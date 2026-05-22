@@ -15,7 +15,7 @@ depends_on = None
 
 def upgrade() -> None:
     # ── fire_dept: neue Organisations-Felder ─────────────────────────────────
-    # IF NOT EXISTS guards against a partial previous migration run
+    # IF NOT EXISTS guards against partial previous migration runs
     op.execute("ALTER TABLE fire_dept ADD COLUMN IF NOT EXISTS is_home_org BOOL NOT NULL DEFAULT 0")
     op.execute("ALTER TABLE fire_dept ADD COLUMN IF NOT EXISTS is_active BOOL NOT NULL DEFAULT 1")
     op.execute("ALTER TABLE fire_dept ADD COLUMN IF NOT EXISTS logo_path VARCHAR(500)")
@@ -26,23 +26,29 @@ def upgrade() -> None:
     # Wolfurt als Home-Org markieren
     op.execute("UPDATE fire_dept SET is_home_org = 1 WHERE slug = 'wolfurt'")
 
-    # ── user: org_id ─────────────────────────────────────────────────────────
-    op.add_column("user", sa.Column("org_id", sa.Integer(), nullable=True))
-    op.create_foreign_key("fk_user_org_id", "user", "fire_dept", ["org_id"], ["id"],
-                          ondelete="SET NULL")
+    # ── user: org_id → BIGINT (muss fire_dept.id BIGINT matchen) ─────────────
+    # ADD IF NOT EXISTS + MODIFY stellt sicher dass der Typ stimmt,
+    # auch wenn ein vorheriger Lauf die Spalte bereits als INT angelegt hat.
+    op.execute("ALTER TABLE `user` ADD COLUMN IF NOT EXISTS org_id BIGINT NULL")
+    op.execute("ALTER TABLE `user` MODIFY COLUMN org_id BIGINT NULL")
+    op.execute("ALTER TABLE `user` DROP FOREIGN KEY IF EXISTS fk_user_org_id")
+    op.execute(
+        "ALTER TABLE `user` ADD CONSTRAINT fk_user_org_id "
+        "FOREIGN KEY (org_id) REFERENCES fire_dept(id) ON DELETE SET NULL"
+    )
 
     # ── api_key: org_id ───────────────────────────────────────────────────────
-    op.add_column("api_key", sa.Column("org_id", sa.Integer(), nullable=True))
+    op.add_column("api_key", sa.Column("org_id", sa.BigInteger(), nullable=True))
     op.create_foreign_key("fk_api_key_org_id", "api_key", "fire_dept", ["org_id"], ["id"],
                           ondelete="SET NULL")
 
     # ── member: org_id ────────────────────────────────────────────────────────
-    op.add_column("member", sa.Column("org_id", sa.Integer(), nullable=True))
+    op.add_column("member", sa.Column("org_id", sa.BigInteger(), nullable=True))
     op.create_foreign_key("fk_member_org_id", "member", "fire_dept", ["org_id"], ["id"],
                           ondelete="SET NULL")
 
     # ── incident: primary_org_id ──────────────────────────────────────────────
-    op.add_column("incident", sa.Column("primary_org_id", sa.Integer(), nullable=True))
+    op.add_column("incident", sa.Column("primary_org_id", sa.BigInteger(), nullable=True))
     op.create_foreign_key("fk_incident_primary_org", "incident", "fire_dept",
                           ["primary_org_id"], ["id"], ondelete="SET NULL")
 
@@ -51,7 +57,7 @@ def upgrade() -> None:
         "incident_org",
         sa.Column("id", sa.BigInteger(), nullable=False, autoincrement=True),
         sa.Column("incident_id", sa.BigInteger(), nullable=False),
-        sa.Column("org_id", sa.Integer(), nullable=False),
+        sa.Column("org_id", sa.BigInteger(), nullable=False),
         sa.Column("role", sa.String(20), nullable=False, server_default="collaborator"),
         sa.Column("joined_at", sa.DateTime(), nullable=False, server_default=sa.text("NOW()")),
         sa.Column("added_by_user_id", sa.BigInteger(), nullable=True),
@@ -66,8 +72,8 @@ def upgrade() -> None:
     # ── org_settings ──────────────────────────────────────────────────────────
     op.create_table(
         "org_settings",
-        sa.Column("id", sa.Integer(), nullable=False, autoincrement=True),
-        sa.Column("org_id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.BigInteger(), nullable=False, autoincrement=True),
+        sa.Column("org_id", sa.BigInteger(), nullable=False),
         sa.Column("logo_path", sa.String(500), nullable=True),
         sa.Column("primary_color", sa.String(7), nullable=True),
         sa.Column("footer_text", sa.String(500), nullable=True),
