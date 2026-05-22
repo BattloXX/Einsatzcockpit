@@ -14,7 +14,7 @@ ExecStart=/home/clp-einsatz/htdocs/einsatzleiter/.venv/bin/gunicorn \
     -w 2 \
     --bind 127.0.0.1:8092 \
     --timeout 120 \
-    --keepalive 5 \
+    --keep-alive 5 \
     --access-logfile - \
     --error-logfile - \
     app.main:app
