@@ -43,8 +43,8 @@ async def stats(request: Request, db: Session = Depends(get_db)):
         .all()
     )
 
-    return templates.TemplateResponse("stats/dashboard.html", {
-        "request": request, "user": user,
+    return templates.TemplateResponse(request, "stats/dashboard.html", {
+        "user": user,
         "total": total, "total_exercises": total_exercises,
         "by_alarm": by_alarm, "by_month": by_month,
     })

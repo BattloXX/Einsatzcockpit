@@ -31,8 +31,7 @@ def settings_page(request: Request, db=Depends(get_db), user: User = Depends(req
     is_sysadmin = has_role(user, "system_admin")
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     sys_settings = {s.key: s.value for s in db.query(SystemSettings).all()} if is_sysadmin else {}
-    return templates.TemplateResponse("admin/settings.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "admin/settings.html", {
         "user": user,
         "org": org,
         "org_settings": org_settings,
@@ -105,8 +104,7 @@ async def save_org_settings(
 @router.get("/organisations", response_class=HTMLResponse)
 def organisations_page(request: Request, db=Depends(get_db), user: User = Depends(require_system_admin)):
     orgs = db.query(FireDept).order_by(FireDept.name).all()
-    return templates.TemplateResponse("admin/organisations.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "admin/organisations.html", {
         "user": user,
         "orgs": orgs,
     })
@@ -152,8 +150,7 @@ def toggle_organisation(org_id: int, db=Depends(get_db), user: User = Depends(re
 @router.get("/system/update", response_class=HTMLResponse)
 def update_page(request: Request, user: User = Depends(require_system_admin)):
     version = get_current_version()
-    return templates.TemplateResponse("admin/system_update.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "admin/system_update.html", {
         "user": user,
         "version": version,
     })
@@ -167,8 +164,7 @@ async def apply_system_update(
     release_zip: UploadFile = File(...),
 ):
     if not release_zip.filename or not release_zip.filename.endswith(".zip"):
-        return templates.TemplateResponse("admin/system_update.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "admin/system_update.html", {
             "user": user,
             "version": get_current_version(),
             "error": "Bitte eine .zip-Datei hochladen",
@@ -181,8 +177,7 @@ async def apply_system_update(
     result = apply_update(tmp_path)
     tmp_path.unlink(missing_ok=True)
 
-    return templates.TemplateResponse("admin/system_update.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "admin/system_update.html", {
         "user": user,
         "version": get_current_version(),
         "update_result": result,
@@ -196,8 +191,7 @@ def about_page(request: Request, db=Depends(get_db)):
     from app.config import settings
     user = getattr(request.state, "user", None)
     version = get_current_version()
-    return templates.TemplateResponse("admin/about.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "admin/about.html", {
         "user": user,
         "version": version,
         "app_version": settings.APP_VERSION,

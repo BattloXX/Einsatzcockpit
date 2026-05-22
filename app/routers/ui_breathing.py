@@ -36,8 +36,8 @@ async def breathing_board(incident_id: int, request: Request, db: Session = Depe
     troops_with_warnings = [
         (t, get_warning_level(t)) for t in incident.breathing_troops
     ]
-    return templates.TemplateResponse("breathing/board.html", {
-        "request": request, "user": user, "incident": incident,
+    return templates.TemplateResponse(request, "breathing/board.html", {
+        "user": user, "incident": incident,
         "troops_with_warnings": troops_with_warnings, "members": members,
     })
 

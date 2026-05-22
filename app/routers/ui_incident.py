@@ -43,8 +43,8 @@ async def index(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse("/login", status_code=302)
     active = db.query(Incident).filter(Incident.status == "active").order_by(Incident.started_at.desc()).all()
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
-    return templates.TemplateResponse("index.html", {
-        "request": request, "user": user,
+    return templates.TemplateResponse(request, "index.html", {
+        "user": user,
         "active_incidents": active, "alarm_types": alarm_types,
     })
 
@@ -99,8 +99,8 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         TaskSuggestion.alarm_type_code == incident.alarm_type_code
     ).order_by(TaskSuggestion.display_order).all()
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
-    return templates.TemplateResponse("incident/board.html", {
-        "request": request, "user": user, "incident": incident,
+    return templates.TemplateResponse(request, "incident/board.html", {
+        "user": user, "incident": incident,
         "alarm_types": alarm_types, "lage_hints": lage_hints,
         "task_suggestions": task_suggestions, "can_edit": can_edit,
     })
@@ -121,8 +121,8 @@ async def create_task(
     await manager.broadcast(incident_id, {
         "type": "task_created", "task_id": task.id, "reload_board": True,
     })
-    return templates.TemplateResponse("incident/_task_card.html", {
-        "request": request, "task": task, "incident": incident,
+    return templates.TemplateResponse(request, "incident/_task_card.html", {
+        "task": task, "incident": incident,
         "can_edit": True,
     })
 
@@ -318,8 +318,8 @@ async def get_qr_code(incident_id: int, request: Request, db: Session = Depends(
     img.save(buf, format="PNG")
     img_b64 = base64.b64encode(buf.getvalue()).decode()
 
-    return templates.TemplateResponse("incident/qr_modal.html", {
-        "request": request, "incident": incident,
+    return templates.TemplateResponse(request, "incident/qr_modal.html", {
+        "incident": incident,
         "qr_img": img_b64, "qr_url": url,
     })
 
@@ -336,6 +336,6 @@ async def incident_history(incident_id: int, request: Request, db: Session = Dep
     changes = db.query(IncidentChange).filter(
         IncidentChange.incident_id == incident_id
     ).order_by(IncidentChange.ts.desc()).limit(500).all()
-    return templates.TemplateResponse("incident/history.html", {
-        "request": request, "user": user, "incident": incident, "changes": changes,
+    return templates.TemplateResponse(request, "incident/history.html", {
+        "user": user, "incident": incident, "changes": changes,
     })

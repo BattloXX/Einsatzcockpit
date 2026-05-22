@@ -18,8 +18,8 @@ async def archive_list(request: Request, db: Session = Depends(get_db)):
     if not user:
         return RedirectResponse("/login", status_code=302)
     incidents = db.query(Incident).order_by(Incident.started_at.desc()).all()
-    return templates.TemplateResponse("archive/list.html", {
-        "request": request, "user": user, "incidents": incidents,
+    return templates.TemplateResponse(request, "archive/list.html", {
+        "user": user, "incidents": incidents,
     })
 
 
@@ -34,8 +34,8 @@ async def archive_detail(incident_id: int, request: Request, db: Session = Depen
         raise HTTPException(404)
     db.refresh(incident, ["columns", "vehicles", "tasks", "messages", "rescued_persons",
                            "breathing_troops", "log_entries"])
-    return templates.TemplateResponse("archive/detail.html", {
-        "request": request, "user": user, "incident": incident,
+    return templates.TemplateResponse(request, "archive/detail.html", {
+        "user": user, "incident": incident,
     })
 
 

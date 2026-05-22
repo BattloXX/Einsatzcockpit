@@ -32,8 +32,8 @@ async def users_list(request: Request, db: Session = Depends(get_db),
                      _=Depends(require_role("admin"))):
     users = db.query(User).order_by(User.username).all()
     roles = db.query(Role).all()
-    return templates.TemplateResponse("admin/users.html", {
-        "request": request, "user": request.state.user,
+    return templates.TemplateResponse(request, "admin/users.html", {
+        "user": request.state.user,
         "users": users, "roles": roles,
     })
 
@@ -82,8 +82,8 @@ async def delete_user(
 async def api_keys(request: Request, db: Session = Depends(get_db),
                    _=Depends(require_role("admin"))):
     keys = db.query(ApiKey).order_by(ApiKey.created_at.desc()).all()
-    return templates.TemplateResponse("admin/api_keys.html", {
-        "request": request, "user": request.state.user, "keys": keys, "new_key": None,
+    return templates.TemplateResponse(request, "admin/api_keys.html", {
+        "user": request.state.user, "keys": keys, "new_key": None,
     })
 
 
@@ -99,8 +99,8 @@ async def create_api_key(
                 payload={"label": label})
     db.commit()
     keys = db.query(ApiKey).order_by(ApiKey.created_at.desc()).all()
-    return templates.TemplateResponse("admin/api_keys.html", {
-        "request": request, "user": request.state.user, "keys": keys, "new_key": raw,
+    return templates.TemplateResponse(request, "admin/api_keys.html", {
+        "user": request.state.user, "keys": keys, "new_key": raw,
     })
 
 
@@ -125,8 +125,8 @@ async def members_list(request: Request, db: Session = Depends(get_db),
                        _=Depends(require_role("admin"))):
     members = db.query(Member).order_by(Member.lastname, Member.firstname).all()
     qualifications = db.query(Qualification).all()
-    return templates.TemplateResponse("admin/members.html", {
-        "request": request, "user": request.state.user,
+    return templates.TemplateResponse(request, "admin/members.html", {
+        "user": request.state.user,
         "members": members, "qualifications": qualifications,
     })
 
@@ -159,6 +159,6 @@ async def create_member(
 async def audit_log(request: Request, db: Session = Depends(get_db),
                     _=Depends(require_role("admin"))):
     entries = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(500).all()
-    return templates.TemplateResponse("admin/audit.html", {
-        "request": request, "user": request.state.user, "entries": entries,
+    return templates.TemplateResponse(request, "admin/audit.html", {
+        "user": request.state.user, "entries": entries,
     })
