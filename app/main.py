@@ -33,6 +33,9 @@ def _bootstrap_admin() -> None:
         seed(db)
         from app.cli import create_admin
         create_admin(settings.BOOTSTRAP_ADMIN_USER, settings.BOOTSTRAP_ADMIN_PASSWORD)
+    except Exception:
+        # Another worker may have seeded concurrently — safe to ignore
+        db.rollback()
     finally:
         db.close()
 
