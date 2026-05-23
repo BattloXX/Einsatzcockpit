@@ -64,6 +64,11 @@ class CSRFMiddleware:
             new_token = secrets.token_urlsafe(32)
             existing_token = new_token
 
+        # Token für Templates verfügbar machen (request.state.csrf_token).
+        # So können Forms das Hidden-Feld serverseitig rendern und funktionieren
+        # auch ohne JavaScript.
+        scope.setdefault("state", {})["csrf_token"] = existing_token
+
         is_exempt = any(path.startswith(prefix) for prefix in EXEMPT_PREFIXES)
         needs_check = method not in SAFE_METHODS and not is_exempt
 

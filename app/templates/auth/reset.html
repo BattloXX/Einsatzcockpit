@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#b71921">
   <title>Neues Passwort – Einsatzleiter</title>
   <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/csrf.js" defer></script>
 </head>
 <body class="login-body">
   <div class="login-container">
@@ -28,6 +29,7 @@
         </div>
       {% else %}
         <form method="post" action="/passwort-zuruecksetzen" class="login-form" autocomplete="off">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="token" value="{{ token }}">
           <div class="form-group">
             <label for="password">Neues Passwort</label>
