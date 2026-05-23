@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Administration – FF Wolfurt{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <h1>Administration</h1>
+  </div>
+
+  <div class="admin-section-title">Einsatz-Stammdaten</div>
+  <div class="admin-grid">
+    <a href="/admin/fahrzeuge" class="admin-card">
+      <div class="admin-card__icon">🚒</div>
+      <div class="admin-card__title">Fahrzeuge</div>
+      <div class="admin-card__desc">Fahrzeuge anlegen, bearbeiten, Erstausrückung konfigurieren</div>
+    </a>
+    <a href="/admin/ausrueckordnung" class="admin-card">
+      <div class="admin-card__icon">📋</div>
+      <div class="admin-card__title">Ausrückordnung</div>
+      <div class="admin-card__desc">Welche Fahrzeuge rücken bei welchem Stichwort aus?</div>
+    </a>
+    <a href="/admin/auftragsvorlagen" class="admin-card">
+      <div class="admin-card__icon">✅</div>
+      <div class="admin-card__title">Auftragsvorlagen</div>
+      <div class="admin-card__desc">Default-Aufträge pro Alarmstichwort</div>
+    </a>
+    <a href="/admin/alarmtypen" class="admin-card">
+      <div class="admin-card__icon">🚨</div>
+      <div class="admin-card__title">Alarmtypen</div>
+      <div class="admin-card__desc">Bekannte Einsatzstichwörter und ihre Eigenschaften</div>
+    </a>
+    <a href="/admin/lage-hinweise" class="admin-card">
+      <div class="admin-card__icon">💡</div>
+      <div class="admin-card__title">Lage-Hinweise</div>
+      <div class="admin-card__desc">Rotierender Ticker im Einsatz-Board</div>
+    </a>
+    <a href="/admin/default-meldungen" class="admin-card">
+      <div class="admin-card__icon">🔔</div>
+      <div class="admin-card__title">Default-Meldungen</div>
+      <div class="admin-card__desc">Automatische Erinnerungen pro Stichwort</div>
+    </a>
+  </div>
+
+  <div class="admin-section-title">Mannschaft</div>
+  <div class="admin-grid">
+    <a href="/admin/mitglieder" class="admin-card">
+      <div class="admin-card__icon">👤</div>
+      <div class="admin-card__title">Mitglieder</div>
+      <div class="admin-card__desc">Mannschaftsliste, Qualifikationen, Ablaufdaten</div>
+    </a>
+    <a href="/admin/qualifikationen" class="admin-card">
+      <div class="admin-card__icon">🎖️</div>
+      <div class="admin-card__title">Qualifikationen</div>
+      <div class="admin-card__desc">AGT, GK, MA und weitere Qualifikations-Codes</div>
+    </a>
+  </div>
+
+  <div class="admin-section-title">Verwaltung</div>
+  <div class="admin-grid">
+    <a href="/admin/benutzer" class="admin-card">
+      <div class="admin-card__icon">🔑</div>
+      <div class="admin-card__title">Benutzer</div>
+      <div class="admin-card__desc">Login-Accounts, Rollen, Passwort-Reset</div>
+    </a>
+    <a href="/admin/api-keys" class="admin-card">
+      <div class="admin-card__icon">🔐</div>
+      <div class="admin-card__title">API-Keys</div>
+      <div class="admin-card__desc">Externe Integrations-Keys (Alarmierungssystem)</div>
+    </a>
+    <a href="/admin/audit" class="admin-card">
+      <div class="admin-card__icon">📜</div>
+      <div class="admin-card__title">Audit-Log</div>
+      <div class="admin-card__desc">Systemweites Protokoll aller Aktionen</div>
+    </a>
+  </div>
+
+  <div class="admin-section-title">Einstellungen</div>
+  <div class="admin-grid">
+    <a href="/admin/settings" class="admin-card">
+      <div class="admin-card__icon">🏛️</div>
+      <div class="admin-card__title">Organisation</div>
+      <div class="admin-card__desc">Name, Logo, Farbe, Atemschutz-Parameter</div>
+    </a>
+    {% if is_sysadmin %}
+    <a href="/admin/system-einstellungen" class="admin-card">
+      <div class="admin-card__icon">⚙️</div>
+      <div class="admin-card__title">System</div>
+      <div class="admin-card__desc">VAPID, Push, Session, globale Parameter</div>
+    </a>
+    <a href="/admin/backup" class="admin-card">
+      <div class="admin-card__icon">📦</div>
+      <div class="admin-card__title">Backup & Export</div>
+      <div class="admin-card__desc">Stammdaten-JSON exportieren und importieren</div>
+    </a>
+    <a href="/admin/organisations" class="admin-card">
+      <div class="admin-card__icon">🌐</div>
+      <div class="admin-card__title">Alle Organisationen</div>
+      <div class="admin-card__desc">Multi-Org-Verwaltung</div>
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

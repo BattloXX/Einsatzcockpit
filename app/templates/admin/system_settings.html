@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}System-Einstellungen – Admin{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>System-Einstellungen</h1><p class="page-header__sub">Key-Value-Store für systemweite Konfiguration</p></div>
+  </div>
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+
+  <form method="post" action="/admin/system-einstellungen">
+    <table class="table-admin">
+      <thead><tr><th>Schlüssel</th><th>Wert</th><th>Beschreibung</th></tr></thead>
+      <tbody>
+        {% set known = [
+          ('vapid_public_key', 'VAPID Public Key (Web Push)'),
+          ('vapid_private_key', 'VAPID Private Key (Web Push)'),
+          ('vapid_email', 'VAPID E-Mail (mailto:…)'),
+          ('enable_push', 'Web Push aktiviert (true/false)'),
+          ('enable_speech_input', 'Sprachdiktat aktiviert (true/false)'),
+          ('default_session_max_age', 'Session-Lebensdauer in Sekunden'),
+        ] %}
+        {% for key, desc in known %}
+        <tr>
+          <td><code>{{ key }}</code></td>
+          <td><input type="text" name="k_{{ key }}" class="form-input form-input--sm"
+                     value="{{ settings.get(key, '') }}" style="width:260px"></td>
+          <td><small class="text-muted">{{ desc }}</small></td>
+        </tr>
+        {% endfor %}
+        {% for k, v in settings.items() %}
+        {% if k not in ['vapid_public_key','vapid_private_key','vapid_email','enable_push','enable_speech_input','default_session_max_age'] %}
+        <tr>
+          <td><code>{{ k }}</code></td>
+          <td><input type="text" name="k_{{ k }}" class="form-input form-input--sm" value="{{ v or '' }}" style="width:260px"></td>
+          <td><small class="text-muted">Benutzerdefiniert</small></td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="margin-top:16px; display:flex; gap:12px; align-items:center;">
+      <button type="submit" class="btn btn--primary">Speichern</button>
+      <span class="text-muted" style="font-size:.8rem">Neuen Key hinzufügen:</span>
+      <input type="text" name="new_key" class="form-input form-input--sm" placeholder="Key" style="width:140px">
+      <input type="text" name="new_value" class="form-input form-input--sm" placeholder="Wert" style="width:200px">
+    </div>
+  </form>
+</div>
+{% endblock %}

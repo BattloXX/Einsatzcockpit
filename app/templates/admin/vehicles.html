@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Fahrzeuge – Admin{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Fahrzeuge</h1>
+      <p class="page-header__sub">Stammdaten aller Fahrzeuge der Organisation</p>
+    </div>
+    <button class="btn btn--primary" onclick="document.getElementById('newVehicleModal').showModal()">
+      + Fahrzeug anlegen
+    </button>
+  </div>
+
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+  {% if error %}<div class="alert alert--danger">{{ error }}</div>{% endif %}
+
+  <table class="table-admin">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Name / Typ</th>
+        <th>Wehr</th>
+        <th>Erstausr.</th>
+        <th>Reihenfolge</th>
+        <th>Status</th>
+        <th>Aktionen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in vehicles %}
+      <tr>
+        <td><strong>{{ v.code }}</strong></td>
+        <td>{{ v.name }}<br><small class="text-muted">{{ v.type }}</small></td>
+        <td>{{ v.dept.name if v.dept else '–' }}</td>
+        <td>{% if v.is_first_train %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
+        <td>
+          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/order/up" style="display:inline">
+            <button type="submit" class="btn btn--ghost btn--xs">↑</button>
+          </form>
+          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/order/down" style="display:inline">
+            <button type="submit" class="btn btn--ghost btn--xs">↓</button>
+          </form>
+        </td>
+        <td>
+          {% if v.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
+          {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}
+        </td>
+        <td>
+          <button class="btn btn--ghost btn--xs"
+                  onclick="openEditVehicle({{ v.id }}, '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', {{ v.is_first_train|lower }})">
+            Bearbeiten
+          </button>
+          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/toggle" style="display:inline">
+            <button type="submit" class="btn btn--ghost btn--xs">
+              {% if v.active %}Deaktivieren{% else %}Aktivieren{% endif %}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Neues Fahrzeug -->
+<dialog class="modal" id="newVehicleModal">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Neues Fahrzeug</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form method="post" action="/admin/fahrzeuge/neu">
+      <div class="modal__body">
+        {% if is_sysadmin %}
+        <div class="form-group">
+          <label class="form-label">Wehr</label>
+          <select name="dept_id" class="form-select">
+            {% for org in all_orgs %}
+            <option value="{{ org.id }}">{{ org.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="form-group">
+          <label class="form-label">Code (z.B. RLF, KDOF)</label>
+          <input type="text" name="code" class="form-input" required maxlength="30">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input type="text" name="name" class="form-input" required maxlength="150">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Typ / Beschreibung</label>
+          <input type="text" name="type" class="form-input" maxlength="200">
+        </div>
+        <div class="form-group">
+          <label><input type="checkbox" name="is_first_train" value="true"> Erstausrückung</label>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- Fahrzeug bearbeiten -->
+<dialog class="modal" id="editVehicleModal">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Fahrzeug bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form method="post" id="editVehicleForm">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Code</label>
+          <input type="text" name="code" id="ev_code" class="form-input" required maxlength="30">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input type="text" name="name" id="ev_name" class="form-input" required maxlength="150">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Typ / Beschreibung</label>
+          <input type="text" name="type" id="ev_type" class="form-input" maxlength="200">
+        </div>
+        <div class="form-group">
+          <label><input type="checkbox" name="is_first_train" id="ev_first_train" value="true"> Erstausrückung</label>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function openEditVehicle(id, code, name, type, firstTrain) {
+  document.getElementById('ev_code').value = code;
+  document.getElementById('ev_name').value = name;
+  document.getElementById('ev_type').value = type;
+  document.getElementById('ev_first_train').checked = firstTrain;
+  document.getElementById('editVehicleForm').action = `/admin/fahrzeuge/${id}/edit`;
+  document.getElementById('editVehicleModal').showModal();
+}
+</script>
+{% endblock %}

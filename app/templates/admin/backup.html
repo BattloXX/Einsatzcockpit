@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Backup & Export – Admin{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Backup & Export</h1><p class="page-header__sub">Stammdaten-Backup für Migration und Restore</p></div>
+  </div>
+
+  <div class="admin-grid">
+    <div class="admin-card">
+      <div class="admin-card__icon">📦</div>
+      <div class="admin-card__title">JSON-Export (Stammdaten)</div>
+      <div class="admin-card__desc">Exportiert alle Stammdaten (Fahrzeuge, Mitglieder, Qualifikationen, Alarmtypen, Auftragsvorlagen, Lage-Hinweise, Ausrückordnung) als JSON-Datei.</div>
+      <div style="margin-top:16px">
+        <a href="/admin/backup/json" class="btn btn--primary">JSON herunterladen</a>
+      </div>
+    </div>
+
+    <div class="admin-card">
+      <div class="admin-card__icon">📥</div>
+      <div class="admin-card__title">JSON-Import (Restore)</div>
+      <div class="admin-card__desc">Importiert Stammdaten aus einem zuvor erstellten JSON-Export. Bestehende Datensätze werden aktualisiert (Upsert).</div>
+      <div style="margin-top:16px">
+        <form method="post" action="/admin/backup/restore" enctype="multipart/form-data"
+              onsubmit="return confirm('Wirklich importieren? Bestehende Daten werden überschrieben.')">
+          <input type="file" name="backup_file" accept=".json" required class="form-input" style="margin-bottom:8px">
+          <button type="submit" class="btn btn--danger">Import starten</button>
+        </form>
+        {% if import_result %}
+        <pre style="margin-top:12px; font-size:.8rem; white-space:pre-wrap">{{ import_result }}</pre>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="admin-card">
+      <div class="admin-card__icon">🗄️</div>
+      <div class="admin-card__title">MariaDB-Dump</div>
+      <div class="admin-card__desc">Für vollständige DB-Backups (inkl. Einsatzdaten) das CloudPanel-Backup-Tool verwenden. Die JSON-Export-Funktion hier deckt nur Stammdaten ab.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

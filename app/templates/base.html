@@ -22,8 +22,40 @@
       <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
       <a href="/archiv" class="nav-link {% if '/archiv' in request.url.path %}active{% endif %}">Archiv</a>
       <a href="/statistik" class="nav-link {% if '/statistik' in request.url.path %}active{% endif %}">Statistik</a>
-      {% if 'admin' in user.roles|map(attribute='code')|list %}
-      <a href="/admin/benutzer" class="nav-link {% if '/admin' in request.url.path %}active{% endif %}">Admin</a>
+      {% set user_roles = user.roles|map(attribute='code')|list %}
+      {% if 'admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles %}
+      <div class="nav-dropdown" x-data="{open:false}" @click.outside="open=false">
+        <button class="nav-link nav-link--dropdown {% if '/admin' in request.url.path %}active{% endif %}"
+                @click="open=!open">Admin ▾</button>
+        <div class="nav-dropdown__menu" x-show="open" x-cloak>
+          <div class="nav-dropdown__group">
+            <span class="nav-dropdown__label">Stammdaten</span>
+            <a href="/admin/fahrzeuge" class="nav-dropdown__item">Fahrzeuge</a>
+            <a href="/admin/mitglieder" class="nav-dropdown__item">Mitglieder</a>
+            <a href="/admin/qualifikationen" class="nav-dropdown__item">Qualifikationen</a>
+            <a href="/admin/auftragsvorlagen" class="nav-dropdown__item">Auftragsvorlagen</a>
+            <a href="/admin/alarmtypen" class="nav-dropdown__item">Alarmtypen</a>
+            <a href="/admin/ausrueckordnung" class="nav-dropdown__item">Ausrückordnung</a>
+            <a href="/admin/lage-hinweise" class="nav-dropdown__item">Lage-Hinweise</a>
+            <a href="/admin/default-meldungen" class="nav-dropdown__item">Default-Meldungen</a>
+          </div>
+          <div class="nav-dropdown__group">
+            <span class="nav-dropdown__label">Verwaltung</span>
+            <a href="/admin/benutzer" class="nav-dropdown__item">Benutzer</a>
+            <a href="/admin/api-keys" class="nav-dropdown__item">API-Keys</a>
+            <a href="/admin/audit" class="nav-dropdown__item">Audit-Log</a>
+          </div>
+          <div class="nav-dropdown__group">
+            <span class="nav-dropdown__label">Einstellungen</span>
+            <a href="/admin/settings" class="nav-dropdown__item">Organisation</a>
+            {% if 'system_admin' in user_roles %}
+            <a href="/admin/system-einstellungen" class="nav-dropdown__item">System</a>
+            <a href="/admin/backup" class="nav-dropdown__item">Backup</a>
+            <a href="/admin/organisations" class="nav-dropdown__item">Alle Orgs</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
       {% endif %}
     </div>
     <div class="topnav__user">
@@ -32,6 +64,11 @@
     </div>
   </nav>
   {% endif %}
+
+  <!-- Global card-detail modal (loaded via HTMX) -->
+  <dialog class="modal modal--detail" id="cardDetailModal">
+    <div class="modal__content" id="cardDetailBody"></div>
+  </dialog>
 
   <!-- Toast container -->
   <div id="toast-container" x-show="toasts.length > 0" class="toast-container">
@@ -64,6 +101,7 @@
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/sortable.min.js"></script>
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/sortable-glue.js"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

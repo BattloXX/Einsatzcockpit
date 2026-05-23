@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Qualifikationen – Admin{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Qualifikationen</h1></div>
+    <button class="btn btn--primary" onclick="document.getElementById('newQualModal').showModal()">+ Qualifikation</button>
+  </div>
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+  <table class="table-admin">
+    <thead><tr><th>Code</th><th>Bezeichnung</th><th>Aktionen</th></tr></thead>
+    <tbody>
+      {% for q in qualifications %}
+      <tr>
+        <td><strong>{{ q.code }}</strong></td>
+        <td>{{ q.label }}</td>
+        <td>
+          <button class="btn btn--ghost btn--xs"
+                  onclick="openEditQual({{ q.id }}, '{{ q.code }}', '{{ q.label|replace("'","\\'")|e }}')">Bearbeiten</button>
+          <form method="post" action="/admin/qualifikationen/{{ q.id }}/loeschen" style="display:inline"
+                onsubmit="return confirm('Löschen?')">
+            <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<dialog class="modal" id="newQualModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Neue Qualifikation</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" action="/admin/qualifikationen/neu">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Code (z.B. AGT)</label>
+          <input type="text" name="code" class="form-input" required maxlength="30"></div>
+        <div class="form-group"><label class="form-label">Bezeichnung</label>
+          <input type="text" name="label" class="form-input" required maxlength="100"></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog class="modal" id="editQualModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Qualifikation bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" id="editQualForm">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Code</label>
+          <input type="text" name="code" id="eq_code" class="form-input" required maxlength="30"></div>
+        <div class="form-group"><label class="form-label">Bezeichnung</label>
+          <input type="text" name="label" id="eq_label" class="form-input" required maxlength="100"></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script>
+function openEditQual(id, code, label) {
+  document.getElementById('eq_code').value = code;
+  document.getElementById('eq_label').value = label;
+  document.getElementById('editQualForm').action = `/admin/qualifikationen/${id}/edit`;
+  document.getElementById('editQualModal').showModal();
+}
+</script>
+{% endblock %}

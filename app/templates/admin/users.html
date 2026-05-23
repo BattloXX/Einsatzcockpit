@@ -1,33 +1,64 @@
 {% extends "base.html" %}
 {% block title %}Benutzer – Admin{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h2>Benutzerverwaltung</h2>
-  <button class="btn btn--primary" onclick="document.getElementById('newUserModal').showModal()">+ Benutzer</button>
-</div>
-<table class="table">
-  <thead><tr><th>Benutzername</th><th>Name</th><th>Rollen</th><th>Letzter Login</th><th>Status</th><th></th></tr></thead>
-  <tbody>
-    {% for u in users %}
-    <tr>
-      <td>{{ u.username }}</td>
-      <td>{{ u.display_name }}</td>
-      <td>{{ u.roles|map(attribute='label')|join(', ') or '–' }}</td>
-      <td>{{ u.last_login_at.strftime('%d.%m.%Y %H:%M') if u.last_login_at else '–' }}</td>
-      <td><span class="badge {% if u.active %}badge--active{% else %}badge--closed{% endif %}">{{ 'Aktiv' if u.active else 'Deaktiviert' }}</span></td>
-      <td>
-        {% if u.id != user.id and u.active %}
-        <form method="post" action="/admin/benutzer/{{ u.id }}/loeschen" style="display:inline">
-          <button type="submit" class="btn btn--xs btn--danger"
-                  onclick="return confirm('Benutzer deaktivieren?')">Deaktivieren</button>
-        </form>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Benutzerverwaltung</h1></div>
+    <button class="btn btn--primary" onclick="document.getElementById('newUserModal').showModal()">+ Benutzer</button>
+  </div>
 
+  {% if new_password %}
+  <div class="alert alert--success">
+    Neues Passwort für {{ new_password_user }}: <code style="font-size:1.1rem; letter-spacing:.1em">{{ new_password }}</code>
+    <br><small>Bitte notieren – wird nur einmal angezeigt.</small>
+  </div>
+  {% endif %}
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+
+  <table class="table-admin">
+    <thead>
+      <tr><th>Benutzername</th><th>Name</th><th>Rollen</th><th>Letzter Login</th><th>Status</th><th>Aktionen</th></tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td><strong>{{ u.username }}</strong></td>
+        <td>{{ u.display_name }}</td>
+        <td>{{ u.roles|map(attribute='label')|join(', ') or '–' }}</td>
+        <td>{{ u.last_login_at.strftime('%d.%m.%Y %H:%M') if u.last_login_at else '–' }}</td>
+        <td>
+          {% if u.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
+          {% else %}<span class="badge-pill badge-pill--gray">Deaktiviert</span>{% endif %}
+        </td>
+        <td style="display:flex; gap:4px; flex-wrap:wrap;">
+          <button class="btn btn--ghost btn--xs"
+                  onclick="openEditUser({{ u.id }}, '{{ u.display_name|replace("'","\\'")|e }}')">
+            Bearbeiten
+          </button>
+          <button class="btn btn--ghost btn--xs"
+                  onclick="openRolesEditor({{ u.id }}, '{{ u.username }}', {{ u.roles|map(attribute='code')|list|tojson }})">
+            Rollen
+          </button>
+          <form method="post" action="/admin/benutzer/{{ u.id }}/passwort" style="display:inline">
+            <button type="submit" class="btn btn--ghost btn--xs"
+                    onclick="return confirm('Passwort für {{ u.username }} zurücksetzen?')">PW Reset</button>
+          </form>
+          {% if u.id != user.id %}
+          <form method="post" action="/admin/benutzer/{{ u.id }}/loeschen" style="display:inline">
+            <button type="submit" class="btn btn--danger btn--xs"
+                    onclick="return confirm('Benutzer deaktivieren?')">
+              {% if u.active %}Deaktivieren{% else %}Aktivieren{% endif %}
+            </button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Neuer Benutzer -->
 <dialog class="modal" id="newUserModal">
   <form method="post" action="/admin/benutzer/neu" class="modal__content">
     <div class="modal__header">
@@ -36,16 +67,17 @@
     </div>
     <div class="modal__body">
       <div class="form-row">
-        <div class="form-group"><label>Benutzername</label><input type="text" name="username" class="form-input" required></div>
-        <div class="form-group"><label>Anzeigename</label><input type="text" name="display_name" class="form-input"></div>
+        <div class="form-group"><label class="form-label">Benutzername</label>
+          <input type="text" name="username" class="form-input" required></div>
+        <div class="form-group"><label class="form-label">Anzeigename</label>
+          <input type="text" name="display_name" class="form-input"></div>
       </div>
-      <div class="form-group"><label>Passwort</label><input type="password" name="password" class="form-input" required></div>
+      <div class="form-group"><label class="form-label">Passwort</label>
+        <input type="password" name="password" class="form-input" required></div>
       <div class="form-group">
-        <label>Rollen</label>
+        <label class="form-label">Rollen</label>
         {% for r in roles %}
-        <label class="checkbox-label">
-          <input type="checkbox" name="role_codes" value="{{ r.code }}"> {{ r.label }}
-        </label>
+        <label class="checkbox-label"><input type="checkbox" name="role_codes" value="{{ r.code }}"> {{ r.label }}</label>
         {% endfor %}
       </div>
     </div>
@@ -55,4 +87,61 @@
     </div>
   </form>
 </dialog>
+
+<!-- Benutzer bearbeiten (Anzeigename) -->
+<dialog class="modal" id="editUserModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Benutzer bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" id="editUserForm">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Anzeigename</label>
+          <input type="text" name="display_name" id="eu_display_name" class="form-input" required></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- Rollen bearbeiten -->
+<dialog class="modal" id="rolesEditorModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Rollen für <span id="re_username"></span></h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" id="rolesEditorForm">
+      <div class="modal__body">
+        {% for r in roles %}
+        <label class="checkbox-label">
+          <input type="checkbox" name="role_codes" value="{{ r.code }}" class="role-check"> {{ r.label }} ({{ r.code }})
+        </label>
+        {% endfor %}
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function openEditUser(id, displayName) {
+  document.getElementById('eu_display_name').value = displayName;
+  document.getElementById('editUserForm').action = `/admin/benutzer/${id}/edit`;
+  document.getElementById('editUserModal').showModal();
+}
+function openRolesEditor(id, username, currentRoles) {
+  document.getElementById('re_username').textContent = username;
+  document.getElementById('rolesEditorForm').action = `/admin/benutzer/${id}/rollen`;
+  document.querySelectorAll('.role-check').forEach(cb => {
+    cb.checked = currentRoles.includes(cb.value);
+  });
+  document.getElementById('rolesEditorModal').showModal();
+}
+</script>
 {% endblock %}

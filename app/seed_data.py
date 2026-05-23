@@ -242,15 +242,16 @@ def _upsert_depts_and_vehicles(db):
 
 
 def _upsert_task_suggestions(db):
-    # Clear and re-seed (order might change)
-    db.query(TaskSuggestion).delete()
+    if db.query(TaskSuggestion).count() > 0:
+        return
     for alarm_code, suggestions in TASK_SUGGESTIONS.items():
         for i, text in enumerate(suggestions):
             db.add(TaskSuggestion(alarm_type_code=alarm_code, text=text, display_order=i))
 
 
 def _upsert_default_messages(db):
-    db.query(DefaultMessage).delete()
+    if db.query(DefaultMessage).count() > 0:
+        return
     for alarm_code, messages in DEFAULT_MESSAGES.items():
         for msg in messages:
             db.add(DefaultMessage(alarm_type_code=alarm_code, **msg))

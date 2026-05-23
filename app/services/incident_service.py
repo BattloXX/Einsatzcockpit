@@ -8,7 +8,7 @@ from app.models.incident import (
     Incident, IncidentColumn, IncidentVehicle, Task, Message,
     FIXED_COLUMNS, FIXED_COLUMN_TITLES,
 )
-from app.models.master import AlarmType, VehicleMaster, DefaultMessage, TaskSuggestion
+from app.models.master import AlarmType, VehicleMaster, DefaultMessage, TaskSuggestion, AlarmDispatchVehicle, Member
 from app.core.audit import write_incident_change, write_audit
 
 
@@ -98,29 +98,50 @@ def _populate_vehicles(db: Session, incident: Incident, alarm: Optional[AlarmTyp
     if not dispatched_col:
         return
 
-    # Own vehicles (FF Wolfurt = slug 'wolfurt')
-    wolfurt_q = (
-        db.query(VehicleMaster)
-        .join(VehicleMaster.dept)
-        .filter(VehicleMaster.active == True)  # noqa: E712
-        .order_by(VehicleMaster.display_order)
+    from app.models.master import FireDept, AlarmDispatchVehicle
+
+    # Check if explicit dispatch order exists for this alarm type
+    dispatch_entries = (
+        db.query(AlarmDispatchVehicle)
+        .filter(AlarmDispatchVehicle.alarm_type_code == alarm.code)
+        .order_by(AlarmDispatchVehicle.display_order)
+        .all()
     )
-    from app.models.master import FireDept
-    wolfurt_q = wolfurt_q.filter(FireDept.slug == "wolfurt")
 
-    if alarm and alarm.default_first_train_only:
-        wolfurt_q = wolfurt_q.filter(VehicleMaster.is_first_train == True)  # noqa: E712
+    if dispatch_entries:
+        # Use explicit dispatch order
+        for i, entry in enumerate(dispatch_entries):
+            vm = db.get(VehicleMaster, entry.vehicle_master_id)
+            if vm and vm.active:
+                db.add(IncidentVehicle(
+                    incident_id=incident.id,
+                    column_id=dispatched_col.id,
+                    vehicle_master_id=vm.id,
+                    display_order=i,
+                ))
+    else:
+        # Fallback: use is_first_train flag (original logic)
+        wolfurt_q = (
+            db.query(VehicleMaster)
+            .join(VehicleMaster.dept)
+            .filter(VehicleMaster.active == True)  # noqa: E712
+            .order_by(VehicleMaster.display_order)
+        )
+        wolfurt_q = wolfurt_q.filter(FireDept.slug == "wolfurt")
 
-    for i, vm in enumerate(wolfurt_q.all()):
-        db.add(IncidentVehicle(
-            incident_id=incident.id,
-            column_id=dispatched_col.id,
-            vehicle_master_id=vm.id,
-            display_order=i,
-        ))
+        if alarm and alarm.default_first_train_only:
+            wolfurt_q = wolfurt_q.filter(VehicleMaster.is_first_train == True)  # noqa: E712
 
-    # Neighbor vehicles go into 'neighbor' column
-    if alarm and alarm.notify_neighbors and neighbor_col:
+        for i, vm in enumerate(wolfurt_q.all()):
+            db.add(IncidentVehicle(
+                incident_id=incident.id,
+                column_id=dispatched_col.id,
+                vehicle_master_id=vm.id,
+                display_order=i,
+            ))
+
+    # Neighbor vehicles go into 'neighbor' column (only in fallback mode if notify_neighbors)
+    if alarm and alarm.notify_neighbors and neighbor_col and not dispatch_entries:
         neighbor_q = (
             db.query(VehicleMaster)
             .join(VehicleMaster.dept)
@@ -253,3 +274,160 @@ def add_section_column(
         user_id=user_id,
     )
     return col
+
+
+def set_commander(
+    db: Session,
+    vehicle: IncidentVehicle,
+    member_id: Optional[int],
+    user_id: Optional[int] = None,
+) -> IncidentVehicle:
+    before = {"commander_member_id": vehicle.commander_member_id}
+    vehicle.commander_member_id = member_id
+    db.flush()
+    write_incident_change(
+        db, vehicle.incident_id, "vehicle.commander_set", "incident_vehicle", vehicle.id,
+        before=before, after={"commander_member_id": member_id},
+        user_id=user_id,
+    )
+    return vehicle
+
+
+def quick_create_commander(
+    db: Session,
+    vehicle: IncidentVehicle,
+    full_name: str,
+    user_id: Optional[int] = None,
+) -> IncidentVehicle:
+    """Create a Member from a name string and assign as commander."""
+    parts = full_name.strip().split(None, 1)
+    firstname = parts[0] if parts else full_name
+    lastname = parts[1] if len(parts) > 1 else ""
+    dept_id = vehicle.vehicle_master.dept_id if vehicle.vehicle_master else None
+    member = Member(firstname=firstname, lastname=lastname, org_id=dept_id, active=True)
+    db.add(member)
+    db.flush()
+    return set_commander(db, vehicle, member.id, user_id=user_id)
+
+
+def update_task(
+    db: Session,
+    task: Task,
+    title: str,
+    detail: Optional[str] = None,
+    user_id: Optional[int] = None,
+) -> Task:
+    before = {"title": task.title, "detail": task.detail}
+    task.title = title
+    task.detail = detail or None
+    db.flush()
+    write_incident_change(
+        db, task.incident_id, "task.updated", "task", task.id,
+        before=before, after={"title": title, "detail": detail},
+        user_id=user_id,
+    )
+    return task
+
+
+def cancel_task(
+    db: Session,
+    task: Task,
+    user_id: Optional[int] = None,
+) -> Task:
+    before = {"is_cancelled": task.is_cancelled}
+    task.is_cancelled = not task.is_cancelled
+    task.cancelled_at = _now() if task.is_cancelled else None
+    db.flush()
+    write_incident_change(
+        db, task.incident_id, "task.cancelled" if task.is_cancelled else "task.restored", "task", task.id,
+        before=before, after={"is_cancelled": task.is_cancelled},
+        user_id=user_id,
+    )
+    return task
+
+
+def move_card(
+    db: Session,
+    incident_id: int,
+    kind: str,
+    uid: int,
+    column_id: Optional[int] = None,
+    position: int = 0,
+    vehicle_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+) -> None:
+    """Generic card move for DnD. kind: 'vehicle'|'task'|'message'."""
+    if kind == "vehicle":
+        vehicle = db.get(IncidentVehicle, uid)
+        if not vehicle:
+            return
+        col = db.get(IncidentColumn, column_id)
+        if not col:
+            return
+        before = {"column_id": vehicle.column_id, "display_order": vehicle.display_order}
+        # Reorder other vehicles in target column
+        siblings = (
+            db.query(IncidentVehicle)
+            .filter(
+                IncidentVehicle.incident_id == incident_id,
+                IncidentVehicle.column_id == column_id,
+                IncidentVehicle.id != uid,
+                IncidentVehicle.removed_at.is_(None),
+            )
+            .order_by(IncidentVehicle.display_order)
+            .all()
+        )
+        for i, sib in enumerate(siblings):
+            sib.display_order = i if i < position else i + 1
+        vehicle.column_id = column_id
+        vehicle.display_order = position
+        db.flush()
+        write_incident_change(
+            db, incident_id, "vehicle.moved", "incident_vehicle", uid,
+            before=before, after={"column_id": column_id, "display_order": position},
+            user_id=user_id,
+        )
+
+    elif kind == "task":
+        task = db.get(Task, uid)
+        if not task:
+            return
+        before = {"column_id": task.column_id, "vehicle_id": task.vehicle_id, "display_order": task.display_order}
+        if vehicle_id:
+            # Drop on a vehicle
+            v = db.get(IncidentVehicle, vehicle_id)
+            if not v:
+                return
+            task.vehicle_id = vehicle_id
+            task.column_id = None
+            db.flush()
+            write_incident_change(
+                db, incident_id, "task.assigned", "task", uid,
+                before=before, after={"vehicle_id": vehicle_id},
+                user_id=user_id,
+            )
+        elif column_id:
+            # Drop on a column
+            task.vehicle_id = None
+            task.column_id = column_id
+            task.display_order = position
+            db.flush()
+            write_incident_change(
+                db, incident_id, "task.moved", "task", uid,
+                before=before, after={"column_id": column_id, "display_order": position},
+                user_id=user_id,
+            )
+
+    elif kind == "message":
+        from app.models.incident import Message as Msg
+        msg = db.get(Msg, uid)
+        if not msg:
+            return
+        before = {"display_order": msg.display_order}
+        msg.display_order = position
+        db.flush()
+        write_incident_change(
+            db, incident_id, "message.reordered", "message", uid,
+            before=before, after={"display_order": position},
+            user_id=user_id,
+        )

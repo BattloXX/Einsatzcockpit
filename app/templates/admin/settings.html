@@ -60,6 +60,23 @@
                  class="form-control" maxlength="200">
         </div>
       </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Atemschutz-Parameter</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Rückzugs-Faktor</label>
+          <input type="number" name="withdraw_press_factor" step="0.05" min="0.1" max="1.0"
+                 value="{{ org.withdraw_press_factor }}" class="form-control" style="max-width:120px">
+          <small class="form-hint">Anteil des Eingangsdrucks als Rückzugsdruck (z.B. 0.5 = 50 %)</small>
+        </div>
+        <div class="form-group">
+          <label>Rückzugs-Reserve (bar)</label>
+          <input type="number" name="withdraw_press_reserve" step="1" min="0" max="100"
+                 value="{{ org.withdraw_press_reserve }}" class="form-control" style="max-width:120px">
+          <small class="form-hint">Fester Pufferdruckwert, der zum berechneten Rückzugsdruck addiert wird</small>
+        </div>
+      </div>
+
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn-primary">Speichern</button>
       </div>

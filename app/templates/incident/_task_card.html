@@ -1,5 +1,11 @@
 <div class="card card--task {% if task.is_done %}card--done{% endif %} {% if task.is_cancelled %}card--cancelled{% endif %}"
-     data-uid="{{ task.id }}" data-kind="task">
+     data-uid="{{ task.id }}" data-kind="task"
+     hx-get="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/detail"
+     hx-target="#cardDetailBody"
+     hx-swap="innerHTML"
+     hx-trigger="click[!event.target.closest('select,input,button')]"
+     hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
+     style="cursor:pointer">
   <div class="card__body">
     <div class="card__title">{{ task.title }}</div>
     {% if task.detail %}<div class="card__sub">{{ task.detail }}</div>{% endif %}

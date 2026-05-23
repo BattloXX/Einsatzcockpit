@@ -129,7 +129,7 @@
   </aside>
 
   <!-- Kanban Board -->
-  <div class="kanban" id="kanban">
+  <div class="kanban" id="kanban" data-incident-id="{{ incident.id }}">
     {% set columns = incident.columns %}
     {% for col in columns %}
     {% set col_vehicles = incident.vehicles|selectattr('column_id', 'eq', col.id)|selectattr('removed_at', 'none')|list %}

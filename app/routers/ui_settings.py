@@ -54,6 +54,8 @@ async def save_org_settings(
     city: str = Form(""),
     primary_color: str = Form(""),
     footer_text: str = Form(""),
+    withdraw_press_factor: str = Form(""),
+    withdraw_press_reserve: str = Form(""),
     logo: UploadFile = File(None),
 ):
     if not user.org_id:
@@ -70,6 +72,16 @@ async def save_org_settings(
         org.street = street
     if org and city:
         org.city = city
+    if org and withdraw_press_factor:
+        try:
+            org.withdraw_press_factor = float(withdraw_press_factor)
+        except ValueError:
+            pass
+    if org and withdraw_press_reserve:
+        try:
+            org.withdraw_press_reserve = int(withdraw_press_reserve)
+        except ValueError:
+            pass
 
     # Logo-Upload
     logo_path = None

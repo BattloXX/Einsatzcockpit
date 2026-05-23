@@ -1,26 +1,63 @@
 {% extends "base.html" %}
 {% block title %}Mitglieder – Admin{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h2>Mannschaftsregister</h2>
-  <button class="btn btn--primary" onclick="document.getElementById('newMemberModal').showModal()">+ Mitglied</button>
-</div>
-<table class="table">
-  <thead><tr><th>Name</th><th>Qualifikationen</th><th>Telefon</th><th>Status</th></tr></thead>
-  <tbody>
-    {% for m in members %}
-    <tr>
-      <td>{{ m.full_name }}</td>
-      <td>{{ m.qualifications|map(attribute='qualification')|map(attribute='code')|join(', ') or '–' }}</td>
-      <td>{{ m.phone or '–' }}</td>
-      <td><span class="badge {% if m.active %}badge--active{% else %}badge--closed{% endif %}">{{ 'Aktiv' if m.active else 'Inaktiv' }}</span></td>
-    </tr>
-    {% else %}
-    <tr><td colspan="4" class="text-center text-muted">Keine Mitglieder.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Mannschaftsregister</h1>
+      <p class="page-header__sub">{{ members|length }} Mitglieder</p>
+    </div>
+    <button class="btn btn--primary" onclick="document.getElementById('newMemberModal').showModal()">+ Mitglied</button>
+  </div>
 
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+
+  <table class="table-admin">
+    <thead>
+      <tr><th>Name</th><th>Qualifikationen</th><th>Telefon</th><th>E-Mail</th><th>Status</th><th>Aktionen</th></tr>
+    </thead>
+    <tbody>
+      {% for m in members %}
+      <tr>
+        <td><strong>{{ m.full_name }}</strong></td>
+        <td>
+          {% for mq in m.qualifications %}
+          <span class="badge-pill badge-pill--green" title="{{ mq.qualification.label if mq.qualification else '' }}">
+            {{ mq.qualification.code if mq.qualification else '?' }}
+            {% if mq.valid_until %}<small> bis {{ mq.valid_until.strftime('%m/%y') }}</small>{% endif %}
+          </span>
+          {% else %}<span class="text-muted">–</span>{% endfor %}
+        </td>
+        <td>{{ m.phone or '–' }}</td>
+        <td>{{ m.email or '–' }}</td>
+        <td>
+          {% if m.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
+          {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}
+        </td>
+        <td>
+          <button class="btn btn--ghost btn--xs"
+                  onclick="openEditMember({{ m.id }}, '{{ m.lastname|replace("'","\\'")|e }}', '{{ m.firstname|replace("'","\\'")|e }}', '{{ m.phone or "" }}', '{{ m.email or "" }}')">
+            Bearbeiten
+          </button>
+          <button class="btn btn--ghost btn--xs"
+                  onclick="openQualiEditor({{ m.id }}, '{{ m.full_name|replace("'","\\'")|e }}')">
+            Qualifikationen
+          </button>
+          <form method="post" action="/admin/mitglieder/{{ m.id }}/toggle" style="display:inline">
+            <button type="submit" class="btn btn--ghost btn--xs">
+              {% if m.active %}Deaktivieren{% else %}Aktivieren{% endif %}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted">Keine Mitglieder.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Neues Mitglied -->
 <dialog class="modal" id="newMemberModal">
   <form method="post" action="/admin/mitglieder/neu" class="modal__content">
     <div class="modal__header">
@@ -29,18 +66,24 @@
     </div>
     <div class="modal__body">
       <div class="form-row">
-        <div class="form-group"><label>Nachname</label><input type="text" name="lastname" class="form-input" required></div>
-        <div class="form-group"><label>Vorname</label><input type="text" name="firstname" class="form-input" required></div>
+        <div class="form-group"><label class="form-label">Nachname</label>
+          <input type="text" name="lastname" class="form-input" required></div>
+        <div class="form-group"><label class="form-label">Vorname</label>
+          <input type="text" name="firstname" class="form-input" required></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Telefon</label><input type="tel" name="phone" class="form-input"></div>
-        <div class="form-group"><label>E-Mail</label><input type="email" name="email" class="form-input"></div>
+        <div class="form-group"><label class="form-label">Telefon</label>
+          <input type="tel" name="phone" class="form-input"></div>
+        <div class="form-group"><label class="form-label">E-Mail</label>
+          <input type="email" name="email" class="form-input"></div>
       </div>
       <div class="form-group">
-        <label>Qualifikationen</label>
-        {% for q in qualifications %}
-        <label class="checkbox-label"><input type="checkbox" name="qualification_codes" value="{{ q.code }}"> {{ q.label }} ({{ q.code }})</label>
-        {% endfor %}
+        <label class="form-label">Qualifikationen</label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          {% for q in qualifications %}
+          <label class="checkbox-label"><input type="checkbox" name="qualification_codes" value="{{ q.code }}"> {{ q.label }} ({{ q.code }})</label>
+          {% endfor %}
+        </div>
       </div>
     </div>
     <div class="modal__footer">
@@ -49,4 +92,84 @@
     </div>
   </form>
 </dialog>
+
+<!-- Mitglied bearbeiten -->
+<dialog class="modal" id="editMemberModal">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Mitglied bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form method="post" id="editMemberForm">
+      <div class="modal__body">
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Nachname</label>
+            <input type="text" name="lastname" id="em_lastname" class="form-input" required></div>
+          <div class="form-group"><label class="form-label">Vorname</label>
+            <input type="text" name="firstname" id="em_firstname" class="form-input" required></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Telefon</label>
+            <input type="tel" name="phone" id="em_phone" class="form-input"></div>
+          <div class="form-group"><label class="form-label">E-Mail</label>
+            <input type="email" name="email" id="em_email" class="form-input"></div>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- Qualifikationen bearbeiten -->
+<dialog class="modal" id="qualiEditorModal">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Qualifikationen für <span id="qe_name"></span></h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form method="post" id="qualiEditorForm">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Qualifikationen mit optionalem Ablaufdatum</label>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            {% for q in qualifications %}
+            <div style="display:flex; align-items:center; gap:10px;">
+              <label style="min-width:160px">
+                <input type="checkbox" name="qualification_codes" value="{{ q.code }}"> {{ q.label }} ({{ q.code }})
+              </label>
+              <input type="date" name="valid_until_{{ q.code }}" class="form-input form-input--sm"
+                     placeholder="Ablaufdatum (optional)" style="width:160px">
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function openEditMember(id, lastname, firstname, phone, email) {
+  document.getElementById('em_lastname').value = lastname;
+  document.getElementById('em_firstname').value = firstname;
+  document.getElementById('em_phone').value = phone;
+  document.getElementById('em_email').value = email;
+  document.getElementById('editMemberForm').action = `/admin/mitglieder/${id}/edit`;
+  document.getElementById('editMemberModal').showModal();
+}
+function openQualiEditor(id, name) {
+  document.getElementById('qe_name').textContent = name;
+  document.getElementById('qualiEditorForm').action = `/admin/mitglieder/${id}/quali`;
+  document.getElementById('qualiEditorModal').showModal();
+}
+</script>
 {% endblock %}

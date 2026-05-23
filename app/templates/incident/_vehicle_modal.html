@@ -1,0 +1,91 @@
+<div class="modal__header" style="border-left: 6px solid {{ vehicle.vehicle_master.dept.color }};">
+  <div>
+    <h3 class="modal__title">{{ vehicle.vehicle_master.code }} – {{ vehicle.vehicle_master.dept.name }}</h3>
+    <p class="modal__subtitle">Standort: {{ vehicle.column.title }} · {{ vehicle.vehicle_master.type }}</p>
+  </div>
+  <button type="button" onclick="document.getElementById('cardDetailModal').close()" class="modal__close">×</button>
+</div>
+
+<div class="modal__body">
+
+  <!-- Fahrzeug-Info -->
+  <div class="detail-section">
+    <div class="detail-kv">
+      <span class="detail-kv__label">{{ vehicle.vehicle_master.code }}</span>
+      <span class="detail-kv__value">{{ vehicle.vehicle_master.dept.name }}</span>
+    </div>
+    <div class="detail-kv">
+      <span class="detail-kv__label">{{ vehicle.vehicle_master.type }}</span>
+      <span class="detail-kv__value">Spalte / Abschnitt: {{ vehicle.column.title }}</span>
+    </div>
+  </div>
+
+  {% if can_edit %}
+  <!-- Gruppenkommandant -->
+  <div class="detail-section">
+    <div class="detail-section__title">GRUPPENKOMMANDANT FÜR DIESES FAHRZEUG</div>
+
+    <form method="post" action="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/kommandant"
+          style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+      <select name="member_id" class="form-select" style="flex:1">
+        <option value="">nicht zugeteilt</option>
+        {% for m in members %}
+        <option value="{{ m.id }}" {% if vehicle.commander_member_id == m.id %}selected{% endif %}>
+          {{ m.firstname }}
+        </option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn--secondary">zuteilen</button>
+    </form>
+
+    <form method="post" action="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/kommandant-neu"
+          style="display:flex; gap:8px; align-items:center;">
+      <input type="text" name="full_name" class="form-input" placeholder="neuen Namen ergänzen und zuteilen" style="flex:1">
+      <button type="submit" class="btn btn--secondary">ergänzen</button>
+    </form>
+
+    <p style="margin-top:8px; font-weight:700;">
+      Aktuell:
+      {% if vehicle.commander %}{{ vehicle.commander.full_name }}{% else %}nicht zugeteilt{% endif %}
+    </p>
+  </div>
+  {% endif %}
+
+  <!-- Zugeordnete Aufgaben -->
+  <div class="detail-section">
+    <div class="detail-section__title">Zugeordnete Aufgaben</div>
+    {% if vehicle.assigned_tasks %}
+    {% for t in vehicle.assigned_tasks %}
+    <div class="assigned-task {% if t.is_done %}assigned-task--done{% endif %} {% if t.is_cancelled %}assigned-task--cancelled{% endif %}"
+         style="cursor:pointer"
+         hx-get="/einsatz/{{ incident.id }}/aufgabe/{{ t.id }}/detail"
+         hx-target="#cardDetailBody"
+         hx-swap="innerHTML">
+      <span class="assigned-task__dot {% if t.is_done %}dot--done{% endif %}"></span>
+      <span>{{ t.title }}</span>
+      {% if t.detail %}<span class="assigned-task__detail"> – {{ t.detail }}</span>{% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="text-muted">Diesem Fahrzeug ist derzeit kein Auftrag zugeteilt.</p>
+    {% endif %}
+  </div>
+
+  <!-- Letzte Einträge -->
+  <div class="detail-section">
+    <div class="detail-section__title">Letzte Einträge</div>
+    {% if recent_changes %}
+    <ul class="change-list">
+      {% for ch in recent_changes %}
+      <li class="change-list__item">
+        {{ ch.action|replace('.', ' → ')|replace('_', ' ') }}:
+        {{ ch.ts.strftime('%d.%m.%Y %H:%M') }}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted">Noch keine Einträge.</p>
+    {% endif %}
+  </div>
+
+</div>

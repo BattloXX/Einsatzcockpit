@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Auftragsvorlagen – Admin{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Auftragsvorlagen</h1>
+      <p class="page-header__sub">Default-Aufträge pro Alarmstichwort</p>
+    </div>
+    <button class="btn btn--primary" onclick="document.getElementById('newSuggModal').showModal()">+ Vorlage anlegen</button>
+  </div>
+
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+
+  {% for atype, suggestions in by_alarm_type %}
+  <div class="admin-section-title">{{ atype.label or atype.code }} ({{ atype.code }})</div>
+  <table class="table-admin" style="margin-bottom:16px">
+    <thead>
+      <tr><th>Text</th><th>Reihenfolge</th><th>Aktionen</th></tr>
+    </thead>
+    <tbody>
+      {% for s in suggestions %}
+      <tr>
+        <td>{{ s.text }}</td>
+        <td>
+          <form method="post" action="/admin/auftragsvorlagen/{{ s.id }}/order/up" style="display:inline">
+            <button type="submit" class="btn btn--ghost btn--xs">↑</button>
+          </form>
+          <form method="post" action="/admin/auftragsvorlagen/{{ s.id }}/order/down" style="display:inline">
+            <button type="submit" class="btn btn--ghost btn--xs">↓</button>
+          </form>
+        </td>
+        <td>
+          <button class="btn btn--ghost btn--xs"
+                  onclick="openEditSugg({{ s.id }}, '{{ s.alarm_type_code }}', '{{ s.text|replace("'","\\'")|e }}')">Bearbeiten</button>
+          <form method="post" action="/admin/auftragsvorlagen/{{ s.id }}/loeschen" style="display:inline"
+                onsubmit="return confirm('Löschen?')">
+            <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+</div>
+
+<dialog class="modal" id="newSuggModal">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Neue Auftragsvorlage</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form method="post" action="/admin/auftragsvorlagen/neu">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Alarmstichwort</label>
+          <select name="alarm_type_code" class="form-select" required>
+            {% for atype in alarm_types %}
+            <option value="{{ atype.code }}">{{ atype.label or atype.code }} ({{ atype.code }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Text</label>
+          <input type="text" name="text" class="form-input" required maxlength="500">
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog class="modal" id="editSuggModal">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Auftragsvorlage bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form method="post" id="editSuggForm">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Text</label>
+          <input type="text" name="text" id="es_text" class="form-input" required maxlength="500">
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function openEditSugg(id, code, text) {
+  document.getElementById('es_text').value = text;
+  document.getElementById('editSuggForm').action = `/admin/auftragsvorlagen/${id}/edit`;
+  document.getElementById('editSuggModal').showModal();
+}
+</script>
+{% endblock %}

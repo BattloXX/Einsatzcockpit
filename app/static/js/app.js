@@ -112,7 +112,15 @@ function incidentBoard(incidentId, alarm, startedAt) {
         const ws = new WebSocket(url);
         ws.onmessage = (e) => {
           const ev = JSON.parse(e.data);
-          if (ev.reload_board) location.reload();
+          if (ev.reload_board) {
+            const modal = document.getElementById('cardDetailModal');
+            if (modal && modal.open) {
+              // Delay reload until modal is closed
+              modal.addEventListener('close', () => location.reload(), { once: true });
+            } else {
+              location.reload();
+            }
+          }
           if (ev.reload_breathing) { /* handled by breathing board */ }
           if (ev.type === 'incident_closed') {
             window.location.href = `/archiv/${id}`;

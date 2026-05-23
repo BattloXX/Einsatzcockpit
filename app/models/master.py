@@ -156,3 +156,16 @@ class SystemSettings(Base):
     value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_by_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+
+
+class AlarmDispatchVehicle(Base):
+    """Ausrückordnung: welche Fahrzeuge bei welchem Alarmtyp ausrücken (inkl. Reihenfolge)."""
+    __tablename__ = "alarm_dispatch_vehicle"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    alarm_type_code: Mapped[str] = mapped_column(String(10), ForeignKey("alarm_type.code", ondelete="CASCADE"), nullable=False)
+    vehicle_master_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("vehicle_master.id", ondelete="CASCADE"), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    alarm_type: Mapped["AlarmType"] = relationship()
+    vehicle: Mapped["VehicleMaster"] = relationship()

@@ -14,8 +14,10 @@ from app.models.incident import Incident, IncidentColumn, IncidentVehicle, Task,
 from app.models.master import AlarmType, TaskSuggestion, LageHint, VehicleMaster
 from app.services.incident_service import (
     create_incident, add_task, assign_task_to_vehicle, move_vehicle_to_column,
-    close_incident, add_section_column,
+    close_incident, add_section_column, set_commander, quick_create_commander,
+    update_task, cancel_task, move_card,
 )
+from app.models.master import Member
 from app.services.broadcast import manager
 from app.core.security import sign_qr_token, hash_api_key
 import qrcode
@@ -339,3 +341,149 @@ async def incident_history(incident_id: int, request: Request, db: Session = Dep
     return templates.TemplateResponse(request, "incident/history.html", {
         "user": user, "incident": incident, "changes": changes,
     })
+
+
+# ── Fahrzeug-Detail-Modal ─────────────────────────────────────────────────────
+
+@router.get("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", response_class=HTMLResponse)
+async def vehicle_detail(
+    incident_id: int, vehicle_id: int, request: Request, db: Session = Depends(get_db)
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    vehicle = db.get(IncidentVehicle, vehicle_id)
+    if not vehicle:
+        return Response("Nicht gefunden", status_code=404)
+    incident = _incident_or_404(incident_id, db)
+
+    dept_id = vehicle.vehicle_master.dept_id if vehicle.vehicle_master else None
+    members = (
+        db.query(Member)
+        .filter(Member.org_id == dept_id, Member.active == True)  # noqa: E712
+        .order_by(Member.lastname, Member.firstname)
+        .all()
+    ) if dept_id else []
+
+    from app.models.incident import IncidentChange
+    recent_changes = (
+        db.query(IncidentChange)
+        .filter(
+            IncidentChange.incident_id == incident_id,
+            IncidentChange.entity_type == "incident_vehicle",
+            IncidentChange.entity_id == vehicle_id,
+        )
+        .order_by(IncidentChange.ts.desc())
+        .limit(10)
+        .all()
+    )
+    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    return templates.TemplateResponse(request, "incident/_vehicle_modal.html", {
+        "user": user, "incident": incident, "vehicle": vehicle,
+        "members": members, "recent_changes": recent_changes, "can_edit": can_edit,
+    })
+
+
+@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/kommandant")
+async def set_vehicle_commander(
+    incident_id: int, vehicle_id: int, request: Request,
+    member_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    vehicle = db.get(IncidentVehicle, vehicle_id)
+    if not vehicle:
+        return Response(status_code=404)
+    set_commander(db, vehicle, member_id or None, user_id=request.state.user.id)
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
+    return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
+
+
+@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/kommandant-neu")
+async def set_vehicle_commander_new(
+    incident_id: int, vehicle_id: int, request: Request,
+    full_name: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    vehicle = db.get(IncidentVehicle, vehicle_id)
+    if not vehicle or not full_name.strip():
+        return Response(status_code=404)
+    quick_create_commander(db, vehicle, full_name.strip(), user_id=request.state.user.id)
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
+    return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
+
+
+# ── Auftrags-Detail / Edit-Modal ──────────────────────────────────────────────
+
+@router.get("/einsatz/{incident_id}/aufgabe/{task_id}/detail", response_class=HTMLResponse)
+async def task_detail(
+    incident_id: int, task_id: int, request: Request, db: Session = Depends(get_db)
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    task = db.get(Task, task_id)
+    if not task:
+        return Response("Nicht gefunden", status_code=404)
+    incident = _incident_or_404(incident_id, db)
+    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    return templates.TemplateResponse(request, "incident/_task_modal.html", {
+        "user": user, "incident": incident, "task": task, "can_edit": can_edit,
+    })
+
+
+@router.post("/einsatz/{incident_id}/aufgabe/{task_id}")
+async def update_task_endpoint(
+    incident_id: int, task_id: int, request: Request,
+    title: str = Form(...), detail: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    task = db.get(Task, task_id)
+    if not task:
+        return Response(status_code=404)
+    update_task(db, task, title, detail or None, user_id=request.state.user.id)
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "task_updated", "reload_board": True})
+    return RedirectResponse(f"/einsatz/{incident_id}/aufgabe/{task_id}/detail", status_code=303)
+
+
+@router.post("/einsatz/{incident_id}/aufgabe/{task_id}/ausblenden")
+async def cancel_task_endpoint(
+    incident_id: int, task_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    task = db.get(Task, task_id)
+    if not task:
+        return Response(status_code=404)
+    cancel_task(db, task, user_id=request.state.user.id)
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "task_updated", "reload_board": True})
+    return Response(status_code=204)
+
+
+# ── Drag & Drop: generischer Karte-verschieben-Endpoint ──────────────────────
+
+@router.post("/einsatz/{incident_id}/karte/verschieben")
+async def move_card_endpoint(
+    incident_id: int, request: Request,
+    kind: str = Form(...),
+    uid: int = Form(...),
+    column_id: Optional[int] = Form(None),
+    position: int = Form(0),
+    vehicle_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    move_card(
+        db, incident_id, kind, uid,
+        column_id=column_id, position=position,
+        vehicle_id=vehicle_id,
+        user_id=request.state.user.id,
+    )
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "card_moved", "reload_board": True})
+    return Response(status_code=204)

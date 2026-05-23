@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Ausrückordnung – Admin{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Ausrückordnung</h1>
+      <p class="page-header__sub">Welche Fahrzeuge rücken bei welchem Alarmstichwort aus (und in welcher Reihenfolge)?
+        Wenn leer → Fallback auf is_first_train Flag.</p>
+    </div>
+  </div>
+
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+
+  {% for atype in alarm_types %}
+  <div class="admin-section-title">{{ atype.label or atype.code }} ({{ atype.code }})</div>
+  <form method="post" action="/admin/ausrueckordnung/{{ atype.code }}" style="margin-bottom:24px;">
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+      {% for v in vehicles %}
+      {% set checked = v.id in dispatch_map.get(atype.code, []) %}
+      <label class="checkbox-pill {% if checked %}checkbox-pill--active{% endif %}">
+        <input type="checkbox" name="vehicle_ids" value="{{ v.id }}" {% if checked %}checked{% endif %}
+               style="display:none" onchange="this.closest('label').classList.toggle('checkbox-pill--active', this.checked)">
+        <span style="border-left: 4px solid {{ v.dept.color }}; padding-left:6px;">
+          {{ v.code }} <small>{{ v.dept.name }}</small>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+    <div style="margin-bottom:8px;">
+      <span style="font-size:.8rem; color:var(--text-muted);">Reihenfolge (kommagetrennte IDs, entspricht Ausrückfolge):</span>
+      <input type="text" name="vehicle_order"
+             value="{{ dispatch_map.get(atype.code, [])|join(',') }}"
+             class="form-input form-input--sm"
+             placeholder="z.B. 1,3,2,5"
+             style="width:200px; margin-left:8px;">
+    </div>
+    <button type="submit" class="btn btn--secondary btn--sm">Speichern für {{ atype.code }}</button>
+    <a href="/admin/ausrueckordnung/{{ atype.code }}/reset" class="btn btn--ghost btn--sm"
+       onclick="return confirm('Ausrückordnung für {{ atype.code }} zurücksetzen (leer = Fallback auf is_first_train)?')">
+      Zurücksetzen
+    </a>
+  </form>
+  {% endfor %}
+</div>
+
+<style>
+.checkbox-pill {
+  display: inline-flex; align-items: center; padding: 6px 12px;
+  border: 2px solid var(--border); border-radius: 6px; cursor: pointer;
+  font-size: .82rem; transition: border-color .15s, background .15s;
+}
+.checkbox-pill--active { border-color: var(--primary); background: rgba(183,25,33,.1); }
+</style>
+{% endblock %}

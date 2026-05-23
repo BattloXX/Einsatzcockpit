@@ -1,0 +1,77 @@
+<div class="modal__header">
+  <div>
+    <h3 class="modal__title">Auftrag bearbeiten</h3>
+    <p class="modal__subtitle">
+      Spalte: {% if task.vehicle %}{{ task.vehicle.vehicle_master.code }}{% elif task.column %}{{ task.column.title }}{% else %}–{% endif %}
+      · angelegt/geändert: {{ task.created_at.strftime('%d.%m.%Y %H:%M') }}
+    </p>
+  </div>
+  <button type="button" onclick="document.getElementById('cardDetailModal').close()" class="modal__close">×</button>
+</div>
+
+<div class="modal__body">
+  {% if can_edit %}
+  <form method="post" action="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}" id="taskEditForm">
+    <div class="form-group">
+      <label class="form-label">ÜBERSCHRIFT</label>
+      <input type="text" name="title" class="form-input" value="{{ task.title }}" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label">ERGÄNZUNG / WAS IST KONKRET ZU MACHEN?</label>
+      <textarea name="detail" class="form-input form-input--textarea" rows="4"
+                placeholder="Ergänzende Beschreibung, Lagehinweis, Auftragstext ...">{{ task.detail or '' }}</textarea>
+    </div>
+    <p class="form-hint">
+      Die Karte zeigt die Überschrift und darunter nur die Ergänzung.
+      Ausblenden bedeutet: Die Karte bleibt grau und durchgestrichen dokumentiert,
+      wird aber nicht mehr als aktiver Auftrag verwendet.
+    </p>
+  </form>
+
+  <!-- Fahrzeug-Zuweisung aus Modal -->
+  <div id="vehicleAssignArea" style="display:none; margin-top:8px;">
+    <form method="post" action="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/zuweisen">
+      <div style="display:flex; gap:8px;">
+        <select name="vehicle_id" class="form-select" style="flex:1">
+          <option value="">Fahrzeug wählen...</option>
+          {% for v in incident.vehicles %}
+          {% if v.removed_at is none %}
+          <option value="{{ v.id }}" {% if task.vehicle_id == v.id %}selected{% endif %}>
+            {{ v.vehicle_master.code }} – {{ v.vehicle_master.dept.name }}
+          </option>
+          {% endif %}
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn--secondary">Zuweisen</button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <div class="form-group">
+    <p class="modal__subtitle">Überschrift</p>
+    <p><strong>{{ task.title }}</strong></p>
+  </div>
+  {% if task.detail %}
+  <div class="form-group">
+    <p class="modal__subtitle">Ergänzung</p>
+    <p>{{ task.detail }}</p>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+
+{% if can_edit %}
+<div class="modal__footer">
+  <button type="submit" form="taskEditForm" class="btn btn--primary">Speichern</button>
+  <button type="button" class="btn btn--ghost"
+          onclick="document.getElementById('vehicleAssignArea').style.display = document.getElementById('vehicleAssignArea').style.display === 'none' ? 'block' : 'none'">
+    Fahrzeug wählen
+  </button>
+  <form method="post" action="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ausblenden" style="display:inline"
+        onsubmit="document.getElementById('cardDetailModal').close()">
+    <button type="submit" class="btn btn--danger">
+      {% if task.is_cancelled %}Wiederherstellen{% else %}Ausblenden / entfernen{% endif %}
+    </button>
+  </form>
+</div>
+{% endif %}

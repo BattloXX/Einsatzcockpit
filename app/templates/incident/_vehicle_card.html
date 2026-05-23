@@ -1,5 +1,11 @@
 <div class="card card--vehicle" data-uid="{{ vehicle.id }}" data-kind="vehicle"
-     style="--org-color: {{ vehicle.vehicle_master.dept.color }}">
+     style="--org-color: {{ vehicle.vehicle_master.dept.color }}"
+     hx-get="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/detail"
+     hx-target="#cardDetailBody"
+     hx-swap="innerHTML"
+     hx-trigger="click[!event.target.closest('select,input,button')]"
+     hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
+     style="cursor:pointer">
   <div class="card__status card__status--{{ vehicle.status_color }}"></div>
   <div class="card__body">
     <div class="card__title">
@@ -11,16 +17,20 @@
     <div class="card__gk">GK: {{ vehicle.commander.full_name }}</div>
     {% endif %}
     {% if vehicle.assigned_tasks %}
-    <div class="card__tasks">
+    <div class="card__tasks sortable-zone sortable-zone--vehicle" data-vehicle-id="{{ vehicle.id }}">
       {% for t in vehicle.assigned_tasks %}
-      <div class="assigned-task {% if t.is_done %}assigned-task--done{% endif %}">
+      {% if not t.is_cancelled %}
+      <div class="assigned-task {% if t.is_done %}assigned-task--done{% endif %}" data-uid="{{ t.id }}" data-kind="task">
         <input type="checkbox" {% if t.is_done %}checked{% endif %}
                hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ t.id }}/erledigt"
                hx-swap="none" class="task-check">
         <span>{{ t.title }}</span>
       </div>
+      {% endif %}
       {% endfor %}
     </div>
+    {% else %}
+    <div class="card__tasks sortable-zone sortable-zone--vehicle" data-vehicle-id="{{ vehicle.id }}"></div>
     {% endif %}
   </div>
   {% if can_edit %}

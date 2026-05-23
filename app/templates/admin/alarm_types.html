@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Alarmtypen – Admin{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Alarmtypen</h1>
+      <p class="page-header__sub">Bekannte Einsatzstichwörter und ihre Eigenschaften</p>
+    </div>
+    <button class="btn btn--primary" onclick="document.getElementById('newAtModal').showModal()">+ Alarmtyp anlegen</button>
+  </div>
+
+  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+  {% if error %}<div class="alert alert--danger">{{ error }}</div>{% endif %}
+
+  <table class="table-admin">
+    <thead>
+      <tr><th>Code</th><th>Kategorie</th><th>Bezeichnung</th><th>Nur Erstausr.</th><th>Nachalarm.</th><th>Aktionen</th></tr>
+    </thead>
+    <tbody>
+      {% for at in alarm_types %}
+      <tr>
+        <td><strong>{{ at.code }}</strong></td>
+        <td>{{ at.category }}</td>
+        <td>{{ at.label }}</td>
+        <td>{% if at.default_first_train_only %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
+        <td>{% if at.notify_neighbors %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
+        <td>
+          <button class="btn btn--ghost btn--xs"
+                  onclick="openEditAt('{{ at.code }}', '{{ at.category }}', '{{ at.label|replace("'","\\'")|e }}', {{ at.default_first_train_only|lower }}, {{ at.notify_neighbors|lower }})">
+            Bearbeiten
+          </button>
+          <form method="post" action="/admin/alarmtypen/{{ at.code }}/loeschen" style="display:inline"
+                onsubmit="return confirm('Alarmtyp {{ at.code }} löschen? Nur möglich wenn keine Einsätze damit existieren.')">
+            <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<dialog class="modal" id="newAtModal">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Neuer Alarmtyp</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form method="post" action="/admin/alarmtypen/neu">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Code (z.B. F3, T5)</label>
+          <input type="text" name="code" class="form-input" required maxlength="10">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kategorie</label>
+          <select name="category" class="form-select">
+            <option value="F">F – Feuer</option>
+            <option value="T" selected>T – Technisch</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bezeichnung</label>
+          <input type="text" name="label" class="form-input" maxlength="100">
+        </div>
+        <div class="form-group">
+          <label><input type="checkbox" name="default_first_train_only" value="true"> Nur Erstausrückung</label>
+        </div>
+        <div class="form-group">
+          <label><input type="checkbox" name="notify_neighbors" value="true"> Nachalarmierung</label>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog class="modal" id="editAtModal">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Alarmtyp bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form method="post" id="editAtForm">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Kategorie</label>
+          <select name="category" id="at_category" class="form-select">
+            <option value="F">F – Feuer</option>
+            <option value="T">T – Technisch</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bezeichnung</label>
+          <input type="text" name="label" id="at_label" class="form-input" maxlength="100">
+        </div>
+        <div class="form-group">
+          <label><input type="checkbox" name="default_first_train_only" id="at_first_train" value="true"> Nur Erstausrückung</label>
+        </div>
+        <div class="form-group">
+          <label><input type="checkbox" name="notify_neighbors" id="at_neighbors" value="true"> Nachalarmierung</label>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function openEditAt(code, category, label, firstTrain, neighbors) {
+  document.getElementById('at_category').value = category;
+  document.getElementById('at_label').value = label;
+  document.getElementById('at_first_train').checked = firstTrain;
+  document.getElementById('at_neighbors').checked = neighbors;
+  document.getElementById('editAtForm').action = `/admin/alarmtypen/${code}/edit`;
+  document.getElementById('editAtModal').showModal();
+}
+</script>
+{% endblock %}
