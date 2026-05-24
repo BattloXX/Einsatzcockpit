@@ -23,7 +23,14 @@
   </div>
   {% endif %}
   {% if request.query_params.get('error') == 'missing_columns' %}
-  <div class="alert alert--danger">Excel-Datei ungültig: Spalten „Nachname" und „Vorname" nicht gefunden.</div>
+  <div class="alert alert--danger">
+    Excel-Datei ungültig: Pflicht-Spalten nicht erkannt.
+    {% if request.query_params.get('error_detail') %}
+    {{ request.query_params.get('error_detail') }}
+    {% else %}
+    Erwartet: Spalte mit Nachnamen (z. B. „Zuname", „Nachname") und Vornamen (z. B. „Vorname").
+    {% endif %}
+  </div>
   {% elif request.query_params.get('error') == 'invalid_excel' %}
   <div class="alert alert--danger">Ungültige Excel-Datei. Bitte .xlsx-Format verwenden.</div>
   {% elif request.query_params.get('error') %}

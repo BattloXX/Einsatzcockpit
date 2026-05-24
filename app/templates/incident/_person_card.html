@@ -12,8 +12,31 @@
     </div>
     {% if person.name %}<div class="card__sub">{{ person.name }}</div>{% endif %}
     {% if person.location %}<div class="card__sub">📍 {{ person.location }}</div>{% endif %}
+    {% if person.media %}
+    <div class="card__media">
+      {% for m in person.media[:3] %}
+        {% if m.kind == 'image' %}<img src="/medien/person/thumb/{{ m.id }}" alt="" loading="lazy">
+        {% elif m.kind == 'pdf' %}<span class="card__media-icon">📄</span>
+        {% else %}<span class="card__media-icon">🎬</span>{% endif %}
+      {% endfor %}
+      {% if person.media|length > 3 %}<span class="card__media-more">+{{ person.media|length - 3 }}</span>{% endif %}
+    </div>
+    {% endif %}
     <div class="card__meta">
       <span class="card__time">{{ person.created_at|local_time }}</span>
     </div>
   </div>
+  {% if can_edit %}
+  <div class="card__footer">
+    <form hx-post="/einsatz/{{ incident.id }}/person/{{ person.id }}/medien"
+          hx-encoding="multipart/form-data"
+          hx-swap="none"
+          style="margin:0;">
+      <label class="card__camera" title="Foto aufnehmen" onclick="event.stopPropagation()">
+        📷<input type="file" name="files" accept="image/*" capture="environment" style="display:none"
+                 onchange="this.closest('form').requestSubmit()">
+      </label>
+    </form>
+  </div>
+  {% endif %}
 </div>

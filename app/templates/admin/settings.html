@@ -20,11 +20,27 @@
 <div class="alert alert--error">Logo-Upload: {{ request.query_params.get('logo_error')|replace('%20', ' ') }}</div>
 {% endif %}
 
+{% if is_sysadmin and all_orgs %}
+<section class="card mb-4">
+  <div class="card-body" style="padding:16px 20px;">
+    <label style="font-weight:600;margin-bottom:6px;display:block;">Organisation wählen:</label>
+    <select class="form-control" style="max-width:320px"
+            onchange="location.href='/admin/settings?org_id='+this.value">
+      <option value="">-- bitte wählen --</option>
+      {% for o in all_orgs %}
+      <option value="{{ o.id }}" {% if org and org.id == o.id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</section>
+{% endif %}
+
 {% if org %}
 <section class="card mb-4">
   <div class="card-header"><h2>Organisation: {{ org.name }}</h2></div>
   <div class="card-body">
     <form method="post" action="/admin/settings/org" enctype="multipart/form-data">
+    {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
       <div class="form-grid">
         <div class="form-group">
           <label>Organisationsname</label>

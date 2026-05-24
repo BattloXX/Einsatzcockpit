@@ -333,14 +333,18 @@ def set_unit_status(
 
 
 def list_commander_candidates(db: Session, org_ids: list[int]) -> list[Member]:
-    """Return all active members of the given organisations."""
+    """Return active members with GK qualification from the given organisations."""
     return (
         db.query(Member)
+        .join(MemberQualification, MemberQualification.member_id == Member.id)
+        .join(Qualification, Qualification.id == MemberQualification.qualification_id)
         .filter(
             Member.active.is_(True),
             Member.org_id.in_(org_ids),
+            Qualification.code == "GK",
         )
         .order_by(Member.lastname, Member.firstname)
+        .distinct()
         .all()
     )
 

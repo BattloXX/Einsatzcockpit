@@ -326,33 +326,71 @@ async def import_members_excel(
     except Exception:
         return RedirectResponse("/admin/mitglieder?error=invalid_excel", status_code=303)
 
+    _LASTNAME_ALIASES  = {"nachname", "lastname", "name", "zuname", "familienname"}
+    _FIRSTNAME_ALIASES = {"vorname", "firstname", "rufname"}
+    _PHONE_ALIASES     = {"telefon", "phone", "tel", "mobil", "handy",
+                          "mobil nummer 1", "mobiltelefon", "telefonnummer"}
+    _EMAIL_ALIASES     = {"e-mail", "email", "mail", "e-mail 1", "e mail"}
+    _ROLE_ALIASES      = {"bezeichnung", "funktion", "rolle"}
+    _ROLE_TO_QUALI = [
+        ("gruppenkommandant", "GK"),
+        ("zugskommandant",    "ZK"),
+        ("kommandant",        "ZK"),
+        ("atemschutz",        "AGT"),
+        ("maschinist",        "MA"),
+        ("truppführer",       "TF"),
+        ("truppfuhrer",       "TF"),
+        ("truppmann",         "TM"),
+        ("einsatzleiter",     "EL"),
+        ("jugend",            "JF"),
+    ]
+
     # Build column index from header row
     headers = [str(c.value or "").strip().lower() for c in next(ws.iter_rows(max_row=1))]
     col_map: dict[str, int] = {}
     for i, h in enumerate(headers):
-        if h in ("nachname", "lastname", "name"):
+        if h in _LASTNAME_ALIASES:
             col_map.setdefault("lastname", i)
-        elif h in ("vorname", "firstname"):
+        elif h in _FIRSTNAME_ALIASES:
             col_map.setdefault("firstname", i)
-        elif h in ("telefon", "phone", "tel"):
+        elif h in _PHONE_ALIASES:
             col_map.setdefault("phone", i)
-        elif h in ("e-mail", "email", "mail"):
+        elif h in _EMAIL_ALIASES:
             col_map.setdefault("email", i)
+        elif h in _ROLE_ALIASES:
+            col_map.setdefault("role", i)
 
     if "lastname" not in col_map or "firstname" not in col_map:
-        return RedirectResponse("/admin/mitglieder?error=missing_columns", status_code=303)
+        found = ", ".join(f"„{h}"" for h in headers[:8] if h)
+        detail = f"Gefundene Spalten: {found}. Erwartet: Zuname/Nachname und Vorname."
+        import urllib.parse
+        return RedirectResponse(
+            f"/admin/mitglieder?error=missing_columns&error_detail={urllib.parse.quote(detail)}",
+            status_code=303,
+        )
+
+    # Pre-load qualifications for role mapping
+    quali_cache: dict[str, int] = {}
+    for _label, _code in _ROLE_TO_QUALI:
+        if _code not in quali_cache:
+            q = db.query(Qualification).filter(Qualification.code == _code).first()
+            if q:
+                quali_cache[_code] = q.id
 
     user = request.state.user
     created = 0
     skipped = 0
     for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row:
+            continue
         lastname = str(row[col_map["lastname"]] or "").strip()
         firstname = str(row[col_map["firstname"]] or "").strip()
         if not lastname or not firstname:
             skipped += 1
             continue
-        phone = str(row[col_map["phone"]] if "phone" in col_map and row[col_map["phone"]] else "").strip() or None
-        email = str(row[col_map["email"]] if "email" in col_map and row[col_map["email"]] else "").strip().lower() or None
+        phone = str(row[col_map["phone"]] if "phone" in col_map and col_map["phone"] < len(row) and row[col_map["phone"]] else "").strip() or None
+        email = str(row[col_map["email"]] if "email" in col_map and col_map["email"] < len(row) and row[col_map["email"]] else "").strip().lower() or None
+        role_raw = str(row[col_map["role"]] if "role" in col_map and col_map["role"] < len(row) and row[col_map["role"]] else "").strip().lower()
         # Skip exact duplicates (same name in same org)
         existing = db.query(Member).filter(
             Member.org_id == user.org_id,
@@ -362,8 +400,20 @@ async def import_members_excel(
         if existing:
             skipped += 1
             continue
-        db.add(Member(lastname=lastname, firstname=firstname, phone=phone, email=email,
-                      org_id=user.org_id, active=True))
+        member = Member(lastname=lastname, firstname=firstname, phone=phone, email=email,
+                        org_id=user.org_id, active=True)
+        db.add(member)
+        db.flush()  # get member.id
+        # Auto-assign qualification from role column
+        if role_raw and quali_cache:
+            for _label, _code in _ROLE_TO_QUALI:
+                if _label in role_raw and _code in quali_cache:
+                    already = db.query(MemberQualification).filter_by(
+                        member_id=member.id, qualification_id=quali_cache[_code]
+                    ).first()
+                    if not already:
+                        db.add(MemberQualification(member_id=member.id, qualification_id=quali_cache[_code]))
+                    break
         created += 1
 
     if created:

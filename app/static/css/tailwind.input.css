@@ -218,6 +218,26 @@ a:hover { text-decoration: underline; }
 .card--message { --org-color: var(--yellow); }
 .card--rescue  { --org-color: var(--green); }
 
+.card__media { display: flex; gap: 4px; padding: 4px 10px 6px; flex-wrap: wrap; }
+.card__media img { width: 38px; height: 38px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+.card__media-icon { display: inline-flex; align-items: center; justify-content: center;
+                    width: 38px; height: 38px; border-radius: 4px;
+                    background: var(--surface-2, #1f2937); font-size: 16px; flex-shrink: 0; }
+.card__media-more { display: inline-flex; align-items: center; justify-content: center;
+                    width: 38px; height: 38px; border-radius: 4px;
+                    background: rgba(255,255,255,.08); font-size: 11px;
+                    color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
+.card__camera { display: inline-flex; align-items: center; justify-content: center;
+                min-width: 44px; min-height: 44px; font-size: 18px; cursor: pointer;
+                border: none; background: none; color: var(--text-muted); padding: 0; }
+@media (hover: hover) { .card__camera { display: none; } }
+.form-select--status { font-size: .7rem !important; font-weight: 700; color: #fff !important;
+                       border: none !important; border-radius: 4px; }
+.status-open        { background: #c62828 !important; }
+.status-in_progress { background: #e65100 !important; }
+.status-done        { background: #2e7d32 !important; }
+.form-select--status option { color: #111; background: #fff; }
+
 /* ── Kanban Board ────────────────────────────────────────── */
 .kanban-col {
   min-width: 280px; max-width: 280px; background: var(--surface-low);
@@ -370,8 +390,7 @@ a:hover { text-decoration: underline; }
 dialog { border: none; background: var(--surface-mid); color: var(--on-surface);
          border-radius: 0.75rem; box-shadow: 0 10px 40px rgba(0,0,0,.65);
          padding: 0; max-width: 560px; width: 90vw;
-         margin: auto; position: fixed; top: 50%; left: 50%;
-         transform: translate(-50%, -50%); }
+         position: fixed; inset: 0; margin: auto; max-height: calc(100dvh - 32px); }
 dialog::backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(2px); }
 dialog.modal--wide { max-width: 720px; }
 .modal__content { display: flex; flex-direction: column; max-height: 90vh; }
@@ -386,7 +405,7 @@ dialog.modal--wide { max-width: 720px; }
 .modal__footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex;
                  justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .modal--detail .modal__content { padding: 0; max-width: 560px; }
-.modal--detail .modal__body { padding: 16px 20px; max-height: 70vh; overflow-y: auto; }
+.modal--detail .modal__body { padding: 16px 20px; max-height: 72dvh; overflow-y: auto; }
 
 .detail-section { margin-bottom: 16px; }
 .detail-section__title { font-size: .72rem; font-weight: 700; letter-spacing: .08em;

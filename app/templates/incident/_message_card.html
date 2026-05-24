@@ -11,11 +11,12 @@
       {% if can_edit %}
       {% set sl = msg.status if msg.status else 'open' %}
       <span onclick="event.stopPropagation()" style="flex-shrink:0;">
-        <select name="status" class="form-select form-select--xs"
-                style="padding:2px 4px;font-size:.7rem;width:auto;min-width:75px;background:{% if sl=='done' %}rgba(67,160,71,.25){% elif sl=='in_progress' %}rgba(249,168,37,.25){% else %}rgba(229,57,53,.25){% endif %};"
+        <select name="status" class="form-select form-select--xs form-select--status status-{{ sl }}"
+                style="width:auto;min-width:75px;"
                 hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel"
                 hx-trigger="change"
-                hx-swap="none">
+                hx-swap="none"
+                onchange="this.className='form-select form-select--xs form-select--status status-'+this.value">
           <option value="open" {% if sl=='open' %}selected{% endif %}>🔴 Offen</option>
           <option value="in_progress" {% if sl=='in_progress' %}selected{% endif %}>🟡 In Arbeit</option>
           <option value="done" {% if sl=='done' %}selected{% endif %}>🟢 Erledigt</option>
@@ -31,5 +32,29 @@
     {% if msg.vehicle %}
     <div class="card__gk" style="font-size:.75rem;opacity:.7;">→ {{ msg.vehicle.vehicle_master.code }}</div>
     {% endif %}
+    {% if msg.media %}
+    <div class="card__media">
+      {% for m in msg.media[:3] %}
+        {% if m.kind == 'image' %}<img src="/medien/meldung/thumb/{{ m.id }}" alt="" loading="lazy">
+        {% elif m.kind == 'pdf' %}<span class="card__media-icon">📄</span>
+        {% else %}<span class="card__media-icon">🎬</span>{% endif %}
+      {% endfor %}
+      {% if msg.media|length > 3 %}<span class="card__media-more">+{{ msg.media|length - 3 }}</span>{% endif %}
+    </div>
+    {% endif %}
+    <div class="card__meta"><span class="card__time">{{ msg.created_at|local_time }}</span></div>
   </div>
+  {% if can_edit %}
+  <div class="card__footer">
+    <form hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/medien"
+          hx-encoding="multipart/form-data"
+          hx-swap="none"
+          style="margin:0;">
+      <label class="card__camera" title="Foto aufnehmen" onclick="event.stopPropagation()">
+        📷<input type="file" name="files" accept="image/*" capture="environment" style="display:none"
+                 onchange="this.closest('form').requestSubmit()">
+      </label>
+    </form>
+  </div>
+  {% endif %}
 </div>

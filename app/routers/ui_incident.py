@@ -595,17 +595,9 @@ async def vehicle_detail(
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
 
-    dept_id = vehicle.vehicle_master.dept_id if vehicle.vehicle_master else None
-    org_ids = [dept_id] if dept_id else []
+    org_ids = [incident.primary_org_id] + [io.org_id for io in (incident.collaborating_orgs or [])]
+    org_ids = [oid for oid in org_ids if oid]
     commander_candidates = list_commander_candidates(db, org_ids)
-    # Fallback: if no GK-qualified members, show all active members of dept
-    if not commander_candidates and dept_id:
-        commander_candidates = (
-            db.query(Member)
-            .filter(Member.org_id == dept_id, Member.active.is_(True))
-            .order_by(Member.lastname, Member.firstname)
-            .all()
-        )
 
     from app.models.incident import IncidentChange
     recent_changes = (

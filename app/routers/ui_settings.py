@@ -54,9 +54,15 @@ def _validate_logo_bytes(data: bytes, ext: str) -> tuple[bool, str]:
 # ── Organisations-Einstellungen ──────────────────────────────────────────────
 
 @router.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request, db=Depends(get_db), user: User = Depends(require_role("org_admin", "admin"))):
-    org = db.query(FireDept).filter(FireDept.id == user.org_id).first() if user.org_id else None
-    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first() if user.org_id else None
+def settings_page(request: Request, db=Depends(get_db), user: User = Depends(require_role("org_admin", "admin")),
+                  org_id: int | None = None):
+    is_sysadmin = has_role(user, "system_admin")
+    if is_sysadmin and org_id:
+        effective_org_id = org_id
+    else:
+        effective_org_id = user.org_id
+    org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first() if effective_org_id else None
     version = get_current_version()
     is_sysadmin = has_role(user, "system_admin")
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
@@ -90,11 +96,14 @@ async def save_org_settings(
     withdraw_press_reserve: str = Form(""),
     timezone: str = Form(""),
     logo: UploadFile = File(None),
+    target_org_id: int | None = Form(None),
 ):
-    if not user.org_id:
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = target_org_id if is_sysadmin and target_org_id else user.org_id
+    if not effective_org_id:
         return RedirectResponse("/admin/settings", status_code=303)
 
-    org = db.query(FireDept).filter(FireDept.id == user.org_id).first()
+    org = db.query(FireDept).filter(FireDept.id == effective_org_id).first()
     if org and org_name:
         org.name = org_name
     if org and contact_email:
@@ -134,25 +143,25 @@ async def save_org_settings(
             if not ok:
                 upload_error = msg
             else:
-                dest = UPLOAD_DIR / f"logo_org{user.org_id}{ext}"
+                dest = UPLOAD_DIR / f"logo_org{effective_org_id}{ext}"
                 # Alte Datei mit anderer Extension löschen, damit es keine Mehrfachversionen gibt
                 for old_ext in ALLOWED_LOGO_EXTS:
                     if old_ext != ext:
-                        old = UPLOAD_DIR / f"logo_org{user.org_id}{old_ext}"
+                        old = UPLOAD_DIR / f"logo_org{effective_org_id}{old_ext}"
                         if old.exists():
                             try:
                                 old.unlink()
                             except OSError:
                                 pass
                 dest.write_bytes(data)
-                logo_path = f"/static/img/uploads/logo_org{user.org_id}{ext}"
+                logo_path = f"/static/img/uploads/logo_org{effective_org_id}{ext}"
                 if org:
                     org.logo_path = logo_path
 
     # OrgSettings
-    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
+    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
     if not org_s:
-        org_s = OrgSettings(org_id=user.org_id)
+        org_s = OrgSettings(org_id=effective_org_id)
         db.add(org_s)
     if primary_color:
         org_s.primary_color = primary_color
@@ -163,7 +172,8 @@ async def save_org_settings(
 
     db.commit()
     suffix = "&logo_error=" + upload_error.replace(" ", "%20") if upload_error else ""
-    return RedirectResponse(f"/admin/settings?saved=1{suffix}", status_code=303)
+    org_suffix = f"&org_id={effective_org_id}" if is_sysadmin and effective_org_id else ""
+    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}{suffix}", status_code=303)
 
 
 @router.post("/settings/org/logo/reset")
