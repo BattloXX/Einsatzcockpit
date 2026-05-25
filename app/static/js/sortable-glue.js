@@ -132,8 +132,8 @@
           const card = evt.item;
           const uid = card.dataset.uid;
           const kind = card.dataset.kind;
-          if (kind !== 'task' || !uid) return;
-          postMove(incidentId, { kind: 'task', uid, vehicle_id: vehicleId, position: evt.newIndex });
+          if (!['task', 'message', 'person'].includes(kind) || !uid) return;
+          postMove(incidentId, { kind, uid, vehicle_id: vehicleId, position: evt.newIndex });
         },
         onEnd() {
           _dragging = false;

@@ -110,12 +110,22 @@
 <!-- Neuer Trupp Modal -->
 <dialog class="modal modal--wide" id="newTroopModal">
   <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/trupp"
-        class="modal__content" x-data="newTroopForm()">
+        class="modal__content" x-data="newTroopForm()"
+        @submit="if (!validate()) $event.preventDefault()">
     <div class="modal__header">
       <h3>Trupp anlegen</h3>
       <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
+      {% if request.query_params.get('error') == 'min_two_members' %}
+      <div class="alert alert--danger" style="margin-bottom:10px;">
+        Es müssen mindestens 2 Truppmitglieder ausgefüllt sein.
+      </div>
+      {% endif %}
+      <p class="form-hint" style="margin-bottom:8px;">
+        Trupp hat 3 Slots — mindestens 2 müssen ausgefüllt sein.
+      </p>
+
       <div class="form-row">
         <div class="form-group">
           <label>Trupp-Bezeichnung</label>
@@ -130,20 +140,20 @@
       <div class="troop-member-list">
         <template x-for="(m, i) in members" :key="i">
           <div class="troop-member-row">
-            <select :name="`member_${i}_id`" class="form-select">
+            <select :name="`member_${i}_id`" x-model="m.id" class="form-select">
               <option value="">Freie Eingabe</option>
               {% for member in members %}
               <option value="{{ member.id }}">{{ member.full_name }}{% if member.is_agt %} (AGT){% endif %}</option>
               {% endfor %}
             </select>
-            <input :name="`member_${i}_name`" type="text" class="form-input" placeholder="oder Name">
+            <input :name="`member_${i}_name`" x-model="m.name" type="text" class="form-input" placeholder="oder Name">
             <select :name="`member_${i}_role`" class="form-select form-select--xs">
               <option value="truppfuehrer">TF</option>
               <option value="truppmann">TM</option>
             </select>
             <input :name="`member_${i}_press`" type="number" class="form-input form-input--press"
                    placeholder="bar" min="100" max="400" step="10">
-            <button type="button" @click="members.splice(i,1)" class="btn btn--icon btn--danger">×</button>
+            <button type="button" @click="removeMember(i)" class="btn btn--icon btn--danger">×</button>
           </div>
         </template>
       </div>
@@ -179,7 +189,26 @@ function troopTimer(entryAt, backAt) {
 }
 
 function newTroopForm() {
-  return { members: [{}, {}] };
+  return {
+    members: [{}, {}, {}],
+    validate() {
+      const filled = this.members.filter(m =>
+        (m.id && m.id !== "") || (m.name && m.name.trim().length > 0)
+      ).length;
+      if (filled < 2) {
+        alert('Bitte mindestens 2 Truppmitglieder ausfüllen.');
+        return false;
+      }
+      return true;
+    },
+    removeMember(i) {
+      if (this.members.length <= 2) {
+        alert('Mindestens 2 Slots nötig.');
+        return;
+      }
+      this.members.splice(i, 1);
+    },
+  };
 }
 </script>
 {% endblock %}

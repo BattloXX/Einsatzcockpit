@@ -1,9 +1,17 @@
-"""Externe REST-API – Einsatz automatisch anlegen."""
+"""Externe REST-API – Einsatz automatisch anlegen.
+
+Authentifizierung erfolgt über den HTTP-Header `X-API-Key`. Keys werden
+im Admin-Bereich (`/admin/api-keys`) erstellt und sind org-gebunden:
+Lese-Endpunkte liefern nur Einsätze der eigenen Org bzw. solche, an denen
+die Org als Kollaborator beteiligt ist.
+
+Antworten sind JSON; Fehler folgen FastAPI-Konvention mit `detail`-Feld.
+"""
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -17,7 +25,7 @@ from app.services.broadcast import manager
 from app.services.push_service import notify_all
 from app.config import settings
 
-router = APIRouter(prefix="/api/v1", tags=["API v1"])
+router = APIRouter(prefix="/api/v1", tags=["Einsätze"])
 
 # Mapping of possible lowercase Stufe values to alarm type codes
 STUFE_MAP = {
@@ -30,17 +38,56 @@ STUFE_MAP = {
 
 
 class AlarmPayload(BaseModel):
-    Key: str
-    Nummer: Optional[int] = None
-    AlarmDatumZeit: Optional[str] = None
-    Stufe: Optional[str] = None
-    Art: Optional[str] = None
-    Meldung: Optional[str] = None
-    Einsatzgrund: Optional[str] = None
-    Ort: Optional[str] = None
-    Strasse: Optional[str] = None
-    HausNr: Optional[str] = None
-    Uebung: bool = False
+    """Eingabe-Schema für `/api/v1/einsatz`.
+
+    Felder folgen dem klassischen FWWO-Alarmlayout (deutsche Bezeichnungen).
+    Pflichtfeld ist nur `Key` — er dient als Idempotency-Token und verhindert,
+    dass dasselbe Alarm-Ereignis zweimal angelegt wird.
+    """
+    Key: str = Field(..., description="Eindeutiger Schlüssel des Alarms (Idempotency).",
+                     examples=["A-2025-04711"])
+    Nummer: Optional[int] = Field(None, description="Externe Einsatznummer.", examples=[4711])
+    AlarmDatumZeit: Optional[str] = Field(
+        None, description="ISO-8601 Datum/Zeit der Alarmierung.",
+        examples=["2026-05-24T18:42:00+02:00"],
+    )
+    Stufe: Optional[str] = Field(
+        None, description="Alarmstufe: F1–F14, T1–T7 (case-insensitive).",
+        examples=["F3"],
+    )
+    Art: Optional[str] = Field(None, description="Einsatzart-Bezeichnung.")
+    Meldung: Optional[str] = Field(None, description="Volltext der Alarmmeldung.")
+    Einsatzgrund: Optional[str] = Field(None, description="Anlass/Einsatzgrund.")
+    Ort: Optional[str] = Field(None, description="Ort/Stadt.")
+    Strasse: Optional[str] = Field(None, description="Straße.")
+    HausNr: Optional[str] = Field(None, description="Hausnummer.")
+    Uebung: bool = Field(False, description="Übungsalarm (kein echter Einsatz).")
+
+
+class IncidentCreatedResponse(BaseModel):
+    """Antwort beim Anlegen / Idempotency-Hit eines Einsatzes."""
+    id: int = Field(..., description="Interne Einsatz-ID.")
+    external_key: str = Field(..., description="Vom Aufrufer mitgegebener Schlüssel.")
+    url: str = Field(..., description="UI-URL zum neu angelegten Einsatz.")
+    created: bool = Field(..., description="True bei Neuanlage, False bei Idempotency-Treffer.")
+
+
+class IncidentSummary(BaseModel):
+    """Kurz-Repräsentation eines Einsatzes in Listen-Endpunkten."""
+    id: int
+    alarm_type_code: str = Field(..., description="Alarmstufe (z. B. F3).")
+    started_at: Optional[datetime] = Field(None, description="Startzeitpunkt UTC.")
+    is_exercise: bool = Field(..., description="Übungsalarm?")
+
+
+class IncidentDetail(BaseModel):
+    """Detail-Repräsentation eines Einsatzes."""
+    id: int
+    alarm_type_code: str
+    status: str = Field(..., description="`active` oder `closed`.")
+    started_at: Optional[datetime]
+    address: str = Field(..., description="Zusammengesetzte Adresse: 'Strasse HausNr, Ort'.")
+    is_exercise: bool
 
 
 def _get_api_key(x_api_key: str = Header(..., alias="X-API-Key"), db: Session = Depends(get_db)):
@@ -52,7 +99,22 @@ def _get_api_key(x_api_key: str = Header(..., alias="X-API-Key"), db: Session = 
     return api_key
 
 
-@router.post("/einsatz")
+@router.post(
+    "/einsatz",
+    response_model=IncidentCreatedResponse,
+    summary="Einsatz aus Alarm anlegen",
+    description=(
+        "Legt einen neuen Einsatz aus einem externen Alarm-Datensatz an "
+        "(z. B. von der Leitstelle oder einem Alarmierungssystem). "
+        "Bereits angelegte Einsätze (gleicher `Key`) werden idempotent zurückgegeben — "
+        "ohne erneute Anlage, ohne Push-Notification. "
+        "Bei Neuanlage werden alle Push-Empfänger und WebSocket-Clients informiert."
+    ),
+    responses={
+        200: {"description": "Einsatz angelegt oder bereits vorhanden (siehe `created`)."},
+        401: {"description": "Ungültiger oder gesperrter API-Key."},
+    },
+)
 async def create_incident_api(
     payload: AlarmPayload,
     request: Request,
@@ -143,14 +205,35 @@ def _api_key_scoped_incidents(db: Session, api_key: ApiKey):
     )
 
 
-@router.get("/einsatz/active")
+@router.get(
+    "/einsatz/active",
+    response_model=List[IncidentSummary],
+    summary="Aktive Einsätze auflisten",
+    description=(
+        "Liefert alle Einsätze mit Status `active` für die Organisation des API-Keys "
+        "(primary org und Kollaborationen). Legacy/System-Keys ohne `org_id` "
+        "sehen alle aktiven Einsätze."
+    ),
+    responses={401: {"description": "Ungültiger oder gesperrter API-Key."}},
+)
 def list_active_incidents(db: Session = Depends(get_db), api_key: ApiKey = Depends(_get_api_key)):
     incidents = _api_key_scoped_incidents(db, api_key).filter(Incident.status == "active").all()
     return [{"id": i.id, "alarm_type_code": i.alarm_type_code,
              "started_at": i.started_at, "is_exercise": i.is_exercise} for i in incidents]
 
 
-@router.get("/einsatz/{incident_id}")
+@router.get(
+    "/einsatz/{incident_id}",
+    response_model=IncidentDetail,
+    summary="Einsatz-Detail abrufen",
+    description=(
+        "Liefert Detail-Informationen zu einem Einsatz. Org-Scope wie bei `/einsatz/active`."
+    ),
+    responses={
+        401: {"description": "Ungültiger API-Key."},
+        404: {"description": "Einsatz nicht gefunden oder nicht im Scope der Org."},
+    },
+)
 def get_incident(incident_id: int, db: Session = Depends(get_db), api_key: ApiKey = Depends(_get_api_key)):
     incident = _api_key_scoped_incidents(db, api_key).filter(Incident.id == incident_id).first()
     if not incident:

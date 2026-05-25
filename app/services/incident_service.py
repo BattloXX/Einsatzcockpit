@@ -313,6 +313,17 @@ def quick_create_commander(
     return set_commander(db, vehicle, member.id, user_id=user_id)
 
 
+def _next_display_order(db: Session, incident_id: int, column_id: int) -> int:
+    """Liefert den nächsten freien display_order-Wert für eine Spalte (ans Ende)."""
+    from sqlalchemy import func
+    max_order = db.query(func.max(IncidentVehicle.display_order)).filter(
+        IncidentVehicle.incident_id == incident_id,
+        IncidentVehicle.column_id == column_id,
+        IncidentVehicle.removed_at.is_(None),
+    ).scalar()
+    return (max_order + 1) if max_order is not None else 0
+
+
 def set_unit_status(
     db: Session,
     vehicle: IncidentVehicle,
@@ -321,12 +332,20 @@ def set_unit_status(
 ) -> IncidentVehicle:
     if status not in UNIT_STATUS_VALUES:
         raise ValueError(f"Ungültiger Status: {status}")
-    before = {"unit_status": vehicle.unit_status}
+    before = {"unit_status": vehicle.unit_status, "column_id": vehicle.column_id}
     vehicle.unit_status = status
+    # Sync: Status "Am Einsatzort" verschiebt das Fahrzeug in die Spalte "active"
+    if status == "Am Einsatzort":
+        active_col = db.query(IncidentColumn).filter_by(
+            incident_id=vehicle.incident_id, code="active"
+        ).first()
+        if active_col and vehicle.column_id != active_col.id:
+            vehicle.column_id = active_col.id
+            vehicle.display_order = _next_display_order(db, vehicle.incident_id, active_col.id)
     db.flush()
     write_incident_change(
         db, vehicle.incident_id, "vehicle.status_set", "incident_vehicle", vehicle.id,
-        before=before, after={"unit_status": status},
+        before=before, after={"unit_status": status, "column_id": vehicle.column_id},
         user_id=user_id,
     )
     return vehicle
@@ -468,7 +487,8 @@ def move_card(
         col = db.get(IncidentColumn, column_id)
         if not col:
             return
-        before = {"column_id": vehicle.column_id, "display_order": vehicle.display_order}
+        before = {"column_id": vehicle.column_id, "display_order": vehicle.display_order,
+                  "unit_status": vehicle.unit_status}
         # Reorder other vehicles in target column
         siblings = (
             db.query(IncidentVehicle)
@@ -485,10 +505,16 @@ def move_card(
             sib.display_order = i if i < position else i + 1
         vehicle.column_id = column_id
         vehicle.display_order = position
+        # Bidirektionaler Sync Spalte ↔ Unit-Status
+        if col.code == "active" and vehicle.unit_status != "Am Einsatzort":
+            vehicle.unit_status = "Am Einsatzort"
+        elif col.code == "dispatched" and vehicle.unit_status == "Am Einsatzort":
+            vehicle.unit_status = "Einsatz übernommen"
         db.flush()
         write_incident_change(
             db, incident_id, "vehicle.moved", "incident_vehicle", uid,
-            before=before, after={"column_id": column_id, "display_order": position},
+            before=before, after={"column_id": column_id, "display_order": position,
+                                   "unit_status": vehicle.unit_status},
             user_id=user_id,
         )
 
@@ -527,11 +553,50 @@ def move_card(
         msg = db.get(Msg, uid)
         if not msg:
             return
-        before = {"display_order": msg.display_order}
-        msg.display_order = position
-        db.flush()
-        write_incident_change(
-            db, incident_id, "message.reordered", "message", uid,
-            before=before, after={"display_order": position},
-            user_id=user_id,
-        )
+        before = {"display_order": msg.display_order, "vehicle_id": msg.vehicle_id}
+        if vehicle_id:
+            v = db.get(IncidentVehicle, vehicle_id)
+            if not v:
+                return
+            msg.vehicle_id = vehicle_id
+            db.flush()
+            write_incident_change(
+                db, incident_id, "message.assigned", "message", uid,
+                before=before, after={"vehicle_id": vehicle_id},
+                user_id=user_id,
+            )
+        else:
+            msg.vehicle_id = None
+            msg.display_order = position
+            db.flush()
+            write_incident_change(
+                db, incident_id, "message.moved", "message", uid,
+                before=before, after={"display_order": position, "vehicle_id": None},
+                user_id=user_id,
+            )
+
+    elif kind == "person":
+        from app.models.incident import RescuedPerson
+        person = db.get(RescuedPerson, uid)
+        if not person:
+            return
+        before = {"vehicle_id": person.vehicle_id}
+        if vehicle_id:
+            v = db.get(IncidentVehicle, vehicle_id)
+            if not v:
+                return
+            person.vehicle_id = vehicle_id
+            db.flush()
+            write_incident_change(
+                db, incident_id, "person.assigned", "rescued_person", uid,
+                before=before, after={"vehicle_id": vehicle_id},
+                user_id=user_id,
+            )
+        else:
+            person.vehicle_id = None
+            db.flush()
+            write_incident_change(
+                db, incident_id, "person.moved", "rescued_person", uid,
+                before=before, after={"vehicle_id": None},
+                user_id=user_id,
+            )

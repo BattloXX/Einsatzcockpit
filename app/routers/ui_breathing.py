@@ -70,6 +70,17 @@ async def create_breathing_troop(
         })
         i += 1
 
+    # Validierung: mindestens 2 Mitglieder ausgefüllt (Member-ID ODER Freitext-Name)
+    filled = [
+        m for m in members_data
+        if m["member_id"] or (m["free_text_name"] and m["free_text_name"].strip())
+    ]
+    if len(filled) < 2:
+        return RedirectResponse(
+            f"/einsatz/{incident_id}/atemschutz?error=min_two_members",
+            status_code=303,
+        )
+
     troop = create_troop(
         db, incident_id=incident_id, name=name,
         members_data=members_data, task_text=task_text or None,

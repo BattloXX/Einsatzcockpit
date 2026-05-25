@@ -180,11 +180,25 @@ async def toggle_task_done(
     task = db.get(Task, task_id)
     if not task:
         return Response(status_code=404)
-    task.is_done = not task.is_done
-    task.done_at = datetime.now(timezone.utc) if task.is_done else None
+    # Toggle: sowohl is_done als auch status synchron halten,
+    # damit die Status-Pille (Ampel) den Wechsel reflektiert.
+    new_status = "open" if task.is_done else "done"
+    set_task_status(db, task, new_status, user_id=request.state.user.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "task_updated", "task_id": task_id, "reload_board": True})
-    return Response(status_code=204)
+    # Re-render der Vehicle-Card, falls die Task zugewiesen ist (Strikethrough sichtbar).
+    if task.vehicle_id:
+        vehicle = db.get(IncidentVehicle, task.vehicle_id)
+        if vehicle:
+            return templates.TemplateResponse(request, "incident/_vehicle_card.html", {
+                "vehicle": vehicle, "incident": task.incident,
+                "can_edit": True,
+                "unit_status_values": UNIT_STATUS_VALUES,
+            })
+    # Free Task (nicht zugewiesen): Task-Card refreshen.
+    return templates.TemplateResponse(request, "incident/_task_card.html", {
+        "task": task, "incident": task.incident, "can_edit": True,
+    })
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/ampel")
@@ -476,6 +490,25 @@ async def close_incident_view(
     db.commit()
     await manager.broadcast(incident_id, {"type": "incident_closed"})
     return RedirectResponse(f"/archiv/{incident_id}", status_code=303)
+
+
+@router.post("/einsatz/{incident_id}/autoclose/keepopen")
+async def autoclose_keepopen(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    """"Offen halten"-Bestätigung aus dem 48h-Warning-Banner.
+
+    Setzt den Warning-Stempel zurück und aktualisiert started_at, damit
+    der 48h-Zähler von neuem läuft.
+    """
+    incident = _incident_or_404(incident_id, db)
+    incident.autoclose_warn_sent_at = None
+    incident.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    incident.autoclose_keepopen_count = (incident.autoclose_keepopen_count or 0) + 1
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "autoclose_dismissed"})
+    return Response(status_code=204)
 
 
 # ── Log-Eintrag ───────────────────────────────────────────────────────────────

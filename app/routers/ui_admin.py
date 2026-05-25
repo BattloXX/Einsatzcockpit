@@ -334,6 +334,12 @@ async def update_member_quali(
 
 # ── Mitglieder Excel-Import ───────────────────────────────────────────────────
 
+@router.get("/mitglieder/excel-import")
+def excel_import_redirect():
+    """GET-Fallback: User hat Direkt-URL aufgerufen → zur Mitglieder-Seite."""
+    return RedirectResponse("/admin/mitglieder", status_code=303)
+
+
 @router.post("/mitglieder/excel-import")
 async def import_members_excel(
     request: Request,
@@ -382,8 +388,12 @@ async def import_members_excel(
         ("jugend",            "JF"),
     ]
 
-    # Build column index from header row
-    headers = [str(c.value or "").strip().lower() for c in next(ws.iter_rows(max_row=1))]
+    # Build column index from header row (safe against empty sheets)
+    try:
+        header_row = next(ws.iter_rows(max_row=1))
+    except StopIteration:
+        return RedirectResponse("/admin/mitglieder?error=empty_sheet", status_code=303)
+    headers = [str(c.value or "").strip().lower() for c in header_row]
     col_map: dict[str, int] = {}
     for i, h in enumerate(headers):
         if h in _LASTNAME_ALIASES:
@@ -418,54 +428,64 @@ async def import_members_excel(
     created = 0
     updated = 0
     skipped = 0
+    row_errors = 0
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row:
             continue
-        lastname = str(row[col_map["lastname"]] or "").strip()
-        firstname = str(row[col_map["firstname"]] or "").strip()
-        if not lastname or not firstname:
-            skipped += 1
-            continue
-        phone = str(row[col_map["phone"]] if "phone" in col_map and col_map["phone"] < len(row) and row[col_map["phone"]] else "").strip() or None
-        email = str(row[col_map["email"]] if "email" in col_map and col_map["email"] < len(row) and row[col_map["email"]] else "").strip().lower() or None
-        role_raw = str(row[col_map["role"]] if "role" in col_map and col_map["role"] < len(row) and row[col_map["role"]] else "").strip().lower()
-        # Match existing (same name in same org) → update; else create
-        existing = db.query(Member).filter(
-            Member.org_id == user.org_id,
-            Member.lastname == lastname,
-            Member.firstname == firstname,
-        ).first()
-        if existing:
-            if not existing.phone and phone:
-                existing.phone = phone
-            if not existing.email and email:
-                existing.email = email
-            existing.active = True
-            member = existing
-            updated += 1
-        else:
-            member = Member(lastname=lastname, firstname=firstname, phone=phone, email=email,
-                            org_id=user.org_id, active=True)
-            db.add(member)
-            db.flush()  # get member.id
-            created += 1
-        # Auto-assign qualification from role column (additiv, idempotent)
-        if role_raw and quali_cache:
-            for _label, _code in _ROLE_TO_QUALI:
-                if _label in role_raw and _code in quali_cache:
-                    already = db.query(MemberQualification).filter_by(
-                        member_id=member.id, qualification_id=quali_cache[_code]
-                    ).first()
-                    if not already:
-                        db.add(MemberQualification(member_id=member.id, qualification_id=quali_cache[_code]))
-                    break
+        sp = db.begin_nested()
+        try:
+            lastname = str(row[col_map["lastname"]] or "").strip()
+            firstname = str(row[col_map["firstname"]] or "").strip()
+            if not lastname or not firstname:
+                skipped += 1
+                sp.commit()
+                continue
+            phone = str(row[col_map["phone"]] if "phone" in col_map and col_map["phone"] < len(row) and row[col_map["phone"]] else "").strip() or None
+            email = str(row[col_map["email"]] if "email" in col_map and col_map["email"] < len(row) and row[col_map["email"]] else "").strip().lower() or None
+            role_raw = str(row[col_map["role"]] if "role" in col_map and col_map["role"] < len(row) and row[col_map["role"]] else "").strip().lower()
+            # Match existing (same name in same org) → update; else create
+            existing = db.query(Member).filter(
+                Member.org_id == user.org_id,
+                Member.lastname == lastname,
+                Member.firstname == firstname,
+            ).first()
+            if existing:
+                if not existing.phone and phone:
+                    existing.phone = phone
+                if not existing.email and email:
+                    existing.email = email
+                existing.active = True
+                member = existing
+                updated += 1
+            else:
+                member = Member(lastname=lastname, firstname=firstname, phone=phone, email=email,
+                                org_id=user.org_id, active=True)
+                db.add(member)
+                db.flush()  # get member.id
+                created += 1
+            # Auto-assign qualification from role column (additiv, idempotent)
+            if role_raw and quali_cache:
+                for _label, _code in _ROLE_TO_QUALI:
+                    if _label in role_raw and _code in quali_cache:
+                        already = db.query(MemberQualification).filter_by(
+                            member_id=member.id, qualification_id=quali_cache[_code]
+                        ).first()
+                        if not already:
+                            db.add(MemberQualification(member_id=member.id, qualification_id=quali_cache[_code]))
+                        break
+            sp.commit()
+        except Exception:
+            sp.rollback()
+            row_errors += 1
 
     if created or updated:
         db.commit()
         write_audit(db, "admin.member.excel_import", user_id=user.id,
-                    payload={"created": created, "updated": updated, "skipped": skipped})
+                    payload={"created": created, "updated": updated,
+                             "skipped": skipped, "row_errors": row_errors})
     return RedirectResponse(
-        f"/admin/mitglieder?saved=1&imported={created}&updated={updated}&skipped={skipped}",
+        f"/admin/mitglieder?saved=1&imported={created}&updated={updated}"
+        f"&skipped={skipped}&row_errors={row_errors}",
         status_code=303,
     )
 
@@ -936,13 +956,29 @@ async def dispatch_order_list(request: Request, db: Session = Depends(get_db),
     dispatch_entries = db.query(AlarmDispatchVehicle).order_by(
         AlarmDispatchVehicle.alarm_type_code, AlarmDispatchVehicle.display_order
     ).all()
-    dispatch_map: dict = {}
+    # vehicle_master_id → VehicleMaster Lookup
+    vehicle_by_id = {v.id: v for v in vehicles}
+    # Matrix: code → geordnete VehicleMaster-Liste (für Übersicht)
+    dispatch_matrix: dict = {}
     for e in dispatch_entries:
-        dispatch_map.setdefault(e.alarm_type_code, []).append(e.vehicle_master_id)
+        dispatch_matrix.setdefault(e.alarm_type_code, []).append(
+            vehicle_by_id.get(e.vehicle_master_id)
+        )
+    # max_count für Matrix-Spalten (mindestens 5)
+    max_count = max([len(v) for v in dispatch_matrix.values()] + [5])
+    # Edit-Mode
+    edit_code = request.query_params.get("edit")
+    edit_alarm = None
+    edit_order: list[int] = []
+    if edit_code:
+        edit_alarm = db.get(AlarmType, edit_code)
+        edit_order = [e.vehicle_master_id for e in dispatch_entries
+                      if e.alarm_type_code == edit_code]
     saved = request.query_params.get("saved")
     return templates.TemplateResponse(request, "admin/dispatch_order.html", {
         "user": request.state.user, "alarm_types": alarm_types, "vehicles": vehicles,
-        "dispatch_map": dispatch_map, "saved": saved,
+        "dispatch_matrix": dispatch_matrix, "max_count": max_count,
+        "edit_alarm": edit_alarm, "edit_order": edit_order, "saved": saved,
     })
 
 
@@ -950,30 +986,18 @@ async def dispatch_order_list(request: Request, db: Session = Depends(get_db),
 async def save_dispatch_order(
     alarm_type_code: str, request: Request,
     vehicle_ids: list[int] = Form([]),
-    vehicle_order: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
-    # Parse order string if provided, else use checkbox order
-    order: list[int] = []
-    if vehicle_order.strip():
-        try:
-            order = [int(x.strip()) for x in vehicle_order.split(",") if x.strip().isdigit()]
-        except ValueError:
-            pass
-    if not order:
-        order = vehicle_ids
-
-    # Delete existing
+    # Reihenfolge wird durch die Form-Reihenfolge der hidden inputs definiert.
     db.query(AlarmDispatchVehicle).filter(
         AlarmDispatchVehicle.alarm_type_code == alarm_type_code
     ).delete()
-    for i, vid in enumerate(order):
-        if vid in vehicle_ids or not vehicle_ids:
-            db.add(AlarmDispatchVehicle(
-                alarm_type_code=alarm_type_code,
-                vehicle_master_id=vid,
-                display_order=i,
-            ))
+    for i, vid in enumerate(vehicle_ids):
+        db.add(AlarmDispatchVehicle(
+            alarm_type_code=alarm_type_code,
+            vehicle_master_id=vid,
+            display_order=i,
+        ))
     db.commit()
     return RedirectResponse("/admin/ausrueckordnung?saved=1", status_code=303)
 

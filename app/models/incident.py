@@ -45,6 +45,9 @@ class Incident(Base):
     report_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    # 48h-Auto-Close-Lifecycle: Warnung versandt + Anzahl der "Offen halten"-Klicks
+    autoclose_warn_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    autoclose_keepopen_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     columns: Mapped[List["IncidentColumn"]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"
@@ -124,6 +127,16 @@ class IncidentVehicle(Base):
         back_populates="vehicle",
         primaryjoin="Task.vehicle_id==IncidentVehicle.id",
         foreign_keys="Task.vehicle_id",
+    )
+    assigned_messages: Mapped[List["Message"]] = relationship(
+        primaryjoin="Message.vehicle_id==IncidentVehicle.id",
+        foreign_keys="Message.vehicle_id",
+        viewonly=True,
+    )
+    assigned_persons: Mapped[List["RescuedPerson"]] = relationship(
+        primaryjoin="RescuedPerson.vehicle_id==IncidentVehicle.id",
+        foreign_keys="RescuedPerson.vehicle_id",
+        viewonly=True,
     )
 
     @property

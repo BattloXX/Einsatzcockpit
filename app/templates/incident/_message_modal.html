@@ -90,14 +90,18 @@
           hx-encoding="multipart/form-data"
           hx-target="#cardDetailBody"
           hx-swap="innerHTML">
+      <input type="file" name="files" multiple
+             accept="image/*,.pdf,video/mp4,video/quicktime"
+             id="msgMediaInput_{{ msg.id }}"
+             style="display:none"
+             onchange="compressAndSubmit(this)">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <input type="file" name="files" multiple
-               accept="image/*,.pdf,video/mp4,video/quicktime"
-               capture="environment"
-               class="form-input" style="flex:1;min-width:140px;font-size:12px;padding:4px 8px;">
-        <button type="submit" class="btn btn--secondary btn--sm">Hochladen</button>
+        <button type="button" class="btn btn--secondary btn--sm"
+                onclick="openCamera('msgMediaInput_{{ msg.id }}')">📷 Kamera</button>
+        <button type="button" class="btn btn--secondary btn--sm"
+                onclick="openGallery('msgMediaInput_{{ msg.id }}')">🖼️ Galerie</button>
       </div>
-      <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB · Video 50 MB.</p>
+      <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB · Video 50 MB. Bilder werden automatisch verkleinert.</p>
     </form>
   </div>
   {% else %}

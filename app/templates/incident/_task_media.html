@@ -56,14 +56,17 @@
       hx-encoding="multipart/form-data"
       hx-target="#taskMediaSection"
       hx-swap="innerHTML">
+  <input type="file" name="files" multiple
+         accept="image/*,.pdf,video/mp4,video/quicktime,video/x-matroska,video/webm"
+         id="taskMediaInput_{{ task.id }}"
+         style="display:none"
+         onchange="compressAndSubmit(this)">
   <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-    <input type="file" name="files" multiple
-           accept="image/*,.pdf,video/mp4,video/quicktime,video/x-matroska,video/webm"
-           capture="environment"
-           class="form-input"
-           style="flex:1;min-width:140px;font-size:12px;padding:4px 8px;">
-    <button type="submit" class="btn btn--secondary btn--sm">Hochladen</button>
+    <button type="button" class="btn btn--secondary btn--sm"
+            onclick="openCamera('taskMediaInput_{{ task.id }}')">📷 Kamera</button>
+    <button type="button" class="btn btn--secondary btn--sm"
+            onclick="openGallery('taskMediaInput_{{ task.id }}')">🖼️ Galerie</button>
   </div>
-  <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB · Video 50 MB. HEIC, JPG, PNG, MP4 werden unterstützt.</p>
+  <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB · Video 50 MB. Bilder werden bei Bedarf automatisch verkleinert.</p>
 </form>
 {% endif %}

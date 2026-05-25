@@ -18,6 +18,9 @@
           ('enable_push', 'Web Push aktiviert (true/false)'),
           ('enable_speech_input', 'Sprachdiktat aktiviert (true/false)'),
           ('default_session_max_age', 'Session-Lebensdauer in Sekunden'),
+          ('incident_autoclose_enabled', '48h-Auto-Close aktiv (true/false, Default: true)'),
+          ('incident_autoclose_after_hours', 'Stunden bis zur "Noch offen?"-Warnung (Default: 48)'),
+          ('incident_autoclose_grace_minutes', 'Minuten zwischen Warnung und Auto-Close (Default: 60)'),
         ] %}
         {% for key, desc in known %}
         <tr>
@@ -28,7 +31,7 @@
         </tr>
         {% endfor %}
         {% for k, v in settings.items() %}
-        {% if k not in ['vapid_public_key','vapid_private_key','vapid_email','enable_push','enable_speech_input','default_session_max_age'] %}
+        {% if k not in ['vapid_public_key','vapid_private_key','vapid_email','enable_push','enable_speech_input','default_session_max_age','incident_autoclose_enabled','incident_autoclose_after_hours','incident_autoclose_grace_minutes'] %}
         <tr>
           <td><code>{{ k }}</code></td>
           <td><input type="text" name="k_{{ k }}" class="form-input form-input--sm" value="{{ v or '' }}" style="width:260px"></td>

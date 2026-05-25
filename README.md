@@ -81,8 +81,8 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 
 ```bash
 # 1. Repository klonen
-git clone https://github.com/BattloXX/FWWO-Einsatzleiter-Hilfswerkzeug.git
-cd FWWO-Einsatzleiter-Hilfswerkzeug
+git clone https://github.com/BattloXX/Einsatzleiter-Hilfswerkzeug.git
+cd Einsatzleiter-Hilfswerkzeug
 
 # 2. Python venv anlegen und aktivieren
 python3.14 -m venv .venv
@@ -143,7 +143,7 @@ sudo apt-get install -y \
 ### App installieren
 
 ```bash
-git clone https://github.com/BattloXX/FWWO-Einsatzleiter-Hilfswerkzeug.git \
+git clone https://github.com/BattloXX/Einsatzleiter-Hilfswerkzeug.git \
     /home/clp-einsatz/htdocs/einsatzleiter
 cd /home/clp-einsatz/htdocs/einsatzleiter
 

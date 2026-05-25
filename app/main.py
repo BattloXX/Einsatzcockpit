@@ -1,4 +1,5 @@
 """FastAPI application – Einsatzleiter-Hilfswerkzeug (Multi-Org) v2.0.0."""
+import asyncio
 import logging
 import secrets as _secrets
 from contextlib import asynccontextmanager
@@ -49,7 +50,18 @@ async def lifespan(app: FastAPI):
 
     # Bootstrap admin on first start
     _bootstrap_admin()
-    yield
+
+    # Background-Loop für 48h-Auto-Close-Lifecycle
+    from app.services.autoclose import autoclose_loop
+    autoclose_task = asyncio.create_task(autoclose_loop())
+    try:
+        yield
+    finally:
+        autoclose_task.cancel()
+        try:
+            await autoclose_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
 
 def _bootstrap_admin() -> None:

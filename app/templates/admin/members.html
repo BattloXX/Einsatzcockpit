@@ -20,6 +20,9 @@
     {{ request.query_params.get('imported') }} neu importiert,
     {{ request.query_params.get('updated', '0') }} aktualisiert,
     {{ request.query_params.get('skipped', '0') }} übersprungen.
+    {% if request.query_params.get('row_errors') and request.query_params.get('row_errors') != '0' %}
+    <br><strong>{{ request.query_params.get('row_errors') }} Zeile(n) mit Fehlern</strong> wurden übersprungen.
+    {% endif %}
     {% endif %}
     {% if request.query_params.get('deleted') %}
     {{ request.query_params.get('deleted') }} gelöscht.
@@ -40,6 +43,12 @@
   </div>
   {% elif request.query_params.get('error') == 'invalid_excel' %}
   <div class="alert alert--danger">Ungültige Excel-Datei. Bitte .xlsx-Format verwenden.</div>
+  {% elif request.query_params.get('error') == 'empty_sheet' %}
+  <div class="alert alert--danger">Excel-Datei ist leer — keine Kopfzeile gefunden.</div>
+  {% elif request.query_params.get('error') == 'empty_file' %}
+  <div class="alert alert--danger">Keine Datei hochgeladen.</div>
+  {% elif request.query_params.get('error') == 'openpyxl_missing' %}
+  <div class="alert alert--danger">Excel-Modul (openpyxl) nicht installiert. Admin kontaktieren.</div>
   {% elif request.query_params.get('error') %}
   <div class="alert alert--danger">Fehler beim Import: {{ request.query_params.get('error') }}</div>
   {% endif %}

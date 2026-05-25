@@ -5,51 +5,149 @@
   <div class="page-header">
     <div>
       <h1>Ausrückordnung</h1>
-      <p class="page-header__sub">Welche Fahrzeuge rücken bei welchem Alarmstichwort aus (und in welcher Reihenfolge)?
-        Wenn leer → Fallback auf is_first_train Flag.</p>
+      <p class="page-header__sub">
+        Matrix zeigt für jede Alarmstufe die Fahrzeuge in der definierten Reihenfolge.
+        Klick auf „Bearbeiten" → Liste mit Drag-Drop-Reihenfolge.
+      </p>
     </div>
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
 
-  {% for atype in alarm_types %}
-  <div class="admin-section-title">{{ atype.label or atype.code }} ({{ atype.code }})</div>
-  <form method="post" action="/admin/ausrueckordnung/{{ atype.code }}" style="margin-bottom:24px;">
-    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
-      {% for v in vehicles %}
-      {% set checked = v.id in dispatch_map.get(atype.code, []) %}
-      <label class="checkbox-pill {% if checked %}checkbox-pill--active{% endif %}">
-        <input type="checkbox" name="vehicle_ids" value="{{ v.id }}" {% if checked %}checked{% endif %}
-               style="display:none" onchange="this.closest('label').classList.toggle('checkbox-pill--active', this.checked)">
-        <span style="border-left: 4px solid {{ v.dept.color }}; padding-left:6px;">
-          {{ v.code }} <small>{{ v.dept.name }}</small>
-        </span>
-      </label>
-      {% endfor %}
+  <!-- ── Matrix-Übersicht ─────────────────────────────────────────── -->
+  <div style="overflow-x:auto; margin-bottom:24px;">
+    <table class="table-admin" style="min-width:800px;">
+      <thead>
+        <tr>
+          <th style="width:120px;">Alarmstufe</th>
+          {% for i in range(1, max_count + 1) %}
+          <th style="white-space:nowrap;">{{ i }}. Fahrzeug</th>
+          {% endfor %}
+          <th style="width:90px;">Aktion</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for atype in alarm_types %}
+        <tr>
+          <td><strong>{{ atype.code }}</strong>{% if atype.label %} <small>{{ atype.label }}</small>{% endif %}</td>
+          {% set row_vehicles = dispatch_matrix.get(atype.code, []) %}
+          {% for i in range(max_count) %}
+          <td>
+            {% if i < row_vehicles|length and row_vehicles[i] %}
+            <span class="vehicle-pill"
+                  style="background:{{ row_vehicles[i].dept.color or '#c62828' }};color:#fff;
+                         padding:2px 8px;border-radius:4px;font-size:.8rem;font-weight:600;">
+              {{ row_vehicles[i].code }}
+            </span>
+            {% endif %}
+          </td>
+          {% endfor %}
+          <td>
+            <a href="/admin/ausrueckordnung?edit={{ atype.code }}"
+               class="btn btn--ghost btn--xs">Bearbeiten</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if edit_alarm %}
+  <!-- ── Edit-View ────────────────────────────────────────────────── -->
+  <div class="admin-section-title">
+    Bearbeiten: {{ edit_alarm.label or edit_alarm.code }} ({{ edit_alarm.code }})
+  </div>
+  <p class="form-hint" style="margin-bottom:10px;">
+    Haken setzen = Fahrzeug rückt aus. Per Drag-Drop am Handle (☰) die Reihenfolge ändern.
+  </p>
+
+  <form method="post" action="/admin/ausrueckordnung/{{ edit_alarm.code }}"
+        id="dispatchEditForm" style="max-width:680px;">
+    <table class="table-admin" id="dispatchEditTable">
+      <thead>
+        <tr>
+          <th style="width:40px;"></th>
+          <th style="width:50px;">Aus</th>
+          <th>Fahrzeug</th>
+          <th>Abteilung</th>
+        </tr>
+      </thead>
+      <tbody id="dispatchEditTbody">
+        {% set checked_ids = edit_order %}
+        {# Erst die aktuell ausgewählten Fahrzeuge in ihrer Reihenfolge … #}
+        {% for vid in checked_ids %}
+        {% for v in vehicles if v.id == vid %}
+        <tr data-vid="{{ v.id }}">
+          <td class="drag-handle" style="cursor:grab; font-size:1.2rem;">☰</td>
+          <td><input type="checkbox" class="dispatch-checkbox" checked></td>
+          <td>
+            <span style="border-left:4px solid {{ v.dept.color }};padding-left:6px;">
+              <strong>{{ v.code }}</strong> – {{ v.type or '' }}
+            </span>
+          </td>
+          <td>{{ v.dept.name }}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+        {# … dann die übrigen (unchecked) #}
+        {% for v in vehicles if v.id not in checked_ids %}
+        <tr data-vid="{{ v.id }}">
+          <td class="drag-handle" style="cursor:grab; font-size:1.2rem;">☰</td>
+          <td><input type="checkbox" class="dispatch-checkbox"></td>
+          <td>
+            <span style="border-left:4px solid {{ v.dept.color }};padding-left:6px;">
+              <strong>{{ v.code }}</strong> – {{ v.type or '' }}
+            </span>
+          </td>
+          <td>{{ v.dept.name }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div id="dispatchHiddenInputs"></div>
+
+    <div style="margin-top:14px; display:flex; gap:8px;">
+      <button type="submit" class="btn btn--primary" onclick="serializeDispatch()">
+        Speichern
+      </button>
+      <a href="/admin/ausrueckordnung" class="btn btn--ghost">Abbrechen</a>
     </div>
-    <div style="margin-bottom:8px;">
-      <span style="font-size:.8rem; color:var(--text-muted);">Reihenfolge (kommagetrennte IDs, entspricht Ausrückfolge):</span>
-      <input type="text" name="vehicle_order"
-             value="{{ dispatch_map.get(atype.code, [])|join(',') }}"
-             class="form-input form-input--sm"
-             placeholder="z.B. 1,3,2,5"
-             style="width:200px; margin-left:8px;">
-    </div>
-    <button type="submit" class="btn btn--secondary btn--sm">Speichern für {{ atype.code }}</button>
-    <a href="/admin/ausrueckordnung/{{ atype.code }}/reset" class="btn btn--ghost btn--sm"
-       onclick="return confirm('Ausrückordnung für {{ atype.code }} zurücksetzen (leer = Fallback auf is_first_train)?')">
-      Zurücksetzen
-    </a>
   </form>
-  {% endfor %}
+
+  <script>
+  (function () {
+    const tbody = document.getElementById('dispatchEditTbody');
+    if (tbody && window.Sortable) {
+      Sortable.create(tbody, {
+        handle: '.drag-handle',
+        animation: 150,
+        ghostClass: 'card--ghost',
+      });
+    }
+  })();
+
+  window.serializeDispatch = function () {
+    const hidden = document.getElementById('dispatchHiddenInputs');
+    hidden.innerHTML = '';
+    document.querySelectorAll('#dispatchEditTbody tr').forEach(tr => {
+      const cb = tr.querySelector('.dispatch-checkbox');
+      if (cb && cb.checked) {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'vehicle_ids';
+        inp.value = tr.dataset.vid;
+        hidden.appendChild(inp);
+      }
+    });
+  };
+  </script>
+  {% endif %}
 </div>
 
 <style>
-.checkbox-pill {
-  display: inline-flex; align-items: center; padding: 6px 12px;
-  border: 2px solid var(--border); border-radius: 6px; cursor: pointer;
-  font-size: .82rem; transition: border-color .15s, background .15s;
-}
-.checkbox-pill--active { border-color: var(--primary); background: rgba(183,25,33,.1); }
+.vehicle-pill { display:inline-block; white-space:nowrap; }
+#dispatchEditTbody tr { transition: background .15s; }
+#dispatchEditTbody tr:hover { background: rgba(255,255,255,.04); }
 </style>
 {% endblock %}

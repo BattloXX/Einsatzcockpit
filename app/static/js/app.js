@@ -170,6 +170,13 @@ function incidentBoard(incidentId, alarm, startedAt) {
           if (ev.type === 'incident_closed') {
             window.location.href = `/archiv/${id}`;
           }
+          if (ev.type === 'autoclose_warning') {
+            this._showAutocloseBanner(id, ev.grace_minutes || 60);
+          }
+          if (ev.type === 'autoclose_dismissed') {
+            const banner = document.getElementById('autocloseBanner');
+            if (banner) banner.remove();
+          }
         };
         ws.onclose = () => {
           setTimeout(() => {
@@ -182,6 +189,38 @@ function incidentBoard(incidentId, alarm, startedAt) {
         setInterval(() => ws.readyState === 1 && ws.send('ping'), 30000);
       };
       connect();
+    },
+
+    _showAutocloseBanner(incidentId, graceMinutes) {
+      if (document.getElementById('autocloseBanner')) return;
+      const banner = document.createElement('div');
+      banner.id = 'autocloseBanner';
+      banner.style.cssText = (
+        'position:fixed;top:0;left:0;right:0;z-index:9999;'
+        + 'background:#e65100;color:#fff;padding:12px 16px;'
+        + 'display:flex;align-items:center;justify-content:center;gap:16px;'
+        + 'box-shadow:0 2px 8px rgba(0,0,0,.3);font-weight:600;'
+      );
+      banner.innerHTML = (
+        '<span>⏰ Dieser Einsatz läuft seit 48h — soll er offen bleiben?</span>'
+        + ' <button type="button" id="autocloseKeepOpenBtn" '
+        + '  style="background:#fff;color:#e65100;border:none;padding:6px 14px;'
+        + '  border-radius:4px;font-weight:700;cursor:pointer;">'
+        + '  Offen halten</button>'
+        + ' <span style="font-size:.85rem;opacity:.85;">'
+        + '  (Sonst Auto-Close in ' + graceMinutes + ' Min)</span>'
+      );
+      document.body.appendChild(banner);
+      document.body.style.paddingTop = (banner.offsetHeight + 'px');
+      document.getElementById('autocloseKeepOpenBtn').addEventListener('click', () => {
+        fetch(`/einsatz/${incidentId}/autoclose/keepopen`, {
+          method: 'POST',
+          credentials: 'same-origin',
+        }).then(() => {
+          banner.remove();
+          document.body.style.paddingTop = '';
+        });
+      });
     },
 
     _setupKeyboard(incidentId) {
