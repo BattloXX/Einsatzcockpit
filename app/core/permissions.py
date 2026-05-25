@@ -1,7 +1,6 @@
-from typing import Callable
+from collections.abc import Callable
 
-from fastapi import Request, HTTPException
-
+from fastapi import HTTPException, Request
 
 # Hierarchy: system_admin > admin/org_admin > incident_leader > breathing_supervisor > recorder > readonly
 ROLES = {

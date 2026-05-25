@@ -32,7 +32,8 @@
       {% set _org = user.org if user and user.org_id else None %}
       {% set _org_name = _org.name if _org and _org.name else '' %}
       <a href="/" style="display:flex;align-items:center;gap:12px;color:inherit;text-decoration:none">
-        <img src="/static/img/logo.png" alt="einsatzleiter.cloud" class="topnav__logo" onerror="this.style.display='none'">
+        {% set _logo_src = _org.logo_path if _org and _org.logo_path else '/static/img/logo.png' %}
+        <img src="{{ _logo_src }}" alt="einsatzleiter.cloud" class="topnav__logo" onerror="this.style.display='none'">
         {% if _org_name %}
         <span class="topnav__title">{{ _org_name }}</span>
         {% endif %}
@@ -85,7 +86,7 @@
               @click="open=!open"
               title="Aktuellen Einsatzleiter anzeigen oder wechseln">
         <span style="font-size:.75rem; opacity:.7; margin-right:2px;">EL</span>
-        <span>{{ incident.leader.display_name if incident.leader else '— kein EL —' }}</span>
+        <span>{% if incident.leader_member %}{{ incident.leader_member.full_name }}{% elif incident.leader %}{{ incident.leader.display_name }}{% else %}— kein EL —{% endif %}</span>
         <span style="font-size:.7rem; opacity:.7; margin-left:2px;">▾</span>
       </button>
       <div x-show="open" x-cloak

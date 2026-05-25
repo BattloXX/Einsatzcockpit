@@ -11,7 +11,6 @@ Handler `request.form()` weiterhin nutzen können.
 Ausnahmen: /ws/*, /api/v1/* (X-API-Key authentifiziert), /static/*, /push/*.
 """
 import secrets
-from typing import Awaitable, Callable
 from urllib.parse import parse_qs
 
 from app.config import settings

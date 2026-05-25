@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -14,7 +13,7 @@ class Role(Base):
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    users: Mapped[List["UserRole"]] = relationship(back_populates="role")
+    users: Mapped[list[UserRole]] = relationship(back_populates="role")
 
 
 class User(Base):
@@ -24,29 +23,29 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(150), nullable=False)
-    full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
-    phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # org_id: which organisation this user belongs to (NULL = system_admin without org)
-    org_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    org_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Lockout (Phase 7)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    user_roles: Mapped[List["UserRole"]] = relationship(back_populates="user", lazy="joined")
-    push_subscriptions: Mapped[List["PushSubscription"]] = relationship(back_populates="user")
-    password_reset_tokens: Mapped[List["PasswordResetToken"]] = relationship(
+    user_roles: Mapped[list[UserRole]] = relationship(back_populates="user", lazy="joined")
+    push_subscriptions: Mapped[list[PushSubscription]] = relationship(back_populates="user")
+    password_reset_tokens: Mapped[list[PasswordResetToken]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    org: Mapped[Optional["FireDept"]] = relationship(
+    org: Mapped[FireDept | None] = relationship(
         "FireDept", foreign_keys=[org_id], lazy="joined"
     )
 
     @property
-    def roles(self) -> List[Role]:
+    def roles(self) -> list[Role]:
         return [ur.role for ur in self.user_roles if ur.role is not None]
 
     @property
@@ -68,8 +67,8 @@ class UserRole(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), primary_key=True)
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("role.id", ondelete="CASCADE"), primary_key=True)
 
-    user: Mapped["User"] = relationship(back_populates="user_roles")
-    role: Mapped["Role"] = relationship(back_populates="users", lazy="joined")
+    user: Mapped[User] = relationship(back_populates="user_roles")
+    role: Mapped[Role] = relationship(back_populates="users", lazy="joined")
 
 
 class ApiKey(Base):
@@ -79,17 +78,17 @@ class ApiKey(Base):
     key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     label: Mapped[str] = mapped_column(String(150), nullable=False)
     org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="RESTRICT"), nullable=False)
-    created_by_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     @property
     def is_active(self) -> bool:
         if self.revoked_at:
             return False
-        if self.expires_at and self.expires_at < datetime.now(timezone.utc):
+        if self.expires_at and self.expires_at < datetime.now(UTC):
             return False
         return True
 
@@ -99,14 +98,14 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
-    user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
-    api_key_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("api_key.id"), nullable=True)
-    incident_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    entity_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    entity_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    payload_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    ip: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    api_key_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("api_key.id"), nullable=True)
+    incident_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    entity_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class PushSubscription(Base):
@@ -117,6 +116,6 @@ class PushSubscription(Base):
     endpoint: Mapped[str] = mapped_column(Text, nullable=False)
     p256dh: Mapped[str] = mapped_column(Text, nullable=False)
     auth: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    user: Mapped["User"] = relationship(back_populates="push_subscriptions")
+    user: Mapped[User] = relationship(back_populates="push_subscriptions")

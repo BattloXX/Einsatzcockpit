@@ -19,7 +19,6 @@ import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 APP_ROOT = Path(__file__).parent.parent.parent  # Projektverzeichnis
 
@@ -75,7 +74,7 @@ def compute_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def apply_update(zip_path: Path, expected_sha256: Optional[str] = None) -> dict:
+def apply_update(zip_path: Path, expected_sha256: str | None = None) -> dict:
     """
     Extrahiert das ZIP und kopiert Dateien über die bestehende Installation.
 

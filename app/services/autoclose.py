@@ -18,7 +18,7 @@ Konfiguration über `SystemSettings`:
 """
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.db import SessionLocal
 from app.models.incident import Incident
@@ -65,7 +65,7 @@ def _check_incidents_sync(db) -> list[tuple[int, int]]:
     cfg = _load_cfg(db)
     if not cfg["enabled"]:
         return []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     warn_threshold = now - timedelta(hours=cfg["after_hours"])
     grace_threshold = now - timedelta(minutes=cfg["grace_minutes"])
     to_warn: list[tuple[int, int]] = []

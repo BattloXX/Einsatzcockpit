@@ -11,10 +11,9 @@ API-Key-Hashing: SHA256 — bewusst gewählt, weil:
 import hashlib
 import hmac
 import secrets
-from typing import Optional
 
 import bcrypt
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.config import settings
 
@@ -49,7 +48,7 @@ def sign_session(user_id: int) -> str:
     return _signer.dumps(user_id)
 
 
-def unsign_session(token: str) -> Optional[int]:
+def unsign_session(token: str) -> int | None:
     try:
         return _signer.loads(token, max_age=settings.SESSION_MAX_AGE_SECONDS)
     except (BadSignature, SignatureExpired):
@@ -60,7 +59,7 @@ def sign_qr_token(incident_id: int, user_id: int) -> str:
     return _qr_signer.dumps({"incident_id": incident_id, "user_id": user_id})
 
 
-def unsign_qr_token(token: str) -> Optional[dict]:
+def unsign_qr_token(token: str) -> dict | None:
     try:
         return _qr_signer.loads(token)
     except (BadSignature, SignatureExpired):

@@ -3,7 +3,7 @@
 Alle Mediendateien liegen außerhalb von app/static und werden ausschließlich
 über diese geschützten Routen ausgeliefert (Org-Check, Auth erforderlich).
 """
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
@@ -70,14 +70,14 @@ async def media_gallery(
     if von:
         try:
             d = date.fromisoformat(von)
-            q = q.filter(TaskMedia.created_at >= datetime(d.year, d.month, d.day, tzinfo=timezone.utc))
+            q = q.filter(TaskMedia.created_at >= datetime(d.year, d.month, d.day, tzinfo=UTC))
         except ValueError:
             von = None
     if bis:
         try:
             d = date.fromisoformat(bis)
             q = q.filter(
-                TaskMedia.created_at < datetime(d.year, d.month, d.day, tzinfo=timezone.utc) + timedelta(days=1)
+                TaskMedia.created_at < datetime(d.year, d.month, d.day, tzinfo=UTC) + timedelta(days=1)
             )
         except ValueError:
             bis = None

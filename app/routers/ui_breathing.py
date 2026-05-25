@@ -1,19 +1,21 @@
 """Atemschutzüberwachung UI."""
-from datetime import datetime, timezone
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from app.db import get_db
 from app.core.permissions import require_role
 from app.core.templating import templates
-from app.models.breathing import BreathingTroop, TroopMember, PressureLog
+from app.db import get_db
+from app.models.breathing import BreathingTroop
 from app.models.incident import Incident
 from app.models.master import Member
 from app.services.breathing_service import (
-    create_troop, start_troop, update_troop_status, log_pressure, get_warning_level,
+    create_troop,
+    get_warning_level,
+    log_pressure,
+    start_troop,
+    update_troop_status,
 )
 from app.services.broadcast import manager
 
@@ -46,7 +48,7 @@ async def create_breathing_troop(
     incident_id: int, request: Request,
     name: str = Form(...),
     task_text: str = Form(""),
-    vehicle_id: Optional[int] = Form(None),
+    vehicle_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin")),
 ):
@@ -128,7 +130,7 @@ async def update_status(
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/druck")
 async def log_pressure_view(
     incident_id: int, troop_id: int, request: Request,
-    member_id: Optional[int] = Form(None),
+    member_id: int | None = Form(None),
     pressure_bar: float = Form(...),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin")),

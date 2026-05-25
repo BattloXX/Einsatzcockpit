@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.audit import write_audit
-from app.core.security import hash_api_key, sign_session, unsign_qr_token, verify_password
+from app.core.security import sign_session, unsign_qr_token, verify_password
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentToken
@@ -47,7 +47,7 @@ async def login(
     - Ab `LOGIN_MAX_FAILED` wird der Account `LOGIN_LOCKOUT_MINUTES` lang gesperrt.
     - Während Lockout wird IMMER der gleiche generische Fehler gezeigt (kein Enumerations-Leak).
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     generic_error = "Benutzername oder Passwort falsch"
 
     user = db.query(User).filter(User.username == username).first()
@@ -61,7 +61,7 @@ async def login(
     if user.locked_until:
         locked_until = user.locked_until
         if locked_until.tzinfo is None:
-            locked_until = locked_until.replace(tzinfo=timezone.utc)
+            locked_until = locked_until.replace(tzinfo=UTC)
         if locked_until > now:
             write_audit(db, "auth.login.locked", user_id=user.id,
                         ip=request.client.host if request.client else None)
@@ -148,7 +148,7 @@ async def qr_login(request: Request, token: str, incident_id: int, db: Session =
     if not can_access_incident(user, incident):
         return RedirectResponse("/login?error=qr_invalid", status_code=302)
 
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now(UTC)
     write_audit(db, "auth.qr_login", user_id=user_id, incident_id=incident_id,
                 ip=request.client.host if request.client else None)
     db.commit()

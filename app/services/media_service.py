@@ -22,13 +22,12 @@ import subprocess
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.incident import Task, TaskMedia, Message, MessageMedia, RescuedPerson, PersonMedia
+from app.models.incident import Message, MessageMedia, PersonMedia, RescuedPerson, Task, TaskMedia
 from app.models.user import User
 
 logger = logging.getLogger("einsatzleiter.media")
@@ -76,7 +75,7 @@ def _entity_dir(incident_id: int, entity_type: str, entity_id: int) -> Path:
     return d
 
 
-def _detect_mime(data: bytes) -> Optional[str]:
+def _detect_mime(data: bytes) -> str | None:
     try:
         import filetype  # type: ignore
         kind = filetype.guess(data)
@@ -85,7 +84,7 @@ def _detect_mime(data: bytes) -> Optional[str]:
         return None
 
 
-def _kind_for_mime(mime: str) -> Optional[str]:
+def _kind_for_mime(mime: str) -> str | None:
     if mime in IMAGE_MIMES:
         return "image"
     if mime in PDF_MIMES:
@@ -133,13 +132,13 @@ def _process_image(data: bytes, dest_dir: Path) -> tuple[Path, Path, int, int, s
 
 
 # ── PDF-Pipeline ──────────────────────────────────────────────────
-def _process_pdf(data: bytes, dest_dir: Path, original_filename: str) -> tuple[Path, Optional[Path], Optional[int]]:
+def _process_pdf(data: bytes, dest_dir: Path, original_filename: str) -> tuple[Path, Path | None, int | None]:
     """Speichert PDF 1:1, ermittelt Seitenanzahl. Kein Page-Thumb (zu aufwendig)."""
     uid = uuid.uuid4().hex
     main_path = dest_dir / f"{uid}.pdf"
     main_path.write_bytes(data)
 
-    pages: Optional[int] = None
+    pages: int | None = None
     try:
         from pypdf import PdfReader  # type: ignore
         pages = len(PdfReader(io.BytesIO(data)).pages)
@@ -156,7 +155,7 @@ def _have_ffmpeg() -> bool:
 
 def _process_video(
     data: bytes, dest_dir: Path,
-) -> tuple[Path, Optional[Path], Optional[int], Optional[int], Optional[float]]:
+) -> tuple[Path, Path | None, int | None, int | None, float | None]:
     """Transkodiert auf MEDIA_VIDEO_MAX_HEIGHT, extrahiert Thumb-Frame."""
     if not _have_ffmpeg():
         raise HTTPException(
@@ -198,7 +197,7 @@ def _process_video(
 
         # Probe dimensions/duration
         width = height = None
-        duration_s: Optional[float] = None
+        duration_s: float | None = None
         try:
             probe = subprocess.run(
                 ["ffprobe", "-v", "error", "-select_streams", "v:0",
@@ -300,7 +299,7 @@ async def store_upload(
 
 async def store_upload_for_message(
     file: UploadFile, message: Message, user: User, db: Session,
-) -> "MessageMedia":
+) -> MessageMedia:
     """Wie store_upload, aber fuer Message-Anhaenge."""
     raw = await file.read()
     if not raw:
@@ -353,7 +352,7 @@ async def store_upload_for_message(
 
 async def store_upload_for_person(
     file: UploadFile, person: RescuedPerson, user: User, db: Session,
-) -> "PersonMedia":
+) -> PersonMedia:
     """Wie store_upload, aber fuer Person-Anhaenge."""
     raw = await file.read()
     if not raw:
@@ -424,7 +423,7 @@ def absolute_path(media: TaskMedia) -> Path:
     return _storage_root() / media.storage_path
 
 
-def absolute_thumb_path(media: TaskMedia) -> Optional[Path]:
+def absolute_thumb_path(media: TaskMedia) -> Path | None:
     if not media.thumb_path:
         return None
     return _storage_root() / media.thumb_path

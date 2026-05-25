@@ -3,9 +3,9 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.models.user import PushSubscription
-from app.config import settings
 
 router = APIRouter(prefix="/push")
 

@@ -13,13 +13,15 @@
   </div>
   {% endif %}
   <table class="table-admin">
-    <thead><tr><th>Code</th><th>Bezeichnung</th><th>Verwendet</th><th>Aktionen</th></tr></thead>
+    <thead><tr><th>Code</th><th>Bezeichnung</th><th>Einsatzleiter</th><th>Grp.-Kdt.</th><th>Verwendet</th><th>Aktionen</th></tr></thead>
     <tbody>
       {% for q in qualifications %}
       {% set member_count = usage.get(q.id, 0) %}
       <tr>
         <td><strong>{{ q.code }}</strong></td>
         <td>{{ q.label }}</td>
+        <td>{% if q.is_einsatzleiter %}<span class="badge-pill badge-pill--green">EL</span>{% else %}<span class="text-muted">–</span>{% endif %}</td>
+        <td>{% if q.is_gruppenkommandant %}<span class="badge-pill badge-pill--green">GK</span>{% else %}<span class="text-muted">–</span>{% endif %}</td>
         <td>
           {% if member_count > 0 %}
           <span class="badge-pill badge-pill--green">{{ member_count }} Mitglied{{ 'er' if member_count != 1 else '' }}</span>
@@ -29,7 +31,7 @@
         </td>
         <td>
           <button class="btn btn--ghost btn--xs"
-                  onclick="openEditQual({{ q.id }}, '{{ q.code }}', '{{ q.label|replace("'","\\'")|e }}')">Bearbeiten</button>
+                  onclick="openEditQual({{ q.id }}, '{{ q.code }}', '{{ q.label|replace("'","\\'")|e }}', {{ q.is_einsatzleiter|lower }}, {{ q.is_gruppenkommandant|lower }})">Bearbeiten</button>
           <form method="post" action="/admin/qualifikationen/{{ q.id }}/loeschen" style="display:inline"
                 onsubmit="return confirm('Qualifikation {{ q.code }} löschen?{% if member_count > 0 %} Achtung: bei {{ member_count }} Mitglied(ern) zugewiesen!{% endif %}')">
             <button type="submit" class="btn btn--danger btn--xs" {% if member_count > 0 %}title="Wird bei {{ member_count }} Mitglied(ern) verwendet"{% endif %}>Löschen</button>
@@ -51,6 +53,14 @@
           <input type="text" name="code" class="form-input" required maxlength="30"></div>
         <div class="form-group"><label class="form-label">Bezeichnung</label>
           <input type="text" name="label" class="form-input" required maxlength="100"></div>
+        <div class="form-group">
+          <label class="form-label">Rollen</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            <label class="checkbox-label"><input type="checkbox" name="is_einsatzleiter" value="1"> Einsatzleiter-Qualifikation</label>
+            <label class="checkbox-label"><input type="checkbox" name="is_gruppenkommandant" value="1"> Gruppenkommandant-Qualifikation</label>
+          </div>
+          <p class="form-hint" style="margin-top:4px;">Mitglieder mit dieser Qualifikation können für diese Rolle ausgewählt werden.</p>
+        </div>
       </div>
       <div class="modal__footer">
         <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -70,6 +80,13 @@
           <input type="text" name="code" id="eq_code" class="form-input" required maxlength="30"></div>
         <div class="form-group"><label class="form-label">Bezeichnung</label>
           <input type="text" name="label" id="eq_label" class="form-input" required maxlength="100"></div>
+        <div class="form-group">
+          <label class="form-label">Rollen</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            <label class="checkbox-label"><input type="checkbox" name="is_einsatzleiter" value="1" id="eq_el"> Einsatzleiter-Qualifikation</label>
+            <label class="checkbox-label"><input type="checkbox" name="is_gruppenkommandant" value="1" id="eq_gk"> Gruppenkommandant-Qualifikation</label>
+          </div>
+        </div>
       </div>
       <div class="modal__footer">
         <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -81,9 +98,11 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function openEditQual(id, code, label) {
+function openEditQual(id, code, label, isEl, isGk) {
   document.getElementById('eq_code').value = code;
   document.getElementById('eq_label').value = label;
+  document.getElementById('eq_el').checked = isEl === true || isEl === 'true';
+  document.getElementById('eq_gk').checked = isGk === true || isGk === 'true';
   document.getElementById('editQualForm').action = `/admin/qualifikationen/${id}/edit`;
   document.getElementById('editQualModal').showModal();
 }

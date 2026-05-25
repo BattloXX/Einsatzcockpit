@@ -1,10 +1,9 @@
 """PDF generation via WeasyPrint."""
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import Optional
 
-from weasyprint import HTML, CSS
+from weasyprint import HTML
 
 from app.core.templating import templates
 from app.db import SessionLocal
@@ -12,7 +11,7 @@ from app.models.incident import Incident
 from app.models.master import FireDept
 
 
-def _resolve_primary_org(incident: Incident) -> Optional[FireDept]:
+def _resolve_primary_org(incident: Incident) -> FireDept | None:
     """Lädt die Primary-Org für die Zeitzonen-Konvertierung in den Filtern."""
     if not incident.primary_org_id:
         return None
@@ -33,7 +32,7 @@ def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
 
     html_str = template.render(
         incident=incident,
-        now=datetime.now(timezone.utc),
+        now=datetime.now(UTC),
         base_url=base_url,
         user=pseudo_user,
     )

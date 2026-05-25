@@ -1,22 +1,36 @@
 """Core incident business logic – mirrors startIncident(), changeAlarm() from the HTML version."""
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.audit import write_audit, write_incident_change
 from app.models.incident import (
-    Incident, IncidentColumn, IncidentVehicle, Task, Message,
-    FIXED_COLUMNS, FIXED_COLUMN_TITLES, UNIT_STATUS_VALUES, TRAFFIC_LIGHT_VALUES,
+    FIXED_COLUMN_TITLES,
+    FIXED_COLUMNS,
+    TRAFFIC_LIGHT_VALUES,
+    UNIT_STATUS_VALUES,
+    Incident,
+    IncidentColumn,
+    IncidentVehicle,
+    Message,
+    Task,
 )
-from app.models.master import AlarmType, VehicleMaster, DefaultMessage, TaskSuggestion, AlarmDispatchVehicle, Member, MemberQualification, Qualification
-from app.core.audit import write_incident_change, write_audit
+from app.models.master import (
+    AlarmDispatchVehicle,
+    AlarmType,
+    DefaultMessage,
+    Member,
+    MemberQualification,
+    Qualification,
+    VehicleMaster,
+)
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-def _resolve_org_id(db: Session, requested: Optional[int]) -> Optional[int]:
+def _resolve_org_id(db: Session, requested: int | None) -> int | None:
     """Liefert eine gültige fire_dept.id zurück.
 
     Reihenfolge: 1) explizit übergeben, 2) Home-Org (is_home_org=True),
@@ -37,19 +51,19 @@ def create_incident(
     db: Session,
     alarm_type_code: str,
     *,
-    started_at: Optional[datetime] = None,
-    external_key: Optional[str] = None,
-    nummer: Optional[int] = None,
+    started_at: datetime | None = None,
+    external_key: str | None = None,
+    nummer: int | None = None,
     is_exercise: bool = False,
-    address_street: Optional[str] = None,
-    address_no: Optional[str] = None,
-    address_city: Optional[str] = None,
-    report_text: Optional[str] = None,
-    reason: Optional[str] = None,
-    incident_leader_user_id: Optional[int] = None,
-    primary_org_id: Optional[int] = None,
-    api_key_id: Optional[int] = None,
-    ip: Optional[str] = None,
+    address_street: str | None = None,
+    address_no: str | None = None,
+    address_city: str | None = None,
+    report_text: str | None = None,
+    reason: str | None = None,
+    incident_leader_user_id: int | None = None,
+    primary_org_id: int | None = None,
+    api_key_id: int | None = None,
+    ip: str | None = None,
 ) -> Incident:
     alarm = db.get(AlarmType, alarm_type_code)
     if alarm is None:
@@ -105,14 +119,14 @@ def _create_fixed_columns(db: Session, incident: Incident) -> None:
     db.flush()
 
 
-def _get_column(incident: Incident, code: str) -> Optional[IncidentColumn]:
+def _get_column(incident: Incident, code: str) -> IncidentColumn | None:
     for col in incident.columns:
         if col.code == code:
             return col
     return None
 
 
-def _populate_vehicles(db: Session, incident: Incident, alarm: Optional[AlarmType]) -> None:
+def _populate_vehicles(db: Session, incident: Incident, alarm: AlarmType | None) -> None:
     if alarm is None:
         return
 
@@ -122,7 +136,7 @@ def _populate_vehicles(db: Session, incident: Incident, alarm: Optional[AlarmTyp
     if not dispatched_col:
         return
 
-    from app.models.master import FireDept, AlarmDispatchVehicle
+    from app.models.master import FireDept
 
     # Check if explicit dispatch order exists for this alarm type
     dispatch_entries = (
@@ -184,7 +198,7 @@ def _populate_vehicles(db: Session, incident: Incident, alarm: Optional[AlarmTyp
     db.flush()
 
 
-def _create_default_messages(db: Session, incident: Incident, alarm: Optional[AlarmType]) -> None:
+def _create_default_messages(db: Session, incident: Incident, alarm: AlarmType | None) -> None:
     if alarm is None:
         return
     msgs = db.query(DefaultMessage).filter(DefaultMessage.alarm_type_code == alarm.code).all()
@@ -192,7 +206,7 @@ def _create_default_messages(db: Session, incident: Incident, alarm: Optional[Al
         due_at = None
         if incident.started_at and dm.due_after_sec:
             from datetime import timedelta
-            started = incident.started_at if incident.started_at.tzinfo else incident.started_at.replace(tzinfo=timezone.utc)
+            started = incident.started_at if incident.started_at.tzinfo else incident.started_at.replace(tzinfo=UTC)
             due_at = started + timedelta(seconds=dm.due_after_sec)
         db.add(Message(
             incident_id=incident.id,
@@ -208,9 +222,9 @@ def add_task(
     db: Session,
     incident: Incident,
     title: str,
-    detail: Optional[str] = None,
-    user_id: Optional[int] = None,
-    column_id: Optional[int] = None,
+    detail: str | None = None,
+    user_id: int | None = None,
+    column_id: int | None = None,
 ) -> Task:
     if column_id is None:
         tasks_col = _get_column(incident, "tasks")
@@ -236,7 +250,7 @@ def assign_task_to_vehicle(
     db: Session,
     task: Task,
     vehicle: IncidentVehicle,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> Task:
     before = {"vehicle_id": task.vehicle_id, "column_id": task.column_id}
     task.vehicle_id = vehicle.id
@@ -254,7 +268,7 @@ def move_vehicle_to_column(
     db: Session,
     vehicle: IncidentVehicle,
     new_column: IncidentColumn,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> IncidentVehicle:
     before = {"column_id": vehicle.column_id}
     vehicle.column_id = new_column.id
@@ -267,7 +281,7 @@ def move_vehicle_to_column(
     return vehicle
 
 
-def close_incident(db: Session, incident: Incident, user_id: Optional[int] = None) -> Incident:
+def close_incident(db: Session, incident: Incident, user_id: int | None = None) -> Incident:
     incident.status = "closed"
     incident.closed_at = _now()
     # Revoke all QR tokens
@@ -283,7 +297,7 @@ def add_section_column(
     db: Session,
     incident: Incident,
     title: str,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> IncidentColumn:
     max_order = max((c.display_order for c in incident.columns), default=0)
     col = IncidentColumn(
@@ -306,8 +320,8 @@ def add_section_column(
 def set_commander(
     db: Session,
     vehicle: IncidentVehicle,
-    member_id: Optional[int],
-    user_id: Optional[int] = None,
+    member_id: int | None,
+    user_id: int | None = None,
 ) -> IncidentVehicle:
     before = {"commander_member_id": vehicle.commander_member_id}
     vehicle.commander_member_id = member_id
@@ -324,7 +338,7 @@ def quick_create_commander(
     db: Session,
     vehicle: IncidentVehicle,
     full_name: str,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> IncidentVehicle:
     """Create a Member from a name string and assign as commander."""
     parts = full_name.strip().split(None, 1)
@@ -352,7 +366,7 @@ def set_unit_status(
     db: Session,
     vehicle: IncidentVehicle,
     status: str,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> IncidentVehicle:
     if status not in UNIT_STATUS_VALUES:
         raise ValueError(f"Ungültiger Status: {status}")
@@ -376,7 +390,7 @@ def set_unit_status(
 
 
 def list_commander_candidates(db: Session, org_ids: list[int]) -> list[Member]:
-    """Return active members with GK qualification from the given organisations."""
+    """Return active members with Gruppenkommandant qualification from the given organisations."""
     return (
         db.query(Member)
         .join(MemberQualification, MemberQualification.member_id == Member.id)
@@ -384,7 +398,7 @@ def list_commander_candidates(db: Session, org_ids: list[int]) -> list[Member]:
         .filter(
             Member.active.is_(True),
             Member.org_id.in_(org_ids),
-            Qualification.code == "GK",
+            Qualification.is_gruppenkommandant.is_(True),
         )
         .order_by(Member.lastname, Member.firstname)
         .distinct()
@@ -392,12 +406,28 @@ def list_commander_candidates(db: Session, org_ids: list[int]) -> list[Member]:
     )
 
 
+def list_el_candidates(db: Session, org_ids: list[int]) -> list[Member]:
+    """Return active members with Einsatzleiter qualification from the given organisations."""
+    q = (
+        db.query(Member)
+        .join(MemberQualification, MemberQualification.member_id == Member.id)
+        .join(Qualification, Qualification.id == MemberQualification.qualification_id)
+        .filter(
+            Member.active.is_(True),
+            Qualification.is_einsatzleiter.is_(True),
+        )
+    )
+    if org_ids:
+        q = q.filter(Member.org_id.in_(org_ids))
+    return q.order_by(Member.lastname, Member.firstname).distinct().all()
+
+
 def update_task(
     db: Session,
     task: Task,
     title: str,
-    detail: Optional[str] = None,
-    user_id: Optional[int] = None,
+    detail: str | None = None,
+    user_id: int | None = None,
 ) -> Task:
     before = {"title": task.title, "detail": task.detail}
     task.title = title
@@ -414,7 +444,7 @@ def update_task(
 def cancel_task(
     db: Session,
     task: Task,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> Task:
     before = {"is_cancelled": task.is_cancelled}
     task.is_cancelled = not task.is_cancelled
@@ -432,7 +462,7 @@ def set_task_status(
     db: Session,
     task: Task,
     status: str,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> Task:
     if status not in TRAFFIC_LIGHT_VALUES:
         raise ValueError(f"Ungültiger Status: {status}")
@@ -466,7 +496,7 @@ def set_message_status(
     db: Session,
     message: Message,
     status: str,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> Message:
     if status not in TRAFFIC_LIGHT_VALUES:
         raise ValueError(f"Ungültiger Status: {status}")
@@ -498,10 +528,10 @@ def move_card(
     incident_id: int,
     kind: str,
     uid: int,
-    column_id: Optional[int] = None,
+    column_id: int | None = None,
     position: int = 0,
-    vehicle_id: Optional[int] = None,
-    user_id: Optional[int] = None,
+    vehicle_id: int | None = None,
+    user_id: int | None = None,
 ) -> None:
     """Generic card move for DnD. kind: 'vehicle'|'task'|'message'."""
     if kind == "vehicle":

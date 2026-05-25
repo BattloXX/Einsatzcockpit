@@ -1,23 +1,32 @@
 """Admin-UI: Stammdaten, User, Rollen, API-Keys."""
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db import get_db
-from app.core.permissions import require_role
-from app.core.security import hash_password, generate_api_key, hash_api_key
 from app.core.audit import write_audit
+from app.core.permissions import require_role
+from app.core.security import generate_api_key, hash_api_key, hash_password
 from app.core.templating import templates
-from app.models.user import User, Role, UserRole, ApiKey, AuditLog
+from app.db import get_db
 from app.models.master import (
-    Member, Qualification, MemberQualification, FireDept, VehicleMaster,
-    AlarmType, TaskSuggestion, LageHint, DefaultMessage, AlarmDispatchVehicle, SystemSettings,
-    BOS_VALUES, MessageSuggestion,
+    BOS_VALUES,
+    AlarmDispatchVehicle,
+    AlarmType,
+    DefaultMessage,
+    FireDept,
+    LageHint,
+    Member,
+    MemberQualification,
+    MessageSuggestion,
+    Qualification,
+    SystemSettings,
+    TaskSuggestion,
+    VehicleMaster,
 )
+from app.models.user import ApiKey, AuditLog, Role, User, UserRole
 
 router = APIRouter(prefix="/admin")
 
@@ -138,7 +147,7 @@ async def revoke_api_key(
 ):
     key = db.get(ApiKey, key_id)
     if key:
-        key.revoked_at = datetime.now(timezone.utc)
+        key.revoked_at = datetime.now(UTC)
         write_audit(db, "admin.api_key.revoked", user_id=request.state.user.id,
                     entity_type="api_key", entity_id=key_id)
         db.commit()
@@ -297,9 +306,9 @@ async def bulk_delete_members(
         except IntegrityError:
             sp.rollback()
             blocked.append(name)
-    db.commit()
     write_audit(db, "admin.member.bulk_delete", user_id=user.id,
                 payload={"deleted": deleted, "blocked": blocked})
+    db.commit()
     import urllib.parse
     blocked_q = ("&blocked=" + urllib.parse.quote(", ".join(blocked))) if blocked else ""
     return RedirectResponse(
@@ -531,7 +540,8 @@ async def send_user_reset_mail(
     """Admin löst den Self-Service-Reset-Flow für einen anderen Benutzer aus."""
     import hashlib
     import secrets as sec
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
+
     from app.config import settings
     from app.models.password_reset import PasswordResetToken
     from app.services.mail_service import send_password_reset
@@ -541,7 +551,7 @@ async def send_user_reset_mail(
         return RedirectResponse("/admin/benutzer?error=no_email", status_code=303)
 
     # Alte Tokens entwerten
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db.query(PasswordResetToken).filter(
         PasswordResetToken.user_id == u.id,
         PasswordResetToken.used_at.is_(None),
@@ -650,7 +660,7 @@ async def create_vehicle(
     code: str = Form(...), name: str = Form(...), type: str = Form(""),
     is_first_train: str = Form(""),
     bos_override: str = Form(""),
-    dept_id: Optional[int] = Form(None),
+    dept_id: int | None = Form(None),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     from app.core.permissions import has_role
@@ -742,7 +752,6 @@ async def task_suggestions_list(request: Request, db: Session = Depends(get_db),
     suggestions = db.query(TaskSuggestion).order_by(
         TaskSuggestion.alarm_type_code, TaskSuggestion.display_order
     ).all()
-    from itertools import groupby
     by_alarm_type = []
     sugg_by_code: dict = {}
     for s in suggestions:
@@ -938,7 +947,7 @@ async def delete_alarm_type(
     from app.models.incident import Incident
     count = db.query(Incident).filter(Incident.alarm_type_code == code).count()
     if count > 0:
-        return RedirectResponse(f"/admin/alarmtypen?error=in_use", status_code=303)
+        return RedirectResponse("/admin/alarmtypen?error=in_use", status_code=303)
     at = db.get(AlarmType, code)
     if at:
         db.delete(at)
@@ -1042,9 +1051,14 @@ async def qualifications_list(request: Request, db: Session = Depends(get_db),
 @router.post("/qualifikationen/neu")
 async def create_qualification(
     request: Request, code: str = Form(...), label: str = Form(...),
+    is_einsatzleiter: str = Form(""), is_gruppenkommandant: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
-    q = Qualification(code=code.upper(), label=label)
+    q = Qualification(
+        code=code.upper(), label=label,
+        is_einsatzleiter=bool(is_einsatzleiter),
+        is_gruppenkommandant=bool(is_gruppenkommandant),
+    )
     db.add(q)
     db.commit()
     return RedirectResponse("/admin/qualifikationen?saved=1", status_code=303)
@@ -1053,12 +1067,15 @@ async def create_qualification(
 @router.post("/qualifikationen/{qid}/edit")
 async def edit_qualification(
     qid: int, request: Request, code: str = Form(...), label: str = Form(...),
+    is_einsatzleiter: str = Form(""), is_gruppenkommandant: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     q = db.get(Qualification, qid)
     if q:
         q.code = code.upper()
         q.label = label
+        q.is_einsatzleiter = bool(is_einsatzleiter)
+        q.is_gruppenkommandant = bool(is_gruppenkommandant)
         db.commit()
     return RedirectResponse("/admin/qualifikationen?saved=1", status_code=303)
 
@@ -1229,7 +1246,7 @@ async def save_system_settings(
             existing = db.get(SystemSettings, key)
             if existing:
                 existing.value = val
-                existing.updated_at = datetime.now(timezone.utc)
+                existing.updated_at = datetime.now(UTC)
                 existing.updated_by_user_id = request.state.user.id
             else:
                 db.add(SystemSettings(key=key, value=val,
@@ -1267,7 +1284,7 @@ async def backup_page(request: Request, _=Depends(require_role("system_admin")))
 async def backup_json(request: Request, db: Session = Depends(get_db),
                       _=Depends(require_role("system_admin"))):
     import json as json_lib
-    from fastapi.responses import JSONResponse
+
     data = {
         "vehicles": [
             {"id": v.id, "dept_slug": v.dept.slug, "code": v.code, "name": v.name,

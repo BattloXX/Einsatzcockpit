@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -29,44 +28,48 @@ class Incident(Base):
     __tablename__ = "incident"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    external_key: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True)
-    nummer: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    external_key: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    nummer: Mapped[int | None] = mapped_column(Integer, nullable=True)
     alarm_type_code: Mapped[str] = mapped_column(String(10), nullable=False, default="T1")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    incident_leader_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    incident_leader_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    incident_leader_member_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("member.id"), nullable=True)
     # primary_org_id: the organisation leading this incident
-    primary_org_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("fire_dept.id"), nullable=True)
+    primary_org_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fire_dept.id"), nullable=True)
     is_exercise: Mapped[bool] = mapped_column(Boolean, default=False)
-    address_street: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    address_no: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    address_city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    report_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    address_street: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    address_no: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    address_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    report_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     # 48h-Auto-Close-Lifecycle: Warnung versandt + Anzahl der "Offen halten"-Klicks
-    autoclose_warn_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    autoclose_warn_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     autoclose_keepopen_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    columns: Mapped[List["IncidentColumn"]] = relationship(
+    columns: Mapped[list[IncidentColumn]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"
     )
-    vehicles: Mapped[List["IncidentVehicle"]] = relationship(back_populates="incident", cascade="all, delete-orphan")
-    tasks: Mapped[List["Task"]] = relationship(back_populates="incident", cascade="all, delete-orphan")
-    messages: Mapped[List["Message"]] = relationship(back_populates="incident", cascade="all, delete-orphan")
-    rescued_persons: Mapped[List["RescuedPerson"]] = relationship(back_populates="incident", cascade="all, delete-orphan")
-    log_entries: Mapped[List["IncidentLog"]] = relationship(
+    vehicles: Mapped[list[IncidentVehicle]] = relationship(back_populates="incident", cascade="all, delete-orphan")
+    tasks: Mapped[list[Task]] = relationship(back_populates="incident", cascade="all, delete-orphan")
+    messages: Mapped[list[Message]] = relationship(back_populates="incident", cascade="all, delete-orphan")
+    rescued_persons: Mapped[list[RescuedPerson]] = relationship(back_populates="incident", cascade="all, delete-orphan")
+    log_entries: Mapped[list[IncidentLog]] = relationship(
         back_populates="incident", order_by="IncidentLog.ts", cascade="all, delete-orphan"
     )
-    changes: Mapped[List["IncidentChange"]] = relationship(
+    changes: Mapped[list[IncidentChange]] = relationship(
         back_populates="incident", order_by="IncidentChange.ts", cascade="all, delete-orphan"
     )
-    breathing_troops: Mapped[List["BreathingTroop"]] = relationship(back_populates="incident", cascade="all, delete-orphan")
-    tokens: Mapped[List["IncidentToken"]] = relationship(back_populates="incident", cascade="all, delete-orphan")
-    collaborating_orgs: Mapped[List["IncidentOrg"]] = relationship(back_populates="incident", cascade="all, delete-orphan")
-    leader: Mapped[Optional["User"]] = relationship(
+    breathing_troops: Mapped[list[BreathingTroop]] = relationship(back_populates="incident", cascade="all, delete-orphan")
+    tokens: Mapped[list[IncidentToken]] = relationship(back_populates="incident", cascade="all, delete-orphan")
+    collaborating_orgs: Mapped[list[IncidentOrg]] = relationship(back_populates="incident", cascade="all, delete-orphan")
+    leader: Mapped[User | None] = relationship(
         "User", foreign_keys=[incident_leader_user_id], lazy="joined"
+    )
+    leader_member: Mapped[object | None] = relationship(
+        "Member", foreign_keys=[incident_leader_member_id], lazy="joined"
     )
 
 
@@ -79,10 +82,10 @@ class IncidentOrg(Base):
     org_id: Mapped[int] = mapped_column(Integer, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False)
     # role: 'leader' (primary org) or 'collaborator'
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="collaborator")
-    joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    added_by_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    added_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
 
-    incident: Mapped["Incident"] = relationship(back_populates="collaborating_orgs")
+    incident: Mapped[Incident] = relationship(back_populates="collaborating_orgs")
 
 
 class IncidentColumn(Base):
@@ -95,9 +98,9 @@ class IncidentColumn(Base):
     is_fixed: Mapped[bool] = mapped_column(Boolean, default=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    incident: Mapped["Incident"] = relationship(back_populates="columns")
-    vehicles: Mapped[List["IncidentVehicle"]] = relationship(back_populates="column")
-    tasks: Mapped[List["Task"]] = relationship(
+    incident: Mapped[Incident] = relationship(back_populates="columns")
+    vehicles: Mapped[list[IncidentVehicle]] = relationship(back_populates="column")
+    tasks: Mapped[list[Task]] = relationship(
         back_populates="column",
         primaryjoin="and_(Task.column_id==IncidentColumn.id, Task.vehicle_id==None)",
         foreign_keys="Task.column_id",
@@ -112,28 +115,28 @@ class IncidentVehicle(Base):
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
     column_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident_column.id"), nullable=False)
     vehicle_master_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("vehicle_master.id"), nullable=False)
-    commander_member_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("member.id"), nullable=True)
+    commander_member_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("member.id"), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
-    removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    org_color_override: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    org_color_override: Mapped[str | None] = mapped_column(String(7), nullable=True)
     unit_status: Mapped[str] = mapped_column(String(40), nullable=False, default="Einsatz übernommen")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    incident: Mapped["Incident"] = relationship(back_populates="vehicles")
-    column: Mapped["IncidentColumn"] = relationship(back_populates="vehicles")
-    vehicle_master: Mapped["VehicleMaster"] = relationship(lazy="joined")
-    commander: Mapped[Optional["Member"]] = relationship(foreign_keys=[commander_member_id], lazy="joined")
-    assigned_tasks: Mapped[List["Task"]] = relationship(
+    incident: Mapped[Incident] = relationship(back_populates="vehicles")
+    column: Mapped[IncidentColumn] = relationship(back_populates="vehicles")
+    vehicle_master: Mapped[VehicleMaster] = relationship(lazy="joined")
+    commander: Mapped[Member | None] = relationship(foreign_keys=[commander_member_id], lazy="joined")
+    assigned_tasks: Mapped[list[Task]] = relationship(
         back_populates="vehicle",
         primaryjoin="Task.vehicle_id==IncidentVehicle.id",
         foreign_keys="Task.vehicle_id",
     )
-    assigned_messages: Mapped[List["Message"]] = relationship(
+    assigned_messages: Mapped[list[Message]] = relationship(
         primaryjoin="Message.vehicle_id==IncidentVehicle.id",
         foreign_keys="Message.vehicle_id",
         viewonly=True,
     )
-    assigned_persons: Mapped[List["RescuedPerson"]] = relationship(
+    assigned_persons: Mapped[list[RescuedPerson]] = relationship(
         primaryjoin="RescuedPerson.vehicle_id==IncidentVehicle.id",
         foreign_keys="RescuedPerson.vehicle_id",
         viewonly=True,
@@ -158,31 +161,31 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
-    column_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("incident_column.id"), nullable=True)
-    vehicle_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("incident_vehicle.id"), nullable=True)
+    column_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("incident_column.id"), nullable=True)
+    vehicle_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("incident_vehicle.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
     is_done: Mapped[bool] = mapped_column(Boolean, default=False)
-    done_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
-    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    created_by_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
 
-    incident: Mapped["Incident"] = relationship(back_populates="tasks")
-    column: Mapped[Optional["IncidentColumn"]] = relationship(
+    incident: Mapped[Incident] = relationship(back_populates="tasks")
+    column: Mapped[IncidentColumn | None] = relationship(
         back_populates="tasks",
         primaryjoin="and_(Task.column_id==IncidentColumn.id, Task.vehicle_id==None)",
         foreign_keys=[column_id],
         overlaps="tasks"
     )
-    vehicle: Mapped[Optional["IncidentVehicle"]] = relationship(
+    vehicle: Mapped[IncidentVehicle | None] = relationship(
         back_populates="assigned_tasks",
         foreign_keys=[vehicle_id],
     )
-    media: Mapped[list["TaskMedia"]] = relationship(
+    media: Mapped[list[TaskMedia]] = relationship(
         back_populates="task",
         cascade="all, delete-orphan",
         order_by="TaskMedia.created_at.desc()",
@@ -204,24 +207,24 @@ class TaskMedia(Base):
     incident_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True,
     )
-    uploaded_by_user_id: Mapped[Optional[int]] = mapped_column(
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True,
     )
     kind: Mapped[str] = mapped_column(String(16), nullable=False)   # image | pdf | video
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    thumb_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    duration_s: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    pages: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), index=True,
+        DateTime, default=lambda: datetime.now(UTC), index=True,
     )
 
-    task: Mapped["Task"] = relationship(back_populates="media")
+    task: Mapped[Task] = relationship(back_populates="media")
 
 
 class MessageMedia(Base):
@@ -235,21 +238,21 @@ class MessageMedia(Base):
     incident_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True,
     )
-    uploaded_by_user_id: Mapped[Optional[int]] = mapped_column(
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True,
     )
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    thumb_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    duration_s: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    pages: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), index=True,
+        DateTime, default=lambda: datetime.now(UTC), index=True,
     )
 
 
@@ -264,21 +267,21 @@ class PersonMedia(Base):
     incident_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True,
     )
-    uploaded_by_user_id: Mapped[Optional[int]] = mapped_column(
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True,
     )
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    thumb_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    duration_s: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    pages: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), index=True,
+        DateTime, default=lambda: datetime.now(UTC), index=True,
     )
 
 
@@ -287,22 +290,22 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
-    vehicle_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("incident_vehicle.id", ondelete="SET NULL"), nullable=True)
+    vehicle_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("incident_vehicle.id", ondelete="SET NULL"), nullable=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    due_after_sec: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    due_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    due_after_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     popup_shown: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
     is_done: Mapped[bool] = mapped_column(Boolean, default=False)
-    done_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    incident: Mapped["Incident"] = relationship(back_populates="messages")
-    vehicle: Mapped[Optional["IncidentVehicle"]] = relationship(foreign_keys=[vehicle_id])
-    media: Mapped[list["MessageMedia"]] = relationship(
+    incident: Mapped[Incident] = relationship(back_populates="messages")
+    vehicle: Mapped[IncidentVehicle | None] = relationship(foreign_keys=[vehicle_id])
+    media: Mapped[list[MessageMedia]] = relationship(
         cascade="all, delete-orphan",
         order_by="MessageMedia.created_at.desc()",
         primaryjoin="Message.id==MessageMedia.message_id",
@@ -317,15 +320,15 @@ class RescuedPerson(Base):
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
     gender: Mapped[str] = mapped_column(String(30), nullable=False, default="Unbekannt")
     person_group: Mapped[str] = mapped_column(String(30), nullable=False, default="Erwachsen")
-    age_range: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    name: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
-    location: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
-    vehicle_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("incident_vehicle.id"), nullable=True)
+    age_range: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    vehicle_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("incident_vehicle.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="gefunden")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    incident: Mapped["Incident"] = relationship(back_populates="rescued_persons")
-    media: Mapped[list["PersonMedia"]] = relationship(
+    incident: Mapped[Incident] = relationship(back_populates="rescued_persons")
+    media: Mapped[list[PersonMedia]] = relationship(
         cascade="all, delete-orphan",
         order_by="PersonMedia.created_at.desc()",
         primaryjoin="RescuedPerson.id==PersonMedia.person_id",
@@ -338,14 +341,14 @@ class IncidentLog(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
-    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     level: Mapped[str] = mapped_column(String(10), default="info")
-    user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    entity_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    entity_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    incident: Mapped["Incident"] = relationship(back_populates="log_entries")
+    incident: Mapped[Incident] = relationship(back_populates="log_entries")
 
 
 class IncidentChange(Base):
@@ -354,17 +357,17 @@ class IncidentChange(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
-    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    before_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    after_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
-    api_key_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("api_key.id"), nullable=True)
-    ip: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    api_key_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("api_key.id"), nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    incident: Mapped["Incident"] = relationship(back_populates="changes")
+    incident: Mapped[Incident] = relationship(back_populates="changes")
 
 
 class IncidentToken(Base):
@@ -375,11 +378,11 @@ class IncidentToken(Base):
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     issued_by_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
-    target_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    target_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    incident: Mapped["Incident"] = relationship(back_populates="tokens")
+    incident: Mapped[Incident] = relationship(back_populates="tokens")
 
 
 # Import BreathingTroop here to avoid circular import in Incident.breathing_troops

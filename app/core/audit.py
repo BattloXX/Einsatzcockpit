@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -8,16 +7,17 @@ def write_audit(
     db: Session,
     action: str,
     *,
-    user_id: Optional[int] = None,
-    api_key_id: Optional[int] = None,
-    incident_id: Optional[int] = None,
-    entity_type: Optional[str] = None,
-    entity_id: Optional[int] = None,
-    payload: Optional[dict] = None,
-    ip: Optional[str] = None,
+    user_id: int | None = None,
+    api_key_id: int | None = None,
+    incident_id: int | None = None,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    payload: dict | None = None,
+    ip: str | None = None,
 ) -> None:
     """Write a system-level audit log entry (auth, admin actions, API-key usage)."""
     import json
+
     from app.models.user import AuditLog
 
     entry = AuditLog(
@@ -29,7 +29,7 @@ def write_audit(
         entity_id=entity_id,
         payload_json=json.dumps(payload, ensure_ascii=False, default=str) if payload else None,
         ip=ip,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(entry)
     # caller is responsible for commit
@@ -41,15 +41,16 @@ def write_incident_change(
     action: str,
     entity_type: str,
     entity_id: int,
-    before: Optional[dict],
-    after: Optional[dict],
+    before: dict | None,
+    after: dict | None,
     *,
-    user_id: Optional[int] = None,
-    api_key_id: Optional[int] = None,
-    ip: Optional[str] = None,
+    user_id: int | None = None,
+    api_key_id: int | None = None,
+    ip: str | None = None,
 ) -> None:
     """Write a granular incident change record (every field mutation)."""
     import json
+
     from app.models.incident import IncidentChange
 
     entry = IncidentChange(
@@ -62,6 +63,6 @@ def write_incident_change(
         user_id=user_id,
         api_key_id=api_key_id,
         ip=ip,
-        ts=datetime.now(timezone.utc),
+        ts=datetime.now(UTC),
     )
     db.add(entry)

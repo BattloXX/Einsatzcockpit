@@ -2,7 +2,6 @@
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -12,7 +11,7 @@ from app.core.permissions import has_role, require_role, require_system_admin
 from app.core.templating import templates
 from app.core.timezones import common_timezones
 from app.db import get_db
-from app.models.master import FireDept, OrgSettings, SystemSettings, BOS_VALUES
+from app.models.master import BOS_VALUES, FireDept, OrgSettings, SystemSettings
 from app.models.user import User
 from app.services.update_service import apply_update, get_current_version
 
@@ -190,8 +189,8 @@ async def reset_org_logo(
         # Datei aus dem Upload-Ordner löschen (Pfad muss unter UPLOAD_DIR liegen)
         try:
             rel = org.logo_path.lstrip("/")
-            target = Path("app") / rel.removeprefix("static/").lstrip("/") if rel.startswith("static/") else None
-            if target and UPLOAD_DIR in target.resolve().parents:
+            target = Path("app") / rel if rel else None
+            if target and UPLOAD_DIR.resolve() in target.resolve().parents:
                 target.unlink(missing_ok=True)
         except (OSError, ValueError):
             pass

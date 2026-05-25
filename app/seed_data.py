@@ -4,11 +4,15 @@ Aufruf: python -m app.seed_data
 """
 from app.db import SessionLocal
 from app.models.master import (
-    AlarmType, DefaultMessage, FireDept, LageHint,
-    Qualification, TaskSuggestion, VehicleMaster,
+    AlarmType,
+    DefaultMessage,
+    FireDept,
+    LageHint,
+    Qualification,
+    TaskSuggestion,
+    VehicleMaster,
 )
 from app.models.user import Role
-
 
 ROLES = [
     {"code": "system_admin",         "label": "Systemadministrator (organisationsübergreifend)"},

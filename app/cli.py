@@ -5,12 +5,11 @@ Verwendung:
   python -m app.cli create-api-key --label "Alarmierungssystem"
 """
 import argparse
-import secrets
 import sys
 
+from app.core.security import generate_api_key, hash_api_key, hash_password
 from app.db import SessionLocal
-from app.core.security import hash_password, generate_api_key, hash_api_key
-from app.models.user import User, UserRole, Role, ApiKey
+from app.models.user import ApiKey, Role, User, UserRole
 
 
 def create_admin(username: str, password: str, display_name: str = "") -> None:

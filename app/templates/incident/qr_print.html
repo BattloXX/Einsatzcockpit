@@ -81,9 +81,14 @@
 
   <div class="sheet">
     <div class="header">
-      <div>
-        <div class="header__title">{{ incident.alarm_type_code }}</div>
-        <div class="header__sub">Einsatz Nr. {{ incident.nummer or incident.id }}{% if incident.is_exercise %} · ÜBUNG{% endif %}</div>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <img src="{{ base_url }}{{ logo_url }}" alt="Logo"
+             style="height:52px;width:auto;object-fit:contain;"
+             onerror="this.style.display='none'">
+        <div>
+          <div class="header__title">{{ incident.alarm_type_code }}</div>
+          <div class="header__sub">Einsatz Nr. {{ incident.nummer or incident.id }}{% if incident.is_exercise %} · ÜBUNG{% endif %}</div>
+        </div>
       </div>
       <div class="header__sub" style="text-align:right;">
         {% if incident.started_at %}

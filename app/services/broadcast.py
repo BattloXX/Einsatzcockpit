@@ -2,14 +2,13 @@
 import asyncio
 import json
 from collections import defaultdict
-from typing import Dict, Set
 
 from fastapi import WebSocket
 
 
 class ConnectionManager:
     def __init__(self):
-        self._connections: Dict[int, Set[WebSocket]] = defaultdict(set)
+        self._connections: dict[int, set[WebSocket]] = defaultdict(set)
         self._lock = asyncio.Lock()
 
     async def connect(self, incident_id: int, ws: WebSocket) -> None:
@@ -23,7 +22,7 @@ class ConnectionManager:
 
     async def broadcast(self, incident_id: int, event: dict) -> None:
         payload = json.dumps(event, ensure_ascii=False, default=str)
-        dead: Set[WebSocket] = set()
+        dead: set[WebSocket] = set()
         for ws in list(self._connections.get(incident_id, [])):
             try:
                 await ws.send_text(payload)
@@ -37,7 +36,7 @@ class ConnectionManager:
         """Broadcast to every connected client (e.g. new incident created)."""
         payload = json.dumps(event, ensure_ascii=False, default=str)
         all_ws = {ws for conns in self._connections.values() for ws in conns}
-        dead: Set[WebSocket] = set()
+        dead: set[WebSocket] = set()
         for ws in all_ws:
             try:
                 await ws.send_text(payload)

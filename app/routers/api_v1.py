@@ -7,23 +7,21 @@ die Org als Kollaborator beteiligt ist.
 
 Antworten sind JSON; Fehler folgen FastAPI-Konvention mit `detail`-Feld.
 """
-from datetime import datetime, timezone
-from typing import Optional, List
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.db import get_db
-from app.core.security import hash_api_key
 from app.core.audit import write_audit
-from app.models.user import ApiKey
+from app.core.security import hash_api_key
+from app.db import get_db
 from app.models.incident import Incident, IncidentOrg
-from sqlalchemy import or_
-from app.services.incident_service import create_incident
+from app.models.user import ApiKey
 from app.services.broadcast import manager
+from app.services.incident_service import create_incident
 from app.services.push_service import notify_all
-from app.config import settings
 
 router = APIRouter(prefix="/api/v1", tags=["Einsätze"])
 
@@ -46,21 +44,21 @@ class AlarmPayload(BaseModel):
     """
     Key: str = Field(..., description="Eindeutiger Schlüssel des Alarms (Idempotency).",
                      examples=["A-2025-04711"])
-    Nummer: Optional[int] = Field(None, description="Externe Einsatznummer.", examples=[4711])
-    AlarmDatumZeit: Optional[str] = Field(
+    Nummer: int | None = Field(None, description="Externe Einsatznummer.", examples=[4711])
+    AlarmDatumZeit: str | None = Field(
         None, description="ISO-8601 Datum/Zeit der Alarmierung.",
         examples=["2026-05-24T18:42:00+02:00"],
     )
-    Stufe: Optional[str] = Field(
+    Stufe: str | None = Field(
         None, description="Alarmstufe: F1–F14, T1–T7 (case-insensitive).",
         examples=["F3"],
     )
-    Art: Optional[str] = Field(None, description="Einsatzart-Bezeichnung.")
-    Meldung: Optional[str] = Field(None, description="Volltext der Alarmmeldung.")
-    Einsatzgrund: Optional[str] = Field(None, description="Anlass/Einsatzgrund.")
-    Ort: Optional[str] = Field(None, description="Ort/Stadt.")
-    Strasse: Optional[str] = Field(None, description="Straße.")
-    HausNr: Optional[str] = Field(None, description="Hausnummer.")
+    Art: str | None = Field(None, description="Einsatzart-Bezeichnung.")
+    Meldung: str | None = Field(None, description="Volltext der Alarmmeldung.")
+    Einsatzgrund: str | None = Field(None, description="Anlass/Einsatzgrund.")
+    Ort: str | None = Field(None, description="Ort/Stadt.")
+    Strasse: str | None = Field(None, description="Straße.")
+    HausNr: str | None = Field(None, description="Hausnummer.")
     Uebung: bool = Field(False, description="Übungsalarm (kein echter Einsatz).")
 
 
@@ -76,7 +74,7 @@ class IncidentSummary(BaseModel):
     """Kurz-Repräsentation eines Einsatzes in Listen-Endpunkten."""
     id: int
     alarm_type_code: str = Field(..., description="Alarmstufe (z. B. F3).")
-    started_at: Optional[datetime] = Field(None, description="Startzeitpunkt UTC.")
+    started_at: datetime | None = Field(None, description="Startzeitpunkt UTC.")
     is_exercise: bool = Field(..., description="Übungsalarm?")
 
 
@@ -85,7 +83,7 @@ class IncidentDetail(BaseModel):
     id: int
     alarm_type_code: str
     status: str = Field(..., description="`active` oder `closed`.")
-    started_at: Optional[datetime]
+    started_at: datetime | None
     address: str = Field(..., description="Zusammengesetzte Adresse: 'Strasse HausNr, Ort'.")
     is_exercise: bool
 
@@ -95,7 +93,7 @@ def _get_api_key(x_api_key: str = Header(..., alias="X-API-Key"), db: Session = 
     api_key = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
     if not api_key or not api_key.is_active:
         raise HTTPException(status_code=401, detail="Ungültiger oder gesperrter API-Key")
-    api_key.last_used_at = datetime.now(timezone.utc)
+    api_key.last_used_at = datetime.now(UTC)
     return api_key
 
 
@@ -140,7 +138,7 @@ async def create_incident_api(
         try:
             started_at = datetime.fromisoformat(payload.AlarmDatumZeit)
             if started_at.tzinfo is None:
-                started_at = started_at.replace(tzinfo=timezone.utc)
+                started_at = started_at.replace(tzinfo=UTC)
         except ValueError:
             started_at = None
 
@@ -208,7 +206,7 @@ def _api_key_scoped_incidents(db: Session, api_key: ApiKey):
 
 @router.get(
     "/einsatz/active",
-    response_model=List[IncidentSummary],
+    response_model=list[IncidentSummary],
     summary="Aktive Einsätze auflisten",
     description=(
         "Liefert alle Einsätze mit Status `active` für die Organisation des API-Keys "

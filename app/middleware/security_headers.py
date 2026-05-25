@@ -16,8 +16,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.config import settings
-
 _CSP_BASE = (
     "default-src 'self'; "
     "img-src 'self' data: blob:; "

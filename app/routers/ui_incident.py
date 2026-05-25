@@ -1,29 +1,63 @@
 """UI Router – Einsatz-Board (HTMX-Endpoints)."""
+import base64
 import hashlib
-from datetime import datetime, timezone
-from typing import Optional
+import io
+from datetime import UTC, datetime
 
+import qrcode
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from app.db import get_db
-from app.core.permissions import require_role, has_role
+from app.core.permissions import has_role, require_role
+from app.core.security import sign_qr_token
 from app.core.templating import templates
-from app.models.incident import Incident, IncidentColumn, IncidentVehicle, Task, Message, RescuedPerson, IncidentToken, MessageMedia, PersonMedia, UNIT_STATUS_VALUES, TRAFFIC_LIGHT_VALUES, PERSON_STATUS_VALUES
-from app.models.master import AlarmType, TaskSuggestion, LageHint, VehicleMaster, Member, BOS_VALUES, MessageSuggestion
-from app.models.user import User, UserRole, Role
-from app.services.incident_service import (
-    create_incident, add_task, assign_task_to_vehicle, move_vehicle_to_column,
-    close_incident, add_section_column, set_commander, quick_create_commander,
-    update_task, cancel_task, move_card, set_unit_status, list_commander_candidates,
-    set_task_status, set_message_status,
+from app.db import get_db
+from app.models.incident import (
+    PERSON_STATUS_VALUES,
+    UNIT_STATUS_VALUES,
+    Incident,
+    IncidentColumn,
+    IncidentToken,
+    IncidentVehicle,
+    Message,
+    MessageMedia,
+    PersonMedia,
+    RescuedPerson,
+    Task,
 )
+from app.models.master import (
+    BOS_VALUES,
+    AlarmType,
+    FireDept,
+    LageHint,
+    Member,
+    MemberQualification,
+    MessageSuggestion,
+    Qualification,
+    TaskSuggestion,
+    VehicleMaster,
+)
+from app.models.user import Role, User, UserRole
 from app.services.broadcast import manager
-from app.core.security import sign_qr_token, hash_api_key
-import qrcode
-import io
-import base64
+from app.services.incident_service import (
+    add_section_column,
+    add_task,
+    assign_task_to_vehicle,
+    cancel_task,
+    close_incident,
+    create_incident,
+    list_commander_candidates,
+    list_el_candidates,
+    move_card,
+    move_vehicle_to_column,
+    quick_create_commander,
+    set_commander,
+    set_message_status,
+    set_task_status,
+    set_unit_status,
+    update_task,
+)
 
 router = APIRouter()
 
@@ -120,16 +154,39 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         .order_by(User.display_name)
         .all()
     )
+    org_ids = [incident.primary_org_id] if incident.primary_org_id else []
+    for io in (incident.collaborating_orgs or []):
+        if io.org_id not in org_ids:
+            org_ids.append(io.org_id)
+    el_member_candidates = list_el_candidates(db, org_ids)
     return templates.TemplateResponse(request, "incident/board.html", {
         "user": user, "incident": incident,
         "alarm_types": alarm_types, "lage_hints": lage_hints,
         "task_suggestions": task_suggestions, "msg_suggestions": msg_suggestions,
         "can_edit": can_edit, "leader_candidates": leader_candidates,
+        "el_member_candidates": el_member_candidates,
         "unit_status_values": UNIT_STATUS_VALUES,
     })
 
 
 # ── Einsatzleiter wechseln ────────────────────────────────────────────────────
+
+@router.post("/einsatz/{incident_id}/einsatzleiter-mitglied")
+async def set_incident_leader_member(
+    incident_id: int, request: Request,
+    member_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    incident = _incident_or_404(incident_id, db)
+    incident.incident_leader_member_id = member_id or None
+    db.commit()
+    await manager.broadcast(incident_id, {
+        "type": "incident_leader_changed",
+        "reload_board": True,
+    })
+    return Response(status_code=204)
+
 
 @router.post("/einsatz/{incident_id}/einsatzleiter")
 async def set_incident_leader(
@@ -157,8 +214,8 @@ async def set_incident_leader(
 async def create_task(
     incident_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
-    column_id: Optional[int] = Form(None),
-    vehicle_id: Optional[int] = Form(None),
+    column_id: int | None = Form(None),
+    vehicle_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -278,8 +335,6 @@ async def vehicle_suggestions(
     base_q = db.query(VehicleMaster).filter(
         VehicleMaster.active == True,  # noqa: E712
     )
-    if org_ids:
-        base_q = base_q.filter(VehicleMaster.dept_id.in_(org_ids))
     if q:
         like = f"%{q.strip()}%"
         from sqlalchemy import or_ as _or
@@ -306,7 +361,7 @@ async def vehicle_suggestions(
 @router.post("/einsatz/{incident_id}/fahrzeug-hinzufuegen")
 async def attach_vehicle_to_incident(
     incident_id: int, request: Request,
-    vehicle_master_id: Optional[int] = Form(None),
+    vehicle_master_id: int | None = Form(None),
     new_code: str = Form(""),
     new_name: str = Form(""),
     new_type: str = Form(""),
@@ -410,7 +465,7 @@ async def create_message(
     incident_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
     due_after_min: int = Form(0),
-    vehicle_id: Optional[int] = Form(None),
+    vehicle_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -440,7 +495,7 @@ async def toggle_message(
     if not msg:
         return Response(status_code=404)
     msg.is_done = not msg.is_done
-    msg.done_at = datetime.now(timezone.utc) if msg.is_done else None
+    msg.done_at = datetime.now(UTC) if msg.is_done else None
     db.commit()
     await manager.broadcast(incident_id, {"type": "message_updated", "reload_board": True})
     return Response(status_code=204)
@@ -472,7 +527,7 @@ async def create_person(
     incident_id: int, request: Request,
     gender: str = Form(...), person_group: str = Form(...),
     age_range: str = Form(""), name: str = Form(""), location: str = Form(""),
-    vehicle_id: Optional[int] = Form(None),
+    vehicle_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
@@ -514,7 +569,7 @@ async def autoclose_keepopen(
     """
     incident = _incident_or_404(incident_id, db)
     incident.autoclose_warn_sent_at = None
-    incident.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    incident.started_at = datetime.now(UTC).replace(tzinfo=None)
     incident.autoclose_keepopen_count = (incident.autoclose_keepopen_count or 0) + 1
     db.commit()
     await manager.broadcast(incident_id, {"type": "autoclose_dismissed"})
@@ -601,9 +656,13 @@ async def qr_print(incident_id: int, request: Request, db: Session = Depends(get
     img.save(buf, format="PNG")
     img_b64 = base64.b64encode(buf.getvalue()).decode()
 
+    org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
+    logo_url = (org.logo_path if org and org.logo_path else None) or "/static/img/logo.png"
     return templates.TemplateResponse(request, "incident/qr_print.html", {
         "incident": incident,
         "qr_img": img_b64, "qr_url": url,
+        "logo_url": logo_url,
+        "base_url": str(request.base_url).rstrip("/"),
     })
 
 
@@ -666,7 +725,7 @@ async def vehicle_detail(
 @router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/kommandant")
 async def set_vehicle_commander(
     incident_id: int, vehicle_id: int, request: Request,
-    member_id: Optional[int] = Form(None),
+    member_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
@@ -900,8 +959,9 @@ async def upload_task_media(
     task = db.get(Task, task_id)
     if not task or task.incident_id != incident_id:
         return Response(status_code=404)
-    from app.services.media_service import store_upload
     from fastapi import HTTPException as _HE
+
+    from app.services.media_service import store_upload
     errors: list[str] = []
     for f in files:
         if not f.filename:
@@ -962,8 +1022,9 @@ async def upload_message_media(
     msg = db.get(Message, message_id)
     if not msg or msg.incident_id != incident_id:
         return Response(status_code=404)
-    from app.services.media_service import store_upload_for_message
     from fastapi import HTTPException as _HE
+
+    from app.services.media_service import store_upload_for_message
     for f in files:
         if not f.filename:
             continue
@@ -1013,8 +1074,9 @@ async def upload_person_media(
     person = db.get(RescuedPerson, person_id)
     if not person or person.incident_id != incident_id:
         return Response(status_code=404)
-    from app.services.media_service import store_upload_for_person
     from fastapi import HTTPException as _HE
+
+    from app.services.media_service import store_upload_for_person
     for f in files:
         if not f.filename:
             continue
@@ -1059,9 +1121,9 @@ async def move_card_endpoint(
     incident_id: int, request: Request,
     kind: str = Form(...),
     uid: int = Form(...),
-    column_id: Optional[int] = Form(None),
+    column_id: int | None = Form(None),
     position: int = Form(0),
-    vehicle_id: Optional[int] = Form(None),
+    vehicle_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):

@@ -7,7 +7,6 @@ zu senden — praktisch für lokale Entwicklung.
 """
 import logging
 from email.message import EmailMessage
-from typing import Optional
 
 try:
     import aiosmtplib  # type: ignore
@@ -23,7 +22,7 @@ class MailConfigError(RuntimeError):
     """SMTP nicht konfiguriert."""
 
 
-def _build_message(*, to: str, subject: str, body_txt: str, body_html: Optional[str] = None) -> EmailMessage:
+def _build_message(*, to: str, subject: str, body_txt: str, body_html: str | None = None) -> EmailMessage:
     msg = EmailMessage()
     msg["From"] = settings.SMTP_FROM or settings.SMTP_USER or "noreply@example.com"
     msg["To"] = to

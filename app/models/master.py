@@ -1,11 +1,9 @@
-from datetime import date, datetime, timezone
-from typing import List, Optional
+from datetime import UTC, date, datetime
 
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-
 
 BOS_VALUES = ["Feuerwehr", "Rotes Kreuz", "Polizei", "Bauhof", "Privat"]
 
@@ -25,18 +23,18 @@ class FireDept(Base):
     # Multi-org fields
     is_home_org: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    logo_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    contact_email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    contact_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    street: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    street: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # IANA timezone (e.g. "Europe/Vienna"). NULL faellt auf settings.DEFAULT_TIMEZONE zurueck.
-    timezone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    vehicles: Mapped[List["VehicleMaster"]] = relationship(back_populates="dept")
-    members: Mapped[List["Member"]] = relationship(back_populates="org", foreign_keys="Member.org_id")
-    settings: Mapped[Optional["OrgSettings"]] = relationship(back_populates="org", uselist=False)
+    vehicles: Mapped[list[VehicleMaster]] = relationship(back_populates="dept")
+    members: Mapped[list[Member]] = relationship(back_populates="org", foreign_keys="Member.org_id")
+    settings: Mapped[OrgSettings | None] = relationship(back_populates="org", uselist=False)
 
     @property
     def display_name(self) -> str:
@@ -54,9 +52,9 @@ class VehicleMaster(Base):
     is_first_train: Mapped[bool] = mapped_column(Boolean, default=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    bos_override: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    bos_override: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
-    dept: Mapped["FireDept"] = relationship(back_populates="vehicles")
+    dept: Mapped[FireDept] = relationship(back_populates="vehicles")
 
     @property
     def effective_bos(self) -> str:
@@ -69,6 +67,8 @@ class Qualification(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_einsatzleiter: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_gruppenkommandant: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class Member(Base):
@@ -76,16 +76,16 @@ class Member(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # org_id: which organisation this member belongs to
-    org_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("fire_dept.id"), nullable=True)
+    org_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fire_dept.id"), nullable=True)
     lastname: Mapped[str] = mapped_column(String(100), nullable=False)
     firstname: Mapped[str] = mapped_column(String(100), nullable=False)
-    phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    org: Mapped[Optional["FireDept"]] = relationship(back_populates="members", foreign_keys=[org_id])
-    qualifications: Mapped[List["MemberQualification"]] = relationship(
+    org: Mapped[FireDept | None] = relationship(back_populates="members", foreign_keys=[org_id])
+    qualifications: Mapped[list[MemberQualification]] = relationship(
         back_populates="member", lazy="joined"
     )
 
@@ -103,10 +103,10 @@ class MemberQualification(Base):
 
     member_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("member.id", ondelete="CASCADE"), primary_key=True)
     qualification_id: Mapped[int] = mapped_column(Integer, ForeignKey("qualification.id", ondelete="CASCADE"), primary_key=True)
-    valid_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
 
-    member: Mapped["Member"] = relationship(back_populates="qualifications")
-    qualification: Mapped["Qualification"] = relationship(lazy="joined")
+    member: Mapped[Member] = relationship(back_populates="qualifications")
+    qualification: Mapped[Qualification] = relationship(lazy="joined")
 
 
 class AlarmType(Base):
@@ -160,12 +160,12 @@ class OrgSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     org_id: Mapped[int] = mapped_column(Integer, ForeignKey("fire_dept.id", ondelete="CASCADE"), unique=True, nullable=False)
-    logo_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    primary_color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
-    footer_text: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    primary_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    footer_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    org: Mapped["FireDept"] = relationship(back_populates="settings")
+    org: Mapped[FireDept] = relationship(back_populates="settings")
 
 
 class SystemSettings(Base):
@@ -173,9 +173,9 @@ class SystemSettings(Base):
     __tablename__ = "system_settings"
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
-    value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_by_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
 
 
 class AlarmDispatchVehicle(Base):
@@ -187,5 +187,5 @@ class AlarmDispatchVehicle(Base):
     vehicle_master_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("vehicle_master.id", ondelete="CASCADE"), nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    alarm_type: Mapped["AlarmType"] = relationship()
-    vehicle: Mapped["VehicleMaster"] = relationship()
+    alarm_type: Mapped[AlarmType] = relationship()
+    vehicle: Mapped[VehicleMaster] = relationship()

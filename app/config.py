@@ -1,6 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 SECRET_KEY_PLACEHOLDER = "change-me-in-production"
 BOOTSTRAP_PASSWORD_PLACEHOLDER = "admin"
 

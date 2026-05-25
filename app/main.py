@@ -4,29 +4,29 @@ import logging
 import secrets as _secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi import Depends, FastAPI, Request
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings, validate_startup_secrets
-from app.db import SessionLocal, engine
 from app.core.security import unsign_session
+from app.db import SessionLocal
 from app.models.user import User
-
-from app.routers import auth, api_v1, ws
 from app.routers import (
-    ui_incident,
-    ui_breathing,
-    ui_archive,
+    api_v1,
+    auth,
     ui_admin,
+    ui_archive,
+    ui_breathing,
+    ui_incident,
     ui_media,
-    ui_stats,
+    ui_password_reset,
     ui_push,
     ui_settings,
-    ui_password_reset,
+    ui_stats,
+    ws,
 )
 
 logger = logging.getLogger("einsatzleiter")
@@ -170,9 +170,9 @@ except ImportError:
 # Rate-Limit via slowapi (Phase 7) — wenn nicht installiert, einfach überspringen.
 try:
     from slowapi import Limiter  # type: ignore
-    from slowapi.util import get_remote_address  # type: ignore
     from slowapi.errors import RateLimitExceeded  # type: ignore
     from slowapi.middleware import SlowAPIMiddleware  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
     from starlette.responses import JSONResponse
 
     # Default-Limit für alle Requests; einzelne Endpoints (login, password-reset)

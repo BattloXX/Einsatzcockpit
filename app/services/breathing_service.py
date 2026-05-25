@@ -1,15 +1,14 @@
 """Atemschutzüberwachung – Rückzugsdruck-Berechnung und Status-Maschine."""
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.models.breathing import BreathingTroop, TroopMember, PressureLog, TROOP_STATUSES
 from app.core.audit import write_incident_change
+from app.models.breathing import TROOP_STATUSES, BreathingTroop, PressureLog, TroopMember
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def calc_withdraw_pressure(start_press: float, factor: float = 0.5, reserve: int = 10) -> float:
@@ -21,9 +20,9 @@ def create_troop(
     incident_id: int,
     name: str,
     members_data: list[dict],
-    task_text: Optional[str] = None,
-    vehicle_id: Optional[int] = None,
-    user_id: Optional[int] = None,
+    task_text: str | None = None,
+    vehicle_id: int | None = None,
+    user_id: int | None = None,
 ) -> BreathingTroop:
     """
     members_data: [{"member_id": int|None, "free_text_name": str|None,
@@ -61,7 +60,7 @@ def create_troop(
 def start_troop(
     db: Session,
     troop: BreathingTroop,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> BreathingTroop:
     before = {"status": troop.status}
 
@@ -103,7 +102,7 @@ def update_troop_status(
     db: Session,
     troop: BreathingTroop,
     new_status: str,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
 ) -> BreathingTroop:
     assert new_status in TROOP_STATUSES
     before = {"status": troop.status}
@@ -114,7 +113,7 @@ def update_troop_status(
         troop.back_at = _now()
     db.flush()
     write_incident_change(
-        db, troop.incident_id, f"troop.status_changed", "breathing_troop", troop.id,
+        db, troop.incident_id, "troop.status_changed", "breathing_troop", troop.id,
         before=before, after={"status": new_status},
         user_id=user_id,
     )
@@ -124,9 +123,9 @@ def update_troop_status(
 def log_pressure(
     db: Session,
     troop: BreathingTroop,
-    member_id: Optional[int],
+    member_id: int | None,
     pressure_bar: float,
-    recorded_by_user_id: Optional[int] = None,
+    recorded_by_user_id: int | None = None,
 ) -> PressureLog:
     log = PressureLog(
         troop_id=troop.id,

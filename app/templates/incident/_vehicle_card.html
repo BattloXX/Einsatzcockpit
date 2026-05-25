@@ -6,7 +6,6 @@
      hx-swap="innerHTML"
      hx-trigger="click[!event.target.closest('select,input,button,label,.assigned-task,.assigned-msg,.assigned-person')]"
      hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
-  <div class="card__status card__status--{{ vehicle.status_color }}"></div>
   <div class="card__body">
     <div class="card__title">
       {{ vehicle.vehicle_master.code }}

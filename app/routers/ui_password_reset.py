@@ -16,11 +16,10 @@ Sicherheit:
 import hashlib
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -41,7 +40,7 @@ def _hash_token(raw: str) -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @router.get("/passwort-vergessen", response_class=HTMLResponse)
@@ -108,7 +107,7 @@ async def forgot_submit(
 
 @router.get("/passwort-zuruecksetzen", response_class=HTMLResponse)
 async def reset_form(request: Request, token: str = "", db: Session = Depends(get_db)):
-    error: Optional[str] = None
+    error: str | None = None
     if not token:
         error = "Token fehlt."
     else:

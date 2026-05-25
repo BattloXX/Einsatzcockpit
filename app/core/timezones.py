@@ -6,14 +6,14 @@ eigene Zeitzone gesetzt hat.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 from zoneinfo import ZoneInfo, available_timezones
 
 from app.config import settings
 
 
-def org_tz(org: Optional[Any]) -> ZoneInfo:
+def org_tz(org: Any | None) -> ZoneInfo:
     """Liefert die ZoneInfo-Instanz fuer eine Org (oder Default)."""
     name = getattr(org, "timezone", None) or settings.DEFAULT_TIMEZONE
     try:
@@ -22,7 +22,7 @@ def org_tz(org: Optional[Any]) -> ZoneInfo:
         return ZoneInfo(settings.DEFAULT_TIMEZONE)
 
 
-def to_org_tz(dt: Optional[datetime], org: Optional[Any] = None) -> Optional[datetime]:
+def to_org_tz(dt: datetime | None, org: Any | None = None) -> datetime | None:
     """Konvertiert ein UTC-Datetime in die Org-Zeitzone.
 
     Naive Datetimes werden als UTC angenommen.
@@ -30,23 +30,23 @@ def to_org_tz(dt: Optional[datetime], org: Optional[Any] = None) -> Optional[dat
     if dt is None:
         return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt.astimezone(org_tz(org))
 
 
-def format_local_time(dt: Optional[datetime], org: Optional[Any] = None) -> str:
+def format_local_time(dt: datetime | None, org: Any | None = None) -> str:
     """HH:MM in Org-Zeitzone."""
     local = to_org_tz(dt, org)
     return local.strftime("%H:%M") if local else ""
 
 
-def format_local_datetime(dt: Optional[datetime], org: Optional[Any] = None) -> str:
+def format_local_datetime(dt: datetime | None, org: Any | None = None) -> str:
     """DD.MM.YYYY HH:MM in Org-Zeitzone."""
     local = to_org_tz(dt, org)
     return local.strftime("%d.%m.%Y %H:%M") if local else ""
 
 
-def format_local_iso(dt: Optional[datetime], org: Optional[Any] = None) -> str:
+def format_local_iso(dt: datetime | None, org: Any | None = None) -> str:
     """ISO-8601 mit Offset (fuer Frontend-Konsumenten wie Alpine-Timer)."""
     local = to_org_tz(dt, org)
     return local.isoformat() if local else ""
