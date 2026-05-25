@@ -9,18 +9,21 @@
   {% for m in task.media %}
   <div style="position:relative; border:1px solid var(--border-color,#374151); border-radius:6px; overflow:hidden; background:var(--surface-2,#1f2937);">
     {% if m.kind == 'image' %}
-    <a href="/medien/datei/{{ m.id }}" target="_blank" title="{{ m.original_filename }}">
+    <a href="/medien/datei/{{ m.id }}" title="{{ m.original_filename }}"
+       onclick="event.preventDefault(); openMediaViewer('/medien/datei/{{ m.id }}', 'image', {{ m.original_filename|tojson }});">
       <img src="/medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}"
            style="width:100%;aspect-ratio:1;object-fit:cover;display:block;">
     </a>
     {% elif m.kind == 'pdf' %}
-    <a href="/medien/datei/{{ m.id }}" target="_blank" title="{{ m.original_filename }}"
+    <a href="/medien/datei/{{ m.id }}" title="{{ m.original_filename }}"
+       onclick="event.preventDefault(); openMediaViewer('/medien/datei/{{ m.id }}', 'pdf', {{ m.original_filename|tojson }});"
        style="display:flex;flex-direction:column;align-items:center;justify-content:center;aspect-ratio:1;text-decoration:none;color:inherit;padding:4px;">
       <span style="font-size:22px;">📄</span>
       <span style="font-size:9px;text-align:center;word-break:break-all;line-height:1.2;">PDF{% if m.pages %}<br>{{ m.pages }} S.{% endif %}</span>
     </a>
     {% elif m.kind == 'video' %}
-    <a href="/medien/datei/{{ m.id }}" target="_blank" title="{{ m.original_filename }}"
+    <a href="/medien/datei/{{ m.id }}" title="{{ m.original_filename }}"
+       onclick="event.preventDefault(); openMediaViewer('/medien/datei/{{ m.id }}', 'video', {{ m.original_filename|tojson }});"
        style="position:relative;display:block;">
       {% if m.thumb_path %}
       <img src="/medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}"

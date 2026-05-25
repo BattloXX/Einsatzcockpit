@@ -108,7 +108,7 @@ async def media_gallery(
     })
 
 
-def _serve_file(user, media, db):
+def _serve_file(user, media, db, download: bool = False):
     if not media:
         return Response(status_code=404)
     incident = db.get(Incident, media.incident_id)
@@ -117,7 +117,15 @@ def _serve_file(user, media, db):
     path = absolute_path(media)
     if not path.exists():
         return Response(status_code=404)
-    return FileResponse(path, media_type=media.mime_type, filename=media.original_filename)
+    # Default ist "inline" damit der In-App-Viewer PDFs/Videos im <iframe>/<video>
+    # rendern kann. Mit ?download=1 wird "attachment" zurückgegeben → Browser
+    # speichert die Datei direkt ab.
+    return FileResponse(
+        path,
+        media_type=media.mime_type,
+        filename=media.original_filename,
+        content_disposition_type="attachment" if download else "inline",
+    )
 
 
 def _serve_thumb(user, media, db):
@@ -137,11 +145,12 @@ def _serve_thumb(user, media, db):
 
 
 @router.get("/medien/datei/{media_id}")
-async def serve_media_file(media_id: int, request: Request, db: Session = Depends(get_db)):
+async def serve_media_file(media_id: int, request: Request, db: Session = Depends(get_db),
+                           download: int = Query(0)):
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)
-    return _serve_file(user, db.get(TaskMedia, media_id), db)
+    return _serve_file(user, db.get(TaskMedia, media_id), db, download=bool(download))
 
 
 @router.get("/medien/thumb/{media_id}")
@@ -153,11 +162,12 @@ async def serve_media_thumb(media_id: int, request: Request, db: Session = Depen
 
 
 @router.get("/medien/meldung/datei/{media_id}")
-async def serve_message_media_file(media_id: int, request: Request, db: Session = Depends(get_db)):
+async def serve_message_media_file(media_id: int, request: Request, db: Session = Depends(get_db),
+                                   download: int = Query(0)):
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)
-    return _serve_file(user, db.get(MessageMedia, media_id), db)
+    return _serve_file(user, db.get(MessageMedia, media_id), db, download=bool(download))
 
 
 @router.get("/medien/meldung/thumb/{media_id}")
@@ -169,11 +179,12 @@ async def serve_message_media_thumb(media_id: int, request: Request, db: Session
 
 
 @router.get("/medien/person/datei/{media_id}")
-async def serve_person_media_file(media_id: int, request: Request, db: Session = Depends(get_db)):
+async def serve_person_media_file(media_id: int, request: Request, db: Session = Depends(get_db),
+                                  download: int = Query(0)):
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)
-    return _serve_file(user, db.get(PersonMedia, media_id), db)
+    return _serve_file(user, db.get(PersonMedia, media_id), db, download=bool(download))
 
 
 @router.get("/medien/person/thumb/{media_id}")

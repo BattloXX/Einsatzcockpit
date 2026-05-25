@@ -158,11 +158,20 @@ async def create_task(
     incident_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
     column_id: Optional[int] = Form(None),
+    vehicle_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
     incident = _incident_or_404(incident_id, db)
-    task = add_task(db, incident, title, detail or None, user_id=request.state.user.id, column_id=column_id)
+    task = add_task(
+        db, incident, title, detail or None,
+        user_id=request.state.user.id, column_id=column_id,
+    )
+    # Einheit direkt mit-zuweisen — column_id bleibt erhalten, damit der Auftrag
+    # gleichzeitig auf dem Board UND in der Fahrzeug-Karte sichtbar ist
+    # (analog assign_task_to_vehicle).
+    if vehicle_id:
+        task.vehicle_id = vehicle_id
     db.commit()
     await manager.broadcast(incident_id, {
         "type": "task_created", "task_id": task.id, "reload_board": True,

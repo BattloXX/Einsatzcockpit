@@ -239,6 +239,17 @@
         <div class="form-group">
           <input type="text" name="detail" placeholder="Zusatzinfo (optional)" class="form-input">
         </div>
+        <div class="form-group">
+          <label class="form-label" style="font-size:.82rem;">Einheit (optional)</label>
+          <select name="vehicle_id" class="form-select">
+            <option value="">– keine –</option>
+            {% for v in incident.vehicles %}
+            {% if v.removed_at is none %}
+            <option value="{{ v.id }}">{{ v.vehicle_master.code }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+        </div>
       </div>
       <div class="modal__footer">
         <button type="button" @click="$el.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
