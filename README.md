@@ -97,7 +97,7 @@ npm install
 npm run build          # einmalig, erzeugt app/static/css/app.css
 
 # 5. MariaDB starten (Docker-Variante)
-docker run -d --name fwwo-db \
+docker run -d --name einsatzleiter-db \
   -e MARIADB_ROOT_PASSWORD=root \
   -e MARIADB_DATABASE=einsatzleiter \
   -e MARIADB_USER=einsatzleiter \
@@ -545,7 +545,7 @@ Browser                  FastAPI                 Dateisystem + DB
 
 ```http
 POST /api/v1/einsatz
-X-API-Key: fwwo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+X-API-Key: elh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 Content-Type: application/json
 ```
 
