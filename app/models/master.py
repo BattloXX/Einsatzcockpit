@@ -86,7 +86,7 @@ class Member(Base):
 
     org: Mapped[FireDept | None] = relationship(back_populates="members", foreign_keys=[org_id])
     qualifications: Mapped[list[MemberQualification]] = relationship(
-        back_populates="member", lazy="joined"
+        back_populates="member", lazy="joined", passive_deletes=True,
     )
 
     @property

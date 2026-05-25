@@ -1,7 +1,7 @@
 /* ─── Media Upload Helpers ───────────────────────────────────────────
- * Reparieren des mobilen Foto-Uploads (Android/Chrome): capture="environment"
- * blockierte oft die Galerie. Stattdessen zwei Buttons "Kamera"/"Galerie"
- * + clientseitige Bild-Kompression auf serverseitige Limits.
+ * Eigenständiger XHR-Upload mit echtem upload.onprogress-Tracking.
+ * Ersetzt den alten htmx:xhr:progress-Ansatz, der nur Download-Progress
+ * lieferte und bei kleinen Dateien unsichtbar blieb.
  * ────────────────────────────────────────────────────────────────── */
 
 (function () {
@@ -13,46 +13,127 @@
   const IMAGE_QUALITY   = 0.85;                // JPEG-Quality
 
   /* ── Upload-Fortschrittsbalken ─────────────────────────────────── */
-  const bar = document.createElement('div');
-  bar.id = 'upload-progress-bar';
-  Object.assign(bar.style, {
-    position: 'fixed', top: '0', left: '0', width: '0%', height: '3px',
-    background: 'var(--red, #b71921)', zIndex: '9999',
-    transition: 'width .2s ease, opacity .4s ease',
+  const track = document.createElement('div');
+  track.id = 'upload-progress-track';
+  Object.assign(track.style, {
+    position: 'fixed', top: '0', left: '0', width: '100%', height: '6px',
+    background: 'rgba(0,0,0,.35)', zIndex: '9999',
     opacity: '0', pointerEvents: 'none',
+    transition: 'opacity .25s ease',
   });
-  document.addEventListener('DOMContentLoaded', () => document.body.appendChild(bar));
+
+  const fill = document.createElement('div');
+  Object.assign(fill.style, {
+    height: '100%', width: '0%',
+    background: 'var(--red, #b71921)',
+    transition: 'width .15s ease',
+  });
+  track.appendChild(fill);
+
+  const label = document.createElement('span');
+  Object.assign(label.style, {
+    position: 'fixed', top: '7px', left: '50%',
+    transform: 'translateX(-50%)',
+    fontSize: '11px', fontWeight: '700', color: '#fff',
+    textShadow: '0 1px 3px rgba(0,0,0,.8)',
+    zIndex: '10000', pointerEvents: 'none', opacity: '0',
+    transition: 'opacity .25s ease',
+    whiteSpace: 'nowrap',
+  });
+  document.head.appendChild(label);
+
+  function initBar() {
+    if (!document.body.contains(track)) document.body.appendChild(track);
+  }
+  if (document.body) {
+    initBar();
+  } else {
+    document.addEventListener('DOMContentLoaded', initBar);
+  }
 
   let _hideTimer = null;
 
-  function progressShow(pct) {
+  function progressShow(pct, text) {
     clearTimeout(_hideTimer);
-    bar.style.opacity = '1';
-    bar.style.width = pct + '%';
+    track.style.opacity = '1';
+    label.style.opacity = '1';
+    fill.style.width = pct + '%';
+    if (text) label.textContent = text;
   }
 
   function progressDone() {
-    bar.style.width = '100%';
+    fill.style.width = '100%';
+    label.textContent = '';
     _hideTimer = setTimeout(() => {
-      bar.style.opacity = '0';
-      setTimeout(() => { bar.style.width = '0%'; }, 450);
-    }, 350);
+      track.style.opacity = '0';
+      label.style.opacity = '0';
+      setTimeout(() => { fill.style.width = '0%'; }, 300);
+    }, 500);
   }
 
-  // HTMX XHR progress → update bar (capped at 90 so "done" is visually distinct)
-  document.addEventListener('htmx:xhr:progress', function (e) {
-    if (e.detail && e.detail.loaded && e.detail.total) {
-      const pct = Math.min(90, Math.round(e.detail.loaded / e.detail.total * 100));
-      progressShow(pct);
+  /* ── CSRF-Token aus Cookie ────────────────────────────────────── */
+  function readCsrf() {
+    const cookies = (document.cookie || '').split(/;\s*/);
+    for (const c of cookies) {
+      const i = c.indexOf('=');
+      if (i === -1) continue;
+      if (c.slice(0, i).trim() === 'fwwo_csrf') return decodeURIComponent(c.slice(i + 1));
     }
-  });
+    return null;
+  }
 
-  // HTMX request finished → fill to 100 % and hide
-  document.addEventListener('htmx:afterRequest', function (e) {
-    if (bar.style.opacity === '1') progressDone();
-  });
+  /* ── Kern-Upload via XHR ─────────────────────────────────────── */
+  function uploadForm(formEl, files) {
+    const action = formEl.getAttribute('hx-post') || formEl.action;
+    const targetSel = formEl.getAttribute('hx-target');
+    const swapMode  = formEl.getAttribute('hx-swap') || 'innerHTML';
 
-  /* ── Public helpers ──────────────────────────────────────────────── */
+    if (!action) return;
+
+    progressShow(2, 'Vorbereitung…');
+
+    const fd = new FormData();
+    const inputName = formEl.querySelector('input[type="file"]')?.name || 'files';
+    for (const f of files) fd.append(inputName, f);
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = function (e) {
+      if (!e.lengthComputable) return;
+      const pct = Math.min(92, Math.round(e.loaded / e.total * 100));
+      const kb = Math.round(e.total / 1024);
+      progressShow(pct, pct + ' % · ' + kb + ' KB');
+    };
+
+    xhr.onload = function () {
+      progressDone();
+      if (!targetSel || swapMode === 'none') return;
+      const target = document.querySelector(targetSel);
+      if (!target) return;
+      if (swapMode === 'outerHTML') {
+        target.outerHTML = xhr.responseText;
+      } else {
+        target.innerHTML = xhr.responseText;
+        // Re-bind HTMX and Alpine on injected content.
+        if (window.htmx) htmx.process(target);
+        if (window.Alpine) Alpine.initTree(target);
+      }
+    };
+
+    xhr.onerror = xhr.onabort = function () {
+      progressDone();
+    };
+
+    xhr.open('POST', action, true);
+    xhr.setRequestHeader('HX-Request', 'true');
+    xhr.setRequestHeader('HX-Current-URL', location.href);
+    const csrf = readCsrf();
+    if (csrf) xhr.setRequestHeader('X-CSRF-Token', csrf);
+
+    xhr.send(fd);
+  }
+
+  /* ── Öffentliche Helfer ──────────────────────────────────────── */
   window.openCamera = function (inputId) {
     const inp = document.getElementById(inputId);
     if (!inp) return;
@@ -71,9 +152,9 @@
     const files = Array.from(inputEl.files || []);
     if (!files.length) return;
 
-    progressShow(5);  // sofort sichtbar während Kompression läuft
+    progressShow(3, 'Komprimiere…');
 
-    const out = new DataTransfer();
+    const out = [];
     for (const f of files) {
       if (f.type && f.type.startsWith('image/') && f.size > IMAGE_MAX_BYTES) {
         try {
@@ -81,26 +162,39 @@
           if (compressed.size > IMAGE_MAX_BYTES) {
             compressed = await compressImage(f, 1920, 0.75);
           }
-          out.items.add(compressed);
+          out.push(compressed);
         } catch (e) {
           console.warn('image compression failed, sending original', e);
-          out.items.add(f);
+          out.push(f);
         }
       } else {
-        out.items.add(f);  // PDF/Video unverändert, Server prüft Limits.
+        out.push(f);
       }
     }
-    inputEl.files = out.files;
-
-    progressShow(15);  // Kompression fertig, Upload beginnt gleich
 
     const form = inputEl.closest('form');
     if (!form) return;
-    if (window.htmx) {
-      htmx.trigger(form, 'submit');
-    } else {
-      form.requestSubmit();
+    uploadForm(form, out);
+  };
+
+  // Kamera-Schnellupload (ohne komprimieren, direktes Foto)
+  window.quickCameraUpload = async function (inputEl) {
+    const files = Array.from(inputEl.files || []);
+    if (!files.length) return;
+    progressShow(5, 'Lade hoch…');
+    const form = inputEl.closest('form');
+    if (!form) return;
+    // Bilder trotzdem komprimieren falls nötig.
+    const out = [];
+    for (const f of files) {
+      if (f.type && f.type.startsWith('image/') && f.size > IMAGE_MAX_BYTES) {
+        try { out.push(await compressImage(f, IMAGE_MAX_DIM, IMAGE_QUALITY)); }
+        catch (e) { out.push(f); }
+      } else {
+        out.push(f);
+      }
     }
+    uploadForm(form, out);
   };
 
   async function compressImage(file, maxDim, quality) {

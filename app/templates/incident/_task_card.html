@@ -59,7 +59,7 @@
           style="margin:0;">
       <label class="card__camera" title="Foto aufnehmen" onclick="event.stopPropagation()">
         📷<input type="file" name="files" accept="image/*" capture="environment" style="display:none"
-                 onchange="this.closest('form').requestSubmit()">
+                 onchange="quickCameraUpload(this)">
       </label>
     </form>
   </div>

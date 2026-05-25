@@ -16,7 +16,21 @@
       {% endif %}
     </div>
     <div class="card__sub">{{ vehicle.vehicle_master.type }}</div>
-    {% if vehicle.commander %}
+    {% if can_edit and gk_member_candidates is defined %}
+    <div style="margin-top:3px;" onclick="event.stopPropagation()">
+      <select class="form-select form-select--xs"
+              style="font-size:.7rem;"
+              hx-post="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/gk"
+              hx-trigger="change"
+              hx-swap="none"
+              name="member_id">
+        <option value="">— kein GK —</option>
+        {% for m in gk_member_candidates %}
+        <option value="{{ m.id }}" {% if vehicle.commander_member_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% elif vehicle.commander %}
     <div class="card__gk">GK: {{ vehicle.commander.full_name }}</div>
     {% endif %}
     {% if can_edit and unit_status_values is defined %}

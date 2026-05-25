@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import qrcode
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.permissions import has_role, require_role
@@ -147,7 +148,10 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         .join(Role, UserRole.role_id == Role.id)
         .filter(
             User.active == True,
-            User.org_id == incident.primary_org_id if incident.primary_org_id else True,
+            or_(
+                Role.code == "system_admin",
+                User.org_id == incident.primary_org_id,
+            ) if incident.primary_org_id else True,
             Role.code.in_(leader_roles),
         )
         .distinct()
@@ -159,12 +163,14 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         if io.org_id not in org_ids:
             org_ids.append(io.org_id)
     el_member_candidates = list_el_candidates(db, org_ids)
+    gk_member_candidates = list_commander_candidates(db, org_ids)
     return templates.TemplateResponse(request, "incident/board.html", {
         "user": user, "incident": incident,
         "alarm_types": alarm_types, "lage_hints": lage_hints,
         "task_suggestions": task_suggestions, "msg_suggestions": msg_suggestions,
         "can_edit": can_edit, "leader_candidates": leader_candidates,
         "el_member_candidates": el_member_candidates,
+        "gk_member_candidates": gk_member_candidates,
         "unit_status_values": UNIT_STATUS_VALUES,
     })
 
@@ -185,6 +191,34 @@ async def set_incident_leader_member(
         "type": "incident_leader_changed",
         "reload_board": True,
     })
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/gk")
+async def set_vehicle_gk_quick(
+    incident_id: int, vehicle_id: int, request: Request,
+    member_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    vehicle = db.get(IncidentVehicle, vehicle_id)
+    if not vehicle:
+        return Response(status_code=404)
+    if member_id:
+        ok = (
+            db.query(MemberQualification)
+            .join(Qualification, Qualification.id == MemberQualification.qualification_id)
+            .filter(
+                MemberQualification.member_id == member_id,
+                Qualification.is_gruppenkommandant.is_(True),
+            )
+            .first()
+        )
+        if not ok:
+            return Response(status_code=422)
+    set_commander(db, vehicle, member_id or None, user_id=request.state.user.id)
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
     return Response(status_code=204)
 
 
@@ -257,10 +291,16 @@ async def toggle_task_done(
     if task.vehicle_id:
         vehicle = db.get(IncidentVehicle, task.vehicle_id)
         if vehicle:
+            inc = task.incident
+            _org_ids = [inc.primary_org_id] if inc.primary_org_id else []
+            for io in (inc.collaborating_orgs or []):
+                if io.org_id not in _org_ids:
+                    _org_ids.append(io.org_id)
             return templates.TemplateResponse(request, "incident/_vehicle_card.html", {
-                "vehicle": vehicle, "incident": task.incident,
+                "vehicle": vehicle, "incident": inc,
                 "can_edit": True,
                 "unit_status_values": UNIT_STATUS_VALUES,
+                "gk_member_candidates": list_commander_candidates(db, _org_ids),
             })
     # Free Task (nicht zugewiesen): Task-Card refreshen.
     return templates.TemplateResponse(request, "incident/_task_card.html", {
@@ -365,6 +405,7 @@ async def attach_vehicle_to_incident(
     new_code: str = Form(""),
     new_name: str = Form(""),
     new_type: str = Form(""),
+    commander_member_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -416,6 +457,7 @@ async def attach_vehicle_to_incident(
         column_id=target_col.id,
         vehicle_master_id=vm.id,
         display_order=999,
+        commander_member_id=commander_member_id or None,
     )
     db.add(iv)
     db.commit()

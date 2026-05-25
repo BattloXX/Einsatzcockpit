@@ -297,6 +297,21 @@ async def bulk_delete_members(
     blocked: list[str] = []
     for m in rows:
         name = m.full_name
+        # Null out nullable FKs so the delete isn't blocked by them.
+        from app.models.incident import Incident as _Incident, IncidentVehicle as _IV
+        from app.models.breathing import TroopMember as _TM, PressureLog as _PL
+        db.query(_IV).filter(_IV.commander_member_id == m.id).update(
+            {"commander_member_id": None}, synchronize_session="fetch"
+        )
+        db.query(_Incident).filter(_Incident.incident_leader_member_id == m.id).update(
+            {"incident_leader_member_id": None}, synchronize_session="fetch"
+        )
+        db.query(_TM).filter(_TM.member_id == m.id).update(
+            {"member_id": None}, synchronize_session="fetch"
+        )
+        db.query(_PL).filter(_PL.member_id == m.id).update(
+            {"member_id": None}, synchronize_session="fetch"
+        )
         sp = db.begin_nested()
         try:
             db.delete(m)

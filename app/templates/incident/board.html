@@ -129,7 +129,7 @@
     {% endif %}
 
     <!-- Einsatzleiter vor Ort -->
-    {% if el_member_candidates is defined and (el_member_candidates or incident.incident_leader_member_id) %}
+    {% if can_edit or incident.incident_leader_member_id %}
     <div class="sidebar-box">
       <div class="sidebar-box__title">Einsatzleiter vor Ort</div>
       {% if can_edit %}
@@ -145,6 +145,9 @@
           <button type="submit" class="btn btn--secondary btn--sm">OK</button>
         </div>
       </form>
+      {% if not el_member_candidates %}
+      <div class="text-muted" style="font-size:.8rem; margin-top:4px;">Keine Mitglieder mit EL-Qualifikation</div>
+      {% endif %}
       {% else %}
       {% if incident.leader_member %}
       <div style="font-size:.9rem;"><strong>{{ incident.leader_member.full_name }}</strong></div>
@@ -380,10 +383,23 @@
                title="Volltextsuche in Funkrufname und Typ">
       </div>
 
+      {% if gk_member_candidates %}
+      <div class="form-group" style="margin-bottom:8px;">
+        <label class="form-label" style="font-size:.75rem;">Gruppenkommandant (optional)</label>
+        <select class="form-select form-select--sm" x-model="gkMemberId">
+          <option value="">— kein GK —</option>
+          {% for m in gk_member_candidates %}
+          <option value="{{ m.id }}">{{ m.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
       <div x-show="suggestions.length > 0" class="suggestion-list">
         <template x-for="s in suggestions" :key="s.id">
           <form method="post" :action="`/einsatz/${incidentId}/fahrzeug-hinzufuegen`" style="display:block;">
             <input type="hidden" name="vehicle_master_id" :value="s.id">
+            <input type="hidden" name="commander_member_id" :value="gkMemberId">
             <button type="submit" class="suggestion-pill suggestion-pill--block"
                     :disabled="s.in_use"
                     :title="s.in_use ? 'Einheit ist bereits im Einsatz' : 'Diese Einheit zum Einsatz hinzufügen'">
@@ -403,6 +419,7 @@
           + Neue Einheit anlegen (nicht in Stammdaten)
         </summary>
         <form method="post" :action="`/einsatz/${incidentId}/fahrzeug-hinzufuegen`" style="margin-top:12px;">
+          <input type="hidden" name="commander_member_id" :value="gkMemberId">
           <div class="form-row" style="display:flex; gap:8px;">
             <div class="form-group" style="flex:1;">
               <label class="form-label">FUNKRUFNAME / KÜRZEL</label>
@@ -528,6 +545,7 @@ function vehicleWizard(incidentId) {
   return {
     incidentId,
     query: '',
+    gkMemberId: '',
     suggestions: [],
     async loadSuggestions() {
       try {

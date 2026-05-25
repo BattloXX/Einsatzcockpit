@@ -115,7 +115,7 @@ class IncidentVehicle(Base):
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
     column_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident_column.id"), nullable=False)
     vehicle_master_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("vehicle_master.id"), nullable=False)
-    commander_member_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("member.id"), nullable=True)
+    commander_member_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     org_color_override: Mapped[str | None] = mapped_column(String(7), nullable=True)
