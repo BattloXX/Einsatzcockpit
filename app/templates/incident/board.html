@@ -40,6 +40,9 @@
   <div class="incident-header__actions">
     <a href="/einsatz/{{ incident.id }}/atemschutz" class="btn btn--sm btn--secondary"
        {{ tip('Atemschutzüberwachung — Pressluft-Trupp-Steuerung') }}>AS-Überwachung</a>
+    <a href="/einsatz/{{ incident.id }}/dashboard" target="_blank" rel="noopener noreferrer"
+       class="btn btn--sm btn--secondary"
+       {{ tip('Übersichts-Dashboard in neuem Fenster öffnen') }}>Dashboard</a>
     <a href="/einsatz/{{ incident.id }}/qr" class="btn btn--sm btn--ghost"
        {{ tip('QR-Code zum Einsatz beitreten anzeigen') }}>QR</a>
     <a href="/archiv/{{ incident.id }}/pdf" class="btn btn--sm btn--ghost"

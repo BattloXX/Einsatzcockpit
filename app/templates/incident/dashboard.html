@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, initial-scale=1">
+  <title>Dashboard · {{ incident.alarm_type_code }} – {{ incident.address_street or ('Einsatz #' ~ incident.id) }}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #080d18;
+      --surface:   #0f1623;
+      --panel:     #141c2e;
+      --border:    #1e2d47;
+      --hover:     #1a2540;
+      --text:      #e2e8f0;
+      --muted:     #6b7a99;
+      --dim:       #3a4560;
+
+      --green:  #22c55e;
+      --green-bg: rgba(34,197,94,.1);
+      --green-border: rgba(34,197,94,.25);
+
+      --amber:  #f59e0b;
+      --amber-bg: rgba(245,158,11,.1);
+      --amber-border: rgba(245,158,11,.25);
+
+      --blue:   #3b82f6;
+      --blue-bg: rgba(59,130,246,.1);
+      --blue-border: rgba(59,130,246,.25);
+
+      --red:    #ef4444;
+      --red-bg: rgba(239,68,68,.12);
+      --red-border: rgba(239,68,68,.28);
+
+      --gray:   #64748b;
+      --gray-bg: rgba(100,116,139,.1);
+      --gray-border: rgba(100,116,139,.25);
+
+      --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+      --font-ui: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+    }
+
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    /* ── SCANLINE OVERLAY ───────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,.03) 2px,
+        rgba(0,0,0,.03) 4px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* ── GRID ───────────────────────────── */
+    .dashboard {
+      display: grid;
+      grid-template-rows: 72px 1fr 170px;
+      height: 1080px;
+      gap: 8px;
+      padding: 8px;
+    }
+
+    /* ══════════════════════════════════════
+       HEADER
+    ══════════════════════════════════════ */
+    .header {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .header::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+    }
+
+    .alarm-badge {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 54px;
+      height: 50px;
+      border-radius: 5px;
+      font-family: var(--font-mono);
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      position: relative;
+    }
+    .alarm-badge--f {
+      background: var(--red-bg);
+      border: 1px solid var(--red-border);
+      color: var(--red);
+      box-shadow: 0 0 16px rgba(239,68,68,.15);
+    }
+    .alarm-badge--t {
+      background: var(--blue-bg);
+      border: 1px solid var(--blue-border);
+      color: var(--blue);
+      box-shadow: 0 0 16px rgba(59,130,246,.15);
+    }
+    .alarm-badge--x {
+      background: var(--gray-bg);
+      border: 1px solid var(--gray-border);
+      color: var(--gray);
+    }
+
+    .h-sep { width: 1px; height: 40px; background: var(--border); flex-shrink: 0; }
+
+    .header-info { flex: 1; min-width: 0; }
+    .header-title {
+      font-size: .95rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .header-address {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .header-nummer {
+      display: inline-block;
+      margin-right: 6px;
+      font-family: var(--font-mono);
+      font-size: .65rem;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      vertical-align: middle;
+    }
+
+    .header-timer {
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .timer-value {
+      font-family: var(--font-mono);
+      font-size: 2.1rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: .06em;
+      color: var(--text);
+      line-height: 1;
+    }
+    .timer-label {
+      font-size: .58rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--dim);
+      margin-top: 3px;
+    }
+
+    .header-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .el-name {
+      font-size: .78rem;
+      color: var(--muted);
+    }
+    .el-name strong { color: var(--text); font-weight: 500; }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: .65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .status-pill--active {
+      background: var(--green-bg);
+      border: 1px solid var(--green-border);
+      color: var(--green);
+    }
+    .status-pill--exercise {
+      background: var(--amber-bg);
+      border: 1px solid var(--amber-border);
+      color: var(--amber);
+    }
+    .pulse-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-pill--active .pulse-dot { background: var(--green); animation: blink 2s ease-in-out infinite; }
+    .status-pill--exercise .pulse-dot { background: var(--amber); animation: blink 2s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+    .refresh-info {
+      font-size: .62rem;
+      color: var(--dim);
+      text-align: right;
+    }
+    #refreshCountdown { font-family: var(--font-mono); color: var(--muted); }
+
+    /* ══════════════════════════════════════
+       MAIN
+    ══════════════════════════════════════ */
+    .main {
+      display: grid;
+      grid-template-columns: 2.2fr 1.4fr 1.4fr;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-hd {
+      padding: 10px 14px 8px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .panel-label {
+      font-size: .58rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .14em;
+      color: var(--dim);
+      margin-bottom: 7px;
+    }
+    .stat-row { display: flex; align-items: center; gap: 8px; }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 9px 4px 7px;
+      border-radius: 5px;
+    }
+    .chip-count {
+      font-family: var(--font-mono);
+      font-size: 1.45rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .chip-label {
+      font-size: .65rem;
+      font-weight: 500;
+      line-height: 1.2;
+    }
+
+    .chip--green { background: var(--green-bg); border: 1px solid var(--green-border); }
+    .chip--green .chip-count { color: var(--green); }
+    .chip--green .chip-label { color: rgba(34,197,94,.7); }
+
+    .chip--amber { background: var(--amber-bg); border: 1px solid var(--amber-border); }
+    .chip--amber .chip-count { color: var(--amber); }
+    .chip--amber .chip-label { color: rgba(245,158,11,.7); }
+
+    .chip--blue { background: var(--blue-bg); border: 1px solid var(--blue-border); }
+    .chip--blue .chip-count { color: var(--blue); }
+    .chip--blue .chip-label { color: rgba(59,130,246,.7); }
+
+    .chip--gray { background: var(--gray-bg); border: 1px solid var(--gray-border); }
+    .chip--gray .chip-count { color: var(--gray); }
+    .chip--gray .chip-label { color: rgba(100,116,139,.7); }
+
+    .progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 7px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--green), rgba(34,197,94,.7));
+      transition: width .6s ease;
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 6px;
+    }
+    .panel-body::-webkit-scrollbar { width: 3px; }
+    .panel-body::-webkit-scrollbar-track { background: transparent; }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── VEHICLE SECTION ─────────────────── */
+    .vs-label {
+      font-size: .58rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      padding: 5px 6px 4px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .vs-label--green { color: var(--green); }
+    .vs-label--amber { color: var(--amber); }
+    .vs-label--gray  { color: var(--muted); }
+    .vs-label .vs-line { flex: 1; height: 1px; background: var(--border); }
+
+    .vehicle-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+      gap: 5px;
+      padding: 0 2px 6px;
+    }
+
+    .v-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 7px 9px 7px 12px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color .15s;
+    }
+    .v-card:hover { border-color: #2a3d5e; }
+    .v-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      border-radius: 5px 0 0 5px;
+    }
+    .v-card--active::before  { background: var(--green); box-shadow: 0 0 8px rgba(34,197,94,.4); }
+    .v-card--dispatch::before { background: var(--amber); box-shadow: 0 0 8px rgba(245,158,11,.35); }
+    .v-card--other::before   { background: var(--dim); }
+
+    .v-code {
+      font-family: var(--font-mono);
+      font-size: .95rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .v-name {
+      font-size: .62rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .v-gk {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .gk-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      border: 1.5px solid var(--border);
+      flex-shrink: 0;
+    }
+    .gk-name {
+      font-size: .68rem;
+      color: var(--text);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .v-no-gk {
+      margin-top: 6px;
+      font-size: .62rem;
+      color: var(--dim);
+      font-style: italic;
+    }
+
+    /* ── ITEM LIST (tasks / messages) ────── */
+    .item-list { display: flex; flex-direction: column; gap: 3px; }
+
+    .item-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      padding: 7px 9px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      transition: background .12s, border-color .12s;
+    }
+    .item-row:hover { background: var(--hover); border-color: #2a3d5e; }
+
+    .i-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      margin-top: 3px;
+      flex-shrink: 0;
+    }
+    .i-dot--open     { background: var(--blue); }
+    .i-dot--progress { background: var(--amber); box-shadow: 0 0 6px rgba(245,158,11,.5); }
+
+    .i-body { flex: 1; min-width: 0; }
+    .i-title {
+      font-size: .78rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.3;
+    }
+    .i-vehicle {
+      margin-top: 2px;
+      font-size: .63rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .v-badge {
+      font-family: var(--font-mono);
+      font-size: .6rem;
+      font-weight: 600;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: var(--blue-bg);
+      border: 1px solid var(--blue-border);
+      color: var(--blue);
+    }
+    .i-unassigned { color: var(--dim); font-style: italic; }
+
+    .empty-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      min-height: 80px;
+      color: var(--dim);
+      font-size: .78rem;
+      gap: 6px;
+    }
+    .empty-icon {
+      width: 28px; height: 28px;
+      opacity: .25;
+    }
+
+    /* ══════════════════════════════════════
+       PERSONEN STRIP
+    ══════════════════════════════════════ */
+    .persons-strip {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .ps-title {
+      flex-shrink: 0;
+      width: 90px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 16px;
+      border-right: 1px solid var(--border);
+      writing-mode: vertical-lr;
+      transform: rotate(180deg);
+      font-size: .58rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .14em;
+      color: var(--dim);
+    }
+
+    .ps-groups {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    .ps-group {
+      padding: 10px 14px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .ps-group:last-child { border-right: none; }
+    .ps-group::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+    }
+    .ps-group--gefunden::before       { background: var(--blue); }
+    .ps-group--versorgt::before       { background: var(--amber); }
+    .ps-group--abtransportiert::before { background: var(--green); }
+    .ps-group--verstorben::before     { background: var(--gray); }
+
+    .ps-hd {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+      flex-shrink: 0;
+    }
+    .ps-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .ps-dot--gefunden       { background: var(--blue); }
+    .ps-dot--versorgt       { background: var(--amber); }
+    .ps-dot--abtransportiert { background: var(--green); }
+    .ps-dot--verstorben     { background: var(--gray); }
+
+    .ps-label {
+      font-size: .6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--muted);
+    }
+
+    .ps-count {
+      font-family: var(--font-mono);
+      font-size: 2.6rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 6px;
+      flex-shrink: 0;
+    }
+    .ps-group--gefunden .ps-count        { color: var(--blue); }
+    .ps-group--versorgt .ps-count        { color: var(--amber); }
+    .ps-group--abtransportiert .ps-count { color: var(--green); }
+    .ps-group--verstorben .ps-count      { color: var(--gray); }
+
+    .ps-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .ps-list::-webkit-scrollbar { width: 2px; }
+    .ps-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .ps-item {
+      font-size: .67rem;
+      color: var(--muted);
+      padding: 1px 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.5;
+    }
+    .ps-item strong { color: var(--text); font-weight: 500; }
+    .ps-empty { font-size: .65rem; color: var(--dim); font-style: italic; }
+  </style>
+</head>
+<body>
+<div class="dashboard">
+
+  <!-- ══ HEADER ══ -->
+  <header class="header">
+    {% set ac = incident.alarm_type_code or '' %}
+    {% set ac_prefix = ac[:1]|lower if ac else 'x' %}
+    <div class="alarm-badge alarm-badge--{{ 'f' if ac_prefix == 'f' else ('t' if ac_prefix == 't' else 'x') }}">
+      {{ ac or '?' }}
+    </div>
+
+    <div class="h-sep"></div>
+
+    <div class="header-info">
+      <div class="header-title">
+        {% if incident.nummer %}<span class="header-nummer">#{{ incident.nummer }}</span>{% endif %}
+        {% if incident.reason %}{{ incident.reason }}
+        {% elif incident.report_text %}{{ incident.report_text[:100] }}
+        {% else %}Einsatz {{ incident.id }}{% endif %}
+      </div>
+      {% if incident.address_street %}
+      <div class="header-address">
+        {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %} &middot; {{ incident.address_city }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="h-sep"></div>
+
+    <div class="header-timer">
+      <div class="timer-value" id="elapsedTimer">00:00:00</div>
+      <div class="timer-label">Einsatzdauer</div>
+    </div>
+
+    <div class="h-sep"></div>
+
+    <div class="header-right">
+      {% if incident.leader %}
+      <div class="el-name">EL: <strong>{{ incident.leader.display_name }}</strong></div>
+      {% elif incident.leader_member %}
+      <div class="el-name">EL: <strong>{{ incident.leader_member.full_name }}</strong></div>
+      {% else %}
+      <div class="el-name" style="color:var(--amber)">Kein Einsatzleiter zugewiesen</div>
+      {% endif %}
+      <div class="status-pill status-pill--{{ 'exercise' if incident.is_exercise else 'active' }}">
+        <span class="pulse-dot"></span>
+        {{ 'Übung aktiv' if incident.is_exercise else 'Einsatz aktiv' }}
+      </div>
+    </div>
+
+    <div class="h-sep"></div>
+
+    <div class="refresh-info">
+      Aktualisierung<br>in <span id="refreshCountdown">30</span>s
+    </div>
+  </header>
+
+  <!-- ══ MAIN ══ -->
+  <div class="main">
+
+    <!-- ── FAHRZEUGE ── -->
+    <div class="panel">
+      <div class="panel-hd">
+        <div class="panel-label">Fahrzeuge</div>
+        <div class="stat-row">
+          <div class="chip chip--green">
+            <span class="chip-count">{{ active_vehicles|length }}</span>
+            <span class="chip-label">Am<br>Einsatzort</span>
+          </div>
+          {% if dispatched_vehicles %}
+          <div class="chip chip--amber">
+            <span class="chip-count">{{ dispatched_vehicles|length }}</span>
+            <span class="chip-label">Dispo&shy;niert</span>
+          </div>
+          {% endif %}
+          {% if other_vehicles %}
+          <div class="chip chip--gray">
+            <span class="chip-count">{{ other_vehicles|length }}</span>
+            <span class="chip-label">Weitere</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="panel-body">
+        {% if active_vehicles %}
+          <div class="vs-label vs-label--green">Am Einsatzort <span class="vs-line"></span></div>
+          <div class="vehicle-grid">
+            {% for v in active_vehicles %}
+            <div class="v-card v-card--active">
+              <div class="v-code">{{ v.vehicle_master.code if v.vehicle_master else '—' }}</div>
+              <div class="v-name">{{ v.vehicle_master.name if v.vehicle_master else '' }}</div>
+              {% if v.commander %}
+              <div class="v-gk"><span class="gk-dot"></span><span class="gk-name">{{ v.commander.full_name }}</span></div>
+              {% else %}
+              <div class="v-no-gk">kein GK</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if dispatched_vehicles %}
+          <div class="vs-label vs-label--amber">Disponiert <span class="vs-line"></span></div>
+          <div class="vehicle-grid">
+            {% for v in dispatched_vehicles %}
+            <div class="v-card v-card--dispatch">
+              <div class="v-code">{{ v.vehicle_master.code if v.vehicle_master else '—' }}</div>
+              <div class="v-name">{{ v.vehicle_master.name if v.vehicle_master else '' }}</div>
+              {% if v.commander %}
+              <div class="v-gk"><span class="gk-dot"></span><span class="gk-name">{{ v.commander.full_name }}</span></div>
+              {% else %}
+              <div class="v-no-gk">kein GK</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if other_vehicles %}
+          <div class="vs-label vs-label--gray">Weitere <span class="vs-line"></span></div>
+          <div class="vehicle-grid">
+            {% for v in other_vehicles %}
+            <div class="v-card v-card--other">
+              <div class="v-code">{{ v.vehicle_master.code if v.vehicle_master else '—' }}</div>
+              <div class="v-name">{{ v.vehicle_master.name if v.vehicle_master else '' }}</div>
+              {% if v.commander %}
+              <div class="v-gk"><span class="gk-dot"></span><span class="gk-name">{{ v.commander.full_name }}</span></div>
+              {% else %}
+              <div class="v-no-gk">kein GK</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if not active_vehicles and not dispatched_vehicles and not other_vehicles %}
+        <div class="empty-panel">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13h2l2-8h10l2 8h2M5 13v5a1 1 0 001 1h12a1 1 0 001-1v-5M9 18v2m6-2v2"/></svg>
+          Keine Fahrzeuge alarmiert
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ── AUFTRÄGE ── -->
+    <div class="panel">
+      <div class="panel-hd">
+        <div class="panel-label">Aufträge</div>
+        <div class="stat-row">
+          <div class="chip chip--blue">
+            <span class="chip-count">{{ tasks_open|length }}</span>
+            <span class="chip-label">Offen</span>
+          </div>
+          <div class="chip chip--green">
+            <span class="chip-count">{{ tasks_done|length }}</span>
+            <span class="chip-label">Erledigt</span>
+          </div>
+        </div>
+        {% set t_total = tasks_open|length + tasks_done|length %}
+        {% if t_total > 0 %}
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:{{ ((tasks_done|length / t_total) * 100)|round }}%"></div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="panel-body">
+        {% if tasks_open %}
+        <div class="item-list">
+          {% for t in tasks_open %}
+          <div class="item-row">
+            <span class="i-dot i-dot--{{ 'progress' if t.status == 'in_progress' else 'open' }}"></span>
+            <div class="i-body">
+              <div class="i-title">{{ t.title }}</div>
+              <div class="i-vehicle">
+                {% if t.vehicle and t.vehicle.vehicle_master %}
+                  <span class="v-badge">{{ t.vehicle.vehicle_master.code }}</span>
+                {% elif t.vehicle %}
+                  <span class="v-badge">Fzg</span>
+                {% else %}
+                  <span class="i-unassigned">nicht zugewiesen</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-panel">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12l2 2 4-4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
+          Keine offenen Aufträge
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ── MELDUNGEN ── -->
+    <div class="panel">
+      <div class="panel-hd">
+        <div class="panel-label">Meldungen</div>
+        <div class="stat-row">
+          <div class="chip chip--blue">
+            <span class="chip-count">{{ msgs_open|length }}</span>
+            <span class="chip-label">Offen</span>
+          </div>
+          <div class="chip chip--green">
+            <span class="chip-count">{{ msgs_done|length }}</span>
+            <span class="chip-label">Erledigt</span>
+          </div>
+        </div>
+        {% set m_total = msgs_open|length + msgs_done|length %}
+        {% if m_total > 0 %}
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:{{ ((msgs_done|length / m_total) * 100)|round }}%"></div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="panel-body">
+        {% if msgs_open %}
+        <div class="item-list">
+          {% for m in msgs_open %}
+          <div class="item-row">
+            <span class="i-dot i-dot--{{ 'progress' if m.status == 'in_progress' else 'open' }}"></span>
+            <div class="i-body">
+              <div class="i-title">{{ m.title }}</div>
+              <div class="i-vehicle">
+                {% if m.vehicle and m.vehicle.vehicle_master %}
+                  <span class="v-badge">{{ m.vehicle.vehicle_master.code }}</span>
+                {% elif m.vehicle %}
+                  <span class="v-badge">Fzg</span>
+                {% else %}
+                  <span class="i-unassigned">nicht zugewiesen</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-panel">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10h8M8 14h5M4 4h16a2 2 0 012 2v10a2 2 0 01-2 2H8l-4 4V6a2 2 0 012-2z"/></svg>
+          Keine offenen Meldungen
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- ══ PERSONEN STRIP ══ -->
+  <div class="persons-strip">
+    <div class="ps-title">Personen</div>
+    <div class="ps-groups">
+
+      <div class="ps-group ps-group--gefunden">
+        <div class="ps-hd"><span class="ps-dot ps-dot--gefunden"></span><span class="ps-label">Gefunden</span></div>
+        <div class="ps-count">{{ person_stats['gefunden']|length }}</div>
+        <div class="ps-list">
+          {% for p in person_stats['gefunden'] %}
+          <div class="ps-item">
+            {% if p.name %}<strong>{{ p.name }}</strong>{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}{% if p.location %} &middot; {{ p.location[:28] }}{% endif %}
+          </div>
+          {% else %}
+          <div class="ps-empty">—</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="ps-group ps-group--versorgt">
+        <div class="ps-hd"><span class="ps-dot ps-dot--versorgt"></span><span class="ps-label">Versorgt</span></div>
+        <div class="ps-count">{{ person_stats['versorgt']|length }}</div>
+        <div class="ps-list">
+          {% for p in person_stats['versorgt'] %}
+          <div class="ps-item">
+            {% if p.name %}<strong>{{ p.name }}</strong>{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}{% if p.location %} &middot; {{ p.location[:28] }}{% endif %}
+          </div>
+          {% else %}
+          <div class="ps-empty">—</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="ps-group ps-group--abtransportiert">
+        <div class="ps-hd"><span class="ps-dot ps-dot--abtransportiert"></span><span class="ps-label">Abtransportiert</span></div>
+        <div class="ps-count">{{ person_stats['abtransportiert']|length }}</div>
+        <div class="ps-list">
+          {% for p in person_stats['abtransportiert'] %}
+          <div class="ps-item">
+            {% if p.name %}<strong>{{ p.name }}</strong>{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}{% if p.location %} &middot; {{ p.location[:28] }}{% endif %}
+          </div>
+          {% else %}
+          <div class="ps-empty">—</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="ps-group ps-group--verstorben">
+        <div class="ps-hd"><span class="ps-dot ps-dot--verstorben"></span><span class="ps-label">Verstorben</span></div>
+        <div class="ps-count">{{ person_stats['verstorben']|length }}</div>
+        <div class="ps-list">
+          {% for p in person_stats['verstorben'] %}
+          <div class="ps-item">
+            {% if p.name %}<strong>{{ p.name }}</strong>{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}{% if p.location %} &middot; {{ p.location[:28] }}{% endif %}
+          </div>
+          {% else %}
+          <div class="ps-empty">—</div>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /dashboard -->
+
+<script>
+  // ── Live elapsed timer ──────────────────────────────────────────
+  const startTime = new Date('{{ started_at_iso }}');
+  const timerEl  = document.getElementById('elapsedTimer');
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function tick() {
+    const s = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+    timerEl.textContent = `${pad(Math.floor(s/3600))}:${pad(Math.floor(s%3600/60))}:${pad(s%60)}`;
+  }
+  setInterval(tick, 1000);
+  tick();
+
+  // ── Auto-refresh countdown ──────────────────────────────────────
+  let countdown = 30;
+  const cdEl = document.getElementById('refreshCountdown');
+  setInterval(() => {
+    countdown--;
+    if (countdown <= 0) { location.reload(); }
+    else { cdEl.textContent = countdown; }
+  }, 1000);
+</script>
+</body>
+</html>

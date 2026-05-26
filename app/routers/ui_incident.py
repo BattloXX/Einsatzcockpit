@@ -176,6 +176,84 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     })
 
 
+@router.get("/einsatz/{incident_id}/dashboard", response_class=HTMLResponse)
+async def incident_dashboard(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+
+    incident = _incident_or_404(incident_id, db)
+    db.refresh(incident, ["columns", "vehicles", "tasks", "messages", "rescued_persons"])
+
+    col_by_id = {c.id: c for c in incident.columns}
+
+    active_vehicles, dispatched_vehicles, other_vehicles = [], [], []
+    for v in incident.vehicles:
+        if v.removed_at:
+            continue
+        col = col_by_id.get(v.column_id)
+        code = col.code if col else ""
+        if code == "active":
+            active_vehicles.append(v)
+        elif code == "dispatched":
+            dispatched_vehicles.append(v)
+        else:
+            other_vehicles.append(v)
+
+    tasks_open = [t for t in incident.tasks if not t.is_done and not t.is_cancelled]
+    tasks_done = [t for t in incident.tasks if t.is_done]
+
+    msgs_open = [m for m in incident.messages if not m.is_done and not m.is_cancelled]
+    msgs_done = [m for m in incident.messages if m.is_done]
+
+    person_stats: dict[str, list] = {s: [] for s in PERSON_STATUS_VALUES}
+    for p in incident.rescued_persons:
+        if p.status in person_stats:
+            person_stats[p.status].append(p)
+
+    started_at_iso = incident.started_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    return templates.TemplateResponse(
+        request,
+        "incident/dashboard.html",
+        {
+            "user": user,
+            "incident": incident,
+            "active_vehicles": active_vehicles,
+            "dispatched_vehicles": dispatched_vehicles,
+            "other_vehicles": other_vehicles,
+            "tasks_open": tasks_open,
+            "tasks_done": tasks_done,
+            "msgs_open": msgs_open,
+            "msgs_done": msgs_done,
+            "person_stats": person_stats,
+            "started_at_iso": started_at_iso,
+        },
+    )
+
+
+@router.get("/dashboard/aktuell", response_class=HTMLResponse)
+async def dashboard_latest(request: Request, db: Session = Depends(get_db)):
+    """Permanent-Link: leitet immer auf das Dashboard des neuesten aktiven Einsatzes."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+
+    latest = (
+        db.query(Incident)
+        .filter(Incident.status == "active")
+        .order_by(Incident.started_at.desc())
+        .first()
+    )
+    if latest:
+        return RedirectResponse(f"/einsatz/{latest.id}/dashboard", status_code=302)
+    return RedirectResponse("/", status_code=302)
+
+
 # ── Einsatzleiter wechseln ────────────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/einsatzleiter-mitglied")
