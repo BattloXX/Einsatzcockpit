@@ -148,6 +148,13 @@
       {% if not el_member_candidates %}
       <div class="text-muted" style="font-size:.8rem; margin-top:4px;">Keine Mitglieder mit EL-Qualifikation</div>
       {% endif %}
+      <form hx-post="/einsatz/{{ incident.id }}/einsatzleiter-mitglied-neu" hx-swap="none"
+            @htmx:after-request="if(event.detail.successful){this.reset();location.reload();}">
+        <div class="input-row" style="margin-top:6px;">
+          <input type="text" name="full_name" class="form-input" placeholder="Name eingeben…" autocomplete="off">
+          <button type="submit" class="btn btn--secondary btn--sm">ergänzen</button>
+        </div>
+      </form>
       {% else %}
       {% if incident.leader_member %}
       <div style="font-size:.9rem;"><strong>{{ incident.leader_member.full_name }}</strong></div>

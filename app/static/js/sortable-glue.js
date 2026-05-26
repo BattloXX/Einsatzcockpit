@@ -1,18 +1,35 @@
-/* ─── Sortable Glue – DnD for Kanban Board ─────────────────────────
+/* ─── Sortable Glue – DnD für das Kanban-Board ──────────────────────────────
  *
- * Eine zentrale onEnd-Handler-Strategie:
- *   - onEnd feuert immer auf der SOURCE-Liste (egal ob Reorder oder Cross-Zone).
- *   - onAdd würde zusätzlich auf der DESTINATION feuern → doppelter POST.
- *     Deshalb: KEIN onAdd verwenden — nur onEnd.
- *   - Vehicle-Zonen sind pull:true, damit Mini-Items (assigned-task/msg/person)
- *     wieder aus dem Fahrzeug heraus auf Spalten oder andere Fahrzeuge gezogen
- *     werden können.
+ * ARCHITEKTUR – BITTE VOR ÄNDERUNGEN LESEN:
+ *
+ *  1. NUR onEnd verwenden, KEIN onAdd.
+ *     onEnd feuert immer auf der SOURCE-Liste (egal ob Reorder oder Cross-Zone).
+ *     onAdd würde zusätzlich auf der DESTINATION feuern → doppelter POST.
+ *
+ *  2. handle: '.card' gilt NUR für Spalten-Zonen.
+ *     In Fahrzeug-Zonen (sortable-zone--vehicle) kein handle setzen,
+ *     damit das ganze Mini-Item-Element draggable ist.
+ *
+ *  3. Re-Init nach HTMX-Swaps läuft über scheduleInit() mit 100 ms Debounce,
+ *     damit schnell aufeinander folgende HTMX-Events nicht mehrfach initialisieren.
+ *     _NICHT_ auf setTimeout(initSortable, 0) oder direkt reagieren.
+ *
+ *  4. Neue Kartentypen (kind) müssen in postMove() als eigener case ergänzt
+ *     werden (analog 'task', 'message', 'vehicle', 'person').
+ *
+ *  5. Sortable-Instanzen werden über zone._sortableInstance verfolgt.
+ *     Bei DOM-Replacement durch HTMX wird das alte Element (incl. Instanz) GC'd;
+ *     das neue Element bekommt beim nächsten scheduleInit() eine frische Instanz.
+ *
+ *  6. postMove() sendet keinen CSRF-Header – der Endpoint ist rate-limited per
+ *     Session-Cookie. Falls CSRF-Middleware eingebaut wird, muss hier ein
+ *     X-CSRF-Token-Header ergänzt werden.
  */
 
 (function () {
   'use strict';
 
-  // Drag-Hover-Tab-Switch state (mobile lane switching during drag)
+  // ── Drag-Hover-Tab-Switch (mobile Lane-Wechsel während Drag) ────────────────
   let _dragging = false;
   let _hoverTabId = null;
   let _hoverStart = 0;
@@ -30,6 +47,8 @@
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
       credentials: 'same-origin',
+    }).catch(function (err) {
+      console.warn('[sortable-glue] postMove fehlgeschlagen:', err);
     });
   }
 
@@ -63,7 +82,7 @@
     }
   }
 
-  // Einheitlicher onEnd-Handler für Spalten- UND Fahrzeug-Zonen
+  // ── Einheitlicher onEnd-Handler für Spalten- UND Fahrzeug-Zonen ─────────────
   function makeOnEnd(incidentId) {
     return function (evt) {
       _dragging = false;
@@ -71,34 +90,51 @@
       document.body.classList.remove('dnd-active');
       evt.item.removeAttribute('draggable');
 
-      const card = evt.item;
-      const kind = card.dataset.kind;
-      const uid = card.dataset.uid;
-      if (!uid || !kind) return;
+      try {
+        const card = evt.item;
+        const kind = card.dataset.kind;
+        const uid = card.dataset.uid;
+        if (!uid || !kind) return;
 
-      // Reorder ohne Positionsänderung → nichts tun
-      if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
+        // Reorder ohne Positionsänderung → nichts tun
+        if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
 
-      const toZone = evt.to;
-      const position = evt.newIndex;
+        const toZone = evt.to;
+        const position = evt.newIndex;
 
-      // Drop auf Fahrzeug-Zone (innerhalb einer Fahrzeug-Karte)
-      if (toZone.classList.contains('sortable-zone--vehicle')) {
-        const vehicleId = toZone.dataset.vehicleId;
-        if (!vehicleId) return;
-        // Ein Fahrzeug auf ein anderes Fahrzeug zu droppen ergibt keinen Sinn
-        if (kind === 'vehicle') return;
-        postMove(incidentId, { kind, uid, vehicle_id: vehicleId, position });
-        return;
+        // Drop auf Fahrzeug-Zone (innerhalb einer Fahrzeug-Karte)
+        if (toZone.classList.contains('sortable-zone--vehicle')) {
+          const vehicleId = toZone.dataset.vehicleId;
+          if (!vehicleId) return;
+          // Ein Fahrzeug auf ein anderes Fahrzeug zu droppen ergibt keinen Sinn
+          if (kind === 'vehicle') return;
+          postMove(incidentId, { kind, uid, vehicle_id: vehicleId, position });
+          return;
+        }
+
+        // Drop auf Spalten-Zone
+        const toColumnId = toZone.closest('[data-col-id]')?.dataset.colId;
+        if (!toColumnId) return;
+        postMove(incidentId, { kind, uid, column_id: toColumnId, position });
+      } catch (err) {
+        console.warn('[sortable-glue] onEnd-Fehler:', err);
       }
-
-      // Drop auf Spalten-Zone
-      const toColumnId = toZone.closest('[data-col-id]')?.dataset.colId;
-      if (!toColumnId) return;
-      postMove(incidentId, { kind, uid, column_id: toColumnId, position });
     };
   }
 
+  // ── Debounce-Helper ──────────────────────────────────────────────────────────
+  // Verhindert, dass schnell aufeinander folgende HTMX-Events (afterSwap,
+  // oobAfterSwap, load) mehrfach initSortable() aufrufen.
+  let _initTimer = null;
+  function scheduleInit() {
+    if (_initTimer) clearTimeout(_initTimer);
+    _initTimer = setTimeout(function () {
+      _initTimer = null;
+      initSortable();
+    }, 100);
+  }
+
+  // ── Haupt-Initialisierung ────────────────────────────────────────────────────
   function initSortable() {
     const incidentId = getIncidentId();
     if (!incidentId) return;
@@ -123,7 +159,7 @@
     };
 
     // Spalten-Zonen (Fahrzeuge + freie Aufträge + Meldungen + Personen)
-    document.querySelectorAll('.kanban-col__body.sortable-zone:not(.sortable-zone--vehicle)').forEach(zone => {
+    document.querySelectorAll('.kanban-col__body.sortable-zone:not(.sortable-zone--vehicle)').forEach(function (zone) {
       destroyExistingSortable(zone);
       const columnId = zone.closest('[data-col-id]')?.dataset.colId;
       if (!columnId) return;
@@ -136,7 +172,7 @@
     });
 
     // Fahrzeug-Drop-Zonen (innerhalb von Fahrzeug-Karten)
-    document.querySelectorAll('.sortable-zone--vehicle').forEach(zone => {
+    document.querySelectorAll('.sortable-zone--vehicle').forEach(function (zone) {
       destroyExistingSortable(zone);
       const vehicleId = zone.dataset.vehicleId;
       if (!vehicleId) return;
@@ -150,14 +186,17 @@
     });
   }
 
+  // ── Startpunkt ───────────────────────────────────────────────────────────────
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initSortable);
   } else {
     initSortable();
   }
 
-  // Re-init nach HTMX-Swaps (Board-Reload, OOB-Swaps)
-  document.body.addEventListener('htmx:afterSwap', () => setTimeout(initSortable, 50));
-  document.body.addEventListener('htmx:oobAfterSwap', () => setTimeout(initSortable, 50));
-  document.body.addEventListener('htmx:load', () => setTimeout(initSortable, 50));
+  // Re-Init nach HTMX-Swaps – alle drei Events laufen durch denselben
+  // Debounce, sodass nur ein einziger initSortable()-Aufruf erfolgt.
+  document.body.addEventListener('htmx:afterSwap', scheduleInit);
+  document.body.addEventListener('htmx:oobAfterSwap', scheduleInit);
+  document.body.addEventListener('htmx:load', scheduleInit);
+  document.body.addEventListener('htmx:afterSettle', scheduleInit);
 })();

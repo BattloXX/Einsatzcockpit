@@ -53,6 +53,7 @@ from app.services.incident_service import (
     move_card,
     move_vehicle_to_column,
     quick_create_commander,
+    quick_create_el,
     set_commander,
     set_message_status,
     set_task_status,
@@ -186,6 +187,26 @@ async def set_incident_leader_member(
 ):
     incident = _incident_or_404(incident_id, db)
     incident.incident_leader_member_id = member_id or None
+    db.commit()
+    await manager.broadcast(incident_id, {
+        "type": "incident_leader_changed",
+        "reload_board": True,
+    })
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/einsatzleiter-mitglied-neu")
+async def set_incident_leader_member_new(
+    incident_id: int, request: Request,
+    full_name: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Legt einen neuen Member aus Freitext-Namen an und setzt ihn als EL vor Ort."""
+    if not full_name.strip():
+        return Response(status_code=422)
+    incident = _incident_or_404(incident_id, db)
+    quick_create_el(db, incident, full_name.strip(), user_id=request.state.user.id)
     db.commit()
     await manager.broadcast(incident_id, {
         "type": "incident_leader_changed",

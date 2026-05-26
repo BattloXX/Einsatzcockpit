@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import settings
@@ -10,6 +10,19 @@ engine = create_engine(
     pool_size=10,
     max_overflow=20,
 )
+
+
+# Setzt die Session-Zeitzone auf UTC, damit naive datetimes (die wir als UTC
+# behandeln) niemals doppelt konvertiert werden – unabhängig davon, was in
+# der globalen MariaDB-/MySQL-Konfiguration eingestellt ist.
+@event.listens_for(engine, "connect")
+def _set_db_timezone_utc(dbapi_connection, connection_record):
+    try:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("SET time_zone = '+00:00'")
+        cursor.close()
+    except Exception:
+        pass  # SQLite und andere Backends ignorieren diesen Befehl
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
