@@ -295,10 +295,7 @@ async def bulk_delete_members(
 
     logger = logging.getLogger(__name__)
     user = request.state.user
-    rows = db.query(Member).filter(
-        Member.id.in_(member_ids),
-        Member.org_id == user.org_id,
-    ).all()
+    rows = db.query(Member).filter(Member.id.in_(member_ids)).all()
     deleted = 0
     blocked: list[str] = []
     for m in rows:
