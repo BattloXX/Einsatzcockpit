@@ -574,6 +574,33 @@
     }
     .bs-badge--im_einsatz { background: rgba(249,115,22,.2); color: #fdba74; border: 1px solid rgba(249,115,22,.35); }
     .bs-badge--rueckzug   { background: rgba(239,68,68,.25); color: #fca5a5; border: 1px solid rgba(239,68,68,.4); }
+
+    /* ── QR-Code Block im Header ── */
+    .hdr-qr {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 1.2rem;
+      border-left: 1px solid rgba(255,255,255,.12);
+      gap: 3px;
+    }
+    .hdr-qr img {
+      width: clamp(50px, 5.5vh, 72px);
+      height: auto;
+      border-radius: 4px;
+      background: #fff;
+      padding: 2px;
+      display: block;
+    }
+    .hdr-qr__label {
+      font-family: var(--font-mono);
+      font-size: .6rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: rgba(255,255,255,.45);
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -640,6 +667,13 @@
         <div class="hdr-block__value--clock" id="clockTime">–</div>
         <div class="hdr-block__sub">Upd. in <span id="refreshCountdown">30</span>s</div>
       </div>
+
+      {% if qr_img %}
+      <a href="/einsatz/{{ incident.id }}/qr" class="hdr-qr" title="Login-QR-Code – anderen Geräten Zugang geben" target="_blank" rel="noopener" style="text-decoration:none">
+        <img src="data:image/png;base64,{{ qr_img }}" alt="Login-QR">
+        <span class="hdr-qr__label">Login-QR</span>
+      </a>
+      {% endif %}
 
     </div>
   </header>

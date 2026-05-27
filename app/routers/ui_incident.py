@@ -230,6 +230,27 @@ async def incident_dashboard(
     for t in breathing_troops:
         _ = list(t.pressure_logs)
 
+    # QR-Code für Dashboard-Header (Login-QR)
+    qr_img_b64 = None
+    qr_url_str = None
+    if user:
+        token = sign_qr_token(incident_id, user.id)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        existing_token = db.query(IncidentToken).filter(
+            IncidentToken.incident_id == incident_id,
+            IncidentToken.issued_by_user_id == user.id,
+            IncidentToken.revoked_at.is_(None),
+        ).first()
+        if not existing_token:
+            from app.models.incident import IncidentToken as IT
+            db.add(IT(incident_id=incident_id, token_hash=token_hash, issued_by_user_id=user.id))
+            db.commit()
+        qr_url_str = f"{request.base_url}qr-login?incident_id={incident_id}&token={token}"
+        qr_img = qrcode.make(qr_url_str, box_size=4, border=1)
+        buf = io.BytesIO()
+        qr_img.save(buf, format="PNG")
+        qr_img_b64 = base64.b64encode(buf.getvalue()).decode()
+
     return templates.TemplateResponse(
         request,
         "incident/dashboard.html",
@@ -247,6 +268,8 @@ async def incident_dashboard(
             "started_at_iso": started_at_iso,
             "lage_hints": lage_hints,
             "breathing_troops": breathing_troops,
+            "qr_img": qr_img_b64,
+            "qr_url": qr_url_str,
         },
     )
 
@@ -953,8 +976,22 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
             summary = f'Person → {vname(vid) if vid else "—"}'
         elif action == "person.moved":
             summary = 'Person: Fahrzeugzuweisung aufgehoben'
-        elif action == "column.created":
-            summary = f'Neue Sektion erstellt: „{after.get("title", f"#{eid}")}“'
+        elif action == “column.created”:
+            summary = f'Neue Sektion erstellt: „{after.get(“title”, f”#{eid}”)}”'
+        elif action == “troop.meldung”:
+            txt = after.get(“text”) or “”
+            summary = f'AS-Trupp Lagemeldung: „{txt}”' if txt else f'AS-Trupp #{eid}: Lagemeldung abgesetzt'
+        elif action == “troop.created”:
+            summary = f'AS-Trupp angelegt: „{after.get(“name”, f”#{eid}”)}”'
+        elif action == “troop.started”:
+            summary = f'AS-Trupp eingesetzt: „{after.get(“name”, f”#{eid}”)}”'
+        elif action.startswith(“troop.warn_acked.”):
+            kind_map = {“one_third”: “1/3-Lagemeldung”, “max_time”: “Max-Einsatzzeit”, “withdraw”: “Rückzugsdruck”}
+            kind = action.split(“.”)[-1]
+            summary = f'AS-Warnung quittiert: {kind_map.get(kind, kind)}'
+        elif action == “troop.status”:
+            status_map = {“im_einsatz”: “Im Einsatz”, “rueckzug”: “Rückzug”, “zurueck”: “Zurück”, “erholt”: “Erholt”}
+            summary = f'AS-Trupp Status: {status_map.get(after.get(“status”, “”), after.get(“status”, “”))}'
 
         actor = ""
         if change.user_id:

@@ -262,11 +262,11 @@
               <input type="hidden" name="member_id" value="{{ m.member_id if m.member_id else '' }}">
               <input type="hidden" name="pressure_bar" x-ref="pressVal">
               <div class="press-grid">
-                {% for val in range(300, 0, -10) %}
+                {% for val in range(350, 0, -10) %}
                 <button type="button"
                         class="press-btn {% if troop.withdraw_press_calc and val <= troop.withdraw_press_calc %}press-btn--danger{% elif troop.start_press_avg and val <= troop.start_press_avg * 0.75 %}press-btn--warn{% else %}press-btn--high{% endif %}"
                         :class="currentPress !== null && Math.floor(currentPress) == {{ val }} ? 'press-btn--selected' : ''"
-                        @click="currentPress = {{ val }}; $refs.pressVal.value = '{{ val }}'; $refs.druckForm.requestSubmit(); open = false">
+                        @click="currentPress = {{ val }}; $refs.pressVal.value = '{{ val }}'; $refs.druckForm.requestSubmit(); open = false; window.dispatchEvent(new CustomEvent('breathing-pressure', {detail:{troopId:{{ troop.id }}, lowestPressure:{{ val }}, memberId:memberId, pressure:{{ val }}}}))">
                   {{ val }}
                 </button>
                 {% endfor %}
@@ -426,7 +426,7 @@
             </select>
             <input :name="`member_${i}_name`" x-model="m.name" type="text"
                    class="form-input" placeholder="oder Name">
-            <select :name="`member_${i}_role`" class="form-select form-select--xs">
+            <select :name="`member_${i}_role`" x-model="m.role" class="form-select form-select--xs">
               <option value="truppfuehrer">TF</option>
               <option value="truppmann">TM</option>
             </select>
@@ -474,7 +474,7 @@
         </template>
       </div>
       <button type="button"
-              @click="members.push({id:'',name:'',press:null,pickerOpen:false,pickerTop:0,pickerLeft:0})"
+              @click="members.push({id:'',name:'',press:null,role:'truppmann',pickerOpen:false,pickerTop:0,pickerLeft:0})"
               class="btn btn--ghost btn--sm">+ Mitglied</button>
     </div>
     <div class="modal__footer">
@@ -644,11 +644,11 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso, entryIso, 
 function newTroopForm() {
   return {
     members: [
-      {id:'', name:'', press:null, pickerOpen:false, pickerTop:0, pickerLeft:0},
-      {id:'', name:'', press:null, pickerOpen:false, pickerTop:0, pickerLeft:0},
-      {id:'', name:'', press:null, pickerOpen:false, pickerTop:0, pickerLeft:0},
+      {id:'', name:'', press:null, role:'truppfuehrer', pickerOpen:false, pickerTop:0, pickerLeft:0},
+      {id:'', name:'', press:null, role:'truppmann',    pickerOpen:false, pickerTop:0, pickerLeft:0},
+      {id:'', name:'', press:null, role:'truppmann',    pickerOpen:false, pickerTop:0, pickerLeft:0},
     ],
-    pressValues: Array.from({length: 30}, (_, i) => 300 - i * 10),
+    pressValues: Array.from({length: 35}, (_, i) => 350 - i * 10),
     bottlePreset: '',
 
     onPresetChange() {
