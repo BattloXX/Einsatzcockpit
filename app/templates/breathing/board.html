@@ -57,8 +57,30 @@
 .troop-meldung-press { font-weight:700; color:var(--color-text,#ddd); }
 
 /* ── Timer row ───────────────────────────────────────────────────────────── */
-.troop-timer-row { display:flex; justify-content:space-between; font-size:.78rem;
-                    color:var(--color-text-muted); margin:4px 0 2px; }
+.troop-timer-row { display:flex; justify-content:space-between; align-items:center;
+                    font-size:.78rem; color:var(--color-text-muted); margin:4px 0 2px; gap:8px; }
+.troop-timer-bar { flex:1; height:4px; border-radius:2px; background:var(--color-border,#444); min-width:40px; }
+.troop-timer-bar__fill { height:100%; border-radius:2px; background:#48bb78; transition:width .5s, background .5s; }
+
+/* ── Warn badges ─────────────────────────────────────────────────────────── */
+.warn-badge--one-third { background:rgba(237,137,54,.2); color:#ed8936; border:1px solid #ed8936;
+                          font-size:.72rem; padding:2px 8px; border-radius:4px; }
+.warn-badge--max-time  { background:rgba(229,62,62,.2); color:#e53e3e; border:1px solid #e53e3e;
+                          font-size:.72rem; padding:2px 8px; border-radius:4px; animation:pulse-warn 1s infinite; }
+.warn-badge--red       { background:rgba(229,62,62,.2); color:#e53e3e; border:1px solid #e53e3e;
+                          font-size:.72rem; padding:2px 8px; border-radius:4px; animation:pulse-warn 1s infinite; }
+@keyframes pulse-warn { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+
+/* ── Standort / Meldung mini-popup ──────────────────────────────────────── */
+.mini-popup-wrap { position:relative; display:inline-block; }
+.mini-popup {
+  position:absolute; z-index:50; left:0; top:calc(100% + 4px);
+  background:var(--color-surface-2,#2a2a2a); border:1px solid var(--color-border,#444);
+  border-radius:8px; padding:10px; box-shadow:0 8px 28px rgba(0,0,0,.5);
+  min-width:260px;
+}
+.troop-card__meta { font-size:.75rem; color:var(--color-text-muted); margin:2px 0; }
+.troop-card__meta strong { color:var(--color-text,#ddd); }
 </style>
 {% endblock %}
 
@@ -72,8 +94,8 @@
   {% endif %}
 </div>
 
-<div class="troops-grid" id="troopsGrid">
-  {% for troop, warning in troops_with_warnings %}
+<div class="troops-grid" id="troopsGrid" @click.once="unlockAudio()">
+  {% for troop, warning, time_warning in troops_with_warnings %}
 
   {# ── Compute current pressure & last-log timestamp ── #}
   {% set ns = namespace(last_log=None) %}
@@ -83,10 +105,13 @@
   {% set max_press     = (troop.start_press_avg or 300) | float %}
   {% set withdraw_press = (troop.withdraw_press_calc or (max_press * 0.5 + 10)) | float %}
   {% set last_log_iso  = (ns.last_log.ts | local_iso if ns.last_log else '') %}
+  {% set entry_iso = (troop.entry_at | local_iso if troop.entry_at else '') %}
+  {% set back_iso  = (troop.back_at  | local_iso if troop.back_at  else '') %}
+  {% set planned_min = troop.planned_duration_min or 0 %}
 
   <div class="troop-card troop-card--{{ troop.status }} troop-card--warn-{{ warning }}"
        id="troop-{{ troop.id }}"
-       x-data="troopCard({{ current_press }}, {{ max_press }}, {{ withdraw_press }}, '{{ last_log_iso }}')"
+       x-data="troopCard({{ current_press }}, {{ max_press }}, {{ withdraw_press }}, '{{ last_log_iso }}', '{{ entry_iso }}', {{ planned_min }}, '{{ back_iso }}')"
        x-init="init()">
 
     <!-- Header -->
@@ -95,15 +120,46 @@
       <span class="troop-card__status-pill status-pill--{{ troop.status }}">
         {{ {'bereit':'Bereit','im_einsatz':'Im Einsatz','rueckzug':'Rückzug!','zurueck':'Zurück','erholt':'Erholt'}[troop.status] }}
       </span>
-      {% if warning == 'red' %}<span class="troop-card__warn-badge warn-badge--red">⚠ RÜCKZUG</span>
-      {% elif warning == 'yellow' %}<span class="troop-card__warn-badge warn-badge--yellow">⚠ 75%</span>
+
+      {# Warn-Badges (Priorität: max_time > withdraw > one_third) #}
+      {% if time_warning == 'max_exceeded' %}
+        <span class="warn-badge--max-time" id="warn-max-{{ troop.id }}">⚠ MAX-EINSATZZEIT
+          <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack" style="display:inline">
+            <input type="hidden" name="kind" value="max_time">
+            <button type="submit" class="btn btn--xs" style="margin-left:4px;padding:1px 6px;font-size:.7rem">✓ Quit.</button>
+          </form>
+        </span>
+      {% elif warning == 'red' %}
+        <span class="warn-badge--red" id="warn-withdraw-{{ troop.id }}">⚠ RÜCKZUGSDRUCK
+          <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack" style="display:inline">
+            <input type="hidden" name="kind" value="withdraw">
+            <button type="submit" class="btn btn--xs" style="margin-left:4px;padding:1px 6px;font-size:.7rem">✓ Quit.</button>
+          </form>
+        </span>
+      {% elif time_warning == 'one_third_due' %}
+        <span class="warn-badge--one-third" id="warn-third-{{ troop.id }}">⚠ Lagemeldung fällig (1/3)
+          <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack" style="display:inline">
+            <input type="hidden" name="kind" value="one_third">
+            <button type="submit" class="btn btn--xs" style="margin-left:4px;padding:1px 6px;font-size:.7rem">✓ Quit.</button>
+          </form>
+        </span>
+      {% elif warning == 'yellow' %}
+        <span class="troop-card__warn-badge warn-badge--yellow">⚠ 75%</span>
       {% endif %}
     </div>
 
-    {% if troop.unit_name or troop.task_text %}
-    <div class="troop-card__task">
+    {# Standort + Auftrag + letzter Meldungstext #}
+    <div class="troop-card__meta">
       {% if troop.unit_name %}<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:.72rem;font-weight:600;background:rgba(99,179,237,.15);color:#63b3ed;margin-right:4px">{{ troop.unit_name }}</span>{% endif %}
-      {% if troop.task_text %}{{ troop.task_text }}{% endif %}
+      {% if troop.task_text %}<strong>Auftrag:</strong> {{ troop.task_text }} {% endif %}
+    </div>
+    <div class="troop-card__meta">
+      {% if troop.location_text %}<strong>Standort:</strong> {{ troop.location_text }}{% endif %}
+    </div>
+    {% if troop.last_meldung_text %}
+    <div class="troop-card__meta">
+      <strong>Letzte Meldung:</strong> {{ troop.last_meldung_text }}
+      {% if troop.last_meldung_at %}<span style="font-size:.68rem;color:var(--color-text-muted)"> – {{ (troop.last_meldung_at | local).strftime('%H:%M') }}</span>{% endif %}
     </div>
     {% endif %}
 
@@ -151,9 +207,15 @@
     <!-- ── Timer ── -->
     {% if troop.entry_at %}
     <div class="troop-timer-row">
-      <span x-data="troopTimer('{{ troop.entry_at|local_iso }}', '{{ (troop.back_at|local_iso if troop.back_at else '') }}')"
-            x-init="init()" x-text="display">00:00</span>
-      <span>von 30 Minuten</span>
+      <span x-text="timerDisplay" style="font-variant-numeric:tabular-nums;min-width:46px">00:00</span>
+      {% if planned_min > 0 %}
+      <div class="troop-timer-bar">
+        <div class="troop-timer-bar__fill" :style="`width:${Math.min(100,timerPct)}%;background:${timerBarColor}`"></div>
+      </div>
+      <span style="white-space:nowrap">/ {{ planned_min }} min</span>
+      {% else %}
+      <span style="white-space:nowrap">{{ troop.bottle_label }}</span>
+      {% endif %}
     </div>
     {% endif %}
 
@@ -200,7 +262,7 @@
               <input type="hidden" name="member_id" value="{{ m.member_id if m.member_id else '' }}">
               <input type="hidden" name="pressure_bar" x-ref="pressVal">
               <div class="press-grid">
-                {% for val in range(350, 0, -10) %}
+                {% for val in range(300, 0, -10) %}
                 <button type="button"
                         class="press-btn {% if troop.withdraw_press_calc and val <= troop.withdraw_press_calc %}press-btn--danger{% elif troop.start_press_avg and val <= troop.start_press_avg * 0.75 %}press-btn--warn{% else %}press-btn--high{% endif %}"
                         :class="currentPress !== null && Math.floor(currentPress) == {{ val }} ? 'press-btn--selected' : ''"
@@ -216,6 +278,20 @@
       </div>
       {% endfor %}
     </div>
+
+    <!-- ── Lagemeldung (Freitext) ── -->
+    {% if (can_edit is not defined or can_edit) and troop.status in ['bereit','im_einsatz','rueckzug'] %}
+    <div class="mini-popup-wrap" style="margin-top:6px" @click.outside="meldungOpen = false" x-data="{meldungOpen:false}">
+      <button type="button" class="btn btn--ghost btn--sm" @click="meldungOpen = !meldungOpen">📢 Lagemeldung</button>
+      <div x-show="meldungOpen" class="mini-popup">
+        <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/meldung" hx-swap="none"
+              @htmx:after-request="meldungOpen = false">
+          <input type="text" name="text" class="form-input" placeholder="Lagetext (optional)" style="margin-bottom:6px">
+          <button type="submit" class="btn btn--primary btn--sm" style="width:100%">Meldung absetzen</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
 
     <!-- ── Status actions ── -->
     <div class="troop-card__actions">
@@ -239,6 +315,9 @@
         <button type="submit" class="btn btn--success btn--sm">✓ Erholt</button>
       </form>
       {% endif %}
+
+      <a href="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/pdf"
+         class="btn btn--ghost btn--sm" target="_blank" title="Trupp-Protokoll als PDF">📄 PDF</a>
     </div>
 
     <!-- ── Meldungen (pressure log history) ── -->
@@ -255,6 +334,7 @@
           <div class="troop-meldung-entry">
             {% if ns_l.name %}<strong>{{ ns_l.name }}:</strong> {% endif %}
             <span class="troop-meldung-press">{{ log.pressure_bar | int }} bar</span>
+            {% if log.note %}<span style="font-size:.7rem;color:var(--color-text-muted)"> – {{ log.note }}</span>{% endif %}
             <span style="color:var(--color-text-muted);font-size:.68rem">
               — {{ (log.ts | local).strftime('%H:%M:%S') }}
             </span>
@@ -297,8 +377,26 @@
           <input type="text" name="task_text" class="form-input" placeholder="Innenangriff...">
         </div>
         <div class="form-group">
-          <label>Einheit</label>
+          <label>Standort / Einsatzabschnitt</label>
+          <input type="text" name="location_text" class="form-input" placeholder="z.B. Treppenhaus Süd">
+        </div>
+        <div class="form-group">
+          <label>Einheit (Funkrufname)</label>
           <input type="text" name="unit_name" class="form-input" placeholder="z.B. 1. Gruppe">
+        </div>
+        <div class="form-group">
+          <label>Flasche / Einsatzzeit</label>
+          <select name="bottle_preset" class="form-select" x-model="bottlePreset" @change="onPresetChange()">
+            <option value="">– bitte wählen –</option>
+            {% for slug, label, dur in bottle_presets %}
+            <option value="{{ slug }}">{{ label }}{% if dur %} → {{ dur }} min{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" x-show="bottlePreset === 'manuell'">
+          <label>Einsatzzeit (Minuten, manuell)</label>
+          <input type="number" name="planned_duration_min" class="form-input" placeholder="z.B. 45" min="1" max="120"
+                 :required="bottlePreset === 'manuell'">
         </div>
         {% if vehicles %}
         <div class="form-group">
@@ -333,7 +431,7 @@
               <option value="truppmann">TM</option>
             </select>
 
-            <!-- Pressure picker per member (fixed positioning to escape modal overflow) -->
+            <!-- Pressure picker per member -->
             <input :name="`member_${i}_press`" type="hidden" :value="m.press">
             <div class="press-picker-wrap" @click.outside="m.pickerOpen = false">
               <button type="button"
@@ -358,9 +456,9 @@
                     <button type="button"
                             class="press-btn"
                             :class="{
-                              'press-btn--high':     val >= 300,
-                              'press-btn--warn':     val >= 150 && val < 300,
-                              'press-btn--danger':   val < 150,
+                              'press-btn--high':     val >= 200,
+                              'press-btn--warn':     val >= 100 && val < 200,
+                              'press-btn--danger':   val < 100,
                               'press-btn--selected': m.press == val
                             }"
                             @click="m.press = val; m.pickerOpen = false"
@@ -389,7 +487,61 @@
 
 {% block scripts %}
 <script>
-/* ── Per-member pressure row – reactive update via breathing-pressure WS event ── */
+/* ── Audio unlock (Browser-Autoplay-Policy) ── */
+let _audioUnlocked = false;
+function unlockAudio() {
+  if (_audioUnlocked) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  ctx.resume().then(() => { _audioUnlocked = true; ctx.close(); }).catch(() => {});
+}
+
+/* ── Audio registry: troop_id → { max: HTMLAudioElement } ── */
+const _loopingAudio = new Map();
+
+function _playWarning(kind, troopId) {
+  const files = {
+    'one_third': '/static/audio/troop-warning-third.mp3',
+    'withdraw':  '/static/audio/troop-warning-withdraw.mp3',
+    'max_time':  '/static/audio/troop-warning-max.mp3',
+  };
+  const src = files[kind];
+  if (!src) return;
+  try {
+    const audio = new Audio(src);
+    if (kind === 'max_time') {
+      audio.loop = true;
+      const key = `${troopId}:max_time`;
+      const existing = _loopingAudio.get(key);
+      if (existing) return; // already playing
+      _loopingAudio.set(key, audio);
+    }
+    audio.play().catch(() => {});
+  } catch (_) {}
+}
+
+function _stopLoopingWarning(kind, troopId) {
+  const key = `${troopId}:${kind}`;
+  const audio = _loopingAudio.get(key);
+  if (audio) {
+    audio.pause();
+    _loopingAudio.delete(key);
+  }
+}
+
+/* ── WS-Event-Handler für Warnungen (ergänzt existing incidentBoard WS) ── */
+window.addEventListener('breathing-warning', (e) => {
+  const { troopId, kind } = e.detail;
+  _playWarning(kind, troopId);
+  // Seite neu laden um Badge anzuzeigen (einfachste Variante)
+  if (document.getElementById('troopsGrid')) location.reload();
+});
+
+window.addEventListener('breathing-warning-acked', (e) => {
+  const { troopId, kind } = e.detail;
+  _stopLoopingWarning(kind, troopId);
+});
+
+/* ── Per-member pressure row ── */
 function memberPressRow(memberId, initialPress, withdrawPress, startPressAvg) {
   return {
     memberId: memberId,
@@ -416,14 +568,19 @@ function memberPressRow(memberId, initialPress, withdrawPress, startPressAvg) {
   };
 }
 
-/* ── Gauge + time-ago component ── */
-function troopCard(currentPress, maxPress, withdrawPress, lastLogIso) {
+/* ── Gauge + time-ago + timer ── */
+function troopCard(currentPress, maxPress, withdrawPress, lastLogIso, entryIso, plannedMin, backIso) {
   return {
     currentPress: currentPress,
     maxPress: maxPress || 300,
     withdrawPct: maxPress ? Math.min(1, (withdrawPress || 0) / maxPress) : 0,
     lastLog: lastLogIso ? new Date(lastLogIso) : null,
+    entryAt: entryIso ? new Date(entryIso) : null,
+    backAt:  backIso  ? new Date(backIso)  : null,
+    plannedMin: plannedMin || 0,
     timeAgo: '',
+    timerDisplay: '00:00',
+    timerPct: 0,
 
     get needleAngle() {
       const pct = this.maxPress > 0
@@ -432,9 +589,17 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso) {
       return 180 * pct - 180;
     },
 
+    get timerBarColor() {
+      if (this.timerPct >= 100) return '#e53e3e';
+      if (this.timerPct >= 67) return '#ed8936';
+      return '#48bb78';
+    },
+
     init() {
       const troopId = parseInt(this.$el.id.replace('troop-', ''));
-      const update = () => {
+
+      // time-ago updater
+      const updateAgo = () => {
         if (!this.lastLog) { this.timeAgo = 'Kein Messwert'; return; }
         const sec = Math.floor((new Date() - this.lastLog) / 1000);
         if (sec < 60) {
@@ -444,40 +609,38 @@ function troopCard(currentPress, maxPress, withdrawPress, lastLogIso) {
           this.timeAgo = `vor ${m} Min. ${s} Sek.`;
         }
       };
-      update();
-      if (this.lastLog) setInterval(update, 1000);
+
+      // timer updater
+      const updateTimer = () => {
+        if (!this.entryAt) return;
+        const now = this.backAt || new Date();
+        const sec = Math.max(0, Math.floor((now - this.entryAt) / 1000));
+        const m = Math.floor(sec / 60).toString().padStart(2, '0');
+        const s = (sec % 60).toString().padStart(2, '0');
+        this.timerDisplay = `${m}:${s}`;
+        if (this.plannedMin > 0) {
+          this.timerPct = Math.min(110, (sec / (this.plannedMin * 60)) * 100);
+        }
+      };
+
+      updateAgo();
+      updateTimer();
+      if (this.lastLog || this.entryAt) {
+        setInterval(() => { updateAgo(); updateTimer(); }, 1000);
+      }
+
       window.addEventListener('breathing-pressure', (e) => {
         if (e.detail.troopId === troopId) {
           this.currentPress = e.detail.lowestPressure;
           this.lastLog = new Date();
-          update();
+          updateAgo();
         }
       });
     }
   };
 }
 
-/* ── Elapsed-time timer ── */
-function troopTimer(entryAt, backAt) {
-  return {
-    display: '00:00',
-    init() {
-      const start = new Date(entryAt);
-      const end   = backAt ? new Date(backAt) : null;
-      const update = () => {
-        const now = end || new Date();
-        const sec = Math.floor((now - start) / 1000);
-        const m = Math.floor(sec / 60).toString().padStart(2, '0');
-        const s = (sec % 60).toString().padStart(2, '0');
-        this.display = `${m}:${s}`;
-      };
-      update();
-      if (!end) setInterval(update, 1000);
-    }
-  };
-}
-
-/* ── New-troop form with picker + validation ── */
+/* ── New-troop form ── */
 function newTroopForm() {
   return {
     members: [
@@ -485,7 +648,12 @@ function newTroopForm() {
       {id:'', name:'', press:null, pickerOpen:false, pickerTop:0, pickerLeft:0},
       {id:'', name:'', press:null, pickerOpen:false, pickerTop:0, pickerLeft:0},
     ],
-    pressValues: Array.from({length: 35}, (_, i) => 350 - i * 10),
+    pressValues: Array.from({length: 30}, (_, i) => 300 - i * 10),
+    bottlePreset: '',
+
+    onPresetChange() {
+      // nichts nötig – Alpine x-show auf 'manuell' regelt Sichtbarkeit
+    },
 
     validate() {
       const filled = this.members.filter(m =>

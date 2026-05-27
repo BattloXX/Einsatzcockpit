@@ -58,16 +58,18 @@
   <div class="detail-box detail-box--full">
     <h3>Atemschutz</h3>
     <table class="table">
-      <thead><tr><th>Trupp</th><th>Auftrag</th><th>Status</th><th>Einsatzbeginn</th><th>Rückzug</th><th>Zurück</th></tr></thead>
+      <thead><tr><th>Trupp</th><th>Auftrag</th><th>Standort</th><th>Status</th><th>Einsatzbeginn</th><th>Rückzug</th><th>Zurück</th><th>PDF</th></tr></thead>
       <tbody>
         {% for t in incident.breathing_troops %}
         <tr>
           <td>{{ t.name }}</td>
           <td>{{ t.task_text or '–' }}</td>
+          <td>{{ t.location_text or '–' }}</td>
           <td>{{ t.status }}</td>
           <td>{{ t.entry_at|local_time if t.entry_at else '–' }}</td>
           <td>{{ t.withdraw_at|local_time if t.withdraw_at else '–' }}</td>
           <td>{{ t.back_at|local_time if t.back_at else '–' }}</td>
+          <td><a href="/einsatz/{{ incident.id }}/atemschutz/{{ t.id }}/pdf" target="_blank" class="btn btn--ghost btn--xs">📄 PDF</a></td>
         </tr>
         {% endfor %}
       </tbody>

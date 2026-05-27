@@ -24,13 +24,28 @@ def _resolve_primary_org(incident: Incident) -> FireDept | None:
 
 def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
     template = templates.env.get_template("pdf/incident_report.html")
-    # Die kontextabhängigen local_*-Filter lesen `user.org`; wir geben hier ein
-    # Pseudo-User-Objekt mit der Primary-Org, damit die PDF-Zeiten in der
-    # richtigen Zeitzone landen.
     primary_org = _resolve_primary_org(incident)
     pseudo_user = SimpleNamespace(org=primary_org)
 
     html_str = template.render(
+        incident=incident,
+        now=datetime.now(UTC),
+        base_url=base_url,
+        user=pseudo_user,
+    )
+    buf = io.BytesIO()
+    HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+    return buf.getvalue()
+
+
+def render_troop_pdf(troop, incident: Incident, base_url: str = "") -> bytes:
+    """Einzelexport eines Atemschutztrupps als vollständiges A4-PDF."""
+    template = templates.env.get_template("pdf/troop_protocol.html")
+    primary_org = _resolve_primary_org(incident)
+    pseudo_user = SimpleNamespace(org=primary_org)
+
+    html_str = template.render(
+        troop=troop,
         incident=incident,
         now=datetime.now(UTC),
         base_url=base_url,

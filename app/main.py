@@ -55,12 +55,22 @@ async def lifespan(app: FastAPI):
     # Background-Loop für 48h-Auto-Close-Lifecycle
     from app.services.autoclose import autoclose_loop
     autoclose_task = asyncio.create_task(autoclose_loop())
+
+    # Background-Watchdog für AS-Warnungen (alle 5 Sekunden)
+    from app.services.breathing_service import _breathing_watchdog_loop
+    watchdog_task = asyncio.create_task(_breathing_watchdog_loop())
+
     try:
         yield
     finally:
         autoclose_task.cancel()
+        watchdog_task.cancel()
         try:
             await autoclose_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        try:
+            await watchdog_task
         except (asyncio.CancelledError, Exception):
             pass
 

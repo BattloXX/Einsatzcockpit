@@ -64,16 +64,53 @@ Ein Partial des Boards wurde geändert (Fahrzeug verschoben, Auftrag erledigt, e
 ```
 
 ### `troop_warning`
-Ein Atemschutz-Trupp hat den Rückzugsdruck erreicht.
+Eine Warnschwelle wurde für einen Atemschutztrupp überschritten.
+Wird vom Server-Watchdog (alle 5 s) gesendet, sobald eine neue Schwelle erreicht ist.
+
+`kind` kann sein:
+- `"one_third"` – 1/3 der Einsatzzeit verstrichen, keine Lagemeldung seit Einsatzbeginn
+- `"withdraw"` – Rückzugsdruck unterschritten
+- `"max_time"` – Max-Einsatzzeit überschritten
 
 ```json
 {
   "type": "troop_warning",
   "troop_id": 3,
-  "troop_name": "Trupp 1",
-  "level": "red",
-  "current_pressure": 158.0,
-  "withdraw_pressure": 160.0
+  "kind": "withdraw"
+}
+```
+
+### `troop_warning_acked`
+Eine Warnung wurde manuell quittiert (via POST `/atemschutz/{troop_id}/ack`).
+
+```json
+{
+  "type": "troop_warning_acked",
+  "troop_id": 3,
+  "kind": "one_third"
+}
+```
+
+### `troop_meldung`
+Eine Lagemeldung (Freitext) wurde abgesetzt.
+
+```json
+{
+  "type": "troop_meldung",
+  "troop_id": 3,
+  "text": "Trupp im Treppenhaus 2. OG",
+  "time_warning": "ok"
+}
+```
+
+### `troop_standort`
+Standort eines Trupps wurde aktualisiert.
+
+```json
+{
+  "type": "troop_standort",
+  "troop_id": 3,
+  "location_text": "Treppenhaus Süd"
 }
 ```
 

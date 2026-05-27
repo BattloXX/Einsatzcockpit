@@ -185,6 +185,19 @@ function incidentBoard(incidentId, alarm, startedAt) {
               }
             }));
           }
+          if (ev.type === 'troop_warning') {
+            window.dispatchEvent(new CustomEvent('breathing-warning', {
+              detail: { troopId: ev.troop_id, kind: ev.kind }
+            }));
+          }
+          if (ev.type === 'troop_warning_acked') {
+            window.dispatchEvent(new CustomEvent('breathing-warning-acked', {
+              detail: { troopId: ev.troop_id, kind: ev.kind }
+            }));
+          }
+          if (ev.type === 'troop_meldung' || ev.type === 'troop_standort') {
+            if (document.getElementById('troopsGrid')) location.reload();
+          }
           if (ev.type === 'incident_closed') {
             window.location.href = `/archiv/${id}`;
           }

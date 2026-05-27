@@ -34,13 +34,10 @@
   .header-box__brand img { height: 48pt; width: auto; display: block; margin: 0 auto 2pt; }
   .header-box__brand .source-url { font-size: 7.5pt; color: #b71921; font-weight: 700;
                                    letter-spacing: .02em; }
-  .alarm-badge { font-size: 24pt; font-weight: bold; color: #b71921; }
+  .alarm-badge { font-size: 20pt; font-weight: bold; color: #b71921; }
   .meta { font-size: 9pt; color: #555; }
   .exercise-banner { background: #f2b02e; color: #111; text-align: center; font-weight: bold;
                      padding: 4pt; font-size: 14pt; margin-bottom: 8pt; }
-  .page-break { page-break-before: always; }
-  .status-ok { color: #18a957; } .status-warn { color: #f2b02e; } .status-err { color: #d83030; }
-  .done { text-decoration: line-through; color: #888; }
   .pdf-footer { position: running(pdf-footer); }
 </style>
 </head>
@@ -59,11 +56,7 @@
     <div class="alarm-badge">{{ incident.alarm_type_code }}</div>
     <div><strong>{{ incident.address_street or '' }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</strong></div>
     <div class="meta">{{ incident.report_text or '' }}</div>
-    {% if incident.leader_member %}
-    <div class="meta" style="margin-top:4pt;">Einsatzleiter vor Ort: <strong>{{ incident.leader_member.full_name }}</strong></div>
-    {% elif incident.leader %}
-    <div class="meta" style="margin-top:4pt;">Einsatzleiter: <strong>{{ incident.leader.display_name }}</strong></div>
-    {% endif %}
+    <div class="meta" style="margin-top:4pt;">AS-Protokoll: <strong>{{ troop.name }}</strong>{% if troop.unit_name %} ({{ troop.unit_name }}){% endif %}</div>
   </div>
   <div class="header-box__brand">
     <img src="{{ (base_url or '').rstrip('/') }}/static/img/logo-trans.png" alt="einsatzleiter.cloud">
@@ -72,67 +65,13 @@
   <div style="text-align:right">
     <div><strong>Einsatz #{{ incident.nummer or incident.id }}</strong></div>
     <div>{{ incident.started_at|local_datetime }} Uhr</div>
-    {% if incident.closed_at %}
-    <div>Ende: {{ incident.closed_at|local_time }} Uhr</div>
-    {% endif %}
     <div class="meta">Erstellt: {{ now|local_datetime }}</div>
   </div>
 </div>
 
-<h2>Fahrzeuge</h2>
-<table>
-  <tr><th>Fahrzeug</th><th>Organisation</th><th>Spalte</th><th>Gruppenkommandant</th></tr>
-  {% for v in incident.vehicles %}
-  <tr>
-    <td>{{ v.vehicle_master.code }}</td>
-    <td>{{ v.vehicle_master.dept.name }}</td>
-    <td>{{ v.column.title if v.column else '–' }}</td>
-    <td>{{ v.commander.full_name if v.commander else '–' }}</td>
-  </tr>
-  {% endfor %}
-</table>
-
-<h2>Aufträge</h2>
-<table>
-  <tr><th>Auftrag</th><th>Fahrzeug</th><th>Status</th><th>Erledigt</th></tr>
-  {% for t in incident.tasks %}
-  <tr>
-    <td class="{% if t.is_done %}done{% endif %}">{{ t.title }}</td>
-    <td>{{ t.vehicle.vehicle_master.code if t.vehicle else '–' }}</td>
-    <td>{% if t.is_done %}Erledigt{% elif t.is_cancelled %}Abgebrochen{% else %}Offen{% endif %}</td>
-    <td>{{ t.done_at|local_time if t.done_at else '–' }}</td>
-  </tr>
-  {% endfor %}
-</table>
-
-{% if incident.rescued_persons %}
-<h2>Gerettete Personen</h2>
-<table>
-  <tr><th>Geschlecht</th><th>Gruppe</th><th>Alter</th><th>Name</th><th>Fundort</th></tr>
-  {% for p in incident.rescued_persons %}
-  <tr>
-    <td>{{ p.gender }}</td><td>{{ p.person_group }}</td>
-    <td>{{ p.age_range or '–' }}</td><td>{{ p.name or '–' }}</td><td>{{ p.location or '–' }}</td>
-  </tr>
-  {% endfor %}
-</table>
-{% endif %}
-
-{% if incident.breathing_troops %}
-<div class="page-break"></div>
 <h2>Atemschutz-Protokoll</h2>
-{% for troop in incident.breathing_troops %}
-{% include "pdf/_troop_block.html" %}
-{% endfor %}
-{% endif %}
 
-<h2>Einsatzverlauf</h2>
-<table>
-  <tr><th>Zeit</th><th>Eintrag</th></tr>
-  {% for e in incident.log_entries %}
-  <tr><td>{{ (e.ts|local).strftime('%H:%M:%S') }}</td><td>{{ e.text }}</td></tr>
-  {% endfor %}
-</table>
+{% include "pdf/_troop_block.html" %}
 
 </body>
 </html>

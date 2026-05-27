@@ -661,13 +661,13 @@
       <span style="font-size:1rem;">🔴</span> Atemschutz
     </div>
     {% for troop in breathing_troops %}
-    {# Druckklasse berechnen #}
+    {# Druckklasse berechnen (300-bar-Welt: ≥150 ok, ≥100 warn, <100 crit) #}
     {% set press = troop.lowest_current_pressure %}
     {% if press is none %}
       {% set press_class = 'none' %}
-    {% elif press >= 200 %}
-      {% set press_class = 'ok' %}
     {% elif press >= 150 %}
+      {% set press_class = 'ok' %}
+    {% elif press >= 100 %}
       {% set press_class = 'warn' %}
     {% else %}
       {% set press_class = 'crit' %}
@@ -678,6 +678,9 @@
         {% if troop.unit_name %}
         <div class="bs-unit">{{ troop.unit_name }}</div>
         {% endif %}
+        {% if troop.location_text %}
+        <div class="bs-unit" style="font-size:.65rem;opacity:.8">{{ troop.location_text }}</div>
+        {% endif %}
       </div>
       <div class="bs-metrics">
         {% if press is not none %}
@@ -686,11 +689,13 @@
         <div class="bs-press bs-press--none">kein Druck</div>
         {% endif %}
         {% if troop.entry_at %}
-        <div class="bs-time" data-entry="{{ troop.entry_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">–</div>
+        <div class="bs-time"
+             data-entry="{{ troop.entry_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+             data-planned="{{ troop.planned_duration_min or 0 }}">–</div>
         {% endif %}
       </div>
       <div class="bs-badge bs-badge--{{ troop.status }}">
-        {% if troop.status == 'im_einsatz' %}Im Einsatz{% else %}Rückzug!{% endif %}
+        {% if troop.status == 'im_einsatz' %}Im Einsatz{% elif troop.status == 'rueckzug' %}Rückzug!{% else %}{{ troop.status }}{% endif %}
       </div>
     </div>
     {% endfor %}
@@ -1058,13 +1063,20 @@
     const now = Date.now();
     troopTimers.forEach(el => {
       const entry = new Date(el.dataset.entry).getTime();
+      const planned = parseInt(el.dataset.planned || '0', 10);
       const s = Math.max(0, Math.floor((now - entry) / 1000));
       const h = Math.floor(s / 3600);
       const m = Math.floor(s % 3600 / 60);
       const sec = s % 60;
-      el.textContent = h > 0
+      const elapsed = h > 0
         ? `${pad(h)}:${pad(m)}:${pad(sec)}`
         : `${pad(m)}:${pad(sec)}`;
+      el.textContent = planned > 0 ? `${elapsed} / ${planned} min` : elapsed;
+      // Farbgebung: über Max = rot, über 2/3 = orange
+      if (planned > 0) {
+        const pct = s / (planned * 60);
+        el.style.color = pct >= 1 ? '#e53e3e' : pct >= 0.67 ? '#ed8936' : '';
+      }
     });
   }
   if (troopTimers.length) {
