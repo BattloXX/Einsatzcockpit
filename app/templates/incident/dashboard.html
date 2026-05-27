@@ -4,485 +4,891 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1920, initial-scale=1">
   <title>Dashboard · {{ incident.alarm_type_code }} – {{ incident.address_street or ('Einsatz #' ~ incident.id) }}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            mono: ['JetBrains Mono', 'Consolas', 'monospace'],
-            ui:   ['Hanken Grotesk', 'Segoe UI', 'system-ui', 'sans-serif'],
-          },
-        },
-      },
-    };
-  </script>
   <style>
-    .material-symbols-outlined {
-      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    /* ── Reset & Tokens ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:              #0b1326;
+      --surface:         #171f33;
+      --surface-high:    #222a3d;
+      --surface-highest: #2d3449;
+      --border:          rgba(90,64,61,.55);
+      --border-soft:     rgba(90,64,61,.28);
+      --text:            #dae2fd;
+      --text-muted:      #aeb9d0;
+      --text-dim:        #5b6b8a;
+
+      --green:    #22c55e;
+      --amber:    #f97316;
+      --blue:     #adc6ff;
+      --red:      #ffb3ac;
+      --red-dark: #d32f2f;
+
+      --font-ui:   'Segoe UI', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Consolas', 'JetBrains Mono', monospace;
     }
-    body { overflow: hidden; height: 100vh; width: 100vw; }
-    .scroll-hide::-webkit-scrollbar { display: none; }
-    .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-    /* Lage-Ticker fade animation */
-    #lageTicker { transition: opacity 0.35s ease; }
+    html, body {
+      width: 1920px;
+      min-width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 15px;
+      line-height: 1.4;
+    }
 
-    /* Done item strikethrough */
-    .item-done { opacity: 0.45; }
-    .item-done .item-title { text-decoration: line-through; }
+    /* ── Layout shell ───────────────────────────────────────────────────────── */
+    .shell {
+      display: flex;
+      flex-direction: column;
+      height: 1080px;
+    }
 
-    /* Blink pulse */
+    /* ── HEADER ─────────────────────────────────────────────────────────────── */
+    {% set ac_pre = (incident.alarm_type_code or '')[:1]|lower %}
+    .hdr {
+      flex-shrink: 0;
+      height: 110px;
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid rgba(255,255,255,.1);
+      box-shadow: 0 4px 24px rgba(0,0,0,.5);
+      {% if ac_pre == 'f' %}
+      background: linear-gradient(100deg, #7f1d1d 0%, #991b1b 55%, #7f1d1d 100%);
+      {% elif ac_pre == 't' %}
+      background: linear-gradient(100deg, #1e3a8a 0%, #1d4ed8 55%, #1e3a8a 100%);
+      {% else %}
+      background: linear-gradient(100deg, #1e293b 0%, #334155 55%, #1e293b 100%);
+      {% endif %}
+    }
+
+    .hdr-left {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 0 24px;
+      min-width: 0;
+    }
+
+    .alarm-badge {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 84px;
+      height: 76px;
+      border-radius: 8px;
+      border: 2px solid rgba(255,255,255,.25);
+      background: rgba(0,0,0,.25);
+      font-family: var(--font-mono);
+      font-size: 1.7rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: .04em;
+    }
+
+    .hdr-vsep {
+      width: 1px;
+      height: 60px;
+      background: rgba(255,255,255,.18);
+      flex-shrink: 0;
+    }
+
+    .hdr-incident {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .hdr-incident__label {
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: rgba(255,255,255,.6);
+      margin-bottom: 3px;
+    }
+    .hdr-incident__title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+    .hdr-incident__address {
+      font-size: .95rem;
+      color: rgba(255,255,255,.75);
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hdr-incident__address::before { content: '📍 '; }
+
+    /* Lage-Ticker inline im Header */
+    .hdr-lage {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(146,100,0,.35);
+      border: 1px solid rgba(245,158,11,.4);
+      border-radius: 6px;
+      padding: 6px 14px;
+      max-width: 340px;
+      min-width: 180px;
+      overflow: hidden;
+    }
+    .hdr-lage__icon { font-size: 1rem; flex-shrink: 0; }
+    .hdr-lage__text {
+      font-size: .88rem;
+      color: #fde68a;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: opacity .35s ease;
+    }
+
+    /* Right side: EL + Timer + Clock */
+    .hdr-right {
+      flex-shrink: 0;
+      display: flex;
+      align-items: stretch;
+      border-left: 1px solid rgba(255,255,255,.12);
+    }
+    .hdr-block {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 22px;
+      border-right: 1px solid rgba(255,255,255,.12);
+    }
+    .hdr-block:last-child { border-right: none; }
+    .hdr-block__label {
+      font-family: var(--font-mono);
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: rgba(255,255,255,.5);
+      margin-bottom: 3px;
+    }
+    .hdr-block__value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+    }
+    .hdr-block__value--timer {
+      font-family: var(--font-mono);
+      font-size: 2.4rem;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: .04em;
+    }
+    .hdr-block__value--clock {
+      font-family: var(--font-mono);
+      font-size: 2.4rem;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -.01em;
+    }
+    .hdr-block__sub {
+      font-size: .72rem;
+      color: rgba(255,255,255,.45);
+      margin-top: 3px;
+      font-family: var(--font-mono);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-top: 5px;
+    }
+    .status-pill--active   { background: rgba(34,197,94,.2);  border: 1px solid rgba(34,197,94,.4);  color: #86efac; }
+    .status-pill--exercise { background: rgba(249,115,22,.2); border: 1px solid rgba(249,115,22,.4); color: #fdba74; }
+    .pulse-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .pulse-dot--green  { background: #22c55e; animation: blink 2s ease-in-out infinite; }
+    .pulse-dot--amber  { background: #f97316; animation: blink 2s ease-in-out infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-    .pulse { animation: blink 2s ease-in-out infinite; }
 
-    /* Header gradient: F = fire red, T = THL blue, default = gray */
-    .hdr-fire  { background: linear-gradient(100deg, #7f1d1d 0%, #991b1b 60%, #7f1d1d 100%); }
-    .hdr-thl   { background: linear-gradient(100deg, #1e3a8a 0%, #1d4ed8 60%, #1e3a8a 100%); }
-    .hdr-other { background: linear-gradient(100deg, #1e293b 0%, #334155 60%, #1e293b 100%); }
+    /* ── LAGE BAR (separate strip below header) ─────────────────────────────── */
+    .lage-bar {
+      flex-shrink: 0;
+      height: 40px;
+      background: rgba(120,53,15,.5);
+      border-bottom: 1px solid rgba(217,119,6,.35);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 22px;
+    }
+    .lage-bar__icon { font-size: 1rem; flex-shrink: 0; }
+    .lage-bar__label {
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: rgba(253,211,77,.7);
+      flex-shrink: 0;
+    }
+    .lage-bar__sep { width: 1px; height: 16px; background: rgba(217,119,6,.4); flex-shrink: 0; }
+    .lage-bar__text {
+      font-size: .95rem;
+      font-weight: 600;
+      color: #fef08a;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: opacity .35s ease;
+    }
+
+    /* ── MAIN GRID ──────────────────────────────────────────────────────────── */
+    .main {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 2.2fr 1.3fr 1.5fr;
+      gap: 10px;
+      padding: 10px;
+    }
+
+    /* ── PANELS ─────────────────────────────────────────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .panel-hd {
+      flex-shrink: 0;
+      background: var(--surface-high);
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-hd__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .panel-hd__title {
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .panel-hd__icon { font-size: 1rem; }
+    .panel-badge {
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .panel-badge--green { background: rgba(34,197,94,.18); color: #86efac; border: 1px solid rgba(34,197,94,.3); }
+    .panel-badge--amber { background: rgba(249,115,22,.18); color: #fdba74; border: 1px solid rgba(249,115,22,.3); }
+
+    .stat-row { display: flex; align-items: center; gap: 8px; }
+    .chip {
+      display: flex; align-items: center; gap: 7px;
+      padding: 5px 10px; border-radius: 5px;
+    }
+    .chip-num {
+      font-family: var(--font-mono);
+      font-size: 1.7rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .chip-lbl { font-size: .82rem; font-weight: 500; line-height: 1.2; }
+    .chip--blue { background: rgba(59,130,246,.13); border: 1px solid rgba(59,130,246,.28); }
+    .chip--blue .chip-num { color: #93c5fd; }
+    .chip--blue .chip-lbl { color: rgba(147,197,253,.65); }
+    .chip--green { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.25); }
+    .chip--green .chip-num { color: #86efac; }
+    .chip--green .chip-lbl { color: rgba(134,239,172,.65); }
+
+    .progress-bar { height: 3px; background: rgba(255,255,255,.07); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg,#22c55e,rgba(34,197,94,.6)); transition: width .7s ease; }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 8px;
+    }
+    .panel-body::-webkit-scrollbar { width: 3px; }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── VEHICLES ───────────────────────────────────────────────────────────── */
+    .vehicles-col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      padding: 5px 6px 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .section-label__line { flex: 1; height: 1px; background: var(--border); }
+    .section-label--green { color: var(--green); }
+    .section-label--amber { color: var(--amber); }
+    .section-label--gray  { color: var(--text-dim); }
+
+    .vehicle-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 7px;
+      padding: 0 2px 8px;
+    }
+    .v-card {
+      background: var(--surface-highest);
+      border: 1px solid var(--border-soft);
+      border-left: 4px solid transparent;
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .v-card--active   { border-left-color: var(--green); }
+    .v-card--dispatch { border-left-color: var(--amber); }
+    .v-card--other    { border-left-color: var(--text-dim); }
+
+    .v-code { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 700; color: #fff; line-height: 1.1; }
+    .v-name { font-size: .82rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+    .v-gk   { font-size: .88rem; font-weight: 500; color: var(--text); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .v-nogk { font-size: .8rem; color: var(--text-dim); font-style: italic; margin-top: 5px; }
+
+    .empty-panel {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 100%; min-height: 60px; gap: 7px;
+      color: var(--text-dim); font-size: .88rem;
+    }
+    .empty-icon { font-size: 2rem; opacity: .4; }
+
+    /* ── ITEM LIST (tasks / messages) ───────────────────────────────────────── */
+    .item-list { display: flex; flex-direction: column; gap: 5px; }
+
+    .item-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--surface-highest);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .item-row--done { opacity: .42; }
+
+    .item-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+
+    .item-body { flex: 1; min-width: 0; }
+    .item-title {
+      font-size: .95rem;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.3;
+    }
+    .item-row--done .item-title { text-decoration: line-through; color: var(--text-muted); }
+    .item-meta {
+      margin-top: 3px;
+      font-size: .8rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .v-badge {
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: rgba(59,130,246,.18);
+      border: 1px solid rgba(59,130,246,.3);
+      color: #93c5fd;
+    }
+    .v-badge--msg {
+      background: rgba(168,85,247,.18);
+      border: 1px solid rgba(168,85,247,.3);
+      color: #d8b4fe;
+    }
+    .unassigned { color: var(--text-dim); font-style: italic; }
+
+    .divider {
+      display: flex; align-items: center; gap: 8px;
+      margin: 6px 0 4px;
+    }
+    .divider__line { flex: 1; height: 1px; background: rgba(255,255,255,.06); }
+    .divider__text { font-family: var(--font-mono); font-size: .65rem; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); }
+
+    /* ── FOOTER (persons strip) ─────────────────────────────────────────────── */
+    .footer {
+      flex-shrink: 0;
+      height: 96px;
+      background: var(--surface-high);
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .ps-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 0 20px;
+      border-right: 1px solid var(--border-soft);
+      position: relative;
+      overflow: hidden;
+    }
+    .ps-group:last-child { border-right: none; }
+    .ps-group::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+    .ps-group--found::before         { background: #60a5fa; }
+    .ps-group--treated::before       { background: var(--amber); }
+    .ps-group--transported::before   { background: var(--green); }
+
+    .ps-icon   { font-size: 2.4rem; flex-shrink: 0; opacity: .7; }
+    .ps-info   { display: flex; flex-direction: column; }
+    .ps-label  { font-family: var(--font-mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; }
+    .ps-count  { font-family: var(--font-mono); font-size: 3rem; font-weight: 700; line-height: 1; }
+    .ps-names  { display: flex; flex-direction: column; gap: 1px; overflow: hidden; max-width: 130px; }
+    .ps-name   { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .ps-group--found       .ps-label, .ps-group--found       .ps-count { color: #93c5fd; }
+    .ps-group--treated     .ps-label, .ps-group--treated     .ps-count { color: #fdba74; }
+    .ps-group--transported .ps-label, .ps-group--transported .ps-count { color: #86efac; }
   </style>
 </head>
-<body class="dark bg-gray-950 text-gray-100 font-ui flex flex-col">
+<body>
+<div class="shell">
 
-{% set ac       = incident.alarm_type_code or '' %}
-{% set ac_pre   = ac[:1]|lower if ac else 'x' %}
-{% set hdr_cls  = 'hdr-fire' if ac_pre == 'f' else ('hdr-thl' if ac_pre == 't' else 'hdr-other') %}
-{% set badge_cls= 'border-red-400 text-red-200 bg-red-900/50'  if ac_pre == 'f' else
-                  ('border-blue-400 text-blue-200 bg-blue-900/50' if ac_pre == 't' else
-                   'border-gray-400 text-gray-200 bg-gray-800/50') %}
+  <!-- ══ HEADER ══ -->
+  <header class="hdr">
+    <div class="hdr-left">
 
-<!-- ══ HEADER ══ -->
-<header class="{{ hdr_cls }} border-b border-white/10 shadow-lg flex items-stretch">
+      <!-- Alarm badge -->
+      <div class="alarm-badge">{{ incident.alarm_type_code or '?' }}</div>
 
-  <!-- LEFT: alarm type + incident info -->
-  <div class="flex items-center gap-5 px-6 py-3 flex-1 min-w-0">
+      <div class="hdr-vsep"></div>
 
-    <!-- Alarm badge -->
-    <div class="flex-shrink-0 flex flex-col items-center justify-center border-2 {{ badge_cls }} rounded-lg w-20 h-16 font-mono font-bold text-2xl tracking-wide">
-      {{ ac or '?' }}
-    </div>
-
-    <div class="w-px h-12 bg-white/20 flex-shrink-0"></div>
-
-    <!-- Incident text -->
-    <div class="flex flex-col min-w-0 flex-1">
-      {% if incident.is_exercise %}
-      <span class="text-amber-300 font-mono text-xs font-bold uppercase tracking-widest mb-0.5">⚠ ÜBUNG / SIMULATION ⚠</span>
-      {% endif %}
-      <span class="text-white/60 font-mono text-xs uppercase tracking-widest">Einsatzgrund</span>
-      <span class="text-white font-bold text-2xl leading-tight truncate">
-        {% if incident.nummer %}
-          <span class="text-white/50 text-base font-mono mr-1">#{{ incident.nummer }}</span>
+      <!-- Incident info -->
+      <div class="hdr-incident">
+        {% if incident.is_exercise %}
+        <div style="font-family:var(--font-mono);font-size:.7rem;font-weight:700;color:#fbbf24;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">⚠ ÜBUNG / SIMULATION ⚠</div>
         {% endif %}
-        {% if incident.reason %}{{ incident.reason }}
-        {% elif incident.report_text %}{{ incident.report_text[:120] }}
-        {% else %}Einsatz {{ incident.id }}{% endif %}
-      </span>
-      {% if incident.address_street %}
-      <span class="text-white/70 text-base flex items-center gap-1 mt-0.5">
-        <span class="material-symbols-outlined text-lg">location_on</span>
-        {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %} &middot; {{ incident.address_city }}{% endif %}
-      </span>
-      {% endif %}
-    </div>
-
-    <!-- Lage-Ticker in header (if hints exist) -->
-    {% if lage_hints %}
-    <div class="w-px h-12 bg-white/20 flex-shrink-0"></div>
-    <div class="flex items-center gap-2 bg-amber-900/40 border border-amber-500/40 rounded-lg px-4 py-2 max-w-xs min-w-48 flex-shrink-0">
-      <span class="material-symbols-outlined text-amber-400 flex-shrink-0 text-xl">info</span>
-      <span class="text-amber-200 text-sm leading-tight" id="headerTicker">{{ lage_hints[0].text }}</span>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- RIGHT: EL + mission timer + clock -->
-  <div class="flex items-center gap-0 flex-shrink-0 border-l border-white/10">
-
-    <!-- EL name -->
-    <div class="px-5 py-3 flex flex-col items-end justify-center">
-      <span class="text-white/50 font-mono text-xs uppercase tracking-widest">Einsatzleiter</span>
-      {% if incident.leader %}
-        <span class="text-white font-bold text-lg leading-tight">{{ incident.leader.display_name }}</span>
-      {% elif incident.leader_member %}
-        <span class="text-white font-bold text-lg leading-tight">{{ incident.leader_member.full_name }}</span>
-      {% else %}
-        <span class="text-amber-400 font-bold text-base leading-tight">nicht zugewiesen</span>
-      {% endif %}
-      <div class="flex items-center gap-1.5 mt-1">
-        <span class="w-2 h-2 rounded-full pulse
-          {% if incident.is_exercise %}bg-amber-400{% else %}bg-green-400{% endif %}"></span>
-        <span class="font-mono text-xs font-bold uppercase
-          {% if incident.is_exercise %}text-amber-400{% else %}text-green-400{% endif %}">
-          {{ 'Übung aktiv' if incident.is_exercise else 'Einsatz aktiv' }}
-        </span>
-      </div>
-    </div>
-
-    <div class="w-px h-12 bg-white/20 self-center"></div>
-
-    <!-- Mission timer -->
-    <div class="px-5 py-3 text-center flex-shrink-0">
-      <span class="text-white/50 font-mono text-xs uppercase tracking-widest block">Einsatzdauer</span>
-      <span class="font-mono font-bold text-4xl text-white tabular-nums leading-none" id="elapsedTimer">00:00:00</span>
-    </div>
-
-    <div class="w-px h-12 bg-white/20 self-center"></div>
-
-    <!-- Wall clock -->
-    <div class="px-5 py-3 text-right flex-shrink-0">
-      <span class="text-white/50 font-mono text-xs block" id="clockDate">–</span>
-      <span class="font-mono font-bold text-4xl text-white tabular-nums leading-none" id="clockTime">–</span>
-      <span class="text-white/40 font-mono text-xs block mt-0.5">
-        Upd. in <span id="refreshCountdown">30</span>s
-      </span>
-    </div>
-
-  </div>
-</header>
-
-<!-- ══ LAGE-TICKER BAR ══ -->
-{% if lage_hints %}
-<div class="bg-amber-950/80 border-b border-amber-700/40 flex items-center gap-3 px-6 h-10 flex-shrink-0">
-  <span class="material-symbols-outlined text-amber-400 text-xl flex-shrink-0">campaign</span>
-  <span class="text-white/40 font-mono text-xs uppercase tracking-widest flex-shrink-0">Lagehinweis</span>
-  <div class="w-px h-4 bg-amber-700/50 flex-shrink-0"></div>
-  <span class="text-amber-200 text-base font-semibold flex-1 truncate" id="lageTicker">{{ lage_hints[0].text }}</span>
-</div>
-{% endif %}
-
-<!-- ══ MAIN CONTENT ══ -->
-<main class="flex-1 grid gap-2.5 p-2.5 overflow-hidden min-h-0"
-      style="grid-template-columns: 2.2fr 1.3fr 1.5fr;">
-
-  <!-- ── FAHRZEUGE ── -->
-  <section class="flex flex-col gap-2.5 overflow-hidden min-h-0">
-
-    <!-- Am Einsatzort -->
-    <div class="flex-1 flex flex-col bg-gray-900 border border-gray-700/60 rounded-lg overflow-hidden min-h-0">
-      <div class="bg-gray-800/80 px-4 py-2.5 flex items-center justify-between border-b border-gray-700/60 flex-shrink-0">
-        <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full bg-green-500 pulse"></span>
-          <span class="font-mono text-xs font-bold uppercase tracking-widest text-gray-300">Am Einsatzort</span>
+        <div class="hdr-incident__label">Einsatzgrund &amp; Ort</div>
+        <div class="hdr-incident__title">
+          {% if incident.nummer %}<span style="opacity:.55;font-size:1rem;">#{{ incident.nummer }} &nbsp;</span>{% endif %}
+          {% if incident.reason %}{{ incident.reason }}
+          {% elif incident.report_text %}{{ incident.report_text[:130] }}
+          {% else %}Einsatz {{ incident.id }}{% endif %}
         </div>
-        <span class="bg-green-500/20 text-green-400 px-2.5 py-0.5 rounded font-mono text-xs font-bold">
-          {{ active_vehicles|length }} Fzg
-        </span>
-      </div>
-      <div class="flex-1 overflow-y-auto scroll-hide p-2.5">
-        {% if active_vehicles %}
-        <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
-          {% for v in active_vehicles %}
-          <div class="bg-gray-800 border border-l-4 border-green-500 border-r-gray-700/40 border-t-gray-700/40 border-b-gray-700/40 rounded-lg p-3 flex flex-col gap-1">
-            <div class="flex items-start justify-between">
-              <span class="font-mono font-bold text-xl text-white leading-tight">{{ v.vehicle_master.code if v.vehicle_master else '—' }}</span>
-            </div>
-            {% if v.vehicle_master and v.vehicle_master.name %}
-            <span class="text-gray-400 text-sm leading-tight truncate">{{ v.vehicle_master.name }}</span>
-            {% endif %}
-            {% if v.commander %}
-            <span class="text-gray-300 text-sm font-medium truncate mt-1">{{ v.commander.full_name }}</span>
-            {% else %}
-            <span class="text-gray-600 text-sm italic">kein GK</span>
-            {% endif %}
-          </div>
-          {% endfor %}
+        {% if incident.address_street %}
+        <div class="hdr-incident__address">
+          {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %} &middot; {{ incident.address_city }}{% endif %}
         </div>
+        {% endif %}
+      </div>
+
+      <!-- Lage-Ticker (inline, if hints exist) -->
+      {% if lage_hints %}
+      <div class="hdr-vsep"></div>
+      <div class="hdr-lage">
+        <span class="hdr-lage__icon">ℹ</span>
+        <span class="hdr-lage__text" id="headerTicker">{{ lage_hints[0].text }}</span>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- Right: EL + Timer + Clock -->
+    <div class="hdr-right">
+
+      <div class="hdr-block">
+        <div class="hdr-block__label">Einsatzleiter</div>
+        {% if incident.leader %}
+          <div class="hdr-block__value">{{ incident.leader.display_name }}</div>
+        {% elif incident.leader_member %}
+          <div class="hdr-block__value">{{ incident.leader_member.full_name }}</div>
         {% else %}
-        <div class="flex flex-col items-center justify-center h-full gap-2 text-gray-600">
-          <span class="material-symbols-outlined text-4xl">fire_truck</span>
-          <span class="text-base">Keine Fahrzeuge am Einsatzort</span>
+          <div class="hdr-block__value" style="color:#fbbf24;">nicht zugewiesen</div>
+        {% endif %}
+        <div class="status-pill status-pill--{{ 'exercise' if incident.is_exercise else 'active' }}">
+          <span class="pulse-dot pulse-dot--{{ 'amber' if incident.is_exercise else 'green' }}"></span>
+          {{ 'Übung aktiv' if incident.is_exercise else 'Einsatz aktiv' }}
+        </div>
+      </div>
+
+      <div class="hdr-block" style="text-align:center; min-width:175px;">
+        <div class="hdr-block__label" style="text-align:center;">Einsatzdauer</div>
+        <div class="hdr-block__value--timer" id="elapsedTimer">00:00:00</div>
+      </div>
+
+      <div class="hdr-block" style="text-align:right; min-width:185px;">
+        <div class="hdr-block__sub" id="clockDate" style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:2px;">–</div>
+        <div class="hdr-block__value--clock" id="clockTime">–</div>
+        <div class="hdr-block__sub">Upd. in <span id="refreshCountdown">30</span>s</div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ══ LAGE-BAR ══ -->
+  {% if lage_hints %}
+  <div class="lage-bar">
+    <span class="lage-bar__icon">📢</span>
+    <span class="lage-bar__label">Lagehinweis</span>
+    <span class="lage-bar__sep"></span>
+    <span class="lage-bar__text" id="lageTicker">{{ lage_hints[0].text }}</span>
+  </div>
+  {% endif %}
+
+  <!-- ══ MAIN ══ -->
+  <div class="main">
+
+    <!-- ── FAHRZEUGE ── -->
+    <div class="vehicles-col">
+
+      <!-- Am Einsatzort -->
+      <div class="panel" style="flex: 1; min-height: 0;">
+        <div class="panel-hd">
+          <div class="panel-hd__top">
+            <div class="panel-hd__title">
+              <span class="panel-hd__icon">🚒</span> Am Einsatzort
+            </div>
+            <span class="panel-badge panel-badge--green">{{ active_vehicles|length }} Fzg</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          {% if active_vehicles %}
+          <div class="vehicle-grid">
+            {% for v in active_vehicles %}
+            <div class="v-card v-card--active">
+              <div class="v-code">{{ v.vehicle_master.code if v.vehicle_master else '—' }}</div>
+              {% if v.vehicle_master and v.vehicle_master.name %}
+              <div class="v-name">{{ v.vehicle_master.name }}</div>
+              {% endif %}
+              {% if v.commander %}
+              <div class="v-gk">{{ v.commander.full_name }}</div>
+              {% else %}
+              <div class="v-nogk">kein GK</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="empty-panel">
+            <div class="empty-icon">🚒</div>
+            Keine Fahrzeuge am Einsatzort
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Disponiert + Weitere -->
+      {% if dispatched_vehicles or other_vehicles %}
+      <div class="panel" style="max-height: 37%; min-height: 0;">
+        <div class="panel-hd">
+          <div class="panel-hd__top">
+            <div class="panel-hd__title">
+              <span class="panel-hd__icon">🔶</span> Disponiert / Weitere
+            </div>
+            <span class="panel-badge panel-badge--amber">{{ dispatched_vehicles|length + other_vehicles|length }} Fzg</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="vehicle-grid">
+            {% for v in dispatched_vehicles %}
+            <div class="v-card v-card--dispatch">
+              <div class="v-code">{{ v.vehicle_master.code if v.vehicle_master else '—' }}</div>
+              {% if v.vehicle_master and v.vehicle_master.name %}
+              <div class="v-name">{{ v.vehicle_master.name }}</div>
+              {% endif %}
+              {% if v.commander %}
+              <div class="v-gk">{{ v.commander.full_name }}</div>
+              {% else %}
+              <div class="v-nogk">kein GK</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+            {% for v in other_vehicles %}
+            <div class="v-card v-card--other">
+              <div class="v-code">{{ v.vehicle_master.code if v.vehicle_master else '—' }}</div>
+              {% if v.vehicle_master and v.vehicle_master.name %}
+              <div class="v-name">{{ v.vehicle_master.name }}</div>
+              {% endif %}
+              {% if v.commander %}
+              <div class="v-gk">{{ v.commander.full_name }}</div>
+              {% else %}
+              <div class="v-nogk">kein GK</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div><!-- /vehicles-col -->
+
+    <!-- ── AUFTRÄGE ── -->
+    <div class="panel">
+      <div class="panel-hd">
+        <div class="panel-hd__top">
+          <div class="panel-hd__title">
+            <span class="panel-hd__icon">📋</span> Aufträge
+          </div>
+        </div>
+        <div class="stat-row">
+          <div class="chip chip--blue">
+            <span class="chip-num">{{ tasks_open|length }}</span>
+            <span class="chip-lbl">Offen</span>
+          </div>
+          <div class="chip chip--green">
+            <span class="chip-num">{{ tasks_done|length }}</span>
+            <span class="chip-lbl">Erledigt</span>
+          </div>
+        </div>
+        {% set t_total = tasks_open|length + tasks_done|length %}
+        {% if t_total > 0 %}
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:{{ ((tasks_done|length / t_total) * 100)|round }}%"></div>
         </div>
         {% endif %}
       </div>
-    </div>
+      <div class="panel-body">
+        <div class="item-list">
 
-    <!-- Disponiert -->
-    {% if dispatched_vehicles or other_vehicles %}
-    <div class="flex flex-col bg-gray-900 border border-gray-700/60 rounded-lg overflow-hidden"
-         style="max-height: 38%;">
-      <div class="bg-gray-800/80 px-4 py-2.5 flex items-center justify-between border-b border-gray-700/60 flex-shrink-0">
-        <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-          <span class="font-mono text-xs font-bold uppercase tracking-widest text-gray-300">Disponiert / Weitere</span>
-        </div>
-        <span class="bg-amber-500/20 text-amber-400 px-2.5 py-0.5 rounded font-mono text-xs font-bold">
-          {{ dispatched_vehicles|length + other_vehicles|length }} Fzg
-        </span>
-      </div>
-      <div class="overflow-y-auto scroll-hide p-2.5">
-        <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
-          {% for v in dispatched_vehicles %}
-          <div class="bg-gray-800 border border-l-4 border-amber-500 border-r-gray-700/40 border-t-gray-700/40 border-b-gray-700/40 rounded-lg p-3 flex flex-col gap-1">
-            <span class="font-mono font-bold text-xl text-white">{{ v.vehicle_master.code if v.vehicle_master else '—' }}</span>
-            {% if v.commander %}
-            <span class="text-gray-300 text-sm truncate">{{ v.commander.full_name }}</span>
-            {% else %}
-            <span class="text-gray-600 text-sm italic">kein GK</span>
-            {% endif %}
+          {% for t in tasks_open %}
+          <div class="item-row">
+            <span class="item-icon">{% if t.status == 'in_progress' %}⏳{% else %}○{% endif %}</span>
+            <div class="item-body">
+              <div class="item-title">{{ t.title }}</div>
+              <div class="item-meta">
+                {% if t.vehicle and t.vehicle.vehicle_master %}
+                  <span class="v-badge">{{ t.vehicle.vehicle_master.code }}</span>
+                {% else %}
+                  <span class="unassigned">nicht zugewiesen</span>
+                {% endif %}
+              </div>
+            </div>
           </div>
           {% endfor %}
-          {% for v in other_vehicles %}
-          <div class="bg-gray-800 border border-l-4 border-gray-500 border-r-gray-700/40 border-t-gray-700/40 border-b-gray-700/40 rounded-lg p-3 flex flex-col gap-1">
-            <span class="font-mono font-bold text-xl text-gray-300">{{ v.vehicle_master.code if v.vehicle_master else '—' }}</span>
-            {% if v.commander %}
-            <span class="text-gray-400 text-sm truncate">{{ v.commander.full_name }}</span>
-            {% else %}
-            <span class="text-gray-600 text-sm italic">kein GK</span>
-            {% endif %}
+
+          {% if not tasks_open and not tasks_done %}
+          <div class="empty-panel">
+            <div class="empty-icon">✅</div>
+            Keine Aufträge
           </div>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-    {% endif %}
+          {% endif %}
 
-  </section>
-
-  <!-- ── AUFTRÄGE ── -->
-  <section class="flex flex-col bg-gray-900 border border-gray-700/60 rounded-lg overflow-hidden min-h-0">
-
-    <!-- Header with counts -->
-    <div class="bg-gray-800/80 px-4 py-2.5 border-b border-gray-700/60 flex-shrink-0">
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2 text-blue-400">
-          <span class="material-symbols-outlined text-xl">add_task</span>
-          <span class="font-mono text-xs font-bold uppercase tracking-widest">Aufträge</span>
-        </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <div class="bg-blue-500/15 border border-blue-500/30 rounded px-2.5 py-1 flex items-center gap-2">
-          <span class="font-mono font-bold text-2xl text-blue-400 leading-none">{{ tasks_open|length }}</span>
-          <span class="text-blue-400/70 text-sm">Offen</span>
-        </div>
-        <div class="bg-green-500/15 border border-green-500/30 rounded px-2.5 py-1 flex items-center gap-2">
-          <span class="font-mono font-bold text-2xl text-green-400 leading-none">{{ tasks_done|length }}</span>
-          <span class="text-green-400/70 text-sm">Erledigt</span>
-        </div>
-      </div>
-      {% set t_total = tasks_open|length + tasks_done|length %}
-      {% if t_total > 0 %}
-      <div class="h-1 bg-gray-700 rounded-full mt-2 overflow-hidden">
-        <div class="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all duration-700"
-             style="width:{{ ((tasks_done|length / t_total) * 100)|round }}%"></div>
-      </div>
-      {% endif %}
-    </div>
-
-    <!-- Task list -->
-    <div class="flex-1 overflow-y-auto scroll-hide p-2.5 flex flex-col gap-1.5">
-
-      {% if tasks_open %}
-        {% for t in tasks_open %}
-        <div class="flex items-start gap-3 bg-gray-800/60 border border-gray-700/40 rounded-lg px-3 py-2.5">
-          <span class="material-symbols-outlined flex-shrink-0 mt-0.5 text-xl
-            {% if t.status == 'in_progress' %}text-amber-400{% else %}text-blue-400{% endif %}"
-            style="font-variation-settings:'FILL' 1;">
-            {% if t.status == 'in_progress' %}pending{% else %}radio_button_unchecked{% endif %}
-          </span>
-          <div class="flex-1 min-w-0">
-            <div class="item-title text-white font-semibold text-base leading-snug truncate">{{ t.title }}</div>
-            <div class="text-gray-400 text-sm mt-0.5">
+          {% if tasks_done %}
+          {% if tasks_open %}
+          <div class="divider">
+            <div class="divider__line"></div>
+            <span class="divider__text">Erledigt</span>
+            <div class="divider__line"></div>
+          </div>
+          {% endif %}
+          {% for t in tasks_done %}
+          <div class="item-row item-row--done">
+            <span class="item-icon">✓</span>
+            <div class="item-body">
+              <div class="item-title">{{ t.title }}</div>
               {% if t.vehicle and t.vehicle.vehicle_master %}
-                <span class="font-mono bg-blue-900/40 border border-blue-700/40 text-blue-300 text-xs px-1.5 py-0.5 rounded">{{ t.vehicle.vehicle_master.code }}</span>
-              {% else %}
-                <span class="text-gray-600 italic">nicht zugewiesen</span>
+              <div class="item-meta"><span class="v-badge">{{ t.vehicle.vehicle_master.code }}</span></div>
               {% endif %}
             </div>
           </div>
-        </div>
-        {% endfor %}
-      {% elif not tasks_done %}
-      <div class="flex flex-col items-center justify-center flex-1 gap-2 text-gray-600">
-        <span class="material-symbols-outlined text-4xl">task_alt</span>
-        <span class="text-base">Keine offenen Aufträge</span>
-      </div>
-      {% endif %}
+          {% endfor %}
+          {% endif %}
 
-      {% if tasks_done %}
-      {% if tasks_open %}
-      <div class="flex items-center gap-2 my-1">
-        <div class="flex-1 h-px bg-gray-700/50"></div>
-        <span class="text-gray-600 font-mono text-xs uppercase tracking-widest">Erledigt</span>
-        <div class="flex-1 h-px bg-gray-700/50"></div>
+        </div>
       </div>
-      {% endif %}
-        {% for t in tasks_done %}
-        <div class="item-done flex items-start gap-3 bg-gray-800/30 border border-gray-700/20 rounded-lg px-3 py-2.5">
-          <span class="material-symbols-outlined flex-shrink-0 mt-0.5 text-xl text-green-600"
-                style="font-variation-settings:'FILL' 1;">check_circle</span>
-          <div class="flex-1 min-w-0">
-            <div class="item-title text-gray-500 text-base leading-snug truncate">{{ t.title }}</div>
-            {% if t.vehicle and t.vehicle.vehicle_master %}
-            <span class="font-mono text-gray-700 text-xs">{{ t.vehicle.vehicle_master.code }}</span>
-            {% endif %}
+    </div>
+
+    <!-- ── MELDUNGEN ── -->
+    <div class="panel">
+      <div class="panel-hd">
+        <div class="panel-hd__top">
+          <div class="panel-hd__title">
+            <span class="panel-hd__icon">📢</span> Meldungen
           </div>
         </div>
-        {% endfor %}
-      {% endif %}
-
-    </div>
-  </section>
-
-  <!-- ── MELDUNGEN ── -->
-  <section class="flex flex-col bg-gray-900 border border-gray-700/60 rounded-lg overflow-hidden min-h-0">
-
-    <!-- Header with counts -->
-    <div class="bg-gray-800/80 px-4 py-2.5 border-b border-gray-700/60 flex-shrink-0">
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2 text-purple-400">
-          <span class="material-symbols-outlined text-xl">campaign</span>
-          <span class="font-mono text-xs font-bold uppercase tracking-widest">Meldungen</span>
+        <div class="stat-row">
+          <div class="chip chip--blue">
+            <span class="chip-num">{{ msgs_open|length }}</span>
+            <span class="chip-lbl">Offen</span>
+          </div>
+          <div class="chip chip--green">
+            <span class="chip-num">{{ msgs_done|length }}</span>
+            <span class="chip-lbl">Erledigt</span>
+          </div>
         </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <div class="bg-blue-500/15 border border-blue-500/30 rounded px-2.5 py-1 flex items-center gap-2">
-          <span class="font-mono font-bold text-2xl text-blue-400 leading-none">{{ msgs_open|length }}</span>
-          <span class="text-blue-400/70 text-sm">Offen</span>
+        {% set m_total = msgs_open|length + msgs_done|length %}
+        {% if m_total > 0 %}
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:{{ ((msgs_done|length / m_total) * 100)|round }}%"></div>
         </div>
-        <div class="bg-green-500/15 border border-green-500/30 rounded px-2.5 py-1 flex items-center gap-2">
-          <span class="font-mono font-bold text-2xl text-green-400 leading-none">{{ msgs_done|length }}</span>
-          <span class="text-green-400/70 text-sm">Erledigt</span>
-        </div>
+        {% endif %}
       </div>
-      {% set m_total = msgs_open|length + msgs_done|length %}
-      {% if m_total > 0 %}
-      <div class="h-1 bg-gray-700 rounded-full mt-2 overflow-hidden">
-        <div class="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all duration-700"
-             style="width:{{ ((msgs_done|length / m_total) * 100)|round }}%"></div>
-      </div>
-      {% endif %}
-    </div>
+      <div class="panel-body">
+        <div class="item-list">
 
-    <!-- Message list -->
-    <div class="flex-1 overflow-y-auto scroll-hide p-2.5 flex flex-col gap-1.5">
-
-      {% if msgs_open %}
-        {% for m in msgs_open %}
-        <div class="flex items-start gap-3 bg-gray-800/60 border border-gray-700/40 rounded-lg px-3 py-2.5">
-          <span class="material-symbols-outlined flex-shrink-0 mt-0.5 text-xl
-            {% if m.status == 'in_progress' %}text-amber-400{% else %}text-purple-400{% endif %}"
-            style="font-variation-settings:'FILL' 1;">
-            {% if m.status == 'in_progress' %}pending{% else %}sms{% endif %}
-          </span>
-          <div class="flex-1 min-w-0">
-            <div class="item-title text-white font-semibold text-base leading-snug">{{ m.title }}</div>
-            <div class="flex items-center gap-2 mt-0.5">
-              {% if m.vehicle and m.vehicle.vehicle_master %}
-                <span class="font-mono bg-purple-900/40 border border-purple-700/40 text-purple-300 text-xs px-1.5 py-0.5 rounded">{{ m.vehicle.vehicle_master.code }}</span>
-              {% endif %}
-              {% if m.due_at %}
-                <span class="text-amber-500 text-sm">⏰ {{ m.due_at|local_time }}</span>
-              {% endif %}
+          {% for m in msgs_open %}
+          <div class="item-row">
+            <span class="item-icon">{% if m.status == 'in_progress' %}⏳{% else %}💬{% endif %}</span>
+            <div class="item-body">
+              <div class="item-title">{{ m.title }}</div>
+              <div class="item-meta">
+                {% if m.vehicle and m.vehicle.vehicle_master %}
+                  <span class="v-badge v-badge--msg">{{ m.vehicle.vehicle_master.code }}</span>
+                {% endif %}
+                {% if m.due_at %}
+                  <span style="color:#fbbf24;">⏰ {{ m.due_at|local_time }}</span>
+                {% endif %}
+                {% if not m.vehicle and not m.due_at %}
+                  <span class="unassigned">keine Einheit</span>
+                {% endif %}
+              </div>
             </div>
           </div>
-        </div>
-        {% endfor %}
-      {% elif not msgs_done %}
-      <div class="flex flex-col items-center justify-center flex-1 gap-2 text-gray-600">
-        <span class="material-symbols-outlined text-4xl">mark_chat_read</span>
-        <span class="text-base">Keine offenen Meldungen</span>
-      </div>
-      {% endif %}
+          {% endfor %}
 
-      {% if msgs_done %}
-      {% if msgs_open %}
-      <div class="flex items-center gap-2 my-1">
-        <div class="flex-1 h-px bg-gray-700/50"></div>
-        <span class="text-gray-600 font-mono text-xs uppercase tracking-widest">Erledigt</span>
-        <div class="flex-1 h-px bg-gray-700/50"></div>
-      </div>
-      {% endif %}
-        {% for m in msgs_done %}
-        <div class="item-done flex items-start gap-3 bg-gray-800/30 border border-gray-700/20 rounded-lg px-3 py-2.5">
-          <span class="material-symbols-outlined flex-shrink-0 mt-0.5 text-xl text-green-600"
-                style="font-variation-settings:'FILL' 1;">check_circle</span>
-          <div class="flex-1 min-w-0">
-            <div class="item-title text-gray-500 text-base leading-snug">{{ m.title }}</div>
+          {% if not msgs_open and not msgs_done %}
+          <div class="empty-panel">
+            <div class="empty-icon">💬</div>
+            Keine Meldungen
           </div>
+          {% endif %}
+
+          {% if msgs_done %}
+          {% if msgs_open %}
+          <div class="divider">
+            <div class="divider__line"></div>
+            <span class="divider__text">Erledigt</span>
+            <div class="divider__line"></div>
+          </div>
+          {% endif %}
+          {% for m in msgs_done %}
+          <div class="item-row item-row--done">
+            <span class="item-icon">✓</span>
+            <div class="item-body">
+              <div class="item-title">{{ m.title }}</div>
+            </div>
+          </div>
+          {% endfor %}
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- ══ FOOTER – Personenstatistik (ohne Verstorben) ══ -->
+  <footer class="footer">
+
+    <div class="ps-group ps-group--found">
+      <div class="ps-icon">🔍</div>
+      <div class="ps-info">
+        <div class="ps-label">Gefunden</div>
+        <div class="ps-count">{{ '%02d'|format(person_stats['gefunden']|length) }}</div>
+      </div>
+      {% if person_stats['gefunden'] %}
+      <div class="ps-names">
+        {% for p in person_stats['gefunden'][:4] %}
+        <div class="ps-name" style="color:var(--text-muted);">
+          {% if p.name %}{{ p.name }}{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}
         </div>
         {% endfor %}
-      {% endif %}
-
-    </div>
-  </section>
-
-</main>
-
-<!-- ══ FOOTER: PERSONEN STRIP ══ -->
-<footer class="flex-shrink-0 bg-gray-900 border-t border-gray-700/60 grid h-24"
-        style="grid-template-columns: repeat(4, 1fr);">
-
-  <div class="flex items-center justify-center gap-5 border-r border-gray-700/40 px-4">
-    <span class="material-symbols-outlined text-5xl text-gray-500">search</span>
-    <div class="flex flex-col">
-      <span class="font-mono text-xs uppercase tracking-widest text-gray-500">Gefunden</span>
-      <span class="font-mono font-bold text-5xl text-gray-200 leading-none tabular-nums">{{ '%02d'|format(person_stats['gefunden']|length) }}</span>
-    </div>
-    {% if person_stats['gefunden'] %}
-    <div class="flex flex-col gap-0.5 overflow-hidden max-w-28">
-      {% for p in person_stats['gefunden'][:3] %}
-      <span class="text-gray-400 text-xs truncate">{% if p.name %}{{ p.name }}{% else %}{{ p.person_group }}{% endif %}</span>
-      {% endfor %}
-      {% if person_stats['gefunden']|length > 3 %}
-      <span class="text-gray-600 text-xs">+{{ person_stats['gefunden']|length - 3 }}</span>
+        {% if person_stats['gefunden']|length > 4 %}
+        <div class="ps-name" style="color:var(--text-dim);">+{{ person_stats['gefunden']|length - 4 }} weitere</div>
+        {% endif %}
+      </div>
       {% endif %}
     </div>
-    {% endif %}
-  </div>
 
-  <div class="flex items-center justify-center gap-5 border-r border-gray-700/40 px-4">
-    <span class="material-symbols-outlined text-5xl text-amber-500">medical_services</span>
-    <div class="flex flex-col">
-      <span class="font-mono text-xs uppercase tracking-widest text-amber-500/60">Versorgt</span>
-      <span class="font-mono font-bold text-5xl text-amber-400 leading-none tabular-nums">{{ '%02d'|format(person_stats['versorgt']|length) }}</span>
-    </div>
-    {% if person_stats['versorgt'] %}
-    <div class="flex flex-col gap-0.5 overflow-hidden max-w-28">
-      {% for p in person_stats['versorgt'][:3] %}
-      <span class="text-gray-400 text-xs truncate">{% if p.name %}{{ p.name }}{% else %}{{ p.person_group }}{% endif %}</span>
-      {% endfor %}
-      {% if person_stats['versorgt']|length > 3 %}
-      <span class="text-gray-600 text-xs">+{{ person_stats['versorgt']|length - 3 }}</span>
+    <div class="ps-group ps-group--treated">
+      <div class="ps-icon">🏥</div>
+      <div class="ps-info">
+        <div class="ps-label">Versorgt</div>
+        <div class="ps-count">{{ '%02d'|format(person_stats['versorgt']|length) }}</div>
+      </div>
+      {% if person_stats['versorgt'] %}
+      <div class="ps-names">
+        {% for p in person_stats['versorgt'][:4] %}
+        <div class="ps-name" style="color:var(--text-muted);">
+          {% if p.name %}{{ p.name }}{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}
+        </div>
+        {% endfor %}
+        {% if person_stats['versorgt']|length > 4 %}
+        <div class="ps-name" style="color:var(--text-dim);">+{{ person_stats['versorgt']|length - 4 }} weitere</div>
+        {% endif %}
+      </div>
       {% endif %}
     </div>
-    {% endif %}
-  </div>
 
-  <div class="flex items-center justify-center gap-5 border-r border-gray-700/40 px-4">
-    <span class="material-symbols-outlined text-5xl text-blue-400">ambulance</span>
-    <div class="flex flex-col">
-      <span class="font-mono text-xs uppercase tracking-widest text-blue-400/60">Abtransportiert</span>
-      <span class="font-mono font-bold text-5xl text-blue-400 leading-none tabular-nums">{{ '%02d'|format(person_stats['abtransportiert']|length) }}</span>
-    </div>
-    {% if person_stats['abtransportiert'] %}
-    <div class="flex flex-col gap-0.5 overflow-hidden max-w-28">
-      {% for p in person_stats['abtransportiert'][:3] %}
-      <span class="text-gray-400 text-xs truncate">{% if p.name %}{{ p.name }}{% else %}{{ p.person_group }}{% endif %}</span>
-      {% endfor %}
-      {% if person_stats['abtransportiert']|length > 3 %}
-      <span class="text-gray-600 text-xs">+{{ person_stats['abtransportiert']|length - 3 }}</span>
+    <div class="ps-group ps-group--transported">
+      <div class="ps-icon">🚑</div>
+      <div class="ps-info">
+        <div class="ps-label">Abtransportiert</div>
+        <div class="ps-count">{{ '%02d'|format(person_stats['abtransportiert']|length) }}</div>
+      </div>
+      {% if person_stats['abtransportiert'] %}
+      <div class="ps-names">
+        {% for p in person_stats['abtransportiert'][:4] %}
+        <div class="ps-name" style="color:var(--text-muted);">
+          {% if p.name %}{{ p.name }}{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}
+        </div>
+        {% endfor %}
+        {% if person_stats['abtransportiert']|length > 4 %}
+        <div class="ps-name" style="color:var(--text-dim);">+{{ person_stats['abtransportiert']|length - 4 }} weitere</div>
+        {% endif %}
+      </div>
       {% endif %}
     </div>
-    {% endif %}
-  </div>
 
-  <div class="flex items-center justify-center gap-5 px-4
-    {% if person_stats['verstorben'] %}bg-red-950/40{% endif %}">
-    <span class="material-symbols-outlined text-5xl {% if person_stats['verstorben'] %}text-red-500{% else %}text-gray-600{% endif %}">dangerous</span>
-    <div class="flex flex-col">
-      <span class="font-mono text-xs uppercase tracking-widest {% if person_stats['verstorben'] %}text-red-400/70{% else %}text-gray-600{% endif %}">Verstorben</span>
-      <span class="font-mono font-bold text-5xl leading-none tabular-nums {% if person_stats['verstorben'] %}text-red-400{% else %}text-gray-600{% endif %}">{{ '%02d'|format(person_stats['verstorben']|length) }}</span>
-    </div>
-  </div>
+  </footer>
 
-</footer>
+</div><!-- /shell -->
 
 <script>
-  // ── Elapsed timer ──────────────────────────────────────────────────
+  // ── Elapsed timer ─────────────────────────────────────────────────────
   const startTime = new Date('{{ started_at_iso }}');
   const timerEl   = document.getElementById('elapsedTimer');
   function pad(n) { return String(n).padStart(2, '0'); }
@@ -493,18 +899,18 @@
   setInterval(tickTimer, 1000);
   tickTimer();
 
-  // ── Wall clock ─────────────────────────────────────────────────────
+  // ── Wall clock ────────────────────────────────────────────────────────
   const clockTimeEl = document.getElementById('clockTime');
   const clockDateEl = document.getElementById('clockDate');
   function tickClock() {
     const now = new Date();
-    clockTimeEl.textContent = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-    clockDateEl.textContent = now.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: 'long' });
+    clockTimeEl.textContent = now.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+    clockDateEl.textContent = now.toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'long' });
   }
   setInterval(tickClock, 1000);
   tickClock();
 
-  // ── Auto-refresh countdown ─────────────────────────────────────────
+  // ── Auto-refresh countdown ────────────────────────────────────────────
   let countdown = 30;
   const cdEl = document.getElementById('refreshCountdown');
   setInterval(() => {
@@ -512,7 +918,7 @@
     else { cdEl.textContent = countdown; }
   }, 1000);
 
-  // ── Lage-Ticker rotation ───────────────────────────────────────────
+  // ── Lage-Ticker rotation ──────────────────────────────────────────────
   const hints = {{ lage_hints|map(attribute="text")|list|tojson if lage_hints else '[]' }};
   if (hints.length > 1) {
     let idx = 0;
@@ -521,7 +927,7 @@
       idx = (idx + 1) % hints.length;
       targets.forEach(el => {
         el.style.opacity = '0';
-        setTimeout(() => { el.textContent = hints[idx]; el.style.opacity = '1'; }, 350);
+        setTimeout(() => { el.textContent = hints[idx]; el.style.opacity = '1'; }, 380);
       });
     }, 8000);
   }
