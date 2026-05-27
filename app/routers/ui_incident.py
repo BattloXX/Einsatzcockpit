@@ -811,6 +811,149 @@ async def qr_print(incident_id: int, request: Request, db: Session = Depends(get
 
 # ── Verlauf / Historie ────────────────────────────────────────────────────────
 
+def _enrich_history(changes, db, incident_id: int) -> list[dict]:
+    """Convert raw IncidentChange records to human-readable dicts for the template."""
+    import json as _json
+
+    tasks    = {t.id: t for t in db.query(Task).filter_by(incident_id=incident_id).all()}
+    msgs     = {m.id: m for m in db.query(Message).filter_by(incident_id=incident_id).all()}
+    vehicles = {v.id: v for v in db.query(IncidentVehicle).filter_by(incident_id=incident_id).all()}
+    columns  = {c.id: c for c in db.query(IncidentColumn).filter_by(incident_id=incident_id).all()}
+
+    user_ids = {c.user_id for c in changes if c.user_id}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+
+    member_ids: set[int] = set()
+    for c in changes:
+        if c.after_json:
+            try:
+                mid = _json.loads(c.after_json).get("commander_member_id")
+                if mid:
+                    member_ids.add(mid)
+            except Exception:
+                pass
+    members = {m.id: m for m in db.query(Member).filter(Member.id.in_(member_ids)).all()} if member_ids else {}
+
+    def vname(vid):
+        v = vehicles.get(vid)
+        return v.vehicle_master.name if v and v.vehicle_master else f"Fahrzeug #{vid}"
+
+    def cname(cid):
+        c = columns.get(cid)
+        return c.title if c else f"Spalte #{cid}"
+
+    def ttitle(tid):
+        t = tasks.get(tid)
+        return t.title if t else f"Auftrag #{tid}"
+
+    def mtitle(mid):
+        m = msgs.get(mid)
+        return m.title if m else f"Meldung #{mid}"
+
+    STATUS_DE = {
+        "done": "Abgeschlossen",
+        "cancelled": "Storniert",
+        "open": "Offen",
+        "yellow": "In Bearbeitung",
+        "red": "Dringend",
+    }
+
+    result = []
+    for change in changes:
+        before: dict = {}
+        after: dict = {}
+        try:
+            if change.before_json:
+                before = _json.loads(change.before_json)
+        except Exception:
+            pass
+        try:
+            if change.after_json:
+                after = _json.loads(change.after_json)
+        except Exception:
+            pass
+
+        action = change.action
+        eid = change.entity_id
+        summary = action
+
+        if action == "task.created":
+            summary = f'Auftrag erstellt: „{after.get("title") or ttitle(eid)}“'
+        elif action == "task.updated":
+            old_t = before.get("title", "")
+            new_t = after.get("title", "")
+            if old_t and new_t and old_t != new_t:
+                summary = f'Auftrag umbenannt: „{old_t}“ → „{new_t}“'
+            else:
+                summary = f'Auftrag bearbeitet: „{new_t or ttitle(eid)}“'
+        elif action == "task.moved":
+            to_col = cname(after.get("column_id"))
+            from_col = cname(before.get("column_id")) if before.get("column_id") else None
+            t = ttitle(eid)
+            summary = (f'Auftrag „{t}“: {from_col} → {to_col}'
+                       if from_col and from_col != to_col
+                       else f'Auftrag „{t}“ verschoben nach {to_col}')
+        elif action == "task.assigned":
+            vid = after.get("vehicle_id")
+            t = ttitle(eid)
+            summary = (f'Auftrag „{t}“ → {vname(vid)}'
+                       if vid else f'Auftrag „{t}“: Fahrzeugzuweisung entfernt')
+        elif action == "task.status_set":
+            st = STATUS_DE.get(after.get("status", ""), after.get("status", ""))
+            summary = f'Auftrag „{ttitle(eid)}“: {st}'
+        elif action == "task.cancelled":
+            summary = f'Auftrag storniert: „{ttitle(eid)}“'
+        elif action == "task.restored":
+            summary = f'Auftrag wiederhergestellt: „{ttitle(eid)}“'
+        elif action == "vehicle.moved":
+            to_col = cname(after.get("column_id"))
+            from_col = cname(before.get("column_id")) if before.get("column_id") else None
+            v = vname(eid)
+            summary = (f'Fahrzeug {v}: {from_col} → {to_col}'
+                       if from_col and from_col != to_col
+                       else f'Fahrzeug {v} → {to_col}')
+        elif action == "vehicle.commander_set":
+            el_name = after.get("incident_leader_member")
+            mid = after.get("commander_member_id")
+            if el_name:
+                summary = f'Einsatzleiter gesetzt: {el_name}'
+            elif mid:
+                m = members.get(mid)
+                summary = f'Gruppenkommandant {vname(eid)}: {m.full_name if m else f"#{mid}"}'
+            else:
+                summary = f'Gruppenkommandant {vname(eid)} entfernt'
+        elif action == "vehicle.status_set":
+            summary = f'Fahrzeug {vname(eid)}: {after.get("unit_status", "")}'
+        elif action == "message.created":
+            summary = f'Meldung erstellt: „{after.get("title") or mtitle(eid)}“'
+        elif action == "message.status_set":
+            st = STATUS_DE.get(after.get("status", ""), after.get("status", ""))
+            summary = f'Meldung „{mtitle(eid)}“: {st}'
+        elif action == "message.assigned":
+            vid = after.get("vehicle_id")
+            summary = f'Meldung „{mtitle(eid)}“ → {vname(vid) if vid else "—"}'
+        elif action == "message.moved":
+            summary = f'Meldung „{mtitle(eid)}“ verschoben'
+        elif action == "person.assigned":
+            vid = after.get("vehicle_id")
+            summary = f'Person → {vname(vid) if vid else "—"}'
+        elif action == "person.moved":
+            summary = 'Person: Fahrzeugzuweisung aufgehoben'
+        elif action == "column.created":
+            summary = f'Neue Sektion erstellt: „{after.get("title", f"#{eid}")}“'
+
+        actor = ""
+        if change.user_id:
+            u = users.get(change.user_id)
+            actor = u.display_name if u else f"Benutzer #{change.user_id}"
+        elif change.api_key_id:
+            actor = "API"
+
+        result.append({"ts": change.ts, "summary": summary, "actor": actor})
+
+    return result
+
+
 @router.get("/einsatz/{incident_id}/historie", response_class=HTMLResponse)
 async def incident_history(incident_id: int, request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
@@ -818,9 +961,10 @@ async def incident_history(incident_id: int, request: Request, db: Session = Dep
         return RedirectResponse("/login", status_code=302)
     incident = _incident_or_404(incident_id, db)
     from app.models.incident import IncidentChange
-    changes = db.query(IncidentChange).filter(
+    raw_changes = db.query(IncidentChange).filter(
         IncidentChange.incident_id == incident_id
     ).order_by(IncidentChange.ts.desc()).limit(500).all()
+    changes = _enrich_history(raw_changes, db, incident_id)
     return templates.TemplateResponse(request, "incident/history.html", {
         "user": user, "incident": incident, "changes": changes,
     })

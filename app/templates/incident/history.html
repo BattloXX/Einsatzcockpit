@@ -1,28 +1,85 @@
 {% extends "base.html" %}
-{% block title %}Historie – Einsatz #{{ incident.id }}{% endblock %}
+{% block title %}Historie – Einsatz {{ incident.alarm_type_code }} #{{ incident.id }}{% endblock %}
+
 {% block content %}
-<div class="page-header">
-  <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">← Board</a>
-  <h2>Änderungshistorie – Einsatz {{ incident.alarm_type_code }} #{{ incident.id }}</h2>
-</div>
-<div class="history-list">
-  {% for change in changes %}
-  <div class="history-entry">
-    <div class="history-entry__time">{{ (change.ts|local).strftime('%d.%m. %H:%M:%S') }}</div>
-    <div class="history-entry__action">
-      <span class="badge badge--action">{{ change.action }}</span>
-      <span class="history-entry__entity">{{ change.entity_type }} #{{ change.entity_id }}</span>
+<style>
+.history-page { max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; }
+
+.history-page .page-header {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 1.1rem 0 1.4rem;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  margin-bottom: 1.5rem;
+}
+.history-page .page-header h2 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+
+.history-timeline { display: flex; flex-direction: column; gap: 0; }
+
+.ht-entry {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 0 1rem;
+  padding: .55rem 0;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  align-items: start;
+}
+.ht-entry:last-child { border-bottom: none; }
+
+.ht-time {
+  color: rgba(255,255,255,.4);
+  font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+  padding-top: .15rem;
+  white-space: nowrap;
+}
+.ht-time__date { display: block; font-size: .7rem; }
+
+.ht-body { display: flex; flex-direction: column; gap: .1rem; }
+
+.ht-summary {
+  font-size: .9rem;
+  color: rgba(255,255,255,.88);
+  line-height: 1.4;
+}
+
+.ht-actor {
+  font-size: .74rem;
+  color: rgba(255,255,255,.35);
+}
+
+.history-empty {
+  text-align: center;
+  color: rgba(255,255,255,.3);
+  padding: 3rem 0;
+  font-size: .9rem;
+}
+</style>
+
+<div class="history-page">
+  <div class="page-header">
+    <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">← Board</a>
+    <h2>Änderungshistorie – Einsatz {{ incident.alarm_type_code }}</h2>
+  </div>
+
+  {% if changes %}
+  <div class="history-timeline">
+    {% for entry in changes %}
+    <div class="ht-entry">
+      <div class="ht-time">
+        <span class="ht-time__date">{{ (entry.ts|local).strftime('%d.%m.') }}</span>
+        {{ (entry.ts|local).strftime('%H:%M:%S') }}
+      </div>
+      <div class="ht-body">
+        <div class="ht-summary">{{ entry.summary }}</div>
+        {% if entry.actor %}
+        <div class="ht-actor">{{ entry.actor }}</div>
+        {% endif %}
+      </div>
     </div>
-    {% if change.before_json %}
-    <details class="history-entry__diff">
-      <summary>Änderung anzeigen</summary>
-      <pre class="code-block">Vorher: {{ change.before_json }}
-Nachher: {{ change.after_json }}</pre>
-    </details>
-    {% endif %}
+    {% endfor %}
   </div>
   {% else %}
-  <p class="text-muted">Keine Einträge.</p>
-  {% endfor %}
+  <p class="history-empty">Keine Einträge vorhanden.</p>
+  {% endif %}
 </div>
 {% endblock %}
