@@ -295,6 +295,15 @@ body.mobile-menu-open { overflow: hidden; }
 @media (hover: hover) { .card__camera { display: none; } }
 .form-select--status { font-size: .7rem !important; font-weight: 700; color: #fff !important;
                        border: none !important; border-radius: 4px; }
+/* Neue Meldungstypen */
+.status-meldung     { background: #c62828 !important; }
+.status-achtung     { background: #e65100 !important; }
+.status-hinweis     { background: #1565c0 !important; }
+.status-information { background: #00695c !important; }
+.status-erledigt    { background: #2e7d32 !important; }
+.status-storniert   { background: #ffffff !important; color: #111 !important;
+                      border: 1px solid #999 !important; }
+/* Legacy – falls alte DB-Werte noch gelesen werden */
 .status-open        { background: #c62828 !important; }
 .status-in_progress { background: #e65100 !important; }
 .status-done        { background: #2e7d32 !important; }

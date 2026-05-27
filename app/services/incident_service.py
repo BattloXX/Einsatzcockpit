@@ -530,15 +530,18 @@ def set_message_status(
     status: str,
     user_id: int | None = None,
 ) -> Message:
+    # Toleriere auch Legacy-Werte (open/in_progress/done/cancelled)
+    from app.models.incident import _TRAFFIC_LIGHT_LEGACY
+    status = _TRAFFIC_LIGHT_LEGACY.get(status, status)
     if status not in TRAFFIC_LIGHT_VALUES:
         raise ValueError(f"Ungültiger Status: {status}")
     before = {"status": message.status, "is_done": message.is_done, "is_cancelled": message.is_cancelled}
     message.status = status
-    if status == "done":
+    if status == "erledigt":
         message.is_done = True
         message.done_at = _now()
         message.is_cancelled = False
-    elif status == "cancelled":
+    elif status == "storniert":
         message.is_cancelled = True
         message.is_done = False
         message.done_at = None

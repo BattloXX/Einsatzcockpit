@@ -12,7 +12,9 @@ UNIT_STATUS_VALUES = [
     "Am Einsatzort",
     "Einsatzbereit",
 ]
-TRAFFIC_LIGHT_VALUES = ["open", "in_progress", "done", "cancelled"]
+TRAFFIC_LIGHT_VALUES = ["meldung", "achtung", "hinweis", "information", "erledigt", "storniert"]
+# Legacy-Werte (aus DB-Migration vorhanden, werden beim Lesen toleriert)
+_TRAFFIC_LIGHT_LEGACY = {"open": "meldung", "in_progress": "achtung", "done": "erledigt", "cancelled": "storniert"}
 PERSON_STATUS_VALUES = ["gefunden", "versorgt", "abtransportiert", "verstorben"]
 FIXED_COLUMN_TITLES = {
     "dispatched": "Disponierte Fahrzeuge",
@@ -296,7 +298,7 @@ class Message(Base):
     due_after_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
     due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     popup_shown: Mapped[bool] = mapped_column(Boolean, default=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="meldung")
     is_done: Mapped[bool] = mapped_column(Boolean, default=False)
     done_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)

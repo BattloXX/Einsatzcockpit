@@ -15,17 +15,19 @@
   <div class="detail-section">
     <div class="detail-section__title">STATUS</div>
     <form style="display:flex;gap:8px;align-items:center;">
-      {% set sl = msg.status if msg.status else 'open' %}
+      {% set sl = msg.status if msg.status else 'meldung' %}
       <select name="status" class="form-select form-select--status status-{{ sl }}"
               style="flex:1"
               hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel"
               hx-trigger="change"
               hx-swap="none"
               onchange="this.className='form-select form-select--status status-'+this.value">
-        <option value="open" {% if sl=='open' %}selected{% endif %}>🔴 Offen</option>
-        <option value="in_progress" {% if sl=='in_progress' %}selected{% endif %}>🟡 In Arbeit</option>
-        <option value="done" {% if sl=='done' %}selected{% endif %}>🟢 Erledigt</option>
-        <option value="cancelled" {% if sl=='cancelled' %}selected{% endif %}>⚪ Storniert</option>
+        <option value="meldung"     {% if sl=='meldung'     or sl=='open'        %}selected{% endif %}>🔴 Meldung</option>
+        <option value="achtung"     {% if sl=='achtung'     or sl=='in_progress' %}selected{% endif %}>⚠️ Achtung</option>
+        <option value="hinweis"     {% if sl=='hinweis'     %}selected{% endif %}>💡 Hinweis</option>
+        <option value="information" {% if sl=='information' %}selected{% endif %}>ℹ️ Information</option>
+        <option value="erledigt"    {% if sl=='erledigt'    or sl=='done'        %}selected{% endif %}>✅ Erledigt</option>
+        <option value="storniert"   {% if sl=='storniert'   or sl=='cancelled'   %}selected{% endif %}>⚪ Storniert</option>
       </select>
     </form>
   </div>

@@ -643,11 +643,16 @@ async def create_section(
 async def create_message(
     incident_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
+    status: str = Form("meldung"),
     due_after_min: int = Form(0),
     vehicle_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
+    from app.models.incident import TRAFFIC_LIGHT_VALUES, _TRAFFIC_LIGHT_LEGACY
+    status = _TRAFFIC_LIGHT_LEGACY.get(status, status)
+    if status not in TRAFFIC_LIGHT_VALUES:
+        status = "meldung"
     incident = _incident_or_404(incident_id, db)
     due_sec = due_after_min * 60 if due_after_min > 0 else None
     due_at = None
@@ -656,6 +661,7 @@ async def create_message(
         due_at = incident.started_at + timedelta(seconds=due_sec)
     msg = Message(
         incident_id=incident_id, title=title, detail=detail or None,
+        status=status,
         due_after_sec=due_sec, due_at=due_at,
         vehicle_id=vehicle_id or None,
     )
@@ -888,11 +894,16 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
         return m.title if m else f"Meldung #{mid}"
 
     STATUS_DE = {
-        "done": "Abgeschlossen",
-        "cancelled": "Storniert",
-        "open": "Offen",
-        "yellow": "In Bearbeitung",
-        "red": "Dringend",
+        "meldung":     "Meldung (aktiv)",
+        "achtung":     "Achtung",
+        "hinweis":     "Hinweis",
+        "information": "Information",
+        "erledigt":    "Erledigt",
+        "storniert":   "Storniert",
+        # Legacy
+        "done": "Erledigt", "cancelled": "Storniert",
+        "open": "Meldung (aktiv)", "in_progress": "Achtung",
+        "yellow": "In Bearbeitung", "red": "Dringend",
     }
 
     result = []

@@ -353,6 +353,16 @@
         </div>
         {% endif %}
         <div class="form-group">
+          <label class="form-label" style="font-size:.82rem;">Typ</label>
+          <select name="status" class="form-select form-select--status status-meldung"
+                  onchange="this.className='form-select form-select--status status-'+this.value">
+            <option value="meldung">🔴 Meldung</option>
+            <option value="achtung">⚠️ Achtung</option>
+            <option value="hinweis">💡 Hinweis</option>
+            <option value="information">ℹ️ Information</option>
+          </select>
+        </div>
+        <div class="form-group">
           <input type="text" name="title" placeholder="Meldung..." class="form-input" required autocomplete="off">
         </div>
         <div class="form-group">
