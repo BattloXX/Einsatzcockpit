@@ -926,33 +926,33 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
         summary = action
 
         if action == "task.created":
-            summary = f'Auftrag erstellt: „{after.get("title") or ttitle(eid)}“'
+            summary = f'Auftrag erstellt: "{after.get("title") or ttitle(eid)}"'
         elif action == "task.updated":
             old_t = before.get("title", "")
             new_t = after.get("title", "")
             if old_t and new_t and old_t != new_t:
-                summary = f'Auftrag umbenannt: „{old_t}“ → „{new_t}“'
+                summary = f'Auftrag umbenannt: "{old_t}" -> "{new_t}"'
             else:
-                summary = f'Auftrag bearbeitet: „{new_t or ttitle(eid)}“'
+                summary = f'Auftrag bearbeitet: "{new_t or ttitle(eid)}"'
         elif action == "task.moved":
             to_col = cname(after.get("column_id"))
             from_col = cname(before.get("column_id")) if before.get("column_id") else None
             t = ttitle(eid)
-            summary = (f'Auftrag „{t}“: {from_col} → {to_col}'
+            summary = (f'Auftrag "{t}": {from_col} -> {to_col}'
                        if from_col and from_col != to_col
-                       else f'Auftrag „{t}“ verschoben nach {to_col}')
+                       else f'Auftrag "{t}" verschoben nach {to_col}')
         elif action == "task.assigned":
             vid = after.get("vehicle_id")
             t = ttitle(eid)
-            summary = (f'Auftrag „{t}“ → {vname(vid)}'
-                       if vid else f'Auftrag „{t}“: Fahrzeugzuweisung entfernt')
+            summary = (f'Auftrag "{t}" -> {vname(vid)}'
+                       if vid else f'Auftrag "{t}": Fahrzeugzuweisung entfernt')
         elif action == "task.status_set":
             st = STATUS_DE.get(after.get("status", ""), after.get("status", ""))
-            summary = f'Auftrag „{ttitle(eid)}“: {st}'
+            summary = f'Auftrag "{ttitle(eid)}": {st}'
         elif action == "task.cancelled":
-            summary = f'Auftrag storniert: „{ttitle(eid)}“'
+            summary = f'Auftrag storniert: "{ttitle(eid)}"'
         elif action == "task.restored":
-            summary = f'Auftrag wiederhergestellt: „{ttitle(eid)}“'
+            summary = f'Auftrag wiederhergestellt: "{ttitle(eid)}"'
         elif action == "vehicle.moved":
             to_col = cname(after.get("column_id"))
             from_col = cname(before.get("column_id")) if before.get("column_id") else None
@@ -973,36 +973,36 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
         elif action == "vehicle.status_set":
             summary = f'Fahrzeug {vname(eid)}: {after.get("unit_status", "")}'
         elif action == "message.created":
-            summary = f'Meldung erstellt: „{after.get("title") or mtitle(eid)}“'
+            summary = f'Meldung erstellt: "{after.get("title") or mtitle(eid)}"'
         elif action == "message.status_set":
             st = STATUS_DE.get(after.get("status", ""), after.get("status", ""))
-            summary = f'Meldung „{mtitle(eid)}“: {st}'
+            summary = f'Meldung "{mtitle(eid)}": {st}'
         elif action == "message.assigned":
             vid = after.get("vehicle_id")
-            summary = f'Meldung „{mtitle(eid)}“ → {vname(vid) if vid else "—"}'
+            summary = f'Meldung "{mtitle(eid)}" -> {vname(vid) if vid else "-"}'
         elif action == "message.moved":
-            summary = f'Meldung „{mtitle(eid)}“ verschoben'
+            summary = f'Meldung "{mtitle(eid)}" verschoben'
         elif action == "person.assigned":
             vid = after.get("vehicle_id")
             summary = f'Person → {vname(vid) if vid else "—"}'
         elif action == "person.moved":
             summary = 'Person: Fahrzeugzuweisung aufgehoben'
-        elif action == “column.created”:
-            summary = f'Neue Sektion erstellt: „{after.get(“title”, f”#{eid}”)}”'
-        elif action == “troop.meldung”:
-            txt = after.get(“text”) or “”
-            summary = f'AS-Trupp Lagemeldung: „{txt}”' if txt else f'AS-Trupp #{eid}: Lagemeldung abgesetzt'
-        elif action == “troop.created”:
-            summary = f'AS-Trupp angelegt: „{after.get(“name”, f”#{eid}”)}”'
-        elif action == “troop.started”:
-            summary = f'AS-Trupp eingesetzt: „{after.get(“name”, f”#{eid}”)}”'
-        elif action.startswith(“troop.warn_acked.”):
-            kind_map = {“one_third”: “1/3-Lagemeldung”, “max_time”: “Max-Einsatzzeit”, “withdraw”: “Rückzugsdruck”}
-            kind = action.split(“.”)[-1]
+        elif action == "column.created":
+            summary = f'Neue Sektion erstellt: "{after.get("title", f"#{eid}")}"'
+        elif action == "troop.meldung":
+            txt = after.get("text") or ""
+            summary = f'AS-Trupp Lagemeldung: "{txt}"' if txt else f'AS-Trupp #{eid}: Lagemeldung abgesetzt'
+        elif action == "troop.created":
+            summary = f'AS-Trupp angelegt: "{after.get("name", f"#{eid}")}"'
+        elif action == "troop.started":
+            summary = f'AS-Trupp eingesetzt: "{after.get("name", f"#{eid}")}"'
+        elif action.startswith("troop.warn_acked."):
+            kind_map = {"one_third": "1/3-Lagemeldung", "max_time": "Max-Einsatzzeit", "withdraw": "Rückzugsdruck"}
+            kind = action.split(".")[-1]
             summary = f'AS-Warnung quittiert: {kind_map.get(kind, kind)}'
-        elif action == “troop.status”:
-            status_map = {“im_einsatz”: “Im Einsatz”, “rueckzug”: “Rückzug”, “zurueck”: “Zurück”, “erholt”: “Erholt”}
-            summary = f'AS-Trupp Status: {status_map.get(after.get(“status”, “”), after.get(“status”, “”))}'
+        elif action == "troop.status":
+            status_map = {"im_einsatz": "Im Einsatz", "rueckzug": "Rückzug", "zurueck": "Zurück", "erholt": "Erholt"}
+            summary = f'AS-Trupp Status: {status_map.get(after.get("status", ""), after.get("status", ""))}'
 
         actor = ""
         if change.user_id:
