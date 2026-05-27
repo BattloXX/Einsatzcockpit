@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard · {{ incident.alarm_type_code }} – {{ incident.address_street or ('Einsatz #' ~ incident.id) }}</title>
   <style>
     /* ── Reset & Tokens ─────────────────────────────────────────────────────── */
@@ -29,15 +29,20 @@
       --font-mono: 'Consolas', 'JetBrains Mono', monospace;
     }
 
+    /* Skalierbare Basisschrift – wächst mit der Viewport-Breite mit.
+       Bei 1920px → ~15px, bei 1366px → ~10.7px, bei 2560px → 20px (max) */
+    html {
+      font-size: clamp(10px, 0.781vw, 20px);
+    }
+
     html, body {
-      width: 1920px;
-      min-width: 1920px;
-      height: 1080px;
+      width: 100%;
+      height: 100dvh;
       overflow: hidden;
       background: var(--bg);
       color: var(--text);
       font-family: var(--font-ui);
-      font-size: 15px;
+      font-size: 1rem;
       line-height: 1.4;
     }
 
@@ -45,14 +50,14 @@
     .shell {
       display: flex;
       flex-direction: column;
-      height: 1080px;
+      height: 100dvh;
     }
 
     /* ── HEADER ─────────────────────────────────────────────────────────────── */
     {% set ac_pre = (incident.alarm_type_code or '')[:1]|lower %}
     .hdr {
       flex-shrink: 0;
-      height: 110px;
+      height: clamp(5.5rem, 10.2vh, 9rem);
       display: flex;
       align-items: stretch;
       border-bottom: 1px solid rgba(255,255,255,.1);
@@ -70,8 +75,8 @@
       flex: 1;
       display: flex;
       align-items: center;
-      gap: 20px;
-      padding: 0 24px;
+      gap: 1.33rem;
+      padding: 0 1.6rem;
       min-width: 0;
     }
 
@@ -81,9 +86,9 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      width: 84px;
-      height: 76px;
-      border-radius: 8px;
+      width: 5.6rem;
+      height: 5rem;
+      border-radius: .5rem;
       border: 2px solid rgba(255,255,255,.25);
       background: rgba(0,0,0,.25);
       font-family: var(--font-mono);
@@ -95,7 +100,7 @@
 
     .hdr-vsep {
       width: 1px;
-      height: 60px;
+      height: 4rem;
       background: rgba(255,255,255,.18);
       flex-shrink: 0;
     }
@@ -136,30 +141,6 @@
     }
     .hdr-incident__address::before { content: '📍 '; }
 
-    /* Lage-Ticker inline im Header */
-    .hdr-lage {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(146,100,0,.35);
-      border: 1px solid rgba(245,158,11,.4);
-      border-radius: 6px;
-      padding: 6px 14px;
-      max-width: 340px;
-      min-width: 180px;
-      overflow: hidden;
-    }
-    .hdr-lage__icon { font-size: 1rem; flex-shrink: 0; }
-    .hdr-lage__text {
-      font-size: .88rem;
-      color: #fde68a;
-      font-weight: 500;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      transition: opacity .35s ease;
-    }
 
     /* Right side: EL + Timer + Clock */
     .hdr-right {
@@ -172,7 +153,7 @@
       display: flex;
       flex-direction: column;
       justify-content: center;
-      padding: 0 22px;
+      padding: 0 1.47rem;
       border-right: 1px solid rgba(255,255,255,.12);
     }
     .hdr-block:last-child { border-right: none; }
@@ -233,13 +214,13 @@
     /* ── LAGE BAR (separate strip below header) ─────────────────────────────── */
     .lage-bar {
       flex-shrink: 0;
-      height: 40px;
+      height: clamp(2rem, 3.7vh, 3.2rem);
       background: rgba(120,53,15,.5);
       border-bottom: 1px solid rgba(217,119,6,.35);
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 0 22px;
+      gap: .67rem;
+      padding: 0 1.47rem;
     }
     .lage-bar__icon { font-size: 1rem; flex-shrink: 0; }
     .lage-bar__label {
@@ -268,8 +249,8 @@
       min-height: 0;
       display: grid;
       grid-template-columns: 2.2fr 1.3fr 1.5fr;
-      gap: 10px;
-      padding: 10px;
+      gap: .67rem;
+      padding: .67rem;
     }
 
     /* ── PANELS ─────────────────────────────────────────────────────────────── */
@@ -286,7 +267,7 @@
     .panel-hd {
       flex-shrink: 0;
       background: var(--surface-high);
-      padding: 10px 16px;
+      padding: .67rem 1.07rem;
       border-bottom: 1px solid var(--border);
     }
     .panel-hd__top {
@@ -343,13 +324,13 @@
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
-      padding: 8px;
+      padding: .53rem;
     }
     .panel-body::-webkit-scrollbar { width: 3px; }
     .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
     /* ── VEHICLES ───────────────────────────────────────────────────────────── */
-    .vehicles-col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+    .vehicles-col { display: flex; flex-direction: column; gap: .67rem; min-height: 0; }
 
     .section-label {
       font-family: var(--font-mono);
@@ -369,19 +350,19 @@
 
     .vehicle-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 7px;
-      padding: 0 2px 8px;
+      grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+      gap: .47rem;
+      padding: 0 .13rem .53rem;
     }
     .v-card {
       background: var(--surface-highest);
       border: 1px solid var(--border-soft);
       border-left: 4px solid transparent;
-      border-radius: 6px;
-      padding: 10px 12px;
+      border-radius: .4rem;
+      padding: .67rem .8rem;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: .2rem;
     }
     .v-card--active   { border-left-color: var(--green); }
     .v-card--dispatch { border-left-color: var(--amber); }
@@ -389,8 +370,8 @@
 
     .v-code { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 700; color: #fff; line-height: 1.1; }
     .v-name { font-size: .82rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-    .v-gk   { font-size: .88rem; font-weight: 500; color: var(--text); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .v-nogk { font-size: .8rem; color: var(--text-dim); font-style: italic; margin-top: 5px; }
+    .v-gk   { font-size: .88rem; font-weight: 500; color: var(--text); margin-top: .33rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .v-nogk { font-size: .8rem; color: var(--text-dim); font-style: italic; margin-top: .33rem; }
 
     .empty-panel {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -403,11 +384,11 @@
     .item-list { display: flex; flex-direction: column; gap: 5px; }
 
     .item-row {
-      display: flex; align-items: flex-start; gap: 10px;
+      display: flex; align-items: flex-start; gap: .67rem;
       background: var(--surface-highest);
       border: 1px solid var(--border-soft);
-      border-radius: 6px;
-      padding: 10px 12px;
+      border-radius: .4rem;
+      padding: .67rem .8rem;
     }
     .item-row--done { opacity: .42; }
 
@@ -459,7 +440,7 @@
     /* ── FOOTER (persons strip) ─────────────────────────────────────────────── */
     .footer {
       flex-shrink: 0;
-      height: 96px;
+      height: clamp(5rem, 8.9vh, 8rem);
       background: var(--surface-high);
       border-top: 1px solid var(--border);
       display: grid;
@@ -469,8 +450,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 18px;
-      padding: 0 20px;
+      gap: 1.2rem;
+      padding: 0 1.33rem;
       border-right: 1px solid var(--border-soft);
       position: relative;
       overflow: hidden;
@@ -500,6 +481,12 @@
   <header class="hdr">
     <div class="hdr-left">
 
+      <!-- Logo -->
+      <img src="/static/img/logo-trans.png" alt="einsatzleiter.cloud"
+           style="height:2.8rem; width:auto; flex-shrink:0; opacity:.9;">
+
+      <div class="hdr-vsep"></div>
+
       <!-- Alarm badge -->
       <div class="alarm-badge">{{ incident.alarm_type_code or '?' }}</div>
 
@@ -512,7 +499,6 @@
         {% endif %}
         <div class="hdr-incident__label">Einsatzgrund &amp; Ort</div>
         <div class="hdr-incident__title">
-          {% if incident.nummer %}<span style="opacity:.55;font-size:1rem;">#{{ incident.nummer }} &nbsp;</span>{% endif %}
           {% if incident.reason %}{{ incident.reason }}
           {% elif incident.report_text %}{{ incident.report_text[:130] }}
           {% else %}Einsatz {{ incident.id }}{% endif %}
@@ -524,15 +510,6 @@
         {% endif %}
       </div>
 
-      <!-- Lage-Ticker (inline, if hints exist) -->
-      {% if lage_hints %}
-      <div class="hdr-vsep"></div>
-      <div class="hdr-lage">
-        <span class="hdr-lage__icon">ℹ</span>
-        <span class="hdr-lage__text" id="headerTicker">{{ lage_hints[0].text }}</span>
-      </div>
-      {% endif %}
-
     </div>
 
     <!-- Right: EL + Timer + Clock -->
@@ -540,9 +517,7 @@
 
       <div class="hdr-block">
         <div class="hdr-block__label">Einsatzleiter</div>
-        {% if incident.leader %}
-          <div class="hdr-block__value">{{ incident.leader.display_name }}</div>
-        {% elif incident.leader_member %}
+        {% if incident.leader_member %}
           <div class="hdr-block__value">{{ incident.leader_member.full_name }}</div>
         {% else %}
           <div class="hdr-block__value" style="color:#fbbf24;">nicht zugewiesen</div>
@@ -553,12 +528,12 @@
         </div>
       </div>
 
-      <div class="hdr-block" style="text-align:center; min-width:175px;">
+      <div class="hdr-block" style="text-align:center; min-width:11.5rem;">
         <div class="hdr-block__label" style="text-align:center;">Einsatzdauer</div>
         <div class="hdr-block__value--timer" id="elapsedTimer">00:00:00</div>
       </div>
 
-      <div class="hdr-block" style="text-align:right; min-width:185px;">
+      <div class="hdr-block" style="text-align:right; min-width:12rem;">
         <div class="hdr-block__sub" id="clockDate" style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:2px;">–</div>
         <div class="hdr-block__value--clock" id="clockTime">–</div>
         <div class="hdr-block__sub">Upd. in <span id="refreshCountdown">30</span>s</div>
@@ -621,7 +596,7 @@
 
       <!-- Disponiert + Weitere -->
       {% if dispatched_vehicles or other_vehicles %}
-      <div class="panel" style="max-height: 37%; min-height: 0;">
+      <div class="panel" style="max-height: 38vh; min-height: 0;">
         <div class="panel-hd">
           <div class="panel-hd__top">
             <div class="panel-hd__title">
@@ -922,14 +897,14 @@
   const hints = {{ lage_hints|map(attribute="text")|list|tojson if lage_hints else '[]' }};
   if (hints.length > 1) {
     let idx = 0;
-    const targets = ['lageTicker', 'headerTicker'].map(id => document.getElementById(id)).filter(Boolean);
-    setInterval(() => {
-      idx = (idx + 1) % hints.length;
-      targets.forEach(el => {
-        el.style.opacity = '0';
-        setTimeout(() => { el.textContent = hints[idx]; el.style.opacity = '1'; }, 380);
-      });
-    }, 8000);
+    const ticker = document.getElementById('lageTicker');
+    if (ticker) {
+      setInterval(() => {
+        idx = (idx + 1) % hints.length;
+        ticker.style.opacity = '0';
+        setTimeout(() => { ticker.textContent = hints[idx]; ticker.style.opacity = '1'; }, 380);
+      }, 8000);
+    }
   }
 </script>
 </body>
