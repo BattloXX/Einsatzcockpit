@@ -46,17 +46,23 @@ def generate_api_key() -> str:
     return "fwwo_" + secrets.token_urlsafe(32)
 
 
-def sign_session(user_id: int, *, qr: bool = False) -> str:
-    payload = {"u": user_id, "qr": 1} if qr else user_id
+def sign_session(user_id: int, *, qr: bool = False, incident_id: int | None = None) -> str:
+    if qr:
+        payload: dict | int = {"u": user_id, "qr": 1}
+        if incident_id is not None:
+            payload["i"] = incident_id  # type: ignore[index]
+    else:
+        payload = user_id
     return _signer.dumps(payload)
 
 
-def unsign_session(token: str) -> tuple[int, bool] | None:
+def unsign_session(token: str) -> tuple[int, bool, int | None] | None:
+    """Returns (user_id, is_qr, qr_incident_id) or None."""
     try:
         data = _signer.loads(token, max_age=settings.SESSION_MAX_AGE_SECONDS)
         if isinstance(data, int):
-            return (data, False)
-        return (data["u"], bool(data.get("qr")))
+            return (data, False, None)
+        return (data["u"], bool(data.get("qr")), data.get("i"))
     except (BadSignature, SignatureExpired):
         return None
 

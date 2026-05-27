@@ -34,7 +34,7 @@ def _resolve_user(websocket: WebSocket) -> User | None:
     session_data = unsign_session(token)
     if not session_data:
         return None
-    user_id, _ = session_data
+    user_id, *_ = session_data
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712

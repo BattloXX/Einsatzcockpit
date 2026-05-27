@@ -153,7 +153,7 @@ async def qr_login(request: Request, token: str, incident_id: int, db: Session =
                 ip=request.client.host if request.client else None)
     db.commit()
 
-    session_token = sign_session(user.id, qr=True)
+    session_token = sign_session(user.id, qr=True, incident_id=incident_id)
     redirect = RedirectResponse(f"/einsatz/{incident_id}", status_code=302)
     _set_session_cookie(redirect, session_token)
     return redirect

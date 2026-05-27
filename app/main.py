@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings, validate_startup_secrets
 from app.core.security import unsign_session
 from app.db import SessionLocal
+from app.models.incident import Incident, IncidentToken
 from app.models.user import Role, User
 from app.routers import (
     api_v1,
@@ -158,13 +159,26 @@ async def session_middleware(request: Request, call_next):
     if token:
         session_data = unsign_session(token)
         if session_data:
-            user_id, is_qr = session_data
+            user_id, is_qr, qr_incident_id = session_data
             db = SessionLocal()
             try:
                 user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
                 if user and is_qr:
-                    recorder = db.query(Role).filter(Role.code == "recorder").first()
-                    user = _QrUser(user, recorder)
+                    # QR sessions are only valid while incident is open and token not revoked.
+                    if qr_incident_id is None:
+                        user = None  # Old session without incident_id → force re-login
+                    else:
+                        db_token = db.query(IncidentToken).filter(
+                            IncidentToken.incident_id == qr_incident_id,
+                            IncidentToken.issued_by_user_id == user_id,
+                            IncidentToken.revoked_at.is_(None),
+                        ).first()
+                        inc = db.get(Incident, qr_incident_id) if db_token else None
+                        if not db_token or not inc or inc.status != "active":
+                            user = None  # Incident closed or token revoked → logged out
+                        else:
+                            recorder = db.query(Role).filter(Role.code == "recorder").first()
+                            user = _QrUser(user, recorder)
                 request.state.user = user
             finally:
                 db.close()
