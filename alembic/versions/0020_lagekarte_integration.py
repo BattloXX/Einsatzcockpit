@@ -15,18 +15,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # --- incident: lat, lng, lagekarte_shash_url ---
-    with op.batch_alter_table("incident", recreate="auto") as batch:
-        batch.add_column(sa.Column("lat", sa.Float(), nullable=True))
-        batch.add_column(sa.Column("lng", sa.Float(), nullable=True))
-        batch.add_column(sa.Column("lagekarte_shash_url", sa.String(500), nullable=True))
+    # Direkte ADD COLUMN Operationen — funktioniert in MySQL/MariaDB und SQLite
+    # (SQLite unterstützt ALTER TABLE ADD COLUMN für nullable Spalten ohne Default)
+    op.add_column("incident", sa.Column("lat", sa.Float(), nullable=True))
+    op.add_column("incident", sa.Column("lng", sa.Float(), nullable=True))
+    op.add_column("incident", sa.Column("lagekarte_shash_url", sa.String(500), nullable=True))
 
-    # --- fire_dept: fallback_lat, fallback_lng ---
-    with op.batch_alter_table("fire_dept", recreate="auto") as batch:
-        batch.add_column(sa.Column("fallback_lat", sa.Float(), nullable=True))
-        batch.add_column(sa.Column("fallback_lng", sa.Float(), nullable=True))
+    op.add_column("fire_dept", sa.Column("fallback_lat", sa.Float(), nullable=True))
+    op.add_column("fire_dept", sa.Column("fallback_lng", sa.Float(), nullable=True))
 
-    # --- lagekarte_token: neue Tabelle ---
+    # lagekarte_token: explizit InnoDB damit FKs in MariaDB funktionieren
     op.create_table(
         "lagekarte_token",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
@@ -44,17 +42,17 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["created_by_user_id"], ["user.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("token_hash"),
+        mysql_engine="InnoDB",
+        mysql_charset="utf8mb4",
     )
 
 
 def downgrade() -> None:
     op.drop_table("lagekarte_token")
 
-    with op.batch_alter_table("fire_dept", recreate="auto") as batch:
-        batch.drop_column("fallback_lng")
-        batch.drop_column("fallback_lat")
+    op.drop_column("fire_dept", "fallback_lng")
+    op.drop_column("fire_dept", "fallback_lat")
 
-    with op.batch_alter_table("incident", recreate="auto") as batch:
-        batch.drop_column("lagekarte_shash_url")
-        batch.drop_column("lng")
-        batch.drop_column("lat")
+    op.drop_column("incident", "lagekarte_shash_url")
+    op.drop_column("incident", "lng")
+    op.drop_column("incident", "lat")
