@@ -173,7 +173,7 @@
   <div class="gallery-grid">
     {% set lb = namespace(i=0) %}
     {% for m in items %}
-    <div class="gallery-card"
+    <div class="gallery-card" style="position:relative;"
       {% if m.kind == 'image' %}
         @click="show({{ lb.i }})" {% set lb.i = lb.i + 1 %}
       {% elif m.kind == 'video' %}
@@ -227,6 +227,16 @@
         </div>
         {% endif %}
       </div>
+      {% if can_delete %}
+      <form method="post" action="/medien/datei/{{ m.id }}/loeschen"
+            style="position:absolute;top:6px;right:6px;margin:0;"
+            onsubmit="event.stopPropagation();return confirm('Datei unwiderruflich löschen?')">
+        <button type="submit"
+                onclick="event.stopPropagation()"
+                style="background:rgba(0,0,0,0.72);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:15px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;"
+                title="Datei löschen">×</button>
+      </form>
+      {% endif %}
     </div>
     {% endfor %}
   </div>

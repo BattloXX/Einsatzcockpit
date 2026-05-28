@@ -1,14 +1,33 @@
 """PDF generation via WeasyPrint."""
+import base64
 import io
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 from weasyprint import HTML
 
+from app.config import settings
 from app.core.templating import templates
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept
+
+
+def _media_b64_uri(media) -> str:
+    """Returns a base64 data URI for an image media object, or '' if unavailable."""
+    if media.kind != "image":
+        return ""
+    path = Path(settings.MEDIA_STORAGE_DIR) / media.storage_path
+    if not path.exists():
+        return ""
+    data = path.read_bytes()
+    return f"data:{media.mime_type};base64,{base64.b64encode(data).decode()}"
+
+
+def _media_file_exists(media) -> bool:
+    path = Path(settings.MEDIA_STORAGE_DIR) / media.storage_path
+    return path.exists()
 
 
 def _resolve_primary_org(incident: Incident) -> FireDept | None:
@@ -32,6 +51,8 @@ def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
         now=datetime.now(UTC),
         base_url=base_url,
         user=pseudo_user,
+        media_b64=_media_b64_uri,
+        media_exists=_media_file_exists,
     )
     buf = io.BytesIO()
     HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)

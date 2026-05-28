@@ -42,6 +42,11 @@
   .status-ok { color: #18a957; } .status-warn { color: #f2b02e; } .status-err { color: #d83030; }
   .done { text-decoration: line-through; color: #888; }
   .pdf-footer { position: running(pdf-footer); }
+  .media-row td { padding: 4pt 6pt 8pt; background: #fafafa; border-bottom: 1px solid #e0e0e0; }
+  .media-thumbs { display: flex; flex-wrap: wrap; gap: 6pt; margin: 3pt 0 0; }
+  .media-thumbs img { height: 80pt; width: auto; max-width: 120pt; object-fit: contain; border: 1px solid #ddd; border-radius: 3pt; }
+  .media-link { font-size: 8pt; color: #555; }
+  .media-link a { color: #b71921; }
 </style>
 </head>
 <body>
@@ -97,13 +102,83 @@
   <tr><th>Auftrag</th><th>Fahrzeug</th><th>Status</th><th>Erledigt</th></tr>
   {% for t in incident.tasks %}
   <tr>
-    <td class="{% if t.is_done %}done{% endif %}">{{ t.title }}</td>
+    <td class="{% if t.is_done %}done{% endif %}">{{ t.title }}{% if t.detail %}<br><span style="font-size:8pt;color:#555;">{{ t.detail }}</span>{% endif %}</td>
     <td>{{ t.vehicle.vehicle_master.code if t.vehicle else '–' }}</td>
     <td>{% if t.is_done %}Erledigt{% elif t.is_cancelled %}Abgebrochen{% else %}Offen{% endif %}</td>
     <td>{{ t.done_at|local_time if t.done_at else '–' }}</td>
   </tr>
+  {% if t.media %}
+  <tr class="media-row">
+    <td colspan="4">
+      <div class="media-thumbs">
+        {% for m in t.media %}
+        {% if m.kind == 'image' %}
+          {% set uri = media_b64(m) %}
+          {% if uri %}
+          <img src="{{ uri }}" alt="{{ m.original_filename }}">
+          {% else %}
+          <span style="font-size:8pt;color:#aaa;">Bild nicht mehr verfügbar ({{ m.original_filename }})</span>
+          {% endif %}
+        {% else %}
+        <div class="media-link">
+          {% if m.kind == 'pdf' %}📄{% else %}🎬{% endif %}
+          {% if media_exists(m) %}
+          <a href="{{ (base_url or '').rstrip('/') }}/medien/datei/{{ m.id }}">{{ m.original_filename }}</a>
+          <span style="color:#999;">(Login erforderlich)</span>
+          {% else %}
+          {{ m.original_filename }} <span style="color:#aaa;">(nicht mehr verfügbar)</span>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </td>
+  </tr>
+  {% endif %}
   {% endfor %}
 </table>
+
+{% if incident.messages %}
+<h2>Meldungen</h2>
+<table>
+  <tr><th>Meldung</th><th>Status</th><th>Zeitpunkt</th></tr>
+  {% for msg in incident.messages %}
+  <tr>
+    <td class="{% if msg.is_done %}done{% endif %}">{{ msg.title }}{% if msg.detail %}<br><span style="font-size:8pt;color:#555;">{{ msg.detail }}</span>{% endif %}</td>
+    <td>{{ msg.status }}</td>
+    <td>{{ msg.created_at|local_time }}</td>
+  </tr>
+  {% if msg.media %}
+  <tr class="media-row">
+    <td colspan="3">
+      <div class="media-thumbs">
+        {% for m in msg.media %}
+        {% if m.kind == 'image' %}
+          {% set uri = media_b64(m) %}
+          {% if uri %}
+          <img src="{{ uri }}" alt="{{ m.original_filename }}">
+          {% else %}
+          <span style="font-size:8pt;color:#aaa;">Bild nicht mehr verfügbar ({{ m.original_filename }})</span>
+          {% endif %}
+        {% else %}
+        <div class="media-link">
+          {% if m.kind == 'pdf' %}📄{% else %}🎬{% endif %}
+          {% if media_exists(m) %}
+          <a href="{{ (base_url or '').rstrip('/') }}/medien/meldung/datei/{{ m.id }}">{{ m.original_filename }}</a>
+          <span style="color:#999;">(Login erforderlich)</span>
+          {% else %}
+          {{ m.original_filename }} <span style="color:#aaa;">(nicht mehr verfügbar)</span>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+</table>
+{% endif %}
 
 {% if incident.rescued_persons %}
 <h2>Gerettete Personen</h2>

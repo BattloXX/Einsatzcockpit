@@ -14,7 +14,7 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, MessageMedia, PersonMedia, Task, TaskMedia
 from app.models.user import User
-from app.services.media_service import absolute_path, absolute_thumb_path
+from app.services.media_service import absolute_path, absolute_thumb_path, delete_media
 
 router = APIRouter()
 
@@ -94,6 +94,7 @@ async def media_gallery(
             for u in db.query(User).filter(User.id.in_(uploader_ids)).all()
         }
 
+    can_delete = has_role(user, "system_admin", "admin", "incident_leader")
     return templates.TemplateResponse(request, "media/gallery.html", {
         "user": user,
         "items": items,
@@ -105,6 +106,7 @@ async def media_gallery(
         "filter_von": von or "",
         "filter_bis": bis or "",
         "filter_kind": kind or "",
+        "can_delete": can_delete,
     })
 
 
@@ -193,3 +195,22 @@ async def serve_person_media_thumb(media_id: int, request: Request, db: Session 
     if not user:
         return Response(status_code=401)
     return _serve_thumb(user, db.get(PersonMedia, media_id), db)
+
+
+@router.post("/medien/datei/{media_id}/loeschen")
+async def gallery_delete_task_media(media_id: int, request: Request, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response(status_code=401)
+    if not has_role(user, "system_admin", "admin", "incident_leader"):
+        return Response(status_code=403)
+    media = db.get(TaskMedia, media_id)
+    if not media:
+        return Response(status_code=404)
+    incident = db.get(Incident, media.incident_id)
+    if not incident or not _user_may_access_incident(user, incident):
+        return Response(status_code=403)
+    delete_media(media, db)
+    db.commit()
+    referer = request.headers.get("referer", "/medien")
+    return RedirectResponse(referer, status_code=303)
