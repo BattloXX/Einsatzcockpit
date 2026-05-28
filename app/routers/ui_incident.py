@@ -1178,3 +1178,113 @@ async def move_card_endpoint(
     db.commit()
     await manager.broadcast(incident_id, {"type": "card_moved", "reload_board": True})
     return Response(status_code=204)
+
+
+# ── Adresse & Koordinaten bearbeiten ─────────────────────────────────────────
+
+@router.get("/einsatz/{incident_id}/adresse/bearbeiten", response_class=HTMLResponse)
+async def address_edit_modal(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Rendert das Adresse-Edit-Modal-Fragment für HTMX."""
+    user = request.state.user
+    incident = _incident_or_404(incident_id, db)
+    from app.core.permissions import can_access_incident
+    if not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+    org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
+    return templates.TemplateResponse(request, "incident/_address_modal.html", {
+        "user": user, "incident": incident, "org": org,
+    })
+
+
+@router.post("/einsatz/{incident_id}/adresse/geocode")
+async def address_geocode(
+    incident_id: int, request: Request,
+    address_street: str = Form(""),
+    address_no: str = Form(""),
+    address_city: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Geocodiert die angegebene Adresse via Nominatim und gibt lat/lng als JSON zurück."""
+    from fastapi.responses import JSONResponse as _JSONResponse
+    from app.services.geocoding import geocode_address
+    result = await geocode_address(
+        address_street.strip() or None,
+        address_no.strip() or None,
+        address_city.strip() or None,
+    )
+    if result is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Adresse konnte nicht gefunden werden")
+    return _JSONResponse({"lat": result.lat, "lng": result.lng, "display_name": result.display_name})
+
+
+@router.post("/einsatz/{incident_id}/adresse", response_class=HTMLResponse)
+async def address_save(
+    incident_id: int, request: Request,
+    address_street: str = Form(""),
+    address_no: str = Form(""),
+    address_city: str = Form(""),
+    lat: str = Form(""),
+    lng: str = Form(""),
+    lagekarte_shash_url: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Speichert Adresse, Koordinaten und optionalen Lagekarte.info-Link."""
+    user = request.state.user
+    incident = _incident_or_404(incident_id, db)
+    from app.core.permissions import can_access_incident
+    if not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+
+    before = {
+        "address_street": incident.address_street,
+        "address_no": incident.address_no,
+        "address_city": incident.address_city,
+        "lat": incident.lat,
+        "lng": incident.lng,
+        "lagekarte_shash_url": incident.lagekarte_shash_url,
+    }
+
+    incident.address_street = address_street.strip() or None
+    incident.address_no = address_no.strip() or None
+    incident.address_city = address_city.strip() or None
+
+    try:
+        incident.lat = float(lat) if lat.strip() else None
+        incident.lng = float(lng) if lng.strip() else None
+    except ValueError:
+        incident.lat = None
+        incident.lng = None
+
+    incident.lagekarte_shash_url = lagekarte_shash_url.strip() or None
+
+    after = {
+        "address_street": incident.address_street,
+        "address_no": incident.address_no,
+        "address_city": incident.address_city,
+        "lat": incident.lat,
+        "lng": incident.lng,
+        "lagekarte_shash_url": incident.lagekarte_shash_url,
+    }
+
+    from app.core.audit import write_incident_change
+    write_incident_change(
+        db, incident_id, "incident.address_updated", "incident", incident_id,
+        before, after, user_id=user.id,
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+
+    await manager.broadcast(incident_id, {"type": "address_updated", "reload_board": True})
+
+    org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
+    return templates.TemplateResponse(request, "incident/_address_modal.html", {
+        "user": user, "incident": incident, "org": org, "saved": True,
+    })

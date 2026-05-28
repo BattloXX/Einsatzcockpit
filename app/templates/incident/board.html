@@ -26,7 +26,17 @@
   <div class="incident-header__alarm">
     <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
     {% if incident.address_street %}
+    {% if can_edit %}
+    <span class="incident-header__address" style="cursor:pointer"
+          hx-get="/einsatz/{{ incident.id }}/adresse/bearbeiten"
+          hx-target="#cardDetailBody" hx-swap="innerHTML"
+          hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
+          title="Adresse / Koordinaten bearbeiten">
+      {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %} ✏
+    </span>
+    {% else %}
     <span class="incident-header__address">{{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</span>
+    {% endif %}
     {% endif %}
   </div>
   <div class="incident-header__timer">
@@ -38,6 +48,13 @@
     </span>
   </div>
   <div class="incident-header__actions">
+    {# Lagekarte.info-Button: SHASH-Link hat Vorrang, sonst generierter Einsatz-Link #}
+    {% set lk_url = lagekarte_url(incident) %}
+    {% if lk_url %}
+    <a href="{{ lk_url }}" target="_blank" rel="noopener"
+       class="btn btn--sm btn--secondary"
+       {{ tip('Einsatz in lagekarte.info öffnen (neues Fenster)') }}>🗺️ Lagekarte</a>
+    {% endif %}
     <a href="/einsatz/{{ incident.id }}/atemschutz" class="btn btn--sm btn--secondary"
        {{ tip('Atemschutzüberwachung — Pressluft-Trupp-Steuerung') }}>AS-Überwachung</a>
     <a href="/einsatz/{{ incident.id }}/qr" class="btn btn--sm btn--ghost"

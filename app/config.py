@@ -67,9 +67,22 @@ class Settings(BaseSettings):
     MEDIA_VIDEO_MAX_HEIGHT: int = 720
     FFMPEG_BIN: str = "ffmpeg"   # ggf. absoluter Pfad ueber ENV
 
+    # Lagekarte.info GeoJSON-Endpoint
+    LAGEKARTE_CORS_ORIGINS: str = "https://www.lagekarte.info,https://lagekarte.info"
+    LAGEKARTE_GEOJSON_RATELIMIT: str = "60/minute"
+
+    # Nominatim Geocoding (OSM – kein API-Key nötig, User-Agent Pflicht!)
+    NOMINATIM_BASE_URL: str = "https://nominatim.openstreetmap.org"
+    NOMINATIM_USER_AGENT: str = "Einsatzleiter-Hilfswerkzeug/2.x (contact: office@feuerwehr-wolfurt.at)"
+    NOMINATIM_TIMEOUT_SECONDS: float = 5.0
+
     @property
     def effective_public_base_url(self) -> str:
         return self.PUBLIC_BASE_URL or self.APP_BASE_URL
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.LAGEKARTE_CORS_ORIGINS.split(",") if o.strip()]
 
 
 settings = Settings()

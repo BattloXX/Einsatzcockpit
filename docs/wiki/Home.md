@@ -45,6 +45,7 @@ Eine Python-Webapp (FastAPI + HTMX), die das bisherige Single-File-HTML-Tool abl
 | [QR-Code Schnellzugriff](Anwender-QR-Code-Schnellzugriff) | Zweites Gerät per Scan einbinden |
 | [Mobile Nutzung / PWA](Anwender-Mobile-Nutzung-PWA) | Installieren, Offline-Verhalten |
 | [Push-Benachrichtigungen](Anwender-Push-Benachrichtigungen) | Aktivieren auf Handy und PC |
+| [Lagekarte.info](Anwender-Lagekarte) | Adresse & Koordinaten, Live-Fahrzeuge auf lagekarte.info |
 
 ### Administration
 | Seite | Beschreibung |
@@ -52,6 +53,7 @@ Eine Python-Webapp (FastAPI + HTMX), die das bisherige Single-File-HTML-Tool abl
 | [Benutzer und Rollen](Administration-Benutzer-und-Rollen) | User anlegen, Rollen zuweisen |
 | [Stammdaten pflegen](Administration-Stammdaten-pflegen) | Fahrzeuge, Wehren, Auftragsvorschläge |
 | [API-Keys verwalten](Administration-API-Keys-verwalten) | Anlegen, Rotieren, Sperren |
+| [Lagekarte-Tokens](Administration-Lagekarte-Tokens) | GeoJSON-Feed-Tokens für lagekarte.info verwalten |
 | [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise) | Historie nachvollziehen, Stand rekonstruieren |
 | [Statistik-Dashboard](Administration-Statistik-Dashboard) | Kennzahlen interpretieren |
 

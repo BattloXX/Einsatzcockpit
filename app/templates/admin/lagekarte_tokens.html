@@ -1,0 +1,114 @@
+{% extends "admin/_layout.html" %}
+{% from "_tooltip.html" import tip %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Lagekarte-Tokens – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Lagekarte-Tokens'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>Lagekarte-Tokens</h1>
+    <p class="page-header__sub">Read-only Tokens für den GeoJSON-Endpoint — für <em>lagekarte.info → Daten importieren → URL</em></p>
+  </div>
+</div>
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Neuen Token erstellen</h2></div>
+  <div class="card-body">
+    <form method="post" action="/admin/lagekarte-tokens/neu" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+      <div class="form-group" style="flex:1;min-width:200px">
+        <label class="form-label">Bezeichnung</label>
+        <input type="text" name="label" placeholder="z.B. lagekarte.info Auto-Reload" class="form-input" required>
+      </div>
+      <div class="form-group" style="flex:1;min-width:200px">
+        <label class="form-label" {{ tip('Optional: Token gilt nur für diesen Einsatz. Leer = gilt für alle Einsätze der Org.') }}>Beschränkung auf Einsatz</label>
+        <select name="einsatz_id" class="form-input">
+          <option value="">— Alle aktiven Einsätze —</option>
+          {% for inc in incidents %}
+          <option value="{{ inc.id }}">#{{ inc.id }} {{ inc.alarm_type_code }}{% if inc.address_street %} · {{ inc.address_street }} {{ inc.address_no or '' }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="min-width:160px">
+        <label class="form-label" {{ tip('Leer = Token läuft nie ab') }}>Ablauf (optional)</label>
+        <input type="date" name="expires_at" class="form-input">
+      </div>
+      <div>
+        <button type="submit" class="btn btn--primary">+ Token erstellen</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+{% if new_token %}
+<div class="alert alert--success">
+  <strong>Neuer Token (nur einmal angezeigt!):</strong><br>
+  <code class="api-key-display">{{ new_token }}</code>
+  <button onclick="navigator.clipboard.writeText('{{ new_token }}')" class="btn btn--xs btn--ghost">Kopieren</button>
+  <p style="margin-top:.5rem;font-size:.85rem">
+    Einsatz-URL für lagekarte.info:<br>
+    <code>{{ request.base_url }}api/lagekarte/einsatz/&lt;EINSATZ_ID&gt;/fahrzeuge.geojson?token={{ new_token }}</code>
+  </p>
+</div>
+{% endif %}
+
+<section class="card">
+  <div class="card-header"><h2>Aktive &amp; gesperrte Tokens</h2></div>
+  <div class="card-body" style="padding:0">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Bezeichnung</th>
+          <th>Org</th>
+          <th>Einsatz</th>
+          <th>Erstellt</th>
+          <th>Zuletzt genutzt</th>
+          <th>Ablauf</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tokens %}
+        <tr>
+          <td>{{ t.label }}</td>
+          <td>{{ t.org.name if t.org else '–' }}</td>
+          <td>{% if t.einsatz_id %}#{{ t.einsatz_id }}{% else %}alle{% endif %}</td>
+          <td>{{ (t.created_at|local).strftime('%d.%m.%Y') }}</td>
+          <td>{{ t.last_used_at|local_datetime if t.last_used_at else '–' }}</td>
+          <td>{{ (t.expires_at|local).strftime('%d.%m.%Y') if t.expires_at else '∞' }}</td>
+          <td><span class="badge {% if t.is_active %}badge--active{% else %}badge--closed{% endif %}">{{ 'Aktiv' if t.is_active else 'Gesperrt' }}</span></td>
+          <td>
+            {% if t.is_active %}
+            <form method="post" action="/admin/lagekarte-tokens/{{ t.id }}/sperren" style="display:inline">
+              <button type="submit" class="btn btn--xs btn--danger"
+                      onclick="return confirm('Token sperren?')">Sperren</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not tokens %}
+        <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1.5rem">Noch keine Tokens angelegt.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card mt-4">
+  <div class="card-header"><h2>Verwendung in lagekarte.info</h2></div>
+  <div class="card-body">
+    <ol style="line-height:2;padding-left:1.2rem">
+      <li>Token erstellen (Org-weit oder auf einen Einsatz beschränkt)</li>
+      <li>In lagekarte.info: <strong>Daten importieren → URL</strong> anklicken</li>
+      <li>URL eintragen: <code>{{ request.base_url }}api/lagekarte/einsatz/&lt;EINSATZ_ID&gt;/fahrzeuge.geojson?token=&lt;TOKEN&gt;</code></li>
+      <li><strong>Auto-Reload</strong> aktivieren (empfohlen: 30–60 Sekunden)</li>
+      <li>Fahrzeuge des Einsatzes erscheinen als Punkte auf der Karte</li>
+    </ol>
+    <p style="margin-top:.75rem;font-size:.875rem;color:var(--text-muted)">
+      Alternativ: KML-Export unter <code>…/fahrzeuge.kml?token=&lt;TOKEN&gt;</code>
+    </p>
+  </div>
+</section>
+{% endblock %}

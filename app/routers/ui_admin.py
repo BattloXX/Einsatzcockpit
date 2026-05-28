@@ -1444,3 +1444,102 @@ async def backup_restore(
         "user": request.state.user,
         "import_result": result,
     })
+
+
+# ── Lagekarte-Tokens ──────────────────────────────────────────────────────────
+
+@router.get("/lagekarte-tokens", response_class=HTMLResponse)
+async def lagekarte_tokens(
+    request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    from app.models.lagekarte import LagekarteToken
+    from app.models.incident import Incident as _Incident
+    user = request.state.user
+    is_sysadmin = has_role(user, "system_admin")
+    if is_sysadmin:
+        tokens = db.query(LagekarteToken).order_by(LagekarteToken.created_at.desc()).all()
+    else:
+        tokens = (
+            db.query(LagekarteToken)
+            .filter(LagekarteToken.org_id == user.org_id)
+            .order_by(LagekarteToken.created_at.desc())
+            .all()
+        )
+    active_incidents = db.query(_Incident).filter(_Incident.status == "active").order_by(_Incident.id).all()
+    return templates.TemplateResponse(request, "admin/lagekarte_tokens.html", {
+        "user": user, "tokens": tokens, "new_token": None, "incidents": active_incidents,
+    })
+
+
+@router.post("/lagekarte-tokens/neu")
+async def create_lagekarte_token(
+    request: Request,
+    label: str = Form(...),
+    einsatz_id: str = Form(""),
+    expires_at: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    import hashlib, secrets as _sec
+    from datetime import datetime as _dt
+    from app.models.lagekarte import LagekarteToken
+    from app.models.incident import Incident as _Incident
+
+    user = request.state.user
+    raw = "lkw_" + _sec.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw.encode()).hexdigest()
+
+    expires = None
+    if expires_at.strip():
+        try:
+            expires = _dt.fromisoformat(expires_at.strip())
+        except ValueError:
+            pass
+
+    einsatz_id_int: int | None = None
+    if einsatz_id.strip():
+        try:
+            einsatz_id_int = int(einsatz_id)
+        except ValueError:
+            pass
+
+    tok = LagekarteToken(
+        token_hash=token_hash,
+        label=label,
+        org_id=user.org_id,
+        einsatz_id=einsatz_id_int,
+        created_by_user_id=user.id,
+        expires_at=expires,
+    )
+    db.add(tok)
+    write_audit(db, "admin.lagekarte_token.created", user_id=user.id,
+                payload={"label": label, "org_id": user.org_id})
+    db.commit()
+
+    from app.models.incident import Incident as _Incident2
+    active_incidents = db.query(_Incident2).filter(_Incident2.status == "active").order_by(_Incident2.id).all()
+    tokens = (
+        db.query(LagekarteToken)
+        .filter(LagekarteToken.org_id == user.org_id)
+        .order_by(LagekarteToken.created_at.desc())
+        .all()
+    )
+    return templates.TemplateResponse(request, "admin/lagekarte_tokens.html", {
+        "user": user, "tokens": tokens, "new_token": raw, "incidents": active_incidents,
+    })
+
+
+@router.post("/lagekarte-tokens/{token_id}/sperren")
+async def revoke_lagekarte_token(
+    token_id: int, request: Request,
+    db: Session = Depends(get_db), _=Depends(require_role("admin")),
+):
+    from app.models.lagekarte import LagekarteToken
+    tok = db.get(LagekarteToken, token_id)
+    if tok:
+        tok.revoked_at = datetime.now(UTC)
+        write_audit(db, "admin.lagekarte_token.revoked", user_id=request.state.user.id,
+                    entity_type="lagekarte_token", entity_id=token_id)
+        db.commit()
+    return RedirectResponse("/admin/lagekarte-tokens", status_code=303)

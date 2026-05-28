@@ -68,6 +68,7 @@ _ACTION_LABELS: dict[str, str] = {
     "message.status_set":       "Meldungs-Status geändert",
     "person.created":           "Person erfasst",
     "person.updated":           "Person bearbeitet",
+    "incident.address_updated": "Adresse / Koordinaten aktualisiert",
 }
 
 
@@ -105,3 +106,7 @@ templates.env.filters["local_iso"] = _local_iso
 templates.env.filters["action_label"] = _action_label
 templates.env.filters["unit_status_slug"] = _unit_status_slug
 templates.env.filters["person_status_label"] = _person_status_label
+
+# Lagekarte.info URL-Hilfsfunktion für Templates
+from app.services.lagekarte import resolve_lagekarte_url  # noqa: E402
+templates.env.globals["lagekarte_url"] = resolve_lagekarte_url

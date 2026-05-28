@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -30,6 +30,9 @@ class FireDept(Base):
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # IANA timezone (e.g. "Europe/Vienna"). NULL faellt auf settings.DEFAULT_TIMEZONE zurueck.
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Fallback-Position für den Karten-Picker (wird genutzt, wenn Geocoding fehlschlägt)
+    fallback_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fallback_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     vehicles: Mapped[list[VehicleMaster]] = relationship(back_populates="dept")

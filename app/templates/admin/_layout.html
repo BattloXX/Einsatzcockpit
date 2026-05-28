@@ -68,6 +68,11 @@
          {{ tip('Schnittstellen-Keys für externe Systeme') }}>
         <span class="admin-nav__icon">🔐</span>API-Keys
       </a>
+      <a href="/admin/lagekarte-tokens"
+         class="admin-nav__item {% if '/admin/lagekarte-tokens' in request.url.path %}is-active{% endif %}"
+         {{ tip('Read-only Tokens für lagekarte.info GeoJSON-Feed') }}>
+        <span class="admin-nav__icon">🗺️</span>Lagekarte-Tokens
+      </a>
       <a href="/admin/audit"
          class="admin-nav__item {% if '/admin/audit' in request.url.path %}is-active{% endif %}"
          {{ tip('Vollständiges Aktionsprotokoll') }}>

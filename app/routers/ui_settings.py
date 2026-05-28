@@ -94,6 +94,8 @@ async def save_org_settings(
     withdraw_press_factor: str = Form(""),
     withdraw_press_reserve: str = Form(""),
     timezone: str = Form(""),
+    fallback_lat: str = Form(""),
+    fallback_lng: str = Form(""),
     logo: UploadFile = File(None),
     target_org_id: int | None = Form(None),
 ):
@@ -128,6 +130,15 @@ async def save_org_settings(
         from zoneinfo import available_timezones
         if timezone in available_timezones():
             org.timezone = timezone
+    if org:
+        try:
+            org.fallback_lat = float(fallback_lat) if fallback_lat.strip() else None
+        except ValueError:
+            pass
+        try:
+            org.fallback_lng = float(fallback_lng) if fallback_lng.strip() else None
+        except ValueError:
+            pass
 
     # Logo-Upload
     logo_path = None

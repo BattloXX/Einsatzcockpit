@@ -131,6 +131,24 @@
         </div>
       </div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Karte / Lagekarte.info</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fallback-Breitengrad (lat)</label>
+          <input type="number" name="fallback_lat" id="settingsFallbackLat" step="0.000001"
+                 value="{{ org.fallback_lat if org.fallback_lat is not none else '' }}"
+                 class="form-control" style="max-width:200px" placeholder="47.466400">
+          <small class="form-hint">Startposition des Karten-Pickers bei neuen Einsätzen, wenn Geocoding keinen Treffer liefert.</small>
+        </div>
+        <div class="form-group">
+          <label>Fallback-Längengrad (lng)</label>
+          <input type="number" name="fallback_lng" id="settingsFallbackLng" step="0.000001"
+                 value="{{ org.fallback_lng if org.fallback_lng is not none else '' }}"
+                 class="form-control" style="max-width:200px" placeholder="9.741600">
+        </div>
+      </div>
+      <div id="settingsMapPicker" style="height:240px;border-radius:6px;border:1px solid var(--border);margin-bottom:1rem"></div>
+
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn-primary">Speichern</button>
       </div>
@@ -141,7 +159,13 @@
 
 {% endblock %}
 
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+{% endblock %}
+
 {% block scripts %}
+<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/map-picker.js"></script>
 <script>
 function previewLogo(input) {
   const f = input.files && input.files[0];
@@ -152,6 +176,17 @@ function previewLogo(input) {
   const reader = new FileReader();
   reader.onload = e => { img.src = e.target.result; };
   reader.readAsDataURL(f);
+}
+
+// Karten-Picker für den Fallback-Standort
+if (document.getElementById('settingsMapPicker')) {
+  initMapPicker({
+    containerId: 'settingsMapPicker',
+    latInputId: 'settingsFallbackLat',
+    lngInputId: 'settingsFallbackLng',
+    defaultLat: 47.4664,
+    defaultLng: 9.7416,
+  });
 }
 </script>
 {% endblock %}

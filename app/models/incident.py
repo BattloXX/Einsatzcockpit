@@ -48,6 +48,11 @@ class Incident(Base):
     # 48h-Auto-Close-Lifecycle: Warnung versandt + Anzahl der "Offen halten"-Klicks
     autoclose_warn_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     autoclose_keepopen_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Koordinaten (via Geocoding oder manueller PIN-Auswahl)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Gespeicherter lagekarte.info-Projekt-Link (?shash=… oder beliebige Form)
+    lagekarte_shash_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     columns: Mapped[list[IncidentColumn]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"

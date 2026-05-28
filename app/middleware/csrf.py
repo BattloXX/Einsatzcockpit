@@ -19,7 +19,7 @@ CSRF_COOKIE = "fwwo_csrf"
 CSRF_HEADER = "X-CSRF-Token"
 CSRF_FORM_FIELD = "_csrf"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
-EXEMPT_PREFIXES = ("/ws/", "/api/v1/", "/static/", "/push/")
+EXEMPT_PREFIXES = ("/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/")
 
 
 def _parse_cookie(header_value: str) -> dict[str, str]:

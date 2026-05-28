@@ -21,6 +21,7 @@ from app.models.master import (
     TaskSuggestion,
     VehicleMaster,
 )
+from app.models.lagekarte import LagekarteToken
 from app.models.password_reset import PasswordResetToken
 from app.models.user import ApiKey, AuditLog, PushSubscription, Role, User, UserRole
 
@@ -32,4 +33,5 @@ __all__ = [
     "RescuedPerson", "IncidentLog", "IncidentChange", "IncidentToken",
     "BreathingTroop", "TroopMember", "PressureLog",
     "PasswordResetToken",
+    "LagekarteToken",
 ]

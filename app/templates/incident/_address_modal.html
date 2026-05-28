@@ -1,0 +1,164 @@
+{# Adresse & Koordinaten bearbeiten — HTMX-Fragment (Ziel: #cardDetailBody) #}
+<div class="modal__header">
+  <div>
+    <div class="modal__title">Adresse &amp; Koordinaten</div>
+    <div class="modal__subtitle">Einsatz #{{ incident.id }}</div>
+  </div>
+  <button class="modal__close" onclick="document.getElementById('cardDetailModal').close()">✕</button>
+</div>
+<div class="modal__body">
+  {% if saved %}
+  <div class="alert alert--success" style="margin-bottom:1rem">Adresse gespeichert.</div>
+  {% endif %}
+
+  <form id="addressForm"
+        hx-post="/einsatz/{{ incident.id }}/adresse"
+        hx-target="#cardDetailBody"
+        hx-swap="innerHTML"
+        hx-encoding="application/x-www-form-urlencoded">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+
+    {# — Adressfelder — #}
+    <div class="form-grid" style="margin-bottom:1rem">
+      <div class="form-group">
+        <label class="form-label">Straße</label>
+        <input type="text" name="address_street" id="addrStreet"
+               value="{{ incident.address_street or '' }}" class="form-input" placeholder="Musterstraße">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hausnummer</label>
+        <input type="text" name="address_no" id="addrNo"
+               value="{{ incident.address_no or '' }}" class="form-input" placeholder="12a">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ort</label>
+        <input type="text" name="address_city" id="addrCity"
+               value="{{ incident.address_city or '' }}" class="form-input" placeholder="Wolfurt">
+      </div>
+    </div>
+
+    {# — Geocoding-Button — #}
+    <div style="margin-bottom:1rem">
+      <button type="button" id="geocodeBtn" class="btn btn--secondary btn--sm"
+              onclick="geocodeAddress({{ incident.id }})">
+        📍 Koordinaten automatisch suchen
+      </button>
+      <span id="geocodeStatus" style="margin-left:.5rem;font-size:.85rem;color:var(--text-muted)"></span>
+    </div>
+
+    {# — Koordinaten + Karte — #}
+    <div class="form-grid" style="margin-bottom:.5rem">
+      <div class="form-group">
+        <label class="form-label">Breitengrad (lat)</label>
+        <input type="number" name="lat" id="addrLat" step="0.000001"
+               value="{{ '%.6f'|format(incident.lat) if incident.lat is not none else '' }}"
+               class="form-input" placeholder="47.488847">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Längengrad (lng)</label>
+        <input type="number" name="lng" id="addrLng" step="0.000001"
+               value="{{ '%.6f'|format(incident.lng) if incident.lng is not none else '' }}"
+               class="form-input" placeholder="9.741011">
+      </div>
+    </div>
+
+    <div id="mapPickerContainer" style="height:260px;border-radius:6px;margin-bottom:1rem;border:1px solid var(--border)"></div>
+
+    {# — Lagekarte.info SHASH/Projekt-Link — #}
+    <div class="form-group" style="margin-bottom:1rem">
+      <label class="form-label">Lagekarte.info-Projekt-Link (optional)</label>
+      <input type="text" name="lagekarte_shash_url" id="addrShash"
+             value="{{ incident.lagekarte_shash_url or '' }}" class="form-input"
+             placeholder="https://www.lagekarte.info/?shash=…">
+      <small class="form-hint">
+        Optional: vollständiger Link aus <em>Speichern &amp; Teilen</em> in lagekarte.info
+        (z.B. <code>?shash=…</code>, <code>?center=…</code>, <code>?map=…</code>).
+        Hat Vorrang vor dem automatisch generierten Einsatz-Link.
+        Wenn leer und Koordinaten vorhanden, wird <code>?einsatz=lat,lng</code> verwendet.
+      </small>
+    </div>
+
+    <div class="modal__footer">
+      <button type="button" class="btn btn--ghost"
+              onclick="document.getElementById('cardDetailModal').close()">Abbrechen</button>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function() {
+  // Leaflet laden, falls noch nicht vorhanden
+  function ensureLeaflet(cb) {
+    if (typeof L !== 'undefined') { cb(); return; }
+    const link = document.createElement('link');
+    link.rel = 'stylesheet'; link.href = '/static/css/leaflet.min.css';
+    document.head.appendChild(link);
+    const s = document.createElement('script');
+    s.src = '/static/js/leaflet.min.js';
+    s.onload = function() {
+      const s2 = document.createElement('script');
+      s2.src = '/static/js/map-picker.js';
+      s2.onload = cb;
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  }
+
+  function startMap() {
+    {% if org and org.fallback_lat %}
+    const orgLat = {{ org.fallback_lat }}, orgLng = {{ org.fallback_lng }};
+    {% else %}
+    const orgLat = 47.4664, orgLng = 9.7416;
+    {% endif %}
+    initMapPicker({
+      containerId: 'mapPickerContainer',
+      latInputId: 'addrLat',
+      lngInputId: 'addrLng',
+      defaultLat: orgLat,
+      defaultLng: orgLng,
+    });
+  }
+
+  // Nach HTMX-Swap: Karte initialisieren
+  if (typeof L !== 'undefined' && typeof initMapPicker !== 'undefined') {
+    startMap();
+  } else {
+    ensureLeaflet(startMap);
+  }
+
+  // Geocoding via fetch
+  window.geocodeAddress = function(incidentId) {
+    const street = document.getElementById('addrStreet').value;
+    const no     = document.getElementById('addrNo').value;
+    const city   = document.getElementById('addrCity').value;
+    const status = document.getElementById('geocodeStatus');
+    const csrf   = document.cookie.match(/fwwo_csrf=([^;]+)/)?.[1] || '';
+
+    status.textContent = '…wird gesucht';
+    const fd = new FormData();
+    fd.append('address_street', street);
+    fd.append('address_no', no);
+    fd.append('address_city', city);
+    fd.append('_csrf', csrf);
+
+    fetch(`/einsatz/${incidentId}/adresse/geocode`, {method:'POST', body: fd})
+      .then(r => {
+        if (!r.ok) throw new Error('Nicht gefunden');
+        return r.json();
+      })
+      .then(d => {
+        document.getElementById('addrLat').value = d.lat.toFixed(6);
+        document.getElementById('addrLng').value = d.lng.toFixed(6);
+        // Marker + Karte per input-change-Event aktualisieren
+        document.getElementById('addrLat').dispatchEvent(new Event('change'));
+        status.textContent = '✓ ' + (d.display_name || 'gefunden');
+        status.style.color = 'var(--success)';
+      })
+      .catch(() => {
+        status.textContent = '✗ Adresse nicht gefunden — Marker bitte manuell setzen';
+        status.style.color = 'var(--danger)';
+      });
+  };
+})();
+</script>

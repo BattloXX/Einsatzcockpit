@@ -18,12 +18,12 @@ from starlette.responses import Response
 
 _CSP_BASE = (
     "default-src 'self'; "
-    "img-src 'self' data: blob:; "
+    "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; "
     "media-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
     "font-src 'self' data:; "
-    "connect-src 'self' ws: wss:; "
+    "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org; "
     "base-uri 'self'; "
     "form-action 'self'"
 )
