@@ -601,6 +601,74 @@
       color: rgba(255,255,255,.45);
       white-space: nowrap;
     }
+
+    /* ── Großes QR-Panel in Fahrzeug-Spalte ── */
+    .qr-panel {
+      flex-shrink: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 1.2rem;
+      padding: .8rem 1.2rem;
+    }
+    .qr-panel a { text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: .4rem; }
+    .qr-panel img {
+      width: clamp(130px, 18vh, 200px);
+      height: auto;
+      border-radius: 6px;
+      background: #fff;
+      padding: 6px;
+      display: block;
+    }
+    .qr-panel__label {
+      font-family: var(--font-mono);
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: rgba(255,255,255,.5);
+      white-space: nowrap;
+    }
+    .qr-panel__text {
+      display: flex;
+      flex-direction: column;
+      gap: .25rem;
+    }
+    .qr-panel__title {
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--text-muted);
+    }
+    .qr-panel__hint {
+      font-size: .85rem;
+      color: var(--text-muted);
+      max-width: 200px;
+      line-height: 1.4;
+    }
+
+    /* ── Status-Tags in Item-Rows ── */
+    .status-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: .72rem;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+    .status-tag--open        { background: rgba(239,68,68,.15);  border: 1px solid rgba(239,68,68,.3);  color: #fca5a5; }
+    .status-tag--in_progress { background: rgba(251,191,36,.15); border: 1px solid rgba(251,191,36,.3); color: #fde68a; }
+    .status-tag--meldung     { background: rgba(239,68,68,.15);  border: 1px solid rgba(239,68,68,.3);  color: #fca5a5; }
+    .status-tag--achtung     { background: rgba(249,115,22,.15); border: 1px solid rgba(249,115,22,.3); color: #fdba74; }
+    .status-tag--hinweis     { background: rgba(234,179,8,.15);  border: 1px solid rgba(234,179,8,.3);  color: #fef08a; }
+    .status-tag--information { background: rgba(59,130,246,.15); border: 1px solid rgba(59,130,246,.3); color: #93c5fd; }
   </style>
 </head>
 <body>
@@ -822,6 +890,20 @@
       </div>
       {% endif %}
 
+      {% if qr_img %}
+      <!-- Großes QR-Panel zum Beitreten -->
+      <div class="qr-panel">
+        <a href="/einsatz/{{ incident.id }}/qr" target="_blank" rel="noopener" title="Login-QR — zum Vergrößern klicken">
+          <img src="data:image/png;base64,{{ qr_img }}" alt="Login-QR">
+          <span class="qr-panel__label">Login-QR</span>
+        </a>
+        <div class="qr-panel__text">
+          <div class="qr-panel__title">📱 Beitreten</div>
+          <div class="qr-panel__hint">QR-Code mit Smartphone scannen um dem Einsatz beizutreten.</div>
+        </div>
+      </div>
+      {% endif %}
+
     </div><!-- /vehicles-col -->
 
     <!-- ── AUFTRÄGE ── -->
@@ -853,11 +935,13 @@
         <div class="item-list">
 
           {% for t in tasks_open %}
+          {% set ts = t.status if t.status else 'open' %}
           <div class="item-row">
-            <span class="item-icon">{% if t.status == 'in_progress' %}⏳{% else %}○{% endif %}</span>
+            <span class="item-icon">{% if ts == 'in_progress' %}🟡{% elif ts == 'cancelled' %}⚪{% else %}🔴{% endif %}</span>
             <div class="item-body">
               <div class="item-title">{{ t.title }}</div>
               <div class="item-meta">
+                <span class="status-tag status-tag--{{ ts }}">{% if ts == 'open' %}Offen{% elif ts == 'in_progress' %}In Arbeit{% elif ts == 'cancelled' %}Storniert{% else %}{{ ts }}{% endif %}</span>
                 {% if t.vehicle and t.vehicle.vehicle_master %}
                   <span class="v-badge">{{ t.vehicle.vehicle_master.code }}</span>
                 {% else %}
@@ -929,19 +1013,18 @@
         <div class="item-list">
 
           {% for m in msgs_open %}
+          {% set ms = m.status if m.status else 'meldung' %}
           <div class="item-row">
-            <span class="item-icon">{% if m.status == 'in_progress' %}⏳{% else %}💬{% endif %}</span>
+            <span class="item-icon">{% if ms == 'achtung' %}⚠️{% elif ms == 'hinweis' %}💡{% elif ms == 'information' %}ℹ️{% else %}🔴{% endif %}</span>
             <div class="item-body">
               <div class="item-title">{{ m.title }}</div>
               <div class="item-meta">
+                <span class="status-tag status-tag--{{ ms }}">{% if ms == 'meldung' %}Meldung{% elif ms == 'achtung' %}Achtung{% elif ms == 'hinweis' %}Hinweis{% elif ms == 'information' %}Information{% else %}{{ ms }}{% endif %}</span>
                 {% if m.vehicle and m.vehicle.vehicle_master %}
                   <span class="v-badge v-badge--msg">{{ m.vehicle.vehicle_master.code }}</span>
                 {% endif %}
                 {% if m.due_at %}
                   <span style="color:#fbbf24;">⏰ {{ m.due_at|local_time }}</span>
-                {% endif %}
-                {% if not m.vehicle and not m.due_at %}
-                  <span class="unassigned">keine Einheit</span>
                 {% endif %}
               </div>
             </div>
