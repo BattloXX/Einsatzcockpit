@@ -13,6 +13,7 @@ UNIT_STATUS_VALUES = [
     "Einsatzbereit",
 ]
 TRAFFIC_LIGHT_VALUES = ["meldung", "achtung", "hinweis", "information", "erledigt", "storniert"]
+TASK_STATUS_VALUES = ["open", "in_progress", "done", "cancelled"]
 # Legacy-Werte (aus DB-Migration vorhanden, werden beim Lesen toleriert)
 _TRAFFIC_LIGHT_LEGACY = {"open": "meldung", "in_progress": "achtung", "done": "erledigt", "cancelled": "storniert"}
 PERSON_STATUS_VALUES = ["gefunden", "versorgt", "abtransportiert", "verstorben"]

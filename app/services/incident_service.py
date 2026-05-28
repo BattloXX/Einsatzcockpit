@@ -7,6 +7,7 @@ from app.core.audit import write_audit, write_incident_change
 from app.models.incident import (
     FIXED_COLUMN_TITLES,
     FIXED_COLUMNS,
+    TASK_STATUS_VALUES,
     TRAFFIC_LIGHT_VALUES,
     UNIT_STATUS_VALUES,
     Incident,
@@ -518,7 +519,7 @@ def set_task_status(
     status: str,
     user_id: int | None = None,
 ) -> Task:
-    if status not in TRAFFIC_LIGHT_VALUES:
+    if status not in TASK_STATUS_VALUES:
         raise ValueError(f"Ungültiger Status: {status}")
     before = {"status": task.status, "is_done": task.is_done, "is_cancelled": task.is_cancelled}
     task.status = status

@@ -59,7 +59,7 @@
           hx-target="#cardDetailBody" hx-swap="innerHTML"
           hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
           title="Adresse / Koordinaten bearbeiten">
-      {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %} ✏
+      {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %} 📍
     </span>
     {% else %}
     <span class="incident-header__address">{{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</span>

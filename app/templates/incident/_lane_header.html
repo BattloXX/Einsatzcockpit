@@ -1,28 +1,63 @@
 {# Lane column header with title, count badge, and contextual + button.
-   Variables expected: col, col_count, can_edit, incident #}
+   Variables expected: col, col_count, can_edit, incident, col_tasks, col_messages #}
 <div class="kanban-col__header">
-  <span class="kanban-col__title">{{ col.title }}</span>
-  <div style="display:flex; align-items:center; gap:6px;">
-    <span class="kanban-col__count">{{ col_count }}</span>
-    {% if can_edit %}
-      {% if col.code in ('dispatched', 'active') %}
-      <button class="kanban-col__add-btn" type="button"
-              onclick="document.getElementById('vehicleWizard').showModal()"
-              title="Einheit zum Einsatz hinzufügen">+</button>
-      {% elif col.code == 'rescued' %}
-      <button class="kanban-col__add-btn" type="button"
-              onclick="document.getElementById('personWizard').showModal()"
-              title="Gerettete Person erfassen">+</button>
-      {% elif col.code == 'messages' %}
-      <button class="kanban-col__add-btn" type="button"
-              onclick="document.getElementById('quickAddMsgDialog').showModal()"
-              title="Meldung anlegen">+</button>
-      {% else %}
-      {# tasks column and any custom section columns #}
-      <button class="kanban-col__add-btn" type="button"
-              onclick="openQuickAddTask({{ col.id }})"
-              title="Auftrag anlegen">+</button>
-      {% endif %}
+  <div style="flex:1; min-width:0;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+      <span class="kanban-col__title">{{ col.title }}</span>
+      <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+        <span class="kanban-col__count">{{ col_count }}</span>
+        {% if can_edit %}
+          {% if col.code in ('dispatched', 'active') %}
+          <button class="kanban-col__add-btn" type="button"
+                  onclick="document.getElementById('vehicleWizard').showModal()"
+                  title="Einheit zum Einsatz hinzufügen">+</button>
+          {% elif col.code == 'rescued' %}
+          <button class="kanban-col__add-btn" type="button"
+                  onclick="document.getElementById('personWizard').showModal()"
+                  title="Gerettete Person erfassen">+</button>
+          {% elif col.code == 'messages' %}
+          <button class="kanban-col__add-btn" type="button"
+                  onclick="document.getElementById('quickAddMsgDialog').showModal()"
+                  title="Meldung anlegen">+</button>
+          {% else %}
+          {# tasks column and any custom section columns #}
+          <button class="kanban-col__add-btn" type="button"
+                  onclick="openQuickAddTask({{ col.id }})"
+                  title="Auftrag anlegen">+</button>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    {# Status-Übersicht für Auftrags-Spalten #}
+    {% if col_tasks %}
+    {% set tc_open = col_tasks | selectattr('status', 'equalto', 'open') | list | length %}
+    {% set tc_ip   = col_tasks | selectattr('status', 'equalto', 'in_progress') | list | length %}
+    {% set tc_done = col_tasks | selectattr('is_done') | list | length %}
+    {% if tc_open or tc_ip or tc_done %}
+    <div style="display:flex; gap:5px; flex-wrap:wrap; margin-top:4px;">
+      {% if tc_open %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;">🔴 {{ tc_open }}</span>{% endif %}
+      {% if tc_ip   %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.3);color:#fde68a;">🟡 {{ tc_ip }}</span>{% endif %}
+      {% if tc_done %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);color:#86efac;">🟢 {{ tc_done }}</span>{% endif %}
+    </div>
     {% endif %}
+    {% endif %}
+
+    {# Status-Übersicht für Meldungs-Spalte #}
+    {% if col.code == 'messages' and col_messages %}
+    {% set mc_meldung     = col_messages | selectattr('status', 'equalto', 'meldung')     | list | length %}
+    {% set mc_achtung     = col_messages | selectattr('status', 'equalto', 'achtung')     | list | length %}
+    {% set mc_hinweis     = col_messages | selectattr('status', 'equalto', 'hinweis')     | list | length %}
+    {% set mc_information = col_messages | selectattr('status', 'equalto', 'information') | list | length %}
+    {% if mc_meldung or mc_achtung or mc_hinweis or mc_information %}
+    <div style="display:flex; gap:5px; flex-wrap:wrap; margin-top:4px;">
+      {% if mc_meldung     %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;">🔴 {{ mc_meldung }}</span>{% endif %}
+      {% if mc_achtung     %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(249,115,22,.15);border:1px solid rgba(249,115,22,.3);color:#fdba74;">⚠️ {{ mc_achtung }}</span>{% endif %}
+      {% if mc_hinweis     %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(234,179,8,.15);border:1px solid rgba(234,179,8,.3);color:#fef08a;">💡 {{ mc_hinweis }}</span>{% endif %}
+      {% if mc_information %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;">ℹ️ {{ mc_information }}</span>{% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
+
   </div>
 </div>
