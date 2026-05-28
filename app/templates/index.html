@@ -36,8 +36,11 @@
 {% endif %}
 
 <!-- Neuer Einsatz Modal -->
-<dialog class="modal" id="newIncidentModal" x-ref="newIncidentModal">
-  <form method="post" action="/einsatz/neu" class="modal__content">
+<dialog class="modal" id="newIncidentModal" x-ref="newIncidentModal" style="max-width:560px;width:95vw">
+  <form method="post" action="/einsatz/neu" class="modal__content" id="newIncidentForm">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="lat" id="newIncLat" value="">
+    <input type="hidden" name="lng" id="newIncLng" value="">
     <div class="modal__header">
       <h3>Neuer Einsatz</h3>
       <button type="button" formnovalidate @click="$refs.newIncidentModal.close()" class="modal__close">×</button>
@@ -54,17 +57,23 @@
       <div class="form-row">
         <div class="form-group">
           <label>Straße</label>
-          <input type="text" name="address_street" class="form-input" placeholder="Senderstraße">
+          <input type="text" name="address_street" id="newIncStreet" class="form-input" placeholder="Senderstraße">
         </div>
         <div class="form-group form-group--narrow">
           <label>Nr.</label>
-          <input type="text" name="address_no" class="form-input" placeholder="34">
+          <input type="text" name="address_no" id="newIncNo" class="form-input" placeholder="34">
         </div>
       </div>
       <div class="form-group">
         <label>Ort</label>
-        <input type="text" name="address_city" class="form-input" value="Wolfurt">
+        <input type="text" name="address_city" id="newIncCity" class="form-input" value="Wolfurt">
       </div>
+      <div style="margin-bottom:.5rem;display:flex;align-items:center;gap:8px">
+        <button type="button" class="btn btn--secondary btn--sm" id="newIncGeocodeBtn"
+                onclick="newIncidentGeocode()">📍 Koordinaten suchen</button>
+        <span id="newIncGeocodeStatus" style="font-size:.8rem;color:var(--text-muted)"></span>
+      </div>
+      <div id="newIncMapContainer" style="height:200px;border-radius:6px;margin-bottom:.75rem;border:1px solid var(--border)"></div>
       <div class="form-group">
         <label>Meldung</label>
         <input type="text" name="report_text" class="form-input" placeholder="Kurze Meldung...">
@@ -101,5 +110,90 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 });
+
+// Karten-Picker für "Neuer Einsatz"-Dialog
+(function() {
+  let _map = null;
+  let _marker = null;
+
+  function ensureLeaflet(cb) {
+    if (typeof L !== 'undefined' && typeof initMapPicker !== 'undefined') { cb(); return; }
+    const link = document.createElement('link');
+    link.rel = 'stylesheet'; link.href = '/static/css/leaflet.min.css';
+    document.head.appendChild(link);
+    const s = document.createElement('script');
+    s.src = '/static/js/leaflet.min.js';
+    s.onload = function() {
+      const s2 = document.createElement('script');
+      s2.src = '/static/js/map-picker.js';
+      s2.onload = cb;
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  }
+
+  function initNewIncidentMap() {
+    if (_map) { _map.invalidateSize(); return; }
+    const lat = parseFloat(document.getElementById('newIncLat').value) || 47.4664;
+    const lng = parseFloat(document.getElementById('newIncLng').value) || 9.7416;
+    _map = L.map('newIncMapContainer').setView([lat, lng], 14);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap', maxZoom: 19,
+    }).addTo(_map);
+    _marker = L.marker([lat, lng], {draggable: true}).addTo(_map);
+    _marker.on('dragend', function(e) {
+      const p = e.target.getLatLng();
+      document.getElementById('newIncLat').value = p.lat.toFixed(6);
+      document.getElementById('newIncLng').value = p.lng.toFixed(6);
+    });
+    _map.on('click', function(e) {
+      _marker.setLatLng(e.latlng);
+      document.getElementById('newIncLat').value = e.latlng.lat.toFixed(6);
+      document.getElementById('newIncLng').value = e.latlng.lng.toFixed(6);
+    });
+  }
+
+  // Karte laden wenn Modal geöffnet wird
+  document.getElementById('newIncidentModal').addEventListener('toggle', function(e) {
+    if (e.newState === 'open') {
+      ensureLeaflet(function() { setTimeout(initNewIncidentMap, 50); });
+    }
+  });
+  // Fallback: click auf den Button
+  document.querySelector('button[\\@click*="newIncidentModal.showModal"]') &&
+    document.querySelector('button[\\@click*="newIncidentModal.showModal"]').addEventListener('click', function() {
+      ensureLeaflet(function() { setTimeout(initNewIncidentMap, 150); });
+    });
+
+  window.newIncidentGeocode = function() {
+    const street = document.getElementById('newIncStreet').value;
+    const no     = document.getElementById('newIncNo').value;
+    const city   = document.getElementById('newIncCity').value;
+    const status = document.getElementById('newIncGeocodeStatus');
+    const csrf   = document.cookie.match(/fwwo_csrf=([^;]+)/)?.[1] || '';
+    status.textContent = '…wird gesucht';
+    const fd = new FormData();
+    fd.append('address_street', street);
+    fd.append('address_no', no);
+    fd.append('address_city', city);
+    fd.append('_csrf', csrf);
+    fetch('/adresse/geocode', {method:'POST', body: fd})
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => {
+        document.getElementById('newIncLat').value = d.lat.toFixed(6);
+        document.getElementById('newIncLng').value = d.lng.toFixed(6);
+        status.textContent = '✓ ' + (d.display_name || 'gefunden');
+        status.style.color = 'var(--success)';
+        if (_map && _marker) {
+          _marker.setLatLng([d.lat, d.lng]);
+          _map.setView([d.lat, d.lng], 16);
+        }
+      })
+      .catch(() => {
+        status.textContent = '✗ Nicht gefunden';
+        status.style.color = 'var(--danger)';
+      });
+  };
+})();
 </script>
 {% endblock %}

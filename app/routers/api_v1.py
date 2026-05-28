@@ -160,6 +160,15 @@ async def create_incident_api(
     )
     db.commit()
 
+    # Automatisches Geocoding wenn Adresse vorhanden
+    if payload.Ort or payload.Strasse:
+        from app.services.geocoding import geocode_address as _geocode
+        geo = await _geocode(payload.Strasse, payload.HausNr, payload.Ort)
+        if geo:
+            incident.lat = geo.lat
+            incident.lng = geo.lng
+            db.commit()
+
     address = f"{payload.Strasse or ''} {payload.HausNr or ''}, {payload.Ort or ''}".strip(", ")
     exercise_prefix = "[ÜBUNG] " if payload.Uebung else ""
 

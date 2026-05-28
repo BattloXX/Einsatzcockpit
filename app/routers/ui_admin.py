@@ -1464,6 +1464,7 @@ async def lagekarte_tokens(
 ):
     from app.models.lagekarte import LagekarteToken
     from app.models.incident import Incident as _Incident
+    from app.core.permissions import has_role
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
     if is_sysadmin:

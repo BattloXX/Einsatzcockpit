@@ -58,6 +58,8 @@ def create_incident(
     address_street: str | None = None,
     address_no: str | None = None,
     address_city: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
     report_text: str | None = None,
     reason: str | None = None,
     incident_leader_user_id: int | None = None,
@@ -65,10 +67,17 @@ def create_incident(
     api_key_id: int | None = None,
     ip: str | None = None,
 ) -> Incident:
+    import hashlib
+    import secrets as _secrets
+    from app.models.lagekarte import LagekarteToken
+
     alarm = db.get(AlarmType, alarm_type_code)
     if alarm is None:
         alarm_type_code = "T1"
         alarm = db.get(AlarmType, "T1")  # ohne re-fetch wäre _populate_vehicles ein No-op
+
+    resolved_org_id = _resolve_org_id(db, primary_org_id)
+    raw_token = "lkw_" + _secrets.token_urlsafe(32)
 
     incident = Incident(
         external_key=external_key,
@@ -80,13 +89,26 @@ def create_incident(
         address_street=address_street,
         address_no=address_no,
         address_city=address_city,
+        lat=lat,
+        lng=lng,
         report_text=report_text,
         reason=reason,
         incident_leader_user_id=incident_leader_user_id,
-        primary_org_id=_resolve_org_id(db, primary_org_id),
+        primary_org_id=resolved_org_id,
+        auto_geojson_token=raw_token,
     )
     db.add(incident)
     db.flush()  # get id
+
+    if resolved_org_id:
+        lk_token = LagekarteToken(
+            token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
+            label="Auto",
+            org_id=resolved_org_id,
+            einsatz_id=incident.id,
+            created_at=_now(),
+        )
+        db.add(lk_token)
 
     _create_fixed_columns(db, incident)
     _populate_vehicles(db, incident, alarm)

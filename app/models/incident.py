@@ -55,6 +55,8 @@ class Incident(Base):
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Gespeicherter lagekarte.info-Projekt-Link (?shash=… oder beliebige Form)
     lagekarte_shash_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Auto-generierter GeoJSON-Feed-Token (Plain-Text für Anzeige im Adress-Modal)
+    auto_geojson_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     columns: Mapped[list[IncidentColumn]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"

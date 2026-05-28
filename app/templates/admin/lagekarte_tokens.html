@@ -16,6 +16,7 @@
   <div class="card-header"><h2>Neuen Token erstellen</h2></div>
   <div class="card-body">
     <form method="post" action="/admin/lagekarte-tokens/neu" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="flex:1;min-width:200px">
         <label class="form-label">Bezeichnung</label>
         <input type="text" name="label" placeholder="z.B. lagekarte.info Auto-Reload" class="form-input" required>
@@ -81,6 +82,7 @@
           <td>
             {% if t.is_active %}
             <form method="post" action="/admin/lagekarte-tokens/{{ t.id }}/sperren" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <button type="submit" class="btn btn--xs btn--danger"
                       onclick="return confirm('Token sperren?')">Sperren</button>
             </form>

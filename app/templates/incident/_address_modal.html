@@ -78,6 +78,21 @@
       </small>
     </div>
 
+    {# — GeoJSON-Feed-Link — #}
+    {% if auto_token %}
+    {% set geojson_url = request.base_url ~ 'api/lagekarte/einsatz/' ~ incident.id ~ '/fahrzeuge.geojson?token=' ~ auto_token %}
+    <div class="form-group" style="margin-bottom:1rem">
+      <label class="form-label">GeoJSON-Feed-Link (für lagekarte.info → Daten importieren → URL)</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" class="form-input" value="{{ geojson_url }}" readonly
+               id="geojsonFeedUrl" style="font-size:.8rem;font-family:monospace;flex:1">
+        <button type="button" class="btn btn--sm btn--ghost"
+                onclick="navigator.clipboard.writeText(document.getElementById('geojsonFeedUrl').value);this.textContent='✓ Kopiert';setTimeout(()=>this.textContent='Kopieren',2000)">Kopieren</button>
+      </div>
+      <small class="form-hint">Dieser Link zeigt alle Fahrzeuge des Einsatzes als GeoJSON. Auto-Reload in lagekarte.info aktivieren (30–60 Sek.).</small>
+    </div>
+    {% endif %}
+
     <div class="modal__footer">
       <button type="button" class="btn btn--ghost"
               onclick="document.getElementById('cardDetailModal').close()">Abbrechen</button>

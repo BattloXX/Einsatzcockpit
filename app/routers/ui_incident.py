@@ -99,15 +99,32 @@ async def new_incident(
     address_city: str = Form("Wolfurt"),
     report_text: str = Form(""),
     is_exercise: bool = Form(False),
+    lat: str = Form(""),
+    lng: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
+    from app.services.geocoding import geocode_address as _geocode
+
     user = request.state.user
+
+    lat_f: float | None = None
+    lng_f: float | None = None
+    try:
+        if lat.strip():
+            lat_f = float(lat)
+        if lng.strip():
+            lng_f = float(lng)
+    except ValueError:
+        pass
+
     incident = create_incident(
         db, alarm_type_code=alarm_type_code,
         address_street=address_street or None,
         address_no=address_no or None,
         address_city=address_city or None,
+        lat=lat_f,
+        lng=lng_f,
         report_text=report_text or None,
         is_exercise=is_exercise,
         incident_leader_user_id=user.id,
@@ -115,6 +132,15 @@ async def new_incident(
         ip=request.client.host if request.client else None,
     )
     db.commit()
+
+    # Automatisches Geocoding wenn Adresse vorhanden aber keine Koordinaten gesetzt
+    if (not lat_f or not lng_f) and (address_street or address_city):
+        geo = await _geocode(address_street or None, address_no or None, address_city or None)
+        if geo:
+            incident.lat = geo.lat
+            incident.lng = geo.lng
+            db.commit()
+
     await manager.broadcast_all({
         "type": "incident_created", "incident_id": incident.id,
         "alarm": alarm_type_code, "is_exercise": is_exercise,
@@ -1487,6 +1513,30 @@ async def move_card_endpoint(
     return Response(status_code=204)
 
 
+# ── Standalone Geocoding (für Neuer-Einsatz-Dialog ohne Incident-ID) ──────────
+
+@router.post("/adresse/geocode")
+async def standalone_geocode(
+    request: Request,
+    address_street: str = Form(""),
+    address_no: str = Form(""),
+    address_city: str = Form(""),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Geocodiert eine Adresse ohne Incident-Kontext — für das Neuer-Einsatz-Formular."""
+    from fastapi.responses import JSONResponse as _JSONResponse
+    from app.services.geocoding import geocode_address
+    result = await geocode_address(
+        address_street.strip() or None,
+        address_no.strip() or None,
+        address_city.strip() or None,
+    )
+    if result is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Adresse konnte nicht gefunden werden")
+    return _JSONResponse({"lat": result.lat, "lng": result.lng, "display_name": result.display_name})
+
+
 # ── Adresse & Koordinaten bearbeiten ─────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/adresse/bearbeiten", response_class=HTMLResponse)
@@ -1504,6 +1554,7 @@ async def address_edit_modal(
     org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
     return templates.TemplateResponse(request, "incident/_address_modal.html", {
         "user": user, "incident": incident, "org": org,
+        "auto_token": incident.auto_geojson_token,
     })
 
 
@@ -1594,4 +1645,5 @@ async def address_save(
     org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
     return templates.TemplateResponse(request, "incident/_address_modal.html", {
         "user": user, "incident": incident, "org": org, "saved": True,
+        "auto_token": incident.auto_geojson_token,
     })
