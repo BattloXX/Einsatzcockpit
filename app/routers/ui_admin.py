@@ -1905,12 +1905,21 @@ async def device_tokens_list(
     )
     roles = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if has_role(user, "system_admin") else []
+    vehicles = (
+        _org_filter(
+            db.query(VehicleMaster).filter(VehicleMaster.active == True),  # noqa: E712
+            user, VehicleMaster.dept_id,
+        )
+        .order_by(VehicleMaster.name)
+        .all()
+    )
     base_url = str(request.base_url).rstrip("/")
     return templates.TemplateResponse(request, "admin/device_tokens.html", {
         "user": user,
         "tokens": tokens,
         "roles": roles,
         "all_orgs": all_orgs,
+        "vehicles": vehicles,
         "is_sysadmin": has_role(user, "system_admin"),
         "saved": request.query_params.get("saved"),
         "error": request.query_params.get("error"),
@@ -1926,6 +1935,7 @@ async def create_device_token(
     label: str = Form(...),
     role_codes: list[str] = Form([]),
     org_id: int | None = Form(None),
+    vehicle_master_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -1970,7 +1980,14 @@ async def create_device_token(
             db.add(UserRole(user_id=device_user.id, role_id=role.id))
 
     token_hash = hash_api_key(raw_token)
-    dt = DeviceToken(label=label, token_hash=token_hash, user_id=device_user.id)
+    # Fahrzeug nur übernehmen wenn es in der eigenen Org liegt (oder system_admin)
+    safe_vehicle_id: int | None = None
+    if vehicle_master_id:
+        vm = db.get(VehicleMaster, vehicle_master_id)
+        if vm and (has_role(current_user, "system_admin") or vm.dept_id == target_org_id):
+            safe_vehicle_id = vm.id
+    dt = DeviceToken(label=label, token_hash=token_hash, user_id=device_user.id,
+                     vehicle_master_id=safe_vehicle_id)
     db.add(dt)
     db.flush()
 
@@ -1992,12 +2009,21 @@ async def create_device_token(
     )
     roles_all = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if has_role(current_user, "system_admin") else []
+    vehicles_all = (
+        _org_filter(
+            db.query(VehicleMaster).filter(VehicleMaster.active == True),  # noqa: E712
+            current_user, VehicleMaster.dept_id,
+        )
+        .order_by(VehicleMaster.name)
+        .all()
+    )
     base_url = str(request.base_url).rstrip("/")
     return templates.TemplateResponse(request, "admin/device_tokens.html", {
         "user": current_user,
         "tokens": all_tokens,
         "roles": roles_all,
         "all_orgs": all_orgs,
+        "vehicles": vehicles_all,
         "is_sysadmin": has_role(current_user, "system_admin"),
         "saved": "1",
         "error": None,
@@ -2051,5 +2077,30 @@ async def reactivate_device_token(
     write_audit(db, "admin.device_token.reactivated", user_id=request.state.user.id,
                 entity_type="device_token", entity_id=token_id,
                 payload={"label": dt.label})
+    db.commit()
+    return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
+
+
+@router.post("/geraete-login/{token_id}/fahrzeug")
+async def assign_device_vehicle(
+    token_id: int,
+    request: Request,
+    vehicle_master_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    dt = db.get(DeviceToken, token_id)
+    _assert_device_token_access(dt, request.state.user)
+    current_user = request.state.user
+    safe_vehicle_id: int | None = None
+    if vehicle_master_id:
+        vm = db.get(VehicleMaster, vehicle_master_id)
+        if vm and (has_role(current_user, "system_admin")
+                   or vm.dept_id == (dt.user.org_id if dt.user else None)):
+            safe_vehicle_id = vm.id
+    dt.vehicle_master_id = safe_vehicle_id
+    write_audit(db, "admin.device_token.vehicle_assigned", user_id=current_user.id,
+                entity_type="device_token", entity_id=token_id,
+                payload={"label": dt.label, "vehicle_master_id": safe_vehicle_id})
     db.commit()
     return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)

@@ -129,11 +129,15 @@ class DeviceToken(Base):
     label: Mapped[str] = mapped_column(String(150), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    vehicle_master_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("vehicle_master.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    vehicle: Mapped["VehicleMaster | None"] = relationship("VehicleMaster", foreign_keys=[vehicle_master_id])
 
     @property
     def is_active(self) -> bool:

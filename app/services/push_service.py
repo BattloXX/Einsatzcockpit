@@ -103,3 +103,28 @@ def notify_user(db: Session, user_id: int, title: str, body: str,
     count = sum(1 for s in subs if send_push(s, title, body, url, db=db))
     _log_push(db, title, body, url, source, user_id, count, len(subs))
     return count
+
+
+def notify_vehicle(db: Session, vehicle_master_id: int, title: str, body: str,
+                   url: str | None = None) -> int:
+    """Push an alle Geräte, die mit diesem VehicleMaster verknüpft sind."""
+    cfg = _push_cfg(db)
+    if not cfg["enabled"]:
+        return 0
+    from app.models.user import DeviceToken
+    device_tokens = (
+        db.query(DeviceToken)
+        .filter(
+            DeviceToken.vehicle_master_id == vehicle_master_id,
+            DeviceToken.revoked_at.is_(None),
+        )
+        .all()
+    )
+    if not device_tokens:
+        return 0
+    user_ids = {dt.user_id for dt in device_tokens}
+    subs = db.query(PushSubscription).filter(PushSubscription.user_id.in_(user_ids)).all()
+    count = sum(1 for s in subs if send_push(s, title, body, url, db=db))
+    if subs:
+        _log_push(db, title, body, url, "vehicle_assigned", None, count, len(subs))
+    return count

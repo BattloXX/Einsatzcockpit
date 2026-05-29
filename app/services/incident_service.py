@@ -295,6 +295,10 @@ def assign_task_to_vehicle(
         before=before, after={"vehicle_id": vehicle.id},
         user_id=user_id,
     )
+    if vehicle.vehicle_master_id:
+        from app.services.push_service import notify_vehicle
+        notify_vehicle(db, vehicle.vehicle_master_id, "📋 Neuer Auftrag", task.title,
+                       url=f"/einsatz/{task.incident_id}")
     return task
 
 
@@ -667,6 +671,10 @@ def move_card(
                 before=before, after={"vehicle_id": vehicle_id},
                 user_id=user_id,
             )
+            if v.vehicle_master_id:
+                from app.services.push_service import notify_vehicle
+                notify_vehicle(db, v.vehicle_master_id, "📋 Neuer Auftrag", task.title,
+                               url=f"/einsatz/{incident_id}")
         elif column_id:
             # Drop on a column — reorder siblings first
             siblings = (
@@ -708,6 +716,10 @@ def move_card(
                 before=before, after={"vehicle_id": vehicle_id},
                 user_id=user_id,
             )
+            if v.vehicle_master_id:
+                from app.services.push_service import notify_vehicle
+                notify_vehicle(db, v.vehicle_master_id, "📩 Neue Meldung", msg.title,
+                               url=f"/einsatz/{incident_id}")
         elif column_id:
             # Drop on a column — reorder siblings first
             siblings = (

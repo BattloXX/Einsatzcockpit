@@ -42,6 +42,7 @@
           <th>Bezeichnung</th>
           <th>Rollen</th>
           {% if is_sysadmin %}<th>Organisation</th>{% endif %}
+          <th>Fahrzeug</th>
           <th style="width:130px;">Erstellt</th>
           <th style="width:130px;">Zuletzt genutzt</th>
           <th style="width:90px;">Status</th>
@@ -63,6 +64,22 @@
           {% if is_sysadmin %}
           <td>{{ dt.user.org.name if dt.user and dt.user.org else '—' }}</td>
           {% endif %}
+          <td>
+            <form method="post" action="/admin/geraete-login/{{ dt.id }}/fahrzeug"
+                  style="display:flex;align-items:center;gap:4px;">
+              <select name="vehicle_master_id" class="form-input"
+                      style="padding:3px 6px;font-size:.82rem;min-width:120px;">
+                <option value="">– kein –</option>
+                {% for v in vehicles %}
+                <option value="{{ v.id }}" {% if dt.vehicle_master_id == v.id %}selected{% endif %}>
+                  {{ v.name }}
+                </option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn--ghost btn--xs"
+                      title="Fahrzeugzuordnung speichern">✓</button>
+            </form>
+          </td>
           <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
             {{ (dt.created_at|local).strftime('%d.%m.%Y') }}
           </td>
@@ -112,6 +129,7 @@
       <li>Widerrufene Token können reaktiviert werden; die URL bleibt dieselbe.</li>
       <li>Jedes Gerät erhält eine eigene Session und kann unabhängig gesperrt werden.</li>
       <li>Geräte erscheinen nicht in der normalen Benutzerliste.</li>
+      <li>Wird ein Gerät einem Fahrzeug zugeordnet, erhält es automatisch eine Push-Nachricht, wenn dem Fahrzeug ein Auftrag oder eine Meldung zugewiesen wird.</li>
     </ul>
   </div>
 </div>
@@ -151,6 +169,18 @@
           <option value="">— keine —</option>
           {% for org in all_orgs %}
           <option value="{{ org.id }}">{{ org.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      {% if vehicles %}
+      <div class="form-group">
+        <label class="form-label">Fahrzeug</label>
+        <select name="vehicle_master_id" class="form-input"
+                {{ tip('Push-Nachrichten bei Aufträgen/Meldungen gehen nur an dieses Gerät') }}>
+          <option value="">– kein Fahrzeug –</option>
+          {% for v in vehicles %}
+          <option value="{{ v.id }}">{{ v.name }}</option>
           {% endfor %}
         </select>
       </div>
