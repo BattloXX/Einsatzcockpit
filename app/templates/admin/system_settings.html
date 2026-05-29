@@ -3,50 +3,276 @@
 {% block admin_content %}
 <div class="page-content">
   <div class="page-header">
-    <div><h1>System-Einstellungen</h1><p class="page-header__sub">Key-Value-Store für systemweite Konfiguration</p></div>
+    <div>
+      <h1>System-Einstellungen</h1>
+      <p class="page-header__sub">Systemweite Konfiguration. Werte in der Datenbank überschreiben gleichnamige Umgebungsvariablen.</p>
+    </div>
   </div>
-  {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+
+  {% if saved %}
+  <div class="alert alert--success">Einstellungen wurden gespeichert.</div>
+  {% endif %}
+  {% if request.query_params.get('mail_ok') %}
+  <div class="alert alert--success">
+    Test-Mail erfolgreich an <strong>{{ request.query_params.get('mail_ok') }}</strong> versendet.
+  </div>
+  {% endif %}
+  {% if request.query_params.get('mail_error') %}
+  <div class="alert alert--danger">
+    Test-Mail fehlgeschlagen: {{ request.query_params.get('mail_error') }}
+  </div>
+  {% endif %}
 
   <form method="post" action="/admin/system-einstellungen">
-    <table class="table-admin">
-      <thead><tr><th>Schlüssel</th><th>Wert</th><th>Beschreibung</th></tr></thead>
-      <tbody>
-        {% set known = [
-          ('vapid_public_key', 'VAPID Public Key (Web Push)'),
-          ('vapid_private_key', 'VAPID Private Key (Web Push)'),
-          ('vapid_email', 'VAPID E-Mail (mailto:…)'),
-          ('enable_push', 'Web Push aktiviert (true/false)'),
-          ('enable_speech_input', 'Sprachdiktat aktiviert (true/false)'),
-          ('default_session_max_age', 'Session-Lebensdauer in Sekunden'),
-          ('incident_autoclose_enabled', '48h-Auto-Close aktiv (true/false, Default: true)'),
-          ('incident_autoclose_after_hours', 'Stunden bis zur "Noch offen?"-Warnung (Default: 48)'),
-          ('incident_autoclose_grace_minutes', 'Minuten zwischen Warnung und Auto-Close (Default: 60)'),
-        ] %}
-        {% for key, desc in known %}
-        <tr>
-          <td><code>{{ key }}</code></td>
-          <td><input type="text" name="k_{{ key }}" class="form-input form-input--sm"
-                     value="{{ settings.get(key, '') }}" style="width:260px"></td>
-          <td><small class="text-muted">{{ desc }}</small></td>
-        </tr>
-        {% endfor %}
-        {% for k, v in settings.items() %}
-        {% if k not in ['vapid_public_key','vapid_private_key','vapid_email','enable_push','enable_speech_input','default_session_max_age','incident_autoclose_enabled','incident_autoclose_after_hours','incident_autoclose_grace_minutes'] %}
-        <tr>
-          <td><code>{{ k }}</code></td>
-          <td><input type="text" name="k_{{ k }}" class="form-input form-input--sm" value="{{ v or '' }}" style="width:260px"></td>
-          <td><small class="text-muted">Benutzerdefiniert</small></td>
-        </tr>
-        {% endif %}
-        {% endfor %}
-      </tbody>
-    </table>
-    <div style="margin-top:16px; display:flex; gap:12px; align-items:center;">
-      <button type="submit" class="btn btn--primary">Speichern</button>
-      <span class="text-muted" style="font-size:.8rem">Neuen Key hinzufügen:</span>
-      <input type="text" name="new_key" class="form-input form-input--sm" placeholder="Key" style="width:140px">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+
+    {# ── E-Mail (SMTP) ──────────────────────────────────────────────────── #}
+    <section class="card mb-4">
+      <div class="card-header">
+        <h2>E-Mail-Versand (SMTP)</h2>
+      </div>
+      <div class="card-body">
+        <p class="text-muted" style="font-size:.85rem;margin-bottom:12px;">
+          Konfiguration für Passwort-Reset-Mails und andere Benachrichtigungen.
+          Leer lassen = Wert aus Umgebungsvariable (<code>SMTP_*</code>) verwenden.
+        </p>
+        <table class="table-admin">
+          <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>smtp_host</code></td>
+              <td><input type="text" name="k_smtp_host" class="form-input form-input--sm"
+                         value="{{ settings.get('smtp_host', '') }}" placeholder="mail.example.com" style="width:260px"></td>
+              <td><small class="text-muted">Hostname des Mailservers (z.&nbsp;B. <em>smtp.gmail.com</em>)</small></td>
+            </tr>
+            <tr>
+              <td><code>smtp_port</code></td>
+              <td><input type="number" name="k_smtp_port" class="form-input form-input--sm"
+                         value="{{ settings.get('smtp_port', '') }}" placeholder="587" style="width:100px"></td>
+              <td><small class="text-muted">TCP-Port — 587 (STARTTLS) oder 465 (SSL/TLS)</small></td>
+            </tr>
+            <tr>
+              <td><code>smtp_user</code></td>
+              <td><input type="text" name="k_smtp_user" class="form-input form-input--sm"
+                         value="{{ settings.get('smtp_user', '') }}" placeholder="absender@example.com" style="width:260px"></td>
+              <td><small class="text-muted">Benutzername für die SMTP-Authentifizierung</small></td>
+            </tr>
+            <tr>
+              <td><code>smtp_password</code></td>
+              <td><input type="password" name="k_smtp_password" class="form-input form-input--sm"
+                         value="{{ settings.get('smtp_password', '') }}" placeholder="••••••••" style="width:260px" autocomplete="new-password"></td>
+              <td><small class="text-muted">Passwort für die SMTP-Authentifizierung</small></td>
+            </tr>
+            <tr>
+              <td><code>smtp_from</code></td>
+              <td><input type="email" name="k_smtp_from" class="form-input form-input--sm"
+                         value="{{ settings.get('smtp_from', '') }}" placeholder="noreply@example.com" style="width:260px"></td>
+              <td><small class="text-muted">Absenderadresse (From-Header). Leer = <code>smtp_user</code> verwenden.</small></td>
+            </tr>
+            <tr>
+              <td><code>smtp_starttls</code></td>
+              <td>
+                <select name="k_smtp_starttls" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('smtp_starttls','') in ('','true') %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('smtp_starttls','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">STARTTLS-Verschlüsselung aktivieren (empfohlen für Port 587)</small></td>
+            </tr>
+            <tr>
+              <td><code>smtp_timeout</code></td>
+              <td><input type="number" name="k_smtp_timeout" class="form-input form-input--sm"
+                         value="{{ settings.get('smtp_timeout', '') }}" placeholder="15" style="width:100px"></td>
+              <td><small class="text-muted">Verbindungs-Timeout in Sekunden (Standard: 15)</small></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {# ── Web Push-Benachrichtigungen ─────────────────────────────────────── #}
+    <section class="card mb-4">
+      <div class="card-header">
+        <h2>Web Push-Benachrichtigungen</h2>
+      </div>
+      <div class="card-body">
+        <p class="text-muted" style="font-size:.85rem;margin-bottom:12px;">
+          Browser-Push bei neuen Einsätzen. Benötigt ein VAPID-Schlüsselpaar
+          (<code>web-push generate-vapid-keys</code>).
+          Leer lassen = Wert aus Umgebungsvariable (<code>VAPID_*</code>) verwenden.
+        </p>
+        <table class="table-admin">
+          <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>enable_push</code></td>
+              <td>
+                <select name="k_enable_push" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('enable_push','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('enable_push','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">Push-Benachrichtigungen systemweit ein- oder ausschalten</small></td>
+            </tr>
+            <tr>
+              <td><code>vapid_public_key</code></td>
+              <td><input type="text" name="k_vapid_public_key" class="form-input form-input--sm"
+                         value="{{ settings.get('vapid_public_key', '') }}" placeholder="BN…" style="width:260px"></td>
+              <td><small class="text-muted">Öffentlicher VAPID-Schlüssel — wird an Browser-Clients übermittelt</small></td>
+            </tr>
+            <tr>
+              <td><code>vapid_private_key</code></td>
+              <td><input type="password" name="k_vapid_private_key" class="form-input form-input--sm"
+                         value="{{ settings.get('vapid_private_key', '') }}" placeholder="••••••••" style="width:260px" autocomplete="new-password"></td>
+              <td><small class="text-muted">Privater VAPID-Schlüssel — niemals öffentlich teilen</small></td>
+            </tr>
+            <tr>
+              <td><code>vapid_email</code></td>
+              <td><input type="email" name="k_vapid_email" class="form-input form-input--sm"
+                         value="{{ settings.get('vapid_email', '') }}" placeholder="admin@feuerwehr.at" style="width:260px"></td>
+              <td><small class="text-muted">Kontakt-E-Mail für Push-Dienst (VAPID-Claim, ohne <em>mailto:</em>)</small></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {# ── Einsatz-Auto-Schließen ──────────────────────────────────────────── #}
+    <section class="card mb-4">
+      <div class="card-header">
+        <h2>Einsatz-Auto-Schließen</h2>
+      </div>
+      <div class="card-body">
+        <p class="text-muted" style="font-size:.85rem;margin-bottom:12px;">
+          Offene Einsätze werden nach Ablauf der konfigurierten Zeit automatisch geschlossen.
+          Benutzer können das über die „Offen halten"-Schaltfläche im Einsatz verzögern
+          (setzt den Timer zurück).
+        </p>
+        <table class="table-admin">
+          <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>incident_autoclose_enabled</code></td>
+              <td>
+                <select name="k_incident_autoclose_enabled" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('incident_autoclose_enabled','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('incident_autoclose_enabled','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">Auto-Schließen aktivieren oder deaktivieren (Standard: aktiv)</small></td>
+            </tr>
+            <tr>
+              <td><code>incident_autoclose_after_hours</code></td>
+              <td><input type="number" min="1" name="k_incident_autoclose_after_hours" class="form-input form-input--sm"
+                         value="{{ settings.get('incident_autoclose_after_hours', '') }}" placeholder="48" style="width:100px"></td>
+              <td><small class="text-muted">Stunden nach Einsatzbeginn bis zur „Noch offen?"-Warnung (Standard: 48&nbsp;h)</small></td>
+            </tr>
+            <tr>
+              <td><code>incident_autoclose_grace_minutes</code></td>
+              <td><input type="number" min="1" name="k_incident_autoclose_grace_minutes" class="form-input form-input--sm"
+                         value="{{ settings.get('incident_autoclose_grace_minutes', '') }}" placeholder="60" style="width:100px"></td>
+              <td><small class="text-muted">Minuten zwischen der Warnung und dem tatsächlichen Schließen (Standard: 60&nbsp;min)</small></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {# ── Allgemein ──────────────────────────────────────────────────────── #}
+    <section class="card mb-4">
+      <div class="card-header">
+        <h2>Allgemein</h2>
+      </div>
+      <div class="card-body">
+        <table class="table-admin">
+          <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>enable_speech_input</code></td>
+              <td>
+                <select name="k_enable_speech_input" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('enable_speech_input','') == 'true' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('enable_speech_input','') != 'true' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">Sprachdiktat-Schaltfläche in Eingabefeldern einblenden</small></td>
+            </tr>
+            <tr>
+              <td><code>default_session_max_age</code></td>
+              <td><input type="number" min="300" name="k_default_session_max_age" class="form-input form-input--sm"
+                         value="{{ settings.get('default_session_max_age', '') }}" placeholder="86400" style="width:140px"></td>
+              <td><small class="text-muted">Session-Lebensdauer in Sekunden (Standard: 86400 = 24&nbsp;h). Wirksam ab dem nächsten Login.</small></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {# ── Benutzerdefinierte Einstellungen ─────────────────────────────── #}
+    {% set known_keys_list = [
+      'smtp_host','smtp_port','smtp_user','smtp_password','smtp_from','smtp_starttls','smtp_timeout',
+      'vapid_public_key','vapid_private_key','vapid_email','enable_push',
+      'incident_autoclose_enabled','incident_autoclose_after_hours','incident_autoclose_grace_minutes',
+      'enable_speech_input','default_session_max_age',
+    ] %}
+    {% set ns = namespace(has_custom=false) %}
+    {% for k, v in settings.items() %}
+      {% if k not in known_keys_list %}{% set ns.has_custom = true %}{% endif %}
+    {% endfor %}
+    {% if ns.has_custom %}
+    <section class="card mb-4">
+      <div class="card-header">
+        <h2>Benutzerdefinierte Einstellungen</h2>
+      </div>
+      <div class="card-body">
+        <table class="table-admin">
+          <thead><tr><th style="width:230px">Schlüssel</th><th>Wert</th><th>Typ</th></tr></thead>
+          <tbody>
+            {% for k, v in settings.items() %}
+            {% if k not in known_keys_list %}
+            <tr>
+              <td><code>{{ k }}</code></td>
+              <td><input type="text" name="k_{{ k }}" class="form-input form-input--sm" value="{{ v or '' }}" style="width:260px"></td>
+              <td><small class="text-muted">Benutzerdefiniert</small></td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    <div style="margin-top:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding-bottom:8px;">
+      <button type="submit" class="btn btn--primary">Einstellungen speichern</button>
+      <span class="text-muted" style="font-size:.85rem;">Neuen Schlüssel hinzufügen:</span>
+      <input type="text" name="new_key" class="form-input form-input--sm" placeholder="Schlüssel" style="width:160px">
       <input type="text" name="new_value" class="form-input form-input--sm" placeholder="Wert" style="width:200px">
     </div>
   </form>
+
+  {# ── SMTP-Verbindung testen ───────────────────────────────────────────── #}
+  <section class="card mb-4" style="margin-top:24px;">
+    <div class="card-header">
+      <h2>SMTP-Verbindung testen</h2>
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="font-size:.85rem;margin-bottom:12px;">
+        Sendet eine Test-Mail mit den aktuell <strong>in der Datenbank gespeicherten</strong> SMTP-Einstellungen.
+        Zuerst speichern, dann testen.
+      </p>
+      <form method="post" action="/admin/system-einstellungen/test-mail"
+            style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label style="font-size:.9rem; white-space:nowrap;">Test-Mail an:</label>
+        <input type="email" name="test_mail_to" class="form-input form-input--sm"
+               placeholder="{{ user.email or 'empfaenger@example.com' }}"
+               value="{{ user.email or '' }}"
+               style="width:260px">
+        <button type="submit" class="btn btn--secondary">Test-Mail senden</button>
+      </form>
+    </div>
+  </section>
+
 </div>
 {% endblock %}
