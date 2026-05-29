@@ -4,13 +4,18 @@ Schlanker Wrapper um aiosmtplib. Wird vom Passwort-Reset-Flow und vom
 Settings-„Test-Mail"-Button verwendet. Wenn SMTP_HOST leer ist, läuft alles
 in einem Trockenlauf: die Mail wird ins Log geschrieben, ohne tatsächlich
 zu senden — praktisch für lokale Entwicklung.
+
+SMTP-Konfiguration: Werte aus den System-Einstellungen (Datenbank) haben Vorrang
+vor Umgebungsvariablen. So können SMTP-Parameter über das Admin-UI gepflegt werden,
+ohne die .env-Datei anpassen zu müssen.
 """
 import logging
 from email.message import EmailMessage
+from typing import Any
 
 try:
     import aiosmtplib  # type: ignore
-except ImportError:  # pragma: no cover – Dependency wird via pyproject installiert
+except ImportError:  # pragma: no cover
     aiosmtplib = None  # type: ignore
 
 from app.config import settings
@@ -22,9 +27,55 @@ class MailConfigError(RuntimeError):
     """SMTP nicht konfiguriert."""
 
 
-def _build_message(*, to: str, subject: str, body_txt: str, body_html: str | None = None) -> EmailMessage:
+def get_smtp_cfg(db=None) -> dict[str, Any]:
+    """Lädt SMTP-Konfiguration – DB-Werte haben Vorrang vor Umgebungsvariablen."""
+    cfg = {
+        "host": settings.SMTP_HOST,
+        "port": settings.SMTP_PORT,
+        "user": settings.SMTP_USER,
+        "password": settings.SMTP_PASSWORD,
+        "from_addr": settings.SMTP_FROM,
+        "starttls": settings.SMTP_STARTTLS,
+        "timeout": settings.SMTP_TIMEOUT,
+    }
+    if db is not None:
+        try:
+            from app.models.master import SystemSettings
+
+            def _get(key: str) -> str | None:
+                row = db.query(SystemSettings).filter_by(key=key).first()
+                return row.value if row and row.value else None
+
+            if (v := _get("smtp_host")) is not None:
+                cfg["host"] = v
+            if (v := _get("smtp_port")) is not None:
+                try:
+                    cfg["port"] = int(v)
+                except ValueError:
+                    pass
+            if (v := _get("smtp_user")) is not None:
+                cfg["user"] = v
+            if (v := _get("smtp_password")) is not None:
+                cfg["password"] = v
+            if (v := _get("smtp_from")) is not None:
+                cfg["from_addr"] = v
+            if (v := _get("smtp_starttls")) is not None:
+                cfg["starttls"] = v.lower() == "true"
+            if (v := _get("smtp_timeout")) is not None:
+                try:
+                    cfg["timeout"] = int(v)
+                except ValueError:
+                    pass
+        except Exception:
+            logger.exception("Fehler beim Laden der SMTP-Einstellungen aus der Datenbank")
+    return cfg
+
+
+def _build_message(*, to: str, subject: str, body_txt: str,
+                   body_html: str | None = None, smtp_cfg: dict | None = None) -> EmailMessage:
+    from_addr = (smtp_cfg or {}).get("from_addr") or (smtp_cfg or {}).get("user") or "noreply@example.com"
     msg = EmailMessage()
-    msg["From"] = settings.SMTP_FROM or settings.SMTP_USER or "noreply@example.com"
+    msg["From"] = from_addr
     msg["To"] = to
     msg["Subject"] = subject
     msg.set_content(body_txt, subtype="plain", charset="utf-8")
@@ -33,11 +84,11 @@ def _build_message(*, to: str, subject: str, body_txt: str, body_html: str | Non
     return msg
 
 
-async def _send(msg: EmailMessage) -> None:
+async def _send(msg: EmailMessage, smtp_cfg: dict) -> None:
     """Versendet eine E-Mail. Bei fehlender SMTP-Konfiguration wird die Mail nur geloggt."""
-    if not settings.SMTP_HOST:
+    if not smtp_cfg.get("host"):
         logger.warning(
-            "SMTP_HOST nicht gesetzt – Mail wird NICHT versendet. "
+            "smtp_host nicht konfiguriert – Mail wird NICHT versendet. "
             "An: %s | Betreff: %s",
             msg["To"], msg["Subject"],
         )
@@ -49,20 +100,21 @@ async def _send(msg: EmailMessage) -> None:
             "die Dependency in pyproject.toml aktivieren."
         )
 
-    kwargs = {
-        "hostname": settings.SMTP_HOST,
-        "port": settings.SMTP_PORT,
-        "timeout": settings.SMTP_TIMEOUT,
-        "start_tls": bool(settings.SMTP_STARTTLS),
+    kwargs: dict[str, Any] = {
+        "hostname": smtp_cfg["host"],
+        "port": smtp_cfg["port"],
+        "timeout": smtp_cfg["timeout"],
+        "start_tls": bool(smtp_cfg["starttls"]),
     }
-    if settings.SMTP_USER:
-        kwargs["username"] = settings.SMTP_USER
-        kwargs["password"] = settings.SMTP_PASSWORD
+    if smtp_cfg.get("user"):
+        kwargs["username"] = smtp_cfg["user"]
+        kwargs["password"] = smtp_cfg.get("password", "")
 
     await aiosmtplib.send(msg, **kwargs)
 
 
-async def send_password_reset(*, to: str, reset_url: str, user_display_name: str) -> None:
+async def send_password_reset(*, to: str, reset_url: str, user_display_name: str, db=None) -> None:
+    smtp_cfg = get_smtp_cfg(db)
     subject = "Passwort zurücksetzen – Einsatzleiter-Hilfswerkzeug"
     ttl = settings.PASSWORD_RESET_TTL_MIN
     body_txt = (
@@ -94,18 +146,23 @@ kannst du diese Mail ignorieren. Dein Passwort bleibt unverändert.</p>
 <p style="font-size:0.85rem;color:#666;">URL: <code>{reset_url}</code></p>
 </body></html>
 """
-    msg = _build_message(to=to, subject=subject, body_txt=body_txt, body_html=body_html)
-    await _send(msg)
+    msg = _build_message(to=to, subject=subject, body_txt=body_txt,
+                         body_html=body_html, smtp_cfg=smtp_cfg)
+    await _send(msg, smtp_cfg)
 
 
-async def send_test_mail(*, to: str) -> None:
+async def send_test_mail(*, to: str, db=None) -> None:
+    smtp_cfg = get_smtp_cfg(db)
+    source = "Datenbank" if db is not None else "Umgebungsvariablen"
     msg = _build_message(
         to=to,
         subject="Test-Mail vom Einsatzleiter-Hilfswerkzeug",
         body_txt=(
             "Diese Test-Mail bestätigt, dass die SMTP-Konfiguration funktioniert.\n\n"
-            f"Host: {settings.SMTP_HOST}\nPort: {settings.SMTP_PORT}\n"
-            f"STARTTLS: {settings.SMTP_STARTTLS}\nAbsender: {settings.SMTP_FROM}\n"
+            f"Konfigurationsquelle: {source}\n"
+            f"Host: {smtp_cfg['host']}\nPort: {smtp_cfg['port']}\n"
+            f"STARTTLS: {smtp_cfg['starttls']}\nAbsender: {smtp_cfg['from_addr']}\n"
         ),
+        smtp_cfg=smtp_cfg,
     )
-    await _send(msg)
+    await _send(msg, smtp_cfg)

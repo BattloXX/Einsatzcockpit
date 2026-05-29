@@ -1,4 +1,5 @@
 """Admin-UI: Stammdaten, User, Rollen, API-Keys."""
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -29,6 +30,7 @@ from app.models.master import (
 from app.models.user import ApiKey, AuditLog, Role, User, UserRole
 
 router = APIRouter(prefix="/admin")
+logger_admin = logging.getLogger("einsatzleiter.admin")
 
 
 def _org_filter(q, user, col):
@@ -629,6 +631,7 @@ async def send_user_reset_mail(
         await send_password_reset(
             to=u.email, reset_url=reset_url,
             user_display_name=u.full_name or u.display_name or u.username,
+            db=db,
         )
     except Exception:
         return RedirectResponse("/admin/benutzer?error=mail_failed", status_code=303)
@@ -1300,8 +1303,16 @@ async def save_system_settings(
 ):
     form = await request.form()
     known_keys = [
-        "vapid_public_key", "vapid_private_key", "vapid_email",
-        "enable_push", "enable_speech_input", "default_session_max_age",
+        # Web Push
+        "vapid_public_key", "vapid_private_key", "vapid_email", "enable_push",
+        # E-Mail (SMTP)
+        "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from",
+        "smtp_starttls", "smtp_timeout",
+        # Allgemein
+        "enable_speech_input", "default_session_max_age",
+        # Auto-Schließen
+        "incident_autoclose_enabled", "incident_autoclose_after_hours",
+        "incident_autoclose_grace_minutes",
     ]
     for key in known_keys:
         val = form.get(f"k_{key}")
@@ -1332,6 +1343,42 @@ async def save_system_settings(
     write_audit(db, "admin.system_settings.updated", user_id=request.state.user.id)
     db.commit()
     return RedirectResponse("/admin/system-einstellungen?saved=1", status_code=303)
+
+
+@router.post("/system-einstellungen/test-mail", response_class=HTMLResponse)
+async def test_smtp_mail(
+    request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("system_admin")),
+    test_mail_to: str = Form(""),
+):
+    from app.services.mail_service import MailConfigError, get_smtp_cfg, send_test_mail
+
+    recipient = test_mail_to.strip() or request.state.user.email or ""
+    if not recipient:
+        return RedirectResponse(
+            "/admin/system-einstellungen?mail_error=Keine+Empfängeradresse+angegeben", status_code=303
+        )
+    smtp_cfg = get_smtp_cfg(db)
+    if not smtp_cfg.get("host"):
+        return RedirectResponse(
+            "/admin/system-einstellungen?mail_error=SMTP-Host+nicht+konfiguriert", status_code=303
+        )
+    try:
+        await send_test_mail(to=recipient, db=db)
+        write_audit(db, "admin.system_settings.test_mail_sent", user_id=request.state.user.id)
+        return RedirectResponse(
+            f"/admin/system-einstellungen?mail_ok={recipient}", status_code=303
+        )
+    except MailConfigError as exc:
+        return RedirectResponse(
+            f"/admin/system-einstellungen?mail_error={str(exc)[:120]}", status_code=303
+        )
+    except Exception as exc:
+        logger_admin.warning("Test-Mail fehlgeschlagen: %s", exc)
+        return RedirectResponse(
+            f"/admin/system-einstellungen?mail_error=Versand+fehlgeschlagen%3A+{str(exc)[:100]}",
+            status_code=303,
+        )
 
 
 # ── Backup / Export ───────────────────────────────────────────────────────────
