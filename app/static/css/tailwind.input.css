@@ -55,6 +55,56 @@
   --hover:     var(--surface-high);
   --primary:   var(--red);
 
+  /* ── Ampel status chip fills ────────────────────────────────── */
+  --ampel-red:    #c62828;
+  --ampel-orange: #e65100;
+  --ampel-green:  #2e7d32;
+  --ampel-blue:   #1565c0;
+  --ampel-gray:   #6b7280;
+  --ampel-black:  #333333;
+
+  /* ── Card type accent colors (left border) ──────────────────── */
+  --org-vehicle: var(--red);
+  --org-task:    #3a7bd5;
+  --org-message: var(--yellow);
+  --org-rescue:  var(--green);
+
+  /* ── Shadow scale ───────────────────────────────────────────── */
+  --shadow-card:  0 1px 2px rgba(0,0,0,.40);
+  --shadow-hover: 0 4px 20px rgba(0,0,0,.60);
+  --shadow-modal: 0 10px 40px rgba(0,0,0,.60);
+  --shadow-drag:  0 8px 24px rgba(0,0,0,.50);
+  --focus-ring:   0 0 0 3px rgba(183,25,33,.18);
+
+  /* ── Font family vars ───────────────────────────────────────── */
+  --font-sans: 'Hanken Grotesk', Inter, 'Segoe UI', system-ui, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ── Type scale ─────────────────────────────────────────────── */
+  --display-lg:   32px;
+  --headline-md:  20px;
+  --headline-sm:  16px;
+  --body-lg:      16px;
+  --body-sm:      14px;
+  --label-caps-size: 12px;
+  --status-badge: 11px;
+
+  /* ── Radius (complete set) ──────────────────────────────────── */
+  --radius-md:   0.5rem;
+  --radius-lg:   0.75rem;
+  --radius-full: 9999px;
+
+  /* ── Spacing scale ──────────────────────────────────────────── */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+  --gutter:      12px;
+  --app-padding: 20px;
+  --column-width: 320px;
   --topnav-h:  64px;
   --topnav-bg: #b71921;
   --sidebar-w: 320px;
@@ -403,9 +453,10 @@ body.mobile-menu-open { overflow: hidden; }
 
 /* ── Exercise Banner ─────────────────────────────────────── */
 .exercise-topbar {
-  background: repeating-linear-gradient(45deg, var(--yellow), var(--yellow) 10px, #111 10px, #111 20px);
-  color: var(--yellow); text-align: center; font-weight: 900; font-size: 1rem;
-  padding: 6px; letter-spacing: 2px;
+  background: repeating-linear-gradient(45deg, #3a2e05, #3a2e05 12px, #2a2204 12px, #2a2204 24px);
+  color: var(--yellow); text-align: center; font-weight: 800; font-size: 13px;
+  padding: 5px; letter-spacing: .1em; font-family: 'JetBrains Mono', monospace;
+  flex-shrink: 0;
 }
 
 /* ── Sidebar Toggle ──────────────────────────────────────────── */
@@ -881,6 +932,39 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
 @media (min-width: 761px) {
   .mobile-menu, .mobile-menu-backdrop { display: none !important; }
 }
+
+/* ── Label caps (sidebar section titles, form field labels) ─── */
+.label-caps {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--red-light);
+}
+
+/* ── Ampel select chip (inline status dropdown) ──────────────── */
+.ampel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.ampel option { color: #111; background: #fff; }
+.st-red    { background: var(--ampel-red); }
+.st-orange { background: var(--ampel-orange); }
+.st-green  { background: var(--ampel-green); }
+.st-blue   { background: var(--ampel-blue); }
+.st-gray   { background: var(--ampel-gray); }
+.st-black  { background: var(--ampel-black); }
+.st-info   { background: var(--blue); }
 
 /* ── Print (non-PDF) ─────────────────────────────────────── */
 @media print {

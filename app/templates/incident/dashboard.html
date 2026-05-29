@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard · {{ incident.alarm_type_code }} – {{ incident.address_street or ('Einsatz #' ~ incident.id) }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
     /* ── Reset & Tokens ─────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -13,20 +15,20 @@
       --surface:         #171f33;
       --surface-high:    #222a3d;
       --surface-highest: #2d3449;
-      --border:          rgba(90,64,61,.55);
-      --border-soft:     rgba(90,64,61,.28);
+      --border:          #2e3347;
+      --border-soft:     rgba(46,51,71,.5);
       --text:            #dae2fd;
-      --text-muted:      #aeb9d0;
+      --text-muted:      #7a87a8;
       --text-dim:        #5b6b8a;
 
-      --green:    #22c55e;
-      --amber:    #f97316;
-      --blue:     #adc6ff;
-      --red:      #ffb3ac;
-      --red-dark: #d32f2f;
+      --green:    #18a957;
+      --amber:    #f2b02e;
+      --blue:     #1877f2;
+      --red:      #b71921;
+      --red-dark: #8c0f15;
 
-      --font-ui:   'Segoe UI', system-ui, -apple-system, sans-serif;
-      --font-mono: 'Consolas', 'JetBrains Mono', monospace;
+      --font-ui:   'Hanken Grotesk', Inter, 'Segoe UI', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
     }
 
     /* Skalierbare Basisschrift – wächst mit der Viewport-Breite mit.
@@ -63,7 +65,7 @@
       border-bottom: 1px solid rgba(255,255,255,.1);
       box-shadow: 0 4px 24px rgba(0,0,0,.5);
       {% if ac_pre == 'f' %}
-      background: linear-gradient(100deg, #7f1d1d 0%, #991b1b 55%, #7f1d1d 100%);
+      background: #b71921;
       {% elif ac_pre == 't' %}
       background: linear-gradient(100deg, #1e3a8a 0%, #1d4ed8 55%, #1e3a8a 100%);
       {% else %}
@@ -204,11 +206,11 @@
       letter-spacing: .08em;
       margin-top: 5px;
     }
-    .status-pill--active   { background: rgba(34,197,94,.2);  border: 1px solid rgba(34,197,94,.4);  color: #86efac; }
-    .status-pill--exercise { background: rgba(249,115,22,.2); border: 1px solid rgba(249,115,22,.4); color: #fdba74; }
+    .status-pill--active   { background: rgba(24,169,87,.2);  border: 1px solid rgba(24,169,87,.4);  color: #5fcf8e; }
+    .status-pill--exercise { background: rgba(242,176,46,.2); border: 1px solid rgba(242,176,46,.4); color: var(--amber); }
     .pulse-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .pulse-dot--green  { background: #22c55e; animation: blink 2s ease-in-out infinite; }
-    .pulse-dot--amber  { background: #f97316; animation: blink 2s ease-in-out infinite; }
+    .pulse-dot--green  { background: var(--green); animation: blink 2s ease-in-out infinite; }
+    .pulse-dot--amber  { background: var(--amber); animation: blink 2s ease-in-out infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
     /* ── LAGE BAR (separate strip below header) ─────────────────────────────── */
@@ -295,8 +297,8 @@
       padding: 2px 8px;
       border-radius: 4px;
     }
-    .panel-badge--green { background: rgba(34,197,94,.18); color: #86efac; border: 1px solid rgba(34,197,94,.3); }
-    .panel-badge--amber { background: rgba(249,115,22,.18); color: #fdba74; border: 1px solid rgba(249,115,22,.3); }
+    .panel-badge--green { background: rgba(24,169,87,.18); color: #5fcf8e; border: 1px solid rgba(24,169,87,.3); }
+    .panel-badge--amber { background: rgba(242,176,46,.18); color: var(--amber); border: 1px solid rgba(242,176,46,.3); }
 
     .stat-row { display: flex; align-items: center; gap: 8px; }
     .chip {
@@ -310,15 +312,15 @@
       line-height: 1;
     }
     .chip-lbl { font-size: .82rem; font-weight: 500; line-height: 1.2; }
-    .chip--blue { background: rgba(59,130,246,.13); border: 1px solid rgba(59,130,246,.28); }
-    .chip--blue .chip-num { color: #93c5fd; }
-    .chip--blue .chip-lbl { color: rgba(147,197,253,.65); }
-    .chip--green { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.25); }
-    .chip--green .chip-num { color: #86efac; }
-    .chip--green .chip-lbl { color: rgba(134,239,172,.65); }
+    .chip--blue { background: rgba(24,119,242,.13); border: 1px solid rgba(24,119,242,.28); }
+    .chip--blue .chip-num { color: #63a4f8; }
+    .chip--blue .chip-lbl { color: rgba(99,164,248,.65); }
+    .chip--green { background: rgba(24,169,87,.1); border: 1px solid rgba(24,169,87,.25); }
+    .chip--green .chip-num { color: #5fcf8e; }
+    .chip--green .chip-lbl { color: rgba(95,207,142,.65); }
 
     .progress-bar { height: 3px; background: rgba(255,255,255,.07); border-radius: 2px; margin-top: 8px; overflow: hidden; }
-    .progress-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg,#22c55e,rgba(34,197,94,.6)); transition: width .7s ease; }
+    .progress-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg,#18a957,rgba(24,169,87,.6)); transition: width .7s ease; }
 
     .panel-body {
       flex: 1;
@@ -469,9 +471,9 @@
     .ps-names  { display: flex; flex-direction: column; gap: 1px; overflow: hidden; max-width: 130px; }
     .ps-name   { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .ps-group--found       .ps-label, .ps-group--found       .ps-count { color: #93c5fd; }
-    .ps-group--treated     .ps-label, .ps-group--treated     .ps-count { color: #fdba74; }
-    .ps-group--transported .ps-label, .ps-group--transported .ps-count { color: #86efac; }
+    .ps-group--found       .ps-label, .ps-group--found       .ps-count { color: #63a4f8; }
+    .ps-group--treated     .ps-label, .ps-group--treated     .ps-count { color: var(--amber); }
+    .ps-group--transported .ps-label, .ps-group--transported .ps-count { color: #5fcf8e; }
 
     /* ── ATEMSCHUTZ-STRIP ───────────────────────────────────────────────────── */
     .bs-strip {
@@ -550,8 +552,8 @@
       line-height: 1;
       white-space: nowrap;
     }
-    .bs-press--ok   { color: #86efac; }
-    .bs-press--warn { color: #fbbf24; }
+    .bs-press--ok   { color: #5fcf8e; }
+    .bs-press--warn { color: var(--amber); }
     .bs-press--crit { color: #f87171; }
     .bs-press--none { color: rgba(255,255,255,.3); font-size: .78rem; font-style: italic; font-weight: 400; }
 
@@ -572,8 +574,8 @@
       border-radius: 3px;
       white-space: nowrap;
     }
-    .bs-badge--im_einsatz { background: rgba(249,115,22,.2); color: #fdba74; border: 1px solid rgba(249,115,22,.35); }
-    .bs-badge--rueckzug   { background: rgba(239,68,68,.25); color: #fca5a5; border: 1px solid rgba(239,68,68,.4); }
+    .bs-badge--im_einsatz { background: rgba(242,176,46,.2); color: var(--amber); border: 1px solid rgba(242,176,46,.35); }
+    .bs-badge--rueckzug   { background: rgba(216,48,48,.25); color: #f08080; border: 1px solid rgba(216,48,48,.4); }
 
     /* ── QR-Code im Header ── */
     .hdr-qr {
