@@ -63,6 +63,11 @@
       </a>
 
       <div class="admin-nav__group">Verwaltung</div>
+      <a href="/admin/geraete-login"
+         class="admin-nav__item {% if '/admin/geraete-login' in request.url.path %}is-active{% endif %}"
+         {{ tip('Token-URLs für Tablets und Anzeigegeräte') }}>
+        <span class="admin-nav__icon">📱</span>Geräte-Login
+      </a>
       <a href="/admin/push-nachrichten"
          class="admin-nav__item {% if '/admin/push-nachrichten' in request.url.path %}is-active{% endif %}"
          {{ tip('Manuelle Push-Nachrichten an alle oder einzelne Benutzer') }}>

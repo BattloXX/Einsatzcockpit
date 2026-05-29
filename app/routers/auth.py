@@ -6,11 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.audit import write_audit
-from app.core.security import sign_session, unsign_qr_token, verify_password
+from app.core.security import hash_api_key, sign_session, unsign_qr_token, verify_password
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentToken
-from app.models.user import User
+from app.models.user import DeviceToken, User
 
 router = APIRouter()
 
@@ -103,6 +103,34 @@ async def login(
     token = sign_session(user.id)
     redirect = RedirectResponse("/", status_code=302)
     _set_session_cookie(redirect, token)
+    return redirect
+
+
+@router.get("/geraet-login")
+async def device_login(request: Request, token: str, db: Session = Depends(get_db)):
+    """Token-basierter Auto-Login für registrierte Geräte."""
+    token_hash = hash_api_key(token)
+    dt = db.query(DeviceToken).filter(
+        DeviceToken.token_hash == token_hash,
+        DeviceToken.revoked_at.is_(None),
+    ).first()
+    if not dt:
+        return RedirectResponse("/login?error=device_invalid", status_code=302)
+    user = db.get(User, dt.user_id)
+    if not user or not user.active:
+        return RedirectResponse("/login?error=device_invalid", status_code=302)
+
+    now = datetime.now(UTC)
+    dt.last_used_at = now
+    user.last_login_at = now
+    write_audit(db, "auth.device_login", user_id=user.id,
+                ip=request.client.host if request.client else None,
+                payload={"device_token_id": dt.id, "label": dt.label})
+    db.commit()
+
+    session_token = sign_session(user.id)
+    redirect = RedirectResponse("/", status_code=302)
+    _set_session_cookie(redirect, session_token)
     return redirect
 
 

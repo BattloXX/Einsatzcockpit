@@ -1,0 +1,176 @@
+{% extends "admin/_layout.html" %}
+{% from "_tooltip.html" import tip %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Geräte-Login – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Geräte-Login'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Geräte-Login</h1>
+      <p class="page-header__sub">Token-basierte Anmelde-URLs für Tablets und Anzeigegeräte.</p>
+    </div>
+    <button class="btn btn--primary" onclick="document.getElementById('newDeviceModal').showModal()"
+            {{ tip('Neues Gerät mit Token-URL registrieren') }}>+ Gerät registrieren</button>
+  </div>
+
+  {% if saved and new_token %}
+  <div class="alert alert--success" style="margin-bottom:20px;">
+    <strong>Gerät „{{ new_label }}" erstellt.</strong> Bitte die URL jetzt kopieren – sie wird nur einmal angezeigt.
+    <div style="margin-top:12px;background:var(--surface-high);border-radius:6px;padding:12px 14px;display:flex;align-items:center;gap:10px;">
+      <code id="newTokenUrl" style="flex:1;word-break:break-all;font-size:.88rem;">{{ base_url }}/geraet-login?token={{ new_token }}</code>
+      <button class="btn btn--ghost btn--sm" onclick="copyDeviceUrl()" {{ tip('URL in Zwischenablage kopieren') }}>
+        📋 Kopieren
+      </button>
+    </div>
+  </div>
+  {% elif saved %}
+  <div class="alert alert--success" style="margin-bottom:20px;">Änderung gespeichert.</div>
+  {% endif %}
+
+  {% if error == 'empty_label' %}
+  <div class="alert alert--danger" style="margin-bottom:20px;">Bezeichnung darf nicht leer sein.</div>
+  {% endif %}
+
+  <!-- Geräte-Tabelle -->
+  {% if tokens %}
+  <div style="overflow-x:auto;margin-bottom:24px;">
+    <table class="table-admin" style="min-width:600px;">
+      <thead>
+        <tr>
+          <th>Bezeichnung</th>
+          <th>Rollen</th>
+          {% if is_sysadmin %}<th>Organisation</th>{% endif %}
+          <th style="width:130px;">Erstellt</th>
+          <th style="width:130px;">Zuletzt genutzt</th>
+          <th style="width:90px;">Status</th>
+          <th style="width:150px;">Aktionen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for dt in tokens %}
+        <tr>
+          <td>
+            <strong>{{ dt.label }}</strong>
+            <br><small class="text-muted" style="font-family:monospace;">{{ dt.user.username if dt.user else '—' }}</small>
+          </td>
+          <td>
+            {% if dt.user %}
+              {{ dt.user.roles|map(attribute='label')|join(', ') or '–' }}
+            {% else %}—{% endif %}
+          </td>
+          {% if is_sysadmin %}
+          <td>{{ dt.user.org.name if dt.user and dt.user.org else '—' }}</td>
+          {% endif %}
+          <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
+            {{ (dt.created_at|local).strftime('%d.%m.%Y') }}
+          </td>
+          <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
+            {% if dt.last_used_at %}{{ (dt.last_used_at|local).strftime('%d.%m.%Y %H:%M') }}
+            {% else %}<span class="text-muted">Nie</span>{% endif %}
+          </td>
+          <td>
+            {% if dt.is_active %}
+              <span class="badge-pill badge-pill--green" style="font-size:.8rem;">Aktiv</span>
+            {% else %}
+              <span class="badge-pill badge-pill--gray" style="font-size:.8rem;">Widerrufen</span>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;">
+            {% if dt.is_active %}
+            <form method="post" action="/admin/geraete-login/{{ dt.id }}/widerrufen" style="display:inline;"
+                  onsubmit="return confirm('Token für „{{ dt.label }}" widerrufen? Das Gerät kann sich dann nicht mehr anmelden.')">
+              <button class="btn btn--ghost btn--sm" {{ tip('Anmeldung sofort sperren') }}>Widerrufen</button>
+            </form>
+            {% else %}
+            <form method="post" action="/admin/geraete-login/{{ dt.id }}/reaktivieren" style="display:inline;">
+              <button class="btn btn--ghost btn--sm" {{ tip('Token reaktivieren') }}>Reaktivieren</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="chart-box" style="text-align:center;padding:40px;margin-bottom:24px;">
+    <div style="font-size:2.5rem;margin-bottom:8px;">📱</div>
+    <p class="text-muted">Noch keine Geräte registriert.</p>
+    <button class="btn btn--primary" style="margin-top:12px;"
+            onclick="document.getElementById('newDeviceModal').showModal()">+ Erstes Gerät registrieren</button>
+  </div>
+  {% endif %}
+
+  <!-- Hinweise -->
+  <div class="chart-box">
+    <h3 style="margin-bottom:8px;">Hinweise</h3>
+    <ul style="margin:0;padding-left:18px;line-height:1.7;color:var(--color-text-muted);font-size:.9rem;">
+      <li>Die Login-URL enthält einen geheimen Token und ersetzt Benutzername + Passwort.</li>
+      <li>Die URL wird nur beim Erstellen einmalig angezeigt — bitte sofort kopieren oder als Lesezeichen speichern.</li>
+      <li>Widerrufene Token können reaktiviert werden; die URL bleibt dieselbe.</li>
+      <li>Jedes Gerät erhält eine eigene Session und kann unabhängig gesperrt werden.</li>
+      <li>Geräte erscheinen nicht in der normalen Benutzerliste.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Modal: Neues Gerät -->
+<dialog id="newDeviceModal" style="background:var(--surface-mid);border:1px solid var(--border);border-radius:.75rem;color:var(--on-surface);padding:0;max-width:480px;width:100%;">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+    <h2>Gerät registrieren</h2>
+    <button class="btn btn--ghost btn--sm" onclick="document.getElementById('newDeviceModal').close()">✕</button>
+  </div>
+  <div class="card-body">
+    <form method="post" action="/admin/geraete-login/neu">
+      <div class="form-group">
+        <label class="form-label">Bezeichnung <span style="color:var(--color-danger)">*</span></label>
+        <input type="text" name="label" class="form-input" required maxlength="150"
+               placeholder="z.B. Tablet Gerätehaus EG"
+               {{ tip('Name des Geräts, wird im Login-Token verwendet') }}>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rollen</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+          {% for role in roles %}
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" name="role_codes" value="{{ role.code }}">
+            <span>{{ role.label }}</span>
+            <small class="text-muted" style="font-family:monospace;">({{ role.code }})</small>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% if is_sysadmin and all_orgs %}
+      <div class="form-group">
+        <label class="form-label">Organisation</label>
+        <select name="org_id" class="form-input">
+          <option value="">— keine —</option>
+          {% for org in all_orgs %}
+          <option value="{{ org.id }}">{{ org.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
+        <button type="button" class="btn btn--ghost" onclick="document.getElementById('newDeviceModal').close()">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Gerät erstellen & Token generieren</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyDeviceUrl() {
+  const el = document.getElementById('newTokenUrl');
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+    const btn = el.nextElementSibling;
+    if (btn) { btn.textContent = '✓ Kopiert'; setTimeout(() => { btn.textContent = '📋 Kopieren'; }, 2000); }
+  });
+}
+</script>
+{% endblock %}

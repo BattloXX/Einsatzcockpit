@@ -30,7 +30,7 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
-from app.models.user import ApiKey, AuditLog, PushLog, PushSubscription, Role, User, UserRole
+from app.models.user import ApiKey, AuditLog, DeviceToken, PushLog, PushSubscription, Role, User, UserRole
 
 router = APIRouter(prefix="/admin")
 logger_admin = logging.getLogger("einsatzleiter.admin")
@@ -57,7 +57,7 @@ async def users_list(request: Request, db: Session = Depends(get_db),
                      _=Depends(require_role("admin"))):
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
-    users = _org_filter(db.query(User), user, User.org_id).order_by(User.username).all()
+    users = _org_filter(db.query(User), user, User.org_id).filter(User.is_device == False).order_by(User.username).all()  # noqa: E712
     roles = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     return templates.TemplateResponse(request, "admin/users.html", {
@@ -1882,3 +1882,131 @@ async def send_push_notification(
                 payload={"title": title, "target": target, "sent": count})
     db.commit()
     return RedirectResponse(f"/admin/push-nachrichten?sent={count}", status_code=303)
+
+
+# ── Geräte-Login ──────────────────────────────────────────────────────────────
+
+@router.get("/geraete-login", response_class=HTMLResponse)
+async def device_tokens_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    from sqlalchemy.orm import joinedload
+    user = request.state.user
+    tokens = (
+        db.query(DeviceToken)
+        .options(joinedload(DeviceToken.user))
+        .order_by(DeviceToken.created_at.desc())
+        .all()
+    )
+    roles = db.query(Role).all()
+    all_orgs = db.query(FireDept).order_by(FireDept.name).all() if has_role(user, "system_admin") else []
+    base_url = str(request.base_url).rstrip("/")
+    return templates.TemplateResponse(request, "admin/device_tokens.html", {
+        "user": user,
+        "tokens": tokens,
+        "roles": roles,
+        "all_orgs": all_orgs,
+        "is_sysadmin": has_role(user, "system_admin"),
+        "new_token": request.query_params.get("new_token"),
+        "new_label": request.query_params.get("new_label"),
+        "saved": request.query_params.get("saved"),
+        "error": request.query_params.get("error"),
+        "base_url": base_url,
+    })
+
+
+@router.post("/geraete-login/neu")
+async def create_device_token(
+    request: Request,
+    label: str = Form(...),
+    role_codes: list[str] = Form([]),
+    org_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    import secrets as _secrets
+    current_user = request.state.user
+    label = label.strip()
+    if not label:
+        return RedirectResponse("/admin/geraete-login?error=empty_label", status_code=303)
+
+    target_org_id = (
+        org_id if has_role(current_user, "system_admin") and org_id and org_id != 0
+        else current_user.org_id
+    )
+
+    # Eindeutigen Username generieren
+    raw_token = _secrets.token_urlsafe(32)
+    username = f"geraet_{_secrets.token_hex(6)}"
+
+    device_user = User(
+        username=username,
+        display_name=label,
+        password_hash=hash_password(_secrets.token_urlsafe(32)),
+        org_id=target_org_id,
+        active=True,
+        is_device=True,
+    )
+    db.add(device_user)
+    db.flush()
+
+    for code in role_codes:
+        role = db.query(Role).filter(Role.code == code).first()
+        if role:
+            db.add(UserRole(user_id=device_user.id, role_id=role.id))
+
+    token_hash = hash_api_key(raw_token)
+    dt = DeviceToken(label=label, token_hash=token_hash, user_id=device_user.id)
+    db.add(dt)
+    db.flush()
+
+    write_audit(db, "admin.device_token.created", user_id=current_user.id,
+                entity_type="device_token", entity_id=dt.id,
+                payload={"label": label, "role_codes": role_codes})
+    db.commit()
+
+    from urllib.parse import quote
+    return RedirectResponse(
+        f"/admin/geraete-login?saved=1&new_token={raw_token}&new_label={quote(label)}",
+        status_code=303,
+    )
+
+
+@router.post("/geraete-login/{token_id}/widerrufen")
+async def revoke_device_token(
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    dt = db.get(DeviceToken, token_id)
+    if dt:
+        dt.revoked_at = datetime.now(UTC)
+        if dt.user:
+            dt.user.active = False
+        write_audit(db, "admin.device_token.revoked", user_id=request.state.user.id,
+                    entity_type="device_token", entity_id=token_id,
+                    payload={"label": dt.label})
+        db.commit()
+    return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
+
+
+@router.post("/geraete-login/{token_id}/reaktivieren")
+async def reactivate_device_token(
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    dt = db.get(DeviceToken, token_id)
+    if dt:
+        dt.revoked_at = None
+        if dt.user:
+            dt.user.active = True
+        write_audit(db, "admin.device_token.reactivated", user_id=request.state.user.id,
+                    entity_type="device_token", entity_id=token_id,
+                    payload={"label": dt.label})
+        db.commit()
+    return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)

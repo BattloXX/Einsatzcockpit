@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.db import get_db
 from app.models.user import PushSubscription
 
@@ -11,8 +10,10 @@ router = APIRouter(prefix="/push")
 
 
 @router.get("/vapid-public-key")
-def vapid_public_key():
-    return {"publicKey": settings.VAPID_PUBLIC_KEY}
+def vapid_public_key(db: Session = Depends(get_db)):
+    from app.services.push_service import _push_cfg
+    cfg = _push_cfg(db)
+    return {"publicKey": cfg["public_key"] or ""}
 
 
 @router.post("/subscribe")

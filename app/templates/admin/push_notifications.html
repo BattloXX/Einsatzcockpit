@@ -213,9 +213,17 @@ function toggleUserSelect() {
     area.innerHTML = '<span class="text-muted">Push wird von diesem Browser nicht unterstützt (kein Service-Worker oder PushManager).</span>';
     return;
   }
-  let swReg;
-  try { swReg = await navigator.serviceWorker.ready; } catch {
-    area.innerHTML = '<span class="text-muted">Service-Worker nicht bereit.</span>';
+  // getRegistration() gibt sofort zurück (kein ewiges Warten wie ready)
+  let swReg = await navigator.serviceWorker.getRegistration('/').catch(() => null);
+  if (!swReg) {
+    // SW noch nicht registriert – warte kurz auf Aktivierung (max 5s)
+    swReg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+    ]).catch(() => null);
+  }
+  if (!swReg) {
+    area.innerHTML = '<span class="text-muted">Service-Worker nicht verfügbar – Push kann nicht geprüft werden.</span>';
     return;
   }
   const existing = await swReg.pushManager.getSubscription().catch(() => null);
