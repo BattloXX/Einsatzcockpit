@@ -52,11 +52,16 @@ def _admin_check(request: Request):
 @router.get("/benutzer", response_class=HTMLResponse)
 async def users_list(request: Request, db: Session = Depends(get_db),
                      _=Depends(require_role("admin"))):
-    users = _org_filter(db.query(User), request.state.user, User.org_id).order_by(User.username).all()
+    user = request.state.user
+    is_sysadmin = has_role(user, "system_admin")
+    users = _org_filter(db.query(User), user, User.org_id).order_by(User.username).all()
     roles = db.query(Role).all()
+    all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     return templates.TemplateResponse(request, "admin/users.html", {
-        "user": request.state.user,
+        "user": user,
         "users": users, "roles": roles,
+        "is_sysadmin": is_sysadmin,
+        "all_orgs": all_orgs,
         "saved": request.query_params.get("saved"),
         "mail_sent": request.query_params.get("mail"),
         "error": request.query_params.get("error"),
@@ -69,16 +74,18 @@ async def create_user(
     username: str = Form(...), display_name: str = Form(""),
     full_name: str = Form(""), email: str = Form(""), phone: str = Form(""),
     password: str = Form(...), role_codes: list[str] = Form([]),
+    org_id: int | None = Form(None),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
+    current_user = request.state.user
     email_clean = (email or "").strip().lower() or None
     if email_clean:
-        # Eindeutigkeit prüfen
         existing = db.query(User).filter(User.email == email_clean).first()
         if existing:
             return RedirectResponse(
                 "/admin/benutzer?error=email_exists", status_code=303,
             )
+    target_org_id = (org_id if has_role(current_user, "system_admin") and org_id and org_id != 0 else current_user.org_id)
     new_user = User(
         username=username,
         display_name=display_name or username,
@@ -86,7 +93,7 @@ async def create_user(
         email=email_clean,
         phone=(phone.strip() or None),
         password_hash=hash_password(password),
-        org_id=request.state.user.org_id,
+        org_id=target_org_id,
     )
     db.add(new_user)
     db.flush()
@@ -564,12 +571,14 @@ async def edit_user(
     user_id: int, request: Request,
     display_name: str = Form(...),
     full_name: str = Form(""), email: str = Form(""), phone: str = Form(""),
+    org_id: int | None = Form(None),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
+    current_user = request.state.user
     u = db.get(User, user_id)
     if not u:
         return RedirectResponse("/admin/benutzer", status_code=303)
-    if not same_org_or_system_admin(request.state.user, u.org_id):
+    if not same_org_or_system_admin(current_user, u.org_id):
         raise HTTPException(403, "Keine Berechtigung")
     email_clean = (email or "").strip().lower() or None
     if email_clean and email_clean != u.email:
@@ -580,7 +589,9 @@ async def edit_user(
     u.full_name = full_name.strip() or None
     u.email = email_clean
     u.phone = phone.strip() or None
-    write_audit(db, "admin.user.edited", user_id=request.state.user.id,
+    if has_role(current_user, "system_admin") and org_id is not None:
+        u.org_id = org_id if org_id != 0 else None
+    write_audit(db, "admin.user.edited", user_id=current_user.id,
                 entity_type="user", entity_id=user_id)
     db.commit()
     return RedirectResponse("/admin/benutzer?saved=1", status_code=303)

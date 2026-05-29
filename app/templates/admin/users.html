@@ -37,6 +37,7 @@
       <th>Echter Name</th>
       <th>E-Mail</th>
       <th>Telefon</th>
+      {% if is_sysadmin %}<th>Organisation</th>{% endif %}
       <th>Rollen</th>
       <th>Letzter Login</th>
       <th>Status</th>
@@ -50,6 +51,7 @@
       <td>{{ u.full_name or '—' }}</td>
       <td>{{ u.email or '—' }}</td>
       <td>{{ u.phone or '—' }}</td>
+      {% if is_sysadmin %}<td>{{ u.org.name if u.org else '—' }}</td>{% endif %}
       <td>{{ u.roles|map(attribute='label')|join(', ') or '–' }}</td>
       <td>{{ u.last_login_at|local_datetime if u.last_login_at else '–' }}</td>
       <td>
@@ -64,6 +66,7 @@
                   'full_name': u.full_name or '',
                   'email': u.email or '',
                   'phone': u.phone or '',
+                  'org_id': u.org_id or 0,
                 }|tojson|forceescape }})"
                 {{ tip('Name, E-Mail, Telefon bearbeiten') }}>
           Bearbeiten
@@ -127,6 +130,16 @@
       <div class="form-group"><label class="form-label">Initial-Passwort</label>
         <input type="password" name="password" class="form-input" required minlength="10"
                {{ tip('Mindestens 10 Zeichen. Der Benutzer sollte es nach dem ersten Login ändern.') }}></div>
+      {% if is_sysadmin %}
+      <div class="form-group"><label class="form-label">Organisation</label>
+        <select name="org_id" class="form-input">
+          <option value="0">— keine Organisation —</option>
+          {% for org in all_orgs %}
+          <option value="{{ org.id }}">{{ org.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
       <div class="form-group">
         <label class="form-label">Rollen</label>
         {% for r in roles %}
@@ -158,6 +171,16 @@
           <div class="form-group" style="flex:1;"><label class="form-label">Telefon</label>
             <input type="tel" name="phone" id="eu_phone" class="form-input"></div>
         </div>
+        {% if is_sysadmin %}
+        <div class="form-group"><label class="form-label">Organisation</label>
+          <select name="org_id" id="eu_org_id" class="form-input">
+            <option value="0">— keine Organisation —</option>
+            {% for org in all_orgs %}
+            <option value="{{ org.id }}">{{ org.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
       </div>
       <div class="modal__footer">
         <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -196,6 +219,8 @@ function openEditUser(id, data) {
   document.getElementById('eu_full_name').value = data.full_name || '';
   document.getElementById('eu_email').value = data.email || '';
   document.getElementById('eu_phone').value = data.phone || '';
+  const orgSel = document.getElementById('eu_org_id');
+  if (orgSel) orgSel.value = data.org_id || 0;
   document.getElementById('editUserForm').action = `/admin/benutzer/${id}/edit`;
   document.getElementById('editUserModal').showModal();
 }
