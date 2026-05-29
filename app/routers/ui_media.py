@@ -212,5 +212,8 @@ async def gallery_delete_task_media(media_id: int, request: Request, db: Session
         return Response(status_code=403)
     delete_media(media, db)
     db.commit()
-    referer = request.headers.get("referer", "/medien")
-    return RedirectResponse(referer, status_code=303)
+    raw_referer = request.headers.get("referer", "")
+    from urllib.parse import urlparse
+    _p = urlparse(raw_referer)
+    safe_redirect = raw_referer if (not _p.scheme and not _p.netloc) else "/medien"
+    return RedirectResponse(safe_redirect, status_code=303)

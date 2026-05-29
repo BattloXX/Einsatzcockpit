@@ -24,6 +24,8 @@ _CSP_BASE = (
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
     "font-src 'self' data:; "
     "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org; "
+    "object-src 'none'; "
+    "worker-src 'self'; "
     "base-uri 'self'; "
     "form-action 'self'"
 )

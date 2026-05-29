@@ -1,13 +1,13 @@
 """Admin-UI: Stammdaten, User, Rollen, API-Keys."""
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.core.permissions import require_role
+from app.core.permissions import has_role, require_role, same_org_or_system_admin
 from app.core.security import generate_api_key, hash_api_key, hash_password
 from app.core.templating import templates
 from app.db import get_db
@@ -31,6 +31,13 @@ from app.models.user import ApiKey, AuditLog, Role, User, UserRole
 router = APIRouter(prefix="/admin")
 
 
+def _org_filter(q, user, col):
+    """Apply org_id filter for non-sysadmin users."""
+    if not has_role(user, "system_admin") and user.org_id:
+        q = q.filter(col == user.org_id)
+    return q
+
+
 def _admin_check(request: Request):
     user = getattr(request.state, "user", None)
     if not user:
@@ -43,7 +50,7 @@ def _admin_check(request: Request):
 @router.get("/benutzer", response_class=HTMLResponse)
 async def users_list(request: Request, db: Session = Depends(get_db),
                      _=Depends(require_role("admin"))):
-    users = db.query(User).order_by(User.username).all()
+    users = _org_filter(db.query(User), request.state.user, User.org_id).order_by(User.username).all()
     roles = db.query(Role).all()
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": request.state.user,
@@ -98,6 +105,8 @@ async def delete_user(
     _=Depends(require_role("admin")),
 ):
     u = db.get(User, user_id)
+    if u and not same_org_or_system_admin(request.state.user, u.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     if u and u.id != request.state.user.id:
         u.active = False
         write_audit(db, "admin.user.deactivated", user_id=request.state.user.id,
@@ -111,7 +120,7 @@ async def delete_user(
 @router.get("/api-keys", response_class=HTMLResponse)
 async def api_keys(request: Request, db: Session = Depends(get_db),
                    _=Depends(require_role("admin"))):
-    keys = db.query(ApiKey).order_by(ApiKey.created_at.desc()).all()
+    keys = _org_filter(db.query(ApiKey), request.state.user, ApiKey.org_id).order_by(ApiKey.created_at.desc()).all()
     return templates.TemplateResponse(request, "admin/api_keys.html", {
         "user": request.state.user, "keys": keys, "new_key": None,
     })
@@ -134,7 +143,7 @@ async def create_api_key(
     write_audit(db, "admin.api_key.created", user_id=user.id,
                 payload={"label": label, "org_id": user.org_id})
     db.commit()
-    keys = db.query(ApiKey).order_by(ApiKey.created_at.desc()).all()
+    keys = _org_filter(db.query(ApiKey), user, ApiKey.org_id).order_by(ApiKey.created_at.desc()).all()
     return templates.TemplateResponse(request, "admin/api_keys.html", {
         "user": request.state.user, "keys": keys, "new_key": raw,
     })
@@ -146,6 +155,8 @@ async def revoke_api_key(
     _=Depends(require_role("admin")),
 ):
     key = db.get(ApiKey, key_id)
+    if key and not same_org_or_system_admin(request.state.user, key.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     if key:
         key.revoked_at = datetime.now(UTC)
         write_audit(db, "admin.api_key.revoked", user_id=request.state.user.id,
@@ -159,7 +170,7 @@ async def revoke_api_key(
 @router.get("/mitglieder", response_class=HTMLResponse)
 async def members_list(request: Request, db: Session = Depends(get_db),
                        _=Depends(require_role("admin"))):
-    members = db.query(Member).order_by(Member.lastname, Member.firstname).all()
+    members = _org_filter(db.query(Member), request.state.user, Member.org_id).order_by(Member.lastname, Member.firstname).all()
     qualifications = db.query(Qualification).all()
     return templates.TemplateResponse(request, "admin/members.html", {
         "user": request.state.user,
@@ -194,7 +205,18 @@ async def create_member(
 @router.get("/audit", response_class=HTMLResponse)
 async def audit_log(request: Request, db: Session = Depends(get_db),
                     _=Depends(require_role("admin"))):
-    entries = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(500).all()
+    user = request.state.user
+    if has_role(user, "system_admin"):
+        entries = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(500).all()
+    else:
+        org_user_ids = db.query(User.id).filter(User.org_id == user.org_id).subquery()
+        entries = (
+            db.query(AuditLog)
+            .filter(AuditLog.user_id.in_(org_user_ids))
+            .order_by(AuditLog.created_at.desc())
+            .limit(500)
+            .all()
+        )
     return templates.TemplateResponse(request, "admin/audit.html", {
         "user": request.state.user, "entries": entries,
     })
@@ -256,6 +278,8 @@ async def edit_member(
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     m = db.get(Member, member_id)
+    if m and not same_org_or_system_admin(request.state.user, m.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     if m:
         m.lastname = lastname
         m.firstname = firstname
@@ -273,6 +297,8 @@ async def toggle_member(
     _=Depends(require_role("admin")),
 ):
     m = db.get(Member, member_id)
+    if m and not same_org_or_system_admin(request.state.user, m.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     if m:
         m.active = not m.active
         write_audit(db, "admin.member.toggled", user_id=request.state.user.id,
@@ -295,7 +321,10 @@ async def bulk_delete_members(
 
     logger = logging.getLogger(__name__)
     user = request.state.user
-    rows = db.query(Member).filter(Member.id.in_(member_ids)).all()
+    rows = _org_filter(
+        db.query(Member).filter(Member.id.in_(member_ids)),
+        user, Member.org_id,
+    ).all()
     deleted = 0
     blocked: list[str] = []
     for m in rows:
@@ -345,6 +374,8 @@ async def update_member_quali(
     m = db.get(Member, member_id)
     if not m:
         return RedirectResponse("/admin/mitglieder", status_code=303)
+    if not same_org_or_system_admin(request.state.user, m.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     # Remove all existing, then re-add
     db.query(MemberQualification).filter(MemberQualification.member_id == member_id).delete()
     form_data = await request.form()
@@ -536,6 +567,8 @@ async def edit_user(
     u = db.get(User, user_id)
     if not u:
         return RedirectResponse("/admin/benutzer", status_code=303)
+    if not same_org_or_system_admin(request.state.user, u.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     email_clean = (email or "").strip().lower() or None
     if email_clean and email_clean != u.email:
         existing = db.query(User).filter(User.email == email_clean, User.id != user_id).first()
@@ -568,6 +601,8 @@ async def send_user_reset_mail(
     u = db.get(User, user_id)
     if not u or not u.email:
         return RedirectResponse("/admin/benutzer?error=no_email", status_code=303)
+    if not same_org_or_system_admin(request.state.user, u.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
 
     # Alte Tokens entwerten
     now = datetime.now(UTC)
@@ -609,6 +644,8 @@ async def update_user_roles(
     u = db.get(User, user_id)
     if not u:
         return RedirectResponse("/admin/benutzer", status_code=303)
+    if not same_org_or_system_admin(request.state.user, u.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     db.query(UserRole).filter(UserRole.user_id == user_id).delete()
     for code in role_codes:
         role = db.query(Role).filter(Role.code == code).first()
@@ -629,12 +666,14 @@ async def reset_user_password(
     u = db.get(User, user_id)
     if not u:
         return RedirectResponse("/admin/benutzer", status_code=303)
+    if not same_org_or_system_admin(request.state.user, u.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     new_pw = sec.token_urlsafe(12)
     u.password_hash = hash_password(new_pw)
     write_audit(db, "admin.user.password_reset", user_id=request.state.user.id,
                 entity_type="user", entity_id=user_id)
     db.commit()
-    users = db.query(User).order_by(User.username).all()
+    users = _org_filter(db.query(User), request.state.user, User.org_id).order_by(User.username).all()
     roles = db.query(Role).all()
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": request.state.user,
@@ -1547,6 +1586,8 @@ async def revoke_lagekarte_token(
 ):
     from app.models.lagekarte import LagekarteToken
     tok = db.get(LagekarteToken, token_id)
+    if tok and not same_org_or_system_admin(request.state.user, tok.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     if tok:
         tok.revoked_at = datetime.now(UTC)
         write_audit(db, "admin.lagekarte_token.revoked", user_id=request.state.user.id,

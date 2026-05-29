@@ -162,11 +162,13 @@ class _QrUser:
         return getattr(self._user, name)
 
 
-# Session middleware – inject request.state.user
+# Session middleware – inject request.state.user + sliding-window token refresh
 @app.middleware("http")
 async def session_middleware(request: Request, call_next):
     token = request.cookies.get("session")
     request.state.user = None
+    _refresh_user_id: int | None = None  # set for non-QR sessions to trigger cookie refresh
+
     if token:
         session_data = unsign_session(token)
         if session_data:
@@ -190,10 +192,27 @@ async def session_middleware(request: Request, call_next):
                         else:
                             recorder = db.query(Role).filter(Role.code == "recorder").first()
                             user = _QrUser(user, recorder)
+                elif user:
+                    # Regular session: refresh token to slide the inactivity window.
+                    _refresh_user_id = user_id
                 request.state.user = user
             finally:
                 db.close()
-    return await call_next(request)
+
+    response = await call_next(request)
+
+    if _refresh_user_id is not None and request.state.user is not None:
+        from app.core.security import sign_session as _sign
+        response.set_cookie(
+            "session",
+            _sign(_refresh_user_id),
+            httponly=True,
+            secure=settings.COOKIE_SECURE,
+            samesite="lax",
+            max_age=settings.SESSION_MAX_AGE_SECONDS,
+        )
+
+    return response
 
 
 # CORS für lagekarte.info GeoJSON-Endpoint
@@ -224,28 +243,26 @@ try:
 except ImportError:
     pass
 
-# Rate-Limit via slowapi (Phase 7) — wenn nicht installiert, einfach überspringen.
-try:
-    from slowapi import Limiter  # type: ignore
-    from slowapi.errors import RateLimitExceeded  # type: ignore
-    from slowapi.middleware import SlowAPIMiddleware  # type: ignore
-    from slowapi.util import get_remote_address  # type: ignore
-    from starlette.responses import JSONResponse
+# Rate-Limit via slowapi — shared limiter lives in app.core.rate_limit.
+from app.core.rate_limit import limiter  # noqa: E402
 
-    # Default-Limit für alle Requests; einzelne Endpoints (login, password-reset)
-    # können engere Limits per Decorator setzen
-    limiter = Limiter(key_func=get_remote_address, default_limits=["300/minute"])
-    app.state.limiter = limiter
-    app.add_middleware(SlowAPIMiddleware)
+if limiter is not None:
+    try:
+        from slowapi.errors import RateLimitExceeded  # type: ignore
+        from slowapi.middleware import SlowAPIMiddleware  # type: ignore
+        from starlette.responses import JSONResponse
 
-    @app.exception_handler(RateLimitExceeded)
-    async def _ratelimit_handler(request, exc):  # type: ignore[override]
-        return JSONResponse(
-            {"detail": "Zu viele Versuche. Bitte später erneut probieren."},
-            status_code=429,
-        )
-except ImportError:
-    limiter = None  # type: ignore
+        app.state.limiter = limiter
+        app.add_middleware(SlowAPIMiddleware)
+
+        @app.exception_handler(RateLimitExceeded)
+        async def _ratelimit_handler(request, exc):  # type: ignore[override]
+            return JSONResponse(
+                {"detail": "Zu viele Versuche. Bitte später erneut probieren."},
+                status_code=429,
+            )
+    except ImportError:
+        pass
 
 
 # Routers

@@ -41,7 +41,6 @@ async def _send(msg: EmailMessage) -> None:
             "An: %s | Betreff: %s",
             msg["To"], msg["Subject"],
         )
-        logger.info("Mail-Body:\n%s", msg.get_content())
         return
 
     if aiosmtplib is None:

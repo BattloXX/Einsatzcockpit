@@ -11,6 +11,7 @@ API-Key-Hashing: SHA256 — bewusst gewählt, weil:
 import hashlib
 import hmac
 import secrets
+from datetime import UTC, datetime
 
 import bcrypt
 from itsdangerous import BadSignature, SignatureExpired, URLSafeSerializer, URLSafeTimedSerializer
@@ -59,8 +60,18 @@ def sign_session(user_id: int, *, qr: bool = False, incident_id: int | None = No
 def unsign_session(token: str) -> tuple[int, bool, int | None] | None:
     """Returns (user_id, is_qr, qr_incident_id) or None."""
     try:
-        data = _signer.loads(token, max_age=settings.SESSION_MAX_AGE_SECONDS)
+        data, ts = _signer.loads(
+            token,
+            max_age=settings.SESSION_MAX_AGE_SECONDS,
+            return_timestamp=True,
+        )
         if isinstance(data, int):
+            # Enforce inactivity timeout for regular (non-QR) sessions.
+            # The middleware refreshes the token on each request, so age == time
+            # since last activity.
+            age_s = (datetime.now(UTC) - ts.replace(tzinfo=UTC)).total_seconds()
+            if age_s > settings.SESSION_INACTIVITY_SECONDS:
+                return None
             return (data, False, None)
         return (data["u"], bool(data.get("qr")), data.get("i"))
     except (BadSignature, SignatureExpired):

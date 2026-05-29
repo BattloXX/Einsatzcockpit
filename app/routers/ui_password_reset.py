@@ -11,7 +11,7 @@ Sicherheit:
 - Token wird als sha256-Hex in DB gespeichert; rohes Token nur im Link.
 - Tokens sind einmalig (used_at) und befristet (PASSWORD_RESET_TTL_MIN).
 - Sobald ein neuer Token erzeugt wird, werden alle alten offenen Tokens des Users invalidiert.
-- Rate-Limit pro IP wird in Phase 7 ergänzt (slowapi).
+- Rate-Limit: 5 Requests/Minute pro IP auf POST-Endpunkte.
 """
 import hashlib
 import logging
@@ -21,6 +21,8 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+
+from app.core.rate_limit import limiter as _limiter
 
 from app.config import settings
 from app.core.audit import write_audit
@@ -49,6 +51,7 @@ async def forgot_form(request: Request):
 
 
 @router.post("/passwort-vergessen", response_class=HTMLResponse)
+@(_limiter.limit("5/minute") if _limiter else lambda f: f)
 async def forgot_submit(
     request: Request,
     email: str = Form(...),
@@ -123,6 +126,7 @@ async def reset_form(request: Request, token: str = "", db: Session = Depends(ge
 
 
 @router.post("/passwort-zuruecksetzen", response_class=HTMLResponse)
+@(_limiter.limit("5/minute") if _limiter else lambda f: f)
 async def reset_submit(
     request: Request,
     token: str = Form(...),
