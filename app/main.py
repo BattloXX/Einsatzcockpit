@@ -302,6 +302,12 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
 
+@app.get("/sw.js", include_in_schema=False)
+async def service_worker():
+    from fastapi.responses import FileResponse
+    return FileResponse("app/static/sw.js", media_type="application/javascript")
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return RedirectResponse("/static/img/favicon.ico")

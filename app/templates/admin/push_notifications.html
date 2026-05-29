@@ -213,17 +213,25 @@ function toggleUserSelect() {
     area.innerHTML = '<span class="text-muted">Push wird von diesem Browser nicht unterstützt (kein Service-Worker oder PushManager).</span>';
     return;
   }
-  // getRegistration() gibt sofort zurück (kein ewiges Warten wie ready)
-  let swReg = await navigator.serviceWorker.getRegistration('/').catch(() => null);
+  // Alle SW-Registrierungen prüfen (scope-unabhängig, kein ewiges Warten)
+  let swReg = null;
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    // Bevorzuge aktive Registrierung mit breitem Scope
+    swReg = regs.find(r => r.active && r.scope === location.origin + '/')
+           || regs.find(r => r.active)
+           || regs.find(r => r.installing || r.waiting)
+           || null;
+    // Falls noch kein SW aktiv: kurz auf ready warten (max 4s)
+    if (!swReg) {
+      swReg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+      ]).catch(() => null);
+    }
+  } catch { swReg = null; }
   if (!swReg) {
-    // SW noch nicht registriert – warte kurz auf Aktivierung (max 5s)
-    swReg = await Promise.race([
-      navigator.serviceWorker.ready,
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
-    ]).catch(() => null);
-  }
-  if (!swReg) {
-    area.innerHTML = '<span class="text-muted">Service-Worker nicht verfügbar – Push kann nicht geprüft werden.</span>';
+    area.innerHTML = '<span class="text-muted">Service-Worker nicht verfügbar – Push kann nicht geprüft werden. Seite neu laden und erneut versuchen.</span>';
     return;
   }
   const existing = await swReg.pushManager.getSubscription().catch(() => null);

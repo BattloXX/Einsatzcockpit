@@ -340,7 +340,13 @@ function startVoice(targetInputId) {
 /* ─── PWA Service Worker Registration ───────────────────────────── */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+    // /sw.js served from root → scope '/' covers all pages including /admin/*
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      // Alte /static/sw.js-Registrierung (Scope /static/) entfernen
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => { if (r !== reg && r.scope.includes('/static/')) r.unregister(); });
+      });
+    }).catch(() => {});
   });
 }
 
