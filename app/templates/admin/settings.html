@@ -51,7 +51,7 @@
           <input type="text" name="short_code" value="{{ org.short_code or '' }}"
                  class="form-control" maxlength="3" placeholder="WOL"
                  style="max-width:120px; text-transform:uppercase">
-          <small>Wird bei Fahrzeugen als Suffix angezeigt: <em>RLF WOL</em></small>
+          <small>Wird bei Fahrzeugen als Suffix angezeigt: <em>RLF - WOL</em></small>
         </div>
         <div class="form-group">
           <label>Kontakt E-Mail</label>
@@ -83,13 +83,11 @@
           {% if org.logo_path %}
           <div class="mb-2" style="display:flex; gap:12px; align-items:center;">
             <img src="{{ org.logo_path }}" id="logoPreview" alt="Logo" style="max-height:60px;max-width:200px;object-fit:contain;background:#fff;border-radius:4px;padding:4px;">
-            <form method="post" action="/admin/settings/org/logo/reset" style="display:inline">
-              <button type="submit" class="btn btn--ghost btn--sm"
-                      onclick="return confirm('Aktuelles Logo entfernen und Standardlogo verwenden?')"
-                      {{ tip('Entfernt das hochgeladene Logo. Standardlogo wird wieder genutzt.') }}>
-                Logo zurücksetzen
-              </button>
-            </form>
+            <button type="button" class="btn btn--ghost btn--sm"
+                    onclick="if(confirm('Aktuelles Logo entfernen und Standardlogo verwenden?')) document.getElementById('logoResetForm').submit()"
+                    {{ tip('Entfernt das hochgeladene Logo. Standardlogo wird wieder genutzt.') }}>
+              Logo zurücksetzen
+            </button>
           </div>
           {% else %}
           <img id="logoPreview" alt="" style="display:none;max-height:60px;max-width:200px;object-fit:contain;background:#fff;border-radius:4px;padding:4px;">
@@ -157,9 +155,14 @@
       <div id="settingsMapPicker" style="height:240px;border-radius:6px;border:1px solid var(--border);margin-bottom:1rem"></div>
 
       <div class="form-actions mt-3">
-        <button type="submit" class="btn btn-primary">Speichern</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>
+    {% if org.logo_path %}
+    <form id="logoResetForm" method="post" action="/admin/settings/org/logo/reset" style="display:none">
+      {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+    </form>
+    {% endif %}
   </div>
 </section>
 {% endif %}
