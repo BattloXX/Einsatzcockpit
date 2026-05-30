@@ -286,9 +286,17 @@ app.include_router(ui_settings.router)
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    # HTMX requests expect JSON detail so the JS toast handler can pick it up
+    # HTMX requests: JSON detail for toast handler; for 401 also trigger full-page redirect
     if request.headers.get("HX-Request"):
+        if exc.status_code == 401:
+            return JSONResponse(
+                {"detail": exc.detail},
+                status_code=exc.status_code,
+                headers={"HX-Redirect": "/login"},
+            )
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    if exc.status_code == 401 and not request.url.path.startswith("/api/"):
+        return RedirectResponse("/login", status_code=302)
     if exc.status_code == 403:
         return HTMLResponse(
             f"""<!doctype html><html lang="de"><head><meta charset="utf-8">
