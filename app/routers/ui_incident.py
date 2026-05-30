@@ -560,6 +560,7 @@ async def vehicle_suggestions(
         {
             "id": v.id,
             "code": v.code,
+            "display_label": v.display_label,
             "name": v.name,
             "type": v.type or "",
             "dept_id": v.dept_id,

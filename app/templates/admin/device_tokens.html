@@ -88,7 +88,7 @@
                 <option value="">– kein –</option>
                 {% for v in vehicles %}
                 <option value="{{ v.id }}" {% if dt.vehicle_master_id == v.id %}selected{% endif %}>
-                  {{ v.name }}
+                  {{ v.display_label }}
                 </option>
                 {% endfor %}
               </select>
@@ -197,7 +197,7 @@
                 {{ tip('Push-Nachrichten bei Aufträgen/Meldungen gehen nur an dieses Gerät') }}>
           <option value="">– kein Fahrzeug –</option>
           {% for v in vehicles %}
-          <option value="{{ v.id }}">{{ v.name }}</option>
+          <option value="{{ v.id }}">{{ v.display_label }}</option>
           {% endfor %}
         </select>
       </div>

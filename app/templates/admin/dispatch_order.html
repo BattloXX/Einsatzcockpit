@@ -82,7 +82,7 @@
           <td><input type="checkbox" class="dispatch-checkbox" checked></td>
           <td>
             <span style="border-left:4px solid {{ v.dept.color }};padding-left:6px;">
-              <strong>{{ v.code }}</strong> – {{ v.type or '' }}
+              <strong>{{ v.display_label }}</strong> – {{ v.type or '' }}
             </span>
           </td>
           <td>{{ v.dept.name }}</td>
@@ -96,7 +96,7 @@
           <td><input type="checkbox" class="dispatch-checkbox"></td>
           <td>
             <span style="border-left:4px solid {{ v.dept.color }};padding-left:6px;">
-              <strong>{{ v.code }}</strong> – {{ v.type or '' }}
+              <strong>{{ v.display_label }}</strong> – {{ v.type or '' }}
             </span>
           </td>
           <td>{{ v.dept.name }}</td>

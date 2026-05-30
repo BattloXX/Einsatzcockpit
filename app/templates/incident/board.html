@@ -465,7 +465,7 @@
             <button type="submit" class="suggestion-pill suggestion-pill--block"
                     :disabled="s.in_use"
                     :title="s.in_use ? 'Einheit ist bereits im Einsatz' : 'Diese Einheit zum Einsatz hinzufügen'">
-              <strong x-text="s.code"></strong>
+              <strong x-text="s.display_label"></strong>
               <span class="text-muted" x-text="' · ' + s.name + (s.type ? ' (' + s.type + ')' : '')"></span>
               <span x-show="s.in_use" class="text-muted">— bereits im Einsatz</span>
             </button>

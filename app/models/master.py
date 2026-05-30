@@ -69,7 +69,7 @@ class VehicleMaster(Base):
     def display_label(self) -> str:
         """Fahrzeug-Code + Organisations-Kürzel, z.B. 'RLF WOL'. Ohne Kürzel nur 'RLF'."""
         kuerzel = self.dept.short_code if self.dept and self.dept.short_code else None
-        return f"{self.code} {kuerzel}" if kuerzel else self.code
+        return f"{self.code} - {kuerzel}" if kuerzel else self.code
 
 
 class Qualification(Base):
