@@ -6,26 +6,30 @@
  * sodass die Web-App weiterhin voll funktionsfähig bleibt.
  *
  * Verfügbare Funktionen:
- *   ELNative.keepAwake(on)          – Bildschirm aktiv halten (oder freigeben)
- *   ELNative.startLocation()        – Hintergrund-GPS starten
- *   ELNative.stopLocation()         – Hintergrund-GPS stoppen
- *   ELNative.scanQr(onResult)       – QR-Scanner öffnen; onResult(url) bei Erfolg
- *   ELNative.isNative               – true wenn in Capacitor-App
+ *   ELNative.keepAwake(on)              – Bildschirm aktiv halten (oder freigeben)
+ *   ELNative.startLocation()            – Hintergrund-GPS starten
+ *   ELNative.stopLocation()             – Hintergrund-GPS stoppen
+ *   ELNative.scanQr(onResult, onError)  – QR-Scanner öffnen; onResult(url) bei Erfolg,
+ *                                         onError(msg) bei Fehler
+ *   ELNative.isNative                   – getter, jedes Mal frisch gegen window.Capacitor geprüft
  */
 (function () {
   'use strict';
 
-  const isCapacitor = !!(window.Capacitor && window.Capacitor.isNative);
+  // Lazy helper — wird bei jedem Aufruf frisch ausgewertet.
+  // Capacitor Remote-Mode injiziert den Bridge-JS asynchron (addDocumentStartJavaScript)
+  // und auf älteren Geräten / WebView-Versionen evtl. erst nach dem ersten Script-Lauf.
+  function _isNative() {
+    return !!(window.Capacitor && window.Capacitor.isNative);
+  }
 
   // ─── FCM-Token registrieren ─────────────────────────────────────────────────
-  // Wird automatisch beim ersten Laden nach Login aufgerufen.
   async function _registerFcmToken() {
-    if (!isCapacitor) return;
+    if (!_isNative()) return;
     try {
       const { PushNotifications } = window.Capacitor.Plugins;
       if (!PushNotifications) return;
 
-      // Berechtigung anfordern
       const perm = await PushNotifications.requestPermissions();
       if (perm.receive !== 'granted') return;
 
@@ -42,7 +46,6 @@
         }
       });
 
-      // Push-Notification Tap → URL öffnen
       PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
         const url = action?.notification?.data?.url;
         if (url) window.location.href = url;
@@ -54,12 +57,9 @@
 
   // ─── Keep-Awake ─────────────────────────────────────────────────────────────
   function keepAwake(on) {
-    if (!isCapacitor) {
-      // PWA-Fallback: Screen Wake Lock API
-      if (on) {
-        if ('wakeLock' in navigator) {
-          navigator.wakeLock.request('screen').catch(() => {});
-        }
+    if (!_isNative()) {
+      if (on && 'wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').catch(() => {});
       }
       return;
     }
@@ -77,7 +77,7 @@
   let _locationWatch = null;
 
   function startLocation() {
-    if (!isCapacitor) return;
+    if (!_isNative()) return;
     try {
       const { BackgroundGeolocation } = window.Capacitor.Plugins;
       if (!BackgroundGeolocation) return;
@@ -87,11 +87,10 @@
           backgroundTitle: 'einsatzleiter.cloud',
           requestPermissions: true,
           stale: false,
-          distanceFilter: 20, // Meter Mindestbewegung
+          distanceFilter: 20,
         },
         function callback(loc, err) {
           if (err) return;
-          // Position ans Backend übermitteln (fire-and-forget)
           fetch('/api/v1/device/location', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -105,7 +104,7 @@
   }
 
   function stopLocation() {
-    if (!isCapacitor || !_locationWatch) return;
+    if (!_isNative() || !_locationWatch) return;
     try {
       const { BackgroundGeolocation } = window.Capacitor.Plugins;
       if (BackgroundGeolocation && _locationWatch) {
@@ -119,20 +118,31 @@
 
   // ─── QR-Scanner ─────────────────────────────────────────────────────────────
   // @capacitor-mlkit/barcode-scanning v7: scan() nutzt das Google Barcode Scanner
-  // Module (Google Play Services). scan() → { barcodes: [{rawValue, ...}] }
-  // Kein explizites requestPermissions() nötig – das Modul regelt das intern.
-  async function scanQr(onResult) {
-    if (!isCapacitor) {
-      console.warn('[ELNative] QR-Scanner nur in nativer App verfügbar');
+  // Module (Google Play Services). Vor dem ersten Aufruf muss das Modul geprüft
+  // und ggf. installiert werden; ohne diese Prüfung schlägt scan() lautlos fehl.
+  // onResult(url)  – wird mit der gescannten URL aufgerufen
+  // onError(msg)   – wird bei jedem Fehler aufgerufen (optional)
+  async function scanQr(onResult, onError) {
+    function _err(msg) {
+      console.warn('[ELNative] QR-Scanner Fehler:', msg);
+      if (typeof onError === 'function') onError(msg);
+    }
+
+    if (!_isNative()) {
+      _err('Nicht in nativer Capacitor-App (window.Capacitor fehlt oder isNative=false)');
       return;
     }
+
+    const plugins = window.Capacitor && window.Capacitor.Plugins;
+    const BarcodeScanner = plugins && plugins.BarcodeScanner;
+    if (!BarcodeScanner) {
+      _err('BarcodeScanner-Plugin nicht registriert');
+      return;
+    }
+
     try {
-      const { BarcodeScanner } = window.Capacitor.Plugins;
-      if (!BarcodeScanner) {
-        console.warn('[ELNative] BarcodeScanner-Plugin nicht verfügbar');
-        return;
-      }
-      // Google Barcode Scanner Module prüfen und ggf. installieren (COMPLETED=4, FAILED=5)
+      // Google Barcode Scanner Module prüfen und ggf. installieren
+      // COMPLETED=4, FAILED=5 (GoogleBarcodeScannerModuleInstallState enum)
       const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
       if (!available) {
         await new Promise(async (resolve, reject) => {
@@ -140,24 +150,25 @@
             'googleBarcodeScannerModuleInstallProgress',
             (event) => {
               if (event.state === 4) { handle.remove(); resolve(); }
-              else if (event.state === 5) { handle.remove(); reject(new Error('Modulinstallation fehlgeschlagen')); }
+              else if (event.state === 5) { handle.remove(); reject(new Error('Google-Modul-Installation fehlgeschlagen (state=5)')); }
             }
           );
           await BarcodeScanner.installGoogleBarcodeScannerModule();
         });
       }
+
       const { barcodes } = await BarcodeScanner.scan();
       if (barcodes && barcodes.length > 0 && typeof onResult === 'function') {
         onResult(barcodes[0].rawValue);
       }
     } catch (e) {
-      console.warn('[ELNative] QR-Scanner Fehler:', e);
+      _err(e && e.message ? e.message : String(e));
     }
   }
 
   // ─── Dienst-Status pollen & Tracking automatisch steuern ────────────────────
   async function _pollDutyState() {
-    if (!isCapacitor) return;
+    if (!_isNative()) return;
     try {
       const resp = await fetch('/api/v1/device/duty-state', {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -175,20 +186,23 @@
   }, 60_000);
 
   // ─── Initialisierung ─────────────────────────────────────────────────────────
-  if (isCapacitor) {
-    // FCM registrieren sobald DOM bereit ist
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', _registerFcmToken);
-    } else {
+  // Warten bis DOM bereit – Capacitor-Bridge ist dann sicher injiziert.
+  function _init() {
+    if (_isNative()) {
       _registerFcmToken();
+      _pollDutyState();
     }
-    // Initiale Dienst-Status-Prüfung
-    _pollDutyState();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _init);
+  } else {
+    _init();
   }
 
   // ─── Öffentliche API ─────────────────────────────────────────────────────────
   window.ELNative = {
-    isNative: isCapacitor,
+    get isNative() { return _isNative(); },
     keepAwake,
     startLocation,
     stopLocation,

@@ -57,24 +57,39 @@
       </div>
       <script>
         function _handleQrScan() {
+          var statusEl = document.getElementById('qr-status');
+          var sectionEl = document.getElementById('qr-section');
+          sectionEl.classList.remove('hidden');
+
           if (window.ELNative && window.ELNative.isNative) {
-            document.getElementById('qr-status').textContent = 'Kamera wird geöffnet…';
-            document.getElementById('qr-section').classList.remove('hidden');
-            window.ELNative.scanQr(function(url) {
-              try {
-                var u = new URL(url, window.location.origin);
-                var allowed = ['/geraet-login', '/qr-login'];
-                if ((u.protocol === 'https:' || u.protocol === 'http:') &&
-                    u.origin === window.location.origin &&
-                    allowed.indexOf(u.pathname) !== -1) {
-                  window.location.href = u.toString();
-                  return;
-                }
-              } catch (_) {}
-              document.getElementById('qr-status').textContent = 'Ungültiger QR-Code. Bitte versuche es erneut.';
-            });
+            statusEl.textContent = 'Kamera wird geöffnet…';
+            window.ELNative.scanQr(
+              function(url) {
+                try {
+                  var u = new URL(url, window.location.origin);
+                  var allowed = ['/geraet-login', '/qr-login'];
+                  if ((u.protocol === 'https:' || u.protocol === 'http:') &&
+                      u.origin === window.location.origin &&
+                      allowed.indexOf(u.pathname) !== -1) {
+                    window.location.href = u.toString();
+                    return;
+                  }
+                } catch (_) {}
+                statusEl.textContent = 'Ungültiger QR-Code. Bitte versuche es erneut.';
+              },
+              function(err) {
+                statusEl.textContent = 'Scanner-Fehler: ' + err;
+              }
+            );
           } else {
-            document.getElementById('qr-section').classList.toggle('hidden');
+            // Kein Capacitor – Debug-Info anzeigen
+            var info = [];
+            if (!window.Capacitor) info.push('kein window.Capacitor');
+            else if (!window.Capacitor.isNative) info.push('Capacitor.isNative=false');
+            if (!window.ELNative) info.push('kein ELNative');
+            statusEl.textContent = info.length
+              ? 'Nur in der App verfügbar (' + info.join(', ') + ')'
+              : 'Nur in der nativen App verfügbar.';
           }
         }
       </script>
