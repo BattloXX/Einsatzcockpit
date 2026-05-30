@@ -2078,9 +2078,18 @@ async def delete_device_token(
     write_audit(db, "admin.device_token.deleted", user_id=request.state.user.id,
                 entity_type="device_token", entity_id=token_id,
                 payload={"label": dt.label})
-    db.delete(dt)
+    db.flush()  # Audit-Log zuerst schreiben
     if device_user and device_user.is_device:
+        # AuditLog.user_id hat kein ondelete → manuell nullen
+        db.query(AuditLog).filter(AuditLog.user_id == device_user.id).update({"user_id": None})
+        # UserRole hat kein ORM-Cascade auf User.user_roles → manuell löschen
+        db.query(UserRole).filter(UserRole.user_id == device_user.id).delete()
+        db.flush()
+        db.delete(dt)
+        db.flush()
         db.delete(device_user)
+    else:
+        db.delete(dt)
     db.commit()
     return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
 
