@@ -2080,13 +2080,27 @@ async def delete_device_token(
                 payload={"label": dt.label})
     db.flush()  # Audit-Log zuerst schreiben
     if device_user and device_user.is_device:
-        # AuditLog.user_id hat kein ondelete → manuell nullen
-        db.query(AuditLog).filter(AuditLog.user_id == device_user.id).update({"user_id": None})
-        # UserRole hat kein ORM-Cascade auf User.user_roles → manuell löschen
-        db.query(UserRole).filter(UserRole.user_id == device_user.id).delete()
+        from app.models.incident import (
+            Incident, IncidentChange, IncidentLog, IncidentOrg, IncidentToken, Task,
+        )
+        from app.models.breathing import PressureLog
+        uid = device_user.id
+        # Alle FK-Verweise ohne ON DELETE SET NULL manuell nullen/löschen
+        db.query(AuditLog).filter(AuditLog.user_id == uid).update({"user_id": None})
+        db.query(SystemSettings).filter(SystemSettings.updated_by_user_id == uid).update({"updated_by_user_id": None})
+        db.query(Incident).filter(Incident.incident_leader_user_id == uid).update({"incident_leader_user_id": None})
+        db.query(IncidentOrg).filter(IncidentOrg.added_by_user_id == uid).update({"added_by_user_id": None})
+        db.query(Task).filter(Task.created_by_user_id == uid).update({"created_by_user_id": None})
+        db.query(IncidentLog).filter(IncidentLog.user_id == uid).update({"user_id": None})
+        db.query(IncidentChange).filter(IncidentChange.user_id == uid).update({"user_id": None})
+        db.query(IncidentToken).filter(IncidentToken.target_user_id == uid).update({"target_user_id": None})
+        db.query(IncidentToken).filter(IncidentToken.issued_by_user_id == uid).delete()
+        db.query(PressureLog).filter(PressureLog.recorded_by_user_id == uid).update({"recorded_by_user_id": None})
+        db.query(UserRole).filter(UserRole.user_id == uid).delete()
         db.flush()
         db.delete(dt)
         db.flush()
+        db.expire(device_user)  # In-Memory-State nach Bulk-Deletes zurücksetzen
         db.delete(device_user)
     else:
         db.delete(dt)
