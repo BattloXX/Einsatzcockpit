@@ -132,6 +132,7 @@ app = FastAPI(
 
 # Static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/.well-known", StaticFiles(directory="app/static/.well-known"), name="well-known")
 
 
 def _require_system_admin(request: Request):
