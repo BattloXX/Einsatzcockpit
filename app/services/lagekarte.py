@@ -45,15 +45,22 @@ def scatter_coords(base_lat: float, base_lng: float, index: int, count: int) -> 
     return lat, lng
 
 
-def _live_position(db: "Session", vehicle_master_id: int) -> tuple[float, float] | None:
-    """Gibt die zuletzt gemeldete GPS-Position eines Fahrzeugs zurück, wenn frisch genug.
+def _live_position(
+    db: "Session", vehicle_master_id: int, min_ts: "datetime | None" = None
+) -> "tuple[float, float] | None":
+    """Gibt die zuletzt gemeldete GPS-Position zurück, wenn sie frisch genug ist.
 
-    Frisch = in den letzten 5 Minuten übermittelt. Ältere Positionen werden ignoriert,
-    damit das Fahrzeug beim Einsatzende nicht dauerhaft an der letzten Koordinate hängt.
+    Frisch = jünger als 5 Minuten UND jünger als `min_ts` (i.d.R. Alarmzeit des Einsatzes).
+    Ältere Positionen werden ignoriert, damit veraltete Standortdaten nicht auftauchen.
     """
     from datetime import UTC, datetime, timedelta
     from app.models.user import DeviceToken
-    threshold = datetime.now(UTC) - timedelta(minutes=5)
+    freshness = datetime.now(UTC) - timedelta(minutes=5)
+    # Daten müssen sowohl innerhalb der letzten 5 min als auch nach der Alarmzeit liegen
+    threshold = max(freshness, min_ts) if min_ts else freshness
+    # min_ts kann naive sein (DB ohne Timezone), normalisieren
+    if threshold.tzinfo is None:
+        threshold = threshold.replace(tzinfo=UTC)
     dt = (
         db.query(DeviceToken)
         .filter(
@@ -72,27 +79,27 @@ def _live_position(db: "Session", vehicle_master_id: int) -> tuple[float, float]
 
 
 def vehicle_features(db: "Session", incident: "Incident") -> list[dict]:
-    """Baut GeoJSON-Features für alle aktiven Fahrzeuge eines Einsatzes.
+    """Baut GeoJSON-Features nur für Fahrzeuge mit live GPS-Position.
 
-    Koordinaten: echte GPS-Position falls vorhanden (live übermittelt vom Gerät),
-    sonst deterministischer Jitter um den Einsatz-Mittelpunkt.
-    Wenn keine Einsatz-Koordinaten → leere Liste.
+    Nur Fahrzeuge, deren Gerät nach der Alarmzeit des Einsatzes eine Position
+    übermittelt hat, erscheinen im Feed. Fahrzeuge ohne aktive Geräteposition
+    werden nicht aufgenommen — kein Fallback auf Einsatz-Koordinaten.
     """
-    if incident.lat is None or incident.lng is None:
-        return []
-
+    from datetime import UTC
     active_vehicles = [v for v in incident.vehicles if v.removed_at is None]
-    count = len(active_vehicles)
     features = []
 
-    for idx, iv in enumerate(active_vehicles):
+    # Alarmzeit als Mindest-Zeitstempel: veraltete Pre-Alarm-Positionen ausschließen
+    alarm_ts = incident.started_at
+    if alarm_ts is not None and alarm_ts.tzinfo is None:
+        alarm_ts = alarm_ts.replace(tzinfo=UTC)
+
+    for iv in active_vehicles:
         vm = iv.vehicle_master
-        # Echte Position bevorzugen, falls frisch vorhanden
-        live = _live_position(db, vm.id) if vm else None
-        if live:
-            lat, lng = live
-        else:
-            lat, lng = scatter_coords(incident.lat, incident.lng, idx, count)
+        live = _live_position(db, vm.id, min_ts=alarm_ts) if vm else None
+        if not live:
+            continue  # kein Fallback: Fahrzeug nur mit echter GPS-Position anzeigen
+        lat, lng = live
 
         open_tasks = iv.open_task_count
         info = f"{open_tasks} offene Aufgabe{'n' if open_tasks != 1 else ''}" if open_tasks else ""
@@ -110,7 +117,6 @@ def vehicle_features(db: "Session", incident: "Incident") -> list[dict]:
                 "info": info,
                 "einsatz_id": incident.id,
                 "fahrzeug_id": iv.id,
-                "live_position": live is not None,
             },
         }
         features.append(feature)

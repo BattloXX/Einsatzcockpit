@@ -146,6 +146,22 @@
   </div>
   {% endif %}
 
+  <!-- Android Standort-Hinweis -->
+  <div class="alert" style="border-left:4px solid var(--color-warning,#f59e0b);background:var(--surface-high);padding:14px 16px;border-radius:6px;margin-bottom:16px;">
+    <strong>📍 Android-App: Standort im Hintergrund aktivieren</strong>
+    <p style="margin:.5rem 0 0;font-size:.9rem;color:var(--color-text-muted);line-height:1.6;">
+      Damit die einsatzleiter.cloud-App den Fahrzeugstandort auch bei gesperrtem Display oder im Hintergrund übermittelt (erforderlich für die Lagekarte), muss in den Android-Systemeinstellungen die Standort-Berechtigung auf <strong>„Immer zulassen"</strong> gesetzt werden:
+    </p>
+    <ol style="margin:.5rem 0 0;padding-left:1.2rem;font-size:.875rem;color:var(--color-text-muted);line-height:1.8;">
+      <li>Android-Einstellungen → <strong>Apps</strong> → <strong>einsatzleiter.cloud</strong></li>
+      <li><strong>Berechtigungen</strong> → <strong>Standort</strong></li>
+      <li>Option <strong>„Immer zulassen"</strong> auswählen</li>
+    </ol>
+    <p style="margin:.5rem 0 0;font-size:.8rem;color:var(--color-text-muted);">
+      Ohne diese Einstellung wird der Standort nur übermittelt, solange die App aktiv im Vordergrund ist. Fahrzeuge ohne aktive Geräteposition erscheinen nicht im GeoJSON-/KML-Feed.
+    </p>
+  </div>
+
   <!-- Hinweise -->
   <div class="chart-box">
     <h3 style="margin-bottom:8px;">Hinweise</h3>
@@ -157,6 +173,7 @@
       <li>Geräte erscheinen nicht in der normalen Benutzerliste.</li>
       <li>Wird ein Gerät einem Fahrzeug zugeordnet, erhält es automatisch eine Push-Nachricht, wenn dem Fahrzeug ein Auftrag oder eine Meldung zugewiesen wird.</li>
       <li>Die <strong>Android-App</strong> (einsatzleiter.cloud) kann beim ersten Start den QR-Code scannen, um sich dauerhaft einzuloggen.</li>
+      <li>Fahrzeugpositionen im GeoJSON-/KML-Feed werden <strong>ausschließlich</strong> über den Geräte-Login übermittelt — nur Fahrzeuge mit aktiver Hintergrund-Standortfreigabe und einer Position nach der Alarmzeit erscheinen auf der Lagekarte.</li>
     </ul>
   </div>
 </div>
