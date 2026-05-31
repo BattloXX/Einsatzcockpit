@@ -112,36 +112,15 @@ async def pages_list(request: Request, db=Depends(get_db),
     })
 
 
-@router.get("/admin/seiten/{slug}", response_class=HTMLResponse)
-async def page_edit(slug: str, request: Request, db=Depends(get_db),
-                    user: User = Depends(require_system_admin)):
-    if slug not in site_pages.PAGES:
-        raise HTTPException(404)
-    return templates.TemplateResponse(request, "admin/page_edit.html", {
-        "user": user,
-        "slug": slug,
-        "meta": site_pages.PAGES[slug],
-        "body_html": site_pages.get_page_html(db, slug),
-        "images": site_pages.list_images(),
-        "saved": request.query_params.get("saved"),
-    })
-
+# WICHTIG: Die literalen Pfade (/bild, /bilder/liste) müssen VOR den
+# parametrisierten Routen (/{slug}) registriert werden – sonst fängt {slug}
+# z.B. "bild" ab und liefert 404.
 
 @router.get("/admin/seiten/bilder/liste")
 async def page_images_list(request: Request, db=Depends(get_db),
                            user: User = Depends(require_system_admin)):
     """JSON-Liste der hochgeladenen Bilder (für die Galerie im Editor)."""
     return JSONResponse({"images": site_pages.list_images()})
-
-
-@router.post("/admin/seiten/{slug}")
-async def page_save(slug: str, request: Request, db=Depends(get_db),
-                    user: User = Depends(require_system_admin), html: str = Form("")):
-    if slug not in site_pages.PAGES:
-        raise HTTPException(404)
-    site_pages.set_page_html(db, slug, html, user.id)
-    db.commit()
-    return RedirectResponse(f"/admin/seiten/{slug}?saved=1", status_code=303)
 
 
 @router.post("/admin/seiten/bild")
@@ -161,3 +140,28 @@ async def page_image_upload(request: Request, db=Depends(get_db),
     filename = f"{uuid.uuid4().hex}{ext}"
     (site_pages.UPLOAD_DIR / filename).write_bytes(data)
     return JSONResponse({"url": f"/seite/bild/{filename}", "name": filename})
+
+
+@router.get("/admin/seiten/{slug}", response_class=HTMLResponse)
+async def page_edit(slug: str, request: Request, db=Depends(get_db),
+                    user: User = Depends(require_system_admin)):
+    if slug not in site_pages.PAGES:
+        raise HTTPException(404)
+    return templates.TemplateResponse(request, "admin/page_edit.html", {
+        "user": user,
+        "slug": slug,
+        "meta": site_pages.PAGES[slug],
+        "body_html": site_pages.get_page_html(db, slug),
+        "images": site_pages.list_images(),
+        "saved": request.query_params.get("saved"),
+    })
+
+
+@router.post("/admin/seiten/{slug}")
+async def page_save(slug: str, request: Request, db=Depends(get_db),
+                    user: User = Depends(require_system_admin), html: str = Form("")):
+    if slug not in site_pages.PAGES:
+        raise HTTPException(404)
+    site_pages.set_page_html(db, slug, html, user.id)
+    db.commit()
+    return RedirectResponse(f"/admin/seiten/{slug}?saved=1", status_code=303)
