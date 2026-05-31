@@ -1,5 +1,5 @@
 <div class="card card--task {% if task.is_done %}card--done{% endif %} {% if task.is_cancelled %}card--cancelled{% endif %}"
-     data-uid="{{ task.id }}" data-kind="task"
+     data-uid="{{ task.id }}" data-kind="task" data-status="{{ task.status or 'open' }}"
      hx-get="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/detail"
      hx-target="#cardDetailBody"
      hx-swap="innerHTML"

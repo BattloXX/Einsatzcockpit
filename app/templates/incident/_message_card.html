@@ -1,5 +1,5 @@
 <div class="card card--message {% if msg.is_done %}card--done{% endif %}"
-     data-uid="{{ msg.id }}" data-kind="message"
+     data-uid="{{ msg.id }}" data-kind="message" data-status="{{ msg.status or 'meldung' }}"
      style="cursor: pointer;"
      hx-get="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/detail"
      hx-target="#cardDetailBody"

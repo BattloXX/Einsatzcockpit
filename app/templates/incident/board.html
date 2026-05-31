@@ -245,12 +245,12 @@
 
   </aside>
 
-  <!-- Mobile Lane Tabs -->
+  <!-- Mobile Lane Tabs (Reihenfolge: Aufträge · Meldungen · Personen · Fahrzeuge) -->
   <nav class="board-tabs" role="tablist" aria-label="Spalten">
-    <button class="board-tab active" data-lane="vehicles" type="button">🚒 Fahrzeuge</button>
-    <button class="board-tab" data-lane="tasks" type="button">📋 Aufträge</button>
-    <button class="board-tab" data-lane="messages" type="button">📨 Meldungen</button>
-    <button class="board-tab" data-lane="persons" type="button">👥 Personen</button>
+    <button class="board-tab active" data-lane="tasks"     type="button">📋 Aufträge</button>
+    <button class="board-tab"        data-lane="messages"  type="button">📨 Meldungen</button>
+    <button class="board-tab"        data-lane="persons"   type="button">👥 Personen</button>
+    <button class="board-tab"        data-lane="vehicles"  type="button">🚒 Fahrzeuge</button>
   </nav>
 
   <!-- Kanban Board -->
@@ -269,7 +269,7 @@
     <div class="kanban-col" id="col-{{ col.id }}"
          data-col-id="{{ col.id }}" data-col-code="{{ col.code }}"
          data-lane="{{ lane }}"
-         {% if lane == 'vehicles' %}data-lane-active{% endif %}>
+         {% if lane == 'tasks' %}data-lane-active{% endif %}>
       {% include "incident/_lane_header.html" %}
       <div class="kanban-col__body sortable-zone" id="zone-{{ col.id }}">
 
@@ -630,11 +630,46 @@ function lageTicker(hints) {
   };
 }
 
-// Mobile Lane Tabs — switch visible lane on tab click + persist via localStorage,
-// damit nach WebSocket-Reload nicht in die erste Lane zurückgesprungen wird.
+// ── Mobile Lane Tabs ──────────────────────────────────────────────────────────
+// Tab-Reihenfolge auf Mobile: Aufträge → Meldungen → Personen → Fahrzeuge.
+// Lane-Wahl wird in localStorage persistiert, damit nach WebSocket-Reload
+// nicht in die erste Lane zurückgesprungen wird.
+// Nach jedem Lane-Wechsel wird mobileSortLane() aufgerufen, das Karten
+// innerhalb jeder Spalte für die Mobile-Ansicht sinnvoll sortiert.
 (function () {
   const LANE_KEY = 'board_active_lane';
+  const IS_MOBILE = () => window.matchMedia('(max-width: 900px)').matches;
 
+  // ── Mobil-Sortierung ────────────────────────────────────────────────────────
+  // Prioritätsskalen (niedrigere Zahl = weiter oben):
+  const TASK_PRIO    = { open: 0, in_progress: 1, done: 20, cancelled: 30 };
+  const MESSAGE_PRIO = { meldung: 0, achtung: 1, hinweis: 2, information: 3,
+                         open: 0, in_progress: 1,           // Legacy-Aliases
+                         erledigt: 20, done: 20, storniert: 30, cancelled: 30 };
+  const PERSON_PRIO  = { gefunden: 0, versorgt: 1, abtransportiert: 2, verstorben: 3 };
+
+  function cardSortKey(card, lane) {
+    const status = (card.dataset.status || '').toLowerCase();
+    if (lane === 'tasks')    return TASK_PRIO[status]    ?? 10;
+    if (lane === 'messages') return MESSAGE_PRIO[status] ?? 10;
+    if (lane === 'persons')  return PERSON_PRIO[status]  ?? 5;
+    return 0; // vehicles: keine Umsortierung
+  }
+
+  function mobileSortLane(lane) {
+    if (!IS_MOBILE() || lane === 'vehicles') return;
+    document.querySelectorAll(`.kanban-col[data-lane="${lane}"]`).forEach(col => {
+      const zone = col.querySelector('.kanban-col__body');
+      if (!zone) return;
+      const cards = Array.from(zone.querySelectorAll(':scope > .card'));
+      if (cards.length < 2) return;
+      // Stabiler Sort: gleiche Priorität → ursprüngliche DOM-Reihenfolge bleibt
+      cards.sort((a, b) => cardSortKey(a, lane) - cardSortKey(b, lane));
+      cards.forEach(c => zone.appendChild(c));
+    });
+  }
+
+  // ── Lane anwenden ───────────────────────────────────────────────────────────
   function applyLane(lane) {
     if (!lane) return false;
     const tab = document.querySelector(`.board-tab[data-lane="${lane}"]`);
@@ -644,14 +679,15 @@ function lageTicker(hints) {
       if (col.dataset.lane === lane) col.setAttribute('data-lane-active', '');
       else col.removeAttribute('data-lane-active');
     });
+    mobileSortLane(lane);
     return true;
   }
 
-  // Beim Laden: gespeicherte Lane wiederherstellen
+  // Beim Laden: gespeicherte Lane wiederherstellen, sonst Standard (tasks)
   try {
     const saved = localStorage.getItem(LANE_KEY);
-    if (saved) applyLane(saved);
-  } catch (e) { /* localStorage disabled — ignore */ }
+    if (!applyLane(saved)) applyLane('tasks');
+  } catch (e) { applyLane('tasks'); }
 
   // Klick-Handler: aktive Lane setzen + speichern
   document.addEventListener('click', function (e) {
