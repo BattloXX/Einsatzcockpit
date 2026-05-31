@@ -32,8 +32,11 @@ a { color: inherit; }
 
 /* Freier CMS-Inhalt (WYSIWYG) */
 .lp-cms img { max-width: 100%; height: auto; border-radius: 8px; }
-.lp-cms a { color: var(--lp-red); }
-.lp-cms .lp-doc a { color: var(--lp-red); }
+/* Buttons ausnehmen – sonst überschreibt die rote Link-Farbe den Button-Text */
+.lp-cms a:not(.lp-btn) { color: var(--lp-red); }
+.lp-cms .lp-doc a:not(.lp-btn) { color: var(--lp-red); }
+/* Abstand für Buttons innerhalb des CMS-Inhalts (z.B. mehrere CTAs nebeneinander) */
+.lp-cms .lp-btn { margin: 6px 10px 6px 0; }
 
 /* ── Header ─────────────────────────────────────────────── */
 .lp-header {
@@ -54,16 +57,39 @@ a { color: inherit; }
 .lp-nav a:hover { color: #fff; }
 .lp-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  font-weight: 700; border-radius: 8px; padding: 10px 18px; cursor: pointer;
-  text-decoration: none; border: 1px solid transparent; transition: transform .12s, background .15s;
+  font-weight: 700; font-size: .98rem; line-height: 1; border-radius: 10px;
+  padding: 13px 22px; cursor: pointer; white-space: nowrap;
+  text-decoration: none; border: 1px solid transparent;
+  transition: transform .12s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 .lp-btn:active { transform: scale(.97); }
+.lp-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* Login im Header: weiße Pille auf rotem Header */
 .lp-btn--login { background: #fff; color: var(--lp-red); }
 .lp-btn--login:hover { background: #ffe9e9; }
-.lp-btn--primary { background: var(--lp-red); color: #fff; }
-.lp-btn--primary:hover { background: var(--lp-red-dark); }
-.lp-btn--ghost { background: transparent; color: var(--lp-text); border-color: var(--lp-border); }
-.lp-btn--ghost:hover { background: var(--lp-surface-2); }
+
+/* Buttons gelten auch innerhalb des CMS-Inhalts (.lp-cms a) – Selektor mit
+   passender Spezifität, damit die Farben nicht von der Link-Regel überschrieben werden. */
+.lp-btn--primary,
+.lp-cms a.lp-btn--primary {
+  background: var(--lp-red); color: #fff;
+  box-shadow: 0 8px 20px rgba(212,34,37,.28);
+}
+.lp-btn--primary:hover,
+.lp-cms a.lp-btn--primary:hover {
+  background: var(--lp-red-dark); transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(212,34,37,.36);
+}
+.lp-btn--ghost,
+.lp-cms a.lp-btn--ghost {
+  background: rgba(255,255,255,.04); color: var(--lp-text);
+  border-color: rgba(255,255,255,.18);
+}
+.lp-btn--ghost:hover,
+.lp-cms a.lp-btn--ghost:hover {
+  background: var(--lp-surface-2); border-color: rgba(255,255,255,.3);
+}
 
 /* ── Hero ───────────────────────────────────────────────── */
 .lp-hero {
@@ -158,4 +184,6 @@ a { color: inherit; }
 @media (max-width: 560px) {
   .lp-features { grid-template-columns: 1fr; }
   .lp-hero { padding-top: 40px; }
+  .lp-hero__cta { flex-direction: column; align-items: stretch; }
+  .lp-hero__cta .lp-btn { width: 100%; }
 }
