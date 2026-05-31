@@ -58,6 +58,11 @@ async def about(request: Request, db=Depends(get_db)):
     return render_public_page(request, db, "about")
 
 
+@router.get("/datenschutz", response_class=HTMLResponse)
+async def datenschutz(request: Request, db=Depends(get_db)):
+    return render_public_page(request, db, "datenschutz")
+
+
 @router.post("/kontakt")
 async def contact_submit(
     request: Request, db=Depends(get_db),
@@ -117,8 +122,16 @@ async def page_edit(slug: str, request: Request, db=Depends(get_db),
         "slug": slug,
         "meta": site_pages.PAGES[slug],
         "body_html": site_pages.get_page_html(db, slug),
+        "images": site_pages.list_images(),
         "saved": request.query_params.get("saved"),
     })
+
+
+@router.get("/admin/seiten/bilder/liste")
+async def page_images_list(request: Request, db=Depends(get_db),
+                           user: User = Depends(require_system_admin)):
+    """JSON-Liste der hochgeladenen Bilder (für die Galerie im Editor)."""
+    return JSONResponse({"images": site_pages.list_images()})
 
 
 @router.post("/admin/seiten/{slug}")
@@ -147,4 +160,4 @@ async def page_image_upload(request: Request, db=Depends(get_db),
     site_pages.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4().hex}{ext}"
     (site_pages.UPLOAD_DIR / filename).write_bytes(data)
-    return JSONResponse({"url": f"/seite/bild/{filename}"})
+    return JSONResponse({"url": f"/seite/bild/{filename}", "name": filename})

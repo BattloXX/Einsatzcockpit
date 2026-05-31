@@ -26,7 +26,10 @@ PAGES: dict[str, dict] = {
     "landing": {"title": "Startseite", "contact": True, "label": "Startseite"},
     "impressum": {"title": "Impressum", "contact": False, "label": "Impressum"},
     "about": {"title": "Über", "contact": False, "label": "Über uns"},
+    "datenschutz": {"title": "Datenschutz", "contact": False, "label": "Datenschutz"},
 }
+
+ALLOWED_IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 DEFAULT_HTML: dict[str, str] = {
     "landing": """
@@ -117,6 +120,41 @@ DEFAULT_HTML: dict[str, str] = {
   </p>
 </div>
 """,
+    "datenschutz": """
+<div class="lp-doc">
+  <h1>Datenschutzerklärung</h1>
+  <p>Der Schutz Ihrer personenbezogenen Daten ist uns wichtig. Nachfolgend informieren wir Sie
+  über die Verarbeitung personenbezogener Daten bei der Nutzung von einsatzleiter.cloud.</p>
+
+  <h2>Verantwortlicher</h2>
+  <p>Johannes Battlogg<br>E-Mail: <a href="mailto:johannes@battlogg.org">johannes@battlogg.org</a></p>
+
+  <h2>Verarbeitete Daten</h2>
+  <p>Bei der Nutzung der Anwendung werden die zur Einsatzdokumentation eingegebenen Daten sowie
+  technisch notwendige Zugangs- und Sitzungsdaten (z.&nbsp;B. Anmeldedaten, Session-Cookie)
+  verarbeitet. Server-Logfiles können IP-Adresse, Zeitpunkt und aufgerufene Ressource enthalten.</p>
+
+  <h2>Kontaktformular</h2>
+  <p>Wenn Sie uns über das Kontaktformular schreiben, werden die von Ihnen angegebenen Daten
+  (Name, E-Mail-Adresse, Nachricht) zur Bearbeitung der Anfrage per E-Mail an uns übermittelt
+  und gespeichert.</p>
+
+  <h2>Cookies</h2>
+  <p>Wir verwenden ausschließlich technisch notwendige Cookies (Anmeldung/Session sowie ein
+  Cookie zum Schutz vor Cross-Site-Request-Forgery). Es findet kein Tracking und keine Analyse
+  durch Dritte statt.</p>
+
+  <h2>Rechtsgrundlage</h2>
+  <p>Die Verarbeitung erfolgt zur Erfüllung vertraglicher bzw. vorvertraglicher Maßnahmen
+  (Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;b DSGVO) sowie auf Grundlage unseres berechtigten Interesses
+  am sicheren Betrieb der Anwendung (Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;f DSGVO).</p>
+
+  <h2>Ihre Rechte</h2>
+  <p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung,
+  Datenübertragbarkeit sowie Widerspruch. Wenden Sie sich dafür an die oben genannte
+  Kontaktadresse. Zudem besteht ein Beschwerderecht bei der zuständigen Aufsichtsbehörde.</p>
+</div>
+""",
 }
 
 
@@ -137,3 +175,15 @@ def set_page_html(db, slug: str, html: str, user_id: int | None = None) -> None:
     row.value = html
     row.updated_at = datetime.now(UTC)
     row.updated_by_user_id = user_id
+
+
+def list_images() -> list[dict]:
+    """Hochgeladene Bilder (neueste zuerst) für die Editor-Galerie."""
+    if not UPLOAD_DIR.is_dir():
+        return []
+    files = [
+        p for p in UPLOAD_DIR.iterdir()
+        if p.is_file() and p.suffix.lower() in ALLOWED_IMG_EXTS
+    ]
+    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return [{"name": p.name, "url": f"/seite/bild/{p.name}"} for p in files]
