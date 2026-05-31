@@ -91,7 +91,8 @@
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <button type="submit" class="btn btn--xs btn--ghost"
                       style="color:var(--color-danger)"
-                      onclick="return confirm('Token &quot;{{ t.label }}&quot; endg\xfcltig l\xf6schen?')">L&ouml;schen</button>
+                      data-label="{{ t.label | e }}"
+                      onclick="return confirm('Token „' + this.dataset.label + '“ endg\xfcltig l\xf6schen?')">L&ouml;schen</button>
             </form>
           </td>
         </tr>
