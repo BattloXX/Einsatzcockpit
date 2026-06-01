@@ -129,7 +129,7 @@ def send_push(subscription: PushSubscription, title: str, body: str,
     if not cfg["private_key"] or not cfg["public_key"]:
         return False
     try:
-        from pywebpush import webpush
+        from pywebpush import webpush, WebPushException
         data = json.dumps({"title": title, "body": body, "url": url or "/"})
         webpush(
             subscription_info={"endpoint": subscription.endpoint,
@@ -140,7 +140,24 @@ def send_push(subscription: PushSubscription, title: str, body: str,
         )
         return True
     except Exception as exc:
-        log.warning("Push fehlgeschlagen für Subscription %s: %s", subscription.id, exc)
+        # 410 Gone or 404 = subscription no longer valid → remove from DB
+        status = None
+        try:
+            from pywebpush import WebPushException as _WPE  # noqa: F811
+            if isinstance(exc, _WPE) and exc.response is not None:
+                status = exc.response.status_code
+        except Exception:
+            pass
+        if status in (404, 410):
+            log.info("Push-Subscription %s ist abgelaufen (HTTP %s) – wird gelöscht", subscription.id, status)
+            if db is not None:
+                try:
+                    db.delete(subscription)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+        else:
+            log.warning("Push fehlgeschlagen für Subscription %s: %s", subscription.id, exc)
         return False
 
 

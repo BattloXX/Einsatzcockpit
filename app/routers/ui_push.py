@@ -25,11 +25,15 @@ async def subscribe(request: Request, db: Session = Depends(get_db)):
     endpoint = data.get("endpoint", "")
     p256dh = data.get("keys", {}).get("p256dh", "")
     auth = data.get("keys", {}).get("auth", "")
-    # Upsert by endpoint
+    # Upsert by endpoint – immer user_id/keys aktualisieren (z.B. nach Device-Login-Wechsel)
     existing = db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).first()
-    if not existing:
+    if existing:
+        existing.user_id = user.id
+        existing.p256dh = p256dh
+        existing.auth = auth
+    else:
         db.add(PushSubscription(user_id=user.id, endpoint=endpoint, p256dh=p256dh, auth=auth))
-        db.commit()
+    db.commit()
     return JSONResponse({"ok": True})
 
 

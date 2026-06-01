@@ -14,9 +14,17 @@
   </div>
 
   {% if sent is not none %}
+  {% if sent|int > 0 %}
   <div class="alert alert--success">
     {{ sent }} Push-Nachricht{{ 'en' if sent|int != 1 else '' }} erfolgreich zugestellt.
   </div>
+  {% else %}
+  <div class="alert alert--danger">
+    Keine Nachricht zugestellt (0 von {{ sub_count }} Gerät{{ 'en' if sub_count != 1 else '' }}).
+    Mögliche Ursachen: VAPID-Schlüssel fehlen/falsch, Abonnement abgelaufen oder Browser-Berechtigungen entzogen.
+    Details im Server-Log.
+  </div>
+  {% endif %}
   {% endif %}
   {% if error == 'empty' %}
   <div class="alert alert--danger">Titel und Text dürfen nicht leer sein.</div>

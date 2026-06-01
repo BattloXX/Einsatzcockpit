@@ -63,18 +63,27 @@ document.addEventListener('alpine:init', () => {
           if (!publicKey) return;
           navigator.serviceWorker.ready.then(sw => {
             sw.pushManager.getSubscription().then(sub => {
-              if (sub) return;
-              // Only subscribe if user has granted permission
+              if (sub) {
+                // Vorhandene Subscription immer ans Backend senden, damit nach einem
+                // User-Wechsel (z.B. Device-Login) die user_id aktualisiert wird.
+                fetch('/push/subscribe', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(sub),
+                }).catch(() => {});
+                return;
+              }
+              // Nur neu subscriben wenn Berechtigung bereits erteilt
               if (Notification.permission === 'granted') {
                 sw.pushManager.subscribe({
                   userVisibleOnly: true,
                   applicationServerKey: urlBase64ToUint8Array(publicKey),
-                }).then(sub => {
+                }).then(newSub => {
                   fetch('/push/subscribe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(sub),
-                  });
+                    body: JSON.stringify(newSub),
+                  }).catch(() => {});
                 }).catch(() => {});
               }
             });
