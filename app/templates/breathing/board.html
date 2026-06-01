@@ -562,8 +562,21 @@ async function ackWarning(btn, url, kind, badgeId) {
 let _audioUnlocked = false;
 function unlockAudio() {
   if (_audioUnlocked) return;
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  ctx.resume().then(() => { _audioUnlocked = true; ctx.close(); }).catch(() => {});
+  _audioUnlocked = true;
+  // Web Audio API Context entsperren
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume().then(function () { ctx.close(); }).catch(function () {});
+  } catch (_) {}
+  // HTML-Audio für iOS/Safari entsperren: kurz play()+pause() pro Datei
+  ['/static/audio/troop-warning-third.mp3',
+   '/static/audio/troop-warning-withdraw.mp3',
+   '/static/audio/troop-warning-max.mp3'].forEach(function (src) {
+    var a = new Audio(src);
+    a.volume = 0.001;
+    var p = a.play();
+    if (p && p.then) p.then(function () { a.pause(); a.currentTime = 0; }).catch(function () {});
+  });
 }
 
 /* ── Audio registry: troop_id → { max: HTMLAudioElement } ── */
@@ -896,7 +909,11 @@ function newTroopForm() {
 
   function resetTimer() {
     clearTimeout(timer);
-    timer = setTimeout(function () { location.href = SS_URL; }, TIMEOUT_MS);
+    timer = setTimeout(function () {
+      // _breathingReload unterdrückt den beforeunload-Dialog (aktive Trupps)
+      _breathingReload = true;
+      location.href = SS_URL;
+    }, TIMEOUT_MS);
   }
 
   ['mousemove','mousedown','touchstart','keydown','scroll','click'].forEach(function (ev) {

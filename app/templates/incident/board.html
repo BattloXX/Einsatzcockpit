@@ -97,8 +97,6 @@
        {{ tip('Übersichts-Dashboard in neuem Fenster öffnen') }}>Dashboard</a>
     <a href="/einsatz/{{ incident.id }}/qr" class="btn btn--sm btn--ghost"
        {{ tip('QR-Code zum Einsatz beitreten anzeigen') }}>QR</a>
-    <a href="/einsatz/{{ incident.id }}/screensaver" class="btn btn--sm btn--ghost"
-       {{ tip('Bildschirmschoner: Logo, Uhrzeit und Alarmtext – Bildschirm bleibt aktiv') }}>🖥</a>
     <a href="/archiv/{{ incident.id }}/pdf" class="btn btn--sm btn--ghost"
        {{ tip('Einsatzdokumentation als PDF herunterladen') }}>PDF</a>
     {% if can_edit %}
