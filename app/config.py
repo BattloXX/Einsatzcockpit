@@ -9,8 +9,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "mysql+pymysql://einsatzleiter:pw@127.0.0.1:3306/einsatzleiter"
     SECRET_KEY: str = SECRET_KEY_PLACEHOLDER
-    SESSION_MAX_AGE_SECONDS: int = 2592000     # 30 Tage
-    SESSION_INACTIVITY_SECONDS: int = 604800  # 7 Tage Inaktivitäts-Timeout
+    SESSION_MAX_AGE_SECONDS: int = 86400    # 24 Stunden (normaler Benutzer)
+    SESSION_INACTIVITY_SECONDS: int = 28800  # 8 Stunden Inaktivitäts-Timeout
 
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8092

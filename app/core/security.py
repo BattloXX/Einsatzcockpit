@@ -47,33 +47,53 @@ def generate_api_key() -> str:
     return "fwwo_" + secrets.token_urlsafe(32)
 
 
-def sign_session(user_id: int, *, qr: bool = False, incident_id: int | None = None) -> str:
+def sign_session(
+    user_id: int,
+    *,
+    qr: bool = False,
+    device: bool = False,
+    incident_id: int | None = None,
+) -> str:
     if qr:
         payload: dict | int = {"u": user_id, "qr": 1}
         if incident_id is not None:
             payload["i"] = incident_id  # type: ignore[index]
+    elif device:
+        payload = {"u": user_id, "d": 1}
     else:
         payload = user_id
     return _signer.dumps(payload)
 
 
-def unsign_session(token: str) -> tuple[int, bool, int | None] | None:
-    """Returns (user_id, is_qr, qr_incident_id) or None."""
+def unsign_session(token: str) -> tuple[int, bool, int | None, bool] | None:
+    """Returns (user_id, is_qr, qr_incident_id, is_device) or None."""
     try:
-        data, ts = _signer.loads(
-            token,
-            max_age=settings.SESSION_MAX_AGE_SECONDS,
-            return_timestamp=True,
-        )
+        # Load without max_age so we can check expiry manually per session type.
+        data, ts = _signer.loads(token, max_age=None, return_timestamp=True)
+        now = datetime.now(UTC)
+        age_s = (now - ts.replace(tzinfo=UTC)).total_seconds()
+
+        if isinstance(data, dict) and data.get("d"):
+            # Device session: no timeout whatsoever.
+            return (data["u"], False, None, True)
+
+        if isinstance(data, dict) and data.get("qr"):
+            # QR session: enforce absolute max_age only (DB controls incident validity).
+            if age_s > settings.SESSION_MAX_AGE_SECONDS:
+                return None
+            return (data["u"], True, data.get("i"), False)
+
         if isinstance(data, int):
-            # Enforce inactivity timeout for regular (non-QR) sessions.
-            # The middleware refreshes the token on each request, so age == time
+            # Regular user session: enforce absolute max_age AND inactivity window.
+            # The middleware re-signs on each request (sliding window), so age ≈ time
             # since last activity.
-            age_s = (datetime.now(UTC) - ts.replace(tzinfo=UTC)).total_seconds()
+            if age_s > settings.SESSION_MAX_AGE_SECONDS:
+                return None
             if age_s > settings.SESSION_INACTIVITY_SECONDS:
                 return None
-            return (data, False, None)
-        return (data["u"], bool(data.get("qr")), data.get("i"))
+            return (data, False, None, False)
+
+        return None
     except (BadSignature, SignatureExpired):
         return None
 

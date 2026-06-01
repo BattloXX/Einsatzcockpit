@@ -128,9 +128,16 @@ async def device_login(request: Request, token: str, db: Session = Depends(get_d
                 payload={"device_token_id": dt.id, "label": dt.label})
     db.commit()
 
-    session_token = sign_session(user.id)
+    session_token = sign_session(user.id, device=True)
     redirect = RedirectResponse("/", status_code=302)
-    _set_session_cookie(redirect, session_token)
+    redirect.set_cookie(
+        "session",
+        session_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        max_age=10 * 365 * 24 * 3600,  # ~10 Jahre; kein Ablauf für Geräte-Sessions
+    )
     return redirect
 
 

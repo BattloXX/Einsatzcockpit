@@ -175,7 +175,7 @@ async def session_middleware(request: Request, call_next):
     if token:
         session_data = unsign_session(token)
         if session_data:
-            user_id, is_qr, qr_incident_id = session_data
+            user_id, is_qr, qr_incident_id, is_device = session_data
             db = SessionLocal()
             try:
                 user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
@@ -195,7 +195,7 @@ async def session_middleware(request: Request, call_next):
                         else:
                             recorder = db.query(Role).filter(Role.code == "recorder").first()
                             user = _QrUser(user, recorder)
-                elif user:
+                elif user and not is_device:
                     # Regular session: refresh token to slide the inactivity window.
                     _refresh_user_id = user_id
                 request.state.user = user
