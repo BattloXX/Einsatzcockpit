@@ -107,10 +107,13 @@ async def test_push(request: Request, db: Session = Depends(get_db)):
                 status = exc.response.status_code
         except Exception:
             pass
-        err_type = type(exc).__name__
-        err_msg = str(exc) or repr(exc)
         log.exception("Test-Push fehlgeschlagen für User %s Subscription %s", user.id, sub.id)
-        detail = f"{err_type}: {err_msg}"
+        # Nur Statuscode + Exception-Typ zurückgeben – keine str(exc)-Details im Response
+        # (pywebpush-Fehlermeldungen können interne Infos enthalten).
+        # Der vollständige Traceback ist im Server-Log via log.exception() oben.
+        err_type = type(exc).__name__
         if status:
-            detail = f"HTTP {status} – {detail}"
+            detail = f"HTTP {status} vom Push-Server ({err_type}) – Details im Server-Log"
+        else:
+            detail = f"{err_type} – Details im Server-Log"
         return JSONResponse({"ok": False, "error": detail})
