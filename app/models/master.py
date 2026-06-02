@@ -187,7 +187,7 @@ class MessageSuggestionAlarm(Base):
 class LageHint(Base):
     __tablename__ = "lage_hint"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     text: Mapped[str] = mapped_column(String(500), nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -201,7 +201,7 @@ class LageHintAlarm(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     lage_hint_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("lage_hint.id", ondelete="CASCADE"), nullable=False
+        BigInteger, ForeignKey("lage_hint.id", ondelete="CASCADE"), nullable=False
     )
     alarm_type_code: Mapped[str] = mapped_column(
         String(10), ForeignKey("alarm_type.code", ondelete="CASCADE"), nullable=False
