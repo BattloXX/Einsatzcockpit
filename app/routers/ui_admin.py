@@ -1518,6 +1518,67 @@ async def test_smtp_mail(
         )
 
 
+# ── Server-Log-Viewer ─────────────────────────────────────────────────────────
+
+@router.get("/system/server-log", response_class=HTMLResponse)
+async def server_log_page(
+    request: Request,
+    n: int = 500,
+    level: str = "DEBUG",
+    _=Depends(require_role("system_admin")),
+):
+    from app.log_buffer import get_entries
+    level = level.upper()
+    if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+        level = "DEBUG"
+    n = max(50, min(n, 2000))
+    entries = get_entries(n=n, min_level_name=level)
+    return templates.TemplateResponse(request, "admin/server_log.html", {
+        "user": request.state.user,
+        "entries": entries,
+        "n": n,
+        "level": level,
+        "total": len(entries),
+        "worker_note": True,
+    })
+
+
+@router.get("/system/server-log/raw")
+async def server_log_raw(
+    request: Request,
+    n: int = 500,
+    level: str = "DEBUG",
+    _=Depends(require_role("system_admin")),
+):
+    from fastapi.responses import PlainTextResponse
+    from app.log_buffer import get_text
+    level = level.upper()
+    if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+        level = "DEBUG"
+    n = max(50, min(n, 2000))
+    text = get_text(n=n, min_level_name=level)
+    return PlainTextResponse(
+        text,
+        headers={"Content-Disposition": f"attachment; filename=server-log-{level}.txt"},
+    )
+
+
+@router.get("/system/server-log/json")
+async def server_log_json(
+    request: Request,
+    n: int = 200,
+    level: str = "DEBUG",
+    _=Depends(require_role("system_admin")),
+):
+    from app.log_buffer import get_entries
+    level = level.upper()
+    if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+        level = "DEBUG"
+    n = max(50, min(n, 2000))
+    entries = get_entries(n=n, min_level_name=level)
+    return {"entries": entries, "total": len(entries)}
+
+
 # ── Backup / Export ───────────────────────────────────────────────────────────
 
 @router.get("/backup", response_class=HTMLResponse)

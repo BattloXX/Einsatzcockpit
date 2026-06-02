@@ -35,6 +35,10 @@ from app.routers import (
 
 logger = logging.getLogger("einsatzleiter")
 
+# In-Memory-Log-Buffer so früh wie möglich registrieren, damit auch Startup-Logs erfasst werden
+from app import log_buffer as _log_buffer  # noqa: E402
+_log_buffer.setup()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

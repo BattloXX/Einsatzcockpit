@@ -1,0 +1,190 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Server-Log – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Server-Log'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Server-Log</h1>
+      <p class="page-header__sub">
+        In-Memory-Ringpuffer der letzten Lognachrichten dieses Server-Prozesses.
+        {% if worker_note %}
+        <span class="text-muted" style="font-size:.82rem;">
+          (Bei mehreren Gunicorn-Worker-Prozessen zeigt dieser Viewer nur den Puffer des gerade
+          antwortenden Workers.)
+        </span>
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  {# ── Steuerleiste ────────────────────────────────────────────────────────── #}
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px;">
+
+    {# Level-Filter #}
+    <div style="display:flex;align-items:center;gap:6px;">
+      <label style="font-size:.85rem;font-weight:600;white-space:nowrap;">Mindest-Level:</label>
+      <select id="levelSelect" class="form-input form-input--sm" style="width:120px;"
+              onchange="applyFilter()">
+        {% for lv in ['DEBUG','INFO','WARNING','ERROR','CRITICAL'] %}
+        <option value="{{ lv }}" {% if lv == level %}selected{% endif %}>{{ lv }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Zeilen-Anzahl #}
+    <div style="display:flex;align-items:center;gap:6px;">
+      <label style="font-size:.85rem;font-weight:600;white-space:nowrap;">Letzte Zeilen:</label>
+      <select id="nSelect" class="form-input form-input--sm" style="width:100px;"
+              onchange="applyFilter()">
+        {% for cnt in [100, 200, 500, 1000, 2000] %}
+        <option value="{{ cnt }}" {% if cnt == n %}selected{% endif %}>{{ cnt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Auto-Refresh #}
+    <div style="display:flex;align-items:center;gap:6px;">
+      <label style="font-size:.85rem;font-weight:600;white-space:nowrap;">Auto-Refresh:</label>
+      <select id="refreshInterval" class="form-input form-input--sm" style="width:110px;"
+              onchange="startAutoRefresh()">
+        <option value="0">Aus</option>
+        <option value="5">5 s</option>
+        <option value="10" selected>10 s</option>
+        <option value="30">30 s</option>
+        <option value="60">60 s</option>
+      </select>
+    </div>
+
+    {# Manuell aktualisieren #}
+    <button class="btn btn--ghost btn--sm" onclick="fetchLog()">↻ Aktualisieren</button>
+
+    {# Trennlinie #}
+    <div style="flex:1;"></div>
+
+    {# Copy #}
+    <button class="btn btn--ghost btn--sm" id="copyBtn" onclick="copyLog()">
+      📋 Kopieren
+    </button>
+
+    {# Download #}
+    <a id="downloadLink"
+       href="/admin/system/server-log/raw?n={{ n }}&level={{ level }}"
+       class="btn btn--ghost btn--sm"
+       download="server-log.txt">
+      ⬇ Download
+    </a>
+
+  </div>
+
+  {# Status-Zeile #}
+  <div style="display:flex;justify-content:space-between;align-items:center;
+              font-size:.8rem;color:var(--color-text-muted);margin-bottom:6px;">
+    <span id="statusLine">{{ total }} Einträge geladen</span>
+    <span id="lastRefresh">Stand: jetzt</span>
+  </div>
+
+  {# Log-Ausgabe #}
+  <div style="position:relative;">
+    <pre id="logOutput"
+         style="background:var(--color-bg-dark,#1a1a2e);color:#d4d4d4;
+                padding:14px 16px;border-radius:6px;overflow:auto;
+                max-height:70vh;font-size:.78rem;line-height:1.5;
+                white-space:pre-wrap;word-break:break-all;
+                font-family:'Courier New',Courier,monospace;margin:0;">{% for e in entries %}<span class="ll-{{ e.level }}">{{ e.msg | forceescape }}</span>
+{% endfor %}</pre>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .ll-DEBUG    { color: #858585; }
+  .ll-INFO     { color: #9cdcfe; }
+  .ll-WARNING  { color: #dcdcaa; }
+  .ll-ERROR    { color: #f48771; }
+  .ll-CRITICAL { color: #ff3333; font-weight: bold; }
+</style>
+<script>
+let _refreshTimer = null;
+
+function currentLevel() { return document.getElementById('levelSelect').value; }
+function currentN()     { return document.getElementById('nSelect').value; }
+
+function applyFilter() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('level', currentLevel());
+  url.searchParams.set('n', currentN());
+  window.location.href = url.toString();
+}
+
+function startAutoRefresh() {
+  clearInterval(_refreshTimer);
+  const sec = parseInt(document.getElementById('refreshInterval').value, 10);
+  if (sec > 0) {
+    _refreshTimer = setInterval(fetchLog, sec * 1000);
+  }
+}
+
+function levelClass(lvl) {
+  const map = { DEBUG: 'll-DEBUG', INFO: 'll-INFO', WARNING: 'll-WARNING',
+                ERROR: 'll-ERROR', CRITICAL: 'll-CRITICAL' };
+  return map[lvl] || '';
+}
+
+async function fetchLog() {
+  const level = currentLevel();
+  const n     = currentN();
+  try {
+    const res = await fetch(`/admin/system/server-log/json?n=${n}&level=${level}`, {
+      credentials: 'same-origin',
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const out = document.getElementById('logOutput');
+
+    // Sicher via DOM-Methoden – kein innerHTML, kein XSS-Risiko
+    const frag = document.createDocumentFragment();
+    data.entries.forEach(e => {
+      const span = document.createElement('span');
+      span.className = levelClass(e.level);
+      span.textContent = e.msg;   // textContent escaped automatisch
+      frag.appendChild(span);
+      frag.appendChild(document.createTextNode('\n'));
+    });
+    out.textContent = '';
+    out.appendChild(frag);
+
+    out.scrollTop = out.scrollHeight;
+    document.getElementById('statusLine').textContent = `${data.total} Einträge geladen`;
+    const now = new Date();
+    document.getElementById('lastRefresh').textContent =
+      'Stand: ' + now.toLocaleTimeString('de-AT');
+    document.getElementById('downloadLink').href =
+      `/admin/system/server-log/raw?n=${n}&level=${level}`;
+  } catch (_) {}
+}
+
+async function copyLog() {
+  const text = document.getElementById('logOutput').innerText;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '✓ Kopiert';
+    setTimeout(() => { btn.textContent = '📋 Kopieren'; }, 2000);
+  } catch (_) {
+    alert('Kopieren fehlgeschlagen – bitte manuell markieren.');
+  }
+}
+
+/* Beim Laden ans Ende scrollen und Auto-Refresh starten */
+window.addEventListener('DOMContentLoaded', () => {
+  const out = document.getElementById('logOutput');
+  out.scrollTop = out.scrollHeight;
+  startAutoRefresh();
+});
+</script>
+{% endblock %}
