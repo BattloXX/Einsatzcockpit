@@ -214,6 +214,46 @@ function toggleUserSelect() {
   sel.disabled = !radio.checked;
 }
 
+async function testPush() {
+  const resultDiv = document.getElementById('pushTestResult');
+  if (!resultDiv) return;
+  resultDiv.style.display = 'block';
+  resultDiv.textContent = 'Sende Test…';
+
+  try {
+    const swReg = await navigator.serviceWorker.ready;
+    const sub = await swReg.pushManager.getSubscription();
+    if (!sub) {
+      resultDiv.textContent = 'Keine aktive Subscription gefunden.';
+      return;
+    }
+    const res = await fetch('/push/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: sub.endpoint }),
+    });
+    const json = await res.json();
+
+    resultDiv.textContent = '';
+    const badge = document.createElement('span');
+    badge.className = json.ok
+      ? 'badge-pill badge-pill--green'
+      : 'badge-pill badge-pill--red';
+    badge.style.cssText = 'font-size:.8rem;margin-right:6px;';
+    badge.textContent = json.ok ? '✓ Gesendet' : '✗ Fehler';
+    resultDiv.appendChild(badge);
+
+    const msg = document.createElement('span');
+    msg.style.fontSize = '.85rem';
+    msg.textContent = json.ok
+      ? 'Test-Push wurde gesendet — Benachrichtigung sollte erscheinen.'
+      : (json.error || 'Unbekannter Fehler');
+    resultDiv.appendChild(msg);
+  } catch (e) {
+    resultDiv.textContent = 'Netzwerkfehler: ' + e.message;
+  }
+}
+
 /* ── Push-Abonnement Status ── */
 (async function () {
   const area = document.getElementById('pushStatusArea');
@@ -249,7 +289,9 @@ function toggleUserSelect() {
     area.innerHTML =
       '<span class="badge-pill badge-pill--green" style="font-size:.85rem;margin-right:8px;">✓ Aktiv</span>'
       + 'Push-Benachrichtigungen sind für dieses Gerät aktiviert.'
-      + ' <button class="btn btn--ghost btn--xs" style="margin-left:8px;" onclick="unsubscribePush()">Abonnement aufheben</button>';
+      + ' <button class="btn btn--primary btn--xs" style="margin-left:8px;" onclick="testPush()">Test senden</button>'
+      + ' <button class="btn btn--ghost btn--xs" style="margin-left:4px;" onclick="unsubscribePush()">Abonnement aufheben</button>'
+      + '<div id="pushTestResult" style="margin-top:8px;display:none;"></div>';
   } else if (perm === 'denied') {
     area.innerHTML =
       '<span class="badge-pill badge-pill--red" style="font-size:.85rem;margin-right:8px;">Blockiert</span>'

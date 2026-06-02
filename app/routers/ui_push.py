@@ -1,4 +1,7 @@
-"""Web Push – subscribe / unsubscribe."""
+"""Web Push – subscribe / unsubscribe / diagnose."""
+import json
+import logging
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
@@ -6,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.user import PushSubscription
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/push")
 
 
@@ -44,3 +48,65 @@ async def unsubscribe(request: Request, db: Session = Depends(get_db)):
     db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).delete()
     db.commit()
     return JSONResponse({"ok": True})
+
+
+@router.post("/test")
+async def test_push(request: Request, db: Session = Depends(get_db)):
+    """Sendet einen Test-Push an die Subscription des anfragenden Geräts.
+    Gibt JSON mit ok/error zurück – für die Admin-Push-Seite."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return JSONResponse({"ok": False, "error": "Nicht eingeloggt"}, status_code=401)
+
+    data = await request.json()
+    endpoint = data.get("endpoint", "")
+    if not endpoint:
+        return JSONResponse({"ok": False, "error": "Kein Endpoint übermittelt"})
+
+    sub = db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).first()
+    if not sub:
+        return JSONResponse({"ok": False, "error": "Subscription nicht in Datenbank gefunden"})
+
+    from app.services.push_service import _push_cfg
+    cfg = _push_cfg(db)
+    if not cfg["enabled"]:
+        return JSONResponse({"ok": False, "error": "Push ist deaktiviert (enable_push=false)"})
+    if not cfg["private_key"]:
+        return JSONResponse({"ok": False, "error": "VAPID Private Key fehlt"})
+    if not cfg["public_key"]:
+        return JSONResponse({"ok": False, "error": "VAPID Public Key fehlt"})
+    if not cfg["claim_email"]:
+        return JSONResponse({"ok": False, "error": "VAPID E-Mail fehlt"})
+
+    try:
+        from pywebpush import WebPushException, webpush
+        payload = json.dumps({
+            "title": "Test-Push",
+            "body": "Wenn du das siehst, funktioniert Web Push!",
+            "url": "/admin/push-nachrichten",
+        })
+        webpush(
+            subscription_info={
+                "endpoint": sub.endpoint,
+                "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+            },
+            data=payload,
+            vapid_private_key=cfg["private_key"],
+            vapid_claims={"sub": f"mailto:{cfg['claim_email']}"},
+        )
+        return JSONResponse({"ok": True})
+    except Exception as exc:
+        status = None
+        try:
+            from pywebpush import WebPushException as _WPE
+            if isinstance(exc, _WPE) and exc.response is not None:
+                status = exc.response.status_code
+        except Exception:
+            pass
+        err_type = type(exc).__name__
+        err_msg = str(exc) or repr(exc)
+        log.exception("Test-Push fehlgeschlagen für User %s Subscription %s", user.id, sub.id)
+        detail = f"{err_type}: {err_msg}"
+        if status:
+            detail = f"HTTP {status} – {detail}"
+        return JSONResponse({"ok": False, "error": detail})

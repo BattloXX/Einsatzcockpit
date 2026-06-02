@@ -86,11 +86,12 @@ def _push_cfg(db: Session | None) -> dict[str, Any]:
             if (v := _get("enable_push")) is not None:
                 cfg["enabled"] = v.lower() == "true"
             if (v := _get("vapid_private_key")) is not None:
-                cfg["private_key"] = v
+                # Whitespace entfernen – Copy-Paste aus Key-Generatoren fügt oft \n ein
+                cfg["private_key"] = v.strip()
             if (v := _get("vapid_public_key")) is not None:
-                cfg["public_key"] = v
+                cfg["public_key"] = v.strip()
             if (v := _get("vapid_email")) is not None:
-                email = v.removeprefix("mailto:")
+                email = v.strip().removeprefix("mailto:")
                 cfg["claim_email"] = email
             # FCM – DB hat Vorrang vor .env
             cfg["fcm_enabled"] = (
@@ -157,7 +158,9 @@ def send_push(subscription: PushSubscription, title: str, body: str,
                 except Exception:
                     db.rollback()
         else:
-            log.warning("Push fehlgeschlagen für Subscription %s: %s", subscription.id, exc)
+            ep = subscription.endpoint[:60] if subscription.endpoint else "?"
+            log.exception("Push fehlgeschlagen für Subscription %s (endpoint: %s…): %r",
+                          subscription.id, ep, exc)
         return False
 
 
