@@ -20,6 +20,7 @@ from app.models.incident import (
     UNIT_STATUS_VALUES,
     Incident,
     IncidentColumn,
+    IncidentLog,
     IncidentToken,
     IncidentVehicle,
     Message,
@@ -461,6 +462,7 @@ async def create_task(
     title: str = Form(...), detail: str = Form(""),
     column_id: int | None = Form(None),
     vehicle_id: int | None = Form(None),
+    note: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -474,6 +476,8 @@ async def create_task(
     # (analog assign_task_to_vehicle).
     if vehicle_id:
         task.vehicle_id = vehicle_id
+    if note.strip():
+        db.add(IncidentLog(incident_id=incident_id, text=note.strip(), user_id=request.state.user.id))
     db.commit()
     await manager.broadcast(incident_id, {
         "type": "task_created", "task_id": task.id, "reload_board": True,
@@ -618,6 +622,8 @@ async def attach_vehicle_to_incident(
     new_name: str = Form(""),
     new_type: str = Form(""),
     commander_member_id: int | None = Form(None),
+    commander_free_text: str = Form(""),
+    note: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -672,6 +678,11 @@ async def attach_vehicle_to_incident(
         commander_member_id=commander_member_id or None,
     )
     db.add(iv)
+    db.flush()
+    if not commander_member_id and commander_free_text.strip():
+        quick_create_commander(db, iv, commander_free_text.strip(), user_id=request.state.user.id)
+    if note.strip():
+        db.add(IncidentLog(incident_id=incident_id, text=note.strip(), user_id=request.state.user.id))
     db.commit()
     await manager.broadcast(incident_id, {"type": "vehicle_added", "reload_board": True})
     return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
@@ -792,6 +803,7 @@ async def create_person(
     gender: str = Form(...), person_group: str = Form(...),
     age_range: str = Form(""), name: str = Form(""), location: str = Form(""),
     vehicle_id: int | None = Form(None),
+    note: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
@@ -802,6 +814,8 @@ async def create_person(
         location=location or None, vehicle_id=vehicle_id,
     )
     db.add(person)
+    if note.strip():
+        db.add(IncidentLog(incident_id=incident_id, text=note.strip(), user_id=request.state.user.id))
     db.commit()
     await manager.broadcast(incident_id, {"type": "person_created", "reload_board": True})
     return Response(status_code=204)
@@ -871,7 +885,6 @@ async def add_log(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
-    from app.models.incident import IncidentLog
     entry = IncidentLog(incident_id=incident_id, text=text, user_id=request.state.user.id)
     db.add(entry)
     db.commit()

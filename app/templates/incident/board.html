@@ -330,6 +330,10 @@
             {% endfor %}
           </select>
         </div>
+        <div class="form-group">
+          <label class="form-label" style="font-size:.82rem;">Notiz (optional — wird ins Journal eingetragen)</label>
+          <input type="text" name="note" class="form-input" placeholder="z. B. Koordinaten weitergegeben">
+        </div>
       </div>
       <div class="modal__footer">
         <button type="button" @click="$el.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -444,22 +448,32 @@
       </div>
 
       {% if gk_member_candidates %}
-      <div class="form-group" style="margin-bottom:8px;">
+      <div class="form-group" style="margin-bottom:4px;">
         <label class="form-label" style="font-size:.75rem;">Gruppenkommandant (optional)</label>
-        <select class="form-select form-select--sm" x-model="gkMemberId">
+        <select class="form-select form-select--sm" x-model="gkMemberId" @change="gkFreeText = ''">
           <option value="">— kein GK —</option>
           {% for m in gk_member_candidates %}
           <option value="{{ m.id }}">{{ m.full_name }}</option>
           {% endfor %}
         </select>
+        <input type="text" class="form-input form-input--sm" x-model="gkFreeText"
+               @input="gkMemberId = ''"
+               placeholder="oder Namen eingeben…" style="margin-top:4px;">
       </div>
       {% endif %}
+
+      <div class="form-group" style="margin-bottom:8px;">
+        <label class="form-label" style="font-size:.75rem;">Notiz (optional — wird ins Journal eingetragen)</label>
+        <input type="text" class="form-input form-input--sm" x-model="noteText" placeholder="z. B. Befehlsübergabe erfolgt">
+      </div>
 
       <div x-show="suggestions.length > 0" class="suggestion-list">
         <template x-for="s in suggestions" :key="s.id">
           <form method="post" :action="`/einsatz/${incidentId}/fahrzeug-hinzufuegen`" style="display:block;">
             <input type="hidden" name="vehicle_master_id" :value="s.id">
             <input type="hidden" name="commander_member_id" :value="gkMemberId">
+            <input type="hidden" name="commander_free_text" :value="gkFreeText">
+            <input type="hidden" name="note" :value="noteText">
             <button type="submit" class="suggestion-pill suggestion-pill--block"
                     :disabled="s.in_use"
                     :title="s.in_use ? 'Einheit ist bereits im Einsatz' : 'Diese Einheit zum Einsatz hinzufügen'">
@@ -480,6 +494,8 @@
         </summary>
         <form method="post" :action="`/einsatz/${incidentId}/fahrzeug-hinzufuegen`" style="margin-top:12px;">
           <input type="hidden" name="commander_member_id" :value="gkMemberId">
+          <input type="hidden" name="commander_free_text" :value="gkFreeText">
+          <input type="hidden" name="note" :value="noteText">
           <div class="form-row" style="display:flex; gap:8px;">
             <div class="form-group" style="flex:1;">
               <label class="form-label">FUNKRUFNAME / KÜRZEL</label>
@@ -551,6 +567,10 @@
             <label class="form-label">Fundort</label>
             <input type="text" name="location" class="form-input" placeholder="z.B. Wohnung 1. OG">
           </div>
+          <div class="form-group">
+            <label class="form-label">Notiz (optional — wird ins Journal eingetragen)</label>
+            <input type="text" name="note" class="form-input" placeholder="z. B. bereits versorgt durch RK">
+          </div>
         </div>
         <!-- Step 4: Übergabe an Einheit -->
         <div x-show="step === 4">
@@ -606,6 +626,8 @@ function vehicleWizard(incidentId) {
     incidentId,
     query: '',
     gkMemberId: '',
+    gkFreeText: '',
+    noteText: '',
     suggestions: [],
     async loadSuggestions() {
       try {

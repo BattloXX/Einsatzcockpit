@@ -68,4 +68,17 @@
   }
   // Nach HTMX-Swaps neue Forms erneut versorgen
   document.body.addEventListener('htmx:afterSwap', injectFormToken);
+
+  // Alpine.js und andere Frameworks fügen Forms dynamisch ein — MutationObserver fängt das ab
+  let _pending = false;
+  const _mo = new MutationObserver(() => {
+    if (_pending) return;
+    _pending = true;
+    requestAnimationFrame(() => { _pending = false; injectFormToken(); });
+  });
+  function _startObserver() {
+    _mo.observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.body) { _startObserver(); }
+  else { document.addEventListener('DOMContentLoaded', _startObserver); }
 })();
