@@ -3,141 +3,307 @@
 {% set user_role_codes = (user.roles|map(attribute='code')|list) if user else [] %}
 {% set is_sysadmin = 'system_admin' in user_role_codes %}
 
+{# Aktive Gruppe anhand des aktuellen Pfades bestimmen #}
+{% set _p = request.url.path %}
+{% if '/admin/geraete-login' in _p or '/admin/push' in _p or '/admin/benutzer' in _p
+     or '/admin/api-keys' in _p or '/admin/lagekarte-tokens' in _p or '/admin/audit' in _p %}
+  {% set active_group = 'verwaltung' %}
+{% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
+       or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p %}
+  {% set active_group = 'einstellungen' %}
+{% else %}
+  {% set active_group = 'stammdaten' %}
+{% endif %}
+
+{% block head_extra %}
+<style>
+/* ── Admin Layout ──────────────────────────────────────────────── */
+.admin-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: calc(100vh - var(--topnav-h));
+}
+.admin-sidebar {
+  background: var(--surface-low);
+  border-right: 1px solid var(--border);
+  padding: 18px 0 32px;
+  position: sticky;
+  top: var(--topnav-h);
+  align-self: start;
+  max-height: calc(100vh - var(--topnav-h));
+  overflow-y: auto;
+}
+.admin-sidebar__header {
+  font-size: .68rem; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text-muted);
+  padding: 0 18px 12px; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+}
+.admin-nav { display: flex; flex-direction: column; padding: 0 8px; }
+.admin-nav__item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; font-size: .9rem;
+  border-radius: .375rem; color: var(--on-surface);
+  text-decoration: none; transition: background .12s, color .12s;
+}
+.admin-nav__item:hover { background: rgba(255,255,255,.06); }
+.admin-nav__item.is-active { background: rgba(183,25,33,.15); color: var(--red-light, #f87171); }
+.admin-nav__icon { width: 22px; text-align: center; font-size: 1rem; flex-shrink: 0; }
+
+/* Collapsible group headers */
+.admin-nav__group-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; background: none; border: none; text-align: left; cursor: pointer;
+  font-size: .64rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-muted); padding: 14px 10px 5px;
+  font-family: JetBrains Mono, monospace;
+  transition: color .12s;
+}
+.admin-nav__group-hdr:hover { color: var(--on-surface); }
+.admin-nav__group-arrow {
+  font-size: .8rem; opacity: .5; flex-shrink: 0;
+  transition: transform .2s ease;
+}
+.admin-nav__group-arrow.is-open { transform: rotate(90deg); }
+
+/* Mobile toggle strip — hidden on desktop */
+.admin-sidebar-toggle { display: none; }
+
+/* ── Mobile (≤ 1100px) ─────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .admin-shell { grid-template-columns: 1fr; }
+
+  .admin-sidebar {
+    position: sticky; top: var(--topnav-h);
+    max-height: none; overflow: visible;
+    border-right: none; border-bottom: 1px solid var(--border);
+    padding: 0; z-index: 50;
+  }
+  .admin-sidebar__header { display: none; }
+
+  /* Compact toggle strip */
+  .admin-sidebar-toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 14px;
+    font-size: .85rem; font-weight: 600;
+    cursor: pointer; border-bottom: 1px solid var(--border);
+    user-select: none; background: var(--surface-low);
+  }
+  .admin-sidebar-toggle__lhs { display: flex; align-items: center; gap: 8px; }
+  .admin-sidebar-toggle__badge {
+    font-size: .62rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-muted);
+    background: rgba(255,255,255,.06); padding: 2px 6px; border-radius: 3px;
+  }
+  .admin-sidebar-toggle__arrow {
+    font-size: .8rem; opacity: .6; transition: transform .2s;
+  }
+  .admin-sidebar-toggle__arrow.is-open { transform: rotate(180deg); }
+
+  /* Collapsible nav panel */
+  .admin-nav-panel {
+    background: var(--surface-low);
+    border-bottom: 1px solid var(--border);
+    overflow-y: auto;
+    max-height: 55vh;
+  }
+
+  /* 2-column item grid */
+  .admin-nav { flex-direction: column; padding: 4px 10px 10px; gap: 0; }
+  .admin-nav__group-hdr { padding: 10px 8px 4px; }
+  .admin-nav__group-items {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    padding-bottom: 4px;
+  }
+  .admin-nav__item {
+    padding: 7px 8px; font-size: .82rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .admin-nav__icon { font-size: .9rem; width: 18px; }
+  .admin-main { padding: 14px 16px 40px; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="admin-shell">
-  <aside class="admin-sidebar" aria-label="Administration Menü">
+  <aside class="admin-sidebar" aria-label="Administration Menü"
+         x-data="adminNav('{{ active_group }}')">
+
+    <!-- Desktop: section header -->
     <div class="admin-sidebar__header">Administration</div>
 
-    <nav class="admin-nav">
-      <a href="/admin"
-         class="admin-nav__item {% if request.url.path == '/admin' or request.url.path == '/admin/' %}is-active{% endif %}"
-         {{ tip('Übersicht & Kennzahlen') }}>
-        <span class="admin-nav__icon">🏠</span>Dashboard
-      </a>
+    <!-- Mobile: compact toggle strip -->
+    <div class="admin-sidebar-toggle" @click="navOpen = !navOpen">
+      <span class="admin-sidebar-toggle__lhs">
+        <span class="admin-sidebar-toggle__badge">Admin</span>
+        <span x-text="sectionLabel">{{ active_group|title }}</span>
+      </span>
+      <span class="admin-sidebar-toggle__arrow" :class="navOpen && 'is-open'">▾</span>
+    </div>
 
-      <div class="admin-nav__group">Stammdaten</div>
-      <a href="/admin/fahrzeuge"
-         class="admin-nav__item {% if '/admin/fahrzeuge' in request.url.path %}is-active{% endif %}"
-         {{ tip('Fahrzeuge, Funkrufnamen, Erstausrückung') }}>
-        <span class="admin-nav__icon">🚒</span>Fahrzeuge
-      </a>
-      <a href="/admin/mitglieder"
-         class="admin-nav__item {% if '/admin/mitglieder' in request.url.path %}is-active{% endif %}"
-         {{ tip('Mannschaftsliste mit Qualifikationen') }}>
-        <span class="admin-nav__icon">👥</span>Mitglieder
-      </a>
-      <a href="/admin/qualifikationen"
-         class="admin-nav__item {% if '/admin/qualifikationen' in request.url.path %}is-active{% endif %}"
-         {{ tip('AGT, GK, MA u.a. — Codes für Mitglieder') }}>
-        <span class="admin-nav__icon">🎖️</span>Qualifikationen
-      </a>
-      <a href="/admin/auftragsvorlagen"
-         class="admin-nav__item {% if '/admin/auftragsvorlagen' in request.url.path %}is-active{% endif %}"
-         {{ tip('Vor-konfigurierte Standardaufträge pro Alarmstichwort') }}>
-        <span class="admin-nav__icon">✅</span>Auftragsvorlagen
-      </a>
-      <a href="/admin/meldungsvorlagen"
-         class="admin-nav__item {% if '/admin/meldungsvorlagen' in request.url.path %}is-active{% endif %}"
-         {{ tip('Vorschläge für Meldungen pro Alarmstichwort') }}>
-        <span class="admin-nav__icon">💬</span>Meldungsvorlagen
-      </a>
-      <a href="/admin/alarmtypen"
-         class="admin-nav__item {% if '/admin/alarmtypen' in request.url.path %}is-active{% endif %}"
-         {{ tip('Bekannte Einsatzstichwörter und ihre Eigenschaften') }}>
-        <span class="admin-nav__icon">🚨</span>Alarmtypen
-      </a>
-      <a href="/admin/ausrueckordnung"
-         class="admin-nav__item {% if '/admin/ausrueckordnung' in request.url.path %}is-active{% endif %}"
-         {{ tip('Welche Fahrzeuge rücken bei welchem Stichwort aus?') }}>
-        <span class="admin-nav__icon">📋</span>Ausrückordnung
-      </a>
-      <a href="/admin/lage-hinweise"
-         class="admin-nav__item {% if '/admin/lage-hinweise' in request.url.path %}is-active{% endif %}"
-         {{ tip('Rotierender Hinweistext über dem Board') }}>
-        <span class="admin-nav__icon">💡</span>Lage-Hinweise
-      </a>
-      <a href="/admin/default-meldungen"
-         class="admin-nav__item {% if '/admin/default-meldungen' in request.url.path %}is-active{% endif %}"
-         {{ tip('Automatische Erinnerungen pro Stichwort') }}>
-        <span class="admin-nav__icon">🔔</span>Default-Meldungen
-      </a>
+    <!-- Nav panel: always visible on desktop, toggled on mobile -->
+    <div class="admin-nav-panel" id="adminNavPanel"
+         x-show="navOpen || !isMobile()" x-cloak
+         x-transition.opacity.duration.150ms>
+      <nav class="admin-nav">
 
-      <div class="admin-nav__group">Verwaltung</div>
-      <a href="/admin/geraete-login"
-         class="admin-nav__item {% if '/admin/geraete-login' in request.url.path %}is-active{% endif %}"
-         {{ tip('Token-URLs für Tablets und Anzeigegeräte') }}>
-        <span class="admin-nav__icon">📱</span>Geräte-Login
-      </a>
-      <a href="/admin/push-nachrichten"
-         class="admin-nav__item {% if '/admin/push-nachrichten' in request.url.path %}is-active{% endif %}"
-         {{ tip('Manuelle Push-Nachrichten an alle oder einzelne Benutzer') }}>
-        <span class="admin-nav__icon">📣</span>Push-Nachrichten
-      </a>
-      <a href="/admin/benutzer"
-         class="admin-nav__item {% if '/admin/benutzer' in request.url.path %}is-active{% endif %}"
-         {{ tip('Login-Accounts, Rollen, Passwörter') }}>
-        <span class="admin-nav__icon">🔑</span>Benutzer
-      </a>
-      <a href="/admin/api-keys"
-         class="admin-nav__item {% if '/admin/api-keys' in request.url.path %}is-active{% endif %}"
-         {{ tip('Schnittstellen-Keys für externe Systeme') }}>
-        <span class="admin-nav__icon">🔐</span>API-Keys
-      </a>
-      <a href="/admin/lagekarte-tokens"
-         class="admin-nav__item {% if '/admin/lagekarte-tokens' in request.url.path %}is-active{% endif %}"
-         {{ tip('Read-only Tokens für lagekarte.info GeoJSON-Feed') }}>
-        <span class="admin-nav__icon">🗺️</span>Lagekarte-Tokens
-      </a>
-      <a href="/admin/audit"
-         class="admin-nav__item {% if '/admin/audit' in request.url.path %}is-active{% endif %}"
-         {{ tip('Vollständiges Aktionsprotokoll') }}>
-        <span class="admin-nav__icon">📜</span>Audit-Log
-      </a>
+        <!-- Dashboard -->
+        <a href="/admin"
+           class="admin-nav__item {% if request.url.path == '/admin' or request.url.path == '/admin/' %}is-active{% endif %}">
+          <span class="admin-nav__icon">🏠</span>Dashboard
+        </a>
 
-      <div class="admin-nav__group">Einstellungen</div>
-      <a href="/admin/settings"
-         class="admin-nav__item {% if '/admin/settings' in request.url.path %}is-active{% endif %}"
-         {{ tip('Organisations-Stammdaten, Logo, Farbe') }}>
-        <span class="admin-nav__icon">🏛️</span>Organisation
-      </a>
-      {% if is_sysadmin %}
-      <a href="/admin/ki-prompts"
-         class="admin-nav__item {% if '/admin/ki-prompts' in request.url.path %}is-active{% endif %}"
-         {{ tip('KI-System-Prompts verwalten und versionieren') }}>
-        <span class="admin-nav__icon">✨</span>KI-Prompts
-      </a>
-      <a href="/admin/system-einstellungen"
-         class="admin-nav__item {% if '/admin/system-einstellungen' in request.url.path %}is-active{% endif %}"
-         {{ tip('VAPID, Push-Konfiguration, globale Parameter') }}>
-        <span class="admin-nav__icon">⚙️</span>System
-      </a>
-      <a href="/admin/system/server-log"
-         class="admin-nav__item {% if '/admin/system/server-log' in request.url.path %}is-active{% endif %}"
-         {{ tip('Live-Log des Server-Prozesses — Level-Filter, Auto-Refresh, Download') }}>
-        <span class="admin-nav__icon">📋</span>Server-Log
-      </a>
-      <a href="/admin/seiten"
-         class="admin-nav__item {% if '/admin/seiten' in request.url.path %}is-active{% endif %}"
-         {{ tip('Öffentliche Seiten (Startseite, Impressum, Über) per WYSIWYG bearbeiten') }}>
-        <span class="admin-nav__icon">🌍</span>Seiten
-      </a>
-      <a href="/admin/system/update"
-         class="admin-nav__item {% if '/admin/system/update' in request.url.path %}is-active{% endif %}"
-         {{ tip('Neues Release per ZIP einspielen') }}>
-        <span class="admin-nav__icon">⬆️</span>System-Update
-      </a>
-      <a href="/admin/backup"
-         class="admin-nav__item {% if '/admin/backup' in request.url.path %}is-active{% endif %}"
-         {{ tip('Stammdaten als JSON sichern oder wiederherstellen') }}>
-        <span class="admin-nav__icon">📦</span>Backup
-      </a>
-      <a href="/admin/organisations"
-         class="admin-nav__item {% if '/admin/organisations' in request.url.path %}is-active{% endif %}"
-         {{ tip('Alle Organisationen verwalten (Multi-Org)') }}>
-        <span class="admin-nav__icon">🌐</span>Alle Organisationen
-      </a>
-      {% endif %}
-    </nav>
+        <!-- ── Stammdaten ────────────────────────────────────────────── -->
+        <button class="admin-nav__group-hdr" type="button" @click="toggle('stammdaten')">
+          <span>Stammdaten</span>
+          <span class="admin-nav__group-arrow" :class="groups.stammdaten && 'is-open'">›</span>
+        </button>
+        <div x-show="groups.stammdaten" x-transition.opacity.duration.120ms>
+          <div class="admin-nav__group-items">
+            <a href="/admin/fahrzeuge"
+               class="admin-nav__item {% if '/admin/fahrzeuge' in request.url.path %}is-active{% endif %}"
+               {{ tip('Fahrzeuge, Funkrufnamen, Erstausrückung') }}>
+              <span class="admin-nav__icon">🚒</span>Fahrzeuge
+            </a>
+            <a href="/admin/mitglieder"
+               class="admin-nav__item {% if '/admin/mitglieder' in request.url.path %}is-active{% endif %}"
+               {{ tip('Mannschaftsliste mit Qualifikationen') }}>
+              <span class="admin-nav__icon">👥</span>Mitglieder
+            </a>
+            <a href="/admin/qualifikationen"
+               class="admin-nav__item {% if '/admin/qualifikationen' in request.url.path %}is-active{% endif %}"
+               {{ tip('AGT, GK, MA u.a. — Codes für Mitglieder') }}>
+              <span class="admin-nav__icon">🎖️</span>Qualifikationen
+            </a>
+            <a href="/admin/alarmtypen"
+               class="admin-nav__item {% if '/admin/alarmtypen' in request.url.path %}is-active{% endif %}"
+               {{ tip('Bekannte Einsatzstichwörter und ihre Eigenschaften') }}>
+              <span class="admin-nav__icon">🚨</span>Alarmtypen
+            </a>
+            <a href="/admin/ausrueckordnung"
+               class="admin-nav__item {% if '/admin/ausrueckordnung' in request.url.path %}is-active{% endif %}"
+               {{ tip('Welche Fahrzeuge rücken bei welchem Stichwort aus?') }}>
+              <span class="admin-nav__icon">📋</span>Ausrückordnung
+            </a>
+            <a href="/admin/auftragsvorlagen"
+               class="admin-nav__item {% if '/admin/auftragsvorlagen' in request.url.path %}is-active{% endif %}"
+               {{ tip('Vor-konfigurierte Standardaufträge pro Alarmstichwort') }}>
+              <span class="admin-nav__icon">✅</span>Auftragsvorlagen
+            </a>
+            <a href="/admin/meldungsvorlagen"
+               class="admin-nav__item {% if '/admin/meldungsvorlagen' in request.url.path %}is-active{% endif %}"
+               {{ tip('Vorschläge für Meldungen pro Alarmstichwort') }}>
+              <span class="admin-nav__icon">💬</span>Meldungsvorlagen
+            </a>
+            <a href="/admin/lage-hinweise"
+               class="admin-nav__item {% if '/admin/lage-hinweise' in request.url.path %}is-active{% endif %}"
+               {{ tip('Rotierender Hinweistext über dem Board') }}>
+              <span class="admin-nav__icon">💡</span>Lage-Hinweise
+            </a>
+            <a href="/admin/default-meldungen"
+               class="admin-nav__item {% if '/admin/default-meldungen' in request.url.path %}is-active{% endif %}"
+               {{ tip('Automatische Erinnerungen pro Stichwort') }}>
+              <span class="admin-nav__icon">🔔</span>Default-Meldungen
+            </a>
+          </div>
+        </div>
+
+        <!-- ── Verwaltung ────────────────────────────────────────────── -->
+        <button class="admin-nav__group-hdr" type="button" @click="toggle('verwaltung')">
+          <span>Verwaltung</span>
+          <span class="admin-nav__group-arrow" :class="groups.verwaltung && 'is-open'">›</span>
+        </button>
+        <div x-show="groups.verwaltung" x-transition.opacity.duration.120ms>
+          <div class="admin-nav__group-items">
+            <a href="/admin/benutzer"
+               class="admin-nav__item {% if '/admin/benutzer' in request.url.path %}is-active{% endif %}"
+               {{ tip('Login-Accounts, Rollen, Passwörter') }}>
+              <span class="admin-nav__icon">🔑</span>Benutzer
+            </a>
+            <a href="/admin/geraete-login"
+               class="admin-nav__item {% if '/admin/geraete-login' in request.url.path %}is-active{% endif %}"
+               {{ tip('Token-URLs für Tablets und Anzeigegeräte') }}>
+              <span class="admin-nav__icon">📱</span>Geräte-Login
+            </a>
+            <a href="/admin/push-nachrichten"
+               class="admin-nav__item {% if '/admin/push-nachrichten' in request.url.path %}is-active{% endif %}"
+               {{ tip('Manuelle Push-Nachrichten an alle oder einzelne Benutzer') }}>
+              <span class="admin-nav__icon">📣</span>Push-Nachrichten
+            </a>
+            <a href="/admin/api-keys"
+               class="admin-nav__item {% if '/admin/api-keys' in request.url.path %}is-active{% endif %}"
+               {{ tip('Schnittstellen-Keys für externe Systeme') }}>
+              <span class="admin-nav__icon">🔐</span>API-Keys
+            </a>
+            <a href="/admin/lagekarte-tokens"
+               class="admin-nav__item {% if '/admin/lagekarte-tokens' in request.url.path %}is-active{% endif %}"
+               {{ tip('Read-only Tokens für lagekarte.info GeoJSON-Feed') }}>
+              <span class="admin-nav__icon">🗺️</span>Lagekarte-Tokens
+            </a>
+            <a href="/admin/audit"
+               class="admin-nav__item {% if '/admin/audit' in request.url.path %}is-active{% endif %}"
+               {{ tip('Vollständiges Aktionsprotokoll') }}>
+              <span class="admin-nav__icon">📜</span>Audit-Log
+            </a>
+          </div>
+        </div>
+
+        <!-- ── Einstellungen ─────────────────────────────────────────── -->
+        <button class="admin-nav__group-hdr" type="button" @click="toggle('einstellungen')">
+          <span>Einstellungen</span>
+          <span class="admin-nav__group-arrow" :class="groups.einstellungen && 'is-open'">›</span>
+        </button>
+        <div x-show="groups.einstellungen" x-transition.opacity.duration.120ms>
+          <div class="admin-nav__group-items">
+            <a href="/admin/settings"
+               class="admin-nav__item {% if '/admin/settings' in request.url.path %}is-active{% endif %}"
+               {{ tip('Organisations-Stammdaten, Logo, Farbe') }}>
+              <span class="admin-nav__icon">🏛️</span>Organisation
+            </a>
+            {% if is_sysadmin %}
+            <a href="/admin/ki-prompts"
+               class="admin-nav__item {% if '/admin/ki-prompts' in request.url.path %}is-active{% endif %}"
+               {{ tip('KI-System-Prompts verwalten und versionieren') }}>
+              <span class="admin-nav__icon">✨</span>KI-Prompts
+            </a>
+            <a href="/admin/system-einstellungen"
+               class="admin-nav__item {% if '/admin/system-einstellungen' in request.url.path %}is-active{% endif %}"
+               {{ tip('VAPID, Push-Konfiguration, globale Parameter') }}>
+              <span class="admin-nav__icon">⚙️</span>System
+            </a>
+            <a href="/admin/system/server-log"
+               class="admin-nav__item {% if '/admin/system/server-log' in request.url.path %}is-active{% endif %}"
+               {{ tip('Live-Log des Server-Prozesses — Level-Filter, Auto-Refresh') }}>
+              <span class="admin-nav__icon">📋</span>Server-Log
+            </a>
+            <a href="/admin/seiten"
+               class="admin-nav__item {% if '/admin/seiten' in request.url.path %}is-active{% endif %}"
+               {{ tip('Öffentliche Seiten per WYSIWYG bearbeiten') }}>
+              <span class="admin-nav__icon">🌍</span>Seiten
+            </a>
+            <a href="/admin/system/update"
+               class="admin-nav__item {% if '/admin/system/update' in request.url.path %}is-active{% endif %}"
+               {{ tip('Neues Release per ZIP einspielen') }}>
+              <span class="admin-nav__icon">⬆️</span>System-Update
+            </a>
+            <a href="/admin/backup"
+               class="admin-nav__item {% if '/admin/backup' in request.url.path %}is-active{% endif %}"
+               {{ tip('Stammdaten als JSON sichern oder wiederherstellen') }}>
+              <span class="admin-nav__icon">📦</span>Backup
+            </a>
+            <a href="/admin/organisations"
+               class="admin-nav__item {% if '/admin/organisations' in request.url.path %}is-active{% endif %}"
+               {{ tip('Alle Organisationen verwalten (Multi-Org)') }}>
+              <span class="admin-nav__icon">🌐</span>Alle Orgs
+            </a>
+            {% endif %}
+          </div>
+        </div>
+
+      </nav>
+    </div>
   </aside>
 
   <section class="admin-main">
@@ -145,4 +311,35 @@
     {% block admin_content %}{% endblock %}
   </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function adminNav(activeGroup) {
+  const STORE = 'admin_nav_groups';
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch(e) {}
+
+  const labels = { stammdaten: 'Stammdaten', verwaltung: 'Verwaltung', einstellungen: 'Einstellungen' };
+
+  return {
+    navOpen: false,
+    sectionLabel: labels[activeGroup] || 'Administration',
+    groups: {
+      stammdaten: activeGroup === 'stammdaten' ? true : (s.stammdaten ?? true),
+      verwaltung: activeGroup === 'verwaltung' ? true : (s.verwaltung ?? true),
+      einstellungen: activeGroup === 'einstellungen' ? true : (s.einstellungen ?? false),
+    },
+    isMobile() {
+      return window.matchMedia('(max-width: 1100px)').matches;
+    },
+    toggle(group) {
+      this.groups[group] = !this.groups[group];
+      try {
+        localStorage.setItem(STORE, JSON.stringify(this.groups));
+      } catch(e) {}
+    },
+  };
+}
+</script>
 {% endblock %}
