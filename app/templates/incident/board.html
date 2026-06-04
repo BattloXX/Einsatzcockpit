@@ -99,6 +99,12 @@
        {{ tip('QR-Code zum Einsatz beitreten anzeigen') }}>QR</a>
     <a href="/archiv/{{ incident.id }}/pdf" class="btn btn--sm btn--ghost"
        {{ tip('Einsatzdokumentation als PDF herunterladen') }}>PDF</a>
+    {% if can_edit and ai_enabled %}
+    <button class="btn btn--sm btn--secondary"
+            onclick="openLagebild()"
+            style="background:rgba(139,92,246,.12); border-color:rgba(139,92,246,.4); color:#a78bfa;"
+            {{ tip('KI-Lagebild erzeugen – aktuelle Lage in 3–5 Sätzen zusammenfassen') }}>✨ Lagebild</button>
+    {% endif %}
     {% if can_edit %}
     <button class="btn btn--sm btn--danger"
             onclick="if(confirm('Einsatz wirklich abschließen?')) { fetch('/einsatz/{{ incident.id }}/abschliessen', {method:'POST'}); }"
@@ -520,6 +526,35 @@
   </div>
 </dialog>
 
+{% if ai_enabled %}
+<!-- KI-Lagebild Dialog -->
+<dialog class="modal" id="lagebildModal" x-data="aiLagebild({{ incident.id }})">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>✨ KI-Lagebild</h3>
+      <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <div class="modal__body">
+      <div x-show="loading" style="text-align:center; padding:24px; color:#a78bfa;">
+        ✨ Lagebild wird erzeugt…
+      </div>
+      <div x-show="error && !loading" x-text="error" style="color:#ef4444; padding:8px 0;"></div>
+      <textarea x-show="text && !loading" x-model="text" class="form-input"
+                style="min-height:140px; width:100%; resize:vertical; font-size:.9rem; font-family:inherit;"></textarea>
+    </div>
+    <div class="modal__footer">
+      <button type="button" @click="$el.closest('dialog').close()" class="btn btn--ghost">Schließen</button>
+      <template x-if="text && !loading">
+        <button type="button" @click="copy()" class="btn btn--secondary">📋 Kopieren</button>
+      </template>
+      <template x-if="text && !loading">
+        <button type="button" @click="saveToJournal()" class="btn btn--primary">In Journal übernehmen</button>
+      </template>
+    </div>
+  </div>
+</dialog>
+{% endif %}
+
 <!-- Person Wizard Dialog -->
 <dialog class="modal" id="personWizard">
   <div class="modal__content" x-data="personWizard()">
@@ -602,6 +637,57 @@
 
 {% block scripts %}
 <script>
+function openLagebild() {
+  const dlg = document.getElementById('lagebildModal');
+  if (!dlg) return;
+  const comp = Alpine.$data(dlg);
+  if (comp && !comp.text) comp.generate();
+  dlg.showModal();
+}
+
+function aiLagebild(incidentId) {
+  return {
+    incidentId,
+    text: '',
+    loading: false,
+    error: '',
+    async generate() {
+      this.loading = true;
+      this.error = '';
+      this.text = '';
+      try {
+        const r = await fetch(`/einsatz/${incidentId}/ki-lagebild`, {method: 'POST'});
+        const data = await r.json();
+        if (!r.ok) { this.error = data.detail || 'Fehler beim Erzeugen'; return; }
+        this.text = data.text;
+      } catch (e) {
+        this.error = e.message || 'Unbekannter Fehler';
+      } finally {
+        this.loading = false;
+      }
+    },
+    copy() {
+      if (this.text) navigator.clipboard?.writeText(this.text);
+    },
+    async saveToJournal() {
+      if (!this.text) return;
+      try {
+        const r = await fetch(`/einsatz/${incidentId}/ki-lagebild/journal`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({text: this.text}),
+        });
+        if (!r.ok) { this.error = 'Fehler beim Speichern'; return; }
+        document.getElementById('lagebildModal')?.close();
+        this.text = '';
+        this.error = '';
+      } catch (e) {
+        this.error = e.message || 'Unbekannter Fehler';
+      }
+    },
+  };
+}
+
 function openQuickAddTask(colId) {
   const dlg = document.getElementById('quickAddTaskDialog');
   if (!dlg) return;

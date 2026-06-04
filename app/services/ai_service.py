@@ -179,3 +179,23 @@ async def generate_report_draft(incident_data: dict) -> str:
     safe_data = _strip_persons(incident_data)
     user_msg = f"Einsatzdaten (JSON):\n{_json.dumps(safe_data, ensure_ascii=False, indent=2)}"
     return await complete(_REPORT_SYSTEM, user_msg)
+
+
+_SITUATION_SYSTEM = (
+    "Du bist ein taktischer Lageberichts-Assistent der Feuerwehr. "
+    "Erstelle aus den gelieferten Live-Einsatzdaten eine knappe Lagebeschreibung "
+    "(3–5 Sätze, de-AT, sachlich, unpersönlich). "
+    "Nutze ausschließlich die gelieferten Fakten. "
+    "Keine Erfindungen, keine Spekulation. "
+    "Ausgabe: nur der Lagetext, ohne Überschrift, ohne Formatierung."
+)
+
+
+async def generate_situation_brief(context: dict) -> str:
+    """Generate a 3–5 sentence live situation summary from incident context."""
+    safe_context = _strip_persons(context)
+    user_msg = (
+        f"Live-Einsatzdaten (JSON):\n"
+        f"{_json.dumps(safe_context, ensure_ascii=False, indent=2)}"
+    )
+    return await complete(_SITUATION_SYSTEM, user_msg, fast=True, max_tokens=600)
