@@ -73,6 +73,22 @@ from app.services.incident_service import (
 router = APIRouter()
 
 
+def _prepend_ai_hints(incident: Incident, master_hints: list) -> list:
+    """Prepend AI-generated hints (stored as JSON on incident) to master hints list."""
+    import json as _json
+    from types import SimpleNamespace
+    if not incident.ai_lage_hints:
+        return master_hints
+    try:
+        texts = _json.loads(incident.ai_lage_hints)
+        if not isinstance(texts, list):
+            return master_hints
+        ai_objs = [SimpleNamespace(text=t) for t in texts if isinstance(t, str) and t.strip()]
+        return ai_objs + list(master_hints)
+    except Exception:
+        return master_hints
+
+
 def _incident_or_404(incident_id: int, db: Session):
     inc = db.get(Incident, incident_id)
     if not inc:
@@ -201,6 +217,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         .order_by(LageHint.display_order)
         .all()
     )
+    lage_hints = _prepend_ai_hints(incident, lage_hints)
     task_suggestions = (
         db.query(TaskSuggestion)
         .join(TaskSuggestionAlarm, TaskSuggestionAlarm.task_suggestion_id == TaskSuggestion.id)
@@ -309,6 +326,7 @@ async def incident_dashboard(
         .order_by(LageHint.display_order)
         .all()
     )
+    lage_hints = _prepend_ai_hints(incident, lage_hints)
 
     breathing_troops = (
         db.query(BreathingTroop)
@@ -1556,6 +1574,44 @@ async def save_lagebild_journal(
     db.commit()
     await manager.broadcast(incident_id, {"type": "message_created", "reload_board": True})
     return Response(status_code=204)
+
+
+# ── KI-Lage-Hinweise ─────────────────────────────────────────────────────────
+
+@router.post("/einsatz/{incident_id}/ki-lagehinweise")
+async def regenerate_lage_hints(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    import json as _json
+    from fastapi import HTTPException
+    from fastapi.responses import JSONResponse
+
+    from app.core.audit import write_audit
+    from app.services.ai_service import AIServiceError, generate_lage_hints
+
+    if not ai_is_enabled():
+        raise HTTPException(503, "KI-Dienst ist nicht aktiviert.")
+
+    incident = _incident_or_404(incident_id, db)
+    address = " ".join(filter(None, [
+        incident.address_street, incident.address_no, incident.address_city,
+    ]))
+    try:
+        hints = await generate_lage_hints(
+            incident.report_text or "",
+            incident.alarm_type_code or "",
+            address,
+        )
+    except AIServiceError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+    incident.ai_lage_hints = _json.dumps(hints, ensure_ascii=False)
+    user_id = getattr(getattr(request.state, "user", None), "id", None)
+    write_audit(db, "ai.lagehinweise.generated", incident_id=incident_id, user_id=user_id)
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "ai_hints_ready", "reload_board": True})
+    return JSONResponse({"hints": hints})
 
 
 # ── Media-Upload / -Löschen ───────────────────────────────────────────────────

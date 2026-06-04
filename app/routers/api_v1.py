@@ -206,6 +206,38 @@ async def _enrich_with_ai_suggestions(
         db.close()
 
 
+async def _enrich_with_ai_hints(
+    incident_id: int,
+    meldung: str,
+    alarm_type: str,
+    address: str,
+) -> None:
+    """Background: generate AI Lage-Hinweise and persist them on the incident."""
+    import json as _json
+    from app.db import SessionLocal
+    from app.models.incident import Incident
+    from app.services.ai_service import generate_lage_hints
+
+    hints = await generate_lage_hints(meldung, alarm_type, address)
+    if not hints:
+        return
+
+    db = SessionLocal()
+    try:
+        incident = db.get(Incident, incident_id)
+        if not incident:
+            return
+        incident.ai_lage_hints = _json.dumps(hints, ensure_ascii=False)
+        db.commit()
+
+        from app.services.broadcast import manager
+        await manager.broadcast(incident_id, {"type": "ai_hints_ready", "reload_board": True})
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 @router.post(
     "/einsatz",
     response_model=IncidentCreatedResponse,
@@ -316,7 +348,7 @@ async def create_incident_api(
     )
     db.commit()
 
-    # AI task suggestions in background (never blocks alarm creation)
+    # AI task suggestions + Lage-Hinweise in background (never blocks alarm creation)
     from app.services.ai_service import is_enabled as ai_is_enabled
     if ai_is_enabled() and not payload.Uebung:
         background_tasks.add_task(
@@ -324,6 +356,13 @@ async def create_incident_api(
             incident.id,
             payload.Meldung or "",
             payload.Art or payload.Stufe or "",
+        )
+        background_tasks.add_task(
+            _enrich_with_ai_hints,
+            incident.id,
+            payload.Meldung or "",
+            alarm_type_code,
+            address,
         )
 
     return {

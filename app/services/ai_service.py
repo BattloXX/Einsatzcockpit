@@ -190,6 +190,21 @@ _SITUATION_VARIABLE_DEFAULT = (
 )
 _SITUATION_FIXED_SUFFIX = "Ausgabe: nur der Lagetext, ohne Überschrift, ohne Formatierung."
 
+_HINTS_FIXED_PREFIX = (
+    "Du bist ein taktischer Assistent der Feuerwehr. "
+    "Analysiere Alarmstichwort, Meldungstext und Einsatzadresse. "
+    "Erstelle kurze taktische Hinweise und Checklisten-Punkte für den Einsatzleiter."
+)
+_HINTS_VARIABLE_DEFAULT = (
+    "Schlage 3–6 prägnante Lage-Hinweise vor. "
+    "Berücksichtige einsatztaktische Besonderheiten, Gefahren und Koordinationsaufgaben."
+)
+_HINTS_FIXED_SUFFIX = (
+    "Jeder Hinweis: max 120 Zeichen, aktiv formuliert (z.B. 'Zufahrt freihalten'). "
+    "Ausgabe: NUR gültiges JSON-Array von Strings, keine Erklärungen, keine Umrahmung. "
+    'Beispiel: ["Zufahrt für Nachkräfte freihalten","Rotes Kreuz nachfordern?"]'
+)
+
 PROMPT_META: dict[str, dict] = {
     "report": {
         "label": "Einsatzbericht",
@@ -208,6 +223,12 @@ PROMPT_META: dict[str, dict] = {
         "fixed_prefix": _SITUATION_FIXED_PREFIX,
         "fixed_suffix": _SITUATION_FIXED_SUFFIX,
         "variable_default": _SITUATION_VARIABLE_DEFAULT,
+    },
+    "hints": {
+        "label": "Lage-Hinweise",
+        "fixed_prefix": _HINTS_FIXED_PREFIX,
+        "fixed_suffix": _HINTS_FIXED_SUFFIX,
+        "variable_default": _HINTS_VARIABLE_DEFAULT,
     },
 }
 
@@ -281,6 +302,31 @@ async def generate_report_draft(incident_data: dict) -> str:
     safe_data = _strip_persons(incident_data)
     user_msg = f"Einsatzdaten (JSON):\n{_json.dumps(safe_data, ensure_ascii=False, indent=2)}"
     return await complete(system, user_msg)
+
+
+async def generate_lage_hints(meldung: str, alarm_type: str, address: str) -> list[str]:
+    """Return 3–6 tactical hint strings for the incident ticker.
+
+    Returns an empty list on any failure (never raises).
+    """
+    variable = _get_active_variable("hints") or _HINTS_VARIABLE_DEFAULT
+    system = _assemble_prompt(_HINTS_FIXED_PREFIX, _HINTS_FIXED_SUFFIX, variable)
+    user_msg = f"Alarmstichwort: {alarm_type}\nMeldung: {meldung}\nAdresse: {address}"
+    try:
+        raw = await complete(system, user_msg, fast=True, max_tokens=400)
+    except AIServiceError:
+        return []
+
+    match = _re.search(r"\[.*?\]", raw, _re.DOTALL)
+    if not match:
+        return []
+    try:
+        items = _json.loads(match.group())
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(items, list):
+        return []
+    return [str(h).strip()[:120] for h in items if isinstance(h, str) and str(h).strip()]
 
 
 async def generate_situation_brief(context: dict) -> str:

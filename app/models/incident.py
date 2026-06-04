@@ -67,6 +67,8 @@ class Incident(Base):
     auto_geojson_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # KI-generierter Verlaufsberichtsentwurf (Phase 1)
     ai_report_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # KI-generierte Lage-Hinweise als JSON-Array von Strings
+    ai_lage_hints: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     columns: Mapped[list[IncidentColumn]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"

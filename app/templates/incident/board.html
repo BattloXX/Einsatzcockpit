@@ -104,6 +104,10 @@
             onclick="openLagebild()"
             style="background:rgba(139,92,246,.12); border-color:rgba(139,92,246,.4); color:#a78bfa;"
             {{ tip('KI-Lagebild erzeugen – aktuelle Lage in 3–5 Sätzen zusammenfassen') }}>✨ Lagebild</button>
+    <button class="btn btn--sm btn--secondary" id="ki-hints-btn"
+            onclick="regenerateLageHinweise({{ incident.id }})"
+            style="background:rgba(139,92,246,.12); border-color:rgba(139,92,246,.4); color:#a78bfa;"
+            {{ tip('KI-Lage-Hinweise neu generieren – taktische Hinweise für den Ticker') }}>✨ Hinweise</button>
     {% endif %}
     {% if can_edit %}
     <button class="btn btn--sm btn--danger"
@@ -643,6 +647,23 @@ function openLagebild() {
   const comp = Alpine.$data(dlg);
   if (comp && !comp.text) comp.generate();
   dlg.showModal();
+}
+
+async function regenerateLageHinweise(incidentId) {
+  const btn = document.getElementById('ki-hints-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '✨ …'; }
+  try {
+    const r = await fetch(`/einsatz/${incidentId}/ki-lagehinweise`, {method: 'POST'});
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      alert(d.detail || 'Fehler beim Generieren der Hinweise');
+    }
+    // board reload comes via WebSocket broadcast
+  } catch (e) {
+    alert(e.message || 'Unbekannter Fehler');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Hinweise'; }
+  }
 }
 
 function aiLagebild(incidentId) {
