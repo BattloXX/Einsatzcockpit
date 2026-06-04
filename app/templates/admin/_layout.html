@@ -101,6 +101,11 @@
         <span class="admin-nav__icon">🏛️</span>Organisation
       </a>
       {% if is_sysadmin %}
+      <a href="/admin/ki-prompts"
+         class="admin-nav__item {% if '/admin/ki-prompts' in request.url.path %}is-active{% endif %}"
+         {{ tip('KI-System-Prompts verwalten und versionieren') }}>
+        <span class="admin-nav__icon">✨</span>KI-Prompts
+      </a>
       <a href="/admin/system-einstellungen"
          class="admin-nav__item {% if '/admin/system-einstellungen' in request.url.path %}is-active{% endif %}"
          {{ tip('VAPID, Push-Konfiguration, globale Parameter') }}>
