@@ -1,0 +1,139 @@
+{% extends "admin/_layout.html" %}
+{% block title %}KI-Prompts – Admin{% endblock %}
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>✨ KI-Prompts</h1>
+      <p class="page-header__sub">
+        Jeder Prompt besteht aus einem <strong>festen Teil</strong> (Rolle, Datenintegrität, Ausgabeformat – nicht editierbar)
+        und einem <strong>variablen Teil</strong> (Stil, Länge, taktische Schwerpunkte – editierbar).
+        Die letzten 10 Versionen je Prompt werden aufbewahrt.
+      </p>
+    </div>
+  </div>
+
+  {% if saved and saved not in ('error', 'empty') %}
+  <div class="alert alert--success">
+    Prompt „{{ prompts[saved].label if saved in prompts else saved }}" wurde als neue Version gespeichert.
+  </div>
+  {% elif saved == 'error' %}
+  <div class="alert alert--danger">Ungültiger Prompt-Schlüssel.</div>
+  {% elif saved == 'empty' %}
+  <div class="alert alert--danger">Variabler Teil darf nicht leer sein.</div>
+  {% endif %}
+
+  {% for key, p in prompts.items() %}
+  <section class="card mb-4" id="{{ key }}">
+    <div class="card-header" style="display:flex; align-items:center; gap:12px;">
+      <h2 style="margin:0;">{{ p.label }}</h2>
+      <span style="font-size:.78rem; color:#6b7280; font-family:monospace;">prompt_key: {{ key }}</span>
+    </div>
+    <div class="card-body">
+
+      {# ── Fester Präfix ──────────────────────────────────────────────── #}
+      <div style="margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <span style="font-size:.8rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.04em;">Fester Teil (Präfix)</span>
+          <span style="font-size:.75rem; background:#f3f4f6; border:1px solid #e5e7eb; border-radius:4px; padding:1px 7px; color:#9ca3af;">nicht editierbar</span>
+        </div>
+        <div style="background:#1e1e2e; border:1px solid #374151; border-radius:6px; padding:12px 14px;
+                    font-family:monospace; font-size:.8rem; color:#a3b0c9; white-space:pre-wrap; line-height:1.55;">{{ p.fixed_prefix }}</div>
+      </div>
+
+      {# ── Variabler Teil (editierbar) ─────────────────────────────────── #}
+      <form method="post" action="/admin/ki-prompts/{{ key }}">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div style="margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <span style="font-size:.8rem; font-weight:600; color:#a78bfa; text-transform:uppercase; letter-spacing:.04em;">Variabler Teil</span>
+            <span style="font-size:.75rem; background:rgba(139,92,246,.1); border:1px solid rgba(139,92,246,.3); border-radius:4px; padding:1px 7px; color:#a78bfa;">editierbar</span>
+          </div>
+          <textarea name="variable_part" class="form-input"
+                    style="min-height:80px; width:100%; resize:vertical; font-family:monospace; font-size:.85rem; line-height:1.55;"
+                    required>{{ p.current_variable }}</textarea>
+        </div>
+
+        {# ── Fester Suffix ──────────────────────────────────────────────── #}
+        <div style="margin-bottom:20px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <span style="font-size:.8rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.04em;">Fester Teil (Suffix)</span>
+            <span style="font-size:.75rem; background:#f3f4f6; border:1px solid #e5e7eb; border-radius:4px; padding:1px 7px; color:#9ca3af;">nicht editierbar</span>
+          </div>
+          <div style="background:#1e1e2e; border:1px solid #374151; border-radius:6px; padding:12px 14px;
+                      font-family:monospace; font-size:.8rem; color:#a3b0c9; white-space:pre-wrap; line-height:1.55;">{{ p.fixed_suffix }}</div>
+        </div>
+
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+          <input type="text" name="note" class="form-input form-input--sm"
+                 placeholder="Notiz zur Änderung (optional)" style="width:280px;">
+          <button type="submit" class="btn btn--primary btn--sm">Als neue Version speichern</button>
+        </div>
+      </form>
+
+      {# ── Versionsverlauf ─────────────────────────────────────────────── #}
+      {% if p.versions %}
+      <details style="margin-top:20px;" {% if p.versions|length == 1 %}{% endif %}>
+        <summary style="cursor:pointer; font-size:.85rem; font-weight:600; color:#6b7280; user-select:none; padding:4px 0;">
+          Versionsverlauf ({{ p.versions|length }} von max. 10)
+        </summary>
+        <div style="margin-top:10px; overflow-x:auto;">
+          <table class="table-admin" style="font-size:.82rem;">
+            <thead>
+              <tr>
+                <th style="width:50px;">Ver.</th>
+                <th style="width:130px;">Gespeichert</th>
+                <th style="width:110px;">Benutzer</th>
+                <th>Inhalt (Vorschau)</th>
+                <th style="width:80px;">Notiz</th>
+                <th style="width:90px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in p.versions %}
+              <tr {% if loop.first %}style="background:rgba(139,92,246,.06);"{% endif %}>
+                <td>
+                  <span style="font-family:monospace; font-weight:600; {% if loop.first %}color:#a78bfa;{% endif %}">
+                    v{{ v.version }}
+                  </span>
+                  {% if loop.first %}<span style="font-size:.72rem; color:#a78bfa; margin-left:4px;">aktiv</span>{% endif %}
+                </td>
+                <td style="color:#6b7280;">
+                  {{ v.created_at.strftime('%d.%m.%y %H:%M') if v.created_at else '–' }}
+                </td>
+                <td style="color:#6b7280;">{{ v.created_by_username or '–' }}</td>
+                <td style="font-family:monospace; color:#374151; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                    title="{{ v.variable_part }}">
+                  {{ v.variable_part[:120] }}{% if v.variable_part|length > 120 %}…{% endif %}
+                </td>
+                <td style="color:#9ca3af; font-size:.78rem;">{{ v.note or '' }}</td>
+                <td>
+                  {% if not loop.first %}
+                  <form method="post" action="/admin/ki-prompts/{{ key }}/restore/{{ v.id }}"
+                        onsubmit="return confirm('v{{ v.version }} als neue aktive Version wiederherstellen?')">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <button type="submit" class="btn btn--ghost btn--sm" style="font-size:.78rem; padding:2px 8px;">
+                      Wiederherstellen
+                    </button>
+                  </form>
+                  {% else %}
+                  <span style="font-size:.78rem; color:#a78bfa;">–</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+      {% else %}
+      <p class="text-muted" style="font-size:.82rem; margin-top:12px;">
+        Noch keine gespeicherte Version — aktuell wird der eingebaute Standardwert verwendet.
+      </p>
+      {% endif %}
+
+    </div>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

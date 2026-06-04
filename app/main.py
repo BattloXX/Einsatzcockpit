@@ -22,6 +22,7 @@ from app.routers import (
     lagekarte_api,
     public,
     ui_admin,
+    ui_ai_prompts,
     ui_archive,
     ui_breathing,
     ui_incident,
@@ -293,6 +294,7 @@ app.include_router(ui_admin.router)
 app.include_router(ui_stats.router)
 app.include_router(ui_push.router)
 app.include_router(ui_settings.router)
+app.include_router(ui_ai_prompts.router)
 
 
 @app.exception_handler(HTTPException)

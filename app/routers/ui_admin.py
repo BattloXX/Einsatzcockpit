@@ -1586,6 +1586,9 @@ async def save_system_settings(
         # Auto-Schließen
         "incident_autoclose_enabled", "incident_autoclose_after_hours",
         "incident_autoclose_grace_minutes",
+        # KI / Anthropic
+        "ai_enabled", "ai_api_key", "ai_model_default", "ai_model_fast",
+        "ai_max_tokens", "ai_timeout",
     ]
     for key in known_keys:
         val = form.get(f"k_{key}")
