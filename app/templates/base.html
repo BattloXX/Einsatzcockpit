@@ -45,38 +45,42 @@
       <a href="/statistik" class="nav-link {% if '/statistik' in request.url.path %}active{% endif %}">Statistik</a>
       <a href="/medien" class="nav-link {% if request.url.path.startswith('/medien') %}active{% endif %}">Medien</a>
       {% if is_admin %}
-      <div class="nav-dropdown" x-data="{open:false}" @click.outside="open=false">
+      <div class="nav-dropdown" x-data="{open:false}" @click.outside="open=false" @keydown.escape.window="open=false">
         <button class="nav-link nav-link--dropdown {% if '/admin' in request.url.path %}active{% endif %}"
-                @click="open=!open">Admin ▾</button>
+                @click="open=!open">⚙ Admin ▾</button>
         <div class="nav-dropdown__menu" x-show="open" x-cloak>
           <div class="nav-dropdown__group">
             <span class="nav-dropdown__label">Stammdaten</span>
-            <a href="/admin/fahrzeuge" class="nav-dropdown__item">Einheiten</a>
-            <a href="/admin/mitglieder" class="nav-dropdown__item">Mitglieder</a>
-            <a href="/admin/qualifikationen" class="nav-dropdown__item">Qualifikationen</a>
-            <a href="/admin/auftragsvorlagen" class="nav-dropdown__item">Auftragsvorlagen</a>
-            <a href="/admin/meldungsvorlagen" class="nav-dropdown__item">Meldungsvorlagen</a>
-            <a href="/admin/alarmtypen" class="nav-dropdown__item">Alarmtypen</a>
-            <a href="/admin/ausrueckordnung" class="nav-dropdown__item">Ausrückordnung</a>
-            <a href="/admin/lage-hinweise" class="nav-dropdown__item">Lage-Hinweise</a>
-            <a href="/admin/default-meldungen" class="nav-dropdown__item">Default-Meldungen</a>
+            <a href="/admin/fahrzeuge" class="nav-dropdown__item">🚒 Fahrzeuge</a>
+            <a href="/admin/mitglieder" class="nav-dropdown__item">👥 Mitglieder</a>
+            <a href="/admin/qualifikationen" class="nav-dropdown__item">🎖️ Qualifikationen</a>
+            <a href="/admin/alarmtypen" class="nav-dropdown__item">🚨 Alarmtypen</a>
+            <a href="/admin/ausrueckordnung" class="nav-dropdown__item">📋 Ausrückordnung</a>
+            <a href="/admin/auftragsvorlagen" class="nav-dropdown__item">✅ Auftragsvorlagen</a>
+            <a href="/admin/meldungsvorlagen" class="nav-dropdown__item">💬 Meldungsvorlagen</a>
+            <a href="/admin/lage-hinweise" class="nav-dropdown__item">💡 Lage-Hinweise</a>
+            <a href="/admin/default-meldungen" class="nav-dropdown__item">🔔 Default-Meldungen</a>
           </div>
           <div class="nav-dropdown__group">
             <span class="nav-dropdown__label">Verwaltung</span>
-            <a href="/admin/geraete-login" class="nav-dropdown__item">Geräte-Login</a>
-            <a href="/admin/push-nachrichten" class="nav-dropdown__item">Push-Nachrichten</a>
-            <a href="/admin/benutzer" class="nav-dropdown__item">Benutzer</a>
-            <a href="/admin/api-keys" class="nav-dropdown__item">API-Keys</a>
-            <a href="/admin/audit" class="nav-dropdown__item">Audit-Log</a>
+            <a href="/admin/benutzer" class="nav-dropdown__item">🔑 Benutzer</a>
+            <a href="/admin/geraete-login" class="nav-dropdown__item">📱 Geräte-Login</a>
+            <a href="/admin/push-nachrichten" class="nav-dropdown__item">📣 Push-Nachrichten</a>
+            <a href="/admin/api-keys" class="nav-dropdown__item">🔐 API-Keys</a>
+            <a href="/admin/lagekarte-tokens" class="nav-dropdown__item">🗺️ Lagekarte-Tokens</a>
+            <a href="/admin/audit" class="nav-dropdown__item">📜 Audit-Log</a>
           </div>
           <div class="nav-dropdown__group">
             <span class="nav-dropdown__label">Einstellungen</span>
-            <a href="/admin/settings" class="nav-dropdown__item">Organisation</a>
+            <a href="/admin/settings" class="nav-dropdown__item">🏛️ Organisation</a>
             {% if 'system_admin' in user_roles %}
-            <a href="/admin/system-einstellungen" class="nav-dropdown__item">System</a>
-            <a href="/admin/seiten" class="nav-dropdown__item">Seiten</a>
-            <a href="/admin/backup" class="nav-dropdown__item">Backup</a>
-            <a href="/admin/organisations" class="nav-dropdown__item">Alle Orgs</a>
+            <a href="/admin/ki-prompts" class="nav-dropdown__item">✨ KI-Prompts</a>
+            <a href="/admin/system-einstellungen" class="nav-dropdown__item">⚙️ System</a>
+            <a href="/admin/system/server-log" class="nav-dropdown__item">📋 Server-Log</a>
+            <a href="/admin/seiten" class="nav-dropdown__item">🌍 Seiten</a>
+            <a href="/admin/system/update" class="nav-dropdown__item">⬆️ System-Update</a>
+            <a href="/admin/backup" class="nav-dropdown__item">📦 Backup</a>
+            <a href="/admin/organisations" class="nav-dropdown__item">🌐 Alle Orgs</a>
             {% endif %}
           </div>
         </div>
@@ -165,32 +169,41 @@
 
       {% if is_admin %}
       <div class="mobile-menu__section">
+        <div class="mobile-menu__section-title">⚙ Administration</div>
+        <a href="/admin" class="mobile-menu__link">🏠 Dashboard</a>
+      </div>
+      <div class="mobile-menu__section">
         <div class="mobile-menu__section-title">Stammdaten</div>
-        <a href="/admin/fahrzeuge" class="mobile-menu__link">Einheiten</a>
-        <a href="/admin/mitglieder" class="mobile-menu__link">Mitglieder</a>
-        <a href="/admin/qualifikationen" class="mobile-menu__link">Qualifikationen</a>
-        <a href="/admin/auftragsvorlagen" class="mobile-menu__link">Auftragsvorlagen</a>
-        <a href="/admin/meldungsvorlagen" class="mobile-menu__link">Meldungsvorlagen</a>
-        <a href="/admin/alarmtypen" class="mobile-menu__link">Alarmtypen</a>
-        <a href="/admin/ausrueckordnung" class="mobile-menu__link">Ausrückordnung</a>
-        <a href="/admin/lage-hinweise" class="mobile-menu__link">Lage-Hinweise</a>
-        <a href="/admin/default-meldungen" class="mobile-menu__link">Default-Meldungen</a>
+        <a href="/admin/fahrzeuge" class="mobile-menu__link">🚒 Fahrzeuge</a>
+        <a href="/admin/mitglieder" class="mobile-menu__link">👥 Mitglieder</a>
+        <a href="/admin/qualifikationen" class="mobile-menu__link">🎖️ Qualifikationen</a>
+        <a href="/admin/alarmtypen" class="mobile-menu__link">🚨 Alarmtypen</a>
+        <a href="/admin/ausrueckordnung" class="mobile-menu__link">📋 Ausrückordnung</a>
+        <a href="/admin/auftragsvorlagen" class="mobile-menu__link">✅ Auftragsvorlagen</a>
+        <a href="/admin/meldungsvorlagen" class="mobile-menu__link">💬 Meldungsvorlagen</a>
+        <a href="/admin/lage-hinweise" class="mobile-menu__link">💡 Lage-Hinweise</a>
+        <a href="/admin/default-meldungen" class="mobile-menu__link">🔔 Default-Meldungen</a>
       </div>
       <div class="mobile-menu__section">
         <div class="mobile-menu__section-title">Verwaltung</div>
+        <a href="/admin/benutzer" class="mobile-menu__link">🔑 Benutzer</a>
         <a href="/admin/geraete-login" class="mobile-menu__link">📱 Geräte-Login</a>
         <a href="/admin/push-nachrichten" class="mobile-menu__link">📣 Push-Nachrichten</a>
-        <a href="/admin/benutzer" class="mobile-menu__link">Benutzer</a>
-        <a href="/admin/api-keys" class="mobile-menu__link">API-Keys</a>
-        <a href="/admin/audit" class="mobile-menu__link">Audit-Log</a>
+        <a href="/admin/api-keys" class="mobile-menu__link">🔐 API-Keys</a>
+        <a href="/admin/lagekarte-tokens" class="mobile-menu__link">🗺️ Lagekarte-Tokens</a>
+        <a href="/admin/audit" class="mobile-menu__link">📜 Audit-Log</a>
       </div>
       <div class="mobile-menu__section">
         <div class="mobile-menu__section-title">Einstellungen</div>
-        <a href="/admin/settings" class="mobile-menu__link">Organisation</a>
+        <a href="/admin/settings" class="mobile-menu__link">🏛️ Organisation</a>
         {% if 'system_admin' in user_roles %}
-        <a href="/admin/system-einstellungen" class="mobile-menu__link">System</a>
-        <a href="/admin/backup" class="mobile-menu__link">Backup</a>
-        <a href="/admin/organisations" class="mobile-menu__link">Alle Orgs</a>
+        <a href="/admin/ki-prompts" class="mobile-menu__link">✨ KI-Prompts</a>
+        <a href="/admin/system-einstellungen" class="mobile-menu__link">⚙️ System</a>
+        <a href="/admin/system/server-log" class="mobile-menu__link">📋 Server-Log</a>
+        <a href="/admin/seiten" class="mobile-menu__link">🌍 Seiten</a>
+        <a href="/admin/system/update" class="mobile-menu__link">⬆️ System-Update</a>
+        <a href="/admin/backup" class="mobile-menu__link">📦 Backup</a>
+        <a href="/admin/organisations" class="mobile-menu__link">🌐 Alle Orgs</a>
         {% endif %}
       </div>
       {% endif %}
