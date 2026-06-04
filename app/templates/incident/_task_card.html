@@ -1,4 +1,4 @@
-<div class="card card--task {% if task.is_done %}card--done{% endif %} {% if task.is_cancelled %}card--cancelled{% endif %}"
+<div class="card card--task {% if task.is_done %}card--done{% endif %} {% if task.is_cancelled %}card--cancelled{% endif %} {% if task.source == 'ai_suggestion' %}card--ai-suggestion{% endif %}"
      data-uid="{{ task.id }}" data-kind="task" data-status="{{ task.status or 'open' }}"
      hx-get="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/detail"
      hx-target="#cardDetailBody"
@@ -6,6 +6,23 @@
      hx-trigger="click[!event.target.closest('select,input,button')]"
      hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
      style="cursor:pointer">
+  {% if task.source == 'ai_suggestion' %}
+  <div class="card__ai-bar" style="background:rgba(139,92,246,.15); border-bottom:1px solid rgba(139,92,246,.3); padding:3px 8px; font-size:.7rem; color:#a78bfa; display:flex; align-items:center; justify-content:space-between; gap:6px;">
+    <span>✨ KI-Vorschlag</span>
+    {% if can_edit %}
+    <span style="display:flex; gap:4px;" onclick="event.stopPropagation()">
+      <button class="btn btn--xs btn--primary"
+              style="font-size:.65rem; padding:1px 6px;"
+              hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ki-annehmen"
+              hx-swap="none">✓</button>
+      <button class="btn btn--xs btn--ghost"
+              style="font-size:.65rem; padding:1px 6px;"
+              hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ki-verwerfen"
+              hx-swap="none">✗</button>
+    </span>
+    {% endif %}
+  </div>
+  {% endif %}
   <div class="card__body">
     <div class="card__title">
       {{ task.title }}

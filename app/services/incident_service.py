@@ -1,5 +1,6 @@
 """Core incident business logic – mirrors startIncident(), changeAlarm() from the HTML version."""
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -30,6 +31,158 @@ from app.models.master import (
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def collect_report_context(incident_id: int, db: Session) -> dict[str, Any]:
+    """Build a structured, person-data-free payload for AI report generation."""
+    from sqlalchemy.orm import selectinload
+
+    from app.services.ai_service import _strip_persons
+
+    incident = (
+        db.query(Incident)
+        .options(
+            selectinload(Incident.vehicles),
+            selectinload(Incident.tasks),
+            selectinload(Incident.messages),
+            selectinload(Incident.log_entries),
+            selectinload(Incident.rescued_persons),
+        )
+        .filter(Incident.id == incident_id)
+        .first()
+    )
+    if not incident:
+        raise ValueError(f"Einsatz {incident_id} nicht gefunden")
+
+    duration_min: int | None = None
+    if incident.started_at and incident.closed_at:
+        duration_min = int((incident.closed_at - incident.started_at).total_seconds() / 60)
+
+    def _vehicle_label(v) -> str:
+        vm = getattr(v, "vehicle_master", None)
+        return getattr(vm, "display_label", "–") if vm else "–"
+
+    def _vehicle_org(v) -> str:
+        vm = getattr(v, "vehicle_master", None)
+        dept = getattr(vm, "dept", None) if vm else None
+        return getattr(dept, "name", "–") if dept else "–"
+
+    data: dict[str, Any] = {
+        "alarm_type": incident.alarm_type_code,
+        "einsatz_id": incident.id,
+        "started_at": incident.started_at.isoformat() if incident.started_at else None,
+        "closed_at": incident.closed_at.isoformat() if incident.closed_at else None,
+        "dauer_min": duration_min,
+        "adresse": " ".join(filter(None, [
+            incident.address_street,
+            incident.address_no,
+            incident.address_city,
+        ])),
+        "meldung": incident.report_text,
+        "einsatzgrund": incident.reason,
+        "fahrzeuge": [
+            {
+                "rufname": _vehicle_label(v),
+                "org": _vehicle_org(v),
+                "status": v.unit_status,
+            }
+            for v in incident.vehicles
+        ],
+        "auftraege": [
+            {
+                "titel": t.title,
+                "detail": t.detail,
+                "status": "erledigt" if t.is_done else "abgebrochen" if t.is_cancelled else "offen",
+            }
+            for t in incident.tasks
+        ],
+        "meldungen": [
+            {
+                "titel": m.title,
+                "status": m.status,
+                "erstellt": m.created_at.isoformat(),
+            }
+            for m in incident.messages
+        ],
+        "verlauf": [
+            {"ts": e.ts.isoformat(), "text": e.text}
+            for e in incident.log_entries
+        ],
+        "gerettete_personen_anzahl": len(incident.rescued_persons),
+    }
+    return _strip_persons(data)
+
+
+def collect_situation_context(incident_id: int, db: Session) -> dict[str, Any]:
+    """Build a live situation payload for AI Lagebild generation (person-data-free)."""
+    from sqlalchemy.orm import selectinload
+
+    from app.services.ai_service import _strip_persons
+
+    incident = (
+        db.query(Incident)
+        .options(
+            selectinload(Incident.vehicles),
+            selectinload(Incident.tasks),
+            selectinload(Incident.messages),
+            selectinload(Incident.rescued_persons),
+        )
+        .filter(Incident.id == incident_id)
+        .first()
+    )
+    if not incident:
+        raise ValueError(f"Einsatz {incident_id} nicht gefunden")
+
+    now = datetime.now(UTC)
+    started = incident.started_at
+    duration_min = int((now - started).total_seconds() / 60) if started else None
+
+    col_by_id = {c.id: c for c in incident.columns}
+
+    def _col_code(col_id: int | None) -> str:
+        col = col_by_id.get(col_id) if col_id else None
+        return col.code if col else "unbekannt"
+
+    data: dict[str, Any] = {
+        "alarm_type": incident.alarm_type_code,
+        "adresse": " ".join(filter(None, [
+            incident.address_street,
+            incident.address_no,
+            incident.address_city,
+        ])),
+        "meldung": incident.report_text,
+        "einsatzgrund": incident.reason,
+        "laufzeit_min": duration_min,
+        "fahrzeuge": [
+            {
+                "rufname": (
+                    v.vehicle_master.display_label if v.vehicle_master else "–"
+                ),
+                "abschnitt": _col_code(v.column_id),
+                "status": v.unit_status,
+            }
+            for v in incident.vehicles
+            if not v.removed_at
+        ],
+        "auftraege": [
+            {
+                "titel": t.title,
+                "status": (
+                    "erledigt" if t.is_done
+                    else "abgebrochen" if t.is_cancelled
+                    else t.status or "offen"
+                ),
+            }
+            for t in incident.tasks
+            if not t.is_cancelled
+        ],
+        "meldungen": [
+            {"titel": m.title, "status": m.status}
+            for m in sorted(incident.messages, key=lambda m: m.created_at, reverse=True)[:10]
+        ],
+        "gerettete_personen_anzahl": len(incident.rescued_persons),
+    }
+    return _strip_persons(data)
 
 
 def _resolve_org_id(db: Session, requested: int | None) -> int | None:

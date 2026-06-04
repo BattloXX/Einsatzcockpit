@@ -11,10 +11,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.permissions import can_access_incident
+from app.core.permissions import can_access_incident, has_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg
+from app.services.ai_service import AIServiceError, generate_report_draft
+from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.pdf_service import render_incident_pdf
 
 router = APIRouter()
@@ -67,6 +69,9 @@ def _scoped_incidents_query(db: Session, user):
     )
 
 
+_AI_ROLES = ("incident_leader", "recorder", "org_admin", "system_admin")
+
+
 @router.get("/archiv", response_class=HTMLResponse)
 async def archive_list(request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
@@ -92,6 +97,7 @@ async def archive_detail(incident_id: int, request: Request, db: Session = Depen
                            "breathing_troops", "log_entries"])
     return templates.TemplateResponse(request, "archive/detail.html", {
         "user": user, "incident": incident,
+        "ai_enabled": ai_is_enabled(),
     })
 
 
@@ -114,3 +120,58 @@ async def download_pdf(incident_id: int, request: Request, db: Session = Depends
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/archiv/{incident_id}/ki-bericht", response_class=HTMLResponse)
+async def generate_ai_report(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    if not has_role(user, *_AI_ROLES):
+        raise HTTPException(403, detail="Keine Berechtigung")
+    if not ai_is_enabled():
+        return HTMLResponse('<p class="text-muted">KI-Funktionen sind nicht aktiviert.</p>')
+
+    incident = _load_incident_with_orgs(incident_id, db)
+    if not incident:
+        raise HTTPException(404)
+    if not can_access_incident(user, incident):
+        raise _deny_access(user, incident)
+
+    from app.core.audit import write_audit
+    from app.services.incident_service import collect_report_context
+
+    try:
+        context = collect_report_context(incident_id, db)
+        draft = await generate_report_draft(context)
+    except AIServiceError as exc:
+        return HTMLResponse(f'<p style="color:var(--red)">KI-Fehler: {exc}</p>')
+
+    write_audit(db, "ai_report_generated", user_id=user.id, incident_id=incident_id)
+    db.commit()
+
+    return templates.TemplateResponse(request, "archive/_ki_bericht.html", {
+        "user": user, "incident": incident, "draft": draft,
+    })
+
+
+@router.post("/archiv/{incident_id}/ki-bericht/speichern", response_class=HTMLResponse)
+async def save_ai_report(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    if not has_role(user, *_AI_ROLES):
+        raise HTTPException(403, detail="Keine Berechtigung")
+
+    incident = _load_incident_with_orgs(incident_id, db)
+    if not incident:
+        raise HTTPException(404)
+    if not can_access_incident(user, incident):
+        raise _deny_access(user, incident)
+
+    form = await request.form()
+    draft_text = str(form.get("ki_bericht_entwurf", "")).strip()
+    incident.ai_report_draft = draft_text or None
+    db.commit()
+
+    return HTMLResponse('<p style="color:var(--green); margin-top:.5rem;">✓ Entwurf gespeichert.</p>')

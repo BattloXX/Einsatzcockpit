@@ -84,6 +84,39 @@
   </div>
   {% endif %}
 
+  {% if ai_enabled or incident.ai_report_draft %}
+  <div class="detail-box detail-box--full">
+    <h3>KI-Verlaufsbericht</h3>
+    {% if incident.ai_report_draft %}
+    <div id="ki-bericht-bereich">
+      <form hx-post="/archiv/{{ incident.id }}/ki-bericht/speichern"
+            hx-target="#ki-bericht-status"
+            hx-swap="innerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <textarea name="ki_bericht_entwurf" rows="8"
+                  style="width:100%; box-sizing:border-box; font-family:var(--font-sans,sans-serif); font-size:.9em; background:var(--bg-2,#1e2129); color:var(--fg,#f0f1f4); border:1px solid var(--border,#3a3d4a); border-radius:4px; padding:.5rem; resize:vertical;">{{ incident.ai_report_draft }}</textarea>
+        <div id="ki-bericht-status"></div>
+        <button type="submit" class="btn btn--primary" style="margin-top:.5rem;">Entwurf speichern</button>
+      </form>
+    </div>
+    {% else %}
+    <div id="ki-bericht-bereich">
+      <p class="text-muted" style="font-size:.875em;">Noch kein Entwurf vorhanden.</p>
+    </div>
+    {% endif %}
+    {% if ai_enabled %}
+    <button class="btn btn--ghost" style="margin-top:.5rem;"
+            hx-post="/archiv/{{ incident.id }}/ki-bericht"
+            hx-target="#ki-bericht-bereich"
+            hx-swap="outerHTML"
+            hx-indicator="#ki-bericht-spinner">
+      ✨ KI-Verlaufsbericht erzeugen
+    </button>
+    <span id="ki-bericht-spinner" class="htmx-indicator" style="margin-left:.5rem; font-size:.85em; color:var(--fg-muted);">Wird erzeugt…</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <div class="detail-box detail-box--full">
     <h3>Verlauf</h3>
     <div class="log-list">

@@ -1,0 +1,11 @@
+<div id="ki-bericht-bereich">
+  <form hx-post="/archiv/{{ incident.id }}/ki-bericht/speichern"
+        hx-target="#ki-bericht-status"
+        hx-swap="innerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <textarea name="ki_bericht_entwurf" rows="8"
+              style="width:100%; box-sizing:border-box; font-family:var(--font-sans,sans-serif); font-size:.9em; background:var(--bg-2,#1e2129); color:var(--fg,#f0f1f4); border:1px solid var(--border,#3a3d4a); border-radius:4px; padding:.5rem; resize:vertical;">{{ draft }}</textarea>
+    <div id="ki-bericht-status"></div>
+    <button type="submit" class="btn btn--primary" style="margin-top:.5rem;">Entwurf speichern</button>
+  </form>
+</div>

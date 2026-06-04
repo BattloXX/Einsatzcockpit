@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -161,6 +161,51 @@ def _get_api_key(x_api_key: str = Header(..., alias="X-API-Key"), db: Session = 
     return api_key
 
 
+async def _enrich_with_ai_suggestions(
+    incident_id: int,
+    meldung: str,
+    einsatzart: str,
+) -> None:
+    """Background: generate AI task suggestions and persist them on the incident."""
+    from app.db import SessionLocal
+    from app.models.incident import Incident, Task
+    from app.services.ai_service import suggest_tasks
+
+    suggestions = await suggest_tasks(meldung, einsatzart)
+    if not suggestions:
+        return
+
+    db = SessionLocal()
+    try:
+        incident = db.get(Incident, incident_id)
+        if not incident:
+            return
+
+        tasks_col = next((c for c in incident.columns if c.code == "tasks"), None)
+
+        for i, s in enumerate(suggestions):
+            db.add(Task(
+                incident_id=incident_id,
+                column_id=tasks_col.id if tasks_col else None,
+                title=s["titel"],
+                detail=s.get("detail"),
+                source="ai_suggestion",
+                display_order=1000 + i,
+            ))
+        db.commit()
+
+        from app.services.broadcast import manager
+        await manager.broadcast(incident_id, {
+            "type": "ai_suggestions_ready",
+            "reload_board": True,
+            "count": len(suggestions),
+        })
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 @router.post(
     "/einsatz",
     response_model=IncidentCreatedResponse,
@@ -180,6 +225,7 @@ def _get_api_key(x_api_key: str = Header(..., alias="X-API-Key"), db: Session = 
 async def create_incident_api(
     payload: AlarmPayload,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     api_key: ApiKey = Depends(_get_api_key),
 ):
@@ -269,6 +315,16 @@ async def create_incident_api(
         db, incident.id, api_key.created_by_user_id, str(request.base_url)
     )
     db.commit()
+
+    # AI task suggestions in background (never blocks alarm creation)
+    from app.services.ai_service import is_enabled as ai_is_enabled
+    if ai_is_enabled() and not payload.Uebung:
+        background_tasks.add_task(
+            _enrich_with_ai_suggestions,
+            incident.id,
+            payload.Meldung or "",
+            payload.Art or payload.Stufe or "",
+        )
 
     return {
         "id": incident.id,

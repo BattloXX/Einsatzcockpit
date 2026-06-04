@@ -45,6 +45,7 @@ from app.models.master import (
     VehicleMaster,
 )
 from app.models.user import Role, User, UserRole
+from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import manager
 from app.services.incident_service import (
     add_section_column,
@@ -52,6 +53,7 @@ from app.services.incident_service import (
     assign_task_to_vehicle,
     cancel_task,
     close_incident,
+    collect_situation_context,
     create_incident,
     list_commander_candidates,
     list_el_candidates,
@@ -246,6 +248,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         "el_member_candidates": el_member_candidates,
         "gk_member_candidates": gk_member_candidates,
         "unit_status_values": UNIT_STATUS_VALUES,
+        "ai_enabled": ai_is_enabled(),
     })
 
 
@@ -1463,6 +1466,95 @@ async def cancel_task_endpoint(
     cancel_task(db, task, user_id=request.state.user.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "task_updated", "reload_board": True})
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/aufgabe/{task_id}/ki-annehmen")
+async def accept_ai_suggestion(
+    incident_id: int, task_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    task = db.get(Task, task_id)
+    if not task or task.incident_id != incident_id or task.source != "ai_suggestion":
+        return Response(status_code=404)
+    task.source = "manual"
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "task_updated", "reload_board": True})
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/aufgabe/{task_id}/ki-verwerfen")
+async def reject_ai_suggestion(
+    incident_id: int, task_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    task = db.get(Task, task_id)
+    if not task or task.incident_id != incident_id or task.source != "ai_suggestion":
+        return Response(status_code=404)
+    from datetime import UTC, datetime
+    task.is_cancelled = True
+    task.cancelled_at = datetime.now(UTC)
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "task_cancelled", "reload_board": True})
+    return Response(status_code=204)
+
+
+# ── KI-Lagebild ──────────────────────────────────────────────────────────────
+
+@router.post("/einsatz/{incident_id}/ki-lagebild")
+async def generate_lagebild(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    from fastapi import HTTPException
+    from fastapi.responses import JSONResponse
+
+    from app.core.audit import write_audit
+    from app.services.ai_service import AIServiceError, generate_situation_brief
+
+    if not ai_is_enabled():
+        raise HTTPException(503, "KI-Dienst ist nicht aktiviert.")
+
+    _incident_or_404(incident_id, db)
+    context = collect_situation_context(incident_id, db)
+    user_id = getattr(getattr(request.state, "user", None), "id", None)
+    write_audit(db, "ai.lagebild.generated", incident_id=incident_id, user_id=user_id)
+    db.commit()
+    try:
+        text = await generate_situation_brief(context)
+    except AIServiceError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return JSONResponse({"text": text})
+
+
+@router.post("/einsatz/{incident_id}/ki-lagebild/journal")
+async def save_lagebild_journal(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    from fastapi import HTTPException
+
+    from app.core.audit import write_audit
+    from app.services.incident_service import _get_column as _gc
+
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "Kein Text übergeben.")
+    incident = _incident_or_404(incident_id, db)
+    msgs_col = _gc(incident, "messages")
+    msg = Message(
+        incident_id=incident_id,
+        column_id=msgs_col.id if msgs_col else None,
+        title="✨ KI-Lagebild",
+        detail=text,
+        status="information",
+    )
+    db.add(msg)
+    user_id = getattr(getattr(request.state, "user", None), "id", None)
+    write_audit(db, "ai.lagebild.journal", incident_id=incident_id, user_id=user_id)
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "message_created", "reload_board": True})
     return Response(status_code=204)
 
 

@@ -204,6 +204,11 @@
 {% endfor %}
 {% endif %}
 
+{% if incident.ai_report_draft %}
+<h2>Einsatzverlauf (KI-Entwurf)</h2>
+<p style="font-size:9.5pt; line-height:1.6; white-space:pre-wrap; margin:4pt 0 8pt;">{{ incident.ai_report_draft }}</p>
+{% endif %}
+
 <h2>Einsatzverlauf / Journal{% if incident.log_entries %} <span style="font-size:9pt;font-weight:normal;color:#666;">({{ incident.log_entries|length }} Einträge)</span>{% endif %}</h2>
 {% if incident.log_entries %}
 <table>
