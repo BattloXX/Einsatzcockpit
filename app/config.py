@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     MEDIA_VIDEO_MAX_HEIGHT: int = 720
     FFMPEG_BIN: str = "ffmpeg"   # ggf. absoluter Pfad ueber ENV
 
+    # KI-Integration (Anthropic Claude)
+    ANTHROPIC_API_KEY: str = ""
+    AI_ENABLED: bool = False
+    AI_MODEL_DEFAULT: str = "claude-sonnet-4-6"
+    AI_MODEL_FAST: str = "claude-haiku-4-5-20251001"
+    AI_MAX_TOKENS: int = 1500
+    AI_TIMEOUT: int = 20
+
     # Lagekarte.info GeoJSON-Endpoint
     LAGEKARTE_CORS_ORIGINS: str = "https://www.lagekarte.info,https://lagekarte.info"
     LAGEKARTE_GEOJSON_RATELIMIT: str = "60/minute"

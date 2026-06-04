@@ -53,6 +53,8 @@ dependencies = [
     "pypdf>=4.0",
     # Excel-Import (Mannschaftsliste)
     "openpyxl>=3.1",
+    # KI-Integration (Anthropic Claude)
+    "anthropic>=0.50",
 ]
 
 [project.optional-dependencies]
