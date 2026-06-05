@@ -83,7 +83,7 @@ def _prepend_ai_hints(incident: Incident, master_hints: list) -> list:
         texts = _json.loads(incident.ai_lage_hints)
         if not isinstance(texts, list):
             return master_hints
-        ai_objs = [SimpleNamespace(text=t) for t in texts if isinstance(t, str) and t.strip()]
+        ai_objs = [SimpleNamespace(text=t, is_ai=True) for t in texts if isinstance(t, str) and t.strip()]
         return ai_objs + list(master_hints)
     except Exception:
         return master_hints
@@ -218,6 +218,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         .all()
     )
     lage_hints = _prepend_ai_hints(incident, lage_hints)
+    lage_hints_ai = [bool(getattr(h, 'is_ai', False)) for h in lage_hints]
     task_suggestions = (
         db.query(TaskSuggestion)
         .join(TaskSuggestionAlarm, TaskSuggestionAlarm.task_suggestion_id == TaskSuggestion.id)
@@ -259,7 +260,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     gk_member_candidates = list_commander_candidates(db, org_ids)
     return templates.TemplateResponse(request, "incident/board.html", {
         "user": user, "incident": incident,
-        "alarm_types": alarm_types, "lage_hints": lage_hints,
+        "alarm_types": alarm_types, "lage_hints": lage_hints, "lage_hints_ai": lage_hints_ai,
         "task_suggestions": task_suggestions, "msg_suggestions": msg_suggestions,
         "can_edit": can_edit, "leader_candidates": leader_candidates,
         "el_member_candidates": el_member_candidates,
@@ -327,6 +328,7 @@ async def incident_dashboard(
         .all()
     )
     lage_hints = _prepend_ai_hints(incident, lage_hints)
+    lage_hints_ai = [bool(getattr(h, 'is_ai', False)) for h in lage_hints]
 
     breathing_troops = (
         db.query(BreathingTroop)
@@ -376,6 +378,7 @@ async def incident_dashboard(
             "person_stats": person_stats,
             "started_at_iso": started_at_iso,
             "lage_hints": lage_hints,
+            "lage_hints_ai": lage_hints_ai,
             "breathing_troops": breathing_troops,
             "qr_img": qr_img_b64,
             "qr_url": qr_url_str,

@@ -107,9 +107,9 @@
   </div>
   {% if lage_hints %}
   <div class="header-lage-ticker"
-       x-data='lageTicker({{ lage_hints|map(attribute="text")|list|tojson }})'
+       x-data='lageTicker({{ lage_hints|map(attribute="text")|list|tojson }}, {{ lage_hints_ai|tojson }})'
        x-init="init()">
-    <span class="header-lage-ticker__icon">ℹ</span>
+    <span class="header-lage-ticker__icon" x-text="currentIsAI ? '✨' : 'ℹ'"></span>
     <span class="header-lage-ticker__text" x-text="currentHint"></span>
   </div>
   {% endif %}
@@ -184,8 +184,8 @@
   <aside class="sidebar" id="sidebar" :class="sidebarOpen ? '' : 'sidebar--collapsed'">
 
     <!-- Lage-Ticker -->
-    <div class="lage-ticker" id="lageTicker" x-data='lageTicker({{ lage_hints|map(attribute="text")|list|tojson }})'>
-      <span class="lage-ticker__icon">ℹ</span>
+    <div class="lage-ticker" id="lageTicker" x-data='lageTicker({{ lage_hints|map(attribute="text")|list|tojson }}, {{ lage_hints_ai|tojson }})'>
+      <span class="lage-ticker__icon" x-text="currentIsAI ? '✨' : 'ℹ'"></span>
       <span class="lage-ticker__text" x-text="currentHint"></span>
     </div>
 
@@ -809,11 +809,18 @@ function vehicleWizard(incidentId) {
   };
 }
 
-function lageTicker(hints) {
+function lageTicker(hints, aiFlags) {
   return {
-    hints, idx: 0,
+    hints,
+    aiFlags: aiFlags || [],
+    idx: 0,
     get currentHint() { return this.hints[this.idx] || ''; },
-    init() { setInterval(() => { this.idx = (this.idx + 1) % this.hints.length; }, 8000); }
+    get currentIsAI() { return this.aiFlags[this.idx] || false; },
+    init() {
+      if (this.hints.length > 1) {
+        setInterval(() => { this.idx = (this.idx + 1) % this.hints.length; }, 8000);
+      }
+    }
   };
 }
 

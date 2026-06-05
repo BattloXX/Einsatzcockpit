@@ -713,7 +713,7 @@
   <!-- ══ LAGE-BAR ══ -->
   {% if lage_hints %}
   <div class="lage-bar">
-    <span class="lage-bar__icon">📢</span>
+    <span class="lage-bar__icon" id="lageBarIcon">{% if lage_hints_ai and lage_hints_ai[0] %}✨{% else %}📢{% endif %}</span>
     <span class="lage-bar__label">Lagehinweis</span>
     <span class="lage-bar__sep"></span>
     <span class="lage-bar__text" id="lageTicker">{{ lage_hints[0].text }}</span>
@@ -1112,14 +1112,20 @@
 
   // ── Lage-Ticker rotation ──────────────────────────────────────────────
   const hints = {{ lage_hints|map(attribute="text")|list|tojson if lage_hints else '[]' }};
+  const hintsAI = {{ lage_hints_ai|tojson if lage_hints_ai else '[]' }};
   if (hints.length > 1) {
     let idx = 0;
     const ticker = document.getElementById('lageTicker');
+    const barIcon = document.getElementById('lageBarIcon');
     if (ticker) {
       setInterval(() => {
         idx = (idx + 1) % hints.length;
         ticker.style.opacity = '0';
-        setTimeout(() => { ticker.textContent = hints[idx]; ticker.style.opacity = '1'; }, 380);
+        setTimeout(() => {
+          ticker.textContent = hints[idx];
+          if (barIcon) barIcon.textContent = hintsAI[idx] ? '✨' : '📢';
+          ticker.style.opacity = '1';
+        }, 380);
       }, 8000);
     }
   }
