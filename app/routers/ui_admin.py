@@ -2450,45 +2450,6 @@ async def reactivate_device_token(
     return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
 
 
-# ── Einsatz löschen (system_admin) ───────────────────────────────────────────
-
-@router.post("/einsatz/{incident_id}/loeschen")
-async def delete_incident_admin(
-    incident_id: int, request: Request, db: Session = Depends(get_db),
-    _=Depends(require_role("system_admin")),
-):
-    """Löscht einen Einsatz vollständig (alle abhängigen Daten + Medien). Nur system_admin."""
-    import shutil
-    from pathlib import Path
-
-    from app.config import settings
-    from app.models.incident import Incident
-
-    incident = db.get(Incident, incident_id)
-    if not incident:
-        return RedirectResponse("/archiv?deleted=1", status_code=303)
-
-    write_audit(
-        db, "admin.incident.deleted",
-        user_id=request.state.user.id,
-        entity_type="incident", entity_id=incident_id,
-        payload={"alarm_type": incident.alarm_type_code, "started_at": str(incident.started_at)},
-    )
-    db.flush()
-    db.delete(incident)
-    db.commit()
-
-    # Mediendateien auf Disk entfernen (best-effort, kein Fehler wenn fehlt)
-    media_dir = Path(settings.MEDIA_STORAGE_DIR) / str(incident_id)
-    if media_dir.exists():
-        try:
-            shutil.rmtree(media_dir)
-        except Exception:
-            pass
-
-    return RedirectResponse("/archiv?deleted=1", status_code=303)
-
-
 @router.post("/geraete-login/{token_id}/fahrzeug")
 async def assign_device_vehicle(
     token_id: int,

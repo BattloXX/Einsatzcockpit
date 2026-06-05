@@ -15,7 +15,7 @@
     </form>
     {% endif %}
     {% if user.is_system_admin %}
-    <form method="post" action="/admin/einsatz/{{ incident.id }}/loeschen" style="display:inline"
+    <form method="post" action="/archiv/{{ incident.id }}/loeschen" style="display:inline"
           onsubmit="return confirm('Einsatz #{{ incident.id }} ({{ incident.alarm_type_code }}) ENDGÜLTIG löschen?\n\nAlle Daten, Aufträge, Meldungen und Medien werden unwiderruflich gelöscht.\nDiese Aktion kann nicht rückgängig gemacht werden!');">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <button type="submit" class="btn btn--danger">🗑 Löschen</button>

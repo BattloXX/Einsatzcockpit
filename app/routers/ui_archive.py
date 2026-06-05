@@ -175,3 +175,42 @@ async def save_ai_report(incident_id: int, request: Request, db: Session = Depen
     db.commit()
 
     return HTMLResponse('<p style="color:var(--green); margin-top:.5rem;">✓ Entwurf gespeichert.</p>')
+
+
+@router.post("/archiv/{incident_id}/loeschen")
+async def delete_incident(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    """Löscht einen Einsatz endgültig. Nur system_admin."""
+    import shutil
+    from pathlib import Path
+
+    from app.config import settings
+    from app.core.audit import write_audit
+
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    if not has_role(user, "system_admin"):
+        raise HTTPException(403, detail="Nur Systemadministratoren können Einsätze löschen.")
+
+    incident = _load_incident_with_orgs(incident_id, db)
+    if not incident:
+        raise HTTPException(404)
+
+    write_audit(
+        db, "admin.incident.deleted",
+        user_id=user.id,
+        entity_type="incident", entity_id=incident_id,
+        payload={"alarm_type": incident.alarm_type_code, "started_at": str(incident.started_at)},
+    )
+    db.flush()
+    db.delete(incident)
+    db.commit()
+
+    media_dir = Path(settings.MEDIA_STORAGE_DIR) / str(incident_id)
+    if media_dir.exists():
+        try:
+            shutil.rmtree(media_dir)
+        except Exception:
+            pass
+
+    return RedirectResponse("/archiv?deleted=1", status_code=303)
