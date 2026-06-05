@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Dashboard – Einsatzleiter FF Wolfurt{% endblock %}
+{% block title %}Übersicht – Einsatzleiter FF Wolfurt{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2 class="page-title">Dashboard</h2>
+  <h2 class="page-title">Übersicht</h2>
   <button class="btn btn--primary" @click="$refs.newIncidentModal.showModal()">
     + Neuer Einsatz
   </button>
@@ -94,23 +94,6 @@
 
 {% block scripts %}
 <script>
-// Auto-open new incident modal via WebSocket global channel
-document.addEventListener('alpine:init', () => {
-  Alpine.data('appState', () => ({
-    toasts: [], newIncidentAlert: null,
-    addToast(msg, type = 'info') {
-      const id = Date.now();
-      this.toasts.push({ id, msg, type });
-      setTimeout(() => this.removeToast(id), 5000);
-    },
-    removeToast(id) { this.toasts = this.toasts.filter(t => t.id !== id); },
-    onIncidentCreated(detail) {
-      if (!detail.is_exercise) this.newIncidentAlert = detail;
-      else this.addToast('[ÜBUNG] Neuer Einsatz: ' + detail.alarm, 'warn');
-    },
-  }));
-});
-
 // Karten-Picker für "Neuer Einsatz"-Dialog
 (function() {
   let _map = null;
