@@ -6,6 +6,7 @@ Create Date: 2026-06-06 00:00:00.000000
 """
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect as sa_inspect
 
 revision = "0037"
 down_revision = "0036"
@@ -15,10 +16,18 @@ depends_on = None
 
 def upgrade() -> None:
     # ── Bestehende Tabellen erweitern ────────────────────────────────────────
-    op.add_column("alarm_type",
-        sa.Column("triggers_major_incident", sa.Boolean(), nullable=False, server_default="0"))
-    op.add_column("org_settings",
-        sa.Column("mi_auto_adopt", sa.Boolean(), nullable=False, server_default="1"))
+    # IF NOT EXISTS weil MySQL DDL nicht transaktional ist und ein frueherer
+    # Fehlversuch diese Spalten bereits angelegt haben koennte.
+    bind = op.get_bind()
+    existing = {c["name"] for c in sa_inspect(bind).get_columns("alarm_type")}
+    if "triggers_major_incident" not in existing:
+        op.add_column("alarm_type",
+            sa.Column("triggers_major_incident", sa.Boolean(), nullable=False, server_default="0"))
+
+    existing = {c["name"] for c in sa_inspect(bind).get_columns("org_settings")}
+    if "mi_auto_adopt" not in existing:
+        op.add_column("org_settings",
+            sa.Column("mi_auto_adopt", sa.Boolean(), nullable=False, server_default="1"))
 
     # ── major_incident ───────────────────────────────────────────────────────
     op.create_table(
