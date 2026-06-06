@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}{{ lage.name }} – Lagekarte{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<style>
+.lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+.lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
+.lage-status--closed  { background:rgba(107,114,128,.2); color:#9ca3af; }
+.lage-status--standby { background:rgba(245,158,11,.15); color:#fbbf24; }
+
+.karte-topbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.karte-topbar__title { font-weight: 700; font-size: 1.05rem; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lage-subnav { display: flex; gap: 4px; }
+.lage-subnav a { font-size: .78rem; padding: 3px 9px; border-radius: 4px;
+  color: var(--text-muted); text-decoration: none; }
+.lage-subnav a:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.lage-subnav a.active { background: rgba(255,255,255,.1); color: var(--text); font-weight: 600; }
+
+.karte-controls {
+  position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+  z-index: 1000; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+  padding: 6px 10px;
+  background: rgba(17,24,39,.85); border-radius: 8px; border: 1px solid var(--border);
+  backdrop-filter: blur(4px);
+}
+.karte-controls label { display: flex; align-items: center; gap: 5px;
+  font-size: .78rem; cursor: pointer; color: var(--text); white-space: nowrap; }
+
+#karte-map {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 0;
+}
+
+.karte-topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1001;
+}
+
+/* Site count badge */
+.karte-badge {
+  position: fixed; bottom: 16px; right: 16px; z-index: 1001;
+  background: rgba(17,24,39,.85); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; font-size: .78rem;
+  color: var(--text-muted); backdrop-filter: blur(4px);
+}
+
+/* Leaflet popup custom style */
+.lk-popup { min-width: 180px; }
+.lk-popup__title { font-weight: 700; font-size: .9rem; margin-bottom: 4px; }
+.lk-popup__phase { font-size: .72rem; color: #9ca3af; margin-bottom: 4px; }
+.lk-popup__res   { font-size: .75rem; margin-bottom: 6px; }
+.lk-popup__link  { display: inline-block; font-size: .75rem; color: #93c5fd;
+  text-decoration: none; border: 1px solid rgba(147,197,253,.3);
+  padding: 2px 8px; border-radius: 4px; }
+.lk-popup__link:hover { background: rgba(147,197,253,.1); }
+
+/* No-coords list */
+.nocoords-box {
+  position: fixed; bottom: 16px; left: 16px; z-index: 1001;
+  background: rgba(17,24,39,.85); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; font-size: .75rem;
+  max-width: 260px; max-height: 200px; overflow-y: auto;
+  backdrop-filter: blur(4px);
+}
+.nocoords-box__title { font-weight: 600; margin-bottom: 6px; color: var(--text-muted); }
+.nocoords-item { padding: 3px 0; border-top: 1px solid rgba(255,255,255,.05); color: var(--text); }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if lage.is_exercise %}
+<div style="position:fixed;top:0;left:0;right:0;z-index:2000;background:#92400e;color:#fde68a;text-align:center;font-weight:700;font-size:.82rem;padding:4px;letter-spacing:.05em;">⚠ ÜBUNG / SIMULATION ⚠</div>
+{% endif %}
+
+<div class="karte-topbar" {% if lage.is_exercise %}style="top:26px;"{% endif %}>
+  <a href="/lage" class="btn btn--ghost btn--sm">←</a>
+  <div class="karte-topbar__title">{{ lage.name }}</div>
+  <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+  <nav class="lage-subnav">
+    <a href="/lage/{{ lage.id }}">📋 Board</a>
+    <a href="/lage/{{ lage.id }}/dashboard">📊 Dashboard</a>
+    <a href="/lage/{{ lage.id }}/stab">👥 Stab</a>
+    <a href="/lage/{{ lage.id }}/funkjournal">📻 Funkjournal</a>
+    <a href="/lage/{{ lage.id }}/meldungen">📥 Meldungen</a>
+    <a href="/lage/{{ lage.id }}/zeitreise">🕐 Zeitreise</a>
+    <a href="/lage/{{ lage.id }}/sektoren">🗂 Abschnitte</a>
+    <a href="/lage/{{ lage.id }}/karte" class="active">🗺 Karte</a>
+    <a href="/lage/{{ lage.id }}/ressourcen">🚒 Ressourcen</a>
+  </nav>
+</div>
+
+<div id="karte-map"></div>
+
+<div class="karte-controls" id="karte-controls">
+  {% for phase in ['eingegangen','erkundung','bewertet','disponiert','in_arbeit','erledigt'] %}
+  <label>
+    <input type="checkbox" checked value="{{ phase }}" onchange="applyPhaseFilter()">
+    {{ {'eingegangen':'Eingegangen','erkundung':'Erkundung','bewertet':'Bewertet',
+        'disponiert':'Disponiert','in_arbeit':'In Arbeit','erledigt':'Erledigt'}[phase] }}
+  </label>
+  {% endfor %}
+</div>
+
+<div class="karte-badge" id="karte-badge"></div>
+
+{% set no_coords = all_sites | selectattr('lat', 'none') | list %}
+{% if no_coords %}
+<div class="nocoords-box">
+  <div class="nocoords-box__title">Ohne Koordinaten ({{ no_coords|length }})</div>
+  {% for s in no_coords %}
+  <div class="nocoords-item">
+    <a href="/lage/{{ lage.id }}" style="color:#93c5fd;text-decoration:none;">{{ s.bezeichnung[:30] }}</a>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/leaflet.min.js"></script>
+<script>
+(function () {
+  var SITES = {{ map_sites_json | safe }};
+  var lageId = {{ lage.id }};
+
+  var map = L.map('karte-map', { preferCanvas: true, zoomControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 19,
+  }).addTo(map);
+
+  var markers = [];
+
+  function buildPopup(s) {
+    var resText = s.active_res > 0 ? s.active_res + ' Ressource(n) aktiv' : 'Keine Ressourcen';
+    return '<div class="lk-popup">' +
+      '<div class="lk-popup__title">' + s.bezeichnung + '</div>' +
+      '<div class="lk-popup__phase">' + s.phase_label +
+        (s.priority_label ? ' · ' + s.priority_label : '') + '</div>' +
+      (s.einsatzgrund ? '<div style="font-size:.78rem;margin-bottom:4px;">' + s.einsatzgrund + '</div>' : '') +
+      '<div class="lk-popup__res">' + resText + '</div>' +
+      '<a class="lk-popup__link" href="/lage/' + lageId + '" target="_blank">→ Board</a>' +
+      '</div>';
+  }
+
+  function renderMarkers() {
+    var checks = document.querySelectorAll('#karte-controls input[type=checkbox]');
+    var active = Array.from(checks).filter(c => c.checked).map(c => c.value);
+    var visible = 0;
+    markers.forEach(function(obj) {
+      if (active.includes(obj.phase)) {
+        if (!map.hasLayer(obj.marker)) obj.marker.addTo(map);
+        visible++;
+      } else {
+        if (map.hasLayer(obj.marker)) map.removeLayer(obj.marker);
+      }
+    });
+    document.getElementById('karte-badge').textContent = visible + ' / ' + SITES.length + ' Stellen sichtbar';
+  }
+
+  window.applyPhaseFilter = renderMarkers;
+
+  if (SITES.length) {
+    var bounds = [];
+    SITES.forEach(function(s) {
+      var m = L.circleMarker([s.lat, s.lng], {
+        radius: 11, color: s.color, fillColor: s.color,
+        fillOpacity: 0.85, weight: 2,
+      });
+      m.bindPopup(buildPopup(s), { maxWidth: 260 });
+      markers.push({ marker: m, phase: s.phase });
+      bounds.push([s.lat, s.lng]);
+    });
+    renderMarkers();
+    if (bounds.length) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
+  } else {
+    map.setView([47.41, 9.74], 11);
+    document.getElementById('karte-badge').textContent = '0 Stellen mit Koordinaten';
+  }
+
+  // WebSocket: reload markers on board changes
+  var wsUrl = 'ws://' + location.host + '/ws/lage/' + lageId;
+  function connectWS() {
+    var ws = new WebSocket(wsUrl);
+    ws.onmessage = function(ev) {
+      try {
+        var msg = JSON.parse(ev.data);
+        if (msg.reload_board || msg.type === 'site_updated') location.reload();
+      } catch(e) {}
+    };
+    ws.onclose = function() { setTimeout(connectWS, 3000); };
+  }
+  connectWS();
+})();
+</script>
+{% endblock %}

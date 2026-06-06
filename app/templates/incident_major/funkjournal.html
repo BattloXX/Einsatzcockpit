@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}{{ lage.name }} – Funkjournal{% endblock %}
+
+{% block head_extra %}
+<style>
+.lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+.lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
+.lage-status--closed  { background:rgba(107,114,128,.2); color:#9ca3af; }
+.lage-status--standby { background:rgba(245,158,11,.15); color:#fbbf24; }
+.fj-wrap { padding: 14px 16px; max-width: 1100px; margin: 0 auto; }
+.fj-topbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface); margin-bottom: 14px;
+}
+.fj-topbar__title { font-weight: 700; font-size: 1.05rem; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lage-subnav { display: flex; gap: 4px; }
+.lage-subnav a { font-size: .78rem; padding: 3px 9px; border-radius: 4px;
+  color: var(--text-muted); text-decoration: none; }
+.lage-subnav a:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.lage-subnav a.active { background: rgba(255,255,255,.1); color: var(--text); font-weight: 600; }
+
+.fj-add {
+  background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 14px;
+}
+.fj-add__title { font-size: .78rem; font-weight: 600; color: var(--text-muted);
+  margin-bottom: 10px; letter-spacing: .04em; }
+.fj-add-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+
+/* Direction badges */
+.dir-badge {
+  font-size: .65rem; font-weight: 700; padding: 2px 7px;
+  border-radius: 3px; white-space: nowrap;
+}
+.dir-in  { background: rgba(59,130,246,.2);  color: #93c5fd; }
+.dir-out { background: rgba(34,197,94,.2);   color: #4ade80; }
+.dir-int { background: rgba(107,114,128,.2); color: #9ca3af; }
+
+/* Table */
+.fj-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.fj-table th {
+  text-align: left; padding: 6px 8px;
+  font-size: .72rem; font-weight: 600; color: var(--text-muted);
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.fj-table td {
+  padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,.04);
+  vertical-align: top;
+}
+.fj-table tr:hover td { background: rgba(255,255,255,.02); }
+.fj-row--handled td { opacity: .5; }
+.fj-msg  { max-width: 380px; line-height: 1.4; }
+.fj-req-badge {
+  font-size: .6rem; font-weight: 700; padding: 1px 5px;
+  border-radius: 3px; background: rgba(251,191,36,.2); color: #fbbf24;
+  vertical-align: middle; margin-left: 4px;
+}
+.fj-site-link { color: #93c5fd; font-size: .72rem; }
+.fj-handle-btn { font-size: .7rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if lage.is_exercise %}
+<div style="background:#92400e;color:#fde68a;text-align:center;font-weight:700;font-size:.82rem;padding:4px;letter-spacing:.05em;">⚠ ÜBUNG / SIMULATION ⚠</div>
+{% endif %}
+
+<div class="fj-topbar">
+  <a href="/lage" class="btn btn--ghost btn--sm">←</a>
+  <div class="fj-topbar__title" title="{{ lage.name }}">{{ lage.name }}</div>
+  <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+  <nav class="lage-subnav">
+    <a href="/lage/{{ lage.id }}">📋 Board</a>
+    <a href="/lage/{{ lage.id }}/dashboard">📊 Dashboard</a>
+    <a href="/lage/{{ lage.id }}/stab">👥 Stab</a>
+    <a href="/lage/{{ lage.id }}/funkjournal" class="active">📻 Funkjournal</a>
+    <a href="/lage/{{ lage.id }}/meldungen">📥 Meldungen</a>
+    <a href="/lage/{{ lage.id }}/zeitreise">🕐 Zeitreise</a>
+    <a href="/lage/{{ lage.id }}/sektoren">🗂 Abschnitte</a>
+    <a href="/lage/{{ lage.id }}/karte">🗺 Karte</a>
+    <a href="/lage/{{ lage.id }}/ressourcen">🚒 Ressourcen</a>
+  </nav>
+</div>
+
+<div class="fj-wrap">
+
+  {# ── Eintrag hinzufügen ────────────────────────────────────────────────────── #}
+  {% if can_edit %}
+  <div class="fj-add">
+    <div class="fj-add__title">EINTRAG HINZUFÜGEN</div>
+    <form hx-post="/lage/{{ lage.id }}/funkjournal"
+          hx-swap="none"
+          hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+          hx-on::after-request="if(event.detail.successful){this.reset();location.reload();}">
+
+      <div class="fj-add-row" style="margin-bottom:8px;">
+        <div>
+          <label class="form-label" style="font-size:.72rem;">Richtung</label>
+          <select name="direction" class="form-select form-select--sm" required>
+            <option value="in">↓ Eingehend</option>
+            <option value="out">↑ Ausgehend</option>
+            <option value="int">↔ Intern</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:100px;">
+          <label class="form-label" style="font-size:.72rem;">Kanal / Frequenz</label>
+          <input type="text" name="channel" class="form-input" placeholder="z. B. Kanal 5, 2m"
+                 maxlength="40" autocomplete="off">
+        </div>
+        <div style="flex:2;min-width:140px;">
+          <label class="form-label" style="font-size:.72rem;">Gegenüber / Absender</label>
+          <input type="text" name="partner" class="form-input" placeholder="z. B. KHD-Zug, ÖRK"
+                 maxlength="120" autocomplete="off">
+        </div>
+        {% if sites %}
+        <div style="min-width:130px;">
+          <label class="form-label" style="font-size:.72rem;">Einsatzstelle</label>
+          <select name="related_site_id" class="form-select form-select--sm">
+            <option value="">— keine —</option>
+            {% for s in sites %}
+            <option value="{{ s.id }}">{{ s.bezeichnung[:30] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div style="display:flex;align-items:center;gap:5px;padding-top:18px;">
+          <input type="checkbox" name="is_request" id="fj_is_req" value="true" style="width:14px;height:14px;">
+          <label for="fj_is_req" style="font-size:.78rem;cursor:pointer;">Auftrag</label>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <div style="flex:1;">
+          <label class="form-label" style="font-size:.72rem;">Inhalt <span style="color:#ef4444;">*</span></label>
+          <input type="text" name="message" class="form-input" required maxlength="500"
+                 placeholder="Nachrichteninhalt…" autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn--primary btn--sm">Eintragen</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {# ── Journaltabelle ────────────────────────────────────────────────────────── #}
+  {% if comms %}
+  <table class="fj-table">
+    <thead>
+      <tr>
+        <th>Zeit</th>
+        <th>Richtung</th>
+        <th>Kanal</th>
+        <th>Gegenüber</th>
+        <th>Inhalt</th>
+        <th>Stelle</th>
+        <th>Bearbeiter</th>
+        {% if can_edit %}<th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in comms %}
+      <tr class="{% if c.handled %}fj-row--handled{% endif %}">
+        <td style="white-space:nowrap;color:var(--text-muted);">{{ c.ts|local_time }}</td>
+        <td>
+          <span class="dir-badge dir-{{ c.direction }}">
+            {% if c.direction == 'in' %}↓ Ein{% elif c.direction == 'out' %}↑ Aus{% else %}↔ Int{% endif %}
+          </span>
+        </td>
+        <td style="color:var(--text-muted);white-space:nowrap;">{{ c.channel or '–' }}</td>
+        <td style="white-space:nowrap;">{{ c.partner or '–' }}</td>
+        <td class="fj-msg">
+          {{ c.message }}
+          {% if c.is_request %}<span class="fj-req-badge">Auftrag</span>{% endif %}
+        </td>
+        <td>
+          {% if c.related_site_id %}
+          <a class="fj-site-link" href="/lage/{{ lage.id }}">#{{ c.related_site_id }}</a>
+          {% else %}–{% endif %}
+        </td>
+        <td style="color:var(--text-muted);font-size:.72rem;white-space:nowrap;">
+          {{ c.author_name or '–' }}
+        </td>
+        {% if can_edit %}
+        <td>
+          <form hx-post="/lage/{{ lage.id }}/funkjournal/{{ c.id }}/erledigt"
+                hx-swap="none"
+                hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+                hx-on::after-request="if(event.detail.successful){location.reload();}">
+            <button type="submit" class="btn btn--xs fj-handle-btn
+              {% if c.handled %}btn--ghost{% else %}btn--secondary{% endif %}"
+                title="{% if c.handled %}Als offen markieren{% else %}Als erledigt markieren{% endif %}">
+              {% if c.handled %}↩{% else %}✓{% endif %}
+            </button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="color:var(--text-muted);font-size:.88rem;padding:20px 0;text-align:center;">
+    Noch keine Einträge im Funkjournal.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

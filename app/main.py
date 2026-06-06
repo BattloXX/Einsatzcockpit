@@ -26,6 +26,7 @@ from app.routers import (
     ui_archive,
     ui_breathing,
     ui_incident,
+    ui_major_incident,
     ui_media,
     ui_password_reset,
     ui_push,
@@ -176,12 +177,14 @@ class _QrUser:
 async def session_middleware(request: Request, call_next):
     token = request.cookies.get("session")
     request.state.user = None
+    request.state.display_name = None
+    request.state.qr_incident_id = None
     _refresh_user_id: int | None = None  # set for non-QR sessions to trigger cookie refresh
 
     if token:
         session_data = unsign_session(token)
         if session_data:
-            user_id, is_qr, qr_incident_id, is_device = session_data
+            user_id, is_qr, qr_incident_id, is_device, display_name = session_data
             db = SessionLocal()
             try:
                 user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
@@ -205,6 +208,8 @@ async def session_middleware(request: Request, call_next):
                     # Regular session: refresh token to slide the inactivity window.
                     _refresh_user_id = user_id
                 request.state.user = user
+                request.state.display_name = display_name
+                request.state.qr_incident_id = qr_incident_id
             finally:
                 db.close()
 
@@ -287,6 +292,7 @@ app.include_router(device_api.router)
 app.include_router(lagekarte_api.router)
 app.include_router(ws.router)
 app.include_router(ui_incident.router)
+app.include_router(ui_major_incident.router)
 app.include_router(ui_media.router)
 app.include_router(ui_breathing.router)
 app.include_router(ui_archive.router)

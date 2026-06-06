@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}{{ lage.name }} – Stab{% endblock %}
+
+{% block head_extra %}
+<style>
+.lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+.lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
+.lage-status--closed  { background:rgba(107,114,128,.2); color:#9ca3af; }
+.lage-status--standby { background:rgba(245,158,11,.15); color:#fbbf24; }
+.stab-wrap { padding: 14px 16px; max-width: 1100px; margin: 0 auto; }
+.stab-topbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface); margin-bottom: 14px;
+}
+.stab-topbar__title { font-weight: 700; font-size: 1.05rem; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lage-subnav { display: flex; gap: 4px; }
+.lage-subnav a { font-size: .78rem; padding: 3px 9px; border-radius: 4px;
+  color: var(--text-muted); text-decoration: none; }
+.lage-subnav a:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.lage-subnav a.active { background: rgba(255,255,255,.1); color: var(--text); font-weight: 600; }
+
+.fn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.fn-card {
+  background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden;
+}
+.fn-card--lageleitung { grid-column: 1 / -1; }
+.fn-card__header {
+  padding: 8px 12px;
+  background: rgba(255,255,255,.04);
+  border-bottom: 1px solid var(--border);
+  font-size: .82rem; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.fn-badge {
+  font-size: .65rem; font-weight: 700; padding: 1px 6px;
+  border-radius: 10px; background: rgba(147,197,253,.15); color: #93c5fd;
+}
+.fn-card__body { padding: 8px 12px; }
+
+.asgn-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 0; border-top: 1px solid rgba(255,255,255,.05);
+  font-size: .82rem;
+}
+.asgn-row:first-child { border-top: none; }
+.asgn-label { flex: 1; font-weight: 500; }
+.asgn-since { font-size: .7rem; color: var(--text-muted); white-space: nowrap; }
+
+.fn-add-form { margin-top: 10px; display: flex; gap: 6px; }
+.fn-empty { font-size: .78rem; color: var(--text-muted); padding: 6px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if lage.is_exercise %}
+<div style="background:#92400e;color:#fde68a;text-align:center;font-weight:700;font-size:.82rem;padding:4px;letter-spacing:.05em;">⚠ ÜBUNG / SIMULATION ⚠</div>
+{% endif %}
+
+<div class="stab-topbar">
+  <a href="/lage" class="btn btn--ghost btn--sm">←</a>
+  <div class="stab-topbar__title" title="{{ lage.name }}">{{ lage.name }}</div>
+  <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+  <nav class="lage-subnav">
+    <a href="/lage/{{ lage.id }}">📋 Board</a>
+    <a href="/lage/{{ lage.id }}/dashboard">📊 Dashboard</a>
+    <a href="/lage/{{ lage.id }}/stab" class="active">👥 Stab</a>
+    <a href="/lage/{{ lage.id }}/funkjournal">📻 Funkjournal</a>
+    <a href="/lage/{{ lage.id }}/meldungen">📥 Meldungen</a>
+    <a href="/lage/{{ lage.id }}/zeitreise">🕐 Zeitreise</a>
+    <a href="/lage/{{ lage.id }}/sektoren">🗂 Abschnitte</a>
+    <a href="/lage/{{ lage.id }}/karte">🗺 Karte</a>
+    <a href="/lage/{{ lage.id }}/ressourcen">🚒 Ressourcen</a>
+  </nav>
+</div>
+
+<div class="stab-wrap">
+  <div class="fn-grid">
+
+    {% for fn in staff_functions %}
+    {% set assignments = staff_by_fn[fn] %}
+    <div class="fn-card {% if fn.value == 'lageleitung' %}fn-card--lageleitung{% endif %}">
+
+      <div class="fn-card__header">
+        <span>{{ staff_fn_label[fn] }}</span>
+        {% if assignments %}
+        <span class="fn-badge">{{ assignments|length }}</span>
+        {% endif %}
+      </div>
+
+      <div class="fn-card__body">
+
+        {% if assignments %}
+        {% for a in assignments %}
+        <div class="asgn-row">
+          <span class="asgn-label">{{ a.label or '–' }}</span>
+          <span class="asgn-since">{{ a.assigned_at|local_time }}</span>
+          {% if can_edit %}
+          <form hx-post="/lage/{{ lage.id }}/stab/{{ a.id }}/freigeben"
+                hx-swap="none"
+                hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+                hx-on::after-request="if(event.detail.successful){location.reload();}"
+                onsubmit="return confirm('Person freigeben?')">
+            <button type="submit" class="btn btn--xs btn--ghost">✕</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="fn-empty">Nicht besetzt</div>
+        {% endif %}
+
+        {% if can_edit and lage.status.value == 'active' %}
+        <form class="fn-add-form"
+              hx-post="/lage/{{ lage.id }}/stab/zuweisen"
+              hx-swap="none"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}","function":"{{ fn.value }}"}'
+              hx-on::after-request="if(event.detail.successful){this.reset();location.reload();}">
+          <input type="text" name="label" class="form-input" placeholder="Name / Rufname…"
+                 required maxlength="120" autocomplete="off" style="flex:1;">
+          <button type="submit" class="btn btn--secondary btn--sm">+</button>
+        </form>
+        {% endif %}
+
+      </div>
+    </div>
+    {% endfor %}
+
+  </div>
+
+  {# ── KI-Pressemeldung (S5) ───────────────────────────────────────────────── #}
+  <div class="dash-section" style="margin-top:16px;background:var(--surface-elevated,#1e2130);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);letter-spacing:.04em;">
+        KI-PRESSEMELDUNG (S5)
+      </span>
+      <form hx-post="/lage/{{ lage.id }}/pressemeldung"
+            hx-target="#presse-result"
+            hx-swap="innerHTML"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+            hx-indicator="#presse-spin"
+            style="margin:0;">
+        <button type="submit" class="btn btn--ghost btn--sm">
+          ✨ Entwurf erstellen
+          <span id="presse-spin" class="htmx-indicator" style="font-size:.75rem;"> …</span>
+        </button>
+      </form>
+    </div>
+    <div id="presse-result">
+      <span style="font-size:.78rem;color:var(--text-muted);">Erstellt einen Pressetext-Entwurf aus dem aktuellen Lagebild.</span>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

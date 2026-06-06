@@ -189,6 +189,44 @@ async def qr_login(request: Request, token: str, incident_id: int, db: Session =
     db.commit()
 
     session_token = sign_session(user.id, qr=True, incident_id=incident_id)
+    redirect = RedirectResponse(f"/qr-name?incident_id={incident_id}", status_code=302)
+    _set_session_cookie(redirect, session_token)
+    return redirect
+
+
+@router.get("/qr-name", response_class=HTMLResponse)
+async def qr_name_page(request: Request, db: Session = Depends(get_db)):
+    """Intermediate name-entry step after QR login."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    qr_incident_id = getattr(request.state, "qr_incident_id", None)
+    if not qr_incident_id:
+        return RedirectResponse("/", status_code=302)
+    incident = db.get(Incident, qr_incident_id)
+    return templates.TemplateResponse(request, "auth/qr_name.html", {
+        "incident": incident,
+        "incident_id": qr_incident_id,
+    })
+
+
+@router.post("/qr-name")
+async def qr_name_submit(
+    request: Request,
+    response: Response,
+    incident_id: int = Form(...),
+    display_name: str = Form(...),
+):
+    """Save the entered name into the QR session token and proceed to the board."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    qr_incident_id = getattr(request.state, "qr_incident_id", None)
+    if not qr_incident_id or qr_incident_id != incident_id:
+        return RedirectResponse("/login?error=qr_invalid", status_code=302)
+
+    name = display_name.strip()[:120] or None
+    session_token = sign_session(user.id, qr=True, incident_id=incident_id, display_name=name)
     redirect = RedirectResponse(f"/einsatz/{incident_id}", status_code=302)
     _set_session_cookie(redirect, session_token)
     return redirect

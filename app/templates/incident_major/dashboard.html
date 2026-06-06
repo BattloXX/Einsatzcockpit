@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}{{ lage.name }} – Dashboard{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<style>
+.lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+.lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
+.lage-status--closed  { background:rgba(107,114,128,.2); color:#9ca3af; }
+.lage-status--standby { background:rgba(245,158,11,.15); color:#fbbf24; }
+.dash-wrap   { padding: 14px 16px; max-width: 1200px; margin: 0 auto; }
+.dash-topbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface); margin-bottom: 14px;
+}
+.dash-topbar__title { font-weight: 700; font-size: 1.05rem; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lage-subnav { display: flex; gap: 4px; }
+.lage-subnav a { font-size: .78rem; padding: 3px 9px; border-radius: 4px;
+  color: var(--text-muted); text-decoration: none; }
+.lage-subnav a:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.lage-subnav a.active { background: rgba(255,255,255,.1); color: var(--text); font-weight: 600; }
+
+.stat-row    { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.stat-card   {
+  flex: 1; min-width: 120px; padding: 12px 14px;
+  background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.stat-card__val  { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+.stat-card__lbl  { font-size: .72rem; color: var(--text-muted); margin-top: 4px; }
+
+.dash-grid   { display: grid; grid-template-columns: 1fr 340px; gap: 14px; align-items: start; }
+@media (max-width: 860px) { .dash-grid { grid-template-columns: 1fr; } }
+
+.dash-section {
+  background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 14px;
+}
+.dash-section__title {
+  font-size: .78rem; font-weight: 600; color: var(--text-muted);
+  margin-bottom: 10px; letter-spacing: .04em;
+}
+
+/* Phase bar */
+.phase-bar-wrap { display: flex; height: 14px; border-radius: 4px; overflow: hidden; gap: 2px; }
+.phase-bar-seg  { transition: flex .3s; min-width: 0; border-radius: 2px; }
+.phase-legend   { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; }
+.phase-legend__item { display: flex; align-items: center; gap: 5px; font-size: .72rem; }
+.phase-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+/* Prio pills */
+.prio-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+.prio-pill {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 10px; border-radius: 6px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--border);
+  font-size: .8rem; flex: 1; min-width: 100px;
+}
+.prio-pill__count { font-size: 1.3rem; font-weight: 700; min-width: 24px; }
+.prio-pill__lbl   { color: var(--text-muted); font-size: .72rem; }
+
+/* Recent log */
+.act-entry { display: flex; gap: 8px; padding: 5px 0;
+  border-top: 1px solid rgba(255,255,255,.05); font-size: .78rem; }
+.act-time  { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; min-width: 44px; }
+.act-site  { color: #93c5fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100px; flex-shrink: 0; }
+.act-text  { flex: 1; color: var(--text); }
+
+/* Map */
+#lage-map { height: 320px; border-radius: 6px; background: #111827; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if lage.is_exercise %}
+<div style="background:#92400e;color:#fde68a;text-align:center;font-weight:700;font-size:.82rem;padding:4px;letter-spacing:.05em;">⚠ ÜBUNG / SIMULATION ⚠</div>
+{% endif %}
+
+<div class="dash-topbar">
+  <a href="/lage" class="btn btn--ghost btn--sm" title="Alle Lagen">←</a>
+  <div class="dash-topbar__title" title="{{ lage.name }}">{{ lage.name }}</div>
+  <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+  <nav class="lage-subnav">
+    <a href="/lage/{{ lage.id }}">📋 Board</a>
+    <a href="/lage/{{ lage.id }}/dashboard" class="active">📊 Dashboard</a>
+    <a href="/lage/{{ lage.id }}/stab">👥 Stab</a>
+    <a href="/lage/{{ lage.id }}/funkjournal">📻 Funkjournal</a>
+    <a href="/lage/{{ lage.id }}/meldungen">📥 Meldungen</a>
+    <a href="/lage/{{ lage.id }}/zeitreise">🕐 Zeitreise</a>
+    <a href="/lage/{{ lage.id }}/sektoren">🗂 Abschnitte</a>
+    <a href="/lage/{{ lage.id }}/karte">🗺 Karte</a>
+    <a href="/lage/{{ lage.id }}/ressourcen">🚒 Ressourcen</a>
+  </nav>
+</div>
+
+<div class="dash-wrap">
+
+  {# ── Schnellkennzahlen ────────────────────────────────────────────────────── #}
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-card__val">{{ total_sites }}</div>
+      <div class="stat-card__lbl">Einsatzstellen gesamt</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__val" style="color:#fb923c;">{{ open_count }}</div>
+      <div class="stat-card__lbl">Offen / In Bearbeitung</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__val" style="color:#4ade80;">{{ done_count }}</div>
+      <div class="stat-card__lbl">Erledigt</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__val" style="color:#93c5fd;">{{ active_res }}</div>
+      <div class="stat-card__lbl">Ressourcen aktiv</div>
+    </div>
+  </div>
+
+  <div class="dash-grid">
+    <div>
+
+      {# ── Phasenverteilung ──────────────────────────────────────────────────── #}
+      <div class="dash-section">
+        <div class="dash-section__title">PHASENVERTEILUNG</div>
+        {% set phase_colors = {
+          'eingegangen': '#6b7280',
+          'erkundung':   '#a78bfa',
+          'bewertet':    '#60a5fa',
+          'disponiert':  '#34d399',
+          'in_arbeit':   '#fbbf24',
+          'erledigt':    '#4ade80'
+        } %}
+        {% set total_shown = namespace(n=0) %}
+        {% for p in phase_labels %}{% set total_shown.n = total_shown.n + phase_stats[p] %}{% endfor %}
+        <div class="phase-bar-wrap">
+          {% for p, label in phase_labels.items() %}
+          {% if p.value != 'abgebrochen' %}
+          {% set cnt = phase_stats[p] %}
+          {% if cnt > 0 %}
+          <div class="phase-bar-seg"
+               style="flex:{{ cnt }};background:{{ phase_colors[p.value] }};"
+               title="{{ label }}: {{ cnt }}"></div>
+          {% endif %}
+          {% endif %}
+          {% endfor %}
+          {% if total_shown.n == 0 %}
+          <div style="flex:1;background:rgba(255,255,255,.06);"></div>
+          {% endif %}
+        </div>
+        <div class="phase-legend">
+          {% for p, label in phase_labels.items() %}
+          {% if p.value != 'abgebrochen' %}
+          <div class="phase-legend__item">
+            <div class="phase-dot" style="background:{{ phase_colors[p.value] }};"></div>
+            <span>{{ label }} ({{ phase_stats[p] }})</span>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+      {# ── Prioritäten ───────────────────────────────────────────────────────── #}
+      <div class="dash-section">
+        <div class="dash-section__title">PRIORITÄTEN (AKTIVE STELLEN)</div>
+        <div class="prio-grid">
+          {% for pk, pt in prio_label.items() %}
+          <div class="prio-pill">
+            <div class="prio-pill__count"
+                 style="{% if prio_color[pk] == 'red' %}color:#f87171;
+                        {% elif prio_color[pk] == 'orange' %}color:#fb923c;
+                        {% elif prio_color[pk] == 'yellow' %}color:#facc15;
+                        {% else %}color:var(--text-muted);{% endif %}">
+              {{ prio_stats[pk] }}
+            </div>
+            <div class="prio-pill__lbl">{{ pt }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# ── Karte ─────────────────────────────────────────────────────────────── #}
+      <div class="dash-section">
+        <div class="dash-section__title">KARTE</div>
+        <div id="lage-map"></div>
+      </div>
+
+      {# ── KI-Lagebericht ────────────────────────────────────────────────────── #}
+      <div class="dash-section" x-data="{loading:false}">
+        <div class="dash-section__title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>KI-LAGEBERICHT</span>
+          <form hx-post="/lage/{{ lage.id }}/lagebericht"
+                hx-target="#ki-bericht-result"
+                hx-swap="innerHTML"
+                hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+                hx-indicator="#ki-spin"
+                style="margin:0;">
+            <button type="submit" class="btn btn--ghost btn--sm">
+              ✨ Generieren
+              <span id="ki-spin" class="htmx-indicator" style="font-size:.75rem;"> …</span>
+            </button>
+          </form>
+        </div>
+        <div id="ki-bericht-result" style="min-height:24px;margin-top:8px;">
+          <span style="font-size:.78rem;color:var(--text-muted);">Klick auf „Generieren" erstellt eine KI-Lagezusammenfassung.</span>
+        </div>
+      </div>
+
+    </div>
+
+    {# ── Letzte Aktivitäten ──────────────────────────────────────────────────── #}
+    <div class="dash-section" style="max-height:calc(100vh - 200px);overflow-y:auto;">
+      <div class="dash-section__title">LETZTE AKTIVITÄTEN</div>
+      {% for entry, site in recent_logs %}
+      <div class="act-entry">
+        <span class="act-time">{{ entry.ts|local_time }}</span>
+        <span class="act-site" title="{{ site.bezeichnung }}">{{ site.bezeichnung[:18] }}</span>
+        <span class="act-text">{{ entry.text }}</span>
+      </div>
+      {% else %}
+      <div style="font-size:.8rem;color:var(--text-muted);">Noch keine Einträge.</div>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/leaflet.min.js"></script>
+<script>
+(function () {
+  var sites = {{ map_sites_json | safe }};
+  var map = L.map('lage-map', { preferCanvas: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19,
+  }).addTo(map);
+
+  if (sites.length) {
+    var bounds = [];
+    sites.forEach(function (s) {
+      var m = L.circleMarker([s.lat, s.lng], {
+        radius: 9, color: s.color, fillColor: s.color,
+        fillOpacity: 0.85, weight: 2,
+      }).addTo(map);
+      m.bindPopup('<b>' + s.bezeichnung + '</b><br>' + s.phase);
+      bounds.push([s.lat, s.lng]);
+    });
+    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+  } else {
+    // Default: Vorarlberg
+    map.setView([47.41, 9.74], 11);
+  }
+})();
+</script>
+{% endblock %}

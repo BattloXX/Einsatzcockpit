@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}{{ lage.name }} – Großschadenslage{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* ── Layout ──────────────────────────────────────────────────────────────── */
+  .lage-wrap { display:flex; flex-direction:column; height:calc(100vh - var(--topnav-h)); overflow:hidden; }
+
+  /* ── Lage-Topbar ─────────────────────────────────────────────────────────── */
+  .lage-topbar {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:8px 14px; border-bottom:1px solid var(--border);
+    background:var(--surface); flex-shrink:0;
+  }
+  .lage-topbar__title { font-weight:700; font-size:1.05rem; flex:1; min-width:0;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lage-topbar__counts { font-size:.8rem; color:var(--text-muted); white-space:nowrap; }
+  .lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+  .lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
+  .lage-status--closed  { background:rgba(107,114,128,.2); color:#9ca3af; }
+  .lage-status--standby { background:rgba(245,158,11,.15); color:#fbbf24; }
+
+  /* ── Phasen-Board ────────────────────────────────────────────────────────── */
+  .phase-board {
+    flex:1; display:flex; overflow-x:auto; gap:10px;
+    padding:12px; align-items:flex-start;
+  }
+  .phase-col {
+    flex:0 0 240px; display:flex; flex-direction:column;
+    background:var(--surface-elevated,#1e2130);
+    border-radius:8px; overflow:hidden; max-height:100%;
+  }
+  .phase-col--abgebrochen { opacity:.65; }
+  .phase-col__header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 10px; background:rgba(255,255,255,.04);
+    border-bottom:1px solid var(--border);
+    font-weight:600; font-size:.82rem; flex-shrink:0;
+  }
+  .phase-col__count {
+    font-size:.75rem; background:rgba(255,255,255,.1);
+    border-radius:10px; padding:1px 7px;
+  }
+  .phase-col__body {
+    flex:1; overflow-y:auto; padding:6px;
+    min-height:80px;
+  }
+
+  /* ── Site-Karte ──────────────────────────────────────────────────────────── */
+  .site-card {
+    background:var(--surface-high,#252a3a);
+    border:1px solid var(--border); border-radius:6px;
+    margin-bottom:6px; cursor:pointer;
+    transition:border-color .12s;
+    overflow:hidden;
+  }
+  .site-card:hover { border-color:rgba(255,255,255,.22); }
+  .site-card--ghost  { opacity:.35; }
+  .site-card--chosen { box-shadow:0 4px 16px rgba(0,0,0,.4); }
+  .site-card--drag   { box-shadow:0 8px 24px rgba(0,0,0,.5); }
+  .site-card__prio-bar { height:4px; }
+  .prio-bar--red    { background:#ef4444; }
+  .prio-bar--orange { background:#f97316; }
+  .prio-bar--yellow { background:#eab308; }
+  .prio-bar--muted  { background:var(--text-muted,#6b7280); }
+  .site-card__body  { padding:8px 10px; }
+  .site-card__title { font-weight:600; font-size:.88rem; line-height:1.3; }
+  .site-card__sub   { font-size:.76rem; color:var(--text-muted); margin-top:2px; }
+  .site-card__addr  { font-size:.74rem; color:var(--text-muted); margin-top:3px; }
+  .site-card__meta  {
+    display:flex; align-items:center; gap:5px; flex-wrap:wrap;
+    margin-top:5px; font-size:.7rem; color:var(--text-muted);
+  }
+  .badge--xs { font-size:.64rem; padding:1px 5px; border-radius:3px;
+    background:rgba(255,255,255,.08); }
+  .badge--blue   { background:rgba(59,130,246,.2); color:#93c5fd; }
+  .badge--purple { background:rgba(139,92,246,.2); color:#c4b5fd; }
+
+  /* ── Quick-Prio-Footer ───────────────────────────────────────────────────── */
+  .site-card__footer {
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding: 4px 6px;
+    display: flex;
+    gap: 3px;
+  }
+  .prio-quick-btn {
+    flex: 1;
+    font-size: .6rem;
+    font-weight: 600;
+    padding: 3px 2px;
+    border-radius: 3px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.08);
+    cursor: pointer;
+    text-align: center;
+    transition: background .1s;
+    letter-spacing: .02em;
+    color: var(--text-muted);
+  }
+  .prio-quick-btn:hover { background: rgba(255,255,255,.09); }
+  .prio-quick-btn--red    { color: #f87171; border-color: rgba(239,68,68,.25); }
+  .prio-quick-btn--red.pq-active    { background: rgba(239,68,68,.18); }
+  .prio-quick-btn--orange { color: #fb923c; border-color: rgba(249,115,22,.25); }
+  .prio-quick-btn--orange.pq-active { background: rgba(249,115,22,.18); }
+  .prio-quick-btn--yellow { color: #facc15; border-color: rgba(234,179,8,.25); }
+  .prio-quick-btn--yellow.pq-active { background: rgba(234,179,8,.18); }
+  .prio-quick-btn--muted.pq-active  { background: rgba(107,114,128,.18); }
+
+  /* ── Übungs-Banner ───────────────────────────────────────────────────────── */
+  .exercise-topbar {
+    background:#92400e; color:#fde68a; text-align:center;
+    font-weight:700; font-size:.82rem; padding:4px;
+    letter-spacing:.05em;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if lage.is_exercise %}
+<div class="exercise-topbar">⚠ ÜBUNG / SIMULATION ⚠</div>
+{% endif %}
+
+<div class="lage-wrap">
+
+  <!-- ── Lage-Header ──────────────────────────────────────────────────────── -->
+  <div class="lage-topbar">
+    <a href="/lage" class="btn btn--ghost btn--sm" title="Alle Lagen">←</a>
+    <div class="lage-topbar__title" title="{{ lage.name }}">{{ lage.name }}</div>
+    <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+    <div style="display:flex;gap:3px;flex-wrap:wrap;">
+      <a href="/lage/{{ lage.id }}/dashboard" class="btn btn--ghost btn--sm" title="Dashboard">📊</a>
+      <a href="/lage/{{ lage.id }}/stab" class="btn btn--ghost btn--sm" title="Stab">👥 Stab</a>
+      <a href="/lage/{{ lage.id }}/funkjournal" class="btn btn--ghost btn--sm" title="Funkjournal">📻</a>
+      <a href="/lage/{{ lage.id }}/meldungen" class="btn btn--ghost btn--sm" title="Bürgermeldungen">📥</a>
+      <a href="/lage/{{ lage.id }}/zeitreise" class="btn btn--ghost btn--sm" title="Zeitreise">🕐</a>
+      <a href="/lage/{{ lage.id }}/sektoren" class="btn btn--ghost btn--sm" title="Abschnitte">🗂</a>
+      <a href="/lage/{{ lage.id }}/karte" class="btn btn--ghost btn--sm" title="Lagekarte">🗺</a>
+      <a href="/lage/{{ lage.id }}/ressourcen" class="btn btn--ghost btn--sm" title="Ressourcen">🚒</a>
+      <a href="/lage/{{ lage.id }}/druck" target="_blank" class="btn btn--ghost btn--sm" title="Drucken / PDF">🖨</a>
+    </div>
+    <input type="search" id="board-search" placeholder="Suchen…"
+           oninput="filterBoard(this.value)"
+           autocomplete="off"
+           style="padding:3px 9px;font-size:.8rem;border-radius:4px;border:1px solid var(--border);
+                  background:var(--surface-elevated,#1e2130);color:var(--text);width:160px;">
+    <span class="lage-topbar__counts" id="board-counts">{{ open_count }} offen · {{ done_count }} erledigt</span>
+
+    {# ── Abgebrochen ein-/ausblenden ─────────────────────────────────────── #}
+    {% if abgebrochen_sites %}
+    <a href="/lage/{{ lage.id }}?show_abgebrochen={{ 'false' if show_abgebrochen else 'true' }}"
+       class="btn btn--ghost btn--sm">
+      {% if show_abgebrochen %}Abgebrochen ausblenden{% else %}Abgebrochen ({{ abgebrochen_sites|length }}){% endif %}
+    </a>
+    {% endif %}
+
+    {# ── Aktions-Buttons ─────────────────────────────────────────────────── #}
+    {% if can_manage %}
+    <a href="/lage/{{ lage.id }}/bearbeiten" class="btn btn--ghost btn--sm" title="Lage bearbeiten">✏️</a>
+    {% endif %}
+
+    {% if can_edit and lage.status.value == 'active' %}
+    <button onclick="document.getElementById('neuStelleDialog').showModal()"
+            class="btn btn--primary btn--sm">+ Einsatzstelle</button>
+    {% endif %}
+
+    {% if can_manage and lage.status.value == 'active' %}
+    <form method="post" action="/lage/{{ lage.id }}/beenden" style="margin:0;"
+          onsubmit="return confirm('Lage „{{ lage.name }}" wirklich beenden?')">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--danger btn--sm">Lage beenden</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- ── Phasen-Board ─────────────────────────────────────────────────────── -->
+  <div class="phase-board" id="lage-board" data-lage-id="{{ lage.id }}">
+
+    {% for phase in phase_order %}
+    {% set phase_sites = sites_by_phase[phase] %}
+    <div class="phase-col">
+      <div class="phase-col__header">
+        <span>{{ phase_labels[phase] }}</span>
+        <span class="phase-col__count">{{ phase_sites|length }}</span>
+      </div>
+      <div class="phase-col__body" data-phase="{{ phase.value }}">
+        {% for site in phase_sites %}
+        {% include "incident_major/_site_card.html" %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+
+    {# ── Abgebrochen-Spalte (optional) ─────────────────────────────────── #}
+    {% if show_abgebrochen and abgebrochen_sites %}
+    <div class="phase-col phase-col--abgebrochen">
+      <div class="phase-col__header">
+        <span>Abgebrochen</span>
+        <span class="phase-col__count">{{ abgebrochen_sites|length }}</span>
+      </div>
+      <div class="phase-col__body" data-phase="abgebrochen">
+        {% for site in abgebrochen_sites %}
+        {% include "incident_major/_site_card.html" %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- ── Neue Einsatzstelle Dialog ──────────────────────────────────────────── -->
+{% if can_edit %}
+<dialog class="modal" id="neuStelleDialog">
+  <div class="modal__content" style="min-width:min(480px,95vw);">
+    <div class="modal__header">
+      <h3 class="modal__title">Einsatzstelle anlegen</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form method="post" action="/lage/{{ lage.id }}/stellen/neu">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Bezeichnung <span style="color:#ef4444">*</span></label>
+          <input type="text" name="bezeichnung" class="form-input" required maxlength="160"
+                 placeholder="z. B. Überschwemmung Hauptstraße"
+                 autocomplete="off" autofocus>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Einsatzgrund (optional)</label>
+          <input type="text" name="einsatzgrund" class="form-input" maxlength="160"
+                 placeholder="z. B. Keller unter Wasser" autocomplete="off">
+        </div>
+        <div class="form-row" style="display:flex;gap:8px;">
+          <div class="form-group" style="flex:3;">
+            <label class="form-label">Straße</label>
+            <input type="text" name="strasse" class="form-input" maxlength="120" autocomplete="off">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Nr.</label>
+            <input type="text" name="hausnr" class="form-input" maxlength="20" autocomplete="off">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ort</label>
+          <input type="text" name="ort" class="form-input" maxlength="120" autocomplete="off">
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+
+<!-- ── Site-Detail Dialog ─────────────────────────────────────────────────── -->
+<dialog class="modal" id="siteDetailModal">
+  <div class="modal__content" id="siteDetailContent"
+       style="min-width:min(540px,95vw);max-height:90vh;overflow-y:auto;">
+    <!-- Wird per HTMX befüllt -->
+  </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/sortable.min.js"></script>
+<script src="/static/js/lage_board.js"></script>
+<script>
+function filterBoard(q) {
+  q = (q || '').trim().toLowerCase();
+  document.querySelectorAll('.phase-col').forEach(function(col) {
+    var cards = col.querySelectorAll('.site-card');
+    var visible = 0;
+    cards.forEach(function(card) {
+      var match = !q || (card.dataset.search || '').includes(q);
+      card.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    var badge = col.querySelector('.phase-col__count');
+    if (badge) badge.textContent = (q && visible !== cards.length) ? (visible + '/' + cards.length) : cards.length;
+  });
+}
+</script>
+{% endblock %}

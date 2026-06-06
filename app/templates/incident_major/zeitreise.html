@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}{{ lage.name }} – Zeitreise{% endblock %}
+
+{% block head_extra %}
+<style>
+.lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+.lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
+.lage-status--closed  { background:rgba(107,114,128,.2); color:#9ca3af; }
+.lage-status--standby { background:rgba(245,158,11,.15); color:#fbbf24; }
+
+.zt-topbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface); margin-bottom: 14px;
+}
+.zt-topbar__title { font-weight: 700; font-size: 1.05rem; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lage-subnav { display: flex; gap: 4px; }
+.lage-subnav a { font-size: .78rem; padding: 3px 9px; border-radius: 4px;
+  color: var(--text-muted); text-decoration: none; }
+.lage-subnav a:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.lage-subnav a.active { background: rgba(255,255,255,.1); color: var(--text); font-weight: 600; }
+
+.zt-wrap { padding: 14px 16px; max-width: 860px; margin: 0 auto; }
+.zt-count { font-size: .78rem; color: var(--text-muted); margin-bottom: 12px; }
+
+/* Timeline */
+.tl { position: relative; padding-left: 28px; }
+.tl::before {
+  content: ''; position: absolute; left: 9px; top: 0; bottom: 0;
+  width: 2px; background: rgba(255,255,255,.08);
+}
+.tl-entry {
+  position: relative; padding: 6px 0 10px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.tl-dot {
+  position: absolute; left: -23px; top: 10px;
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--surface-elevated, #1e2130);
+  background: #4b5563;
+}
+.tl-dot--status   { background: #93c5fd; }
+.tl-dot--prio     { background: #fbbf24; }
+.tl-dot--resource { background: #86efac; }
+.tl-dot--media    { background: #a78bfa; }
+.tl-dot--note     { background: #6b7280; }
+.tl-dot--comm-in  { background: #60a5fa; }
+.tl-dot--comm-out { background: #34d399; }
+.tl-dot--comm-int { background: #9ca3af; }
+
+.tl-time  { font-size: .72rem; color: var(--text-muted); margin-bottom: 2px; }
+.tl-site  { font-size: .7rem; color: #93c5fd; margin-bottom: 2px; }
+.tl-text  { font-size: .84rem; line-height: 1.45; }
+.tl-badge {
+  display: inline-block; font-size: .6rem; font-weight: 700;
+  padding: 1px 5px; border-radius: 3px; margin-right: 4px;
+  vertical-align: middle;
+}
+.tl-badge--comm-in  { background: rgba(59,130,246,.2);  color: #93c5fd; }
+.tl-badge--comm-out { background: rgba(52,211,153,.2);  color: #34d399; }
+.tl-badge--comm-int { background: rgba(107,114,128,.2); color: #9ca3af; }
+.tl-author { font-size: .7rem; color: var(--text-muted); margin-top: 2px; }
+
+.zt-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.zt-filter label { display: flex; align-items: center; gap: 5px;
+  font-size: .78rem; cursor: pointer; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if lage.is_exercise %}
+<div style="background:#92400e;color:#fde68a;text-align:center;font-weight:700;font-size:.82rem;padding:4px;letter-spacing:.05em;">⚠ ÜBUNG / SIMULATION ⚠</div>
+{% endif %}
+
+<div class="zt-topbar">
+  <a href="/lage" class="btn btn--ghost btn--sm">←</a>
+  <div class="zt-topbar__title">{{ lage.name }}</div>
+  <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+  <nav class="lage-subnav">
+    <a href="/lage/{{ lage.id }}">📋 Board</a>
+    <a href="/lage/{{ lage.id }}/dashboard">📊 Dashboard</a>
+    <a href="/lage/{{ lage.id }}/stab">👥 Stab</a>
+    <a href="/lage/{{ lage.id }}/funkjournal">📻 Funkjournal</a>
+    <a href="/lage/{{ lage.id }}/meldungen">📥 Meldungen</a>
+    <a href="/lage/{{ lage.id }}/zeitreise" class="active">🕐 Zeitreise</a>
+    <a href="/lage/{{ lage.id }}/sektoren">🗂 Abschnitte</a>
+    <a href="/lage/{{ lage.id }}/karte">🗺 Karte</a>
+    <a href="/lage/{{ lage.id }}/ressourcen">🚒 Ressourcen</a>
+  </nav>
+</div>
+
+<div class="zt-wrap">
+
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+    <div class="zt-filter" id="zt-filter" style="margin-bottom:0;">
+      <label><input type="checkbox" checked value="site_log" onchange="applyFilter()"> Stellenlog</label>
+      <label><input type="checkbox" checked value="comm" onchange="applyFilter()"> Funkjournal</label>
+    </div>
+    <a href="/lage/{{ lage.id }}/protokoll.txt"
+       class="btn btn--ghost btn--sm" style="margin-left:auto;" download>
+      ⬇ Protokoll exportieren
+    </a>
+  </div>
+
+  <div class="zt-count">{{ timeline|length }} Einträge</div>
+
+  {% if timeline %}
+  <div class="tl" id="zt-timeline">
+    {% for e in timeline %}
+    {% if e.kind == 'site_log' %}
+    <div class="tl-entry" data-kind="site_log">
+      <div class="tl-dot tl-dot--{{ e.log_kind }}"></div>
+      <div class="tl-time">{{ e.ts|local_time }}</div>
+      <div class="tl-site">{{ e.site_bezeichnung }}</div>
+      <div class="tl-text">{{ e.text }}</div>
+      {% if e.author %}<div class="tl-author">{{ e.author }}</div>{% endif %}
+    </div>
+    {% else %}
+    <div class="tl-entry" data-kind="comm">
+      <div class="tl-dot tl-dot--comm-{{ e.direction }}"></div>
+      <div class="tl-time">{{ e.ts|local_time }}</div>
+      <div class="tl-text">
+        <span class="tl-badge tl-badge--comm-{{ e.direction }}">{{ e.label }}</span>
+        {% if e.channel %}<span style="font-size:.72rem;color:var(--text-muted);">{{ e.channel }} · </span>{% endif %}
+        {% if e.partner %}<span style="font-size:.78rem;font-weight:500;">{{ e.partner }}: </span>{% endif %}
+        {{ e.text }}
+      </div>
+      {% if e.author %}<div class="tl-author">{{ e.author }}</div>{% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:40px;color:var(--text-muted);">Noch keine Ereignisse.</div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilter() {
+  var checks = document.querySelectorAll('#zt-filter input[type=checkbox]');
+  var active = Array.from(checks).filter(c => c.checked).map(c => c.value);
+  document.querySelectorAll('#zt-timeline .tl-entry').forEach(function(el) {
+    el.style.display = active.includes(el.dataset.kind) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

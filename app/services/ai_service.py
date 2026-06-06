@@ -339,3 +339,72 @@ async def generate_situation_brief(context: dict) -> str:
         f"{_json.dumps(safe_context, ensure_ascii=False, indent=2)}"
     )
     return await complete(system, user_msg, fast=True, max_tokens=600)
+
+
+_ERKUNDUNG_SYSTEM = """Du bist ein Einsatzassistent für die österreichische Feuerwehr.
+Analysiere den folgenden Erkundungsbericht einer Einsatzstelle und antworte AUSSCHLIESSLICH
+mit einem JSON-Objekt (kein Markdown, kein Text davor oder danach) mit diesen Feldern:
+{
+  "einsatzgrund": "<Kurzbezeichnung, max. 60 Zeichen>",
+  "gefahr": "<Kurzeinschätzung der Gefahr, max. 100 Zeichen>",
+  "benoetigte_mittel": "<empfohlene Einsatzmittel, max. 120 Zeichen>",
+  "danger_score": <1–4, 1=gering, 4=extrem>,
+  "urgency_score": <1–4, 1=aufschiebbar, 4=sofort>,
+  "prio_vorschlag": <1–4, 1=sofort/Leben, 2=dringend, 3=normal, 4=aufschiebbar>,
+  "zusammenfassung": "<2–3 Sätze Lageeinschätzung>"
+}
+Keine Personendaten. Datensparsamkeit beachten."""
+
+
+async def analyze_site_reconnaissance(erkundungstext: str, site_info: dict) -> dict:
+    """Analyze a site reconnaissance report; returns structured assessment dict.
+
+    Returns an empty dict on failure (never raises).
+    """
+    user_msg = (
+        f"Einsatzstelle: {site_info.get('bezeichnung', '')} | "
+        f"Ort: {site_info.get('ort', '')} | "
+        f"Straße: {site_info.get('strasse', '')}\n\n"
+        f"Erkundungsbericht:\n{erkundungstext}"
+    )
+    try:
+        raw = await complete(_ERKUNDUNG_SYSTEM, user_msg, fast=True, max_tokens=500)
+    except AIServiceError:
+        return {}
+
+    match = _re.search(r"\{.*\}", raw, _re.DOTALL)
+    if not match:
+        return {}
+    try:
+        result = _json.loads(match.group())
+    except (ValueError, TypeError):
+        return {}
+    if not isinstance(result, dict):
+        return {}
+    result["danger_score"] = max(1, min(4, int(result.get("danger_score") or 2)))
+    result["urgency_score"] = max(1, min(4, int(result.get("urgency_score") or 2)))
+    result["prio_vorschlag"] = max(1, min(4, int(result.get("prio_vorschlag") or 3)))
+    return result
+
+
+_PRESSE_SYSTEM = """Du bist Pressesprecher der Freiwilligen Feuerwehr.
+Erstelle aus den folgenden Einsatzdaten einer Großschadenslage einen sachlichen,
+informativen Pressetext für die Öffentlichkeit (3–5 Absätze, max. 350 Wörter).
+Keine Personendaten, keine Spekulationen. Verfasse den Text auf Deutsch.
+Beginne direkt mit dem Text ohne Überschrift oder Anrede."""
+
+
+async def generate_pressemeldung(context: dict) -> str:
+    """Generate a press release text from major incident context.
+
+    Returns an empty string on failure (never raises).
+    """
+    safe_context = _strip_persons(context)
+    user_msg = (
+        f"Lage-Daten (JSON):\n"
+        f"{_json.dumps(safe_context, ensure_ascii=False, indent=2)}"
+    )
+    try:
+        return await complete(_PRESSE_SYSTEM, user_msg, fast=False, max_tokens=800)
+    except AIServiceError:
+        return ""

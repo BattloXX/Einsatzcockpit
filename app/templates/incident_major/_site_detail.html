@@ -1,0 +1,349 @@
+<style>
+.site-detail { font-size: .9rem; }
+.site-detail__row { display: flex; gap: 6px; align-items: baseline; margin-bottom: 5px; }
+.site-detail__label { font-size: .75rem; color: var(--text-muted); min-width: 90px; flex-shrink: 0; }
+.site-detail__value { flex: 1; }
+.site-log { margin-top: 14px; }
+.site-log__entry { display: flex; gap: 10px; padding: 5px 0; border-top: 1px solid rgba(255,255,255,.06); font-size: .8rem; }
+.site-log__time { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+.site-log__text { flex: 1; }
+.site-log__kind--status   { color: #93c5fd; }
+.site-log__kind--prio     { color: #fbbf24; }
+.site-log__kind--resource { color: #86efac; }
+.res-section { margin-top: 16px; }
+.res-section__title { font-size: .78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
+.res-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 5px 0; border-top: 1px solid rgba(255,255,255,.06);
+  font-size: .82rem;
+}
+.res-badge {
+  font-size: .65rem; font-weight: 700; padding: 1px 6px;
+  border-radius: 3px; white-space: nowrap;
+}
+.res-badge--alarmed  { background: rgba(245,158,11,.2); color: #fbbf24; }
+.res-badge--onsite   { background: rgba(34,197,94,.2);  color: #4ade80; }
+.res-label { flex: 1; font-weight: 500; }
+.res-time  { font-size: .72rem; color: var(--text-muted); white-space: nowrap; }
+.site-log__kind--media { color: #a78bfa; }
+.media-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.media-thumb {
+  width: 72px; height: 72px; object-fit: cover;
+  border-radius: 4px; border: 1px solid var(--border);
+  cursor: pointer; transition: opacity .12s;
+}
+.media-thumb:hover { opacity: .8; }
+</style>
+
+<div class="modal__header" x-data="{editing:false}">
+  <div style="flex:1;min-width:0;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <h3 class="modal__title" x-show="!editing">{{ site.bezeichnung }}</h3>
+      {% if can_edit %}
+      <button class="btn btn--xs btn--ghost" x-show="!editing" @click.stop="editing=true" title="Bezeichnung/Adresse bearbeiten">✏️</button>
+      {% endif %}
+    </div>
+    {% if site.einsatzgrund %}
+    <p class="modal__subtitle" x-show="!editing">{{ site.einsatzgrund }}</p>
+    {% endif %}
+
+    {# ── Inline-Editform ─────────────────────────────────────────── #}
+    {% if can_edit %}
+    <form x-show="editing" x-cloak style="margin-top:6px;"
+          hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/bearbeiten"
+          hx-swap="none"
+          hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+          @htmx:after-request="if(event.detail.successful){editing=false;}">
+      <div class="form-group">
+        <input type="text" name="bezeichnung" class="form-input" required maxlength="160"
+               value="{{ site.bezeichnung }}" placeholder="Bezeichnung" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <input type="text" name="einsatzgrund" class="form-input" maxlength="160"
+               value="{{ site.einsatzgrund or '' }}" placeholder="Einsatzgrund" autocomplete="off">
+      </div>
+      <div style="display:flex;gap:6px;">
+        <input type="text" name="strasse" class="form-input" style="flex:3;"
+               value="{{ site.strasse or '' }}" placeholder="Straße" autocomplete="off" maxlength="120">
+        <input type="text" name="hausnr" class="form-input" style="flex:1;"
+               value="{{ site.hausnr or '' }}" placeholder="Nr." autocomplete="off" maxlength="20">
+      </div>
+      <div class="form-group" style="margin-top:6px;">
+        <input type="text" name="ort" class="form-input"
+               value="{{ site.ort or '' }}" placeholder="Ort" autocomplete="off" maxlength="120">
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button type="button" class="btn btn--ghost btn--sm" @click="editing=false">Abbrechen</button>
+        <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+  <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+</div>
+
+<div class="modal__body site-detail">
+
+  {# ── Adresse ──────────────────────────────────────────────────────── #}
+  {% if site.strasse or site.ort %}
+  <div class="site-detail__row">
+    <span class="site-detail__label">Adresse</span>
+    <span class="site-detail__value">
+      {% if site.strasse %}{{ site.strasse }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% if site.ort %}, {% endif %}{% endif %}
+      {% if site.ort %}{{ site.ort }}{% endif %}
+    </span>
+  </div>
+  {% endif %}
+
+  {# ── Abschnitt ────────────────────────────────────────────────────── #}
+  {% if sectors %}
+  <div class="site-detail__row">
+    <span class="site-detail__label">Abschnitt</span>
+    <span class="site-detail__value">
+      {% if can_edit %}
+      <select class="form-select form-select--xs"
+              hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/sektor"
+              hx-vals='{"_csrf": "{{ request.state.csrf_token }}"}'
+              name="sector_id" hx-trigger="change" hx-swap="none">
+        <option value="">— keiner —</option>
+        {% for s in sectors %}
+        <option value="{{ s.id }}" {% if site.sector_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      {% set matched = sectors|selectattr('id', 'equalto', site.sector_id)|list %}
+      {{ matched[0].name if matched else '–' }}
+      {% endif %}
+    </span>
+  </div>
+  {% endif %}
+
+  {# ── Phase ────────────────────────────────────────────────────────── #}
+  <div class="site-detail__row">
+    <span class="site-detail__label">Phase</span>
+    <span class="site-detail__value">
+      {% if can_edit %}
+      <select class="form-select form-select--xs"
+              hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/phase"
+              hx-vals='{"_csrf": "{{ request.state.csrf_token }}", "sort_index": "0"}'
+              name="phase" hx-trigger="change" hx-swap="none">
+        {% for phase_key, phase_text in phase_labels.items() %}
+        <option value="{{ phase_key.value }}" {% if site.phase == phase_key %}selected{% endif %}>{{ phase_text }}</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      {{ phase_labels[site.phase] }}
+      {% endif %}
+    </span>
+  </div>
+
+  {# ── Priorität ────────────────────────────────────────────────────── #}
+  <div class="site-detail__row">
+    <span class="site-detail__label">Priorität</span>
+    <span class="site-detail__value">
+      {% if can_edit %}
+      <select class="form-select form-select--xs"
+              hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/prio"
+              hx-vals='{"_csrf": "{{ request.state.csrf_token }}"}'
+              name="priority" hx-trigger="change" hx-swap="none">
+        <option value="" {% if not site.priority %}selected{% endif %}>— keine —</option>
+        {% for prio_key, prio_text in prio_label.items() %}
+        <option value="{{ prio_key.value }}" {% if site.priority == prio_key %}selected{% endif %}
+                style="{% if prio_color[prio_key] == 'red' %}color:#f87171;{% elif prio_color[prio_key] == 'orange' %}color:#fb923c;{% elif prio_color[prio_key] == 'yellow' %}color:#facc15;{% endif %}">
+          {{ prio_text }}
+        </option>
+        {% endfor %}
+      </select>
+      {% else %}
+      {{ prio_label[site.priority] if site.priority else '—' }}
+      {% endif %}
+    </span>
+  </div>
+
+  {# ── Quelle / Alarmierung ─────────────────────────────────────────── #}
+  <div class="site-detail__row">
+    <span class="site-detail__label">Quelle</span>
+    <span class="site-detail__value">
+      {% if site.source == 'api' %}API / Alarmierung{% elif site.source == 'buerger' %}Bürger-Meldung{% else %}Manuell{% endif %}
+      {% if site.alarm_stufe %} · {{ site.alarm_stufe }}{% endif %}
+    </span>
+  </div>
+
+  {# ── Erfasst ──────────────────────────────────────────────────────── #}
+  <div class="site-detail__row">
+    <span class="site-detail__label">Erfasst</span>
+    <span class="site-detail__value">{{ site.created_at|local_datetime }}</span>
+  </div>
+
+  {# ── Ressourcen (PR 12) ───────────────────────────────────────────── #}
+  <div class="res-section">
+    <div class="res-section__title">RESSOURCEN</div>
+    {% set active_res = site.resources|selectattr('released_at', 'none')|list %}
+    {% if active_res %}
+    {% for res in active_res %}
+    <div class="res-row">
+      <span class="res-badge {% if res.committed_at %}res-badge--onsite{% else %}res-badge--alarmed{% endif %}">
+        {% if res.committed_at %}VOR ORT{% else %}ALARMIERT{% endif %}
+      </span>
+      <span class="res-label">{{ res.label or res.resource_type }}</span>
+      <span class="res-time">{{ res.assigned_at|local_time }}</span>
+      {% if can_edit %}
+      <div style="display:flex;gap:4px;" onclick="event.stopPropagation()">
+        {% if not res.committed_at %}
+        <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/ressourcen/{{ res.id }}/commit"
+              hx-swap="none"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+          <button type="submit" class="btn btn--xs btn--secondary">✓ VorOrt</button>
+        </form>
+        {% endif %}
+        <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/ressourcen/{{ res.id }}/freigeben"
+              hx-swap="none"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+              onsubmit="return confirm('Ressource freigeben?')">
+          <button type="submit" class="btn btn--xs btn--ghost">Freigeben</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Keine aktiven Ressourcen.</div>
+    {% endif %}
+
+    {% if can_edit %}
+    <form style="margin-top:8px;"
+          hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/ressourcen"
+          hx-swap="none"
+          hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+          @htmx:after-request="if(event.detail.successful){this.reset();}">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <select name="vehicle_id" class="form-select form-select--sm" style="flex:2;min-width:110px;">
+          <option value="">— Freitext —</option>
+          {% for v in vehicles %}
+          <option value="{{ v.id }}">{{ v.display_label }}</option>
+          {% endfor %}
+        </select>
+        <input type="text" name="label" class="form-input" placeholder="Bezeichnung…"
+               style="flex:2;min-width:90px;" autocomplete="off" maxlength="120">
+        <button type="submit" class="btn btn--secondary btn--sm">+ Zuweisen</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+
+  {# ── Verlaufslog ──────────────────────────────────────────────────── #}
+  <div class="site-log">
+    <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">VERLAUF</div>
+    {% for entry in site.log_entries|reverse %}
+    <div class="site-log__entry">
+      <span class="site-log__time">{{ entry.ts|local_time }}</span>
+      <span class="site-log__text site-log__kind--{{ entry.kind }}">{{ entry.text }}</span>
+    </div>
+    {% else %}
+    <div style="font-size:.8rem;color:var(--text-muted);">Noch keine Einträge.</div>
+    {% endfor %}
+  </div>
+
+  {# ── Notiz hinzufügen ─────────────────────────────────────────────── #}
+  {% if can_edit %}
+  <form style="margin-top:14px;"
+        hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/log"
+        hx-swap="none"
+        hx-vals='{"_csrf": "{{ request.state.csrf_token }}"}'
+        @htmx:after-request="if(event.detail.successful){this.reset();}">
+    <div class="input-row">
+      <input type="text" name="text" class="form-input" placeholder="Notiz eintragen…"
+             required autocomplete="off" maxlength="500">
+      <button type="submit" class="btn btn--ghost btn--sm">+</button>
+    </div>
+  </form>
+  {% endif %}
+
+  {# ── KI-Erkundungsassistent ───────────────────────────────────────── #}
+  {% if can_edit and site.phase.value == 'erkundung' %}
+  <div style="margin-top:14px;" x-data="{ki_open:false}">
+    <button type="button" class="btn btn--ghost btn--sm"
+            @click="ki_open=!ki_open"
+            style="color:#a78bfa;border-color:rgba(139,92,246,.3);">
+      ✨ KI-Erkundung
+    </button>
+    <div x-show="ki_open" x-cloak style="margin-top:8px;">
+      <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/ki-erkundung"
+            hx-target="#ki-result-{{ site.id }}"
+            hx-swap="innerHTML"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+            hx-indicator="#ki-spin-{{ site.id }}">
+        <textarea name="erkundungstext" class="form-input" rows="3" required maxlength="1000"
+                  placeholder="Erkundungsbericht eingeben… (z. B. Keller unter Wasser, 2 Personen eingeschlossen, steigender Pegel)"
+                  style="resize:vertical;"></textarea>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+          <button type="submit" class="btn btn--secondary btn--sm">Analysieren</button>
+          <span id="ki-spin-{{ site.id }}" class="htmx-indicator"
+                style="font-size:.75rem;color:var(--text-muted);"> …</span>
+        </div>
+      </form>
+      <div id="ki-result-{{ site.id }}"></div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Fotos ────────────────────────────────────────────────────────── #}
+  {% if site.media %}
+  <div style="margin-top:16px;">
+    <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">FOTOS</div>
+    <div class="media-grid">
+      {% for m in site.media %}
+      <a href="/lage-medien/{{ m.id }}" target="_blank" rel="noopener">
+        <img src="/lage-medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}"
+             class="media-thumb" loading="lazy">
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Foto hochladen ───────────────────────────────────────────────── #}
+  {% if can_edit %}
+  <script>
+  function _lmOnPhoto(input) {
+    var sid = '{{ site.id }}';
+    var btn  = document.getElementById('lmUploadBtn-'  + sid);
+    var prev = document.getElementById('lmPhotoPreview-' + sid);
+    if (btn)  btn.style.display  = input.files.length ? '' : 'none';
+    if (prev) prev.innerHTML = '';
+    if (input.files[0] && prev) {
+      var r = new FileReader();
+      r.onload = function(e) {
+        prev.innerHTML = '<img src="' + e.target.result
+          + '" style="max-height:60px;border-radius:4px;margin-top:4px;">';
+      };
+      r.readAsDataURL(input.files[0]);
+    }
+  }
+  </script>
+  <form style="margin-top:12px;"
+        hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/medien"
+        hx-encoding="multipart/form-data"
+        hx-swap="none"
+        hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+        @htmx:after-request="if(event.detail.successful){this.reset();var p=document.getElementById('lmPhotoPreview-{{ site.id }}');if(p)p.innerHTML='';var b=document.getElementById('lmUploadBtn-{{ site.id }}');if(b)b.style.display='none';}">
+    <input type="file" name="file" id="lmPhotoFile-{{ site.id }}" accept="image/*"
+           style="display:none;" onchange="_lmOnPhoto(this)">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button type="button" class="btn btn--secondary btn--sm"
+              onclick="openCamera('lmPhotoFile-{{ site.id }}')">📷 Kamera</button>
+      <button type="button" class="btn btn--ghost btn--sm"
+              onclick="openGallery('lmPhotoFile-{{ site.id }}')">🖼️ Galerie</button>
+      <button type="submit" class="btn btn--primary btn--sm"
+              id="lmUploadBtn-{{ site.id }}" style="display:none;">Hochladen</button>
+    </div>
+    <div id="lmPhotoPreview-{{ site.id }}"></div>
+    <p class="form-hint">Nur Bilder · max. 10 MB · wird automatisch verkleinert</p>
+  </form>
+  {% endif %}
+
+</div>
+
+<div class="modal__footer">
+  <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Schließen</button>
+</div>

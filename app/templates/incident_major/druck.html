@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ lage.name }} – Lagebericht</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Arial", sans-serif; font-size: 11pt; color: #111;
+    background: #fff; padding: 16px;
+  }
+  h1 { font-size: 16pt; margin-bottom: 2px; }
+  h2 { font-size: 11pt; font-weight: 700; text-transform: uppercase;
+       letter-spacing: .04em; border-bottom: 1.5px solid #111;
+       margin: 14px 0 6px; padding-bottom: 3px; }
+  h3 { font-size: 10pt; font-weight: 700; margin-bottom: 3px; }
+
+  .header { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 12px; }
+  .header__meta { font-size: 9pt; color: #555; margin-top: 4px; }
+  .exercise-banner {
+    background: #fef9c3; border: 1px solid #fde68a; color: #92400e;
+    font-weight: 700; text-align: center; padding: 5px; font-size: 10pt;
+    margin-bottom: 8px;
+  }
+
+  /* Stats row */
+  .stats { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 80px; border: 1px solid #ccc; border-radius: 4px;
+          padding: 5px 8px; text-align: center; }
+  .stat__val { font-size: 18pt; font-weight: 700; }
+  .stat__lbl { font-size: 8pt; color: #555; }
+
+  /* Stab */
+  .stab-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stab-fn { flex: 1; min-width: 160px; border: 1px solid #ddd;
+              border-radius: 4px; padding: 5px 8px; }
+  .stab-fn__title { font-size: 8pt; font-weight: 700; color: #555;
+                    text-transform: uppercase; margin-bottom: 3px; }
+  .stab-fn__names { font-size: 10pt; }
+
+  /* Sites */
+  .site-row { border: 1px solid #ddd; border-radius: 4px; padding: 7px 10px;
+               margin-bottom: 5px; page-break-inside: avoid; }
+  .site-row--sofort   { border-left: 4px solid #ef4444; }
+  .site-row--dringend { border-left: 4px solid #f97316; }
+  .site-row--normal   { border-left: 4px solid #eab308; }
+  .site-row--done     { opacity: .6; }
+  .site-row__header { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .site-row__title  { font-weight: 700; font-size: 10.5pt; flex: 1; }
+  .site-row__badge  { font-size: 7.5pt; font-weight: 700; border: 1px solid #ccc;
+                      padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+  .site-row__badge--red    { border-color: #ef4444; color: #b91c1c; }
+  .site-row__badge--orange { border-color: #f97316; color: #c2410c; }
+  .site-row__badge--yellow { border-color: #eab308; color: #854d0e; }
+  .site-row__sub  { font-size: 9pt; color: #444; margin-top: 2px; }
+  .site-row__addr { font-size: 8.5pt; color: #555; margin-top: 1px; }
+  .site-row__res  { font-size: 8pt; color: #555; margin-top: 3px; }
+
+  /* Comm table */
+  .comm-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+  .comm-table th { text-align: left; padding: 3px 6px;
+                   border-bottom: 1px solid #111; font-size: 8pt; }
+  .comm-table td { padding: 3px 6px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+
+  /* Print controls */
+  .no-print { margin-bottom: 14px; }
+  .btn-print { padding: 7px 18px; background: #111; color: #fff; border: none;
+                border-radius: 5px; cursor: pointer; font-size: 10pt; margin-right: 8px; }
+  .print-footer { margin-top: 18px; font-size: 8pt; color: #999; text-align: center; }
+
+  @media print {
+    .no-print { display: none !important; }
+    body { padding: 0; }
+    .page-break { page-break-before: always; }
+  }
+</style>
+</head>
+<body>
+
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨 Drucken / PDF</button>
+  <a href="/lage/{{ lage.id }}" style="font-size:10pt;color:#3b82f6;">← zurück zum Board</a>
+</div>
+
+{% if lage.is_exercise %}
+<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – kein echter Einsatz ⚠</div>
+{% endif %}
+
+<div class="header">
+  <h1>{{ lage.name }}</h1>
+  <div class="header__meta">
+    Beginn: {{ lage.started_at|local_datetime }}
+    {% if lage.ended_at %} · Ende: {{ lage.ended_at|local_datetime }}{% endif %}
+     · Stand: {{ now|local_datetime }}
+     · Status: {{ lage.status.value }}
+  </div>
+</div>
+
+{# ── Kennzahlen ────────────────────────────────────────────────────────────── #}
+<div class="stats">
+  <div class="stat">
+    <div class="stat__val">{{ active_sites|length }}</div>
+    <div class="stat__lbl">Offen</div>
+  </div>
+  <div class="stat">
+    <div class="stat__val">{{ done_sites|length }}</div>
+    <div class="stat__lbl">Erledigt</div>
+  </div>
+  <div class="stat">
+    <div class="stat__val">
+      {{ active_sites|sum(attribute='resources')|list|selectattr('released_at','none')|list|length }}
+    </div>
+    <div class="stat__lbl">Ressourcen</div>
+  </div>
+</div>
+
+{# ── Stabsbesetzung ────────────────────────────────────────────────────────── #}
+<h2>Stabsbesetzung</h2>
+<div class="stab-grid">
+  {% for fn in staff_functions %}
+  {% set asgns = staff_by_fn[fn] %}
+  <div class="stab-fn">
+    <div class="stab-fn__title">{{ staff_fn_label[fn] }}</div>
+    <div class="stab-fn__names">
+      {% if asgns %}
+      {{ asgns|map(attribute='label')|join(', ') }}
+      {% else %}–{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{# ── Aktive Einsatzstellen ─────────────────────────────────────────────────── #}
+<h2>Aktive Einsatzstellen ({{ active_sites|length }})</h2>
+{% for site in active_sites %}
+{% set color = prio_color[site.priority] if site.priority else '' %}
+<div class="site-row site-row--{{ color }}">
+  <div class="site-row__header">
+    <div class="site-row__title">{{ site.bezeichnung }}</div>
+    {% if site.priority %}
+    <span class="site-row__badge site-row__badge--{{ color }}">{{ prio_label[site.priority] }}</span>
+    {% endif %}
+    <span class="site-row__badge">{{ phase_labels[site.phase] }}</span>
+    {% if site.alarm_stufe %}<span class="site-row__badge">{{ site.alarm_stufe }}</span>{% endif %}
+  </div>
+  {% if site.einsatzgrund %}
+  <div class="site-row__sub">{{ site.einsatzgrund }}</div>
+  {% endif %}
+  {% if site.strasse or site.ort %}
+  <div class="site-row__addr">
+    {% if site.strasse %}{{ site.strasse }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% if site.ort %}, {% endif %}{% endif %}
+    {{ site.ort or '' }}
+  </div>
+  {% endif %}
+  {% set active_res = site.resources|selectattr('released_at','none')|list %}
+  {% if active_res %}
+  <div class="site-row__res">
+    Ressourcen: {{ active_res|map(attribute='label')|select|join(', ') or active_res|length ~ ' zugewiesen' }}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<p style="color:#666;font-size:9pt;">Keine aktiven Einsatzstellen.</p>
+{% endfor %}
+
+{# ── Erledigte Stellen ─────────────────────────────────────────────────────── #}
+{% if done_sites %}
+<h2>Erledigt ({{ done_sites|length }})</h2>
+{% for site in done_sites %}
+<div class="site-row site-row--done">
+  <div class="site-row__header">
+    <div class="site-row__title">{{ site.bezeichnung }}</div>
+    {% if site.einsatzgrund %}
+    <span style="font-size:9pt;color:#555;">{{ site.einsatzgrund }}</span>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{# ── Funkjournal ───────────────────────────────────────────────────────────── #}
+{% if comms %}
+<div class="page-break">
+  <h2>Funkjournal (letzte {{ comms|length }} Einträge)</h2>
+  <table class="comm-table">
+    <thead>
+      <tr>
+        <th>Zeit</th>
+        <th>Richtung</th>
+        <th>Kanal</th>
+        <th>Gegenüber</th>
+        <th>Inhalt</th>
+        <th>Bearbeiter</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in comms|reverse %}
+      <tr>
+        <td style="white-space:nowrap;">{{ c.ts|local_time }}</td>
+        <td>{% if c.direction == 'in' %}↓ Ein{% elif c.direction == 'out' %}↑ Aus{% else %}↔ Int{% endif %}</td>
+        <td>{{ c.channel or '–' }}</td>
+        <td>{{ c.partner or '–' }}</td>
+        <td>{{ c.message }}{% if c.is_request %} [Auftrag]{% endif %}</td>
+        <td>{{ c.author_name or '–' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="print-footer">
+  {{ lage.name }} · Stand {{ now|local_datetime }} · Einsatzleiter-Hilfswerkzeug
+</div>
+</body>
+</html>

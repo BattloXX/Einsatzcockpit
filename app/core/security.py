@@ -53,11 +53,14 @@ def sign_session(
     qr: bool = False,
     device: bool = False,
     incident_id: int | None = None,
+    display_name: str | None = None,
 ) -> str:
     if qr:
         payload: dict | int = {"u": user_id, "qr": 1}
         if incident_id is not None:
             payload["i"] = incident_id  # type: ignore[index]
+        if display_name:
+            payload["n"] = display_name  # type: ignore[index]
     elif device:
         payload = {"u": user_id, "d": 1}
     else:
@@ -65,8 +68,8 @@ def sign_session(
     return _signer.dumps(payload)
 
 
-def unsign_session(token: str) -> tuple[int, bool, int | None, bool] | None:
-    """Returns (user_id, is_qr, qr_incident_id, is_device) or None."""
+def unsign_session(token: str) -> tuple[int, bool, int | None, bool, str | None] | None:
+    """Returns (user_id, is_qr, qr_incident_id, is_device, display_name) or None."""
     try:
         # Load without max_age so we can check expiry manually per session type.
         data, ts = _signer.loads(token, max_age=None, return_timestamp=True)
@@ -75,13 +78,13 @@ def unsign_session(token: str) -> tuple[int, bool, int | None, bool] | None:
 
         if isinstance(data, dict) and data.get("d"):
             # Device session: no timeout whatsoever.
-            return (data["u"], False, None, True)
+            return (data["u"], False, None, True, None)
 
         if isinstance(data, dict) and data.get("qr"):
             # QR session: enforce absolute max_age only (DB controls incident validity).
             if age_s > settings.SESSION_MAX_AGE_SECONDS:
                 return None
-            return (data["u"], True, data.get("i"), False)
+            return (data["u"], True, data.get("i"), False, data.get("n"))
 
         if isinstance(data, int):
             # Regular user session: enforce absolute max_age AND inactivity window.
@@ -91,11 +94,26 @@ def unsign_session(token: str) -> tuple[int, bool, int | None, bool] | None:
                 return None
             if age_s > settings.SESSION_INACTIVITY_SECONDS:
                 return None
-            return (data, False, None, False)
+            return (data, False, None, False, None)
 
         return None
     except (BadSignature, SignatureExpired):
         return None
+
+
+def get_author_name(request) -> str | None:
+    """Returns the name to record as author in log/journal entries.
+
+    QR sessions: the name entered on the /qr-name page (from session payload).
+    Regular and device sessions: the user's display_name.
+    """
+    name = getattr(request.state, "display_name", None)
+    if name:
+        return name
+    user = getattr(request.state, "user", None)
+    if user:
+        return getattr(user, "display_name", None)
+    return None
 
 
 def sign_qr_token(incident_id: int, user_id: int) -> str:

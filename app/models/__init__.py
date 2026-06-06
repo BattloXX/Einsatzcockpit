@@ -1,4 +1,19 @@
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
+from app.models.major_incident import (
+    CitizenReport,
+    CommLogEntry,
+    IncidentSite,
+    MajorIncident,
+    MajorIncidentStatus,
+    Sector,
+    SiteLogEntry,
+    SiteMedia,
+    SitePhase,
+    SitePriority,
+    SiteResourceAssignment,
+    StaffAssignment,
+    StaffFunction,
+)
 from app.models.incident import (
     Incident,
     IncidentChange,
@@ -42,4 +57,7 @@ __all__ = [
     "BreathingTroop", "TroopMember", "PressureLog",
     "PasswordResetToken",
     "LagekarteToken",
+    "MajorIncident", "MajorIncidentStatus", "Sector", "StaffAssignment", "StaffFunction",
+    "IncidentSite", "SitePhase", "SitePriority", "SiteResourceAssignment",
+    "SiteLogEntry", "SiteMedia", "CommLogEntry", "CitizenReport",
 ]

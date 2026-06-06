@@ -341,6 +341,7 @@ class Message(Base):
     done_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     incident: Mapped[Incident] = relationship(back_populates="messages")
@@ -385,6 +386,7 @@ class IncidentLog(Base):
     ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     level: Mapped[str] = mapped_column(String(10), default="info")
     user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     entity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

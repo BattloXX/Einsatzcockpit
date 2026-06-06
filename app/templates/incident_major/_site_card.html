@@ -1,0 +1,77 @@
+<div class="site-card" data-site-id="{{ site.id }}"
+     data-search="{{ (site.bezeichnung ~ ' ' ~ (site.einsatzgrund or '') ~ ' ' ~ (site.strasse or '') ~ ' ' ~ (site.ort or ''))|lower }}"
+     hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}"
+     hx-target="#siteDetailContent"
+     hx-swap="innerHTML"
+     hx-trigger="click[!event.target.closest('select,input,button,a')]"
+     hx-on::after-swap="document.getElementById('siteDetailModal').showModal()">
+  {# Prioritätsbalken #}
+  {% if site.priority %}
+  <div class="site-card__prio-bar prio-bar--{{ prio_color[site.priority] }}"></div>
+  {% endif %}
+
+  <div class="site-card__body">
+    <div class="site-card__title">{{ site.bezeichnung }}</div>
+
+    {% if site.einsatzgrund %}
+    <div class="site-card__sub">{{ site.einsatzgrund }}</div>
+    {% endif %}
+
+    {% if site.strasse or site.ort %}
+    <div class="site-card__addr">
+      {% if site.strasse %}{{ site.strasse }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% if site.ort %}, {% endif %}{% endif %}
+      {% if site.ort %}{{ site.ort }}{% endif %}
+    </div>
+    {% endif %}
+
+    {% if site.sector_id and sectors_by_id and site.sector_id in sectors_by_id %}
+    {% set sec = sectors_by_id[site.sector_id] %}
+    <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px;display:flex;align-items:center;gap:4px;">
+      <span style="width:8px;height:8px;border-radius:50%;background:{{ sec.color or '#6b7280' }};display:inline-block;flex-shrink:0;"></span>
+      {{ sec.name }}
+    </div>
+    {% endif %}
+
+    <div class="site-card__meta">
+      <span>{{ site.created_at|local_time }}</span>
+      {% set active_res = site.resources|selectattr('released_at', 'none')|list %}
+      {% if active_res %}
+      <span>🚒 {{ active_res|length }}</span>
+      {% endif %}
+      {% if site.alarm_stufe %}
+      <span class="badge--xs">{{ site.alarm_stufe }}</span>
+      {% endif %}
+      {% if site.source == 'api' %}
+      <span class="badge--xs badge--blue">API</span>
+      {% elif site.source == 'buerger' %}
+      <span class="badge--xs badge--purple">Bürger</span>
+      {% endif %}
+      {% if site.priority %}
+      <span style="font-size:.7rem;font-weight:600;
+        {% if prio_color[site.priority] == 'red' %}color:#f87171;
+        {% elif prio_color[site.priority] == 'orange' %}color:#fb923c;
+        {% elif prio_color[site.priority] == 'yellow' %}color:#facc15;
+        {% else %}color:var(--text-muted);{% endif %}">
+        {{ prio_label[site.priority] }}
+      </span>
+      {% endif %}
+    </div>
+  </div>
+  </div>
+
+  {# ── Quick-Prio (nur für Editoren) ────────────────────────────────────── #}
+  {% if can_edit %}
+  <div class="site-card__footer" onclick="event.stopPropagation()">
+    {% for pk, pt in prio_label.items() %}
+    <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/prio"
+          hx-swap="none"
+          hx-vals='{"_csrf":"{{ request.state.csrf_token }}","priority":"{{ pk.value }}"}'>
+      <button type="submit" title="{{ pt }}"
+              class="prio-quick-btn prio-quick-btn--{{ prio_color[pk] }}{% if site.priority == pk %} pq-active{% endif %}">
+        {{ pt[:1] }}
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>

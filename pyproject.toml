@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fwwo-einsatzleiter"
-version = "2.0.0"
+version = "2.1.0"
 description = "Einsatzleiter-Hilfswerkzeug – Multi-Organisations-Plattform für Feuerwehren"
 requires-python = ">=3.14"
 dependencies = [

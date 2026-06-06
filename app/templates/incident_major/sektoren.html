@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}{{ lage.name }} – Abschnitte{% endblock %}
+
+{% block head_extra %}
+<style>
+.lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+.lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
+.lage-status--closed  { background:rgba(107,114,128,.2); color:#9ca3af; }
+.lage-status--standby { background:rgba(245,158,11,.15); color:#fbbf24; }
+
+.sk-topbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface); margin-bottom: 14px;
+}
+.sk-topbar__title { font-weight: 700; font-size: 1.05rem; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lage-subnav { display: flex; gap: 4px; }
+.lage-subnav a { font-size: .78rem; padding: 3px 9px; border-radius: 4px;
+  color: var(--text-muted); text-decoration: none; }
+.lage-subnav a:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.lage-subnav a.active { background: rgba(255,255,255,.1); color: var(--text); font-weight: 600; }
+
+.sk-wrap { padding: 14px 16px; max-width: 1100px; margin: 0 auto; }
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+
+.sk-card {
+  background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden;
+}
+.sk-card__header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sk-card__dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+.sk-card__title { font-weight: 600; font-size: .9rem; flex: 1; }
+.sk-card__leader { font-size: .75rem; color: var(--text-muted); }
+.sk-card__body { padding: 8px 12px; }
+.sk-site { font-size: .8rem; padding: 3px 0;
+  border-top: 1px solid rgba(255,255,255,.05); }
+.sk-site:first-child { border-top: none; }
+.sk-empty { font-size: .78rem; color: var(--text-muted); padding: 6px 0; }
+
+.sk-card__footer { padding: 8px 12px; border-top: 1px solid var(--border);
+  display: flex; gap: 6px; align-items: center; }
+
+/* New sector card */
+.sk-add { border: 1px dashed rgba(255,255,255,.15); }
+.sk-add .sk-card__header { background: rgba(255,255,255,.02); }
+
+/* Color swatches */
+.color-swatches { display: flex; gap: 5px; flex-wrap: wrap; }
+.color-swatch {
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; flex-shrink: 0;
+}
+.color-swatch:hover, .color-swatch.selected { border-color: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if lage.is_exercise %}
+<div style="background:#92400e;color:#fde68a;text-align:center;font-weight:700;font-size:.82rem;padding:4px;letter-spacing:.05em;">⚠ ÜBUNG / SIMULATION ⚠</div>
+{% endif %}
+
+<div class="sk-topbar">
+  <a href="/lage" class="btn btn--ghost btn--sm">←</a>
+  <div class="sk-topbar__title">{{ lage.name }}</div>
+  <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+  <nav class="lage-subnav">
+    <a href="/lage/{{ lage.id }}">📋 Board</a>
+    <a href="/lage/{{ lage.id }}/dashboard">📊 Dashboard</a>
+    <a href="/lage/{{ lage.id }}/stab">👥 Stab</a>
+    <a href="/lage/{{ lage.id }}/funkjournal">📻 Funkjournal</a>
+    <a href="/lage/{{ lage.id }}/meldungen">📥 Meldungen</a>
+    <a href="/lage/{{ lage.id }}/zeitreise">🕐 Zeitreise</a>
+    <a href="/lage/{{ lage.id }}/sektoren" class="active">🗂 Abschnitte</a>
+    <a href="/lage/{{ lage.id }}/karte">🗺 Karte</a>
+    <a href="/lage/{{ lage.id }}/ressourcen">🚒 Ressourcen</a>
+  </nav>
+</div>
+
+<div class="sk-wrap">
+  <div class="sk-grid">
+
+    {# ── Bestehende Abschnitte ───────────────────────────────────────────────── #}
+    {% for sector in sectors %}
+    {% set sites = sites_by_sector.get(sector.id, []) %}
+    <div class="sk-card">
+      <div class="sk-card__header">
+        <div class="sk-card__dot" style="background:{{ sector.color or '#6b7280' }};"></div>
+        <div>
+          <div class="sk-card__title">{{ sector.name }}</div>
+          {% if sector.leader_label %}
+          <div class="sk-card__leader">Abschnittsleiter: {{ sector.leader_label }}</div>
+          {% endif %}
+        </div>
+        <span style="font-size:.75rem;background:rgba(255,255,255,.1);border-radius:10px;padding:1px 8px;">{{ sites|length }}</span>
+      </div>
+
+      <div class="sk-card__body">
+        {% if sites %}
+        {% for site in sites %}
+        <div class="sk-site">
+          <span style="font-size:.65rem;color:{% if prio_color.get(site.priority) == 'red' %}#f87171{% elif prio_color.get(site.priority) == 'orange' %}#fb923c{% elif prio_color.get(site.priority) == 'yellow' %}#facc15{% else %}var(--text-muted){% endif %};">●</span>
+          {{ site.bezeichnung }}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="sk-empty">Keine Einsatzstellen zugewiesen.</div>
+        {% endif %}
+      </div>
+
+      {% if can_edit %}
+      <div class="sk-card__footer">
+        <button class="btn btn--ghost btn--sm"
+                onclick="document.getElementById('edit-{{ sector.id }}').showModal()">✏️ Bearbeiten</button>
+        <form method="post" action="/lage/{{ lage.id }}/sektoren/{{ sector.id }}/loeschen" style="margin:0;"
+              onsubmit="return confirm('Abschnitt {{ sector.name }} löschen?')">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn--ghost btn--sm" style="color:#f87171;">✕</button>
+        </form>
+      </div>
+
+      <dialog id="edit-{{ sector.id }}" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;min-width:300px;">
+        <h3 style="font-size:.9rem;margin-bottom:12px;">Abschnitt bearbeiten</h3>
+        <form method="post" action="/lage/{{ lage.id }}/sektoren/{{ sector.id }}/bearbeiten">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <div class="form-group">
+            <input type="text" name="name" class="form-input" required maxlength="80"
+                   value="{{ sector.name }}" placeholder="Bezeichnung">
+          </div>
+          <div class="form-group">
+            <input type="text" name="leader_label" class="form-input" maxlength="80"
+                   value="{{ sector.leader_label or '' }}" placeholder="Abschnittsleiter (optional)">
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:.72rem;">Farbe</label>
+            <div class="color-swatches">
+              {% for c in sector_colors %}
+              <div class="color-swatch {% if sector.color == c %}selected{% endif %}"
+                   style="background:{{ c }};"
+                   onclick="this.closest('form').querySelector('[name=color]').value='{{ c }}';this.closest('.color-swatches').querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));this.classList.add('selected');">
+              </div>
+              {% endfor %}
+              <input type="hidden" name="color" value="{{ sector.color or '#6b7280' }}">
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:10px;">
+            <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost btn--sm">Abbrechen</button>
+            <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+          </div>
+        </form>
+      </dialog>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {# ── Neu anlegen ─────────────────────────────────────────────────────────── #}
+    {% if can_edit and lage.status.value == 'active' %}
+    <div class="sk-card sk-add">
+      <div class="sk-card__header">
+        <div class="sk-card__title" style="color:var(--text-muted);">+ Neuer Abschnitt</div>
+      </div>
+      <div class="sk-card__body">
+        <form method="post" action="/lage/{{ lage.id }}/sektoren">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <div class="form-group">
+            <input type="text" name="name" class="form-input" required maxlength="80"
+                   placeholder="Bezeichnung, z. B. Abschnitt Ost" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <input type="text" name="leader_label" class="form-input" maxlength="80"
+                   placeholder="Abschnittsleiter (optional)" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:.72rem;">Farbe</label>
+            <div class="color-swatches" id="new-swatches">
+              {% for c in sector_colors %}
+              <div class="color-swatch {% if loop.last %}selected{% endif %}"
+                   style="background:{{ c }};"
+                   onclick="document.getElementById('new-color').value='{{ c }}';document.getElementById('new-swatches').querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));this.classList.add('selected');">
+              </div>
+              {% endfor %}
+              <input type="hidden" name="color" id="new-color" value="{{ sector_colors[-1] }}">
+            </div>
+          </div>
+          <button type="submit" class="btn btn--secondary btn--sm" style="margin-top:8px;">Anlegen</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Nicht zugeordnet ────────────────────────────────────────────────────── #}
+    {% set unassigned = sites_by_sector.get(None, []) %}
+    {% if unassigned %}
+    <div class="sk-card" style="opacity:.7;">
+      <div class="sk-card__header">
+        <div class="sk-card__dot" style="background:#374151;"></div>
+        <div class="sk-card__title" style="color:var(--text-muted);">Nicht zugeordnet</div>
+        <span style="font-size:.75rem;background:rgba(255,255,255,.08);border-radius:10px;padding:1px 8px;">{{ unassigned|length }}</span>
+      </div>
+      <div class="sk-card__body">
+        {% for site in unassigned %}
+        <div class="sk-site">{{ site.bezeichnung }}</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

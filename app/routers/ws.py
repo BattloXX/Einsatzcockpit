@@ -14,8 +14,9 @@ from app.core.permissions import can_access_incident
 from app.core.security import unsign_session
 from app.db import SessionLocal
 from app.models.incident import Incident
+from app.models.major_incident import MajorIncident
 from app.models.user import User
-from app.services.broadcast import manager
+from app.services.broadcast import LAGE_WS_OFFSET, manager
 
 logger = logging.getLogger("einsatzleiter.ws")
 router = APIRouter()
@@ -80,6 +81,36 @@ async def incident_ws(websocket: WebSocket, incident_id: int):
             # andere Nachrichten ignorieren wir bewusst (Server-Push only)
     except WebSocketDisconnect:
         await manager.disconnect(incident_id, websocket)
+
+
+@router.websocket("/ws/lage/{lage_id}")
+async def lage_ws(websocket: WebSocket, lage_id: int):
+    """WebSocket-Kanal für eine Großschadenslage – org-gebunden."""
+    user = _resolve_user(websocket)
+    if user is None:
+        await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+        return
+
+    db = SessionLocal()
+    try:
+        lage = db.get(MajorIncident, lage_id)
+        if lage is None or lage.org_id != user.org_id:
+            from app.core.permissions import has_role
+            if not (lage and has_role(user, "system_admin")):
+                await websocket.close(code=WS_CLOSE_FORBIDDEN)
+                return
+    finally:
+        db.close()
+
+    channel = LAGE_WS_OFFSET + lage_id
+    await manager.connect(channel, websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        await manager.disconnect(channel, websocket)
 
 
 @router.websocket("/ws/global")

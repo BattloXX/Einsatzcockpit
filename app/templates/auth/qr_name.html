@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#d42225">
+  <title>Name eingeben – einsatzleiter.cloud</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/csrf.js" defer></script>
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="/static/img/Logo-rot.png" alt="einsatzleiter.cloud"
+             onerror="this.style.display='none'" class="login-logo__img">
+        <p class="login-logo__sub">Einsatzleiter-Hilfswerkzeug</p>
+      </div>
+
+      {% if incident %}
+      <p style="text-align:center; color:var(--text-muted); margin-bottom:4px; font-size:0.85rem;">
+        Einsatz {{ incident.alarm_type_code }}
+      </p>
+      {% endif %}
+
+      <p style="text-align:center; margin-bottom:20px; font-size:1.05rem; font-weight:600;">
+        Wie heißt du?
+      </p>
+
+      <form method="post" action="/qr-name" class="login-form">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="incident_id" value="{{ incident_id }}">
+        <div class="form-group">
+          <label for="display_name">Dein Name</label>
+          <input type="text" id="display_name" name="display_name" required
+                 maxlength="120" autocomplete="name" class="form-input"
+                 placeholder="z.&thinsp;B. Huber Maria" autofocus>
+        </div>
+        <button type="submit" class="btn btn--primary btn--full">Zum Einsatz</button>
+      </form>
+
+      <p style="text-align:center; margin-top:14px; font-size:0.8rem; color:var(--text-muted);">
+        Der Name wird in allen Einträgen mitgeloggt.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

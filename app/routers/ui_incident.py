@@ -11,7 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.permissions import can_access_incident, has_role, require_role
-from app.core.security import sign_qr_token
+from app.core.security import get_author_name, sign_qr_token
 from app.core.templating import templates
 from app.db import get_db
 from app.models.breathing import BreathingTroop
@@ -602,7 +602,8 @@ async def create_task(
     if vehicle_id:
         task.vehicle_id = vehicle_id
     if note.strip():
-        db.add(IncidentLog(incident_id=incident_id, text=note.strip(), user_id=request.state.user.id))
+        db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
+                           user_id=request.state.user.id, author_name=get_author_name(request)))
     db.commit()
     await manager.broadcast(incident_id, {
         "type": "task_created", "task_id": task.id, "reload_board": True,
@@ -817,7 +818,8 @@ async def attach_vehicle_to_incident(
     if not commander_member_id and commander_free_text.strip():
         quick_create_commander(db, iv, commander_free_text.strip(), user_id=request.state.user.id)
     if note.strip():
-        db.add(IncidentLog(incident_id=incident_id, text=note.strip(), user_id=request.state.user.id))
+        db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
+                           user_id=request.state.user.id, author_name=get_author_name(request)))
     db.commit()
     await manager.broadcast(incident_id, {"type": "vehicle_added", "reload_board": True})
     return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
@@ -890,6 +892,7 @@ async def create_message(
         status=status,
         due_after_sec=due_sec, due_at=due_at,
         vehicle_id=vehicle_id or None,
+        author_name=get_author_name(request),
     )
     db.add(msg)
     db.commit()
@@ -963,7 +966,8 @@ async def create_person(
     )
     db.add(person)
     if note.strip():
-        db.add(IncidentLog(incident_id=incident_id, text=note.strip(), user_id=request.state.user.id))
+        db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
+                           user_id=request.state.user.id, author_name=get_author_name(request)))
     db.commit()
     await manager.broadcast(incident_id, {"type": "person_created", "reload_board": True})
     return Response(status_code=204)
@@ -1038,6 +1042,7 @@ async def add_log(
     etype = entity_type.strip() or None
     entry = IncidentLog(
         incident_id=incident_id, text=text, user_id=request.state.user.id,
+        author_name=get_author_name(request),
         entity_type=etype,
         entity_id=entity_id if etype else None,
     )
@@ -1675,6 +1680,7 @@ async def save_lagebild_journal(
         title="✨ KI-Lagebild",
         detail=text,
         status="information",
+        author_name=get_author_name(request),
     )
     db.add(msg)
     user_id = getattr(getattr(request.state, "user", None), "id", None)

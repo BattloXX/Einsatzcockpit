@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Großschadenslagen{% endblock %}
+
+{% block content %}
+<div style="max-width:900px;margin:32px auto;padding:0 16px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:10px;">
+    <h2 style="margin:0;">Großschadenslagen</h2>
+    {% if can_manage %}
+    <a href="/lage/neu" class="btn btn--danger">🚨 Neue Lage starten</a>
+    {% endif %}
+  </div>
+
+  {% if lage_list %}
+  <div style="display:flex;flex-direction:column;gap:10px;">
+    {% for lage in lage_list %}
+    <a href="/lage/{{ lage.id }}" class="card" style="display:block;text-decoration:none;padding:14px 18px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+            <span style="font-weight:600;font-size:1rem;">{{ lage.name }}</span>
+            {% if lage.is_exercise %}
+            <span style="font-size:.72rem;background:rgba(245,158,11,.15);color:#fbbf24;border-radius:4px;padding:1px 6px;">ÜBUNG</span>
+            {% endif %}
+            <span style="font-size:.75rem;padding:2px 8px;border-radius:10px;
+              {% if lage.status.value == 'active' %}background:rgba(34,197,94,.15);color:#4ade80;
+              {% elif lage.status.value == 'closed' %}background:rgba(107,114,128,.2);color:#9ca3af;
+              {% else %}background:rgba(245,158,11,.15);color:#fbbf24;{% endif %}">
+              {{ lage.status.value }}
+            </span>
+          </div>
+          {% if lage.description %}
+          <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:4px;">{{ lage.description }}</div>
+          {% endif %}
+          <div style="font-size:.78rem;color:var(--text-muted);display:flex;gap:14px;flex-wrap:wrap;">
+            <span>Start: {{ lage.started_at|local_datetime }}</span>
+            {% if lage.ended_at %}<span>Ende: {{ lage.ended_at|local_datetime }}</span>{% endif %}
+            <span>{{ lage.sites|length }} Einsatzstellen</span>
+          </div>
+        </div>
+        <div style="font-size:1.4rem;opacity:.4;">›</div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card" style="padding:32px;text-align:center;color:var(--text-muted);">
+    <p style="font-size:1.1rem;margin-bottom:16px;">Keine Großschadenslagen vorhanden.</p>
+    {% if can_manage %}
+    <a href="/lage/neu" class="btn btn--danger">🚨 Erste Lage starten</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

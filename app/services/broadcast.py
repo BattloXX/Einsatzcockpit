@@ -1,9 +1,12 @@
-"""WebSocket connection manager – pub/sub per incident."""
+"""WebSocket connection manager – pub/sub per incident and major incident."""
 import asyncio
 import json
 from collections import defaultdict
 
 from fastapi import WebSocket
+
+# Lage-Kanäle verwenden einen Offset um Kollision mit Einsatz-IDs zu vermeiden
+LAGE_WS_OFFSET = 10_000_000
 
 
 class ConnectionManager:
@@ -45,3 +48,7 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+async def broadcast_lage(lage_id: int, event: dict) -> None:
+    await manager.broadcast(LAGE_WS_OFFSET + lage_id, event)

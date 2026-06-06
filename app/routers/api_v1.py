@@ -20,7 +20,7 @@ from app.core.audit import write_audit
 from app.core.security import hash_api_key, sign_qr_token
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentToken
-from app.models.master import FireDept
+from app.models.master import AlarmType, FireDept, OrgSettings
 from app.models.user import ApiKey
 from app.services.broadcast import manager
 from app.services.incident_service import create_incident
@@ -34,7 +34,7 @@ STUFE_MAP = {
     "t1": "T1", "t2": "T2", "t3": "T3", "t4": "T4", "t6": "T6", "t7": "T7",
     # Numeric variants
     "1": "T1", "2": "T2", "3": "T3", "4": "T4", "6": "T6", "7": "T7",
-    "t9": "T3",  # fallback for unknown T-variants
+    "t9": "T9", "9": "T9",
 }
 
 
@@ -238,6 +238,55 @@ async def _enrich_with_ai_hints(
         db.close()
 
 
+def _handle_major_incident_trigger(
+    db: Session,
+    org_id: int,
+    alarm_type_code: str,
+    incident_id: int,
+    external_key: str,
+    *,
+    is_exercise: bool,
+    ort: str | None,
+    strasse: str | None,
+    hausnr: str | None,
+    einsatzgrund: str | None,
+) -> None:
+    """Prüft ob der Alarm eine Großschadenslage auslöst oder in eine laufende übernommen wird."""
+    from app.services.major_incident_service import (
+        adopt_incident_as_site,
+        get_active_lage,
+        handle_alarm_trigger,
+    )
+
+    alarm_type = db.get(AlarmType, alarm_type_code)
+    triggers = alarm_type.triggers_major_incident if alarm_type else False
+
+    active_lage = get_active_lage(db, org_id)
+
+    if triggers:
+        # Alarm löst Lage aus oder wird in bestehende Lage eingefügt
+        handle_alarm_trigger(
+            db, org_id, alarm_type_code, incident_id, external_key,
+            is_exercise=is_exercise,
+            ort=ort, strasse=strasse, hausnr=hausnr, einsatzgrund=einsatzgrund,
+        )
+    elif active_lage:
+        # Laufende Lage + mi_auto_adopt → normalen Einsatz spiegeln
+        org_settings = (
+            db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        )
+        auto_adopt = org_settings.mi_auto_adopt if org_settings else True
+        if auto_adopt:
+            adopt_incident_as_site(
+                db, active_lage,
+                incident_id=incident_id,
+                external_key=external_key,
+                alarm_type_code=alarm_type_code,
+                org_id=org_id,
+                ort=ort, strasse=strasse, hausnr=hausnr, einsatzgrund=einsatzgrund,
+            )
+
+
 @router.post(
     "/einsatz",
     response_model=IncidentCreatedResponse,
@@ -315,6 +364,22 @@ async def create_incident_api(
     )
     db.commit()
 
+    # ── Großschadenslage-Trigger ─────────────────────────────────────────────
+    if api_key.org_id:
+        _handle_major_incident_trigger(
+            db=db,
+            org_id=api_key.org_id,
+            alarm_type_code=alarm_type_code,
+            incident_id=incident.id,
+            external_key=payload.Key,
+            is_exercise=payload.Uebung,
+            ort=payload.Ort,
+            strasse=payload.Strasse,
+            hausnr=payload.HausNr,
+            einsatzgrund=payload.Einsatzgrund,
+        )
+        db.commit()
+
     # Automatisches Geocoding wenn Adresse vorhanden
     if payload.Ort or payload.Strasse:
         from app.services.geocoding import geocode_address as _geocode
@@ -390,6 +455,105 @@ def _api_key_scoped_incidents(db: Session, api_key: ApiKey):
             Incident.id.in_(collab_ids_subq),
         )
     )
+
+
+# ── Großschadenslage: Direkte Site-Erstellung ────────────────────────────────
+
+class LageAlarmPayload(BaseModel):
+    """Direktes Hinzufügen einer Einsatzstelle zur laufenden Großschadenslage."""
+    Key: str = Field(..., description="Eindeutiger Schlüssel (Idempotency-Token).")
+    Art: str | None = Field(None, description="Bezeichnung/Einsatzart für die Einsatzstelle.")
+    Meldung: str | None = Field(None, description="Volltext der Meldung (wird als Einsatzgrund gespeichert).")
+    Stufe: str | None = Field(None, description="Alarmstufe (F1–F14, T1–T7).")
+    Ort: str | None = Field(None, description="Ort.")
+    Strasse: str | None = Field(None, description="Straße.")
+    HausNr: str | None = Field(None, description="Hausnummer.")
+    Lat: float | None = Field(None, description="Breitengrad (WGS 84).")
+    Lng: float | None = Field(None, description="Längengrad (WGS 84).")
+
+
+class LageSiteCreatedResponse(BaseModel):
+    lage_id: int = Field(..., description="ID der Großschadenslage.")
+    site_id: int = Field(..., description="ID der angelegten Einsatzstelle.")
+    created: bool = Field(..., description="True bei Neuanlage, False bei Idempotency-Treffer.")
+
+
+@router.post(
+    "/lage/alarm",
+    response_model=LageSiteCreatedResponse,
+    summary="Einsatzstelle direkt in aktive Großschadenslage eintragen",
+    description=(
+        "Legt eine Einsatzstelle in der aktiven Großschadenslage der Org an. "
+        "Identische `Key`-Werte werden idempotent behandelt. "
+        "Liefert 404 wenn keine aktive Lage existiert."
+    ),
+    responses={
+        200: {"description": "Einsatzstelle angelegt oder Idempotency-Treffer."},
+        401: {"description": "Ungültiger oder gesperrter API-Key."},
+        404: {"description": "Keine aktive Großschadenslage."},
+    },
+)
+async def lage_alarm(
+    payload: LageAlarmPayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    api_key: ApiKey = Depends(_get_api_key),
+):
+    from app.models.major_incident import (
+        IncidentSite,
+        MajorIncidentStatus,
+        SiteLogEntry,
+    )
+    from app.services.broadcast import broadcast_lage
+    from app.services.major_incident_service import create_site, get_active_lage
+
+    lage = get_active_lage(db, api_key.org_id)
+    if not lage:
+        raise HTTPException(status_code=404, detail="Keine aktive Großschadenslage.")
+
+    # Idempotency
+    existing = (
+        db.query(IncidentSite)
+        .filter(
+            IncidentSite.major_incident_id == lage.id,
+            IncidentSite.external_key == payload.Key,
+        )
+        .first()
+    )
+    if existing:
+        return LageSiteCreatedResponse(lage_id=lage.id, site_id=existing.id, created=False)
+
+    bezeichnung = (payload.Art or payload.Meldung or "Alarm")[:160]
+    stufe = STUFE_MAP.get((payload.Stufe or "").lower().strip())
+    if stufe and not payload.Art:
+        bezeichnung = f"[{stufe}] {bezeichnung}"[:160]
+
+    site = create_site(
+        db, lage,
+        bezeichnung=bezeichnung,
+        einsatzgrund=(payload.Meldung or "")[:160] or None,
+        ort=payload.Ort,
+        strasse=payload.Strasse,
+        hausnr=payload.HausNr,
+        lat=payload.Lat,
+        lng=payload.Lng,
+        source="api",
+        external_key=payload.Key,
+        alarm_stufe=stufe,
+    )
+    db.add(SiteLogEntry(
+        incident_site_id=site.id,
+        kind="status",
+        text=f"Einsatzstelle aus API-Alarm erstellt (Key: {payload.Key})",
+    ))
+    write_audit(db, "major_incident.site.from_api", api_key_id=api_key.id,
+                payload={"lage_id": lage.id, "site_id": site.id, "key": payload.Key})
+    db.commit()
+
+    background_tasks.add_task(
+        broadcast_lage, lage.id, {"type": "site_created", "reload_board": True}
+    )
+    return LageSiteCreatedResponse(lage_id=lage.id, site_id=site.id, created=True)
 
 
 @router.get(

@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}{{ lage.name }} – Ressourcen{% endblock %}
+
+{% block head_extra %}
+<style>
+.lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+.lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
+.lage-status--closed  { background:rgba(107,114,128,.2); color:#9ca3af; }
+.lage-status--standby { background:rgba(245,158,11,.15); color:#fbbf24; }
+
+.res-topbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface); margin-bottom: 14px;
+}
+.res-topbar__title { font-weight: 700; font-size: 1.05rem; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lage-subnav { display: flex; gap: 4px; }
+.lage-subnav a { font-size: .78rem; padding: 3px 9px; border-radius: 4px;
+  color: var(--text-muted); text-decoration: none; }
+.lage-subnav a:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.lage-subnav a.active { background: rgba(255,255,255,.1); color: var(--text); font-weight: 600; }
+
+.res-wrap { padding: 14px 16px; max-width: 1100px; margin: 0 auto; }
+
+.res-stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.res-stat {
+  flex: 1; min-width: 100px; padding: 10px 14px;
+  background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.res-stat__val { font-size: 1.6rem; font-weight: 700; line-height: 1; }
+.res-stat__lbl { font-size: .72rem; color: var(--text-muted); margin-top: 4px; }
+
+.res-section {
+  background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 14px;
+}
+.res-section__title {
+  font-size: .78rem; font-weight: 600; color: var(--text-muted);
+  margin-bottom: 10px; letter-spacing: .04em;
+}
+
+.res-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.res-table th {
+  text-align: left; padding: 5px 8px;
+  font-size: .72rem; font-weight: 600; color: var(--text-muted);
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.res-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
+.res-table tr:hover td { background: rgba(255,255,255,.02); }
+
+.res-status {
+  display: inline-block; font-size: .65rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 3px; white-space: nowrap;
+}
+.res-status--vor-ort  { background: rgba(74,222,128,.2);  color: #4ade80; }
+.res-status--alarmiert { background: rgba(251,191,36,.2); color: #fbbf24; }
+.res-status--released { background: rgba(107,114,128,.2); color: #9ca3af; }
+
+.res-conflict { color: #f87171; font-size: .7rem; font-weight: 700; margin-left: 4px; }
+
+.res-site-link { color: #93c5fd; font-size: .78rem; text-decoration: none; }
+.res-site-link:hover { text-decoration: underline; }
+
+.res-empty { font-size: .85rem; color: var(--text-muted); padding: 16px 0; text-align: center; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if lage.is_exercise %}
+<div style="background:#92400e;color:#fde68a;text-align:center;font-weight:700;font-size:.82rem;padding:4px;letter-spacing:.05em;">⚠ ÜBUNG / SIMULATION ⚠</div>
+{% endif %}
+
+<div class="res-topbar">
+  <a href="/lage" class="btn btn--ghost btn--sm">←</a>
+  <div class="res-topbar__title">{{ lage.name }}</div>
+  <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+  <nav class="lage-subnav">
+    <a href="/lage/{{ lage.id }}">📋 Board</a>
+    <a href="/lage/{{ lage.id }}/dashboard">📊 Dashboard</a>
+    <a href="/lage/{{ lage.id }}/stab">👥 Stab</a>
+    <a href="/lage/{{ lage.id }}/funkjournal">📻 Funkjournal</a>
+    <a href="/lage/{{ lage.id }}/meldungen">📥 Meldungen</a>
+    <a href="/lage/{{ lage.id }}/zeitreise">🕐 Zeitreise</a>
+    <a href="/lage/{{ lage.id }}/sektoren">🗂 Abschnitte</a>
+    <a href="/lage/{{ lage.id }}/karte">🗺 Karte</a>
+    <a href="/lage/{{ lage.id }}/ressourcen" class="active">🚒 Ressourcen</a>
+  </nav>
+</div>
+
+<div class="res-wrap">
+
+  {# Kennzahlen #}
+  <div class="res-stat-row">
+    <div class="res-stat">
+      <div class="res-stat__val">{{ all_res|length }}</div>
+      <div class="res-stat__lbl">Aktiv gesamt</div>
+    </div>
+    <div class="res-stat">
+      <div class="res-stat__val" style="color:#4ade80;">{{ total_committed }}</div>
+      <div class="res-stat__lbl">Vor Ort</div>
+    </div>
+    <div class="res-stat">
+      <div class="res-stat__val" style="color:#fbbf24;">{{ total_alarmed }}</div>
+      <div class="res-stat__lbl">Alarmiert / unterwegs</div>
+    </div>
+    <div class="res-stat">
+      <div class="res-stat__val" style="color:#9ca3af;">{{ released|length }}</div>
+      <div class="res-stat__lbl">Abgezogen (letzte 30)</div>
+    </div>
+    {% if conflict_vids %}
+    <div class="res-stat" style="border-color:#f87171;">
+      <div class="res-stat__val" style="color:#f87171;">{{ conflict_vids|length }}</div>
+      <div class="res-stat__lbl">Fahrzeugkonflikte</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# Aktive Ressourcen #}
+  <div class="res-section">
+    <div class="res-section__title">AKTIVE RESSOURCEN</div>
+    {% if all_res %}
+    <table class="res-table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Bezeichnung</th>
+          <th>Typ</th>
+          <th>Einsatzstelle</th>
+          <th>Alarmiert</th>
+          <th>Vor Ort seit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r, site in all_res %}
+        <tr>
+          <td>
+            {% if r.committed_at %}
+            <span class="res-status res-status--vor-ort">Vor Ort</span>
+            {% else %}
+            <span class="res-status res-status--alarmiert">Alarmiert</span>
+            {% endif %}
+          </td>
+          <td>
+            {{ r.label or '–' }}
+            {% if r.vehicle_id and r.vehicle_id in conflict_vids %}
+            <span class="res-conflict" title="Fahrzeug mehrfach eingeteilt">⚠ Konflikt</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--text-muted);">{{ r.resource_type or '–' }}</td>
+          <td>
+            <a class="res-site-link" href="/lage/{{ lage.id }}">{{ site.bezeichnung[:35] }}</a>
+          </td>
+          <td style="color:var(--text-muted);white-space:nowrap;font-size:.75rem;">
+            {{ r.assigned_at|local_time }}
+          </td>
+          <td style="color:var(--text-muted);white-space:nowrap;font-size:.75rem;">
+            {{ r.committed_at|local_time if r.committed_at else '–' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="res-empty">Keine aktiven Ressourcen.</div>
+    {% endif %}
+  </div>
+
+  {# Abgezogene Ressourcen #}
+  {% if released %}
+  <div class="res-section">
+    <div class="res-section__title">ZULETZT ABGEZOGEN ({{ released|length }})</div>
+    <table class="res-table">
+      <thead>
+        <tr>
+          <th>Bezeichnung</th>
+          <th>Typ</th>
+          <th>Einsatzstelle</th>
+          <th>Abgezogen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r, site in released %}
+        <tr style="opacity:.6;">
+          <td><span class="res-status res-status--released">Abgezogen</span> {{ r.label or '–' }}</td>
+          <td style="color:var(--text-muted);">{{ r.resource_type or '–' }}</td>
+          <td>
+            <a class="res-site-link" href="/lage/{{ lage.id }}">{{ site.bezeichnung[:35] }}</a>
+          </td>
+          <td style="color:var(--text-muted);white-space:nowrap;font-size:.75rem;">
+            {{ r.released_at|local_time }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

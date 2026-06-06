@@ -130,6 +130,7 @@ class AlarmType(Base):
     label: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     default_first_train_only: Mapped[bool] = mapped_column(Boolean, default=False)
     notify_neighbors: Mapped[bool] = mapped_column(Boolean, default=False)
+    triggers_major_incident: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class TaskSuggestion(Base):
@@ -249,6 +250,7 @@ class OrgSettings(Base):
     logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     primary_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     footer_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    mi_auto_adopt: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     org: Mapped[FireDept] = relationship(back_populates="settings")
