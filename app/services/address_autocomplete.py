@@ -162,19 +162,25 @@ async def photon_suggest(
     suggestions: list[AddressSuggestion] = []
     seen_labels: set[str] = set()
 
-    # City-Filter: nur Treffer aus der gesuchten Stadt behalten
+    # City-Filter: nur Treffer aus der gesuchten Stadt behalten.
+    # Photon liefert city, district, locality oder municipality – alle prüfen.
     for feat in features:
         s = _parse_feature(feat, field)
         if s is None:
             continue
         if city and field in ("street", "house"):
+            props = feat.get("properties", {})
             feat_city = (
-                feat.get("properties", {}).get("city") or
-                feat.get("properties", {}).get("district") or ""
+                props.get("city") or
+                props.get("municipality") or
+                props.get("district") or
+                props.get("locality") or ""
             ).lower()
             city_lower = city.lower()
-            # Erlaubt: feat_city enthält gesuchten Ort ODER gesuchter Ort enthält feat_city
-            if feat_city and city_lower not in feat_city and feat_city not in city_lower:
+            # Kein Ort im Feature → bei gesetztem City-Filter verwerfen
+            if not feat_city:
+                continue
+            if city_lower not in feat_city and feat_city not in city_lower:
                 continue
         if s.label in seen_labels:
             continue
@@ -182,17 +188,6 @@ async def photon_suggest(
         suggestions.append(s)
         if len(suggestions) >= limit:
             break
-
-    # Fallback: City-Filter zu restriktiv → ungefilterte Ergebnisse zurückgeben
-    if not suggestions and city and field in ("street", "house") and features:
-        for feat in features:
-            s = _parse_feature(feat, field)
-            if s is None or s.label in seen_labels:
-                continue
-            seen_labels.add(s.label)
-            suggestions.append(s)
-            if len(suggestions) >= limit:
-                break
 
     return suggestions[:limit]
 
@@ -360,10 +355,15 @@ async def suggest_addresses(
         except Exception:
             pass
 
-    # Photon-Query für Hausnummer: Straße voranstellen
+    # Photon-Query aufbauen: Stadt und Straße als Kontext einbauen, damit
+    # Photon von vornherein lokal sucht statt global.
     photon_q = q
     if field == "house" and street:
         photon_q = f"{street} {q}"
+        if city:
+            photon_q += f", {city}"
+    elif field == "street" and city:
+        photon_q = f"{q}, {city}"
 
     key = _cache_key(field, city or "", street or "", photon_q)
     cached = _cache_get(key)
