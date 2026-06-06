@@ -1075,12 +1075,14 @@ async def lage_funkjournal(
     )
 
     sites = [s for s in lage.sites if s.phase != SitePhase.abgebrochen]
+    open_requests = sum(1 for c in comms if c.is_request and not c.handled)
 
     return templates.TemplateResponse(request, "incident_major/funkjournal.html", {
         "user": user,
         "lage": lage,
         "comms": comms,
         "sites": sites,
+        "open_requests": open_requests,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
     })

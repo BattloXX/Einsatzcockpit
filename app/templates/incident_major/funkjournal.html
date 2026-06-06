@@ -60,6 +60,11 @@
 }
 .fj-site-link { color: #93c5fd; font-size: .72rem; }
 .fj-handle-btn { font-size: .7rem; }
+.fj-filter-bar { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.fj-open-badge {
+  font-size:.68rem; font-weight:700; padding:2px 7px; border-radius:10px;
+  background:rgba(251,191,36,.2); color:#fbbf24;
+}
 </style>
 {% endblock %}
 
@@ -144,6 +149,17 @@
   </div>
   {% endif %}
 
+  {# ── Filter: offene Aufträge ──────────────────────────────────────────────── #}
+  {% if open_requests > 0 %}
+  <div class="fj-filter-bar">
+    <button type="button" id="fj-filter-btn" onclick="toggleOpenFilter()" class="btn btn--ghost btn--sm">
+      Nur offene Aufträge
+      <span class="fj-open-badge">{{ open_requests }}</span>
+    </button>
+    <span id="fj-filter-hint" style="display:none;font-size:.75rem;color:var(--text-muted);">Filter aktiv</span>
+  </div>
+  {% endif %}
+
   {# ── Journaltabelle ────────────────────────────────────────────────────────── #}
   {% if comms %}
   <table class="fj-table">
@@ -161,7 +177,9 @@
     </thead>
     <tbody>
       {% for c in comms %}
-      <tr class="{% if c.handled %}fj-row--handled{% endif %}">
+      <tr class="{% if c.handled %}fj-row--handled{% endif %}"
+          data-is-request="{{ 'true' if c.is_request else 'false' }}"
+          data-handled="{{ 'true' if c.handled else 'false' }}">
         <td style="white-space:nowrap;color:var(--text-muted);">{{ c.ts|local_time }}</td>
         <td>
           <span class="dir-badge dir-{{ c.direction }}">
@@ -207,4 +225,25 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var FJ_FILTER = false;
+
+function toggleOpenFilter() {
+  FJ_FILTER = !FJ_FILTER;
+  var btn  = document.getElementById('fj-filter-btn');
+  var hint = document.getElementById('fj-filter-hint');
+  document.querySelectorAll('.fj-table tbody tr').forEach(function(tr) {
+    if (FJ_FILTER) {
+      tr.style.display = (tr.dataset.isRequest === 'true' && tr.dataset.handled !== 'true') ? '' : 'none';
+    } else {
+      tr.style.display = '';
+    }
+  });
+  if (btn)  { btn.style.background = FJ_FILTER ? 'rgba(251,191,36,.15)' : ''; btn.style.color = FJ_FILTER ? '#fbbf24' : ''; }
+  if (hint) { hint.style.display = FJ_FILTER ? '' : 'none'; }
+}
+</script>
 {% endblock %}
