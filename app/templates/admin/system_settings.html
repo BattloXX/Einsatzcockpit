@@ -317,6 +317,95 @@
       </div>
     </section>
 
+    {# ── Großschadenslage – Funktionen ──────────────────────────────────── #}
+    <section class="card mb-4">
+      <div class="card-header">
+        <h2>Großschadenslage – Funktionen</h2>
+      </div>
+      <div class="card-body">
+        <p class="text-muted" style="font-size:.85rem;margin-bottom:12px;">
+          Einzelne Module der Großschadenslage ein- oder ausschalten.
+          Deaktivierte Module werden in der Navigation ausgeblendet.
+          Standard: alle aktiv.
+        </p>
+        <table class="table-admin">
+          <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>mi_feature_stab</code></td>
+              <td>
+                <select name="k_mi_feature_stab" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('mi_feature_stab','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('mi_feature_stab','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">👥 Stab – Stabsführung (S1–S6, Lageleitung)</small></td>
+            </tr>
+            <tr>
+              <td><code>mi_feature_funkjournal</code></td>
+              <td>
+                <select name="k_mi_feature_funkjournal" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('mi_feature_funkjournal','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('mi_feature_funkjournal','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">📻 Funkjournal – Eingehende, ausgehende und interne Funkmeldungen</small></td>
+            </tr>
+            <tr>
+              <td><code>mi_feature_meldungen</code></td>
+              <td>
+                <select name="k_mi_feature_meldungen" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('mi_feature_meldungen','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('mi_feature_meldungen','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">📥 Meldungen – Bürger-Meldungsportal und eingehende Schadensmeldungen</small></td>
+            </tr>
+            <tr>
+              <td><code>mi_feature_sektoren</code></td>
+              <td>
+                <select name="k_mi_feature_sektoren" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('mi_feature_sektoren','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('mi_feature_sektoren','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">🗂 Abschnitte – Einsatzstellen in Abschnitte/Sektoren gliedern</small></td>
+            </tr>
+            <tr>
+              <td><code>mi_feature_karte</code></td>
+              <td>
+                <select name="k_mi_feature_karte" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('mi_feature_karte','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('mi_feature_karte','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">🗺 Karte – Geografische Übersichtskarte aller Einsatzstellen</small></td>
+            </tr>
+            <tr>
+              <td><code>mi_feature_zeitreise</code></td>
+              <td>
+                <select name="k_mi_feature_zeitreise" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('mi_feature_zeitreise','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('mi_feature_zeitreise','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">🕐 Zeitreise – Chronologischer Ereignisverlauf der gesamten Lage</small></td>
+            </tr>
+            <tr>
+              <td><code>mi_feature_ressourcen</code></td>
+              <td>
+                <select name="k_mi_feature_ressourcen" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('mi_feature_ressourcen','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('mi_feature_ressourcen','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">🚒 Ressourcen – Übersicht aller zugewiesenen Einheiten und Kräfte</small></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     {# ── Benutzerdefinierte Einstellungen ─────────────────────────────── #}
     {% set known_keys_list = [
       'smtp_host','smtp_port','smtp_user','smtp_password','smtp_from','smtp_starttls','smtp_timeout',
@@ -325,6 +414,8 @@
       'incident_autoclose_enabled','incident_autoclose_after_hours','incident_autoclose_grace_minutes',
       'enable_speech_input','default_session_max_age',
       'ai_enabled','ai_api_key','ai_model_default','ai_model_fast','ai_max_tokens','ai_timeout',
+      'mi_feature_stab','mi_feature_funkjournal','mi_feature_meldungen',
+      'mi_feature_sektoren','mi_feature_karte','mi_feature_zeitreise','mi_feature_ressourcen',
     ] %}
     {% set ns = namespace(has_custom=false) %}
     {% for k, v in settings.items() %}

@@ -41,6 +41,27 @@ from app.services.major_incident_service import (
 
 router = APIRouter()
 
+_MI_FEATURE_KEYS: frozenset[str] = frozenset({
+    "mi_feature_stab", "mi_feature_funkjournal", "mi_feature_meldungen",
+    "mi_feature_sektoren", "mi_feature_karte", "mi_feature_zeitreise", "mi_feature_ressourcen",
+})
+
+
+def _get_mi_features(db: Session) -> dict[str, bool]:
+    from app.models.master import SystemSettings as _SS
+    rows = db.query(_SS).filter(_SS.key.in_(_MI_FEATURE_KEYS)).all()
+    cfg = {r.key: r.value for r in rows}
+    return {
+        "stab":        cfg.get("mi_feature_stab",        "true") != "false",
+        "funkjournal": cfg.get("mi_feature_funkjournal",  "true") != "false",
+        "meldungen":   cfg.get("mi_feature_meldungen",    "true") != "false",
+        "sektoren":    cfg.get("mi_feature_sektoren",     "true") != "false",
+        "karte":       cfg.get("mi_feature_karte",        "true") != "false",
+        "zeitreise":   cfg.get("mi_feature_zeitreise",    "true") != "false",
+        "ressourcen":  cfg.get("mi_feature_ressourcen",   "true") != "false",
+    }
+
+
 PHASE_ORDER = [
     SitePhase.eingegangen,
     SitePhase.erkundung,
@@ -219,6 +240,7 @@ async def lage_board(
         "sectors": sectors,
         "sectors_by_id": sectors_by_id,
         "now": datetime.now(UTC),
+        "mi_features": _get_mi_features(db),
     })
 
 
@@ -911,6 +933,7 @@ async def lage_dashboard(
         "journal_categories": JOURNAL_CATEGORIES,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
+        "mi_features": _get_mi_features(db),
     })
 
 
@@ -950,6 +973,7 @@ async def lage_stab(
         "journal_category_color": JOURNAL_CATEGORY_COLOR,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
+        "mi_features": _get_mi_features(db),
     })
 
 
@@ -1085,6 +1109,7 @@ async def lage_funkjournal(
         "open_requests": open_requests,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
+        "mi_features": _get_mi_features(db),
     })
 
 
@@ -1308,6 +1333,7 @@ async def meldungen_list(
         "can_manage": _can_manage(user),
         "portal_url": str(request.base_url).rstrip("/") + f"/melden/{lage.public_token}"
                       if lage.public_token else None,
+        "mi_features": _get_mi_features(db),
     })
 
 
@@ -1600,6 +1626,7 @@ async def lage_zeitreise(
         "journal_category_color": JOURNAL_CATEGORY_COLOR,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
+        "mi_features": _get_mi_features(db),
     })
 
 
@@ -1699,6 +1726,7 @@ async def sektoren_view(
         "prio_color": SITE_PRIORITY_COLOR,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
+        "mi_features": _get_mi_features(db),
     })
 
 
@@ -1876,6 +1904,7 @@ async def lage_karte(
         "reports_count": len(citizen_reports_raw),
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
+        "mi_features": _get_mi_features(db),
     })
 
 
@@ -1924,6 +1953,7 @@ async def lage_ressourcen(
         "total_committed": total_committed,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
+        "mi_features": _get_mi_features(db),
     })
 
 

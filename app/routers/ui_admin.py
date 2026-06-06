@@ -1132,6 +1132,7 @@ async def create_alarm_type(
     request: Request,
     code: str = Form(...), category: str = Form("T"), label: str = Form(""),
     default_first_train_only: str = Form(""), notify_neighbors: str = Form(""),
+    triggers_major_incident: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     code = code.upper()
@@ -1142,6 +1143,7 @@ async def create_alarm_type(
         code=code, category=category, label=label,
         default_first_train_only=bool(default_first_train_only),
         notify_neighbors=bool(notify_neighbors),
+        triggers_major_incident=bool(triggers_major_incident),
     )
     db.add(at)
     db.commit()
@@ -1153,6 +1155,7 @@ async def edit_alarm_type(
     code: str, request: Request,
     category: str = Form("T"), label: str = Form(""),
     default_first_train_only: str = Form(""), notify_neighbors: str = Form(""),
+    triggers_major_incident: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     at = db.get(AlarmType, code)
@@ -1161,6 +1164,7 @@ async def edit_alarm_type(
         at.label = label
         at.default_first_train_only = bool(default_first_train_only)
         at.notify_neighbors = bool(notify_neighbors)
+        at.triggers_major_incident = bool(triggers_major_incident)
         db.commit()
     return RedirectResponse("/admin/alarmtypen?saved=1", status_code=303)
 

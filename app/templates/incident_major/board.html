@@ -129,13 +129,13 @@
     <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
     <div style="display:flex;gap:3px;flex-wrap:wrap;">
       <a href="/lage/{{ lage.id }}/dashboard" class="btn btn--ghost btn--sm" title="Dashboard">📊</a>
-      <a href="/lage/{{ lage.id }}/stab" class="btn btn--ghost btn--sm" title="Stab">👥 Stab</a>
-      <a href="/lage/{{ lage.id }}/funkjournal" class="btn btn--ghost btn--sm" title="Funkjournal">📻</a>
-      <a href="/lage/{{ lage.id }}/meldungen" class="btn btn--ghost btn--sm" title="Bürgermeldungen">📥</a>
-      <a href="/lage/{{ lage.id }}/zeitreise" class="btn btn--ghost btn--sm" title="Zeitreise">🕐</a>
-      <a href="/lage/{{ lage.id }}/sektoren" class="btn btn--ghost btn--sm" title="Abschnitte">🗂</a>
-      <a href="/lage/{{ lage.id }}/karte" class="btn btn--ghost btn--sm" title="Lagekarte">🗺</a>
-      <a href="/lage/{{ lage.id }}/ressourcen" class="btn btn--ghost btn--sm" title="Ressourcen">🚒</a>
+      {% if mi_features.stab %}<a href="/lage/{{ lage.id }}/stab" class="btn btn--ghost btn--sm" title="Stab">👥 Stab</a>{% endif %}
+      {% if mi_features.funkjournal %}<a href="/lage/{{ lage.id }}/funkjournal" class="btn btn--ghost btn--sm" title="Funkjournal">📻</a>{% endif %}
+      {% if mi_features.meldungen %}<a href="/lage/{{ lage.id }}/meldungen" class="btn btn--ghost btn--sm" title="Bürgermeldungen">📥</a>{% endif %}
+      {% if mi_features.zeitreise %}<a href="/lage/{{ lage.id }}/zeitreise" class="btn btn--ghost btn--sm" title="Zeitreise">🕐</a>{% endif %}
+      {% if mi_features.sektoren %}<a href="/lage/{{ lage.id }}/sektoren" class="btn btn--ghost btn--sm" title="Abschnitte">🗂</a>{% endif %}
+      {% if mi_features.karte %}<a href="/lage/{{ lage.id }}/karte" class="btn btn--ghost btn--sm" title="Lagekarte">🗺</a>{% endif %}
+      {% if mi_features.ressourcen %}<a href="/lage/{{ lage.id }}/ressourcen" class="btn btn--ghost btn--sm" title="Ressourcen">🚒</a>{% endif %}
       <a href="/lage/{{ lage.id }}/druck" target="_blank" class="btn btn--ghost btn--sm" title="Drucken / PDF">🖨</a>
     </div>
     <input type="search" id="board-search" placeholder="Suchen…"

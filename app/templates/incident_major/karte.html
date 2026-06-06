@@ -114,13 +114,13 @@
   <nav class="lage-subnav">
     <a href="/lage/{{ lage.id }}">📋 Board</a>
     <a href="/lage/{{ lage.id }}/dashboard">📊 Dashboard</a>
-    <a href="/lage/{{ lage.id }}/stab">👥 Stab</a>
-    <a href="/lage/{{ lage.id }}/funkjournal">📻 Funkjournal</a>
-    <a href="/lage/{{ lage.id }}/meldungen">📥 Meldungen</a>
-    <a href="/lage/{{ lage.id }}/zeitreise">🕐 Zeitreise</a>
-    <a href="/lage/{{ lage.id }}/sektoren">🗂 Abschnitte</a>
+    {% if mi_features.stab %}<a href="/lage/{{ lage.id }}/stab">👥 Stab</a>{% endif %}
+    {% if mi_features.funkjournal %}<a href="/lage/{{ lage.id }}/funkjournal">📻 Funkjournal</a>{% endif %}
+    {% if mi_features.meldungen %}<a href="/lage/{{ lage.id }}/meldungen">📥 Meldungen</a>{% endif %}
+    {% if mi_features.zeitreise %}<a href="/lage/{{ lage.id }}/zeitreise">🕐 Zeitreise</a>{% endif %}
+    {% if mi_features.sektoren %}<a href="/lage/{{ lage.id }}/sektoren">🗂 Abschnitte</a>{% endif %}
     <a href="/lage/{{ lage.id }}/karte" class="active">🗺 Karte</a>
-    <a href="/lage/{{ lage.id }}/ressourcen">🚒 Ressourcen</a>
+    {% if mi_features.ressourcen %}<a href="/lage/{{ lage.id }}/ressourcen">🚒 Ressourcen</a>{% endif %}
   </nav>
 </div>
 
