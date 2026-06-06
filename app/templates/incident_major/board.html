@@ -143,6 +143,8 @@
            autocomplete="off"
            style="padding:3px 9px;font-size:.8rem;border-radius:4px;border:1px solid var(--border);
                   background:var(--surface-elevated,#1e2130);color:var(--text);width:160px;">
+    <button id="prio-sort-btn" type="button" onclick="togglePrioSort()"
+            class="btn btn--ghost btn--sm" title="Karten nach Priorität sortieren">↕ Prio</button>
     <span class="lage-topbar__counts" id="board-counts">{{ open_count }} offen · {{ done_count }} erledigt</span>
 
     {# ── Abgebrochen ein-/ausblenden ─────────────────────────────────────── #}
@@ -279,6 +281,37 @@ function filterBoard(q) {
     });
     var badge = col.querySelector('.phase-col__count');
     if (badge) badge.textContent = (q && visible !== cards.length) ? (visible + '/' + cards.length) : cards.length;
+  });
+}
+
+var PRIO_SORT = false;
+var _origOrder = {};
+
+function togglePrioSort() {
+  PRIO_SORT = !PRIO_SORT;
+  var btn = document.getElementById('prio-sort-btn');
+  if (btn) {
+    btn.style.background = PRIO_SORT ? 'rgba(251,191,36,.15)' : '';
+    btn.style.color       = PRIO_SORT ? '#fbbf24' : '';
+  }
+  document.querySelectorAll('.phase-col__body').forEach(function(col) {
+    var phase = col.dataset.phase;
+    var cards = Array.from(col.querySelectorAll('.site-card'));
+    if (PRIO_SORT) {
+      if (!_origOrder[phase]) {
+        _origOrder[phase] = cards.map(function(c) { return c.dataset.siteId; });
+      }
+      cards.sort(function(a, b) {
+        return parseInt(a.dataset.prio || 9) - parseInt(b.dataset.prio || 9);
+      });
+      cards.forEach(function(c) { col.appendChild(c); });
+    } else {
+      if (_origOrder[phase]) {
+        var map = {};
+        cards.forEach(function(c) { map[c.dataset.siteId] = c; });
+        _origOrder[phase].forEach(function(id) { if (map[id]) col.appendChild(map[id]); });
+      }
+    }
   });
 }
 </script>
