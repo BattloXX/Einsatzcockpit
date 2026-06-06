@@ -58,7 +58,10 @@
         'font-size:.88rem',
         'font-family:var(--font-sans,sans-serif)',
       ].join(';');
-      document.body.appendChild(ul);
+      // Im <dialog>-Element anhängen, damit das Dropdown im Browser-Top-Layer
+      // gerendert wird und nicht hinter dem Dialog-Backdrop verschwindet.
+      var dlg = input.closest('dialog');
+      (dlg || document.body).appendChild(ul);
     }
 
     function reposition() {

@@ -54,6 +54,10 @@
           {% endfor %}
         </select>
       </div>
+      <div class="form-group">
+        <label>Ort</label>
+        <input type="text" name="address_city" id="newIncCity" class="form-input" value="{{ default_city }}" onblur="newIncAutoGeocode()">
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>Straße</label>
@@ -63,10 +67,6 @@
           <label>Nr.</label>
           <input type="text" name="address_no" id="newIncNo" class="form-input" placeholder="34" onblur="newIncAutoGeocode()">
         </div>
-      </div>
-      <div class="form-group">
-        <label>Ort</label>
-        <input type="text" name="address_city" id="newIncCity" class="form-input" value="{{ default_city }}" onblur="newIncAutoGeocode()">
       </div>
       <div style="margin-bottom:.5rem;display:flex;align-items:center;gap:8px">
         <button type="button" class="btn btn--secondary btn--sm" id="newIncGeocodeBtn"
@@ -124,12 +124,17 @@
   }
 
   function initNewIncidentMap() {
-    if (_map) { _map.invalidateSize(); return; }
+    if (_map) {
+      // Re-open: Container-Größe neu berechnen (Dialog-Animation braucht Zeit)
+      setTimeout(function() { _map.invalidateSize(); }, 150);
+      return;
+    }
     const lat = parseFloat(document.getElementById('newIncLat').value) || 47.4664;
     const lng = parseFloat(document.getElementById('newIncLng').value) || 9.7416;
     _map = L.map('newIncMapContainer').setView([lat, lng], 14);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap', maxZoom: 19,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende',
+      maxZoom: 19,
     }).addTo(_map);
     _marker = L.marker([lat, lng], {draggable: true}).addTo(_map);
     _marker.on('dragend', function(e) {
@@ -142,8 +147,9 @@
       document.getElementById('newIncLat').value = e.latlng.lat.toFixed(6);
       document.getElementById('newIncLng').value = e.latlng.lng.toFixed(6);
     });
-    // Tiles laden korrekt nachdem Dialog vollständig gerendert ist
-    setTimeout(function() { _map.invalidateSize(); }, 250);
+    // Mehrfach invalidieren: erster Aufruf nach Dialog-Öffnung, zweiter als Fallback
+    setTimeout(function() { _map.invalidateSize(); }, 200);
+    setTimeout(function() { _map.invalidateSize(); }, 600);
   }
 
   // Marker und Koordinaten von außen setzen (z.B. durch Autocomplete-Auswahl)

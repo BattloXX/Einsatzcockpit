@@ -21,6 +21,11 @@
     {# — Adressfelder — #}
     <div class="form-grid" style="margin-bottom:1rem">
       <div class="form-group">
+        <label class="form-label">Ort</label>
+        <input type="text" name="address_city" id="addrCity"
+               value="{{ incident.address_city or default_city }}" class="form-input" placeholder="Wolfurt">
+      </div>
+      <div class="form-group">
         <label class="form-label">Straße</label>
         <input type="text" name="address_street" id="addrStreet"
                value="{{ incident.address_street or '' }}" class="form-input" placeholder="Musterstraße">
@@ -29,11 +34,6 @@
         <label class="form-label">Hausnummer</label>
         <input type="text" name="address_no" id="addrNo"
                value="{{ incident.address_no or '' }}" class="form-input" placeholder="12a">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Ort</label>
-        <input type="text" name="address_city" id="addrCity"
-               value="{{ incident.address_city or default_city }}" class="form-input" placeholder="Wolfurt">
       </div>
     </div>
 
