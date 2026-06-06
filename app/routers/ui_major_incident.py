@@ -1811,6 +1811,29 @@ async def lage_karte(
         "color": s.color or "#6b7280",
     } for s in sectors])
 
+    from app.core.timezones import format_local_datetime
+    org = getattr(user, "org", None)
+    citizen_reports_raw = (
+        db.query(CitizenReport)
+        .filter(
+            CitizenReport.major_incident_id == lage_id,
+            CitizenReport.lat.isnot(None),
+            CitizenReport.lng.isnot(None),
+            CitizenReport.status == "new",
+        )
+        .order_by(CitizenReport.created_at)
+        .all()
+    )
+    citizen_reports_json = json.dumps([{
+        "id": r.id,
+        "lat": r.lat,
+        "lng": r.lng,
+        "ort": r.ort or r.strasse or "",
+        "description": r.description[:120],
+        "reporter": r.reporter_name or "Anonym",
+        "ts": format_local_datetime(r.created_at, org),
+    } for r in citizen_reports_raw])
+
     return templates.TemplateResponse(request, "incident_major/karte.html", {
         "user": user,
         "lage": lage,
@@ -1819,6 +1842,8 @@ async def lage_karte(
         "sectors": sectors,
         "sectors_by_id": sectors_by_id,
         "all_sites": active_sites,
+        "citizen_reports_json": citizen_reports_json,
+        "reports_count": len(citizen_reports_raw),
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
     })

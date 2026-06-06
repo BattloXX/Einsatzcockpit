@@ -136,11 +136,18 @@
   <div class="karte-controls__sep"></div>
   {% for phase in ['eingegangen','erkundung','bewertet','disponiert','in_arbeit','erledigt'] %}
   <label>
-    <input type="checkbox" checked value="{{ phase }}" onchange="applyFilter()">
+    <input type="checkbox" class="phase-filter" checked value="{{ phase }}" onchange="applyFilter()">
     {{ {'eingegangen':'Eingegangen','erkundung':'Erkundung','bewertet':'Bewertet',
         'disponiert':'Disponiert','in_arbeit':'In Arbeit','erledigt':'Erledigt'}[phase] }}
   </label>
   {% endfor %}
+  {% if reports_count > 0 %}
+  <div class="karte-controls__sep"></div>
+  <label style="color:#fbbf24;">
+    <input type="checkbox" id="rep-toggle" checked onchange="toggleReports(this.checked)">
+    📥 Meldungen
+  </label>
+  {% endif %}
 </div>
 
 <div class="karte-badge" id="karte-badge"></div>
@@ -168,6 +175,7 @@
 (function () {
   var SITES   = {{ map_sites_json | safe }};
   var SECTORS = {{ sectors_json | safe }};
+  var REPORTS = {{ citizen_reports_json | safe }};
   var lageId  = {{ lage.id }};
 
   // Build sector lookup: id → {name, color}
@@ -182,6 +190,7 @@
   }).addTo(map);
 
   var markers = [];
+  var reportMarkers = [];
 
   function siteColor(s) {
     if (colorMode === 'sector') {
@@ -208,6 +217,16 @@
       '</div>';
   }
 
+  function buildReportPopup(r) {
+    return '<div class="lk-popup">' +
+      '<div class="lk-popup__phase" style="color:#fbbf24;margin-bottom:4px;">📥 Bürger-Meldung</div>' +
+      (r.description ? '<div style="font-size:.84rem;margin-bottom:6px;">' + r.description + '</div>' : '') +
+      (r.ort ? '<div style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">' + r.ort + '</div>' : '') +
+      '<div style="font-size:.72rem;color:#9ca3af;margin-bottom:6px;">' + r.reporter + ' · ' + r.ts + '</div>' +
+      '<a class="lk-popup__link" href="/lage/' + lageId + '/meldungen">→ Meldungen</a>' +
+      '</div>';
+  }
+
   function refreshMarkerColors() {
     markers.forEach(function(obj) {
       var c = siteColor(obj.site);
@@ -217,7 +236,7 @@
   }
 
   function renderMarkers() {
-    var checks = document.querySelectorAll('#karte-controls input[type=checkbox]');
+    var checks = document.querySelectorAll('#karte-controls .phase-filter');
     var active = Array.from(checks).filter(function(c) { return c.checked; }).map(function(c) { return c.value; });
     var visible = 0;
     markers.forEach(function(obj) {
@@ -228,7 +247,13 @@
         if (map.hasLayer(obj.marker)) map.removeLayer(obj.marker);
       }
     });
-    document.getElementById('karte-badge').textContent = visible + ' / ' + SITES.length + ' Stellen sichtbar';
+    var repToggle = document.getElementById('rep-toggle');
+    var repVis = (repToggle && repToggle.checked)
+      ? reportMarkers.filter(function(m) { return map.hasLayer(m); }).length
+      : 0;
+    var badge = visible + ' / ' + SITES.length + ' Stellen';
+    if (repVis > 0) badge += ' · ' + repVis + ' Meldung' + (repVis !== 1 ? 'en' : '');
+    document.getElementById('karte-badge').textContent = badge;
   }
 
   function updateLegend() {
@@ -264,23 +289,43 @@
     updateLegend();
   };
 
-  if (SITES.length) {
-    var bounds = [];
-    SITES.forEach(function(s) {
-      var c = siteColor(s);
-      var m = L.circleMarker([s.lat, s.lng], {
-        radius: 11, color: c, fillColor: c,
-        fillOpacity: 0.85, weight: 2,
-      });
-      m.bindPopup(buildPopup(s), { maxWidth: 260 });
-      markers.push({ marker: m, phase: s.phase, site: s });
-      bounds.push([s.lat, s.lng]);
+  window.toggleReports = function(checked) {
+    reportMarkers.forEach(function(m) {
+      if (checked) { if (!map.hasLayer(m)) m.addTo(map); }
+      else          { if (map.hasLayer(m)) map.removeLayer(m); }
     });
     renderMarkers();
-    if (bounds.length) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
+  };
+
+  var allBounds = [];
+  SITES.forEach(function(s) {
+    var c = siteColor(s);
+    var m = L.circleMarker([s.lat, s.lng], {
+      radius: 11, color: c, fillColor: c,
+      fillOpacity: 0.85, weight: 2,
+    });
+    m.bindPopup(buildPopup(s), { maxWidth: 260 });
+    markers.push({ marker: m, phase: s.phase, site: s });
+    allBounds.push([s.lat, s.lng]);
+  });
+
+  REPORTS.forEach(function(r) {
+    var m = L.circleMarker([r.lat, r.lng], {
+      radius: 9, color: '#f59e0b', fillColor: '#fbbf24',
+      fillOpacity: 0.75, weight: 2, dashArray: '5 3',
+    });
+    m.bindPopup(buildReportPopup(r), { maxWidth: 240 });
+    reportMarkers.push(m);
+    m.addTo(map);
+    allBounds.push([r.lat, r.lng]);
+  });
+
+  renderMarkers();
+
+  if (allBounds.length) {
+    map.fitBounds(allBounds, { padding: [60, 60], maxZoom: 15 });
   } else {
     map.setView([47.41, 9.74], 11);
-    document.getElementById('karte-badge').textContent = '0 Stellen mit Koordinaten';
   }
 
   // Hide sector toggle if no sectors exist
