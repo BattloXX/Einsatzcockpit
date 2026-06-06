@@ -53,8 +53,9 @@ function initMapPicker(opts) {
 
   const map = L.map(container, { zoomControl: true }).setView([initLat, initLng], 15);
 
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende',
+    subdomains: 'abc',
     maxZoom: 19,
   }).addTo(map);
 

@@ -132,8 +132,9 @@
     const lat = parseFloat(document.getElementById('newIncLat').value) || 47.4664;
     const lng = parseFloat(document.getElementById('newIncLng').value) || 9.7416;
     _map = L.map('newIncMapContainer').setView([lat, lng], 14);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende',
+      subdomains: 'abc',
       maxZoom: 19,
     }).addTo(_map);
     _marker = L.marker([lat, lng], {draggable: true}).addTo(_map);

@@ -73,8 +73,9 @@
   var ts  = "{% if dt.last_location_at %}{{ (dt.last_location_at|local).strftime('%d.%m.%Y %H:%M:%S') }}{% else %}unbekannt{% endif %}";
 
   var map = L.map('deviceMap').setView([lat, lng], 15);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap',
+    subdomains: 'abc',
     maxZoom: 19,
   }).addTo(map);
 
