@@ -259,7 +259,8 @@
 <!-- ── Site-Detail Dialog ─────────────────────────────────────────────────── -->
 <dialog class="modal" id="siteDetailModal">
   <div class="modal__content" id="siteDetailContent"
-       style="min-width:min(540px,95vw);max-height:90vh;overflow-y:auto;">
+       style="min-width:min(540px,95vw);max-height:90vh;overflow-y:auto;"
+       hx-on::after-swap="document.getElementById('siteDetailModal').showModal()">
     <!-- Wird per HTMX befüllt -->
   </div>
 </dialog>
