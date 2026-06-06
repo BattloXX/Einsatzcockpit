@@ -4,8 +4,7 @@
      hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}"
      hx-target="#siteDetailContent"
      hx-swap="innerHTML"
-     hx-trigger="click[!event.target.closest('select,input,button,a')]"
-     hx-on::after-swap="document.getElementById('siteDetailModal').showModal()">
+     hx-trigger="click[!event.target.closest('select,input,button,a')]">
   {# Prioritätsbalken #}
   {% if site.priority %}
   <div class="site-card__prio-bar prio-bar--{{ prio_color[site.priority] }}"></div>
@@ -57,7 +56,6 @@
       </span>
       {% endif %}
     </div>
-  </div>
   </div>
 
   {# ── Quick-Prio (nur für Editoren) ────────────────────────────────────── #}

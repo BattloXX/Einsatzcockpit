@@ -264,8 +264,8 @@ async def new_incident(
                 ort=address_city or None,
                 strasse=address_street or None,
                 hausnr=address_no or None,
-                lat=lat_f,
-                lng=lng_f,
+                lat=incident.lat,
+                lng=incident.lng,
                 einsatzgrund=report_text or None,
             )
             db.commit()
@@ -284,8 +284,8 @@ async def new_incident(
                         ort=address_city or None,
                         strasse=address_street or None,
                         hausnr=address_no or None,
-                        lat=lat_f,
-                        lng=lng_f,
+                        lat=incident.lat,
+                        lng=incident.lng,
                         einsatzgrund=report_text or None,
                     )
                     db.commit()
