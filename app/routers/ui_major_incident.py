@@ -14,6 +14,7 @@ from app.models.major_incident import (
     CitizenReport,
     CommLogEntry,
     IncidentSite,
+    LageJournalEntry,
     Sector,
     MajorIncident,
     MajorIncidentStatus,
@@ -22,6 +23,8 @@ from app.models.major_incident import (
     SitePriority,
     SiteResourceAssignment,
     StaffAssignment,
+    JOURNAL_CATEGORIES,
+    JOURNAL_CATEGORY_COLOR,
     SITE_PRIORITY_COLOR,
     SITE_PRIORITY_LABEL,
     STAFF_FUNCTION_LABEL,
@@ -901,12 +904,22 @@ async def lage_stab(
         if not s.released_at:
             staff_by_fn[s.function].append(s)
 
+    journal_entries = (
+        db.query(LageJournalEntry)
+        .filter(LageJournalEntry.major_incident_id == lage_id)
+        .order_by(LageJournalEntry.ts.desc())
+        .all()
+    )
+
     return templates.TemplateResponse(request, "incident_major/stab.html", {
         "user": user,
         "lage": lage,
         "staff_by_fn": staff_by_fn,
         "staff_fn_label": STAFF_FUNCTION_LABEL,
         "staff_functions": list(StaffFunction),
+        "journal_entries": journal_entries,
+        "journal_categories": JOURNAL_CATEGORIES,
+        "journal_category_color": JOURNAL_CATEGORY_COLOR,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
     })
@@ -959,6 +972,55 @@ async def stab_release(
         raise HTTPException(status_code=404)
 
     asgn.released_at = datetime.now(UTC)
+    db.commit()
+    return Response(status_code=204)
+
+
+# ── Lage-Journal ──────────────────────────────────────────────────────────────
+
+@router.post("/lage/{lage_id}/journal")
+async def lage_journal_add(
+    request: Request,
+    lage_id: int,
+    text: str = Form(...),
+    category: str = Form("sonstiges"),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    if not _can_edit(user):
+        raise HTTPException(status_code=403)
+    if category not in JOURNAL_CATEGORIES:
+        category = "sonstiges"
+    db.add(LageJournalEntry(
+        major_incident_id=lage_id,
+        category=category,
+        text=text.strip()[:2000],
+        author_name=get_author_name(request),
+        user_id=getattr(user, "id", None),
+    ))
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "journal_updated"})
+    return Response(status_code=204)
+
+
+@router.post("/lage/{lage_id}/journal/{entry_id}/loeschen")
+async def lage_journal_delete(
+    request: Request,
+    lage_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    entry = db.get(LageJournalEntry, entry_id)
+    if not entry or entry.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    db.delete(entry)
     db.commit()
     return Response(status_code=204)
 
@@ -1461,7 +1523,14 @@ async def lage_zeitreise(
         .all()
     )
 
-    # Interleave both streams into a single chronological list
+    journal = (
+        db.query(LageJournalEntry)
+        .filter(LageJournalEntry.major_incident_id == lage_id)
+        .order_by(LageJournalEntry.ts)
+        .all()
+    )
+
+    # Interleave all streams into a single chronological list
     timeline: list[dict] = []
     for entry, site in site_logs:
         timeline.append({
@@ -1483,12 +1552,22 @@ async def lage_zeitreise(
             "text": c.message,
             "author": c.author_name,
         })
+    for j in journal:
+        timeline.append({
+            "ts": j.ts, "kind": "journal",
+            "category": j.category,
+            "text": j.text,
+            "author": j.author_name,
+            "entry_id": j.id,
+        })
     timeline.sort(key=lambda x: x["ts"])
 
     return templates.TemplateResponse(request, "incident_major/zeitreise.html", {
         "user": user,
         "lage": lage,
         "timeline": timeline,
+        "journal_categories": JOURNAL_CATEGORIES,
+        "journal_category_color": JOURNAL_CATEGORY_COLOR,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
     })
@@ -1808,6 +1887,13 @@ async def lage_protokoll_export(
         .all()
     )
 
+    journal_exp = (
+        db.query(LageJournalEntry)
+        .filter(LageJournalEntry.major_incident_id == lage_id)
+        .order_by(LageJournalEntry.ts)
+        .all()
+    )
+
     direction_map = {"in": "Eingehend", "out": "Ausgehend", "int": "Intern"}
     entries: list[dict] = []
     for entry, site in site_logs:
@@ -1828,6 +1914,14 @@ async def lage_protokoll_export(
             "text": c.message,
             "author": c.author_name,
         })
+    for j in journal_exp:
+        entries.append({
+            "ts": j.ts,
+            "kind": "journal",
+            "category": JOURNAL_CATEGORIES.get(j.category, j.category),
+            "text": j.text,
+            "author": j.author_name,
+        })
     entries.sort(key=lambda x: x["ts"])
 
     lines: list[str] = [
@@ -1841,6 +1935,9 @@ async def lage_protokoll_export(
         author_tag = f"  [{e['author']}]" if e.get("author") else ""
         if e["kind"] == "stelle":
             lines.append(f"{ts}  [STELLE]  {e['site']}")
+            lines.append(f"              {e['text']}{author_tag}")
+        elif e["kind"] == "journal":
+            lines.append(f"{ts}  [JOURNAL] {e['category']}")
             lines.append(f"              {e['text']}{author_tag}")
         else:
             parts = [e["direction"]]

@@ -48,6 +48,14 @@
 .tl-dot--comm-in  { background: #60a5fa; }
 .tl-dot--comm-out { background: #34d399; }
 .tl-dot--comm-int { background: #9ca3af; }
+.tl-dot--journal-entscheidung { background: #a855f7; }
+.tl-dot--journal-anweisung    { background: #f97316; }
+.tl-dot--journal-meldung      { background: #60a5fa; }
+.tl-dot--journal-sonstiges    { background: #6b7280; }
+.tl-badge--journal-entscheidung { background:rgba(168,85,247,.2); color:#c4b5fd; }
+.tl-badge--journal-anweisung    { background:rgba(249,115,22,.2);  color:#fdba74; }
+.tl-badge--journal-meldung      { background:rgba(59,130,246,.2);  color:#93c5fd; }
+.tl-badge--journal-sonstiges    { background:rgba(107,114,128,.2); color:#9ca3af; }
 
 .tl-time  { font-size: .72rem; color: var(--text-muted); margin-bottom: 2px; }
 .tl-site  { font-size: .7rem; color: #93c5fd; margin-bottom: 2px; }
@@ -96,6 +104,7 @@
     <div class="zt-filter" id="zt-filter" style="margin-bottom:0;">
       <label><input type="checkbox" checked value="site_log" onchange="applyFilter()"> Stellenlog</label>
       <label><input type="checkbox" checked value="comm" onchange="applyFilter()"> Funkjournal</label>
+      <label><input type="checkbox" checked value="journal" onchange="applyFilter()"> Journal</label>
     </div>
     <a href="/lage/{{ lage.id }}/protokoll.txt"
        class="btn btn--ghost btn--sm" style="margin-left:auto;" download>
@@ -114,6 +123,18 @@
       <div class="tl-time">{{ e.ts|local_time }}</div>
       <div class="tl-site">{{ e.site_bezeichnung }}</div>
       <div class="tl-text">{{ e.text }}</div>
+      {% if e.author %}<div class="tl-author">{{ e.author }}</div>{% endif %}
+    </div>
+    {% elif e.kind == 'journal' %}
+    <div class="tl-entry" data-kind="journal">
+      <div class="tl-dot tl-dot--journal-{{ e.category }}"></div>
+      <div class="tl-time">{{ e.ts|local_time }}</div>
+      <div class="tl-text">
+        <span class="tl-badge tl-badge--journal-{{ e.category }}">
+          {{ journal_categories.get(e.category, e.category)|upper }}
+        </span>
+        {{ e.text }}
+      </div>
       {% if e.author %}<div class="tl-author">{{ e.author }}</div>{% endif %}
     </div>
     {% else %}

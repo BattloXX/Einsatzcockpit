@@ -89,11 +89,12 @@ class MajorIncident(Base):
     updated_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
                                                     onupdate=lambda: datetime.now(UTC))
 
-    sites:   Mapped[list[IncidentSite]] = relationship(
+    sites:          Mapped[list[IncidentSite]] = relationship(
         back_populates="major_incident", cascade="all, delete-orphan")
-    sectors: Mapped[list[Sector]] = relationship(cascade="all, delete-orphan")
-    staff:   Mapped[list[StaffAssignment]] = relationship(cascade="all, delete-orphan")
-    comms:   Mapped[list[CommLogEntry]] = relationship(cascade="all, delete-orphan")
+    sectors:        Mapped[list[Sector]] = relationship(cascade="all, delete-orphan")
+    staff:          Mapped[list[StaffAssignment]] = relationship(cascade="all, delete-orphan")
+    comms:          Mapped[list[CommLogEntry]] = relationship(cascade="all, delete-orphan")
+    journal_entries: Mapped[list[LageJournalEntry]] = relationship(cascade="all, delete-orphan")
 
 
 class Sector(Base):
@@ -254,3 +255,34 @@ class CitizenReport(Base):
     source_ip:         Mapped[str | None] = mapped_column(String(45), nullable=True)
     site_id:           Mapped[int | None] = mapped_column(
         Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True)
+
+
+# ── Lage-Journal ──────────────────────────────────────────────────────────────
+
+JOURNAL_CATEGORIES = {
+    "entscheidung": "Entscheidung",
+    "anweisung":    "Anweisung",
+    "meldung":      "Meldung",
+    "sonstiges":    "Sonstiges",
+}
+
+JOURNAL_CATEGORY_COLOR = {
+    "entscheidung": "purple",
+    "anweisung":    "orange",
+    "meldung":      "blue",
+    "sonstiges":    "muted",
+}
+
+
+class LageJournalEntry(Base):
+    __tablename__ = "lage_journal_entry"
+
+    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
+    major_incident_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
+    ts:                Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    category:          Mapped[str] = mapped_column(String(20), default="sonstiges")
+    text:              Mapped[str] = mapped_column(Text)
+    author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
+    user_id:           Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("user.id"), nullable=True)

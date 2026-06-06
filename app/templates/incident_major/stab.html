@@ -135,6 +135,69 @@
 
   </div>
 
+  {# ── Lage-Journal ────────────────────────────────────────────────────────── #}
+  <div class="dash-section" style="margin-top:16px;background:var(--surface-elevated,#1e2130);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+    <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);letter-spacing:.04em;margin-bottom:10px;">
+      LAGE-JOURNAL
+    </div>
+
+    {% if can_edit and lage.status.value == 'active' %}
+    <form hx-post="/lage/{{ lage.id }}/journal"
+          hx-swap="none"
+          hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+          hx-on::after-request="if(event.detail.successful){this.reset();location.reload();}"
+          style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
+      <textarea name="text" class="form-input" rows="2" required maxlength="2000"
+                placeholder="Entscheidung, Lagemeldung oder Anweisung…"
+                style="resize:vertical;font-size:.84rem;"></textarea>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select name="category" class="form-input" style="flex:1;font-size:.82rem;padding:4px 8px;">
+          {% for cat_key, cat_label in journal_categories.items() %}
+          <option value="{{ cat_key }}">{{ cat_label }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn--secondary btn--sm">Eintragen</button>
+      </div>
+    </form>
+    {% endif %}
+
+    {% if journal_entries %}
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      {% for entry in journal_entries %}
+      {% set cat_color = journal_category_color.get(entry.category, 'muted') %}
+      <div style="padding:8px 10px;background:var(--surface-high,#252a3a);border-radius:6px;
+                  border-left:3px solid {% if cat_color == 'purple' %}#a855f7{% elif cat_color == 'orange' %}#f97316{% elif cat_color == 'blue' %}#60a5fa{% else %}#4b5563{% endif %};">
+        <div style="display:flex;align-items:flex-start;gap:6px;">
+          <span style="font-size:.62rem;font-weight:700;padding:1px 5px;border-radius:3px;white-space:nowrap;margin-top:2px;
+            {% if cat_color == 'purple' %}background:rgba(168,85,247,.2);color:#c4b5fd;
+            {% elif cat_color == 'orange' %}background:rgba(249,115,22,.2);color:#fdba74;
+            {% elif cat_color == 'blue' %}background:rgba(59,130,246,.2);color:#93c5fd;
+            {% else %}background:rgba(107,114,128,.2);color:#9ca3af;{% endif %}">
+            {{ journal_categories.get(entry.category, entry.category)|upper }}
+          </span>
+          <span style="font-size:.84rem;flex:1;line-height:1.45;">{{ entry.text }}</span>
+          {% if can_manage %}
+          <form hx-post="/lage/{{ lage.id }}/journal/{{ entry.id }}/loeschen"
+                hx-swap="none"
+                hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+                hx-on::after-request="if(event.detail.successful){location.reload();}"
+                onsubmit="return confirm('Eintrag löschen?')"
+                style="margin:0;flex-shrink:0;">
+            <button type="submit" class="btn btn--xs btn--ghost" title="Löschen">✕</button>
+          </form>
+          {% endif %}
+        </div>
+        <div style="font-size:.68rem;color:var(--text-muted);margin-top:4px;padding-left:0;">
+          {{ entry.ts|local_datetime }}{% if entry.author_name %} · {{ entry.author_name }}{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="font-size:.78rem;color:var(--text-muted);padding:6px 0;">Noch keine Einträge.</div>
+    {% endif %}
+  </div>
+
   {# ── KI-Pressemeldung (S5) ───────────────────────────────────────────────── #}
   <div class="dash-section" style="margin-top:16px;background:var(--surface-elevated,#1e2130);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
