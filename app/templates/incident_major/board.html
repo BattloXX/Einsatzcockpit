@@ -2,6 +2,7 @@
 {% block title %}{{ lage.name }} – Großschadenslage{% endblock %}
 
 {% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
 <style>
   /* ── Layout ──────────────────────────────────────────────────────────────── */
   .lage-wrap { display:flex; flex-direction:column; height:calc(100vh - var(--topnav-h)); overflow:hidden; }
@@ -267,6 +268,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/leaflet.min.js"></script>
 <script src="/static/js/sortable.min.js"></script>
 <script src="/static/js/lage_board.js"></script>
 <script>

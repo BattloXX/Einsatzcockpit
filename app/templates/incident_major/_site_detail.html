@@ -95,6 +95,59 @@
   </div>
   {% endif %}
 
+  {# ── Karte ───────────────────────────────────────────────────────── #}
+  {% if site.lat and site.lng %}
+  <div style="margin:10px 0 6px;">
+    <div id="sdMap{{ site.id }}"
+         style="height:180px;border-radius:6px;border:1px solid var(--border);z-index:0;"></div>
+    <div style="margin-top:4px;display:flex;gap:10px;align-items:center;font-size:.72rem;">
+      <span style="color:var(--text-muted);">{{ '%.5f'|format(site.lat) }}, {{ '%.5f'|format(site.lng) }}</span>
+      <a href="https://www.openstreetmap.org/?mlat={{ site.lat }}&mlon={{ site.lng }}&zoom=17"
+         target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ OSM</a>
+      <a href="https://maps.google.com/?q={{ site.lat }},{{ site.lng }}"
+         target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ Google Maps</a>
+    </div>
+  </div>
+  <script>
+  (function() {
+    var _lat = {{ site.lat }}, _lng = {{ site.lng }};
+    function _initMap() {
+      if (typeof L === 'undefined') return;
+      var el = document.getElementById('sdMap{{ site.id }}');
+      if (!el || el._m) return;
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconUrl: '/static/img/leaflet/marker-icon.png',
+        iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
+        shadowUrl: '/static/img/leaflet/marker-shadow.png',
+      });
+      var m = L.map(el, { zoomControl: true }).setView([_lat, _lng], 17);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap', subdomains: 'abc', maxZoom: 19,
+      }).addTo(m);
+      L.marker([_lat, _lng]).addTo(m);
+      el._m = m;
+      setTimeout(function() { m.invalidateSize(); }, 50);
+      setTimeout(function() { m.invalidateSize(); }, 350);
+    }
+    var dlg = document.getElementById('siteDetailModal');
+    if (dlg && !dlg.open) {
+      dlg.addEventListener('toggle', function h() {
+        if (dlg.open) { dlg.removeEventListener('toggle', h); setTimeout(_initMap, 20); }
+      });
+    } else {
+      setTimeout(_initMap, 20);
+    }
+  })();
+  </script>
+  {% elif site.strasse or site.ort %}
+  <div style="margin-top:6px;margin-bottom:4px;">
+    <a href="https://maps.google.com/?q={{ site.strasse or '' }} {{ site.hausnr or '' }}, {{ site.ort or '' }}"
+       target="_blank" rel="noopener"
+       style="font-size:.78rem;color:#93c5fd;text-decoration:none;">🗺 Adresse auf Karte ↗</a>
+  </div>
+  {% endif %}
+
   {# ── Abschnitt ────────────────────────────────────────────────────── #}
   {% if sectors %}
   <div class="site-detail__row">

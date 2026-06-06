@@ -250,6 +250,8 @@ def _handle_major_incident_trigger(
     strasse: str | None,
     hausnr: str | None,
     einsatzgrund: str | None,
+    lat: float | None = None,
+    lng: float | None = None,
 ) -> None:
     """Prüft ob der Alarm eine Großschadenslage auslöst oder in eine laufende übernommen wird."""
     from app.services.major_incident_service import (
@@ -269,6 +271,7 @@ def _handle_major_incident_trigger(
             db, org_id, alarm_type_code, incident_id, external_key,
             is_exercise=is_exercise,
             ort=ort, strasse=strasse, hausnr=hausnr, einsatzgrund=einsatzgrund,
+            lat=lat, lng=lng,
         )
     elif active_lage:
         # Laufende Lage + mi_auto_adopt → normalen Einsatz spiegeln
@@ -284,6 +287,7 @@ def _handle_major_incident_trigger(
                 alarm_type_code=alarm_type_code,
                 org_id=org_id,
                 ort=ort, strasse=strasse, hausnr=hausnr, einsatzgrund=einsatzgrund,
+                lat=lat, lng=lng,
             )
 
 
@@ -364,6 +368,18 @@ async def create_incident_api(
     )
     db.commit()
 
+    # Automatisches Geocoding wenn Adresse vorhanden (vor GSL-Trigger, damit Koordinaten fließen)
+    _geo_lat: float | None = None
+    _geo_lng: float | None = None
+    if payload.Ort or payload.Strasse:
+        from app.services.geocoding import geocode_address as _geocode
+        geo = await _geocode(payload.Strasse, payload.HausNr, payload.Ort)
+        if geo:
+            _geo_lat, _geo_lng = geo.lat, geo.lng
+            incident.lat = geo.lat
+            incident.lng = geo.lng
+            db.commit()
+
     # ── Großschadenslage-Trigger ─────────────────────────────────────────────
     if api_key.org_id:
         _handle_major_incident_trigger(
@@ -377,17 +393,10 @@ async def create_incident_api(
             strasse=payload.Strasse,
             hausnr=payload.HausNr,
             einsatzgrund=payload.Einsatzgrund,
+            lat=_geo_lat,
+            lng=_geo_lng,
         )
         db.commit()
-
-    # Automatisches Geocoding wenn Adresse vorhanden
-    if payload.Ort or payload.Strasse:
-        from app.services.geocoding import geocode_address as _geocode
-        geo = await _geocode(payload.Strasse, payload.HausNr, payload.Ort)
-        if geo:
-            incident.lat = geo.lat
-            incident.lng = geo.lng
-            db.commit()
 
     address = f"{payload.Strasse or ''} {payload.HausNr or ''}, {payload.Ort or ''}".strip(", ")
     exercise_prefix = "[ÜBUNG] " if payload.Uebung else ""
