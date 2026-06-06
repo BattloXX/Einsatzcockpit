@@ -117,6 +117,13 @@
       <div class="stat-card__val" style="color:#93c5fd;">{{ active_res }}</div>
       <div class="stat-card__lbl">Ressourcen aktiv</div>
     </div>
+    <a href="/lage/{{ lage.id }}/meldungen" class="stat-card"
+       style="text-decoration:none;{% if pending_reports > 0 %}border-color:#f59e0b;{% endif %}">
+      <div class="stat-card__val" style="color:{% if pending_reports > 0 %}#fbbf24{% else %}var(--text-muted){% endif %};">
+        {{ pending_reports }}
+      </div>
+      <div class="stat-card__lbl">📥 Offene Meldungen</div>
+    </a>
   </div>
 
   <div class="dash-grid">
@@ -213,11 +220,22 @@
     {# ── Letzte Aktivitäten ──────────────────────────────────────────────────── #}
     <div class="dash-section" style="max-height:calc(100vh - 200px);overflow-y:auto;">
       <div class="dash-section__title">LETZTE AKTIVITÄTEN</div>
-      {% for entry, site in recent_logs %}
+      {% for item in activity_feed %}
       <div class="act-entry">
-        <span class="act-time">{{ entry.ts|local_time }}</span>
-        <span class="act-site" title="{{ site.bezeichnung }}">{{ site.bezeichnung[:18] }}</span>
-        <span class="act-text">{{ entry.text }}</span>
+        <span class="act-time">{{ item.ts|local_time }}</span>
+        {% if item.kind == 'journal' %}
+        <span class="act-site" style="color:
+          {% if item.category == 'entscheidung' %}#c4b5fd
+          {% elif item.category == 'anweisung' %}#fdba74
+          {% elif item.category == 'meldung' %}#93c5fd
+          {% else %}var(--text-muted){% endif %};white-space:nowrap;"
+          title="{{ journal_categories.get(item.category, item.category) }}">
+          {{ (journal_categories.get(item.category, item.category) or '')[:10] }}
+        </span>
+        {% else %}
+        <span class="act-site" title="{{ item.site }}">{{ (item.site or '')[:18] }}</span>
+        {% endif %}
+        <span class="act-text">{{ item.text }}</span>
       </div>
       {% else %}
       <div style="font-size:.8rem;color:var(--text-muted);">Noch keine Einträge.</div>

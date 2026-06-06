@@ -830,14 +830,40 @@ async def lage_dashboard(
         if site.phase not in (SitePhase.abgebrochen, SitePhase.erledigt) and site.priority:
             prio_stats[site.priority] += 1
 
-    recent_logs = (
+    pending_reports = (
+        db.query(CitizenReport)
+        .filter(
+            CitizenReport.major_incident_id == lage_id,
+            CitizenReport.status == "new",
+        )
+        .count()
+    )
+
+    site_logs_raw = (
         db.query(SiteLogEntry, IncidentSite)
         .join(IncidentSite, SiteLogEntry.incident_site_id == IncidentSite.id)
         .filter(IncidentSite.major_incident_id == lage_id)
         .order_by(SiteLogEntry.ts.desc())
-        .limit(40)
+        .limit(30)
         .all()
     )
+
+    journal_logs_raw = (
+        db.query(LageJournalEntry)
+        .filter(LageJournalEntry.major_incident_id == lage_id)
+        .order_by(LageJournalEntry.ts.desc())
+        .limit(20)
+        .all()
+    )
+
+    activity_feed = sorted(
+        [{"kind": "site_log", "ts": e.ts, "text": e.text,
+          "site": s.bezeichnung, "category": None} for e, s in site_logs_raw]
+        + [{"kind": "journal", "ts": e.ts, "text": e.text,
+            "site": None, "category": e.category} for e in journal_logs_raw],
+        key=lambda x: x["ts"],
+        reverse=True,
+    )[:40]
 
     map_sites_json = json.dumps([
         {
@@ -875,12 +901,14 @@ async def lage_dashboard(
         "prio_stats": prio_stats,
         "prio_label": SITE_PRIORITY_LABEL,
         "prio_color": SITE_PRIORITY_COLOR,
-        "recent_logs": recent_logs,
+        "activity_feed": activity_feed,
         "map_sites_json": map_sites_json,
         "open_count": open_count,
         "done_count": phase_stats[SitePhase.erledigt],
         "active_res": active_res,
         "total_sites": len(lage.sites),
+        "pending_reports": pending_reports,
+        "journal_categories": JOURNAL_CATEGORIES,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
     })
