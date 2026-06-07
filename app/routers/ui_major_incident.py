@@ -85,8 +85,11 @@ PHASE_LABELS = {
 
 
 async def _apply_ai_prio(site: IncidentSite, db: Session) -> None:
-    """Automatically suggest priority via AI based on einsatzgrund. Never raises."""
-    if not ai_is_enabled() or not site.einsatzgrund:
+    """Automatically suggest priority via AI based on einsatzgrund. Never raises.
+
+    Only sets priority when none exists — never overwrites a manually set value.
+    """
+    if site.priority or not ai_is_enabled() or not site.einsatzgrund:
         return
     try:
         result = await analyze_site_reconnaissance(

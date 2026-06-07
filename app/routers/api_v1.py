@@ -238,6 +238,35 @@ async def _enrich_with_ai_hints(
         db.close()
 
 
+async def _apply_ai_prio_to_site(site_id: int) -> None:
+    """Background: set AI-suggested priority on a newly created major incident site.
+
+    Only sets priority when none exists — never overwrites a manually set value.
+    """
+    from app.db import SessionLocal
+    from app.models.major_incident import IncidentSite, SitePriority
+    from app.services.ai_service import analyze_site_reconnaissance
+
+    db = SessionLocal()
+    try:
+        site = db.get(IncidentSite, site_id)
+        if not site or site.priority or not site.einsatzgrund:
+            return
+        result = await analyze_site_reconnaissance(
+            site.einsatzgrund,
+            {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
+        )
+        if result and result.get("prio_vorschlag"):
+            site.priority = SitePriority(result["prio_vorschlag"])
+            site.danger_score = result.get("danger_score")
+            site.urgency_score = result.get("urgency_score")
+            db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 def _handle_major_incident_trigger(
     db: Session,
     org_id: int,
@@ -252,7 +281,7 @@ def _handle_major_incident_trigger(
     einsatzgrund: str | None,
     lat: float | None = None,
     lng: float | None = None,
-) -> None:
+) -> "IncidentSite | None":
     """Prüft ob der Alarm eine Großschadenslage auslöst oder in eine laufende übernommen wird."""
     from app.services.major_incident_service import (
         adopt_incident_as_site,
@@ -267,12 +296,13 @@ def _handle_major_incident_trigger(
 
     if triggers:
         # Alarm löst Lage aus oder wird in bestehende Lage eingefügt
-        handle_alarm_trigger(
+        _, site, _ = handle_alarm_trigger(
             db, org_id, alarm_type_code, incident_id, external_key,
             is_exercise=is_exercise,
             ort=ort, strasse=strasse, hausnr=hausnr, einsatzgrund=einsatzgrund,
             lat=lat, lng=lng,
         )
+        return site
     elif active_lage:
         # Laufende Lage + mi_auto_adopt → normalen Einsatz spiegeln
         org_settings = (
@@ -280,7 +310,7 @@ def _handle_major_incident_trigger(
         )
         auto_adopt = org_settings.mi_auto_adopt if org_settings else True
         if auto_adopt:
-            adopt_incident_as_site(
+            return adopt_incident_as_site(
                 db, active_lage,
                 incident_id=incident_id,
                 external_key=external_key,
@@ -289,6 +319,7 @@ def _handle_major_incident_trigger(
                 ort=ort, strasse=strasse, hausnr=hausnr, einsatzgrund=einsatzgrund,
                 lat=lat, lng=lng,
             )
+    return None
 
 
 @router.post(
@@ -381,8 +412,9 @@ async def create_incident_api(
             db.commit()
 
     # ── Großschadenslage-Trigger ─────────────────────────────────────────────
+    _mi_site = None
     if api_key.org_id:
-        _handle_major_incident_trigger(
+        _mi_site = _handle_major_incident_trigger(
             db=db,
             org_id=api_key.org_id,
             alarm_type_code=alarm_type_code,
@@ -438,6 +470,9 @@ async def create_incident_api(
             alarm_type_code,
             address,
         )
+        # Set AI priority on major incident site (only if einsatzgrund present and no priority yet)
+        if _mi_site and _mi_site.id:
+            background_tasks.add_task(_apply_ai_prio_to_site, _mi_site.id)
 
     return {
         "id": incident.id,
