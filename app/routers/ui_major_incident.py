@@ -31,7 +31,7 @@ from app.models.major_incident import (
     STAFF_FUNCTION_LABEL,
     StaffFunction,
 )
-from app.models.master import VehicleMaster
+from app.models.master import FireDept, Member, VehicleMaster
 from app.services.ai_service import analyze_site_reconnaissance, is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage
 from app.services.major_incident_service import (
@@ -85,15 +85,17 @@ PHASE_LABELS = {
 
 
 async def _apply_ai_prio(site: IncidentSite, db: Session) -> None:
-    """Automatically suggest priority via AI based on einsatzgrund. Never raises.
+    """Automatically suggest priority via AI. Never raises.
 
     Only sets priority when none exists — never overwrites a manually set value.
+    Uses einsatzgrund if available, falls back to bezeichnung.
     """
-    if site.priority or not ai_is_enabled() or not site.einsatzgrund:
+    text = site.einsatzgrund or site.bezeichnung
+    if site.priority or not ai_is_enabled() or not text:
         return
     try:
         result = await analyze_site_reconnaissance(
-            site.einsatzgrund,
+            text,
             {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
         )
         if result and result.get("prio_vorschlag"):
@@ -1320,8 +1322,14 @@ async def buerger_portal(
     if lage.public_token_expires_at and lage.public_token_expires_at < now:
         return HTMLResponse("<h2>Dieser Link ist abgelaufen.</h2>", status_code=410)
 
+    org = db.get(FireDept, lage.org_id) if lage.org_id else None
+    org_logo = (org.logo_path if org and org.logo_path else None) or "/static/img/Logo-rot.png"
+
     return templates.TemplateResponse(request, "incident_major/public_report.html", {
-        "lage": lage, "token": token,
+        "lage": lage,
+        "token": token,
+        "org_name": org.name if org else "Feuerwehr",
+        "org_logo": org_logo,
     })
 
 
@@ -2052,11 +2060,19 @@ async def lage_ressourcen(
         .all()
     )
 
+    org_members = (
+        db.query(Member)
+        .filter(Member.org_id == lage.org_id, Member.active == True)  # noqa: E712
+        .order_by(Member.lastname, Member.firstname)
+        .all()
+    )
+
     return templates.TemplateResponse(request, "incident_major/ressourcen.html", {
         "user": user,
         "lage": lage,
         "einheiten": einheiten,
         "extra_vehicles": extra_vehicles,
+        "org_members": org_members,
         "all_res": all_res,
         "conflict_vids": conflict_vids,
         "released": released,

@@ -250,10 +250,11 @@ async def _apply_ai_prio_to_site(site_id: int) -> None:
     db = SessionLocal()
     try:
         site = db.get(IncidentSite, site_id)
-        if not site or site.priority or not site.einsatzgrund:
+        text = site.einsatzgrund or site.bezeichnung if site else None
+        if not site or site.priority or not text:
             return
         result = await analyze_site_reconnaissance(
-            site.einsatzgrund,
+            text,
             {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
         )
         if result and result.get("prio_vorschlag"):

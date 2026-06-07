@@ -135,16 +135,17 @@
       }).addTo(m);
       L.marker([_lat, _lng]).addTo(m);
       el._m = m;
-      setTimeout(function() { m.invalidateSize(); }, 50);
-      setTimeout(function() { m.invalidateSize(); }, 350);
+      setTimeout(function() { m.invalidateSize(); }, 100);
+      setTimeout(function() { m.invalidateSize(); }, 400);
+      setTimeout(function() { m.invalidateSize(); }, 900);
     }
     var dlg = document.getElementById('siteDetailModal');
     if (dlg && !dlg.open) {
       dlg.addEventListener('toggle', function h() {
-        if (dlg.open) { dlg.removeEventListener('toggle', h); setTimeout(_initMap, 20); }
+        if (dlg.open) { dlg.removeEventListener('toggle', h); setTimeout(_initMap, 150); }
       });
     } else {
-      setTimeout(_initMap, 20);
+      setTimeout(_initMap, 150);
     }
   })();
   </script>
@@ -187,7 +188,8 @@
       <select class="form-select form-select--xs"
               hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/phase"
               hx-vals='{"_csrf": "{{ request.state.csrf_token }}", "sort_index": "0"}'
-              name="phase" hx-trigger="change" hx-swap="none">
+              name="phase" hx-trigger="change" hx-swap="none"
+              hx-on::after-request="if(event.detail.successful) location.reload()">
         {% for phase_key, phase_text in phase_labels.items() %}
         <option value="{{ phase_key.value }}" {% if site.phase == phase_key %}selected{% endif %}>{{ phase_text }}</option>
         {% endfor %}
@@ -206,7 +208,8 @@
       <select class="form-select form-select--xs"
               hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/prio"
               hx-vals='{"_csrf": "{{ request.state.csrf_token }}"}'
-              name="priority" hx-trigger="change" hx-swap="none">
+              name="priority" hx-trigger="change" hx-swap="none"
+              hx-on::after-request="if(event.detail.successful) location.reload()">
         <option value="" {% if not site.priority %}selected{% endif %}>— keine —</option>
         {% for prio_key, prio_text in prio_label.items() %}
         <option value="{{ prio_key.value }}" {% if site.priority == prio_key %}selected{% endif %}

@@ -207,22 +207,27 @@
   });
   var map = L.map('printMap', { zoomControl: false, attributionControl: false })
              .setView([lat, lng], 18);
+  // subdomains: 'abc' PFLICHT — ohne Option → HTTP 503
   var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     subdomains: 'abc', maxZoom: 19,
     attribution: '© OpenStreetMap'
   }).addTo(map);
   L.marker([lat, lng]).addTo(map);
 
-  // Auto-print after tiles load; fallback after 4 seconds
+  // Karte korrekte Größe berechnen lassen, damit Tiles für den richtigen Bereich geladen werden
+  setTimeout(function() { map.invalidateSize(); }, 50);
+  setTimeout(function() { map.invalidateSize(); }, 300);
+
+  // Auto-print after tiles load; fallback after 5 seconds
   var printed = false;
   function autoPrint() {
     if (printed) return;
     printed = true;
     map.invalidateSize();
-    setTimeout(function() { window.print(); }, 200);
+    setTimeout(function() { window.print(); }, 700);
   }
   tiles.on('load', autoPrint);
-  setTimeout(autoPrint, 4000);
+  setTimeout(autoPrint, 5000);
 })();
 </script>
 {% else %}

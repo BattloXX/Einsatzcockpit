@@ -164,6 +164,7 @@
               <input type="text" name="commander_label" class="cmdr-input"
                      value="{{ e.commander_label or '' }}"
                      placeholder="Name eintragen…"
+                     list="cmdr-datalist"
                      hx-trigger="change"
                      hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/kommandant"
                      hx-swap="none"
@@ -328,6 +329,13 @@
 {% endblock %}
 
 {% block scripts %}
+{% if org_members %}
+<datalist id="cmdr-datalist">
+  {% for m in org_members %}
+  <option value="{{ m.full_name }}">
+  {% endfor %}
+</datalist>
+{% endif %}
 <script>
 function formatDur(secs) {
   if (secs < 0) secs = 0;
