@@ -487,6 +487,32 @@ class LageSiteCreatedResponse(BaseModel):
     created: bool = Field(..., description="True bei Neuanlage, False bei Idempotency-Treffer.")
 
 
+async def _ai_prio_background(site_id: int) -> None:
+    """Background task: set priority on a freshly created site via AI analysis."""
+    from app.db import SessionLocal
+    from app.models.major_incident import IncidentSite, SitePriority
+    from app.services.ai_service import analyze_site_reconnaissance, is_enabled
+    if not is_enabled():
+        return
+    db = SessionLocal()
+    try:
+        site = db.get(IncidentSite, site_id)
+        if site and site.einsatzgrund and not site.priority:
+            result = await analyze_site_reconnaissance(
+                site.einsatzgrund,
+                {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
+            )
+            if result and result.get("prio_vorschlag"):
+                site.priority = SitePriority(result["prio_vorschlag"])
+                site.danger_score = result.get("danger_score")
+                site.urgency_score = result.get("urgency_score")
+                db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 @router.post(
     "/lage/alarm",
     response_model=LageSiteCreatedResponse,
@@ -562,6 +588,7 @@ async def lage_alarm(
     background_tasks.add_task(
         broadcast_lage, lage.id, {"type": "site_created", "reload_board": True}
     )
+    background_tasks.add_task(_ai_prio_background, site.id)
     return LageSiteCreatedResponse(lage_id=lage.id, site_id=site.id, created=True)
 
 

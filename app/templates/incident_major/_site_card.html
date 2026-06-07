@@ -11,11 +11,7 @@
   {% endif %}
 
   <div class="site-card__body">
-    <div class="site-card__title">{{ site.bezeichnung }}</div>
-
-    {% if site.einsatzgrund %}
-    <div class="site-card__sub">{{ site.einsatzgrund }}</div>
-    {% endif %}
+    <div class="site-card__title">{{ site.einsatzgrund or site.bezeichnung }}</div>
 
     {% if site.strasse or site.ort %}
     <div class="site-card__addr">
@@ -26,9 +22,11 @@
 
     {% if site.sector_id and sectors_by_id and site.sector_id in sectors_by_id %}
     {% set sec = sectors_by_id[site.sector_id] %}
-    <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px;display:flex;align-items:center;gap:4px;">
-      <span style="width:8px;height:8px;border-radius:50%;background:{{ sec.color or '#6b7280' }};display:inline-block;flex-shrink:0;"></span>
-      {{ sec.name }}
+    <div style="margin-top:5px;">
+      <span style="font-size:.7rem;padding:2px 7px;border-radius:4px;border:1px solid {{ sec.color or '#6b7280' }};color:{{ sec.color or '#9ca3af' }};display:inline-flex;align-items:center;gap:4px;">
+        <span style="width:6px;height:6px;border-radius:50%;background:{{ sec.color or '#6b7280' }};flex-shrink:0;"></span>
+        {{ sec.name }}
+      </span>
     </div>
     {% endif %}
 
@@ -47,30 +45,14 @@
       <span class="badge--xs badge--purple">Bürger</span>
       {% endif %}
       {% if site.priority %}
-      <span style="font-size:.7rem;font-weight:600;
-        {% if prio_color[site.priority] == 'red' %}color:#f87171;
-        {% elif prio_color[site.priority] == 'orange' %}color:#fb923c;
-        {% elif prio_color[site.priority] == 'yellow' %}color:#facc15;
-        {% else %}color:var(--text-muted);{% endif %}">
+      <span style="font-size:.7rem;font-weight:700;padding:1px 7px;border-radius:4px;
+        {% if prio_color[site.priority] == 'red' %}background:rgba(248,113,113,.15);color:#f87171;
+        {% elif prio_color[site.priority] == 'orange' %}background:rgba(251,146,60,.15);color:#fb923c;
+        {% elif prio_color[site.priority] == 'yellow' %}background:rgba(250,204,21,.12);color:#facc15;
+        {% else %}background:rgba(107,114,128,.15);color:var(--text-muted);{% endif %}">
         {{ prio_label[site.priority] }}
       </span>
       {% endif %}
     </div>
   </div>
-
-  {# ── Quick-Prio (nur für Editoren) ────────────────────────────────────── #}
-  {% if can_edit %}
-  <div class="site-card__footer" onclick="event.stopPropagation()">
-    {% for pk, pt in prio_label.items() %}
-    <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/prio"
-          hx-swap="none"
-          hx-vals='{"_csrf":"{{ request.state.csrf_token }}","priority":"{{ pk.value }}"}'>
-      <button type="submit" title="{{ pt }}"
-              class="prio-quick-btn prio-quick-btn--{{ prio_color[pk] }}{% if site.priority == pk %} pq-active{% endif %}">
-        {{ pt[:1] }}
-      </button>
-    </form>
-    {% endfor %}
-  </div>
-  {% endif %}
 </div>

@@ -40,7 +40,8 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **In-App ZIP-Update** | Neue Version per Upload einspielen, kein SSH erforderlich |
 | **Statistik-Dashboard** | Einsatzauswertung nach Typ, Zeit, Fahrzeug |
 | **Stammdaten-Verwaltung** | Fahrzeuge, Mitglieder, Qualifikationen (AGT-Ablaufdaten), Alarmtypen |
-| **KI-Assistent (✨)** | Auftragsvorschläge, Lage-Ticker-Hinweise und Lagebild via Anthropic Claude; opt-in pro Instanz |
+| **Großschadenslage** | Phasen-Kanban für Massenanfall-Ereignisse: Einsatzstellen, Abschnitte, Stabsfunktionen, Funkliste, Bürgermeldungen, Pressemeldung |
+| **KI-Assistent (✨)** | Auftragsvorschläge, Lage-Ticker-Hinweise, Lagebild und automatische Priorisierung neuer Einsatzstellen via Anthropic Claude; opt-in pro Instanz |
 
 ---
 
@@ -608,6 +609,7 @@ Default: **deaktiviert** (`AI_ENABLED=false`).
 | **✨ Lage-Hinweise** | Taktische Ticker-Hinweise für das Board (Sidebar + Header). KI-Hinweise werden mit ✨ markiert; admin-gepflegte Hinweise dienen als Fallback wenn keine KI-Hinweise vorliegen. |
 | **✨ Lagebild** | Kompakte Lagebeschreibung aus Live-Einsatzdaten; kann ins Journal übernommen werden. |
 | **✨ Einsatzbericht** | KI-Entwurf für den Abschlussbericht (im Archiv). |
+| **✨ Auto-Priorisierung (Großschadenslage)** | Beim Anlegen einer Einsatzstelle (manuell, API, Bürgermeldung) analysiert die KI die Einsatzmeldung und schlägt automatisch eine Priorität (Sofort / Dringend / Normal / Aufschiebbar) samt `danger_score` und `urgency_score` vor. |
 
 ### Auftragsvorschlags-Chips
 

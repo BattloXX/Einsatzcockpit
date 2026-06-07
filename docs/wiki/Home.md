@@ -46,6 +46,7 @@ Eine Python-Webapp (FastAPI + HTMX), die das bisherige Single-File-HTML-Tool abl
 | [Mobile Nutzung / PWA](Anwender-Mobile-Nutzung-PWA) | Installieren, Offline-Verhalten |
 | [Push-Benachrichtigungen](Anwender-Push-Benachrichtigungen) | Aktivieren auf Handy und PC |
 | [Lagekarte.info](Anwender-Lagekarte) | Adresse & Koordinaten, Live-Fahrzeuge auf lagekarte.info |
+| [Großschadenslage](Anwender-Grosschadenslage) | Phasen-Kanban, Einsatzstellen, Abschnitte, KI-Priorisierung |
 
 ### Administration
 | Seite | Beschreibung |

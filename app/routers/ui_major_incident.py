@@ -31,6 +31,7 @@ from app.models.major_incident import (
     StaffFunction,
 )
 from app.models.master import VehicleMaster
+from app.services.ai_service import analyze_site_reconnaissance, is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage
 from app.services.major_incident_service import (
     close_lage,
@@ -80,6 +81,23 @@ PHASE_LABELS = {
     SitePhase.erledigt:    "Erledigt",
     SitePhase.abgebrochen: "Abgebrochen",
 }
+
+
+async def _apply_ai_prio(site: IncidentSite, db: Session) -> None:
+    """Automatically suggest priority via AI based on einsatzgrund. Never raises."""
+    if not ai_is_enabled() or not site.einsatzgrund:
+        return
+    try:
+        result = await analyze_site_reconnaissance(
+            site.einsatzgrund,
+            {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
+        )
+        if result and result.get("prio_vorschlag"):
+            site.priority = SitePriority(result["prio_vorschlag"])
+            site.danger_score = result.get("danger_score")
+            site.urgency_score = result.get("urgency_score")
+    except Exception:
+        pass
 
 
 def _lage_or_404(lage_id: int, db: Session) -> MajorIncident:
@@ -288,6 +306,7 @@ async def site_create(
         created_by=user.id,
     )
     await _geocode_site(site)
+    await _apply_ai_prio(site, db)
     db.add(SiteLogEntry(
         incident_site_id=site.id,
         kind="status",
@@ -1422,6 +1441,7 @@ async def meldung_annehmen(
         source="buerger",
     )
     await _geocode_site(site)
+    await _apply_ai_prio(site, db)
     db.add(SiteLogEntry(
         incident_site_id=site.id,
         kind="status",
