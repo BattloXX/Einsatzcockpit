@@ -14,6 +14,7 @@ from app.models.major_incident import (
     CitizenReport,
     CommLogEntry,
     IncidentSite,
+    LageEinheit,
     LageJournalEntry,
     Sector,
     MajorIncident,
@@ -84,8 +85,11 @@ PHASE_LABELS = {
 
 
 async def _apply_ai_prio(site: IncidentSite, db: Session) -> None:
-    """Automatically suggest priority via AI based on einsatzgrund. Never raises."""
-    if not ai_is_enabled() or not site.einsatzgrund:
+    """Automatically suggest priority via AI based on einsatzgrund. Never raises.
+
+    Only sets priority when none exists — never overwrites a manually set value.
+    """
+    if site.priority or not ai_is_enabled() or not site.einsatzgrund:
         return
     try:
         result = await analyze_site_reconnaissance(
@@ -381,7 +385,7 @@ async def site_prio_change(
     request: Request,
     lage_id: int,
     site_id: int,
-    priority: int = Form(...),
+    priority: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -393,9 +397,25 @@ async def site_prio_change(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
+    if not priority.strip():
+        old_prio = site.priority
+        site.priority = None
+        if old_prio:
+            old_label = SITE_PRIORITY_LABEL.get(old_prio, "–")
+            db.add(SiteLogEntry(
+                incident_site_id=site_id,
+                kind="prio",
+                text=f"Priorität: {old_label} → –",
+                user_id=user.id,
+                author_name=get_author_name(request),
+            ))
+        db.commit()
+        await broadcast_lage(lage_id, {"type": "site_prio_changed", "site_id": site_id, "reload_board": True})
+        return Response(status_code=204)
+
     try:
-        new_prio = SitePriority(priority)
-    except ValueError:
+        new_prio = SitePriority(int(priority))
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400)
 
     old_prio = site.priority
@@ -1979,6 +1999,30 @@ async def lage_ressourcen(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
+    # Auto-populate Einheiten from org vehicles on first access
+    if not lage.einheiten:
+        org_vehicles = (
+            db.query(VehicleMaster)
+            .filter(VehicleMaster.dept_id == lage.org_id, VehicleMaster.active == True)  # noqa: E712
+            .order_by(VehicleMaster.display_order, VehicleMaster.code)
+            .all()
+        )
+        for v in org_vehicles:
+            db.add(LageEinheit(
+                lage_id=lage.id,
+                vehicle_id=v.id,
+                label=v.display_label,
+                is_from_org=True,
+            ))
+        if org_vehicles:
+            db.commit()
+            db.refresh(lage)
+
+    einheiten = sorted(lage.einheiten, key=lambda e: (
+        0 if e.status == "verfuegbar" else 1 if e.status == "eingesetzt" else 2,
+        e.label,
+    ))
+
     active_sites = [s for s in lage.sites if s.phase != SitePhase.abgebrochen]
 
     all_res = [
@@ -2001,9 +2045,18 @@ async def lage_ressourcen(
     total_alarmed = sum(1 for r, _ in all_res if not r.committed_at)
     total_committed = sum(1 for r, _ in all_res if r.committed_at)
 
+    extra_vehicles = (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.dept_id == lage.org_id, VehicleMaster.active == True)  # noqa: E712
+        .order_by(VehicleMaster.display_order, VehicleMaster.code)
+        .all()
+    )
+
     return templates.TemplateResponse(request, "incident_major/ressourcen.html", {
         "user": user,
         "lage": lage,
+        "einheiten": einheiten,
+        "extra_vehicles": extra_vehicles,
         "all_res": all_res,
         "conflict_vids": conflict_vids,
         "released": released,
@@ -2013,6 +2066,107 @@ async def lage_ressourcen(
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db),
     })
+
+
+# ── Einheiten-Pool ────────────────────────────────────────────────────────────
+
+@router.post("/lage/{lage_id}/einheiten")
+async def lage_einheit_create(
+    request: Request,
+    lage_id: int,
+    label: str = Form(...),
+    vehicle_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    actual_label = label.strip()
+    if vehicle_id and not actual_label:
+        vehicle = db.get(VehicleMaster, vehicle_id)
+        if vehicle:
+            actual_label = vehicle.display_label
+    if not actual_label:
+        raise HTTPException(status_code=400, detail="Bezeichnung fehlt")
+
+    db.add(LageEinheit(
+        lage_id=lage_id,
+        vehicle_id=vehicle_id,
+        label=actual_label,
+        is_from_org=False,
+    ))
+    db.commit()
+    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
+
+
+@router.post("/lage/{lage_id}/einheiten/{einheit_id}/kommandant")
+async def lage_einheit_kommandant(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    commander_label: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    einheit = db.get(LageEinheit, einheit_id)
+    if not einheit or einheit.lage_id != lage_id:
+        raise HTTPException(status_code=404)
+
+    einheit.commander_label = commander_label.strip() or None
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/lage/{lage_id}/einheiten/{einheit_id}/status")
+async def lage_einheit_status(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    status: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    einheit = db.get(LageEinheit, einheit_id)
+    if not einheit or einheit.lage_id != lage_id:
+        raise HTTPException(status_code=404)
+
+    if status not in ("verfuegbar", "eingesetzt", "abgezogen"):
+        raise HTTPException(status_code=400)
+
+    einheit.status = status
+    db.commit()
+    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
+
+
+@router.post("/lage/{lage_id}/einheiten/{einheit_id}/loeschen")
+async def lage_einheit_delete(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    einheit = db.get(LageEinheit, einheit_id)
+    if not einheit or einheit.lage_id != lage_id:
+        raise HTTPException(status_code=404)
+
+    db.delete(einheit)
+    db.commit()
+    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 
 
 # ── Protokoll-Export ──────────────────────────────────────────────────────────

@@ -108,7 +108,7 @@
 {% endif %}
 
 <div class="karte-topbar" {% if lage.is_exercise %}style="top:26px;"{% endif %}>
-  <a href="/lage" class="btn btn--ghost btn--sm">←</a>
+  <a href="/lage/{{ lage.id }}" class="btn btn--ghost btn--sm" title="Zurück zum Board">←</a>
   <div class="karte-topbar__title">{{ lage.name }}</div>
   <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
   <nav class="lage-subnav">
@@ -335,7 +335,8 @@
   }
 
   // WebSocket: reload markers on board changes
-  var wsUrl = 'ws://' + location.host + '/ws/lage/' + lageId;
+  var wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  var wsUrl = wsProto + '://' + location.host + '/ws/lage/' + lageId;
   function connectWS() {
     var ws = new WebSocket(wsUrl);
     ws.onmessage = function(ev) {
