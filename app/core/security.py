@@ -13,7 +13,6 @@ import hmac
 import secrets
 from datetime import UTC, datetime
 
-import bcrypt
 from itsdangerous import BadSignature, SignatureExpired, URLSafeSerializer, URLSafeTimedSerializer
 
 from app.config import settings
@@ -25,10 +24,12 @@ _qr_signer = URLSafeSerializer(settings.SECRET_KEY, salt="qr-token")
 
 
 def hash_password(plain: str) -> str:
+    import bcrypt
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=12)).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
+    import bcrypt
     try:
         return bcrypt.checkpw(plain.encode(), hashed.encode())
     except (ValueError, TypeError):
