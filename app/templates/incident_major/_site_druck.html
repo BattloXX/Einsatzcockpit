@@ -92,6 +92,7 @@
 <body>
 
 <div class="no-print print-bar">
+  <a href="/lage/{{ lage.id }}" class="print-btn" style="text-decoration:none;background:#374151;">← Board</a>
   <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
   <span>A4 Hochformat · Einsatzstelle #{{ site.id }}</span>
   <span style="margin-left:auto;color:#6b7280;">{{ lage.name }}</span>
@@ -204,19 +205,30 @@
     iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
     shadowUrl: '/static/img/leaflet/marker-shadow.png',
   });
-  var map = L.map('printMap', { zoomControl: true, attributionControl: false })
+  var map = L.map('printMap', { zoomControl: false, attributionControl: false })
              .setView([lat, lng], 18);
   var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     subdomains: 'abc', maxZoom: 19,
     attribution: '© OpenStreetMap'
   }).addTo(map);
   L.marker([lat, lng]).addTo(map);
-  // Show print button only after tiles load
-  var loaded = false;
-  tiles.on('load', function() {
-    if (!loaded) { loaded = true; map.invalidateSize(); }
-  });
+
+  // Auto-print after tiles load; fallback after 4 seconds
+  var printed = false;
+  function autoPrint() {
+    if (printed) return;
+    printed = true;
+    map.invalidateSize();
+    setTimeout(function() { window.print(); }, 200);
+  }
+  tiles.on('load', autoPrint);
+  setTimeout(autoPrint, 4000);
 })();
+</script>
+{% else %}
+<script>
+// No map – print immediately
+window.addEventListener('load', function() { setTimeout(window.print, 300); });
 </script>
 {% endif %}
 <script>

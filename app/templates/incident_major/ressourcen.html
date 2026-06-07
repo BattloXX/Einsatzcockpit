@@ -55,9 +55,12 @@
   display: inline-block; font-size: .65rem; font-weight: 700;
   padding: 2px 7px; border-radius: 3px; white-space: nowrap;
 }
-.res-status--vor-ort  { background: rgba(74,222,128,.2);  color: #4ade80; }
-.res-status--alarmiert { background: rgba(251,191,36,.2); color: #fbbf24; }
-.res-status--released { background: rgba(107,114,128,.2); color: #9ca3af; }
+.res-status--vor-ort    { background: rgba(74,222,128,.2);  color: #4ade80; }
+.res-status--alarmiert  { background: rgba(251,191,36,.2);  color: #fbbf24; }
+.res-status--released   { background: rgba(107,114,128,.2); color: #9ca3af; }
+.res-status--verfuegbar { background: rgba(74,222,128,.15); color: #4ade80; }
+.res-status--eingesetzt { background: rgba(251,191,36,.15); color: #fbbf24; }
+.res-status--abgezogen  { background: rgba(107,114,128,.2); color: #9ca3af; }
 
 .res-conflict { color: #f87171; font-size: .7rem; font-weight: 700; margin-left: 4px; }
 
@@ -65,6 +68,17 @@
 .res-site-link:hover { text-decoration: underline; }
 
 .res-empty { font-size: .85rem; color: var(--text-muted); padding: 16px 0; text-align: center; }
+
+/* Inline-Edit Kommandant */
+.cmdr-input {
+  background: transparent; border: none; border-bottom: 1px dashed rgba(255,255,255,.2);
+  color: var(--text); font-size: .82rem; padding: 1px 4px; width: 100%; min-width: 80px;
+  outline: none;
+}
+.cmdr-input:focus { border-bottom-color: #93c5fd; }
+.cmdr-input::placeholder { color: var(--text-muted); }
+
+.einheit-status-form { display:flex; gap:3px; }
 </style>
 {% endblock %}
 
@@ -74,7 +88,7 @@
 {% endif %}
 
 <div class="res-topbar">
-  <a href="/lage" class="btn btn--ghost btn--sm">←</a>
+  <a href="/lage/{{ lage.id }}" class="btn btn--ghost btn--sm" title="Zurück zum Board">←</a>
   <div class="res-topbar__title">{{ lage.name }}</div>
   <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
   <nav class="lage-subnav">
@@ -95,20 +109,20 @@
   {# Kennzahlen #}
   <div class="res-stat-row">
     <div class="res-stat">
-      <div class="res-stat__val">{{ all_res|length }}</div>
-      <div class="res-stat__lbl">Aktiv gesamt</div>
+      <div class="res-stat__val">{{ einheiten|length }}</div>
+      <div class="res-stat__lbl">Einheiten gesamt</div>
     </div>
     <div class="res-stat">
-      <div class="res-stat__val" style="color:#4ade80;">{{ total_committed }}</div>
-      <div class="res-stat__lbl">Vor Ort</div>
+      <div class="res-stat__val" style="color:#4ade80;">{{ einheiten|selectattr('status','equalto','verfuegbar')|list|length }}</div>
+      <div class="res-stat__lbl">Verfügbar</div>
     </div>
     <div class="res-stat">
-      <div class="res-stat__val" style="color:#fbbf24;">{{ total_alarmed }}</div>
-      <div class="res-stat__lbl">Alarmiert / unterwegs</div>
+      <div class="res-stat__val" style="color:#fbbf24;">{{ einheiten|selectattr('status','equalto','eingesetzt')|list|length }}</div>
+      <div class="res-stat__lbl">Eingesetzt</div>
     </div>
     <div class="res-stat">
-      <div class="res-stat__val" style="color:#9ca3af;">{{ released|length }}</div>
-      <div class="res-stat__lbl">Abgezogen (letzte 30)</div>
+      <div class="res-stat__val" style="color:#9ca3af;">{{ einheiten|selectattr('status','equalto','abgezogen')|list|length }}</div>
+      <div class="res-stat__lbl">Abgezogen</div>
     </div>
     {% if conflict_vids %}
     <div class="res-stat" style="border-color:#f87171;">
@@ -118,10 +132,115 @@
     {% endif %}
   </div>
 
-  {# Aktive Ressourcen #}
+  {# Einheiten-Pool #}
   <div class="res-section">
-    <div class="res-section__title">AKTIVE RESSOURCEN</div>
-    {% if all_res %}
+    <div class="res-section__title">EINHEITEN</div>
+    {% if einheiten %}
+    <table class="res-table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Einheit</th>
+          <th>Gruppenkommandant</th>
+          {% if can_edit %}<th style="width:120px;"></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in einheiten %}
+        <tr {% if e.status == 'abgezogen' %}style="opacity:.55;"{% endif %}>
+          <td>
+            <span class="res-status res-status--{{ e.status }}">
+              {% if e.status == 'verfuegbar' %}Verfügbar
+              {% elif e.status == 'eingesetzt' %}Eingesetzt
+              {% else %}Abgezogen{% endif %}
+            </span>
+          </td>
+          <td style="font-weight:500;">{{ e.label }}</td>
+          <td>
+            {% if can_edit %}
+            <form hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/kommandant"
+                  hx-swap="none"
+                  hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+              <input type="text" name="commander_label" class="cmdr-input"
+                     value="{{ e.commander_label or '' }}"
+                     placeholder="Name eintragen…"
+                     hx-trigger="change"
+                     hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/kommandant"
+                     hx-swap="none"
+                     hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+                     autocomplete="off" maxlength="120">
+            </form>
+            {% else %}
+            <span style="font-size:.82rem;">{{ e.commander_label or '–' }}</span>
+            {% endif %}
+          </td>
+          {% if can_edit %}
+          <td>
+            <div class="einheit-status-form">
+              {% if e.status != 'verfuegbar' %}
+              <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status"
+                    style="margin:0;">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                <input type="hidden" name="status" value="verfuegbar">
+                <button type="submit" class="btn btn--xs btn--ghost" title="Als Verfügbar markieren">✓ Verf.</button>
+              </form>
+              {% endif %}
+              {% if e.status != 'eingesetzt' %}
+              <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status"
+                    style="margin:0;">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                <input type="hidden" name="status" value="eingesetzt">
+                <button type="submit" class="btn btn--xs btn--secondary" title="Als Eingesetzt markieren">Eings.</button>
+              </form>
+              {% endif %}
+              {% if e.status != 'abgezogen' %}
+              <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status"
+                    style="margin:0;">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                <input type="hidden" name="status" value="abgezogen">
+                <button type="submit" class="btn btn--xs btn--ghost" title="Abziehen">Abz.</button>
+              </form>
+              {% endif %}
+              <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/loeschen"
+                    style="margin:0;"
+                    onsubmit="return confirm('Einheit \'{{ e.label }}\' entfernen?')">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                <button type="submit" class="btn btn--xs btn--ghost" style="color:#f87171;" title="Entfernen">✕</button>
+              </form>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="res-empty">Noch keine Einheiten.</div>
+    {% endif %}
+
+    {% if can_edit %}
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+      <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">EINHEIT HINZUFÜGEN</div>
+      <form method="post" action="/lage/{{ lage.id }}/einheiten" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <select name="vehicle_id" class="form-select form-select--sm" style="flex:2;min-width:120px;">
+          <option value="">— Freitext —</option>
+          {% for v in extra_vehicles %}
+          <option value="{{ v.id }}">{{ v.display_label }}</option>
+          {% endfor %}
+        </select>
+        <input type="text" name="label" class="form-input" placeholder="Bezeichnung…"
+               style="flex:2;min-width:100px;" autocomplete="off" maxlength="120">
+        <button type="submit" class="btn btn--secondary btn--sm">+ Hinzufügen</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  {# Aktive Ressourcen (Einzeleinsatz-Zuweisungen) #}
+  {% if all_res %}
+  <div class="res-section">
+    <div class="res-section__title">RESSOURCEN-ZUWEISUNGEN (EINSATZSTELLEN)</div>
     <table class="res-table">
       <thead>
         <tr>
@@ -166,10 +285,8 @@
         {% endfor %}
       </tbody>
     </table>
-    {% else %}
-    <div class="res-empty">Keine aktiven Ressourcen.</div>
-    {% endif %}
   </div>
+  {% endif %}
 
   {# Abgezogene Ressourcen #}
   {% if released %}
@@ -216,7 +333,7 @@ function formatDur(secs) {
   if (secs < 0) secs = 0;
   var h = Math.floor(secs / 3600);
   var m = Math.floor((secs % 3600) / 60);
-  if (h > 0) return h + 'h ' + m + 'min';
+  if (h > 0) return h + 'h ' + m + 'min';
   return m + 'min';
 }
 

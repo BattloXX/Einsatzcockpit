@@ -65,7 +65,7 @@
 {% endif %}
 
 <div class="mel-topbar">
-  <a href="/lage" class="btn btn--ghost btn--sm">←</a>
+  <a href="/lage/{{ lage.id }}" class="btn btn--ghost btn--sm" title="Zurück zum Board">←</a>
   <div class="mel-topbar__title">{{ lage.name }}</div>
   <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
   <nav class="lage-subnav">
