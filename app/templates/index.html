@@ -8,6 +8,25 @@
   </button>
 </div>
 
+{% if active_major_incidents %}
+<section class="section">
+  <h3 class="section-title">Großschadenslagen ({{ active_major_incidents|length }})</h3>
+  <div class="incident-cards">
+    {% for lage in active_major_incidents %}
+    <a href="/lage/{{ lage.id }}" class="incident-card" style="border-left:3px solid var(--red,#b71921);">
+      {% if lage.is_exercise %}<div class="exercise-banner">ÜBUNG</div>{% endif %}
+      <div class="incident-card__alarm" style="color:var(--red,#b71921);">LAGE</div>
+      <div class="incident-card__address" style="font-weight:600;">{{ lage.name }}</div>
+      <div class="incident-card__meta">
+        <span class="badge badge--active">Aktiv</span>
+        <span class="incident-card__time">{{ lage.sites|length }} Einsatzstellen · seit {{ lage.started_at|local_time }} Uhr</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if active_incidents %}
 <section class="section">
   <h3 class="section-title">Aktive Einsätze ({{ active_incidents|length }})</h3>
@@ -27,7 +46,9 @@
     {% endfor %}
   </div>
 </section>
-{% else %}
+{% endif %}
+
+{% if not active_major_incidents and not active_incidents %}
 <div class="empty-state">
   <div class="empty-state__icon">🔔</div>
   <p>Keine aktiven Einsätze.</p>

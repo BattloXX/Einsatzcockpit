@@ -44,6 +44,7 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
+from app.models.major_incident import IncidentSite, MajorIncident, MajorIncidentStatus
 from app.models.user import Role, User, UserRole
 from app.config import settings
 from app.services.ai_service import is_enabled as ai_is_enabled
@@ -161,13 +162,35 @@ async def index(request: Request, db: Session = Depends(get_db)):
         from app.routers.public import render_public_page
         return render_public_page(request, db, "landing",
                                   kontakt=request.query_params.get("kontakt"))
-    active = db.query(Incident).filter(Incident.status == "active").order_by(Incident.started_at.desc()).all()
+    active_major = (
+        db.query(MajorIncident)
+        .filter(MajorIncident.status == MajorIncidentStatus.active)
+        .order_by(MajorIncident.started_at.desc())
+        .all()
+    )
+    adopted_ids = (
+        db.query(IncidentSite.incident_id)
+        .join(MajorIncident, IncidentSite.major_incident_id == MajorIncident.id)
+        .filter(
+            MajorIncident.status == MajorIncidentStatus.active,
+            IncidentSite.incident_id.isnot(None),
+        )
+        .all()
+    )
+    adopted_id_set = {row[0] for row in adopted_ids}
+    active = (
+        db.query(Incident)
+        .filter(Incident.status == "active", ~Incident.id.in_(adopted_id_set))
+        .order_by(Incident.started_at.desc())
+        .all()
+    )
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
     home = db.query(FireDept).filter(FireDept.is_home_org == True).first()  # noqa: E712
     default_city = (home.city if home and home.city else settings.DEFAULT_INCIDENT_CITY)
     return templates.TemplateResponse(request, "index.html", {
         "user": user,
         "active_incidents": active,
+        "active_major_incidents": active_major,
         "alarm_types": alarm_types,
         "default_city": default_city,
     })
