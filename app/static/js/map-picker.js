@@ -4,6 +4,20 @@
  * Initialisiert eine Leaflet-Karte mit einem verschiebbaren Marker.
  * Setzt den Leaflet-Icon-Pfad auf /static/img/leaflet/.
  *
+ * ── OSM-Tile-Server-Regel ───────────────────────────────────────────────────
+ * IMMER die Subdomain-Variante verwenden:
+ *   URL:       'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+ *   Option:    subdomains: 'abc'
+ *
+ * NIEMALS die direkte URL ohne {s} verwenden:
+ *   ✗  'https://tile.openstreetmap.org/{z}/{x}/{y}.png'   → HTTP 503
+ *
+ * Begründung: tile.openstreetmap.org ist nur für Tests. Die drei Subdomains
+ * a/b/c (a.tile.…, b.tile.…, c.tile.…) verteilen die Last und entsprechen
+ * der OSM-Nutzungsrichtlinie für Produktionsanwendungen. Fehlt `subdomains`,
+ * sendet Leaflet alle Requests an einen einzigen Host → 503-Fehler.
+ * ───────────────────────────────────────────────────────────────────────────
+ *
  * Verwendung:
  *   initMapPicker({
  *     containerId: 'mapPickerContainer',

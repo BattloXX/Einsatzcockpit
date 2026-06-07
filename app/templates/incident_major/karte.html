@@ -185,8 +185,9 @@
   var colorMode = 'priority';  // 'priority' | 'sector'
 
   var map = L.map('karte-map', { preferCanvas: true, zoomControl: true });
+  // subdomains: 'abc' PFLICHT — ohne Option → Leaflet nutzt keinen Subdomain-Ersatz → HTTP 503
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap', maxZoom: 19,
+    attribution: '© OpenStreetMap', subdomains: 'abc', maxZoom: 19,
   }).addTo(map);
 
   var markers = [];

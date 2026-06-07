@@ -252,8 +252,10 @@
 (function () {
   var sites = {{ map_sites_json | safe }};
   var map = L.map('lage-map', { preferCanvas: true });
+  // subdomains: 'abc' PFLICHT — ohne Option → Leaflet nutzt keinen Subdomain-Ersatz → HTTP 503
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap',
+    subdomains: 'abc',
     maxZoom: 19,
   }).addTo(map);
 
