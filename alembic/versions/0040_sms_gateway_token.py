@@ -1,14 +1,14 @@
 """Connection-Token für SMS-Gateway-Docker-Container
 
-Revision ID: 0037
-Revises: 0036
+Revision ID: 0040
+Revises: 0039
 Create Date: 2026-06-07 00:00:00.000000
 """
 from alembic import op
 from sqlalchemy import text
 
-revision = "0037"
-down_revision = "0036"
+revision = "0040"
+down_revision = "0039"
 branch_labels = None
 depends_on = None
 
