@@ -487,26 +487,41 @@ class LageSiteCreatedResponse(BaseModel):
     created: bool = Field(..., description="True bei Neuanlage, False bei Idempotency-Treffer.")
 
 
-async def _ai_prio_background(site_id: int) -> None:
-    """Background task: set priority on a freshly created site via AI analysis."""
+async def _site_post_create_tasks(site_id: int) -> None:
+    """Background task: geocode address and apply AI priority on a newly created site."""
     from app.db import SessionLocal
     from app.models.major_incident import IncidentSite, SitePriority
+    from app.services.geocoding import geocode_address
     from app.services.ai_service import analyze_site_reconnaissance, is_enabled
-    if not is_enabled():
-        return
     db = SessionLocal()
     try:
         site = db.get(IncidentSite, site_id)
-        if site and site.einsatzgrund and not site.priority:
-            result = await analyze_site_reconnaissance(
-                site.einsatzgrund,
-                {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
-            )
-            if result and result.get("prio_vorschlag"):
-                site.priority = SitePriority(result["prio_vorschlag"])
-                site.danger_score = result.get("danger_score")
-                site.urgency_score = result.get("urgency_score")
-                db.commit()
+        if not site:
+            return
+        changed = False
+        if not (site.lat and site.lng) and (site.strasse or site.ort):
+            try:
+                geo = await geocode_address(site.strasse, site.hausnr, site.ort)
+                if geo:
+                    site.lat, site.lng = geo.lat, geo.lng
+                    changed = True
+            except Exception:
+                pass
+        if is_enabled() and site.einsatzgrund and not site.priority:
+            try:
+                result = await analyze_site_reconnaissance(
+                    site.einsatzgrund,
+                    {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
+                )
+                if result and result.get("prio_vorschlag"):
+                    site.priority = SitePriority(result["prio_vorschlag"])
+                    site.danger_score = result.get("danger_score")
+                    site.urgency_score = result.get("urgency_score")
+                    changed = True
+            except Exception:
+                pass
+        if changed:
+            db.commit()
     except Exception:
         pass
     finally:
@@ -588,7 +603,7 @@ async def lage_alarm(
     background_tasks.add_task(
         broadcast_lage, lage.id, {"type": "site_created", "reload_board": True}
     )
-    background_tasks.add_task(_ai_prio_background, site.id)
+    background_tasks.add_task(_site_post_create_tasks, site.id)
     return LageSiteCreatedResponse(lage_id=lage.id, site_id=site.id, created=True)
 
 

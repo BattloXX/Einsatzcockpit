@@ -456,6 +456,30 @@ async def site_detail(
     })
 
 
+# ── Einzeldruck (Einsatzstelle) ─────────────────────────────────────────────
+
+@router.get("/lage/{lage_id}/stellen/{site_id}/druck", response_class=HTMLResponse)
+async def site_druck(
+    request: Request,
+    lage_id: int,
+    site_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, "incident_major/_site_druck.html", {
+        "lage": lage,
+        "site": site,
+        "phase_labels": PHASE_LABELS,
+        "prio_label": SITE_PRIORITY_LABEL,
+    })
+
+
 # ── Log-Eintrag hinzufügen ──────────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/log")

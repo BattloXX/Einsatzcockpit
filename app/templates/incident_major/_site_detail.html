@@ -42,6 +42,8 @@
       {% if can_edit %}
       <button class="btn btn--xs btn--ghost" x-show="!editing" @click.stop="editing=true" title="Bezeichnung/Adresse bearbeiten">✏️</button>
       {% endif %}
+      <a href="/lage/{{ lage.id }}/stellen/{{ site.id }}/druck" target="_blank"
+         class="btn btn--xs btn--ghost" title="Drucken" style="text-decoration:none;">🖨</a>
     </div>
     {% if site.einsatzgrund %}
     <p class="modal__subtitle" x-show="!editing">{{ site.einsatzgrund }}</p>
@@ -49,32 +51,36 @@
 
     {# ── Inline-Editform ─────────────────────────────────────────── #}
     {% if can_edit %}
-    <form x-show="editing" x-cloak style="margin-top:6px;"
+    <form x-ref="editForm" x-show="editing" x-cloak style="margin-top:6px;"
           hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/bearbeiten"
           hx-swap="none"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
           @htmx:after-request="if(event.detail.successful){editing=false;}">
       <div class="form-group">
         <input type="text" name="bezeichnung" class="form-input" required maxlength="160"
-               value="{{ site.bezeichnung }}" placeholder="Bezeichnung" autocomplete="off">
+               value="{{ site.bezeichnung }}" placeholder="Bezeichnung" autocomplete="off"
+               @keydown.enter.prevent="$refs.editForm.requestSubmit()">
       </div>
       <div class="form-group">
         <input type="text" name="einsatzgrund" class="form-input" maxlength="160"
-               value="{{ site.einsatzgrund or '' }}" placeholder="Einsatzgrund" autocomplete="off">
+               value="{{ site.einsatzgrund or '' }}" placeholder="Einsatzgrund" autocomplete="off"
+               @keydown.enter.prevent="$refs.editForm.requestSubmit()">
       </div>
       <div style="display:flex;gap:6px;">
         <input type="text" name="strasse" class="form-input" style="flex:3;"
-               value="{{ site.strasse or '' }}" placeholder="Straße" autocomplete="off" maxlength="120">
+               value="{{ site.strasse or '' }}" placeholder="Straße" autocomplete="off" maxlength="120"
+               @keydown.enter.prevent="$refs.editForm.requestSubmit()">
         <input type="text" name="hausnr" class="form-input" style="flex:1;"
-               value="{{ site.hausnr or '' }}" placeholder="Nr." autocomplete="off" maxlength="20">
+               value="{{ site.hausnr or '' }}" placeholder="Nr." autocomplete="off" maxlength="20"
+               @keydown.enter.prevent="$refs.editForm.requestSubmit()">
       </div>
       <div class="form-group" style="margin-top:6px;">
         <input type="text" name="ort" class="form-input"
-               value="{{ site.ort or '' }}" placeholder="Ort" autocomplete="off" maxlength="120">
+               value="{{ site.ort or '' }}" placeholder="Ort" autocomplete="off" maxlength="120"
+               @keydown.enter.prevent="$refs.editForm.requestSubmit()">
       </div>
-      <div style="display:flex;gap:6px;margin-top:6px;">
+      <div style="margin-top:6px;">
         <button type="button" class="btn btn--ghost btn--sm" @click="editing=false">Abbrechen</button>
-        <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
       </div>
     </form>
     {% endif %}
@@ -99,7 +105,9 @@
   {% if site.lat and site.lng %}
   <div style="margin:10px 0 6px;">
     <div id="sdMap{{ site.id }}"
-         style="height:180px;border-radius:6px;border:1px solid var(--border);z-index:0;"></div>
+         style="height:180px;border-radius:6px;border:1px solid var(--border);z-index:0;cursor:pointer;"
+         title="Klicken zum Öffnen in OpenStreetMap"
+         onclick="window.open('https://www.openstreetmap.org/?mlat={{ site.lat }}&mlon={{ site.lng }}&zoom=18','_blank')"></div>
     <div style="margin-top:4px;display:flex;gap:10px;align-items:center;font-size:.72rem;">
       <span style="color:var(--text-muted);">{{ '%.5f'|format(site.lat) }}, {{ '%.5f'|format(site.lng) }}</span>
       <a href="https://www.openstreetmap.org/?mlat={{ site.lat }}&mlon={{ site.lng }}&zoom=17"
@@ -217,7 +225,7 @@
   <div class="site-detail__row">
     <span class="site-detail__label">Quelle</span>
     <span class="site-detail__value">
-      {% if site.source == 'api' %}API / Alarmierung{% elif site.source == 'buerger' %}Bürger-Meldung{% else %}Manuell{% endif %}
+      {% if site.source == 'api' %}Leitstelle{% elif site.source == 'buerger' %}Bürger-Meldung{% else %}Manuell{% endif %}
       {% if site.alarm_stufe %} · {{ site.alarm_stufe }}{% endif %}
     </span>
   </div>
