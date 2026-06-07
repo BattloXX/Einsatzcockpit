@@ -43,11 +43,11 @@ from app.models.master import (
     VehicleMaster,
 )
 from app.models.password_reset import PasswordResetToken
-from app.models.user import ApiKey, AuditLog, DeviceToken, FcmToken, PushLog, PushSubscription, Role, User, UserRole
+from app.models.user import ApiKey, AuditLog, DeviceToken, FcmToken, PushLog, PushSubscription, Role, SmsGatewayToken, User, UserRole
 
 __all__ = [
     "User", "Role", "UserRole", "ApiKey", "AuditLog", "PushSubscription",
-    "DeviceToken", "FcmToken", "PushLog",
+    "DeviceToken", "FcmToken", "PushLog", "SmsGatewayToken",
     "FireDept", "VehicleMaster", "Member", "Qualification", "MemberQualification",
     "AlarmType", "TaskSuggestion", "TaskSuggestionAlarm",
     "MessageSuggestion", "MessageSuggestionAlarm",

@@ -47,6 +47,10 @@ def generate_api_key() -> str:
     return "fwwo_" + secrets.token_urlsafe(32)
 
 
+def generate_sms_gateway_token() -> str:
+    return "smsgw_" + secrets.token_urlsafe(32)
+
+
 def sign_session(
     user_id: int,
     *,

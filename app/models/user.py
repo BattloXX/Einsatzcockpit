@@ -190,3 +190,20 @@ class PushLog(Base):
     total_count: Mapped[int] = mapped_column(Integer, default=0)
 
     target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
+
+
+class SmsGatewayToken(Base):
+    """Connection-Token für den SMS-Gateway-Docker-Container."""
+    __tablename__ = "sms_gateway_token"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    label: Mapped[str] = mapped_column(String(150), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    @property
+    def is_active(self) -> bool:
+        return self.revoked_at is None
