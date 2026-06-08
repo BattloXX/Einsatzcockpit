@@ -5,8 +5,35 @@ from datetime import UTC, datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from app.db import Base
+
+
+class _SitePriorityColType(TypeDecorator):
+    """Maps SitePriority IntEnum ↔ INTEGER column in the database.
+
+    The migration created this column as Integer, so we bypass SQLAlchemy's
+    Enum type (which would try to store the string name and break MySQL strict
+    mode).  Instead we store/read raw integers and convert in Python.
+    """
+    impl = Integer
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        return int(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        try:
+            return SitePriority(int(value))
+        except (ValueError, KeyError):
+            return None
 
 
 class MajorIncidentStatus(str, enum.Enum):
@@ -149,7 +176,7 @@ class IncidentSite(Base):
 
     phase:         Mapped[SitePhase] = mapped_column(
         Enum(SitePhase), default=SitePhase.eingegangen, index=True)
-    priority:      Mapped[SitePriority | None] = mapped_column(Enum(SitePriority), nullable=True)
+    priority:      Mapped[SitePriority | None] = mapped_column(_SitePriorityColType, nullable=True)
     danger_score:  Mapped[int | None] = mapped_column(Integer, nullable=True)
     urgency_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sort_index:    Mapped[int] = mapped_column(Integer, default=0)

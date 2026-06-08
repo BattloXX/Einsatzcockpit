@@ -3,64 +3,78 @@
 
 {% block head_extra %}
 {{ super() }}
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
 <style>
-  .wysiwyg-toolbar {
-    display: flex; flex-wrap: wrap; gap: 4px; padding: 8px;
+  /* ── Quill dark-theme overrides ──────────────────────────────────── */
+  .ql-toolbar.ql-snow {
     background: var(--surface-low); border: 1px solid var(--border);
-    border-bottom: none; border-radius: 8px 8px 0 0; position: sticky; top: 0; z-index: 5;
+    border-bottom: none; border-radius: 8px 8px 0 0;
+    position: sticky; top: 0; z-index: 5;
   }
-  .wysiwyg-toolbar button {
-    background: var(--surface-high); color: var(--on-surface); border: 1px solid var(--border);
-    border-radius: 6px; padding: 6px 10px; font-size: .85rem; cursor: pointer; min-width: 34px;
+  .ql-container.ql-snow {
+    background: #0b1326; color: #dae2fd;
+    border: 1px solid var(--border); border-radius: 0 0 8px 8px;
+    font-size: .95rem; line-height: 1.55;
   }
-  .wysiwyg-toolbar button:hover { background: var(--red); border-color: var(--red); color: #fff; }
-  .wysiwyg-toolbar button.is-active { background: var(--red); border-color: var(--red); color: #fff; }
-  .wysiwyg-toolbar button[disabled] { opacity: .4; cursor: not-allowed; }
-  .wysiwyg-toolbar .sep { width: 1px; background: var(--border); margin: 2px 4px; }
-  .wysiwyg-toolbar .spacer { flex: 1; }
-  .wysiwyg-editor, .wysiwyg-source {
-    min-height: 60vh; padding: 24px; background: #0b1326; color: #dae2fd;
-    border: 1px solid var(--border); border-radius: 0 0 8px 8px; overflow-wrap: anywhere;
-    line-height: 1.55;
+  .ql-editor { min-height: 60vh; padding: 24px; }
+  .ql-editor.ql-blank::before { color: var(--text-muted); font-style: normal; }
+  .ql-toolbar.ql-snow button { color: var(--on-surface); }
+  .ql-toolbar.ql-snow button:hover,
+  .ql-toolbar.ql-snow button.ql-active { color: #f87171; }
+  .ql-toolbar.ql-snow .ql-stroke { stroke: var(--on-surface, #dae2fd); }
+  .ql-toolbar.ql-snow button:hover .ql-stroke,
+  .ql-toolbar.ql-snow button.ql-active .ql-stroke { stroke: #f87171; }
+  .ql-toolbar.ql-snow .ql-fill { fill: var(--on-surface, #dae2fd); }
+  .ql-toolbar.ql-snow button:hover .ql-fill { fill: #f87171; }
+  .ql-toolbar.ql-snow .ql-picker { color: var(--on-surface); }
+  .ql-toolbar.ql-snow .ql-picker-options {
+    background: var(--surface-elevated, #1e2130); border-color: var(--border);
   }
-  .wysiwyg-editor:focus { outline: 2px solid var(--red); outline-offset: -2px; }
-  .wysiwyg-editor img { max-width: 100%; height: auto; border-radius: 8px; }
-  .wysiwyg-editor h1 { font-size: 2rem; }
-  .wysiwyg-editor h2 { font-size: 1.5rem; margin-top: 1em; }
-  .wysiwyg-editor h3 { font-size: 1.2rem; }
-  .wysiwyg-editor a { color: #ff8a85; }
+  .ql-toolbar.ql-snow .ql-picker-options .ql-picker-item { color: var(--on-surface); }
+  .ql-toolbar.ql-snow .ql-picker-options .ql-picker-item:hover { color: #f87171; }
+  .ql-toolbar.ql-snow .ql-picker-label { border-color: var(--border); color: var(--on-surface); }
+  .ql-toolbar.ql-snow .ql-picker-label .ql-stroke { stroke: var(--on-surface, #dae2fd); }
+  /* custom HTML-source button */
+  .ql-html-source { font-size: .78rem !important; padding: 4px 7px !important; }
+  .ql-html-source::after { content: '</> HTML'; }
+  .ql-html-source.ql-active::after { color: #f87171; }
+  /* rendered content ─────────────────────────────────────────────── */
+  .ql-editor h1 { font-size: 2rem; }
+  .ql-editor h2 { font-size: 1.5rem; margin-top: 1em; }
+  .ql-editor h3 { font-size: 1.2rem; }
+  .ql-editor a { color: #ff8a85; }
+  .ql-editor img { max-width: 100%; height: auto; border-radius: 8px; }
+  /* HTML source textarea ─────────────────────────────────────────── */
   .wysiwyg-source {
+    display: none; min-height: 60vh; padding: 24px; background: #0b1326; color: #dae2fd;
+    border: 1px solid var(--border); border-radius: 0 0 8px 8px;
     width: 100%; box-sizing: border-box; resize: vertical; tab-size: 2;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85rem;
-    white-space: pre; overflow-wrap: normal;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .85rem; white-space: pre; overflow-wrap: normal;
   }
-  .wysiwyg-source:focus { outline: 2px solid var(--red); outline-offset: -2px; }
+  .wysiwyg-source:focus { outline: 2px solid #f87171; outline-offset: -2px; }
   .wysiwyg-hint { color: var(--text-muted); font-size: .82rem; margin-top: 10px; }
-
+  /* gallery ──────────────────────────────────────────────────────── */
   .gallery { margin-top: 28px; }
   .gallery__head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
   .gallery__head h2 { font-size: 1.1rem; margin: 0; }
-  .gallery__grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
-  }
+  .gallery__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
   .gallery__item {
     border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
     background: var(--surface-low); display: flex; flex-direction: column;
   }
-  .gallery__thumb {
-    aspect-ratio: 4 / 3; background: #0b1326 center/contain no-repeat; cursor: pointer;
-  }
+  .gallery__thumb { aspect-ratio: 4/3; background: #0b1326 center/contain no-repeat; cursor: pointer; }
   .gallery__meta { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
   .gallery__meta code {
-    font-size: .72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; display: block;
+    font-size: .72rem; color: var(--text-muted); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; display: block;
   }
   .gallery__actions { display: flex; gap: 6px; }
   .gallery__actions button {
     flex: 1; font-size: .75rem; padding: 5px 6px; border-radius: 6px; cursor: pointer;
     border: 1px solid var(--border); background: var(--surface-high); color: var(--on-surface);
   }
-  .gallery__actions button:hover { background: var(--red); border-color: var(--red); color: #fff; }
+  .gallery__actions button:hover { background: #f87171; border-color: #f87171; color: #fff; }
   .gallery__empty { color: var(--text-muted); font-size: .85rem; }
 </style>
 {% endblock %}
@@ -85,28 +99,11 @@
 <div class="alert alert--success">Seite gespeichert.</div>
 {% endif %}
 
-<div class="wysiwyg-toolbar" role="toolbar" aria-label="Formatierung">
-  <button type="button" class="fmt" data-cmd="bold" title="Fett"><strong>B</strong></button>
-  <button type="button" class="fmt" data-cmd="italic" title="Kursiv"><em>I</em></button>
-  <button type="button" class="fmt" data-cmd="underline" title="Unterstrichen"><u>U</u></button>
-  <span class="sep"></span>
-  <button type="button" class="fmt" data-cmd="formatBlock" data-val="H2" title="Überschrift 2">H2</button>
-  <button type="button" class="fmt" data-cmd="formatBlock" data-val="H3" title="Überschrift 3">H3</button>
-  <button type="button" class="fmt" data-cmd="formatBlock" data-val="P" title="Absatz">¶</button>
-  <span class="sep"></span>
-  <button type="button" class="fmt" data-cmd="insertUnorderedList" title="Aufzählung">• Liste</button>
-  <button type="button" class="fmt" data-cmd="insertOrderedList" title="Nummerierte Liste">1. Liste</button>
-  <span class="sep"></span>
-  <button type="button" class="fmt" id="btn-link" title="Link einfügen">🔗 Link</button>
-  <button type="button" id="btn-image" title="Bild hochladen &amp; einfügen">🖼 Bild</button>
-  <span class="sep"></span>
-  <button type="button" class="fmt" data-cmd="removeFormat" title="Formatierung entfernen">✕ Format</button>
-  <span class="spacer"></span>
-  <button type="button" id="btn-mode" title="Zwischen visueller Bearbeitung und HTML-Quelltext wechseln">&lt;/&gt; HTML</button>
-</div>
+{# JSON-encoded so </script> and special chars in body_html can't break the page #}
+<script>var _pageBodyHtml = {{ body_html | tojson }};</script>
 
-<div id="editor" class="wysiwyg-editor" contenteditable="true">{{ body_html | safe }}</div>
-<textarea id="html-source" class="wysiwyg-source" spellcheck="false" style="display:none"></textarea>
+<div id="quill-editor"></div>
+<textarea id="html-source" class="wysiwyg-source" spellcheck="false"></textarea>
 <p class="wysiwyg-hint">Tipp: Im HTML-Modus kannst du den Quelltext direkt bearbeiten. Bilder aus der Galerie unten lassen sich per „Einfügen" an der Cursor-Position einsetzen.</p>
 
 <form id="save-form" method="post" action="/admin/seiten/{{ slug }}" style="margin-top:16px">
@@ -130,54 +127,72 @@
 
 <input type="file" id="image-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
 
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script>
 (function () {
-  const editor = document.getElementById('editor');
+  let htmlMode = false;
   const source = document.getElementById('html-source');
   const grid = document.getElementById('gallery-grid');
-  let htmlMode = false;
 
-  const exec = (cmd, val) => { editor.focus(); document.execCommand(cmd, false, val || null); };
+  // ── Quill init ───────────────────────────────────────────────────────────────
+  const quill = new Quill('#quill-editor', {
+    theme: 'snow',
+    placeholder: 'Seiteninhalt hier eingeben…',
+    modules: {
+      toolbar: {
+        container: [
+          [{ header: [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline'],
+          ['link', 'image'],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          ['clean'],
+          ['html-source'],
+        ],
+        handlers: {
+          image: () => document.getElementById('image-input').click(),
+          'html-source': toggleHtmlMode,
+        },
+      },
+    },
+  });
 
+  // Load initial HTML from the JSON-encoded server variable
+  if (typeof _pageBodyHtml === 'string' && _pageBodyHtml.trim()) {
+    quill.clipboard.dangerouslyPasteHTML(_pageBodyHtml);
+  }
+
+  // ── HTML source toggle ───────────────────────────────────────────────────────
+  function toggleHtmlMode() {
+    htmlMode = !htmlMode;
+    const container = document.querySelector('.ql-container');
+    const toolbar = document.querySelector('.ql-toolbar');
+    const btn = document.querySelector('.ql-html-source');
+    if (htmlMode) {
+      source.value = quill.root.innerHTML;
+      container.style.display = 'none';
+      // dim toolbar so it's clear we're in source mode
+      toolbar.style.opacity = '0.45';
+      toolbar.style.pointerEvents = 'none';
+      if (btn) { btn.style.opacity = '1'; btn.style.pointerEvents = 'auto'; btn.classList.add('ql-active'); }
+      source.style.display = '';
+      source.focus();
+    } else {
+      quill.clipboard.dangerouslyPasteHTML(source.value);
+      source.style.display = 'none';
+      container.style.display = '';
+      toolbar.style.opacity = '';
+      toolbar.style.pointerEvents = '';
+      if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; btn.classList.remove('ql-active'); }
+      quill.focus();
+    }
+  }
+
+  // ── Bild an Cursor-Position einfügen ────────────────────────────────────────
   function csrfToken() {
     const m = document.cookie.match(/(?:^|;\s*)fwwo_csrf=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : '';
   }
 
-  // ── Visuell ⇄ HTML-Quelltext ────────────────────────────────────────────────
-  const fmtButtons = document.querySelectorAll('.wysiwyg-toolbar button.fmt');
-  const modeBtn = document.getElementById('btn-mode');
-
-  function setHtmlMode(on) {
-    htmlMode = on;
-    if (on) {
-      source.value = editor.innerHTML;
-      editor.style.display = 'none';
-      source.style.display = '';
-      source.focus();
-    } else {
-      editor.innerHTML = source.value;
-      source.style.display = 'none';
-      editor.style.display = '';
-      editor.focus();
-    }
-    modeBtn.classList.toggle('is-active', on);
-    modeBtn.innerHTML = on ? '👁 Visuell' : '&lt;/&gt; HTML';
-    fmtButtons.forEach(b => { b.disabled = on; });
-  }
-  modeBtn.addEventListener('click', () => setHtmlMode(!htmlMode));
-
-  document.querySelectorAll('.wysiwyg-toolbar button[data-cmd]').forEach(btn => {
-    btn.addEventListener('click', () => { if (!htmlMode) exec(btn.dataset.cmd, btn.dataset.val); });
-  });
-
-  document.getElementById('btn-link').addEventListener('click', () => {
-    if (htmlMode) return;
-    const url = prompt('Link-Adresse (URL):', 'https://');
-    if (url) exec('createLink', url);
-  });
-
-  // ── Bild an Cursor-Position einfügen (beide Modi) ───────────────────────────
   function insertImageUrl(url) {
     if (htmlMode) {
       const tag = '<img src="' + url + '" alt="">';
@@ -187,82 +202,14 @@
       source.setSelectionRange(pos, pos);
       source.focus();
     } else {
-      exec('insertImage', url);
+      const range = quill.getSelection(true);
+      quill.insertEmbed(range ? range.index : quill.getLength(), 'image', url, Quill.sources.USER);
     }
   }
-
-  // ── Galerie ─────────────────────────────────────────────────────────────────
-  async function copyLink(url) {
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch (e) {
-      const t = document.createElement('textarea');
-      t.value = url; document.body.appendChild(t); t.select();
-      try { document.execCommand('copy'); } catch (_) {}
-      document.body.removeChild(t);
-    }
-  }
-
-  function renderGallery(images) {
-    grid.innerHTML = '';
-    if (!images.length) {
-      grid.innerHTML = '<p class="gallery__empty">Noch keine Bilder hochgeladen.</p>';
-      return;
-    }
-    images.forEach(img => {
-      const item = document.createElement('div');
-      item.className = 'gallery__item';
-
-      const thumb = document.createElement('div');
-      thumb.className = 'gallery__thumb';
-      thumb.style.backgroundImage = 'url("' + img.url + '")';
-      thumb.title = 'Klicken zum Einfügen';
-      thumb.addEventListener('click', () => insertImageUrl(img.url));
-
-      const meta = document.createElement('div');
-      meta.className = 'gallery__meta';
-      const code = document.createElement('code');
-      code.textContent = img.url;
-      const actions = document.createElement('div');
-      actions.className = 'gallery__actions';
-
-      const insertBtn = document.createElement('button');
-      insertBtn.type = 'button';
-      insertBtn.textContent = 'Einfügen';
-      insertBtn.addEventListener('click', () => insertImageUrl(img.url));
-
-      const copyBtn = document.createElement('button');
-      copyBtn.type = 'button';
-      copyBtn.textContent = 'Link';
-      copyBtn.addEventListener('click', async () => {
-        await copyLink(img.url);
-        const old = copyBtn.textContent; copyBtn.textContent = '✓ kopiert';
-        setTimeout(() => { copyBtn.textContent = old; }, 1200);
-      });
-
-      actions.appendChild(insertBtn);
-      actions.appendChild(copyBtn);
-      meta.appendChild(code);
-      meta.appendChild(actions);
-      item.appendChild(thumb);
-      item.appendChild(meta);
-      grid.appendChild(item);
-    });
-  }
-
-  async function refreshGallery() {
-    try {
-      const res = await fetch('/admin/seiten/bilder/liste', { headers: { 'X-CSRF-Token': csrfToken() } });
-      if (res.ok) renderGallery((await res.json()).images || []);
-    } catch (e) { /* Galerie bleibt unverändert */ }
-  }
-
-  document.getElementById('btn-refresh').addEventListener('click', refreshGallery);
 
   // ── Upload ──────────────────────────────────────────────────────────────────
   const imageInput = document.getElementById('image-input');
-  document.getElementById('btn-image').addEventListener('click', () => imageInput.click());
-  document.getElementById('btn-upload').addEventListener('click', () => imageInput.click());
+
   imageInput.addEventListener('change', async () => {
     const file = imageInput.files[0];
     if (!file) return;
@@ -288,12 +235,78 @@
     }
   });
 
-  // Beim Absenden den Inhalt des aktiven Modus ins Hidden-Feld übertragen.
+  document.getElementById('btn-upload').addEventListener('click', () => imageInput.click());
+
+  // ── Galerie ─────────────────────────────────────────────────────────────────
+  async function copyLink(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch (e) {
+      const t = document.createElement('textarea');
+      t.value = url; document.body.appendChild(t); t.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(t);
+    }
+  }
+
+  function renderGallery(images) {
+    grid.innerHTML = '';
+    if (!images.length) {
+      grid.innerHTML = '<p class="gallery__empty">Noch keine Bilder hochgeladen.</p>';
+      return;
+    }
+    images.forEach(img => {
+      const item = document.createElement('div');
+      item.className = 'gallery__item';
+      const thumb = document.createElement('div');
+      thumb.className = 'gallery__thumb';
+      thumb.style.backgroundImage = 'url("' + img.url + '")';
+      thumb.title = 'Klicken zum Einfügen';
+      thumb.addEventListener('click', () => insertImageUrl(img.url));
+      const meta = document.createElement('div');
+      meta.className = 'gallery__meta';
+      const code = document.createElement('code');
+      code.textContent = img.url;
+      const actions = document.createElement('div');
+      actions.className = 'gallery__actions';
+      const insertBtn = document.createElement('button');
+      insertBtn.type = 'button';
+      insertBtn.textContent = 'Einfügen';
+      insertBtn.addEventListener('click', () => insertImageUrl(img.url));
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.textContent = 'Link';
+      copyBtn.addEventListener('click', async () => {
+        await copyLink(img.url);
+        const old = copyBtn.textContent;
+        copyBtn.textContent = '✓ kopiert';
+        setTimeout(() => { copyBtn.textContent = old; }, 1200);
+      });
+      actions.appendChild(insertBtn);
+      actions.appendChild(copyBtn);
+      meta.appendChild(code);
+      meta.appendChild(actions);
+      item.appendChild(thumb);
+      item.appendChild(meta);
+      grid.appendChild(item);
+    });
+  }
+
+  async function refreshGallery() {
+    try {
+      const res = await fetch('/admin/seiten/bilder/liste', { headers: { 'X-CSRF-Token': csrfToken() } });
+      if (res.ok) renderGallery((await res.json()).images || []);
+    } catch (e) { /* Galerie bleibt unverändert */ }
+  }
+
+  document.getElementById('btn-refresh').addEventListener('click', refreshGallery);
+
+  // ── Speichern ────────────────────────────────────────────────────────────────
   document.getElementById('save-form').addEventListener('submit', () => {
-    document.getElementById('html-field').value = htmlMode ? source.value : editor.innerHTML;
+    document.getElementById('html-field').value = htmlMode ? source.value : quill.root.innerHTML;
   });
 
-  // Initiale Galerie aus dem Server-Kontext.
+  // Initiale Galerie aus dem Server-Kontext
   renderGallery({{ images | tojson }});
 })();
 </script>
