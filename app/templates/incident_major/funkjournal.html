@@ -126,7 +126,7 @@
           <select name="related_site_id" class="form-select form-select--sm">
             <option value="">— keine —</option>
             {% for s in sites %}
-            <option value="{{ s.id }}">{{ s.bezeichnung[:30] }}</option>
+            <option value="{{ s.id }}">{% if s.strasse %}{{ s.strasse }}{% if s.hausnr %} {{ s.hausnr }}{% endif %} – {% endif %}{{ s.bezeichnung[:40] }}</option>
             {% endfor %}
           </select>
         </div>
@@ -194,7 +194,12 @@
         </td>
         <td>
           {% if c.related_site_id %}
-          <a class="fj-site-link" href="/lage/{{ lage.id }}">#{{ c.related_site_id }}</a>
+          {% set rel_site = sites_by_id.get(c.related_site_id) %}
+          {% if rel_site %}
+          <span class="fj-site-link">{% if rel_site.strasse %}{{ rel_site.strasse }}{% if rel_site.hausnr %} {{ rel_site.hausnr }}{% endif %} – {% endif %}{{ rel_site.bezeichnung[:30] }}</span>
+          {% else %}
+          <span class="fj-site-link">#{{ c.related_site_id }}</span>
+          {% endif %}
           {% else %}–{% endif %}
         </td>
         <td style="color:var(--text-muted);font-size:.72rem;white-space:nowrap;">

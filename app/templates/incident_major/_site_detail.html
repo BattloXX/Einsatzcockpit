@@ -45,10 +45,6 @@
       <a href="/lage/{{ lage.id }}/stellen/{{ site.id }}/druck" target="_blank"
          class="btn btn--xs btn--ghost" title="Drucken" style="text-decoration:none;">🖨</a>
     </div>
-    {% if site.einsatzgrund %}
-    <p class="modal__subtitle" x-show="!editing">{{ site.einsatzgrund }}</p>
-    {% endif %}
-
     {# ── Inline-Editform ─────────────────────────────────────────── #}
     {% if can_edit %}
     <form x-ref="editForm" x-show="editing" x-cloak style="margin-top:6px;"
@@ -59,11 +55,6 @@
       <div class="form-group">
         <input type="text" name="bezeichnung" class="form-input" required maxlength="160"
                value="{{ site.bezeichnung }}" placeholder="Bezeichnung" autocomplete="off"
-               @keydown.enter.prevent="$refs.editForm.requestSubmit()">
-      </div>
-      <div class="form-group">
-        <input type="text" name="einsatzgrund" class="form-input" maxlength="160"
-               value="{{ site.einsatzgrund or '' }}" placeholder="Einsatzgrund" autocomplete="off"
                @keydown.enter.prevent="$refs.editForm.requestSubmit()">
       </div>
       <div style="display:flex;gap:6px;">
@@ -263,7 +254,7 @@
         <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/ressourcen/{{ res.id }}/freigeben"
               hx-swap="none"
               hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-              onsubmit="return confirm('Ressource freigeben?')">
+              hx-confirm="Ressource freigeben?">
           <button type="submit" class="btn btn--xs btn--ghost">Freigeben</button>
         </form>
       </div>
@@ -321,34 +312,6 @@
       <button type="submit" class="btn btn--ghost btn--sm">+</button>
     </div>
   </form>
-  {% endif %}
-
-  {# ── KI-Erkundungsassistent ───────────────────────────────────────── #}
-  {% if can_edit and site.phase.value == 'erkundung' %}
-  <div style="margin-top:14px;" x-data="{ki_open:false}">
-    <button type="button" class="btn btn--ghost btn--sm"
-            @click="ki_open=!ki_open"
-            style="color:#a78bfa;border-color:rgba(139,92,246,.3);">
-      ✨ KI-Erkundung
-    </button>
-    <div x-show="ki_open" x-cloak style="margin-top:8px;">
-      <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/ki-erkundung"
-            hx-target="#ki-result-{{ site.id }}"
-            hx-swap="innerHTML"
-            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-            hx-indicator="#ki-spin-{{ site.id }}">
-        <textarea name="erkundungstext" class="form-input" rows="3" required maxlength="1000"
-                  placeholder="Erkundungsbericht eingeben… (z. B. Keller unter Wasser, 2 Personen eingeschlossen, steigender Pegel)"
-                  style="resize:vertical;"></textarea>
-        <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
-          <button type="submit" class="btn btn--secondary btn--sm">Analysieren</button>
-          <span id="ki-spin-{{ site.id }}" class="htmx-indicator"
-                style="font-size:.75rem;color:var(--text-muted);"> …</span>
-        </div>
-      </form>
-      <div id="ki-result-{{ site.id }}"></div>
-    </div>
-  </div>
   {% endif %}
 
   {# ── Fotos ────────────────────────────────────────────────────────── #}

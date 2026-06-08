@@ -32,7 +32,7 @@ from app.models.major_incident import (
     StaffFunction,
 )
 from app.models.master import FireDept, Member, VehicleMaster
-from app.services.ai_service import analyze_site_reconnaissance, is_enabled as ai_is_enabled
+from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage
 from app.services.major_incident_service import (
     close_lage,
@@ -88,12 +88,12 @@ async def _apply_ai_prio(site: IncidentSite, db: Session) -> None:
     """Automatically suggest priority via AI. Never raises.
 
     Only sets priority when none exists — never overwrites a manually set value.
-    Uses einsatzgrund if available, falls back to bezeichnung.
     """
-    text = site.einsatzgrund or site.bezeichnung
+    text = site.bezeichnung
     if site.priority or not ai_is_enabled() or not text:
         return
     try:
+        from app.services.ai_service import analyze_site_reconnaissance
         result = await analyze_site_reconnaissance(
             text,
             {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
@@ -530,78 +530,6 @@ async def site_log_add(
     ))
     db.commit()
     return Response(status_code=204)
-
-
-# ── KI-Erkundungsassistent ───────────────────────────────────────────────────
-
-@router.post("/lage/{lage_id}/stellen/{site_id}/ki-erkundung", response_class=HTMLResponse)
-async def site_ki_erkundung(
-    request: Request,
-    lage_id: int,
-    site_id: int,
-    erkundungstext: str = Form(...),
-    db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
-):
-    user = request.state.user
-    lage = _lage_or_404(lage_id, db)
-    _check_org_access(user, lage)
-
-    site = db.get(IncidentSite, site_id)
-    if not site or site.major_incident_id != lage_id:
-        raise HTTPException(status_code=404)
-
-    from app.services.ai_service import analyze_site_reconnaissance
-    result = await analyze_site_reconnaissance(
-        erkundungstext,
-        {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
-    )
-
-    if not result:
-        return HTMLResponse(
-            '<p style="color:#f87171;font-size:.82rem;margin-top:8px;">KI-Analyse nicht verfügbar.</p>'
-        )
-
-    prio_colors = {1: "#f87171", 2: "#fb923c", 3: "#facc15", 4: "#9ca3af"}
-    prio_labels = {1: "Sofort", 2: "Dringend", 3: "Normal", 4: "Aufschiebbar"}
-    pv = result.get("prio_vorschlag", 3)
-    csrf = request.state.csrf_token
-
-    html = f"""
-<div style="margin-top:12px;padding:10px 12px;background:rgba(139,92,246,.08);
-border:1px solid rgba(139,92,246,.25);border-radius:6px;font-size:.82rem;">
-  <div style="font-size:.72rem;font-weight:700;color:#a78bfa;margin-bottom:8px;letter-spacing:.04em;">
-    ✨ KI-ERKUNDUNGSANALYSE
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:10px;">
-    <div><span style="color:var(--text-muted);font-size:.72rem;">Einsatzgrund</span><br>
-      <strong>{result.get('einsatzgrund','–')}</strong></div>
-    <div><span style="color:var(--text-muted);font-size:.72rem;">Gefahr</span><br>
-      {result.get('gefahr','–')}</div>
-    <div><span style="color:var(--text-muted);font-size:.72rem;">Benötigte Mittel</span><br>
-      {result.get('benoetigte_mittel','–')}</div>
-    <div><span style="color:var(--text-muted);font-size:.72rem;">Prio-Vorschlag</span><br>
-      <strong style="color:{prio_colors.get(pv,'#fff')};">{prio_labels.get(pv,'–')}</strong>
-      &nbsp;(Gefahr {result.get('danger_score','?')}/4 · Dringlichkeit {result.get('urgency_score','?')}/4)
-    </div>
-  </div>
-  <div style="color:var(--text-muted);margin-bottom:10px;font-size:.8rem;line-height:1.5;">
-    {result.get('zusammenfassung','').replace(chr(10),'<br>')}
-  </div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;">
-    <form hx-post="/lage/{lage_id}/stellen/{site_id}/prio"
-          hx-swap="none" hx-vals='{{"_csrf":"{csrf}"}}'>
-      <input type="hidden" name="priority" value="{pv}">
-      <button type="submit" class="btn btn--secondary btn--sm">Prio {prio_labels.get(pv,'')} übernehmen</button>
-    </form>
-    <form hx-post="/lage/{lage_id}/stellen/{site_id}/log"
-          hx-swap="none"
-          hx-vals='{{"_csrf":"{csrf}","text":"KI-Erkundung: {result.get('zusammenfassung','').replace(chr(34),chr(39))[:200]}"}}'>
-      <button type="submit" class="btn btn--ghost btn--sm">Als Notiz speichern</button>
-    </form>
-  </div>
-</div>"""
-    return HTMLResponse(html)
 
 
 # ── Ressource zuweisen ──────────────────────────────────────────────────────
@@ -1178,6 +1106,7 @@ async def lage_funkjournal(
     )
 
     sites = [s for s in lage.sites if s.phase != SitePhase.abgebrochen]
+    sites_by_id = {s.id: s for s in lage.sites}
     open_requests = sum(1 for c in comms if c.is_request and not c.handled)
 
     return templates.TemplateResponse(request, "incident_major/funkjournal.html", {
@@ -1185,6 +1114,7 @@ async def lage_funkjournal(
         "lage": lage,
         "comms": comms,
         "sites": sites,
+        "sites_by_id": sites_by_id,
         "open_requests": open_requests,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
@@ -1339,7 +1269,7 @@ async def buerger_submit(
     token: str,
     description: str = Form(...),
     reporter_name: str = Form(""),
-    reporter_contact: str = Form(""),
+    reporter_contact: str = Form(...),
     ort: str = Form(""),
     strasse: str = Form(""),
     lat: float | None = Form(None),

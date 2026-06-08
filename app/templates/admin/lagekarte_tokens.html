@@ -115,21 +115,6 @@
   </div>
 </section>
 
-{% block scripts %}
-<script>
-function toggleAllTokens() {
-  const cbs = document.querySelectorAll('.token-bulk-cb');
-  const anyUnchecked = Array.from(cbs).some(cb => !cb.checked);
-  cbs.forEach(cb => cb.checked = anyUnchecked);
-}
-function checkBulkTokens() {
-  const checked = document.querySelectorAll('.token-bulk-cb:checked').length;
-  if (!checked) { alert('Keine Tokens ausgewählt.'); return false; }
-  return confirm(checked + ' Token(s) endgültig löschen?');
-}
-</script>
-{% endblock %}
-
 <section class="card mt-4">
   <div class="card-header"><h2>Verwendung in lagekarte.info</h2></div>
   <div class="card-body">
@@ -145,4 +130,19 @@ function checkBulkTokens() {
     </p>
   </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleAllTokens() {
+  const cbs = document.querySelectorAll('.token-bulk-cb');
+  const anyUnchecked = Array.from(cbs).some(cb => !cb.checked);
+  cbs.forEach(cb => cb.checked = anyUnchecked);
+}
+function checkBulkTokens() {
+  const checked = document.querySelectorAll('.token-bulk-cb:checked').length;
+  if (!checked) { alert('Keine Tokens ausgewählt.'); return false; }
+  return confirm(checked + ' Token(s) endgültig löschen?');
+}
+</script>
 {% endblock %}

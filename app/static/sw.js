@@ -1,5 +1,5 @@
 /* Service Worker – PWA Offline Cache */
-const CACHE = 'fwwo-v3';
+const CACHE = 'fwwo-v4';
 const BOARD_CACHE = 'fwwo-board-v1';
 const PRECACHE = [
   '/',
@@ -75,16 +75,18 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Static assets — cache-first
+  // Static assets — stale-while-revalidate (always fetch fresh, serve cache if offline)
   if (url.pathname.startsWith('/static/')) {
     e.respondWith(
-      caches.match(e.request).then(r => r || fetch(e.request).then(res => {
-        if (res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return res;
-      }))
+      caches.open(CACHE).then(cache =>
+        cache.match(e.request).then(cached => {
+          const fetchPromise = fetch(e.request).then(res => {
+            if (res.ok) cache.put(e.request, res.clone());
+            return res;
+          });
+          return cached || fetchPromise;
+        })
+      )
     );
     return;
   }

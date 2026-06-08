@@ -106,8 +106,8 @@
     <label>Ihr Name (optional)</label>
     <input type="text" name="reporter_name" maxlength="120" placeholder="Vorname Nachname">
 
-    <label>Ihre Telefonnummer (optional)</label>
-    <input type="tel" name="reporter_contact" maxlength="120" placeholder="für Rückfragen">
+    <label class="required">Ihre Telefonnummer</label>
+    <input type="tel" name="reporter_contact" maxlength="120" placeholder="für Rückfragen" required>
 
     <label>Foto (optional)</label>
     <label class="file-label" for="photo-input">📷 Foto auswählen / aufnehmen</label>
@@ -118,6 +118,14 @@
 
     <button type="submit" class="btn">Meldung absenden</button>
   </form>
+<script>
+document.querySelector('form[action^="/melden/"]').addEventListener('submit', function() {
+  var lat = document.getElementById('gps-lat');
+  var lng = document.getElementById('gps-lng');
+  if (lat && !lat.value) lat.removeAttribute('name');
+  if (lng && !lng.value) lng.removeAttribute('name');
+});
+</script>
 
   <div class="footer">Einsatzleiter-Hilfswerkzeug – {{ org_name }}</div>
 </div>

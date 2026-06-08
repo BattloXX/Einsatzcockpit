@@ -119,9 +119,13 @@
     <div class="stat__lbl">Erledigt</div>
   </div>
   <div class="stat">
-    <div class="stat__val">
-      {{ active_sites|sum(attribute='resources')|list|selectattr('released_at','none')|list|length }}
-    </div>
+    {% set res_count = namespace(n=0) %}
+    {% for s in active_sites %}
+      {% for r in s.resources %}
+        {% if r.released_at is none %}{% set res_count.n = res_count.n + 1 %}{% endif %}
+      {% endfor %}
+    {% endfor %}
+    <div class="stat__val">{{ res_count.n }}</div>
     <div class="stat__lbl">Ressourcen</div>
   </div>
 </div>

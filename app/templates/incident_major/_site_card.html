@@ -1,6 +1,6 @@
 <div class="site-card" data-site-id="{{ site.id }}"
      data-prio="{{ site.priority.value if site.priority else 9 }}"
-     data-search="{{ (site.bezeichnung ~ ' ' ~ (site.einsatzgrund or '') ~ ' ' ~ (site.strasse or '') ~ ' ' ~ (site.ort or ''))|lower }}"
+     data-search="{{ (site.bezeichnung ~ ' ' ~ (site.strasse or '') ~ ' ' ~ (site.ort or ''))|lower }}"
      hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}"
      hx-target="#siteDetailContent"
      hx-swap="innerHTML"
@@ -11,7 +11,7 @@
   {% endif %}
 
   <div class="site-card__body">
-    <div class="site-card__title">{{ site.einsatzgrund or site.bezeichnung }}</div>
+    <div class="site-card__title">{{ site.bezeichnung }}</div>
 
     {% if site.strasse or site.ort %}
     <div class="site-card__addr">

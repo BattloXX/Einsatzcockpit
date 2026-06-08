@@ -106,8 +106,8 @@
           <form hx-post="/lage/{{ lage.id }}/stab/{{ a.id }}/freigeben"
                 hx-swap="none"
                 hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-                hx-on::after-request="if(event.detail.successful){location.reload();}"
-                onsubmit="return confirm('Person freigeben?')">
+                hx-confirm="Person freigeben?"
+                hx-on::after-request="if(event.detail.successful){location.reload();}">
             <button type="submit" class="btn btn--xs btn--ghost">✕</button>
           </form>
           {% endif %}
@@ -180,8 +180,8 @@
           <form hx-post="/lage/{{ lage.id }}/journal/{{ entry.id }}/loeschen"
                 hx-swap="none"
                 hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+                hx-confirm="Eintrag löschen?"
                 hx-on::after-request="if(event.detail.successful){location.reload();}"
-                onsubmit="return confirm('Eintrag löschen?')"
                 style="margin:0;flex-shrink:0;">
             <button type="submit" class="btn btn--xs btn--ghost" title="Löschen">✕</button>
           </form>
