@@ -115,7 +115,7 @@
   {# ── Meldungsliste ───────────────────────────────────────────────────────── #}
   {% if reports %}
   {% for r in reports %}
-  <div class="mel-card mel-card--{{ r.status }}">
+  <div id="mel-{{ r.id }}" class="mel-card mel-card--{{ r.status }}">
     <div class="mel-header">
       <span class="mel-status mel-status--{{ r.status }}">
         {% if r.status == 'new' %}Neu{% elif r.status == 'accepted' %}Angenommen{% else %}Abgelehnt{% endif %}

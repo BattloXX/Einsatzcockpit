@@ -583,13 +583,12 @@ async def _enrich_site_from_alarm(
     name: str | None = None,
     telefon: str | None = None,
 ) -> None:
-    """Background: geocode, AI-generate short bezeichnung, AI priority, name/telefon notes."""
+    """Background: geocode, AI priority, name/telefon notes."""
     from app.db import SessionLocal
     from app.models.major_incident import IncidentSite, SiteLogEntry, SitePriority
     from app.services.geocoding import geocode_address
     from app.services.ai_service import (
         analyze_site_reconnaissance,
-        generate_site_bezeichnung,
         is_enabled,
     )
 
@@ -607,17 +606,6 @@ async def _enrich_site_from_alarm(
                 geo = await geocode_address(site.strasse, site.hausnr, site.ort)
                 if geo:
                     site.lat, site.lng = geo.lat, geo.lng
-                    changed = True
-            except Exception:
-                pass
-
-        # AI: short bezeichnung from alarm text
-        ai_text = (meldung or einsatzgrund or "").strip()
-        if is_enabled() and ai_text:
-            try:
-                bezeichnung = await generate_site_bezeichnung(meldung or "", einsatzgrund)
-                if bezeichnung:
-                    site.bezeichnung = bezeichnung
                     changed = True
             except Exception:
                 pass

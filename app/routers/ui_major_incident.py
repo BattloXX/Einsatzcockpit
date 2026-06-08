@@ -472,6 +472,14 @@ async def site_detail(
 
     sectors = sorted(lage.sectors, key=lambda s: s.id)
 
+    citizen_report = None
+    if site.source == "buerger":
+        citizen_report = (
+            db.query(CitizenReport)
+            .filter(CitizenReport.site_id == site.id)
+            .first()
+        )
+
     return templates.TemplateResponse(request, "incident_major/_site_detail.html", {
         "user": user,
         "lage": lage,
@@ -483,6 +491,7 @@ async def site_detail(
         "vehicles": vehicles,
         "sectors": sectors,
         "now": datetime.now(UTC),
+        "citizen_report": citizen_report,
     })
 
 
@@ -749,6 +758,13 @@ async def site_pin_save(
         .all()
     )
     sectors = sorted(lage.sectors, key=lambda s: s.id)
+    citizen_report = None
+    if site.source == "buerger":
+        citizen_report = (
+            db.query(CitizenReport)
+            .filter(CitizenReport.site_id == site.id)
+            .first()
+        )
     return templates.TemplateResponse(request, "incident_major/_site_detail.html", {
         "user": user,
         "lage": lage,
@@ -760,6 +776,7 @@ async def site_pin_save(
         "vehicles": vehicles,
         "sectors": sectors,
         "now": datetime.now(UTC),
+        "citizen_report": citizen_report,
     })
 
 
@@ -1519,10 +1536,21 @@ async def meldung_annehmen(
     if not report or report.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
+    # AI-generierte Kurzbezeichnung aus der Bürgerbeschreibung
+    bezeichnung = f"Bürgermeldung – {report.ort or report.strasse or 'unbekannt'}"
+    if ai_is_enabled() and report.description:
+        try:
+            from app.services.ai_service import generate_site_bezeichnung
+            ai_bez = await generate_site_bezeichnung(report.description)
+            if ai_bez:
+                bezeichnung = ai_bez
+        except Exception:
+            pass
+
     try:
         site = create_site(
             db, lage,
-            bezeichnung=f"Bürgermeldung – {report.ort or report.strasse or 'unbekannt'}",
+            bezeichnung=bezeichnung,
             einsatzgrund=(report.description or "")[:160] or None,
             ort=report.ort,
             strasse=report.strasse,
@@ -1540,6 +1568,20 @@ async def meldung_annehmen(
             user_id=user.id,
             author_name=get_author_name(request),
         ))
+        # Name/Telefon aus Bürgermeldung in Notizen übernehmen
+        contact_parts: list[str] = []
+        if report.reporter_name:
+            contact_parts.append(f"Anrufer: {report.reporter_name.strip()}")
+        if report.reporter_contact:
+            contact_parts.append(f"Tel.: {report.reporter_contact.strip()}")
+        if contact_parts:
+            db.add(SiteLogEntry(
+                incident_site_id=site.id,
+                kind="note",
+                text=" · ".join(contact_parts),
+                user_id=user.id,
+                author_name=get_author_name(request),
+            ))
         report.status = "accepted"
         report.site_id = site.id
         db.commit()

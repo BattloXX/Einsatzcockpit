@@ -12,7 +12,7 @@
 
 <div class="modal__body">
   <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:10px;">
-    Klicke auf die Karte um den Standort zu markieren. Mit dem Suchen-Button kann eine Adresse gesucht werden.
+    Klicke auf die Karte oder ziehe den Pin um den Standort zu setzen. Mit dem Suchen-Button kann eine Adresse gesucht werden.
   </p>
 
   <div style="margin-bottom:8px;display:flex;gap:6px;">
@@ -84,7 +84,11 @@
     }).addTo(_map);
 
     if (initLat !== null) {
-      _marker = L.marker([initLat, initLng]).addTo(_map);
+      _marker = L.marker([initLat, initLng], {draggable: true}).addTo(_map);
+      _marker.on('dragend', function(e) {
+        var pos = e.target.getLatLng();
+        _updateCoords(pos.lat, pos.lng);
+      });
     }
 
     _map.on('click', function(e) {
@@ -95,14 +99,22 @@
     setTimeout(function() { _map.invalidateSize(); }, 400);
   }
 
-  function setPin(lat, lng) {
-    if (_marker) _map.removeLayer(_marker);
-    _marker = L.marker([lat, lng]).addTo(_map);
+  function _updateCoords(lat, lng) {
     document.getElementById('pinLat').value = lat.toFixed(6);
     document.getElementById('pinLng').value = lng.toFixed(6);
     document.getElementById('pinCoords').textContent =
       'Gesetzt: ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
     document.getElementById('pinSaveBtn').disabled = false;
+  }
+
+  function setPin(lat, lng) {
+    if (_marker) _map.removeLayer(_marker);
+    _marker = L.marker([lat, lng], {draggable: true}).addTo(_map);
+    _marker.on('dragend', function(e) {
+      var pos = e.target.getLatLng();
+      _updateCoords(pos.lat, pos.lng);
+    });
+    _updateCoords(lat, lng);
   }
 
   window.pinSearch = function() {

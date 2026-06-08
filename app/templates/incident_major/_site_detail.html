@@ -235,7 +235,18 @@
   <div class="site-detail__row">
     <span class="site-detail__label">Quelle</span>
     <span class="site-detail__value">
-      {% if site.source == 'api' %}Leitstelle{% elif site.source == 'buerger' %}Bürger-Meldung{% else %}Manuell{% endif %}
+      {% if site.source == 'api' %}
+        Leitstelle
+      {% elif site.source == 'buerger' %}
+        {% if citizen_report %}
+          <a href="/lage/{{ lage.id }}/meldungen#mel-{{ citizen_report.id }}"
+             style="color:#93c5fd;text-decoration:none;" target="_blank">Bürger-Meldung #{{ citizen_report.id }} ↗</a>
+        {% else %}
+          Bürger-Meldung
+        {% endif %}
+      {% else %}
+        Manuell
+      {% endif %}
       {% if site.alarm_stufe %} · {{ site.alarm_stufe }}{% endif %}
     </span>
   </div>
