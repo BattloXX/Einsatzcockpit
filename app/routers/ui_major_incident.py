@@ -1,5 +1,8 @@
 """UI-Router: Großschadenslage – Phasen-Board, Stellen-CRUD, Abschluss."""
+import logging
 from datetime import UTC, datetime
+
+logger = logging.getLogger("einsatzleiter.major_incident")
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
@@ -302,27 +305,32 @@ async def site_create(
     if lage.status != MajorIncidentStatus.active:
         raise HTTPException(status_code=400, detail="Lage nicht aktiv")
 
-    site = create_site(
-        db, lage,
-        bezeichnung=bezeichnung.strip(),
-        einsatzgrund=einsatzgrund.strip() or None,
-        ort=ort.strip() or None,
-        strasse=strasse.strip() or None,
-        hausnr=hausnr.strip() or None,
-        created_by=user.id,
-    )
-    await _geocode_site(site)
-    await _apply_ai_prio(site, db)
-    db.add(SiteLogEntry(
-        incident_site_id=site.id,
-        kind="status",
-        text="Einsatzstelle angelegt",
-        user_id=user.id,
-        author_name=get_author_name(request),
-    ))
-    write_audit(db, "major_incident.site.created", user_id=user.id,
-                payload={"lage_id": lage_id, "site_id": site.id, "bezeichnung": site.bezeichnung})
-    db.commit()
+    try:
+        site = create_site(
+            db, lage,
+            bezeichnung=bezeichnung.strip(),
+            einsatzgrund=einsatzgrund.strip() or None,
+            ort=ort.strip() or None,
+            strasse=strasse.strip() or None,
+            hausnr=hausnr.strip() or None,
+            created_by=user.id,
+        )
+        await _geocode_site(site)
+        await _apply_ai_prio(site, db)
+        db.add(SiteLogEntry(
+            incident_site_id=site.id,
+            kind="status",
+            text="Einsatzstelle angelegt",
+            user_id=user.id,
+            author_name=get_author_name(request),
+        ))
+        write_audit(db, "major_incident.site.created", user_id=user.id,
+                    payload={"lage_id": lage_id, "site_id": site.id, "bezeichnung": site.bezeichnung})
+        db.commit()
+    except Exception:
+        logger.exception("Fehler beim Anlegen der Einsatzstelle lage_id=%s", lage_id)
+        db.rollback()
+        raise
     await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
     return RedirectResponse(f"/lage/{lage_id}", status_code=303)
 
@@ -1411,29 +1419,35 @@ async def meldung_annehmen(
     if not report or report.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    site = create_site(
-        db, lage,
-        bezeichnung=f"Bürgermeldung – {report.ort or report.strasse or 'unbekannt'}",
-        einsatzgrund=report.description[:160],
-        ort=report.ort,
-        strasse=report.strasse,
-        lat=report.lat,
-        lng=report.lng,
-        created_by=user.id,
-        source="buerger",
-    )
-    await _geocode_site(site)
-    await _apply_ai_prio(site, db)
-    db.add(SiteLogEntry(
-        incident_site_id=site.id,
-        kind="status",
-        text=f"Aus Bürgermeldung #{report.id} erstellt",
-        user_id=user.id,
-        author_name=get_author_name(request),
-    ))
-    report.status = "accepted"
-    report.site_id = site.id
-    db.commit()
+    try:
+        site = create_site(
+            db, lage,
+            bezeichnung=f"Bürgermeldung – {report.ort or report.strasse or 'unbekannt'}",
+            einsatzgrund=(report.description or "")[:160] or None,
+            ort=report.ort,
+            strasse=report.strasse,
+            lat=report.lat,
+            lng=report.lng,
+            created_by=user.id,
+            source="buerger",
+        )
+        await _geocode_site(site)
+        await _apply_ai_prio(site, db)
+        db.add(SiteLogEntry(
+            incident_site_id=site.id,
+            kind="status",
+            text=f"Aus Bürgermeldung #{report.id} erstellt",
+            user_id=user.id,
+            author_name=get_author_name(request),
+        ))
+        report.status = "accepted"
+        report.site_id = site.id
+        db.commit()
+    except Exception:
+        logger.exception("Fehler beim Annehmen der Bürgermeldung lage_id=%s report_id=%s",
+                         lage_id, report_id)
+        db.rollback()
+        raise
     await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
     return RedirectResponse(f"/lage/{lage_id}/meldungen", status_code=303)
 
