@@ -92,7 +92,7 @@ async def _apply_ai_prio(site: IncidentSite, db: Session) -> None:
 
     Only sets priority when none exists — never overwrites a manually set value.
     """
-    text = site.bezeichnung
+    text = site.einsatzgrund or site.bezeichnung
     if site.priority or not ai_is_enabled() or not text:
         return
     try:

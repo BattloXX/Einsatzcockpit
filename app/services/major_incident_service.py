@@ -166,7 +166,7 @@ def handle_alarm_trigger(
 
     site = create_site(
         db, lage,
-        bezeichnung=bezeichnung or f"{alarm_type_code} – {ort or 'unbekannt'}",
+        bezeichnung=bezeichnung or einsatzgrund or f"{alarm_type_code} – {ort or 'unbekannt'}",
         source="api",
         external_key=external_key,
         alarm_stufe=alarm_type_code,
@@ -214,7 +214,7 @@ def adopt_incident_as_site(
 
     return create_site(
         db, lage,
-        bezeichnung=f"{alarm_type_code} – {ort or 'unbekannt'}",
+        bezeichnung=einsatzgrund or f"{alarm_type_code} – {ort or 'unbekannt'}",
         source="api",
         external_key=external_key,
         alarm_stufe=alarm_type_code,
