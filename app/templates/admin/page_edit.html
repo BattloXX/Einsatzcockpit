@@ -3,7 +3,7 @@
 
 {% block head_extra %}
 {{ super() }}
-<link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css" rel="stylesheet">
+<link href="/static/css/quill.snow.css" rel="stylesheet">
 <style>
   /* ── Quill dark-theme overrides ──────────────────────────────────── */
   .ql-toolbar.ql-snow {
@@ -127,7 +127,7 @@
 
 <input type="file" id="image-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
 
-<script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
+<script src="/static/js/quill.min.js"></script>
 <script>
 (function () {
   let htmlMode = false;
