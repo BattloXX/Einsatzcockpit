@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
-from app.core.security import generate_api_key, hash_api_key, hash_password
+from app.core.security import generate_api_key, generate_sms_gateway_token, hash_api_key, hash_password
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import (
@@ -30,7 +30,7 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
-from app.models.user import ApiKey, AuditLog, DeviceToken, PushLog, PushSubscription, Role, User, UserRole
+from app.models.user import ApiKey, AuditLog, DeviceToken, PushLog, PushSubscription, Role, SmsGatewayToken, User, UserRole
 
 router = APIRouter(prefix="/admin")
 logger_admin = logging.getLogger("einsatzleiter.admin")
@@ -2212,6 +2212,14 @@ async def device_tokens_list(
         .order_by(DeviceToken.created_at.desc())
         .all()
     )
+    gateway_tokens = (
+        _org_filter(
+            db.query(SmsGatewayToken),
+            user, SmsGatewayToken.org_id,
+        )
+        .order_by(SmsGatewayToken.created_at.desc())
+        .all()
+    )
     roles = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if has_role(user, "system_admin") else []
     vehicles = (
@@ -2226,6 +2234,7 @@ async def device_tokens_list(
     return templates.TemplateResponse(request, "admin/device_tokens.html", {
         "user": user,
         "tokens": tokens,
+        "gateway_tokens": gateway_tokens,
         "roles": roles,
         "all_orgs": all_orgs,
         "vehicles": vehicles,
@@ -2234,6 +2243,7 @@ async def device_tokens_list(
         "error": request.query_params.get("error"),
         "base_url": base_url,
         "new_token": None,
+        "new_token_type": None,
         "new_label": None,
         "new_qr_b64": None,
     })
@@ -2264,6 +2274,7 @@ async def device_token_detail(
 async def create_device_token(
     request: Request,
     label: str = Form(...),
+    device_type: str = Form("unit"),  # "unit" | "sms-gateway"
     role_codes: list[str] = Form([]),
     org_id: int | None = Form(None),
     vehicle_master_id: int | None = Form(None),
@@ -2281,6 +2292,43 @@ async def create_device_token(
         else current_user.org_id
     )
 
+    base_url = str(request.base_url).rstrip("/")
+
+    # ── SMS-Gateway-Token ────────────────────────────────────────────────────────
+    if device_type == "sms-gateway":
+        raw_token = generate_sms_gateway_token()
+        token_hash = hash_api_key(raw_token)
+        gw = SmsGatewayToken(label=label, token_hash=token_hash, org_id=target_org_id)
+        db.add(gw)
+        db.flush()
+        write_audit(db, "admin.sms_gateway_token.created", user_id=current_user.id,
+                    entity_type="sms_gateway_token", entity_id=gw.id,
+                    payload={"label": label})
+        db.commit()
+
+        # QR mit mode=sms-gateway damit die Android-App den Modus erkennt
+        login_url = f"{base_url}/geraet-login?token={raw_token}&mode=sms-gateway"
+        new_qr_b64: str | None = None
+        try:
+            import base64
+            import io
+
+            import qrcode  # type: ignore
+            qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=6, border=4)
+            qr.add_data(login_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            new_qr_b64 = base64.b64encode(buf.getvalue()).decode()
+        except Exception:
+            pass
+
+        return _render_device_tokens_page(request, db, current_user, new_token=raw_token,
+                                          new_label=label, new_qr_b64=new_qr_b64,
+                                          new_token_type="sms-gateway", base_url=base_url)
+
+    # ── Einheit-Gerät (bisheriger Pfad) ─────────────────────────────────────────
     # Rollen: system_admin darf nur system_admin vergeben
     is_sysadmin = has_role(current_user, "system_admin")
     allowed_codes = (
@@ -2327,32 +2375,10 @@ async def create_device_token(
                 payload={"label": label, "role_codes": role_codes})
     db.commit()
 
-    # Token einmalig direkt in der Response zeigen — nie in URL/Logs
-    from sqlalchemy.orm import joinedload as _jl
-    all_tokens = (
-        _org_filter(
-            db.query(DeviceToken).join(User, DeviceToken.user_id == User.id),
-            current_user, User.org_id,
-        )
-        .options(_jl(DeviceToken.user).joinedload(User.user_roles).joinedload(UserRole.role))
-        .order_by(DeviceToken.created_at.desc())
-        .all()
-    )
-    roles_all = db.query(Role).all()
-    all_orgs = db.query(FireDept).order_by(FireDept.name).all() if has_role(current_user, "system_admin") else []
-    vehicles_all = (
-        _org_filter(
-            db.query(VehicleMaster).filter(VehicleMaster.active == True),  # noqa: E712
-            current_user, VehicleMaster.dept_id,
-        )
-        .order_by(VehicleMaster.name)
-        .all()
-    )
-    base_url = str(request.base_url).rstrip("/")
     login_url = f"{base_url}/geraet-login?token={raw_token}"
 
     # QR-Code für den Device-Login generieren (gleiche Methode wie Einsatz-QR)
-    new_qr_b64: str | None = None
+    new_qr_b64 = None
     try:
         import base64
         import io
@@ -2368,20 +2394,121 @@ async def create_device_token(
     except Exception:
         pass  # QR-Generierung optional; URL bleibt weiterhin sichtbar
 
+    return _render_device_tokens_page(request, db, current_user, new_token=raw_token,
+                                      new_label=label, new_qr_b64=new_qr_b64,
+                                      new_token_type="unit", base_url=base_url)
+
+
+def _render_device_tokens_page(request, db, current_user, *, new_token=None, new_label=None,
+                               new_qr_b64=None, new_token_type="unit", base_url=None):
+    """Baut den Template-Kontext für die Geräte-Login-Seite auf."""
+    from sqlalchemy.orm import joinedload as _jl
+    all_tokens = (
+        _org_filter(
+            db.query(DeviceToken).join(User, DeviceToken.user_id == User.id),
+            current_user, User.org_id,
+        )
+        .options(_jl(DeviceToken.user).joinedload(User.user_roles).joinedload(UserRole.role))
+        .order_by(DeviceToken.created_at.desc())
+        .all()
+    )
+    gateway_tokens = (
+        _org_filter(
+            db.query(SmsGatewayToken),
+            current_user, SmsGatewayToken.org_id,
+        )
+        .order_by(SmsGatewayToken.created_at.desc())
+        .all()
+    )
+    roles_all = db.query(Role).all()
+    all_orgs = db.query(FireDept).order_by(FireDept.name).all() if has_role(current_user, "system_admin") else []
+    vehicles_all = (
+        _org_filter(
+            db.query(VehicleMaster).filter(VehicleMaster.active == True),  # noqa: E712
+            current_user, VehicleMaster.dept_id,
+        )
+        .order_by(VehicleMaster.name)
+        .all()
+    )
     return templates.TemplateResponse(request, "admin/device_tokens.html", {
         "user": current_user,
         "tokens": all_tokens,
+        "gateway_tokens": gateway_tokens,
         "roles": roles_all,
         "all_orgs": all_orgs,
         "vehicles": vehicles_all,
         "is_sysadmin": has_role(current_user, "system_admin"),
         "saved": "1",
         "error": None,
-        "base_url": base_url,
-        "new_token": raw_token,
-        "new_label": label,
+        "base_url": base_url or "",
+        "new_token": new_token,
+        "new_token_type": new_token_type,
+        "new_label": new_label,
         "new_qr_b64": new_qr_b64,
     })
+
+
+# ── SMS-Gateway-Token Verwaltung ───────────────────────────────────────────────
+
+def _assert_gateway_token_access(gw: SmsGatewayToken | None, current_user) -> None:
+    if gw is None:
+        raise HTTPException(status_code=404)
+    if not same_org_or_system_admin(current_user, gw.org_id):
+        raise HTTPException(status_code=403)
+
+
+@router.post("/geraete-login/gateway/{token_id}/widerrufen")
+async def revoke_gateway_token(
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    gw = db.get(SmsGatewayToken, token_id)
+    _assert_gateway_token_access(gw, request.state.user)
+    assert gw is not None
+    gw.revoked_at = datetime.now(UTC)
+    write_audit(db, "admin.sms_gateway_token.revoked", user_id=request.state.user.id,
+                entity_type="sms_gateway_token", entity_id=token_id,
+                payload={"label": gw.label})
+    db.commit()
+    return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
+
+
+@router.post("/geraete-login/gateway/{token_id}/reaktivieren")
+async def reactivate_gateway_token(
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    gw = db.get(SmsGatewayToken, token_id)
+    _assert_gateway_token_access(gw, request.state.user)
+    assert gw is not None
+    gw.revoked_at = None
+    write_audit(db, "admin.sms_gateway_token.reactivated", user_id=request.state.user.id,
+                entity_type="sms_gateway_token", entity_id=token_id,
+                payload={"label": gw.label})
+    db.commit()
+    return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
+
+
+@router.post("/geraete-login/gateway/{token_id}/loeschen")
+async def delete_gateway_token(
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    gw = db.get(SmsGatewayToken, token_id)
+    _assert_gateway_token_access(gw, request.state.user)
+    assert gw is not None
+    write_audit(db, "admin.sms_gateway_token.deleted", user_id=request.state.user.id,
+                entity_type="sms_gateway_token", entity_id=token_id,
+                payload={"label": gw.label})
+    db.delete(gw)
+    db.commit()
+    return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
 
 
 def _assert_device_token_access(dt: DeviceToken | None, current_user) -> None:

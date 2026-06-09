@@ -193,7 +193,7 @@ class PushLog(Base):
 
 
 class SmsGatewayToken(Base):
-    """Connection-Token für den SMS-Gateway-Docker-Container."""
+    """Connection-Token für den SMS-Gateway-Docker-Container oder die Android-App."""
     __tablename__ = "sms_gateway_token"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -203,6 +203,8 @@ class SmsGatewayToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    org: Mapped[FireDept | None] = relationship("FireDept", foreign_keys=[org_id], lazy="joined")
 
     @property
     def is_active(self) -> bool:
