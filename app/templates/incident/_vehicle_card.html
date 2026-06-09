@@ -31,10 +31,14 @@
       </select>
       {% if vehicle.commander and vehicle.commander_member_id not in (gk_member_candidates | map(attribute='id') | list) %}
       <div class="card__gk" style="font-size:.65rem;margin-top:1px;">GK: {{ vehicle.commander.full_name }}</div>
+      {% elif not vehicle.commander and vehicle.commander_name %}
+      <div class="card__gk" style="font-size:.65rem;margin-top:1px;">GK: {{ vehicle.commander_name }}</div>
       {% endif %}
     </div>
     {% elif vehicle.commander %}
     <div class="card__gk">GK: {{ vehicle.commander.full_name }}</div>
+    {% elif vehicle.commander_name %}
+    <div class="card__gk">GK: {{ vehicle.commander_name }}</div>
     {% endif %}
     {% if can_edit and unit_status_values is defined %}
     <div style="margin-top:4px;" onclick="event.stopPropagation()">

@@ -286,6 +286,8 @@
       {% else %}
       {% if incident.leader_member %}
       <div style="font-size:.9rem;"><strong>{{ incident.leader_member.full_name }}</strong></div>
+      {% elif incident.incident_leader_name %}
+      <div style="font-size:.9rem;"><strong>{{ incident.incident_leader_name }}</strong></div>
       {% else %}
       <div class="text-muted" style="font-size:.85rem;">Nicht zugewiesen</div>
       {% endif %}

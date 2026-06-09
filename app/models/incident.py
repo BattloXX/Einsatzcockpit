@@ -46,6 +46,7 @@ class Incident(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     incident_leader_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     incident_leader_member_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("member.id"), nullable=True)
+    incident_leader_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # primary_org_id: the organisation leading this incident
     primary_org_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fire_dept.id"), nullable=True)
     is_exercise: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -150,6 +151,7 @@ class IncidentVehicle(Base):
     commander_member_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
     )
+    commander_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     org_color_override: Mapped[str | None] = mapped_column(String(7), nullable=True)

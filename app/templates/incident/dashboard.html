@@ -795,6 +795,8 @@
               {% endif %}
               {% if v.commander %}
               <div class="v-gk">{{ v.commander.full_name }}</div>
+              {% elif v.commander_name %}
+              <div class="v-gk">{{ v.commander_name }}</div>
               {% else %}
               <div class="v-nogk">kein GK</div>
               {% endif %}
@@ -831,6 +833,8 @@
               {% endif %}
               {% if v.commander %}
               <div class="v-gk">{{ v.commander.full_name }}</div>
+              {% elif v.commander_name %}
+              <div class="v-gk">{{ v.commander_name }}</div>
               {% else %}
               <div class="v-nogk">kein GK</div>
               {% endif %}
@@ -844,6 +848,8 @@
               {% endif %}
               {% if v.commander %}
               <div class="v-gk">{{ v.commander.full_name }}</div>
+              {% elif v.commander_name %}
+              <div class="v-gk">{{ v.commander_name }}</div>
               {% else %}
               <div class="v-nogk">kein GK</div>
               {% endif %}

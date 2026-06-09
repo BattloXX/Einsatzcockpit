@@ -63,8 +63,6 @@ from app.services.incident_service import (
     list_el_candidates,
     move_card,
     move_vehicle_to_column,
-    quick_create_commander,
-    quick_create_el,
     reopen_incident,
     set_commander,
     set_message_status,
@@ -575,6 +573,7 @@ async def set_incident_leader_member(
 ):
     incident = _incident_or_404(incident_id, db)
     incident.incident_leader_member_id = member_id or None
+    incident.incident_leader_name = None
     db.commit()
     await manager.broadcast(incident_id, {
         "type": "incident_leader_changed",
@@ -590,17 +589,19 @@ async def set_incident_leader_member_new(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
-    """Legt einen neuen Member aus Freitext-Namen an und setzt ihn als EL vor Ort."""
+    """Speichert einen Freitext-EL-Namen — legt KEINEN Member-Eintrag an."""
     if not full_name.strip():
         return Response(status_code=422)
     incident = _incident_or_404(incident_id, db)
-    quick_create_el(db, incident, full_name.strip(), user_id=request.state.user.id)
+    incident.incident_leader_name = full_name.strip()
+    incident.incident_leader_member_id = None
     db.commit()
     await manager.broadcast(incident_id, {
         "type": "incident_leader_changed",
         "reload_board": True,
     })
     return Response(status_code=204)
+
 
 
 @router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/gk")
@@ -625,10 +626,29 @@ async def set_vehicle_gk_quick(
         )
         if not ok:
             return Response(status_code=422)
+    vehicle.commander_name = None
     set_commander(db, vehicle, member_id or None, user_id=request.state.user.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
     return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/kommandant-neu")
+async def set_vehicle_commander_new(
+    incident_id: int, vehicle_id: int, request: Request,
+    full_name: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Speichert einen Freitext-GK-Namen — legt KEINEN Member-Eintrag an."""
+    vehicle = db.get(IncidentVehicle, vehicle_id)
+    if not vehicle or not full_name.strip():
+        return Response(status_code=404)
+    vehicle.commander_name = full_name.strip()
+    vehicle.commander_member_id = None
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
+    return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
 
 
 @router.post("/einsatz/{incident_id}/einsatzleiter")
@@ -888,7 +908,7 @@ async def attach_vehicle_to_incident(
     db.add(iv)
     db.flush()
     if not commander_member_id and commander_free_text.strip():
-        quick_create_commander(db, iv, commander_free_text.strip(), user_id=request.state.user.id)
+        iv.commander_name = commander_free_text.strip()
     if note.strip():
         db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
                            user_id=request.state.user.id, author_name=get_author_name(request)))
@@ -1452,21 +1472,6 @@ async def set_vehicle_commander(
     await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
     return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
 
-
-@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/kommandant-neu")
-async def set_vehicle_commander_new(
-    incident_id: int, vehicle_id: int, request: Request,
-    full_name: str = Form(...),
-    db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin")),
-):
-    vehicle = db.get(IncidentVehicle, vehicle_id)
-    if not vehicle or not full_name.strip():
-        return Response(status_code=404)
-    quick_create_commander(db, vehicle, full_name.strip(), user_id=request.state.user.id)
-    db.commit()
-    await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
-    return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
 
 
 @router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/status")

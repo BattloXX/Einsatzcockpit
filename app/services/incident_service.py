@@ -553,45 +553,6 @@ def set_commander(
     return vehicle
 
 
-def quick_create_commander(
-    db: Session,
-    vehicle: IncidentVehicle,
-    full_name: str,
-    user_id: int | None = None,
-) -> IncidentVehicle:
-    """Create a Member from a name string and assign as commander."""
-    parts = full_name.strip().split(None, 1)
-    firstname = parts[0] if parts else full_name
-    lastname = parts[1] if len(parts) > 1 else ""
-    dept_id = vehicle.vehicle_master.dept_id if vehicle.vehicle_master else None
-    member = Member(firstname=firstname, lastname=lastname, org_id=dept_id, active=True)
-    db.add(member)
-    db.flush()
-    return set_commander(db, vehicle, member.id, user_id=user_id)
-
-
-def quick_create_el(
-    db: Session,
-    incident: Incident,
-    full_name: str,
-    user_id: int | None = None,
-) -> Incident:
-    """Create a Member from a free-text name and assign as incident leader (vor Ort)."""
-    parts = full_name.strip().split(None, 1)
-    firstname = parts[0] if parts else full_name
-    lastname = parts[1] if len(parts) > 1 else ""
-    member = Member(firstname=firstname, lastname=lastname, org_id=incident.primary_org_id, active=True)
-    db.add(member)
-    db.flush()
-    incident.incident_leader_member_id = member.id
-    db.flush()
-    write_incident_change(
-        db, incident.id, "vehicle.commander_set", "incident", incident.id,
-        before=None, after={"incident_leader_member": full_name},
-        user_id=user_id,
-    )
-    return incident
-
 
 def _next_display_order(db: Session, incident_id: int, column_id: int) -> int:
     """Liefert den nächsten freien display_order-Wert für eine Spalte (ans Ende)."""

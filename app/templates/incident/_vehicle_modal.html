@@ -79,7 +79,7 @@
 
     <p style="margin-top:8px; font-weight:700;">
       Aktuell:
-      {% if vehicle.commander %}{{ vehicle.commander.full_name }}{% else %}nicht zugeteilt{% endif %}
+      {% if vehicle.commander %}{{ vehicle.commander.full_name }}{% elif vehicle.commander_name %}{{ vehicle.commander_name }}{% else %}nicht zugeteilt{% endif %}
     </p>
   </div>
   {% endif %}
