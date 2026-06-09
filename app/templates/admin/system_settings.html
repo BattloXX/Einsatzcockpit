@@ -317,6 +317,30 @@
       </div>
     </section>
 
+    {# ── Einsatz – Funktionen ─────────────────────────────────────────── #}
+    <section class="card mb-4">
+      <div class="card-header">
+        <h2>Einsatz – Funktionen</h2>
+      </div>
+      <div class="card-body">
+        <table class="table-admin">
+          <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>breathing_enabled</code></td>
+              <td>
+                <select name="k_breathing_enabled" class="form-input form-input--sm" style="width:130px">
+                  <option value="true" {% if settings.get('breathing_enabled','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
+                  <option value="false" {% if settings.get('breathing_enabled','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
+                </select>
+              </td>
+              <td><small class="text-muted">🫁 Atemschutzüberwachung (BETA) – Pressluft-Trupp-Steuerung im Einsatz-Board ein- oder ausblenden</small></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     {# ── Großschadenslage – Funktionen ──────────────────────────────────── #}
     <section class="card mb-4">
       <div class="card-header">
@@ -414,6 +438,7 @@
       'incident_autoclose_enabled','incident_autoclose_after_hours','incident_autoclose_grace_minutes',
       'enable_speech_input','default_session_max_age',
       'ai_enabled','ai_api_key','ai_model_default','ai_model_fast','ai_max_tokens','ai_timeout',
+      'breathing_enabled',
       'mi_feature_stab','mi_feature_funkjournal','mi_feature_meldungen',
       'mi_feature_sektoren','mi_feature_karte','mi_feature_zeitreise','mi_feature_ressourcen',
     ] %}

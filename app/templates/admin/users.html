@@ -221,6 +221,7 @@
     <div class="modal__header"><h3>Rollen für <span id="re_username"></span></h3>
       <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" id="rolesEditorForm">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
         {% for r in roles %}
         <label class="checkbox-label">

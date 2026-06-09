@@ -343,15 +343,30 @@
 
   {# ── Fotos ────────────────────────────────────────────────────────── #}
   {% if site.media %}
-  <div style="margin-top:16px;">
+  <div style="margin-top:16px;"
+       x-data="{
+         lbOpen: false,
+         lbItems: [{% for m in site.media %}{{ m.id }}{% if not loop.last %},{% endif %}{% endfor %}],
+         lbIdx: 0,
+         lbShow(i) { this.lbIdx = i; this.lbOpen = true; },
+         lbClose() { this.lbOpen = false; }
+       }"
+       @keydown.escape.window="if(lbOpen) lbClose()">
     <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">FOTOS</div>
     <div class="media-grid">
       {% for m in site.media %}
-      <a href="/lage-medien/{{ m.id }}" target="_blank" rel="noopener">
-        <img src="/lage-medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}"
-             class="media-thumb" loading="lazy">
-      </a>
+      <img src="/lage-medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}"
+           class="media-thumb" loading="lazy" style="cursor:zoom-in"
+           @click="lbShow({{ loop.index0 }})">
       {% endfor %}
+    </div>
+    <div x-show="lbOpen" x-cloak
+         style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;"
+         @click.self="lbClose()">
+      <img :src="'/lage-medien/' + lbItems[lbIdx]"
+           style="max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.7);">
+      <button @click="lbClose()"
+              style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;color:#fff;font-size:26px;line-height:1;cursor:pointer;border-radius:50%;width:40px;height:40px;">×</button>
     </div>
   </div>
   {% endif %}

@@ -37,14 +37,15 @@
     var activeIdx = -1;
     var lastItems = [];
 
-    // ── Dropdown erzeugen (lazy, an body gebunden, position:fixed) ──────────
+    // ── Dropdown erzeugen (lazy) ──────────────────────────────────────────
     function ensureDropdown() {
       if (ul) return;
+      var dlg = input.closest('dialog');
       ul = document.createElement('ul');
       ul.className = 'addr-suggest';
       ul.style.cssText = [
         'display:none',
-        'position:fixed',
+        dlg ? 'position:absolute' : 'position:fixed',
         'z-index:10000',
         'list-style:none',
         'margin:0',
@@ -60,15 +61,21 @@
       ].join(';');
       // Im <dialog>-Element anhängen, damit das Dropdown im Browser-Top-Layer
       // gerendert wird und nicht hinter dem Dialog-Backdrop verschwindet.
-      var dlg = input.closest('dialog');
       (dlg || document.body).appendChild(ul);
     }
 
     function reposition() {
       if (!ul || ul.style.display === 'none') return;
       var rect = input.getBoundingClientRect();
-      ul.style.top   = (rect.bottom + 2) + 'px';
-      ul.style.left  = rect.left + 'px';
+      var dlg  = input.closest('dialog');
+      if (dlg) {
+        var dr = dlg.getBoundingClientRect();
+        ul.style.top   = (rect.bottom - dr.top + 2) + 'px';
+        ul.style.left  = (rect.left - dr.left) + 'px';
+      } else {
+        ul.style.top   = (rect.bottom + 2) + 'px';
+        ul.style.left  = rect.left + 'px';
+      }
       ul.style.width = rect.width + 'px';
     }
 

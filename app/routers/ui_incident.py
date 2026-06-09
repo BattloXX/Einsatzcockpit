@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import io
+import logging
 from datetime import UTC, datetime
 
 import qrcode
@@ -40,6 +41,7 @@ from app.models.master import (
     MessageSuggestion,
     MessageSuggestionAlarm,
     Qualification,
+    SystemSettings,
     TaskSuggestion,
     TaskSuggestionAlarm,
     VehicleMaster,
@@ -73,6 +75,7 @@ from app.services.incident_service import (
 )
 
 router = APIRouter()
+_log = logging.getLogger(__name__)
 
 
 async def _trigger_ai_task_suggestions(incident_id: int, meldung: str, einsatzart: str) -> None:
@@ -110,7 +113,7 @@ async def _trigger_ai_task_suggestions(incident_id: int, meldung: str, einsatzar
             "count": len(suggestions),
         })
     except Exception:
-        pass
+        _log.exception("KI-Auftragsvorschläge Fehler für Einsatz %d", incident_id)
     finally:
         db.close()
 
@@ -411,6 +414,8 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         t for t in incident.tasks
         if t.source == "ai_suggestion" and not t.is_done and not t.is_cancelled
     ]
+    _bs = db.get(SystemSettings, "breathing_enabled")
+    breathing_enabled = (_bs.value if _bs else "true") != "false"
     return templates.TemplateResponse(request, "incident/board.html", {
         "user": user, "incident": incident,
         "alarm_types": alarm_types, "lage_hints": lage_hints, "lage_hints_ai": lage_hints_ai,
@@ -421,6 +426,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         "gk_member_candidates": gk_member_candidates,
         "unit_status_values": UNIT_STATUS_VALUES,
         "ai_enabled": ai_is_enabled(),
+        "breathing_enabled": breathing_enabled,
     })
 
 
@@ -1688,9 +1694,7 @@ async def reject_ai_suggestion(
     task = db.get(Task, task_id)
     if not task or task.incident_id != incident_id or task.source != "ai_suggestion":
         return Response(status_code=404)
-    from datetime import UTC, datetime
-    task.is_cancelled = True
-    task.cancelled_at = datetime.now(UTC)
+    db.delete(task)
     db.commit()
     await manager.broadcast(incident_id, {"type": "task_cancelled", "reload_board": True})
     return Response(status_code=204)

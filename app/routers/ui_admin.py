@@ -1593,6 +1593,11 @@ async def save_system_settings(
         # KI / Anthropic
         "ai_enabled", "ai_api_key", "ai_model_default", "ai_model_fast",
         "ai_max_tokens", "ai_timeout",
+        # Einsatz-Funktionen
+        "breathing_enabled",
+        # Großschadenslage – Funktionen
+        "mi_feature_stab", "mi_feature_funkjournal", "mi_feature_meldungen",
+        "mi_feature_sektoren", "mi_feature_karte", "mi_feature_zeitreise", "mi_feature_ressourcen",
     ]
     for key in known_keys:
         val = form.get(f"k_{key}")

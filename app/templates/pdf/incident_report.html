@@ -226,7 +226,8 @@
   {% endif %}
   <tr>
     <td style="white-space:nowrap; font-variant-numeric:tabular-nums; color:#555;">{{ (e.ts|local).strftime('%H:%M:%S') }}</td>
-    <td>{{ e.text }}</td>
+    <td>{{ e.text }}{% if e.entity_type == 'task' %}{% for t in incident.tasks %}{% if t.id == e.entity_id %}<br><span style="font-size:7.5pt;color:#888;">↳ Auftrag: {{ t.title }}</span>{% endif %}{% endfor %}{% elif e.entity_type == 'message' %}{% for m in incident.messages %}{% if m.id == e.entity_id %}<br><span style="font-size:7.5pt;color:#888;">↳ Meldung: {{ m.title }}</span>{% endif %}{% endfor %}{% elif e.entity_type %}
+      <br><span style="font-size:7.5pt;color:#888;">↳ {{ e.entity_type }} #{{ e.entity_id }}</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>

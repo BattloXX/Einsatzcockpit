@@ -121,8 +121,10 @@
        class="btn btn--sm btn--secondary"
        {{ tip('Einsatz in lagekarte.info öffnen (neues Fenster)') }}>🗺️ Karte</a>
     {% endif %}
+    {% if breathing_enabled %}
     <a href="/einsatz/{{ incident.id }}/atemschutz" class="btn btn--sm btn--secondary"
        {{ tip('Atemschutzüberwachung — Pressluft-Trupp-Steuerung') }}>🫁 AS</a>
+    {% endif %}
     <a href="/einsatz/{{ incident.id }}/dashboard" target="_blank" rel="noopener noreferrer"
        class="btn btn--sm btn--secondary"
        {{ tip('Übersichts-Dashboard in neuem Fenster öffnen') }}>📊 Dashboard</a>
