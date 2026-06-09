@@ -93,33 +93,24 @@
           Rollen
         </button>
         {% if u.email %}
-        <form method="post" action="/admin/benutzer/{{ u.id }}/reset-mail" style="display:inline">
-          <button type="submit" class="btn btn--ghost btn--xs"
-                  onclick="return confirm('Reset-Link an {{ u.email }} senden?')"
-                  {{ tip('Sendet einen Self-Service-Reset-Link an die hinterlegte E-Mail') }}>📧 Reset-Mail</button>
-        </form>
+        <button type="button" class="btn btn--ghost btn--xs"
+                onclick="if(confirm('Reset-Link an {{ u.email }} senden?')) postAction('/admin/benutzer/{{ u.id }}/reset-mail')"
+                {{ tip('Sendet einen Self-Service-Reset-Link an die hinterlegte E-Mail') }}>📧 Reset-Mail</button>
         {% endif %}
-        <form method="post" action="/admin/benutzer/{{ u.id }}/passwort" style="display:inline">
-          <button type="submit" class="btn btn--ghost btn--xs"
-                  onclick="return confirm('Sofort neues Zufallspasswort für {{ u.username }} setzen?')"
-                  {{ tip('Setzt sofort ein neues Zufallspasswort und zeigt es einmalig an') }}>PW Reset</button>
-        </form>
+        <button type="button" class="btn btn--ghost btn--xs"
+                onclick="if(confirm('Sofort neues Zufallspasswort für {{ u.username }} setzen?')) postAction('/admin/benutzer/{{ u.id }}/passwort')"
+                {{ tip('Setzt sofort ein neues Zufallspasswort und zeigt es einmalig an') }}>PW Reset</button>
         {% if u.id != user.id %}
-        <form method="post" action="/admin/benutzer/{{ u.id }}/loeschen" style="display:inline">
-          <button type="submit" class="btn btn--ghost btn--xs"
-                  onclick="return confirm('Benutzer {{ 'aktivieren' if not u.active else 'deaktivieren' }}?')"
-                  {{ tip('Account aktivieren/deaktivieren – keine Datenlöschung') }}>
-            {% if u.active %}Deaktivieren{% else %}Aktivieren{% endif %}
-          </button>
-        </form>
-        <form method="post" action="/admin/benutzer/{{ u.id }}/endgueltig-loeschen" style="display:inline">
-          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button type="submit" class="btn btn--danger btn--xs"
-                  onclick="return confirm('Benutzer ' + {{ u.username | tojson }} + ' endgültig löschen? Alle zugehörigen Daten werden entfernt. Dies kann nicht rückgängig gemacht werden!')"
-                  {{ tip('Account und alle zugehörigen Daten endgültig löschen') }}>
-            Löschen
-          </button>
-        </form>
+        <button type="button" class="btn btn--ghost btn--xs"
+                onclick="if(confirm('Benutzer {{ 'aktivieren' if not u.active else 'deaktivieren' }}?')) postAction('/admin/benutzer/{{ u.id }}/loeschen')"
+                {{ tip('Account aktivieren/deaktivieren – keine Datenlöschung') }}>
+          {% if u.active %}Deaktivieren{% else %}Aktivieren{% endif %}
+        </button>
+        <button type="button" class="btn btn--danger btn--xs"
+                onclick="if(confirm('Benutzer ' + {{ u.username | tojson }} + ' endgültig löschen? Alle zugehörigen Daten werden entfernt. Dies kann nicht rückgängig gemacht werden!')) postAction('/admin/benutzer/{{ u.id }}/endgueltig-loeschen')"
+                {{ tip('Account und alle zugehörigen Daten endgültig löschen') }}>
+          Löschen
+        </button>
         {% endif %}
       </td>
     </tr>
@@ -131,6 +122,7 @@
 <!-- Neuer Benutzer -->
 <dialog class="modal" id="newUserModal">
   <form method="post" action="/admin/benutzer/neu" class="modal__content">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="modal__header">
       <h3>Neuer Benutzer</h3>
       <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
@@ -152,9 +144,9 @@
         <div class="form-group" style="flex:1;"><label class="form-label">Telefon</label>
           <input type="tel" name="phone" class="form-input" {{ tip('Optional — z. B. für Pager-Listen') }}></div>
       </div>
-      <div class="form-group"><label class="form-label">Initial-Passwort</label>
-        <input type="password" name="password" class="form-input" required minlength="10"
-               {{ tip('Mindestens 10 Zeichen. Der Benutzer sollte es nach dem ersten Login ändern.') }}></div>
+      <p class="text-muted" style="font-size:.85rem; margin:.25rem 0 .75rem;">
+        Initial-Passwort wird automatisch sicher generiert und nach dem Anlegen einmalig angezeigt.
+      </p>
       {% if is_sysadmin %}
       <div class="form-group"><label class="form-label">Organisation</label>
         <select name="org_id" class="form-input">
@@ -185,6 +177,7 @@
     <div class="modal__header"><h3>Benutzer bearbeiten</h3>
       <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" id="editUserForm">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
         <div class="form-group"><label class="form-label">Anzeigename</label>
           <input type="text" name="display_name" id="eu_display_name" class="form-input" required></div>
@@ -240,6 +233,22 @@
 
 {% block scripts %}
 <script>
+function getCsrfToken() {
+  const m = document.cookie.match(/fwwo_csrf=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+function postAction(url) {
+  const f = document.createElement('form');
+  f.method = 'post';
+  f.action = url;
+  const inp = document.createElement('input');
+  inp.type = 'hidden';
+  inp.name = '_csrf';
+  inp.value = getCsrfToken();
+  f.appendChild(inp);
+  document.body.appendChild(f);
+  f.submit();
+}
 function toggleAllUsers() {
   const cbs = document.querySelectorAll('.user-bulk-cb');
   const anyUnchecked = Array.from(cbs).some(cb => !cb.checked);

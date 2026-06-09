@@ -77,10 +77,11 @@ async def create_user(
     request: Request,
     username: str = Form(...), display_name: str = Form(""),
     full_name: str = Form(""), email: str = Form(""), phone: str = Form(""),
-    password: str = Form(...), role_codes: list[str] = Form([]),
+    password: str = Form(""), role_codes: list[str] = Form([]),
     org_id: int | None = Form(None),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
+    import secrets as _sec
     current_user = request.state.user
     email_clean = (email or "").strip().lower() or None
     if email_clean:
@@ -92,6 +93,8 @@ async def create_user(
     target_org_id = (
         org_id if has_role(current_user, "system_admin") and org_id and org_id != 0 else current_user.org_id
     )
+    if not password:
+        password = _sec.token_urlsafe(16)
     new_user = User(
         username=username,
         display_name=display_name or username,
@@ -123,7 +126,16 @@ async def create_user(
             )
         except Exception:
             logger_admin.warning("Willkommensmail an %s konnte nicht gesendet werden", email_clean)
-    return RedirectResponse("/admin/benutzer?saved=1", status_code=303)
+    is_sysadmin = has_role(current_user, "system_admin")
+    users = _org_filter(db.query(User), current_user, User.org_id).filter(User.is_device == False).order_by(User.username).all()  # noqa: E712
+    roles_list = db.query(Role).all()
+    all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
+    return templates.TemplateResponse(request, "admin/users.html", {
+        "user": current_user,
+        "users": users, "roles": roles_list,
+        "is_sysadmin": is_sysadmin, "all_orgs": all_orgs,
+        "new_password": password, "new_password_user": username,
+    })
 
 
 @router.post("/benutzer/{user_id}/loeschen")
