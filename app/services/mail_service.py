@@ -210,6 +210,41 @@ async def send_contact_message(*, name: str, reply_email: str, message: str, db=
     await _send(msg, smtp_cfg)
 
 
+async def send_welcome_mail(*, to: str, username: str, password: str,
+                            user_display_name: str, db=None) -> None:
+    smtp_cfg = get_smtp_cfg(db)
+    subject = "Willkommen im Einsatzleiter-Hilfswerkzeug – Zugangsdaten"
+    body_txt = (
+        f"Hallo {user_display_name},\n\n"
+        f"Dein Account für das Einsatzleiter-Hilfswerkzeug wurde eingerichtet.\n\n"
+        f"Benutzername: {username}\n"
+        f"Passwort:     {password}\n\n"
+        f"Bitte ändere dein Passwort nach dem ersten Login.\n\n"
+        f"Mit freundlichen Grüßen\n"
+        f"Einsatzleiter-Hilfswerkzeug"
+    )
+    safe_name = html.escape(user_display_name)
+    safe_user = html.escape(username)
+    safe_pw = html.escape(password)
+    body_html = f"""<!doctype html>
+<html lang="de"><body style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto;">
+<p>Hallo <strong>{safe_name}</strong>,</p>
+<p>Dein Account für das Einsatzleiter-Hilfswerkzeug wurde eingerichtet.</p>
+<table style="border-collapse:collapse;margin:12px 0;">
+<tr><td style="padding:4px 12px 4px 0;color:#666;">Benutzername:</td>
+    <td style="padding:4px 0;"><code>{safe_user}</code></td></tr>
+<tr><td style="padding:4px 12px 4px 0;color:#666;">Passwort:</td>
+    <td style="padding:4px 0;"><code>{safe_pw}</code></td></tr>
+</table>
+<p><strong>Bitte ändere dein Passwort nach dem ersten Login.</strong></p>
+<p style="font-size:0.85rem;color:#666;">Bewahre deine Zugangsdaten sicher auf.</p>
+</body></html>
+"""
+    msg = _build_message(to=to, subject=subject, body_txt=body_txt,
+                         body_html=body_html, smtp_cfg=smtp_cfg)
+    await _send(msg, smtp_cfg)
+
+
 async def send_test_mail(*, to: str, db=None) -> None:
     smtp_cfg = get_smtp_cfg(db)
     source = "Datenbank" if db is not None else "Umgebungsvariablen"

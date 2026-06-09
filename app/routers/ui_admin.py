@@ -111,6 +111,18 @@ async def create_user(
                 entity_type="user", entity_id=new_user.id,
                 payload={"role_codes": role_codes})
     db.commit()
+    if email_clean:
+        try:
+            from app.services.mail_service import send_welcome_mail
+            await send_welcome_mail(
+                to=email_clean,
+                username=username,
+                password=password,
+                user_display_name=new_user.full_name or new_user.display_name or username,
+                db=db,
+            )
+        except Exception:
+            logger_admin.warning("Willkommensmail an %s konnte nicht gesendet werden", email_clean)
     return RedirectResponse("/admin/benutzer?saved=1", status_code=303)
 
 

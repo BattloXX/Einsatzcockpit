@@ -76,7 +76,7 @@
         {% if u.locked_until %}<br><span class="badge-pill badge-pill--red" {{ tip('Account ist temporär gesperrt') }}>Gesperrt</span>{% endif %}
       </td>
       <td style="display:flex; gap:4px; flex-wrap:wrap;">
-        <button class="btn btn--ghost btn--xs"
+        <button type="button" class="btn btn--ghost btn--xs"
                 onclick="openEditUser({{ u.id }}, {{ {
                   'display_name': u.display_name,
                   'full_name': u.full_name or '',
@@ -87,7 +87,7 @@
                 {{ tip('Name, E-Mail, Telefon bearbeiten') }}>
           Bearbeiten
         </button>
-        <button class="btn btn--ghost btn--xs"
+        <button type="button" class="btn btn--ghost btn--xs"
                 onclick="openRolesEditor({{ u.id }}, '{{ u.username }}', {{ u.roles|map(attribute='code')|list|tojson }})"
                 {{ tip('Rollen-Zuweisung ändern') }}>
           Rollen
