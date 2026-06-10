@@ -137,6 +137,25 @@
     #prio-sort-btn { display: none; }
     #board-search { width: 120px !important; }
   }
+  /* Phase-Tabs ersetzt durch Dropdown */
+  .lage-phase-tabs { display: none !important; }
+  .lage-phase-dropdown { position: relative; display: none; }
+  @media (max-width: 760px) { .lage-phase-dropdown { display: block; } }
+  .lage-phase-dd-menu {
+    position: absolute; right: 0; top: calc(100% + 4px);
+    background: var(--surface-elevated, #1e2130);
+    border: 1px solid var(--border); border-radius: 6px;
+    min-width: 200px; z-index: 200; padding: 4px 0;
+    box-shadow: 0 4px 20px rgba(0,0,0,.45);
+  }
+  .lage-phase-dd-item {
+    display: flex; align-items: center; gap: 6px;
+    width: 100%; padding: 8px 14px;
+    background: none; border: none; cursor: pointer;
+    font-size: .85rem; color: var(--text); text-align: left;
+    transition: background .12s;
+  }
+  .lage-phase-dd-item:hover { background: rgba(255,255,255,.07); }
 </style>
 {% endblock %}
 
@@ -201,6 +220,34 @@
     </a>
     {% endif %}
 
+    {# ── Mobile Phasen-Dropdown (nur ≤760px) ────────────────────────────── #}
+    <div class="lage-phase-dropdown" x-data="{open:false}" @click.outside="open=false">
+      <button class="btn btn--ghost btn--sm" @click="open=!open" style="gap:4px;max-width:160px;">
+        <span id="lage-phase-dd-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ phase_labels[phase_order[0]] }}</span>
+        <span style="flex-shrink:0;font-size:.75em;">▾</span>
+      </button>
+      <div class="lage-phase-dd-menu" x-show="open" x-cloak x-transition.opacity.duration.150ms>
+        {% for phase in phase_order %}
+        <button class="lage-phase-dd-item"
+                data-phase="{{ phase.value }}"
+                data-phase-name="{{ phase_labels[phase] }}"
+                @click="open=false; lageSwitchPhase('{{ phase.value }}')">
+          <span style="flex:1;">{{ phase_labels[phase] }}</span>
+          <span style="color:var(--text-muted);font-size:.78em;">{{ sites_by_phase[phase]|length }}</span>
+        </button>
+        {% endfor %}
+        {% if show_abgebrochen and abgebrochen_sites %}
+        <button class="lage-phase-dd-item"
+                data-phase="abgebrochen"
+                data-phase-name="Abgebrochen"
+                @click="open=false; lageSwitchPhase('abgebrochen')">
+          <span style="flex:1;">Abgebrochen</span>
+          <span style="color:var(--text-muted);font-size:.78em;">{{ abgebrochen_sites|length }}</span>
+        </button>
+        {% endif %}
+      </div>
+    </div>
+
     {# ── Aktions-Buttons ─────────────────────────────────────────────────── #}
     {% if can_manage %}
     <a href="/lage/{{ lage.id }}/bearbeiten" class="btn btn--ghost btn--sm" title="Lage bearbeiten">✏️</a>
@@ -220,22 +267,6 @@
     {% endif %}
   </div>
 
-  <!-- ── Mobile Phasen-Tabs ───────────────────────────────────────────────── -->
-  <div class="lage-phase-tabs" id="lage-phase-tabs">
-    {% for phase in phase_order %}
-    <button class="lage-phase-tab{% if loop.first %} active{% endif %}"
-            data-phase="{{ phase.value }}"
-            onclick="lageSwitchPhase('{{ phase.value }}', this)">
-      {{ phase_labels[phase] }} <span class="ptab-count">{{ sites_by_phase[phase]|length }}</span>
-    </button>
-    {% endfor %}
-    {% if show_abgebrochen and abgebrochen_sites %}
-    <button class="lage-phase-tab" data-phase="abgebrochen"
-            onclick="lageSwitchPhase('abgebrochen', this)">
-      Abgebrochen<span class="ptab-count">{{ abgebrochen_sites|length }}</span>
-    </button>
-    {% endif %}
-  </div>
 
   <!-- ── Phasen-Board ─────────────────────────────────────────────────────── -->
   <div class="phase-board" id="lage-board" data-lage-id="{{ lage.id }}">
@@ -362,13 +393,15 @@ function filterBoard(q) {
   });
 }
 
-function lageSwitchPhase(phase, btn) {
-  document.querySelectorAll('.lage-phase-tab').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
+function lageSwitchPhase(phase) {
   document.querySelectorAll('.phase-col').forEach(function(col) { col.classList.remove('lage-col-active'); });
   var body = document.querySelector('.phase-col__body[data-phase="' + phase + '"]');
   if (body) body.closest('.phase-col').classList.add('lage-col-active');
-  btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  var labelEl = document.getElementById('lage-phase-dd-label');
+  if (labelEl) {
+    var item = document.querySelector('.lage-phase-dd-item[data-phase="' + phase + '"]');
+    if (item && item.dataset.phaseName) labelEl.textContent = item.dataset.phaseName;
+  }
 }
 
 var PRIO_SORT = false;
