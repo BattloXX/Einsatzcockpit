@@ -80,30 +80,31 @@
   /* ── Quick-Prio-Footer ───────────────────────────────────────────────────── */
   .site-card__footer {
     border-top: 1px solid rgba(255,255,255,.06);
-    padding: 4px 6px;
+    padding: 0;
     display: flex;
-    gap: 3px;
+    gap: 1px;
+    background: rgba(255,255,255,.06);
   }
   .prio-quick-btn {
-    flex: 1;
-    font-size: .6rem;
-    font-weight: 600;
-    padding: 3px 2px;
-    border-radius: 3px;
-    background: rgba(255,255,255,.03);
-    border: 1px solid rgba(255,255,255,.08);
+    width: 100%;
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 5px 2px;
+    border-radius: 0;
+    background: var(--surface-high, #252a3a);
+    border: none;
     cursor: pointer;
     text-align: center;
     transition: background .1s;
-    letter-spacing: .02em;
+    letter-spacing: .04em;
     color: var(--text-muted);
   }
   .prio-quick-btn:hover { background: rgba(255,255,255,.09); }
-  .prio-quick-btn--red    { color: #f87171; border-color: rgba(239,68,68,.25); }
+  .prio-quick-btn--red    { color: #f87171; }
   .prio-quick-btn--red.pq-active    { background: rgba(239,68,68,.18); }
-  .prio-quick-btn--orange { color: #fb923c; border-color: rgba(249,115,22,.25); }
+  .prio-quick-btn--orange { color: #fb923c; }
   .prio-quick-btn--orange.pq-active { background: rgba(249,115,22,.18); }
-  .prio-quick-btn--yellow { color: #facc15; border-color: rgba(234,179,8,.25); }
+  .prio-quick-btn--yellow { color: #facc15; }
   .prio-quick-btn--yellow.pq-active { background: rgba(234,179,8,.18); }
   .prio-quick-btn--muted.pq-active  { background: rgba(107,114,128,.18); }
 

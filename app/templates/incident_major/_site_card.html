@@ -59,8 +59,8 @@
   {# ── Schnell-Prio-Buttons ─────────────────────────────────────────────── #}
   {% if can_edit %}
   <div class="site-card__footer" onclick="event.stopPropagation()">
-    {% set prios = [(1,'S','red'),(2,'D','orange'),(3,'N','yellow'),(4,'A','muted')] %}
-    {% for pv, lbl, cls in prios %}
+    {% set prios = [(1,'S','red','Sofort'),(2,'D','orange','Dringend'),(3,'N','yellow','Normal'),(4,'A','muted','Aufschiebbar')] %}
+    {% for pv, lbl, cls, fullname in prios %}
     <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/prio"
           hx-swap="none"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
@@ -69,7 +69,7 @@
       <input type="hidden" name="priority" value="{{ pv }}">
       <button type="submit"
               class="prio-quick-btn prio-quick-btn--{{ cls }}{% if site.priority and site.priority.value == pv %} pq-active{% endif %}"
-              title="{{ prio_label[site.priority] if site.priority else '' }}">{{ lbl }}</button>
+              title="{{ fullname }}">{{ lbl }}</button>
     </form>
     {% endfor %}
   </div>

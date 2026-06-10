@@ -58,7 +58,8 @@
   border-radius: 3px; background: rgba(251,191,36,.2); color: #fbbf24;
   vertical-align: middle; margin-left: 4px;
 }
-.fj-site-link { color: #93c5fd; font-size: .72rem; }
+.fj-site-link { color: #93c5fd; font-size: .72rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.fj-site-link:hover { text-decoration: underline; }
 .fj-handle-btn { font-size: .7rem; }
 .fj-filter-bar { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
 .fj-open-badge {
@@ -196,7 +197,14 @@
           {% if c.related_site_id %}
           {% set rel_site = sites_by_id.get(c.related_site_id) %}
           {% if rel_site %}
-          <span class="fj-site-link">{% if rel_site.strasse %}{{ rel_site.strasse }}{% if rel_site.hausnr %} {{ rel_site.hausnr }}{% endif %} – {% endif %}{{ rel_site.bezeichnung[:30] }}</span>
+          <a href="/lage/{{ lage.id }}/karte?site={{ rel_site.id }}" class="fj-site-link"
+             title="{{ rel_site.bezeichnung }}">
+            {% if rel_site.priority %}
+            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0;
+              background:{% if rel_site.priority.value == 1 %}#ef4444{% elif rel_site.priority.value == 2 %}#f97316{% elif rel_site.priority.value == 3 %}#eab308{% else %}#6b7280{% endif %};"></span>
+            {% endif %}
+            {% if rel_site.strasse %}{{ rel_site.strasse }}{% if rel_site.hausnr %} {{ rel_site.hausnr }}{% endif %} – {% endif %}{{ rel_site.bezeichnung[:30] }}
+          </a>
           {% else %}
           <span class="fj-site-link">#{{ c.related_site_id }}</span>
           {% endif %}

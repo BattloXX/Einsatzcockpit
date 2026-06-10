@@ -323,7 +323,19 @@
 
   renderMarkers();
 
-  if (allBounds.length) {
+  var focusSiteId = parseInt(new URLSearchParams(location.search).get('site'));
+  if (focusSiteId) {
+    var focusObj = markers.find(function(o) { return o.site.id === focusSiteId; });
+    if (focusObj) {
+      map.setView([focusObj.site.lat, focusObj.site.lng], 16);
+      if (!map.hasLayer(focusObj.marker)) focusObj.marker.addTo(map);
+      setTimeout(function() { focusObj.marker.openPopup(); }, 300);
+    } else if (allBounds.length) {
+      map.fitBounds(allBounds, { padding: [60, 60], maxZoom: 15 });
+    } else {
+      map.setView([47.41, 9.74], 11);
+    }
+  } else if (allBounds.length) {
     map.fitBounds(allBounds, { padding: [60, 60], maxZoom: 15 });
   } else {
     map.setView([47.41, 9.74], 11);
