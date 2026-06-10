@@ -123,6 +123,9 @@
   .lage-subnav a.active { background: rgba(255,255,255,.1); color: var(--text); font-weight: 600; }
 
   /* ── Mobile Board ────────────────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .lage-subnav { display: none; }
+  }
   @media (max-width: 760px) {
     .lage-wrap { height: auto; overflow: visible; }
     .phase-board { flex: none; flex-direction: column; overflow-x: hidden;
@@ -130,7 +133,9 @@
     .phase-col { flex: none; width: 100%; display: none; max-height: none; }
     .phase-col.lage-col-active { display: flex; }
     .lage-topbar { gap: 6px; padding: 6px 10px; }
-    #board-search { width: 110px !important; }
+    .lage-topbar__counts { display: none; }
+    #prio-sort-btn { display: none; }
+    #board-search { width: 120px !important; }
   }
 </style>
 {% endblock %}
@@ -221,7 +226,7 @@
     <button class="lage-phase-tab{% if loop.first %} active{% endif %}"
             data-phase="{{ phase.value }}"
             onclick="lageSwitchPhase('{{ phase.value }}', this)">
-      {{ phase_labels[phase] }}<span class="ptab-count">{{ sites_by_phase[phase]|length }}</span>
+      {{ phase_labels[phase] }} <span class="ptab-count">{{ sites_by_phase[phase]|length }}</span>
     </button>
     {% endfor %}
     {% if show_abgebrochen and abgebrochen_sites %}
