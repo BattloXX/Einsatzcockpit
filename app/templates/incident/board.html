@@ -132,18 +132,6 @@
   </div>
   {% endif %}
   <div class="incident-header__actions">
-    {# ── Mobile Lane Dropdown (nur ≤760px) ─────────────────────────────── #}
-    <div class="header-dropdown mobile-lane-dropdown"
-         x-data="{open:false}"
-         @click.outside="open=false"
-         id="mobile-lane-dd">
-      <button class="btn btn--ghost btn--sm" @click="open=!open" title="Ansicht">
-        <span id="mobile-lane-label">📋 Aufträge</span> ▾
-      </button>
-      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms
-           id="mobile-lane-dd-items" style="min-width:190px;">
-      </div>
-    </div>
     {# ── Primäre Aktionen ────────────────────────────────────────────────── #}
     {% set lk_url = lagekarte_url(incident) %}
     {% if lk_url %}
@@ -203,6 +191,19 @@
             onclick="if(confirm('Einsatz wirklich abschließen?')) { fetch('/einsatz/{{ incident.id }}/abschliessen', {method:'POST'}); }"
             {{ tip('Einsatz abschließen und ins Archiv verschieben') }}>Abschließen</button>
     {% endif %}
+
+    {# ── Mobile Lane Dropdown (nur ≤760px) ─────────────────────────────── #}
+    <div class="header-dropdown mobile-lane-dropdown"
+         x-data="{open:false}"
+         @click.outside="open=false"
+         id="mobile-lane-dd">
+      <button class="btn btn--ghost btn--sm" @click="open=!open" title="Ansicht">
+        <span id="mobile-lane-label">📋 Aufträge</span> ▾
+      </button>
+      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms
+           id="mobile-lane-dd-items" style="min-width:190px;">
+      </div>
+    </div>
   </div>
 </div>
 
@@ -355,8 +356,7 @@
   <!-- Kanban Board -->
   <div class="kanban" id="kanban" data-incident-id="{{ incident.id }}">
     {% set columns = incident.columns %}
-    {% set lane_map = {'dispatched':'vehicles','active':'vehicles','neighbor':'vehicles',
-                       'tasks':'tasks','messages':'messages','rescued':'persons'} %}
+    {% set lane_map = {'tasks':'tasks','messages':'messages','rescued':'persons'} %}
     {% for col in columns %}
     {% set col_vehicles = incident.vehicles|selectattr('column_id', 'eq', col.id)|selectattr('removed_at', 'none')|list %}
     {% set col_tasks = incident.tasks|selectattr('column_id', 'eq', col.id)|list %}

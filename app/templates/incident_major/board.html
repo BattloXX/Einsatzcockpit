@@ -220,7 +220,25 @@
     </a>
     {% endif %}
 
-    {# ── Mobile Phasen-Dropdown (nur ≤760px) ────────────────────────────── #}
+    {# ── Aktions-Buttons ─────────────────────────────────────────────────── #}
+    {% if can_manage %}
+    <a href="/lage/{{ lage.id }}/bearbeiten" class="btn btn--ghost btn--sm" title="Lage bearbeiten">✏️</a>
+    {% endif %}
+
+    {% if can_edit and lage.status.value == 'active' %}
+    <button onclick="document.getElementById('neuStelleDialog').showModal()"
+            class="btn btn--primary btn--sm">+ Einsatzstelle</button>
+    {% endif %}
+
+    {% if can_manage and lage.status.value == 'active' %}
+    <form method="post" action="/lage/{{ lage.id }}/beenden" style="margin:0;"
+          onsubmit="return confirm('Lage „{{ lage.name }}" wirklich beenden?')">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--danger btn--sm">Lage beenden</button>
+    </form>
+    {% endif %}
+
+    {# ── Mobile Phasen-Dropdown (nur ≤760px) ── #}
     <div class="lage-phase-dropdown" x-data="{open:false}" @click.outside="open=false">
       <button class="btn btn--ghost btn--sm" @click="open=!open" style="gap:4px;max-width:160px;">
         <span id="lage-phase-dd-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ phase_labels[phase_order[0]] }}</span>
@@ -247,24 +265,6 @@
         {% endif %}
       </div>
     </div>
-
-    {# ── Aktions-Buttons ─────────────────────────────────────────────────── #}
-    {% if can_manage %}
-    <a href="/lage/{{ lage.id }}/bearbeiten" class="btn btn--ghost btn--sm" title="Lage bearbeiten">✏️</a>
-    {% endif %}
-
-    {% if can_edit and lage.status.value == 'active' %}
-    <button onclick="document.getElementById('neuStelleDialog').showModal()"
-            class="btn btn--primary btn--sm">+ Einsatzstelle</button>
-    {% endif %}
-
-    {% if can_manage and lage.status.value == 'active' %}
-    <form method="post" action="/lage/{{ lage.id }}/beenden" style="margin:0;"
-          onsubmit="return confirm('Lage „{{ lage.name }}" wirklich beenden?')">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--danger btn--sm">Lage beenden</button>
-    </form>
-    {% endif %}
   </div>
 
 

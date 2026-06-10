@@ -3,7 +3,7 @@
 .incident-header__grund{font-size:.9rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;}
 /* ── Lage Mobile (Major Incident) ─────────────────────────────────────────── */
 @media(max-width:900px){.lage-subnav{display:none!important;}}
-.mobile-menu__section--top{border-top:none!important;margin-top:0!important;padding-top:0!important;border-bottom:1px solid var(--border);margin-bottom:4px;padding-bottom:4px;}
+.mobile-menu__section--top{border-top:none!important;margin-top:0!important;padding-top:0!important;border-bottom:1px solid var(--border);margin-bottom:14px;padding-bottom:8px;}
 .lage-phase-tabs{display:none;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0;-webkit-overflow-scrolling:touch;scrollbar-width:none;gap:0;}
 .lage-phase-tabs::-webkit-scrollbar{display:none;}
 .lage-phase-tab{flex:0 0 auto;padding:9px 14px;font-size:.82rem;font-weight:500;color:var(--text-muted);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s;}
