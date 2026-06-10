@@ -271,6 +271,8 @@ async def new_incident(
             report_text or "",
             alarm_type_code,
         )
+    elif not is_exercise:
+        _log.debug("KI-Auftragsvorschläge übersprungen: KI nicht aktiviert (Einsatz %d)", incident.id)
 
     # Großschadenslage-Trigger: AlarmTyp-Flag prüfen
     if user.org_id:

@@ -203,7 +203,10 @@ async def _enrich_with_ai_suggestions(
             "count": len(suggestions),
         })
     except Exception:
-        pass
+        import logging as _logging
+        _logging.getLogger("einsatzleiter.ai").exception(
+            "AI suggestions failed for incident %d", incident_id
+        )
     finally:
         db.close()
 

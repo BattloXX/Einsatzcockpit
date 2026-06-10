@@ -113,6 +113,8 @@ async def complete(
     """
     cfg = _get_ai_cfg()
     if not (cfg["enabled"] and bool(cfg["api_key"])):
+        logger.debug("AI call skipped: ai_enabled=%s, api_key_set=%s",
+                     cfg["enabled"], bool(cfg["api_key"]))
         raise AIServiceError("KI-Dienst ist nicht aktiviert.")
 
     model = cfg["model_fast"] if fast else cfg["model_default"]
@@ -270,14 +272,19 @@ async def suggest_tasks(meldung: str, einsatzart: str) -> list[dict]:
     except AIServiceError:
         return []
 
-    # Extract the first JSON array from the response (model may wrap text around it)
-    match = _re.search(r"\[.*?\]", raw, _re.DOTALL)
-    if not match:
+    # Extract the outermost JSON array (first [ to last ]) from the response.
+    # Avoid non-greedy \[.*?\] which stops at the first ] and may match "[3]" in
+    # preamble text like "Here are [3] suggestions:" instead of the actual array.
+    _start = raw.find('[')
+    _end = raw.rfind(']')
+    if _start == -1 or _end == -1 or _end <= _start:
+        logger.warning("suggest_tasks: no JSON array found in AI response (len=%d)", len(raw))
         return []
 
     try:
-        items = _json.loads(match.group())
+        items = _json.loads(raw[_start:_end + 1])
     except (ValueError, TypeError):
+        logger.warning("suggest_tasks: failed to parse AI response as JSON")
         return []
 
     if not isinstance(items, list):
@@ -317,12 +324,15 @@ async def generate_lage_hints(meldung: str, alarm_type: str, address: str) -> li
     except AIServiceError:
         return []
 
-    match = _re.search(r"\[.*?\]", raw, _re.DOTALL)
-    if not match:
+    _start = raw.find('[')
+    _end = raw.rfind(']')
+    if _start == -1 or _end == -1 or _end <= _start:
+        logger.warning("generate_lage_hints: no JSON array found in AI response")
         return []
     try:
-        items = _json.loads(match.group())
+        items = _json.loads(raw[_start:_end + 1])
     except (ValueError, TypeError):
+        logger.warning("generate_lage_hints: failed to parse AI response as JSON")
         return []
     if not isinstance(items, list):
         return []
