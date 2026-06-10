@@ -13,42 +13,62 @@
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
-  {% if error %}<div class="alert alert--danger">{{ error }}</div>{% endif %}
+  {% if error == "in_use" %}
+  <div class="alert alert--danger">Einheit kann nicht gelöscht werden – sie ist in bestehenden Einsätzen referenziert.</div>
+  {% elif error %}
+  <div class="alert alert--danger">{{ error }}</div>
+  {% endif %}
 
-  <table class="table-admin">
+  <form method="get" action="/admin/fahrzeuge" style="display:flex;gap:10px;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+    {% if is_sysadmin %}
+    <div class="form-group" style="margin:0;min-width:200px">
+      <select name="filter_org_id" class="form-select form-select--sm" onchange="this.form.submit()">
+        <option value="">Alle Organisationen</option>
+        {% for org in all_orgs %}
+        <option value="{{ org.id }}" {% if filter_org_id == org.id %}selected{% endif %}>{{ org.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div class="form-group" style="margin:0;min-width:150px">
+      <select name="filter_status" class="form-select form-select--sm" onchange="this.form.submit()">
+        <option value="all" {% if filter_status == 'all' %}selected{% endif %}>Alle Status</option>
+        <option value="active" {% if filter_status == 'active' %}selected{% endif %}>Aktiv</option>
+        <option value="inactive" {% if filter_status == 'inactive' %}selected{% endif %}>Inaktiv</option>
+      </select>
+    </div>
+    {% if filter_org_id or filter_status != 'all' %}
+    <a href="/admin/fahrzeuge" class="btn btn--ghost btn--xs">Filter zurücksetzen</a>
+    {% endif %}
+  </form>
+
+  <table class="table-admin" id="vehiclesTable">
     <thead>
       <tr>
+        <th style="width:32px;"></th>
         <th>Code</th>
         <th>Name / Typ</th>
         <th>Organisation</th>
         <th>BOS</th>
         <th>Erstausr.</th>
-        <th>Reihenfolge</th>
         <th>Status</th>
         <th>Aktionen</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="vehiclesTbody">
       {% for v in vehicles %}
-      <tr>
+      <tr data-vehicle-id="{{ v.id }}">
+        <td class="drag-handle" title="Ziehen zum Sortieren" style="cursor:grab;color:var(--text-muted);user-select:none;text-align:center;font-size:1.1rem;">⠿</td>
         <td><strong>{{ v.code }}</strong></td>
         <td>{{ v.name }}<br><small class="text-muted">{{ v.type }}</small></td>
         <td>{{ v.dept.name if v.dept else '–' }}</td>
         <td>{{ v.bos_override or (v.dept.bos if v.dept else '–') }}</td>
         <td>{% if v.is_first_train %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
         <td>
-          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/order/up" style="display:inline">
-            <button type="submit" class="btn btn--ghost btn--xs">↑</button>
-          </form>
-          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/order/down" style="display:inline">
-            <button type="submit" class="btn btn--ghost btn--xs">↓</button>
-          </form>
-        </td>
-        <td>
           {% if v.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
           {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}
         </td>
-        <td>
+        <td style="white-space:nowrap;">
           <button class="btn btn--ghost btn--xs"
                   onclick="openEditVehicle({{ v.id }}, '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', {{ v.is_first_train|lower }}, '{{ v.bos_override or "" }}')">
             Bearbeiten
@@ -56,6 +76,13 @@
           <form method="post" action="/admin/fahrzeuge/{{ v.id }}/toggle" style="display:inline">
             <button type="submit" class="btn btn--ghost btn--xs">
               {% if v.active %}Deaktivieren{% else %}Aktivieren{% endif %}
+            </button>
+          </form>
+          <form method="post" action="/admin/fahrzeuge/{{ v.id }}/loeschen" style="display:inline">
+            <button type="submit" class="btn btn--ghost btn--xs" style="color:var(--color-danger)"
+                    data-name="{{ v.name | e }}"
+                    onclick="return confirm('Einheit „' + this.dataset.name + '" endgültig löschen?\n\nEinheiten die in bestehenden Einsätzen verwendet werden können nicht gelöscht werden.')">
+              Löschen
             </button>
           </form>
         </td>
@@ -171,5 +198,26 @@ function openEditVehicle(id, code, name, type, firstTrain, bosOverride) {
   document.getElementById('editVehicleForm').action = `/admin/fahrzeuge/${id}/edit`;
   document.getElementById('editVehicleModal').showModal();
 }
+
+(function () {
+  var tbody = document.getElementById('vehiclesTbody');
+  if (!tbody || typeof Sortable === 'undefined') return;
+  new Sortable(tbody, {
+    handle: '.drag-handle',
+    animation: 150,
+    ghostClass: 'tr--ghost',
+    onEnd: function () {
+      var rows = tbody.querySelectorAll('tr[data-vehicle-id]');
+      var body = new URLSearchParams();
+      rows.forEach(function (r) { body.append('vehicle_ids', r.dataset.vehicleId); });
+      fetch('/admin/fahrzeuge/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+        credentials: 'same-origin',
+      });
+    }
+  });
+}());
 </script>
 {% endblock %}

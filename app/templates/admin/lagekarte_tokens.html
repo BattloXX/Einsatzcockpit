@@ -23,7 +23,7 @@
       </div>
       <div class="form-group" style="flex:1;min-width:200px">
         <label class="form-label" {{ tip('Optional: Token gilt nur für diesen Einsatz. Leer = gilt für alle Einsätze der Org.') }}>Beschränkung auf Einsatz</label>
-        <select name="einsatz_id" class="form-input">
+        <select name="einsatz_id" class="form-select">
           <option value="">— Alle aktiven Einsätze —</option>
           {% for inc in incidents %}
           <option value="{{ inc.id }}">#{{ inc.id }} {{ inc.alarm_type_code }}{% if inc.address_street %} · {{ inc.address_street }} {{ inc.address_no or '' }}{% endif %}</option>

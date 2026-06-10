@@ -818,24 +818,35 @@ async def vehicles_list_alias(request: Request, db: Session = Depends(get_db),
 
 
 @router.get("/fahrzeuge", response_class=HTMLResponse)
-async def vehicles_list(request: Request, db: Session = Depends(get_db),
-                        _=Depends(require_role("admin", "org_admin"))):
+async def vehicles_list(
+    request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("admin", "org_admin")),
+    filter_org_id: int | None = None,
+    filter_status: str = "all",
+):
     from app.core.permissions import has_role
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
-    vehicles = (
-        db.query(VehicleMaster)
-        .join(VehicleMaster.dept)
-        .order_by(FireDept.name, VehicleMaster.display_order)
-        .all()
-    )
+    q = db.query(VehicleMaster).join(VehicleMaster.dept)
+    if is_sysadmin:
+        if filter_org_id:
+            q = q.filter(VehicleMaster.dept_id == filter_org_id)
+    else:
+        q = _org_filter(q, user, VehicleMaster.dept_id)
+    if filter_status == "active":
+        q = q.filter(VehicleMaster.active == True)  # noqa: E712
+    elif filter_status == "inactive":
+        q = q.filter(VehicleMaster.active == False)  # noqa: E712
+    vehicles = q.order_by(FireDept.name, VehicleMaster.display_order).all()
     saved = request.query_params.get("saved")
     error = request.query_params.get("error")
     return templates.TemplateResponse(request, "admin/vehicles.html", {
         "user": user, "vehicles": vehicles, "all_orgs": all_orgs,
         "is_sysadmin": is_sysadmin, "saved": saved, "error": error,
         "bos_values": BOS_VALUES,
+        "filter_org_id": filter_org_id,
+        "filter_status": filter_status,
     })
 
 
@@ -926,6 +937,44 @@ async def reorder_vehicle(
             )
             db.commit()
     return RedirectResponse("/admin/fahrzeuge", status_code=303)
+
+
+@router.post("/fahrzeuge/reorder")
+async def reorder_vehicles_bulk(
+    request: Request,
+    vehicle_ids: list[int] = Form([]),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin", "org_admin")),
+):
+    from fastapi.responses import Response as FastAPIResponse
+    user = request.state.user
+    for i, vid in enumerate(vehicle_ids):
+        v = db.get(VehicleMaster, vid)
+        if v and (has_role(user, "system_admin") or v.dept_id == user.org_id):
+            v.display_order = i
+    db.commit()
+    return FastAPIResponse(status_code=204)
+
+
+@router.post("/fahrzeuge/{vehicle_id}/loeschen")
+async def delete_vehicle(
+    vehicle_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("admin", "org_admin")),
+):
+    from app.models.incident import IncidentVehicle
+    v = db.get(VehicleMaster, vehicle_id)
+    if not v:
+        return RedirectResponse("/admin/fahrzeuge?error=Einheit+nicht+gefunden.", status_code=303)
+    ref_count = db.query(IncidentVehicle).filter(
+        IncidentVehicle.vehicle_master_id == vehicle_id
+    ).count()
+    if ref_count > 0:
+        return RedirectResponse("/admin/fahrzeuge?error=in_use", status_code=303)
+    write_audit(db, "admin.vehicle.deleted", user_id=request.state.user.id,
+                entity_type="vehicle_master", entity_id=vehicle_id)
+    db.delete(v)
+    db.commit()
+    return RedirectResponse("/admin/fahrzeuge?saved=1", status_code=303)
 
 
 # ── Auftragsvorlagen CRUD ─────────────────────────────────────────────────────
