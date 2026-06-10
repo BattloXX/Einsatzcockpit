@@ -70,10 +70,20 @@
   .header-btn--ki:hover { background:rgba(139,92,246,.22) !important; }
   .dropdown-arrow { display:inline-block; font-size:.75rem; margin-left:2px; transition: transform .15s; }
   .dropdown-arrow.open { transform: rotate(180deg); }
-  /* Mobile lane dropdown */
-  .mobile-lane-dropdown { display: none; }
+  /* Mobile lane select */
+  .mobile-lane-select { display: none; }
   @media (max-width: 760px) {
-    .mobile-lane-dropdown { display: flex; }
+    .mobile-lane-select {
+      display: block;
+      background: var(--surface-elevated, #1e2130);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 3px 7px;
+      font-size: .85rem;
+      cursor: pointer;
+      max-width: 160px;
+    }
     .board-tabs { display: none !important; }
   }
 </style>
@@ -192,18 +202,8 @@
             {{ tip('Einsatz abschließen und ins Archiv verschieben') }}>Abschließen</button>
     {% endif %}
 
-    {# ── Mobile Lane Dropdown (nur ≤760px) ─────────────────────────────── #}
-    <div class="header-dropdown mobile-lane-dropdown"
-         x-data="{open:false}"
-         @click.outside="open=false"
-         id="mobile-lane-dd">
-      <button class="btn btn--ghost btn--sm" @click="open=!open" title="Ansicht">
-        <span id="mobile-lane-label">📋 Aufträge</span> ▾
-      </button>
-      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms
-           id="mobile-lane-dd-items" style="min-width:190px;">
-      </div>
-    </div>
+    {# ── Mobile Lane Select (nur ≤760px) ─────────────────────────────── #}
+    <select class="mobile-lane-select" id="mobile-lane-select" title="Ansicht wechseln"></select>
   </div>
 </div>
 
@@ -898,7 +898,7 @@ function lageTicker(hints, aiFlags) {
   };
 }
 
-// ── Mobile Lane Dropdown ─────────────────────────────────────────────────────
+// ── Mobile Lane Select ───────────────────────────────────────────────────────
 (function () {
   const LANE_KEY = 'board_active_lane';
   const IS_MOBILE = () => window.matchMedia('(max-width: 900px)').matches;
@@ -929,16 +929,9 @@ function lageTicker(hints, aiFlags) {
     });
   }
 
-  function setDropdownLabel(lane) {
-    var lbl = document.getElementById('mobile-lane-label');
-    if (!lbl) return;
-    var item = document.querySelector('#mobile-lane-dd-items .mobile-lane-item[data-lane="' + lane + '"]');
-    if (item) {
-      var ns = item.querySelector('.ml-name');
-      if (ns) { lbl.textContent = ns.textContent.trim(); return; }
-    }
-    var tab = document.querySelector('.board-tab[data-lane="' + lane + '"]');
-    if (tab) lbl.textContent = tab.textContent.trim();
+  function setSelectValue(lane) {
+    var sel = document.getElementById('mobile-lane-select');
+    if (sel && sel.value !== lane) sel.value = lane;
   }
 
   function applyLane(lane) {
@@ -952,13 +945,13 @@ function lageTicker(hints, aiFlags) {
       else col.removeAttribute('data-lane-active');
     });
     mobileSortLane(lane);
-    setDropdownLabel(lane);
+    setSelectValue(lane);
     return true;
   }
 
   function buildLaneDropdown() {
-    var container = document.getElementById('mobile-lane-dd-items');
-    if (!container) return;
+    var sel = document.getElementById('mobile-lane-select');
+    if (!sel) return;
     var laneNames = {
       'tasks': '📋 Aufträge', 'messages': '📨 Meldungen',
       'persons': '👥 Personen', 'vehicles': '🚒 Fahrzeuge'
@@ -986,27 +979,16 @@ function lageTicker(hints, aiFlags) {
       items.push({ lane: lane, label: label, count: count });
       added.add(lane);
     });
-    container.innerHTML = '';
+    sel.innerHTML = '';
     items.forEach(function(info) {
-      var btn = document.createElement('button');
-      btn.className = 'dropdown-item mobile-lane-item';
-      btn.setAttribute('data-lane', info.lane);
-      btn.type = 'button';
-      btn.style.cssText = 'display:flex;align-items:center;gap:6px;';
-      btn.innerHTML = '<span class="ml-name">' + info.label + '</span>' +
-        '<span style="margin-left:auto;padding-left:8px;color:var(--text-muted);font-size:.8em;">' + info.count + '</span>';
-      btn.addEventListener('click', function() {
-        if (applyLane(info.lane)) {
-          try { localStorage.setItem(LANE_KEY, info.lane); } catch(e) {}
-        }
-        var dd = document.getElementById('mobile-lane-dd');
-        if (dd && window.Alpine) Alpine.$data(dd).open = false;
-      });
-      container.appendChild(btn);
+      var opt = document.createElement('option');
+      opt.value = info.lane;
+      opt.textContent = info.label + (info.count ? ' (' + info.count + ')' : '');
+      sel.appendChild(opt);
     });
     var cur = 'tasks';
     try { cur = localStorage.getItem(LANE_KEY) || 'tasks'; } catch(e) {}
-    setDropdownLabel(cur);
+    sel.value = cur;
   }
 
   // Initial lane setup
@@ -1015,14 +997,23 @@ function lageTicker(hints, aiFlags) {
     if (!applyLane(saved)) applyLane('tasks');
   } catch (e) { applyLane('tasks'); }
 
-  // Build dropdown after DOM ready
+  // Build select options after DOM ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', buildLaneDropdown);
   } else {
     buildLaneDropdown();
   }
 
-  // Click handler for board-tab buttons (kept for compatibility)
+  // Native select change handler
+  document.addEventListener('change', function (e) {
+    if (e.target.id !== 'mobile-lane-select') return;
+    const lane = e.target.value;
+    if (applyLane(lane)) {
+      try { localStorage.setItem(LANE_KEY, lane); } catch (e) { /* noop */ }
+    }
+  });
+
+  // Click handler for board-tab buttons (desktop fallback)
   document.addEventListener('click', function (e) {
     const tab = e.target.closest('.board-tab');
     if (!tab) return;
