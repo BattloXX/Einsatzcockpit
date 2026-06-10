@@ -32,6 +32,7 @@ from app.models.incident import (
 )
 from app.models.master import (
     BOS_VALUES,
+    AlarmDispatchVehicle,
     AlarmType,
     FireDept,
     LageHint,
@@ -337,6 +338,121 @@ async def request_ai_task_suggestions(
         incident.alarm_type_code,
     )
     return Response(status_code=202)
+
+
+# ── Alarmstufe / Einsatzgrund bearbeiten ─────────────────────────────────────
+
+@router.get("/einsatz/{incident_id}/alarm/bearbeiten", response_class=HTMLResponse)
+async def alarm_edit_modal(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    incident = _incident_or_404(incident_id, db)
+    alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
+    return templates.TemplateResponse(request, "incident/_alarm_edit_modal.html", {
+        "incident": incident,
+        "alarm_types": alarm_types,
+    })
+
+
+@router.post("/einsatz/{incident_id}/alarm", response_class=HTMLResponse)
+async def alarm_save(
+    incident_id: int, request: Request,
+    alarm_type_code: str = Form(...),
+    report_text: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    incident = _incident_or_404(incident_id, db)
+    incident.alarm_type_code = alarm_type_code
+    incident.report_text = report_text.strip() or None
+    incident.reason = None
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "alarm_type_changed", "reload_board": True})
+    return templates.TemplateResponse(request, "incident/_alarm_confirm_fahrzeuge.html", {
+        "incident": incident,
+    })
+
+
+@router.post("/einsatz/{incident_id}/alarm/fahrzeuge", response_class=HTMLResponse)
+async def alarm_dispatch_vehicles(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Add vehicles from dispatch order for current alarm type, without duplicating existing ones."""
+    incident = _incident_or_404(incident_id, db)
+    db.refresh(incident, ["columns", "vehicles"])
+
+    dispatch_entries = (
+        db.query(AlarmDispatchVehicle)
+        .filter(AlarmDispatchVehicle.alarm_type_code == incident.alarm_type_code)
+        .order_by(AlarmDispatchVehicle.display_order)
+        .all()
+    )
+
+    dispatched_col = next((c for c in incident.columns if c.code == "dispatched"), None)
+    added = 0
+    if dispatched_col and dispatch_entries:
+        already_master_ids = {
+            v.vehicle_master_id for v in incident.vehicles if v.removed_at is None
+        }
+        for entry in dispatch_entries:
+            if entry.vehicle_master_id not in already_master_ids:
+                vm = db.get(VehicleMaster, entry.vehicle_master_id)
+                if vm and vm.active:
+                    db.add(IncidentVehicle(
+                        incident_id=incident.id,
+                        column_id=dispatched_col.id,
+                        vehicle_master_id=vm.id,
+                        display_order=999,
+                    ))
+                    already_master_ids.add(entry.vehicle_master_id)
+                    added += 1
+        if added:
+            db.commit()
+            await manager.broadcast(incident_id, {"type": "vehicle_added", "reload_board": True})
+
+    return templates.TemplateResponse(request, "incident/_alarm_confirm_ki.html", {
+        "incident": incident,
+        "ai_enabled": ai_is_enabled(),
+        "vehicles_added": added,
+    })
+
+
+@router.post("/einsatz/{incident_id}/alarm/fahrzeuge-ueberspringen", response_class=HTMLResponse)
+async def alarm_skip_vehicles(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    incident = _incident_or_404(incident_id, db)
+    return templates.TemplateResponse(request, "incident/_alarm_confirm_ki.html", {
+        "incident": incident,
+        "ai_enabled": ai_is_enabled(),
+        "vehicles_added": None,
+    })
+
+
+@router.post("/einsatz/{incident_id}/alarm/ki-aufgaben-neu", response_class=HTMLResponse)
+async def alarm_regenerate_ki(
+    incident_id: int, request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Remove pending AI suggestions and generate new ones based on updated alarm/reason."""
+    if not ai_is_enabled():
+        from fastapi import HTTPException
+        raise HTTPException(503, "KI ist nicht aktiviert.")
+    incident = _incident_or_404(incident_id, db)
+    background_tasks.add_task(
+        _trigger_ai_task_suggestions,
+        incident.id,
+        incident.report_text or "",
+        incident.alarm_type_code,
+    )
+    return templates.TemplateResponse(request, "incident/_alarm_ki_triggered.html", {
+        "incident": incident,
+    })
 
 
 # ── Einsatz-Board ─────────────────────────────────────────────────────────────

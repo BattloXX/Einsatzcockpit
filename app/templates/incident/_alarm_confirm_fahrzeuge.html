@@ -1,0 +1,38 @@
+{# Schritt 2: Fahrzeuge nach neuer Alarmstufe disponieren? — HTMX-Fragment #}
+<div class="modal__header">
+  <div>
+    <div class="modal__title">Alarmstufe gespeichert</div>
+    <div class="modal__subtitle">Einsatz #{{ incident.id }}</div>
+  </div>
+  <button class="modal__close" onclick="document.getElementById('cardDetailModal').close()">✕</button>
+</div>
+<div class="modal__body">
+  <div class="alert alert--success" style="margin-bottom:1.25rem">
+    Alarmstufe auf <strong>{{ incident.alarm_type_code }}</strong> geändert.
+    {% if incident.report_text %}<br><small>Einsatzgrund: {{ incident.report_text[:80] }}</small>{% endif %}
+  </div>
+
+  <p style="margin-bottom:.5rem;font-weight:500">Fahrzeuge disponieren?</p>
+  <p style="margin-bottom:1.5rem;color:var(--text-muted);font-size:.9rem">
+    Sollen die Fahrzeuge laut Ausrückordnung für <strong>{{ incident.alarm_type_code }}</strong>
+    zum Einsatz hinzugefügt werden?
+    Bereits vorhandene Fahrzeuge werden nicht doppelt hinzugefügt.
+  </p>
+
+  <div class="modal__footer">
+    <button class="btn btn--ghost"
+            hx-post="/einsatz/{{ incident.id }}/alarm/fahrzeuge-ueberspringen"
+            hx-target="#cardDetailBody"
+            hx-swap="innerHTML"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+      Nein
+    </button>
+    <button class="btn btn--primary"
+            hx-post="/einsatz/{{ incident.id }}/alarm/fahrzeuge"
+            hx-target="#cardDetailBody"
+            hx-swap="innerHTML"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+      Ja, disponieren
+    </button>
+  </div>
+</div>

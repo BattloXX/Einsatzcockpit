@@ -1,0 +1,49 @@
+{# Schritt 3: KI-Auftragsvorschläge neu generieren? — HTMX-Fragment #}
+<div class="modal__header">
+  <div>
+    <div class="modal__title">KI-Auftragsvorschläge</div>
+    <div class="modal__subtitle">Einsatz #{{ incident.id }}</div>
+  </div>
+  <button class="modal__close" onclick="document.getElementById('cardDetailModal').close()">✕</button>
+</div>
+<div class="modal__body">
+  {% if vehicles_added is not none %}
+  <div class="alert alert--success" style="margin-bottom:1.25rem">
+    {% if vehicles_added > 0 %}
+      {{ vehicles_added }} Fahrzeug{% if vehicles_added != 1 %}e{% endif %} laut Ausrückordnung hinzugefügt.
+    {% else %}
+      Alle Fahrzeuge der Ausrückordnung waren bereits im Einsatz.
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if ai_enabled %}
+  <p style="margin-bottom:.5rem;font-weight:500">KI-Auftragsvorschläge neu generieren?</p>
+  <p style="margin-bottom:1.5rem;color:var(--text-muted);font-size:.9rem">
+    Nicht angenommene KI-Vorschläge werden entfernt und neue auf Basis der
+    aktuellen Alarmstufe und des Einsatzgrundes erstellt.
+  </p>
+
+  <div class="modal__footer">
+    <button class="btn btn--ghost"
+            onclick="document.getElementById('cardDetailModal').close()">
+      Nein, abschließen
+    </button>
+    <button class="btn btn--primary header-btn--ki"
+            hx-post="/einsatz/{{ incident.id }}/alarm/ki-aufgaben-neu"
+            hx-target="#cardDetailBody"
+            hx-swap="innerHTML"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+      ✨ Ja, neu generieren
+    </button>
+  </div>
+  {% else %}
+  <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:1.5rem">KI ist nicht aktiviert.</p>
+  <div class="modal__footer">
+    <button class="btn btn--ghost"
+            onclick="document.getElementById('cardDetailModal').close()">
+      Schließen
+    </button>
+  </div>
+  {% endif %}
+</div>

@@ -1,0 +1,19 @@
+{# KI-Auftragsvorschläge werden generiert — HTMX-Fragment #}
+<div class="modal__header">
+  <div>
+    <div class="modal__title">KI-Auftragsvorschläge</div>
+    <div class="modal__subtitle">Einsatz #{{ incident.id }}</div>
+  </div>
+  <button class="modal__close" onclick="document.getElementById('cardDetailModal').close()">✕</button>
+</div>
+<div class="modal__body">
+  <div class="alert alert--success" style="margin-bottom:1.25rem">
+    ✨ KI-Auftragsvorschläge werden im Hintergrund generiert und erscheinen in Kürze auf dem Board.
+  </div>
+  <div class="modal__footer">
+    <button class="btn btn--primary"
+            onclick="document.getElementById('cardDetailModal').close()">
+      Schließen
+    </button>
+  </div>
+</div>

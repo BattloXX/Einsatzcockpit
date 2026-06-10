@@ -82,7 +82,15 @@
 <!-- Incident Header -->
 <div class="incident-header" x-data="headerState('{{ incident.started_at|local_iso }}')">
   <div class="incident-header__alarm">
+    {% if can_edit %}
+    <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}" style="cursor:pointer"
+          hx-get="/einsatz/{{ incident.id }}/alarm/bearbeiten"
+          hx-target="#cardDetailBody" hx-swap="innerHTML"
+          hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
+          title="Alarmstufe / Einsatzgrund bearbeiten">{{ incident.alarm_type_code }}</span>
+    {% else %}
     <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
+    {% endif %}
     {% set _grund = (incident.reason or incident.report_text or '') %}
     {% if _grund %}
     <span class="incident-header__grund">{{ _grund[:80] }}</span>
