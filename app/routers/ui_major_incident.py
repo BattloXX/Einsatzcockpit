@@ -1271,6 +1271,7 @@ async def funkjournal_add(
     if direction not in ("in", "out", "int"):
         raise HTTPException(status_code=400, detail="Ungültige Richtung")
 
+    site_id = related_site_id or None
     db.add(CommLogEntry(
         major_incident_id=lage_id,
         direction=direction,
@@ -1278,10 +1279,25 @@ async def funkjournal_add(
         partner=partner.strip() or None,
         message=message.strip(),
         is_request=is_request,
-        related_site_id=related_site_id or None,
+        related_site_id=site_id,
         user_id=user.id,
         author_name=get_author_name(request),
     ))
+    if site_id:
+        dir_label = {"in": "↓ Eingehend", "out": "↑ Ausgehend", "int": "↔ Intern"}.get(direction, direction)
+        parts = [f"Funkjournal ({dir_label})"]
+        if channel.strip():
+            parts.append(f"Kanal: {channel.strip()}")
+        if partner.strip():
+            parts.append(f"Von/An: {partner.strip()}")
+        parts.append(message.strip())
+        db.add(SiteLogEntry(
+            incident_site_id=site_id,
+            kind="note",
+            text=" – ".join(parts),
+            user_id=user.id,
+            author_name=get_author_name(request),
+        ))
     db.commit()
     return Response(status_code=204)
 
