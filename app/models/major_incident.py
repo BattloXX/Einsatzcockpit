@@ -277,6 +277,7 @@ class CitizenReport(Base):
     description:       Mapped[str] = mapped_column(Text)
     photo_filename:    Mapped[str | None] = mapped_column(String(64), nullable=True)
     status:            Mapped[str] = mapped_column(String(10), default="new")  # new|accepted|rejected
+    phone_verified:    Mapped[bool] = mapped_column(Boolean, default=False)
     created_at:        Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     source_ip:         Mapped[str | None] = mapped_column(String(45), nullable=True)
     site_id:           Mapped[int | None] = mapped_column(

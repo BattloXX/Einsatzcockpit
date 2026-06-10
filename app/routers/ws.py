@@ -228,6 +228,11 @@ async def sms_gateway_ws(websocket: WebSocket):
         _sms_gateways[org_id].discard(websocket)
 
 
+def is_sms_gateway_connected(org_id: int) -> bool:
+    """Gibt True zurück wenn mindestens ein SMS-Gateway für diese Org verbunden ist."""
+    return bool(_sms_gateways.get(org_id))
+
+
 async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: float = 15.0) -> dict:
     """Sendet einen SMS-Job an einen verbundenen Gateway und wartet auf das Ergebnis.
 

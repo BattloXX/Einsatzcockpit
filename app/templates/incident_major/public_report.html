@@ -108,6 +108,9 @@
 
     <label class="required">Ihre Telefonnummer</label>
     <input type="tel" name="reporter_contact" maxlength="120" placeholder="für Rückfragen" required>
+    {% if sms_available %}
+    <p class="hint">📱 Zur Bestätigung erhalten Sie einen SMS-Code auf diese Nummer.</p>
+    {% endif %}
 
     <label>Foto (optional)</label>
     <label class="file-label" for="photo-input">📷 Foto auswählen / aufnehmen</label>

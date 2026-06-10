@@ -125,7 +125,12 @@
       <span style="font-size:.78rem;">{{ r.reporter_name }}</span>
       {% endif %}
       {% if r.reporter_contact %}
-      <span style="font-size:.78rem;color:var(--text-muted);">{{ r.reporter_contact }}</span>
+      <span style="font-size:.78rem;color:var(--text-muted);">
+        {{ r.reporter_contact }}
+        {% if r.phone_verified %}
+        <span title="Telefonnummer per SMS verifiziert" style="color:#4ade80;font-size:.85rem;">✓</span>
+        {% endif %}
+      </span>
       {% endif %}
     </div>
 

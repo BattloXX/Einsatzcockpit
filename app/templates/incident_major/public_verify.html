@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Telefonnummer bestätigen</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f3f4f6; color: #111827; min-height: 100vh;
+    padding: 16px; display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    max-width: 420px; width: 100%;
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.1);
+    padding: 28px 22px;
+  }
+  .header { text-align: center; margin-bottom: 22px; }
+  .header__icon { font-size: 2.4rem; }
+  .header__title { font-size: 1.15rem; font-weight: 700; margin-top: 8px; }
+  .header__sub { font-size: .85rem; color: #6b7280; margin-top: 5px; }
+  .info-box {
+    background: #eff6ff; border: 1px solid #bfdbfe;
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 18px;
+    font-size: .85rem; color: #1d4ed8; line-height: 1.5;
+  }
+  .error-box {
+    background: #fef2f2; border: 1px solid #fecaca;
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 14px;
+    font-size: .85rem; color: #b91c1c;
+  }
+  label { display: block; font-size: .83rem; font-weight: 600; color: #374151;
+    margin-bottom: 6px; }
+  .pin-input {
+    width: 100%; padding: 14px 11px; border: 2px solid #d1d5db;
+    border-radius: 8px; font-size: 1.8rem; font-weight: 700; color: #111827;
+    background: #fff; outline: none; text-align: center;
+    letter-spacing: .3em; font-family: monospace;
+  }
+  .pin-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+  .btn {
+    display: block; width: 100%; margin-top: 18px;
+    padding: 12px; border: none; border-radius: 8px;
+    background: #15803d; color: #fff; font-size: 1rem; font-weight: 700;
+    cursor: pointer; transition: background .15s;
+  }
+  .btn:hover { background: #166534; }
+  .emergency {
+    background: #fef2f2; border: 2px solid #ef4444;
+    border-radius: 8px; padding: 12px 14px; margin-top: 20px; text-align: center;
+  }
+  .emergency__title { font-size: .85rem; font-weight: 700; color: #b91c1c; margin-bottom: 8px; }
+  .emergency__btn {
+    display: inline-block; background: #b91c1c; color: #fff;
+    font-size: 1.2rem; font-weight: 900; padding: 8px 22px;
+    border-radius: 8px; text-decoration: none; letter-spacing: .04em;
+  }
+  .emergency__hint { font-size: .75rem; color: #991b1b; margin-top: 6px; }
+  .footer { text-align: center; font-size: .72rem; color: #9ca3af; margin-top: 18px; }
+  .resend-hint { font-size: .78rem; color: #6b7280; text-align: center; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div class="header__icon">📱</div>
+    <div class="header__title">Telefonnummer bestätigen</div>
+    <div class="header__sub">{{ lage.name }}</div>
+  </div>
+
+  <div class="info-box">
+    Wir haben einen <strong>4-stelligen Code</strong> an
+    <strong>{{ phone_masked }}</strong> gesendet.<br>
+    Bitte geben Sie den Code unten ein, um Ihre Meldung abzusenden.
+  </div>
+
+  {% if error %}
+  <div class="error-box">⚠ {{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/melden/{{ token }}/verify/{{ verify_token }}">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label for="pin-field">Bestätigungscode (4 Stellen)</label>
+    <input
+      id="pin-field"
+      class="pin-input"
+      type="text"
+      name="pin"
+      inputmode="numeric"
+      pattern="[0-9]{4}"
+      maxlength="4"
+      placeholder="0000"
+      autocomplete="one-time-code"
+      required
+      autofocus
+    >
+    <button type="submit" class="btn">✓ Code bestätigen &amp; Meldung senden</button>
+  </form>
+
+  <p class="resend-hint">
+    Kein Code erhalten? Warten Sie bis zu 2 Minuten. Falls weiterhin keine SMS ankommt:
+  </p>
+
+  <div class="emergency">
+    <div class="emergency__title">⚠ Keine SMS erhalten?</div>
+    <a href="tel:122" class="emergency__btn">📞 122 anrufen</a>
+    <div class="emergency__hint">
+      Feuerwehr-Notruf – für dringende Meldungen direkt anrufen
+    </div>
+  </div>
+
+  <div class="footer">Einsatzleiter-Hilfswerkzeug{% if org_name %} – {{ org_name }}{% endif %}</div>
+</div>
+<script>
+  // Automatisch absenden wenn 4 Ziffern eingegeben
+  document.getElementById('pin-field').addEventListener('input', function() {
+    if (this.value.replace(/\D/g,'').length === 4) {
+      this.value = this.value.replace(/\D/g,'');
+      this.closest('form').submit();
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,8 +1,13 @@
 """UI-Router: Großschadenslage – Phasen-Board, Stellen-CRUD, Abschluss."""
 import logging
-from datetime import UTC, datetime
+import random
+import secrets
+from datetime import UTC, datetime, timedelta
 
 logger = logging.getLogger("einsatzleiter.major_incident")
+
+# Pending phone verifications: verify_token → {pin, expires_at, ...}
+_pending_verifications: dict[str, dict] = {}
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
@@ -1355,6 +1360,19 @@ async def _save_citizen_photo(file: UploadFile) -> str | None:
         return None
 
 
+def _mask_phone(phone: str) -> str:
+    if len(phone) >= 5:
+        return phone[:-3] + "***"
+    return "***"
+
+
+def _cleanup_pending_verifications() -> None:
+    now = datetime.now(UTC)
+    expired = [k for k, v in _pending_verifications.items() if v["expires_at"] < now]
+    for k in expired:
+        _pending_verifications.pop(k, None)
+
+
 # ── Bürgermeldeportal – öffentliche Seiten (kein Auth) ───────────────────────
 
 @router.get("/melden/{token}", response_class=HTMLResponse)
@@ -1380,11 +1398,15 @@ async def buerger_portal(
     org = db.get(FireDept, lage.org_id) if lage.org_id else None
     org_logo = (org.logo_path if org and org.logo_path else None) or "/static/img/Logo-rot.png"
 
+    from app.routers.ws import is_sms_gateway_connected
+    sms_available = bool(lage.org_id and is_sms_gateway_connected(lage.org_id))
+
     return templates.TemplateResponse(request, "incident_major/public_report.html", {
         "lage": lage,
         "token": token,
         "org_name": org.name if org else "Feuerwehr",
         "org_logo": org_logo,
+        "sms_available": sms_available,
     })
 
 
@@ -1425,10 +1447,50 @@ async def buerger_submit(
         or request.client.host if request.client else None
     )
 
+    # SMS-Verifizierung wenn Gateway verbunden
+    from app.routers.ws import is_sms_gateway_connected
+    from app.services.sms_service import send_sms
+
+    org = db.get(FireDept, lage.org_id) if lage.org_id else None
+    phone = reporter_contact.strip()
+
+    if lage.org_id and is_sms_gateway_connected(lage.org_id):
+        _cleanup_pending_verifications()
+        pin = f"{random.randint(0, 9999):04d}"
+        verify_token = secrets.token_urlsafe(24)
+        _pending_verifications[verify_token] = {
+            "pin": pin,
+            "expires_at": datetime.now(UTC) + timedelta(minutes=10),
+            "phone": phone,
+            "form_data": {
+                "description": description.strip(),
+                "reporter_name": reporter_name.strip() or None,
+                "reporter_contact": phone or None,
+                "ort": ort.strip() or None,
+                "strasse": strasse.strip() or None,
+                "lat": lat,
+                "lng": lng,
+            },
+            "photo_fn": photo_fn,
+            "lage_id": lage.id,
+            "source_ip": source_ip,
+        }
+        sms_ok = await send_sms(lage.org_id, phone, f"Feuerwehr {org.name if org else ''}: Ihr Bestätigungscode lautet {pin}")
+        if sms_ok:
+            return templates.TemplateResponse(request, "incident_major/public_verify.html", {
+                "lage": lage,
+                "token": token,
+                "verify_token": verify_token,
+                "phone_masked": _mask_phone(phone),
+                "org_name": org.name if org else "Feuerwehr",
+            })
+        # SMS fehlgeschlagen → Meldung ohne Verifikation anlegen
+        _pending_verifications.pop(verify_token, None)
+
     db.add(CitizenReport(
         major_incident_id=lage.id,
         reporter_name=reporter_name.strip() or None,
-        reporter_contact=reporter_contact.strip() or None,
+        reporter_contact=phone or None,
         ort=ort.strip() or None,
         strasse=strasse.strip() or None,
         lat=lat,
@@ -1436,7 +1498,88 @@ async def buerger_submit(
         description=description.strip(),
         photo_filename=photo_fn,
         status="new",
+        phone_verified=False,
         source_ip=source_ip,
+    ))
+    db.commit()
+    return templates.TemplateResponse(request, "incident_major/public_danke.html",
+                                      {"lage": lage}, status_code=200)
+
+
+@router.get("/melden/{token}/verify/{verify_token}", response_class=HTMLResponse)
+async def buerger_verify_get(
+    request: Request,
+    token: str,
+    verify_token: str,
+    db: Session = Depends(get_db),
+):
+    pending = _pending_verifications.get(verify_token)
+    if not pending or pending["expires_at"] < datetime.now(UTC):
+        return HTMLResponse("<h2>Dieser Verifizierungslink ist ungültig oder abgelaufen.</h2>", status_code=410)
+    lage = db.get(MajorIncident, pending["lage_id"])
+    if not lage:
+        return HTMLResponse("<h2>Lage nicht gefunden.</h2>", status_code=404)
+    return templates.TemplateResponse(request, "incident_major/public_verify.html", {
+        "lage": lage,
+        "token": token,
+        "verify_token": verify_token,
+        "phone_masked": _mask_phone(pending["phone"]),
+        "org_name": "",
+        "error": None,
+    })
+
+
+@router.post("/melden/{token}/verify/{verify_token}")
+async def buerger_verify_post(
+    request: Request,
+    token: str,
+    verify_token: str,
+    pin: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    now = datetime.now(UTC)
+    pending = _pending_verifications.get(verify_token)
+
+    if not pending or pending["expires_at"] < now:
+        return HTMLResponse("<h2>Dieser Verifizierungslink ist abgelaufen. Bitte erneut versuchen.</h2>", status_code=410)
+
+    lage = db.get(MajorIncident, pending["lage_id"])
+    if not lage:
+        raise HTTPException(status_code=404)
+
+    if pin.strip() != pending["pin"]:
+        org_name = ""
+        try:
+            if lage.org_id:
+                org = db.get(FireDept, lage.org_id)
+                org_name = org.name if org else ""
+        except Exception:
+            pass
+        return templates.TemplateResponse(request, "incident_major/public_verify.html", {
+            "lage": lage,
+            "token": token,
+            "verify_token": verify_token,
+            "phone_masked": _mask_phone(pending["phone"]),
+            "org_name": org_name,
+            "error": "Falscher PIN. Bitte prüfen Sie Ihre SMS und versuchen Sie es erneut.",
+        }, status_code=200)
+
+    # PIN korrekt → Meldung anlegen
+    _pending_verifications.pop(verify_token, None)
+    fd = pending["form_data"]
+    db.add(CitizenReport(
+        major_incident_id=lage.id,
+        reporter_name=fd.get("reporter_name"),
+        reporter_contact=fd.get("reporter_contact"),
+        ort=fd.get("ort"),
+        strasse=fd.get("strasse"),
+        lat=fd.get("lat"),
+        lng=fd.get("lng"),
+        description=fd["description"],
+        photo_filename=pending.get("photo_fn"),
+        status="new",
+        phone_verified=True,
+        source_ip=pending.get("source_ip"),
     ))
     db.commit()
     return templates.TemplateResponse(request, "incident_major/public_danke.html",
