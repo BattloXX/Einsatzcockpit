@@ -334,7 +334,7 @@
         hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/log"
         hx-swap="none"
         hx-vals='{"_csrf": "{{ request.state.csrf_token }}"}'
-        @htmx:after-request="if(event.detail.successful){this.reset();}">
+        @htmx:after-request="if(event.detail.successful){this.reset();htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'});}">
     <div class="input-row">
       <input type="text" name="text" class="form-input" placeholder="Notiz eintragen…"
              required autocomplete="off" maxlength="500">
