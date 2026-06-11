@@ -24,6 +24,14 @@ def _drop_fks_on_column(conn, table, column):
         conn.execute(text(f"ALTER TABLE `{table}` DROP FOREIGN KEY `{row[0]}`"))
 
 
+def _column_exists(conn, table, column):
+    r = conn.execute(text(
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS"
+        " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c"
+    ), {"t": table, "c": column})
+    return r.scalar() > 0
+
+
 def upgrade():
     conn = op.get_bind()
 
@@ -48,17 +56,27 @@ def upgrade():
         pass
 
     # 3. alarm_type: PK von code auf id (BigInt AUTO_INCREMENT) umstellen + org_id hinzufügen
+    #    Idempotent: nur ausführen wenn id-Spalte noch nicht existiert
     #    org_id BIGINT – muss zu fire_dept.id BIGINT passen (errno 150 sonst)
-    conn.execute(text("""
-        ALTER TABLE `alarm_type`
-          DROP PRIMARY KEY,
-          ADD COLUMN `id` BIGINT NOT NULL AUTO_INCREMENT FIRST,
-          ADD PRIMARY KEY (`id`),
-          ADD COLUMN `org_id` BIGINT NULL DEFAULT NULL,
-          ADD INDEX `ix_alarm_type_org_id` (`org_id`)
-    """))
+    if not _column_exists(conn, "alarm_type", "id"):
+        conn.execute(text("""
+            ALTER TABLE `alarm_type`
+              DROP PRIMARY KEY,
+              ADD COLUMN `id` BIGINT NOT NULL AUTO_INCREMENT FIRST,
+              ADD PRIMARY KEY (`id`),
+              ADD COLUMN `org_id` BIGINT NULL DEFAULT NULL,
+              ADD INDEX `ix_alarm_type_org_id` (`org_id`)
+        """))
+    elif not _column_exists(conn, "alarm_type", "org_id"):
+        # id existiert bereits, nur org_id fehlt noch
+        conn.execute(text(
+            "ALTER TABLE `alarm_type`"
+            "  ADD COLUMN IF NOT EXISTS `org_id` BIGINT NULL DEFAULT NULL,"
+            "  ADD INDEX IF NOT EXISTS `ix_alarm_type_org_id` (`org_id`)"
+        ))
 
     # 4. alarm_type_id (nullable) auf alle 5 Junction-Tabellen hinzufügen
+    #    IF NOT EXISTS verhindert Fehler bei Duplicate column bei Retry
     for table in [
         "task_suggestion_alarm",
         "message_suggestion_alarm",
@@ -67,7 +85,8 @@ def upgrade():
         "alarm_dispatch_vehicle",
     ]:
         conn.execute(text(
-            f"ALTER TABLE `{table}` ADD COLUMN `alarm_type_id` BIGINT NULL DEFAULT NULL"
+            f"ALTER TABLE `{table}`"
+            f"  ADD COLUMN IF NOT EXISTS `alarm_type_id` BIGINT NULL DEFAULT NULL"
         ))
 
 

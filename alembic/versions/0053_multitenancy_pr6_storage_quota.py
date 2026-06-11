@@ -17,10 +17,10 @@ depends_on = None
 def upgrade():
     conn = op.get_bind()
 
-    # 1. FireDept: storage_quota_bytes (NULL = unbegrenzt)
+    # 1. FireDept: storage_quota_bytes (NULL = unbegrenzt, IF NOT EXISTS – idempotent)
     conn.execute(text("""
         ALTER TABLE fire_dept
-        ADD COLUMN storage_quota_bytes BIGINT NULL
+        ADD COLUMN IF NOT EXISTS storage_quota_bytes BIGINT NULL
     """))
 
     # 2. OrgStorageUsage-Tabelle anlegen
@@ -38,9 +38,9 @@ def upgrade():
     # 3. SiteMedia: bytes-Spalte (0 für Altdaten) und org_id (NULL für Altdaten)
     conn.execute(text("""
         ALTER TABLE site_media
-        ADD COLUMN bytes  BIGINT NOT NULL DEFAULT 0,
-        ADD COLUMN org_id BIGINT NULL,
-        ADD INDEX  ix_site_media_org_id (org_id)
+        ADD COLUMN IF NOT EXISTS bytes  BIGINT NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS org_id BIGINT NULL,
+        ADD INDEX  IF NOT EXISTS ix_site_media_org_id (org_id)
     """))
 
     # 4. Bestehende Org-Zeilen in org_storage_usage eintragen (used_bytes=0, Reconcile später)

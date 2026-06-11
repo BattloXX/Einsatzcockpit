@@ -16,12 +16,13 @@ depends_on = None
 def upgrade():
     conn = op.get_bind()
 
-    # 1. org_id (nullable) auf die 4 Vorlagen-Tabellen hinzufügen
+    # 1. org_id (nullable BIGINT) auf die 4 Vorlagen-Tabellen hinzufügen
+    #    ADD COLUMN IF NOT EXISTS – idempotent bei Retry nach Fehlschlag
     for table in ["task_suggestion", "message_suggestion", "lage_hint", "default_message"]:
         conn.execute(text(
             f"ALTER TABLE `{table}`"
-            f"  ADD COLUMN `org_id` BIGINT NULL DEFAULT NULL,"
-            f"  ADD INDEX `ix_{table}_org_id` (`org_id`)"
+            f"  ADD COLUMN IF NOT EXISTS `org_id` BIGINT NULL DEFAULT NULL,"
+            f"  ADD INDEX IF NOT EXISTS `ix_{table}_org_id` (`org_id`)"
         ))
 
     # 2. Bestehenden UNIQUE-Index auf incident.external_key entfernen
@@ -30,7 +31,6 @@ def upgrade():
         conn.execute(text("ALTER TABLE `incident` DROP INDEX `external_key`"))
     except Exception:
         pass
-    # Alembic/SQLAlchemy benennt den Index manchmal anders
     try:
         conn.execute(text("ALTER TABLE `incident` DROP INDEX `ix_incident_external_key`"))
     except Exception:

@@ -31,9 +31,9 @@ def upgrade():
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """))
 
-    # 2. FireDept.deleted_at (Soft-Delete)
+    # 2. FireDept.deleted_at (Soft-Delete, IF NOT EXISTS – idempotent)
     conn.execute(text(
-        "ALTER TABLE `fire_dept` ADD COLUMN `deleted_at` DATETIME NULL DEFAULT NULL"
+        "ALTER TABLE `fire_dept` ADD COLUMN IF NOT EXISTS `deleted_at` DATETIME NULL DEFAULT NULL"
     ))
 
 
