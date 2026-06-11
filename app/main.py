@@ -34,6 +34,7 @@ from app.routers import (
     ui_push,
     ui_settings,
     ui_stats,
+    ui_sysadmin,
     ws,
 )
 
@@ -304,6 +305,7 @@ app.include_router(ui_admin.router)
 app.include_router(ui_stats.router)
 app.include_router(ui_push.router)
 app.include_router(ui_settings.router)
+app.include_router(ui_sysadmin.router)
 app.include_router(ui_ai_prompts.router)
 
 

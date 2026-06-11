@@ -10,7 +10,8 @@
      or '/admin/sms-test' in _p %}
   {% set active_group = 'verwaltung' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
-       or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p %}
+       or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
+       or '/admin/konfig' in _p %}
   {% set active_group = 'einstellungen' %}
 {% else %}
   {% set active_group = 'stammdaten' %}
@@ -303,6 +304,11 @@
                class="admin-nav__item {% if '/admin/organisations' in request.url.path %}is-active{% endif %}"
                {{ tip('Alle Organisationen verwalten (Multi-Org)') }}>
               <span class="admin-nav__icon">🌐</span>Alle Orgs
+            </a>
+            <a href="/admin/system/orgs"
+               class="admin-nav__item {% if '/admin/system/orgs' in request.url.path %}is-active{% endif %}"
+               {{ tip('KPI-Übersicht aller Orgs mit Schnellzugriff') }}>
+              <span class="admin-nav__icon">📊</span>System-Konsole
             </a>
             {% endif %}
           </div>
