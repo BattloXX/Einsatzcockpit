@@ -154,6 +154,32 @@
       </div>
       <div id="settingsMapPicker" style="height:240px;border-radius:6px;border:1px solid var(--border);margin-bottom:1rem"></div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Auto-Schließen</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Auto-Schließen</label>
+          <select name="autoclose_enabled_raw" class="form-control" style="max-width:240px">
+            <option value="" {% if org_settings and org_settings.autoclose_enabled is none %}selected{% elif not org_settings %}selected{% endif %}>Standard (globale Einstellung)</option>
+            <option value="1" {% if org_settings and org_settings.autoclose_enabled == true %}selected{% endif %}>Aktiviert</option>
+            <option value="0" {% if org_settings and org_settings.autoclose_enabled == false %}selected{% endif %}>Deaktiviert</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Warnung nach (Stunden)</label>
+          <input type="number" name="autoclose_after_hours_raw" min="1" max="720"
+                 value="{{ org_settings.autoclose_after_hours if org_settings and org_settings.autoclose_after_hours is not none else '' }}"
+                 class="form-control" style="max-width:120px" placeholder="48 (Standard)">
+          <small class="form-hint">Leer = globale Einstellung (Standard: 48 h)</small>
+        </div>
+        <div class="form-group">
+          <label>Schließen nach Warnung (Minuten)</label>
+          <input type="number" name="autoclose_grace_minutes_raw" min="1" max="1440"
+                 value="{{ org_settings.autoclose_grace_minutes if org_settings and org_settings.autoclose_grace_minutes is not none else '' }}"
+                 class="form-control" style="max-width:120px" placeholder="60 (Standard)">
+          <small class="form-hint">Leer = globale Einstellung (Standard: 60 min)</small>
+        </div>
+      </div>
+
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>

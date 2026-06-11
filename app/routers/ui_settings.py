@@ -102,6 +102,9 @@ async def save_org_settings(
     fallback_lng: str = Form(""),
     logo: UploadFile = File(None),
     target_org_id: int | None = Form(None),
+    autoclose_enabled_raw: str = Form(""),
+    autoclose_after_hours_raw: str = Form(""),
+    autoclose_grace_minutes_raw: str = Form(""),
 ):
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = target_org_id if is_sysadmin and target_org_id else user.org_id
@@ -187,6 +190,26 @@ async def save_org_settings(
         org_s.footer_text = footer_text
     if logo_path:
         org_s.logo_path = logo_path
+
+    # Autoclose-Override (leer = globale SystemSettings-Fallback verwenden)
+    if autoclose_enabled_raw == "":
+        org_s.autoclose_enabled = None
+    elif autoclose_enabled_raw in ("1", "true"):
+        org_s.autoclose_enabled = True
+    else:
+        org_s.autoclose_enabled = False
+    try:
+        org_s.autoclose_after_hours = (
+            int(autoclose_after_hours_raw) if autoclose_after_hours_raw.strip() else None
+        )
+    except ValueError:
+        pass
+    try:
+        org_s.autoclose_grace_minutes = (
+            int(autoclose_grace_minutes_raw) if autoclose_grace_minutes_raw.strip() else None
+        )
+    except ValueError:
+        pass
 
     db.commit()
     suffix = "&logo_error=" + upload_error.replace(" ", "%20") if upload_error else ""

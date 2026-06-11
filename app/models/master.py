@@ -277,6 +277,11 @@ class OrgSettings(Base):
     ai_tokens_used_month: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     ai_tokens_month_key: Mapped[str | None] = mapped_column(String(7), nullable=True)  # YYYY-MM
 
+    # Auto-Schließen je Org (NULL = globale SystemSettings-Fallback nutzen)
+    autoclose_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    autoclose_after_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    autoclose_grace_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     org: Mapped[FireDept] = relationship(back_populates="settings")
 
 
