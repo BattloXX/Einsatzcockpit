@@ -31,6 +31,11 @@ class Base(DeclarativeBase):
     pass
 
 
+# Tenant-Filter-Listener global registrieren (einmalig beim Modul-Import)
+from app.core.tenant import register_tenant_listener  # noqa: E402
+register_tenant_listener()
+
+
 def get_db():
     db = SessionLocal()
     try:

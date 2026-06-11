@@ -7,6 +7,7 @@ def write_audit(
     db: Session,
     action: str,
     *,
+    org_id: int | None = None,
     user_id: int | None = None,
     api_key_id: int | None = None,
     incident_id: int | None = None,
@@ -22,6 +23,7 @@ def write_audit(
 
     entry = AuditLog(
         action=action,
+        org_id=org_id,
         user_id=user_id,
         api_key_id=api_key_id,
         incident_id=incident_id,

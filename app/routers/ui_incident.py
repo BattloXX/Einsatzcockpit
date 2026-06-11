@@ -51,6 +51,7 @@ from app.models.major_incident import IncidentSite, MajorIncident, MajorIncident
 from app.models.user import Role, User, UserRole
 from app.config import settings
 from app.services.ai_service import is_enabled as ai_is_enabled
+from app.services.alarm_service import get_alarm_type_by_code
 from app.services.broadcast import manager
 from app.services.incident_service import (
     add_section_column,
@@ -77,12 +78,14 @@ router = APIRouter()
 _log = logging.getLogger(__name__)
 
 
-async def _trigger_ai_task_suggestions(incident_id: int, meldung: str, einsatzart: str) -> None:
+async def _trigger_ai_task_suggestions(
+    incident_id: int, meldung: str, einsatzart: str, org_id: int | None = None,
+) -> None:
     """Background: KI-Auftragsvorschläge generieren und an Board broadcasten."""
     from app.db import SessionLocal
     from app.services.ai_service import suggest_tasks
 
-    suggestions = await suggest_tasks(meldung, einsatzart)
+    suggestions = await suggest_tasks(meldung, einsatzart, org_id=org_id)
     if not suggestions:
         return
     db = SessionLocal()
@@ -187,8 +190,8 @@ async def index(request: Request, db: Session = Depends(get_db)):
         .all()
     )
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
-    home = db.query(FireDept).filter(FireDept.is_home_org == True).first()  # noqa: E712
-    default_city = (home.city if home and home.city else settings.DEFAULT_INCIDENT_CITY)
+    org = getattr(user, "org", None)
+    default_city = (org.city if org and org.city else settings.DEFAULT_INCIDENT_CITY)
     return templates.TemplateResponse(request, "index.html", {
         "user": user,
         "active_incidents": active,
@@ -221,8 +224,8 @@ async def new_incident(
 
     # Ort aus Org-Stammdaten wenn nicht angegeben
     if not address_city.strip():
-        _home = db.query(FireDept).filter(FireDept.is_home_org == True).first()  # noqa: E712
-        address_city = (_home.city if _home and _home.city else settings.DEFAULT_INCIDENT_CITY)
+        _org = getattr(user, "org", None)
+        address_city = (_org.city if _org and _org.city else settings.DEFAULT_INCIDENT_CITY)
 
     lat_f: float | None = None
     lng_f: float | None = None
@@ -270,6 +273,7 @@ async def new_incident(
             incident.id,
             report_text or "",
             alarm_type_code,
+            incident.primary_org_id,
         )
     elif not is_exercise:
         _log.debug("KI-Auftragsvorschläge übersprungen: KI nicht aktiviert (Einsatz %d)", incident.id)
@@ -282,7 +286,7 @@ async def new_incident(
             get_active_lage as _get_active_lage,
             adopt_incident_as_site as _adopt_incident_as_site,
         )
-        at = db.get(_AlarmType, alarm_type_code)
+        at = get_alarm_type_by_code(db, user.org_id, alarm_type_code)
         if at and at.triggers_major_incident:
             lage, _site, _created = _handle_alarm_trigger(
                 db, user.org_id, alarm_type_code, incident.id,
@@ -338,6 +342,7 @@ async def request_ai_task_suggestions(
         incident.id,
         incident.report_text or "",
         incident.alarm_type_code,
+        incident.primary_org_id,
     )
     return Response(status_code=202)
 
@@ -385,12 +390,13 @@ async def alarm_dispatch_vehicles(
     incident = _incident_or_404(incident_id, db)
     db.refresh(incident, ["columns", "vehicles"])
 
+    _at_for_dispatch = get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code) if incident.alarm_type_code else None
     dispatch_entries = (
         db.query(AlarmDispatchVehicle)
-        .filter(AlarmDispatchVehicle.alarm_type_code == incident.alarm_type_code)
+        .filter(AlarmDispatchVehicle.alarm_type_id == _at_for_dispatch.id)
         .order_by(AlarmDispatchVehicle.display_order)
         .all()
-    )
+    ) if _at_for_dispatch else []
 
     dispatched_col = next((c for c in incident.columns if c.code == "dispatched"), None)
     added = 0
@@ -451,6 +457,7 @@ async def alarm_regenerate_ki(
         incident.id,
         incident.report_text or "",
         incident.alarm_type_code,
+        incident.primary_org_id,
     )
     return templates.TemplateResponse(request, "incident/_alarm_ki_triggered.html", {
         "incident": incident,
@@ -467,18 +474,19 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     incident = _incident_or_404(incident_id, db)
     db.refresh(incident, ["columns", "vehicles", "tasks", "messages", "rescued_persons"])
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
+    _at_board = get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code) if incident.alarm_type_code else None
     from sqlalchemy import exists as _exists
     _has_any_alarm = _exists().where(LageHintAlarm.lage_hint_id == LageHint.id)
     _has_matching = _exists().where(
         (LageHintAlarm.lage_hint_id == LageHint.id)
-        & (LageHintAlarm.alarm_type_code == incident.alarm_type_code)
-    )
+        & (LageHintAlarm.alarm_type_id == _at_board.id)
+    ) if _at_board else None
     lage_hints = (
         db.query(LageHint)
         .filter(or_(~_has_any_alarm, _has_matching))
         .order_by(LageHint.display_order)
         .all()
-    ) if incident.alarm_type_code else (
+    ) if _at_board else (
         db.query(LageHint)
         .filter(~_has_any_alarm)
         .order_by(LageHint.display_order)
@@ -489,17 +497,17 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     task_suggestions = (
         db.query(TaskSuggestion)
         .join(TaskSuggestionAlarm, TaskSuggestionAlarm.task_suggestion_id == TaskSuggestion.id)
-        .filter(TaskSuggestionAlarm.alarm_type_code == incident.alarm_type_code)
+        .filter(TaskSuggestionAlarm.alarm_type_id == _at_board.id)
         .order_by(TaskSuggestionAlarm.display_order)
         .all()
-    ) if incident.alarm_type_code else []
+    ) if _at_board else []
     msg_suggestions = (
         db.query(MessageSuggestion)
         .join(MessageSuggestionAlarm, MessageSuggestionAlarm.message_suggestion_id == MessageSuggestion.id)
-        .filter(MessageSuggestionAlarm.alarm_type_code == incident.alarm_type_code)
+        .filter(MessageSuggestionAlarm.alarm_type_id == _at_board.id)
         .order_by(MessageSuggestionAlarm.display_order)
         .all()
-    ) if incident.alarm_type_code else []
+    ) if _at_board else []
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
     # Leader candidates: active users of same org with relevant roles
     leader_roles = {"incident_leader", "admin", "org_admin", "system_admin"}
@@ -586,18 +594,19 @@ async def incident_dashboard(
             person_stats[p.status].append(p)
 
     started_at_iso = incident.started_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+    _at_board2 = get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code) if incident.alarm_type_code else None
     from sqlalchemy import exists as _exists2
     _has_any2 = _exists2().where(LageHintAlarm.lage_hint_id == LageHint.id)
     _has_match2 = _exists2().where(
         (LageHintAlarm.lage_hint_id == LageHint.id)
-        & (LageHintAlarm.alarm_type_code == incident.alarm_type_code)
-    )
+        & (LageHintAlarm.alarm_type_id == _at_board2.id)
+    ) if _at_board2 else None
     lage_hints = (
         db.query(LageHint)
         .filter(or_(~_has_any2, _has_match2))
         .order_by(LageHint.display_order)
         .all()
-    ) if incident.alarm_type_code else (
+    ) if _at_board2 else (
         db.query(LageHint)
         .filter(~_has_any2)
         .order_by(LageHint.display_order)
@@ -1839,13 +1848,13 @@ async def generate_lagebild(
     if not ai_is_enabled():
         raise HTTPException(503, "KI-Dienst ist nicht aktiviert.")
 
-    _incident_or_404(incident_id, db)
+    incident = _incident_or_404(incident_id, db)
     context = collect_situation_context(incident_id, db)
     user_id = getattr(getattr(request.state, "user", None), "id", None)
     write_audit(db, "ai.lagebild.generated", incident_id=incident_id, user_id=user_id)
     db.commit()
     try:
-        text = await generate_situation_brief(context)
+        text = await generate_situation_brief(context, org_id=incident.primary_org_id)
     except AIServiceError as exc:
         raise HTTPException(503, str(exc)) from exc
     return JSONResponse({"text": text})
@@ -1909,6 +1918,7 @@ async def regenerate_lage_hints(
             incident.report_text or "",
             incident.alarm_type_code or "",
             address,
+            org_id=incident.primary_org_id,
         )
     except AIServiceError as exc:
         raise HTTPException(503, str(exc)) from exc
@@ -2203,8 +2213,8 @@ async def address_edit_modal(
         from fastapi import HTTPException
         raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
     org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
-    home = db.query(FireDept).filter(FireDept.is_home_org == True).first()  # noqa: E712
-    default_city = (home.city if home and home.city else settings.DEFAULT_INCIDENT_CITY)
+    _user_org = getattr(user, "org", None)
+    default_city = (_user_org.city if _user_org and _user_org.city else settings.DEFAULT_INCIDENT_CITY)
     return templates.TemplateResponse(request, "incident/_address_modal.html", {
         "user": user, "incident": incident, "org": org,
         "auto_token": incident.auto_geojson_token,

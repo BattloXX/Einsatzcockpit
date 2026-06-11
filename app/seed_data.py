@@ -2,6 +2,8 @@
 Seed-Daten: Stammdaten 1:1 aus der HTML-Version übernommen.
 Aufruf: python -m app.seed_data
 """
+import json
+
 from app.db import SessionLocal
 from app.models.master import (
     AlarmType,
@@ -10,6 +12,7 @@ from app.models.master import (
     FireDept,
     LageHint,
     Qualification,
+    SeedTemplate,
     TaskSuggestion,
     TaskSuggestionAlarm,
     VehicleMaster,
@@ -207,11 +210,12 @@ def seed(db=None):
     try:
         _upsert_roles(db)
         _upsert_qualifications(db)
+        _upsert_depts_and_vehicles(db)   # Orgs müssen vor AlarmTypes existieren
         _upsert_alarm_types(db)
-        _upsert_depts_and_vehicles(db)
         _upsert_task_suggestions(db)
         _upsert_default_messages(db)
         _upsert_lage_hints(db)
+        _upsert_seed_templates(db)
         db.commit()
         print("✓ Seed-Daten eingespielt.")
     finally:
@@ -236,10 +240,18 @@ def _upsert_qualifications(db):
 
 
 def _upsert_alarm_types(db):
+    home = db.query(FireDept).order_by(FireDept.id).first()
+    org_id = home.id if home else None
+    if org_id is None:
+        return
     for a in ALARM_TYPES:
-        obj = db.get(AlarmType, a["code"])
+        obj = (
+            db.query(AlarmType)
+            .filter(AlarmType.org_id == org_id, AlarmType.code == a["code"])
+            .first()
+        )
         if not obj:
-            db.add(AlarmType(**a))
+            db.add(AlarmType(org_id=org_id, **a))
         else:
             for k, v in a.items():
                 setattr(obj, k, v)
@@ -275,18 +287,27 @@ def _upsert_depts_and_vehicles(db):
 def _upsert_task_suggestions(db):
     if db.query(TaskSuggestion).count() > 0:
         return
-    # Collect unique texts (a template may appear in multiple alarm types)
+    home = db.query(FireDept).order_by(FireDept.id).first()
+    if not home:
+        return
+    alarm_type_map = {
+        at.code: at
+        for at in db.query(AlarmType).filter(AlarmType.org_id == home.id).all()
+    }
     text_to_obj: dict[str, TaskSuggestion] = {}
     for alarm_code, suggestions in TASK_SUGGESTIONS.items():
+        at = alarm_type_map.get(alarm_code)
+        if at is None:
+            continue
         for i, text in enumerate(suggestions):
             if text not in text_to_obj:
-                s = TaskSuggestion(text=text)
+                s = TaskSuggestion(org_id=home.id, text=text)
                 db.add(s)
                 db.flush()
                 text_to_obj[text] = s
             db.add(TaskSuggestionAlarm(
                 task_suggestion_id=text_to_obj[text].id,
-                alarm_type_code=alarm_code,
+                alarm_type_id=at.id,
                 display_order=i,
             ))
 
@@ -294,19 +315,29 @@ def _upsert_task_suggestions(db):
 def _upsert_default_messages(db):
     if db.query(DefaultMessage).count() > 0:
         return
+    home = db.query(FireDept).order_by(FireDept.id).first()
+    if not home:
+        return
+    alarm_type_map = {
+        at.code: at
+        for at in db.query(AlarmType).filter(AlarmType.org_id == home.id).all()
+    }
     text_to_obj: dict[str, DefaultMessage] = {}
     for alarm_code, messages in DEFAULT_MESSAGES.items():
+        at = alarm_type_map.get(alarm_code)
+        if at is None:
+            continue
         for i, msg in enumerate(messages):
             text = msg["text"]
             due = msg.get("due_after_sec", 300)
             if text not in text_to_obj:
-                m = DefaultMessage(text=text)
+                m = DefaultMessage(org_id=home.id, text=text)
                 db.add(m)
                 db.flush()
                 text_to_obj[text] = m
             db.add(DefaultMessageAlarm(
                 default_message_id=text_to_obj[text].id,
-                alarm_type_code=alarm_code,
+                alarm_type_id=at.id,
                 display_order=i,
                 due_after_sec=due,
             ))
@@ -315,8 +346,132 @@ def _upsert_default_messages(db):
 def _upsert_lage_hints(db):
     existing = db.query(LageHint).count()
     if existing == 0:
+        home = db.query(FireDept).order_by(FireDept.id).first()
+        if not home:
+            return
         for i, text in enumerate(LAGE_HINTS):
-            db.add(LageHint(text=text, display_order=i))
+            db.add(LageHint(org_id=home.id, text=text, display_order=i))
+
+
+# ---------------------------------------------------------------------------
+# Seed-Profile
+# ---------------------------------------------------------------------------
+
+_VORARLBERG_ALARM_TYPES = [
+    {"code": "f1",  "category": "B", "label": "Kleinstereignis Brand",
+     "default_first_train_only": True,  "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "f2",  "category": "B", "label": "Kleinereignis Brand",
+     "default_first_train_only": True,  "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "f3",  "category": "B", "label": "Mittelereignis Brand",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "f4",  "category": "B", "label": "Großereignis Brand",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": True},
+    {"code": "f5",  "category": "B", "label": "Nachbarschaftshilfe Brand",
+     "default_first_train_only": False, "notify_neighbors": True,  "triggers_major_incident": False},
+    {"code": "f10", "category": "B", "label": "Abklärung",
+     "default_first_train_only": True,  "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "f11", "category": "B", "label": "Sondereinsatzmittel",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "f14", "category": "B", "label": "Brandmeldeanlage",
+     "default_first_train_only": True,  "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "f21", "category": "B", "label": "Bootseinsatz Brand",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "f30", "category": "B", "label": "Proberuf",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "t1",  "category": "T", "label": "Kleinstereignis Technik",
+     "default_first_train_only": True,  "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "t2",  "category": "T", "label": "Kleinereignis Technik",
+     "default_first_train_only": True,  "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "t3",  "category": "T", "label": "Mittelereignis Technik",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "t4",  "category": "T", "label": "Großereignis Technik",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": True},
+    {"code": "t5",  "category": "T", "label": "Nachbarschaftshilfe Technik",
+     "default_first_train_only": False, "notify_neighbors": True,  "triggers_major_incident": False},
+    {"code": "t6",  "category": "T", "label": "Gefahrgut klein",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "t7",  "category": "T", "label": "Gefahrgut groß",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": True},
+    {"code": "t9",  "category": "T", "label": "Großlage",
+     "default_first_train_only": False, "notify_neighbors": True,  "triggers_major_incident": True},
+    {"code": "t21", "category": "T", "label": "Bootseinsatz Technik",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+]
+
+_VORARLBERG_TASK_SUGGESTIONS = [
+    {"text": "Lage erkunden",              "alarm_codes": ["t1", "t2", "t3", "t4", "t6", "t7"]},
+    {"text": "Löschangriff vorbereiten",   "alarm_codes": ["f1", "f2", "f3", "f4"]},
+    {"text": "Wasserversorgung herstellen","alarm_codes": ["f1", "f2", "f3", "f4"]},
+    {"text": "Atemschutz bereitstellen",   "alarm_codes": ["f1", "f2", "f3", "f4"]},
+    {"text": "Atemschutztrupp einsetzen",  "alarm_codes": ["f2", "f3", "f4"]},
+    {"text": "Atemschutzüberwachung einrichten", "alarm_codes": ["f2", "f3", "f4"]},
+    {"text": "Menschenrettung priorisieren","alarm_codes": ["f3", "f4"]},
+    {"text": "Riegelstellung einrichten",  "alarm_codes": ["f1", "f2"]},
+    {"text": "Absperrung einrichten",      "alarm_codes": ["t2", "t3", "t6", "t7"]},
+    {"text": "Spezialkräfte anfordern",    "alarm_codes": ["t3", "t4", "t7", "t9"]},
+    {"text": "Lagemeldung absetzen",       "alarm_codes": ["t2", "t3", "t4", "f2", "f3", "f4"]},
+    {"text": "Wasserrettung aktivieren",   "alarm_codes": ["t5", "t21", "f21"]},
+    {"text": "Gefahrenbereich sichern",    "alarm_codes": ["t6", "t7"]},
+    {"text": "Fachberater anfordern",      "alarm_codes": ["t7", "t9"]},
+    {"text": "Bereitstellungsraum einrichten", "alarm_codes": ["t3", "t4", "t9", "f3", "f4"]},
+]
+
+_VORARLBERG_DEFAULT_MESSAGES = [
+    {"text": "Lagemeldung an RFL absetzen", "due_after_sec": 300,
+     "alarm_codes": ["f1", "f2", "f3", "f4", "t1", "t2", "t3", "t4", "t6", "t7"]},
+    {"text": "Spezialkräfte prüfen/anfordern", "due_after_sec": 600,
+     "alarm_codes": ["f3", "f4", "t3", "t4", "t7", "t9"]},
+]
+
+_VORARLBERG_LAGE_HINTS = [
+    "Lage erkunden – eigene Kräfte schützen",
+    "Gefahrenmatrix im Blick behalten",
+    "Wasserversorgung frühzeitig sicherstellen",
+    "Eigenschutz geht vor – PSA prüfen",
+    "Abschnittsführer einweisen",
+    "Regelmäßige Lagemeldungen absetzen",
+    "Rückzugswege freihalten",
+    "Atemschutzsammelplatz bestimmen",
+]
+
+
+def _upsert_seed_templates(db):
+    """Befüllt die SeedTemplate-Tabelle mit dem Profil 'feuerwehr_vorarlberg'."""
+    PROFILE = "feuerwehr_vorarlberg"
+    LABEL = "Feuerwehr Vorarlberg (LWZ)"
+
+    # Nur befüllen wenn noch keine Templates für dieses Profil vorhanden
+    if db.query(SeedTemplate).filter(SeedTemplate.profile == PROFILE).count() > 0:
+        return
+
+    order = 0
+    for at in _VORARLBERG_ALARM_TYPES:
+        db.add(SeedTemplate(
+            profile=PROFILE, profile_label=LABEL,
+            type="alarm_type", data=json.dumps(at), display_order=order,
+        ))
+        order += 1
+
+    for ts in _VORARLBERG_TASK_SUGGESTIONS:
+        db.add(SeedTemplate(
+            profile=PROFILE, profile_label=LABEL,
+            type="task_suggestion", data=json.dumps(ts), display_order=order,
+        ))
+        order += 1
+
+    for dm in _VORARLBERG_DEFAULT_MESSAGES:
+        db.add(SeedTemplate(
+            profile=PROFILE, profile_label=LABEL,
+            type="default_message", data=json.dumps(dm), display_order=order,
+        ))
+        order += 1
+
+    for i, text in enumerate(_VORARLBERG_LAGE_HINTS):
+        db.add(SeedTemplate(
+            profile=PROFILE, profile_label=LABEL,
+            type="lage_hint", data=json.dumps({"text": text, "alarm_codes": []}),
+            display_order=order + i,
+        ))
 
 
 if __name__ == "__main__":

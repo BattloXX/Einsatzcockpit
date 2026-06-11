@@ -190,16 +190,13 @@ def collect_situation_context(incident_id: int, db: Session) -> dict[str, Any]:
 def _resolve_org_id(db: Session, requested: int | None) -> int | None:
     """Liefert eine gültige fire_dept.id zurück.
 
-    Reihenfolge: 1) explizit übergeben, 2) Home-Org (is_home_org=True),
-    3) erste FireDept-Zeile, 4) None (keine Org in der DB → kein Fallback möglich).
+    Reihenfolge: 1) explizit übergeben, 2) erste FireDept-Zeile nach ID,
+    3) None (keine Org in der DB → kein Fallback möglich).
     """
     from app.models.master import FireDept
     if requested:
         if db.get(FireDept, requested):
             return requested
-    home = db.query(FireDept).filter(FireDept.is_home_org == True).first()  # noqa: E712
-    if home:
-        return home.id
     any_org = db.query(FireDept).order_by(FireDept.id).first()
     return any_org.id if any_org else None
 
@@ -229,12 +226,13 @@ def create_incident(
 
     from app.models.lagekarte import LagekarteToken
 
-    alarm = db.get(AlarmType, alarm_type_code)
-    if alarm is None:
-        alarm_type_code = "T1"
-        alarm = db.get(AlarmType, "T1")  # ohne re-fetch wäre _populate_vehicles ein No-op
+    from app.services.alarm_service import get_alarm_type_by_code as _get_alarm_type
 
     resolved_org_id = _resolve_org_id(db, primary_org_id)
+    alarm = _get_alarm_type(db, resolved_org_id, alarm_type_code) if resolved_org_id else None
+    if alarm is None:
+        alarm_type_code = "T1"
+        alarm = _get_alarm_type(db, resolved_org_id, "T1") if resolved_org_id else None
     raw_token = "lkw_" + _secrets.token_urlsafe(32)
 
     incident = Incident(
@@ -321,7 +319,7 @@ def _populate_vehicles(db: Session, incident: Incident, alarm: AlarmType | None)
     # Check if explicit dispatch order exists for this alarm type
     dispatch_entries = (
         db.query(AlarmDispatchVehicle)
-        .filter(AlarmDispatchVehicle.alarm_type_code == alarm.code)
+        .filter(AlarmDispatchVehicle.alarm_type_id == alarm.id)
         .order_by(AlarmDispatchVehicle.display_order)
         .all()
     )
@@ -384,7 +382,7 @@ def _create_default_messages(db: Session, incident: Incident, alarm: AlarmType |
     msgs_col = _get_column(incident, "messages")
     assignments = (
         db.query(DefaultMessageAlarm)
-        .filter(DefaultMessageAlarm.alarm_type_code == alarm.code)
+        .filter(DefaultMessageAlarm.alarm_type_id == alarm.id)
         .order_by(DefaultMessageAlarm.display_order)
         .all()
     )

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -36,9 +36,10 @@ FIXED_COLUMN_TITLES = {
 
 class Incident(Base):
     __tablename__ = "incident"
+    __table_args__ = (UniqueConstraint("primary_org_id", "external_key", name="uq_incident_org_ext_key"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    external_key: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    external_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     nummer: Mapped[int | None] = mapped_column(Integer, nullable=True)
     alarm_type_code: Mapped[str] = mapped_column(String(10), nullable=False, default="T1")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")

@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.tenant import TenantScoped
 from app.db import Base
 
 BOS_VALUES = ["Feuerwehr", "Rotes Kreuz", "Polizei", "Bauhof", "Privat"]
@@ -23,6 +24,8 @@ class FireDept(Base):
     # Multi-org fields
     is_home_org: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Org-Lifecycle: NULL = aktiv, gesetzt = Soft-Delete (30-Tage-Frist bis Purge)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -83,12 +86,11 @@ class Qualification(Base):
     is_gruppenkommandant: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
-class Member(Base):
+class Member(TenantScoped, Base):
     __tablename__ = "member"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    # org_id: which organisation this member belongs to
-    org_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fire_dept.id"), nullable=True)
+    # org_id kommt via TenantScoped-Mixin
     lastname: Mapped[str] = mapped_column(String(100), nullable=False)
     firstname: Mapped[str] = mapped_column(String(100), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -96,7 +98,7 @@ class Member(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    org: Mapped[FireDept | None] = relationship(back_populates="members", foreign_keys=[org_id])
+    org: Mapped[FireDept | None] = relationship(back_populates="members", foreign_keys="Member.org_id")
     qualifications: Mapped[list[MemberQualification]] = relationship(
         back_populates="member", lazy="joined", passive_deletes=True,
     )
@@ -123,10 +125,13 @@ class MemberQualification(Base):
     qualification: Mapped[Qualification] = relationship(lazy="joined")
 
 
-class AlarmType(Base):
+class AlarmType(TenantScoped, Base):
     __tablename__ = "alarm_type"
+    __table_args__ = (UniqueConstraint("org_id", "code", name="uq_alarm_type_org_code"),)
 
-    code: Mapped[str] = mapped_column(String(10), primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    code: Mapped[str] = mapped_column(String(10), nullable=False)
     category: Mapped[str] = mapped_column(String(20), nullable=False, default="T")
     label: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     default_first_train_only: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -134,10 +139,11 @@ class AlarmType(Base):
     triggers_major_incident: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
-class TaskSuggestion(Base):
+class TaskSuggestion(TenantScoped, Base):
     __tablename__ = "task_suggestion"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
     text: Mapped[str] = mapped_column(String(500), nullable=False)
 
     alarm_assignments: Mapped[list[TaskSuggestionAlarm]] = relationship(
@@ -152,18 +158,20 @@ class TaskSuggestionAlarm(Base):
     task_suggestion_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("task_suggestion.id", ondelete="CASCADE"), nullable=False
     )
-    alarm_type_code: Mapped[str] = mapped_column(
-        String(10), ForeignKey("alarm_type.code", ondelete="CASCADE"), nullable=False
+    alarm_type_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("alarm_type.id", ondelete="CASCADE"), nullable=False
     )
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
     suggestion: Mapped[TaskSuggestion] = relationship(back_populates="alarm_assignments")
+    alarm_type: Mapped[AlarmType] = relationship(lazy="joined")
 
 
-class MessageSuggestion(Base):
+class MessageSuggestion(TenantScoped, Base):
     __tablename__ = "message_suggestion"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
     text: Mapped[str] = mapped_column(String(500), nullable=False)
 
     alarm_assignments: Mapped[list[MessageSuggestionAlarm]] = relationship(
@@ -178,18 +186,20 @@ class MessageSuggestionAlarm(Base):
     message_suggestion_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("message_suggestion.id", ondelete="CASCADE"), nullable=False
     )
-    alarm_type_code: Mapped[str] = mapped_column(
-        String(10), ForeignKey("alarm_type.code", ondelete="CASCADE"), nullable=False
+    alarm_type_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("alarm_type.id", ondelete="CASCADE"), nullable=False
     )
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
     suggestion: Mapped[MessageSuggestion] = relationship(back_populates="alarm_assignments")
+    alarm_type: Mapped[AlarmType] = relationship(lazy="joined")
 
 
-class LageHint(Base):
+class LageHint(TenantScoped, Base):
     __tablename__ = "lage_hint"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
     text: Mapped[str] = mapped_column(String(500), nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -205,18 +215,20 @@ class LageHintAlarm(Base):
     lage_hint_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("lage_hint.id", ondelete="CASCADE"), nullable=False
     )
-    alarm_type_code: Mapped[str] = mapped_column(
-        String(10), ForeignKey("alarm_type.code", ondelete="CASCADE"), nullable=False
+    alarm_type_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("alarm_type.id", ondelete="CASCADE"), nullable=False
     )
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
     hint: Mapped[LageHint] = relationship(back_populates="alarm_assignments")
+    alarm_type: Mapped[AlarmType] = relationship(lazy="joined")
 
 
-class DefaultMessage(Base):
+class DefaultMessage(TenantScoped, Base):
     __tablename__ = "default_message"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
     text: Mapped[str] = mapped_column(String(500), nullable=False)
 
     alarm_assignments: Mapped[list[DefaultMessageAlarm]] = relationship(
@@ -231,17 +243,18 @@ class DefaultMessageAlarm(Base):
     default_message_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("default_message.id", ondelete="CASCADE"), nullable=False
     )
-    alarm_type_code: Mapped[str] = mapped_column(
-        String(10), ForeignKey("alarm_type.code", ondelete="CASCADE"), nullable=False
+    alarm_type_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("alarm_type.id", ondelete="CASCADE"), nullable=False
     )
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     due_after_sec: Mapped[int] = mapped_column(Integer, default=300)
 
     message: Mapped[DefaultMessage] = relationship(back_populates="alarm_assignments")
+    alarm_type: Mapped[AlarmType] = relationship(lazy="joined")
 
 
 class OrgSettings(Base):
-    """Organisations-spezifische Einstellungen (Logo, Farbe, etc.)."""
+    """Organisations-spezifische Einstellungen (Logo, Farbe, KI-Modus, Quota etc.)."""
     __tablename__ = "org_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -253,6 +266,14 @@ class OrgSettings(Base):
     footer_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mi_auto_adopt: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    # KI-Konfiguration je Org
+    # 'central' = Plattform-Key aus Server-Env; 'byok' = org-eigener Anthropic-Key
+    ai_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="central")
+    ai_api_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # Fernet-verschlüsselt
+    ai_monthly_token_quota: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    ai_tokens_used_month: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    ai_tokens_month_key: Mapped[str | None] = mapped_column(String(7), nullable=True)  # YYYY-MM
 
     org: Mapped[FireDept] = relationship(back_populates="settings")
 
@@ -267,10 +288,10 @@ class SystemSettings(Base):
     updated_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
 
 
-class AIPromptVersion(Base):
+class AIPromptVersion(TenantScoped, Base):
     """Versionsverlauf der bearbeitbaren KI-Prompt-Teile (max. 10 je Prompt-Typ)."""
     __tablename__ = "ai_prompt_versions"
-    __table_args__ = (UniqueConstraint("prompt_key", "version", name="uq_ai_prompt_version"),)
+    __table_args__ = (UniqueConstraint("org_id", "prompt_key", "version", name="uq_ai_prompt_org_version"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     prompt_key: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
@@ -289,13 +310,28 @@ class AlarmDispatchVehicle(Base):
     __tablename__ = "alarm_dispatch_vehicle"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    alarm_type_code: Mapped[str] = mapped_column(
-        String(10), ForeignKey("alarm_type.code", ondelete="CASCADE"), nullable=False
+    alarm_type_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("alarm_type.id", ondelete="CASCADE"), nullable=False
     )
     vehicle_master_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("vehicle_master.id", ondelete="CASCADE"), nullable=False
     )
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    alarm_type: Mapped[AlarmType] = relationship()
+    alarm_type: Mapped[AlarmType] = relationship(lazy="joined")
     vehicle: Mapped[VehicleMaster] = relationship()
+
+
+class SeedTemplate(Base):
+    """System-Vorlagen je Profil – system_admin pflegt; beim Org-Anlegen werden sie kopiert."""
+    __tablename__ = "seed_template"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    profile: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    profile_label: Mapped[str] = mapped_column(String(100), nullable=False)
+    # type: alarm_type | task_suggestion | message_suggestion | lage_hint | default_message
+    type: Mapped[str] = mapped_column(String(30), nullable=False)
+    data: Mapped[str] = mapped_column(Text, nullable=False)  # JSON object
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
+                                                  onupdate=lambda: datetime.now(UTC))

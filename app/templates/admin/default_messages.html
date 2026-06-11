@@ -29,13 +29,13 @@
     </thead>
     <tbody>
       {% for m in messages %}
-      {% set codes = m.alarm_assignments | sort(attribute='display_order') | map(attribute='alarm_type_code') | list %}
+      {% set codes = m.alarm_assignments | sort(attribute='display_order') | map(attribute='alarm_type.code') | list %}
       <tr{% if edit_message and edit_message.id == m.id %} style="background:var(--color-bg-highlight,#f0f7ff);"{% endif %}>
         <td>{{ m.text }}</td>
         <td>
           {% if codes %}
             {% for code in codes %}
-              {% set a = m.alarm_assignments | selectattr('alarm_type_code', 'equalto', code) | first %}
+              {% set a = m.alarm_assignments | selectattr('alarm_type.code', 'equalto', code) | first %}
               <span class="badge-pill badge-pill--gray" style="margin:2px;font-size:.75rem;"
                     {{ tip('Fällig nach ' ~ (a.due_after_sec // 60) ~ ' Min.') }}>{{ code }}</span>
             {% endfor %}

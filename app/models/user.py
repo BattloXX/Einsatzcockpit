@@ -106,6 +106,7 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
+    org_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True, index=True)
     user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     api_key_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("api_key.id"), nullable=True)
     incident_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

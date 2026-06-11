@@ -29,7 +29,7 @@
     </thead>
     <tbody>
       {% for s in suggestions %}
-      {% set codes = s.alarm_assignments | sort(attribute='display_order') | map(attribute='alarm_type_code') | list %}
+      {% set codes = s.alarm_assignments | sort(attribute='display_order') | map(attribute='alarm_type.code') | list %}
       <tr{% if edit_suggestion and edit_suggestion.id == s.id %} style="background:var(--color-bg-highlight,#f0f7ff);"{% endif %}>
         <td>{{ s.text }}</td>
         <td>

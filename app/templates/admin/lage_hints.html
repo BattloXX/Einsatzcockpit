@@ -30,7 +30,7 @@
     </thead>
     <tbody>
       {% for h in hints %}
-      {% set codes = h.alarm_assignments | sort(attribute='display_order') | map(attribute='alarm_type_code') | list %}
+      {% set codes = h.alarm_assignments | sort(attribute='display_order') | map(attribute='alarm_type.code') | list %}
       <tr{% if edit_hint and edit_hint.id == h.id %} style="background:var(--color-bg-highlight,#f0f7ff);"{% endif %}>
         <td>{{ h.text }}</td>
         <td>

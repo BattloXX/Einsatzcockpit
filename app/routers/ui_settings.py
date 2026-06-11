@@ -11,8 +11,9 @@ from app.core.permissions import has_role, require_role, require_system_admin
 from app.core.templating import templates
 from app.core.timezones import common_timezones
 from app.db import get_db
-from app.models.master import BOS_VALUES, FireDept, OrgSettings, SystemSettings
+from app.models.master import BOS_VALUES, FireDept, OrgSettings, SeedTemplate, SystemSettings
 from app.models.user import User
+from app.services.seed_service import apply_seed_profile, copy_default_prompts, list_profiles
 from app.services.update_service import apply_update, get_current_version
 
 router = APIRouter(prefix="/admin")
@@ -225,10 +226,14 @@ async def reset_org_logo(
 @router.get("/organisations", response_class=HTMLResponse)
 def organisations_page(request: Request, db=Depends(get_db), user: User = Depends(require_system_admin)):
     orgs = db.query(FireDept).order_by(FireDept.name).all()
+    seed_profiles = list_profiles(db)
     return templates.TemplateResponse(request, "admin/organisations.html", {
         "user": user,
         "orgs": orgs,
         "bos_values": BOS_VALUES,
+        "seed_profiles": seed_profiles,
+        "created": request.query_params.get("created"),
+        "error": request.query_params.get("error"),
     })
 
 
@@ -242,6 +247,9 @@ async def create_organisation(
     color: str = Form("#d42225"),
     bos: str = Form("Feuerwehr"),
     contact_email: str = Form(""),
+    seed_profile: str = Form(""),
+    admin_email: str = Form(""),
+    admin_name: str = Form(""),
 ):
     existing = db.query(FireDept).filter(FireDept.slug == slug).first()
     if existing:
@@ -252,21 +260,136 @@ async def create_organisation(
         color=color,
         bos=bos if bos in BOS_VALUES else "Feuerwehr",
         contact_email=contact_email or None,
-        is_home_org=False,
         is_active=True,
     )
     db.add(org)
+    db.flush()
+
+    # Seed-Profil kopieren
+    if seed_profile:
+        apply_seed_profile(db, org.id, seed_profile)
+
+    # Standard-KI-Prompts anlegen
+    copy_default_prompts(db, org.id)
+
     db.commit()
+
+    # Ersten org_admin einladen
+    if admin_email:
+        await _invite_org_admin(request, db, org, admin_email.strip(), admin_name.strip())
+
     return RedirectResponse("/admin/organisations?created=1", status_code=303)
+
+
+async def _invite_org_admin(request: Request, db, org: FireDept, email: str, display_name: str) -> None:
+    """Legt einen org_admin-User an und sendet einen Passwort-Set-Link."""
+    import hashlib
+    import secrets as sec
+    from datetime import UTC, datetime, timedelta
+
+    from app.config import settings as cfg
+    from app.core.auth import hash_password
+    from app.models.password_reset import PasswordResetToken
+    from app.models.user import Role, User, UserRole
+    from app.services.mail_service import send_password_reset
+
+    # User bereits vorhanden?
+    existing_user = db.query(User).filter(User.email == email.lower()).first()
+    if existing_user:
+        return
+
+    tmp_pw = sec.token_urlsafe(24)
+    new_user = User(
+        username=email.split("@")[0][:50],
+        display_name=display_name or email.split("@")[0],
+        email=email.lower(),
+        password_hash=hash_password(tmp_pw),
+        org_id=org.id,
+    )
+    db.add(new_user)
+    db.flush()
+
+    org_admin_role = db.query(Role).filter(Role.code == "org_admin").first()
+    if org_admin_role:
+        db.add(UserRole(user_id=new_user.id, role_id=org_admin_role.id))
+    db.flush()
+
+    raw_token = sec.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    db.add(PasswordResetToken(
+        user_id=new_user.id,
+        token_hash=token_hash,
+        expires_at=datetime.now(UTC) + timedelta(days=7),
+        requesting_ip=request.client.host if request.client else None,
+    ))
+    db.flush()
+
+    base = cfg.effective_public_base_url.rstrip("/")
+    reset_url = f"{base}/passwort-zuruecksetzen?token={raw_token}"
+    try:
+        await send_password_reset(
+            to=email.lower(), reset_url=reset_url,
+            user_display_name=new_user.display_name,
+            db=db,
+        )
+    except Exception:
+        pass
 
 
 @router.post("/organisations/{org_id}/toggle")
 def toggle_organisation(org_id: int, db=Depends(get_db), user: User = Depends(require_system_admin)):
     org = db.query(FireDept).filter(FireDept.id == org_id).first()
-    if org and not org.is_home_org:
+    if org:
         org.is_active = not org.is_active
         db.commit()
     return RedirectResponse("/admin/organisations", status_code=303)
+
+
+@router.post("/organisations/{org_id}/delete")
+def delete_organisation(org_id: int, db=Depends(get_db), user: User = Depends(require_system_admin)):
+    """Soft-Delete: setzt deleted_at auf jetzt; Purge nach 30 Tagen."""
+    from datetime import UTC, datetime
+    org = db.query(FireDept).filter(FireDept.id == org_id).first()
+    if org and not org.deleted_at:
+        org.deleted_at = datetime.now(UTC)
+        org.is_active = False
+        db.commit()
+    return RedirectResponse("/admin/organisations", status_code=303)
+
+
+@router.post("/organisations/{org_id}/restore")
+def restore_organisation(org_id: int, db=Depends(get_db), user: User = Depends(require_system_admin)):
+    """Hebt Soft-Delete innerhalb der 30-Tage-Frist wieder auf."""
+    org = db.query(FireDept).filter(FireDept.id == org_id).first()
+    if org and org.deleted_at:
+        org.deleted_at = None
+        org.is_active = True
+        db.commit()
+    return RedirectResponse("/admin/organisations", status_code=303)
+
+
+@router.get("/seed-vorlagen", response_class=HTMLResponse)
+def seed_templates_page(request: Request, db=Depends(get_db), user: User = Depends(require_system_admin)):
+    import json as json_lib
+    from collections import defaultdict
+    raw = (
+        db.query(SeedTemplate)
+        .order_by(SeedTemplate.profile, SeedTemplate.type, SeedTemplate.display_order)
+        .all()
+    )
+    by_profile: dict[str, dict] = {}
+    for t in raw:
+        if t.profile not in by_profile:
+            by_profile[t.profile] = {"label": t.profile_label, "types": defaultdict(list)}
+        try:
+            d = json_lib.loads(t.data)
+        except Exception:
+            d = {}
+        by_profile[t.profile]["types"][t.type].append({"id": t.id, "data": d, "order": t.display_order})
+    return templates.TemplateResponse(request, "admin/seed_templates.html", {
+        "user": user,
+        "by_profile": by_profile,
+    })
 
 
 # ── System-Update (system_admin only) ────────────────────────────────────────

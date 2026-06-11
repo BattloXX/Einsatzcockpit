@@ -7,10 +7,10 @@
   <a href="#new-org" class="btn btn-primary">+ Neue Organisation</a>
 </div>
 
-{% if request.query_params.get('created') %}
+{% if created %}
 <div class="alert alert-success">Organisation angelegt.</div>
 {% endif %}
-{% if request.query_params.get('error') == 'slug_exists' %}
+{% if error == 'slug_exists' %}
 <div class="alert alert-danger">Ein Kürzel mit diesem Namen existiert bereits.</div>
 {% endif %}
 
@@ -21,49 +21,49 @@
         <th>Farbe</th>
         <th>Name</th>
         <th>Slug</th>
-        <th>Kürzel</th>
         <th>BOS</th>
         <th>Kontakt</th>
         <th>Status</th>
-        <th>Typ</th>
         <th>Aktionen</th>
       </tr>
     </thead>
     <tbody>
       {% for org in orgs %}
-      <tr>
+      <tr {% if org.deleted_at %}class="table-danger"{% endif %}>
         <td><span class="org-color-dot" style="background:{{ org.color }}"></span></td>
         <td>
           {% if org.logo_path %}<img src="{{ org.logo_path }}" alt="" style="height:24px;margin-right:6px">{% endif %}
           <strong>{{ org.name }}</strong>
-        </td>
-        <td><code>{{ org.slug }}</code></td>
-        <td>
-          {% if org.short_code %}
-          <strong>{{ org.short_code }}</strong>
-          {% else %}
-          <span class="text-muted">–</span>
+          {% if org.deleted_at %}
+          <span class="badge badge-danger">Gelöscht {{ org.deleted_at.strftime('%d.%m.%Y') }}</span>
           {% endif %}
         </td>
+        <td><code>{{ org.slug }}</code></td>
         <td>{{ org.bos }}</td>
         <td>{{ org.contact_email or '–' }}</td>
         <td>
-          {% if org.is_active %}
+          {% if org.deleted_at %}
+          <span class="badge badge-danger">Soft-Delete</span>
+          {% elif org.is_active %}
           <span class="badge badge-success">Aktiv</span>
           {% else %}
-          <span class="badge badge-danger">Inaktiv</span>
+          <span class="badge badge-warning">Inaktiv</span>
           {% endif %}
         </td>
-        <td>
-          {% if org.is_home_org %}<span class="badge badge-primary">Heimwehr</span>{% else %}
-          <span class="badge badge-secondary">Partner</span>{% endif %}
-        </td>
-        <td>
-          {% if not org.is_home_org %}
+        <td style="white-space:nowrap">
+          {% if org.deleted_at %}
+          <form method="post" action="/admin/organisations/{{ org.id }}/restore" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-outline">Wiederherstellen</button>
+          </form>
+          {% else %}
           <form method="post" action="/admin/organisations/{{ org.id }}/toggle" style="display:inline">
             <button type="submit" class="btn btn-sm btn-outline">
               {% if org.is_active %}Deaktivieren{% else %}Aktivieren{% endif %}
             </button>
+          </form>
+          <form method="post" action="/admin/organisations/{{ org.id }}/delete" style="display:inline"
+                onsubmit="return confirm('Org wirklich löschen? 30-Tage-Frist beginnt.')">
+            <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
           </form>
           {% endif %}
         </td>
@@ -104,11 +104,39 @@
           <label>Kontakt E-Mail (optional)</label>
           <input type="email" name="contact_email" class="form-control">
         </div>
+        <div class="form-group">
+          <label>Seed-Profil (optional)</label>
+          <select name="seed_profile" class="form-control">
+            <option value="">– kein Profil –</option>
+            {% for p in seed_profiles %}
+            <option value="{{ p.profile }}">{{ p.label }}</option>
+            {% endfor %}
+          </select>
+          <small>Alarmtypen, Vorlagen und Lage-Hinweise werden aus dem Profil kopiert.</small>
+        </div>
       </div>
+      <fieldset class="card mt-3">
+        <legend class="card-header">Ersten Org-Admin einladen (optional)</legend>
+        <div class="card-body form-grid">
+          <div class="form-group">
+            <label>E-Mail-Adresse</label>
+            <input type="email" name="admin_email" class="form-control" placeholder="admin@example.com">
+          </div>
+          <div class="form-group">
+            <label>Anzeigename</label>
+            <input type="text" name="admin_name" class="form-control" placeholder="Max Mustermann">
+          </div>
+        </div>
+        <small class="px-3 pb-2 d-block text-muted">Der Benutzer erhält einen Passwort-Set-Link per E-Mail (7 Tage gültig).</small>
+      </fieldset>
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn-primary">Organisation anlegen</button>
       </div>
     </form>
   </div>
 </section>
+
+{% if seed_profiles %}
+<p class="mt-3"><small><a href="/admin/seed-vorlagen">Seed-Vorlagen verwalten</a></small></p>
+{% endif %}
 {% endblock %}
