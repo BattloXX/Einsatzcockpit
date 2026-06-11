@@ -12,11 +12,13 @@ from hashlib import sha256
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.audit import write_audit
+from app.core.rate_limit import get_api_key_identifier, limiter as _limiter
 from app.core.security import hash_api_key, sign_qr_token
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentToken
@@ -80,28 +82,31 @@ class AlarmPayload(BaseModel):
     Pflichtfeld ist nur `Key` — er dient als Idempotency-Token und verhindert,
     dass dasselbe Alarm-Ereignis zweimal angelegt wird.
     """
-    Key: str = Field(..., description="Eindeutiger Schlüssel des Alarms (Idempotency).",
+    Key: str = Field(..., min_length=1, max_length=200,
+                     description="Eindeutiger Schlüssel des Alarms (Idempotency).",
                      examples=["A-2025-04711"])
-    Nummer: int | None = Field(None, description="Externe Einsatznummer.", examples=[4711])
+    Nummer: int | None = Field(None, ge=0, le=999_999_999,
+                                description="Externe Einsatznummer.", examples=[4711])
     AlarmDatumZeit: str | None = Field(
-        None, description="ISO-8601 Datum/Zeit der Alarmierung.",
+        None, max_length=50, description="ISO-8601 Datum/Zeit der Alarmierung.",
         examples=["2026-05-24T18:42:00+02:00"],
     )
     Stufe: str | None = Field(
-        None, description="Alarmstufe: F1–F14, T1–T7 (case-insensitive).",
+        None, max_length=10,
+        description="Alarmstufe: F1–F14, T1–T7 (case-insensitive).",
         examples=["F3"],
     )
-    Art: str | None = Field(None, description="Einsatzart-Bezeichnung.")
-    Meldung: str | None = Field(None, description="Volltext der Alarmmeldung.")
-    Einsatzgrund: str | None = Field(None, description="Anlass/Einsatzgrund.")
-    Ort: str | None = Field(None, description="Ort/Stadt.")
-    Strasse: str | None = Field(None, description="Straße.")
-    HausNr: str | None = Field(None, description="Hausnummer.")
+    Art: str | None = Field(None, max_length=200, description="Einsatzart-Bezeichnung.")
+    Meldung: str | None = Field(None, max_length=5000, description="Volltext der Alarmmeldung.")
+    Einsatzgrund: str | None = Field(None, max_length=1000, description="Anlass/Einsatzgrund.")
+    Ort: str | None = Field(None, max_length=200, description="Ort/Stadt.")
+    Strasse: str | None = Field(None, max_length=200, description="Straße.")
+    HausNr: str | None = Field(None, max_length=20, description="Hausnummer.")
     Uebung: bool = Field(False, description="Übungsalarm (kein echter Einsatz).")
-    Name: str | None = Field(None, description="Name des Anrufers/Melders.")
-    Telefon: str | None = Field(None, description="Telefonnummer des Anrufers/Melders.")
+    Name: str | None = Field(None, max_length=200, description="Name des Anrufers/Melders.")
+    Telefon: str | None = Field(None, max_length=50, description="Telefonnummer des Anrufers/Melders.")
     Zeitzone: str | None = Field(
-        None,
+        None, max_length=64,
         description=(
             "IANA-Zeitzone für naive `AlarmDatumZeit`-Werte ohne UTC-Offset "
             "(z. B. `'Europe/Vienna'`). "
@@ -110,6 +115,19 @@ class AlarmPayload(BaseModel):
         ),
         examples=["Europe/Vienna"],
     )
+
+    @field_validator("Key")
+    @classmethod
+    def _strip_key(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Key darf nicht leer oder nur Leerzeichen sein")
+        return v
+
+    @field_validator("Stufe")
+    @classmethod
+    def _normalise_stufe(cls, v: str | None) -> str | None:
+        return v.strip().upper() if v else None
 
 
 class IncidentCreatedResponse(BaseModel):
@@ -379,8 +397,13 @@ def _handle_major_incident_trigger(
     responses={
         200: {"description": "Einsatz angelegt oder bereits vorhanden (siehe `created`)."},
         401: {"description": "Ungültiger oder gesperrter API-Key."},
+        429: {"description": "Rate-Limit überschritten."},
     },
 )
+@(_limiter.limit(
+    settings.API_ALARM_RATELIMIT,
+    key_func=get_api_key_identifier,
+) if _limiter else lambda f: f)
 async def create_incident_api(
     payload: AlarmPayload,
     request: Request,
@@ -565,17 +588,30 @@ def _api_key_scoped_incidents(db: Session, api_key: ApiKey):
 
 class LageAlarmPayload(BaseModel):
     """Direktes Hinzufügen einer Einsatzstelle zur laufenden Großschadenslage."""
-    Key: str = Field(..., description="Eindeutiger Schlüssel (Idempotency-Token).")
-    Art: str | None = Field(None, description="Bezeichnung/Einsatzart für die Einsatzstelle.")
-    Meldung: str | None = Field(None, description="Volltext der Meldung (wird als Einsatzgrund gespeichert).")
-    Stufe: str | None = Field(None, description="Alarmstufe (F1–F14, T1–T7).")
-    Ort: str | None = Field(None, description="Ort.")
-    Strasse: str | None = Field(None, description="Straße.")
-    HausNr: str | None = Field(None, description="Hausnummer.")
-    Lat: float | None = Field(None, description="Breitengrad (WGS 84).")
-    Lng: float | None = Field(None, description="Längengrad (WGS 84).")
-    Name: str | None = Field(None, description="Name des Anrufers/Melders.")
-    Telefon: str | None = Field(None, description="Telefonnummer des Anrufers/Melders.")
+    Key: str = Field(..., min_length=1, max_length=200, description="Eindeutiger Schlüssel (Idempotency-Token).")
+    Art: str | None = Field(None, max_length=200, description="Bezeichnung/Einsatzart für die Einsatzstelle.")
+    Meldung: str | None = Field(None, max_length=5000, description="Volltext der Meldung (wird als Einsatzgrund gespeichert).")
+    Stufe: str | None = Field(None, max_length=10, description="Alarmstufe (F1–F14, T1–T7).")
+    Ort: str | None = Field(None, max_length=200, description="Ort.")
+    Strasse: str | None = Field(None, max_length=200, description="Straße.")
+    HausNr: str | None = Field(None, max_length=20, description="Hausnummer.")
+    Lat: float | None = Field(None, ge=-90.0, le=90.0, description="Breitengrad (WGS 84).")
+    Lng: float | None = Field(None, ge=-180.0, le=180.0, description="Längengrad (WGS 84).")
+    Name: str | None = Field(None, max_length=200, description="Name des Anrufers/Melders.")
+    Telefon: str | None = Field(None, max_length=50, description="Telefonnummer des Anrufers/Melders.")
+
+    @field_validator("Key")
+    @classmethod
+    def _strip_key(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Key darf nicht leer oder nur Leerzeichen sein")
+        return v
+
+    @field_validator("Stufe")
+    @classmethod
+    def _normalise_stufe(cls, v: str | None) -> str | None:
+        return v.strip().upper() if v else None
 
 
 class LageSiteCreatedResponse(BaseModel):
@@ -724,10 +760,16 @@ async def _enrich_site_from_alarm(
         200: {"description": "Einsatzstelle angelegt oder Idempotency-Treffer."},
         401: {"description": "Ungültiger oder gesperrter API-Key."},
         404: {"description": "Keine aktive Großschadenslage."},
+        429: {"description": "Rate-Limit überschritten."},
     },
 )
+@(_limiter.limit(
+    settings.API_ALARM_RATELIMIT,
+    key_func=get_api_key_identifier,
+) if _limiter else lambda f: f)
 async def lage_alarm(
     payload: LageAlarmPayload,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     api_key: ApiKey = Depends(_get_api_key),
