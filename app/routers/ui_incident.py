@@ -12,6 +12,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.permissions import can_access_incident, has_role, require_role
+from app.core.queries import visible_incidents_q
 from app.core.security import get_author_name, sign_qr_token
 from app.core.templating import templates
 from app.db import get_db
@@ -145,19 +146,7 @@ def _incident_or_404(incident_id: int, db: Session):
     return inc
 
 
-def _visible_incidents_q(db: Session, user):
-    """Incident-Query gefiltert auf Einsätze der eigenen Org + kollaborative Einsätze.
-    system_admin erhält ungefilterte Abfrage.
-    """
-    q = db.query(Incident)
-    if has_role(user, "system_admin"):
-        return q
-    if not user or not user.org_id:
-        return q.filter(False)  # type: ignore[arg-type]
-    collab_subq = db.query(IncidentOrg.incident_id).filter(IncidentOrg.org_id == user.org_id)
-    return q.filter(
-        or_(Incident.primary_org_id == user.org_id, Incident.id.in_(collab_subq))
-    )
+_visible_incidents_q = visible_incidents_q
 
 
 def _create_neighbor_invitations(

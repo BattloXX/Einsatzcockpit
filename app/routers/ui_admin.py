@@ -342,17 +342,17 @@ async def audit_log(request: Request, db: Session = Depends(get_db),
 async def admin_index(request: Request, db: Session = Depends(get_db),
                       _=Depends(require_role("admin", "org_admin", "system_admin"))):
     from app.core.permissions import has_role
+    from app.core.queries import visible_incidents_q
     from app.models.incident import Incident
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
 
-    # KPI-Kennzahlen (Org-scoped, system_admin sieht alles)
-    incident_q = db.query(Incident)
+    # KPI-Kennzahlen (inkl. kollaborative Einsätze via visible_incidents_q)
+    incident_q = visible_incidents_q(db, user)
     member_q = db.query(Member)
     vehicle_q = db.query(VehicleMaster).filter(VehicleMaster.active == True)  # noqa: E712
     user_q = db.query(User).filter(User.active == True)  # noqa: E712
     if not is_sysadmin and user.org_id:
-        incident_q = incident_q.filter(Incident.primary_org_id == user.org_id)
         member_q = member_q.filter(Member.org_id == user.org_id)
         vehicle_q = vehicle_q.filter(VehicleMaster.dept_id == user.org_id)
         user_q = user_q.filter(User.org_id == user.org_id)
