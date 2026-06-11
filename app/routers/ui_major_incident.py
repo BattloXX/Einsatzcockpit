@@ -92,7 +92,7 @@ PHASE_LABELS = {
 }
 
 
-async def _apply_ai_prio(site: IncidentSite, db: Session) -> None:
+async def _apply_ai_prio(site: IncidentSite, db: Session, org_id: int | None = None) -> None:
     """Automatically suggest priority via AI. Never raises.
 
     Only sets priority when none exists — never overwrites a manually set value.
@@ -105,6 +105,7 @@ async def _apply_ai_prio(site: IncidentSite, db: Session) -> None:
         result = await analyze_site_reconnaissance(
             text,
             {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
+            org_id=org_id,
         )
         if result and result.get("prio_vorschlag"):
             site.priority = SitePriority(result["prio_vorschlag"])
@@ -342,7 +343,7 @@ async def site_create(
             created_by=user.id,
         )
         await _geocode_site(site)
-        await _apply_ai_prio(site, db)
+        await _apply_ai_prio(site, db, org_id=lage.org_id)
         db.add(SiteLogEntry(
             incident_site_id=site.id,
             kind="status",
@@ -1740,7 +1741,7 @@ async def meldung_annehmen(
     if ai_is_enabled() and report.description:
         try:
             from app.services.ai_service import generate_site_bezeichnung
-            ai_bez = await generate_site_bezeichnung(report.description)
+            ai_bez = await generate_site_bezeichnung(report.description, org_id=lage.org_id)
             if ai_bez:
                 bezeichnung = ai_bez
         except Exception:
@@ -1759,7 +1760,7 @@ async def meldung_annehmen(
             source="buerger",
         )
         await _geocode_site(site)
-        await _apply_ai_prio(site, db)
+        await _apply_ai_prio(site, db, org_id=lage.org_id)
         db.add(SiteLogEntry(
             incident_site_id=site.id,
             kind="status",
@@ -1861,7 +1862,7 @@ async def lage_ki_bericht(
     }
 
     try:
-        text = await generate_situation_brief(context)
+        text = await generate_situation_brief(context, org_id=lage.org_id)
     except AIServiceError as e:
         return HTMLResponse(
             f'<p style="color:#f87171;font-size:.85rem;">{e}</p>'
@@ -1911,7 +1912,7 @@ async def lage_pressemeldung(
         "done_sites": sum(1 for s in lage.sites if s.phase == SitePhase.erledigt),
         "sites": active_sites,
     }
-    text = await generate_pressemeldung(context)
+    text = await generate_pressemeldung(context, org_id=lage.org_id)
     if not text:
         return HTMLResponse(
             '<p style="color:#f87171;font-size:.85rem;">Pressemeldung konnte nicht erstellt werden.</p>'

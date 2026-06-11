@@ -20,19 +20,20 @@ _MAX_VERSIONS = 10
 _VALID_KEYS = frozenset(PROMPT_META.keys())
 
 
-def _next_version(db: Session, prompt_key: str) -> int:
+def _next_version(db: Session, prompt_key: str, org_id: int) -> int:
     from sqlalchemy import func
     result = db.query(func.max(AIPromptVersion.version)).filter(
-        AIPromptVersion.prompt_key == prompt_key
+        AIPromptVersion.prompt_key == prompt_key,
+        AIPromptVersion.org_id == org_id,
     ).scalar()
     return (result or 0) + 1
 
 
-def _prune_old_versions(db: Session, prompt_key: str) -> None:
+def _prune_old_versions(db: Session, prompt_key: str, org_id: int) -> None:
     """Keep only the latest _MAX_VERSIONS versions; delete older ones."""
     versions = (
         db.query(AIPromptVersion)
-        .filter(AIPromptVersion.prompt_key == prompt_key)
+        .filter(AIPromptVersion.prompt_key == prompt_key, AIPromptVersion.org_id == org_id)
         .order_by(AIPromptVersion.version.desc())
         .all()
     )
@@ -44,14 +45,15 @@ def _prune_old_versions(db: Session, prompt_key: str) -> None:
 async def ki_prompts_page(
     request: Request,
     db: Session = Depends(get_db),
-    _=Depends(require_role("system_admin")),
+    _=Depends(require_role("system_admin", "org_admin")),
 ):
+    user = request.state.user
     saved = request.query_params.get("saved")
     prompts: dict[str, dict] = {}
     for key, meta in PROMPT_META.items():
         versions = (
             db.query(AIPromptVersion)
-            .filter(AIPromptVersion.prompt_key == key)
+            .filter(AIPromptVersion.prompt_key == key, AIPromptVersion.org_id == user.org_id)
             .order_by(AIPromptVersion.version.desc())
             .all()
         )
@@ -62,7 +64,7 @@ async def ki_prompts_page(
             "versions": versions,
         }
     return templates.TemplateResponse(request, "admin/ai_prompts.html", {
-        "user": request.state.user,
+        "user": user,
         "prompts": prompts,
         "saved": saved,
     })
@@ -73,7 +75,7 @@ async def save_prompt_version(
     prompt_key: str,
     request: Request,
     db: Session = Depends(get_db),
-    _=Depends(require_role("system_admin")),
+    _=Depends(require_role("system_admin", "org_admin")),
     variable_part: str = Form(...),
     note: str = Form(""),
 ):
@@ -85,8 +87,9 @@ async def save_prompt_version(
         return RedirectResponse(f"/admin/ki-prompts?saved=empty#{prompt_key}", status_code=303)
 
     user = request.state.user
-    version = _next_version(db, prompt_key)
+    version = _next_version(db, prompt_key, user.org_id)
     db.add(AIPromptVersion(
+        org_id=user.org_id,
         prompt_key=prompt_key,
         version=version,
         variable_part=variable_part,
@@ -95,7 +98,7 @@ async def save_prompt_version(
         created_by_user_id=user.id,
         created_by_username=getattr(user, "username", None),
     ))
-    _prune_old_versions(db, prompt_key)
+    _prune_old_versions(db, prompt_key, user.org_id)
     write_audit(db, f"admin.ai_prompt.saved.{prompt_key}", user_id=user.id)
     db.commit()
     return RedirectResponse(f"/admin/ki-prompts?saved={prompt_key}#{prompt_key}", status_code=303)
@@ -107,18 +110,19 @@ async def restore_prompt_version(
     version_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    _=Depends(require_role("system_admin")),
+    _=Depends(require_role("system_admin", "org_admin")),
 ):
     if prompt_key not in _VALID_KEYS:
         return RedirectResponse("/admin/ki-prompts", status_code=303)
 
+    user = request.state.user
     source = db.get(AIPromptVersion, version_id)
-    if not source or source.prompt_key != prompt_key:
+    if not source or source.prompt_key != prompt_key or source.org_id != user.org_id:
         return RedirectResponse("/admin/ki-prompts", status_code=303)
 
-    user = request.state.user
-    version = _next_version(db, prompt_key)
+    version = _next_version(db, prompt_key, user.org_id)
     db.add(AIPromptVersion(
+        org_id=user.org_id,
         prompt_key=prompt_key,
         version=version,
         variable_part=source.variable_part,
@@ -127,7 +131,7 @@ async def restore_prompt_version(
         created_by_user_id=user.id,
         created_by_username=getattr(user, "username", None),
     ))
-    _prune_old_versions(db, prompt_key)
+    _prune_old_versions(db, prompt_key, user.org_id)
     write_audit(db, f"admin.ai_prompt.restored.{prompt_key}", user_id=user.id)
     db.commit()
     return RedirectResponse(f"/admin/ki-prompts?saved={prompt_key}#{prompt_key}", status_code=303)

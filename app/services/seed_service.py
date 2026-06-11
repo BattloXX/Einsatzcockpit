@@ -1,9 +1,11 @@
 """Seed-Profil-Service: kopiert SeedTemplate-Einträge in eine neue Org."""
 import json
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from app.models.master import (
+    AIPromptVersion,
     AlarmType,
     DefaultMessage,
     DefaultMessageAlarm,
@@ -126,4 +128,27 @@ def apply_seed_profile(db: Session, org_id: int, profile: str) -> None:
                     due_after_sec=d.get("due_after_sec", 300),
                 ))
 
+    db.flush()
+
+
+def copy_default_prompts(db: Session, org_id: int) -> None:
+    """Creates one AIPromptVersion per PROMPT_META key for org_id (idempotent)."""
+    from app.services.ai_service import PROMPT_META
+
+    for key, meta in PROMPT_META.items():
+        exists = (
+            db.query(AIPromptVersion)
+            .filter(AIPromptVersion.org_id == org_id, AIPromptVersion.prompt_key == key)
+            .first()
+        )
+        if exists:
+            continue
+        db.add(AIPromptVersion(
+            org_id=org_id,
+            prompt_key=key,
+            version=1,
+            variable_part=meta["variable_default"],
+            note="Standard (automatisch erstellt)",
+            created_at=datetime.now(UTC),
+        ))
     db.flush()

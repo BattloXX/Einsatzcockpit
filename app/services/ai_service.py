@@ -3,6 +3,9 @@
 Every outgoing payload must pass through `_strip_persons()` before being sent.
 Provider errors are always wrapped in `AIServiceError`; raw SDK exceptions never
 escape this module.
+
+All public functions accept `org_id: int | None = None` to select the right API
+key (central vs. BYOK) and enforce per-org token quotas.
 """
 from __future__ import annotations
 
@@ -25,7 +28,7 @@ _AI_SETTING_KEYS: frozenset[str] = frozenset({
 
 
 def _get_ai_cfg() -> dict:
-    """Read AI settings from SystemSettings table, fall back to env vars."""
+    """Read platform AI settings from SystemSettings table, fall back to env vars."""
     from app.db import SessionLocal
     from app.models.master import SystemSettings as _SS
     try:
@@ -47,27 +50,80 @@ def _get_ai_cfg() -> dict:
     }
 
 
+def _fernet():
+    """Return Fernet instance keyed from SECRET_KEY."""
+    import base64
+    import hashlib
+    from cryptography.fernet import Fernet
+    key_bytes = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key_bytes))
+
+
+def encrypt_api_key(raw: str) -> str:
+    return _fernet().encrypt(raw.encode()).decode()
+
+
+def decrypt_api_key(enc: str) -> str:
+    return _fernet().decrypt(enc.encode()).decode()
+
+
+def _get_org_ai_cfg(org_id: int) -> dict | None:
+    """Return org-specific AI config dict, or None if OrgSettings not found."""
+    from app.db import SessionLocal
+    from app.models.master import OrgSettings
+    try:
+        db = SessionLocal()
+        try:
+            os = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+            if not os:
+                return None
+            from datetime import UTC, datetime
+            current_month = datetime.now(UTC).strftime("%Y-%m")
+            reset_needed = os.ai_tokens_month_key != current_month
+            return {
+                "ai_mode": os.ai_mode or "central",
+                "ai_api_key_enc": os.ai_api_key_enc,
+                "ai_monthly_token_quota": os.ai_monthly_token_quota,
+                "ai_tokens_used_month": 0 if reset_needed else (os.ai_tokens_used_month or 0),
+                "reset_needed": reset_needed,
+                "current_month": current_month,
+            }
+        finally:
+            db.close()
+    except Exception:
+        return None
+
+
+async def _record_token_usage(org_id: int, total_tokens: int, model: str) -> None:
+    """Fire-and-forget: update monthly token counter + write audit entry."""
+    from app.core.audit import write_audit
+    from app.db import SessionLocal
+    from app.models.master import OrgSettings
+    from datetime import UTC, datetime
+    try:
+        db = SessionLocal()
+        try:
+            os = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+            if os:
+                current_month = datetime.now(UTC).strftime("%Y-%m")
+                if os.ai_tokens_month_key != current_month:
+                    os.ai_tokens_used_month = 0
+                    os.ai_tokens_month_key = current_month
+                os.ai_tokens_used_month = (os.ai_tokens_used_month or 0) + total_tokens
+            write_audit(db, "ai.tokens.used", org_id=org_id,
+                        payload={"tokens": total_tokens, "model": model})
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+
 _PERSON_KEYS: frozenset[str] = frozenset({
-    "name",
-    "member",
-    "member_id",
-    "commander",
-    "commander_member_id",
-    "commander_id",
-    "leader",
-    "leader_member",
-    "incident_leader_user_id",
-    "incident_leader_member_id",
-    "created_by_user_id",
-    "user",
-    "user_id",
-    "email",
-    "phone",
-    "contact",
-    "first_name",
-    "last_name",
-    "fullname",
-    "username",
+    "name", "member", "member_id", "commander", "commander_member_id",
+    "commander_id", "leader", "leader_member", "incident_leader_user_id",
+    "incident_leader_member_id", "created_by_user_id", "user", "user_id",
+    "email", "phone", "contact", "first_name", "last_name", "fullname", "username",
 })
 
 
@@ -105,21 +161,48 @@ async def complete(
     *,
     fast: bool = False,
     max_tokens: int | None = None,
+    org_id: int | None = None,
 ) -> str:
     """Call the Anthropic Messages API and return the text response.
 
-    Raises AIServiceError on any provider failure or timeout.
-    Never raises raw SDK exceptions.
+    If org_id is provided, picks the org's BYOK key (if configured) and enforces
+    the org's monthly token quota. Token usage is written to the audit log.
+    Raises AIServiceError on any provider failure, timeout, or quota exceeded.
     """
-    cfg = _get_ai_cfg()
-    if not (cfg["enabled"] and bool(cfg["api_key"])):
-        logger.debug("AI call skipped: ai_enabled=%s, api_key_set=%s",
-                     cfg["enabled"], bool(cfg["api_key"]))
+    platform_cfg = _get_ai_cfg()
+    if not platform_cfg["enabled"]:
         raise AIServiceError("KI-Dienst ist nicht aktiviert.")
 
-    model = cfg["model_fast"] if fast else cfg["model_default"]
-    tokens = max_tokens or cfg["max_tokens"]
-    client = AsyncAnthropic(api_key=cfg["api_key"])
+    api_key = platform_cfg["api_key"]
+    quota_exceeded = False
+
+    if org_id is not None:
+        org_cfg = _get_org_ai_cfg(org_id)
+        if org_cfg:
+            if org_cfg["ai_mode"] == "byok" and org_cfg["ai_api_key_enc"]:
+                try:
+                    api_key = decrypt_api_key(org_cfg["ai_api_key_enc"])
+                except Exception:
+                    raise AIServiceError("KI-Konfiguration: BYOK-Key konnte nicht entschlüsselt werden.")
+            elif org_cfg["ai_mode"] == "central":
+                # Quota prüfen
+                quota = org_cfg.get("ai_monthly_token_quota")
+                used = org_cfg.get("ai_tokens_used_month", 0)
+                if quota is not None and used >= quota:
+                    quota_exceeded = True
+
+    if quota_exceeded:
+        raise AIServiceError(
+            "KI-Monatskontingent aufgebraucht. "
+            "Bitte wenden Sie sich an Ihren Administrator."
+        )
+
+    if not api_key:
+        raise AIServiceError("KI-Dienst: kein API-Key konfiguriert.")
+
+    model = platform_cfg["model_fast"] if fast else platform_cfg["model_default"]
+    tokens = max_tokens or platform_cfg["max_tokens"]
+    client = AsyncAnthropic(api_key=api_key)
 
     try:
         response = await asyncio.wait_for(
@@ -129,7 +212,7 @@ async def complete(
                 system=system,
                 messages=[{"role": "user", "content": user}],
             ),
-            timeout=float(cfg["timeout"]),
+            timeout=float(platform_cfg["timeout"]),
         )
     except TimeoutError:
         logger.warning("AI provider timeout after %ss (model=%s)", settings.AI_TIMEOUT, model)
@@ -147,12 +230,18 @@ async def complete(
     if not response.content:
         raise AIServiceError("KI-Dienst hat eine leere Antwort geliefert.")
 
+    # Token-Verbrauch asynchron protokollieren
+    if org_id is not None:
+        try:
+            total_tokens = response.usage.input_tokens + response.usage.output_tokens
+            asyncio.ensure_future(_record_token_usage(org_id, total_tokens, model))
+        except Exception:
+            pass
+
     return response.content[0].text
 
 
 # ── Prompt-Bausteine ─────────────────────────────────────────────────────────
-# Feste Teile: definieren Rolle, Datenintegrität und Ausgabeformat – nicht editierbar.
-# Variable Teile: Stil, Länge, taktische Schwerpunkte – editierbar im Admin unter /admin/ki-prompts.
 
 _REPORT_FIXED_PREFIX = (
     "Du bist ein sachlicher Berichtsassistent der Feuerwehr. "
@@ -239,19 +328,17 @@ def _assemble_prompt(prefix: str, suffix: str, variable: str) -> str:
     return f"{prefix}\n{variable}\n{suffix}"
 
 
-def _get_active_variable(prompt_key: str) -> str | None:
-    """Return the latest saved variable part for *prompt_key*, or None if none saved yet."""
+def _get_active_variable(prompt_key: str, org_id: int | None = None) -> str | None:
+    """Return the latest saved variable part for prompt_key scoped to org, or None."""
     from app.db import SessionLocal
     from app.models.master import AIPromptVersion
     try:
         db = SessionLocal()
         try:
-            row = (
-                db.query(AIPromptVersion)
-                .filter(AIPromptVersion.prompt_key == prompt_key)
-                .order_by(AIPromptVersion.version.desc())
-                .first()
-            )
+            q = db.query(AIPromptVersion).filter(AIPromptVersion.prompt_key == prompt_key)
+            if org_id is not None:
+                q = q.filter(AIPromptVersion.org_id == org_id)
+            row = q.order_by(AIPromptVersion.version.desc()).first()
             return row.variable_part if row and row.variable_part.strip() else None
         finally:
             db.close()
@@ -259,37 +346,30 @@ def _get_active_variable(prompt_key: str) -> str | None:
         return None
 
 
-async def suggest_tasks(meldung: str, einsatzart: str) -> list[dict]:
-    """Return 3–5 first-response task suggestions for an incoming alarm.
-
-    Returns an empty list on any failure (never raises).
-    """
-    variable = _get_active_variable("suggest") or _SUGGEST_VARIABLE_DEFAULT
+async def suggest_tasks(
+    meldung: str, einsatzart: str, org_id: int | None = None,
+) -> list[dict]:
+    """Return 3–5 first-response task suggestions for an incoming alarm."""
+    variable = _get_active_variable("suggest", org_id) or _SUGGEST_VARIABLE_DEFAULT
     system = _assemble_prompt(_SUGGEST_FIXED_PREFIX, _SUGGEST_FIXED_SUFFIX, variable)
     user_msg = f"Alarmmeldung: {meldung}\nEinsatzart: {einsatzart}"
     try:
-        raw = await complete(system, user_msg, fast=True, max_tokens=600)
+        raw = await complete(system, user_msg, fast=True, max_tokens=600, org_id=org_id)
     except AIServiceError:
         return []
 
-    # Extract the outermost JSON array (first [ to last ]) from the response.
-    # Avoid non-greedy \[.*?\] which stops at the first ] and may match "[3]" in
-    # preamble text like "Here are [3] suggestions:" instead of the actual array.
     _start = raw.find('[')
     _end = raw.rfind(']')
     if _start == -1 or _end == -1 or _end <= _start:
         logger.warning("suggest_tasks: no JSON array found in AI response (len=%d)", len(raw))
         return []
-
     try:
         items = _json.loads(raw[_start:_end + 1])
     except (ValueError, TypeError):
         logger.warning("suggest_tasks: failed to parse AI response as JSON")
         return []
-
     if not isinstance(items, list):
         return []
-
     result: list[dict] = []
     for item in items:
         if not isinstance(item, dict):
@@ -302,25 +382,26 @@ async def suggest_tasks(meldung: str, einsatzart: str) -> list[dict]:
     return result
 
 
-async def generate_report_draft(incident_data: dict) -> str:
+async def generate_report_draft(
+    incident_data: dict, org_id: int | None = None,
+) -> str:
     """Generate a German prose incident report draft from structured incident data."""
-    variable = _get_active_variable("report") or _REPORT_VARIABLE_DEFAULT
+    variable = _get_active_variable("report", org_id) or _REPORT_VARIABLE_DEFAULT
     system = _assemble_prompt(_REPORT_FIXED_PREFIX, _REPORT_FIXED_SUFFIX, variable)
     safe_data = _strip_persons(incident_data)
     user_msg = f"Einsatzdaten (JSON):\n{_json.dumps(safe_data, ensure_ascii=False, indent=2)}"
-    return await complete(system, user_msg)
+    return await complete(system, user_msg, org_id=org_id)
 
 
-async def generate_lage_hints(meldung: str, alarm_type: str, address: str) -> list[str]:
-    """Return 3–6 tactical hint strings for the incident ticker.
-
-    Returns an empty list on any failure (never raises).
-    """
-    variable = _get_active_variable("hints") or _HINTS_VARIABLE_DEFAULT
+async def generate_lage_hints(
+    meldung: str, alarm_type: str, address: str, org_id: int | None = None,
+) -> list[str]:
+    """Return 3–6 tactical hint strings for the incident ticker."""
+    variable = _get_active_variable("hints", org_id) or _HINTS_VARIABLE_DEFAULT
     system = _assemble_prompt(_HINTS_FIXED_PREFIX, _HINTS_FIXED_SUFFIX, variable)
     user_msg = f"Alarmstichwort: {alarm_type}\nMeldung: {meldung}\nAdresse: {address}"
     try:
-        raw = await complete(system, user_msg, fast=True, max_tokens=400)
+        raw = await complete(system, user_msg, fast=True, max_tokens=400, org_id=org_id)
     except AIServiceError:
         return []
 
@@ -339,16 +420,18 @@ async def generate_lage_hints(meldung: str, alarm_type: str, address: str) -> li
     return [str(h).strip()[:120] for h in items if isinstance(h, str) and str(h).strip()]
 
 
-async def generate_situation_brief(context: dict) -> str:
+async def generate_situation_brief(
+    context: dict, org_id: int | None = None,
+) -> str:
     """Generate a 3–5 sentence live situation summary from incident context."""
-    variable = _get_active_variable("situation") or _SITUATION_VARIABLE_DEFAULT
+    variable = _get_active_variable("situation", org_id) or _SITUATION_VARIABLE_DEFAULT
     system = _assemble_prompt(_SITUATION_FIXED_PREFIX, _SITUATION_FIXED_SUFFIX, variable)
     safe_context = _strip_persons(context)
     user_msg = (
         f"Live-Einsatzdaten (JSON):\n"
         f"{_json.dumps(safe_context, ensure_ascii=False, indent=2)}"
     )
-    return await complete(system, user_msg, fast=True, max_tokens=600)
+    return await complete(system, user_msg, fast=True, max_tokens=600, org_id=org_id)
 
 
 _ERKUNDUNG_SYSTEM = """Du bist ein Einsatzassistent für die österreichische Feuerwehr.
@@ -366,11 +449,10 @@ mit einem JSON-Objekt (kein Markdown, kein Text davor oder danach) mit diesen Fe
 Keine Personendaten. Datensparsamkeit beachten."""
 
 
-async def analyze_site_reconnaissance(erkundungstext: str, site_info: dict) -> dict:
-    """Analyze a site reconnaissance report; returns structured assessment dict.
-
-    Returns an empty dict on failure (never raises).
-    """
+async def analyze_site_reconnaissance(
+    erkundungstext: str, site_info: dict, org_id: int | None = None,
+) -> dict:
+    """Analyze a site reconnaissance report; returns structured assessment dict."""
     user_msg = (
         f"Einsatzstelle: {site_info.get('bezeichnung', '')} | "
         f"Ort: {site_info.get('ort', '')} | "
@@ -378,7 +460,7 @@ async def analyze_site_reconnaissance(erkundungstext: str, site_info: dict) -> d
         f"Erkundungsbericht:\n{erkundungstext}"
     )
     try:
-        raw = await complete(_ERKUNDUNG_SYSTEM, user_msg, fast=True, max_tokens=500)
+        raw = await complete(_ERKUNDUNG_SYSTEM, user_msg, fast=True, max_tokens=500, org_id=org_id)
     except AIServiceError:
         return {}
 
@@ -411,8 +493,10 @@ Keine Personendaten, keine Spekulationen. Verfasse den Text auf Deutsch.
 Beginne direkt mit dem Text ohne Überschrift oder Anrede."""
 
 
-async def generate_site_bezeichnung(meldung: str, einsatzgrund: str | None = None) -> str | None:
-    """Generate a short site designation from alarm text. Returns None on any failure (never raises)."""
+async def generate_site_bezeichnung(
+    meldung: str, einsatzgrund: str | None = None, org_id: int | None = None,
+) -> str | None:
+    """Generate a short site designation from alarm text. Returns None on failure."""
     text = (meldung or "").strip()
     if not text:
         text = (einsatzgrund or "").strip()
@@ -422,24 +506,23 @@ async def generate_site_bezeichnung(meldung: str, einsatzgrund: str | None = Non
     if einsatzgrund and einsatzgrund.strip() and einsatzgrund.strip() != meldung.strip():
         user_msg += f"\nEinsatzgrund: {einsatzgrund[:200]}"
     try:
-        result = await complete(_BEZEICHNUNG_SYSTEM, user_msg, fast=True, max_tokens=80)
+        result = await complete(_BEZEICHNUNG_SYSTEM, user_msg, fast=True, max_tokens=80, org_id=org_id)
         bezeichnung = result.strip()[:60]
         return bezeichnung if bezeichnung else None
     except AIServiceError:
         return None
 
 
-async def generate_pressemeldung(context: dict) -> str:
-    """Generate a press release text from major incident context.
-
-    Returns an empty string on failure (never raises).
-    """
+async def generate_pressemeldung(
+    context: dict, org_id: int | None = None,
+) -> str:
+    """Generate a press release text from major incident context."""
     safe_context = _strip_persons(context)
     user_msg = (
         f"Lage-Daten (JSON):\n"
         f"{_json.dumps(safe_context, ensure_ascii=False, indent=2)}"
     )
     try:
-        return await complete(_PRESSE_SYSTEM, user_msg, fast=False, max_tokens=800)
+        return await complete(_PRESSE_SYSTEM, user_msg, fast=False, max_tokens=800, org_id=org_id)
     except AIServiceError:
         return ""

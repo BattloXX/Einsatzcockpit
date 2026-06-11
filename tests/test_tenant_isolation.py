@@ -1,4 +1,4 @@
-"""Tenant-Isolation-Tests (PR 1 + PR 2 + PR 3 Grundlage).
+"""Tenant-Isolation-Tests (PR 1 + PR 2 + PR 3 + PR 5 Grundlage).
 
 Akzeptanz-Kriterium PR 1: ungefiltertes select(Member) liefert nur Org-A-Daten,
 wenn Org A im Session-Kontext gesetzt ist – obwohl beide Orgs in der DB liegen.
@@ -25,6 +25,7 @@ def _bigint_sqlite(element, compiler, **kw):
 from app.core.tenant import set_tenant_context
 from app.db import Base
 from app.models.master import (
+    AIPromptVersion,
     AlarmType,
     DefaultMessage,
     FireDept,
@@ -337,3 +338,105 @@ def test_stammdaten_no_context_sees_all(stammdaten_db):
     assert db.query(MessageSuggestion).count() == 2
     assert db.query(LageHint).count() == 2
     assert db.query(DefaultMessage).count() == 2
+
+
+# ---------------------------------------------------------------------------
+# PR 5: AIPromptVersion-Isolation
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def ai_prompt_db():
+    """Eigene In-Memory-DB für AIPromptVersion-Isolationstests."""
+    engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+
+    org_a = FireDept(slug="ai-org-a", name="AI Org A", color="#ff0000", bos="Feuerwehr")
+    org_b = FireDept(slug="ai-org-b", name="AI Org B", color="#0000ff", bos="Feuerwehr")
+    db.add_all([org_a, org_b])
+    db.flush()
+
+    # Beide Orgs haben den gleichen prompt_key "suggest" – mit verschiedenem Inhalt
+    db.add_all([
+        AIPromptVersion(
+            org_id=org_a.id, prompt_key="suggest", version=1,
+            variable_part="Org A Prompt", created_by_user_id=None,
+        ),
+        AIPromptVersion(
+            org_id=org_a.id, prompt_key="report", version=1,
+            variable_part="Org A Report", created_by_user_id=None,
+        ),
+        AIPromptVersion(
+            org_id=org_b.id, prompt_key="suggest", version=1,
+            variable_part="Org B Prompt", created_by_user_id=None,
+        ),
+    ])
+    db.commit()
+
+    yield db, org_a.id, org_b.id
+
+    db.close()
+    Base.metadata.drop_all(bind=engine)
+
+
+def test_ai_prompt_isolation_org_a(ai_prompt_db):
+    """Mit Org-A-Kontext: nur Org-A-AIPromptVersions sichtbar."""
+    db, org_a_id, org_b_id = ai_prompt_db
+    set_tenant_context(db, org_a_id)
+    db.expire_all()
+
+    versions = db.query(AIPromptVersion).all()
+
+    assert len(versions) == 2
+    assert all(v.org_id == org_a_id for v in versions)
+    keys = {v.prompt_key for v in versions}
+    assert keys == {"suggest", "report"}
+
+
+def test_ai_prompt_isolation_org_b(ai_prompt_db):
+    """Mit Org-B-Kontext: nur Org-B-AIPromptVersions sichtbar."""
+    db, org_a_id, org_b_id = ai_prompt_db
+    set_tenant_context(db, org_b_id)
+    db.expire_all()
+
+    versions = db.query(AIPromptVersion).all()
+
+    assert len(versions) == 1
+    assert versions[0].org_id == org_b_id
+    assert versions[0].prompt_key == "suggest"
+    assert versions[0].variable_part == "Org B Prompt"
+
+
+def test_ai_prompt_same_key_different_orgs(ai_prompt_db):
+    """Akzeptanz PR 5: Zwei Orgs können gleichen prompt_key 'suggest' mit unterschiedlichem Inhalt führen."""
+    db, org_a_id, org_b_id = ai_prompt_db
+    set_tenant_context(db, None)
+
+    all_suggest = db.query(AIPromptVersion).filter(AIPromptVersion.prompt_key == "suggest").all()
+
+    assert len(all_suggest) == 2
+    parts = {v.variable_part for v in all_suggest}
+    assert "Org A Prompt" in parts
+    assert "Org B Prompt" in parts
+
+
+def test_ai_prompt_no_cross_tenant_leak(ai_prompt_db):
+    """Org A darf Org-B-Prompts nicht sehen."""
+    db, org_a_id, org_b_id = ai_prompt_db
+    set_tenant_context(db, org_a_id)
+    db.expire_all()
+
+    result = db.query(AIPromptVersion).filter(
+        AIPromptVersion.variable_part == "Org B Prompt"
+    ).first()
+
+    assert result is None, "Org-A darf keinen Org-B-Prompt sehen!"
+
+
+def test_ai_prompt_no_context_sees_all(ai_prompt_db):
+    """Ohne Tenant-Kontext: alle Prompt-Versionen aller Orgs sichtbar."""
+    db, org_a_id, org_b_id = ai_prompt_db
+    set_tenant_context(db, None)
+
+    assert db.query(AIPromptVersion).count() == 3

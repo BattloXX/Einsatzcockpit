@@ -78,12 +78,14 @@ router = APIRouter()
 _log = logging.getLogger(__name__)
 
 
-async def _trigger_ai_task_suggestions(incident_id: int, meldung: str, einsatzart: str) -> None:
+async def _trigger_ai_task_suggestions(
+    incident_id: int, meldung: str, einsatzart: str, org_id: int | None = None,
+) -> None:
     """Background: KI-Auftragsvorschläge generieren und an Board broadcasten."""
     from app.db import SessionLocal
     from app.services.ai_service import suggest_tasks
 
-    suggestions = await suggest_tasks(meldung, einsatzart)
+    suggestions = await suggest_tasks(meldung, einsatzart, org_id=org_id)
     if not suggestions:
         return
     db = SessionLocal()
@@ -271,6 +273,7 @@ async def new_incident(
             incident.id,
             report_text or "",
             alarm_type_code,
+            incident.primary_org_id,
         )
     elif not is_exercise:
         _log.debug("KI-Auftragsvorschläge übersprungen: KI nicht aktiviert (Einsatz %d)", incident.id)
@@ -339,6 +342,7 @@ async def request_ai_task_suggestions(
         incident.id,
         incident.report_text or "",
         incident.alarm_type_code,
+        incident.primary_org_id,
     )
     return Response(status_code=202)
 
@@ -453,6 +457,7 @@ async def alarm_regenerate_ki(
         incident.id,
         incident.report_text or "",
         incident.alarm_type_code,
+        incident.primary_org_id,
     )
     return templates.TemplateResponse(request, "incident/_alarm_ki_triggered.html", {
         "incident": incident,
@@ -1843,13 +1848,13 @@ async def generate_lagebild(
     if not ai_is_enabled():
         raise HTTPException(503, "KI-Dienst ist nicht aktiviert.")
 
-    _incident_or_404(incident_id, db)
+    incident = _incident_or_404(incident_id, db)
     context = collect_situation_context(incident_id, db)
     user_id = getattr(getattr(request.state, "user", None), "id", None)
     write_audit(db, "ai.lagebild.generated", incident_id=incident_id, user_id=user_id)
     db.commit()
     try:
-        text = await generate_situation_brief(context)
+        text = await generate_situation_brief(context, org_id=incident.primary_org_id)
     except AIServiceError as exc:
         raise HTTPException(503, str(exc)) from exc
     return JSONResponse({"text": text})
@@ -1913,6 +1918,7 @@ async def regenerate_lage_hints(
             incident.report_text or "",
             incident.alarm_type_code or "",
             address,
+            org_id=incident.primary_org_id,
         )
     except AIServiceError as exc:
         raise HTTPException(503, str(exc)) from exc

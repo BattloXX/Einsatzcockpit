@@ -143,7 +143,7 @@ async def generate_ai_report(incident_id: int, request: Request, db: Session = D
 
     try:
         context = collect_report_context(incident_id, db)
-        draft = await generate_report_draft(context)
+        draft = await generate_report_draft(context, org_id=incident.primary_org_id)
     except AIServiceError as exc:
         return HTMLResponse(f'<p style="color:var(--red)">KI-Fehler: {exc}</p>')
 

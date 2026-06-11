@@ -168,13 +168,14 @@ async def _enrich_with_ai_suggestions(
     incident_id: int,
     meldung: str,
     einsatzart: str,
+    org_id: int | None = None,
 ) -> None:
     """Background: generate AI task suggestions and persist them on the incident."""
     from app.db import SessionLocal
     from app.models.incident import Incident, Task
     from app.services.ai_service import suggest_tasks
 
-    suggestions = await suggest_tasks(meldung, einsatzart)
+    suggestions = await suggest_tasks(meldung, einsatzart, org_id=org_id)
     if not suggestions:
         return
 
@@ -217,6 +218,7 @@ async def _enrich_with_ai_hints(
     meldung: str,
     alarm_type: str,
     address: str,
+    org_id: int | None = None,
 ) -> None:
     """Background: generate AI Lage-Hinweise and persist them on the incident."""
     import json as _json
@@ -224,7 +226,7 @@ async def _enrich_with_ai_hints(
     from app.models.incident import Incident
     from app.services.ai_service import generate_lage_hints
 
-    hints = await generate_lage_hints(meldung, alarm_type, address)
+    hints = await generate_lage_hints(meldung, alarm_type, address, org_id=org_id)
     if not hints:
         return
 
@@ -472,6 +474,7 @@ async def create_incident_api(
             incident.id,
             payload.Meldung or "",
             payload.Art or payload.Stufe or "",
+            api_key.org_id,
         )
         background_tasks.add_task(
             _enrich_with_ai_hints,
@@ -479,6 +482,7 @@ async def create_incident_api(
             payload.Meldung or "",
             alarm_type_code,
             address,
+            api_key.org_id,
         )
 
     # Site-Anreicherung: KI-Bezeichnung, Priorität, Anrufer-Notiz (immer, unabhängig von AI)
@@ -490,6 +494,7 @@ async def create_incident_api(
             payload.Einsatzgrund,
             payload.Name,
             payload.Telefon,
+            api_key.org_id,
         )
 
     return {
@@ -545,7 +550,7 @@ class LageSiteCreatedResponse(BaseModel):
 async def _site_post_create_tasks(site_id: int) -> None:
     """Background task: geocode address and apply AI priority on a newly created site."""
     from app.db import SessionLocal
-    from app.models.major_incident import IncidentSite, SitePriority
+    from app.models.major_incident import IncidentSite, MajorIncident, SitePriority
     from app.services.geocoding import geocode_address
     from app.services.ai_service import analyze_site_reconnaissance, is_enabled
     db = SessionLocal()
@@ -553,6 +558,8 @@ async def _site_post_create_tasks(site_id: int) -> None:
         site = db.get(IncidentSite, site_id)
         if not site:
             return
+        lage = db.get(MajorIncident, site.major_incident_id)
+        org_id = lage.org_id if lage else None
         changed = False
         if not (site.lat and site.lng) and (site.strasse or site.ort):
             try:
@@ -567,6 +574,7 @@ async def _site_post_create_tasks(site_id: int) -> None:
                 result = await analyze_site_reconnaissance(
                     site.einsatzgrund,
                     {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
+                    org_id=org_id,
                 )
                 if result and result.get("prio_vorschlag"):
                     site.priority = SitePriority(result["prio_vorschlag"])
@@ -589,6 +597,7 @@ async def _enrich_site_from_alarm(
     einsatzgrund: str | None = None,
     name: str | None = None,
     telefon: str | None = None,
+    org_id: int | None = None,
 ) -> None:
     """Background: geocode, AI priority, name/telefon notes."""
     from app.db import SessionLocal
@@ -624,6 +633,7 @@ async def _enrich_site_from_alarm(
                 result = await analyze_site_reconnaissance(
                     prio_text,
                     {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
+                    org_id=org_id,
                 )
                 if result and result.get("prio_vorschlag"):
                     site.priority = SitePriority(result["prio_vorschlag"])
@@ -746,6 +756,7 @@ async def lage_alarm(
         payload.Art,
         payload.Name,
         payload.Telefon,
+        api_key.org_id,
     )
     return LageSiteCreatedResponse(lage_id=lage.id, site_id=site.id, created=True)
 

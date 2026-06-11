@@ -13,7 +13,7 @@ from app.core.timezones import common_timezones
 from app.db import get_db
 from app.models.master import BOS_VALUES, FireDept, OrgSettings, SeedTemplate, SystemSettings
 from app.models.user import User
-from app.services.seed_service import apply_seed_profile, list_profiles
+from app.services.seed_service import apply_seed_profile, copy_default_prompts, list_profiles
 from app.services.update_service import apply_update, get_current_version
 
 router = APIRouter(prefix="/admin")
@@ -268,6 +268,9 @@ async def create_organisation(
     # Seed-Profil kopieren
     if seed_profile:
         apply_seed_profile(db, org.id, seed_profile)
+
+    # Standard-KI-Prompts anlegen
+    copy_default_prompts(db, org.id)
 
     db.commit()
 

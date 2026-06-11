@@ -27,6 +27,7 @@ from app.models.incident import (
 )
 from app.models.lagekarte import LagekarteToken
 from app.models.master import (
+    AIPromptVersion,
     AlarmType,
     DefaultMessage,
     DefaultMessageAlarm,
@@ -50,7 +51,7 @@ __all__ = [
     "User", "Role", "UserRole", "ApiKey", "AuditLog", "PushSubscription",
     "DeviceToken", "FcmToken", "PushLog", "SmsGatewayToken",
     "FireDept", "VehicleMaster", "Member", "Qualification", "MemberQualification",
-    "AlarmType", "SeedTemplate",
+    "AlarmType", "SeedTemplate", "AIPromptVersion",
     "TaskSuggestion", "TaskSuggestionAlarm",
     "MessageSuggestion", "MessageSuggestionAlarm",
     "LageHint", "LageHintAlarm", "DefaultMessage", "DefaultMessageAlarm",

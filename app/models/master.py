@@ -254,7 +254,7 @@ class DefaultMessageAlarm(Base):
 
 
 class OrgSettings(Base):
-    """Organisations-spezifische Einstellungen (Logo, Farbe, etc.)."""
+    """Organisations-spezifische Einstellungen (Logo, Farbe, KI-Modus, Quota etc.)."""
     __tablename__ = "org_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -266,6 +266,14 @@ class OrgSettings(Base):
     footer_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mi_auto_adopt: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    # KI-Konfiguration je Org
+    # 'central' = Plattform-Key aus Server-Env; 'byok' = org-eigener Anthropic-Key
+    ai_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="central")
+    ai_api_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # Fernet-verschlüsselt
+    ai_monthly_token_quota: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    ai_tokens_used_month: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    ai_tokens_month_key: Mapped[str | None] = mapped_column(String(7), nullable=True)  # YYYY-MM
 
     org: Mapped[FireDept] = relationship(back_populates="settings")
 
@@ -280,10 +288,10 @@ class SystemSettings(Base):
     updated_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
 
 
-class AIPromptVersion(Base):
+class AIPromptVersion(TenantScoped, Base):
     """Versionsverlauf der bearbeitbaren KI-Prompt-Teile (max. 10 je Prompt-Typ)."""
     __tablename__ = "ai_prompt_versions"
-    __table_args__ = (UniqueConstraint("prompt_key", "version", name="uq_ai_prompt_version"),)
+    __table_args__ = (UniqueConstraint("org_id", "prompt_key", "version", name="uq_ai_prompt_org_version"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     prompt_key: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
