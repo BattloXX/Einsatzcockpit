@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.audit import write_audit
+from app.core.rate_limit import limiter as _limiter
 from app.core.security import hash_api_key, sign_session, unsign_qr_token, verify_password
 from app.core.templating import templates
 from app.db import get_db
@@ -34,6 +35,7 @@ async def login_page(request: Request):
 
 
 @router.post("/login")
+@(_limiter.limit(settings.LOGIN_RATELIMIT) if _limiter else lambda f: f)
 async def login(
     request: Request,
     response: Response,

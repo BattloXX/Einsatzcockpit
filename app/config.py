@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     AI_MAX_TOKENS: int = 1500
     AI_TIMEOUT: int = 20
 
+    # Rate-Limits
+    LOGIN_RATELIMIT: str = "10/minute"          # POST /login – IP-basiert
+    API_ALARM_RATELIMIT: str = "60/minute"      # POST /api/v1/einsatz – Key-basiert
+    UPLOAD_RATELIMIT: str = "20/minute"         # Medien-Uploads – IP-basiert
+
     # Lagekarte.info GeoJSON-Endpoint
     LAGEKARTE_CORS_ORIGINS: str = "https://www.lagekarte.info,https://lagekarte.info"
     LAGEKARTE_GEOJSON_RATELIMIT: str = "60/minute"
