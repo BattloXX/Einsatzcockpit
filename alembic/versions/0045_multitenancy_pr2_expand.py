@@ -14,14 +14,36 @@ depends_on = None
 
 
 def _drop_fks_on_column(conn, table, column):
-    """Drop alle FK-Constraints, die auf 'column' in 'table' zeigen."""
+    """Drop alle FK-Constraints auf 'column' in 'table'."""
     r = conn.execute(text(
         "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
         " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c"
         " AND REFERENCED_TABLE_NAME IS NOT NULL"
     ), {"t": table, "c": column})
-    for row in r:
-        conn.execute(text(f"ALTER TABLE `{table}` DROP FOREIGN KEY `{row[0]}`"))
+    for row in r.fetchall():
+        try:
+            conn.execute(text(f"ALTER TABLE `{table}` DROP FOREIGN KEY `{row[0]}`"))
+        except Exception:
+            pass
+
+
+def _drop_all_fks_referencing(conn, referenced_table):
+    """Drop alle FKs aus beliebigen Tabellen, die auf referenced_table zeigen.
+
+    Robustere Alternative zu _drop_fks_on_column: findet FKs unabhängig
+    vom Spaltennamen. Nötig vor DROP PRIMARY KEY auf referenced_table.
+    """
+    r = conn.execute(text("""
+        SELECT TABLE_NAME, CONSTRAINT_NAME
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND REFERENCED_TABLE_NAME = :t
+    """), {"t": referenced_table})
+    for row in r.fetchall():
+        try:
+            conn.execute(text(f"ALTER TABLE `{row[0]}` DROP FOREIGN KEY `{row[1]}`"))
+        except Exception:
+            pass
 
 
 def _column_exists(conn, table, column):
@@ -35,7 +57,12 @@ def _column_exists(conn, table, column):
 def upgrade():
     conn = op.get_bind()
 
-    # 1. FK-Constraints von den 5 Junction-Tabellen auf alarm_type.code entfernen
+    # 1. ALLE FK-Constraints, die irgendwo auf alarm_type zeigen, entfernen.
+    #    Nötig vor DROP PRIMARY KEY – MariaDB prüft Referenzen beim Rename.
+    #    Verwendet REFERENCED_TABLE_NAME-Suche statt Tabellen-spezifischer Suche,
+    #    damit auch unerwartete Referenzen (z.B. lage_hint_alarm) erfasst werden.
+    _drop_all_fks_referencing(conn, "alarm_type")
+    # Zusätzlich: spaltenbasiert für alle bekannten Junction-Tabellen (Fallback)
     for table in [
         "task_suggestion_alarm",
         "message_suggestion_alarm",
