@@ -1,0 +1,85 @@
+{% extends "admin/_layout.html" %}
+{% block title %}System-Konsole – Organisationen{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>System-Konsole: Organisationen</h1>
+    <p class="page-header__sub">KPI-Übersicht über alle registrierten Organisationen</p>
+  </div>
+  <a href="/admin/organisations" class="btn btn--secondary">+ Neue Org anlegen</a>
+</div>
+
+<div class="table-responsive">
+  <table class="table-admin">
+    <thead>
+      <tr>
+        <th></th>
+        <th>Organisation</th>
+        <th>Status</th>
+        <th style="text-align:right">Aktive Einsätze</th>
+        <th style="text-align:right">Einsätze gesamt</th>
+        <th>Letzter Einsatz</th>
+        <th style="text-align:right">Benutzer</th>
+        <th style="text-align:right">Mitglieder</th>
+        <th style="text-align:right">API-Keys</th>
+        <th>Aktionen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      {% set org = row.org %}
+      <tr {% if org.deleted_at %}style="opacity:.55"{% endif %}>
+        <td>
+          <span style="display:inline-block;width:14px;height:14px;border-radius:50%;
+                        background:{{ org.color }};vertical-align:middle"></span>
+        </td>
+        <td>
+          <strong>{{ org.name }}</strong>
+          {% if org.short_code %}<code style="font-size:.75rem;opacity:.7">&nbsp;{{ org.short_code }}</code>{% endif %}
+          {% if org.is_home_org %}<span class="badge" style="font-size:.65rem;background:var(--red);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px">Home</span>{% endif %}
+          <br><small class="text-muted">{{ org.slug }}</small>
+        </td>
+        <td>
+          {% if org.deleted_at %}
+            <span class="badge" style="background:#dc2626;color:#fff;padding:2px 7px;border-radius:3px;font-size:.75rem">Gelöscht</span>
+          {% elif not org.is_active %}
+            <span class="badge" style="background:#d97706;color:#fff;padding:2px 7px;border-radius:3px;font-size:.75rem">Inaktiv</span>
+          {% else %}
+            <span class="badge" style="background:#16a34a;color:#fff;padding:2px 7px;border-radius:3px;font-size:.75rem">Aktiv</span>
+          {% endif %}
+        </td>
+        <td style="text-align:right;font-weight:600;color:{% if row.active_incidents > 0 %}var(--red-light,#f87171){% else %}var(--text-muted){% endif %}">
+          {{ row.active_incidents }}
+        </td>
+        <td style="text-align:right">{{ row.total_incidents }}</td>
+        <td>
+          {% if row.last_incident_at %}
+            {{ row.last_incident_at.strftime('%d.%m.%Y %H:%M') }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        <td style="text-align:right">{{ row.users }}</td>
+        <td style="text-align:right">{{ row.members }}</td>
+        <td style="text-align:right">{{ row.api_keys }}</td>
+        <td style="white-space:nowrap">
+          <a href="/admin/settings?org_id={{ org.id }}" class="btn btn--secondary btn--sm"
+             title="Org-Einstellungen">Einstellungen</a>
+          <a href="/admin/benutzer?org_id={{ org.id }}" class="btn btn--secondary btn--sm"
+             title="Benutzer dieser Org">Benutzer</a>
+          <a href="/admin/konfig?org_id={{ org.id }}" class="btn btn--secondary btn--sm"
+             title="Konfig-Export/Import">Konfig</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="text-muted" style="text-align:center;padding:24px">Keine Organisationen vorhanden.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p style="margin-top:16px;font-size:.82rem;color:var(--text-muted)">
+  Einsatz-Zähler basieren auf <code>primary_org_id</code>; kollaborierende Einsätze werden nicht mitgezählt.
+</p>
+{% endblock %}
