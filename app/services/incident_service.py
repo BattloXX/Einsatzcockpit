@@ -556,6 +556,18 @@ def add_section_column(
     return col
 
 
+def reorder_columns(db: Session, incident_id: int, column_ids: list[int]) -> None:
+    for order, col_id in enumerate(column_ids):
+        col = (
+            db.query(IncidentColumn)
+            .filter_by(id=col_id, incident_id=incident_id)
+            .first()
+        )
+        if col:
+            col.display_order = order
+    db.flush()
+
+
 def set_commander(
     db: Session,
     vehicle: IncidentVehicle,

@@ -918,6 +918,26 @@ function lageTicker(hints, aiFlags) {
   };
 }
 
+// ── Board WebSocket (real-time column reorder from other clients) ─────────────
+(function () {
+  const _incId = {{ incident.id }};
+  const _proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  let _bws;
+  function _connectBoardWs() {
+    _bws = new WebSocket(_proto + '//' + location.host + '/ws/incident/' + _incId);
+    _bws.onmessage = function (e) {
+      if (e.data === 'pong') return;
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'columns_reordered') location.reload();
+      } catch (_) {}
+    };
+    _bws.onclose = function () { setTimeout(_connectBoardWs, 3000); };
+    setInterval(function () { if (_bws && _bws.readyState === 1) _bws.send('ping'); }, 30000);
+  }
+  _connectBoardWs();
+})();
+
 // ── Mobile Lane Select ───────────────────────────────────────────────────────
 (function () {
   const LANE_KEY = 'board_active_lane';

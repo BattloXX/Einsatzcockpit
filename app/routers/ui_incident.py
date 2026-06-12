@@ -68,6 +68,7 @@ from app.services.incident_service import (
     move_card,
     move_vehicle_to_column,
     reopen_incident,
+    reorder_columns,
     set_commander,
     set_message_status,
     set_task_status,
@@ -1123,6 +1124,25 @@ async def create_section(
     add_section_column(db, incident, title, user_id=request.state.user.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "column_created", "reload_board": True})
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/spalten/reihenfolge")
+async def reorder_columns_endpoint(
+    incident_id: int, request: Request,
+    column_order: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    import json as _json
+    try:
+        ids = _json.loads(column_order)
+        if isinstance(ids, list):
+            reorder_columns(db, incident_id, [int(i) for i in ids])
+            db.commit()
+    except Exception:
+        pass
+    await manager.broadcast(incident_id, {"type": "columns_reordered", "reload_board": True})
     return Response(status_code=204)
 
 
