@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.incident import Incident, Message
+from app.models.incident import Incident, Message, Task
 from app.services.broadcast import manager
 
 logger = logging.getLogger("einsatzleiter.task_reminder")
@@ -47,6 +47,35 @@ def _check_due_messages_sync(db) -> list[dict]:
                 "title": msg.title,
                 "leader_user_id": incident.incident_leader_user_id,
             })
+    # Check tasks with due_at
+    task_candidates = (
+        db.query(Task)
+        .filter(
+            Task.due_at.isnot(None),
+            Task.popup_shown == False,  # noqa: E712
+            Task.is_done == False,  # noqa: E712
+            Task.is_cancelled == False,  # noqa: E712
+        )
+        .all()
+    )
+    for task in task_candidates:
+        due_at = task.due_at
+        if due_at is None:
+            continue
+        due_naive = due_at.replace(tzinfo=None) if due_at.tzinfo else due_at
+        if due_naive > now_naive:
+            continue
+        task.popup_shown = True
+        incident = db.get(Incident, task.incident_id)
+        if incident and incident.status == "active":
+            due.append({
+                "incident_id": task.incident_id,
+                "message_id": task.id,
+                "title": f"Auftrag: {task.title}",
+                "leader_user_id": incident.incident_leader_user_id,
+                "kind": "task",
+            })
+
     if due:
         db.commit()
     return due

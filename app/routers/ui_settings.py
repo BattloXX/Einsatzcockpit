@@ -105,6 +105,7 @@ async def save_org_settings(
     autoclose_enabled_raw: str = Form(""),
     autoclose_after_hours_raw: str = Form(""),
     autoclose_grace_minutes_raw: str = Form(""),
+    default_access_pin: str = Form(""),
 ):
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = target_org_id if is_sysadmin and target_org_id else user.org_id
@@ -210,6 +211,14 @@ async def save_org_settings(
         )
     except ValueError:
         pass
+
+    # Standard-PIN für neue Einsätze: neuer Wert → hashen; "__clear__" → entfernen; leer → unverändert
+    pin_val = default_access_pin.strip()
+    if pin_val == "__clear__":
+        org_s.default_access_pin_hash = None
+    elif pin_val:
+        from app.core.security import hash_pin
+        org_s.default_access_pin_hash = hash_pin(pin_val[:16])
 
     db.commit()
     suffix = "&logo_error=" + upload_error.replace(" ", "%20") if upload_error else ""

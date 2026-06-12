@@ -42,6 +42,20 @@
       <textarea name="detail" class="form-input form-input--textarea" rows="4"
                 placeholder="Ergänzende Beschreibung, Lagehinweis, Auftragstext ...">{{ task.detail or '' }}</textarea>
     </div>
+    <div class="form-group">
+      <label class="form-label">ERINNERUNG IN MINUTEN (0 = keine)</label>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="number" name="due_after_min" class="form-input" min="0" max="1440" style="max-width:100px;"
+               value="0"
+               placeholder="Min.">
+        {% if task.due_at %}
+        <span style="font-size:.78rem; color:var(--text-muted);">
+          Aktiv: fällig um {{ task.due_at|local_time }}
+          {% if not task.popup_shown %}<span style="color:#fbbf24;">⏰</span>{% endif %}
+        </span>
+        {% endif %}
+      </div>
+    </div>
     <p class="form-hint">
       Überschrift erscheint auf der Karte, die Ergänzung darunter als Zusatzinfo.
     </p>

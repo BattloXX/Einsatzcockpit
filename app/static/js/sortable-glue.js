@@ -245,12 +245,15 @@
       animation:      150,
       handle:         '.kanban-col__header',
       draggable:      '.kanban-col[data-col-id]',
+      filter:         'button, a, select, input, .kanban-col__add-btn',
+      preventOnFilter: true,
       ghostClass:     'kanban-col--ghost',
       chosenClass:    'kanban-col--chosen',
-      delay:          200,
-      delayOnTouchOnly: true,
+      delay:          150,
+      delayOnTouchOnly: false,
       touchStartThreshold: 8,
       fallbackTolerance: 5,
+      fallbackOnBody: true,
       onEnd: function () {
         const cols = Array.from(kanban.querySelectorAll('.kanban-col[data-col-id]'));
         const ids = cols.map(function (c) { return parseInt(c.dataset.colId, 10); });

@@ -207,6 +207,13 @@ function incidentBoard(incidentId, alarm, startedAt) {
           if (ev.type === 'troop_meldung' || ev.type === 'troop_standort') {
             if (document.getElementById('troopsGrid')) location.reload();
           }
+          if (ev.type === 'message_due' || ev.type === 'task_due') {
+            const state = window.Alpine && Alpine.$data(document.body);
+            if (state && state.addToast) {
+              state.addToast((ev.type === 'task_due' ? 'Auftrag fällig: ' : 'Meldung fällig: ') + ev.title, 'warn');
+            }
+            try { new Audio('/static/audio/alarm.mp3').play().catch(() => {}); } catch (_) {}
+          }
           if (ev.type === 'incident_closed') {
             window.location.href = `/archiv/${id}`;
           }

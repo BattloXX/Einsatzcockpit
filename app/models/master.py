@@ -281,6 +281,7 @@ class OrgSettings(Base):
     autoclose_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     autoclose_after_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     autoclose_grace_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    default_access_pin_hash: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     org: Mapped[FireDept] = relationship(back_populates="settings")
 

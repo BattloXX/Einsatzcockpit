@@ -1,6 +1,7 @@
 {# Lane column header with title, count badge, and contextual + button.
    Variables expected: col, col_count, can_edit, incident, col_tasks, col_messages #}
 <div class="kanban-col__header">
+  <span style="color:var(--text-muted);opacity:.4;font-size:.9rem;margin-right:4px;flex-shrink:0;cursor:grab;" title="Spalte verschieben">⣿</span>
   <div style="flex:1; min-width:0;">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
       <span class="kanban-col__title">{{ col.title }}</span>

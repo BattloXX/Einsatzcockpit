@@ -138,8 +138,9 @@
         <div style="display:flex; align-items:flex-end; gap:5px; padding-bottom:2px;">
           <button type="button"
                   @click="lageRel = !lageRel"
-                  :class="lageRel ? 'btn--secondary' : 'btn--ghost'"
                   class="btn btn--sm"
+                  :style="lageRel ? 'background:rgba(245,158,11,.25);color:#fbbf24;border-color:rgba(245,158,11,.5);font-weight:700;' : ''"
+                  :class="lageRel ? '' : 'btn--ghost'"
                   style="white-space:nowrap;">
             ⭐ Lagerelevant
           </button>

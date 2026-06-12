@@ -154,6 +154,25 @@
       </div>
       <div id="settingsMapPicker" style="height:240px;border-radius:6px;border:1px solid var(--border);margin-bottom:1rem"></div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Board-Zugang</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Standard-PIN für neue Einsätze</label>
+          <input type="text" name="default_access_pin" class="form-control"
+                 style="max-width:180px" maxlength="16" autocomplete="off"
+                 placeholder="{% if org_settings and org_settings.default_access_pin_hash %}● ● ● ●  (gesetzt){% else %}kein PIN{% endif %}">
+          <small class="form-hint">
+            Wird automatisch auf neu angelegte Einsätze gesetzt.
+            {% if org_settings and org_settings.default_access_pin_hash %}
+            <button type="button" class="btn btn--ghost btn--xs"
+                    onclick="this.closest('form').querySelector('[name=default_access_pin]').value='__clear__';this.closest('form').submit()">
+              PIN entfernen
+            </button>
+            {% endif %}
+          </small>
+        </div>
+      </div>
+
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Auto-Schließen</h3>
       <div class="form-grid">
         <div class="form-group">

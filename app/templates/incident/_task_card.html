@@ -14,11 +14,13 @@
       <button class="btn btn--xs btn--primary"
               style="font-size:.65rem; padding:1px 6px;"
               hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ki-annehmen"
-              hx-swap="none">✓</button>
+              hx-swap="none"
+              hx-on::after-request="if(event.detail.successful){location.reload();}">✓</button>
       <button class="btn btn--xs btn--ghost"
               style="font-size:.65rem; padding:1px 6px;"
               hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ki-verwerfen"
-              hx-swap="none">✗</button>
+              hx-swap="none"
+              hx-on::after-request="if(event.detail.successful){location.reload();}">✗</button>
     </span>
     {% endif %}
   </div>
@@ -44,6 +46,7 @@
       {% endif %}
     </div>
     {% if task.detail %}<div class="card__sub">{{ task.detail }}</div>{% endif %}
+    {% if task.due_at and not task.is_done %}<div class="card__due">⏰ {{ task.due_at|local_time }}</div>{% endif %}
     {% if task.media %}
     <div class="card__media">
       {% for m in task.media[:3] %}

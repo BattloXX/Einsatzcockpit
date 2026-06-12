@@ -472,6 +472,14 @@ async def create_incident_api(
         api_key_id=api_key.id,
         ip=request.client.host if request.client else None,
     )
+
+    # Org-Standard-PIN auf neuen Einsatz übertragen
+    if api_key.org_id:
+        from app.models.master import OrgSettings as _OrgSettings
+        _org_s = db.query(_OrgSettings).filter(_OrgSettings.org_id == api_key.org_id).first()
+        if _org_s and _org_s.default_access_pin_hash:
+            incident.access_pin_hash = _org_s.default_access_pin_hash
+
     db.commit()
 
     # Automatisches Geocoding wenn Adresse vorhanden (vor GSL-Trigger, damit Koordinaten fließen)

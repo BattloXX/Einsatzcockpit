@@ -51,6 +51,7 @@ from app.models.master import (
     MemberQualification,
     MessageSuggestion,
     MessageSuggestionAlarm,
+    OrgSettings,
     Qualification,
     SystemSettings,
     TaskSuggestion,
@@ -301,6 +302,13 @@ async def new_incident(
         primary_org_id=user.org_id,
         ip=request.client.host if request.client else None,
     )
+
+    # Org-Standard-PIN auf neuen Einsatz übertragen
+    if user.org_id:
+        _org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
+        if _org_settings and _org_settings.default_access_pin_hash:
+            incident.access_pin_hash = _org_settings.default_access_pin_hash
+
     db.commit()
 
     # Automatisches Geocoding wenn Adresse vorhanden aber keine Koordinaten gesetzt
@@ -596,6 +604,16 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     ]
     _bs = db.get(SystemSettings, "breathing_enabled")
     breathing_enabled = (_bs.value if _bs else "true") != "false"
+    lage_sprueche = (
+        db.query(IncidentCommLog)
+        .filter(
+            IncidentCommLog.incident_id == incident_id,
+            IncidentCommLog.is_lage_relevant == True,  # noqa: E712
+        )
+        .order_by(IncidentCommLog.ts.desc())
+        .limit(20)
+        .all()
+    )
     return templates.TemplateResponse(request, "incident/board.html", {
         "user": user, "incident": incident,
         "alarm_types": alarm_types, "lage_hints": lage_hints, "lage_hints_ai": lage_hints_ai,
@@ -607,6 +625,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         "unit_status_values": UNIT_STATUS_VALUES,
         "ai_enabled": ai_is_enabled(),
         "breathing_enabled": breathing_enabled,
+        "lage_sprueche": lage_sprueche,
     })
 
 
@@ -1926,13 +1945,22 @@ async def delete_person_endpoint(
 async def update_task_endpoint(
     incident_id: int, task_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
+    due_after_min: int = Form(0),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
+    from datetime import timedelta
     task = db.get(Task, task_id)
     if not task:
         return Response(status_code=404)
     update_task(db, task, title, detail or None, user_id=request.state.user.id)
+    if due_after_min > 0:
+        task.due_after_sec = due_after_min * 60
+        task.due_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=due_after_min)
+        task.popup_shown = False
+    else:
+        task.due_at = None
+        task.due_after_sec = None
     db.commit()
     await manager.broadcast(incident_id, {"type": "task_updated", "reload_board": True})
     incident = _incident_or_404(incident_id, db)
