@@ -782,6 +782,94 @@ def update_column_card_order(db: Session, column_id: int, zone_order_json: str) 
         db.flush()
 
 
+def sink_done_cards(db: Session, column_id: int | None) -> None:
+    """Verschiebt erledigte/stornierte Karten ans Ende der card_order (unterhalb aller aktiven)."""
+    import json as _json
+    if not column_id:
+        return
+    col = db.get(IncidentColumn, column_id)
+    if not col:
+        return
+
+    done_tasks = {
+        t.id for t in db.query(Task).filter(Task.column_id == column_id, Task.vehicle_id.is_(None)).all()
+        if t.is_done or t.is_cancelled
+    }
+    done_msgs = {
+        m.id for m in db.query(Message).filter(Message.column_id == column_id).all()
+        if m.is_done or m.is_cancelled
+    }
+
+    try:
+        current: list[dict] = _json.loads(col.card_order) if col.card_order else []
+    except Exception:
+        current = []
+
+    if not current:
+        # Build minimal order from DB when no card_order exists yet
+        vehicles = db.query(IncidentVehicle).filter(
+            IncidentVehicle.column_id == column_id,
+            IncidentVehicle.removed_at.is_(None),
+        ).all()
+        tasks = db.query(Task).filter(Task.column_id == column_id, Task.vehicle_id.is_(None)).all()
+        msgs = db.query(Message).filter(Message.column_id == column_id).all()
+        current = (
+            [{"kind": "vehicle", "id": v.id} for v in vehicles]
+            + [{"kind": "task", "id": t.id} for t in tasks]
+            + [{"kind": "message", "id": m.id} for m in msgs]
+        )
+
+    active, done = [], []
+    for item in current:
+        kind = item.get("kind")
+        uid = item.get("id")
+        if (kind == "task" and uid in done_tasks) or (kind == "message" and uid in done_msgs):
+            done.append(item)
+        else:
+            active.append(item)
+
+    col.card_order = _json.dumps(active + done)
+    db.flush()
+
+
+def delete_section_column(db: Session, column: IncidentColumn, user_id: int | None = None) -> None:
+    """Löscht eine nicht-fixierte Spalte. Wirft ValueError wenn Elemente zugeordnet sind."""
+    if column.is_fixed:
+        raise ValueError("Fixierte Spalten können nicht gelöscht werden.")
+
+    active_vehicles = db.query(IncidentVehicle).filter(
+        IncidentVehicle.column_id == column.id,
+        IncidentVehicle.removed_at.is_(None),
+    ).count()
+    tasks = db.query(Task).filter(
+        Task.column_id == column.id,
+        Task.vehicle_id.is_(None),
+    ).count()
+    msgs = db.query(Message).filter(Message.column_id == column.id).count()
+
+    parts = []
+    if active_vehicles:
+        parts.append(f"{active_vehicles} Einheit{'en' if active_vehicles != 1 else ''}")
+    if tasks:
+        parts.append(f"{tasks} Auftrag{'äge' if tasks != 1 else ''}")
+    if msgs:
+        parts.append(f"{msgs} Meldung{'en' if msgs != 1 else ''}")
+
+    if parts:
+        raise ValueError(
+            f"Spalte kann nicht gelöscht werden – es sind noch {', '.join(parts)} zugeordnet. "
+            "Bitte zuerst alle Elemente verschieben oder entfernen."
+        )
+
+    write_incident_change(
+        db, column.incident_id, "column.deleted", "incident_column", column.id,
+        before={"title": column.title}, after=None,
+        user_id=user_id,
+    )
+    db.delete(column)
+    db.flush()
+
+
 def move_card(
     db: Session,
     incident_id: int,

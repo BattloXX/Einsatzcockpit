@@ -909,6 +909,29 @@ function aiLagebild(incidentId) {
   };
 }
 
+function _colToast(msg, type) {
+  var appEl = document.querySelector('[x-data="appState()"]');
+  if (appEl && window.Alpine) Alpine.$data(appEl).addToast(msg, type || 'warn');
+}
+function deleteColumn(colId, colTitle) {
+  if (!confirm('Spalte „' + colTitle + '" wirklich löschen?\n\nNur möglich wenn keine Elemente zugeordnet sind.')) return;
+  var csrfToken = document.cookie.match(/(?:^|;\s*)fwwo_csrf=([^;]+)/)?.[1] || '';
+  fetch('/einsatz/{{ incident.id }}/spalten/' + colId, {
+    method: 'DELETE',
+    headers: {'X-CSRF-Token': csrfToken},
+  }).then(function(r) {
+    if (r.ok) {
+      location.reload();
+    } else {
+      r.json().then(function(j) {
+        _colToast(j.detail || 'Spalte konnte nicht gelöscht werden.', 'warn');
+      }).catch(function() {
+        _colToast('Spalte konnte nicht gelöscht werden.', 'warn');
+      });
+    }
+  });
+}
+
 function openQuickAddTask(colId) {
   const dlg = document.getElementById('quickAddTaskDialog');
   if (!dlg) return;

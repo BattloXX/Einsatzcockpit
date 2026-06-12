@@ -72,6 +72,7 @@ from app.services.incident_service import (
     close_incident,
     collect_situation_context,
     create_incident,
+    delete_section_column,
     list_commander_candidates,
     list_el_candidates,
     move_card,
@@ -82,6 +83,7 @@ from app.services.incident_service import (
     set_message_status,
     set_task_status,
     set_unit_status,
+    sink_done_cards,
     update_column_card_order,
     update_task,
 )
@@ -919,7 +921,10 @@ async def toggle_task_done(
     # Toggle: sowohl is_done als auch status synchron halten,
     # damit die Status-Pille (Ampel) den Wechsel reflektiert.
     new_status = "open" if task.is_done else "done"
+    col_id = task.column_id
     set_task_status(db, task, new_status, user_id=request.state.user.id)
+    if new_status == "done":
+        sink_done_cards(db, col_id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "task_updated", "task_id": task_id, "reload_board": True})
     # Re-render der Vehicle-Card, falls die Task zugewiesen ist (Strikethrough sichtbar).
@@ -953,10 +958,13 @@ async def set_task_ampel(
     task = db.get(Task, task_id)
     if not task:
         return Response(status_code=404)
+    col_id = task.column_id
     try:
         set_task_status(db, task, status, user_id=request.state.user.id)
     except ValueError:
         return Response(status_code=422)
+    if status in ("done", "cancelled"):
+        sink_done_cards(db, col_id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "task_updated", "task_id": task_id, "reload_board": True})
     return Response(status_code=204)
@@ -1161,6 +1169,25 @@ async def create_section(
     return Response(status_code=204)
 
 
+@router.delete("/einsatz/{incident_id}/spalten/{column_id}")
+async def delete_column_endpoint(
+    incident_id: int, column_id: int, request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    from fastapi.responses import JSONResponse
+    column = db.get(IncidentColumn, column_id)
+    if not column or column.incident_id != incident_id:
+        return Response(status_code=404)
+    try:
+        delete_section_column(db, column, user_id=request.state.user.id)
+        db.commit()
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+    await manager.broadcast(incident_id, {"type": "column_deleted", "reload_board": True})
+    return Response(status_code=204)
+
+
 @router.post("/einsatz/{incident_id}/spalten/reihenfolge")
 async def reorder_columns_endpoint(
     incident_id: int, request: Request,
@@ -1242,6 +1269,9 @@ async def toggle_message(
         return Response(status_code=404)
     msg.is_done = not msg.is_done
     msg.done_at = datetime.now(UTC) if msg.is_done else None
+    col_id = msg.column_id
+    if msg.is_done:
+        sink_done_cards(db, col_id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "message_updated", "reload_board": True})
     return Response(status_code=204)
@@ -1257,10 +1287,13 @@ async def set_message_ampel(
     msg = db.get(Message, msg_id)
     if not msg:
         return Response(status_code=404)
+    col_id = msg.column_id
     try:
         set_message_status(db, msg, status, user_id=request.state.user.id)
     except ValueError:
         return Response(status_code=422)
+    if status in ("erledigt", "storniert"):
+        sink_done_cards(db, col_id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "message_updated", "reload_board": True})
     return Response(status_code=204)
