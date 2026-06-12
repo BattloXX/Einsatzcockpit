@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from app.config import settings
 from app.core.templating import templates
+from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept
@@ -33,6 +34,7 @@ def _resolve_primary_org(incident: Incident) -> FireDept | None:
     if not incident.primary_org_id:
         return None
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         return db.get(FireDept, incident.primary_org_id)
     finally:

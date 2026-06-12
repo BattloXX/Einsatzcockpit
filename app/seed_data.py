@@ -4,6 +4,7 @@ Aufruf: python -m app.seed_data
 """
 import json
 
+from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import (
     AlarmType,
@@ -207,6 +208,7 @@ def seed(db=None):
     if db is None:
         db = SessionLocal()
         close = True
+    set_tenant_context(db, None)
     try:
         _upsert_roles(db)
         _upsert_qualifications(db)

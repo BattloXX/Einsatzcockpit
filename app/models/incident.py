@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 # Fixed column codes (always present)
-FIXED_COLUMNS = ["dispatched", "active", "tasks", "messages", "neighbor", "rescued"]
+FIXED_COLUMNS = ["dispatched", "active", "tasks", "messages", "rescued"]
 UNIT_STATUS_VALUES = [
     "Einsatz übernommen",
     "Am Einsatzort",
@@ -71,6 +71,8 @@ class Incident(Base):
     ai_report_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
     # KI-generierte Lage-Hinweise als JSON-Array von Strings
     ai_lage_hints: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Bcrypt-Hash eines optionalen Gäste-PINs für QR-Zugang ohne Account
+    access_pin_hash: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     columns: Mapped[list[IncidentColumn]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"
@@ -97,6 +99,9 @@ class Incident(Base):
     tokens: Mapped[list[IncidentToken]] = relationship(back_populates="incident", cascade="all, delete-orphan")
     collaborating_orgs: Mapped[list[IncidentOrg]] = relationship(
         back_populates="incident", cascade="all, delete-orphan"
+    )
+    comm_log: Mapped[list[IncidentCommLog]] = relationship(
+        back_populates="incident", order_by="IncidentCommLog.ts.desc()", cascade="all, delete-orphan"
     )
     leader: Mapped[User | None] = relationship(
         "User", foreign_keys=[incident_leader_user_id], lazy="joined"
@@ -128,6 +133,7 @@ class IncidentColumn(Base):
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False)
     code: Mapped[str] = mapped_column(String(50), nullable=False)
     title: Mapped[str] = mapped_column(String(150), nullable=False)
+    column_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="vehicles")
     is_fixed: Mapped[bool] = mapped_column(Boolean, default=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     card_order: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -429,6 +435,26 @@ class IncidentToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     incident: Mapped[Incident] = relationship(back_populates="tokens")
+
+
+class IncidentCommLog(Base):
+    """Funkjournal-Eintrag für Normaleinsatz."""
+    __tablename__ = "incident_comm_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    direction: Mapped[str] = mapped_column(String(4), nullable=False)   # in|out|int
+    channel: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    partner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    is_request: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_lage_relevant: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    handled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    incident: Mapped[Incident] = relationship(back_populates="comm_log")
 
 
 # Import BreathingTroop here to avoid circular import in Incident.breathing_troops

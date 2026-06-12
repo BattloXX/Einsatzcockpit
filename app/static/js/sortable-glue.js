@@ -159,9 +159,10 @@
     if (_initTimer) clearTimeout(_initTimer);
     _initTimer = setTimeout(function () {
       _initTimer = null;
-      initSortable();
+      initAll();
     }, 150);
   }
+
 
   // ── Haupt-Initialisierung ────────────────────────────────────────────────────
   function initSortable() {
@@ -227,11 +228,54 @@
     });
   }
 
+  // ── Spalten-Drag (ganze Kanban-Spalten verschieben) ─────────────────────────
+  function initColumnSortable() {
+    const kanban = document.getElementById('kanban');
+    if (!kanban) return;
+    const incidentId = getIncidentId();
+    if (!incidentId) return;
+
+    if (kanban._columnSortableInstance) {
+      try { kanban._columnSortableInstance.destroy(); } catch (e) { /* noop */ }
+      kanban._columnSortableInstance = null;
+    }
+
+    kanban._columnSortableInstance = new Sortable(kanban, {
+      group:          'kanban-columns',
+      animation:      150,
+      handle:         '.kanban-col__header',
+      draggable:      '.kanban-col[data-col-id]',
+      ghostClass:     'kanban-col--ghost',
+      chosenClass:    'kanban-col--chosen',
+      delay:          200,
+      delayOnTouchOnly: true,
+      touchStartThreshold: 8,
+      fallbackTolerance: 5,
+      onEnd: function () {
+        const cols = Array.from(kanban.querySelectorAll('.kanban-col[data-col-id]'));
+        const ids = cols.map(function (c) { return parseInt(c.dataset.colId, 10); });
+        fetch('/einsatz/' + incidentId + '/spalten/reihenfolge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'column_order=' + encodeURIComponent(JSON.stringify(ids)),
+          credentials: 'same-origin',
+        }).catch(function (err) {
+          console.warn('[sortable-glue] Spalten-Reihenfolge fehlgeschlagen:', err);
+        });
+      },
+    });
+  }
+
   // ── Startpunkt ───────────────────────────────────────────────────────────────
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSortable);
-  } else {
+  function initAll() {
     initSortable();
+    initColumnSortable();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAll);
+  } else {
+    initAll();
   }
 
   // Re-Init nach HTMX-Swaps – alle Events laufen durch denselben Debounce,

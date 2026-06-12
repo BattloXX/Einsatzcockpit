@@ -130,3 +130,35 @@ def unsign_qr_token(token: str) -> dict | None:
         return _qr_signer.loads(token)
     except BadSignature:
         return None
+
+
+# ── Incident-PIN-Zugangstoken (Gäste ohne Account) ────────────────────────────
+
+# PIN-Zugangstokens laufen nach 24 h ab.
+_pin_access_signer = URLSafeTimedSerializer(settings.SECRET_KEY, salt="incident-pin-access")
+PIN_ACCESS_MAX_AGE = 86400  # 24 h
+
+
+def hash_pin(plain: str) -> str:
+    import bcrypt
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=10)).decode()
+
+
+def verify_pin(plain: str, hashed: str) -> bool:
+    import bcrypt
+    try:
+        return bcrypt.checkpw(plain.encode(), hashed.encode())
+    except (ValueError, TypeError):
+        return False
+
+
+def sign_pin_access_token(incident_id: int) -> str:
+    return _pin_access_signer.dumps({"incident_id": incident_id})
+
+
+def unsign_pin_access_token(token: str) -> int | None:
+    try:
+        data = _pin_access_signer.loads(token, max_age=PIN_ACCESS_MAX_AGE)
+        return data.get("incident_id")
+    except (BadSignature, SignatureExpired):
+        return None

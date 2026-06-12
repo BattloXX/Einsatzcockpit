@@ -104,10 +104,12 @@ def test_task_source_default_is_manual(client):
     """Newly created Tasks have source='manual' by default."""
     from sqlalchemy.orm import Session
 
+    from app.core.tenant import set_tenant_context
     from app.db import engine
     from app.models.incident import Incident, Task
 
     db = Session(bind=engine)
+    set_tenant_context(db, None)
     try:
         incident = db.query(Incident).first()
         if not incident:
@@ -133,10 +135,12 @@ def test_task_source_ai_suggestion(client):
     """Tasks with source='ai_suggestion' persist correctly."""
     from sqlalchemy.orm import Session
 
+    from app.core.tenant import set_tenant_context
     from app.db import engine
     from app.models.incident import Incident, Task
 
     db = Session(bind=engine)
+    set_tenant_context(db, None)
     try:
         incident = db.query(Incident).first()
         if not incident:
@@ -191,10 +195,12 @@ def test_accept_endpoint_rejects_non_ai_task(client):
     """ki-annehmen returns 404 for tasks with source='manual'."""
     from sqlalchemy.orm import Session
 
+    from app.core.tenant import set_tenant_context
     from app.db import engine
     from app.models.incident import Incident, Task
 
     db = Session(bind=engine)
+    set_tenant_context(db, None)
     try:
         incident = db.query(Incident).first()
         if not incident:

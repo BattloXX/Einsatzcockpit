@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker
 def _bigint_sqlite(element, compiler, **kw):
     return "INTEGER"
 
+from app.core.tenant import set_tenant_context
 from app.db import Base
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings, SystemSettings
@@ -32,6 +33,7 @@ def db():
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     session = Session()
+    set_tenant_context(session, None)  # System-Modus für Autoclose-Tests
     yield session
     session.close()
     Base.metadata.drop_all(bind=engine)

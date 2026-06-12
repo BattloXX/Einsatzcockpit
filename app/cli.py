@@ -8,12 +8,14 @@ import argparse
 import sys
 
 from app.core.security import generate_api_key, generate_sms_gateway_token, hash_api_key, hash_password
+from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.user import ApiKey, Role, SmsGatewayToken, User, UserRole
 
 
 def create_admin(username: str, password: str, display_name: str = "") -> None:
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         existing = db.query(User).filter(User.username == username).first()
         if existing:
@@ -38,6 +40,7 @@ def create_admin(username: str, password: str, display_name: str = "") -> None:
 
 def create_api_key(label: str) -> None:
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         raw_key = generate_api_key()
         key = ApiKey(key_hash=hash_api_key(raw_key), label=label)
@@ -51,6 +54,7 @@ def create_api_key(label: str) -> None:
 
 def create_sms_gateway_token(label: str, org_id: int) -> None:
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         raw_key = generate_sms_gateway_token()
         tok = SmsGatewayToken(token_hash=hash_api_key(raw_key), label=label, org_id=org_id)

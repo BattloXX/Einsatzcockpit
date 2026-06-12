@@ -142,7 +142,8 @@
     </div>
     {% endif %}
     <div class="topnav__user">
-      <span class="user-badge">{{ user.display_name }}</span>
+      <a href="/profil" class="user-badge {% if request.url.path.startswith('/profil') %}active{% endif %}"
+         style="text-decoration:none;">{{ user.display_name }}</a>
       <button type="button" class="btn btn--ghost btn--sm pwa-install-btn" style="display:none"
               title="App auf Gerät installieren">📲 Installieren</button>
       <button type="button" class="btn btn--ghost btn--sm pwa-install-ios" style="display:none"
@@ -212,6 +213,7 @@
       {% endif %}
     </nav>
     <footer class="mobile-menu__footer">
+      <a href="/profil" class="mobile-menu__link {% if request.url.path.startswith('/profil') %}active{% endif %}">👤 Mein Profil</a>
       <button type="button" class="btn btn--secondary btn--full pwa-install-btn" style="display:none">
         📲 App installieren
       </button>

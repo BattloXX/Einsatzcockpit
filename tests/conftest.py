@@ -9,6 +9,7 @@ from sqlalchemy.ext.compiler import compiles
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
 os.environ.setdefault("DEBUG", "true")
 
+from app.core.tenant import set_tenant_context
 from app.db import Base, get_db
 from app.main import app
 from app.seed_data import seed
@@ -36,6 +37,7 @@ def override_get_db():
 def setup_db():
     Base.metadata.create_all(bind=engine)
     db = TestingSession()
+    set_tenant_context(db, None)
     seed(db)
     db.close()
     yield

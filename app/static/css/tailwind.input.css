@@ -821,6 +821,10 @@ dialog.media-viewer { max-width: 95vw; width: 95vw; max-height: 95dvh; height: 9
 .card--ghost { opacity: .4; background: var(--surface-high); }
 .card--chosen { box-shadow: 0 0 0 2px var(--red); }
 .card--drag { opacity: .9; transform: rotate(1.5deg); }
+.kanban-col--ghost  { opacity: .35; outline: 2px dashed var(--border); }
+.kanban-col--chosen { box-shadow: 0 0 0 2px var(--red); cursor: grabbing; }
+.kanban-col__header { cursor: grab; }
+.kanban-col__header button { cursor: pointer; }
 
 /* ── Admin Shell (Sidebar-Layout) ────────────────────────── */
 .admin-shell {

@@ -11,7 +11,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings, validate_startup_secrets
+from app.core.dependencies import _resolve_current_org
 from app.core.security import unsign_session
+from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentToken
 from app.models.user import Role, User
@@ -31,6 +33,7 @@ from app.routers import (
     ui_major_incident,
     ui_media,
     ui_password_reset,
+    ui_profile,
     ui_push,
     ui_settings,
     ui_stats,
@@ -73,11 +76,16 @@ async def lifespan(app: FastAPI):
     from app.services.breathing_service import _breathing_watchdog_loop
     watchdog_task = asyncio.create_task(_breathing_watchdog_loop())
 
+    # Background-Loop für fällige Meldungen (alle 30 Sekunden)
+    from app.services.task_reminder import task_reminder_loop
+    reminder_task = asyncio.create_task(task_reminder_loop())
+
     try:
         yield
     finally:
         autoclose_task.cancel()
         watchdog_task.cancel()
+        reminder_task.cancel()
         try:
             await autoclose_task
         except (asyncio.CancelledError, Exception):
@@ -86,10 +94,15 @@ async def lifespan(app: FastAPI):
             await watchdog_task
         except (asyncio.CancelledError, Exception):
             pass
+        try:
+            await reminder_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
 
 def _bootstrap_admin() -> None:
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         from app.models.user import User as U
         from app.seed_data import _upsert_roles
@@ -129,6 +142,7 @@ def _bootstrap_admin() -> None:
 app = FastAPI(
     title="Einsatzleiter-Hilfswerkzeug",
     version=settings.APP_VERSION,
+    dependencies=[Depends(_resolve_current_org)],
     description=(
         "REST-API des Einsatzleiter-Hilfswerkzeugs.\n\n"
         "**Authentifizierung:** API-Key via Header `X-API-Key`.\n\n"
@@ -189,6 +203,7 @@ async def session_middleware(request: Request, call_next):
         if session_data:
             user_id, is_qr, qr_incident_id, is_device, display_name = session_data
             db = SessionLocal()
+            set_tenant_context(db, None)
             try:
                 user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
                 if user and is_qr:
@@ -307,6 +322,7 @@ app.include_router(ui_push.router)
 app.include_router(ui_settings.router)
 app.include_router(ui_sysadmin.router)
 app.include_router(ui_ai_prompts.router)
+app.include_router(ui_profile.router)
 
 
 @app.exception_handler(HTTPException)

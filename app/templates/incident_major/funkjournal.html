@@ -68,6 +68,22 @@
   font-size:.68rem; font-weight:700; padding:2px 7px; border-radius:10px;
   background:rgba(251,191,36,.2); color:#fbbf24;
 }
+
+/* Direction/type button group */
+.btn-group { display:inline-flex; border-radius:6px; overflow:hidden; border:1px solid var(--border); }
+.btn-group__btn {
+  flex:1; padding:5px 12px; font-size:.75rem; font-weight:600; cursor:pointer;
+  background:var(--surface-high); color:var(--text-muted);
+  border:none; border-right:1px solid var(--border); transition:background .12s, color .12s;
+  white-space:nowrap;
+}
+.btn-group__btn:last-child { border-right:none; }
+.btn-group__btn--in.active  { background:rgba(59,130,246,.25);  color:#93c5fd; }
+.btn-group__btn--out.active { background:rgba(34,197,94,.25);   color:#4ade80; }
+.btn-group__btn--int.active { background:rgba(107,114,128,.25); color:#d1d5db; }
+.btn-group__btn--meldung.active  { background:rgba(99,102,241,.2);  color:#a5b4fc; }
+.btn-group__btn--auftrag.active  { background:rgba(251,191,36,.2);  color:#fbbf24; }
+.btn-group__btn--spruch.active   { background:rgba(168,85,247,.2);  color:#d8b4fe; }
 </style>
 {% endblock %}
 
@@ -114,30 +130,68 @@
 
   {# ── Eintrag hinzufügen ────────────────────────────────────────────────────── #}
   {% if can_edit %}
-  <div class="fj-add">
+  <div class="fj-add" x-data="fjForm()">
     <div class="fj-add__title">EINTRAG HINZUFÜGEN</div>
     <form hx-post="/lage/{{ lage.id }}/funkjournal"
           hx-swap="none"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-          hx-on::after-request="if(event.detail.successful){this.reset();location.reload();}">
+          hx-on::after-request="if(event.detail.successful){resetForm();location.reload();}">
 
-      <div class="fj-add-row" style="margin-bottom:8px;">
+      <input type="hidden" name="direction"  :value="dir">
+      <input type="hidden" name="is_request" :value="typ === 'auftrag' ? 'true' : ''">
+
+      {# Row 1: Richtung + Typ #}
+      <div class="fj-add-row" style="margin-bottom:10px; gap:12px;">
         <div>
           <label class="form-label" style="font-size:.72rem;">Richtung</label>
-          <select name="direction" class="form-select form-select--sm" required>
-            <option value="in">↓ Eingehend</option>
-            <option value="out">↑ Ausgehend</option>
-            <option value="int">↔ Intern</option>
-          </select>
+          <div class="btn-group" style="display:flex;">
+            <button type="button" class="btn-group__btn btn-group__btn--in"
+                    :class="{ active: dir === 'in' }"
+                    @click="dir='in'">↓ Ein</button>
+            <button type="button" class="btn-group__btn btn-group__btn--out"
+                    :class="{ active: dir === 'out' }"
+                    @click="dir='out'">↑ Aus</button>
+            <button type="button" class="btn-group__btn btn-group__btn--int"
+                    :class="{ active: dir === 'int' }"
+                    @click="dir='int'">↔ Int</button>
+          </div>
         </div>
-        <div style="flex:1;min-width:100px;">
+        <div>
+          <label class="form-label" style="font-size:.72rem;">Art</label>
+          <div class="btn-group" style="display:flex;">
+            <button type="button" class="btn-group__btn btn-group__btn--meldung"
+                    :class="{ active: typ === 'meldung' }"
+                    @click="typ='meldung'">Meldung</button>
+            <button type="button" class="btn-group__btn btn-group__btn--auftrag"
+                    :class="{ active: typ === 'auftrag' }"
+                    @click="typ='auftrag'">Auftrag</button>
+            <button type="button" class="btn-group__btn btn-group__btn--spruch"
+                    :class="{ active: typ === 'spruch' }"
+                    @click="typ='spruch'">Spruch</button>
+          </div>
+        </div>
+      </div>
+
+      {# Row 2: Kanal + Von/An + Einsatzstelle #}
+      <div class="fj-add-row" style="margin-bottom:8px;">
+        <div style="min-width:110px;">
           <label class="form-label" style="font-size:.72rem;">Kanal / Frequenz</label>
           <input type="text" name="channel" class="form-input" placeholder="z. B. Kanal 5, 2m"
                  maxlength="40" autocomplete="off">
         </div>
-        <div style="flex:2;min-width:140px;">
-          <label class="form-label" style="font-size:.72rem;">Gegenüber / Absender</label>
-          <input type="text" name="partner" class="form-input" placeholder="z. B. KHD-Zug, ÖRK"
+        <div style="flex:1;min-width:120px;">
+          <label class="form-label" style="font-size:.72rem;"
+                 x-text="dir === 'in' ? 'Von (Absender)' : dir === 'out' ? 'An (Empfänger)' : 'Gegenstelle'"></label>
+          <input type="text" name="partner" class="form-input"
+                 :placeholder="dir === 'in' ? 'z. B. Abschnitt West' : dir === 'out' ? 'z. B. KHD-Zug' : 'z. B. EL'"
+                 maxlength="120" autocomplete="off">
+        </div>
+        {# Zusatzfeld An/Von bei Spruch-Modus #}
+        <div style="flex:1;min-width:120px;" x-show="typ === 'spruch'" x-cloak>
+          <label class="form-label" style="font-size:.72rem;"
+                 x-text="dir === 'in' ? 'An (Empfänger)' : 'Von (Absender)'"></label>
+          <input type="text" name="partner2" class="form-input"
+                 :placeholder="dir === 'in' ? 'z. B. EL' : 'z. B. Abschnitt West'"
                  maxlength="120" autocomplete="off">
         </div>
         {% if sites %}
@@ -151,15 +205,16 @@
           </select>
         </div>
         {% endif %}
-        <div style="display:flex;align-items:center;gap:5px;padding-top:18px;">
-          <input type="checkbox" name="is_request" id="fj_is_req" value="true" style="width:14px;height:14px;">
-          <label for="fj_is_req" style="font-size:.78rem;cursor:pointer;">Auftrag</label>
-        </div>
       </div>
 
+      {# Row 3: Inhalt + Submit #}
       <div style="display:flex;gap:8px;align-items:flex-end;">
         <div style="flex:1;">
-          <label class="form-label" style="font-size:.72rem;">Inhalt <span style="color:#ef4444;">*</span></label>
+          <label class="form-label" style="font-size:.72rem;">
+            Inhalt <span style="color:#ef4444;">*</span>
+            <span x-show="typ === 'spruch'" x-cloak
+                  style="color:var(--text-muted);font-size:.68rem;font-weight:400;margin-left:4px;">(Spruchtext)</span>
+          </label>
           <input type="text" name="message" class="form-input" required maxlength="500"
                  placeholder="Nachrichteninhalt…" autocomplete="off">
         </div>
@@ -261,6 +316,27 @@
 
 {% block scripts %}
 <script>
+function fjForm() {
+  return {
+    dir: 'out',
+    typ: 'meldung',
+    resetForm: function() {
+      this.dir = 'out';
+      this.typ = 'meldung';
+    },
+  };
+}
+
+function resetForm() {
+  var el = document.querySelector('[x-data="fjForm()"]');
+  if (el) {
+    var comp = Alpine.$data(el);
+    if (comp) { comp.dir = 'out'; comp.typ = 'meldung'; }
+  }
+  var form = el ? el.querySelector('form') : null;
+  if (form) form.reset();
+}
+
 var FJ_FILTER = false;
 
 function toggleOpenFilter() {

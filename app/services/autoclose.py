@@ -16,6 +16,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
+from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings, SystemSettings
@@ -135,6 +136,7 @@ async def autoclose_loop() -> None:
         try:
             await asyncio.sleep(60)
             db = SessionLocal()
+            set_tenant_context(db, None)
             try:
                 to_warn = _check_incidents_sync(db)
             finally:

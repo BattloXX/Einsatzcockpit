@@ -90,11 +90,13 @@ def test_collect_situation_context_returns_dict(client):
     """collect_situation_context returns a person-data-free dict."""
     from sqlalchemy.orm import Session
 
+    from app.core.tenant import set_tenant_context
     from app.db import engine
     from app.models.incident import Incident
     from app.services.incident_service import collect_situation_context
 
     db = Session(bind=engine)
+    set_tenant_context(db, None)
     try:
         incident = db.query(Incident).first()
         if not incident:
@@ -118,11 +120,13 @@ def test_collect_situation_context_vehicles_no_persons(client):
     """Vehicle entries in context contain no person-data keys."""
     from sqlalchemy.orm import Session
 
+    from app.core.tenant import set_tenant_context
     from app.db import engine
     from app.models.incident import Incident
     from app.services.incident_service import collect_situation_context
 
     db = Session(bind=engine)
+    set_tenant_context(db, None)
     try:
         incident = db.query(Incident).first()
         if not incident:

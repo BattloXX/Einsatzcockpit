@@ -13,7 +13,14 @@ from sqlalchemy.orm import Session
 
 from app.core.permissions import can_access_incident, has_role, require_role
 from app.core.queries import visible_incidents_q
-from app.core.security import get_author_name, sign_qr_token
+from app.core.security import (
+    get_author_name,
+    hash_pin,
+    sign_pin_access_token,
+    sign_qr_token,
+    unsign_pin_access_token,
+    verify_pin,
+)
 from app.core.templating import templates
 from app.db import get_db
 from app.models.breathing import BreathingTroop
@@ -22,6 +29,7 @@ from app.models.incident import (
     UNIT_STATUS_VALUES,
     Incident,
     IncidentColumn,
+    IncidentCommLog,
     IncidentLog,
     IncidentOrg,
     IncidentToken,
@@ -68,6 +76,7 @@ from app.services.incident_service import (
     move_card,
     move_vehicle_to_column,
     reopen_incident,
+    reorder_columns,
     set_commander,
     set_message_status,
     set_task_status,
@@ -90,7 +99,9 @@ async def _trigger_ai_task_suggestions(
     suggestions = await suggest_tasks(meldung, einsatzart, org_id=org_id)
     if not suggestions:
         return
+    from app.core.tenant import set_tenant_context
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         incident = db.get(Incident, incident_id)
         if not incident:
@@ -1124,6 +1135,25 @@ async def create_section(
     return Response(status_code=204)
 
 
+@router.post("/einsatz/{incident_id}/spalten/reihenfolge")
+async def reorder_columns_endpoint(
+    incident_id: int, request: Request,
+    column_order: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    import json as _json
+    try:
+        ids = _json.loads(column_order)
+        if isinstance(ids, list):
+            reorder_columns(db, incident_id, [int(i) for i in ids])
+            db.commit()
+    except Exception:
+        pass
+    await manager.broadcast(incident_id, {"type": "columns_reordered", "reload_board": True})
+    return Response(status_code=204)
+
+
 # ── Meldungen ─────────────────────────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/meldung")
@@ -1215,7 +1245,7 @@ async def set_message_ampel(
 @router.post("/einsatz/{incident_id}/person")
 async def create_person(
     incident_id: int, request: Request,
-    gender: str = Form(...), person_group: str = Form(...),
+    gender: str = Form("Unbekannt"), person_group: str = Form("Erwachsen"),
     age_range: str = Form(""), name: str = Form(""), location: str = Form(""),
     vehicle_id: int | None = Form(None),
     note: str = Form(""),
@@ -1390,6 +1420,82 @@ async def qr_print(incident_id: int, request: Request, db: Session = Depends(get
     })
 
 
+# ── Gäste-PIN für QR-Zugang ──────────────────────────────────────────────────
+
+_PIN_COOKIE = "board_pin"
+_PIN_COOKIE_MAX_AGE = 86400  # 24 h
+
+
+def _set_pin_cookie(response: Response, incident_id: int) -> None:
+    from app.config import settings as _cfg
+    token = sign_pin_access_token(incident_id)
+    response.set_cookie(
+        _PIN_COOKIE, token,
+        httponly=True, secure=_cfg.COOKIE_SECURE,
+        samesite="lax", max_age=_PIN_COOKIE_MAX_AGE,
+    )
+
+
+def _check_pin_cookie(request: Request) -> int | None:
+    """Gibt incident_id zurück wenn ein gültiges PIN-Zugangscookie vorhanden."""
+    token = request.cookies.get(_PIN_COOKIE)
+    if not token:
+        return None
+    return unsign_pin_access_token(token)
+
+
+@router.post("/einsatz/{incident_id}/pin")
+async def set_incident_pin(
+    incident_id: int, request: Request,
+    pin: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Setzt oder löscht den Gäste-PIN für QR-Zugang ohne Account."""
+    incident = _incident_or_404(incident_id, db)
+    if pin.strip():
+        incident.access_pin_hash = hash_pin(pin.strip()[:16])
+    else:
+        incident.access_pin_hash = None
+    db.commit()
+    return RedirectResponse(f"/einsatz/{incident_id}", status_code=302)
+
+
+@router.get("/einsatz/{incident_id}/pin-zugang", response_class=HTMLResponse)
+async def pin_entry_page(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    """Öffentliche PIN-Eingabeseite für Gäste – kein Login erforderlich."""
+    incident = db.get(Incident, incident_id)
+    if not incident or incident.status != "active" or not incident.access_pin_hash:
+        return RedirectResponse("/login", status_code=302)
+    error = request.query_params.get("error")
+    return templates.TemplateResponse(request, "incident/pin_entry.html", {
+        "incident": incident,
+        "error": error,
+    })
+
+
+from app.core.rate_limit import limiter as _limiter  # noqa: E402
+
+@(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
+@router.post("/einsatz/{incident_id}/pin-zugang", response_class=HTMLResponse)
+async def pin_verify(
+    incident_id: int, request: Request,
+    pin: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Prüft den PIN und setzt bei Erfolg ein signiertes Zugangscookie."""
+    incident = db.get(Incident, incident_id)
+    if not incident or incident.status != "active" or not incident.access_pin_hash:
+        return RedirectResponse("/login", status_code=302)
+    if not verify_pin(pin.strip(), incident.access_pin_hash):
+        return RedirectResponse(
+            f"/einsatz/{incident_id}/pin-zugang?error=wrong_pin", status_code=302
+        )
+    redirect = RedirectResponse(f"/einsatz/{incident_id}/screensaver", status_code=302)
+    _set_pin_cookie(redirect, incident_id)
+    return redirect
+
+
 # ── Bildschirmschoner ─────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/screensaver", response_class=HTMLResponse)
@@ -1400,8 +1506,11 @@ async def screensaver(incident_id: int, request: Request, db: Session = Depends(
     (oder Web Screen Wake Lock API im Browser). Live-Update via WebSocket.
     """
     user = getattr(request.state, "user", None)
-    if not user:
-        return RedirectResponse("/login", status_code=302)
+    pin_incident_id = _check_pin_cookie(request)
+    if not user and pin_incident_id != incident_id:
+        return RedirectResponse(
+            f"/einsatz/{incident_id}/pin-zugang", status_code=302
+        )
     incident = _incident_or_404(incident_id, db)
     return templates.TemplateResponse(request, "incident/screensaver.html", {
         "user": user,
@@ -2357,3 +2466,116 @@ async def address_save(
         "user": user, "incident": incident, "org": org, "saved": True,
         "auto_token": incident.auto_geojson_token,
     })
+
+
+# ── Funkjournal ───────────────────────────────────────────────────────────────
+
+@router.get("/einsatz/{incident_id}/funkjournal", response_class=HTMLResponse)
+async def funkjournal_page(
+    request: Request,
+    incident_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    incident = db.get(Incident, incident_id)
+    if not incident or not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+
+    comms = (
+        db.query(IncidentCommLog)
+        .filter(IncidentCommLog.incident_id == incident_id)
+        .order_by(IncidentCommLog.ts.desc())
+        .limit(200)
+        .all()
+    )
+    open_requests = sum(1 for c in comms if c.is_request and not c.handled)
+    return templates.TemplateResponse(request, "incident/funkjournal.html", {
+        "user": user,
+        "incident": incident,
+        "comms": comms,
+        "open_requests": open_requests,
+        "can_edit": has_role(user, "incident_leader", "admin", "org_admin", "recorder"),
+    })
+
+
+@router.post("/einsatz/{incident_id}/funkjournal")
+async def funkjournal_add(
+    request: Request,
+    incident_id: int,
+    direction: str = Form(...),
+    channel: str = Form(""),
+    partner: str = Form(""),
+    message: str = Form(...),
+    is_request: bool = Form(False),
+    is_lage_relevant: bool = Form(False),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    incident = db.get(Incident, incident_id)
+    if not incident or not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    if direction not in ("in", "out", "int"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Ungültige Richtung")
+
+    db.add(IncidentCommLog(
+        incident_id=incident_id,
+        direction=direction,
+        channel=channel.strip() or None,
+        partner=partner.strip() or None,
+        message=message.strip(),
+        is_request=is_request,
+        is_lage_relevant=is_lage_relevant,
+        user_id=user.id,
+        author_name=get_author_name(request),
+    ))
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/funkjournal/{entry_id}/erledigt")
+async def funkjournal_toggle_handled(
+    request: Request,
+    incident_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    incident = db.get(Incident, incident_id)
+    if not incident or not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    entry = db.get(IncidentCommLog, entry_id)
+    if not entry or entry.incident_id != incident_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    entry.handled = not entry.handled
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/funkjournal/{entry_id}/lage")
+async def funkjournal_toggle_lage(
+    request: Request,
+    incident_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    incident = db.get(Incident, incident_id)
+    if not incident or not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    entry = db.get(IncidentCommLog, entry_id)
+    if not entry or entry.incident_id != incident_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    entry.is_lage_relevant = not entry.is_lage_relevant
+    db.commit()
+    return Response(status_code=204)

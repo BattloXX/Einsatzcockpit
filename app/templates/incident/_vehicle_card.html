@@ -85,9 +85,18 @@
     </div>
   </div>
   {% if can_edit %}
-  <div class="card__footer">
-    <select class="form-select form-select--xs" onchange="moveVehicle({{ vehicle.id }}, this.value, {{ incident.id }})">
-      <option value="">Verschieben nach...</option>
+  <div class="card__footer" style="gap:4px; flex-wrap:wrap;">
+    <button type="button" class="btn btn--ghost btn--xs"
+            onclick="event.stopPropagation(); openQuickAddTaskForVehicle({{ vehicle.id }}, {{ vehicle.column_id }})">
+      + Auftrag
+    </button>
+    <button type="button" class="btn btn--ghost btn--xs"
+            onclick="event.stopPropagation(); openQuickAddMsgForVehicle({{ vehicle.id }})">
+      + Meldung
+    </button>
+    <select class="form-select form-select--xs" style="flex:1; min-width:100px;"
+            onchange="moveVehicle({{ vehicle.id }}, this.value, {{ incident.id }})">
+      <option value="">Verschieben...</option>
       {% for col in incident.columns %}
       <option value="{{ col.id }}" {% if col.id == vehicle.column_id %}disabled{% endif %}>{{ col.title }}</option>
       {% endfor %}

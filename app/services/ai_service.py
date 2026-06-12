@@ -29,10 +29,12 @@ _AI_SETTING_KEYS: frozenset[str] = frozenset({
 
 def _get_ai_cfg() -> dict:
     """Read platform AI settings from SystemSettings table, fall back to env vars."""
+    from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.master import SystemSettings as _SS
     try:
         db = SessionLocal()
+        set_tenant_context(db, None)
         try:
             rows = db.query(_SS).filter(_SS.key.in_(_AI_SETTING_KEYS)).all()
             db_cfg = {r.key: r.value for r in rows if r.value}
@@ -69,10 +71,12 @@ def decrypt_api_key(enc: str) -> str:
 
 def _get_org_ai_cfg(org_id: int) -> dict | None:
     """Return org-specific AI config dict, or None if OrgSettings not found."""
+    from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.master import OrgSettings
     try:
         db = SessionLocal()
+        set_tenant_context(db, None)
         try:
             os = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
             if not os:
@@ -97,11 +101,13 @@ def _get_org_ai_cfg(org_id: int) -> dict | None:
 async def _record_token_usage(org_id: int, total_tokens: int, model: str) -> None:
     """Fire-and-forget: update monthly token counter + write audit entry."""
     from app.core.audit import write_audit
+    from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.master import OrgSettings
     from datetime import UTC, datetime
     try:
         db = SessionLocal()
+        set_tenant_context(db, None)
         try:
             os = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
             if os:
@@ -330,10 +336,12 @@ def _assemble_prompt(prefix: str, suffix: str, variable: str) -> str:
 
 def _get_active_variable(prompt_key: str, org_id: int | None = None) -> str | None:
     """Return the latest saved variable part for prompt_key scoped to org, or None."""
+    from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.master import AIPromptVersion
     try:
         db = SessionLocal()
+        set_tenant_context(db, None)
         try:
             q = db.query(AIPromptVersion).filter(AIPromptVersion.prompt_key == prompt_key)
             if org_id is not None:

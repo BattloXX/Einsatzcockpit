@@ -271,7 +271,9 @@ async def _breathing_watchdog_loop() -> None:
     while True:
         try:
             await asyncio.sleep(5)
+            from app.core.tenant import set_tenant_context
             db = SessionLocal()
+            set_tenant_context(db, None)
             try:
                 active_incidents = db.query(Incident).filter(Incident.status == "active").all()
                 for incident in active_incidents:

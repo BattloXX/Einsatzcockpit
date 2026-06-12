@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PIN-Zugang – Einsatz {{ incident.alarm_type_code }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); }
+    .pin-card {
+      background:var(--surface-low); border:1px solid var(--border); border-radius:.75rem;
+      padding:2rem; max-width:380px; width:100%; text-align:center;
+    }
+    .pin-card h1 { font-size:1.3rem; margin-bottom:.25rem; }
+    .pin-card .sub { color:var(--text-muted); font-size:.85rem; margin-bottom:1.5rem; }
+    .pin-input {
+      width:100%; font-size:1.5rem; letter-spacing:.3em; text-align:center;
+      padding:.6rem; border:1px solid var(--border); border-radius:.5rem;
+      background:var(--surface-high); color:var(--on-surface); margin-bottom:1rem;
+    }
+    .pin-input:focus { outline:none; border-color:var(--red); }
+    .pin-error { color:#f87171; font-size:.85rem; margin-bottom:1rem; }
+    .pin-submit { width:100%; }
+  </style>
+</head>
+<body>
+  <div class="pin-card">
+    <h1>Einsatz {{ incident.alarm_type_code }}</h1>
+    <p class="sub">PIN eingeben um den Einsatz zu verfolgen</p>
+    {% if error %}
+    <p class="pin-error">Falscher PIN – bitte erneut versuchen.</p>
+    {% endif %}
+    <form method="post" action="/einsatz/{{ incident.id }}/pin-zugang">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="password" name="pin" class="pin-input" inputmode="numeric"
+             pattern="[0-9]*" maxlength="16" placeholder="••••"
+             autofocus autocomplete="one-time-code">
+      <button type="submit" class="btn btn--primary pin-submit">Bestätigen</button>
+    </form>
+  </div>
+</body>
+</html>

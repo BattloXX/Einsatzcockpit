@@ -186,6 +186,10 @@
               @click="open=!open"
               {{ tip('Weitere Aktionen: QR-Code, PDF-Export') }}>⋯</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms>
+        <a href="/einsatz/{{ incident.id }}/funkjournal" class="dropdown-item">
+          <span class="di-icon">📻</span> Funkjournal
+        </a>
+        <hr class="dropdown-divider">
         <a href="/einsatz/{{ incident.id }}/qr" class="dropdown-item">
           <span class="di-icon">🔗</span> QR-Code anzeigen
         </a>
@@ -356,14 +360,14 @@
   <!-- Kanban Board -->
   <div class="kanban" id="kanban" data-incident-id="{{ incident.id }}">
     {% set columns = incident.columns %}
-    {% set lane_map = {'tasks':'tasks','messages':'messages','rescued':'persons'} %}
+    {% set kind_to_lane = {'tasks':'tasks','messages':'messages','rescued':'persons','vehicles':'vehicles','neighbor':'vehicles','custom':'vehicles'} %}
     {% for col in columns %}
     {% set col_vehicles = incident.vehicles|selectattr('column_id', 'eq', col.id)|selectattr('removed_at', 'none')|list %}
     {% set col_tasks = incident.tasks|selectattr('column_id', 'eq', col.id)|list %}
     {% set col_messages = incident.messages|selectattr('column_id', 'eq', col.id)|list %}
-    {% set col_persons = incident.rescued_persons if col.code == 'rescued' else [] %}
+    {% set col_persons = incident.rescued_persons if col.column_kind == 'rescued' else [] %}
     {% set col_count = col_vehicles|length + col_tasks|length + col_messages|length + col_persons|length %}
-    {% set lane = lane_map.get(col.code) or ('col-' + col.id|string) %}
+    {% set lane = kind_to_lane.get(col.column_kind) or ('col-' + col.id|string) %}
 
     <div class="kanban-col" id="col-{{ col.id }}"
          data-col-id="{{ col.id }}" data-col-code="{{ col.code }}"
@@ -396,16 +400,17 @@
 </div>
 
 <!-- Quick-Add Auftrag Dialog -->
-<dialog class="modal" id="quickAddTaskDialog" x-data="{colId: null}">
+<dialog class="modal" id="quickAddTaskDialog" x-data="{colId: null, vehicleId: null}">
   <div class="modal__content" style="min-width:min(400px,90vw);">
     <div class="modal__header">
       <h3 class="modal__title">Auftrag anlegen</h3>
       <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-swap="none"
-          @htmx:after-request="if(event.detail.successful){$el.reset();$el.closest('dialog').close();location.reload();}">
+          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId=null;$el.closest('dialog').close();location.reload();}">
       <div class="modal__body">
         <input type="hidden" name="column_id" :value="colId">
+        <input type="hidden" name="vehicle_id" :value="vehicleId || ''">
         {% if task_suggestions %}
         <div class="task-suggestions" style="margin-bottom:10px;">
           {% for ts in task_suggestions %}
@@ -445,7 +450,7 @@
 </dialog>
 
 <!-- Quick-Add Meldung Dialog -->
-<dialog class="modal" id="quickAddMsgDialog">
+<dialog class="modal" id="quickAddMsgDialog" x-data="{vehicleId: null}">
   <div class="modal__content" style="min-width:min(400px,90vw);">
     <div class="modal__header">
       <h3 class="modal__title">Meldung anlegen</h3>
@@ -453,8 +458,9 @@
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-swap="none"
           hx-encoding="multipart/form-data"
-          @htmx:after-request="if(event.detail.successful){$el.reset();document.getElementById('newMsgPreview').innerHTML='';$el.closest('dialog').close();location.reload();}">
+          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId=null;document.getElementById('newMsgPreview').innerHTML='';$el.closest('dialog').close();location.reload();}">
       <div class="modal__body">
+        <input type="hidden" name="vehicle_id" :value="vehicleId || ''">
         {% if msg_suggestions %}
         <div class="task-suggestions" style="margin-bottom:10px;">
           {% for ms in msg_suggestions %}
@@ -677,7 +683,26 @@
     <form method="post" action="/einsatz/{{ incident.id }}/person">
       <input type="hidden" name="gender" :value="gender">
       <input type="hidden" name="person_group" :value="group">
+      <input type="hidden" name="name" :value="quickName">
       <div class="modal__body">
+        <!-- Step 0: Quick-Erfassung (nur Name) -->
+        <div x-show="step === 0">
+          <p class="wizard-label" style="margin-bottom:12px;">Schnellerfassung – nur Name erforderlich</p>
+          <div class="form-group">
+            <label class="form-label">Name (optional)</label>
+            <input type="text" x-model="quickName" class="form-input" placeholder="z. B. Max Muster" autofocus>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fundort (optional)</label>
+            <input type="text" name="location" class="form-input" placeholder="z. B. Wohnung 1. OG">
+          </div>
+          <button type="button"
+                  @click="step=1"
+                  class="btn btn--ghost btn--sm"
+                  style="margin-top:4px; font-size:.8rem; opacity:.7;">
+            ＋ Mehr Details (Geschlecht, Alter, Fahrzeug)
+          </button>
+        </div>
         <!-- Step 1: Geschlecht -->
         <div x-show="step === 1">
           <p class="wizard-label">Schritt 1 / 4 – Geschlecht</p>
@@ -696,7 +721,7 @@
             <button type="button" @click="group='Ältere Person'; step=3" class="wizard-pill">Ältere Person</button>
           </div>
         </div>
-        <!-- Step 3: Name + Fundort -->
+        <!-- Step 3: Name + Fundort (vollständige Erfassung) -->
         <div x-show="step === 3">
           <p class="wizard-label">Schritt 3 / 4 – Details</p>
           <div class="form-group">
@@ -708,7 +733,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">Name (falls bekannt)</label>
-            <input type="text" name="name" class="form-input">
+            <input type="text" x-model="quickName" class="form-input">
           </div>
           <div class="form-group">
             <label class="form-label">Fundort</label>
@@ -736,9 +761,10 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" @click="step > 1 ? step-- : $el.closest('dialog').close()" class="btn btn--ghost">
-          <span x-text="step > 1 ? '← Zurück' : 'Abbrechen'"></span>
+        <button type="button" @click="step > 0 ? step-- : $el.closest('dialog').close()" class="btn btn--ghost">
+          <span x-text="step > 0 ? '← Zurück' : 'Abbrechen'"></span>
         </button>
+        <button x-show="step === 0" type="submit" class="btn btn--primary">Speichern</button>
         <button x-show="step === 3" type="button" @click="step=4" class="btn btn--secondary">Weiter →</button>
         <button x-show="step === 4" type="submit" class="btn btn--primary">Speichern</button>
       </div>
@@ -847,13 +873,29 @@ function openQuickAddTask(colId) {
   const dlg = document.getElementById('quickAddTaskDialog');
   if (!dlg) return;
   const comp = Alpine.$data(dlg);
-  if (comp) comp.colId = colId;
+  if (comp) { comp.colId = colId; comp.vehicleId = null; }
+  dlg.showModal();
+}
+
+function openQuickAddTaskForVehicle(vehicleId, colId) {
+  const dlg = document.getElementById('quickAddTaskDialog');
+  if (!dlg) return;
+  const comp = Alpine.$data(dlg);
+  if (comp) { comp.colId = colId; comp.vehicleId = vehicleId; }
+  dlg.showModal();
+}
+
+function openQuickAddMsgForVehicle(vehicleId) {
+  const dlg = document.getElementById('quickAddMsgDialog');
+  if (!dlg) return;
+  const comp = Alpine.$data(dlg);
+  if (comp) comp.vehicleId = vehicleId;
   dlg.showModal();
 }
 
 function personWizard() {
   return {
-    step: 1, gender: '', group: '',
+    step: 0, gender: '', group: '', quickName: '',
     get ageOptions() {
       if (this.group === 'Kind') return ['0–4 Jahre','5–9 Jahre','10–14 Jahre','15–17 Jahre'];
       if (this.group === 'Ältere Person') return ['65–69 Jahre','70–74 Jahre','75–79 Jahre','80+ Jahre'];
@@ -897,6 +939,34 @@ function lageTicker(hints, aiFlags) {
     }
   };
 }
+
+// ── Board WebSocket (real-time column reorder from other clients) ─────────────
+(function () {
+  const _incId = {{ incident.id }};
+  const _proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  let _bws;
+  function _connectBoardWs() {
+    _bws = new WebSocket(_proto + '//' + location.host + '/ws/incident/' + _incId);
+    _bws.onmessage = function (e) {
+      if (e.data === 'pong') return;
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'columns_reordered') {
+          location.reload();
+        } else if (msg.type === 'message_due') {
+          const state = window.Alpine && Alpine.$data(document.body);
+          if (state && state.addToast) {
+            state.addToast('Meldung fällig: ' + msg.title, 'warn');
+          }
+          try { new Audio('/static/audio/alarm.mp3').play().catch(function(){}); } catch(_) {}
+        }
+      } catch (_) {}
+    };
+    _bws.onclose = function () { setTimeout(_connectBoardWs, 3000); };
+    setInterval(function () { if (_bws && _bws.readyState === 1) _bws.send('ping'); }, 30000);
+  }
+  _connectBoardWs();
+})();
 
 // ── Mobile Lane Select ───────────────────────────────────────────────────────
 (function () {

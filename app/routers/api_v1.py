@@ -27,7 +27,7 @@ from app.models.user import ApiKey
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.broadcast import broadcast_org, manager
 from app.services.incident_service import create_incident
-from app.services.push_service import notify_all
+from app.services.push_service import notify_all, notify_org
 
 router = APIRouter(prefix="/api/v1", tags=["Einsätze"])
 
@@ -231,7 +231,9 @@ async def _enrich_with_ai_suggestions(
     if not suggestions:
         return
 
+    from app.core.tenant import set_tenant_context
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         incident = db.get(Incident, incident_id)
         if not incident:
@@ -282,7 +284,9 @@ async def _enrich_with_ai_hints(
     if not hints:
         return
 
+    from app.core.tenant import set_tenant_context
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         incident = db.get(Incident, incident_id)
         if not incident:
@@ -303,11 +307,13 @@ async def _apply_ai_prio_to_site(site_id: int) -> None:
 
     Only sets priority when none exists — never overwrites a manually set value.
     """
+    from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.major_incident import IncidentSite, SitePriority
     from app.services.ai_service import analyze_site_reconnaissance
 
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         site = db.get(IncidentSite, site_id)
         text = site.einsatzgrund or site.bezeichnung if site else None
@@ -516,10 +522,13 @@ async def create_incident_api(
     # notify_neighbors → Einladungsvorschläge für Partner-Orgs
     _create_neighbor_invitations_api(db, incident, alarm_type_code, api_key.org_id)
 
-    # Web Push notification
+    # Web Push notification – nur an die eigene Org des Einsatzes
     push_title = f"{exercise_prefix}🚒 Einsatz: {alarm_type_code}"
     push_body = address or payload.Meldung or "Kein Ort angegeben"
-    notify_all(db, push_title, push_body, url=f"/einsatz/{incident.id}")
+    if api_key.org_id:
+        notify_org(db, api_key.org_id, push_title, push_body, url=f"/einsatz/{incident.id}")
+    else:
+        notify_all(db, push_title, push_body, url=f"/einsatz/{incident.id}")
 
     board_token, board_url = _get_or_create_board_token(
         db, incident.id, api_key.created_by_user_id, str(request.base_url)
@@ -622,11 +631,13 @@ class LageSiteCreatedResponse(BaseModel):
 
 async def _site_post_create_tasks(site_id: int) -> None:
     """Background task: geocode address and apply AI priority on a newly created site."""
+    from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.major_incident import IncidentSite, MajorIncident, SitePriority
     from app.services.geocoding import geocode_address
     from app.services.ai_service import analyze_site_reconnaissance, is_enabled
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         site = db.get(IncidentSite, site_id)
         if not site:
@@ -673,6 +684,7 @@ async def _enrich_site_from_alarm(
     org_id: int | None = None,
 ) -> None:
     """Background: geocode, AI priority, name/telefon notes."""
+    from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.major_incident import IncidentSite, SiteLogEntry, SitePriority
     from app.services.geocoding import geocode_address
@@ -682,6 +694,7 @@ async def _enrich_site_from_alarm(
     )
 
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         site = db.get(IncidentSite, site_id)
         if not site:

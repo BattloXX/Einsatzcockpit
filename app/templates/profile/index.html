@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Mein Profil{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Mein Profil</h1>
+    <p class="page-header__sub">Anzeigename, Kontakt, Passwort und Profilbild</p>
+  </div>
+</div>
+
+{% if saved %}
+<div class="alert alert--success" style="margin-bottom:1rem;">Gespeichert.</div>
+{% endif %}
+{% if error == 'email_taken' %}
+<div class="alert alert--error" style="margin-bottom:1rem;">Diese E-Mail-Adresse wird bereits verwendet.</div>
+{% elif error == 'wrong_password' %}
+<div class="alert alert--error" style="margin-bottom:1rem;">Aktuelles Passwort ist falsch.</div>
+{% elif error == 'password_too_short' %}
+<div class="alert alert--error" style="margin-bottom:1rem;">Das neue Passwort muss mindestens 8 Zeichen lang sein.</div>
+{% elif error == 'avatar_too_large' %}
+<div class="alert alert--error" style="margin-bottom:1rem;">Das Bild ist zu groß (max. 3 MB).</div>
+{% elif error == 'avatar_not_image' %}
+<div class="alert alert--error" style="margin-bottom:1rem;">Nur Bilddateien sind erlaubt.</div>
+{% elif error == 'avatar_upload_failed' %}
+<div class="alert alert--error" style="margin-bottom:1rem;">Bild-Upload fehlgeschlagen. Bitte erneut versuchen.</div>
+{% endif %}
+
+<div style="display:grid; gap:1.5rem; max-width:640px;">
+
+  <!-- Avatar -->
+  <section class="card">
+    <div class="card-header"><h2>Profilbild</h2></div>
+    <div class="card-body">
+      <div style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap; margin-bottom:1.25rem;">
+        {% if avatar_url %}
+        <img src="{{ avatar_url }}" alt="Avatar"
+             style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:2px solid var(--border);">
+        {% else %}
+        <div style="width:80px; height:80px; border-radius:50%; background:var(--surface-high);
+                    display:flex; align-items:center; justify-content:center;
+                    font-size:2rem; border:2px solid var(--border); color:var(--text-muted);">
+          {{ profile_user.display_name[0]|upper if profile_user.display_name else '?' }}
+        </div>
+        {% endif %}
+        <div style="font-size:.85rem; color:var(--text-muted);">
+          JPEG, PNG oder GIF · max. 3 MB · wird auf 256×256 px skaliert
+        </div>
+      </div>
+      <form method="post" action="/profil/avatar" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
+          <input type="file" name="avatar" accept="image/*" class="form-control" style="flex:1; min-width:200px;">
+          <button type="submit" class="btn btn--primary btn--sm">Hochladen</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Profildaten -->
+  <section class="card">
+    <div class="card-header"><h2>Profildaten</h2></div>
+    <div class="card-body">
+      <form method="post" action="/profil">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Anzeigename</label>
+            <input type="text" name="display_name"
+                   value="{{ profile_user.display_name or '' }}"
+                   class="form-control" maxlength="150" required>
+          </div>
+          <div class="form-group">
+            <label>E-Mail</label>
+            <input type="email" name="email"
+                   value="{{ profile_user.email or '' }}"
+                   class="form-control" maxlength="255">
+          </div>
+          <div class="form-group">
+            <label>Telefon</label>
+            <input type="tel" name="phone"
+                   value="{{ profile_user.phone or '' }}"
+                   class="form-control" maxlength="64">
+          </div>
+        </div>
+        <div style="margin-top:1rem;">
+          <button type="submit" class="btn btn--primary">Speichern</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Passwort -->
+  <section class="card">
+    <div class="card-header"><h2>Passwort ändern</h2></div>
+    <div class="card-body">
+      <form method="post" action="/profil/passwort">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Aktuelles Passwort</label>
+            <input type="password" name="current_password" class="form-control" autocomplete="current-password">
+          </div>
+          <div class="form-group">
+            <label>Neues Passwort <small style="color:var(--text-muted);">(min. 8 Zeichen)</small></label>
+            <input type="password" name="new_password" class="form-control" minlength="8" autocomplete="new-password">
+          </div>
+        </div>
+        <div style="margin-top:1rem;">
+          <button type="submit" class="btn btn--primary">Passwort ändern</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Account-Info (read-only) -->
+  <section class="card">
+    <div class="card-header"><h2>Konto-Info</h2></div>
+    <div class="card-body">
+      <dl style="display:grid; grid-template-columns:auto 1fr; gap:.4rem 1rem; font-size:.9rem;">
+        <dt style="color:var(--text-muted);">Benutzername</dt>
+        <dd><code>{{ profile_user.username }}</code></dd>
+        <dt style="color:var(--text-muted);">Rollen</dt>
+        <dd>{{ profile_user.roles|map(attribute='label')|join(', ') or '—' }}</dd>
+        {% if profile_user.created_at %}
+        <dt style="color:var(--text-muted);">Erstellt am</dt>
+        <dd>{{ profile_user.created_at.strftime('%d.%m.%Y') }}</dd>
+        {% endif %}
+        {% if profile_user.last_login_at %}
+        <dt style="color:var(--text-muted);">Letzter Login</dt>
+        <dd>{{ profile_user.last_login_at.strftime('%d.%m.%Y %H:%M') }} Uhr</dd>
+        {% endif %}
+      </dl>
+    </div>
+  </section>
+
+</div>
+{% endblock %}

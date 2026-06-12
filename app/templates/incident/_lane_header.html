@@ -7,26 +7,26 @@
       <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
         <span class="kanban-col__count">{{ col_count }}</span>
         {% if can_edit %}
-          {% if col.code in ('dispatched', 'active') %}
+          {% if col.column_kind in ('vehicles', 'neighbor') %}
           <button class="kanban-col__add-btn" type="button"
                   onclick="document.getElementById('vehicleWizard').showModal()"
                   title="Einheit zum Einsatz hinzufügen">
             <span class="kanban-col__add-label">+ Einheit</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
           </button>
-          {% elif col.code == 'rescued' %}
+          {% elif col.column_kind == 'rescued' %}
           <button class="kanban-col__add-btn kanban-col__add-btn--person" type="button"
                   onclick="document.getElementById('personWizard').showModal()"
                   title="Gerettete Person erfassen">
             <span class="kanban-col__add-label">+ Person</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
           </button>
-          {% elif col.code == 'messages' %}
+          {% elif col.column_kind == 'messages' %}
           <button class="kanban-col__add-btn" type="button"
                   onclick="document.getElementById('quickAddMsgDialog').showModal()"
                   title="Meldung anlegen">
             <span class="kanban-col__add-label">+ Meldung</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
           </button>
           {% else %}
-          {# tasks column and any custom section columns #}
+          {# tasks and custom section columns #}
           <button class="kanban-col__add-btn" type="button"
                   onclick="openQuickAddTask({{ col.id }})"
                   title="Auftrag anlegen">

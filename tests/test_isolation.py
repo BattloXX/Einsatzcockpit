@@ -24,6 +24,8 @@ from app.db import Base
 from app.models.incident import Incident, IncidentOrg
 from app.models.master import AlarmType, FireDept, Member
 
+
+
 TEST_DB_URL = "sqlite:///:memory:"
 
 
@@ -33,6 +35,7 @@ def db():
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     session = Session()
+    set_tenant_context(session, None)  # System-Modus: kein Filter (explizit gesetzt)
     yield session
     session.close()
     Base.metadata.drop_all(bind=engine)

@@ -78,11 +78,13 @@ def test_collect_report_context_returns_dict(client):
     """collect_report_context with a seeded incident returns a dict without person keys."""
     from sqlalchemy.orm import Session
 
+    from app.core.tenant import set_tenant_context
     from app.db import engine
     from app.models.incident import Incident
     from app.services.incident_service import collect_report_context
 
     db = Session(bind=engine)
+    set_tenant_context(db, None)
     try:
         incident = db.query(Incident).first()
         if not incident:
@@ -125,10 +127,12 @@ def test_ai_report_draft_persists(client):
     """Saving an ai_report_draft stores it on the Incident."""
     from sqlalchemy.orm import Session
 
+    from app.core.tenant import set_tenant_context
     from app.db import engine
     from app.models.incident import Incident
 
     db = Session(bind=engine)
+    set_tenant_context(db, None)
     try:
         incident = db.query(Incident).first()
         if not incident:

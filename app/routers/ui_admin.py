@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.audit import write_audit
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
 from app.services.alarm_service import get_alarm_type_by_code
+from app.services.push_service import notify_all as _push_notify_all
+from app.services.push_service import notify_org as _push_notify_org
 from app.core.security import generate_api_key, generate_sms_gateway_token, hash_api_key, hash_password
 from app.core.templating import templates
 from app.db import get_db
@@ -31,7 +33,7 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
-from app.models.user import ApiKey, AuditLog, DeviceToken, PushLog, PushSubscription, Role, SmsGatewayToken, User, UserRole
+from app.models.user import ApiKey, AuditLog, DeviceToken, FcmToken, PushLog, PushSubscription, Role, SmsGatewayToken, User, UserRole
 
 router = APIRouter(prefix="/admin")
 logger_admin = logging.getLogger("einsatzleiter.admin")
@@ -299,15 +301,17 @@ async def create_member(
     qualification_codes: list[str] = Form([]),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
+    user = request.state.user
     member = Member(lastname=lastname, firstname=firstname,
-                    phone=phone or None, email=email or None)
+                    phone=phone or None, email=email or None,
+                    org_id=user.org_id)
     db.add(member)
     db.flush()
     for code in qualification_codes:
         q = db.query(Qualification).filter(Qualification.code == code).first()
         if q:
             db.add(MemberQualification(member_id=member.id, qualification_id=q.id))
-    write_audit(db, "admin.member.created", user_id=request.state.user.id,
+    write_audit(db, "admin.member.created", user_id=user.id,
                 entity_type="member", entity_id=member.id)
     db.commit()
     return RedirectResponse("/admin/mitglieder", status_code=303)
@@ -2254,14 +2258,21 @@ async def push_notifications_page(
 
     from app.services.push_service import _push_cfg
     cfg = _push_cfg(db)
-    sub_count = db.query(PushSubscription).count()
-    users_with_subs = (
+    is_sysadmin = has_role(user, "system_admin")
+
+    sub_q = db.query(PushSubscription)
+    users_q = (
         db.query(User)
         .join(PushSubscription, PushSubscription.user_id == User.id)
         .distinct()
-        .order_by(User.display_name)
-        .all()
     )
+    if not is_sysadmin and user.org_id:
+        org_user_ids = db.query(User.id).filter(User.org_id == user.org_id)
+        sub_q = sub_q.filter(PushSubscription.user_id.in_(org_user_ids))
+        users_q = users_q.filter(User.org_id == user.org_id)
+
+    sub_count = sub_q.count()
+    users_with_subs = users_q.order_by(User.display_name).all()
     push_logs = (
         db.query(PushLog)
         .options(joinedload(PushLog.target_user))
@@ -2291,16 +2302,19 @@ async def send_push_notification(
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
-    from app.services.push_service import notify_all, notify_user
+    from app.services.push_service import notify_user
     title = title.strip()
     body = body.strip()
     url = url.strip() or "/"
     if not title or not body:
         return RedirectResponse("/admin/push-nachrichten?error=empty", status_code=303)
+    admin_user = request.state.user
     if target == "user" and user_id:
         count = notify_user(db, user_id, title, body, url, source="admin_user")
+    elif has_role(admin_user, "system_admin"):
+        count = _push_notify_all(db, title, body, url, source="admin_all")
     else:
-        count = notify_all(db, title, body, url, source="admin_all")
+        count = _push_notify_org(db, admin_user.org_id, title, body, url, source="admin_org")
     write_audit(db, "admin.push.manual_send", user_id=request.state.user.id,
                 payload={"title": title, "target": target, "sent": count})
     db.commit()

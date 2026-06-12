@@ -284,12 +284,23 @@ def create_incident(
     return incident
 
 
+_CODE_KINDS: dict[str, str] = {
+    "dispatched": "vehicles",
+    "active":     "vehicles",
+    "tasks":      "tasks",
+    "messages":   "messages",
+    "rescued":    "rescued",
+    "neighbor":   "neighbor",
+}
+
+
 def _create_fixed_columns(db: Session, incident: Incident) -> None:
     for i, code in enumerate(FIXED_COLUMNS):
         col = IncidentColumn(
             incident_id=incident.id,
             code=code,
             title=FIXED_COLUMN_TITLES[code],
+            column_kind=_CODE_KINDS.get(code, "custom"),
             is_fixed=True,
             display_order=i,
         )
@@ -310,7 +321,6 @@ def _populate_vehicles(db: Session, incident: Incident, alarm: AlarmType | None)
 
     db.refresh(incident, ["columns"])
     dispatched_col = _get_column(incident, "dispatched")
-    neighbor_col = _get_column(incident, "neighbor")
     if not dispatched_col:
         return
 
@@ -356,16 +366,28 @@ def _populate_vehicles(db: Session, incident: Incident, alarm: AlarmType | None)
                 display_order=i,
             ))
 
-    # Neighbor vehicles go into 'neighbor' column (only in fallback mode if notify_neighbors)
-    if alarm and alarm.notify_neighbors and neighbor_col and not dispatch_entries:
+    # Neighbor column: only create when alarm uses notify_neighbors (and no explicit dispatch)
+    if alarm and alarm.notify_neighbors and not dispatch_entries:
+        neighbor_col = _get_column(incident, "neighbor")
+        if neighbor_col is None:
+            neighbor_col = IncidentColumn(
+                incident_id=incident.id,
+                code="neighbor",
+                title=FIXED_COLUMN_TITLES["neighbor"],
+                column_kind="neighbor",
+                is_fixed=True,
+                display_order=len(FIXED_COLUMNS),
+            )
+            db.add(neighbor_col)
+            db.flush()
+        from app.models.master import FireDept as FD
         neighbor_q = (
             db.query(VehicleMaster)
             .join(VehicleMaster.dept)
             .filter(VehicleMaster.active == True)  # noqa: E712
+            .filter(FD.slug != "wolfurt")
             .order_by(VehicleMaster.display_order)
         )
-        from app.models.master import FireDept as FD
-        neighbor_q = neighbor_q.filter(FD.slug != "wolfurt")
         for i, vm in enumerate(neighbor_q.all()):
             db.add(IncidentVehicle(
                 incident_id=incident.id,
@@ -532,6 +554,18 @@ def add_section_column(
         user_id=user_id,
     )
     return col
+
+
+def reorder_columns(db: Session, incident_id: int, column_ids: list[int]) -> None:
+    for order, col_id in enumerate(column_ids):
+        col = (
+            db.query(IncidentColumn)
+            .filter_by(id=col_id, incident_id=incident_id)
+            .first()
+        )
+        if col:
+            col.display_order = order
+    db.flush()
 
 
 def set_commander(

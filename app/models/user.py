@@ -42,6 +42,8 @@ class User(Base):
     # Lockout (Phase 7)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Profil-Avatar (relativer Pfad unterhalb MEDIA_STORAGE_DIR)
+    avatar_path: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     user_roles: Mapped[list[UserRole]] = relationship(back_populates="user", lazy="joined")
     push_subscriptions: Mapped[list[PushSubscription]] = relationship(back_populates="user")

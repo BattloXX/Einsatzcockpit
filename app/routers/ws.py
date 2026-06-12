@@ -17,6 +17,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.permissions import can_access_incident
 from app.core.security import hash_api_key, unsign_session
+from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.major_incident import MajorIncident
@@ -48,6 +49,7 @@ def _resolve_user(websocket: WebSocket) -> User | None:
         return None
     user_id, *_ = session_data
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
         if user is not None:
@@ -68,6 +70,7 @@ async def incident_ws(websocket: WebSocket, incident_id: int):
 
     # Org-/Einsatz-Zugriff prüfen
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         incident = db.get(Incident, incident_id)
         if incident is None:
@@ -103,6 +106,7 @@ async def lage_ws(websocket: WebSocket, lage_id: int):
         return
 
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         lage = db.get(MajorIncident, lage_id)
         if lage is None or lage.org_id != user.org_id:
@@ -161,6 +165,7 @@ def _resolve_sms_gateway_token(websocket: WebSocket) -> SmsGatewayToken | None:
         return None
     token_hash = hash_api_key(raw)
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         return (
             db.query(SmsGatewayToken)
@@ -173,6 +178,7 @@ def _resolve_sms_gateway_token(websocket: WebSocket) -> SmsGatewayToken | None:
 
 def _touch_sms_gateway_token(token_id: int) -> None:
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         tok = db.get(SmsGatewayToken, token_id)
         if tok:
