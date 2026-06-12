@@ -354,13 +354,12 @@
     <button class="board-tab active" data-lane="tasks"     type="button">📋 Aufträge</button>
     <button class="board-tab"        data-lane="messages"  type="button">📨 Meldungen</button>
     <button class="board-tab"        data-lane="persons"   type="button">👥 Personen</button>
-    <button class="board-tab"        data-lane="vehicles"  type="button">🚒 Fahrzeuge</button>
   </nav>
 
   <!-- Kanban Board -->
   <div class="kanban" id="kanban" data-incident-id="{{ incident.id }}">
     {% set columns = incident.columns %}
-    {% set kind_to_lane = {'tasks':'tasks','messages':'messages','rescued':'persons','vehicles':'vehicles','neighbor':'vehicles','custom':'vehicles'} %}
+    {% set kind_to_lane = {'tasks':'tasks','messages':'messages','rescued':'persons'} %}
     {% for col in columns %}
     {% set col_vehicles = incident.vehicles|selectattr('column_id', 'eq', col.id)|selectattr('removed_at', 'none')|list %}
     {% set col_tasks = incident.tasks|selectattr('column_id', 'eq', col.id)|list %}
@@ -1061,11 +1060,11 @@ function lageTicker(hints, aiFlags) {
     if (!sel) return;
     var laneNames = {
       'tasks': '📋 Aufträge', 'messages': '📨 Meldungen',
-      'persons': '👥 Personen', 'vehicles': '🚒 Fahrzeuge'
+      'persons': '👥 Personen'
     };
     var added = new Set();
     var items = [];
-    ['tasks', 'messages', 'persons', 'vehicles'].forEach(function(lane) {
+    ['tasks', 'messages', 'persons'].forEach(function(lane) {
       var cols = document.querySelectorAll('.kanban-col[data-lane="' + lane + '"]');
       if (!cols.length) return;
       var count = 0;
