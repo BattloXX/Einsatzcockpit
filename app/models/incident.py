@@ -100,6 +100,9 @@ class Incident(Base):
     collaborating_orgs: Mapped[list[IncidentOrg]] = relationship(
         back_populates="incident", cascade="all, delete-orphan"
     )
+    comm_log: Mapped[list[IncidentCommLog]] = relationship(
+        back_populates="incident", order_by="IncidentCommLog.ts.desc()", cascade="all, delete-orphan"
+    )
     leader: Mapped[User | None] = relationship(
         "User", foreign_keys=[incident_leader_user_id], lazy="joined"
     )
@@ -432,6 +435,26 @@ class IncidentToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     incident: Mapped[Incident] = relationship(back_populates="tokens")
+
+
+class IncidentCommLog(Base):
+    """Funkjournal-Eintrag für Normaleinsatz."""
+    __tablename__ = "incident_comm_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    direction: Mapped[str] = mapped_column(String(4), nullable=False)   # in|out|int
+    channel: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    partner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    is_request: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_lage_relevant: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    handled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    incident: Mapped[Incident] = relationship(back_populates="comm_log")
 
 
 # Import BreathingTroop here to avoid circular import in Incident.breathing_troops

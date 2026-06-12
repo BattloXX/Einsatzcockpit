@@ -186,6 +186,10 @@
               @click="open=!open"
               {{ tip('Weitere Aktionen: QR-Code, PDF-Export') }}>⋯</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms>
+        <a href="/einsatz/{{ incident.id }}/funkjournal" class="dropdown-item">
+          <span class="di-icon">📻</span> Funkjournal
+        </a>
+        <hr class="dropdown-divider">
         <a href="/einsatz/{{ incident.id }}/qr" class="dropdown-item">
           <span class="di-icon">🔗</span> QR-Code anzeigen
         </a>

@@ -29,6 +29,7 @@ from app.models.incident import (
     UNIT_STATUS_VALUES,
     Incident,
     IncidentColumn,
+    IncidentCommLog,
     IncidentLog,
     IncidentOrg,
     IncidentToken,
@@ -2465,3 +2466,116 @@ async def address_save(
         "user": user, "incident": incident, "org": org, "saved": True,
         "auto_token": incident.auto_geojson_token,
     })
+
+
+# ── Funkjournal ───────────────────────────────────────────────────────────────
+
+@router.get("/einsatz/{incident_id}/funkjournal", response_class=HTMLResponse)
+async def funkjournal_page(
+    request: Request,
+    incident_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    incident = db.get(Incident, incident_id)
+    if not incident or not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+
+    comms = (
+        db.query(IncidentCommLog)
+        .filter(IncidentCommLog.incident_id == incident_id)
+        .order_by(IncidentCommLog.ts.desc())
+        .limit(200)
+        .all()
+    )
+    open_requests = sum(1 for c in comms if c.is_request and not c.handled)
+    return templates.TemplateResponse(request, "incident/funkjournal.html", {
+        "user": user,
+        "incident": incident,
+        "comms": comms,
+        "open_requests": open_requests,
+        "can_edit": has_role(user, "incident_leader", "admin", "org_admin", "recorder"),
+    })
+
+
+@router.post("/einsatz/{incident_id}/funkjournal")
+async def funkjournal_add(
+    request: Request,
+    incident_id: int,
+    direction: str = Form(...),
+    channel: str = Form(""),
+    partner: str = Form(""),
+    message: str = Form(...),
+    is_request: bool = Form(False),
+    is_lage_relevant: bool = Form(False),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    incident = db.get(Incident, incident_id)
+    if not incident or not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    if direction not in ("in", "out", "int"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Ungültige Richtung")
+
+    db.add(IncidentCommLog(
+        incident_id=incident_id,
+        direction=direction,
+        channel=channel.strip() or None,
+        partner=partner.strip() or None,
+        message=message.strip(),
+        is_request=is_request,
+        is_lage_relevant=is_lage_relevant,
+        user_id=user.id,
+        author_name=get_author_name(request),
+    ))
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/funkjournal/{entry_id}/erledigt")
+async def funkjournal_toggle_handled(
+    request: Request,
+    incident_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    incident = db.get(Incident, incident_id)
+    if not incident or not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    entry = db.get(IncidentCommLog, entry_id)
+    if not entry or entry.incident_id != incident_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    entry.handled = not entry.handled
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/funkjournal/{entry_id}/lage")
+async def funkjournal_toggle_lage(
+    request: Request,
+    incident_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    incident = db.get(Incident, incident_id)
+    if not incident or not can_access_incident(user, incident):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    entry = db.get(IncidentCommLog, entry_id)
+    if not entry or entry.incident_id != incident_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    entry.is_lage_relevant = not entry.is_lage_relevant
+    db.commit()
+    return Response(status_code=204)
