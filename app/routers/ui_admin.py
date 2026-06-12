@@ -8,9 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
-from app.services.alarm_service import get_alarm_type_by_code
-from app.services.push_service import notify_all as _push_notify_all
-from app.services.push_service import notify_org as _push_notify_org
 from app.core.security import generate_api_key, generate_sms_gateway_token, hash_api_key, hash_password
 from app.core.templating import templates
 from app.db import get_db
@@ -33,7 +30,20 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
-from app.models.user import ApiKey, AuditLog, DeviceToken, FcmToken, PushLog, PushSubscription, Role, SmsGatewayToken, User, UserRole
+from app.models.user import (
+    ApiKey,
+    AuditLog,
+    DeviceToken,
+    PushLog,
+    PushSubscription,
+    Role,
+    SmsGatewayToken,
+    User,
+    UserRole,
+)
+from app.services.alarm_service import get_alarm_type_by_code
+from app.services.push_service import notify_all as _push_notify_all
+from app.services.push_service import notify_org as _push_notify_org
 
 router = APIRouter(prefix="/admin")
 logger_admin = logging.getLogger("einsatzleiter.admin")
@@ -130,7 +140,12 @@ async def create_user(
         except Exception:
             logger_admin.warning("Willkommensmail an %s konnte nicht gesendet werden", email_clean)
     is_sysadmin = has_role(current_user, "system_admin")
-    users = _org_filter(db.query(User), current_user, User.org_id).filter(User.is_device == False).order_by(User.username).all()  # noqa: E712
+    users = (
+        _org_filter(db.query(User), current_user, User.org_id)
+        .filter(User.is_device == False)  # noqa: E712
+        .order_by(User.username)
+        .all()
+    )
     roles_list = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     return templates.TemplateResponse(request, "admin/users.html", {
@@ -1879,16 +1894,20 @@ async def backup_json(request: Request, db: Session = Depends(get_db),
         "task_suggestions": [
             {
                 "text": s.text,
-                "alarms": [{"alarm_type_code": a.alarm_type.code if a.alarm_type else None, "display_order": a.display_order}
-                           for a in sorted(s.alarm_assignments, key=lambda x: x.display_order) if a.alarm_type],
+                "alarms": [
+                    {"alarm_type_code": a.alarm_type.code if a.alarm_type else None, "display_order": a.display_order}
+                    for a in sorted(s.alarm_assignments, key=lambda x: x.display_order) if a.alarm_type
+                ],
             }
             for s in db.query(TaskSuggestion).order_by(TaskSuggestion.id).all()
         ],
         "message_suggestions": [
             {
                 "text": s.text,
-                "alarms": [{"alarm_type_code": a.alarm_type.code if a.alarm_type else None, "display_order": a.display_order}
-                           for a in sorted(s.alarm_assignments, key=lambda x: x.display_order) if a.alarm_type],
+                "alarms": [
+                    {"alarm_type_code": a.alarm_type.code if a.alarm_type else None, "display_order": a.display_order}
+                    for a in sorted(s.alarm_assignments, key=lambda x: x.display_order) if a.alarm_type
+                ],
             }
             for s in db.query(MessageSuggestion).order_by(MessageSuggestion.id).all()
         ],
@@ -2805,6 +2824,7 @@ async def sms_test_send(
     _=Depends(require_role("admin")),
 ):
     from urllib.parse import quote_plus
+
     from app.services.sms_service import send_sms
     user = request.state.user
     to = to.strip()

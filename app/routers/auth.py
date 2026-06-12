@@ -8,8 +8,13 @@ from app.config import settings
 from app.core.audit import write_audit
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import (
-    hash_api_key, sign_session, sign_pin_access_token,
-    unsign_pin_access_token, unsign_qr_token, verify_password, verify_pin,
+    hash_api_key,
+    sign_pin_access_token,
+    sign_session,
+    unsign_pin_access_token,
+    unsign_qr_token,
+    verify_password,
+    verify_pin,
 )
 from app.core.templating import templates
 from app.db import get_db

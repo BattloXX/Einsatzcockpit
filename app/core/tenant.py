@@ -114,10 +114,11 @@ def _add_tenant_filter(execute_state) -> None:
         return
 
     # Regulärer Benutzer: Filter auf aktive Org
+    from sqlalchemy import select as sa_select
+
     from app.models.incident import Incident, IncidentOrg
     from app.models.master import VehicleMaster
     from app.models.user import AuditLog, User
-    from sqlalchemy import select as sa_select
 
     _org_id = org_id  # lokale Kopie für Closure
 

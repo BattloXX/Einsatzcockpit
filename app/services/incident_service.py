@@ -225,7 +225,6 @@ def create_incident(
     import secrets as _secrets
 
     from app.models.lagekarte import LagekarteToken
-
     from app.services.alarm_service import get_alarm_type_by_code as _get_alarm_type
 
     resolved_org_id = _resolve_org_id(db, primary_org_id)

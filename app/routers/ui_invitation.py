@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from app.core.permissions import has_role, require_role, same_org_or_system_admin
+from app.core.permissions import require_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg

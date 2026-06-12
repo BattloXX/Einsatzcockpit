@@ -259,7 +259,7 @@ async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: fl
     try:
         await ws.send_text(payload)
         return await asyncio.wait_for(fut, timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _sms_pending.pop(job_id, None)
         raise RuntimeError(f"SMS-Gateway Timeout für Job {job_id}")
     except Exception:

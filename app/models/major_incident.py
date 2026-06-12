@@ -9,7 +9,6 @@ from sqlalchemy.types import TypeDecorator
 
 from app.db import Base
 
-
 # ── GSL Stab: SKKM-Besetzungsjournal ──────────────────────────────────────────
 
 class GslStaffRole(Base):
@@ -83,13 +82,13 @@ class _SitePriorityColType(TypeDecorator):
             return None
 
 
-class MajorIncidentStatus(str, enum.Enum):
+class MajorIncidentStatus(enum.StrEnum):
     standby = "standby"
     active  = "active"
     closed  = "closed"    # nur manuell erreichbar
 
 
-class SitePhase(str, enum.Enum):
+class SitePhase(enum.StrEnum):
     eingegangen = "eingegangen"
     erkundung   = "erkundung"
     bewertet    = "bewertet"
@@ -106,7 +105,7 @@ class SitePriority(int, enum.Enum):
     aufschiebbar = 4    # reine Sachwerte
 
 
-class StaffFunction(str, enum.Enum):
+class StaffFunction(enum.StrEnum):
     lageleitung   = "lageleitung"
     s1_personal   = "s1"
     s2_lage       = "s2"

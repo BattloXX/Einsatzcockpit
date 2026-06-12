@@ -18,7 +18,7 @@ def get_roles(db: Session, org_id: int) -> list[GslStaffRole]:
     """Gibt systemweite + org-eigene Rollen sortiert zurück."""
     return (
         db.query(GslStaffRole)
-        .filter((GslStaffRole.org_id == None) | (GslStaffRole.org_id == org_id))
+        .filter((GslStaffRole.org_id.is_(None)) | (GslStaffRole.org_id == org_id))
         .order_by(GslStaffRole.sort_order)
         .all()
     )

@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
-from app.models.master import FireDept, OrgSettings, SystemSettings
+from app.models.master import OrgSettings, SystemSettings
 from app.services.broadcast import manager
 from app.services.incident_service import close_incident
 

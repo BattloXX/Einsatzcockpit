@@ -102,10 +102,8 @@ async def update_location(request: Request, db: Session = Depends(get_db)):
 
     # Positionshistorie schreiben wenn einem Fahrzeug zugeordnet
     if device_token.vehicle_master_id:
-        from app.models.major_incident import VehiclePosition
-        from app.models.master import OrgSettings
         # Aktive GSL-Lage für dieses Fahrzeug ermitteln
-        from app.models.major_incident import MajorIncident, MajorIncidentStatus, LageEinheit
+        from app.models.major_incident import LageEinheit, MajorIncident, MajorIncidentStatus, VehiclePosition
         active_lage = (
             db.query(MajorIncident)
             .join(LageEinheit, LageEinheit.lage_id == MajorIncident.id)
@@ -137,9 +135,9 @@ async def update_location(request: Request, db: Session = Depends(get_db)):
 
         # WS-Broadcast (gedrosselt: handled by caller - hier immer senden, Frontend drosselt)
         if active_lage:
-            from app.services.broadcast import broadcast_lage
             import asyncio
-            from app.models.master import VehicleMaster as _VM
+
+            from app.services.broadcast import broadcast_lage
             v = vehicle
             label = v.code if v else str(device_token.vehicle_master_id)
             asyncio.create_task(broadcast_lage(active_lage.id, {
@@ -207,7 +205,7 @@ async def get_duty_state(request: Request, db: Session = Depends(get_db)):
 
         # GSL: Fahrzeug als LageEinheit in aktiver Großschadenslage?
         if not incident_active:
-            from app.models.major_incident import MajorIncident, MajorIncidentStatus, LageEinheit
+            from app.models.major_incident import LageEinheit, MajorIncident, MajorIncidentStatus
             incident_active = db.query(MajorIncident).join(
                 LageEinheit, LageEinheit.lage_id == MajorIncident.id
             ).filter(

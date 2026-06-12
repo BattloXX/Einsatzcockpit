@@ -36,7 +36,9 @@ class User(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_device: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # org_id: which organisation this user belongs to (NULL = system_admin without org)
-    org_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True)
+    org_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Lockout (Phase 7)
@@ -108,7 +110,9 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
-    org_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True, index=True)
+    org_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     api_key_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("api_key.id"), nullable=True)
     incident_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

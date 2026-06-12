@@ -9,10 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.permissions import has_role, require_role
-from app.core.security import get_author_name
 from app.core.templating import templates
 from app.db import get_db
-from app.models.major_incident import GslStaffAssignment, GslStaffRole, MajorIncident, MajorIncidentStatus
+from app.models.major_incident import GslStaffAssignment, MajorIncident, MajorIncidentStatus
 from app.services import gsl_staff_service as svc
 from app.services.broadcast import broadcast_lage
 

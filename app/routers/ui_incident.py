@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.permissions import can_access_incident, has_role, require_role
 from app.core.queries import visible_incidents_q
 from app.core.security import (
@@ -31,7 +32,6 @@ from app.models.incident import (
     IncidentColumn,
     IncidentCommLog,
     IncidentLog,
-    IncidentOrg,
     IncidentToken,
     IncidentVehicle,
     Message,
@@ -40,6 +40,7 @@ from app.models.incident import (
     RescuedPerson,
     Task,
 )
+from app.models.major_incident import IncidentSite, MajorIncident, MajorIncidentStatus
 from app.models.master import (
     BOS_VALUES,
     AlarmDispatchVehicle,
@@ -58,9 +59,7 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
-from app.models.major_incident import IncidentSite, MajorIncident, MajorIncidentStatus
 from app.models.user import Role, User, UserRole
-from app.config import settings
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.broadcast import broadcast_org, manager
@@ -343,11 +342,15 @@ async def new_incident(
 
     # Großschadenslage-Trigger: AlarmTyp-Flag prüfen
     if user.org_id:
-        from app.models.master import AlarmType as _AlarmType, OrgSettings as _OrgSettings
+        from app.models.master import OrgSettings as _OrgSettings
+        from app.services.major_incident_service import (
+            adopt_incident_as_site as _adopt_incident_as_site,
+        )
+        from app.services.major_incident_service import (
+            get_active_lage as _get_active_lage,
+        )
         from app.services.major_incident_service import (
             handle_alarm_trigger as _handle_alarm_trigger,
-            get_active_lage as _get_active_lage,
-            adopt_incident_as_site as _adopt_incident_as_site,
         )
         at = get_alarm_type_by_code(db, user.org_id, alarm_type_code)
         if at and at.triggers_major_incident:
@@ -453,7 +456,10 @@ async def alarm_dispatch_vehicles(
     incident = _incident_or_404(incident_id, db)
     db.refresh(incident, ["columns", "vehicles"])
 
-    _at_for_dispatch = get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code) if incident.alarm_type_code else None
+    _at_for_dispatch = (
+        get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)
+        if incident.alarm_type_code else None
+    )
     dispatch_entries = (
         db.query(AlarmDispatchVehicle)
         .filter(AlarmDispatchVehicle.alarm_type_id == _at_for_dispatch.id)
@@ -540,7 +546,10 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
     db.refresh(incident, ["columns", "vehicles", "tasks", "messages", "rescued_persons"])
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
-    _at_board = get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code) if incident.alarm_type_code else None
+    _at_board = (
+        get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)
+        if incident.alarm_type_code else None
+    )
     from sqlalchemy import exists as _exists
     _has_any_alarm = _exists().where(LageHintAlarm.lage_hint_id == LageHint.id)
     _has_matching = _exists().where(
@@ -671,7 +680,10 @@ async def incident_dashboard(
             person_stats[p.status].append(p)
 
     started_at_iso = incident.started_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-    _at_board2 = get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code) if incident.alarm_type_code else None
+    _at_board2 = (
+        get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)
+        if incident.alarm_type_code else None
+    )
     from sqlalchemy import exists as _exists2
     _has_any2 = _exists2().where(LageHintAlarm.lage_hint_id == LageHint.id)
     _has_match2 = _exists2().where(
@@ -1246,6 +1258,7 @@ async def create_message(
     # Optional: Dateien direkt beim Anlegen anhängen
     if files:
         from fastapi import HTTPException as _HE
+
         from app.services.media_service import store_upload_for_message
         for f in files:
             if not f.filename:
@@ -1536,6 +1549,7 @@ async def pin_entry_page(incident_id: int, request: Request, db: Session = Depen
 
 
 from app.core.rate_limit import limiter as _limiter  # noqa: E402
+
 
 @(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
 @router.post("/einsatz/{incident_id}/pin-zugang", response_class=HTMLResponse)
@@ -2124,6 +2138,7 @@ async def regenerate_lage_hints(
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
     import json as _json
+
     from fastapi import HTTPException
     from fastapi.responses import JSONResponse
 
@@ -2375,7 +2390,9 @@ async def address_suggestions(
 ):
     """Liefert Adress-Vorschläge via Photon/Historie für das Typeahead-Autocomplete."""
     from dataclasses import asdict as _asdict
+
     from fastapi.responses import JSONResponse as _JSONResponse
+
     from app.services.address_autocomplete import suggest_addresses as _suggest
 
     user = getattr(request.state, "user", None)

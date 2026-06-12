@@ -5,9 +5,9 @@ rowcount == 0  →  quota exceeded  →  raise 413.
 """
 from __future__ import annotations
 
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
 
 _UNLIMITED = 2**62  # sentinel: effectively no upper bound
 
@@ -109,7 +109,7 @@ def release_storage(db: Session, org_id: int, n_bytes: int) -> None:
 def get_org_storage_info(db: Session, org_id: int) -> dict:
     """Returns {'used_bytes': int, 'quota_bytes': int | None}."""
     _ensure_row(db, org_id)
-    from app.models.master import OrgStorageUsage, FireDept
+    from app.models.master import FireDept, OrgStorageUsage
     row = db.get(OrgStorageUsage, org_id)
     org = db.get(FireDept, org_id)
     return {

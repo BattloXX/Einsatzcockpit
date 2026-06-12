@@ -56,6 +56,7 @@ def _fernet():
     """Return Fernet instance keyed from SECRET_KEY."""
     import base64
     import hashlib
+
     from cryptography.fernet import Fernet
     key_bytes = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key_bytes))
@@ -100,11 +101,12 @@ def _get_org_ai_cfg(org_id: int) -> dict | None:
 
 async def _record_token_usage(org_id: int, total_tokens: int, model: str) -> None:
     """Fire-and-forget: update monthly token counter + write audit entry."""
+    from datetime import UTC, datetime
+
     from app.core.audit import write_audit
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.master import OrgSettings
-    from datetime import UTC, datetime
     try:
         db = SessionLocal()
         set_tenant_context(db, None)

@@ -4,11 +4,6 @@ import random
 import secrets
 from datetime import UTC, datetime, timedelta
 
-logger = logging.getLogger("einsatzleiter.major_incident")
-
-# Pending phone verifications: verify_token → {pin, expires_at, ...}
-_pending_verifications: dict[str, dict] = {}
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -19,24 +14,24 @@ from app.core.security import get_author_name
 from app.core.templating import templates
 from app.db import get_db
 from app.models.major_incident import (
-    CitizenReport,
-    CommLogEntry,
-    IncidentSite,
-    LageEinheit,
-    LageJournalEntry,
-    Sector,
-    MajorIncident,
-    MajorIncidentStatus,
-    SiteLogEntry,
-    SitePhase,
-    SitePriority,
-    SiteResourceAssignment,
-    StaffAssignment,
     JOURNAL_CATEGORIES,
     JOURNAL_CATEGORY_COLOR,
     SITE_PRIORITY_COLOR,
     SITE_PRIORITY_LABEL,
     STAFF_FUNCTION_LABEL,
+    CitizenReport,
+    CommLogEntry,
+    IncidentSite,
+    LageEinheit,
+    LageJournalEntry,
+    MajorIncident,
+    MajorIncidentStatus,
+    Sector,
+    SiteLogEntry,
+    SitePhase,
+    SitePriority,
+    SiteResourceAssignment,
+    StaffAssignment,
     StaffFunction,
 )
 from app.models.master import FireDept, Member, VehicleMaster
@@ -50,6 +45,11 @@ from app.services.major_incident_service import (
 )
 
 router = APIRouter()
+
+logger = logging.getLogger("einsatzleiter.major_incident")
+
+# Pending phone verifications: verify_token → {pin, expires_at, ...}
+_pending_verifications: dict[str, dict] = {}
 
 _MI_FEATURE_KEYS: frozenset[str] = frozenset({
     "mi_feature_stab", "mi_feature_funkjournal", "mi_feature_meldungen",
@@ -206,7 +206,7 @@ async def lage_overview(
             .limit(50)
             .all()
         )
-        active_all = [l for l in all_lage if l.status == MajorIncidentStatus.active]
+        active_all = [li for li in all_lage if li.status == MajorIncidentStatus.active]
         if len(active_all) == 1:
             return RedirectResponse(f"/lage/{active_all[0].id}", status_code=302)
 
@@ -887,7 +887,7 @@ async def lage_media_thumb(
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
     from app.models.major_incident import SiteMedia as _SiteMedia
-    from app.services.lage_media_service import site_thumb_path
+    from app.services.lage_media_service import site_media_path, site_thumb_path
     user = request.state.user
     media = db.get(_SiteMedia, media_id)
     if not media:
@@ -1118,7 +1118,7 @@ async def lage_stab(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
-    from app.services.gsl_staff_service import soll_check, get_roles
+    from app.services.gsl_staff_service import get_roles, soll_check
     check = soll_check(db, lage_id, lage.org_id)
     roles = get_roles(db, lage.org_id)
 
@@ -1341,6 +1341,7 @@ async def meldungen_qr(
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
     import io
+
     import qrcode  # type: ignore
     import qrcode.image.svg  # type: ignore
 
@@ -1386,7 +1387,8 @@ async def funkjournal_handled(
 # ── Bürgermeldeportal – Hilfsfunktion ────────────────────────────────────────
 
 async def _save_citizen_photo(file: UploadFile) -> str | None:
-    import io, uuid
+    import io
+    import uuid
     from pathlib import Path
     data = await file.read()
     if not data:
@@ -1598,7 +1600,10 @@ async def buerger_verify_post(
     pending = _pending_verifications.get(verify_token)
 
     if not pending or pending["expires_at"] < now:
-        return HTMLResponse("<h2>Dieser Verifizierungslink ist abgelaufen. Bitte erneut versuchen.</h2>", status_code=410)
+        return HTMLResponse(
+            "<h2>Dieser Verifizierungslink ist abgelaufen. Bitte erneut versuchen.</h2>",
+            status_code=410,
+        )
 
     lage = db.get(MajorIncident, pending["lage_id"])
     if not lage:
@@ -2319,11 +2324,10 @@ async def vehicle_positions(
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
     """Gibt aktuelle Fahrzeugpositionen (letzte je Fahrzeug) als JSON zurück."""
-    import json as _json
     from datetime import timedelta
+
     from app.models.major_incident import VehiclePosition
-    from app.models.user import DeviceToken
-    from app.models.master import VehicleMaster, OrgSettings
+    from app.models.master import OrgSettings, VehicleMaster
 
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
@@ -2371,7 +2375,8 @@ async def vehicle_positions(
     result = []
     for p in positions:
         vehicle = db.get(VehicleMaster, p.vehicle_id) if p.vehicle_id else None
-        is_stale = p.received_at.replace(tzinfo=UTC) < stale_threshold if p.received_at.tzinfo is None else p.received_at < stale_threshold
+        ts = p.received_at.replace(tzinfo=UTC) if p.received_at.tzinfo is None else p.received_at
+        is_stale = ts < stale_threshold
         result.append({
             "id": p.id,
             "vehicle_id": p.vehicle_id,
@@ -2469,10 +2474,14 @@ async def lage_karte(
 
     def _site_color(s: IncidentSite) -> str:
         c = SITE_PRIORITY_COLOR.get(s.priority) if s.priority else None
-        if c == "red":    return "#ef4444"
-        if c == "orange": return "#f97316"
-        if c == "yellow": return "#eab308"
-        if s.phase == SitePhase.erledigt: return "#22c55e"
+        if c == "red":
+            return "#ef4444"
+        if c == "orange":
+            return "#f97316"
+        if c == "yellow":
+            return "#eab308"
+        if s.phase == SitePhase.erledigt:
+            return "#22c55e"
         return "#6b7280"
 
     active_sites = [s for s in lage.sites if s.phase != SitePhase.abgebrochen]

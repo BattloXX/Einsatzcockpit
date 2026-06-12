@@ -33,6 +33,7 @@ class Base(DeclarativeBase):
 
 # Tenant-Filter-Listener global registrieren (einmalig beim Modul-Import)
 from app.core.tenant import register_tenant_listener  # noqa: E402
+
 register_tenant_listener()
 
 

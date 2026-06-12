@@ -1,8 +1,8 @@
 """Shared query helpers used across multiple routers."""
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from sqlalchemy.orm import Session
 
 from app.core.permissions import has_role
 from app.models.incident import Incident, IncidentOrg

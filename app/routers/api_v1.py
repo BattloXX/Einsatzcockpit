@@ -18,14 +18,16 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.audit import write_audit
-from app.core.rate_limit import get_api_key_identifier, limiter as _limiter
+from app.core.rate_limit import get_api_key_identifier
+from app.core.rate_limit import limiter as _limiter
 from app.core.security import hash_api_key, sign_qr_token
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentToken
+from app.models.major_incident import IncidentSite as _IncidentSiteType
 from app.models.master import AlarmType, FireDept, OrgSettings
 from app.models.user import ApiKey
 from app.services.alarm_service import get_alarm_type_by_code
-from app.services.broadcast import broadcast_org, manager
+from app.services.broadcast import broadcast_org
 from app.services.incident_service import create_incident
 from app.services.push_service import notify_all, notify_org
 
@@ -276,6 +278,7 @@ async def _enrich_with_ai_hints(
 ) -> None:
     """Background: generate AI Lage-Hinweise and persist them on the incident."""
     import json as _json
+
     from app.db import SessionLocal
     from app.models.incident import Incident
     from app.services.ai_service import generate_lage_hints
@@ -348,7 +351,7 @@ def _handle_major_incident_trigger(
     einsatzgrund: str | None,
     lat: float | None = None,
     lng: float | None = None,
-) -> "IncidentSite | None":
+) -> _IncidentSiteType | None:
     """Prüft ob der Alarm eine Großschadenslage auslöst oder in eine laufende übernommen wird."""
     from app.services.major_incident_service import (
         adopt_incident_as_site,
@@ -607,7 +610,9 @@ class LageAlarmPayload(BaseModel):
     """Direktes Hinzufügen einer Einsatzstelle zur laufenden Großschadenslage."""
     Key: str = Field(..., min_length=1, max_length=200, description="Eindeutiger Schlüssel (Idempotency-Token).")
     Art: str | None = Field(None, max_length=200, description="Bezeichnung/Einsatzart für die Einsatzstelle.")
-    Meldung: str | None = Field(None, max_length=5000, description="Volltext der Meldung (wird als Einsatzgrund gespeichert).")
+    Meldung: str | None = Field(
+        None, max_length=5000, description="Volltext der Meldung (wird als Einsatzgrund gespeichert)."
+    )
     Stufe: str | None = Field(None, max_length=10, description="Alarmstufe (F1–F14, T1–T7).")
     Ort: str | None = Field(None, max_length=200, description="Ort.")
     Strasse: str | None = Field(None, max_length=200, description="Straße.")
@@ -642,8 +647,8 @@ async def _site_post_create_tasks(site_id: int) -> None:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.major_incident import IncidentSite, MajorIncident, SitePriority
-    from app.services.geocoding import geocode_address
     from app.services.ai_service import analyze_site_reconnaissance, is_enabled
+    from app.services.geocoding import geocode_address
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -695,11 +700,11 @@ async def _enrich_site_from_alarm(
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.major_incident import IncidentSite, SiteLogEntry, SitePriority
-    from app.services.geocoding import geocode_address
     from app.services.ai_service import (
         analyze_site_reconnaissance,
         is_enabled,
     )
+    from app.services.geocoding import geocode_address
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -797,7 +802,6 @@ async def lage_alarm(
 ):
     from app.models.major_incident import (
         IncidentSite,
-        MajorIncidentStatus,
         SiteLogEntry,
     )
     from app.services.broadcast import broadcast_lage

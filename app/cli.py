@@ -62,7 +62,7 @@ def create_sms_gateway_token(label: str, org_id: int) -> None:
         db.commit()
         print(f"✓ SMS-Gateway-Token angelegt: {raw_key}")
         print("   → Diesen Token sicher speichern, er wird nicht erneut angezeigt!")
-        print(f"   → Als GATEWAY_TOKEN in der .env des SMS-Gateway-Containers eintragen.")
+        print("   → Als GATEWAY_TOKEN in der .env des SMS-Gateway-Containers eintragen.")
     finally:
         db.close()
 

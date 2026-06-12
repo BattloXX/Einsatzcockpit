@@ -445,7 +445,9 @@ class IncidentCommLog(Base):
     __tablename__ = "incident_comm_log"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True)
+    incident_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     direction: Mapped[str] = mapped_column(String(4), nullable=False)   # in|out|int
     channel: Mapped[str | None] = mapped_column(String(40), nullable=True)

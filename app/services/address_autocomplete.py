@@ -58,7 +58,7 @@ def _cache_put(key: str, items: list) -> None:
 
 # ── GeoJSON-Parsing ───────────────────────────────────────────────────────────
 
-def _parse_feature(feat: dict, field: str) -> "AddressSuggestion | None":
+def _parse_feature(feat: dict, field: str) -> AddressSuggestion | None:
     """Wandelt ein Photon-GeoJSON-Feature in eine AddressSuggestion um."""
     try:
         props = feat.get("properties", {})
@@ -207,6 +207,7 @@ def _history_fallback(
     """Distinct Adressen aus bisherigen Einsätzen (org-gescoped)."""
     try:
         from sqlalchemy import desc
+
         from app.models.incident import Incident
 
         base = db.query(Incident)
