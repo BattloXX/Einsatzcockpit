@@ -189,6 +189,27 @@ def notify_all(db: Session, title: str, body: str, url: str | None = None,
     return wp_count + fcm_extra
 
 
+def notify_org(db: Session, org_id: int, title: str, body: str,
+               url: str | None = None, source: str = "system") -> int:
+    """Push nur an User der angegebenen Org (statt an alle)."""
+    from app.models.user import User as _User
+    cfg = _push_cfg(db)
+    org_user_ids_subq = db.query(_User.id).filter(_User.org_id == org_id)
+    if cfg["enabled"]:
+        subs = (
+            db.query(PushSubscription)
+            .filter(PushSubscription.user_id.in_(org_user_ids_subq))
+            .all()
+        )
+        wp_count = sum(1 for s in subs if send_push(s, title, body, url, db=db))
+        _log_push(db, title, body, url, source, None, wp_count, len(subs))
+    else:
+        wp_count = 0
+    org_user_ids = {r[0] for r in db.query(_User.id).filter(_User.org_id == org_id).all()}
+    fcm_extra = _notify_fcm_users(db, org_user_ids, title, body, url, cfg)
+    return wp_count + fcm_extra
+
+
 def notify_user(db: Session, user_id: int, title: str, body: str,
                 url: str | None = None, source: str = "system") -> int:
     cfg = _push_cfg(db)

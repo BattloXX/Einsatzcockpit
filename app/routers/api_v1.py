@@ -27,7 +27,7 @@ from app.models.user import ApiKey
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.broadcast import broadcast_org, manager
 from app.services.incident_service import create_incident
-from app.services.push_service import notify_all
+from app.services.push_service import notify_all, notify_org
 
 router = APIRouter(prefix="/api/v1", tags=["Einsätze"])
 
@@ -522,10 +522,13 @@ async def create_incident_api(
     # notify_neighbors → Einladungsvorschläge für Partner-Orgs
     _create_neighbor_invitations_api(db, incident, alarm_type_code, api_key.org_id)
 
-    # Web Push notification
+    # Web Push notification – nur an die eigene Org des Einsatzes
     push_title = f"{exercise_prefix}🚒 Einsatz: {alarm_type_code}"
     push_body = address or payload.Meldung or "Kein Ort angegeben"
-    notify_all(db, push_title, push_body, url=f"/einsatz/{incident.id}")
+    if api_key.org_id:
+        notify_org(db, api_key.org_id, push_title, push_body, url=f"/einsatz/{incident.id}")
+    else:
+        notify_all(db, push_title, push_body, url=f"/einsatz/{incident.id}")
 
     board_token, board_url = _get_or_create_board_token(
         db, incident.id, api_key.created_by_user_id, str(request.base_url)
