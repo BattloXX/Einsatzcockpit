@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
+from starlette.requests import HTTPConnection
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
@@ -17,7 +18,7 @@ from app.db import get_db
 
 
 def _resolve_current_org(
-    request: Request,
+    request: HTTPConnection,
     db: Session = Depends(get_db),
 ) -> int | None:
     """Bestimmt die aktive org_id für diesen Request und setzt den Tenant-Context.
