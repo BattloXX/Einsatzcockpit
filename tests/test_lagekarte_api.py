@@ -3,6 +3,7 @@ import hashlib
 
 import pytest
 
+from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentColumn, IncidentVehicle
 from app.models.lagekarte import LagekarteToken
@@ -13,6 +14,7 @@ from app.models.master import FireDept, VehicleMaster
 @pytest.fixture
 def org_id(setup_db):
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         org = db.query(FireDept).filter(FireDept.is_home_org == True).first()  # noqa: E712
         assert org is not None, "Keine Home-Org in Seed-Daten"
@@ -24,6 +26,7 @@ def org_id(setup_db):
 @pytest.fixture
 def other_org_id(setup_db):
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         org = db.query(FireDept).filter(FireDept.is_home_org == False).first()  # noqa: E712
         assert org is not None
@@ -36,6 +39,7 @@ def other_org_id(setup_db):
 def incident_with_vehicles(setup_db, org_id):
     """Erstellt einen Einsatz mit Koordinaten + 2 Fahrzeugen."""
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         incident = Incident(
             alarm_type_code="T1",
@@ -79,6 +83,7 @@ def incident_with_vehicles(setup_db, org_id):
 def incident_no_coords(setup_db, org_id):
     """Einsatz ohne lat/lng."""
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         incident = Incident(alarm_type_code="F1", status="active", primary_org_id=org_id)
         db.add(incident)
@@ -92,6 +97,7 @@ def incident_no_coords(setup_db, org_id):
 def incident_empty(setup_db, org_id):
     """Einsatz mit Koordinaten aber ohne Fahrzeuge."""
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         incident = Incident(alarm_type_code="F2", status="active",
                             primary_org_id=org_id, lat=47.0, lng=9.5)
@@ -108,6 +114,7 @@ def _make_token(org_id, einsatz_id=None, revoked=False, expired=False) -> str:
     raw = "lkw_" + secrets.token_urlsafe(16)
     tok_hash = hashlib.sha256(raw.encode()).hexdigest()
     db = SessionLocal()
+    set_tenant_context(db, None)
     try:
         expires_at = datetime.now(UTC) - timedelta(hours=1) if expired else None
         revoked_at = datetime.now(UTC) if revoked else None

@@ -1,7 +1,9 @@
 """Tests für Adresse-Edit-Routes und Lagekarte-URL-Hilfsfunktionen."""
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept
@@ -10,13 +12,13 @@ from app.services.lagekarte import resolve_lagekarte_url, scatter_coords
 
 # ── resolve_lagekarte_url ─────────────────────────────────────────────────────
 
-def _make_incident(**kwargs) -> Incident:
-    inc = Incident.__new__(Incident)
-    inc.id = 1
-    inc.lat = kwargs.get("lat")
-    inc.lng = kwargs.get("lng")
-    inc.lagekarte_shash_url = kwargs.get("lagekarte_shash_url")
-    return inc
+def _make_incident(**kwargs) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=1,
+        lat=kwargs.get("lat"),
+        lng=kwargs.get("lng"),
+        lagekarte_shash_url=kwargs.get("lagekarte_shash_url"),
+    )
 
 
 def test_resolve_shash_takes_priority():
@@ -82,6 +84,7 @@ class TestAddressEndpoints:
 
     def test_get_address_modal_requires_auth(self, client, setup_db):
         db = SessionLocal()
+        set_tenant_context(db, None)
         try:
             inc = Incident(alarm_type_code="T1", status="active")
             db.add(inc)

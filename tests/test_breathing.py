@@ -154,7 +154,10 @@ def test_ack_warning_sets_timestamp(tmp_path):
 
 def test_start_troop_uses_primary_org_factor(monkeypatch):
     """start_troop holt Factor/Reserve über primary_org_id, nicht slug=='wolfurt'."""
+    from types import SimpleNamespace
     import app.services.breathing_service as svc
+    import app.models.incident as inc_mod
+    import app.models.master as master_mod
 
     class FakeDept:
         withdraw_press_factor = 0.4
@@ -163,46 +166,34 @@ def test_start_troop_uses_primary_org_factor(monkeypatch):
     class FakeIncident:
         primary_org_id = 99
 
+    FakeIncidentClass = type("Incident", (), {"__name__": "Incident"})
+    FakeFireDeptClass = type("FireDept", (), {"__name__": "FireDept"})
+
+    monkeypatch.setattr(inc_mod, "Incident", FakeIncidentClass)
+    monkeypatch.setattr(master_mod, "FireDept", FakeFireDeptClass)
+    monkeypatch.setattr(svc, "write_incident_change", lambda *a, **kw: None)
+
     class FakeDB:
         def flush(self): pass
         def get(self, model, pk):
             if model.__name__ == "Incident":
                 return FakeIncident()
-            if model.__name__ == "FireDept":
-                return FakeDept()
-            return None
+            return FakeDept()
 
-    # Monkeypatch imports used inside start_troop
-    import app.models.incident as inc_mod
-    import app.models.master as master_mod
+    m1 = SimpleNamespace(start_press=300, withdraw_press=None)
+    m2 = SimpleNamespace(start_press=290, withdraw_press=None)
 
-    original_write = svc.write_incident_change
-    svc.write_incident_change = lambda *a, **kw: None
+    troop = SimpleNamespace(
+        id=1,
+        incident_id=1,
+        status="bereit",
+        entry_at=None,
+        start_press_avg=None,
+        withdraw_press_calc=None,
+        members=[m1, m2],
+    )
 
-    try:
-        troop = BreathingTroop()
-        troop.incident_id = 1
-        troop.status = "bereit"
-        troop.entry_at = None
-        troop.start_press_avg = None
-        troop.withdraw_press_calc = None
+    svc.start_troop(FakeDB(), troop)
 
-        m1 = type("M", (), {"start_press": 300, "withdraw_press": None})()
-        m2 = type("M", (), {"start_press": 290, "withdraw_press": None})()
-        troop.members = [m1, m2]
-
-        # Inject fake model classes into the service's import namespace
-        orig_incident = getattr(inc_mod, "Incident", None)
-        orig_firedept = getattr(master_mod, "FireDept", None)
-        inc_mod.Incident = type("Incident", (), {"__name__": "Incident"})
-        master_mod.FireDept = type("FireDept", (), {"__name__": "FireDept"})
-
-        db = FakeDB()
-        db.get = lambda model, pk: FakeIncident() if "Incident" in str(model) else FakeDept()
-
-        svc.start_troop(db, troop)
-
-        # avg = (300 + 290) / 2 = 295; withdraw = 295 * 0.4 + 20 = 138.0
-        assert troop.withdraw_press_calc == 138.0
-    finally:
-        svc.write_incident_change = original_write
+    # avg = (300 + 290) / 2 = 295; withdraw = 295 * 0.4 + 20 = 138.0
+    assert troop.withdraw_press_calc == 138.0

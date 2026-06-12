@@ -228,6 +228,8 @@ def get_time_warning(troop: BreathingTroop) -> str:
     if troop.max_seconds and elapsed >= troop.max_seconds:
         if troop.warn_max_time_acked_at is None:
             return "max_exceeded"
+        # Max überschritten und quittiert → 1/3-Warnung ebenfalls unterdrücken
+        return "ok"
 
     # 1/3-Warnung: keine Meldung seit Einsatzbeginn
     if troop.one_third_seconds and elapsed >= troop.one_third_seconds:

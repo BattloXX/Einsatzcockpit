@@ -1,7 +1,9 @@
 """Tests für die REST-API (Einsatz anlegen)."""
 import pytest
+from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.core.security import generate_api_key, hash_api_key
+from app.models.master import FireDept
 from app.models.user import ApiKey
 
 
@@ -9,10 +11,14 @@ from app.models.user import ApiKey
 def api_key(setup_db):
     raw = generate_api_key()
     db = SessionLocal()
-    key = ApiKey(key_hash=hash_api_key(raw), label="Test")
-    db.add(key)
-    db.commit()
-    db.close()
+    set_tenant_context(db, None)
+    try:
+        org = db.query(FireDept).filter(FireDept.is_home_org == True).first()  # noqa: E712
+        key = ApiKey(key_hash=hash_api_key(raw), label="Test", org_id=org.id)
+        db.add(key)
+        db.commit()
+    finally:
+        db.close()
     return raw
 
 

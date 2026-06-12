@@ -8,6 +8,9 @@ from sqlalchemy.ext.compiler import compiles
 # Test-Umgebungsvariablen VOR dem App-Import setzen
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
 os.environ.setdefault("DEBUG", "true")
+# SQLite für alle Tests erzwingen – verhindert, dass Fixtures und Client
+# auf unterschiedliche Datenbanken schreiben/lesen.
+os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 
 from app.core.tenant import set_tenant_context
 from app.db import Base, get_db
@@ -27,6 +30,7 @@ TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def override_get_db():
     db = TestingSession()
+    set_tenant_context(db, None)
     try:
         yield db
     finally:
