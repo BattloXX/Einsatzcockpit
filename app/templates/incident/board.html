@@ -430,10 +430,9 @@
       <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-swap="none"
-          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId=null;$el.closest('dialog').close();location.reload();}">
+          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';$el.closest('dialog').close();location.reload();}">
       <div class="modal__body">
         <input type="hidden" name="column_id" :value="colId">
-        <input type="hidden" name="vehicle_id" :value="vehicleId || ''">
         {% if task_suggestions %}
         <div class="task-suggestions" style="margin-bottom:10px;">
           {% for ts in task_suggestions %}
@@ -450,7 +449,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" style="font-size:.82rem;">Einheit (optional)</label>
-          <select name="vehicle_id" class="form-select">
+          <select name="vehicle_id" class="form-select" x-model="vehicleId">
             <option value="">– keine –</option>
             {% for v in incident.vehicles %}
             {% if v.removed_at is none %}
@@ -481,9 +480,8 @@
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-swap="none"
           hx-encoding="multipart/form-data"
-          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId=null;document.getElementById('newMsgPreview').innerHTML='';$el.closest('dialog').close();location.reload();}">
+          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';document.getElementById('newMsgPreview').innerHTML='';$el.closest('dialog').close();location.reload();}">
       <div class="modal__body">
-        <input type="hidden" name="vehicle_id" :value="vehicleId || ''">
         {% if msg_suggestions %}
         <div class="task-suggestions" style="margin-bottom:10px;">
           {% for ms in msg_suggestions %}
@@ -507,7 +505,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" style="font-size:.82rem;">Einheit (optional)</label>
-          <select name="vehicle_id" class="form-select">
+          <select name="vehicle_id" class="form-select" x-model="vehicleId">
             <option value="">– keine –</option>
             {% for v in incident.vehicles %}
             {% if v.removed_at is none %}
@@ -547,7 +545,7 @@
 
 <!-- Neuer Abschnitt / Spalte Dialog -->
 <dialog class="modal" id="addColumnDialog">
-  <div class="modal__content" style="min-width:min(360px,90vw);">
+  <div class="modal__content" style="min-width:min(380px,90vw);">
     <div class="modal__header">
       <h3 class="modal__title">Abschnitt hinzufügen</h3>
       <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
@@ -556,15 +554,25 @@
           @htmx:after-request="if(event.detail.successful){$el.reset();$el.closest('dialog').close();location.reload();}">
       <div class="modal__body">
         <div class="form-group">
+          <label class="form-label">NAME DER SPALTE</label>
           <input type="text" name="title" class="form-input" placeholder="Abschnitt..." required>
         </div>
-        <div class="section-presets">
+        <div class="section-presets" style="margin-bottom:12px;">
           <button type="button" class="btn btn--ghost btn--xs"
                   onclick="this.closest('form').querySelector('[name=title]').value='Abschnitt 1'">Abschnitt 1</button>
           <button type="button" class="btn btn--ghost btn--xs"
                   onclick="this.closest('form').querySelector('[name=title]').value='Bereitstellung'">Bereitstellung</button>
           <button type="button" class="btn btn--ghost btn--xs"
                   onclick="this.closest('form').querySelector('[name=title]').value='Atemschutz'">Atemschutz</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">TYP DER SPALTE</label>
+          <select name="column_kind" class="form-select">
+            <option value="vehicles">🚒 Einheiten-Spalte</option>
+            <option value="tasks">📋 Auftrags-Spalte</option>
+            <option value="messages">📢 Meldungs-Spalte</option>
+          </select>
+          <p class="form-hint" style="margin-top:4px;">Bestimmt welche Art von Karten in dieser Spalte angezeigt werden.</p>
         </div>
       </div>
       <div class="modal__footer">
@@ -896,7 +904,7 @@ function openQuickAddTask(colId) {
   const dlg = document.getElementById('quickAddTaskDialog');
   if (!dlg) return;
   const comp = Alpine.$data(dlg);
-  if (comp) { comp.colId = colId; comp.vehicleId = null; }
+  if (comp) { comp.colId = colId; comp.vehicleId = ''; }
   dlg.showModal();
 }
 
@@ -904,7 +912,7 @@ function openQuickAddTaskForVehicle(vehicleId, colId) {
   const dlg = document.getElementById('quickAddTaskDialog');
   if (!dlg) return;
   const comp = Alpine.$data(dlg);
-  if (comp) { comp.colId = colId; comp.vehicleId = vehicleId; }
+  if (comp) { comp.colId = colId; comp.vehicleId = String(vehicleId); }
   dlg.showModal();
 }
 
@@ -912,7 +920,7 @@ function openQuickAddMsgForVehicle(vehicleId) {
   const dlg = document.getElementById('quickAddMsgDialog');
   if (!dlg) return;
   const comp = Alpine.$data(dlg);
-  if (comp) comp.vehicleId = vehicleId;
+  if (comp) comp.vehicleId = String(vehicleId);
   dlg.showModal();
 }
 

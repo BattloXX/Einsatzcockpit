@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.rate_limit import limiter as _limiter
-from app.core.security import hash_api_key, sign_session, unsign_qr_token, verify_password
+from app.core.security import (
+    hash_api_key, sign_session, sign_pin_access_token,
+    unsign_pin_access_token, unsign_qr_token, verify_password, verify_pin,
+)
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentToken
@@ -196,16 +199,78 @@ async def qr_login(request: Request, token: str, incident_id: int, db: Session =
     return redirect
 
 
+_PIN_COOKIE = "board_pin"
+_PIN_COOKIE_MAX_AGE = 86400
+
+
+def _set_pin_cookie_auth(response: Response, incident_id: int) -> None:
+    token = sign_pin_access_token(incident_id)
+    response.set_cookie(
+        _PIN_COOKIE, token,
+        httponly=True, secure=settings.COOKIE_SECURE,
+        samesite="lax", max_age=_PIN_COOKIE_MAX_AGE,
+    )
+
+
+def _has_valid_pin_cookie(request: Request, incident_id: int) -> bool:
+    token = request.cookies.get(_PIN_COOKIE)
+    if not token:
+        return False
+    return unsign_pin_access_token(token) == incident_id
+
+
+@router.get("/qr-pin", response_class=HTMLResponse)
+async def qr_pin_page(request: Request, incident_id: int, db: Session = Depends(get_db)):
+    """PIN-Abfrage im QR-Flow – vor der Namenseingabe."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = db.get(Incident, incident_id)
+    if not incident or not incident.access_pin_hash:
+        return RedirectResponse(f"/qr-name?incident_id={incident_id}", status_code=302)
+    error = request.query_params.get("error")
+    return templates.TemplateResponse(request, "auth/qr_pin.html", {
+        "incident": incident,
+        "incident_id": incident_id,
+        "error": error,
+    })
+
+
+@(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
+@router.post("/qr-pin")
+async def qr_pin_submit(
+    request: Request,
+    incident_id: int = Form(...),
+    pin: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Prüft den PIN im QR-Flow und setzt das Zugangscookie."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = db.get(Incident, incident_id)
+    if not incident or not incident.access_pin_hash:
+        return RedirectResponse(f"/qr-name?incident_id={incident_id}", status_code=302)
+    if not verify_pin(pin.strip(), incident.access_pin_hash):
+        return RedirectResponse(f"/qr-pin?incident_id={incident_id}&error=wrong_pin", status_code=302)
+    redirect = RedirectResponse(f"/qr-name?incident_id={incident_id}", status_code=302)
+    _set_pin_cookie_auth(redirect, incident_id)
+    return redirect
+
+
 @router.get("/qr-name", response_class=HTMLResponse)
-async def qr_name_page(request: Request, db: Session = Depends(get_db)):
+async def qr_name_page(request: Request, incident_id: int | None = None, db: Session = Depends(get_db)):
     """Intermediate name-entry step after QR login."""
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
-    qr_incident_id = getattr(request.state, "qr_incident_id", None)
+    qr_incident_id = incident_id or getattr(request.state, "qr_incident_id", None)
     if not qr_incident_id:
         return RedirectResponse("/", status_code=302)
     incident = db.get(Incident, qr_incident_id)
+    # PIN-Prüfung: wenn Einsatz einen PIN hat und kein gültiges Cookie vorhanden
+    if incident and incident.access_pin_hash and not _has_valid_pin_cookie(request, qr_incident_id):
+        return RedirectResponse(f"/qr-pin?incident_id={qr_incident_id}", status_code=302)
     return templates.TemplateResponse(request, "auth/qr_name.html", {
         "incident": incident,
         "incident_id": qr_incident_id,

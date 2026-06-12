@@ -6,7 +6,7 @@
      hx-trigger="click[!event.target.closest('select,input,button,a')]"
      hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
   <div class="card__body">
-    <div class="card__title" style="display:flex;align-items:center;gap:6px;">
+    <div class="card__title" style="display:flex;align-items:flex-start;gap:6px;">
       {% if can_edit %}
       {% set ps = person.status if person.status else 'gefunden' %}
       <span onclick="event.stopPropagation()" style="flex-shrink:0;">
@@ -23,11 +23,18 @@
         </select>
       </span>
       {% endif %}
-      <span>{{ person.gender }}, {{ person.person_group }}
-        {% if person.age_range %}<span class="card__age">{{ person.age_range }}</span>{% endif %}
-      </span>
+      <span>{{ person.name or '–' }}</span>
     </div>
-    {% if person.name %}<div class="card__sub">{{ person.name }}</div>{% endif %}
+    {% set show_gender = person.gender and person.gender not in ('Unbekannt', '') %}
+    {% set show_group = person.person_group and person.person_group not in ('Erwachsen', '') %}
+    {% if show_gender or show_group or person.age_range %}
+    <div class="card__sub" style="font-size:.75rem;">
+      {% if show_gender %}{{ person.gender }}{% endif %}
+      {% if show_gender and show_group %}, {% endif %}
+      {% if show_group %}{{ person.person_group }}{% endif %}
+      {% if person.age_range %}<span class="card__age" style="margin-left:4px;">{{ person.age_range }}</span>{% endif %}
+    </div>
+    {% endif %}
     {% if person.location %}<div class="card__sub">📍 {{ person.location }}</div>{% endif %}
     {% if person.media %}
     <div class="card__media">

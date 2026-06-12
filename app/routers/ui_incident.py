@@ -1144,11 +1144,12 @@ async def move_vehicle(
 async def create_section(
     incident_id: int, request: Request,
     title: str = Form(...),
+    column_kind: str = Form("vehicles"),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
     incident = _incident_or_404(incident_id, db)
-    add_section_column(db, incident, title, user_id=request.state.user.id)
+    add_section_column(db, incident, title, column_kind=column_kind, user_id=request.state.user.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "column_created", "reload_board": True})
     return Response(status_code=204)

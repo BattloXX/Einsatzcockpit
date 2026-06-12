@@ -536,13 +536,17 @@ def add_section_column(
     db: Session,
     incident: Incident,
     title: str,
+    column_kind: str = "vehicles",
     user_id: int | None = None,
 ) -> IncidentColumn:
+    allowed_kinds = {"vehicles", "tasks", "messages"}
+    kind = column_kind if column_kind in allowed_kinds else "vehicles"
     max_order = max((c.display_order for c in incident.columns), default=0)
     col = IncidentColumn(
         incident_id=incident.id,
         code=f"section_{_now().timestamp():.0f}",
         title=title,
+        column_kind=kind,
         is_fixed=False,
         display_order=max_order + 1,
     )
