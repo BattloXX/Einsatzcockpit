@@ -3,6 +3,25 @@
 {% elif not nowcast and not current and not forecast %}
 <span style="font-size:.75rem;color:var(--text-muted);">Wetterdaten derzeit nicht verfügbar.</span>
 {% else %}
+
+{# ── Szenario-Warnungen (Sturm/Waldbrand) ──────────────────────────────────── #}
+{% if scenarios %}
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+  {% for alert in scenarios %}
+  {% set is_danger = alert.level == "danger" %}
+  {% set bg      = "rgba(239,68,68,.12)"  if is_danger else "rgba(249,115,22,.12)" %}
+  {% set border  = "rgba(239,68,68,.40)"  if is_danger else "rgba(249,115,22,.40)" %}
+  {% set color   = "#f87171"              if is_danger else "#fb923c" %}
+  {% set icon    = "⚡" if alert.key == "storm" else "🔥" %}
+  <div style="background:{{ bg }};border:1px solid {{ border }};border-radius:4px;
+              padding:4px 10px;font-size:.78rem;color:{{ color }};">
+    <strong>{{ icon }} {{ alert.label_de }}</strong>
+    <span style="opacity:.85;margin-left:4px;font-size:.72rem;">{{ alert.detail_de }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;">
 
   {# ── Ist-Werte ──────────────────────────────────────────────────────────── #}

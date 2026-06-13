@@ -14,6 +14,7 @@ from app.db import get_db
 from app.models.major_incident import MajorIncident
 from app.services import weather_service
 from app.services.weather_focus import resolve_weather_focus
+from app.services.weather_service import analyze_weather
 
 router = APIRouter()
 logger = logging.getLogger("einsatzleiter.weather")
@@ -155,6 +156,7 @@ async def gsl_wetter_panel(
     warn_color = weather_service._WARN_LEVEL_COLORS.get(
         top_warning.level, "#6b7280"
     ) if top_warning else None
+    scenarios = analyze_weather(current, forecast, nowcast)
 
     return templates.TemplateResponse(
         request,
@@ -172,6 +174,7 @@ async def gsl_wetter_panel(
             "warnings": warnings,
             "top_warning": top_warning,
             "warn_color": warn_color,
+            "scenarios": scenarios,
             "attribution": weather_service.GEOSPHERE_ATTRIBUTION,
             "lage_id": lage_id,
         },

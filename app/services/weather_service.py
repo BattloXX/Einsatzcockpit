@@ -109,6 +109,14 @@ class WeatherWarning:
     region: str = ""
 
 
+@dataclass
+class ScenarioAlert:
+    key: str        # "storm" | "wildfire"
+    level: str      # "warn" | "danger"
+    label_de: str
+    detail_de: str
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _parse_timestamps(raw: list[str]) -> list[datetime]:
@@ -347,7 +355,7 @@ async def _openmeteo_nowcast(lat: float, lng: float) -> NowcastResult | None:
 async def get_current(lat: float, lng: float) -> CurrentWeather | None:
     """Current weather conditions (temperature, wind, gust, humidity).
 
-    Source: NWP t=0 (first forecast step). TAWES station integration in PR 3.
+    Primary: GeoSphere NWP t=0. Fallback: Open-Meteo current.
     """
     if not settings.WEATHER_ENABLED:
         return None
@@ -358,9 +366,48 @@ async def get_current(lat: float, lng: float) -> CurrentWeather | None:
         return cached
 
     result = await _fetch_current_from_nwp(lat, lng)
+    if result is None and settings.WEATHER_FALLBACK_OPENMETEO:
+        result = await _openmeteo_current(lat, lng)
+
     if result is not None:
         _cache_set(key, result, settings.WEATHER_CACHE_TTL_NOWCAST)
     return result
+
+
+async def _openmeteo_current(lat: float, lng: float) -> CurrentWeather | None:
+    """Open-Meteo fallback for current conditions."""
+    try:
+        async with httpx.AsyncClient(timeout=settings.WEATHER_HTTP_TIMEOUT) as client:
+            resp = await client.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": lat,
+                    "longitude": lng,
+                    "current": (
+                        "temperature_2m,relative_humidity_2m,"
+                        "wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation"
+                    ),
+                    "timezone": "UTC",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("Open-Meteo Current Fallback fehlgeschlagen: %s", exc)
+        return None
+
+    c = data.get("current", {})
+    ws_kmh = _safe_float(c.get("wind_speed_10m"))
+    wg_kmh = _safe_float(c.get("wind_gusts_10m"))
+    return CurrentWeather(
+        temperature_c=_safe_float(c.get("temperature_2m")),
+        humidity_pct=_safe_float(c.get("relative_humidity_2m")),
+        wind_speed_ms=ws_kmh / 3.6 if ws_kmh is not None else None,
+        gust_speed_ms=wg_kmh / 3.6 if wg_kmh is not None else None,
+        wind_direction_deg=_safe_float(c.get("wind_direction_10m")),
+        precipitation_1h_mm=_safe_float(c.get("precipitation")),
+        source="openmeteo",
+    )
 
 
 async def _fetch_current_from_nwp(lat: float, lng: float) -> CurrentWeather | None:
@@ -405,6 +452,7 @@ async def get_forecast(
 ) -> ForecastResult | None:
     """NWP multi-horizon forecast: accumulated precipitation, wind, temperature.
 
+    Primary: GeoSphere NWP. Fallback: Open-Meteo hourly.
     horizons: list of hours from now (default +6, +12, +24).
     """
     if not settings.WEATHER_ENABLED:
@@ -416,9 +464,57 @@ async def get_forecast(
         return cached
 
     result = await _fetch_geosphere_nwp(lat, lng, horizons)
+    if result is None and settings.WEATHER_FALLBACK_OPENMETEO:
+        result = await _openmeteo_forecast(lat, lng, horizons)
+
     if result is not None:
         _cache_set(key, result, settings.WEATHER_CACHE_TTL_NWP)
     return result
+
+
+async def _openmeteo_forecast(
+    lat: float, lng: float, horizons: tuple[int, ...]
+) -> ForecastResult | None:
+    """Open-Meteo hourly fallback for multi-horizon forecast."""
+    try:
+        async with httpx.AsyncClient(timeout=settings.WEATHER_HTTP_TIMEOUT) as client:
+            resp = await client.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": lat,
+                    "longitude": lng,
+                    "hourly": "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation",
+                    "forecast_hours": max(horizons) + 1,
+                    "timeformat": "iso8601",
+                    "timezone": "UTC",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("Open-Meteo Forecast Fallback fehlgeschlagen: %s", exc)
+        return None
+
+    h_data = data.get("hourly", {})
+    t2m = h_data.get("temperature_2m", [])
+    ws = h_data.get("wind_speed_10m", [])    # km/h
+    wg = h_data.get("wind_gusts_10m", [])    # km/h
+    prec = h_data.get("precipitation", [])   # mm/h
+
+    result_horizons: list[ForecastHorizon] = []
+    for h in horizons:
+        ws_kmh = _safe_float(ws[h]) if h < len(ws) else None
+        wg_kmh = _safe_float(wg[h]) if h < len(wg) else None
+        acc = sum(_safe_float(p) or 0.0 for p in prec[: h + 1]) if prec else None
+        result_horizons.append(ForecastHorizon(
+            hours=h,
+            precipitation_acc_mm=acc,
+            temperature_c=_safe_float(t2m[h]) if h < len(t2m) else None,
+            wind_speed_ms=ws_kmh / 3.6 if ws_kmh is not None else None,
+            gust_speed_ms=wg_kmh / 3.6 if wg_kmh is not None else None,
+        ))
+
+    return ForecastResult(horizons=result_horizons, source="openmeteo")
 
 
 async def _fetch_geosphere_nwp(
@@ -537,6 +633,95 @@ async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarni
             logger.warning("Warnung konnte nicht geparst werden: %s — %s", item, exc)
 
     return sorted(warnings, key=lambda w: -w.level)
+
+
+# ── Scenario analysis (Storm / Wildfire) ─────────────────────────────────────
+
+_BF8 = 17.2    # m/s — Beaufort 8: storm begins, twigs break
+_BF10 = 24.5   # m/s — Beaufort 10: whole gale, trees uprooted
+
+_WILDFIRE_TEMP = 30.0   # °C threshold
+_WILDFIRE_HUM_WARN = 30.0   # % — warn level
+_WILDFIRE_HUM_DANGER = 20.0  # % — danger level
+_WILDFIRE_NO_RAIN = 0.5  # mm — nowcast total below this = "no rain"
+
+
+def _storm_alerts(
+    current: CurrentWeather | None,
+    forecast: ForecastResult | None,
+) -> list[ScenarioAlert]:
+    alerts: list[ScenarioAlert] = []
+    active_gust = None
+    if current:
+        active_gust = current.gust_speed_ms or current.wind_speed_ms
+
+    if active_gust is not None:
+        if active_gust >= _BF10:
+            alerts.append(ScenarioAlert(
+                key="storm",
+                level="danger",
+                label_de="Schwerer Sturm",
+                detail_de=f"Böe {active_gust:.0f} m/s (BF10+) – erhöhte Einsatzgefährdung",
+            ))
+        elif active_gust >= _BF8:
+            alerts.append(ScenarioAlert(
+                key="storm",
+                level="warn",
+                label_de="Sturmwarnung",
+                detail_de=f"Böe {active_gust:.0f} m/s (BF8+) – Windgefahr beachten",
+            ))
+
+    if not alerts and forecast:
+        for h in forecast.horizons:
+            g = h.gust_speed_ms or h.wind_speed_ms or 0.0
+            if g >= _BF8:
+                alerts.append(ScenarioAlert(
+                    key="storm",
+                    level="warn",
+                    label_de=f"Sturm in {h.hours}h",
+                    detail_de=f"Erwartete Böe {g:.0f} m/s (BF8+) in +{h.hours}h",
+                ))
+                break
+
+    return alerts
+
+
+def _wildfire_alerts(
+    current: CurrentWeather | None,
+    forecast: ForecastResult | None,  # noqa: ARG001  (reserved for future use)
+    nowcast: NowcastResult | None,
+) -> list[ScenarioAlert]:
+    if not current or current.temperature_c is None or current.humidity_pct is None:
+        return []
+
+    temp = current.temperature_c
+    hum = current.humidity_pct
+    no_rain = nowcast is None or nowcast.total_mm < _WILDFIRE_NO_RAIN
+
+    if temp >= _WILDFIRE_TEMP and hum <= _WILDFIRE_HUM_DANGER:
+        return [ScenarioAlert(
+            key="wildfire",
+            level="danger",
+            label_de="Hohe Waldbrandgefahr",
+            detail_de=f"{temp:.0f}°C, {hum:.0f}% RF – Brandbedingungen kritisch",
+        )]
+    if temp >= _WILDFIRE_TEMP and hum <= _WILDFIRE_HUM_WARN and no_rain:
+        return [ScenarioAlert(
+            key="wildfire",
+            level="warn",
+            label_de="Erhöhte Waldbrandgefahr",
+            detail_de=f"{temp:.0f}°C, {hum:.0f}% RF – trockene Bedingungen",
+        )]
+    return []
+
+
+def analyze_weather(
+    current: "CurrentWeather | None",
+    forecast: "ForecastResult | None",
+    nowcast: "NowcastResult | None" = None,
+) -> list[ScenarioAlert]:
+    """Returns scenario alerts (storm, wildfire) derived from current weather data."""
+    return _storm_alerts(current, forecast) + _wildfire_alerts(current, forecast, nowcast)
 
 
 # ── Nowcast grid stub (PR 4) ──────────────────────────────────────────────────

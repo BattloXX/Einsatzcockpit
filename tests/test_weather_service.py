@@ -8,9 +8,11 @@ import pytest
 from app.services import weather_service
 from app.services.weather_service import (
     CurrentWeather,
+    ForecastHorizon,
     ForecastResult,
     NowcastResult,
     NowcastStep,
+    ScenarioAlert,
     WeatherWarning,
     _cache,
     _cache_key,
@@ -19,6 +21,7 @@ from app.services.weather_service import (
     _safe_float,
     _wind_dir_from_uv,
     _wind_speed_from_uv,
+    analyze_weather,
     get_cached_nowcast,
     get_current,
     get_forecast,
@@ -535,3 +538,166 @@ async def test_get_nowcast_missing_parameter_uses_zero():
     assert result is not None
     assert all(s.precipitation_mm == 0.0 for s in result.steps)
     assert result.total_mm == 0.0
+
+
+# ── Open-Meteo fallbacks ──────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_get_current_falls_back_to_openmeteo():
+    openmeteo_data = {
+        "current": {
+            "temperature_2m": 22.5,
+            "relative_humidity_2m": 55.0,
+            "wind_speed_10m": 36.0,   # km/h → 10 m/s
+            "wind_gusts_10m": 54.0,   # km/h → 15 m/s
+            "wind_direction_10m": 270.0,
+            "precipitation": 0.0,
+        }
+    }
+
+    async def fake_get(url, **kwargs):
+        resp = MagicMock()
+        if "geosphere" in url:
+            import httpx as _httpx
+            raise _httpx.TimeoutException("timeout", request=MagicMock())
+        resp.raise_for_status = MagicMock(return_value=None)
+        resp.json = MagicMock(return_value=openmeteo_data)
+        return resp
+
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = fake_get
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        result = await get_current(LAT, LNG)
+
+    assert result is not None
+    assert result.source == "openmeteo"
+    assert result.temperature_c == pytest.approx(22.5)
+    assert result.wind_speed_ms == pytest.approx(36.0 / 3.6, rel=1e-3)
+    assert result.wind_direction_deg == pytest.approx(270.0)
+
+
+@pytest.mark.asyncio
+async def test_get_forecast_falls_back_to_openmeteo():
+    hours = list(range(25))
+    prec = [0.1] * 25      # mm/h each hour
+    openmeteo_data = {
+        "hourly": {
+            "temperature_2m": [20.0] * 25,
+            "wind_speed_10m": [36.0] * 25,   # km/h
+            "wind_gusts_10m": [54.0] * 25,   # km/h
+            "precipitation": prec,
+        }
+    }
+
+    async def fake_get(url, **kwargs):
+        resp = MagicMock()
+        if "geosphere" in url:
+            import httpx as _httpx
+            raise _httpx.TimeoutException("timeout", request=MagicMock())
+        resp.raise_for_status = MagicMock(return_value=None)
+        resp.json = MagicMock(return_value=openmeteo_data)
+        return resp
+
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = fake_get
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        result = await get_forecast(LAT, LNG, horizons=(6, 12))
+
+    assert result is not None
+    assert result.source == "openmeteo"
+    assert len(result.horizons) == 2
+    h6 = result.horizons[0]
+    assert h6.hours == 6
+    # accumulated: sum of prec[0..6] = 7 * 0.1 = 0.7
+    assert h6.precipitation_acc_mm == pytest.approx(0.7, rel=1e-3)
+    assert h6.wind_speed_ms == pytest.approx(36.0 / 3.6, rel=1e-3)
+
+
+# ── analyze_weather ───────────────────────────────────────────────────────────
+
+def _make_current(temp=15.0, hum=60.0, wind=5.0, gust=8.0) -> CurrentWeather:
+    return CurrentWeather(
+        temperature_c=temp,
+        humidity_pct=hum,
+        wind_speed_ms=wind,
+        gust_speed_ms=gust,
+        source="test",
+    )
+
+
+def _make_forecast(gust_ms: float = 5.0) -> ForecastResult:
+    return ForecastResult(
+        horizons=[ForecastHorizon(hours=6, gust_speed_ms=gust_ms)],
+        source="test",
+    )
+
+
+def test_analyze_no_alerts_in_mild_conditions():
+    result = analyze_weather(_make_current(), _make_forecast())
+    assert result == []
+
+
+def test_analyze_storm_warn_at_bf8():
+    current = _make_current(gust=17.2)
+    alerts = analyze_weather(current, None)
+    assert len(alerts) == 1
+    assert alerts[0].key == "storm"
+    assert alerts[0].level == "warn"
+
+
+def test_analyze_storm_danger_at_bf10():
+    current = _make_current(gust=25.0)
+    alerts = analyze_weather(current, None)
+    assert len(alerts) == 1
+    assert alerts[0].key == "storm"
+    assert alerts[0].level == "danger"
+
+
+def test_analyze_storm_upcoming_from_forecast():
+    # current is calm; forecast has BF8 gust in 6h
+    current = _make_current(gust=5.0)
+    forecast = _make_forecast(gust_ms=18.0)
+    alerts = analyze_weather(current, forecast)
+    assert len(alerts) == 1
+    assert alerts[0].key == "storm"
+    assert alerts[0].level == "warn"
+    assert "6h" in alerts[0].label_de
+
+
+def test_analyze_storm_active_suppresses_forecast():
+    # active BF8 storm should not also add an "upcoming" alert
+    current = _make_current(gust=18.0)
+    forecast = _make_forecast(gust_ms=18.0)
+    alerts = analyze_weather(current, forecast)
+    storm_alerts = [a for a in alerts if a.key == "storm"]
+    assert len(storm_alerts) == 1
+
+
+def test_analyze_wildfire_warn():
+    current = _make_current(temp=32.0, hum=28.0, gust=5.0)
+    nowcast = NowcastResult(steps=[], peak_mm=0, peak_at=None, total_mm=0.0, trend="stable", source="x")
+    alerts = analyze_weather(current, None, nowcast)
+    assert any(a.key == "wildfire" and a.level == "warn" for a in alerts)
+
+
+def test_analyze_wildfire_danger():
+    current = _make_current(temp=33.0, hum=18.0, gust=5.0)
+    alerts = analyze_weather(current, None)
+    assert any(a.key == "wildfire" and a.level == "danger" for a in alerts)
+
+
+def test_analyze_wildfire_suppressed_by_rain():
+    current = _make_current(temp=32.0, hum=28.0, gust=5.0)
+    nowcast = NowcastResult(steps=[], peak_mm=1.0, peak_at=None, total_mm=2.5, trend="stable", source="x")
+    alerts = analyze_weather(current, None, nowcast)
+    assert not any(a.key == "wildfire" for a in alerts)
+
+
+def test_analyze_missing_humidity_no_wildfire():
+    current = CurrentWeather(temperature_c=35.0, humidity_pct=None, source="test")
+    alerts = analyze_weather(current, None)
+    assert not any(a.key == "wildfire" for a in alerts)
