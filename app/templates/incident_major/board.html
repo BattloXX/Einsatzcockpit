@@ -192,23 +192,45 @@
            style="padding:3px 9px;font-size:.8rem;border-radius:4px;border:1px solid var(--border);
                   background:var(--surface-elevated,#1e2130);color:var(--text);width:160px;">
     {% if sectors %}
-    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
-      <button class="board-sector-chip active" data-sector="all"
-              style="font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
-                     background:rgba(255,255,255,.1);color:var(--text);cursor:pointer;"
-              onclick="filterBySector('all')">Alle</button>
-      {% for sec in sectors %}
-      <button class="board-sector-chip" data-sector="{{ sec.id }}"
-              style="font-size:.7rem;padding:2px 8px;border-radius:10px;cursor:pointer;
-                     border:1px solid {{ sec.color or '#6b7280' }}88;
-                     background:{{ sec.color or '#6b7280' }}22;
-                     color:{{ sec.color or '#6b7280' }};"
-              onclick="filterBySector('{{ sec.id }}')">{{ sec.name }}</button>
-      {% endfor %}
-      <button class="board-sector-chip" data-sector="none"
-              style="font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(107,114,128,.4);
-                     background:rgba(107,114,128,.15);color:#9ca3af;cursor:pointer;"
-              onclick="filterBySector('none')">Ohne</button>
+    <div style="position:relative;" id="sector-filter-wrap">
+      <button type="button" id="sector-filter-btn" onclick="toggleSectorDropdown()"
+              style="font-size:.8rem;padding:3px 9px;border-radius:4px;border:1px solid var(--border);
+                     background:var(--surface-elevated,#1e2130);color:var(--text);cursor:pointer;
+                     white-space:nowrap;display:flex;align-items:center;gap:5px;">
+        <span id="sector-filter-label">Alle Abschnitte</span>
+        <span style="font-size:.6rem;opacity:.6;">▾</span>
+      </button>
+      <div id="sector-filter-dropdown"
+           style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:300;
+                  min-width:200px;background:var(--surface-elevated,#1e2130);
+                  border:1px solid var(--border);border-radius:6px;
+                  box-shadow:0 4px 16px rgba(0,0,0,.5);padding:4px 0;">
+        <label style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;
+                      font-size:.78rem;font-weight:600;border-bottom:1px solid var(--border);
+                      margin-bottom:2px;">
+          <input type="checkbox" id="sector-all-cb" onchange="sectorToggleAll(this.checked)"
+                 style="accent-color:var(--primary,#6366f1);">
+          Alle / Keine
+        </label>
+        {% for sec in sectors %}
+        <label style="display:flex;align-items:center;gap:8px;padding:4px 12px;cursor:pointer;
+                      font-size:.78rem;">
+          <input type="checkbox" class="sector-cb" value="{{ sec.id }}"
+                 onchange="sectorCbChanged()" style="accent-color:{{ sec.color or '#6b7280' }};">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0;
+                       background:{{ sec.color or '#6b7280' }};"></span>
+          {{ sec.name }}
+        </label>
+        {% endfor %}
+        <label style="display:flex;align-items:center;gap:8px;padding:4px 12px;cursor:pointer;
+                      font-size:.78rem;border-top:1px solid var(--border);margin-top:2px;">
+          <input type="checkbox" class="sector-cb" value="none" onchange="sectorCbChanged()"
+                 style="accent-color:#6b7280;">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0;
+                       background:#6b7280;"></span>
+          Ohne Abschnitt
+        </label>
+      </div>
     </div>
     {% endif %}
     <button id="prio-sort-btn" type="button" onclick="togglePrioSort()"
@@ -473,34 +495,105 @@
   }, 150);
 })();
 
-var _boardSectorFilter = (function() {
-  try { return localStorage.getItem('board_sector_filter_{{ lage.id }}') || 'all'; } catch(e) { return 'all'; }
-})();
+// ── Sektor-Filter (Multi-Select Dropdown) ─────────────────────────────────
+var _lsSectorKey = 'board_sector_sel_{{ lage.id }}';
+var _allSectorVals = [{% for sec in sectors %}'{{ sec.id }}',{% endfor %}'none'];
+// null = alle ausgewählt; Set of strings = Teilmenge
+var _sectorSelected = null;
 
-function filterBySector(sectorId) {
-  _boardSectorFilter = sectorId;
-  try { localStorage.setItem('board_sector_filter_{{ lage.id }}', sectorId); } catch(e) {}
-  document.querySelectorAll('.board-sector-chip').forEach(function(c) {
-    var isActive = c.dataset.sector === sectorId;
-    c.classList.toggle('active', isActive);
-    c.style.background = isActive ? 'rgba(255,255,255,.15)' : '';
-    c.style.borderColor = isActive ? '' : '';
-  });
+function _loadSectorSel() {
+  try {
+    var raw = localStorage.getItem(_lsSectorKey);
+    if (!raw) return null;
+    var arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return null;
+    return new Set(arr.map(String));
+  } catch(e) { return null; }
+}
+
+function _saveSectorSel(sel) {
+  try {
+    if (!sel) { localStorage.removeItem(_lsSectorKey); return; }
+    localStorage.setItem(_lsSectorKey, JSON.stringify(Array.from(sel)));
+  } catch(e) {}
+}
+
+function _updateSectorUI() {
+  var allCb  = document.getElementById('sector-all-cb');
+  var cbs    = document.querySelectorAll('.sector-cb');
+  var label  = document.getElementById('sector-filter-label');
+  if (!allCb) return;
+
+  if (!_sectorSelected) {
+    // alle
+    allCb.checked       = true;
+    allCb.indeterminate = false;
+    cbs.forEach(function(cb) { cb.checked = true; });
+    if (label) label.textContent = 'Alle Abschnitte';
+  } else {
+    var total   = _allSectorVals.length;
+    var checked = 0;
+    cbs.forEach(function(cb) {
+      cb.checked = _sectorSelected.has(cb.value);
+      if (cb.checked) checked++;
+    });
+    if (checked === 0) {
+      allCb.checked = false; allCb.indeterminate = false;
+      if (label) label.textContent = 'Kein Abschnitt';
+    } else if (checked === total) {
+      allCb.checked = true; allCb.indeterminate = false;
+      _sectorSelected = null; _saveSectorSel(null);
+      if (label) label.textContent = 'Alle Abschnitte';
+    } else {
+      allCb.checked = false; allCb.indeterminate = true;
+      if (label) label.textContent = checked + ' Abschnitt' + (checked !== 1 ? 'e' : '');
+    }
+  }
+}
+
+function sectorToggleAll(checked) {
+  _sectorSelected = checked ? null : new Set();
+  _saveSectorSel(_sectorSelected);
+  _updateSectorUI();
   applyBoardFilters();
 }
+
+function sectorCbChanged() {
+  var cbs = document.querySelectorAll('.sector-cb');
+  var sel = new Set();
+  cbs.forEach(function(cb) { if (cb.checked) sel.add(cb.value); });
+  _sectorSelected = (sel.size === _allSectorVals.length) ? null : sel;
+  _saveSectorSel(_sectorSelected);
+  _updateSectorUI();
+  applyBoardFilters();
+}
+
+function toggleSectorDropdown() {
+  var dd = document.getElementById('sector-filter-dropdown');
+  if (!dd) return;
+  var open = dd.style.display !== 'none';
+  dd.style.display = open ? 'none' : 'block';
+}
+
+document.addEventListener('click', function(e) {
+  var wrap = document.getElementById('sector-filter-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    var dd = document.getElementById('sector-filter-dropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
 
 function filterBoard(q) { applyBoardFilters(); }
 
 function applyBoardFilters() {
   var q = ((document.getElementById('board-search') || {}).value || '').trim().toLowerCase();
-  var sec = _boardSectorFilter || 'all';
   document.querySelectorAll('.phase-col').forEach(function(col) {
     var cards = col.querySelectorAll('.site-card');
     var visible = 0;
     cards.forEach(function(card) {
       var textMatch = !q || (card.dataset.search || '').includes(q);
-      var sectorMatch = sec === 'all' ||
-        (sec === 'none' ? (card.dataset.sector === 'none' || !card.dataset.sector) : String(card.dataset.sector) === String(sec));
+      var cardSec   = String(card.dataset.sector || 'none');
+      var sectorMatch = !_sectorSelected || _sectorSelected.has(cardSec);
       var show = textMatch && sectorMatch;
       card.style.display = show ? '' : 'none';
       if (show) visible++;
@@ -512,13 +605,9 @@ function applyBoardFilters() {
 
 // Restore persisted sector filter on load
 (function() {
-  var chip = document.querySelector('.board-sector-chip[data-sector="' + _boardSectorFilter + '"]');
-  if (chip && _boardSectorFilter !== 'all') {
-    document.querySelectorAll('.board-sector-chip').forEach(function(c) { c.classList.remove('active'); c.style.background = ''; });
-    chip.classList.add('active');
-    chip.style.background = 'rgba(255,255,255,.15)';
-    applyBoardFilters();
-  }
+  _sectorSelected = _loadSectorSel();
+  _updateSectorUI();
+  if (_sectorSelected) applyBoardFilters();
 })();
 
 // Update cross-marker column count after HTMX body reload
