@@ -105,6 +105,56 @@ async def upload_site_media(
     )
 
 
+def copy_citizen_photo_to_site(
+    citizen_photo_path: Path,
+    site_id: int,
+    org_id: int | None = None,
+    user_id: int | None = None,
+    author_name: str | None = None,
+    db=None,
+) -> "SiteMedia | None":
+    """Überträgt ein Bürgermeldungs-Foto auf eine Einsatzstelle (SiteMedia)."""
+    if not citizen_photo_path.exists():
+        return None
+    try:
+        from PIL import Image, ImageOps  # type: ignore
+    except ImportError:
+        return None
+    try:
+        from app.config import settings as _s
+        data = citizen_photo_path.read_bytes()
+        img = Image.open(io.BytesIO(data))
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        img.thumbnail((_s.MEDIA_IMAGE_MAX_WIDTH, _s.MEDIA_IMAGE_MAX_HEIGHT), Image.Resampling.LANCZOS)
+        dest = _site_dir(site_id, org_id)
+        uid = uuid.uuid4().hex
+        main_fn = f"{uid}.jpg"
+        thumb_fn = f"{uid}_thumb.jpg"
+        img.save(dest / main_fn, "JPEG", quality=85, optimize=True, progressive=True)
+        thumb = img.copy()
+        thumb.thumbnail((_s.MEDIA_THUMB_SIZE, _s.MEDIA_THUMB_SIZE), Image.Resampling.LANCZOS)
+        thumb.save(dest / thumb_fn, "JPEG", quality=80, optimize=True)
+        stored_bytes = (dest / main_fn).stat().st_size
+        if db is not None and org_id is not None:
+            from app.services.storage_service import reserve_storage
+            reserve_storage(db, org_id, stored_bytes)
+        return SiteMedia(
+            incident_site_id=site_id,
+            stored_filename=main_fn,
+            original_filename="bürgermeldung.jpg",
+            media_type="image",
+            uploaded_by=user_id,
+            author_name=author_name,
+            bytes=stored_bytes,
+            org_id=org_id,
+        )
+    except Exception:
+        logger.warning("Bürgermeldungs-Foto konnte nicht übertragen werden", exc_info=True)
+        return None
+
+
 def _journal_dir(entry_id: int, org_id: int | None = None) -> Path:
     if org_id is not None:
         d = Path(_JOURNAL_MEDIA_DIR) / str(org_id) / str(entry_id)
