@@ -1,21 +1,39 @@
 {# Karte für übergreifende Meldungen im Board #}
-{# Kontext: marker, lage, type_label, type_icon, status_label, status_color, can_edit #}
+{# Kontext: marker, lage, status_label, can_edit #}
 <div class="site-card" data-marker-id="{{ marker.id }}" data-cm-status="{{ marker.status }}"
      hx-get="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel"
      hx-target="#siteDetailContent"
      hx-swap="innerHTML"
-     hx-trigger="click[!event.target.closest('select,button,a')]"
+     hx-trigger="click[!event.target.closest('select,button,form,a')]"
      style="border-left:3px {{ 'dashed' if marker.status == 'unbestaetigt' else 'solid' }} {{ marker.status_color }};">
   <div class="site-card__body">
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-      <span style="font-size:1rem;">{{ marker.type_icon }}</span>
-      <div class="site-card__title" style="flex:1;">{{ marker.title }}</div>
-    </div>
-    <div class="site-card__sub" style="display:flex;align-items:center;gap:5px;">
-      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:{{ marker.status_color }};flex-shrink:0;"></span>
+
+    {# Titel-Zeile mit Icon, Titel, Typ-Subtitle und Löschen-Button #}
+    <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:5px;">
+      <span style="font-size:.95rem;flex-shrink:0;padding-top:1px;">{{ marker.type_icon }}</span>
+      <div style="flex:1;min-width:0;">
+        <div class="site-card__title" style="line-height:1.25;">{{ marker.title }}</div>
+        <div style="font-size:.68rem;color:var(--text-muted);margin-top:1px;">{{ marker.type_label }}</div>
+      </div>
       {% if can_edit %}
-      <select style="font-size:.72rem;padding:1px 4px;border-radius:3px;border:1px solid var(--border);
-                     background:var(--surface-elevated,#1e2130);color:{{ marker.status_color }};font-weight:600;"
+      <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/loeschen"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+            hx-confirm="Meldung löschen?"
+            hx-on::after-request="if(event.detail.successful){this.closest('.site-card').remove()}"
+            style="margin:0;flex-shrink:0;">
+        <button type="submit" class="btn btn--xs btn--ghost" title="Löschen"
+                style="opacity:.45;padding:0 5px;font-size:.65rem;line-height:1.6;">✕</button>
+      </form>
+      {% endif %}
+    </div>
+
+    {# Status-Zeile #}
+    <div style="display:flex;align-items:center;margin-bottom:4px;">
+      {% if can_edit %}
+      <select style="font-size:.72rem;padding:2px 5px;border-radius:4px;
+                     border:1px solid {{ marker.status_color }}55;
+                     background:{{ marker.status_color }}18;
+                     color:{{ marker.status_color }};font-weight:600;width:100%;"
               hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/status"
               hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
               hx-swap="none"
@@ -27,28 +45,24 @@
         {% endfor %}
       </select>
       {% else %}
-      <span style="color:{{ marker.status_color }};font-weight:600;">{{ marker.status_label }}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:10px;
+                   background:{{ marker.status_color }}1a;color:{{ marker.status_color }};
+                   font-size:.7rem;font-weight:600;border:1px solid {{ marker.status_color }}44;">
+        <span style="width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>
+        {{ marker.status_label }}
+      </span>
       {% endif %}
-      <span style="color:var(--border);">·</span>
-      {{ marker.type_label }}
     </div>
+
     {% if marker.address_line %}
     <div class="site-card__addr">{{ marker.address_line }}</div>
     {% endif %}
+
     {% if marker.description %}
-    <div class="site-card__sub" style="margin-top:3px;font-size:.72rem;">{{ marker.description[:80] }}{% if marker.description|length > 80 %}…{% endif %}</div>
-    {% endif %}
-    {% if can_edit %}
-    <div style="display:flex;justify-content:flex-end;margin-top:4px;">
-      <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/loeschen"
-            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-            hx-confirm="Meldung löschen?"
-            hx-on::after-request="if(event.detail.successful){this.closest('.site-card').remove()}"
-            style="margin:0;">
-        <button type="submit" class="btn btn--xs btn--ghost" title="Löschen"
-                style="opacity:.5;padding:1px 5px;font-size:.65rem;">✕</button>
-      </form>
+    <div class="site-card__sub" style="margin-top:3px;font-size:.72rem;">
+      {{ marker.description[:90] }}{% if marker.description|length > 90 %}…{% endif %}
     </div>
     {% endif %}
+
   </div>
 </div>

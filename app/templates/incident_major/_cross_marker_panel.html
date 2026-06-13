@@ -22,7 +22,7 @@
             hx-swap="none"
             name="status"
             hx-trigger="change"
-            hx-on::after-request="if(event.detail.successful) htmx.trigger(document.body,'crossMarkerChanged')">
+            hx-on::after-request="if(event.detail.successful){htmx.trigger(document.body,'crossMarkerChanged');htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel',{target:this.closest('#site-panel-content,#siteDetailContent'),swap:'innerHTML'})}">
       {% for val, label in status_label.items() %}
       <option value="{{ val }}" {% if marker.status == val %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
@@ -99,12 +99,35 @@
         hx-encoding="multipart/form-data"
         hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
         hx-swap="none"
-        hx-on::after-request="if(event.detail.successful){this.reset();htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel',{target:this.closest('#site-panel-content,#siteDetailContent'),swap:'innerHTML'})}"
-        style="display:flex;gap:6px;align-items:center;margin:0;">
-    <input type="file" name="file" accept="image/*" required
-           style="flex:1;font-size:.72rem;color:var(--text);">
-    <button type="submit" class="btn btn--xs btn--secondary">↑</button>
+        hx-on::after-request="if(event.detail.successful){this.reset();var p=document.getElementById('cmPrev-{{ marker.id }}');if(p)p.innerHTML='';var b=document.getElementById('cmUpBtn-{{ marker.id }}');if(b)b.style.display='none';htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel',{target:this.closest('#site-panel-content,#siteDetailContent'),swap:'innerHTML'})}"
+        style="margin:0;">
+    <input type="file" name="file" id="cmFile-{{ marker.id }}" accept="image/*"
+           style="display:none;" onchange="_cmPhoto(this,'{{ marker.id }}')">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button type="button" class="btn btn--secondary btn--sm"
+              onclick="openCamera('cmFile-{{ marker.id }}')">📷 Kamera</button>
+      <button type="button" class="btn btn--ghost btn--sm"
+              onclick="openGallery('cmFile-{{ marker.id }}')">🖼️ Galerie</button>
+      <button type="submit" class="btn btn--primary btn--sm"
+              id="cmUpBtn-{{ marker.id }}" style="display:none;">Hochladen</button>
+    </div>
+    <div id="cmPrev-{{ marker.id }}" style="margin-top:4px;"></div>
   </form>
+  <script>
+  function _cmPhoto(input, mid) {
+    var btn = document.getElementById('cmUpBtn-' + mid);
+    var prev = document.getElementById('cmPrev-' + mid);
+    if (btn) btn.style.display = input.files.length ? '' : 'none';
+    if (prev) prev.innerHTML = '';
+    if (input.files[0] && prev) {
+      var r = new FileReader();
+      r.onload = function(e) {
+        prev.innerHTML = '<img src="' + e.target.result + '" style="max-height:60px;border-radius:4px;">';
+      };
+      r.readAsDataURL(input.files[0]);
+    }
+  }
+  </script>
   {% endif %}
 </div>
 {% endif %}
