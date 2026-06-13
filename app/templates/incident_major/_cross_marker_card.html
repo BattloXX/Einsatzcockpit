@@ -13,20 +13,9 @@
     </div>
     <div class="site-card__sub" style="display:flex;align-items:center;gap:5px;">
       <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:{{ marker.status_color }};flex-shrink:0;"></span>
-      {{ marker.status_label }}
-      <span style="color:var(--border);">·</span>
-      {{ marker.type_label }}
-    </div>
-    {% if marker.address_line %}
-    <div class="site-card__addr">{{ marker.address_line }}</div>
-    {% endif %}
-    {% if marker.description %}
-    <div class="site-card__sub" style="margin-top:3px;font-size:.72rem;">{{ marker.description[:80] }}{% if marker.description|length > 80 %}…{% endif %}</div>
-    {% endif %}
-    {% if can_edit %}
-    <div style="display:flex;gap:5px;margin-top:6px;align-items:center;">
-      <select style="font-size:.7rem;padding:2px 5px;border-radius:4px;border:1px solid var(--border);
-                     background:var(--surface-elevated,#1e2130);color:var(--text);flex:1;"
+      {% if can_edit %}
+      <select style="font-size:.72rem;padding:1px 4px;border-radius:3px;border:1px solid var(--border);
+                     background:var(--surface-elevated,#1e2130);color:{{ marker.status_color }};font-weight:600;"
               hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/status"
               hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
               hx-swap="none"
@@ -37,6 +26,20 @@
         <option value="{{ val }}" {% if marker.status == val %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
+      {% else %}
+      <span style="color:{{ marker.status_color }};font-weight:600;">{{ marker.status_label }}</span>
+      {% endif %}
+      <span style="color:var(--border);">·</span>
+      {{ marker.type_label }}
+    </div>
+    {% if marker.address_line %}
+    <div class="site-card__addr">{{ marker.address_line }}</div>
+    {% endif %}
+    {% if marker.description %}
+    <div class="site-card__sub" style="margin-top:3px;font-size:.72rem;">{{ marker.description[:80] }}{% if marker.description|length > 80 %}…{% endif %}</div>
+    {% endif %}
+    {% if can_edit %}
+    <div style="display:flex;justify-content:flex-end;margin-top:4px;">
       <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/loeschen"
             hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
             hx-confirm="Meldung löschen?"
