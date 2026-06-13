@@ -177,3 +177,8 @@ templates.env.globals["ordered_col_items"] = _ordered_col_items
 from app.services.lagekarte import resolve_lagekarte_url  # noqa: E402
 
 templates.env.globals["lagekarte_url"] = resolve_lagekarte_url
+
+# Globale Konfigurationswerte für Templates
+from app.config import settings as _settings  # noqa: E402
+
+templates.env.globals["WEATHER_ENABLED"] = _settings.WEATHER_ENABLED

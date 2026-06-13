@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Wetter – {{ focus_label }}{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<style>
+  .wetter-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px 14px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .wetter-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .wetter-header__title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .wetter-header__sub {
+    font-size: .8rem;
+    color: var(--text-muted);
+  }
+  .wetter-panel-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  #wetter-map {
+    width: 100%;
+    height: 360px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .radar-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: .8rem;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .radar-toggle.active {
+    background: rgba(59,130,246,.25);
+    border-color: rgba(59,130,246,.5);
+    color: #93c5fd;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wetter-wrap">
+
+  <div class="wetter-header">
+    <span class="wetter-header__title">🌦 Wetter</span>
+    <span class="wetter-header__sub">{{ focus_label }}</span>
+  </div>
+
+  {# ── Wetter-Panel (HTMX auto-refresh) ──────────────────────────────────── #}
+  <div class="wetter-panel-box"
+       id="wetter-panel"
+       hx-get="/wetter/panel"
+       hx-trigger="load, every 300s"
+       hx-swap="innerHTML">
+    {% include "incident_major/_weather_panel.html" %}
+  </div>
+
+  {# ── Karte mit Radar-Toggle ─────────────────────────────────────────────── #}
+  {% if lat is not none and lng is not none %}
+  <div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <span style="font-size:.75rem;color:var(--text-muted);font-weight:600;letter-spacing:.05em;">RADARKARTE</span>
+      <button class="radar-toggle" id="radar-btn" type="button">🌧 Radar einblenden</button>
+    </div>
+    <div id="wetter-map"></div>
+    <div style="font-size:.65rem;color:var(--text-muted);margin-top:4px;">
+      Radar: <a href="https://rainviewer.com" target="_blank" rel="noopener" style="color:var(--text-muted);">RainViewer</a>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if lat is not none and lng is not none %}
+<script src="/static/js/leaflet.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  var LAT = {{ lat }};
+  var LNG = {{ lng }};
+
+  var map = L.map('wetter-map').setView([LAT, LNG], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+
+  // Org marker
+  L.circleMarker([LAT, LNG], {
+    radius: 8, fillColor: '#3b82f6', fillOpacity: 0.8,
+    color: '#1d4ed8', weight: 2,
+  }).bindTooltip('{{ focus_label|e }}').addTo(map);
+
+  var radarLayer = null;
+  var btn = document.getElementById('radar-btn');
+
+  function loadRadar() {
+    if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+    fetch('https://api.rainviewer.com/public/weather-maps.json')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) { return; }
+        var host = d.host || 'https://tilecache.rainviewer.com';
+        var items = (d.radar && d.radar.nowcast) || [];
+        if (!items.length) { items = (d.radar && d.radar.past) || []; }
+        var item = items[items.length - 1] || null;
+        if (!item) { return; }
+        radarLayer = L.tileLayer(
+          host + item.path + '/256/{z}/{x}/{y}/2/1_1.png',
+          { opacity: 0.55, attribution: 'Radar: RainViewer', zIndex: 2 }
+        ).addTo(map);
+      })
+      .catch(function () {});
+  }
+
+  btn.addEventListener('click', function () {
+    if (radarLayer) {
+      map.removeLayer(radarLayer);
+      radarLayer = null;
+      btn.textContent = '🌧 Radar einblenden';
+      btn.classList.remove('active');
+    } else {
+      loadRadar();
+      btn.textContent = '🌧 Radar ausblenden';
+      btn.classList.add('active');
+    }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -46,6 +46,9 @@
       <a href="/archiv" class="nav-link {% if '/archiv' in request.url.path %}active{% endif %}">Archiv</a>
       <a href="/statistik" class="nav-link {% if '/statistik' in request.url.path %}active{% endif %}">Statistik</a>
       <a href="/medien" class="nav-link {% if request.url.path.startswith('/medien') %}active{% endif %}">Medien</a>
+      {% if WEATHER_ENABLED %}
+      <a href="/wetter" class="nav-link {% if request.url.path.startswith('/wetter') %}active{% endif %}">🌦 Wetter</a>
+      {% endif %}
       {% if is_admin %}
       <div class="nav-dropdown" x-data="{open:false}" @click.outside="open=false">
         <button class="nav-link nav-link--dropdown {% if '/admin' in request.url.path %}active{% endif %}"

@@ -1,4 +1,4 @@
-"""UI-Router: Wetter-Panel (HTMX-Partials für GSL-Board und Einzeleinsatz)."""
+"""UI-Router: Wetter-Panel (HTMX-Partials für GSL-Board, Einzeleinsatz und /wetter-Seite)."""
 import asyncio
 import logging
 from datetime import UTC, datetime
@@ -14,7 +14,7 @@ from app.db import get_db
 from app.models.major_incident import MajorIncident
 from app.services import weather_service
 from app.services.weather_focus import resolve_weather_focus
-from app.services.weather_service import analyze_weather
+from app.services.weather_service import analyze_weather, has_cached
 
 router = APIRouter()
 logger = logging.getLogger("einsatzleiter.weather")
@@ -362,3 +362,136 @@ async def einsatz_wetter_panel(
     return await _render_weather_panel(
         request, lat, lng, focus_label, {"incident_id": incident_id}
     )
+
+
+# ── Globale Wetter-Seite (/wetter) ───────────────────────────────────────────
+
+def _resolve_menu_standort(user, db: Session) -> tuple[float | None, float | None, str]:
+    """Returns (lat, lng, label) for the global /wetter page.
+
+    Uses the org's fallback_lat/lng. Cache-first: if nowcast is already
+    cached for this location, the panel will skip the fetch.
+    """
+    if not user or not user.org_id:
+        return None, None, "Kein Standort"
+    from app.models.master import FireDept as _FD
+    org = db.get(_FD, user.org_id)
+    if not org or not org.fallback_lat or not org.fallback_lng:
+        return None, None, "Kein Standort konfiguriert"
+    label = org.city or org.name or "Org-Standort"
+    return org.fallback_lat, org.fallback_lng, label
+
+
+@router.get(
+    "/wetter",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def wetter_index(
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    """Globale Wetter-Übersichtsseite — Org-Standort mit vollständigem Panel + Radar."""
+    if not settings.WEATHER_ENABLED:
+        raise HTTPException(status_code=404)
+
+    user = request.state.user
+    lat, lng, focus_label = _resolve_menu_standort(user, db)
+
+    if lat is None or lng is None:
+        return templates.TemplateResponse(
+            request,
+            "weather/index.html",
+            {
+                "no_location": True,
+                "lat": None,
+                "lng": None,
+                "focus_label": focus_label,
+                "attribution": weather_service.GEOSPHERE_ATTRIBUTION,
+                "user": user,
+                "scenarios": [],
+            },
+        )
+
+    # Trigger cache warm-up in background (panel HTMX will use it)
+    _ = has_cached(lat, lng)
+
+    nowcast, current, forecast, warnings = await asyncio.gather(
+        weather_service.get_nowcast(lat, lng),
+        weather_service.get_current(lat, lng),
+        weather_service.get_forecast(lat, lng),
+        weather_service.get_warnings(lat, lng),
+        return_exceptions=True,
+    )
+    for name, val in [("nowcast", nowcast), ("current", current),
+                      ("forecast", forecast), ("warnings", warnings)]:
+        if isinstance(val, Exception):
+            logger.warning("Wetter-Seite %s-Fehler: %s", name, val)
+    if isinstance(nowcast, Exception):   nowcast = None
+    if isinstance(current, Exception):   current = None
+    if isinstance(forecast, Exception):  forecast = None
+    if isinstance(warnings, Exception):  warnings = []
+
+    nowcast_bars = _build_nowcast_bars(nowcast) if nowcast else []
+    peak_label = _peak_label(nowcast) if nowcast else None
+    trend_de = _TREND_DE.get(nowcast.trend, nowcast.trend) if nowcast else None
+    top_warning = warnings[0] if warnings else None
+    warn_color = weather_service._WARN_LEVEL_COLORS.get(
+        top_warning.level, "#6b7280"
+    ) if top_warning else None
+    scenarios = analyze_weather(current, forecast, nowcast)
+
+    return templates.TemplateResponse(
+        request,
+        "weather/index.html",
+        {
+            "no_location": False,
+            "lat": lat,
+            "lng": lng,
+            "focus_label": focus_label,
+            "nowcast": nowcast,
+            "nowcast_bars": nowcast_bars,
+            "peak_label": peak_label,
+            "trend_de": trend_de,
+            "current": current,
+            "wind_dir_label": _wind_dir_label(current.wind_direction_deg if current else None),
+            "forecast": forecast,
+            "warnings": warnings,
+            "top_warning": top_warning,
+            "warn_color": warn_color,
+            "scenarios": scenarios,
+            "attribution": weather_service.GEOSPHERE_ATTRIBUTION,
+            "user": user,
+        },
+    )
+
+
+@router.get(
+    "/wetter/panel",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def wetter_panel(
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    """HTMX-Partial: Wetter-Panel für /wetter-Seite (5-min auto-refresh)."""
+    if not settings.WEATHER_ENABLED:
+        return HTMLResponse("")
+
+    user = request.state.user
+    lat, lng, focus_label = _resolve_menu_standort(user, db)
+
+    if lat is None or lng is None:
+        return templates.TemplateResponse(
+            request,
+            "incident_major/_weather_panel.html",
+            {
+                "no_location": True,
+                "attribution": weather_service.GEOSPHERE_ATTRIBUTION,
+            },
+        )
+
+    return await _render_weather_panel(request, lat, lng, focus_label, {})
