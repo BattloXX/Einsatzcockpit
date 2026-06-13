@@ -26,7 +26,7 @@
 @media (max-width: 900px) { .lage-subnav { display: none; } }
 
 .karte-controls {
-  position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+  position: fixed; top: var(--karte-offset, 58px); left: 50%; transform: translateX(-50%);
   z-index: 1000; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
   padding: 6px 10px;
   background: rgba(17,24,39,.85); border-radius: 8px; border: 1px solid var(--border);
@@ -215,6 +215,12 @@
     📥 Meldungen
   </label>
   {% endif %}
+  {% if can_edit %}
+  <div class="karte-controls__sep"></div>
+  <button class="karte-mode-btn" id="btn-pin-mode" onclick="togglePinMode()">
+    📍 Pin-Modus
+  </button>
+  {% endif %}
 </div>
 
 <div class="karte-badge" id="karte-badge"></div>
@@ -236,7 +242,7 @@
 
 {# Abschnitt-Filter-Chips #}
 {% if sectors %}
-<div id="section-filters" style="position:fixed;top:60px;right:8px;z-index:1001;
+<div id="section-filters" style="position:fixed;top:var(--karte-offset,58px);right:8px;z-index:1001;
      background:rgba(17,24,39,.85);border:1px solid var(--border);border-radius:8px;
      padding:6px 10px;backdrop-filter:blur(4px);max-width:200px;">
   <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:4px;">Abschnitt-Filter</div>
@@ -302,6 +308,20 @@
   </div>
 </dialog>
 
+{# Pin-Modus Dialog #}
+<dialog id="pin-modal" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;min-width:280px;">
+  <h3 style="font-size:.9rem;margin:0 0 12px;">Neue Einsatzstelle</h3>
+  <div class="form-group">
+    <label class="form-label" style="font-size:.78rem;">Einsatzgrund</label>
+    <input type="text" id="pin-einsatzgrund" class="form-input" placeholder="Kurzbeschreibung" maxlength="200" autocomplete="off">
+  </div>
+  <div id="pin-address-row" style="font-size:.72rem;color:var(--text-muted);margin-bottom:8px;"></div>
+  <div style="display:flex;gap:8px;margin-top:12px;">
+    <button onclick="document.getElementById('pin-modal').close()" class="btn btn--ghost btn--sm">Abbrechen</button>
+    <button onclick="savePinSite()" class="btn btn--primary btn--sm">Anlegen</button>
+  </div>
+</dialog>
+
 {% endblock %}
 
 {% block scripts %}
@@ -315,6 +335,17 @@
   var REPORTS = {{ citizen_reports_json | safe }};
   var lageId  = {{ lage.id }};
   var canEdit = {{ 'true' if can_edit else 'false' }};
+
+  // Dynamische Offset-Berechnung für Topbar-Höhe
+  function setKarteOffset() {
+    var tb = document.querySelector('.karte-topbar');
+    if (tb) {
+      var h = tb.getBoundingClientRect().height;
+      document.documentElement.style.setProperty('--karte-offset', (h + 6) + 'px');
+    }
+  }
+  setKarteOffset();
+  window.addEventListener('resize', setKarteOffset);
 
   // Build sector lookup: id → {name, color}
   var sectorMap = {};
@@ -345,6 +376,10 @@
     if (s.sector_id != null && sectorMap[s.sector_id]) {
       secLine = '<div class="lk-popup__sector">Abschnitt: ' + sectorMap[s.sector_id].name + '</div>';
     }
+    var links = '<a class="lk-popup__link" href="/lage/' + lageId + '" target="_blank">→ Board</a>';
+    if (s.incident_id) {
+      links += '&nbsp;<a class="lk-popup__link" href="/einsatz/' + s.incident_id + '/karte" target="_blank">→ Einsatzkarte</a>';
+    }
     return '<div class="lk-popup">' +
       '<div class="lk-popup__title">' + s.bezeichnung + '</div>' +
       '<div class="lk-popup__phase">' + s.phase_label +
@@ -352,7 +387,7 @@
       (s.einsatzgrund ? '<div style="font-size:.78rem;margin-bottom:4px;">' + s.einsatzgrund + '</div>' : '') +
       secLine +
       '<div class="lk-popup__res">' + resText + '</div>' +
-      '<a class="lk-popup__link" href="/lage/' + lageId + '" target="_blank">→ Board</a>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + links + '</div>' +
       '</div>';
   }
 
@@ -522,6 +557,45 @@
   var pendingSectorId = null;  // null = neuer Abschnitt, int = bestehenden updaten
 
   if (canEdit && typeof L.PM !== 'undefined') {
+    // Deutsche Übersetzung für Geoman-Toolbar
+    L.PM.setLang('de', {
+      tooltips: {
+        placeMarker: 'Marker setzen',
+        firstVertex: 'Ersten Punkt klicken',
+        continueLine: 'Weiteren Punkt klicken',
+        finishLine: 'Letzten Punkt klicken zum Beenden',
+        finishPoly: 'Ersten Punkt klicken zum Schließen',
+        finishRect: 'Loslassen zum Fertigstellen',
+        startCircle: 'Mittelpunkt klicken',
+        finishCircle: 'Radius durch Klick festlegen',
+        placeCircleMarker: 'Kreis-Marker setzen',
+        placeText: 'Text platzieren',
+      },
+      actions: {
+        finish: 'Fertig',
+        cancel: 'Abbrechen',
+        removeLastVertex: 'Letzten Punkt entfernen',
+      },
+      buttonTitles: {
+        drawMarkerButton: 'Marker zeichnen',
+        drawPolyButton: 'Polygon zeichnen',
+        drawLineButton: 'Linie zeichnen',
+        drawCircleButton: 'Kreis zeichnen',
+        drawRectButton: 'Rechteck zeichnen',
+        drawCircleMarkerButton: 'Kreis-Marker zeichnen',
+        editButton: 'Formen bearbeiten',
+        dragButton: 'Formen verschieben',
+        cutButton: 'Formen ausschneiden',
+        deleteButton: 'Formen löschen',
+        drawTextButton: 'Text zeichnen',
+        rotateButton: 'Formen drehen',
+        snapButton: 'Einrasten',
+        pinningButton: 'Anheften',
+        snappingButton: 'Einrasten',
+      },
+    }, 'de');
+    map.pm.setLang('de');
+
     map.pm.addControls({
       position: 'topleft',
       drawMarker: false, drawCircle: false, drawCircleMarker: false,
@@ -530,6 +604,15 @@
       rotateMode: false,
     });
     map.pm.setGlobalOptions({ allowSelfIntersection: false, snappable: true });
+
+    // Geoman-Toolbar unter Topbar schieben
+    (function pushGeomanDown() {
+      var tb = document.querySelector('.karte-topbar');
+      var ctrl = document.querySelector('.leaflet-top.leaflet-left');
+      if (tb && ctrl) {
+        ctrl.style.marginTop = (tb.getBoundingClientRect().height + 6) + 'px';
+      }
+    })();
 
     map.on('pm:create', function(e) {
       pendingGeoJson = e.layer.toGeoJSON().geometry;
@@ -589,26 +672,37 @@
     if (!name) { alert('Bitte Bezeichnung eingeben'); return; }
     if (!pendingGeoJson) return;
 
-    // Neuen Sektor anlegen, dann Geometrie speichern
     var formData = new URLSearchParams();
     formData.append('_csrf', '{{ request.state.csrf_token }}');
     formData.append('name', name);
     formData.append('color', color);
 
+    document.getElementById('poly-modal').close();
+
     fetch('/lage/' + lageId + '/sektoren', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+      },
       body: formData,
-      redirect: 'manual',
-    }).then(function() {
-      // Nach Anlegen: Seite neu laden, um neue Sektor-ID zu bekommen, dann Polygon speichern
-      // Vereinfacht: Bei Neuladen wird alles korrekt. Wir nutzen sessionStorage als Bridge.
-      sessionStorage.setItem('pendingPolygon', JSON.stringify({
-        geometry: pendingGeoJson, color: color,
-      }));
-      location.reload();
+    }).then(function(r) {
+      if (!r.ok) { r.json().then(function(j) { alert(j.detail || 'Fehler'); }); return; }
+      return r.json();
+    }).then(function(sector) {
+      if (!sector) return;
+      // Sektor lokal hinzufügen
+      SECTORS.push(sector);
+      sectorMap[sector.id] = sector;
+      // Polygon sofort speichern
+      saveSectorPolygon(sector.id, pendingGeoJson);
+      // Lokal hinzufügen ohne Reload
+      sector.geometry = pendingGeoJson;
+      pendingGeoJson = null;
+      renderSectorPolygons();
+      // Sektor-Toggle einblenden falls noch nicht da
+      document.getElementById('btn-sektor').style.display = '';
     });
-    document.getElementById('poly-modal').close();
   };
 
   window.selectPolyColor = function(color, el) {
@@ -619,20 +713,6 @@
     el.style.borderColor = '#fff';
   };
 
-  // Nach Reload: Polygon für neusten Sektor speichern
-  (function() {
-    var pending = sessionStorage.getItem('pendingPolygon');
-    if (!pending) return;
-    sessionStorage.removeItem('pendingPolygon');
-    try {
-      var data = JSON.parse(pending);
-      // Letzten Sektor der aktuellen Lage finden
-      var lastSector = SECTORS[SECTORS.length - 1];
-      if (lastSector && data.geometry) {
-        saveSectorPolygon(lastSector.id, data.geometry);
-      }
-    } catch(e) {}
-  })();
 
   // ── Abschnitt-Chips ──────────────────────────────────────────────────────────
   var activeSectorFilter = 'all';
@@ -737,7 +817,15 @@
         if (msg.reload_board || msg.type === 'site_updated') {
           location.reload();
         } else if (msg.type === 'section:changed') {
-          location.reload();
+          // Sektoren neu laden ohne Seiten-Reload
+          fetch('/lage/' + lageId + '/karte-sektoren')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              SECTORS = data;
+              sectorMap = {};
+              SECTORS.forEach(function(s) { sectorMap[s.id] = s; });
+              renderSectorPolygons();
+            }).catch(function() { location.reload(); });
         } else if (msg.type === 'vehicle:position') {
           // Fahrzeug-Marker animiert bewegen
           var key = msg.vehicle_id != null ? 'v' + msg.vehicle_id : null;
@@ -752,6 +840,101 @@
     ws.onclose = function() { setTimeout(connectWS, 3000); };
   }
   connectWS();
+
+  // ── Pin-Modus: neue Einsatzstelle via Kartenklick ───────────────────────────
+  var pinModeActive = false;
+  var pendingPinLatLng = null;
+
+  window.togglePinMode = function() {
+    pinModeActive = !pinModeActive;
+    var btn = document.getElementById('btn-pin-mode');
+    if (btn) btn.classList.toggle('active', pinModeActive);
+    map.getContainer().style.cursor = pinModeActive ? 'crosshair' : '';
+  };
+
+  map.on('click', function(e) {
+    if (!pinModeActive) return;
+    pendingPinLatLng = e.latlng;
+    document.getElementById('pin-einsatzgrund').value = '';
+    document.getElementById('pin-address-row').textContent = 'Koordinaten: ' +
+      e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5);
+
+    // Reverse Geocode
+    var lat = e.latlng.lat, lng = e.latlng.lng;
+    fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng, {
+      headers: { 'Accept-Language': 'de' },
+    }).then(function(r) { return r.json(); }).then(function(j) {
+      if (j && j.address) {
+        var a = j.address;
+        var parts = [];
+        if (a.road) parts.push(a.road + (a.house_number ? ' ' + a.house_number : ''));
+        if (a.town || a.village || a.city) parts.push(a.town || a.village || a.city);
+        document.getElementById('pin-address-row').textContent = parts.join(', ') || j.display_name || '';
+        document.getElementById('pin-einsatzgrund').dataset.strasse = a.road || '';
+        document.getElementById('pin-einsatzgrund').dataset.hausnr = a.house_number || '';
+        document.getElementById('pin-einsatzgrund').dataset.ort = a.town || a.village || a.city || '';
+      }
+    }).catch(function() {});
+
+    document.getElementById('pin-modal').showModal();
+    setTimeout(function() { document.getElementById('pin-einsatzgrund').focus(); }, 50);
+  });
+
+  window.savePinSite = function() {
+    if (!pendingPinLatLng) return;
+    var inp = document.getElementById('pin-einsatzgrund');
+    var einsatzgrund = inp.value.trim();
+    document.getElementById('pin-modal').close();
+
+    fetch('/lage/' + lageId + '/stellen/via-karte', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': '{{ request.state.csrf_token }}',
+      },
+      body: JSON.stringify({
+        lat: pendingPinLatLng.lat,
+        lng: pendingPinLatLng.lng,
+        einsatzgrund: einsatzgrund,
+        strasse: inp.dataset.strasse || '',
+        hausnr: inp.dataset.hausnr || '',
+        ort: inp.dataset.ort || '',
+      }),
+    }).then(function(r) { return r.json(); }).then(function(site) {
+      if (!site || !site.id) return;
+      // Marker direkt hinzufügen
+      var s = {
+        id: site.id,
+        bezeichnung: site.bezeichnung,
+        einsatzgrund: einsatzgrund,
+        lat: site.lat,
+        lng: site.lng,
+        phase: 'eingegangen',
+        phase_label: 'Eingegangen',
+        priority_label: '',
+        color: '#6b7280',
+        active_res: 0,
+        sector_id: null,
+        incident_id: null,
+      };
+      SITES.push(s);
+      var c = s.color;
+      var m = L.circleMarker([s.lat, s.lng], {
+        radius: 11, color: c, fillColor: c, fillOpacity: 0.85, weight: 2,
+      });
+      m.on('click', function() { openPanel(s.id); });
+      m.addTo(map);
+      markers.push({ marker: m, phase: s.phase, site: s });
+      renderMarkers();
+    }).catch(function(err) { alert('Fehler beim Anlegen'); });
+
+    pendingPinLatLng = null;
+    // Pin-Modus nach Anlegen beenden
+    pinModeActive = false;
+    var btn = document.getElementById('btn-pin-mode');
+    if (btn) btn.classList.remove('active');
+    map.getContainer().style.cursor = '';
+  };
 
   // ── Sektor-Filter Update ────────────────────────────────────────────────────
   var _origRenderMarkers = renderMarkers;

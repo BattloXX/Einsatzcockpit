@@ -268,7 +268,8 @@
 <script src="/static/js/leaflet.min.js"></script>
 <script>
 (function () {
-  var sites = {{ map_sites_json | safe }};
+  var sites   = {{ map_sites_json | safe }};
+  var sectors = {{ sectors_json | safe }};
   var map = L.map('lage-map', { preferCanvas: true });
   // subdomains: 'abc' PFLICHT — ohne Option → Leaflet nutzt keinen Subdomain-Ersatz → HTTP 503
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -277,8 +278,22 @@
     maxZoom: 19,
   }).addTo(map);
 
+  // Abschnitt-Polygone (unter den Markern)
+  var sectionPane = map.createPane('sectionPane');
+  sectionPane.style.zIndex = 350;
+  sectors.forEach(function(s) {
+    if (!s.geometry) return;
+    try {
+      var color = s.color || '#6b7280';
+      L.geoJSON(s.geometry, {
+        pane: 'sectionPane',
+        style: { color: color, fillColor: color, fillOpacity: 0.15, weight: 2, opacity: 0.7 },
+      }).bindTooltip(s.name, { permanent: true, direction: 'center', opacity: 0.85 }).addTo(map);
+    } catch(e) {}
+  });
+
+  var bounds = [];
   if (sites.length) {
-    var bounds = [];
     sites.forEach(function (s) {
       var m = L.circleMarker([s.lat, s.lng], {
         radius: 9, color: s.color, fillColor: s.color,
@@ -287,9 +302,28 @@
       m.bindPopup('<b>' + s.bezeichnung + '</b><br>' + s.phase);
       bounds.push([s.lat, s.lng]);
     });
+  }
+
+  if (bounds.length) {
     map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+  } else if (sectors.length) {
+    // Karte auf Polygon-Ausdehnung ausrichten wenn keine Sites
+    var allBounds = [];
+    sectors.forEach(function(s) {
+      if (!s.geometry) return;
+      try {
+        var layer = L.geoJSON(s.geometry);
+        layer.getBounds && allBounds.push(layer.getBounds());
+      } catch(e) {}
+    });
+    if (allBounds.length) {
+      var combined = allBounds[0];
+      allBounds.forEach(function(b) { combined.extend(b); });
+      map.fitBounds(combined, { padding: [30, 30], maxZoom: 15 });
+    } else {
+      map.setView([47.41, 9.74], 11);
+    }
   } else {
-    // Default: Vorarlberg
     map.setView([47.41, 9.74], 11);
   }
   setTimeout(function() { map.invalidateSize(); }, 200);

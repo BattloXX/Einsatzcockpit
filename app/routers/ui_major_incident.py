@@ -365,6 +365,66 @@ async def site_create(
     return RedirectResponse(f"/lage/{lage_id}", status_code=303)
 
 
+@router.post("/lage/{lage_id}/stellen/via-karte")
+async def site_create_via_karte(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    """Erstellt eine Einsatzstelle aus einem Karten-Pin (JSON-Body)."""
+    from fastapi.responses import JSONResponse
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    if lage.status != MajorIncidentStatus.active:
+        raise HTTPException(status_code=400, detail="Lage nicht aktiv")
+
+    data = await request.json()
+    try:
+        lat = float(data["lat"])
+        lng = float(data["lng"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="lat/lng fehlen")
+
+    einsatzgrund = (data.get("einsatzgrund") or "").strip()[:200] or None
+    strasse = (data.get("strasse") or "").strip()[:120] or None
+    hausnr = (data.get("hausnr") or "").strip()[:20] or None
+    ort = (data.get("ort") or "").strip()[:120] or None
+    bezeichnung = einsatzgrund or "Einsatzstelle"
+
+    try:
+        site = create_site(
+            db, lage,
+            bezeichnung=bezeichnung,
+            einsatzgrund=einsatzgrund,
+            strasse=strasse,
+            hausnr=hausnr,
+            ort=ort,
+            lat=lat,
+            lng=lng,
+            source="manual",
+            created_by=user.id,
+        )
+        db.add(SiteLogEntry(
+            incident_site_id=site.id,
+            kind="status",
+            text="Einsatzstelle via Karten-Pin angelegt",
+            user_id=user.id,
+            author_name=get_author_name(request),
+        ))
+        from app.services.geo_service import auto_assign_section
+        auto_assign_section(db, site)
+        db.commit()
+    except Exception:
+        logger.exception("Fehler beim Anlegen via Karte lage_id=%s", lage_id)
+        db.rollback()
+        raise
+    await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
+    return JSONResponse({"id": site.id, "bezeichnung": site.bezeichnung,
+                         "lat": site.lat, "lng": site.lng})
+
+
 # ── Phase ändern (Drag & Drop) ───────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/phase")
@@ -1082,6 +1142,13 @@ async def lage_dashboard(
         for s in lage.sites
     )
 
+    sectors_json = json.dumps([{
+        "id": s.id,
+        "name": s.name,
+        "color": s.color or "#6b7280",
+        "geometry": json.loads(s.geometry) if s.geometry else None,
+    } for s in sorted(lage.sectors, key=lambda s: s.id)])
+
     return templates.TemplateResponse(request, "incident_major/dashboard.html", {
         "user": user,
         "lage": lage,
@@ -1092,6 +1159,7 @@ async def lage_dashboard(
         "prio_color": SITE_PRIORITY_COLOR,
         "activity_feed": activity_feed,
         "map_sites_json": map_sites_json,
+        "sectors_json": sectors_json,
         "open_count": open_count,
         "done_count": phase_stats[SitePhase.erledigt],
         "active_res": active_res,
@@ -2129,13 +2197,19 @@ async def sektor_create(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
-    db.add(Sector(
+    safe_color = color[:7] if color.startswith("#") else "#6b7280"
+    sector = Sector(
         major_incident_id=lage_id,
         name=name.strip()[:80],
-        color=color[:7] if color.startswith("#") else "#6b7280",
+        color=safe_color,
         leader_label=leader_label.strip()[:80] or None,
-    ))
+    )
+    db.add(sector)
     db.commit()
+
+    if request.headers.get("accept", "").startswith("application/json"):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"id": sector.id, "name": sector.name, "color": sector.color})
     return RedirectResponse(f"/lage/{lage_id}/sektoren", status_code=303)
 
 
@@ -2497,6 +2571,7 @@ async def lage_karte(
         "color": _site_color(s),
         "active_res": sum(1 for r in s.resources if not r.released_at),
         "sector_id": s.sector_id,
+        "incident_id": s.incident_id,
     } for s in active_sites if s.lat and s.lng])
 
     sectors = sorted(lage.sectors, key=lambda s: s.id)
@@ -2546,6 +2621,29 @@ async def lage_karte(
         "mi_features": _get_mi_features(db),
         **_nav_counts(lage_id, lage, db),
     })
+
+
+@router.get("/lage/{lage_id}/karte-sektoren")
+async def lage_karte_sektoren(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    """JSON-API: gibt aktuelle Sektoren für Live-Update der Lagekarte zurück."""
+    import json
+
+    from fastapi.responses import JSONResponse
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    sectors = sorted(lage.sectors, key=lambda s: s.id)
+    return JSONResponse([{
+        "id": s.id,
+        "name": s.name,
+        "color": s.color or "#6b7280",
+        "geometry": json.loads(s.geometry) if s.geometry else None,
+    } for s in sectors])
 
 
 # ── Ressourcenübersicht ───────────────────────────────────────────────────────

@@ -11,7 +11,13 @@ from app.core.audit import write_audit
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
-from app.models.major_incident import GslStaffAssignment, MajorIncident, MajorIncidentStatus
+from app.models.major_incident import (
+    JOURNAL_CATEGORIES,
+    GslStaffAssignment,
+    LageJournalEntry,
+    MajorIncident,
+    MajorIncidentStatus,
+)
 from app.services import gsl_staff_service as svc
 from app.services.broadcast import broadcast_lage
 
@@ -226,6 +232,33 @@ async def stab_patch(
     db.commit()
     await _broadcast_staff(lage_id)
     return Response(status_code=204)
+
+
+# ── Einsatzjournal-Partial (HTMX live-reload) ─────────────────────────────────
+
+@router.get("/lage/{lage_id}/stab/einsatzjournal", response_class=HTMLResponse)
+async def stab_einsatzjournal(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org(user, lage)
+
+    entries = (
+        db.query(LageJournalEntry)
+        .filter(LageJournalEntry.major_incident_id == lage_id)
+        .order_by(LageJournalEntry.ts.desc())
+        .all()
+    )
+    return templates.TemplateResponse(request, "incident_major/_stab_einsatzjournal.html", {
+        "lage": lage,
+        "journal_entries": entries,
+        "journal_categories": JOURNAL_CATEGORIES,
+        "can_edit": _can_edit(user),
+    })
 
 
 # ── Personenjournal-API ────────────────────────────────────────────────────────
