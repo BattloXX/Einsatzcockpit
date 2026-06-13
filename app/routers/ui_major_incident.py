@@ -2156,6 +2156,10 @@ async def meldung_annehmen(
                 user_id=user.id,
                 author_name=get_author_name(request),
             ))
+        # Abschnitts-Zuweisung anhand GPS-Koordinaten
+        from app.services.geo_service import auto_assign_section
+        auto_assign_section(db, site)
+
         # Bürgermeldungs-Foto auf Einsatzstelle übertragen
         if report.photo_filename:
             from pathlib import Path as _Path
