@@ -289,6 +289,18 @@ async def lage_board(
         .count()
     )
 
+    from app.config import settings as _cfg
+    from app.models.master import OrgSettings as _OS
+    _org_s = db.query(_OS).filter(_OS.org_id == lage.org_id).first() if lage.org_id else None
+    _weather_enabled = (
+        _cfg.WEATHER_ENABLED
+        and (
+            _org_s is None
+            or _org_s.weather_enabled is None
+            or bool(_org_s.weather_enabled)
+        )
+    )
+
     return templates.TemplateResponse(request, "incident_major/board.html", {
         "user": user,
         "lage": lage,
@@ -309,6 +321,7 @@ async def lage_board(
         "sectors_by_id": sectors_by_id,
         "now": datetime.now(UTC),
         "mi_features": _get_mi_features(db),
+        "weather_enabled": _weather_enabled,
     })
 
 

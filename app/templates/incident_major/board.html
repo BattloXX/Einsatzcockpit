@@ -247,7 +247,8 @@
   </div>
 
 
-  <!-- ── Wetter-Panel ─────────────────────────────────────────────────────── -->
+  {# ── Wetter-Panel ──────────────────────────────────────────────────────── #}
+  {% if weather_enabled %}
   <details id="wetter-details"
            style="border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;">
     <summary style="padding:4px 14px;cursor:pointer;font-size:.75rem;color:var(--text-muted);
@@ -262,6 +263,7 @@
       <span style="font-size:.75rem;color:var(--text-muted);">Lade…</span>
     </div>
   </details>
+  {% endif %}
 
   <!-- ── Phasen-Board ─────────────────────────────────────────────────────── -->
   <div class="phase-board" id="lage-board" data-lage-id="{{ lage.id }}">
