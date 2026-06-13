@@ -39,6 +39,7 @@ from app.routers import (
     ui_settings,
     ui_stats,
     ui_sysadmin,
+    ui_weather,
     ws,
 )
 
@@ -325,6 +326,7 @@ app.include_router(ui_settings.router)
 app.include_router(ui_sysadmin.router)
 app.include_router(ui_ai_prompts.router)
 app.include_router(ui_profile.router)
+app.include_router(ui_weather.router)
 
 
 @app.exception_handler(HTTPException)

@@ -247,6 +247,22 @@
   </div>
 
 
+  <!-- ── Wetter-Panel ─────────────────────────────────────────────────────── -->
+  <details id="wetter-details"
+           style="border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;">
+    <summary style="padding:4px 14px;cursor:pointer;font-size:.75rem;color:var(--text-muted);
+                    user-select:none;list-style:none;display:flex;align-items:center;gap:6px;">
+      <span>▸</span><span>🌦 Wetter</span>
+    </summary>
+    <div id="wetter-panel"
+         hx-get="/gsl/{{ lage.id }}/wetter/panel"
+         hx-trigger="load, every 300s"
+         hx-swap="innerHTML"
+         style="padding:8px 14px;">
+      <span style="font-size:.75rem;color:var(--text-muted);">Lade…</span>
+    </div>
+  </details>
+
   <!-- ── Phasen-Board ─────────────────────────────────────────────────────── -->
   <div class="phase-board" id="lage-board" data-lage-id="{{ lage.id }}">
 
