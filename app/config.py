@@ -102,6 +102,20 @@ class Settings(BaseSettings):
     PHOTON_SUGGEST_LIMIT: int = 8
     DEFAULT_INCIDENT_CITY: str = "Wolfurt"   # Fallback wenn Home-Org kein city hat
 
+    # Wetter (GeoSphere Austria Data Hub — CC BY 4.0, kein API-Key)
+    WEATHER_ENABLED: bool = True
+    GEOSPHERE_BASE_URL: str = "https://dataset.api.hub.geosphere.at/v1"
+    GEOSPHERE_WARN_URL: str = "https://openapi.hub.geosphere.at/warnapi/v1"
+    WEATHER_NOWCAST_RESOURCE: str = "nowcast-v1-15min-1km"
+    WEATHER_NWP_RESOURCE: str = "nwp-v1-1h-2500m"
+    WEATHER_STATION_RESOURCE: str = "tawes-v1-10min"
+    WEATHER_CACHE_TTL_NOWCAST: int = 300     # 5 min
+    WEATHER_CACHE_TTL_NWP: int = 1800        # 30 min
+    WEATHER_CACHE_TTL_WARN: int = 300        # 5 min
+    WEATHER_HTTP_TIMEOUT: int = 8
+    WEATHER_RADIUS_KM: int = 15
+    WEATHER_FALLBACK_OPENMETEO: bool = True
+
     @property
     def effective_public_base_url(self) -> str:
         return self.PUBLIC_BASE_URL or self.APP_BASE_URL
