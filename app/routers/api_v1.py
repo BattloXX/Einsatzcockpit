@@ -848,6 +848,8 @@ async def lage_alarm(
     ))
     write_audit(db, "major_incident.site.from_api", api_key_id=api_key.id,
                 payload={"lage_id": lage.id, "site_id": site.id, "key": payload.Key})
+    from app.services.geo_service import auto_assign_section
+    auto_assign_section(db, site)
     db.commit()
 
     background_tasks.add_task(

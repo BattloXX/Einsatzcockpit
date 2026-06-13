@@ -179,6 +179,8 @@ def handle_alarm_trigger(
         lng=lng,
         einsatzgrund=einsatzgrund,
     )
+    from app.services.geo_service import auto_assign_section
+    auto_assign_section(db, site)
     return lage, site, lage_created
 
 
@@ -212,7 +214,7 @@ def adopt_incident_as_site(
     if existing:
         return None
 
-    return create_site(
+    site = create_site(
         db, lage,
         bezeichnung=einsatzgrund or f"{alarm_type_code} – {ort or 'unbekannt'}",
         source="api",
@@ -227,3 +229,6 @@ def adopt_incident_as_site(
         lng=lng,
         einsatzgrund=einsatzgrund,
     )
+    from app.services.geo_service import auto_assign_section
+    auto_assign_section(db, site)
+    return site
