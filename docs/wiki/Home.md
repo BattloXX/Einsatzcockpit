@@ -52,7 +52,8 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Mobile Nutzung / PWA](Anwender-Mobile-Nutzung-PWA) | Installieren, Offline-Verhalten |
 | [Push-Benachrichtigungen](Anwender-Push-Benachrichtigungen) | Aktivieren auf Handy und PC |
 | [Lagekarte.info](Anwender-Lagekarte) | Adresse & Koordinaten, Live-Fahrzeuge auf lagekarte.info |
-| [Großschadenslage](Anwender-Grosschadenslage) | Phasen-Kanban, Einsatzstellen, Abschnitte, KI-Priorisierung |
+| [Großschadenslage](Anwender-Grosschadenslage) | Phasen-Kanban, Einsatzstellen, Abschnitte, Stab-Journal, KI-Priorisierung |
+| [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte) | Interaktive Karte, Abschnitt-Polygone zeichnen, Pin-Modus, Fahrzeuge |
 
 ### Administration
 | Seite | Beschreibung |

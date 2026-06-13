@@ -82,13 +82,64 @@ Die KI bewertet `danger_score` (Gefahrenlage 1–4) und `urgency_score` (Dringli
 
 Abschnitte (`/lage/{id}/sektoren`) strukturieren die Einsatzstellen geografisch oder taktisch. Jeder Abschnitt hat einen Namen, eine Farbe und optional einen Abschnittsleiter. Die Abschnittsfarbe erscheint als farbiger Badge auf der Einsatzstellenkarte.
 
+Abschnitte können auch direkt auf der **Lagekarte** als Polygon eingezeichnet werden — ohne Seitenneuladen. Siehe [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte).
+
 ---
 
 ## Einsatzstellen anlegen
 
 **Manuell:** + Einsatzstelle-Button im Board  
 **Via API:** `POST /api/v1/lage/alarm` mit Alarmierungsdaten  
+**Via Karte (Pin-Modus):** Kartenklick auf der Lagekarte → Einsatzgrund eingeben (inkl. automatischer Adressermittlung)  
 **Bürgermeldung:** Eingehende Meldungen unter `/lage/{id}/meldungen` akzeptieren
+
+---
+
+## Lagekarte
+
+Die Lagekarte (`/lage/{id}/karte`) zeigt alle Einsatzstellen und Abschnitt-Polygone auf einer interaktiven Karte. Vollständige Dokumentation: [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte).
+
+---
+
+## Stab (SKKM-konform)
+
+Der Stab (`/lage/{id}/stab`) bietet drei Tabs:
+
+### Tab 1 – Einsatzjournal
+
+Das Einsatzjournal ist BMI SKKM-konform aufgebaut und dient zur lückenlosen Dokumentation aller Führungsentscheide:
+
+| Kategorie | Farbe | Bedeutung |
+|-----------|-------|-----------|
+| **Entscheidung** | Lila | Führungsentscheid, Lagebewertung |
+| **Anweisung** | Orange | Auftrag an Abschnitt oder Einheit |
+| **Meldung** | Blau | Lagemeldung, Statusänderung |
+| **Sonstiges** | Grau | Sonstige Vermerke |
+
+**Eintrag erstellen:**
+1. Kategorie aus dem Dropdown wählen
+2. Text eingeben
+3. **Eintragen** klicken → erscheint sofort mit Zeitstempel und Autor
+
+Einträge können mit ✕ gelöscht werden (Bestätigung erforderlich). Alle Einträge werden live via WebSocket aktualisiert, wenn mehrere Geräte gleichzeitig am Stab arbeiten.
+
+### Tab 2 – Besetzungstafel
+
+SKKM-konforme Stabsfunktionen (EL, S1–S6 etc.) mit aktueller Besetzung, Ampel-Anzeige und Ablöse-Protokoll.
+
+### Tab 3 – Personenjournal
+
+Chronologische Tabelle aller Besetzungseinträge mit Zeitstrahl je Stabsfunktion.
+
+---
+
+## Dashboard
+
+Das Dashboard (`/lage/{id}/dashboard`) bietet eine Echtzeit-Übersicht über:
+- Einsatzstellen nach Phase und Priorität
+- Aktive Ressourcen-Zuordnungen
+- Aktivitäts-Feed (Lageeinträge + Stellen-Protokolle)
+- **Mini-Karte** mit allen Einsatzstellen und Abschnitt-Polygonen
 
 ---
 
@@ -106,5 +157,8 @@ Abschnitte (`/lage/{id}/sektoren`) strukturieren die Einsatzstellen geografisch 
 |--------|-------|
 | Lage ansehen | `readonly` und höher |
 | Einsatzstelle anlegen/bearbeiten | `recorder`, `incident_leader`, `admin`, `org_admin` |
+| Einsatzstelle via Karten-Pin anlegen | `recorder`, `incident_leader`, `admin`, `org_admin` |
 | Lage starten / beenden | `incident_leader`, `admin`, `org_admin` |
-| Abschnitte verwalten | `incident_leader`, `admin`, `org_admin` |
+| Abschnitte verwalten / zeichnen | `incident_leader`, `admin`, `org_admin`, `recorder` |
+| Stab-Journal schreiben | `recorder`, `incident_leader`, `admin`, `org_admin` |
+| Stab-Journal löschen | `incident_leader`, `admin`, `org_admin` |
