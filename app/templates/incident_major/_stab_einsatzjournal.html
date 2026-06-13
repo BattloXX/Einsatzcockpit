@@ -1,5 +1,5 @@
 {# HTMX-Partial: Einsatzjournal-Liste (ohne Formular, nur Einträge) #}
-{% set cat_color = {'entscheidung':'#a78bfa','anweisung':'#fb923c','meldung':'#60a5fa','sonstiges':'#6b7280'} %}
+{% set cat_color = {'entscheidung':'#a78bfa','anweisung':'#fb923c','meldung':'#60a5fa','sonstiges':'#6b7280','lagemeldung':'#34d399'} %}
 {% for entry in journal_entries %}
 <div class="journal-row" style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);align-items:flex-start;">
   <div style="flex-shrink:0;width:90px;font-size:.7rem;font-family:var(--font-mono,monospace);color:var(--text-muted);padding-top:2px;">
@@ -12,7 +12,42 @@
          white-space:nowrap;margin-top:1px;">
     {{ journal_categories.get(entry.category, entry.category) }}
   </span>
-  <div style="flex:1;font-size:.82rem;line-height:1.45;">{{ entry.text }}</div>
+  <div style="flex:1;min-width:0;">
+    <div style="font-size:.82rem;font-weight:600;line-height:1.4;">{{ entry.text }}</div>
+    {% if entry.partner_from or entry.partner_to %}
+    <div style="font-size:.72rem;color:var(--text-muted);margin-top:2px;">
+      {% if entry.partner_from %}Von: {{ entry.partner_from }}{% endif %}
+      {% if entry.partner_from and entry.partner_to %} · {% endif %}
+      {% if entry.partner_to %}An: {{ entry.partner_to }}{% endif %}
+    </div>
+    {% endif %}
+    {% if entry.body_html %}
+    <details style="margin-top:4px;">
+      <summary style="font-size:.75rem;color:var(--text-muted);cursor:pointer;list-style:none;">
+        <span style="text-decoration:underline;text-decoration-style:dotted;">Details einblenden</span>
+      </summary>
+      <div class="journal-body" style="margin-top:6px;font-size:.82rem;line-height:1.5;
+           padding:8px;background:rgba(255,255,255,.04);border-radius:6px;border:1px solid rgba(255,255,255,.07);">
+        {{ entry.body_html | safe }}
+      </div>
+    </details>
+    {% endif %}
+    {% if entry.measure %}
+    <div style="font-size:.72rem;color:#fbbf24;margin-top:3px;">⚡ {{ entry.measure }}</div>
+    {% endif %}
+    {% if entry.media %}
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">
+      {% for m in entry.media %}
+      <a href="/lage/{{ lage.id }}/journal/{{ entry.id }}/medien/{{ m.id }}/bild"
+         target="_blank" rel="noopener">
+        <img src="/lage/{{ lage.id }}/journal/{{ entry.id }}/medien/{{ m.id }}/bild?thumb=true"
+             alt="{{ m.original_filename }}"
+             style="width:64px;height:64px;object-fit:cover;border-radius:4px;border:1px solid var(--border);">
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
   {% if entry.author_name %}
   <div style="flex-shrink:0;font-size:.68rem;color:var(--text-muted);white-space:nowrap;padding-top:2px;">{{ entry.author_name }}</div>
   {% endif %}

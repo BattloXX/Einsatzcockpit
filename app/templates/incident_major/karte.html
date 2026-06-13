@@ -92,6 +92,17 @@
   padding: 2px 8px; border-radius: 4px; }
 .lk-popup__link:hover { background: rgba(147,197,253,.1); }
 
+/* Hover-Tooltip */
+.lk-tip { max-width: 240px; }
+.leaflet-tooltip.lk-tip {
+  background: rgba(17,24,39,.92); color: #e5e7eb;
+  border: 1px solid rgba(255,255,255,.15); border-radius: 6px;
+  padding: 5px 8px; font-size: .76rem; line-height: 1.45;
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  pointer-events: none;
+}
+.leaflet-tooltip.lk-tip::before { display: none; }
+
 /* No-coords list */
 .nocoords-box {
   position: fixed; bottom: 16px; left: 16px; z-index: 1001;
@@ -215,6 +226,13 @@
     📥 Meldungen
   </label>
   {% endif %}
+  {% if mi_features.uebergreifend %}
+  <div class="karte-controls__sep"></div>
+  <label style="color:#818cf8;">
+    <input type="checkbox" id="cross-toggle" checked onchange="toggleCrossMarkers(this.checked)">
+    📍 Übergreifend
+  </label>
+  {% endif %}
   {% if can_edit %}
   <div class="karte-controls__sep"></div>
   <button class="karte-mode-btn" id="btn-pin-mode" onclick="togglePinMode()">
@@ -331,9 +349,10 @@
 <script src="/static/js/weather_layer.js"></script>
 <script>
 (function () {
-  var SITES   = {{ map_sites_json | safe }};
-  var SECTORS = {{ sectors_json | safe }};
-  var REPORTS = {{ citizen_reports_json | safe }};
+  var SITES          = {{ map_sites_json | safe }};
+  var SECTORS        = {{ sectors_json | safe }};
+  var REPORTS        = {{ citizen_reports_json | safe }};
+  var CROSS_MARKERS  = {{ cross_markers_json | safe }};
   var lageId  = {{ lage.id }};
   var canEdit = {{ 'true' if can_edit else 'false' }};
 
@@ -352,7 +371,9 @@
   var sectorMap = {};
   SECTORS.forEach(function(s) { sectorMap[s.id] = s; });
 
-  var colorMode = 'priority';  // 'priority' | 'sector'
+  var _lsColorKey = 'karte_color_' + lageId;
+  var _lsSectorKey = 'karte_sector_' + lageId;
+  var colorMode = localStorage.getItem(_lsColorKey) || 'priority';  // 'priority' | 'sector'
 
   var map = L.map('karte-map', { preferCanvas: true, zoomControl: true });
   // subdomains: 'abc' PFLICHT — ohne Option → Leaflet nutzt keinen Subdomain-Ersatz → HTTP 503
@@ -407,11 +428,30 @@
       '</div>';
   }
 
+  function buildSiteTooltip(s) {
+    var sec = s.sector_id != null ? sectorMap[s.sector_id] : null;
+    var lines = ['<strong>' + s.bezeichnung + '</strong>',
+      s.phase_label + (s.priority_label ? ' · ' + s.priority_label : '')];
+    if (s.einsatzgrund) lines.push(s.einsatzgrund.length > 60 ? s.einsatzgrund.slice(0, 57) + '…' : s.einsatzgrund);
+    if (sec) lines.push('Abschnitt: ' + sec.name);
+    if (s.active_res > 0) lines.push(s.active_res + ' Ressource(n) aktiv');
+    return lines.join('<br>');
+  }
+
+  function buildReportTooltip(r) {
+    var lines = ['<strong style="color:#fbbf24;">📥 Bürger-Meldung</strong>'];
+    if (r.description) lines.push(r.description.length > 60 ? r.description.slice(0, 57) + '…' : r.description);
+    if (r.ort) lines.push(r.ort);
+    lines.push(r.reporter + ' · ' + r.ts);
+    return lines.join('<br>');
+  }
+
   function refreshMarkerColors() {
     markers.forEach(function(obj) {
       var c = siteColor(obj.site);
       obj.marker.setStyle({ color: c, fillColor: c });
       obj.marker.setPopupContent(buildPopup(obj.site));
+      obj.marker.setTooltipContent(buildSiteTooltip(obj.site));
     });
   }
 
@@ -463,6 +503,7 @@
 
   window.setMode = function(mode) {
     colorMode = mode;
+    localStorage.setItem(_lsColorKey, mode);
     document.getElementById('btn-prio').classList.toggle('active', mode === 'priority');
     document.getElementById('btn-sektor').classList.toggle('active', mode === 'sector');
     refreshMarkerColors();
@@ -477,6 +518,49 @@
     renderMarkers();
   };
 
+  // ── Übergreifende Meldungen Layer ───────────────────────────────────────────
+  var crossMarkerGroup = L.layerGroup().addTo(map);
+
+  function renderCrossMarkers() {
+    crossMarkerGroup.clearLayers();
+    CROSS_MARKERS.forEach(function(m) {
+      if (!m.lat || !m.lng) return;
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="background:' + m.status_color + ';border-radius:50%;width:28px;height:28px;'
+            + 'display:flex;align-items:center;justify-content:center;font-size:14px;'
+            + 'border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);">' + m.type_icon + '</div>',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+      var lm = L.marker([m.lat, m.lng], { icon: icon });
+      lm.bindTooltip(
+        '<b>' + m.title + '</b><br>' + m.type_label + ' · ' + m.status_label
+        + (m.address_line ? '<br>' + m.address_line : ''),
+        { direction: 'top', sticky: true, opacity: 0.95, className: 'lk-tip' }
+      );
+      lm.on('click', function() { openCrossPanel(m.id); });
+      crossMarkerGroup.addLayer(lm);
+    });
+  }
+
+  window.toggleCrossMarkers = function(checked) {
+    if (checked) { if (!map.hasLayer(crossMarkerGroup)) crossMarkerGroup.addTo(map); }
+    else          { if (map.hasLayer(crossMarkerGroup)) map.removeLayer(crossMarkerGroup); }
+  };
+
+  window.openCrossPanel = function(markerId) {
+    var wrap    = document.getElementById('site-panel-wrap');
+    var content = document.getElementById('site-panel-content');
+    content.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:.8rem;">Lade…</div>';
+    wrap.classList.add('open');
+    htmx.ajax('GET', '/lage/' + lageId + '/uebergreifend/' + markerId + '/panel', {
+      target: '#site-panel-content', swap: 'innerHTML'
+    });
+  };
+
+  renderCrossMarkers();
+
   var allBounds = [];
   SITES.forEach(function(s) {
     var c = siteColor(s);
@@ -485,6 +569,7 @@
       fillOpacity: 0.85, weight: 2,
     });
     m.bindPopup(buildPopup(s), { maxWidth: 260 });
+    m.bindTooltip(buildSiteTooltip(s), { direction: 'top', sticky: true, opacity: 0.95, className: 'lk-tip' });
     markers.push({ marker: m, phase: s.phase, site: s });
     allBounds.push([s.lat, s.lng]);
   });
@@ -495,6 +580,7 @@
       fillOpacity: 0.75, weight: 2, dashArray: '5 3',
     });
     m.bindPopup(buildReportPopup(r), { maxWidth: 240 });
+    m.bindTooltip(buildReportTooltip(r), { direction: 'top', sticky: true, opacity: 0.95, className: 'lk-tip' });
     reportMarkers.push(m);
     m.addTo(map);
     allBounds.push([r.lat, r.lng]);
@@ -548,10 +634,21 @@
             weight: 2, opacity: 0.7,
           },
         });
+        var siteCount = SITES.filter(function(st) { return st.sector_id === s.id; }).length;
+        var tipContent = '<strong>' + s.name + '</strong><br>' + siteCount + ' Einsatzstelle' + (siteCount !== 1 ? 'n' : '');
         poly.bindTooltip(s.name, { permanent: true, direction: 'center',
           className: 'leaflet-tooltip', opacity: 0.85 });
-        // _sectorId auf Sublayer setzen → pm:edit kann Sektor direkt finden
-        poly.eachLayer(function(sub) { sub._sectorId = s.id; });
+        poly.on('mouseover', function() { this.setStyle({ fillOpacity: 0.35 }); });
+        poly.on('mouseout',  function() { this.setStyle({ fillOpacity: 0.15 }); });
+        // pm:update pro Sublayer → feuert einmalig nach Abschluss des Edits
+        poly.eachLayer(function(sub) {
+          sub._sectorId = s.id;
+          sub.on('pm:update pm:dragend pm:markerdragend', function(ev) {
+            var gj = ev.layer.toGeoJSON();
+            var geo = gj.geometry || (gj.features && gj.features[0] && gj.features[0].geometry);
+            if (geo) saveSectorPolygon(sub._sectorId, geo);
+          });
+        });
         poly.addTo(map);
         poly.sectorId = s.id;
         sectorLayers[s.id] = poly;
@@ -594,34 +691,24 @@
       map.pm.disableDraw();
     });
 
-    // Bestehende Polygone editierbar machen
-    map.on('pm:edit', function(e) {
-      var layer = e.layer;
-      // _sectorId direkt am Sublayer (gesetzt in renderSectorPolygons)
-      var sectorId = layer._sectorId || null;
-      // Fallback: GeoJSON-Gruppe → Sublayer durchsuchen
-      if (!sectorId && layer.getLayers) {
-        layer.getLayers().forEach(function(sub) {
-          if (sub._sectorId) sectorId = sub._sectorId;
-        });
-      }
-      if (!sectorId) return;
-      var gj = layer.toGeoJSON ? layer.toGeoJSON() : null;
-      if (!gj) return;
-      // Feature → .geometry; FeatureCollection → .features[0].geometry
-      var geo = gj.geometry || (gj.features && gj.features[0] && gj.features[0].geometry);
-      if (!geo) return;
-      saveSectorPolygon(sectorId, geo);
-    });
   } catch(e) { console.error('Geoman-Init fehlgeschlagen:', e); } }
 
   function saveSectorPolygon(sectorId, geometry) {
+    console.debug('[Geoman] saveSectorPolygon', sectorId, geometry);
     fetch('/lage/' + lageId + '/sektoren/' + sectorId + '/geometrie', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '{{ request.state.csrf_token }}' },
       body: JSON.stringify({ geometry: geometry }),
     }).then(function(r) {
-      if (!r.ok) r.json().then(function(j) { alert(j.detail || 'Fehler'); });
+      if (!r.ok) { r.json().then(function(j) { alert(j.detail || 'Fehler'); }); return; }
+      return r.json();
+    }).then(function(data) {
+      if (!data) return;
+      // Lokale SECTORS-Geometrie auf Server-Stand setzen
+      for (var i = 0; i < SECTORS.length; i++) {
+        if (SECTORS[i].id === sectorId) { SECTORS[i].geometry = data.geometry; break; }
+      }
+      renderSectorPolygons();
     });
   }
 
@@ -679,10 +766,11 @@
 
 
   // ── Abschnitt-Chips ──────────────────────────────────────────────────────────
-  var activeSectorFilter = 'all';
+  var activeSectorFilter = localStorage.getItem(_lsSectorKey) || 'all';
   document.querySelectorAll('.section-chip').forEach(function(chip) {
     chip.addEventListener('click', function() {
       activeSectorFilter = this.dataset.sector;
+      localStorage.setItem(_lsSectorKey, activeSectorFilter);
       document.querySelectorAll('.section-chip').forEach(function(c) {
         c.style.background = '';
         c.style.borderColor = '';
@@ -691,6 +779,15 @@
       renderMarkers();
     });
   });
+  // Restore persisted chip + color mode
+  (function() {
+    var saved = document.querySelector('.section-chip[data-sector="' + activeSectorFilter + '"]');
+    if (saved) {
+      document.querySelectorAll('.section-chip').forEach(function(c) { c.style.background = ''; });
+      saved.style.background = 'rgba(255,255,255,.15)';
+    }
+    setMode(colorMode);
+  }());
 
   // ── Side-Panel ──────────────────────────────────────────────────────────────
   window.openPanel = function(siteId) {
@@ -778,18 +875,33 @@
     ws.onmessage = function(ev) {
       try {
         var msg = JSON.parse(ev.data);
-        if (msg.reload_board || msg.type === 'site_updated') {
+        if (msg.type === 'site:sector_changed') {
+          SITES.forEach(function(s) {
+            if (s.id === msg.site_id) { s.sector_id = msg.sector_id != null ? msg.sector_id : null; }
+          });
+          refreshMarkerColors();
+        } else if (msg.reload_board || msg.type === 'site_updated') {
           location.reload();
         } else if (msg.type === 'section:changed') {
-          // Sektoren neu laden ohne Seiten-Reload
-          fetch('/lage/' + lageId + '/karte-sektoren')
+          // Sektoren + Stellen-Sektorzuordnungen neu laden ohne Seiten-Reload
+          Promise.all([
+            fetch('/lage/' + lageId + '/karte-sektoren').then(function(r) { return r.json(); }),
+            fetch('/lage/' + lageId + '/karte-sites').then(function(r) { return r.json(); }),
+          ]).then(function(results) {
+            SECTORS = results[0];
+            sectorMap = {};
+            SECTORS.forEach(function(s) { sectorMap[s.id] = s; });
+            var siteIdx = {};
+            results[1].forEach(function(e) { siteIdx[e.id] = e.sector_id; });
+            SITES.forEach(function(s) { if (s.id in siteIdx) s.sector_id = siteIdx[s.id]; });
+            renderSectorPolygons();
+            refreshMarkerColors();
+          }).catch(function() { location.reload(); });
+        } else if (msg.type === 'cross_marker:changed') {
+          fetch('/lage/' + lageId + '/karte-cross-markers')
             .then(function(r) { return r.json(); })
-            .then(function(data) {
-              SECTORS = data;
-              sectorMap = {};
-              SECTORS.forEach(function(s) { sectorMap[s.id] = s; });
-              renderSectorPolygons();
-            }).catch(function() { location.reload(); });
+            .then(function(data) { CROSS_MARKERS = data; renderCrossMarkers(); })
+            .catch(function() {});
         } else if (msg.type === 'vehicle:position') {
           // Fahrzeug-Marker animiert bewegen
           var key = msg.vehicle_id != null ? 'v' + msg.vehicle_id : null;

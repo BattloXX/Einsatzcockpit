@@ -57,6 +57,8 @@ dependencies = [
     "anthropic>=0.50",
     # Geodienste: Point-in-Polygon (GSL Abschnittszuweisung)
     "shapely>=2.0",
+    # HTML-Sanitisierung (Quill-Output für Einsatzjournal)
+    "nh3>=0.2",
 ]
 
 [project.optional-dependencies]

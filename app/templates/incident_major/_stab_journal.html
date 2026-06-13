@@ -39,7 +39,8 @@
           {% else %}—{% endif %}
         </td>
         <td style="padding:5px 8px;font-size:.72rem;color:var(--text-muted);">
-          {% if a.predecessor_id %}Ablösung{% else %}—{% endif %}
+          {% set succ = successors.get(a.id) %}
+          {% if succ %}{{ succ.display_name }}{% else %}—{% endif %}
         </td>
       </tr>
       {% endfor %}

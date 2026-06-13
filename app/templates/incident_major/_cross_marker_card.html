@@ -1,0 +1,51 @@
+{# Karte für übergreifende Meldungen im Board #}
+{# Kontext: marker, lage, type_label, type_icon, status_label, status_color, can_edit #}
+<div class="site-card" data-marker-id="{{ marker.id }}"
+     hx-get="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel"
+     hx-target="#siteDetailContent"
+     hx-swap="innerHTML"
+     hx-trigger="click[!event.target.closest('select,button,a')]"
+     style="border-left:3px solid {{ marker.status_color }};">
+  <div class="site-card__body">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+      <span style="font-size:1rem;">{{ marker.type_icon }}</span>
+      <div class="site-card__title" style="flex:1;">{{ marker.title }}</div>
+    </div>
+    <div class="site-card__sub" style="display:flex;align-items:center;gap:5px;">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:{{ marker.status_color }};flex-shrink:0;"></span>
+      {{ marker.status_label }}
+      <span style="color:var(--border);">·</span>
+      {{ marker.type_label }}
+    </div>
+    {% if marker.address_line %}
+    <div class="site-card__addr">{{ marker.address_line }}</div>
+    {% endif %}
+    {% if marker.description %}
+    <div class="site-card__sub" style="margin-top:3px;font-size:.72rem;">{{ marker.description[:80] }}{% if marker.description|length > 80 %}…{% endif %}</div>
+    {% endif %}
+    {% if can_edit %}
+    <div style="display:flex;gap:5px;margin-top:6px;align-items:center;">
+      <select style="font-size:.7rem;padding:2px 5px;border-radius:4px;border:1px solid var(--border);
+                     background:var(--surface-elevated,#1e2130);color:var(--text);flex:1;"
+              hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/status"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+              hx-swap="none"
+              name="status"
+              onchange="this.form && this.form.dispatchEvent(new Event('submit'))"
+              hx-trigger="change">
+        {% for val, label in status_label.items() %}
+        <option value="{{ val }}" {% if marker.status == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/loeschen"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+            hx-confirm="Meldung löschen?"
+            hx-on::after-request="if(event.detail.successful){this.closest('.site-card').remove()}"
+            style="margin:0;">
+        <button type="submit" class="btn btn--xs btn--ghost" title="Löschen"
+                style="opacity:.5;padding:1px 5px;font-size:.65rem;">✕</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>

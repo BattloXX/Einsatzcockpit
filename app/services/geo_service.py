@@ -63,12 +63,13 @@ def section_for_point(
     return candidates[0][1]
 
 
-def auto_assign_section(db: Session, site) -> bool:
+def auto_assign_section(db: Session, site, force: bool = False) -> bool:
     """
     Weist der Einsatzstelle automatisch einen Abschnitt zu (nur wenn mode != 'manual').
+    Mit force=True wird die Manual-Sperre ignoriert (für Geometrie-Änderungen).
     Gibt True zurück wenn eine Änderung stattgefunden hat.
     """
-    if site.section_assigned_mode == "manual":
+    if not force and site.section_assigned_mode == "manual":
         return False
     if site.lat is None or site.lng is None:
         return False
@@ -83,25 +84,27 @@ def auto_assign_section(db: Session, site) -> bool:
     return True
 
 
-def bulk_reassign_section(db: Session, incident_id: int, changed_sector_id: int | None = None) -> int:
+def bulk_reassign_section(
+    db: Session,
+    incident_id: int,
+    changed_sector_id: int | None = None,
+    include_manual: bool = False,
+) -> int:
     """
-    Neu-Zuweisung aller Auto-Einsatzstellen eines Vorgangs nach Polygon-Änderung.
+    Neu-Zuweisung aller Einsatzstellen eines Vorgangs nach Polygon-Änderung.
+    include_manual=True ignoriert die Manual-Sperre (für Geometrie-Änderungen).
     Gibt Anzahl geänderter Stellen zurück.
     """
     from app.models.major_incident import IncidentSite
 
-    sites = (
-        db.query(IncidentSite)
-        .filter(
-            IncidentSite.major_incident_id == incident_id,
-            IncidentSite.section_assigned_mode != "manual",
-        )
-        .all()
-    )
+    q = db.query(IncidentSite).filter(IncidentSite.major_incident_id == incident_id)
+    if not include_manual:
+        q = q.filter(IncidentSite.section_assigned_mode != "manual")
+    sites = q.all()
 
     changed = 0
     for site in sites:
-        if auto_assign_section(db, site):
+        if auto_assign_section(db, site, force=include_manual):
             changed += 1
 
     return changed

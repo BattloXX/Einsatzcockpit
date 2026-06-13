@@ -171,6 +171,7 @@ class MajorIncident(Base):
     comms:          Mapped[list[CommLogEntry]] = relationship(cascade="all, delete-orphan")
     journal_entries: Mapped[list[LageJournalEntry]] = relationship(cascade="all, delete-orphan")
     einheiten:      Mapped[list[LageEinheit]] = relationship(cascade="all, delete-orphan")
+    cross_site_markers: Mapped[list["CrossSiteMarker"]] = relationship(cascade="all, delete-orphan")
 
 
 class Sector(Base):
@@ -363,8 +364,9 @@ class LageEinheit(Base):
 
 JOURNAL_CATEGORIES = {
     "entscheidung": "Entscheidung",
-    "anweisung":    "Anweisung",
+    "anweisung":    "Anweisung/Auftrag",
     "meldung":      "Meldung",
+    "lagemeldung":  "Lagemeldung (S2)",
     "sonstiges":    "Sonstiges",
 }
 
@@ -372,7 +374,29 @@ JOURNAL_CATEGORY_COLOR = {
     "entscheidung": "purple",
     "anweisung":    "orange",
     "meldung":      "blue",
+    "lagemeldung":  "green",
     "sonstiges":    "muted",
+}
+
+# Vorlagen je Kategorie (Betreff-Platzhalter + Body-Skelett für Quill)
+JOURNAL_TEMPLATES: dict[str, dict] = {
+    "meldung": {
+        "subject": "Meldung: ",
+        "body": "<p><strong>Von:</strong> </p><p><strong>Inhalt:</strong> </p><p><strong>Zeitbezug:</strong> </p><p><strong>Quelle/Zuverlässigkeit:</strong> </p>",
+    },
+    "anweisung": {
+        "subject": "Auftrag: ",
+        "body": "<p><strong>An:</strong> </p><p><strong>Auftrag:</strong> </p><p><strong>Frist:</strong> </p><p><strong>Rückmeldung erwartet bis:</strong> </p>",
+    },
+    "entscheidung": {
+        "subject": "Entscheidung: ",
+        "body": "<p><strong>Lagebezug:</strong> </p><p><strong>Entscheidung:</strong> </p><p><strong>Begründung:</strong> </p><p><strong>Veranlassung/Folgemaßnahmen:</strong> </p>",
+    },
+    "lagemeldung": {
+        "subject": "Lagebild Stand ",
+        "body": "<p><strong>Allgemeine Lage:</strong> </p><p><strong>Eigene Lage (Kräfte):</strong> </p><p><strong>Gefahren/Entwicklung:</strong> </p><p><strong>Maßnahmen:</strong> </p>",
+    },
+    "sonstiges": {"subject": "", "body": ""},
 }
 
 
@@ -384,10 +408,137 @@ class LageJournalEntry(Base):
         Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
     ts:                Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     category:          Mapped[str] = mapped_column(String(20), default="sonstiges")
-    text:              Mapped[str] = mapped_column(Text)
+    text:              Mapped[str] = mapped_column(Text)              # Betreff (Pflichtfeld)
+    body_html:         Mapped[str | None] = mapped_column(Text, nullable=True)  # Fließtext (sanitisiert)
+    partner_from:      Mapped[str | None] = mapped_column(String(120), nullable=True)  # Von (SKKM)
+    partner_to:        Mapped[str | None] = mapped_column(String(120), nullable=True)  # An (SKKM)
+    measure:           Mapped[str | None] = mapped_column(String(500), nullable=True)  # Veranlassung (SKKM)
     author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
     user_id:           Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id"), nullable=True)
+
+    media: Mapped[list["LageJournalMedia"]] = relationship(
+        "LageJournalMedia", cascade="all, delete-orphan", lazy="select",
+        foreign_keys="LageJournalMedia.journal_entry_id",
+    )
+
+
+class LageJournalMedia(Base):
+    __tablename__ = "lage_journal_media"
+
+    id:               Mapped[int] = mapped_column(Integer, primary_key=True)
+    journal_entry_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("lage_journal_entry.id", ondelete="CASCADE"), index=True)
+    stored_filename:  Mapped[str] = mapped_column(String(64))
+    original_filename: Mapped[str] = mapped_column(String(255))
+    media_type:       Mapped[str] = mapped_column(String(12))  # image
+    uploaded_at:      Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    uploaded_by:      Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name:      Mapped[str | None] = mapped_column(String(120), nullable=True)
+    bytes:            Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    org_id:           Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
+
+
+# ── Einsatzstellenübergreifende Meldungen ─────────────────────────────────────
+
+CROSS_MARKER_TYPE_LABEL: dict[str, str] = {
+    "unterfuehrung_geflutet": "Überflutete Unterführung",
+    "strasse_ueberflutet":    "Überflutete Straße",
+    "hangrutschung":          "Hangrutschung",
+    "mure":                   "Murenabgang",
+    "baum_umgestuerzt":       "Umgestürzter Baum",
+    "vermurung_objekt":       "Vermurtes/überflutetes Objekt",
+    "damm_deich":             "Damm-/Deichgefährdung",
+    "bruecke_gesperrt":       "Brücke gesperrt",
+    "strasse_gesperrt":       "Straßensperre",
+    "stromausfall":           "Stromausfall (Bereich)",
+    "pegel_messpunkt":        "Pegel-/Messpunkt",
+    "gefahrenstoff":          "Gefahrstoff-/Umweltgefahr",
+    "sonstiges":              "Sonstige Lageinfo",
+}
+
+CROSS_MARKER_TYPE_ICON: dict[str, str] = {
+    "unterfuehrung_geflutet": "🌊",
+    "strasse_ueberflutet":    "💧",
+    "hangrutschung":          "⛰️",
+    "mure":                   "🪨",
+    "baum_umgestuerzt":       "🌲",
+    "vermurung_objekt":       "🏚️",
+    "damm_deich":             "🧱",
+    "bruecke_gesperrt":       "🌉",
+    "strasse_gesperrt":       "🚧",
+    "stromausfall":           "⚡",
+    "pegel_messpunkt":        "📈",
+    "gefahrenstoff":          "☣️",
+    "sonstiges":              "📍",
+}
+
+CROSS_MARKER_STATUS_LABEL: dict[str, str] = {
+    "gemeldet":       "Gemeldet",
+    "bestaetigt":     "Bestätigt",
+    "in_bearbeitung": "In Bearbeitung",
+    "behoben":        "Behoben",
+    "aufgehoben":     "Aufgehoben",
+}
+
+CROSS_MARKER_STATUS_COLOR: dict[str, str] = {
+    "gemeldet":       "#6b7280",
+    "bestaetigt":     "#ef4444",
+    "in_bearbeitung": "#f97316",
+    "behoben":        "#22c55e",
+    "aufgehoben":     "#374151",
+}
+
+
+class CrossSiteMarker(Base):
+    """Einsatzstellenübergreifende Meldung/Lageinfo."""
+    __tablename__ = "cross_site_marker"
+
+    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
+    major_incident_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
+    org_id:            Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), nullable=True)
+    title:             Mapped[str] = mapped_column(String(160))
+    marker_type:       Mapped[str] = mapped_column(String(32), default="sonstiges")
+    status:            Mapped[str] = mapped_column(String(16), default="gemeldet")
+    description:       Mapped[str | None] = mapped_column(Text, nullable=True)
+    ort:               Mapped[str | None] = mapped_column(String(120), nullable=True)
+    strasse:           Mapped[str | None] = mapped_column(String(160), nullable=True)
+    hausnr:            Mapped[str | None] = mapped_column(String(20),  nullable=True)
+    lat:               Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng:               Mapped[float | None] = mapped_column(Float, nullable=True)
+    source:            Mapped[str] = mapped_column(String(12), default="manual")
+    sort_index:        Mapped[int] = mapped_column(Integer, default=0)
+    created_at:        Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at:        Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
+                                                        onupdate=lambda: datetime.now(UTC))
+    created_by:        Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    @property
+    def type_icon(self) -> str:
+        return CROSS_MARKER_TYPE_ICON.get(self.marker_type, "📍")
+
+    @property
+    def type_label(self) -> str:
+        return CROSS_MARKER_TYPE_LABEL.get(self.marker_type, self.marker_type)
+
+    @property
+    def status_label(self) -> str:
+        return CROSS_MARKER_STATUS_LABEL.get(self.status, self.status)
+
+    @property
+    def status_color(self) -> str:
+        return CROSS_MARKER_STATUS_COLOR.get(self.status, "#6b7280")
+
+    @property
+    def address_line(self) -> str:
+        parts = []
+        if self.strasse:
+            parts.append(self.strasse + (" " + self.hausnr if self.hausnr else ""))
+        if self.ort:
+            parts.append(self.ort)
+        return ", ".join(parts) if parts else ""
 
 
 # ── Fahrzeugpositions-Historie ─────────────────────────────────────────────────

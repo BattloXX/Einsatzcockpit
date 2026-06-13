@@ -1,5 +1,6 @@
 <div class="site-card" data-site-id="{{ site.id }}"
      data-prio="{{ site.priority.value if site.priority else 9 }}"
+     data-sector="{{ site.sector_id or 'none' }}"
      data-search="{{ (site.bezeichnung ~ ' ' ~ (site.strasse or '') ~ ' ' ~ (site.ort or ''))|lower }}"
      hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}"
      hx-target="#siteDetailContent"

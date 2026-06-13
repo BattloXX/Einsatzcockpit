@@ -187,10 +187,30 @@
 
     {# ── Board-Steuerung (Suche, Sortierung, Zähler) ──────────────────────── #}
     <input type="search" id="board-search" placeholder="Suchen…"
-           oninput="filterBoard(this.value)"
+           oninput="applyBoardFilters()"
            autocomplete="off"
            style="padding:3px 9px;font-size:.8rem;border-radius:4px;border:1px solid var(--border);
                   background:var(--surface-elevated,#1e2130);color:var(--text);width:160px;">
+    {% if sectors %}
+    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+      <button class="board-sector-chip active" data-sector="all"
+              style="font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
+                     background:rgba(255,255,255,.1);color:var(--text);cursor:pointer;"
+              onclick="filterBySector('all')">Alle</button>
+      {% for sec in sectors %}
+      <button class="board-sector-chip" data-sector="{{ sec.id }}"
+              style="font-size:.7rem;padding:2px 8px;border-radius:10px;cursor:pointer;
+                     border:1px solid {{ sec.color or '#6b7280' }}88;
+                     background:{{ sec.color or '#6b7280' }}22;
+                     color:{{ sec.color or '#6b7280' }};"
+              onclick="filterBySector('{{ sec.id }}')">{{ sec.name }}</button>
+      {% endfor %}
+      <button class="board-sector-chip" data-sector="none"
+              style="font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(107,114,128,.4);
+                     background:rgba(107,114,128,.15);color:#9ca3af;cursor:pointer;"
+              onclick="filterBySector('none')">Ohne</button>
+    </div>
+    {% endif %}
     <button id="prio-sort-btn" type="button" onclick="togglePrioSort()"
             class="btn btn--ghost btn--sm" title="Karten nach Priorität sortieren">↕ Prio</button>
     <span class="lage-topbar__counts" id="board-counts">{{ open_count }} offen · {{ done_count }} erledigt</span>
@@ -298,6 +318,29 @@
     </div>
     {% endif %}
 
+    {# ── Übergreifende Meldungen ─────────────────────────────────────────── #}
+    {% if mi_features.uebergreifend %}
+    <div class="phase-col" id="cross-marker-col">
+      <div class="phase-col__header" style="border-top-color:#6366f1;">
+        <span style="flex:1;">📍 Übergreifend</span>
+        <span class="phase-col__count">{{ cross_markers|length }}</span>
+        {% if can_edit %}
+        <button type="button" onclick="document.getElementById('neuMeldungDialog').showModal()"
+                class="btn btn--xs btn--ghost" style="padding:1px 8px;margin-left:6px;">+</button>
+        {% endif %}
+      </div>
+      <div class="phase-col__body" id="cross-marker-col-body"
+           hx-get="/lage/{{ lage.id }}/uebergreifend/board-col"
+           hx-trigger="crossMarkerChanged from:body"
+           hx-swap="innerHTML">
+        {% set status_label = cross_marker_status_label %}
+        {% for marker in cross_markers %}
+        {% include "incident_major/_cross_marker_card.html" %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 </div>
 
@@ -322,6 +365,61 @@
           <div class="form-group" style="flex:3;">
             <label class="form-label">Straße</label>
             <input type="text" name="strasse" class="form-input" maxlength="120" autocomplete="off">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Nr.</label>
+            <input type="text" name="hausnr" class="form-input" maxlength="20" autocomplete="off">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ort</label>
+          <input type="text" name="ort" class="form-input" maxlength="120" autocomplete="off">
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+
+<!-- ── Neue Übergreifende Meldung Dialog ───────────────────────────────────── -->
+{% if can_edit and mi_features.uebergreifend %}
+<dialog class="modal" id="neuMeldungDialog">
+  <div class="modal__content" style="min-width:min(460px,95vw);">
+    <div class="modal__header">
+      <h3 class="modal__title">Übergreifende Meldung</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <form hx-post="/lage/{{ lage.id }}/uebergreifend"
+          hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();htmx.trigger(document.body,'crossMarkerChanged');this.reset()}"
+          style="margin:0;">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Bezeichnung <span style="color:#ef4444">*</span></label>
+          <input type="text" name="title" class="form-input" required maxlength="160"
+                 placeholder="z. B. Sammelplatz Nord" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Typ</label>
+          <select name="marker_type" class="form-input">
+            {% for val, label in cross_marker_type_label.items() %}
+            <option value="{{ val }}">{{ cross_marker_type_icon[val] }} {{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Beschreibung</label>
+          <textarea name="description" class="form-input" rows="2" maxlength="500"
+                    placeholder="Optional"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div class="form-group" style="flex:3;">
+            <label class="form-label">Straße</label>
+            <input type="text" name="strasse" class="form-input" maxlength="160" autocomplete="off">
           </div>
           <div class="form-group" style="flex:1;">
             <label class="form-label">Nr.</label>
@@ -375,20 +473,62 @@
   }, 150);
 })();
 
-function filterBoard(q) {
-  q = (q || '').trim().toLowerCase();
+var _boardSectorFilter = (function() {
+  try { return localStorage.getItem('board_sector_filter_{{ lage.id }}') || 'all'; } catch(e) { return 'all'; }
+})();
+
+function filterBySector(sectorId) {
+  _boardSectorFilter = sectorId;
+  try { localStorage.setItem('board_sector_filter_{{ lage.id }}', sectorId); } catch(e) {}
+  document.querySelectorAll('.board-sector-chip').forEach(function(c) {
+    var isActive = c.dataset.sector === sectorId;
+    c.classList.toggle('active', isActive);
+    c.style.background = isActive ? 'rgba(255,255,255,.15)' : '';
+    c.style.borderColor = isActive ? '' : '';
+  });
+  applyBoardFilters();
+}
+
+function filterBoard(q) { applyBoardFilters(); }
+
+function applyBoardFilters() {
+  var q = ((document.getElementById('board-search') || {}).value || '').trim().toLowerCase();
+  var sec = _boardSectorFilter || 'all';
   document.querySelectorAll('.phase-col').forEach(function(col) {
     var cards = col.querySelectorAll('.site-card');
     var visible = 0;
     cards.forEach(function(card) {
-      var match = !q || (card.dataset.search || '').includes(q);
-      card.style.display = match ? '' : 'none';
-      if (match) visible++;
+      var textMatch = !q || (card.dataset.search || '').includes(q);
+      var sectorMatch = sec === 'all' ||
+        (sec === 'none' ? (card.dataset.sector === 'none' || !card.dataset.sector) : String(card.dataset.sector) === String(sec));
+      var show = textMatch && sectorMatch;
+      card.style.display = show ? '' : 'none';
+      if (show) visible++;
     });
     var badge = col.querySelector('.phase-col__count');
-    if (badge) badge.textContent = (q && visible !== cards.length) ? (visible + '/' + cards.length) : cards.length;
+    if (badge) badge.textContent = visible !== cards.length ? (visible + '/' + cards.length) : cards.length;
   });
 }
+
+// Restore persisted sector filter on load
+(function() {
+  var chip = document.querySelector('.board-sector-chip[data-sector="' + _boardSectorFilter + '"]');
+  if (chip && _boardSectorFilter !== 'all') {
+    document.querySelectorAll('.board-sector-chip').forEach(function(c) { c.classList.remove('active'); c.style.background = ''; });
+    chip.classList.add('active');
+    chip.style.background = 'rgba(255,255,255,.15)';
+    applyBoardFilters();
+  }
+})();
+
+// Update cross-marker column count after HTMX body reload
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  if (e.detail.target && e.detail.target.id === 'cross-marker-col-body') {
+    var count = e.detail.target.querySelectorAll('.site-card').length;
+    var badge = document.querySelector('#cross-marker-col .phase-col__count');
+    if (badge) badge.textContent = count;
+  }
+});
 
 function lageSwitchPhase(phase) {
   document.querySelectorAll('.phase-col').forEach(function(col) { col.classList.remove('lage-col-active'); });

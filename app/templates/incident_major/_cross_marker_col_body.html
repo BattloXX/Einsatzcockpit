@@ -1,0 +1,5 @@
+{# Partielle Inhalt der Übergreifende-Meldungen-Spalte (HTMX-Reload) #}
+{# Kontext: cross_markers, lage, status_label, can_edit #}
+{% for marker in cross_markers %}
+{% include "incident_major/_cross_marker_card.html" %}
+{% endfor %}

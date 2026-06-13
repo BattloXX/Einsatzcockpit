@@ -2,6 +2,7 @@
 {% block title %}{{ lage.name }} – Stab{% endblock %}
 
 {% block head_extra %}
+<link rel="stylesheet" href="/static/css/quill.snow.css">
 <style>
 .lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
 .lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
@@ -190,9 +191,9 @@
 
   {# ── Tab-Navigation ────────────────────────────────────────────────────────── #}
   <div class="stab-tabs">
-    <button class="stab-tab" :class="{active: tab==='einsatzjournal'}" @click="tab='einsatzjournal'">Einsatzjournal</button>
-    <button class="stab-tab" :class="{active: tab==='tafel'}" @click="tab='tafel'">Besetzungstafel</button>
-    <button class="stab-tab" :class="{active: tab==='journal'}" @click="tab='journal'; loadJournal()">Personenjournal</button>
+    <button class="stab-tab" :class="{active: tab==='einsatzjournal'}" @click="setTab('einsatzjournal')">Einsatzjournal</button>
+    <button class="stab-tab" :class="{active: tab==='tafel'}" @click="setTab('tafel')">Besetzungstafel</button>
+    <button class="stab-tab" :class="{active: tab==='journal'}" @click="setTab('journal')">Personenjournal</button>
   </div>
 
   {# ── Einsatzjournal (BMI SKKM) ─────────────────────────────────────────────── #}
@@ -203,55 +204,49 @@
     <div style="background:var(--surface-elevated,#1e2130);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px;">
       <form id="form-journal-add"
             hx-post="/lage/{{ lage.id }}/journal"
+            hx-encoding="multipart/form-data"
             hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-            hx-on::after-request="if(event.detail.successful){this.reset();htmx.ajax('GET','/lage/{{ lage.id }}/stab/einsatzjournal',{target:'#journal-list',swap:'innerHTML'})}">
-        <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
-          <select name="category" class="form-input" style="width:160px;font-size:.8rem;padding:5px 8px;flex-shrink:0;">
+            hx-on::after-request="if(event.detail.successful){journalReset();htmx.ajax('GET','/lage/{{ lage.id }}/stab/einsatzjournal',{target:'#journal-list',swap:'innerHTML'})}">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px;">
+          <select name="category" id="journal-category" class="form-input"
+                  style="width:170px;font-size:.8rem;padding:5px 8px;flex-shrink:0;"
+                  onchange="journalApplyTemplate(this.value)">
             {% for key, label in journal_categories.items() %}
             <option value="{{ key }}">{{ label }}</option>
             {% endfor %}
           </select>
-          <input type="text" name="text" class="form-input" placeholder="Eintrag…" maxlength="2000"
+          <input type="text" name="text" id="journal-subject" class="form-input"
+                 placeholder="Betreff…" maxlength="2000"
                  style="flex:1;min-width:200px;" required autocomplete="off">
           <button type="submit" class="btn btn--primary btn--sm" style="flex-shrink:0;">Eintragen</button>
         </div>
+        {# Quill-Editor #}
+        <div id="journal-quill-editor" style="background:#fff;border-radius:4px;min-height:80px;max-height:200px;overflow-y:auto;margin-bottom:6px;"></div>
+        <input type="hidden" name="body_html" id="journal-body-html">
+        {# SKKM-Felder (ausklappbar) #}
+        <details style="margin-bottom:6px;">
+          <summary style="font-size:.73rem;color:var(--text-muted);cursor:pointer;user-select:none;padding:3px 0;">
+            SKKM-Felder (Von / An / Veranlassung)
+          </summary>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+            <input type="text" name="partner_from" class="form-input" placeholder="Von…" maxlength="120" autocomplete="off" style="font-size:.78rem;">
+            <input type="text" name="partner_to"   class="form-input" placeholder="An…"  maxlength="120" autocomplete="off" style="font-size:.78rem;">
+          </div>
+          <input type="text" name="measure" class="form-input" placeholder="Veranlassung/Folgemaßnahmen…"
+                 maxlength="500" autocomplete="off" style="font-size:.78rem;width:100%;margin-top:6px;">
+        </details>
+        {# Medien-Upload #}
+        <div style="font-size:.73rem;color:var(--text-muted);margin-bottom:4px;">Bilder anhängen (optional)</div>
+        <input type="file" name="media" multiple accept="image/*"
+               style="font-size:.75rem;color:var(--text);">
       </form>
     </div>
     {% endif %}
 
     {# Journal-Liste #}
     <div id="journal-list">
-      {% set cat_color = {'entscheidung':'#a78bfa','anweisung':'#fb923c','meldung':'#60a5fa','sonstiges':'#6b7280'} %}
-      {% for entry in journal_entries %}
-      <div class="journal-row" style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);align-items:flex-start;">
-        <div style="flex-shrink:0;width:90px;font-size:.7rem;font-family:var(--font-mono,monospace);color:var(--text-muted);padding-top:2px;">
-          {{ entry.ts | local_datetime }}
-        </div>
-        <span style="flex-shrink:0;font-size:.65rem;font-weight:700;padding:1px 7px;border-radius:8px;
-               background:{{ cat_color.get(entry.category,'#6b7280') }}22;
-               color:{{ cat_color.get(entry.category,'#9ca3af') }};
-               border:1px solid {{ cat_color.get(entry.category,'#6b7280') }}44;
-               white-space:nowrap;margin-top:1px;">
-          {{ journal_categories.get(entry.category, entry.category) }}
-        </span>
-        <div style="flex:1;font-size:.82rem;line-height:1.45;">{{ entry.text }}</div>
-        {% if entry.author_name %}
-        <div style="flex-shrink:0;font-size:.68rem;color:var(--text-muted);white-space:nowrap;padding-top:2px;">{{ entry.author_name }}</div>
-        {% endif %}
-        {% if can_edit %}
-        <form hx-post="/lage/{{ lage.id }}/journal/{{ entry.id }}/loeschen"
-              hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-              hx-confirm="Eintrag löschen?"
-              hx-on::after-request="if(event.detail.successful){this.closest('.journal-row').remove()}"
-              style="margin:0;">
-          <button type="submit" class="btn btn--xs btn--ghost" title="Löschen"
-                  style="opacity:.5;padding:1px 5px;font-size:.65rem;">✕</button>
-        </form>
-        {% endif %}
-      </div>
-      {% else %}
-      <div style="color:var(--text-muted);font-size:.82rem;padding:12px 0;">Noch keine Einträge.</div>
-      {% endfor %}
+      {% include "incident_major/_stab_einsatzjournal.html" %}
     </div>
 
   </div>
@@ -265,7 +260,8 @@
   <div x-show="tab==='journal'"
        id="stab-journal"
        hx-get="/lage/{{ lage.id }}/stab/journal"
-       hx-trigger="load once">
+       hx-trigger="load once, staffChanged from:body"
+       hx-swap="innerHTML">
     <div style="color:var(--text-muted);font-size:.8rem;padding:16px 0;">Lade Journal…</div>
   </div>
 
@@ -351,13 +347,55 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/quill.min.js"></script>
 <script>
+var JOURNAL_TEMPLATES = {{ journal_templates_json | safe }};
+
+// Quill-Initialisierung
+var _quill = null;
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof Quill !== 'undefined') {
+    _quill = new Quill('#journal-quill-editor', {
+      theme: 'snow',
+      modules: { toolbar: [['bold','italic','underline'],['strike'],['link'],
+        [{list:'ordered'},{list:'bullet'}],['clean']] },
+      placeholder: 'Fließtext (optional)…',
+    });
+  }
+});
+
+function journalReset() {
+  document.getElementById('form-journal-add').reset();
+  document.getElementById('journal-body-html').value = '';
+  if (_quill) _quill.setContents([]);
+}
+
+function journalApplyTemplate(cat) {
+  var tpl = JOURNAL_TEMPLATES[cat] || {};
+  var subj = document.getElementById('journal-subject');
+  if (tpl.subject && !subj.value.trim()) subj.value = tpl.subject;
+  if (tpl.body && _quill && !_quill.getText().trim()) {
+    _quill.clipboard.dangerouslyPasteHTML(tpl.body);
+  }
+}
+
+// Quill-Inhalt vor HTMX-Submit in hidden input kopieren
+document.addEventListener('htmx:configRequest', function(ev) {
+  if (ev.detail.elt && ev.detail.elt.id === 'form-journal-add' && _quill) {
+    var html = _quill.getSemanticHTML ? _quill.getSemanticHTML() : _quill.root.innerHTML;
+    document.getElementById('journal-body-html').value = html;
+  }
+});
+
 function stabApp() {
+  var _key = 'stab_tab_{{ lage.id }}';
   return {
-    tab: 'einsatzjournal',
-    loadJournal() {
-      // htmx trigger on first show handles loading
-    }
+    tab: localStorage.getItem(_key) || 'einsatzjournal',
+    setTab(t) {
+      this.tab = t;
+      localStorage.setItem(_key, t);
+    },
+    loadJournal() {}
   };
 }
 
@@ -392,7 +430,6 @@ async function beendeAsgn(asgnId) {
   });
   if (r.ok) {
     htmx.trigger(document.body, 'staffChanged');
-    location.reload();
   }
 }
 
@@ -408,7 +445,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (r.ok) {
         form.closest('dialog').close();
         htmx.trigger(document.body, 'staffChanged');
-        location.reload();
       } else {
         var j = await r.json().catch(() => ({detail: 'Fehler'}));
         alert(j.detail || 'Fehler beim Speichern');

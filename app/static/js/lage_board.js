@@ -77,7 +77,11 @@
     ws.addEventListener('message', evt => {
       try {
         const msg = JSON.parse(evt.data);
-        if (msg.reload_board) location.reload();
+        if (msg.type === 'cross_marker:changed') {
+          htmx.trigger(document.body, 'crossMarkerChanged');
+          return;
+        }
+        if (msg.reload_board || msg.type === 'site:sector_changed') location.reload();
       } catch (e) { /* noop */ }
     });
 

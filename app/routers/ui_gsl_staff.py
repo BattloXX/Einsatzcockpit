@@ -281,10 +281,12 @@ async def stab_journal(
         .all()
     )
     roles = {r.id: r for r in svc.get_roles(db, lage.org_id)}
+    successor_by_pred = {a.predecessor_id: a for a in assignments if a.predecessor_id is not None}
 
     return templates.TemplateResponse(request, "incident_major/_stab_journal.html", {
         "lage": lage,
         "assignments": assignments,
         "roles": roles,
+        "successors": successor_by_pred,
         "can_edit": _can_edit(user),
     })

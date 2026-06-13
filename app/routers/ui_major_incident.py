@@ -13,9 +13,16 @@ from app.core.permissions import has_role, require_role, same_org_or_system_admi
 from app.core.security import get_author_name
 from app.core.templating import templates
 from app.db import get_db
+from app.core.html_utils import sanitize_html
 from app.models.major_incident import (
+    CROSS_MARKER_STATUS_COLOR,
+    CROSS_MARKER_STATUS_LABEL,
+    CROSS_MARKER_TYPE_ICON,
+    CROSS_MARKER_TYPE_LABEL,
+    CrossSiteMarker,
     JOURNAL_CATEGORIES,
     JOURNAL_CATEGORY_COLOR,
+    JOURNAL_TEMPLATES,
     SITE_PRIORITY_COLOR,
     SITE_PRIORITY_LABEL,
     STAFF_FUNCTION_LABEL,
@@ -24,6 +31,7 @@ from app.models.major_incident import (
     IncidentSite,
     LageEinheit,
     LageJournalEntry,
+    LageJournalMedia,
     MajorIncident,
     MajorIncidentStatus,
     Sector,
@@ -54,6 +62,7 @@ _pending_verifications: dict[str, dict] = {}
 _MI_FEATURE_KEYS: frozenset[str] = frozenset({
     "mi_feature_stab", "mi_feature_funkjournal", "mi_feature_meldungen",
     "mi_feature_sektoren", "mi_feature_karte", "mi_feature_zeitreise", "mi_feature_ressourcen",
+    "mi_feature_uebergreifend",
 })
 
 
@@ -62,13 +71,14 @@ def _get_mi_features(db: Session) -> dict[str, bool]:
     rows = db.query(_SS).filter(_SS.key.in_(_MI_FEATURE_KEYS)).all()
     cfg = {r.key: r.value for r in rows}
     return {
-        "stab":        cfg.get("mi_feature_stab",        "true") != "false",
-        "funkjournal": cfg.get("mi_feature_funkjournal",  "true") != "false",
-        "meldungen":   cfg.get("mi_feature_meldungen",    "true") != "false",
-        "sektoren":    cfg.get("mi_feature_sektoren",     "true") != "false",
-        "karte":       cfg.get("mi_feature_karte",        "true") != "false",
-        "zeitreise":   cfg.get("mi_feature_zeitreise",    "true") != "false",
-        "ressourcen":  cfg.get("mi_feature_ressourcen",   "true") != "false",
+        "stab":           cfg.get("mi_feature_stab",           "true") != "false",
+        "funkjournal":    cfg.get("mi_feature_funkjournal",     "true") != "false",
+        "meldungen":      cfg.get("mi_feature_meldungen",       "true") != "false",
+        "sektoren":       cfg.get("mi_feature_sektoren",        "true") != "false",
+        "karte":          cfg.get("mi_feature_karte",           "true") != "false",
+        "zeitreise":      cfg.get("mi_feature_zeitreise",       "true") != "false",
+        "ressourcen":     cfg.get("mi_feature_ressourcen",      "true") != "false",
+        "uebergreifend":  cfg.get("mi_feature_uebergreifend",   "true") != "false",
     }
 
 
@@ -282,6 +292,7 @@ async def lage_board(
     abgebrochen_sites = sites_by_phase.get(SitePhase.abgebrochen, [])
     sectors = sorted(lage.sectors, key=lambda s: s.id)
     sectors_by_id = {s.id: s for s in sectors}
+    cross_markers = sorted(lage.cross_site_markers, key=lambda m: (m.sort_index, m.id))
 
     new_meldungen_count = (
         db.query(CitizenReport)
@@ -319,6 +330,11 @@ async def lage_board(
         "abgebrochen_sites": abgebrochen_sites,
         "sectors": sectors,
         "sectors_by_id": sectors_by_id,
+        "cross_markers": cross_markers,
+        "cross_marker_type_label": CROSS_MARKER_TYPE_LABEL,
+        "cross_marker_type_icon": CROSS_MARKER_TYPE_ICON,
+        "cross_marker_status_label": CROSS_MARKER_STATUS_LABEL,
+        "cross_marker_status_color": CROSS_MARKER_STATUS_COLOR,
         "now": datetime.now(UTC),
         "mi_features": _get_mi_features(db),
         "weather_enabled": _weather_enabled,
@@ -1218,6 +1234,7 @@ async def lage_stab(
         "journal_entries": journal_entries,
         "journal_categories": JOURNAL_CATEGORIES,
         "journal_category_color": JOURNAL_CATEGORY_COLOR,
+        "journal_templates_json": __import__("json").dumps(JOURNAL_TEMPLATES),
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db),
@@ -1284,6 +1301,11 @@ async def lage_journal_add(
     lage_id: int,
     text: str = Form(...),
     category: str = Form("sonstiges"),
+    body_html: str = Form(""),
+    partner_from: str = Form(""),
+    partner_to: str = Form(""),
+    measure: str = Form(""),
+    media: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -1294,16 +1316,58 @@ async def lage_journal_add(
         raise HTTPException(status_code=403)
     if category not in JOURNAL_CATEGORIES:
         category = "sonstiges"
-    db.add(LageJournalEntry(
+    entry = LageJournalEntry(
         major_incident_id=lage_id,
         category=category,
         text=text.strip()[:2000],
+        body_html=sanitize_html(body_html),
+        partner_from=partner_from.strip()[:120] or None,
+        partner_to=partner_to.strip()[:120] or None,
+        measure=measure.strip()[:500] or None,
         author_name=get_author_name(request),
         user_id=getattr(user, "id", None),
-    ))
+    )
+    db.add(entry)
+    db.flush()  # get entry.id for media FK
+    if media:
+        from app.services.lage_media_service import upload_journal_media
+        for f in media:
+            if not f.filename:
+                continue
+            m = await upload_journal_media(
+                f, entry.id,
+                org_id=lage.org_id,
+                user_id=getattr(user, "id", None),
+                author_name=get_author_name(request),
+                db=db,
+            )
+            db.add(m)
     db.commit()
     await broadcast_lage(lage_id, {"type": "journal_updated"})
     return Response(status_code=204)
+
+
+@router.get("/lage/{lage_id}/journal/{entry_id}/medien/{media_id}/bild")
+async def lage_journal_media_image(
+    request: Request,
+    lage_id: int,
+    entry_id: int,
+    media_id: int,
+    thumb: bool = False,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    m = db.get(LageJournalMedia, media_id)
+    if not m or m.journal_entry_id != entry_id:
+        raise HTTPException(status_code=404)
+    from app.services.lage_media_service import journal_media_path, journal_thumb_path
+    p = journal_thumb_path(m) if thumb else journal_media_path(m)
+    if not p.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(str(p), media_type="image/jpeg")
 
 
 @router.post("/lage/{lage_id}/journal/{entry_id}/loeschen")
@@ -1323,6 +1387,219 @@ async def lage_journal_delete(
     db.delete(entry)
     db.commit()
     return Response(status_code=204)
+
+
+# ── Übergreifende Meldungen (CrossSiteMarker) ────────────────────────────────
+
+@router.post("/lage/{lage_id}/uebergreifend")
+async def cross_marker_create(
+    request: Request,
+    lage_id: int,
+    title: str = Form(...),
+    marker_type: str = Form("sonstiges"),
+    status: str = Form("gemeldet"),
+    description: str = Form(""),
+    strasse: str = Form(""),
+    hausnr: str = Form(""),
+    ort: str = Form(""),
+    lat: float | None = Form(None),
+    lng: float | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    if status not in CROSS_MARKER_STATUS_LABEL:
+        status = "gemeldet"
+    if marker_type not in CROSS_MARKER_TYPE_LABEL:
+        marker_type = "sonstiges"
+    m = CrossSiteMarker(
+        major_incident_id=lage_id,
+        org_id=lage.org_id,
+        title=title.strip()[:160],
+        marker_type=marker_type,
+        status=status,
+        description=description.strip() or None,
+        strasse=strasse.strip()[:160] or None,
+        hausnr=hausnr.strip()[:20] or None,
+        ort=ort.strip()[:120] or None,
+        lat=lat,
+        lng=lng,
+        created_by=getattr(user, "id", None),
+        author_name=get_author_name(request),
+    )
+    db.add(m)
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": m.id, "reload_board": False})
+    return Response(status_code=204)
+
+
+@router.get("/lage/{lage_id}/uebergreifend/board-col", response_class=HTMLResponse)
+async def cross_marker_board_col(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    can_edit = _can_edit(user)
+    markers = sorted(lage.cross_site_markers, key=lambda m: (m.sort_index, m.id))
+    return templates.TemplateResponse(request, "incident_major/_cross_marker_col_body.html", {
+        "lage": lage,
+        "cross_markers": markers,
+        "status_label": CROSS_MARKER_STATUS_LABEL,
+        "can_edit": can_edit,
+    })
+
+
+@router.post("/lage/{lage_id}/uebergreifend/{mid}/status")
+async def cross_marker_set_status(
+    request: Request,
+    lage_id: int,
+    mid: int,
+    status: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    m = db.get(CrossSiteMarker, mid)
+    if not m or m.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    if status in CROSS_MARKER_STATUS_LABEL:
+        m.status = status
+        db.commit()
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "reload_board": False})
+    return Response(status_code=204)
+
+
+@router.post("/lage/{lage_id}/uebergreifend/{mid}/bearbeiten")
+async def cross_marker_update(
+    request: Request,
+    lage_id: int,
+    mid: int,
+    title: str = Form(...),
+    marker_type: str = Form("sonstiges"),
+    status: str = Form("gemeldet"),
+    description: str = Form(""),
+    strasse: str = Form(""),
+    hausnr: str = Form(""),
+    ort: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    m = db.get(CrossSiteMarker, mid)
+    if not m or m.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    m.title = title.strip()[:160]
+    if marker_type in CROSS_MARKER_TYPE_LABEL:
+        m.marker_type = marker_type
+    if status in CROSS_MARKER_STATUS_LABEL:
+        m.status = status
+    m.description = description.strip() or None
+    m.strasse = strasse.strip()[:160] or None
+    m.hausnr = hausnr.strip()[:20] or None
+    m.ort = ort.strip()[:120] or None
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "reload_board": False})
+    return Response(status_code=204)
+
+
+@router.post("/lage/{lage_id}/uebergreifend/{mid}/pin")
+async def cross_marker_set_pin(
+    request: Request,
+    lage_id: int,
+    mid: int,
+    lat: float = Form(...),
+    lng: float = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    m = db.get(CrossSiteMarker, mid)
+    if not m or m.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    m.lat = lat
+    m.lng = lng
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "reload_board": False})
+    return Response(status_code=204)
+
+
+@router.post("/lage/{lage_id}/uebergreifend/{mid}/loeschen")
+async def cross_marker_delete(
+    request: Request,
+    lage_id: int,
+    mid: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    m = db.get(CrossSiteMarker, mid)
+    if not m or m.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    db.delete(m)
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "deleted": True, "reload_board": False})
+    return Response(status_code=204)
+
+
+@router.get("/lage/{lage_id}/uebergreifend/{mid}/panel", response_class=HTMLResponse)
+async def cross_marker_panel(
+    request: Request,
+    lage_id: int,
+    mid: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    m = db.get(CrossSiteMarker, mid)
+    if not m or m.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, "incident_major/_cross_marker_panel.html", {
+        "lage": lage,
+        "marker": m,
+        "type_label": CROSS_MARKER_TYPE_LABEL,
+        "type_icon": CROSS_MARKER_TYPE_ICON,
+        "status_label": CROSS_MARKER_STATUS_LABEL,
+        "status_color": CROSS_MARKER_STATUS_COLOR,
+        "can_edit": _can_edit(user),
+    })
+
+
+@router.get("/lage/{lage_id}/karte-cross-markers")
+async def lage_karte_cross_markers(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    """JSON-API: gibt übergreifende Meldungen für Live-Update der Lagekarte zurück."""
+    from fastapi.responses import JSONResponse
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    return JSONResponse([{
+        "id": m.id, "title": m.title,
+        "marker_type": m.marker_type, "type_icon": m.type_icon, "type_label": m.type_label,
+        "status": m.status, "status_label": m.status_label, "status_color": m.status_color,
+        "lat": m.lat, "lng": m.lng,
+        "ort": m.ort or "", "description": m.description or "",
+        "address_line": m.address_line,
+    } for m in lage.cross_site_markers if m.lat and m.lng])
 
 
 # ── Funkjournal ───────────────────────────────────────────────────────────────
@@ -2293,7 +2570,12 @@ async def site_sektor_assign(
     site.sector_id = sector_id or None
     site.section_assigned_mode = "manual"  # manuell → sticky
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site_updated", "site_id": site_id, "reload_board": True})
+    await broadcast_lage(lage_id, {
+        "type": "site:sector_changed",
+        "site_id": site_id,
+        "sector_id": site.sector_id,
+        "reload_board": False,
+    })
     return Response(status_code=204)
 
 
@@ -2331,14 +2613,20 @@ async def sektor_geometry_update(
 
     db.commit()
 
-    # Auto-Zuweisung neu berechnen
+    # Auto-Zuweisung neu berechnen (inkl. manuell zugewiesener Stellen)
     from app.services.geo_service import bulk_reassign_section
-    changed = bulk_reassign_section(db, lage_id)
-    if changed:
+    reassigned = bulk_reassign_section(db, lage_id, include_manual=True)
+    if reassigned:
         db.commit()
 
-    await broadcast_lage(lage_id, {"type": "section:changed", "sector_id": sektor_id, "reload_board": False})
-    return Response(status_code=204)
+    await broadcast_lage(lage_id, {
+        "type": "section:changed",
+        "sector_id": sektor_id,
+        "reassigned": reassigned,
+        "reload_board": False,
+    })
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"geometry": geometry, "reassigned": reassigned})
 
 
 @router.delete("/lage/{lage_id}/sektoren/{sektor_id}/geometrie")
@@ -2619,6 +2907,15 @@ async def lage_karte(
         "ts": format_local_datetime(r.created_at, org),
     } for r in citizen_reports_raw])
 
+    cross_markers_json = json.dumps([{
+        "id": m.id, "title": m.title,
+        "marker_type": m.marker_type, "type_icon": m.type_icon, "type_label": m.type_label,
+        "status": m.status, "status_label": m.status_label, "status_color": m.status_color,
+        "lat": m.lat, "lng": m.lng,
+        "ort": m.ort or "", "description": m.description or "",
+        "address_line": m.address_line,
+    } for m in lage.cross_site_markers if m.lat and m.lng])
+
     return templates.TemplateResponse(request, "incident_major/karte.html", {
         "user": user,
         "lage": lage,
@@ -2629,6 +2926,7 @@ async def lage_karte(
         "all_sites": active_sites,
         "citizen_reports_json": citizen_reports_json,
         "reports_count": len(citizen_reports_raw),
+        "cross_markers_json": cross_markers_json,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db),
@@ -2657,6 +2955,21 @@ async def lage_karte_sektoren(
         "color": s.color or "#6b7280",
         "geometry": json.loads(s.geometry) if s.geometry else None,
     } for s in sectors])
+
+
+@router.get("/lage/{lage_id}/karte-sites")
+async def lage_karte_sites(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    """JSON-API: gibt aktuelle Sektorzuordnungen der Einsatzstellen zurück."""
+    from fastapi.responses import JSONResponse
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    return JSONResponse([{"id": s.id, "sector_id": s.sector_id} for s in lage.sites])
 
 
 # ── Ressourcenübersicht ───────────────────────────────────────────────────────

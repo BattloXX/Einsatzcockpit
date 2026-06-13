@@ -1,0 +1,56 @@
+{# Detail-Panel für übergreifende Meldungen (in Seitenpanel) #}
+{# Kontext: lage, marker, type_label, type_icon, status_label, status_color, can_edit #}
+<div style="padding:12px 14px;">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+    <span style="font-size:1.4rem;">{{ marker.type_icon }}</span>
+    <div>
+      <div style="font-weight:700;font-size:.95rem;">{{ marker.title }}</div>
+      <div style="font-size:.72rem;color:var(--text-muted);">{{ marker.type_label }}</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{{ marker.status_color }};"></span>
+    <span style="font-size:.8rem;font-weight:600;color:{{ marker.status_color }};">{{ marker.status_label }}</span>
+  </div>
+
+  {% if marker.address_line %}
+  <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:6px;">📍 {{ marker.address_line }}</div>
+  {% endif %}
+
+  {% if marker.lat and marker.lng %}
+  <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px;">
+    GPS: {{ "%.5f"|format(marker.lat) }}, {{ "%.5f"|format(marker.lng) }}
+  </div>
+  {% endif %}
+
+  {% if marker.description %}
+  <div style="font-size:.82rem;line-height:1.5;margin-bottom:8px;padding:8px;
+              background:rgba(255,255,255,.04);border-radius:6px;">
+    {{ marker.description }}
+  </div>
+  {% endif %}
+
+  <div style="font-size:.68rem;color:var(--text-muted);margin-top:8px;">
+    {% if marker.author_name %}{{ marker.author_name }} · {% endif %}
+    {{ marker.created_at | local_datetime }}
+  </div>
+
+  {% if can_edit %}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+    <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/loeschen"
+          hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+          hx-confirm="Meldung wirklich löschen?"
+          hx-on::after-request="if(event.detail.successful){
+            var pw=document.getElementById('site-panel-wrap');
+            if(pw) pw.classList.remove('open');
+            var dm=document.getElementById('siteDetailModal');
+            if(dm) dm.close();
+            htmx.trigger(document.body,'crossMarkerChanged');
+          }"
+          style="margin:0;">
+      <button type="submit" class="btn btn--ghost btn--sm" style="color:#f87171;border-color:rgba(239,68,68,.3);">Löschen</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
