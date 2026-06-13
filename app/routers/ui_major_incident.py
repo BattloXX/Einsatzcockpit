@@ -2151,6 +2151,21 @@ async def meldung_annehmen(
                 user_id=user.id,
                 author_name=get_author_name(request),
             ))
+        # Bürgermeldungs-Foto auf Einsatzstelle übertragen
+        if report.photo_filename:
+            from pathlib import Path as _Path
+            from app.services.lage_media_service import copy_citizen_photo_to_site
+            citizen_photo = _Path("app_storage/citizen_media") / report.photo_filename
+            media_obj = copy_citizen_photo_to_site(
+                citizen_photo, site.id,
+                org_id=lage.org_id,
+                user_id=user.id,
+                author_name=get_author_name(request),
+                db=db,
+            )
+            if media_obj:
+                db.add(media_obj)
+
         report.status = "accepted"
         report.site_id = site.id
         db.commit()
