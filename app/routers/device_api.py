@@ -5,7 +5,7 @@ Auth über bestehende Session-Cookies (Device-Login via /geraet-login).
 """
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -75,7 +75,7 @@ async def unregister_fcm_token(request: Request, db: Session = Depends(get_db)):
 # ── Standort ──────────────────────────────────────────────────────────────────
 
 @router.post("/location")
-async def update_location(request: Request, db: Session = Depends(get_db)):
+async def update_location(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Aktualisiert den Gerätestandort.
 
     Wird von der App nur bei aktivem Einsatz/Dienst aufgerufen (alle 10–30 s).
@@ -135,12 +135,10 @@ async def update_location(request: Request, db: Session = Depends(get_db)):
 
         # WS-Broadcast (gedrosselt: handled by caller - hier immer senden, Frontend drosselt)
         if active_lage:
-            import asyncio
-
             from app.services.broadcast import broadcast_lage
             v = vehicle
             label = v.code if v else str(device_token.vehicle_master_id)
-            asyncio.create_task(broadcast_lage(active_lage.id, {
+            background_tasks.add_task(broadcast_lage, active_lage.id, {
                 "type": "vehicle:position",
                 "vehicle_id": device_token.vehicle_master_id,
                 "label": label,
@@ -148,7 +146,7 @@ async def update_location(request: Request, db: Session = Depends(get_db)):
                 "lng": lng,
                 "source": "gps",
                 "ts": now.isoformat(),
-            }))
+            })
 
     db.commit()
     return JSONResponse({"ok": True})

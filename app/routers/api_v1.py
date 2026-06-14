@@ -218,6 +218,58 @@ def _get_api_key(x_api_key: str = Header(..., alias="X-API-Key"), db: Session = 
     return api_key
 
 
+async def _geocode_incident(incident_id: int, street: str | None, no: str | None, city: str | None) -> None:
+    """Background: Geocodiert Adresse und speichert lat/lng am Einsatz.
+
+    Kein Fehler wenn Nominatim nicht erreichbar — Einsatz bleibt ohne Koordinaten.
+    """
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.incident import Incident
+    from app.services.broadcast import manager
+    from app.services.geocoding import geocode_address
+
+    if not (street or city):
+        return
+    try:
+        geo = await geocode_address(street, no, city)
+    except Exception:
+        import logging as _logging
+        _logging.getLogger("einsatzleiter.geocoding").exception(
+            "Background-Geocoding für Einsatz %d fehlgeschlagen", incident_id
+        )
+        return
+
+    if not geo:
+        return
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = db.get(Incident, incident_id)
+        if not incident:
+            return
+        if incident.lat is None and incident.lng is None:
+            incident.lat = geo.lat
+            incident.lng = geo.lng
+            db.commit()
+            try:
+                await manager.broadcast(incident_id, {
+                    "type": "incident_geocoded",
+                    "lat": geo.lat,
+                    "lng": geo.lng,
+                })
+            except Exception:
+                pass
+    except Exception:
+        import logging as _logging
+        _logging.getLogger("einsatzleiter.geocoding").exception(
+            "Background-Geocoding DB-Speicherung für Einsatz %d fehlgeschlagen", incident_id
+        )
+    finally:
+        db.close()
+
+
 async def _enrich_with_ai_suggestions(
     incident_id: int,
     meldung: str,
@@ -483,68 +535,90 @@ async def create_incident_api(
         if _org_s and _org_s.default_access_pin_hash:
             incident.access_pin_hash = _org_s.default_access_pin_hash
 
+    # ── Einsatz ist jetzt gespeichert ────────────────────────────────────────
     db.commit()
 
-    # Automatisches Geocoding wenn Adresse vorhanden (vor GSL-Trigger, damit Koordinaten fließen)
-    _geo_lat: float | None = None
-    _geo_lng: float | None = None
-    if payload.Ort or payload.Strasse:
-        from app.services.geocoding import geocode_address as _geocode
-        geo = await _geocode(payload.Strasse, payload.HausNr, payload.Ort)
-        if geo:
-            _geo_lat, _geo_lng = geo.lat, geo.lng
-            incident.lat = geo.lat
-            incident.lng = geo.lng
-            db.commit()
-
-    # ── Großschadenslage-Trigger ─────────────────────────────────────────────
-    _mi_site = None
-    if api_key.org_id:
-        _mi_site = _handle_major_incident_trigger(
-            db=db,
-            org_id=api_key.org_id,
-            alarm_type_code=alarm_type_code,
-            incident_id=incident.id,
-            external_key=payload.Key,
-            is_exercise=payload.Uebung,
-            ort=payload.Ort,
-            strasse=payload.Strasse,
-            hausnr=payload.HausNr,
-            einsatzgrund=payload.Einsatzgrund,
-            lat=_geo_lat,
-            lng=_geo_lng,
-        )
-        db.commit()
+    # Ab hier darf jede einzelne Nebenwirkung scheitern ohne den Request zu
+    # unterbrechen. Der Einsatz ist committed und die Response wird immer
+    # erfolgreich zurückgegeben.
+    from app.core.resilience import run_side_effect
 
     address = f"{payload.Strasse or ''} {payload.HausNr or ''}, {payload.Ort or ''}".strip(", ")
     exercise_prefix = "[ÜBUNG] " if payload.Uebung else ""
 
+    # Geocoding in Background – kein Warten auf Nominatim (≥1,1 s)
+    if payload.Ort or payload.Strasse:
+        background_tasks.add_task(
+            _geocode_incident,
+            incident.id,
+            payload.Strasse,
+            payload.HausNr,
+            payload.Ort,
+        )
+
+    # GSL-Trigger (nutzt vorerst keine Geocoding-Koords, da diese im Background kommen)
+    _mi_site = None
+    if api_key.org_id:
+        def _mi_trigger():
+            site = _handle_major_incident_trigger(
+                db=db,
+                org_id=api_key.org_id,
+                alarm_type_code=alarm_type_code,
+                incident_id=incident.id,
+                external_key=payload.Key,
+                is_exercise=payload.Uebung,
+                ort=payload.Ort,
+                strasse=payload.Strasse,
+                hausnr=payload.HausNr,
+                einsatzgrund=payload.Einsatzgrund,
+                lat=None,
+                lng=None,
+            )
+            db.commit()
+            return site
+        _mi_site = run_side_effect("gsl_trigger", _mi_trigger)
+
     # WebSocket broadcast – org-spezifisch
     if api_key.org_id:
-        await broadcast_org(api_key.org_id, {
-            "type": "incident_created",
-            "incident_id": incident.id,
-            "alarm": alarm_type_code,
-            "address": address,
-            "is_exercise": payload.Uebung,
-            "url": f"/einsatz/{incident.id}",
-            "title": f"{exercise_prefix}Neuer Einsatz: {alarm_type_code} – {address}",
-        })
-    # notify_neighbors → Einladungsvorschläge für Partner-Orgs
-    _create_neighbor_invitations_api(db, incident, alarm_type_code, api_key.org_id)
+        background_tasks.add_task(
+            broadcast_org,
+            api_key.org_id,
+            {
+                "type": "incident_created",
+                "incident_id": incident.id,
+                "alarm": alarm_type_code,
+                "address": address,
+                "is_exercise": payload.Uebung,
+                "url": f"/einsatz/{incident.id}",
+                "title": f"{exercise_prefix}Neuer Einsatz: {alarm_type_code} – {address}",
+            },
+        )
 
-    # Web Push notification – nur an die eigene Org des Einsatzes
+    # notify_neighbors → Einladungsvorschläge für Partner-Orgs
+    run_side_effect(
+        "neighbor_invitations",
+        _create_neighbor_invitations_api, db, incident, alarm_type_code, api_key.org_id,
+    )
+
+    # Web Push in Background – blockierende Netzwerk-Calls (pywebpush/FCM) nicht im Event-Loop
     push_title = f"{exercise_prefix}🚒 Einsatz: {alarm_type_code}"
     push_body = address or payload.Meldung or "Kein Ort angegeben"
     if api_key.org_id:
-        notify_org(db, api_key.org_id, push_title, push_body, url=f"/einsatz/{incident.id}")
+        background_tasks.add_task(
+            notify_org, db, api_key.org_id, push_title, push_body,
+            f"/einsatz/{incident.id}",
+        )
     else:
-        notify_all(db, push_title, push_body, url=f"/einsatz/{incident.id}")
+        background_tasks.add_task(
+            notify_all, db, push_title, push_body, f"/einsatz/{incident.id}",
+        )
 
-    board_token, board_url = _get_or_create_board_token(
-        db, incident.id, api_key.created_by_user_id, str(request.base_url)
-    )
-    db.commit()
+    board_token, board_url = run_side_effect(
+        "board_token",
+        _get_or_create_board_token,
+        db, incident.id, api_key.created_by_user_id, str(request.base_url),
+    ) or (None, None)
+    run_side_effect("board_token_commit", db.commit)
 
     # AI task suggestions + Lage-Hinweise in background (never blocks alarm creation)
     from app.services.ai_service import is_enabled as ai_is_enabled
@@ -658,7 +732,7 @@ async def _site_post_create_tasks(site_id: int) -> None:
         lage = db.get(MajorIncident, site.major_incident_id)
         org_id = lage.org_id if lage else None
         changed = False
-        if not (site.lat and site.lng) and (site.strasse or site.ort):
+        if (site.lat is None or site.lng is None) and (site.strasse or site.ort):
             try:
                 geo = await geocode_address(site.strasse, site.hausnr, site.ort)
                 if geo:
@@ -716,7 +790,7 @@ async def _enrich_site_from_alarm(
         changed = False
 
         # Geocoding (only if not already set)
-        if not (site.lat and site.lng) and (site.strasse or site.ort):
+        if (site.lat is None or site.lng is None) and (site.strasse or site.ort):
             try:
                 geo = await geocode_address(site.strasse, site.hausnr, site.ort)
                 if geo:

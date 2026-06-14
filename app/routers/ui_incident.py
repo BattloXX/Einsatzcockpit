@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.permissions import can_access_incident, has_role, require_role
 from app.core.queries import visible_incidents_q
+from app.core.resilience import run_side_effect
 from app.core.security import (
     get_author_name,
     hash_pin,
@@ -271,7 +272,7 @@ async def new_incident(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
-    from app.services.geocoding import geocode_address as _geocode
+    from app.routers.api_v1 import _geocode_incident
 
     user = request.state.user
 
@@ -310,24 +311,36 @@ async def new_incident(
         if _org_settings and _org_settings.default_access_pin_hash:
             incident.access_pin_hash = _org_settings.default_access_pin_hash
 
+    # ── Einsatz ist jetzt gespeichert ────────────────────────────────────────
     db.commit()
 
-    # Automatisches Geocoding wenn Adresse vorhanden aber keine Koordinaten gesetzt
-    if (not lat_f or not lng_f) and (address_street or address_city):
-        geo = await _geocode(address_street or None, address_no or None, address_city or None)
-        if geo:
-            incident.lat = geo.lat
-            incident.lng = geo.lng
-            db.commit()
+    # Geocoding in Background – blockiert weder Redirect noch den Event-Loop
+    if (lat_f is None or lng_f is None) and (address_street or address_city):
+        background_tasks.add_task(
+            _geocode_incident,
+            incident.id,
+            address_street or None,
+            address_no or None,
+            address_city or None,
+        )
 
+    # Broadcast – Fehler darf den Redirect nicht verhindern
     if user.org_id:
-        await broadcast_org(user.org_id, {
-            "type": "incident_created", "incident_id": incident.id,
-            "alarm": alarm_type_code, "is_exercise": is_exercise,
-            "url": f"/einsatz/{incident.id}",
-            "title": f"{'[ÜBUNG] ' if is_exercise else ''}Neuer Einsatz: {alarm_type_code}",
-        })
-    _create_neighbor_invitations(db, incident, alarm_type_code, user.org_id, user.id)
+        background_tasks.add_task(
+            broadcast_org,
+            user.org_id,
+            {
+                "type": "incident_created", "incident_id": incident.id,
+                "alarm": alarm_type_code, "is_exercise": is_exercise,
+                "url": f"/einsatz/{incident.id}",
+                "title": f"{'[ÜBUNG] ' if is_exercise else ''}Neuer Einsatz: {alarm_type_code}",
+            },
+        )
+
+    run_side_effect(
+        "neighbor_invitations",
+        _create_neighbor_invitations, db, incident, alarm_type_code, user.org_id, user.id,
+    )
 
     if ai_is_enabled() and not is_exercise:
         background_tasks.add_task(
@@ -341,6 +354,8 @@ async def new_incident(
         _log.debug("KI-Auftragsvorschläge übersprungen: KI nicht aktiviert (Einsatz %d)", incident.id)
 
     # Großschadenslage-Trigger: AlarmTyp-Flag prüfen
+    # Fehler darf den Nutzer nicht auf einer 500-Seite landen lassen.
+    _lage_redirect: str | None = None
     if user.org_id:
         from app.models.master import OrgSettings as _OrgSettings
         from app.services.major_incident_service import (
@@ -352,41 +367,49 @@ async def new_incident(
         from app.services.major_incident_service import (
             handle_alarm_trigger as _handle_alarm_trigger,
         )
-        at = get_alarm_type_by_code(db, user.org_id, alarm_type_code)
-        if at and at.triggers_major_incident:
-            lage, _site, _created = _handle_alarm_trigger(
-                db, user.org_id, alarm_type_code, incident.id,
-                external_key=f"ui_{incident.id}",
-                is_exercise=is_exercise,
-                ort=address_city or None,
-                strasse=address_street or None,
-                hausnr=address_no or None,
-                lat=incident.lat,
-                lng=incident.lng,
-                einsatzgrund=report_text or None,
+        try:
+            at = get_alarm_type_by_code(db, user.org_id, alarm_type_code)
+            if at and at.triggers_major_incident:
+                lage, _site, _created = _handle_alarm_trigger(
+                    db, user.org_id, alarm_type_code, incident.id,
+                    external_key=f"ui_{incident.id}",
+                    is_exercise=is_exercise,
+                    ort=address_city or None,
+                    strasse=address_street or None,
+                    hausnr=address_no or None,
+                    lat=incident.lat,
+                    lng=incident.lng,
+                    einsatzgrund=report_text or None,
+                )
+                db.commit()
+                _lage_redirect = f"/lage/{lage.id}"
+            else:
+                active_lage = _get_active_lage(db, user.org_id)
+                if active_lage:
+                    org_settings = db.query(_OrgSettings).filter(_OrgSettings.org_id == user.org_id).first()
+                    if not org_settings or org_settings.mi_auto_adopt:
+                        _adopt_incident_as_site(
+                            db, active_lage,
+                            incident_id=incident.id,
+                            external_key=f"ui_{incident.id}",
+                            alarm_type_code=alarm_type_code,
+                            org_id=user.org_id,
+                            ort=address_city or None,
+                            strasse=address_street or None,
+                            hausnr=address_no or None,
+                            lat=incident.lat,
+                            lng=incident.lng,
+                            einsatzgrund=report_text or None,
+                        )
+                        db.commit()
+        except Exception:
+            _log.exception(
+                "GSL-Trigger für Einsatz %d fehlgeschlagen – Einsatz bleibt erhalten",
+                incident.id,
             )
-            db.commit()
-            return RedirectResponse(f"/lage/{lage.id}", status_code=303)
-        else:
-            active_lage = _get_active_lage(db, user.org_id)
-            if active_lage:
-                org_settings = db.query(_OrgSettings).filter(_OrgSettings.org_id == user.org_id).first()
-                if not org_settings or org_settings.mi_auto_adopt:
-                    _adopt_incident_as_site(
-                        db, active_lage,
-                        incident_id=incident.id,
-                        external_key=f"ui_{incident.id}",
-                        alarm_type_code=alarm_type_code,
-                        org_id=user.org_id,
-                        ort=address_city or None,
-                        strasse=address_street or None,
-                        hausnr=address_no or None,
-                        lat=incident.lat,
-                        lng=incident.lng,
-                        einsatzgrund=report_text or None,
-                    )
-                    db.commit()
 
+    if _lage_redirect:
+        return RedirectResponse(_lage_redirect, status_code=303)
     return RedirectResponse(f"/einsatz/{incident.id}", status_code=303)
 
 

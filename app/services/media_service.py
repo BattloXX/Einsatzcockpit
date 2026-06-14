@@ -82,11 +82,16 @@ def _entity_dir(incident_id: int, entity_type: str, entity_id: int, org_id: int 
 
 
 def _detect_mime(data: bytes) -> str | None:
+    """Erkennt MIME-Typ anhand Magic-Bytes (nie anhand des Client-Headers)."""
     try:
         import filetype  # type: ignore
         kind = filetype.guess(data)
         return kind.mime if kind else None
     except ImportError:
+        logger.error(
+            "filetype-Bibliothek nicht installiert – Magic-Byte-MIME-Erkennung deaktiviert. "
+            "Upload-Sicherheit eingeschränkt. Bitte `pip install filetype` ausführen."
+        )
         return None
 
 
@@ -254,7 +259,15 @@ async def store_upload(
     if not raw:
         raise HTTPException(400, "Leere Datei.")
 
-    mime = _detect_mime(raw) or (file.content_type or "").lower()
+    mime = _detect_mime(raw)
+    if mime is None:
+        # Magic-Byte-Erkennung schlug fehl – Client-Content-Type nur als Hint,
+        # niemals als Sicherheits-Entscheidung verwenden.
+        client_ct = (file.content_type or "").lower().split(";")[0].strip()
+        if client_ct in ALLOWED_MIMES:
+            mime = client_ct
+        else:
+            raise HTTPException(415, "Dateityp konnte nicht erkannt werden und ist nicht erlaubt.")
     if mime not in ALLOWED_MIMES:
         raise HTTPException(415, f"Dateityp '{mime}' wird nicht unterstuetzt.")
 
@@ -333,7 +346,13 @@ async def store_upload_for_message(
     raw = await file.read()
     if not raw:
         raise HTTPException(400, "Leere Datei.")
-    mime = _detect_mime(raw) or (file.content_type or "").lower()
+    mime = _detect_mime(raw)
+    if mime is None:
+        client_ct = (file.content_type or "").lower().split(";")[0].strip()
+        if client_ct in ALLOWED_MIMES:
+            mime = client_ct
+        else:
+            raise HTTPException(415, "Dateityp konnte nicht erkannt werden und ist nicht erlaubt.")
     if mime not in ALLOWED_MIMES:
         raise HTTPException(415, f"Dateityp '{mime}' wird nicht unterstuetzt.")
     kind = _kind_for_mime(mime)
@@ -393,7 +412,13 @@ async def store_upload_for_person(
     raw = await file.read()
     if not raw:
         raise HTTPException(400, "Leere Datei.")
-    mime = _detect_mime(raw) or (file.content_type or "").lower()
+    mime = _detect_mime(raw)
+    if mime is None:
+        client_ct = (file.content_type or "").lower().split(";")[0].strip()
+        if client_ct in ALLOWED_MIMES:
+            mime = client_ct
+        else:
+            raise HTTPException(415, "Dateityp konnte nicht erkannt werden und ist nicht erlaubt.")
     if mime not in ALLOWED_MIMES:
         raise HTTPException(415, f"Dateityp '{mime}' wird nicht unterstuetzt.")
     kind = _kind_for_mime(mime)

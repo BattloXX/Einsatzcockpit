@@ -1,6 +1,7 @@
 """FastAPI application – Einsatzleiter-Hilfswerkzeug (Multi-Org) v2.0.0."""
 import asyncio
 import logging
+import os as _os
 import secrets as _secrets
 from contextlib import asynccontextmanager
 
@@ -230,6 +231,9 @@ async def session_middleware(request: Request, call_next):
                 request.state.user = user
                 request.state.display_name = display_name
                 request.state.qr_incident_id = qr_incident_id
+            except Exception:
+                # Transienter DB-Fehler darf anonyme Routen nicht blockieren.
+                logger.exception("session_middleware: User-Lookup fehlgeschlagen")
             finally:
                 db.close()
 
@@ -266,6 +270,22 @@ try:
     )
 except Exception:
     pass
+
+# Proxy-Header-Middleware: setzt request.client.host auf die echte Client-IP aus
+# X-Forwarded-For, damit Rate-Limits pro Angreifer greifen und nicht alle Clients
+# dieselbe Proxy-IP teilen. Nur aktivieren wenn ein vertrauenswürdiger Reverse-
+# Proxy vorgelagert ist (Nginx, Traefik …) — sonst ist XFF fälschbar.
+# Steuerung über Env-Variable TRUST_PROXY_HEADERS (true/false, default true).
+if _os.environ.get("TRUST_PROXY_HEADERS", "true").lower() == "true":
+    try:
+        from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: F401
+        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+    except ImportError:
+        logger.warning(
+            "ProxyHeadersMiddleware nicht verfügbar — Rate-Limits arbeiten mit Proxy-IP. "
+            "Setze TRUST_PROXY_HEADERS=false wenn kein Reverse-Proxy vorgelagert ist."
+        )
 
 # Security headers middleware (Phase 7)
 try:

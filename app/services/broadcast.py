@@ -47,6 +47,10 @@ class ConnectionManager:
                 await ws.send_text(payload)
             except Exception:
                 dead.add(ws)
+        if dead:
+            async with self._lock:
+                for conns in self._connections.values():
+                    conns -= dead
 
 
 manager = ConnectionManager()
