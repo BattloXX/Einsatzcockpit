@@ -231,6 +231,13 @@ def set_status(
     if ts_field:
         setattr(e, ts_field, datetime.now(UTC))
 
+    # Auto-Abschnittszuweisung: wenn Einheit bereits einer Einsatzstelle mit Abschnitt zugeordnet ist
+    if status == STATUS_IM_EINSATZ and not e.sector_id and e.incident_site_id:
+        from app.models.major_incident import IncidentSite
+        site = db.get(IncidentSite, e.incident_site_id)
+        if site and site.sector_id:
+            e.sector_id = site.sector_id
+
     _journal(db, lage_id,
              f"{e.label}: Status {STATUS_LABEL.get(old_status, old_status)}"
              f" → {STATUS_LABEL.get(status, status)}",
@@ -373,8 +380,16 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
     """Vollständiges S2-Lagebild: Pool + Abschnitte + Leiter aller Ebenen."""
     einheiten = lage.einheiten
 
-    # Pool: sector_id IS NULL
-    pool = [e for e in einheiten if e.sector_id is None and e.status != STATUS_ABGERUECKT]
+    # Pool: sector_id IS NULL und nicht im aktiven Einsatz
+    pool = [
+        e for e in einheiten
+        if e.sector_id is None and e.status not in (STATUS_IM_EINSATZ, STATUS_ABGERUECKT)
+    ]
+    # Im Einsatz ohne Abschnitt: sector_id IS NULL, aber bereits aktiv eingeteilt
+    im_einsatz_no_sector = [
+        e for e in einheiten
+        if e.sector_id is None and e.status == STATUS_IM_EINSATZ
+    ]
     abgerueckt = [e for e in einheiten if e.status == STATUS_ABGERUECKT]
 
     sectors = sorted(lage.sectors, key=lambda s: s.sort_order)
@@ -404,6 +419,7 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
 
     return {
         "pool": pool,
+        "im_einsatz_no_sector": im_einsatz_no_sector,
         "sectors": sector_data,
         "abgerueckt": abgerueckt,
         "conflict_vids": conflict_vids,

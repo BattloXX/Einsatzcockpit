@@ -306,6 +306,22 @@
     </div>
   </div>
 
+  {# Ressourcen im Einsatz (kein Abschnitt) #}
+  <div class="res-col" style="border-color:#fbbf2455;">
+    <div class="res-col__head" style="color:#fbbf24;">
+      <span>🟠 RESSOURCEN IM EINSATZ</span>
+      <span class="res-col__count" style="background:rgba(251,191,36,.2);color:#fbbf24;">{{ kue.im_einsatz_no_sector|length }}</span>
+    </div>
+    <div class="res-col__leader" style="font-size:.68rem;">
+      Im Einsatz – noch keinem Abschnitt zugeteilt
+    </div>
+    <div class="res-col__body">
+      {% for e in kue.im_einsatz_no_sector %}{{ einheit_card(e) }}{% else %}
+      <div style="text-align:center;font-size:.8rem;color:var(--text-muted);padding:20px 0;">Keine aktiven Einheiten</div>
+      {% endfor %}
+    </div>
+  </div>
+
   {# Abschnitt-Spalten #}
   {% for sd in kue.sectors %}
   {% set s = sd.sector %}

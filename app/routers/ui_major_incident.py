@@ -3548,7 +3548,7 @@ async def lage_einheit_create(
         bos=bos.strip() or None,
         qty=qty,
         unit=unit.strip() or None,
-        author_name=get_author_name(user),
+        author_name=get_author_name(request),
         user_id=user.id,
     )
     db.commit()
@@ -3574,7 +3574,7 @@ async def lage_einheit_kommandant(
             db, einheit_id, lage_id,
             person_name=name,
             created_by=user.id,
-            author_name=get_author_name(user),
+            author_name=get_author_name(request),
         )
     else:
         einheit = db.get(LageEinheit, einheit_id)
@@ -3601,7 +3601,7 @@ async def lage_einheit_status(
     try:
         resource_service.set_status(
             db, einheit_id, lage_id, status,
-            author_name=get_author_name(user),
+            author_name=get_author_name(request),
             user_id=user.id,
         )
     except ValueError:
@@ -3627,12 +3627,12 @@ async def lage_einheit_sektor(
         if sector_id:
             resource_service.assign_to_sector(
                 db, einheit_id, lage_id, sector_id,
-                author_name=get_author_name(user), user_id=user.id,
+                author_name=get_author_name(request), user_id=user.id,
             )
         else:
             resource_service.move_to_pool(
                 db, einheit_id, lage_id,
-                author_name=get_author_name(user), user_id=user.id,
+                author_name=get_author_name(request), user_id=user.id,
             )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -3654,7 +3654,7 @@ async def lage_einheit_pool(
 
     resource_service.move_to_pool(
         db, einheit_id, lage_id,
-        author_name=get_author_name(user), user_id=user.id,
+        author_name=get_author_name(request), user_id=user.id,
     )
     db.commit()
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
@@ -3681,7 +3681,7 @@ async def lage_einheit_fuehrer(
         db, einheit_id, lage_id,
         person_name=name,
         created_by=user.id,
-        author_name=get_author_name(user),
+        author_name=get_author_name(request),
     )
     db.commit()
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
