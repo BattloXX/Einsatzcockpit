@@ -216,7 +216,7 @@
               hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/prio"
               hx-vals='{"_csrf": "{{ request.state.csrf_token }}"}'
               name="priority" hx-trigger="change" hx-swap="none"
-              hx-on::after-request="if(event.detail.successful) location.reload()">
+              hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
         <option value="" {% if not site.priority %}selected{% endif %}>— keine —</option>
         {% for prio_key, prio_text in prio_label.items() %}
         <option value="{{ prio_key.value }}" {% if site.priority == prio_key %}selected{% endif %}
@@ -275,7 +275,7 @@
         <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/ressourcen/{{ res.id }}/commit"
               hx-swap="none"
               hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-              hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); }">
+              hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
           <button type="submit" class="btn btn--xs btn--secondary">✓ VorOrt</button>
         </form>
         {% endif %}
@@ -283,7 +283,7 @@
               hx-swap="none"
               hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
               hx-confirm="Ressource freigeben?"
-              hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); }">
+              hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
           <button type="submit" class="btn btn--xs btn--ghost">Freigeben</button>
         </form>
       </div>
@@ -299,7 +299,7 @@
           hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/ressourcen"
           hx-swap="none"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-          hx-on::after-request="if(event.detail.successful){ this.reset(); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); }">
+          hx-on::after-request="if(event.detail.successful){ this.reset(); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
         <select name="vehicle_id" class="form-select form-select--sm" style="flex:2;min-width:110px;">
           <option value="">— Freitext —</option>
@@ -403,7 +403,7 @@
         hx-encoding="multipart/form-data"
         hx-swap="none"
         hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-        @htmx:after-request="if(event.detail.successful){this.reset();var p=document.getElementById('lmPhotoPreview-{{ site.id }}');if(p)p.innerHTML='';var b=document.getElementById('lmUploadBtn-{{ site.id }}');if(b)b.style.display='none';}">
+        @htmx:after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
     <input type="file" name="file" id="lmPhotoFile-{{ site.id }}" accept="image/*"
            style="display:none;" onchange="_lmOnPhoto(this)">
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">

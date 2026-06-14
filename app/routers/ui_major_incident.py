@@ -626,6 +626,35 @@ async def site_detail(
     })
 
 
+# ── Karten-Partial (Board-Karte) ────────────────────────────────────────────
+
+@router.get("/lage/{lage_id}/stellen/{site_id}/card", response_class=HTMLResponse)
+async def site_card_partial(
+    request: Request,
+    lage_id: int,
+    site_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    sectors = sorted(lage.sectors, key=lambda s: s.id)
+    sectors_by_id = {s.id: s for s in sectors}
+    return templates.TemplateResponse(request, "incident_major/_site_card.html", {
+        "lage": lage,
+        "site": site,
+        "prio_color": SITE_PRIORITY_COLOR,
+        "prio_label": SITE_PRIORITY_LABEL,
+        "sectors": sectors,
+        "sectors_by_id": sectors_by_id,
+        "can_edit": _can_edit(user),
+    })
+
+
 # ── Einzeldruck (Einsatzstelle) ─────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stellen/{site_id}/druck", response_class=HTMLResponse)
@@ -677,6 +706,7 @@ async def site_log_add(
         author_name=get_author_name(request),
     ))
     db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -720,6 +750,7 @@ async def site_resource_assign(
         author_name=get_author_name(request),
     ))
     db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -750,6 +781,7 @@ async def site_resource_commit(
         author_name=get_author_name(request),
     ))
     db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -780,6 +812,7 @@ async def site_resource_release(
         author_name=get_author_name(request),
     ))
     db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -1950,6 +1983,42 @@ async def lage_karte_cross_markers(
 
 # ── Funkjournal ───────────────────────────────────────────────────────────────
 
+def _fj_context(lage_id: int, lage, db: Session) -> dict:
+    comms = (
+        db.query(CommLogEntry)
+        .filter(CommLogEntry.major_incident_id == lage_id)
+        .order_by(CommLogEntry.ts.desc())
+        .limit(200)
+        .all()
+    )
+    sites = [s for s in lage.sites if s.phase != SitePhase.abgebrochen]
+    sites_by_id = {s.id: s for s in lage.sites}
+    return {
+        "comms": comms,
+        "sites": sites,
+        "sites_by_id": sites_by_id,
+        "open_requests": sum(1 for c in comms if c.is_request and not c.handled),
+    }
+
+
+@router.get("/lage/{lage_id}/funkjournal/rows", response_class=HTMLResponse)
+async def funkjournal_rows(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    ctx = _fj_context(lage_id, lage, db)
+    return templates.TemplateResponse(request, "incident_major/_funkjournal_rows.html", {
+        "lage": lage,
+        "can_edit": _can_edit(user),
+        **ctx,
+    })
+
+
 @router.get("/lage/{lage_id}/funkjournal", response_class=HTMLResponse)
 async def lage_funkjournal(
     request: Request,
@@ -1960,29 +2029,15 @@ async def lage_funkjournal(
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
-
-    comms = (
-        db.query(CommLogEntry)
-        .filter(CommLogEntry.major_incident_id == lage_id)
-        .order_by(CommLogEntry.ts.desc())
-        .limit(200)
-        .all()
-    )
-
-    sites = [s for s in lage.sites if s.phase != SitePhase.abgebrochen]
-    sites_by_id = {s.id: s for s in lage.sites}
-    open_requests = sum(1 for c in comms if c.is_request and not c.handled)
+    ctx = _fj_context(lage_id, lage, db)
 
     return templates.TemplateResponse(request, "incident_major/funkjournal.html", {
         "user": user,
         "lage": lage,
-        "comms": comms,
-        "sites": sites,
-        "sites_by_id": sites_by_id,
-        "open_requests": open_requests,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db),
+        **ctx,
         **_nav_counts(lage_id, lage, db),
     })
 

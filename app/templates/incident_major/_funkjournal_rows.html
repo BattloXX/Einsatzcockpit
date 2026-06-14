@@ -1,0 +1,78 @@
+{# Partial: Funkjournal Tabelle (HTMX-Reload nach Eintrag) #}
+{# Kontext: comms, sites_by_id, lage, can_edit, open_requests #}
+
+{% if comms %}
+<table class="fj-table">
+  <thead>
+    <tr>
+      <th>Zeit</th>
+      <th>Richtung</th>
+      <th>Kanal</th>
+      <th>Gegenüber</th>
+      <th>Inhalt</th>
+      <th>Stelle</th>
+      <th>Bearbeiter</th>
+      {% if can_edit %}<th></th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in comms %}
+    <tr class="{% if c.handled %}fj-row--handled{% endif %}"
+        data-is-request="{{ 'true' if c.is_request else 'false' }}"
+        data-handled="{{ 'true' if c.handled else 'false' }}"
+        data-fj-search="{{ ((c.partner or '') ~ ' ' ~ (c.channel or '') ~ ' ' ~ c.message)|lower }}">
+      <td style="white-space:nowrap;color:var(--text-muted);">{{ c.ts|local_time }}</td>
+      <td>
+        <span class="dir-badge dir-{{ c.direction }}">
+          {% if c.direction == 'in' %}↓ Ein{% elif c.direction == 'out' %}↑ Aus{% else %}↔ Int{% endif %}
+        </span>
+      </td>
+      <td style="color:var(--text-muted);white-space:nowrap;">{{ c.channel or '–' }}</td>
+      <td style="white-space:nowrap;">{{ c.partner or '–' }}</td>
+      <td class="fj-msg">
+        {{ c.message }}
+        {% if c.is_request %}<span class="fj-req-badge">Auftrag</span>{% endif %}
+      </td>
+      <td>
+        {% if c.related_site_id %}
+        {% set rel_site = sites_by_id.get(c.related_site_id) %}
+        {% if rel_site %}
+        <a href="/lage/{{ lage.id }}?open_site={{ rel_site.id }}" class="fj-site-link"
+           title="{{ rel_site.bezeichnung }}">
+          {% if rel_site.priority %}
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0;
+            background:{% if rel_site.priority.value == 1 %}#ef4444{% elif rel_site.priority.value == 2 %}#f97316{% elif rel_site.priority.value == 3 %}#eab308{% else %}#6b7280{% endif %};"></span>
+          {% endif %}
+          {% if rel_site.strasse %}{{ rel_site.strasse }}{% if rel_site.hausnr %} {{ rel_site.hausnr }}{% endif %} – {% endif %}{{ rel_site.bezeichnung[:30] }}
+        </a>
+        {% else %}
+        <span class="fj-site-link">#{{ c.related_site_id }}</span>
+        {% endif %}
+        {% else %}–{% endif %}
+      </td>
+      <td style="color:var(--text-muted);font-size:.72rem;white-space:nowrap;">
+        {{ c.author_name or '–' }}
+      </td>
+      {% if can_edit %}
+      <td>
+        <form hx-post="/lage/{{ lage.id }}/funkjournal/{{ c.id }}/erledigt"
+              hx-swap="none"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+              hx-on::after-request="if(event.detail.successful){htmx.ajax('GET','/lage/{{ lage.id }}/funkjournal/rows',{target:'#fj-table-section',swap:'innerHTML'});}">
+          <button type="submit" class="btn btn--xs fj-handle-btn
+            {% if c.handled %}btn--ghost{% else %}btn--secondary{% endif %}"
+              title="{% if c.handled %}Als offen markieren{% else %}Als erledigt markieren{% endif %}">
+            {% if c.handled %}↩{% else %}✓{% endif %}
+          </button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div style="color:var(--text-muted);font-size:.88rem;padding:20px 0;text-align:center;">
+  Noch keine Einträge im Funkjournal.
+</div>
+{% endif %}

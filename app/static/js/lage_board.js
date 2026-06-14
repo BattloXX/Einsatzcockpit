@@ -81,6 +81,16 @@
           htmx.trigger(document.body, 'crossMarkerChanged');
           return;
         }
+        if (msg.type === 'site:card_changed' && msg.site_id) {
+          const card = document.querySelector(`[data-site-id="${msg.site_id}"]`);
+          if (card) {
+            htmx.ajax('GET', `/lage/${lageId}/stellen/${msg.site_id}/card`, {
+              target: card,
+              swap: 'outerHTML',
+            }).then(() => scheduleInit());
+          }
+          return;
+        }
         if (msg.reload_board || msg.type === 'site:sector_changed') location.reload();
       } catch (e) { /* noop */ }
     });

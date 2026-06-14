@@ -37,6 +37,9 @@
       {% if active_res %}
       <span>🚒 {{ active_res|length }}</span>
       {% endif %}
+      {% if site.media %}
+      <span title="{{ site.media|length }} Foto(s)">📷 {{ site.media|length }}</span>
+      {% endif %}
       {% if site.alarm_stufe %}
       <span class="badge--xs">{{ site.alarm_stufe }}</span>
       {% endif %}
@@ -65,7 +68,7 @@
     <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/prio"
           hx-swap="none"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-          hx-on::after-request="if(event.detail.successful) location.reload()"
+          hx-on::after-request="if(event.detail.successful) htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'})"
           style="flex:1;margin:0;">
       <input type="hidden" name="priority" value="{{ pv }}">
       <button type="submit"
