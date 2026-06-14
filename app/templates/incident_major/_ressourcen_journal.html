@@ -1,0 +1,44 @@
+<div style="padding: 0 16px 16px;">
+  <div class="res-section">
+    <div class="res-section__title" style="display:flex;align-items:center;gap:8px;">
+      RESSOURCEN-JOURNAL
+      <span style="font-size:.7rem;font-weight:400;color:var(--text-muted);">({{ entries|length }} Einträge)</span>
+    </div>
+    {% if entries %}
+    <table class="res-table">
+      <thead>
+        <tr>
+          <th style="width:120px;">Zeit</th>
+          <th>Vorgang</th>
+          <th style="width:130px;">Benutzer</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td style="white-space:nowrap;font-size:.72rem;color:var(--text-muted);">
+            {{ e.ts|local_time }}
+          </td>
+          <td style="font-size:.82rem;">
+            {% if e.category == 'entscheidung' %}
+            <span style="font-size:.6rem;font-weight:700;padding:1px 5px;border-radius:3px;
+                         background:rgba(167,139,250,.2);color:#a78bfa;margin-right:4px;">
+              ENTSCHEIDUNG
+            </span>
+            {% endif %}
+            {{ e.text }}
+          </td>
+          <td style="font-size:.72rem;color:var(--text-muted);">
+            {{ e.author_name or '–' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="font-size:.82rem;color:var(--text-muted);padding:10px 0;">
+      Noch keine Ressourcen-Ereignisse.
+    </div>
+    {% endif %}
+  </div>
+</div>

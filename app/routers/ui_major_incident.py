@@ -751,6 +751,8 @@ async def site_resource_assign(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
+    if vehicle_id:
+        _sync_einheit_assign(db, lage_id, site, vehicle_id, get_author_name(request), user.id)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
@@ -813,6 +815,8 @@ async def site_resource_release(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
+    if res.vehicle_id:
+        _sync_einheit_pool(db, lage_id, res.vehicle_id, get_author_name(request), user.id)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
@@ -3445,6 +3449,57 @@ async def lage_karte_sites(
     return JSONResponse([{"id": s.id, "sector_id": s.sector_id} for s in lage.sites])
 
 
+# ── Board→Kräfteübersicht Sync-Helpers ───────────────────────────────────────
+
+def _sync_einheit_assign(
+    db: Session,
+    lage_id: int,
+    site: IncidentSite,
+    vehicle_id: int,
+    author_name: str | None,
+    user_id: int | None,
+) -> None:
+    """Board-Zuweisung eines Fahrzeugs → LageEinheit synchronisieren."""
+    einheit = (
+        db.query(LageEinheit)
+        .filter(LageEinheit.lage_id == lage_id, LageEinheit.vehicle_id == vehicle_id)
+        .first()
+    )
+    if not einheit:
+        return
+    try:
+        resource_service.assign_to_site(
+            db, einheit.id, lage_id, site.id,
+            author_name=author_name, user_id=user_id,
+        )
+    except ValueError:
+        pass
+
+
+def _sync_einheit_pool(
+    db: Session,
+    lage_id: int,
+    vehicle_id: int,
+    author_name: str | None,
+    user_id: int | None,
+) -> None:
+    """Board-Freigabe eines Fahrzeugs → LageEinheit zurück in Pool."""
+    einheit = (
+        db.query(LageEinheit)
+        .filter(LageEinheit.lage_id == lage_id, LageEinheit.vehicle_id == vehicle_id)
+        .first()
+    )
+    if not einheit:
+        return
+    try:
+        resource_service.move_to_pool(
+            db, einheit.id, lage_id,
+            author_name=author_name, user_id=user_id,
+        )
+    except ValueError:
+        pass
+
+
 # ── Ressourcenübersicht ───────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/ressourcen", response_class=HTMLResponse)
@@ -3509,6 +3564,36 @@ async def lage_ressourcen(
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db),
         **_nav_counts(lage_id, lage, db),
+    })
+
+
+# ── Ressourcen-Journal ───────────────────────────────────────────────────────
+
+@router.get("/lage/{lage_id}/ressourcen/journal", response_class=HTMLResponse)
+async def lage_ressourcen_journal(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    entries = (
+        db.query(LageJournalEntry)
+        .filter(
+            LageJournalEntry.major_incident_id == lage_id,
+            LageJournalEntry.category.in_(["anweisung", "entscheidung"]),
+        )
+        .order_by(LageJournalEntry.ts.desc())
+        .limit(300)
+        .all()
+    )
+
+    return templates.TemplateResponse(request, "incident_major/_ressourcen_journal.html", {
+        "lage": lage,
+        "entries": entries,
     })
 
 

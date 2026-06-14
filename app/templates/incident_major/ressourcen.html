@@ -436,6 +436,14 @@
 </div>
 {% endif %}
 
+{# ── Ressourcen-Journal ───────────────────────────────────────────────────── #}
+<div id="res-journal-container"
+     hx-get="/lage/{{ lage.id }}/ressourcen/journal"
+     hx-trigger="load, every 30s"
+     hx-swap="innerHTML">
+  <div style="padding:14px 16px;font-size:.8rem;color:var(--text-muted);">Lade Journal…</div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
