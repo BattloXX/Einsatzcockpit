@@ -129,6 +129,29 @@
   border:1px solid var(--border); border-radius:4px; padding:2px 5px;
   max-width:130px;
 }
+
+/* ── Einheit-Hinzufügen-Button ───────────────────────────────────────────── */
+.res-add-btn {
+  margin-left:auto; display:flex; align-items:center; gap:10px;
+  padding:5px 16px 5px 5px; border-radius:30px; border:none;
+  background:rgba(99,102,241,.18); color:#a5b4fc;
+  font-size:.8rem; font-weight:700; letter-spacing:.05em;
+  cursor:pointer; transition:background .15s, transform .1s; white-space:nowrap;
+}
+.res-add-btn:hover { background:rgba(99,102,241,.3); transform:scale(1.02); }
+.res-add-btn__icon {
+  width:32px; height:32px; border-radius:50%;
+  background:#6366f1; color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.3rem; font-weight:700; line-height:1; flex-shrink:0;
+  box-shadow:0 2px 8px rgba(99,102,241,.4);
+  transition:background .15s, box-shadow .15s;
+}
+.res-add-btn--close { background:rgba(239,68,68,.15); color:#f87171; }
+.res-add-btn--close:hover { background:rgba(239,68,68,.25); transform:scale(1.02); }
+.res-add-btn--close .res-add-btn__icon {
+  background:#ef4444; box-shadow:0 2px 8px rgba(239,68,68,.4);
+}
 </style>
 {% endblock %}
 
@@ -206,14 +229,9 @@
   {% endif %}
   {% if can_edit %}
   <button @click="showAdd = !showAdd"
-          :style="showAdd ? 'background:rgba(99,102,241,.25);border-color:#818cf8;color:#a5b4fc;' : ''"
-          style="margin-left:auto;display:flex;align-items:center;gap:7px;
-                 padding:8px 18px;border-radius:8px;border:1.5px solid var(--border);
-                 background:var(--surface-elevated,#1e2130);color:var(--text);
-                 font-size:.82rem;font-weight:700;letter-spacing:.04em;cursor:pointer;
-                 transition:all .15s;white-space:nowrap;">
-    <span style="font-size:1.2rem;line-height:1;" x-text="showAdd ? '✕' : '+'">+</span>
-    EINHEIT / RESSOURCE HINZUFÜGEN
+          :class="showAdd ? 'res-add-btn res-add-btn--close' : 'res-add-btn'">
+    <span class="res-add-btn__icon" x-text="showAdd ? '✕' : '+'">+</span>
+    <span x-text="showAdd ? 'SCHLIESSEN' : 'EINHEIT HINZUFÜGEN'">EINHEIT HINZUFÜGEN</span>
   </button>
   {% endif %}
 </div>
@@ -226,7 +244,7 @@
   <div style="background:var(--surface-elevated,#1e2130);border:1.5px solid #818cf855;
               border-radius:10px;padding:14px 16px;max-width:780px;">
     <div style="font-size:.72rem;font-weight:700;color:#a5b4fc;letter-spacing:.06em;margin-bottom:12px;">
-      + EINHEIT / RESSOURCE HINZUFÜGEN
+      EINHEIT HINZUFÜGEN
     </div>
     <form method="post" action="/lage/{{ lage.id }}/einheiten">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
