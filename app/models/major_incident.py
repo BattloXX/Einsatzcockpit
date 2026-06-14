@@ -43,13 +43,16 @@ class GslStaffAssignment(Base):
     end_at:         Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     predecessor_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("gsl_staff_assignment.id", ondelete="SET NULL"), nullable=True)
+    sector_id:      Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("site_sector.id", ondelete="SET NULL"), nullable=True)
     note:           Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by:     Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     created_at:     Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     role:           Mapped[GslStaffRole] = relationship(back_populates="assignments")
-    incident:       Mapped[MajorIncident] = relationship(back_populates="gsl_staff")
+    incident:       Mapped[MajorIncident] = relationship(
+        back_populates="gsl_staff", foreign_keys="GslStaffAssignment.incident_id")
     predecessor:    Mapped[GslStaffAssignment | None] = relationship(
         foreign_keys=[predecessor_id], remote_side="GslStaffAssignment.id")
 
@@ -161,13 +164,16 @@ class MajorIncident(Base):
     created_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
                                                     onupdate=lambda: datetime.now(UTC))
+    leader_assignment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("gsl_staff_assignment.id", ondelete="SET NULL"), nullable=True)
 
     sites:          Mapped[list[IncidentSite]] = relationship(
         back_populates="major_incident", cascade="all, delete-orphan")
     sectors:        Mapped[list[Sector]] = relationship(cascade="all, delete-orphan")
     staff:          Mapped[list[StaffAssignment]] = relationship(cascade="all, delete-orphan")
     gsl_staff:      Mapped[list[GslStaffAssignment]] = relationship(
-        back_populates="incident", cascade="all, delete-orphan")
+        back_populates="incident", cascade="all, delete-orphan",
+        foreign_keys="GslStaffAssignment.incident_id")
     comms:          Mapped[list[CommLogEntry]] = relationship(cascade="all, delete-orphan")
     journal_entries: Mapped[list[LageJournalEntry]] = relationship(cascade="all, delete-orphan")
     einheiten:      Mapped[list[LageEinheit]] = relationship(cascade="all, delete-orphan")
@@ -344,7 +350,7 @@ class CitizenReport(Base):
 
 
 class LageEinheit(Base):
-    """Einheit (Fahrzeug/Gruppe) im Ressourcenpool einer Lage."""
+    """Einheit (Fahrzeug/Gruppe/extern/Material) im Ressourcenpool einer Lage."""
     __tablename__ = "lage_einheit"
 
     id:              Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -354,10 +360,58 @@ class LageEinheit(Base):
         BigInteger, ForeignKey("vehicle_master.id", ondelete="SET NULL"), nullable=True)
     label:           Mapped[str] = mapped_column(String(120))
     commander_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    # verfuegbar | eingesetzt | abgezogen
-    status:          Mapped[str] = mapped_column(String(12), default="verfuegbar")
+    # angefordert | bereitgestellt | im_einsatz | abgerueckt
+    status:          Mapped[str] = mapped_column(String(16), default="bereitgestellt")
     is_from_org:     Mapped[bool] = mapped_column(Boolean, default=False)
     added_at:        Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    # Ressourcentyp + Abschnittszuordnung (§3.1)
+    resource_type:      Mapped[str] = mapped_column(String(12), default="fahrzeug")  # fahrzeug|extern|material
+    sector_id:          Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("site_sector.id", ondelete="SET NULL"), nullable=True)
+    incident_site_id:   Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True)
+    org_name:           Mapped[str | None] = mapped_column(String(120), nullable=True)
+    bos:                Mapped[str | None] = mapped_column(String(20), nullable=True)
+    qty:                Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unit:               Mapped[str | None] = mapped_column(String(20), nullable=True)
+    requested_at:       Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    arrived_at:         Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    committed_at:       Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    released_at:        Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    leader_assignment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit_leader.id", ondelete="SET NULL"), nullable=True)
+
+    sector:  Mapped[Sector | None] = relationship(foreign_keys=[sector_id])
+    leader:  Mapped[LageEinheitLeader | None] = relationship(
+        foreign_keys=[leader_assignment_id], lazy="joined")
+
+
+class LageEinheitLeader(Base):
+    """Einheitsführer-Historie je LageEinheit (Gruppenkommandant-Ebene)."""
+    __tablename__ = "lage_einheit_leader"
+
+    id:             Mapped[int] = mapped_column(Integer, primary_key=True)
+    einheit_id:     Mapped[int] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), index=True)
+    member_id:      Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True)
+    person_name:    Mapped[str | None] = mapped_column(String(120), nullable=True)
+    start_at:       Mapped[datetime] = mapped_column(DateTime)
+    end_at:         Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    predecessor_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit_leader.id", ondelete="SET NULL"), nullable=True)
+    note:           Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by:     Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    created_at:     Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    predecessor: Mapped[LageEinheitLeader | None] = relationship(
+        foreign_keys=[predecessor_id], remote_side="LageEinheitLeader.id")
+
+    @property
+    def display_name(self) -> str:
+        return self.person_name or "–"
 
 
 # ── Lage-Journal ──────────────────────────────────────────────────────────────
