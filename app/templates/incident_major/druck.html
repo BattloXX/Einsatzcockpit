@@ -64,15 +64,22 @@
   .comm-table td { padding: 3px 6px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
 
   /* Journal */
-  .journal-row { padding: 4px 8px; margin-bottom: 3px; border-radius: 3px;
+  .journal-row { padding: 5px 8px; margin-bottom: 4px; border-radius: 3px;
                  border-left: 3px solid #ccc; page-break-inside: avoid; }
   .journal-row--entscheidung { border-left-color: #7c3aed; }
   .journal-row--anweisung    { border-left-color: #c2410c; }
   .journal-row--meldung      { border-left-color: #1d4ed8; }
   .journal-row--sonstiges    { border-left-color: #6b7280; }
+  .journal-row--lagemeldung  { border-left-color: #059669; }
   .journal-badge { font-size: 7pt; font-weight: 700; border: 1px solid #ccc;
                    padding: 0 4px; border-radius: 2px; margin-right: 4px; }
   .journal-meta  { font-size: 8pt; color: #777; margin-top: 2px; }
+  .journal-skkm  { font-size: 8pt; color: #555; margin-top: 2px; }
+  .journal-body  { font-size: 9pt; margin-top: 4px; padding: 4px 6px;
+                   background: #f9fafb; border-radius: 3px; line-height: 1.5; }
+  .journal-body p { margin: 2px 0; }
+  .journal-measure { font-size: 8.5pt; margin-top: 3px; padding: 3px 6px;
+                     background: #fffbeb; border-left: 2px solid #d97706; color: #92400e; }
 
   /* Print controls */
   .no-print { margin-bottom: 14px; }
@@ -233,11 +240,24 @@
   <div class="journal-row journal-row--{{ entry.category }}">
     <div>
       <span class="journal-badge">{{ journal_categories.get(entry.category, entry.category)|upper }}</span>
-      <span style="font-size:10pt;">{{ entry.text }}</span>
+      <span style="font-size:10pt;font-weight:600;">{{ entry.text }}</span>
     </div>
     <div class="journal-meta">
       {{ entry.ts|local_datetime }}{% if entry.author_name %} · {{ entry.author_name }}{% endif %}
     </div>
+    {% if entry.partner_from or entry.partner_to %}
+    <div class="journal-skkm">
+      {% if entry.partner_from %}Von: <strong>{{ entry.partner_from }}</strong>{% endif %}
+      {% if entry.partner_from and entry.partner_to %} &nbsp;·&nbsp; {% endif %}
+      {% if entry.partner_to %}An: <strong>{{ entry.partner_to }}</strong>{% endif %}
+    </div>
+    {% endif %}
+    {% if entry.body_html %}
+    <div class="journal-body">{{ entry.body_html | safe }}</div>
+    {% endif %}
+    {% if entry.measure %}
+    <div class="journal-measure">⚡ Veranlassung: {{ entry.measure }}</div>
+    {% endif %}
   </div>
   {% endfor %}
 </div>

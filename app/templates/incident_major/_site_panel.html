@@ -125,6 +125,81 @@
 </div>
 {% endif %}
 
+{# ── Medien ──────────────────────────────────────────────────────────────── #}
+<div style="padding:8px 14px;border-top:1px solid var(--border);">
+  <div style="font-size:.7rem;color:var(--text-muted);font-weight:600;margin-bottom:7px;">BILDER</div>
+  {% if site.media %}
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+    {% for m in site.media %}
+    <div x-data="{lbOpen:false}" style="position:relative;display:inline-block;">
+      <img src="/lage-medien/thumb/{{ m.id }}"
+           alt="{{ m.original_filename }}"
+           style="width:64px;height:64px;object-fit:cover;border-radius:4px;
+                  border:1px solid var(--border);cursor:zoom-in;"
+           @click="lbOpen=true">
+      <div x-show="lbOpen" x-cloak @keydown.escape.window="lbOpen=false"
+           style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.92);">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"
+             @click.self="lbOpen=false">
+          <img src="/lage-medien/{{ m.id }}"
+               style="max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.8);">
+        </div>
+        <button @click="lbOpen=false"
+                style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;
+                       color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:50%;
+                       width:40px;height:40px;display:flex;align-items:center;justify-content:center;">×</button>
+      </div>
+      {% if can_edit %}
+      <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/medien/{{ m.id }}/loeschen"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+            hx-confirm="Bild löschen?"
+            hx-on::after-request="if(event.detail.successful){this.closest('[x-data]').remove()}"
+            style="margin:0;position:absolute;top:1px;right:1px;">
+        <button type="submit" class="btn btn--xs btn--ghost"
+                style="background:rgba(0,0,0,.7);color:#f87171;padding:0 3px;font-size:.6rem;line-height:1.4;">✕</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if can_edit and lage.status.value == 'active' %}
+  <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/medien"
+        hx-encoding="multipart/form-data"
+        hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+        hx-swap="none"
+        hx-on::after-request="if(event.detail.successful){this.reset();var p=document.getElementById('sitePrev-{{ site.id }}');if(p)p.innerHTML='';var b=document.getElementById('siteUpBtn-{{ site.id }}');if(b)b.style.display='none';htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/panel',{target:'#site-panel-content',swap:'innerHTML'})}"
+        style="margin:0;">
+    <input type="file" name="file" id="siteFile-{{ site.id }}" accept="image/*"
+           style="display:none;" onchange="_sitePhoto(this,'{{ site.id }}')">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button type="button" class="btn btn--secondary btn--sm"
+              onclick="openCamera('siteFile-{{ site.id }}')">📷 Kamera</button>
+      <button type="button" class="btn btn--ghost btn--sm"
+              onclick="openGallery('siteFile-{{ site.id }}')">🖼️ Galerie</button>
+      <button type="submit" class="btn btn--primary btn--sm"
+              id="siteUpBtn-{{ site.id }}" style="display:none;">Hochladen</button>
+    </div>
+    <div id="sitePrev-{{ site.id }}" style="margin-top:4px;"></div>
+  </form>
+  <script>
+  function _sitePhoto(input, sid) {
+    var btn = document.getElementById('siteUpBtn-' + sid);
+    var prev = document.getElementById('sitePrev-' + sid);
+    if (btn) btn.style.display = input.files.length ? '' : 'none';
+    if (prev) prev.innerHTML = '';
+    if (input.files[0] && prev) {
+      var r = new FileReader();
+      r.onload = function(e) {
+        prev.innerHTML = '<img src="' + e.target.result + '" style="max-height:60px;border-radius:4px;">';
+      };
+      r.readAsDataURL(input.files[0]);
+    }
+  }
+  </script>
+  {% endif %}
+</div>
+
 {# ── Footer-Link ─────────────────────────────────────────────────────────── #}
 <div style="padding:8px 14px;border-top:1px solid var(--border);">
   <a href="/lage/{{ lage.id }}" style="font-size:.75rem;color:#93c5fd;text-decoration:none;">

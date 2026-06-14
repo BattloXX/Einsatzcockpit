@@ -270,7 +270,12 @@
     </div>
     {% endif %}
 
-    {# Journal-Liste #}
+    {# Journal-Liste Header mit Drucken-Button #}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:.72rem;color:var(--text-muted);">Einträge</div>
+      <a href="/lage/{{ lage.id }}/druck#journal" target="_blank"
+         class="btn btn--xs btn--ghost" title="Ganzes Journal drucken">🖨 Journal drucken</a>
+    </div>
     <div id="journal-list">
       {% include "incident_major/_stab_einsatzjournal.html" %}
     </div>
@@ -500,6 +505,12 @@ window.openJournalDetail = function(entryId) {
   htmx.ajax('GET', '/lage/{{ lage.id }}/journal/' + entryId + '/detail', {
     target: '#journalDetailContent', swap: 'innerHTML'
   });
+};
+
+// Einzelnen Journal-Eintrag drucken
+window.printJournalEntry = function(entryId) {
+  var win = window.open('/lage/{{ lage.id }}/journal/' + entryId + '/druck', '_blank', 'width=700,height=600');
+  if (win) win.focus();
 };
 
 // WS: staff:changed → Banner + Tafel neu laden

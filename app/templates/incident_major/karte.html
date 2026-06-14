@@ -88,6 +88,29 @@
   border: 2px solid rgba(255,255,255,.2);
 }
 
+/* Mobile: bottom shelf replaces overlapping fixed elements */
+@media (max-width: 640px) {
+  .karte-badge { bottom: 60px; right: 8px; font-size: .72rem; padding: 5px 9px; }
+  .karte-legend { bottom: 60px; font-size: .68rem; padding: 5px 9px; }
+  .veh-legend { bottom: 60px; left: 8px; }
+  .karte-bottom-shelf {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 1002;
+    background: rgba(17,24,39,.95); border-top: 1px solid var(--border);
+    backdrop-filter: blur(4px);
+  }
+  .karte-bottom-shelf__toggle {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 8px 16px; cursor: pointer; font-size: .75rem; color: var(--text-muted);
+    user-select: none;
+  }
+  .karte-bottom-shelf__toggle .arrow { transition: transform .2s; }
+  .karte-bottom-shelf__toggle .arrow.open { transform: rotate(180deg); }
+  .karte-bottom-shelf__body { padding: 8px 14px 10px; display: flex; gap: 10px; flex-wrap: wrap; }
+}
+@media (min-width: 641px) {
+  .karte-bottom-shelf { display: none; }
+}
+
 /* Leaflet popup custom style */
 .lk-popup { min-width: 180px; }
 .lk-popup__title { font-weight: 700; font-size: .9rem; margin-bottom: 4px; }
@@ -145,7 +168,7 @@
 
 /* Fahrzeug-Legende */
 .veh-legend {
-  position: fixed; bottom: 16px; right: 16px; z-index: 1001;
+  position: fixed; bottom: 16px; left: 16px; z-index: 1001;
   background: rgba(17,24,39,.88); border: 1px solid var(--border);
   border-radius: 8px; padding: 8px 12px; font-size: .72rem;
   backdrop-filter: blur(4px); cursor: pointer;
@@ -256,6 +279,11 @@
       📍 Neuer Einsatz
     </button>
     {% endif %}
+    <div class="karte-controls__sep"></div>
+    <button class="karte-mode-btn" id="btn-geolocate" onclick="toggleGeolocation()"
+            title="Eigenen Standort anzeigen">
+      📍 Standort
+    </button>
   </div>
 </div>
 
@@ -263,6 +291,23 @@
 
 {# Sector legend – initially hidden, shown when sector mode is active #}
 <div class="karte-legend" id="karte-legend" style="display:none;"></div>
+
+{# Mobile bottom shelf (replaces overlapping fixed widgets on small screens) #}
+<div class="karte-bottom-shelf" x-data="{open: false}" id="karte-bottom-shelf">
+  <div class="karte-bottom-shelf__toggle" @click="open=!open">
+    <span style="font-size:.65rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;">Karten-Info</span>
+    <span class="arrow" :class="open ? 'open' : ''">▲</span>
+  </div>
+  <div class="karte-bottom-shelf__body" x-show="open" x-cloak>
+    <div style="font-size:.72rem;color:var(--text-muted);" id="shelf-badge">Lade…</div>
+    <div style="font-size:.7rem;color:var(--text-muted);display:flex;gap:8px;flex-wrap:wrap;" id="shelf-veh-legend">
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 4px #22c55e;"></span> GPS live</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6b7280;"></span> GPS veraltet</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f97316;"></span> Manuell</span>
+    </div>
+    <div style="font-size:.7rem;" id="shelf-sector-legend"></div>
+  </div>
+</div>
 
 {% set no_coords = all_sites | selectattr('lat', 'none') | list %}
 {% if no_coords %}
@@ -399,6 +444,7 @@
   var colorMode = localStorage.getItem(_lsColorKey) || 'priority';  // 'priority' | 'sector'
 
   var map = L.map('karte-map', { preferCanvas: true, zoomControl: true });
+  window._karteMap = map;  // expose for geolocation
   // subdomains: 'abc' PFLICHT — ohne Option → Leaflet nutzt keinen Subdomain-Ersatz → HTTP 503
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap', subdomains: 'abc', maxZoom: 19,
@@ -420,21 +466,34 @@
     return s.color;  // priority-based from server
   }
 
+  function _siteAddrLine(s) {
+    var parts = [];
+    if (s.strasse) parts.push(s.strasse + (s.hausnr ? ' ' + s.hausnr : ''));
+    if (s.ort) parts.push(s.ort);
+    return parts.join(', ');
+  }
+
   function buildPopup(s) {
     var resText = s.active_res > 0 ? s.active_res + ' Ressource(n) aktiv' : 'Keine Ressourcen';
     var secLine = '';
     if (s.sector_id != null && sectorMap[s.sector_id]) {
       secLine = '<div class="lk-popup__sector">Abschnitt: ' + sectorMap[s.sector_id].name + '</div>';
     }
+    var addr = _siteAddrLine(s);
     var links = '<a class="lk-popup__link" href="/lage/' + lageId + '?open_site=' + s.id + '" target="_blank">→ Board</a>';
     if (s.incident_id) {
       links += '&nbsp;<a class="lk-popup__link" href="/einsatz/' + s.incident_id + '/karte" target="_blank">→ Einsatzkarte</a>';
     }
+    // Only show einsatzgrund if it differs from bezeichnung (site-pin sets both to same value)
+    var grundLine = (s.einsatzgrund && s.einsatzgrund !== s.bezeichnung)
+      ? '<div style="font-size:.78rem;margin-bottom:4px;">' + s.einsatzgrund + '</div>'
+      : '';
     return '<div class="lk-popup">' +
       '<div class="lk-popup__title">' + s.bezeichnung + '</div>' +
       '<div class="lk-popup__phase">' + s.phase_label +
         (s.priority_label ? ' · ' + s.priority_label : '') + '</div>' +
-      (s.einsatzgrund ? '<div style="font-size:.78rem;margin-bottom:4px;">' + s.einsatzgrund + '</div>' : '') +
+      grundLine +
+      (addr ? '<div style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">📍 ' + addr + '</div>' : '') +
       secLine +
       '<div class="lk-popup__res">' + resText + '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + links + '</div>' +
@@ -453,9 +512,14 @@
 
   function buildSiteTooltip(s) {
     var sec = s.sector_id != null ? sectorMap[s.sector_id] : null;
+    var addr = _siteAddrLine(s);
     var lines = ['<strong>' + s.bezeichnung + '</strong>',
       s.phase_label + (s.priority_label ? ' · ' + s.priority_label : '')];
-    if (s.einsatzgrund) lines.push(s.einsatzgrund.length > 60 ? s.einsatzgrund.slice(0, 57) + '…' : s.einsatzgrund);
+    // Only show einsatzgrund if different from bezeichnung to avoid duplication
+    if (s.einsatzgrund && s.einsatzgrund !== s.bezeichnung) {
+      lines.push(s.einsatzgrund.length > 60 ? s.einsatzgrund.slice(0, 57) + '…' : s.einsatzgrund);
+    }
+    if (addr) lines.push('📍 ' + (addr.length > 50 ? addr.slice(0, 47) + '…' : addr));
     if (sec) lines.push('Abschnitt: ' + sec.name);
     if (s.active_res > 0) lines.push(s.active_res + ' Ressource(n) aktiv');
     return lines.join('<br>');
@@ -1085,10 +1149,64 @@
     var badge = visible + ' / ' + SITES.length + ' Stellen';
     if (repVis > 0) badge += ' · ' + repVis + ' Meldung' + (repVis !== 1 ? 'en' : '');
     document.getElementById('karte-badge').textContent = badge;
+    var shelf = document.getElementById('shelf-badge');
+    if (shelf) shelf.textContent = badge;
   };
   // Initial
   renderMarkers();
 
+})();
+
+// ── Geolocation / eigener Standort ──────────────────────────────────────────
+(function() {
+  var geoWatchId = null;
+  var ownMarker = null;
+  var ownCircle = null;
+  var geoActive = false;
+
+  window.toggleGeolocation = function() {
+    if (!navigator.geolocation) {
+      alert('Geolocation wird von diesem Browser nicht unterstützt.');
+      return;
+    }
+    var btn = document.getElementById('btn-geolocate');
+    if (geoActive) {
+      if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+      if (ownMarker) { ownMarker.remove(); ownMarker = null; }
+      if (ownCircle) { ownCircle.remove(); ownCircle = null; }
+      geoActive = false;
+      if (btn) btn.classList.remove('active');
+    } else {
+      geoActive = true;
+      if (btn) btn.classList.add('active');
+      var lmap = window._karteMap;
+      if (!lmap) return;
+      geoWatchId = navigator.geolocation.watchPosition(function(pos) {
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        var acc = pos.coords.accuracy;
+        if (!ownMarker) {
+          ownCircle = L.circle([lat, lng], {
+            radius: acc, color: '#3b82f6', fillColor: '#3b82f6',
+            fillOpacity: 0.1, weight: 1.5,
+          }).addTo(lmap);
+          ownMarker = L.circleMarker([lat, lng], {
+            radius: 8, color: '#fff', fillColor: '#3b82f6',
+            fillOpacity: 1, weight: 2,
+          }).addTo(lmap).bindTooltip('Mein Standort', { permanent: false });
+          lmap.setView([lat, lng], Math.max(lmap.getZoom(), 15));
+        } else {
+          ownMarker.setLatLng([lat, lng]);
+          ownCircle.setLatLng([lat, lng]).setRadius(acc);
+        }
+      }, function(err) {
+        if (btn) btn.classList.remove('active');
+        geoActive = false;
+        geoWatchId = null;
+        alert('Standort konnte nicht ermittelt werden: ' + err.message);
+      }, { enableHighAccuracy: true, maximumAge: 5000 });
+    }
+  };
 })();
 </script>
 {% endblock %}

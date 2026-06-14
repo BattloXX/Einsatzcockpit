@@ -948,6 +948,34 @@ async def site_media_upload(
     return Response(status_code=204)
 
 
+@router.post("/lage/{lage_id}/stellen/{site_id}/medien/{media_id}/loeschen")
+async def site_media_delete(
+    request: Request,
+    lage_id: int,
+    site_id: int,
+    media_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    from app.models.major_incident import SiteMedia as _SiteMedia
+    from app.services.lage_media_service import site_media_path, site_thumb_path
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    media = db.get(_SiteMedia, media_id)
+    if not media or media.incident_site_id != site_id:
+        raise HTTPException(status_code=404)
+    for p in (site_media_path(media), site_thumb_path(media)):
+        if p and p.exists():
+            p.unlink(missing_ok=True)
+    db.delete(media)
+    db.commit()
+    return Response(status_code=204)
+
+
 # ── Foto ausliefern ──────────────────────────────────────────────────────────
 
 @router.get("/lage-medien/{media_id}")
@@ -1414,6 +1442,28 @@ async def lage_journal_entry_detail(
         "lage": lage,
         "entry": entry,
         "journal_categories": JOURNAL_CATEGORIES,
+    })
+
+
+@router.get("/lage/{lage_id}/journal/{entry_id}/druck", response_class=HTMLResponse)
+async def lage_journal_entry_druck(
+    request: Request,
+    lage_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    entry = db.get(LageJournalEntry, entry_id)
+    if not entry or entry.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, "incident_major/_journal_entry_druck.html", {
+        "lage": lage,
+        "entry": entry,
+        "journal_categories": JOURNAL_CATEGORIES,
+        "now": datetime.now(UTC),
     })
 
 
@@ -3087,6 +3137,9 @@ async def lage_karte(
         "active_res": sum(1 for r in s.resources if not r.released_at),
         "sector_id": s.sector_id,
         "incident_id": s.incident_id,
+        "strasse": s.strasse or "",
+        "hausnr": s.hausnr or "",
+        "ort": s.ort or "",
     } for s in active_sites if s.lat and s.lng])
 
     sectors = sorted(lage.sectors, key=lambda s: s.id)

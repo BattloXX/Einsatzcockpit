@@ -57,6 +57,9 @@
   <button type="button" onclick="openJournalDetail({{ entry.id }})"
           class="btn btn--xs btn--ghost" title="Öffnen"
           style="flex-shrink:0;opacity:.6;padding:1px 5px;font-size:.65rem;">↗</button>
+  <button type="button" onclick="printJournalEntry({{ entry.id }})"
+          class="btn btn--xs btn--ghost" title="Drucken"
+          style="flex-shrink:0;opacity:.5;padding:1px 5px;font-size:.65rem;">🖨</button>
   {% if can_edit %}
   <form hx-post="/lage/{{ lage.id }}/journal/{{ entry.id }}/loeschen"
         hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'

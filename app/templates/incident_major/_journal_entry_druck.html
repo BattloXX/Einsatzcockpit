@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ lage.name }} – Journaleintrag</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11pt; color: #111;
+         background: #fff; padding: 20px; max-width: 720px; }
+  h1 { font-size: 13pt; margin-bottom: 2px; }
+  .header { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 14px; }
+  .header__meta { font-size: 9pt; color: #555; margin-top: 3px; }
+  .badge { font-size: 8pt; font-weight: 700; border: 1px solid #ccc;
+           padding: 1px 6px; border-radius: 3px; display: inline-block; margin-bottom: 6px; }
+  .subject { font-size: 12pt; font-weight: 700; margin-bottom: 6px; line-height: 1.35; }
+  .meta { font-size: 8.5pt; color: #666; margin-bottom: 10px; }
+  .skkm { font-size: 9pt; color: #444; margin-bottom: 8px; }
+  .body { font-size: 10pt; line-height: 1.6; padding: 8px 10px;
+          background: #f9fafb; border-radius: 4px; margin-bottom: 10px; }
+  .body p { margin: 3px 0; }
+  .measure { font-size: 9.5pt; padding: 5px 10px; background: #fffbeb;
+             border-left: 3px solid #d97706; color: #92400e; margin-bottom: 10px; }
+  .media-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .media-grid img { width: 120px; height: 120px; object-fit: cover;
+                    border-radius: 4px; border: 1px solid #ddd; }
+  .no-print { margin-bottom: 16px; }
+  .btn-print { padding: 7px 18px; background: #111; color: #fff; border: none;
+               border-radius: 5px; cursor: pointer; font-size: 10pt; margin-right: 8px; }
+  .print-footer { margin-top: 20px; font-size: 8pt; color: #999;
+                  text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
+  @media print {
+    .no-print { display: none !important; }
+    body { padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨 Drucken / PDF</button>
+  <a href="javascript:window.close()" style="font-size:10pt;color:#3b82f6;">✕ Schließen</a>
+</div>
+
+<div class="header">
+  <h1>{{ lage.name }} – Journaleintrag</h1>
+  <div class="header__meta">Stand: {{ now|local_datetime }}</div>
+</div>
+
+<div class="badge">{{ journal_categories.get(entry.category, entry.category)|upper }}</div>
+<div class="subject">{{ entry.text }}</div>
+<div class="meta">
+  {{ entry.ts|local_datetime }}{% if entry.author_name %} · {{ entry.author_name }}{% endif %}
+</div>
+
+{% if entry.partner_from or entry.partner_to %}
+<div class="skkm">
+  {% if entry.partner_from %}<strong>Von:</strong> {{ entry.partner_from }}{% endif %}
+  {% if entry.partner_from and entry.partner_to %} &nbsp;·&nbsp; {% endif %}
+  {% if entry.partner_to %}<strong>An:</strong> {{ entry.partner_to }}{% endif %}
+</div>
+{% endif %}
+
+{% if entry.body_html %}
+<div class="body">{{ entry.body_html | safe }}</div>
+{% endif %}
+
+{% if entry.measure %}
+<div class="measure">⚡ <strong>Veranlassung:</strong> {{ entry.measure }}</div>
+{% endif %}
+
+{% if entry.media %}
+<div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#555;margin-top:10px;margin-bottom:6px;">Bilder</div>
+<div class="media-grid">
+  {% for m in entry.media %}
+  <img src="/lage/{{ lage.id }}/journal/{{ entry.id }}/medien/{{ m.id }}/bild" alt="{{ m.original_filename }}">
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="print-footer">
+  {{ lage.name }} · {{ entry.ts|local_datetime }} · Einsatzleiter-Hilfswerkzeug
+</div>
+</body>
+</html>
