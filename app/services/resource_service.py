@@ -53,11 +53,14 @@ RESOURCE_TYPE_LABEL = {
 
 # ── Hilfsfunktionen ───────────────────────────────────────────────────────────
 
+RESSOURCE_CATEGORIES = {"ressource", "ressource_fhr"}
+
+
 def _journal(
     db: Session,
     lage_id: int,
     text: str,
-    category: str = "anweisung",
+    category: str = "ressource",
     author_name: str | None = None,
     user_id: int | None = None,
 ) -> None:
@@ -124,7 +127,7 @@ def add_resource(
 
     _journal(db, lage_id,
              f"Ressource hinzugefügt: {label} [{RESOURCE_TYPE_LABEL.get(resource_type, resource_type)}]",
-             category="anweisung", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id)
     return e
 
 
@@ -154,7 +157,7 @@ def assign_to_sector(
 
     _journal(db, lage_id,
              f'{e.label} -> Abschnitt "{sector.name}" zugeordnet',
-             category="anweisung", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id)
     return e
 
 
@@ -183,7 +186,7 @@ def assign_to_site(
 
     _journal(db, lage_id,
              f'{e.label} -> Einsatzstelle "{site.bezeichnung}" zugeordnet',
-             category="anweisung", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id)
     return e
 
 
@@ -205,7 +208,7 @@ def move_to_pool(
     _journal(db, lage_id,
              f"{e.label} → Pool/Reserve zurückgeführt"
              + (f" (war Abschnitt {prev_sector})" if prev_sector else ""),
-             category="anweisung", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id)
     return e
 
 
@@ -241,7 +244,7 @@ def set_status(
     _journal(db, lage_id,
              f"{e.label}: Status {STATUS_LABEL.get(old_status, old_status)}"
              f" → {STATUS_LABEL.get(status, status)}",
-             category="anweisung", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id)
     return e
 
 
@@ -288,7 +291,7 @@ def rotate_einheit_leadership(
 
     _journal(db, lage_id,
              f"{e.label}: Einheitsführer → {new_leader.display_name}",
-             category="entscheidung", author_name=author_name, user_id=created_by)
+             category="ressource_fhr", author_name=author_name, user_id=created_by)
     return new_leader
 
 
@@ -370,7 +373,7 @@ def rotate_gsl_leadership(
     target = "Einsatzleiter" if role_code == "EL" else f"Abschnittsleiter Abschnitt {sector_id}"
     _journal(db, lage.id,
              f"{target} → {person_name or str(member_id)}",
-             category="entscheidung", author_name=author_name, user_id=created_by)
+             category="ressource_fhr", author_name=author_name, user_id=created_by)
     return new_asgn
 
 

@@ -1432,7 +1432,10 @@ async def lage_stab(
 
     journal_entries = (
         db.query(LageJournalEntry)
-        .filter(LageJournalEntry.major_incident_id == lage_id)
+        .filter(
+            LageJournalEntry.major_incident_id == lage_id,
+            LageJournalEntry.category.notin_(resource_service.RESSOURCE_CATEGORIES),
+        )
         .options(selectinload(LageJournalEntry.media))
         .order_by(LageJournalEntry.ts.desc())
         .all()
@@ -2876,7 +2879,10 @@ async def lage_druck(
 
     journal_entries = (
         db.query(LageJournalEntry)
-        .filter(LageJournalEntry.major_incident_id == lage_id)
+        .filter(
+            LageJournalEntry.major_incident_id == lage_id,
+            LageJournalEntry.category.notin_(resource_service.RESSOURCE_CATEGORIES),
+        )
         .options(selectinload(LageJournalEntry.media))
         .order_by(LageJournalEntry.ts)
         .all()
@@ -3584,7 +3590,7 @@ async def lage_ressourcen_journal(
         db.query(LageJournalEntry)
         .filter(
             LageJournalEntry.major_incident_id == lage_id,
-            LageJournalEntry.category.in_(["anweisung", "entscheidung"]),
+            LageJournalEntry.category.in_(resource_service.RESSOURCE_CATEGORIES),
         )
         .order_by(LageJournalEntry.ts.desc())
         .limit(300)
