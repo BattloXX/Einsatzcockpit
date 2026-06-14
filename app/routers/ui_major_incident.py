@@ -32,6 +32,7 @@ from app.models.major_incident import (
     CommLogEntry,
     IncidentSite,
     LageEinheit,
+    LageEinheitLeader,
     LageJournalEntry,
     LageJournalMedia,
     MajorIncident,
@@ -45,6 +46,7 @@ from app.models.major_incident import (
     StaffFunction,
 )
 from app.models.master import FireDept, Member, VehicleMaster
+from app.services import resource_service
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
 from app.services.major_incident_service import (
@@ -3213,37 +3215,14 @@ async def lage_ressourcen(
                 vehicle_id=v.id,
                 label=v.display_label,
                 is_from_org=True,
+                resource_type="fahrzeug",
+                status=resource_service.STATUS_BEREITGESTELLT,
             ))
         if org_vehicles:
             db.commit()
             db.refresh(lage)
 
-    einheiten = sorted(lage.einheiten, key=lambda e: (
-        0 if e.status == "verfuegbar" else 1 if e.status == "eingesetzt" else 2,
-        e.label,
-    ))
-
-    active_sites = [s for s in lage.sites if s.phase != SitePhase.abgebrochen]
-
-    all_res = [
-        (r, site)
-        for site in active_sites
-        for r in site.resources
-        if not r.released_at
-    ]
-    all_res.sort(key=lambda x: (0 if x[0].committed_at else 1, x[0].label or x[0].resource_type or ""))
-
-    vid_list = [r.vehicle_id for r, _ in all_res if r.vehicle_id]
-    conflict_vids = {vid for vid in vid_list if vid_list.count(vid) > 1}
-
-    released = sorted(
-        [(r, site) for site in lage.sites for r in site.resources if r.released_at],
-        key=lambda x: x[0].released_at,
-        reverse=True,
-    )[:30]
-
-    total_alarmed = sum(1 for r, _ in all_res if not r.committed_at)
-    total_committed = sum(1 for r, _ in all_res if r.committed_at)
+    kue = resource_service.kraefteuebersicht(db, lage)
 
     extra_vehicles = (
         db.query(VehicleMaster)
@@ -3259,17 +3238,16 @@ async def lage_ressourcen(
         .all()
     )
 
+    sectors = sorted(lage.sectors, key=lambda s: s.sort_order)
+
     return templates.TemplateResponse(request, "incident_major/ressourcen.html", {
         "user": user,
         "lage": lage,
-        "einheiten": einheiten,
+        "kue": kue,
+        "sectors": sectors,
         "extra_vehicles": extra_vehicles,
         "org_members": org_members,
-        "all_res": all_res,
-        "conflict_vids": conflict_vids,
-        "released": released,
-        "total_alarmed": total_alarmed,
-        "total_committed": total_committed,
+        "resource_service": resource_service,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db),
@@ -3283,8 +3261,13 @@ async def lage_ressourcen(
 async def lage_einheit_create(
     request: Request,
     lage_id: int,
-    label: str = Form(...),
+    label: str = Form(""),
     vehicle_id: int | None = Form(None),
+    resource_type: str = Form("fahrzeug"),
+    org_name: str = Form(""),
+    bos: str = Form(""),
+    qty: int | None = Form(None),
+    unit: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -3300,12 +3283,17 @@ async def lage_einheit_create(
     if not actual_label:
         raise HTTPException(status_code=400, detail="Bezeichnung fehlt")
 
-    db.add(LageEinheit(
-        lage_id=lage_id,
+    resource_service.add_resource(
+        db, lage_id, actual_label,
+        resource_type=resource_type,
         vehicle_id=vehicle_id,
-        label=actual_label,
-        is_from_org=False,
-    ))
+        org_name=org_name.strip() or None,
+        bos=bos.strip() or None,
+        qty=qty,
+        unit=unit.strip() or None,
+        author_name=get_author_name(user),
+        user_id=user.id,
+    )
     db.commit()
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 
@@ -3323,11 +3311,19 @@ async def lage_einheit_kommandant(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
-    einheit = db.get(LageEinheit, einheit_id)
-    if not einheit or einheit.lage_id != lage_id:
-        raise HTTPException(status_code=404)
-
-    einheit.commander_label = commander_label.strip() or None
+    name = commander_label.strip()
+    if name:
+        resource_service.rotate_einheit_leadership(
+            db, einheit_id, lage_id,
+            person_name=name,
+            created_by=user.id,
+            author_name=get_author_name(user),
+        )
+    else:
+        einheit = db.get(LageEinheit, einheit_id)
+        if not einheit or einheit.lage_id != lage_id:
+            raise HTTPException(status_code=404)
+        einheit.commander_label = None
     db.commit()
     return Response(status_code=204)
 
@@ -3345,14 +3341,91 @@ async def lage_einheit_status(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
-    einheit = db.get(LageEinheit, einheit_id)
-    if not einheit or einheit.lage_id != lage_id:
-        raise HTTPException(status_code=404)
-
-    if status not in ("verfuegbar", "eingesetzt", "abgezogen"):
+    try:
+        resource_service.set_status(
+            db, einheit_id, lage_id, status,
+            author_name=get_author_name(user),
+            user_id=user.id,
+        )
+    except ValueError:
         raise HTTPException(status_code=400)
+    db.commit()
+    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 
-    einheit.status = status
+
+@router.post("/lage/{lage_id}/einheiten/{einheit_id}/sektor")
+async def lage_einheit_sektor(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    sector_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    try:
+        if sector_id:
+            resource_service.assign_to_sector(
+                db, einheit_id, lage_id, sector_id,
+                author_name=get_author_name(user), user_id=user.id,
+            )
+        else:
+            resource_service.move_to_pool(
+                db, einheit_id, lage_id,
+                author_name=get_author_name(user), user_id=user.id,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    db.commit()
+    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
+
+
+@router.post("/lage/{lage_id}/einheiten/{einheit_id}/pool")
+async def lage_einheit_pool(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    resource_service.move_to_pool(
+        db, einheit_id, lage_id,
+        author_name=get_author_name(user), user_id=user.id,
+    )
+    db.commit()
+    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
+
+
+@router.post("/lage/{lage_id}/einheiten/{einheit_id}/fuehrer")
+async def lage_einheit_fuehrer(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    person_name: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    name = person_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name erforderlich")
+
+    resource_service.rotate_einheit_leadership(
+        db, einheit_id, lage_id,
+        person_name=name,
+        created_by=user.id,
+        author_name=get_author_name(user),
+    )
     db.commit()
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 

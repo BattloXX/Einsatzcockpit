@@ -1,20 +1,20 @@
 {% extends "base.html" %}
-{% block title %}{{ lage.name }} – Ressourcen{% endblock %}
+{% block title %}{{ lage.name }} – Kräfteübersicht{% endblock %}
 
 {% block head_extra %}
 <style>
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.res-topbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface); margin-bottom: 0;
+}
+.res-topbar__title { font-weight: 700; font-size: 1.05rem; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lage-status { font-size:.75rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
 .lage-status--active  { background:rgba(34,197,94,.15); color:#4ade80; }
 .lage-status--closed  { background:rgba(107,114,128,.2); color:#9ca3af; }
 .lage-status--standby { background:rgba(245,158,11,.15); color:#fbbf24; }
-
-.res-topbar {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 8px 14px; border-bottom: 1px solid var(--border);
-  background: var(--surface); margin-bottom: 14px;
-}
-.res-topbar__title { font-weight: 700; font-size: 1.05rem; flex: 1; min-width: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lage-subnav { display: flex; gap: 4px; }
 .lage-subnav a { font-size: .78rem; padding: 3px 9px; border-radius: 4px;
   color: var(--text-muted); text-decoration: none; }
@@ -22,64 +22,113 @@
 .lage-subnav a.active { background: rgba(255,255,255,.1); color: var(--text); font-weight: 600; }
 @media (max-width: 900px) { .lage-subnav { display: none; } }
 
-.res-wrap { padding: 14px 16px; max-width: 1100px; margin: 0 auto; }
-
-.res-stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-.res-stat {
-  flex: 1; min-width: 100px; padding: 10px 14px;
-  background: var(--surface-elevated, #1e2130);
-  border: 1px solid var(--border); border-radius: 8px;
+/* ── Stats-Leiste ────────────────────────────────────────────────────────── */
+.res-stats {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  padding: 10px 16px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
-.res-stat__val { font-size: 1.6rem; font-weight: 700; line-height: 1; }
-.res-stat__lbl { font-size: .72rem; color: var(--text-muted); margin-top: 4px; }
+.res-stat {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 6px 14px; border-radius: 8px; min-width: 70px;
+  background: var(--surface-elevated, #1e2130); border: 1px solid var(--border);
+}
+.res-stat__val { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+.res-stat__lbl { font-size: .68rem; color: var(--text-muted); margin-top: 2px; }
+.res-stat--reserve { border-color: #fbbf24; }
+.res-stat--reserve .res-stat__val { color: #fbbf24; }
 
+/* ── Board ───────────────────────────────────────────────────────────────── */
+.res-board {
+  display: flex; gap: 12px; padding: 14px 16px; overflow-x: auto;
+  align-items: flex-start; min-height: calc(100vh - 190px);
+}
+.res-col {
+  flex: 0 0 280px; min-width: 260px;
+  background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border); border-radius: 10px;
+  display: flex; flex-direction: column;
+}
+.res-col--pool {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 1px rgba(251,191,36,.2);
+}
+.res-col__head {
+  padding: 10px 12px 8px; border-bottom: 1px solid var(--border);
+  font-size: .78rem; font-weight: 700; letter-spacing: .04em;
+  display: flex; align-items: center; gap: 6px;
+}
+.res-col--pool .res-col__head { color: #fbbf24; }
+.res-col__leader {
+  padding: 4px 12px 6px; border-bottom: 1px solid rgba(255,255,255,.05);
+  font-size: .72rem; color: var(--text-muted);
+}
+.res-col__leader strong { color: var(--text); }
+.res-col__body { padding: 8px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.res-col__count {
+  margin-left: auto; background: rgba(255,255,255,.1);
+  color: var(--text-muted); border-radius: 10px;
+  padding: 1px 7px; font-size: .7rem; font-weight: 700;
+}
+.res-col--pool .res-col__count { background: rgba(251,191,36,.2); color: #fbbf24; }
+
+/* ── Einheiten-Karte ─────────────────────────────────────────────────────── */
+.einh-card {
+  background: var(--surface, #151823);
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 8px 10px;
+}
+.einh-card--conflict { border-color: #f87171; }
+.einh-card__top { display: flex; align-items: center; gap: 6px; }
+.einh-card__label { font-weight: 600; font-size: .84rem; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.einh-card__type {
+  font-size: .6rem; font-weight: 700; letter-spacing: .05em;
+  padding: 1px 5px; border-radius: 3px;
+  background: rgba(255,255,255,.08); color: var(--text-muted);
+}
+.einh-card__commander {
+  font-size: .75rem; color: var(--text-muted); margin-top: 3px;
+  display: flex; align-items: center; gap: 4px;
+}
+.einh-card__since { font-size: .65rem; color: var(--text-muted); margin-left: auto; }
+.einh-card__actions {
+  display: flex; gap: 3px; margin-top: 6px; flex-wrap: wrap; align-items: center;
+}
+
+/* ── Status-Badges ───────────────────────────────────────────────────────── */
+.estatus {
+  display: inline-block; font-size: .62rem; font-weight: 700;
+  padding: 2px 6px; border-radius: 3px; white-space: nowrap;
+}
+.estatus--angefordert    { background: rgba(147,197,253,.2); color: #93c5fd; }
+.estatus--bereitgestellt { background: rgba(74,222,128,.15); color: #4ade80; }
+.estatus--im_einsatz     { background: rgba(251,191,36,.2);  color: #fbbf24; }
+.estatus--abgerueckt     { background: rgba(107,114,128,.2); color: #9ca3af; }
+
+/* ── Abgerückt + Hinzufügen ──────────────────────────────────────────────── */
+.res-abgerueckt, .res-add { padding: 14px 16px 0; max-width: 900px; }
 .res-section {
   background: var(--surface-elevated, #1e2130);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 12px 14px; margin-bottom: 14px;
+  padding: 10px 12px; margin-bottom: 12px;
 }
-.res-section__title {
-  font-size: .78rem; font-weight: 600; color: var(--text-muted);
-  margin-bottom: 10px; letter-spacing: .04em;
+.res-section__title { font-size:.72rem; font-weight:700; color:var(--text-muted);
+  margin-bottom:8px; letter-spacing:.04em; }
+.res-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+.res-table th { text-align:left; padding:4px 8px; font-size:.68rem; font-weight:600;
+  color:var(--text-muted); border-bottom:1px solid var(--border); }
+.res-table td { padding:5px 8px; border-bottom:1px solid rgba(255,255,255,.04); }
+
+.res-add-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+@media(max-width:600px) { .res-add-grid { grid-template-columns:1fr; } }
+.res-add-grid .span2 { grid-column: span 2; }
+
+.sektor-select {
+  font-size:.75rem; background:var(--surface); color:var(--text);
+  border:1px solid var(--border); border-radius:4px; padding:2px 5px;
+  max-width:130px;
 }
-
-.res-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-.res-table th {
-  text-align: left; padding: 5px 8px;
-  font-size: .72rem; font-weight: 600; color: var(--text-muted);
-  border-bottom: 1px solid var(--border); white-space: nowrap;
-}
-.res-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
-.res-table tr:hover td { background: rgba(255,255,255,.02); }
-
-.res-status {
-  display: inline-block; font-size: .65rem; font-weight: 700;
-  padding: 2px 7px; border-radius: 3px; white-space: nowrap;
-}
-.res-status--vor-ort    { background: rgba(74,222,128,.2);  color: #4ade80; }
-.res-status--alarmiert  { background: rgba(251,191,36,.2);  color: #fbbf24; }
-.res-status--released   { background: rgba(107,114,128,.2); color: #9ca3af; }
-.res-status--verfuegbar { background: rgba(74,222,128,.15); color: #4ade80; }
-.res-status--eingesetzt { background: rgba(251,191,36,.15); color: #fbbf24; }
-.res-status--abgezogen  { background: rgba(107,114,128,.2); color: #9ca3af; }
-
-.res-conflict { color: #f87171; font-size: .7rem; font-weight: 700; margin-left: 4px; }
-
-.res-site-link { color: #93c5fd; font-size: .78rem; text-decoration: none; }
-.res-site-link:hover { text-decoration: underline; }
-
-.res-empty { font-size: .85rem; color: var(--text-muted); padding: 16px 0; text-align: center; }
-
-/* Inline-Edit Kommandant */
-.cmdr-input {
-  background: transparent; border: none; border-bottom: 1px dashed rgba(255,255,255,.2);
-  color: var(--text); font-size: .82rem; padding: 1px 4px; width: 100%; min-width: 80px;
-  outline: none;
-}
-.cmdr-input:focus { border-bottom-color: #93c5fd; }
-.cmdr-input::placeholder { color: var(--text-muted); }
-
-.einheit-status-form { display:flex; gap:3px; }
 </style>
 {% endblock %}
 
@@ -104,8 +153,9 @@
 <div style="background:#92400e;color:#fde68a;text-align:center;font-weight:700;font-size:.82rem;padding:4px;letter-spacing:.05em;">⚠ ÜBUNG / SIMULATION ⚠</div>
 {% endif %}
 
+{# ── Topbar ──────────────────────────────────────────────────────────────── #}
 <div class="res-topbar">
-  <a href="/lage/{{ lage.id }}" class="btn btn--ghost btn--sm" title="Zurück zum Board">←</a>
+  <a href="/lage/{{ lage.id }}" class="btn btn--ghost btn--sm">←</a>
   <div class="res-topbar__title">{{ lage.name }}</div>
   <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
   <nav class="lage-subnav">
@@ -122,260 +172,269 @@
   </nav>
 </div>
 
-<div class="res-wrap">
-
-  {# Kennzahlen #}
-  <div class="res-stat-row">
-    <div class="res-stat">
-      <div class="res-stat__val">{{ einheiten|length }}</div>
-      <div class="res-stat__lbl">Einheiten gesamt</div>
-    </div>
-    <div class="res-stat">
-      <div class="res-stat__val" style="color:#4ade80;">{{ einheiten|selectattr('status','equalto','verfuegbar')|list|length }}</div>
-      <div class="res-stat__lbl">Verfügbar</div>
-    </div>
-    <div class="res-stat">
-      <div class="res-stat__val" style="color:#fbbf24;">{{ einheiten|selectattr('status','equalto','eingesetzt')|list|length }}</div>
-      <div class="res-stat__lbl">Eingesetzt</div>
-    </div>
-    <div class="res-stat">
-      <div class="res-stat__val" style="color:#9ca3af;">{{ einheiten|selectattr('status','equalto','abgezogen')|list|length }}</div>
-      <div class="res-stat__lbl">Abgezogen</div>
-    </div>
-    {% if conflict_vids %}
-    <div class="res-stat" style="border-color:#f87171;">
-      <div class="res-stat__val" style="color:#f87171;">{{ conflict_vids|length }}</div>
-      <div class="res-stat__lbl">Fahrzeugkonflikte</div>
-    </div>
-    {% endif %}
+{# ── Stats-Leiste ────────────────────────────────────────────────────────── #}
+<div class="res-stats">
+  {% if kue.el_asgn %}
+  <div class="res-stat" style="flex-direction:row;gap:8px;align-items:center;min-width:0;">
+    <span style="font-size:.7rem;color:var(--text-muted);white-space:nowrap;">EL:</span>
+    <strong style="font-size:.88rem;">{{ kue.el_asgn.display_name }}</strong>
+    <span style="font-size:.65rem;color:var(--text-muted);">seit {{ kue.el_asgn.start_at|local_time }}</span>
   </div>
+  {% endif %}
+  <div class="res-stat res-stat--reserve" title="SKKM Reserve">
+    <div class="res-stat__val">{{ kue.reserve_count }}</div>
+    <div class="res-stat__lbl">Reserve/Pool</div>
+  </div>
+  <div class="res-stat">
+    <div class="res-stat__val" style="color:#fbbf24;">{{ kue.im_einsatz_count }}</div>
+    <div class="res-stat__lbl">Im Einsatz</div>
+  </div>
+  <div class="res-stat">
+    <div class="res-stat__val" style="color:#9ca3af;">{{ kue.abgerueckt|length }}</div>
+    <div class="res-stat__lbl">Abgerückt</div>
+  </div>
+  <div class="res-stat">
+    <div class="res-stat__val">{{ kue.total }}</div>
+    <div class="res-stat__lbl">Gesamt</div>
+  </div>
+  {% if kue.conflict_vids %}
+  <div class="res-stat" style="border-color:#f87171;">
+    <div class="res-stat__val" style="color:#f87171;">{{ kue.conflict_vids|length }}</div>
+    <div class="res-stat__lbl">Konflikte</div>
+  </div>
+  {% endif %}
+</div>
 
-  {# Einheiten-Pool #}
-  <div class="res-section">
-    <div class="res-section__title">EINHEITEN</div>
-    {% if einheiten %}
-    <table class="res-table">
-      <thead>
-        <tr>
-          <th>Status</th>
-          <th>Einheit</th>
-          <th>Gruppenkommandant</th>
-          {% if can_edit %}<th style="width:120px;"></th>{% endif %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for e in einheiten %}
-        <tr {% if e.status == 'abgezogen' %}style="opacity:.55;"{% endif %}>
-          <td>
-            <span class="res-status res-status--{{ e.status }}">
-              {% if e.status == 'verfuegbar' %}Verfügbar
-              {% elif e.status == 'eingesetzt' %}Eingesetzt
-              {% else %}Abgezogen{% endif %}
-            </span>
-          </td>
-          <td style="font-weight:500;">{{ e.label }}</td>
-          <td>
-            {% if can_edit %}
-            <form hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/kommandant"
-                  hx-swap="none"
-                  hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
-              <input type="text" name="commander_label" class="cmdr-input"
-                     value="{{ e.commander_label or '' }}"
-                     placeholder="Name eintragen…"
-                     list="cmdr-datalist"
-                     hx-trigger="change"
-                     hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/kommandant"
-                     hx-swap="none"
-                     hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-                     autocomplete="off" maxlength="120">
-            </form>
-            {% else %}
-            <span style="font-size:.82rem;">{{ e.commander_label or '–' }}</span>
-            {% endif %}
-          </td>
-          {% if can_edit %}
-          <td>
-            <div class="einheit-status-form">
-              {% if e.status != 'verfuegbar' %}
-              <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status"
-                    style="margin:0;">
-                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                <input type="hidden" name="status" value="verfuegbar">
-                <button type="submit" class="btn btn--xs btn--ghost" title="Als Verfügbar markieren">✓ Verf.</button>
-              </form>
-              {% endif %}
-              {% if e.status != 'eingesetzt' %}
-              <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status"
-                    style="margin:0;">
-                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                <input type="hidden" name="status" value="eingesetzt">
-                <button type="submit" class="btn btn--xs btn--secondary" title="Als Eingesetzt markieren">Eings.</button>
-              </form>
-              {% endif %}
-              {% if e.status != 'abgezogen' %}
-              <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status"
-                    style="margin:0;">
-                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                <input type="hidden" name="status" value="abgezogen">
-                <button type="submit" class="btn btn--xs btn--ghost" title="Abziehen">Abz.</button>
-              </form>
-              {% endif %}
-              <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/loeschen"
-                    style="margin:0;"
-                    onsubmit="return confirm('Einheit \'{{ e.label }}\' entfernen?')">
-                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                <button type="submit" class="btn btn--xs btn--ghost" style="color:#f87171;" title="Entfernen">✕</button>
-              </form>
-            </div>
-          </td>
-          {% endif %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+{# ── Einheiten-Karte (Makro) ──────────────────────────────────────────────── #}
+{% macro einheit_card(e) %}
+{% set is_conflict = e.vehicle_id and e.vehicle_id in kue.conflict_vids %}
+<div class="einh-card{% if is_conflict %} einh-card--conflict{% endif %}">
+  <div class="einh-card__top">
+    <span class="einh-card__label" title="{{ e.label }}">{{ e.label }}</span>
+    <span class="einh-card__type">
+      {%- if e.resource_type == 'extern' -%}EXT
+      {%- elif e.resource_type == 'material' -%}MAT
+      {%- else -%}FZG{%- endif -%}
+    </span>
+    <span class="estatus estatus--{{ e.status }}">
+      {{ resource_service.STATUS_LABEL.get(e.status, e.status) }}
+    </span>
+  </div>
+  {% if e.org_name or e.bos %}
+  <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px;">
+    {% if e.bos %}<span>{{ e.bos }}</span>{% endif %}
+    {% if e.org_name %} – {{ e.org_name }}{% endif %}
+  </div>
+  {% endif %}
+  {% if e.resource_type == 'material' and e.qty %}
+  <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px;">
+    {{ e.qty }}{% if e.unit %} {{ e.unit }}{% endif %}
+  </div>
+  {% endif %}
+  <div class="einh-card__commander">
+    {% if e.leader and e.leader.end_at is none %}
+      <span>👤 <span>{{ e.leader.display_name }}</span></span>
+      <span class="einh-card__since">{{ e.leader.start_at|local_time }}</span>
+    {% elif e.commander_label %}
+      <span>👤 <span>{{ e.commander_label }}</span></span>
     {% else %}
-    <div class="res-empty">Noch keine Einheiten.</div>
+      <span style="opacity:.4;font-size:.72rem;">Kein Führer eingetragen</span>
     {% endif %}
+  </div>
+  {% if is_conflict %}
+  <div style="font-size:.65rem;color:#f87171;font-weight:700;margin-top:3px;">⚠ Fahrzeug mehrfach eingeteilt</div>
+  {% endif %}
+  {% if can_edit %}
+  <div class="einh-card__actions">
+    {% if sectors %}
+    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/sektor" style="display:flex;gap:3px;flex:1;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <select name="sector_id" class="sektor-select">
+        <option value="">→ Pool</option>
+        {% for s in sectors %}<option value="{{ s.id }}"{% if s.id == e.sector_id %} selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn btn--xs btn--secondary">OK</button>
+    </form>
+    {% endif %}
+    {% if e.sector_id %}
+    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/pool" style="margin:0;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--xs btn--ghost" title="In Pool zurückführen">Pool</button>
+    </form>
+    {% endif %}
+    {% if e.status != resource_service.STATUS_ABGERUECKT %}
+    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status" style="margin:0;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="status" value="{{ resource_service.STATUS_ABGERUECKT }}">
+      <button type="submit" class="btn btn--xs btn--ghost" title="Abgerückt markieren">Abg.</button>
+    </form>
+    {% endif %}
+    <input type="text" name="commander_label"
+           class="form-input form-input--xs" style="flex:1;min-width:60px;"
+           value="{{ e.commander_label or '' }}"
+           placeholder="Führer…" list="cmdr-datalist"
+           hx-trigger="change" hx-swap="none"
+           hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/kommandant"
+           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+           maxlength="120" autocomplete="off">
+    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/loeschen" style="margin:0;"
+          onsubmit="return confirm('{{ e.label }} entfernen?')">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--xs btn--ghost" style="color:#f87171;">✕</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
 
-    {% if can_edit %}
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-      <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">EINHEIT HINZUFÜGEN</div>
-      <form method="post" action="/lage/{{ lage.id }}/einheiten" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <select name="vehicle_id" class="form-select form-select--sm" style="flex:2;min-width:120px;">
-          <option value="">— Freitext —</option>
-          {% for v in extra_vehicles %}
-          <option value="{{ v.id }}">{{ v.display_label }}</option>
-          {% endfor %}
-        </select>
-        <input type="text" name="label" class="form-input" placeholder="Bezeichnung…"
-               style="flex:2;min-width:100px;" autocomplete="off" maxlength="120">
-        <button type="submit" class="btn btn--secondary btn--sm">+ Hinzufügen</button>
-      </form>
+{# ── Board ───────────────────────────────────────────────────────────────── #}
+<div class="res-board">
+
+  {# Pool / Reserve #}
+  <div class="res-col res-col--pool">
+    <div class="res-col__head">
+      <span>🟡 POOL / RESERVE</span>
+      <span class="res-col__count">{{ kue.pool|length }}</span>
     </div>
+    <div class="res-col__leader" style="color:#fbbf24;font-size:.68rem;">
+      Noch keinem Abschnitt zugeteilt (SKKM Reserve)
+    </div>
+    <div class="res-col__body">
+      {% for e in kue.pool %}{{ einheit_card(e) }}{% else %}
+      <div style="text-align:center;font-size:.8rem;color:var(--text-muted);padding:20px 0;">Reserve leer</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# Abschnitt-Spalten #}
+  {% for sd in kue.sectors %}
+  {% set s = sd.sector %}
+  <div class="res-col" style="{% if s.color %}border-color:{{ s.color }}55;{% endif %}">
+    <div class="res-col__head" style="{% if s.color %}color:{{ s.color }};{% endif %}">
+      <span>{{ s.name }}</span>
+      <span class="res-col__count">{{ sd.einheiten|length }}</span>
+    </div>
+    {% if sd.leader %}
+    <div class="res-col__leader">
+      AbsLtr: <strong>{{ sd.leader.display_name }}</strong>
+      <span style="float:right;font-size:.65rem;">seit {{ sd.leader.start_at|local_time }}</span>
+    </div>
+    {% elif s.leader_label %}
+    <div class="res-col__leader">AbsLtr: <strong>{{ s.leader_label }}</strong></div>
+    {% else %}
+    <div class="res-col__leader" style="color:#f87171;font-size:.68rem;">Kein Abschnittsleiter</div>
     {% endif %}
+    <div class="res-col__body">
+      {% for e in sd.einheiten %}{{ einheit_card(e) }}{% else %}
+      <div style="text-align:center;font-size:.8rem;color:var(--text-muted);padding:20px 0;">Keine Einheiten</div>
+      {% endfor %}
+    </div>
   </div>
-
-  {# Aktive Ressourcen (Einzeleinsatz-Zuweisungen) #}
-  {% if all_res %}
-  <div class="res-section">
-    <div class="res-section__title">RESSOURCEN-ZUWEISUNGEN (EINSATZSTELLEN)</div>
-    <table class="res-table">
-      <thead>
-        <tr>
-          <th>Status</th>
-          <th>Bezeichnung</th>
-          <th>Typ</th>
-          <th>Einsatzstelle</th>
-          <th>Alarmiert</th>
-          <th>Vor Ort seit</th>
-          <th title="Einsatzdauer seit Alarmierung">Dauer</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r, site in all_res %}
-        <tr>
-          <td>
-            {% if r.committed_at %}
-            <span class="res-status res-status--vor-ort">Vor Ort</span>
-            {% else %}
-            <span class="res-status res-status--alarmiert">Alarmiert</span>
-            {% endif %}
-          </td>
-          <td>
-            {{ r.label or '–' }}
-            {% if r.vehicle_id and r.vehicle_id in conflict_vids %}
-            <span class="res-conflict" title="Fahrzeug mehrfach eingeteilt">⚠ Konflikt</span>
-            {% endif %}
-          </td>
-          <td style="color:var(--text-muted);">{{ r.resource_type or '–' }}</td>
-          <td>
-            <a class="res-site-link" href="/lage/{{ lage.id }}?open_site={{ site.id }}">{{ site.bezeichnung[:35] }}</a>
-          </td>
-          <td style="color:var(--text-muted);white-space:nowrap;font-size:.75rem;">
-            {{ r.assigned_at|local_time }}
-          </td>
-          <td style="color:var(--text-muted);white-space:nowrap;font-size:.75rem;">
-            {{ r.committed_at|local_time if r.committed_at else '–' }}
-          </td>
-          <td class="res-dur" data-since="{{ r.assigned_at.isoformat() }}Z"
-              style="font-size:.75rem;font-weight:600;color:#fbbf24;white-space:nowrap;">–</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-
-  {# Abgezogene Ressourcen #}
-  {% if released %}
-  <div class="res-section">
-    <div class="res-section__title">ZULETZT ABGEZOGEN ({{ released|length }})</div>
-    <table class="res-table">
-      <thead>
-        <tr>
-          <th>Bezeichnung</th>
-          <th>Typ</th>
-          <th>Einsatzstelle</th>
-          <th>Abgezogen</th>
-          <th>Einsatzdauer</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r, site in released %}
-        <tr style="opacity:.6;">
-          <td><span class="res-status res-status--released">Abgezogen</span> {{ r.label or '–' }}</td>
-          <td style="color:var(--text-muted);">{{ r.resource_type or '–' }}</td>
-          <td>
-            <a class="res-site-link" href="/lage/{{ lage.id }}?open_site={{ site.id }}">{{ site.bezeichnung[:35] }}</a>
-          </td>
-          <td style="color:var(--text-muted);white-space:nowrap;font-size:.75rem;">
-            {{ r.released_at|local_time }}
-          </td>
-          <td class="res-rel-dur"
-              data-since="{{ r.assigned_at.isoformat() }}Z"
-              data-until="{{ r.released_at.isoformat() }}Z"
-              style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;">–</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
+  {% endfor %}
 
 </div>
+
+{# ── Abgerückt ───────────────────────────────────────────────────────────── #}
+{% if kue.abgerueckt %}
+<div class="res-abgerueckt">
+  <div class="res-section" style="opacity:.65;">
+    <div class="res-section__title">ABGERÜCKT ({{ kue.abgerueckt|length }})</div>
+    <table class="res-table">
+      <thead><tr><th>Einheit</th><th>Typ</th><th>Abschnitt</th><th>Abgerückt</th></tr></thead>
+      <tbody>
+        {% for e in kue.abgerueckt %}
+        <tr>
+          <td style="font-weight:500;">{{ e.label }}</td>
+          <td style="color:var(--text-muted);font-size:.75rem;">
+            {{ resource_service.RESOURCE_TYPE_LABEL.get(e.resource_type, e.resource_type) }}
+          </td>
+          <td style="color:var(--text-muted);font-size:.75rem;">
+            {{ e.sector.name if e.sector else '–' }}
+          </td>
+          <td style="color:var(--text-muted);font-size:.75rem;white-space:nowrap;">
+            {{ e.released_at|local_time if e.released_at else '–' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ── Einheit hinzufügen ───────────────────────────────────────────────────── #}
+{% if can_edit %}
+<div class="res-add">
+  <div class="res-section">
+    <div class="res-section__title">EINHEIT / RESSOURCE HINZUFÜGEN</div>
+    <form method="post" action="/lage/{{ lage.id }}/einheiten">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="res-add-grid">
+        <div>
+          <label class="form-label form-label--xs">Typ</label>
+          <select name="resource_type" class="form-select form-select--sm" id="res-type-sel"
+                  onchange="resTypeChanged(this.value)">
+            <option value="fahrzeug">Fahrzeug</option>
+            <option value="extern">Externe Kräfte</option>
+            <option value="material">Material/Gerät</option>
+          </select>
+        </div>
+        <div id="fzg-row" class="span2">
+          <label class="form-label form-label--xs">Fahrzeug</label>
+          <select name="vehicle_id" class="form-select form-select--sm">
+            <option value="">— Freitext unten —</option>
+            {% for v in extra_vehicles %}
+            <option value="{{ v.id }}">{{ v.display_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="ext-org-row" class="span2" style="display:none;">
+          <label class="form-label form-label--xs">Organisation</label>
+          <input type="text" name="org_name" class="form-input" placeholder="z.B. Rotes Kreuz" maxlength="120">
+        </div>
+        <div id="ext-bos-row" style="display:none;">
+          <label class="form-label form-label--xs">BOS-Typ</label>
+          <input type="text" name="bos" class="form-input" placeholder="FW / RK / Pol …" maxlength="20">
+        </div>
+        <div id="mat-qty-row" style="display:none;">
+          <label class="form-label form-label--xs">Menge</label>
+          <input type="number" name="qty" class="form-input" placeholder="200" min="1">
+        </div>
+        <div id="mat-unit-row" style="display:none;">
+          <label class="form-label form-label--xs">Einheit</label>
+          <input type="text" name="unit" class="form-input" placeholder="Sandsäcke" maxlength="20">
+        </div>
+        <div class="span2">
+          <label class="form-label form-label--xs">Bezeichnung</label>
+          <input type="text" name="label" class="form-input"
+                 placeholder="z.B. RLF WOL, Baufirma Müller, …"
+                 maxlength="120" autocomplete="off">
+        </div>
+        <div>
+          <label class="form-label form-label--xs" style="visibility:hidden;">x</label>
+          <button type="submit" class="btn btn--secondary btn--sm" style="width:100%;">+ Hinzufügen</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
 {% if org_members %}
 <datalist id="cmdr-datalist">
-  {% for m in org_members %}
-  <option value="{{ m.full_name }}">
-  {% endfor %}
+  {% for m in org_members %}<option value="{{ m.full_name }}">{% endfor %}
 </datalist>
 {% endif %}
 <script>
-function formatDur(secs) {
-  if (secs < 0) secs = 0;
-  var h = Math.floor(secs / 3600);
-  var m = Math.floor((secs % 3600) / 60);
-  if (h > 0) return h + 'h ' + m + 'min';
-  return m + 'min';
+function resTypeChanged(v) {
+  document.getElementById('fzg-row').style.display     = v === 'fahrzeug' ? '' : 'none';
+  document.getElementById('ext-org-row').style.display = v === 'extern'   ? '' : 'none';
+  document.getElementById('ext-bos-row').style.display = v === 'extern'   ? '' : 'none';
+  document.getElementById('mat-qty-row').style.display = v === 'material' ? '' : 'none';
+  document.getElementById('mat-unit-row').style.display= v === 'material' ? '' : 'none';
 }
-
-function updateDurations() {
-  var now = Date.now();
-  document.querySelectorAll('.res-dur').forEach(function(td) {
-    td.textContent = formatDur((now - new Date(td.dataset.since).getTime()) / 1000);
-  });
-  document.querySelectorAll('.res-rel-dur').forEach(function(td) {
-    var since = new Date(td.dataset.since).getTime();
-    var until = new Date(td.dataset.until).getTime();
-    td.textContent = formatDur((until - since) / 1000);
-  });
-}
-
-updateDurations();
-setInterval(updateDurations, 60000);
 </script>
 {% endblock %}
