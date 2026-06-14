@@ -718,42 +718,6 @@ function togglePrioSort() {
   });
 }
 
-// ── Übergreifende Meldungen: Mini-Karten auf Board-Karten ─────────────────
-var _cmIconsSet = false;
-function initCrossMarkerMaps() {
-  if (typeof L === 'undefined') return;
-  if (!_cmIconsSet) {
-    delete L.Icon.Default.prototype._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconUrl: '/static/img/leaflet/marker-icon.png',
-      iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
-      shadowUrl: '/static/img/leaflet/marker-shadow.png',
-    });
-    _cmIconsSet = true;
-  }
-  document.querySelectorAll('[data-cm-lat][data-cm-lng]').forEach(function(el) {
-    if (el._cmMap) return;
-    var lat = parseFloat(el.dataset.cmLat);
-    var lng = parseFloat(el.dataset.cmLng);
-    if (isNaN(lat) || isNaN(lng)) return;
-    var m = L.map(el, {
-      zoomControl: false, attributionControl: false,
-      dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
-      touchZoom: false, keyboard: false,
-    }).setView([lat, lng], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(m);
-    L.marker([lat, lng]).addTo(m);
-    el._cmMap = m;
-    setTimeout(function() { m.invalidateSize(); }, 80);
-  });
-}
-document.addEventListener('DOMContentLoaded', function() { setTimeout(initCrossMarkerMaps, 200); });
-document.body.addEventListener('htmx:afterSwap', function(ev) {
-  if (ev.detail.target && ev.detail.target.id === 'cross-marker-col-body') {
-    setTimeout(initCrossMarkerMaps, 80);
-  }
-});
-
 // ── Übergreifende Meldungen: OSM-Karte im Anlegen-Dialog ──────────────────
 var _meldungPinMap = null, _meldungPinMarker = null;
 

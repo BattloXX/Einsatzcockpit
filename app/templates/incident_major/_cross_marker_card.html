@@ -68,13 +68,5 @@
     <div style="font-size:.7rem;color:#a78bfa;margin-top:4px;" title="{{ marker.media|length }} Foto(s)">📷 {{ marker.media|length }}</div>
     {% endif %}
 
-    {% if marker.lat and marker.lng %}
-    <div id="cm-map-{{ marker.id }}"
-         data-cm-lat="{{ marker.lat }}"
-         data-cm-lng="{{ marker.lng }}"
-         style="height:110px;border-radius:4px;border:1px solid var(--border);margin-top:7px;z-index:0;"
-         onclick="event.stopPropagation()"></div>
-    {% endif %}
-
   </div>
 </div>

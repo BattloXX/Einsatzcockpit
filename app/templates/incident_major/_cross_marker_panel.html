@@ -37,9 +37,48 @@
   {% endif %}
 
   {% if marker.lat and marker.lng %}
-  <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px;">
-    GPS: {{ "%.5f"|format(marker.lat) }}, {{ "%.5f"|format(marker.lng) }}
+  <div id="cm-panel-map-{{ marker.id }}"
+       style="height:220px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;z-index:0;"></div>
+  <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <span>{{ "%.5f"|format(marker.lat) }}, {{ "%.5f"|format(marker.lng) }}</span>
+    <a href="https://www.openstreetmap.org/?mlat={{ marker.lat }}&mlon={{ marker.lng }}&zoom=17"
+       target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ OSM</a>
+    <a href="https://maps.google.com/?q={{ marker.lat }},{{ marker.lng }}"
+       target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ Google Maps</a>
   </div>
+  <script>
+  (function() {
+    var _lat = {{ marker.lat }}, _lng = {{ marker.lng }};
+    function _initCmPanelMap() {
+      if (typeof L === 'undefined') return;
+      var el = document.getElementById('cm-panel-map-{{ marker.id }}');
+      if (!el || el._cmPanelMap) return;
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconUrl: '/static/img/leaflet/marker-icon.png',
+        iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
+        shadowUrl: '/static/img/leaflet/marker-shadow.png',
+      });
+      var m = L.map(el, { zoomControl: true }).setView([_lat, _lng], 17);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright" style="color:#9ca3af">OSM</a>',
+        maxZoom: 19,
+      }).addTo(m);
+      L.marker([_lat, _lng]).addTo(m);
+      el._cmPanelMap = m;
+      setTimeout(function() { m.invalidateSize(); }, 100);
+      setTimeout(function() { m.invalidateSize(); }, 400);
+    }
+    var dlg = document.getElementById('siteDetailModal');
+    if (dlg && !dlg.open) {
+      dlg.addEventListener('toggle', function h() {
+        if (dlg.open) { dlg.removeEventListener('toggle', h); setTimeout(_initCmPanelMap, 150); }
+      });
+    } else {
+      setTimeout(_initCmPanelMap, 150);
+    }
+  })();
+  </script>
   {% endif %}
 
   {% if marker.description %}
