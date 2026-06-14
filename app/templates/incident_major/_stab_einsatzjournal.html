@@ -16,15 +16,23 @@
     <div style="font-size:.82rem;font-weight:600;line-height:1.4;cursor:pointer;"
          onclick="openJournalDetail({{ entry.id }})">{{ entry.text }}</div>
     {% if entry.partner_from or entry.partner_to %}
-    <div style="font-size:.72rem;color:var(--text-muted);margin-top:2px;">
-      {% if entry.partner_from %}Von: {{ entry.partner_from }}{% endif %}
-      {% if entry.partner_from and entry.partner_to %} · {% endif %}
-      {% if entry.partner_to %}An: {{ entry.partner_to }}{% endif %}
+    <div style="font-size:.72rem;color:var(--text-muted);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap;">
+      {% if entry.partner_from %}<span>Von: <strong style="color:var(--text);">{{ entry.partner_from }}</strong></span>{% endif %}
+      {% if entry.partner_to %}<span>An: <strong style="color:var(--text);">{{ entry.partner_to }}</strong></span>{% endif %}
     </div>
     {% endif %}
-    {% if entry.body_html or entry.measure or entry.media %}
-    <span style="font-size:.7rem;color:var(--text-muted);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;"
-          onclick="openJournalDetail({{ entry.id }})">Details…</span>
+    {% if entry.body_html %}
+    <div style="font-size:.78rem;line-height:1.5;margin-top:5px;padding:6px 9px;
+                background:rgba(255,255,255,.04);border-radius:4px;
+                border-left:2px solid {{ cat_color.get(entry.category,'#6b7280') }}66;">
+      {{ entry.body_html | safe }}
+    </div>
+    {% endif %}
+    {% if entry.measure %}
+    <div style="font-size:.72rem;color:#fbbf24;margin-top:4px;padding:3px 8px;
+                background:rgba(251,191,36,.08);border-radius:3px;border-left:2px solid #fbbf24;">
+      ⚡ {{ entry.measure }}
+    </div>
     {% endif %}
     {% if entry.media %}
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">
