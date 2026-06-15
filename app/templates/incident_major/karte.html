@@ -185,26 +185,49 @@
 .leg-sep { width:1px; background:rgba(255,255,255,.15); align-self:stretch; margin:0 2px; }
 .leg-item { display:flex; align-items:center; gap:4px; white-space:nowrap; }
 
-/* Print */
-#print-modal {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 10px; padding: 20px; min-width: 300px; color: var(--text);
+/* Druckvorschau */
+#print-frame {
+  display: none; position: fixed; z-index: 1050; pointer-events: none;
+  border: 2px dashed #93c5fd;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.52);
+  transition: left .15s, top .15s, width .15s, height .15s;
 }
-#print-modal::backdrop { background: rgba(0,0,0,.6); }
-.print-opt-group { margin-bottom: 14px; }
-.print-opt-group__label { font-size:.72rem; font-weight:700; color:var(--text-muted);
-  text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
-.print-opt-row { display:flex; flex-direction:column; gap:6px; }
-.print-opt-row label { display:flex; align-items:center; gap:8px;
-  font-size:.84rem; cursor:pointer; padding:6px 10px; border-radius:6px;
-  border:1px solid var(--border); background:rgba(255,255,255,.04); }
-.print-opt-row label:hover { background:rgba(255,255,255,.08); }
-.print-opt-row input[type=radio] { accent-color:#93c5fd; }
+#print-frame__label {
+  position: absolute; bottom: -26px; left: 50%; transform: translateX(-50%);
+  background: rgba(17,24,39,.9); border: 1px solid rgba(147,197,253,.35);
+  border-radius: 5px; padding: 2px 10px; font-size: .67rem; color: #93c5fd;
+  white-space: nowrap;
+}
+#print-frame__corners span {
+  position: absolute; width: 14px; height: 14px; border-color: #93c5fd; border-style: solid;
+  border-width: 0;
+}
+#print-frame__corners span:nth-child(1) { top:-1px; left:-1px; border-top-width:2px; border-left-width:2px; }
+#print-frame__corners span:nth-child(2) { top:-1px; right:-1px; border-top-width:2px; border-right-width:2px; }
+#print-frame__corners span:nth-child(3) { bottom:-1px; left:-1px; border-bottom-width:2px; border-left-width:2px; }
+#print-frame__corners span:nth-child(4) { bottom:-1px; right:-1px; border-bottom-width:2px; border-right-width:2px; }
+#pf-bar {
+  display: none; position: fixed; bottom: 20px; left: 50%;
+  transform: translateX(-50%); z-index: 1060;
+  background: rgba(17,24,39,.97); border: 1px solid rgba(147,197,253,.4);
+  border-radius: 10px; padding: 9px 14px;
+  backdrop-filter: blur(8px);
+  align-items: center; gap: 10px; flex-wrap: wrap;
+  box-shadow: 0 4px 24px rgba(0,0,0,.5);
+}
+#pf-bar select {
+  font-size:.8rem; background:rgba(255,255,255,.07); border:1px solid var(--border);
+  border-radius:5px; color:var(--text); padding:4px 8px; cursor:pointer;
+}
+@media (max-width:640px) {
+  #pf-bar { bottom: 70px; width: calc(100vw - 24px); justify-content: center; }
+}
+/* Print CSS */
 @media print {
   .lage-topbar, .lage-subnav, .karte-controls, .karte-bottom-shelf,
   .karte-mode-btn, #btn-pin-mode, #btn-geolocate, .veh-legend,
   #section-filters, .nocoords-box, #site-panel-wrap,
-  #print-modal { display:none !important; }
+  #print-frame, #pf-bar { display:none !important; }
   #karte-map { position:static !important; height:var(--print-map-height,150mm) !important; width:100% !important; }
   #karte-legend { display:flex !important; position:static !important;
                   transform:none !important; bottom:auto; left:auto;
@@ -454,50 +477,33 @@
   </div>
 </dialog>
 
-{# Print-Dialog #}
-<dialog id="print-modal">
-  <h3 style="font-size:.95rem;font-weight:700;margin:0 0 16px;">🖨 Druckoptionen</h3>
-
-  <div class="print-opt-group">
-    <div class="print-opt-group__label">Inhalt</div>
-    <div class="print-opt-row">
-      <label>
-        <input type="radio" name="print-content" value="map" checked>
-        Lagekarte (aktuelle Kartenansicht)
-      </label>
-      <label>
-        <input type="radio" name="print-content" value="report">
-        Lagebericht / PDF (Liste aller Einsatzstellen)
-      </label>
-    </div>
+{# Druckvorschau-Rahmen (über Karte) #}
+<div id="print-frame">
+  <div id="print-frame__corners">
+    <span></span><span></span><span></span><span></span>
   </div>
+  <div id="print-frame__label">Druckbereich · Zoomen &amp; Verschieben zum Ausrichten</div>
+</div>
 
-  <div class="print-opt-group" id="print-format-group">
-    <div class="print-opt-group__label">Papierformat</div>
-    <div class="print-opt-row">
-      <label>
-        <input type="radio" name="print-format" value="A4 portrait" checked>
-        A4 Hochformat
-        <span style="font-size:.7rem;color:var(--text-muted);">210 × 297 mm</span>
-      </label>
-      <label>
-        <input type="radio" name="print-format" value="A4 landscape">
-        A4 Querformat
-        <span style="font-size:.7rem;color:var(--text-muted);">297 × 210 mm</span>
-      </label>
-      <label>
-        <input type="radio" name="print-format" value="A3 landscape">
-        A3 Querformat
-        <span style="font-size:.7rem;color:var(--text-muted);">420 × 297 mm</span>
-      </label>
-    </div>
+{# Steuerleiste Druckvorschau #}
+<div id="pf-bar">
+  <span style="font-size:.75rem;font-weight:700;color:#93c5fd;white-space:nowrap;">🖨 Druckvorschau</span>
+  <div style="width:1px;background:rgba(255,255,255,.2);align-self:stretch;"></div>
+  <div style="display:flex;align-items:center;gap:6px;">
+    <span style="font-size:.72rem;color:var(--text-muted);">Format</span>
+    <select id="pf-format-sel" onchange="updatePrintFrame()">
+      <option value="A4 portrait">A4 Hochformat</option>
+      <option value="A4 landscape">A4 Querformat</option>
+      <option value="A3 landscape">A3 Querformat</option>
+    </select>
   </div>
-
-  <div style="display:flex;gap:8px;margin-top:18px;justify-content:flex-end;">
-    <button onclick="document.getElementById('print-modal').close()" class="btn btn--ghost btn--sm">Abbrechen</button>
+  <div style="width:1px;background:rgba(255,255,255,.2);align-self:stretch;"></div>
+  <div style="display:flex;gap:6px;">
+    <button onclick="closePrintPreview()" class="btn btn--ghost btn--sm">✕ Abbrechen</button>
+    <button onclick="window.open('/lage/{{ lage.id }}/druck','_blank')" class="btn btn--ghost btn--sm" title="Textbericht in neuem Tab">📋 Bericht</button>
     <button onclick="executePrint()" class="btn btn--primary btn--sm">Drucken</button>
   </div>
-</dialog>
+</div>
 
 {% endblock %}
 
@@ -1376,57 +1382,133 @@
 
 })();
 
-// ── Druckdialog ──────────────────────────────────────────────────────────────
-window.openPrintDialog = function() {
-  document.getElementById('print-modal').showModal();
-};
+// ── Druckvorschau ────────────────────────────────────────────────────────────
+(function() {
+  var _active = false;
 
-// Papierformat → Kartenhöhe (Druckbereich abzüglich Legende + Ränder)
-var PRINT_MAP_HEIGHTS = {
-  'A4 portrait':  '170mm',
-  'A4 landscape': '110mm',
-  'A3 landscape': '175mm',
-};
+  // Seitenverhältnisse (Breite / Höhe) der Papierformate
+  var RATIOS = {
+    'A4 portrait':  210 / 297,
+    'A4 landscape': 297 / 210,
+    'A3 landscape': 420 / 297,
+  };
+  // Kartenhöhe im Print-CSS (Seite minus Legende + Rand)
+  var MAP_HEIGHTS = {
+    'A4 portrait':  '170mm',
+    'A4 landscape': '110mm',
+    'A3 landscape': '175mm',
+  };
 
-var _printStyleEl = null;
-function _applyPageStyle(format) {
-  if (!_printStyleEl) {
-    _printStyleEl = document.createElement('style');
-    _printStyleEl.id = 'karte-print-page';
-    document.head.appendChild(_printStyleEl);
-  }
-  _printStyleEl.textContent = '@media print { @page { size: ' + format + '; margin: 10mm; } }';
-  var h = PRINT_MAP_HEIGHTS[format] || '150mm';
-  document.documentElement.style.setProperty('--print-map-height', h);
-}
-
-window.executePrint = function() {
-  var content = document.querySelector('input[name="print-content"]:checked');
-  var format  = document.querySelector('input[name="print-format"]:checked');
-  document.getElementById('print-modal').close();
-
-  if (content && content.value === 'report') {
-    window.open('/lage/{{ lage.id }}/druck', '_blank');
-    return;
+  var _styleEl = null;
+  function _applyPageStyle(format) {
+    if (!_styleEl) {
+      _styleEl = document.createElement('style');
+      _styleEl.id = 'karte-print-page';
+      document.head.appendChild(_styleEl);
+    }
+    _styleEl.textContent = '@media print { @page { size: ' + format + '; margin: 10mm; } }';
+    document.documentElement.style.setProperty(
+      '--print-map-height', MAP_HEIGHTS[format] || '150mm'
+    );
   }
 
-  _applyPageStyle(format ? format.value : 'A4 portrait');
-  // Karte auf Druckgröße vorbereiten
-  if (window._karteMap) {
-    window._karteMap.invalidateSize();
-    setTimeout(function() { window.print(); }, 300);
-  } else {
-    window.print();
+  function _currentFormat() {
+    var sel = document.getElementById('pf-format-sel');
+    return sel ? sel.value : 'A4 portrait';
   }
-};
 
-// Radio: Formatwahl nur bei Karte relevant
-document.querySelectorAll('input[name="print-content"]').forEach(function(r) {
-  r.addEventListener('change', function() {
-    var fg = document.getElementById('print-format-group');
-    if (fg) fg.style.opacity = (this.value === 'map') ? '' : '0.35';
+  window.updatePrintFrame = function() {
+    var format = _currentFormat();
+    var ratio  = RATIOS[format] || (210 / 297);
+
+    var mapEl  = document.getElementById('karte-map');
+    var rect   = mapEl.getBoundingClientRect();
+
+    // Topbar-Offset berücksichtigen
+    var topOffset = rect.top;
+    var availW = rect.width  * 0.82;
+    var availH = (rect.height - topOffset) * 0.80;
+
+    var frameW, frameH;
+    if (availW / availH > ratio) {
+      frameH = availH;
+      frameW = frameH * ratio;
+    } else {
+      frameW = availW;
+      frameH = frameW / ratio;
+    }
+
+    var cx = rect.left + rect.width  / 2;
+    var cy = rect.top  + rect.height / 2;
+
+    var frame = document.getElementById('print-frame');
+    frame.style.left   = Math.round(cx - frameW / 2) + 'px';
+    frame.style.top    = Math.round(cy - frameH / 2) + 'px';
+    frame.style.width  = Math.round(frameW) + 'px';
+    frame.style.height = Math.round(frameH) + 'px';
+    frame.style.display = 'block';
+
+    // Label aktualisieren
+    var lbl = document.getElementById('print-frame__label');
+    if (lbl) {
+      var names = {
+        'A4 portrait': 'A4 Hochformat',
+        'A4 landscape': 'A4 Querformat',
+        'A3 landscape': 'A3 Querformat',
+      };
+      lbl.textContent = (names[format] || format) + ' · Zoomen & Verschieben zum Ausrichten';
+    }
+  };
+
+  window.openPrintDialog = function() {
+    _active = true;
+    document.getElementById('pf-bar').style.display = 'flex';
+    updatePrintFrame();
+    // Sicherstellen dass Karte interaktiv bleibt
+    if (window._karteMap) window._karteMap.invalidateSize();
+  };
+
+  window.closePrintPreview = function() {
+    _active = false;
+    document.getElementById('print-frame').style.display = 'none';
+    document.getElementById('pf-bar').style.display = 'none';
+  };
+
+  window.executePrint = function() {
+    var format = _currentFormat();
+    _applyPageStyle(format);
+
+    // Overlay vor Druck ausblenden
+    document.getElementById('print-frame').style.display = 'none';
+    document.getElementById('pf-bar').style.display = 'none';
+
+    if (window._karteMap) {
+      window._karteMap.invalidateSize();
+      setTimeout(function() {
+        window.print();
+        // Nach Druck Vorschau wiederherstellen
+        setTimeout(function() {
+          if (_active) {
+            document.getElementById('pf-bar').style.display = 'flex';
+            updatePrintFrame();
+          }
+        }, 600);
+      }, 300);
+    } else {
+      window.print();
+    }
+  };
+
+  // Fenstergrößenänderung → Rahmen neu berechnen
+  window.addEventListener('resize', function() {
+    if (_active) updatePrintFrame();
   });
-});
+
+  // Escape → Vorschau schließen
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && _active) closePrintPreview();
+  });
+}());
 
 // ── Geolocation / eigener Standort ──────────────────────────────────────────
 (function() {
