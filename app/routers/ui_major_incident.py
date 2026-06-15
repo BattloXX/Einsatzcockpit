@@ -674,12 +674,19 @@ async def site_einheit_zuweisen(
         raise HTTPException(status_code=404)
 
     try:
-        resource_service.assign_to_site(
+        einheit = resource_service.assign_to_site(
             db, einheit_id, lage_id, site_id,
             author_name=get_author_name(request), user_id=user.id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    db.add(SiteLogEntry(
+        incident_site_id=site_id,
+        kind="resource",
+        text=f"Einheit zugewiesen: {einheit.label}",
+        user_id=user.id,
+        author_name=get_author_name(request),
+    ))
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
@@ -699,12 +706,19 @@ async def site_einheit_freigeben(
     _check_org_access(user, lage)
 
     try:
-        resource_service.move_to_pool(
+        einheit = resource_service.move_to_pool(
             db, einheit_id, lage_id,
             author_name=get_author_name(request), user_id=user.id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    db.add(SiteLogEntry(
+        incident_site_id=site_id,
+        kind="resource",
+        text=f"Einheit freigegeben: {einheit.label}",
+        user_id=user.id,
+        author_name=get_author_name(request),
+    ))
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
