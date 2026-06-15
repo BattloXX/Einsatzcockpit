@@ -754,28 +754,21 @@ window.openMeldungDialog = function() {
   setTimeout(function() { _meldungPinMap.invalidateSize(); }, 80);
 };
 
-// openSite deep-link: ?openSite=<site_id> öffnet das Detail-Panel direkt
+// openSite deep-link: ?openSite=<site_id> als Alias für ?open_site=
 (function() {
   var params = new URLSearchParams(location.search);
   var siteId = params.get('openSite');
   if (!siteId) return;
-  function tryOpen() {
-    var card = document.querySelector('[data-site-id="' + siteId + '"]');
-    if (card) {
-      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      htmx.ajax('GET', '/lage/{{ lage.id }}/stellen/' + siteId, {
-        target: '#siteDetailContent',
-        swap: 'innerHTML',
-      });
-      var panel = document.getElementById('site-detail-panel');
-      if (panel) panel.style.display = '';
-    }
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', tryOpen);
-  } else {
-    tryOpen();
-  }
+  var url = new URL(window.location.href);
+  url.searchParams.delete('openSite');
+  url.searchParams.set('open_site', siteId);
+  history.replaceState(null, '', url.toString());
+  setTimeout(function() {
+    htmx.ajax('GET', '/lage/{{ lage.id }}/stellen/' + siteId, {
+      target: '#siteDetailContent',
+      swap: 'innerHTML'
+    });
+  }, 150);
 })();
 </script>
 {% endblock %}

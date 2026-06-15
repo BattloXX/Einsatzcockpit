@@ -604,7 +604,7 @@ async def create_incident_api(
     push_title = f"{exercise_prefix}🚒 Einsatz: {alarm_type_code}"
     push_body = address or payload.Meldung or "Kein Ort angegeben"
     if _mi_site:
-        push_url = f"/lage/{_mi_site.major_incident_id}?openSite={_mi_site.id}"
+        push_url = f"/lage/{_mi_site.major_incident_id}?open_site={_mi_site.id}"
     else:
         push_url = f"/einsatz/{incident.id}"
     if api_key.org_id:
@@ -948,7 +948,7 @@ async def lage_alarm(
             notify_org, db, api_key.org_id,
             f"{_ex_prefix}🚨 Neue Einsatzstelle: {bezeichnung}",
             _push_body,
-            f"/lage/{lage.id}?openSite={site.id}",
+            f"/lage/{lage.id}?open_site={site.id}",
         )
     return LageSiteCreatedResponse(lage_id=lage.id, site_id=site.id, created=True)
 
