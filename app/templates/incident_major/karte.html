@@ -538,7 +538,7 @@
 <div id="print-footer">
   {# Logo + Branding #}
   <div class="pf-col" style="flex:.7;min-width:80px;">
-    <img src="/static/img/logo-trans.png" alt="einsatzleiter.cloud" class="pf-logo">
+    <img src="/static/img/logo.png" alt="einsatzleiter.cloud" class="pf-logo">
     <div class="pf-brand">einsatzleiter.cloud</div>
   </div>
 
@@ -1453,17 +1453,21 @@
 (function() {
   var _active = false;
 
-  // Seitenverhältnisse (Breite / Höhe) der Papierformate
-  var RATIOS = {
-    'A4 portrait':  210 / 297,
-    'A4 landscape': 297 / 210,
-    'A3 landscape': 420 / 297,
-  };
-  // Kartenhöhe im Print-CSS (Seite minus Legende + Rand)
+  // Kartenhöhe im Print-CSS (Seitenhöhe minus Rand minus Fußzeile/Legende)
   var MAP_HEIGHTS = {
-    'A4 portrait':  '170mm',
-    'A4 landscape': '110mm',
-    'A3 landscape': '175mm',
+    'A4 portrait':  '220mm',
+    'A4 landscape': '140mm',
+    'A3 landscape': '220mm',
+  };
+  // Seitenverhältnisse (Breite / Höhe) des Druck-Kartenbereichs
+  // = (Papierbreite - 2×10mm Rand) / MAP_HEIGHTS[format]
+  // A4 portrait:  190mm / 220mm ≈ 0.864
+  // A4 landscape: 277mm / 140mm ≈ 1.979
+  // A3 landscape: 400mm / 220mm ≈ 1.818
+  var RATIOS = {
+    'A4 portrait':  190 / 220,
+    'A4 landscape': 277 / 140,
+    'A3 landscape': 400 / 220,
   };
 
   var _styleEl = null;
