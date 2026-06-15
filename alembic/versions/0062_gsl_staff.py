@@ -41,7 +41,7 @@ def upgrade():
           ('S5',     'S5 – Öffentlichkeitsarbeit',              6, 1, 0, NULL),
           ('S6',     'S6 – Kommunikation',                      7, 1, 0, NULL),
           ('MSST',   'Meldesammelstelle',                       8, 0, 0, NULL),
-          ('SICHTER','Sichter',                                 9, 0, 0, NULL),
+          ('ERKUNDER','Erkunder',                               9, 0, 0, NULL),
           ('FB',     'Fachberater / Sachverständiger',         10, 0, 1, NULL),
           ('VO',     'Verbindungsoffizier',                    11, 0, 1, NULL)
     """))
