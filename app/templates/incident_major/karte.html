@@ -228,7 +228,7 @@
   .karte-mode-btn, #btn-pin-mode, #btn-geolocate, .veh-legend,
   #section-filters, .nocoords-box, #site-panel-wrap,
   #print-frame, #pf-bar { display:none !important; }
-  #karte-map { position:static !important; height:var(--print-map-height,150mm) !important; width:100% !important; }
+  #karte-map { position:static; height:var(--print-map-height,150mm); width:100% !important; }
   #karte-legend { display:flex !important; position:static !important;
                   transform:none !important; bottom:auto; left:auto;
                   margin-top:6px; max-width:100%; }
@@ -1478,25 +1478,66 @@
     var format = _currentFormat();
     _applyPageStyle(format);
 
-    // Overlay vor Druck ausblenden
+    // Overlay ausblenden
     document.getElementById('print-frame').style.display = 'none';
     document.getElementById('pf-bar').style.display = 'none';
 
-    if (window._karteMap) {
-      window._karteMap.invalidateSize();
-      setTimeout(function() {
-        window.print();
-        // Nach Druck Vorschau wiederherstellen
-        setTimeout(function() {
-          if (_active) {
-            document.getElementById('pf-bar').style.display = 'flex';
-            updatePrintFrame();
-          }
-        }, 600);
-      }, 300);
-    } else {
-      window.print();
+    var map   = window._karteMap;
+    var mapEl = document.getElementById('karte-map');
+
+    if (!map) { window.print(); return; }
+
+    // Aktuellen Ausschnitt sichern (der vom Nutzer in der Vorschau gewählt wurde)
+    var center = map.getCenter();
+    var zoom   = map.getZoom();
+    var printH = MAP_HEIGHTS[format] || '150mm';
+
+    // Karte JETZT auf Druckgröße setzen – Leaflet rendert Tiles für diese Dimensionen
+    mapEl.style.position = 'static';
+    mapEl.style.height   = printH;
+    mapEl.style.width    = '100%';
+    map.invalidateSize({ animate: false });
+    map.setView(center, zoom, { animate: false });
+
+    function restoreMap() {
+      mapEl.style.position = '';
+      mapEl.style.height   = '';
+      mapEl.style.width    = '';
+      map.invalidateSize({ animate: false });
+      map.setView(center, zoom, { animate: false });
+      if (_active) {
+        document.getElementById('pf-bar').style.display = 'flex';
+        updatePrintFrame();
+      }
     }
+
+    function doPrint() {
+      window.print();
+      // afterprint wiederherstellen; Fallback nach 8s
+      var restored = false;
+      function onAfter() {
+        if (restored) return;
+        restored = true;
+        window.removeEventListener('afterprint', onAfter);
+        restoreMap();
+      }
+      window.addEventListener('afterprint', onAfter);
+      setTimeout(onAfter, 8000);
+    }
+
+    // Auf Tile-Laden warten: erst tile-layer 'load', Fallback nach 1,2 s
+    var fired = false;
+    function onReady() {
+      if (fired) return;
+      fired = true;
+      setTimeout(doPrint, 80);
+    }
+    var tileLayer = null;
+    map.eachLayer(function(l) { if (l instanceof L.TileLayer && !tileLayer) tileLayer = l; });
+    if (tileLayer) {
+      tileLayer.once('load', onReady);
+    }
+    setTimeout(onReady, 1200);
   };
 
   // Fenstergrößenänderung → Rahmen neu berechnen
