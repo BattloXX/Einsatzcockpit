@@ -563,10 +563,16 @@ async def _fetch_geosphere_nwp(
 # ── Warnings (GeoSphere Warn-API) ─────────────────────────────────────────────
 
 _WARN_LEVEL_COLORS = {1: "#fbbf24", 2: "#f97316", 3: "#ef4444", 4: "#a855f7"}
+
+# warntypid → event key used for label lookup
+_WARN_TYPE_EVENT = {
+    1: "WIND", 2: "RAIN", 3: "SNOW", 4: "FROST",
+    5: "THUNDERSTORM", 6: "HEAT", 7: "FROST",
+}
 _WARN_EVENT_DE = {
     "RAIN": "Starkregen", "THUNDERSTORM": "Gewitter", "WIND": "Sturm",
     "SNOW": "Schneefall", "FROST": "Frost", "FOG": "Nebel",
-    "AVALANCHE": "Lawinengefahr", "FLOOD": "Hochwasser",
+    "AVALANCHE": "Lawinengefahr", "FLOOD": "Hochwasser", "HEAT": "Hitze",
 }
 
 
@@ -586,13 +592,14 @@ async def get_warnings(lat: float, lng: float) -> list[WeatherWarning]:
 
 
 async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarning]:
-    url = f"{settings.GEOSPHERE_WARN_URL}/warnings/byLocation"
+    # GeoSphere Warn-API v1: /getWarningsForCoords returns a GeoJSON Feature
+    url = f"{settings.GEOSPHERE_WARN_URL}/getWarningsForCoords"
     try:
         async with httpx.AsyncClient(
             headers={"User-Agent": "Einsatzleiter-Hilfswerkzeug/2.x (warnings)"},
             timeout=settings.WEATHER_HTTP_TIMEOUT,
         ) as client:
-            resp = await client.get(url, params={"lat": lat, "lon": lng})
+            resp = await client.get(url, params={"lat": lat, "lon": lng, "lang": "de"})
             resp.raise_for_status()
             data = resp.json()
     except httpx.TimeoutException:
@@ -605,18 +612,22 @@ async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarni
         logger.warning("GeoSphere Warn-API Fehler: %s", exc)
         return []
 
+    props = data.get("properties", {})
+    region = props.get("location", {}).get("properties", {}).get("name", "")
+    raw_list = props.get("warnings", [])
+
     warnings: list[WeatherWarning] = []
-    raw_list = data if isinstance(data, list) else data.get("warnings", [])
     for item in raw_list:
         try:
-            level = int(item.get("level", item.get("severity", 1)))
-            event = str(item.get("event", item.get("type", "UNKNOWN"))).upper()
-            text = item.get("text", item.get("description", _WARN_EVENT_DE.get(event, event)))
+            level = int(item.get("warnstufeid", 1))
+            type_id = int(item.get("warntypid", 0))
+            event = _WARN_TYPE_EVENT.get(type_id, "UNKNOWN")
+            text = item.get("text") or item.get("meteotext") or _WARN_EVENT_DE.get(event, event)
             valid_from = datetime.fromisoformat(
-                str(item.get("onset", item.get("valid_from", ""))).replace("Z", "+00:00")
+                str(item.get("begin", "")).replace("Z", "+00:00")
             )
             valid_to = datetime.fromisoformat(
-                str(item.get("expires", item.get("valid_to", ""))).replace("Z", "+00:00")
+                str(item.get("end", "")).replace("Z", "+00:00")
             )
             now = datetime.now(UTC)
             if valid_to < now:
@@ -627,7 +638,7 @@ async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarni
                 text=str(text),
                 valid_from=valid_from,
                 valid_to=valid_to,
-                region=str(item.get("region", item.get("regionName", ""))),
+                region=region,
             ))
         except Exception as exc:
             logger.warning("Warnung konnte nicht geparst werden: %s — %s", item, exc)
