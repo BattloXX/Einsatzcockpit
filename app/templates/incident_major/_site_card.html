@@ -77,27 +77,5 @@
     </form>
     {% endfor %}
   </div>
-  {# ── Einheit zuweisen ──────────────────────────────────────────────────── #}
-  {% if available_einheiten is defined %}
-  {% set addable = available_einheiten | rejectattr('incident_site_id', 'equalto', site.id) | list %}
-  {% if addable %}
-  <div style="padding:4px 8px 6px;border-top:1px solid rgba(255,255,255,.05);" onclick="event.stopPropagation()">
-    <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-zuweisen"
-          hx-target="closest .site-card" hx-swap="outerHTML"
-          hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-          style="display:flex;gap:4px;align-items:center;">
-      <select name="einheit_id"
-              style="flex:1;font-size:.7rem;padding:2px 4px;height:24px;
-                     background:var(--surface);color:var(--text);
-                     border:1px solid var(--border);border-radius:4px;">
-        {% for e in addable %}
-        <option value="{{ e.id }}">{{ e.label }}{% if e.incident_site_id %} ↗{% endif %}</option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="btn btn--xs btn--secondary" title="Einheit zuweisen">🚒+</button>
-    </form>
-  </div>
-  {% endif %}
-  {% endif %}
   {% endif %}
 </div>

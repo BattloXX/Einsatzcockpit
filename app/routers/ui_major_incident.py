@@ -324,11 +324,6 @@ async def lage_board(
     _org_lat = getattr(_org, "fallback_lat", None) or 47.41
     _org_lng = getattr(_org, "fallback_lng", None) or 9.74
 
-    available_einheiten = sorted(
-        [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT],
-        key=lambda e: e.label,
-    )
-
     return templates.TemplateResponse(request, "incident_major/board.html", {
         "user": user,
         "lage": lage,
@@ -357,7 +352,6 @@ async def lage_board(
         "weather_enabled": _weather_enabled,
         "org_lat": _org_lat,
         "org_lng": _org_lng,
-        "available_einheiten": available_einheiten,
     })
 
 
@@ -602,13 +596,6 @@ async def site_detail(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    vehicles = (
-        db.query(VehicleMaster)
-        .filter(VehicleMaster.dept_id == lage.org_id, VehicleMaster.active == True)  # noqa: E712
-        .order_by(VehicleMaster.display_order, VehicleMaster.code)
-        .all()
-    )
-
     sectors = sorted(lage.sectors, key=lambda s: s.id)
 
     citizen_report = None
@@ -619,6 +606,11 @@ async def site_detail(
             .first()
         )
 
+    available_einheiten = sorted(
+        [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT],
+        key=lambda e: (e.incident_site_id is not None, e.label),
+    )
+
     return templates.TemplateResponse(request, "incident_major/_site_detail.html", {
         "user": user,
         "lage": lage,
@@ -627,10 +619,10 @@ async def site_detail(
         "prio_label": SITE_PRIORITY_LABEL,
         "prio_color": SITE_PRIORITY_COLOR,
         "can_edit": _can_edit(user),
-        "vehicles": vehicles,
         "sectors": sectors,
         "now": datetime.now(UTC),
         "citizen_report": citizen_report,
+        "available_einheiten": available_einheiten,
     })
 
 
@@ -652,10 +644,6 @@ async def site_card_partial(
         raise HTTPException(status_code=404)
     sectors = sorted(lage.sectors, key=lambda s: s.id)
     sectors_by_id = {s.id: s for s in sectors}
-    available_einheiten = sorted(
-        [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT],
-        key=lambda e: e.label,
-    )
     return templates.TemplateResponse(request, "incident_major/_site_card.html", {
         "lage": lage,
         "site": site,
@@ -664,7 +652,6 @@ async def site_card_partial(
         "sectors": sectors,
         "sectors_by_id": sectors_by_id,
         "can_edit": _can_edit(user),
-        "available_einheiten": available_einheiten,
     })
 
 
@@ -701,10 +688,6 @@ async def site_einheit_zuweisen(
 
     sectors = sorted(lage.sectors, key=lambda s: s.id)
     sectors_by_id = {s.id: s for s in sectors}
-    available_einheiten = sorted(
-        [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT],
-        key=lambda e: e.label,
-    )
     return templates.TemplateResponse(request, "incident_major/_site_card.html", {
         "lage": lage,
         "site": site,
@@ -713,7 +696,6 @@ async def site_einheit_zuweisen(
         "sectors": sectors,
         "sectors_by_id": sectors_by_id,
         "can_edit": _can_edit(user),
-        "available_einheiten": available_einheiten,
     })
 
 
