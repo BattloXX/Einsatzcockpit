@@ -179,6 +179,35 @@
 .veh-dot--stale  { background: #6b7280; }
 .veh-dot--manual { background: #f97316; }
 
+/* Druck-Fußzeile */
+#print-footer {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 1040;
+  border-top: 1.5px solid #aaa;
+  padding: 6px 14px 8px;
+  background: #fff;
+  align-items: flex-start;
+  gap: 14px;
+  font-family: Arial, sans-serif;
+  font-size: 8.5pt;
+  color: #222;
+  line-height: 1.45;
+}
+#print-footer .pf-col { flex: 1; }
+#print-footer .pf-col--wide { flex: 2.2; }
+#print-footer .pf-col--right { flex: 1.3; text-align: right; }
+#print-footer .pf-logo { height: 22px; display: block; margin-bottom: 3px; }
+#print-footer .pf-brand { font-size: 7pt; color: #777; }
+#print-footer .pf-lage { font-size: 10pt; font-weight: 700; margin-bottom: 1px; }
+#print-footer .pf-exercise { color: #92400e; font-weight: 700; }
+#print-footer .pf-num { font-weight: 700; }
+@media print {
+  #print-footer {
+    position: static !important;
+    display: flex !important;
+  }
+}
+
 /* Taktische Legende */
 .leg-h { font-size:.65rem; color:var(--text-muted); font-weight:700;
           letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; align-self:center; }
@@ -505,6 +534,43 @@
   </div>
 </div>
 
+{# Druck-Fußzeile – via JS beim Drucken eingeblendet #}
+<div id="print-footer">
+  {# Logo + Branding #}
+  <div class="pf-col" style="flex:.7;min-width:80px;">
+    <img src="/static/img/logo-trans.png" alt="einsatzleiter.cloud" class="pf-logo">
+    <div class="pf-brand">einsatzleiter.cloud</div>
+  </div>
+
+  {# Lage-Infos #}
+  <div class="pf-col pf-col--wide">
+    <div class="pf-lage">
+      {{ lage.name }}{% if lage.is_exercise %} <span class="pf-exercise">· ÜBUNG</span>{% endif %}
+    </div>
+    <div>Beginn: {{ lage.started_at|local_datetime }}{% if lage.ended_at %} · Ende: {{ lage.ended_at|local_datetime }}{% endif %}</div>
+    <div>
+      Status:
+      {% if lage.status.value == 'active' %}Aktiv
+      {% elif lage.status.value == 'standby' %}Bereitschaft
+      {% elif lage.status.value == 'closed' %}Abgeschlossen
+      {% else %}{{ lage.status.value }}{% endif %}
+      {% if sectors %} · <span class="pf-num">{{ sectors|length }}</span> Abschnitt{{ 'e' if sectors|length != 1 else '' }}{% endif %}
+    </div>
+  </div>
+
+  {# Statistiken + Druckzeitpunkt #}
+  <div class="pf-col pf-col--right">
+    <div id="pf-print-time" style="font-size:9pt;font-weight:700;margin-bottom:2px;"></div>
+    <div>
+      <span class="pf-num" id="pf-open">{{ open_count }}</span> offen ·
+      <span class="pf-num">{{ (all_sites|length) - open_count }}</span> erledigt ·
+      <span class="pf-num">{{ all_sites|length }}</span> gesamt
+    </div>
+    <div id="pf-res-stat" style="margin-top:1px;"></div>
+    <div style="margin-top:3px;font-size:7pt;color:#999;">Lage-ID: {{ lage.id }}</div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -520,6 +586,7 @@
   var CROSS_MARKERS  = {{ cross_markers_json | safe }};
   var lageId  = {{ lage.id }};
   var canEdit = {{ 'true' if can_edit else 'false' }};
+  window._lageSites  = SITES;  // für Druck-Fußzeile (Ressourcenzähler)
 
   // Dynamische Offset-Berechnung: bottom = top + height (korrekt auch mit Übungs-Banner)
   function setKarteOffset() {
@@ -1482,6 +1549,20 @@
     document.getElementById('print-frame').style.display = 'none';
     document.getElementById('pf-bar').style.display = 'none';
 
+    // Fußzeile befüllen
+    var _now = new Date();
+    var _timeEl = document.getElementById('pf-print-time');
+    if (_timeEl) _timeEl.textContent = 'Stand: ' + _now.toLocaleString('de-AT', {
+      day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
+    });
+    var _resEl = document.getElementById('pf-res-stat');
+    if (_resEl && window._lageSites) {
+      var _res = window._lageSites.reduce(function(s, site) { return s + (site.active_res || 0); }, 0);
+      _resEl.textContent = _res > 0 ? _res + ' Ressource' + (_res !== 1 ? 'n' : '') + ' aktiv' : '';
+    }
+    var _footer = document.getElementById('print-footer');
+    if (_footer) _footer.style.display = 'flex';
+
     var map   = window._karteMap;
     var mapEl = document.getElementById('karte-map');
 
@@ -1505,6 +1586,8 @@
       mapEl.style.width    = '';
       map.invalidateSize({ animate: false });
       map.setView(center, zoom, { animate: false });
+      var _f = document.getElementById('print-footer');
+      if (_f) _f.style.display = 'none';
       if (_active) {
         document.getElementById('pf-bar').style.display = 'flex';
         updatePrintFrame();
