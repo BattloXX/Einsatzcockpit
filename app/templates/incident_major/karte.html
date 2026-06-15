@@ -1559,18 +1559,20 @@
     var mapEl = document.getElementById('karte-map');
     if (!map || !mapEl) { window.print(); return; }
 
-    // ── 1. Geografische Grenzen des Druckrahmens vor dem Ausblenden ermitteln
+    // ── 1. Rahmen-Geometrie auslesen BEVOR irgendwas ausgeblendet wird
     var fEl   = document.getElementById('print-frame');
     var fRect = fEl.getBoundingClientRect();
     var mRect = mapEl.getBoundingClientRect();
     var ptTL  = L.point(fRect.left - mRect.left, fRect.top    - mRect.top);
     var ptBR  = L.point(fRect.right - mRect.left, fRect.bottom - mRect.top);
-    var printBounds = L.latLngBounds(
-      map.containerPointToLatLng(ptTL),
-      map.containerPointToLatLng(ptBR)
-    );
-    var origCenter = map.getCenter();
-    var origZoom   = map.getZoom();
+
+    // Mittelpunkt des Rahmens als Geo-Koordinate
+    var frameCenterPt     = L.point((ptTL.x + ptBR.x) / 2, (ptTL.y + ptBR.y) / 2);
+    var frameCenterLatLng = map.containerPointToLatLng(frameCenterPt);
+    var frameW            = fRect.width;
+    var origCenter        = map.getCenter();
+    var origZoom          = map.getZoom();
+    var origZoomSnap      = map.options.zoomSnap;
 
     // ── 2. Alle UI-Elemente per JS ausblenden (inline > @media print)
     var _hideSels = [
@@ -1586,7 +1588,7 @@
       });
     });
 
-    // ── 3. Fußzeile befüllen und einblenden
+    // ── 3. Fußzeile befüllen; position:static inline, sonst bleibt fixed aus Screen-CSS
     var now  = new Date();
     var tEl  = document.getElementById('pf-print-time');
     if (tEl) tEl.textContent = 'Stand: ' + now.toLocaleString('de-AT', {
@@ -1598,7 +1600,7 @@
       rEl.textContent = res > 0 ? res + ' Ressource' + (res !== 1 ? 'n' : '') + ' aktiv' : '';
     }
     var ftrEl = document.getElementById('print-footer');
-    if (ftrEl) ftrEl.style.display = 'flex';
+    if (ftrEl) { ftrEl.style.display = 'flex'; ftrEl.style.position = 'static'; }
 
     // ── 4. Karte auf exakte Druckabmessungen in CSS-Pixeln setzen
     //     Leaflet rendert Tiles für genau diese Größe → stimmt mit @page überein
@@ -1613,8 +1615,13 @@
     void mapEl.offsetHeight;   // Layout-Flush erzwingen
     map.invalidateSize({ animate: false });
 
-    // ── 5. Exakt auf Druckbereich zoomen
-    map.fitBounds(printBounds, { animate: false, padding: [0, 0] });
+    // ── 5. Exakter Maßstab: Zoom so anpassen dass Rahmenbreite = Druckbreite
+    //     printZoom = currentZoom + log2(printWpx / frameW)
+    //     zoomSnap=0 → kein Runden auf Integer → kein Overshooting
+    var printZoom = origZoom + Math.log2(printWpx / frameW);
+    map.options.zoomSnap = 0;
+    map.setView(frameCenterLatLng, printZoom, { animate: false });
+    map.options.zoomSnap = origZoomSnap;
 
     // ── 6. Aufräumen nach Druck
     function restoreMap() {
@@ -1623,7 +1630,8 @@
       mapEl.style.width    = '';
       mapEl.style.height   = '';
       mapEl.style.zIndex   = '';
-      if (ftrEl) ftrEl.style.display = 'none';
+      if (ftrEl) { ftrEl.style.display = 'none'; ftrEl.style.position = ''; }
+      map.options.zoomSnap = origZoomSnap;
       map.invalidateSize({ animate: false });
       map.setView(origCenter, origZoom, { animate: false });
       if (_active) {
