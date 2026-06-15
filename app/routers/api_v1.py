@@ -603,14 +603,17 @@ async def create_incident_api(
     # Web Push in Background – blockierende Netzwerk-Calls (pywebpush/FCM) nicht im Event-Loop
     push_title = f"{exercise_prefix}🚒 Einsatz: {alarm_type_code}"
     push_body = address or payload.Meldung or "Kein Ort angegeben"
+    if _mi_site:
+        push_url = f"/lage/{_mi_site.major_incident_id}?openSite={_mi_site.id}"
+    else:
+        push_url = f"/einsatz/{incident.id}"
     if api_key.org_id:
         background_tasks.add_task(
-            notify_org, db, api_key.org_id, push_title, push_body,
-            f"/einsatz/{incident.id}",
+            notify_org, db, api_key.org_id, push_title, push_body, push_url,
         )
     else:
         background_tasks.add_task(
-            notify_all, db, push_title, push_body, f"/einsatz/{incident.id}",
+            notify_all, db, push_title, push_body, push_url,
         )
 
     board_token, board_url = run_side_effect(
@@ -938,6 +941,15 @@ async def lage_alarm(
         payload.Telefon,
         api_key.org_id,
     )
+    if api_key.org_id:
+        _ex_prefix = "[ÜBUNG] " if lage.is_exercise else ""
+        _push_body = payload.Ort or payload.Meldung or "Keine Ortsangabe"
+        background_tasks.add_task(
+            notify_org, db, api_key.org_id,
+            f"{_ex_prefix}🚨 Neue Einsatzstelle: {bezeichnung}",
+            _push_body,
+            f"/lage/{lage.id}?openSite={site.id}",
+        )
     return LageSiteCreatedResponse(lage_id=lage.id, site_id=site.id, created=True)
 
 
