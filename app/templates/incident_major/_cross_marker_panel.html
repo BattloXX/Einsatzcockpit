@@ -1,66 +1,71 @@
 {# Detail-Panel für übergreifende Meldungen (in Seitenpanel) #}
 {# Kontext: lage, marker, type_label, type_icon, status_label, status_color, can_edit #}
 <div x-data="{editing:false}">
-<div style="padding:12px 14px;">
-  <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;">
-    <span style="font-size:1.4rem;flex-shrink:0;">{{ marker.type_icon }}</span>
+
+{# ── Header (wie Einsatzstellen-Panel) ──────────────────────────────────────── #}
+<div style="padding:10px 14px 8px;border-bottom:1px solid var(--border);">
+  <div style="display:flex;align-items:flex-start;gap:6px;">
+    <span style="font-size:1.2rem;flex-shrink:0;padding-top:2px;">{{ marker.type_icon }}</span>
     <div style="flex:1;min-width:0;">
-      <div style="font-weight:700;font-size:.95rem;">{{ marker.title }}</div>
-      <div style="font-size:.72rem;color:var(--text-muted);">{{ marker.type_label }}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;" x-show="!editing">
+        <span style="font-weight:700;font-size:.95rem;line-height:1.25;">{{ marker.title }}</span>
+        {% if can_edit %}
+        <button type="button" @click="editing=true"
+                class="btn btn--xs btn--ghost" title="Bearbeiten">✏️</button>
+        {% endif %}
+        <a href="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/druck"
+           target="_blank" class="btn btn--xs btn--ghost"
+           title="Drucken" style="text-decoration:none;">🖨</a>
+      </div>
+      <div style="font-size:.72rem;color:var(--text-muted);margin-top:2px;" x-show="!editing">
+        {{ marker.type_label }}
+      </div>
+
+      {# ── Bearbeiten-Formular ──────────────────────────────────────────────── #}
+      {% if can_edit %}
+      <div x-show="editing" x-cloak style="padding-top:4px;">
+        <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/bearbeiten"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+              hx-swap="none"
+              hx-on::after-request="if(event.detail.successful){htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel',{target:this.closest('#site-panel-content,#siteDetailContent'),swap:'innerHTML'});htmx.trigger(document.body,'crossMarkerChanged')}"
+              style="display:flex;flex-direction:column;gap:7px;">
+          <input type="text" name="title" class="form-input"
+                 value="{{ marker.title }}" required maxlength="160"
+                 placeholder="Titel">
+          <select name="marker_type" class="form-select">
+            {% for val, lbl in type_label.items() %}
+            <option value="{{ val }}" {% if marker.marker_type == val %}selected{% endif %}>{{ lbl }}</option>
+            {% endfor %}
+          </select>
+          <textarea name="description" class="form-input" rows="2" maxlength="1000"
+                    style="resize:vertical;font-size:.82rem;"
+                    placeholder="Beschreibung…">{{ marker.description or '' }}</textarea>
+          <div style="display:flex;gap:5px;">
+            <input type="text" name="strasse" class="form-input" style="flex:3;"
+                   value="{{ marker.strasse or '' }}" placeholder="Straße" maxlength="160">
+            <input type="text" name="hausnr" class="form-input" style="flex:1;"
+                   value="{{ marker.hausnr or '' }}" placeholder="Nr." maxlength="20">
+          </div>
+          <input type="text" name="ort" class="form-input"
+                 value="{{ marker.ort or '' }}" placeholder="Ort" maxlength="120">
+          <input type="hidden" name="status" value="{{ marker.status }}">
+          <div style="display:flex;gap:6px;">
+            <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+            <button type="button" @click="editing=false" class="btn btn--ghost btn--sm">Abbrechen</button>
+          </div>
+        </form>
+      </div>
+      {% endif %}
     </div>
-    {% if can_edit %}
-    <button type="button" @click="editing=!editing"
-            :class="editing ? 'btn btn--xs btn--secondary' : 'btn btn--xs btn--ghost'"
-            style="flex-shrink:0;"
-            x-text="editing ? '✕ Abbrechen' : '✎ Bearbeiten'">✎ Bearbeiten</button>
-    {% endif %}
     <button type="button"
             onclick="(function(){var pw=document.getElementById('site-panel-wrap');if(pw)pw.classList.remove('open');var dm=document.getElementById('siteDetailModal');if(dm)dm.close();})()"
             class="btn btn--xs btn--ghost" style="flex-shrink:0;font-size:1rem;padding:0 6px;" title="Schließen">✕</button>
   </div>
+</div>
 
-  {# ── Bearbeiten-Formular ─────────────────────────────────────────────────── #}
-  {% if can_edit %}
-  <div x-show="editing" x-cloak
-       style="padding:10px 0 12px;border-bottom:1px solid var(--border);margin-bottom:10px;">
-    <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/bearbeiten"
-          hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-          hx-swap="none"
-          hx-on::after-request="if(event.detail.successful){htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel',{target:this.closest('#site-panel-content,#siteDetailContent'),swap:'innerHTML'});htmx.trigger(document.body,'crossMarkerChanged')}"
-          style="display:flex;flex-direction:column;gap:8px;">
-      <div>
-        <label class="form-label form-label--xs">Titel *</label>
-        <input type="text" name="title" class="form-input"
-               value="{{ marker.title }}" required maxlength="160">
-      </div>
-      <div>
-        <label class="form-label form-label--xs">Kategorie</label>
-        <select name="marker_type" class="form-select">
-          {% for val, lbl in type_label.items() %}
-          <option value="{{ val }}" {% if marker.marker_type == val %}selected{% endif %}>{{ lbl }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label class="form-label form-label--xs">Beschreibung</label>
-        <textarea name="description" class="form-input" rows="3" maxlength="1000"
-                  style="resize:vertical;font-size:.82rem;">{{ marker.description or '' }}</textarea>
-      </div>
-      {# Unveränderliche Felder erhalten (Backend überschreibt sonst mit leer) #}
-      <input type="hidden" name="status" value="{{ marker.status }}">
-      <input type="hidden" name="strasse" value="{{ marker.strasse or '' }}">
-      <input type="hidden" name="hausnr" value="{{ marker.hausnr or '' }}">
-      <input type="hidden" name="ort" value="{{ marker.ort or '' }}">
-      <div style="display:flex;gap:6px;">
-        <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
-        <button type="button" @click="editing=false" class="btn btn--ghost btn--sm">Abbrechen</button>
-      </div>
-    </form>
-  </div>
-  {% endif %}
+{# ── Normale Ansicht ─────────────────────────────────────────────────────────── #}
+<div x-show="!editing" style="padding:10px 14px 0;">
 
-  {# ── Normale Ansicht ─────────────────────────────────────────────────────── #}
-  <div x-show="!editing">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
     <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{{ marker.status_color }};flex-shrink:0;"></span>
     {% if can_edit %}
@@ -81,19 +86,24 @@
     {% endif %}
   </div>
 
-  {% if marker.address_line %}
-  <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:6px;">📍 {{ marker.address_line }}</div>
-  {% endif %}
-
+  {# Adresse + Karte #}
   {% if marker.lat and marker.lng %}
   <div id="cm-panel-map-{{ marker.id }}"
-       style="height:220px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;z-index:0;"></div>
-  <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <span>{{ "%.5f"|format(marker.lat) }}, {{ "%.5f"|format(marker.lng) }}</span>
+       style="height:200px;border-radius:6px;border:1px solid var(--border);margin-bottom:6px;z-index:0;"></div>
+  <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    {% if marker.address_line %}
+    <span>📍 {{ marker.address_line }}</span>
+    {% endif %}
+    <span style="font-family:monospace;">{{ "%.5f"|format(marker.lat) }}, {{ "%.5f"|format(marker.lng) }}</span>
     <a href="https://www.openstreetmap.org/?mlat={{ marker.lat }}&mlon={{ marker.lng }}&zoom=17"
        target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ OSM</a>
     <a href="https://maps.google.com/?q={{ marker.lat }},{{ marker.lng }}"
        target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ Google Maps</a>
+    {% if can_edit %}
+    <button type="button"
+            onclick="var t=this.closest('#site-panel-content')||this.closest('#siteDetailContent');if(t)htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/pin-picker',{target:t,swap:'innerHTML'})"
+            class="btn btn--xs btn--ghost" style="font-size:.7rem;padding:1px 6px;">📍 Pin korrigieren</button>
+    {% endif %}
   </div>
   <script>
   (function() {
@@ -128,6 +138,17 @@
     }
   })();
   </script>
+  {% else %}
+  <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    {% if marker.address_line %}
+    <span style="font-size:.78rem;color:var(--text-muted);">📍 {{ marker.address_line }}</span>
+    {% endif %}
+    {% if can_edit %}
+    <button type="button"
+            onclick="var t=this.closest('#site-panel-content')||this.closest('#siteDetailContent');if(t)htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/pin-picker',{target:t,swap:'innerHTML'})"
+            class="btn btn--xs btn--ghost">📍 Koordinaten per Pin setzen</button>
+    {% endif %}
+  </div>
   {% endif %}
 
   {% if marker.description %}
@@ -137,11 +158,10 @@
   </div>
   {% endif %}
 
-  <div style="font-size:.68rem;color:var(--text-muted);margin-top:4px;margin-bottom:10px;">
+  <div style="font-size:.68rem;color:var(--text-muted);margin-top:4px;margin-bottom:8px;">
     {% if marker.author_name %}{{ marker.author_name }} · {% endif %}
     {{ marker.created_at | local_datetime }}
   </div>
-  </div>{# /x-show !editing #}
 </div>
 
 {# ── Medien ─────────────────────────────────────────────────────────────────── #}
@@ -262,10 +282,8 @@
 </div>
 
 {# ── Aktionen ───────────────────────────────────────────────────────────────── #}
+{% if can_edit %}
 <div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--border);">
-  <a href="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/druck"
-     target="_blank" class="btn btn--ghost btn--sm">🖨 Drucken</a>
-  {% if can_edit %}
   <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/loeschen"
         hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
         hx-confirm="Meldung wirklich löschen?"
@@ -279,6 +297,6 @@
         style="margin:0;">
     <button type="submit" class="btn btn--ghost btn--sm" style="color:#f87171;border-color:rgba(239,68,68,.3);">Löschen</button>
   </form>
-  {% endif %}
 </div>
+{% endif %}
 </div>{# /x-data #}

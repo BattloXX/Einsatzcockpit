@@ -1,0 +1,140 @@
+{# PIN-Picker für übergreifende Meldungen (HTMX-Partial) #}
+{# Kontext: lage, marker, org #}
+<div style="padding:12px 14px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+  <div style="flex:1;min-width:0;">
+    <div style="font-weight:700;font-size:.95rem;">Koordinaten per Pin setzen</div>
+    <div style="font-size:.72rem;color:var(--text-muted);margin-top:2px;">{{ marker.title }}</div>
+  </div>
+  <button type="button"
+          onclick="var t=this.closest('#site-panel-content')||this.closest('#siteDetailContent');if(t)htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel',{target:t,swap:'innerHTML'})"
+          class="btn btn--xs btn--ghost" style="font-size:1rem;padding:0 6px;" title="Abbrechen">✕</button>
+</div>
+
+<div style="padding:10px 14px;">
+  <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:10px;">
+    Klicke auf die Karte oder ziehe den Pin, um den Standort zu setzen.
+  </p>
+
+  <div style="margin-bottom:8px;display:flex;gap:6px;">
+    <input type="text" id="cmPinSearchInput" placeholder="Adresse suchen…"
+           class="form-input" style="flex:1;font-size:.82rem;"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();cmPinSearch();}">
+    <button type="button" class="btn btn--ghost btn--sm" onclick="cmPinSearch()">Suchen</button>
+  </div>
+
+  <div id="cmPinMap" style="height:280px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;"></div>
+  <div id="cmPinCoords" style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px;min-height:1.2em;">
+    {% if marker.lat and marker.lng %}
+    Aktuell: {{ '%.5f'|format(marker.lat) }}, {{ '%.5f'|format(marker.lng) }} – auf Karte klicken zum Ändern.
+    {% else %}
+    Noch kein Standort gesetzt – auf Karte klicken.
+    {% endif %}
+  </div>
+
+  <input type="hidden" id="cmPinLat" value="{{ '%.6f'|format(marker.lat) if marker.lat else '' }}">
+  <input type="hidden" id="cmPinLng" value="{{ '%.6f'|format(marker.lng) if marker.lng else '' }}">
+  <div style="display:flex;gap:6px;">
+    <button type="button"
+            onclick="var t=this.closest('#site-panel-content')||this.closest('#siteDetailContent');if(t)htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel',{target:t,swap:'innerHTML'})"
+            class="btn btn--ghost btn--sm">Abbrechen</button>
+    <button type="button" id="cmPinSaveBtn"
+            onclick="(function(btn){var t=btn.closest('#site-panel-content')||btn.closest('#siteDetailContent');if(!t)return;htmx.ajax('POST','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/pin',{target:t,swap:'innerHTML',values:{lat:document.getElementById('cmPinLat').value,lng:document.getElementById('cmPinLng').value,'_csrf':'{{ request.state.csrf_token }}'}});})(this)"
+            class="btn btn--primary btn--sm"
+            {% if not marker.lat %}disabled{% endif %}>Speichern</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  {% if org and org.fallback_lat %}
+  var defLat = {{ org.fallback_lat }}, defLng = {{ org.fallback_lng }};
+  {% else %}
+  var defLat = 47.4664, defLng = 9.7416;
+  {% endif %}
+  {% if marker.lat and marker.lng %}
+  var initLat = {{ marker.lat }}, initLng = {{ marker.lng }};
+  {% else %}
+  var initLat = null, initLng = null;
+  {% endif %}
+
+  var _map = null, _marker = null;
+
+  function initPinMap() {
+    if (typeof L === 'undefined' || _map) return;
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconUrl: '/static/img/leaflet/marker-icon.png',
+      iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
+      shadowUrl: '/static/img/leaflet/marker-shadow.png',
+    });
+    var startLat = initLat !== null ? initLat : defLat;
+    var startLng = initLng !== null ? initLng : defLng;
+    var startZoom = initLat !== null ? 17 : 14;
+
+    _map = L.map('cmPinMap').setView([startLat, startLng], startZoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap', subdomains: 'abc', maxZoom: 19,
+    }).addTo(_map);
+
+    if (initLat !== null) {
+      _marker = L.marker([initLat, initLng], {draggable: true}).addTo(_map);
+      _marker.on('dragend', function(e) {
+        var pos = e.target.getLatLng();
+        _updateCoords(pos.lat, pos.lng);
+      });
+    }
+
+    _map.on('click', function(e) { setPin(e.latlng.lat, e.latlng.lng); });
+    setTimeout(function() { _map.invalidateSize(); }, 100);
+    setTimeout(function() { _map.invalidateSize(); }, 400);
+  }
+
+  function _updateCoords(lat, lng) {
+    document.getElementById('cmPinLat').value = lat.toFixed(6);
+    document.getElementById('cmPinLng').value = lng.toFixed(6);
+    document.getElementById('cmPinCoords').textContent =
+      'Gesetzt: ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+    document.getElementById('cmPinSaveBtn').disabled = false;
+  }
+
+  function setPin(lat, lng) {
+    if (_marker) _map.removeLayer(_marker);
+    _marker = L.marker([lat, lng], {draggable: true}).addTo(_map);
+    _marker.on('dragend', function(e) {
+      _updateCoords(e.target.getLatLng().lat, e.target.getLatLng().lng);
+    });
+    _updateCoords(lat, lng);
+  }
+
+  window.cmPinSearch = function() {
+    var q = document.getElementById('cmPinSearchInput').value.trim();
+    if (!q) return;
+    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q))
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d && d[0]) {
+          var lat = parseFloat(d[0].lat), lng = parseFloat(d[0].lon);
+          _map.setView([lat, lng], 17);
+          setPin(lat, lng);
+        } else {
+          document.getElementById('cmPinCoords').textContent = 'Adresse nicht gefunden.';
+        }
+      })
+      .catch(function() {
+        document.getElementById('cmPinCoords').textContent = 'Suche fehlgeschlagen.';
+      });
+  };
+
+  if (typeof L !== 'undefined') {
+    initPinMap();
+  } else {
+    var link = document.createElement('link');
+    link.rel = 'stylesheet'; link.href = '/static/css/leaflet.min.css';
+    document.head.appendChild(link);
+    var s = document.createElement('script');
+    s.src = '/static/js/leaflet.min.js';
+    s.onload = initPinMap;
+    document.head.appendChild(s);
+  }
+})();
+</script>

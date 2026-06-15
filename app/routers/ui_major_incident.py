@@ -1861,7 +1861,30 @@ async def cross_marker_update(
     return Response(status_code=204)
 
 
-@router.post("/lage/{lage_id}/uebergreifend/{mid}/pin")
+@router.get("/lage/{lage_id}/uebergreifend/{mid}/pin-picker", response_class=HTMLResponse)
+async def cross_marker_pin_picker(
+    request: Request,
+    lage_id: int,
+    mid: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    m = db.get(CrossSiteMarker, mid)
+    if not m or m.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    from app.models.master import FireDept as _FD
+    org = db.get(_FD, lage.org_id) if lage.org_id else None
+    return templates.TemplateResponse(request, "incident_major/_cross_marker_pin.html", {
+        "lage": lage,
+        "marker": m,
+        "org": org,
+    })
+
+
+@router.post("/lage/{lage_id}/uebergreifend/{mid}/pin", response_class=HTMLResponse)
 async def cross_marker_set_pin(
     request: Request,
     lage_id: int,
@@ -1881,7 +1904,15 @@ async def cross_marker_set_pin(
     m.lng = lng
     db.commit()
     await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "reload_board": False})
-    return Response(status_code=204)
+    return templates.TemplateResponse(request, "incident_major/_cross_marker_panel.html", {
+        "lage": lage,
+        "marker": m,
+        "type_label": CROSS_MARKER_TYPE_LABEL,
+        "type_icon": CROSS_MARKER_TYPE_ICON,
+        "status_label": CROSS_MARKER_STATUS_LABEL,
+        "status_color": CROSS_MARKER_STATUS_COLOR,
+        "can_edit": _can_edit(user),
+    })
 
 
 @router.post("/lage/{lage_id}/uebergreifend/{mid}/loeschen")
