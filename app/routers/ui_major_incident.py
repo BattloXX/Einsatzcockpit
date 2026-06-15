@@ -3307,6 +3307,7 @@ async def vehicle_positions(
             "source": p.source,
             "is_stale": is_stale,
             "ts": p.received_at.isoformat() if p.received_at else None,
+            "vtype": vehicle.type if vehicle else "",
         })
 
     for p in manual_positions:
@@ -3320,6 +3321,7 @@ async def vehicle_positions(
             "source": "manual",
             "is_stale": False,
             "ts": p.received_at.isoformat() if p.received_at else None,
+            "vtype": "",
         })
 
     from fastapi.responses import JSONResponse

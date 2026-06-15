@@ -263,6 +263,34 @@
 </div>
 {% endif %}
 
+<div class="page-break">
+  <h2>Taktische Zeichen – Legende</h2>
+  <style>
+    .taktlegende { margin-top:6px; }
+    .tl-row { display:flex; align-items:center; gap:8px; padding:3px 0;
+               border-top:1px solid #eee; font-size:9pt; }
+    .tl-sym { display:inline-flex; align-items:center; justify-content:center;
+               width:20px; height:16px; border:2px solid #d11; border-radius:2px;
+               font-size:8pt; font-weight:700; flex-shrink:0; color:#d11; }
+    .tl-dot { display:inline-block; width:12px; height:12px; border-radius:50%;
+               flex-shrink:0; }
+    .tl-line { display:inline-block; width:20px; height:2px; background:#111; flex-shrink:0; }
+  </style>
+  <div class="taktlegende">
+    <div class="tl-row"><span class="tl-sym"></span> Einsatzstelle (Rot = Schadenslage)</div>
+    <div class="tl-row"><span class="tl-sym" style="border-color:#d11;border-radius:0;clip-path:polygon(50% 0%,100% 100%,0% 100%);height:18px;">△</span> Gefahr / Schaden (Rot)</div>
+    <div class="tl-row"><span class="tl-sym" style="border-radius:50%;">⊘</span> gesperrt / blockiert (Rot)</div>
+    <div class="tl-row"><span class="tl-sym" style="border-color:#111;transform:rotate(45deg);color:#111;">◇</span> Messpunkt / allgemeine Lage (Schwarz)</div>
+    <div class="tl-row"><span class="tl-dot" style="background:#d11;"></span> wasserführendes Fahrzeug (TLF, RLF, HLF, LFB)</div>
+    <div class="tl-row"><span class="tl-dot" style="background:#1f5fd1;"></span> Löschfahrzeug (LF, KLF, KLFA, MLF, KRF)</div>
+    <div class="tl-row"><span class="tl-dot" style="background:#f5c000;"></span> Sonderfahrzeug (DL, DLK, RF, WLF, ASF, …)</div>
+    <div class="tl-row"><span class="tl-dot" style="background:#22a06b;"></span> diverses Fahrzeug (MTF, KDOF, LAST, MZF, SW, …)</div>
+    <div class="tl-row"><span class="tl-dot" style="background:#fff;border:1px solid #555;"></span> andere Organisation / manuelle Markierung</div>
+    <div class="tl-row"><span class="tl-line"></span> Abschnittsgrenze (Schwarz = allgemeine Lage)</div>
+  </div>
+  <p style="font-size:8pt;color:#555;margin-top:6px;">Darstellung nach ÖBFV E-27 / ÖNORM S 2308.</p>
+</div>
+
 <div class="print-footer">
   {{ lage.name }} · Stand {{ now|local_datetime }} · Einsatzleiter-Hilfswerkzeug
 </div>
