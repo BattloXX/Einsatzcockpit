@@ -1,5 +1,6 @@
 {# Detail-Panel für übergreifende Meldungen (in Seitenpanel) #}
 {# Kontext: lage, marker, type_label, type_icon, status_label, status_color, can_edit #}
+<div x-data="{editing:false}">
 <div style="padding:12px 14px;">
   <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;">
     <span style="font-size:1.4rem;flex-shrink:0;">{{ marker.type_icon }}</span>
@@ -7,11 +8,59 @@
       <div style="font-weight:700;font-size:.95rem;">{{ marker.title }}</div>
       <div style="font-size:.72rem;color:var(--text-muted);">{{ marker.type_label }}</div>
     </div>
+    {% if can_edit %}
+    <button type="button" @click="editing=!editing"
+            :class="editing ? 'btn btn--xs btn--secondary' : 'btn btn--xs btn--ghost'"
+            style="flex-shrink:0;"
+            x-text="editing ? '✕ Abbrechen' : '✎ Bearbeiten'">✎ Bearbeiten</button>
+    {% endif %}
     <button type="button"
             onclick="(function(){var pw=document.getElementById('site-panel-wrap');if(pw)pw.classList.remove('open');var dm=document.getElementById('siteDetailModal');if(dm)dm.close();})()"
             class="btn btn--xs btn--ghost" style="flex-shrink:0;font-size:1rem;padding:0 6px;" title="Schließen">✕</button>
   </div>
 
+  {# ── Bearbeiten-Formular ─────────────────────────────────────────────────── #}
+  {% if can_edit %}
+  <div x-show="editing" x-cloak
+       style="padding:10px 0 12px;border-bottom:1px solid var(--border);margin-bottom:10px;">
+    <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/bearbeiten"
+          hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+          hx-swap="none"
+          hx-on::after-request="if(event.detail.successful){htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel',{target:this.closest('#site-panel-content,#siteDetailContent'),swap:'innerHTML'});htmx.trigger(document.body,'crossMarkerChanged')}"
+          style="display:flex;flex-direction:column;gap:8px;">
+      <div>
+        <label class="form-label form-label--xs">Titel *</label>
+        <input type="text" name="title" class="form-input"
+               value="{{ marker.title }}" required maxlength="160">
+      </div>
+      <div>
+        <label class="form-label form-label--xs">Kategorie</label>
+        <select name="marker_type" class="form-select">
+          {% for val, lbl in type_label.items() %}
+          <option value="{{ val }}" {% if marker.marker_type == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label form-label--xs">Beschreibung</label>
+        <textarea name="description" class="form-input" rows="3" maxlength="1000"
+                  style="resize:vertical;font-size:.82rem;">{{ marker.description or '' }}</textarea>
+      </div>
+      {# Unveränderliche Felder erhalten (Backend überschreibt sonst mit leer) #}
+      <input type="hidden" name="status" value="{{ marker.status }}">
+      <input type="hidden" name="strasse" value="{{ marker.strasse or '' }}">
+      <input type="hidden" name="hausnr" value="{{ marker.hausnr or '' }}">
+      <input type="hidden" name="ort" value="{{ marker.ort or '' }}">
+      <div style="display:flex;gap:6px;">
+        <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+        <button type="button" @click="editing=false" class="btn btn--ghost btn--sm">Abbrechen</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {# ── Normale Ansicht ─────────────────────────────────────────────────────── #}
+  <div x-show="!editing">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
     <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{{ marker.status_color }};flex-shrink:0;"></span>
     {% if can_edit %}
@@ -92,6 +141,7 @@
     {% if marker.author_name %}{{ marker.author_name }} · {% endif %}
     {{ marker.created_at | local_datetime }}
   </div>
+  </div>{# /x-show !editing #}
 </div>
 
 {# ── Medien ─────────────────────────────────────────────────────────────────── #}
@@ -212,8 +262,10 @@
 </div>
 
 {# ── Aktionen ───────────────────────────────────────────────────────────────── #}
-{% if can_edit %}
 <div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--border);">
+  <a href="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/druck"
+     target="_blank" class="btn btn--ghost btn--sm">🖨 Drucken</a>
+  {% if can_edit %}
   <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/loeschen"
         hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
         hx-confirm="Meldung wirklich löschen?"
@@ -227,5 +279,6 @@
         style="margin:0;">
     <button type="submit" class="btn btn--ghost btn--sm" style="color:#f87171;border-color:rgba(239,68,68,.3);">Löschen</button>
   </form>
+  {% endif %}
 </div>
-{% endif %}
+</div>{# /x-data #}

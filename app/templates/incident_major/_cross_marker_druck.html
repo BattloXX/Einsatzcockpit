@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ marker.title }} – Übergreifende Meldung</title>
+{% if marker.lat and marker.lng %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+{% endif %}
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: A4 portrait; margin: 14mm 16mm; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10.5pt; color: #111; background: #fff;
+  }
+
+  .no-print { }
+  @media print { .no-print { display: none !important; } }
+
+  .print-bar {
+    background: #f3f4f6; border-bottom: 1px solid #d1d5db;
+    padding: 8px 16px; display: flex; align-items: center; gap: 10px;
+    font-size: 9.5pt;
+  }
+  .print-btn {
+    background: #1f2937; color: #fff; border: none; border-radius: 4px;
+    padding: 5px 14px; font-size: 9.5pt; cursor: pointer;
+  }
+  .print-btn:hover { background: #374151; }
+
+  .page { padding: 0; max-width: 180mm; margin: 8mm auto 0; }
+
+  .hdr { border-bottom: 2.5px solid #b71921; padding-bottom: 7px; margin-bottom: 10px; }
+  .hdr__lage { font-size: 8.5pt; color: #6b7280; margin-bottom: 3px; }
+  .hdr__title { font-size: 15pt; font-weight: 700; line-height: 1.2; }
+  .hdr__sub { font-size: 10pt; color: #374151; margin-top: 3px; }
+  .hdr__meta { font-size: 8.5pt; color: #6b7280; margin-top: 5px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .exercise-banner {
+    background: #fef9c3; border: 1px solid #fde68a; color: #92400e;
+    font-weight: 700; text-align: center; padding: 4px; font-size: 9.5pt; margin-bottom: 8px;
+  }
+
+  .info-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .info-table td { padding: 3px 6px; vertical-align: top; font-size: 10pt; border-bottom: 1px solid #e5e7eb; }
+  .info-table td:first-child { width: 32mm; font-size: 8.5pt; color: #6b7280; font-weight: 600; white-space: nowrap; }
+
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+
+  h2 { font-size: 9.5pt; font-weight: 700; text-transform: uppercase;
+       letter-spacing: .04em; border-bottom: 1.5px solid #111;
+       margin: 12px 0 6px; padding-bottom: 3px; }
+
+  .desc-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;
+              padding: 8px 10px; font-size: 10pt; line-height: 1.5; margin-bottom: 10px; }
+
+  .map-wrap { margin: 10px 0; }
+  .map-wrap h2 { font-size: 9.5pt; font-weight: 700; text-transform: uppercase;
+                 letter-spacing: .04em; border-bottom: 1.5px solid #111;
+                 margin-bottom: 6px; padding-bottom: 3px; }
+  #printMap { width: 100%; height: 130mm; border: 1px solid #ccc; border-radius: 3px; }
+  .map-coords { font-size: 7.5pt; color: #9ca3af; margin-top: 3px; }
+
+  .log-row { display: flex; gap: 10px; padding: 3px 0;
+             border-bottom: 1px solid #f3f4f6; font-size: 9.5pt;
+             page-break-inside: avoid; }
+  .log-time { color: #6b7280; white-space: nowrap; flex-shrink: 0; width: 22mm; }
+  .log-text { flex: 1; }
+
+  .media-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .media-grid img { width: 44mm; height: 44mm; object-fit: cover;
+                    border-radius: 3px; border: 1px solid #d1d5db; page-break-inside: avoid; }
+
+  .footer { margin-top: 16px; padding-top: 5px; border-top: 1px solid #d1d5db;
+            font-size: 8pt; color: #9ca3af; display: flex; justify-content: space-between; }
+
+  @media print {
+    .page { max-width: 100%; margin: 0; }
+    body { font-size: 10pt; }
+  }
+</style>
+</head>
+<body>
+
+<div class="no-print print-bar">
+  <a href="/lage/{{ lage.id }}" class="print-btn" style="text-decoration:none;background:#374151;">← Board</a>
+  <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
+  <span>A4 Hochformat · Übergreifende Meldung #{{ marker.id }}</span>
+  <span style="margin-left:auto;color:#6b7280;">{{ lage.name }}</span>
+</div>
+
+<div class="page">
+
+  {% if lage.is_exercise %}
+  <div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
+  {% endif %}
+
+  <div class="hdr">
+    <div class="hdr__lage">{{ lage.name }} · Übergreifende Meldung</div>
+    <div class="hdr__title">{{ marker.type_icon }} {{ marker.title }}</div>
+    <div class="hdr__sub">{{ marker.type_label }}</div>
+    <div class="hdr__meta">
+      <span>Erfasst: {{ marker.created_at | local_datetime }}</span>
+      <span>Status: {{ marker.status_label }}</span>
+      {% if marker.author_name %}<span>{{ marker.author_name }}</span>{% endif %}
+    </div>
+  </div>
+
+  <table class="info-table">
+    <tr>
+      <td>Status</td>
+      <td>{{ marker.status_label }}</td>
+    </tr>
+    <tr>
+      <td>Kategorie</td>
+      <td>{{ marker.type_label }}</td>
+    </tr>
+    {% if marker.address_line %}
+    <tr>
+      <td>Adresse</td>
+      <td>{{ marker.address_line }}</td>
+    </tr>
+    {% endif %}
+    {% if marker.lat and marker.lng %}
+    <tr>
+      <td>Koordinaten</td>
+      <td>{{ '%.5f'|format(marker.lat) }}, {{ '%.5f'|format(marker.lng) }}</td>
+    </tr>
+    {% endif %}
+    {% if marker.media %}
+    <tr>
+      <td>Fotos</td>
+      <td>{{ marker.media|length }}</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  {% if marker.description %}
+  <h2>Beschreibung</h2>
+  <div class="desc-box">{{ marker.description }}</div>
+  {% endif %}
+
+  {# ── Karte ── #}
+  {% if marker.lat and marker.lng %}
+  <div class="map-wrap">
+    <h2>Karte</h2>
+    <div id="printMap"></div>
+    <div class="map-coords">{{ '%.5f'|format(marker.lat) }}, {{ '%.5f'|format(marker.lng) }}</div>
+  </div>
+  {% elif marker.address_line %}
+  <div class="map-wrap">
+    <h2>Adresse</h2>
+    <p style="font-size:10pt;">{{ marker.address_line }}</p>
+  </div>
+  {% endif %}
+
+  {# ── Notizen / Log ── #}
+  {% if marker.log_entries %}
+  <h2>Meldungen &amp; Notizen</h2>
+  {% for entry in marker.log_entries %}
+  <div class="log-row">
+    <span class="log-time">{{ entry.ts | local_datetime }}</span>
+    <span class="log-text">{{ entry.text }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {# ── Fotos ── #}
+  {% if marker.media %}
+  <h2>Fotos ({{ marker.media|length }})</h2>
+  <div class="media-grid">
+    {% for m in marker.media %}
+    <img src="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/medien/{{ m.id }}/bild"
+         alt="{{ m.original_filename }}" loading="eager">
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="footer">
+    <span>{{ lage.name }} · Meldung #{{ marker.id }}</span>
+    <span>Gedruckt: <span id="printTs">–</span></span>
+  </div>
+
+</div>{# /page #}
+
+{% if marker.lat and marker.lng %}
+<script src="/static/js/leaflet.min.js"></script>
+<script>
+(function() {
+  var lat = {{ marker.lat }}, lng = {{ marker.lng }};
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconUrl: '/static/img/leaflet/marker-icon.png',
+    iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
+    shadowUrl: '/static/img/leaflet/marker-shadow.png',
+  });
+  var map = L.map('printMap', { zoomControl: false, attributionControl: false })
+             .setView([lat, lng], 18);
+  var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    subdomains: 'abc', maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+  L.marker([lat, lng]).addTo(map);
+  setTimeout(function() { map.invalidateSize(); }, 50);
+  setTimeout(function() { map.invalidateSize(); }, 300);
+  window.addEventListener('beforeprint', function() { map.invalidateSize(); });
+  var printed = false;
+  function autoPrint() {
+    if (printed) return;
+    printed = true;
+    setTimeout(function() { window.print(); }, 800);
+  }
+  tiles.on('load', autoPrint);
+  setTimeout(autoPrint, 8000);
+})();
+</script>
+{% else %}
+<script>
+window.addEventListener('load', function() { setTimeout(window.print, 300); });
+</script>
+{% endif %}
+<script>
+document.getElementById('printTs').textContent =
+  new Date().toLocaleString('de-AT', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+</script>
+
+</body>
+</html>

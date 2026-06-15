@@ -271,6 +271,20 @@ async def lage_neu_create(
     )
     write_audit(db, "major_incident.created", user_id=user.id,
                 payload={"name": lage.name, "lage_id": lage.id})
+    for _v in (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.dept_id == org_id, VehicleMaster.active == True)  # noqa: E712
+        .order_by(VehicleMaster.display_order, VehicleMaster.code)
+        .all()
+    ):
+        db.add(LageEinheit(
+            lage_id=lage.id,
+            vehicle_id=_v.id,
+            label=_v.display_label,
+            is_from_org=True,
+            resource_type="fahrzeug",
+            status=resource_service.STATUS_BEREITGESTELLT,
+        ))
     db.commit()
     return RedirectResponse(f"/lage/{lage.id}", status_code=303)
 
@@ -1912,6 +1926,26 @@ async def cross_marker_panel(
         "status_label": CROSS_MARKER_STATUS_LABEL,
         "status_color": CROSS_MARKER_STATUS_COLOR,
         "can_edit": _can_edit(user),
+    })
+
+
+@router.get("/lage/{lage_id}/uebergreifend/{mid}/druck", response_class=HTMLResponse)
+async def cross_marker_druck(
+    request: Request,
+    lage_id: int,
+    mid: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    m = db.get(CrossSiteMarker, mid)
+    if not m or m.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, "incident_major/_cross_marker_druck.html", {
+        "lage": lage,
+        "marker": m,
     })
 
 
@@ -3765,12 +3799,22 @@ async def lage_einheit_status(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
+    einheit = db.get(LageEinheit, einheit_id)
+    if not einheit or einheit.lage_id != lage_id:
+        raise HTTPException(status_code=404)
     try:
-        resource_service.set_status(
-            db, einheit_id, lage_id, status,
-            author_name=get_author_name(request),
-            user_id=user.id,
-        )
+        if status == resource_service.STATUS_ABGERUECKT and einheit.vehicle_id is None:
+            resource_service.move_to_pool(
+                db, einheit_id, lage_id,
+                author_name=get_author_name(request),
+                user_id=user.id,
+            )
+        else:
+            resource_service.set_status(
+                db, einheit_id, lage_id, status,
+                author_name=get_author_name(request),
+                user_id=user.id,
+            )
     except ValueError:
         raise HTTPException(status_code=400)
     db.commit()
