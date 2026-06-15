@@ -186,14 +186,30 @@
 .leg-item { display:flex; align-items:center; gap:4px; white-space:nowrap; }
 
 /* Print */
+#print-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px; min-width: 300px; color: var(--text);
+}
+#print-modal::backdrop { background: rgba(0,0,0,.6); }
+.print-opt-group { margin-bottom: 14px; }
+.print-opt-group__label { font-size:.72rem; font-weight:700; color:var(--text-muted);
+  text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+.print-opt-row { display:flex; flex-direction:column; gap:6px; }
+.print-opt-row label { display:flex; align-items:center; gap:8px;
+  font-size:.84rem; cursor:pointer; padding:6px 10px; border-radius:6px;
+  border:1px solid var(--border); background:rgba(255,255,255,.04); }
+.print-opt-row label:hover { background:rgba(255,255,255,.08); }
+.print-opt-row input[type=radio] { accent-color:#93c5fd; }
 @media print {
   .lage-topbar, .lage-subnav, .karte-controls, .karte-bottom-shelf,
   .karte-mode-btn, #btn-pin-mode, #btn-geolocate, .veh-legend,
-  #section-filters, .nocoords-box, #site-panel-wrap { display:none !important; }
-  #karte-map { position:static !important; height:150mm !important; }
+  #section-filters, .nocoords-box, #site-panel-wrap,
+  #print-modal { display:none !important; }
+  #karte-map { position:static !important; height:var(--print-map-height,150mm) !important; width:100% !important; }
   #karte-legend { display:flex !important; position:static !important;
                   transform:none !important; bottom:auto; left:auto;
-                  margin-top:8px; max-width:100%; }
+                  margin-top:6px; max-width:100%; }
+  body { background:#fff !important; }
 }
 
 /* Geoman-Polygon-Modal */
@@ -304,7 +320,7 @@
       📍 Standort
     </button>
     <div class="karte-controls__sep"></div>
-    <button class="karte-mode-btn" onclick="window.print()" title="Kartenansicht drucken">
+    <button class="karte-mode-btn" onclick="openPrintDialog()" title="Kartenansicht drucken">
       🖨 Drucken
     </button>
   </div>
@@ -435,6 +451,51 @@
   <div style="display:flex;gap:8px;margin-top:12px;">
     <button onclick="document.getElementById('pin-modal').close()" class="btn btn--ghost btn--sm">Abbrechen</button>
     <button onclick="savePinSite()" class="btn btn--primary btn--sm">Anlegen</button>
+  </div>
+</dialog>
+
+{# Print-Dialog #}
+<dialog id="print-modal">
+  <h3 style="font-size:.95rem;font-weight:700;margin:0 0 16px;">🖨 Druckoptionen</h3>
+
+  <div class="print-opt-group">
+    <div class="print-opt-group__label">Inhalt</div>
+    <div class="print-opt-row">
+      <label>
+        <input type="radio" name="print-content" value="map" checked>
+        Lagekarte (aktuelle Kartenansicht)
+      </label>
+      <label>
+        <input type="radio" name="print-content" value="report">
+        Lagebericht / PDF (Liste aller Einsatzstellen)
+      </label>
+    </div>
+  </div>
+
+  <div class="print-opt-group" id="print-format-group">
+    <div class="print-opt-group__label">Papierformat</div>
+    <div class="print-opt-row">
+      <label>
+        <input type="radio" name="print-format" value="A4 portrait" checked>
+        A4 Hochformat
+        <span style="font-size:.7rem;color:var(--text-muted);">210 × 297 mm</span>
+      </label>
+      <label>
+        <input type="radio" name="print-format" value="A4 landscape">
+        A4 Querformat
+        <span style="font-size:.7rem;color:var(--text-muted);">297 × 210 mm</span>
+      </label>
+      <label>
+        <input type="radio" name="print-format" value="A3 landscape">
+        A3 Querformat
+        <span style="font-size:.7rem;color:var(--text-muted);">420 × 297 mm</span>
+      </label>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-top:18px;justify-content:flex-end;">
+    <button onclick="document.getElementById('print-modal').close()" class="btn btn--ghost btn--sm">Abbrechen</button>
+    <button onclick="executePrint()" class="btn btn--primary btn--sm">Drucken</button>
   </div>
 </dialog>
 
@@ -1314,6 +1375,58 @@
   renderMarkers();
 
 })();
+
+// ── Druckdialog ──────────────────────────────────────────────────────────────
+window.openPrintDialog = function() {
+  document.getElementById('print-modal').showModal();
+};
+
+// Papierformat → Kartenhöhe (Druckbereich abzüglich Legende + Ränder)
+var PRINT_MAP_HEIGHTS = {
+  'A4 portrait':  '170mm',
+  'A4 landscape': '110mm',
+  'A3 landscape': '175mm',
+};
+
+var _printStyleEl = null;
+function _applyPageStyle(format) {
+  if (!_printStyleEl) {
+    _printStyleEl = document.createElement('style');
+    _printStyleEl.id = 'karte-print-page';
+    document.head.appendChild(_printStyleEl);
+  }
+  _printStyleEl.textContent = '@media print { @page { size: ' + format + '; margin: 10mm; } }';
+  var h = PRINT_MAP_HEIGHTS[format] || '150mm';
+  document.documentElement.style.setProperty('--print-map-height', h);
+}
+
+window.executePrint = function() {
+  var content = document.querySelector('input[name="print-content"]:checked');
+  var format  = document.querySelector('input[name="print-format"]:checked');
+  document.getElementById('print-modal').close();
+
+  if (content && content.value === 'report') {
+    window.open('/lage/{{ lage.id }}/druck', '_blank');
+    return;
+  }
+
+  _applyPageStyle(format ? format.value : 'A4 portrait');
+  // Karte auf Druckgröße vorbereiten
+  if (window._karteMap) {
+    window._karteMap.invalidateSize();
+    setTimeout(function() { window.print(); }, 300);
+  } else {
+    window.print();
+  }
+};
+
+// Radio: Formatwahl nur bei Karte relevant
+document.querySelectorAll('input[name="print-content"]').forEach(function(r) {
+  r.addEventListener('change', function() {
+    var fg = document.getElementById('print-format-group');
+    if (fg) fg.style.opacity = (this.value === 'map') ? '' : '0.35';
+  });
+});
 
 // ── Geolocation / eigener Standort ──────────────────────────────────────────
 (function() {
