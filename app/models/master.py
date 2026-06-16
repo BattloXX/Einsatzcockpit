@@ -298,6 +298,14 @@ class OrgSettings(Base):
     # Wetter-Integration: NULL = globale Einstellung nutzen, True/False = org-spezifisch
     weather_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # GSL-Lagemeldungs-Regelkreis (SKKM): Intervall der Lagemeldungs-Pflicht je Einsatz.
+    # NULL beim Default-Intervall ⇒ gesamte Logik deaktiviert (kein Timer/Auftrag/Chip).
+    gsl_lagemeldung_interval_minutes:        Mapped[int | None] = mapped_column(Integer, nullable=True, default=60)
+    # Eigenes (kürzeres) Intervall bei Priorität "Sofort"; NULL ⇒ Default-Intervall verwenden.
+    gsl_lagemeldung_interval_sofort_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True, default=30)
+    # Automatischen Funkjournal-Auftrag bei Überfälligkeit erstellen
+    gsl_lagemeldung_auto_auftrag:            Mapped[bool]       = mapped_column(Boolean, default=True)
+
     org: Mapped[FireDept] = relationship(back_populates="settings")
 
 

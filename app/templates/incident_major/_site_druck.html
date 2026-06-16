@@ -171,7 +171,7 @@
   {% for entry in site.log_entries %}
   <div class="log-row">
     <span class="log-time">{{ entry.ts|local_datetime }}</span>
-    <span class="log-text">{{ entry.text }}</span>
+    <span class="log-text">{% if site_log_kind_label and entry.kind in site_log_kind_label and entry.kind != 'note' %}<strong>[{{ site_log_kind_label[entry.kind] }}]</strong> {% endif %}{{ entry.text }}</span>
   </div>
   {% endfor %}
   {% endif %}

@@ -84,12 +84,17 @@ async def lifespan(app: FastAPI):
     from app.services.task_reminder import task_reminder_loop
     reminder_task = asyncio.create_task(task_reminder_loop())
 
+    # Background-Loop für überfällige GSL-Lagemeldungen (SKKM-Regelkreis)
+    from app.services.gsl_lagemeldung_reminder import gsl_lagemeldung_reminder_loop
+    lagemeldung_task = asyncio.create_task(gsl_lagemeldung_reminder_loop())
+
     try:
         yield
     finally:
         autoclose_task.cancel()
         watchdog_task.cancel()
         reminder_task.cancel()
+        lagemeldung_task.cancel()
         try:
             await autoclose_task
         except (asyncio.CancelledError, Exception):
@@ -100,6 +105,10 @@ async def lifespan(app: FastAPI):
             pass
         try:
             await reminder_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        try:
+            await lagemeldung_task
         except (asyncio.CancelledError, Exception):
             pass
 

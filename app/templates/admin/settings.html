@@ -199,6 +199,33 @@
         </div>
       </div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Lagemeldung (Großschadenslage)</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Intervall Lagemeldung (Minuten)</label>
+          <input type="number" name="gsl_lagemeldung_interval_raw" min="1" max="1440"
+                 value="{{ org_settings.gsl_lagemeldung_interval_minutes if org_settings and org_settings.gsl_lagemeldung_interval_minutes is not none else '' }}"
+                 class="form-control" style="max-width:120px" placeholder="60">
+          <small class="form-hint">Wie oft je laufender Einsatzstelle eine Lagemeldung erwartet wird. Leer lassen schaltet die automatische Lagemeldungs-Erinnerung komplett ab.</small>
+        </div>
+        <div class="form-group">
+          <label>Intervall bei Priorität „Sofort“ (Minuten)</label>
+          <input type="number" name="gsl_lagemeldung_sofort_raw" min="1" max="1440"
+                 value="{{ org_settings.gsl_lagemeldung_interval_sofort_minutes if org_settings and org_settings.gsl_lagemeldung_interval_sofort_minutes is not none else '' }}"
+                 class="form-control" style="max-width:120px" placeholder="30">
+          <small class="form-hint">Kürzeres Intervall für Einsatzstellen mit Priorität „Sofort“. Leer = Standard-Intervall verwenden.</small>
+        </div>
+        <div class="form-group">
+          <label>Auto-Auftrag im Funkjournal</label>
+          <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+            <input type="checkbox" name="gsl_lagemeldung_auto_auftrag_raw" value="1"
+                   {% if not org_settings or org_settings.gsl_lagemeldung_auto_auftrag %}checked{% endif %}>
+            Bei Überfälligkeit automatisch einen Auftrag „Lagemeldung anfordern“ erstellen
+          </label>
+          <small class="form-hint">Ist die Option aus, wird die überfällige Einsatzstelle nur am Board markiert (kein Journaleintrag).</small>
+        </div>
+      </div>
+
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>

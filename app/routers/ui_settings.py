@@ -106,6 +106,9 @@ async def save_org_settings(
     autoclose_after_hours_raw: str = Form(""),
     autoclose_grace_minutes_raw: str = Form(""),
     default_access_pin: str = Form(""),
+    gsl_lagemeldung_interval_raw: str = Form(""),
+    gsl_lagemeldung_sofort_raw: str = Form(""),
+    gsl_lagemeldung_auto_auftrag_raw: str = Form(""),
 ):
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = target_org_id if is_sysadmin and target_org_id else user.org_id
@@ -211,6 +214,28 @@ async def save_org_settings(
         )
     except ValueError:
         pass
+
+    # GSL-Lagemeldungs-Intervalle: leer ⇒ NULL (Default-Feld leer = Logik aus,
+    # Sofort-Feld leer = Default verwenden); 0/negativ ablehnen (unverändert lassen)
+    def _parse_interval(raw: str) -> tuple[bool, int | None]:
+        s = raw.strip()
+        if not s:
+            return True, None
+        try:
+            v = int(s)
+        except ValueError:
+            return False, None
+        if v <= 0:
+            return False, None
+        return True, v
+
+    ok, val = _parse_interval(gsl_lagemeldung_interval_raw)
+    if ok:
+        org_s.gsl_lagemeldung_interval_minutes = val
+    ok, val = _parse_interval(gsl_lagemeldung_sofort_raw)
+    if ok:
+        org_s.gsl_lagemeldung_interval_sofort_minutes = val
+    org_s.gsl_lagemeldung_auto_auftrag = gsl_lagemeldung_auto_auftrag_raw in ("1", "true", "on")
 
     # Standard-PIN für neue Einsätze: neuer Wert → hashen; "__clear__" → entfernen; leer → unverändert
     pin_val = default_access_pin.strip()

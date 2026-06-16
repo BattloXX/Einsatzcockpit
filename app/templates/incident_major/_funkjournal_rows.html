@@ -17,7 +17,8 @@
   </thead>
   <tbody>
     {% for c in comms %}
-    <tr class="{% if c.handled %}fj-row--handled{% endif %}"
+    {% set is_auto_lm = c.auto_kind == 'lagemeldung_faellig' and not c.handled %}
+    <tr class="{% if c.handled %}fj-row--handled{% endif %}{% if is_auto_lm %} fj-row--auto-auftrag{% endif %}"
         data-is-request="{{ 'true' if c.is_request else 'false' }}"
         data-handled="{{ 'true' if c.handled else 'false' }}"
         data-fj-search="{{ ((c.partner or '') ~ ' ' ~ (c.channel or '') ~ ' ' ~ c.message)|lower }}">
@@ -32,12 +33,23 @@
       <td class="fj-msg">
         {{ c.message }}
         {% if c.is_request %}<span class="fj-req-badge">Auftrag</span>{% endif %}
+        {% if is_auto_lm and can_edit %}
+        {% set rel_site = sites_by_id.get(c.related_site_id) %}
+        <div style="margin-top:5px;">
+          <button type="button" class="btn btn--xs btn--secondary"
+                  onclick='openFjLm({{ lage.id }}, {{ c.related_site_id }}, {{ (rel_site.bezeichnung if rel_site else ("#" ~ c.related_site_id))|tojson }})'>
+            ✎ Lagemeldung erfassen
+          </button>
+        </div>
+        {% endif %}
       </td>
       <td>
         {% if c.related_site_id %}
         {% set rel_site = sites_by_id.get(c.related_site_id) %}
         {% if rel_site %}
-        <a href="/lage/{{ lage.id }}?open_site={{ rel_site.id }}" class="fj-site-link"
+        <a href="javascript:void(0)" class="fj-site-link"
+           hx-get="/lage/{{ lage.id }}/stellen/{{ rel_site.id }}"
+           hx-target="#siteDetailContent" hx-swap="innerHTML"
            title="{{ rel_site.bezeichnung }}">
           {% if rel_site.priority %}
           <span style="display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0;

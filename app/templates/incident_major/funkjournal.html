@@ -69,6 +69,10 @@
   background:rgba(251,191,36,.2); color:#fbbf24;
 }
 
+/* Auto-Auftrag „Lagemeldung anfordern" hervorheben */
+.fj-row--auto-auftrag td { background: rgba(239,68,68,.07); }
+.fj-row--auto-auftrag td:first-child { box-shadow: inset 3px 0 0 #ef4444; }
+
 /* Direction/type button group */
 .btn-group { display:inline-flex; border-radius:6px; overflow:hidden; border:1px solid var(--border); }
 .btn-group__btn {
@@ -245,6 +249,41 @@
   </div>
 
 </div>
+
+<!-- ── Site-Detail Dialog (Klick auf Einsatzstelle im Journal) ───────────── -->
+<dialog class="modal" id="siteDetailModal">
+  <div class="modal__content" id="siteDetailContent"
+       style="min-width:min(540px,95vw);max-height:90vh;overflow-y:auto;"
+       hx-on::after-swap="var _d=document.getElementById('siteDetailModal');if(_d&&!_d.open)_d.showModal()">
+    <!-- Wird per HTMX befüllt -->
+  </div>
+</dialog>
+
+<!-- ── Kompaktes Lagemeldung-Popup (aus Auftragszeile) ──────────────────── -->
+{% if can_edit %}
+<dialog class="modal" id="fjLmDialog">
+  <div class="modal__content" style="min-width:min(440px,95vw);">
+    <div class="modal__header">
+      <h3 class="modal__title">Lagemeldung erfassen</h3>
+      <button type="button" onclick="document.getElementById('fjLmDialog').close()" class="modal__close">×</button>
+    </div>
+    <form id="fjLmForm" hx-swap="none"
+          hx-vals='{"_csrf":"{{ request.state.csrf_token }}","art":"lagemeldung"}'
+          hx-on::after-request="if(event.detail.successful){document.getElementById('fjLmDialog').close();this.reset();htmx.ajax('GET','/lage/{{ lage.id }}/funkjournal/rows',{target:'#fj-table-section',swap:'innerHTML'});}">
+      <div class="modal__body">
+        <p id="fjLmSiteLabel" style="font-size:.82rem;color:var(--text-muted);margin-bottom:8px;"></p>
+        <textarea name="text" class="form-input" rows="3" required maxlength="500"
+                  placeholder="Aktuelles Lagebild der Einsatzstelle…" autocomplete="off"></textarea>
+        <p class="form-hint" style="margin-top:6px;">Setzt den Lagemeldungs-Timer zurück und schließt den Auftrag.</p>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" onclick="document.getElementById('fjLmDialog').close()">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Lagemeldung speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -308,5 +347,37 @@ function toggleOpenFilter() {
   if (btn)  { btn.style.background = FJ_FILTER ? 'rgba(251,191,36,.15)' : ''; btn.style.color = FJ_FILTER ? '#fbbf24' : ''; }
   if (hint) { hint.style.display = FJ_FILTER ? '' : 'none'; }
 }
+
+// ── Lagemeldung-Popup aus Auftragszeile ───────────────────────────────────
+function openFjLm(lageId, siteId, label) {
+  var form = document.getElementById('fjLmForm');
+  if (!form) return;
+  form.setAttribute('hx-post', '/lage/' + lageId + '/stellen/' + siteId + '/log');
+  if (window.htmx) htmx.process(form);
+  var lbl = document.getElementById('fjLmSiteLabel');
+  if (lbl) lbl.textContent = label ? ('Einsatzstelle: ' + label) : '';
+  var ta = form.querySelector('[name=text]');
+  if (ta) ta.value = '';
+  document.getElementById('fjLmDialog').showModal();
+  if (ta) setTimeout(function(){ ta.focus(); }, 50);
+}
+
+// ── WebSocket: Funkjournal live aktualisieren ─────────────────────────────
+(function() {
+  var wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  function connect() {
+    var ws = new WebSocket(wsProto + '://' + location.host + '/ws/lage/{{ lage.id }}');
+    ws.onmessage = function(ev) {
+      try {
+        var msg = JSON.parse(ev.data);
+        if (msg.type === 'funkjournal:changed') {
+          htmx.ajax('GET', '/lage/{{ lage.id }}/funkjournal/rows', {target:'#fj-table-section', swap:'innerHTML'});
+        }
+      } catch(e) {}
+    };
+    ws.onclose = function() { setTimeout(connect, 3000); };
+  }
+  connect();
+})();
 </script>
 {% endblock %}

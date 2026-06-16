@@ -28,6 +28,9 @@ from app.models.major_incident import (
     JOURNAL_CATEGORIES,
     JOURNAL_CATEGORY_COLOR,
     JOURNAL_TEMPLATES,
+    SITE_LOG_KIND_LABEL,
+    SITE_LOG_RESET_KINDS,
+    SITE_LOG_USER_KINDS,
     SITE_PRIORITY_COLOR,
     SITE_PRIORITY_LABEL,
     STAFF_FUNCTION_LABEL,
@@ -51,7 +54,7 @@ from app.models.major_incident import (
 )
 from app.models.master import FireDept, Member, VehicleMaster
 from app.models.user import User
-from app.services import resource_service
+from app.services import lagemeldung_service, resource_service
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
 from app.services.major_incident_service import (
@@ -525,6 +528,11 @@ async def site_phase_change(
         write_audit(db, "major_incident.site.phase_changed", user_id=user.id,
                     payload={"lage_id": lage_id, "site_id": site_id,
                              "from": old_phase.value, "to": new_phase.value})
+        # Lagemeldungs-Timer an Phase koppeln
+        if new_phase == SitePhase.in_arbeit:
+            lagemeldung_service.ensure_timer(site, db)
+        elif new_phase in (SitePhase.erledigt, SitePhase.abgebrochen):
+            lagemeldung_service.clear_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {
         "type": "site_phase_changed",
@@ -566,6 +574,7 @@ async def site_prio_change(
                 user_id=user.id,
                 author_name=get_author_name(request),
             ))
+        lagemeldung_service.recompute_if_active(site, db)
         db.commit()
         await broadcast_lage(lage_id, {"type": "site_prio_changed", "site_id": site_id, "reload_board": True})
         return Response(status_code=204)
@@ -587,6 +596,7 @@ async def site_prio_change(
             user_id=user.id,
             author_name=get_author_name(request),
         ))
+    lagemeldung_service.recompute_if_active(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site_prio_changed", "site_id": site_id, "reload_board": True})
     return Response(status_code=204)
@@ -637,6 +647,7 @@ async def site_detail(
         "now": datetime.now(UTC),
         "citizen_report": citizen_report,
         "available_einheiten": available_einheiten,
+        "site_log_kind_label": SITE_LOG_KIND_LABEL,
     })
 
 
@@ -701,6 +712,7 @@ async def site_einheit_zuweisen(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
+    lagemeldung_service.ensure_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
@@ -733,6 +745,9 @@ async def site_einheit_freigeben(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
+    site = db.get(IncidentSite, site_id)
+    if site and not lagemeldung_service.has_active_resource(site, db):
+        lagemeldung_service.clear_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
@@ -759,6 +774,7 @@ async def site_druck(
         "site": site,
         "phase_labels": PHASE_LABELS,
         "prio_label": SITE_PRIORITY_LABEL,
+        "site_log_kind_label": SITE_LOG_KIND_LABEL,
     })
 
 
@@ -770,6 +786,7 @@ async def site_log_add(
     lage_id: int,
     site_id: int,
     text: str = Form(...),
+    art: str = Form("note"),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -781,15 +798,23 @@ async def site_log_add(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
+    kind = art if art in SITE_LOG_USER_KINDS else "note"
     db.add(SiteLogEntry(
         incident_site_id=site_id,
-        kind="note",
+        kind=kind,
         text=text.strip(),
         user_id=user.id,
         author_name=get_author_name(request),
     ))
+
+    # Lagemeldung = Kontrolle im Führungskreislauf: Timer zurücksetzen + Auto-Auftrag schließen
+    is_reset = kind in SITE_LOG_RESET_KINDS
+    if is_reset:
+        lagemeldung_service.register_lagemeldung(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    if is_reset:
+        await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
     return Response(status_code=204)
 
 
@@ -834,6 +859,7 @@ async def site_resource_assign(
     ))
     if vehicle_id:
         _sync_einheit_assign(db, lage_id, site, vehicle_id, get_author_name(request), user.id)
+    lagemeldung_service.ensure_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
@@ -898,6 +924,9 @@ async def site_resource_release(
     ))
     if res.vehicle_id:
         _sync_einheit_pool(db, lage_id, res.vehicle_id, get_author_name(request), user.id)
+    site = db.get(IncidentSite, site_id)
+    if site and not lagemeldung_service.has_active_resource(site, db):
+        lagemeldung_service.clear_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)

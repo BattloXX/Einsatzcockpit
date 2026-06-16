@@ -143,6 +143,21 @@ STAFF_FUNCTION_LABEL = {
 }
 
 
+# ── SiteLogEntry-Typen (SKKM-Regelkreis: Lage – Auftrag – Kontrolle) ──────────
+# Benutzer-wählbare Eintragstypen im Site-Detail-Dropdown. status|prio|resource|
+# media bleiben System-Einträge und passen weiterhin in String(16).
+SITE_LOG_KIND_LABEL = {
+    "note":        "Notiz",
+    "lagemeldung": "Lagemeldung",
+    "massnahmen":  "Maßnahmen",
+}
+SITE_LOG_USER_KINDS = ["note", "lagemeldung", "massnahmen"]   # im Dropdown auswählbar
+SITE_LOG_RESET_KINDS = {"lagemeldung"}                        # setzt den Lagemeldungs-Timer zurück
+
+# auto_kind-Wert für automatisch erzeugte Funkjournal-Aufträge "Lagemeldung anfordern"
+AUTO_KIND_LAGEMELDUNG = "lagemeldung_faellig"
+
+
 class MajorIncident(Base):
     __tablename__ = "major_incident"
 
@@ -244,6 +259,9 @@ class IncidentSite(Base):
     incident_id:  Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True)
 
+    # Zeitpunkt der nächsten fälligen Lagemeldung; NULL = keine Timer-Pflicht aktiv
+    naechste_lagemeldung_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+
     created_at:   Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at:   Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
                                                    onupdate=lambda: datetime.now(UTC))
@@ -322,6 +340,8 @@ class CommLogEntry(Base):
     message:           Mapped[str] = mapped_column(Text)
     is_request:        Mapped[bool] = mapped_column(Boolean, default=False)
     handled:           Mapped[bool] = mapped_column(Boolean, default=False)
+    # Kennzeichnet automatisch erzeugte Einträge (z.B. "lagemeldung_faellig") für Dedup/Schließen
+    auto_kind:         Mapped[str | None] = mapped_column(String(24), nullable=True)
     user_id:           Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id"), nullable=True)
     author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)

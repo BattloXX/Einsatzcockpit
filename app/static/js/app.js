@@ -91,6 +91,45 @@ document.addEventListener('alpine:init', () => {
         }).catch(() => {});
     },
   }));
+
+  /* ─── Lagemeldungs-Timer-Chip (SKKM-Regelkreis) ──────────────────
+     Live-Countdown bis zur nächsten fälligen Lagemeldung. Erwartet ein
+     ISO-UTC-Datum (z.B. "2026-06-16T11:00:00Z"). Ampel: grün → amber
+     (≤10 min oder ≤20 %) → rot (überfällig). Sekündliches Update ohne Reload. */
+  Alpine.data('lmChip', (dueIso, intervalMin) => ({
+    dueIso: dueIso,
+    intervalMin: intervalMin || 0,
+    label: '',
+    cls: '',
+    _t: null,
+    start() {
+      this.tick();
+      this._t = setInterval(() => this.tick(), 1000);
+    },
+    destroy() {
+      if (this._t) clearInterval(this._t);
+    },
+    tick() {
+      const due = new Date(this.dueIso).getTime();
+      if (isNaN(due)) { this.label = ''; return; }
+      const diffMs = due - Date.now();
+      const diffMin = Math.round(diffMs / 60000);
+      const t = new Date(this.dueIso).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
+      // Schwellwerte: amber bei ≤10 min Rest oder ≤20 % des Intervalls
+      const amberAt = Math.max(10, Math.round((this.intervalMin || 0) * 0.2));
+      if (diffMs < 0) {
+        const overdue = Math.abs(diffMin);
+        this.cls = 'lm-chip--red';
+        this.label = '⚠ Lagemeldung überfällig · seit ' + overdue + ' min (' + t + ')';
+      } else if (diffMin <= amberAt) {
+        this.cls = 'lm-chip--amber';
+        this.label = 'Lagemeldung fällig ' + t + ' · in ' + diffMin + ' min';
+      } else {
+        this.cls = 'lm-chip--green';
+        this.label = 'Lagemeldung ' + t + ' · in ' + diffMin + ' min';
+      }
+    },
+  }));
 });
 
 
