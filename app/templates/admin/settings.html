@@ -204,14 +204,14 @@
         <div class="form-group">
           <label>Intervall Lagemeldung (Minuten)</label>
           <input type="number" name="gsl_lagemeldung_interval_raw" min="1" max="1440"
-                 value="{{ org_settings.gsl_lagemeldung_interval_minutes if org_settings and org_settings.gsl_lagemeldung_interval_minutes is not none else '' }}"
+                 value="{{ org_settings.gsl_lagemeldung_interval_minutes if org_settings and org_settings.gsl_lagemeldung_interval_minutes is not none else (60 if not org_settings else '') }}"
                  class="form-control" style="max-width:120px" placeholder="60">
           <small class="form-hint">Wie oft je laufender Einsatzstelle eine Lagemeldung erwartet wird. Leer lassen schaltet die automatische Lagemeldungs-Erinnerung komplett ab.</small>
         </div>
         <div class="form-group">
           <label>Intervall bei Priorität „Sofort“ (Minuten)</label>
           <input type="number" name="gsl_lagemeldung_sofort_raw" min="1" max="1440"
-                 value="{{ org_settings.gsl_lagemeldung_interval_sofort_minutes if org_settings and org_settings.gsl_lagemeldung_interval_sofort_minutes is not none else '' }}"
+                 value="{{ org_settings.gsl_lagemeldung_interval_sofort_minutes if org_settings and org_settings.gsl_lagemeldung_interval_sofort_minutes is not none else (30 if not org_settings else '') }}"
                  class="form-control" style="max-width:120px" placeholder="30">
           <small class="form-hint">Kürzeres Intervall für Einsatzstellen mit Priorität „Sofort“. Leer = Standard-Intervall verwenden.</small>
         </div>
