@@ -229,6 +229,7 @@ async def save_org_settings(
             return False, None
         return True, v
 
+    interval_was_off = org_s.gsl_lagemeldung_interval_minutes is None
     ok, val = _parse_interval(gsl_lagemeldung_interval_raw)
     if ok:
         org_s.gsl_lagemeldung_interval_minutes = val
@@ -236,6 +237,25 @@ async def save_org_settings(
     if ok:
         org_s.gsl_lagemeldung_interval_sofort_minutes = val
     org_s.gsl_lagemeldung_auto_auftrag = gsl_lagemeldung_auto_auftrag_raw in ("1", "true", "on")
+
+    # Wird die Lagemeldungs-Pflicht gerade erst aktiviert (Intervall aus → an), Timer für
+    # bereits laufende Einsatzstellen sofort nachziehen – sonst erst beim nächsten
+    # Phasen-/Ressourcen-Wechsel (Admin müsste sonst raten, warum noch kein Chip erscheint).
+    if interval_was_off and org_s.gsl_lagemeldung_interval_minutes is not None:
+        from app.models.major_incident import IncidentSite, MajorIncident, MajorIncidentStatus, SitePhase
+        from app.services import lagemeldung_service
+        active_sites = (
+            db.query(IncidentSite)
+            .join(MajorIncident, MajorIncident.id == IncidentSite.major_incident_id)
+            .filter(
+                IncidentSite.org_id == effective_org_id,
+                IncidentSite.phase == SitePhase.in_arbeit,
+                MajorIncident.status == MajorIncidentStatus.active,
+            )
+            .all()
+        )
+        for s in active_sites:
+            lagemeldung_service.ensure_timer(s, db)
 
     # Standard-PIN für neue Einsätze: neuer Wert → hashen; "__clear__" → entfernen; leer → unverändert
     pin_val = default_access_pin.strip()
