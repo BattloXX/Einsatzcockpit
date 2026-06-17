@@ -54,8 +54,11 @@ def has_active_resource(site: IncidentSite, db: Session) -> bool:
     """True, wenn der Einsatzstelle mindestens eine nicht freigegebene Ressource zugeordnet ist.
 
     Per DB-Query (statt der Python-Collection), damit frisch hinzugefügte bzw. soeben
-    freigegebene Ressourcen via SQLAlchemy-Autoflush bereits korrekt berücksichtigt werden.
+    freigegebene Ressourcen berücksichtigt werden. Die App-Session läuft mit
+    autoflush=False (app/db.py) – ohne expliziten Flush sieht diese Query noch nicht
+    zugewiesene/freigegebene Einheiten aus der laufenden Request-Transaktion nicht.
     """
+    db.flush()
     ra = (
         db.query(SiteResourceAssignment.id)
         .filter(

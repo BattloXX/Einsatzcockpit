@@ -3290,44 +3290,6 @@ async def sektor_geometry_delete(
     return Response(status_code=204)
 
 
-# ── Einsatz-Detail-Panel (Karte) ───────────────────────────────────────────────
-
-@router.get("/lage/{lage_id}/stellen/{site_id}/panel", response_class=HTMLResponse)
-async def site_panel(
-    request: Request,
-    lage_id: int,
-    site_id: int,
-    db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
-):
-    user = request.state.user
-    lage = _lage_or_404(lage_id, db)
-    _check_org_access(user, lage)
-
-    site = db.get(IncidentSite, site_id)
-    if not site or site.major_incident_id != lage_id:
-        raise HTTPException(status_code=404)
-
-    sectors = sorted(lage.sectors, key=lambda s: s.id)
-    available_einheiten = sorted(
-        [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT],
-        key=lambda e: (e.incident_site_id is not None, e.label),
-    )
-
-    return templates.TemplateResponse(request, "incident_major/_site_panel.html", {
-        "user": user,
-        "lage": lage,
-        "site": site,
-        "sectors": sectors,
-        "phase_labels": PHASE_LABELS,
-        "phase_order": PHASE_ORDER,
-        "prio_color": SITE_PRIORITY_COLOR,
-        "prio_label": SITE_PRIORITY_LABEL,
-        "can_edit": _can_edit(user),
-        "available_einheiten": available_einheiten,
-    })
-
-
 # ── Fahrzeugpositionen (Karten-API) ───────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/fahrzeuge/positionen")

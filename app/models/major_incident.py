@@ -151,7 +151,7 @@ SITE_LOG_KIND_LABEL = {
     "lagemeldung": "Lagemeldung",
     "massnahmen":  "Maßnahmen",
 }
-SITE_LOG_USER_KINDS = ["note", "lagemeldung", "massnahmen"]   # im Dropdown auswählbar
+SITE_LOG_USER_KINDS = ["lagemeldung", "massnahmen", "note"]   # im Dropdown auswählbar (Reihenfolge)
 SITE_LOG_RESET_KINDS = {"lagemeldung"}                        # setzt den Lagemeldungs-Timer zurück
 
 # auto_kind-Wert für automatisch erzeugte Funkjournal-Aufträge "Lagemeldung anfordern"

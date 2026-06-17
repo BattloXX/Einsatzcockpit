@@ -164,7 +164,7 @@
   flex-shrink: 0;
 }
 .site-panel-header span { font-size: .78rem; font-weight: 600; color: var(--text-muted); }
-#site-panel-content { flex: 1; overflow-y: auto; }
+#siteDetailContent { flex: 1; overflow-y: auto; }
 
 /* Fahrzeug-Legende */
 .veh-legend {
@@ -465,7 +465,7 @@
     <span>EINSATZ-DETAILS</span>
     <button onclick="closePanel()" class="btn btn--xs btn--ghost">✕</button>
   </div>
-  <div id="site-panel-content">
+  <div id="siteDetailContent">
     <div style="padding:16px;color:var(--text-muted);font-size:.8rem;">Einsatz wählen…</div>
   </div>
 </div>
@@ -950,11 +950,11 @@
 
   window.openCrossPanel = function(markerId) {
     var wrap    = document.getElementById('site-panel-wrap');
-    var content = document.getElementById('site-panel-content');
+    var content = document.getElementById('siteDetailContent');
     content.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:.8rem;">Lade…</div>';
     wrap.classList.add('open');
     htmx.ajax('GET', '/lage/' + lageId + '/uebergreifend/' + markerId + '/panel', {
-      target: '#site-panel-content', swap: 'innerHTML'
+      target: '#siteDetailContent', swap: 'innerHTML'
     });
   };
 
@@ -1189,15 +1189,16 @@
   // ── Side-Panel ──────────────────────────────────────────────────────────────
   window.openPanel = function(siteId) {
     var wrap = document.getElementById('site-panel-wrap');
-    var content = document.getElementById('site-panel-content');
+    var content = document.getElementById('siteDetailContent');
     content.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:.8rem;">Lade…</div>';
     wrap.classList.add('open');
-    fetch('/lage/' + lageId + '/stellen/' + siteId + '/panel')
+    fetch('/lage/' + lageId + '/stellen/' + siteId)
       .then(function(r) { return r.text(); })
       .then(function(html) {
         content.innerHTML = html;
         // HTMX re-process für Post-Formulare im Panel
         if (window.htmx) htmx.process(content);
+        if (window.Alpine) Alpine.initTree(content);
       });
   };
 

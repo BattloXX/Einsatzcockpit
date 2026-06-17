@@ -75,7 +75,7 @@ def _scan_and_create(db) -> list[dict]:
         db.add(CommLogEntry(
             major_incident_id=site.major_incident_id,
             related_site_id=site.id,
-            direction="int",
+            direction="out",
             is_request=True,
             auto_kind=AUTO_KIND_LAGEMELDUNG,
             message="Lagemeldung anfordern – nächste Lagemeldung überfällig",

@@ -1,3 +1,11 @@
+/* ─── Site-Detail-Panel: gemeinsames Schließen für Board-Dialog & Karten-Sidebar ─── */
+window.closeSiteDetailPanel = function(el) {
+  const dlg = el.closest('dialog');
+  if (dlg) { dlg.close(); return; }
+  const panel = el.closest('#site-panel-wrap');
+  if (panel) { panel.classList.remove('open'); }
+};
+
 /* ─── Alpine.js Global App State ────────────────────────────────── */
 document.addEventListener('alpine:init', () => {
   Alpine.data('appState', () => ({

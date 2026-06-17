@@ -85,7 +85,7 @@
     </form>
     {% endif %}
   </div>
-  <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+  <button type="button" onclick="closeSiteDetailPanel(this)" class="modal__close">×</button>
 </div>
 
 <div class="modal__body site-detail">
@@ -285,6 +285,7 @@
   <div class="res-section">
     <div class="res-section__title">RESSOURCEN</div>
     {% set active_res = site.resources|selectattr('released_at', 'none')|list %}
+    {% set site_einheiten = (available_einheiten | selectattr('incident_site_id', 'equalto', site.id) | list) if available_einheiten is defined else [] %}
     {% if active_res %}
     {% for res in active_res %}
     <div class="res-row">
@@ -314,13 +315,12 @@
       {% endif %}
     </div>
     {% endfor %}
-    {% else %}
+    {% elif not site_einheiten %}
     <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Keine aktiven Ressourcen.</div>
     {% endif %}
 
     {% if available_einheiten is defined %}
     {# ── zugewiesene LageEinheiten ──────────────────────────────────── #}
-    {% set site_einheiten = available_einheiten | selectattr('incident_site_id', 'equalto', site.id) | list %}
     {% for e in site_einheiten %}
     <div class="res-row">
       <span class="res-badge" style="background:rgba(251,191,36,.2);color:#fbbf24;">
@@ -394,8 +394,8 @@
       <label class="form-label" style="font-size:.72rem;margin:0;">Typ</label>
       <select name="art" class="form-select form-select--xs" style="max-width:160px;">
         <option value="lagemeldung" selected>Lagemeldung</option>
-        <option value="note">Notiz</option>
         <option value="massnahmen">Maßnahmen</option>
+        <option value="note">Notiz</option>
       </select>
     </div>
     <div class="input-row">
@@ -486,5 +486,5 @@
 </div>
 
 <div class="modal__footer">
-  <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Schließen</button>
+  <button type="button" onclick="closeSiteDetailPanel(this)" class="btn btn--ghost">Schließen</button>
 </div>

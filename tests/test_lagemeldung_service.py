@@ -130,7 +130,7 @@ def test_register_lagemeldung_closes_open_auto_auftrag():
 
         lage, site = _mk_lage_site(db)
         auftrag = CommLogEntry(
-            major_incident_id=lage.id, related_site_id=site.id, direction="int",
+            major_incident_id=lage.id, related_site_id=site.id, direction="out",
             is_request=True, auto_kind=AUTO_KIND_LAGEMELDUNG,
             message="Lagemeldung anfordern", handled=False,
         )
@@ -152,7 +152,7 @@ def test_clear_timer_closes_auftrag_and_resets():
         lage, site = _mk_lage_site(db)
         site.naechste_lagemeldung_at = lm._now()
         auftrag = CommLogEntry(
-            major_incident_id=lage.id, related_site_id=site.id, direction="int",
+            major_incident_id=lage.id, related_site_id=site.id, direction="out",
             is_request=True, auto_kind=AUTO_KIND_LAGEMELDUNG,
             message="Lagemeldung anfordern", handled=False,
         )
