@@ -1572,129 +1572,30 @@
 
   window.executePrint = function() {
     var format = _currentFormat();
-    _applyPageStyle(format);
+    var map    = window._karteMap;
+    var mapEl  = document.getElementById('karte-map');
+    var fEl    = document.getElementById('print-frame');
 
-    var map   = window._karteMap;
-    var mapEl = document.getElementById('karte-map');
-    if (!map || !mapEl) { window.print(); return; }
+    if (!map || !mapEl || !fEl || fEl.style.display === 'none') { return; }
 
-    // ── 1. Geografische Grenzen des Rahmens BEVOR irgendwas geändert wird
-    var fEl   = document.getElementById('print-frame');
     var fRect = fEl.getBoundingClientRect();
     var mRect = mapEl.getBoundingClientRect();
-    var ptTL  = L.point(fRect.left - mRect.left, fRect.top    - mRect.top);
-    var ptBR  = L.point(fRect.right - mRect.left, fRect.bottom - mRect.top);
-    var printBounds = L.latLngBounds(
-      map.containerPointToLatLng(ptTL),
-      map.containerPointToLatLng(ptBR)
-    );
-    var origCenter   = map.getCenter();
-    var origZoom     = map.getZoom();
-    var origZoomSnap = map.options.zoomSnap;
+    var ptNW  = L.point(fRect.left - mRect.left, fRect.top    - mRect.top);
+    var ptSE  = L.point(fRect.right - mRect.left, fRect.bottom - mRect.top);
+    // top-left  = smaller y = higher lat = NW corner
+    // bot-right = larger  y = lower  lat = SE corner
+    var nw = map.containerPointToLatLng(ptNW);
+    var se = map.containerPointToLatLng(ptSE);
 
-    // ── 2. UI-Elemente per JS ausblenden
-    var _hideSels = [
-      '.lage-topbar', '.lage-subnav', '.karte-topbar', '.karte-controls', '.karte-bottom-shelf',
-      '.veh-legend', '.karte-badge', '#section-filters',
-      '.nocoords-box', '#site-panel-wrap', '#print-frame', '#pf-bar'
-    ];
-    var _hiddenEls = [];
-    _hideSels.forEach(function(sel) {
-      document.querySelectorAll(sel).forEach(function(el) {
-        _hiddenEls.push({ el: el, prev: el.style.display });
-        el.style.display = 'none';
-      });
-    });
+    var url = '/lage/{{ lage.id }}/karte/druck'
+      + '?min_lat=' + se.lat.toFixed(6)
+      + '&min_lng=' + nw.lng.toFixed(6)
+      + '&max_lat=' + nw.lat.toFixed(6)
+      + '&max_lng=' + se.lng.toFixed(6)
+      + '&fmt=' + encodeURIComponent(format);
 
-    // ── 3. Fußzeile befüllen – alle Positionierungs-Eigenschaften inline überschreiben
-    var now  = new Date();
-    var tEl  = document.getElementById('pf-print-time');
-    if (tEl) tEl.textContent = 'Stand: ' + now.toLocaleString('de-AT', {
-      day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
-    });
-    var rEl = document.getElementById('pf-res-stat');
-    if (rEl && window._lageSites) {
-      var res = window._lageSites.reduce(function(s, x) { return s + (x.active_res || 0); }, 0);
-      rEl.textContent = res > 0 ? res + ' Ressource' + (res !== 1 ? 'n' : '') + ' aktiv' : '';
-    }
-    var ftrEl = document.getElementById('print-footer');
-    if (ftrEl) {
-      ftrEl.style.cssText += ';display:flex;position:relative;bottom:auto;top:auto;left:auto;right:auto;z-index:auto;';
-    }
-
-    // ── 4. Karte auf exakte Druckabmessungen skalieren (CSS-Pixel = 96dpi)
-    var printWpx = Math.round((PAGE_WIDTHS_MM[format] || 190) * MM_TO_PX);
-    var printHmm = parseFloat(MAP_HEIGHTS[format] || '150');
-    var printHpx = Math.round(printHmm * MM_TO_PX);
-
-    mapEl.style.position = 'static';
-    mapEl.style.width    = printWpx + 'px';
-    mapEl.style.height   = printHpx + 'px';
-    mapEl.style.overflow = 'hidden';
-    void mapEl.offsetHeight;
-    map.invalidateSize({ animate: false });
-
-    // ── 5. Geografische Grenzen exakt in den Druckcontainer einpassen
-    //     fitBounds nach invalidateSize → Leaflet kennt die neue Größe (printWpx × printHpx)
-    //     zoomSnap=0 → kein Abrunden auf Integer-Zoom → kein Overshooting
-    map.options.zoomSnap = 0;
-    map.fitBounds(printBounds, { animate: false, padding: [0, 0] });
-    map.options.zoomSnap = origZoomSnap;
-
-    // ── 6. Aufräumen nach Druck
-    function restoreMap() {
-      _hiddenEls.forEach(function(h) { h.el.style.display = h.prev; });
-      mapEl.style.position = '';
-      mapEl.style.width    = '';
-      mapEl.style.height   = '';
-      mapEl.style.overflow = '';
-      if (ftrEl) ftrEl.style.cssText = ftrEl.style.cssText
-        .replace(/display:[^;]+;?/g,'')
-        .replace(/position:[^;]+;?/g,'')
-        .replace(/bottom:[^;]+;?/g,'')
-        .replace(/top:[^;]+;?/g,'')
-        .replace(/left:[^;]+;?/g,'')
-        .replace(/right:[^;]+;?/g,'')
-        .replace(/z-index:[^;]+;?/g,'');
-      map.options.zoomSnap = origZoomSnap;
-      map.invalidateSize({ animate: false });
-      map.setView(origCenter, origZoom, { animate: false });
-      if (_active) {
-        document.getElementById('pf-bar').style.display = 'flex';
-        updatePrintFrame();
-      }
-    }
-
-    // ── 7. afterprint VOR window.print() registrieren
-    function doPrint() {
-      var restored = false;
-      function onAfter() {
-        if (restored) return; restored = true;
-        window.removeEventListener('afterprint', onAfter);
-        restoreMap();
-      }
-      window.addEventListener('afterprint', onAfter);
-      setTimeout(onAfter, 8000);
-      window.print();
-    }
-
-    // Tiles abwarten, Fallback 2500ms
-    var fired = false;
-    function onReady() {
-      if (fired) return; fired = true;
-      setTimeout(doPrint, 600);
-    }
-    var tileLayer = null;
-    map.eachLayer(function(l) { if (l instanceof L.TileLayer && !tileLayer) tileLayer = l; });
-    if (tileLayer) {
-      // Tiles schon geladen → sofort drucken, sonst auf load-Event warten
-      if (tileLayer._loading === 0) {
-        onReady();
-      } else {
-        tileLayer.once('load', onReady);
-      }
-    }
-    setTimeout(onReady, 2500);
+    window.open(url, '_blank');
+    closePrintPreview();
   };
 
   window.addEventListener('resize', function() {

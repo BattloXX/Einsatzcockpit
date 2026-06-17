@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ lage.name }} – Lagekarte</title>
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+{% set map_heights = {'A4 portrait': 258, 'A4 landscape': 170, 'A3 portrait': 378, 'A3 landscape': 258} %}
+{% set map_h = map_heights.get(fmt, 258) %}
+{% set format_names = {'A4 portrait': 'A4 Hochformat', 'A4 landscape': 'A4 Querformat', 'A3 portrait': 'A3 Hochformat', 'A3 landscape': 'A3 Querformat'} %}
+{% set fmt_name = format_names.get(fmt, fmt) %}
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: {{ fmt }}; margin: 10mm; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #fff; color: #111; }
+
+  .no-print {}
+  @media print { .no-print { display: none !important; } }
+
+  .print-bar {
+    background: #f3f4f6; border-bottom: 1px solid #d1d5db;
+    padding: 8px 16px; display: flex; align-items: center; gap: 10px;
+    font-size: 9.5pt;
+  }
+  .print-btn {
+    background: #1f2937; color: #fff; border: none; border-radius: 4px;
+    padding: 5px 14px; font-size: 9.5pt; cursor: pointer;
+  }
+  .print-btn:hover { background: #374151; }
+
+  #karte-map {
+    width: 100%;
+    height: {{ map_h }}mm;
+  }
+
+  .karte-footer {
+    border-top: 1.5px solid #aaa;
+    padding: 5px 0 3px;
+    display: flex;
+    gap: 16px;
+    font-size: 8.5pt;
+    color: #333;
+    line-height: 1.5;
+  }
+  .karte-footer .fc { flex: 1; }
+  .karte-footer .fc-lage { font-size: 10pt; font-weight: 700; margin-bottom: 1px; }
+  .karte-footer .fc--right { text-align: right; flex: 0 0 auto; }
+
+  .exercise-banner {
+    background: #fef9c3; border-bottom: 2px solid #fde68a;
+    padding: 5px 16px; text-align: center;
+    color: #92400e; font-weight: 700; font-size: 9pt;
+  }
+</style>
+</head>
+<body>
+
+<div class="no-print print-bar">
+  <a href="/lage/{{ lage.id }}/karte" class="print-btn" style="text-decoration:none;background:#374151;">← Karte</a>
+  <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
+  <span>{{ fmt_name }} · {{ lage.name }}</span>
+</div>
+
+{% if lage.is_exercise %}
+<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
+{% endif %}
+
+<div id="karte-map"></div>
+
+<div class="karte-footer">
+  <div class="fc">
+    <div class="fc-lage">{{ lage.name }}{% if lage.is_exercise %} <span style="color:#92400e;">· ÜBUNG</span>{% endif %}</div>
+    <div>Beginn: {{ lage.started_at|local_datetime }}{% if lage.ended_at %} · Ende: {{ lage.ended_at|local_datetime }}{% endif %}</div>
+  </div>
+  <div class="fc fc--right">
+    <div id="print-ts" style="font-weight:700;">–</div>
+    <div>{{ fmt_name }}</div>
+  </div>
+</div>
+
+<script src="/static/js/leaflet.min.js"></script>
+<script>
+(function () {
+  var minLat = {{ min_lat }}, minLng = {{ min_lng }};
+  var maxLat = {{ max_lat }}, maxLng = {{ max_lng }};
+  var bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
+
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconUrl: '/static/img/leaflet/marker-icon.png',
+    iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
+    shadowUrl: '/static/img/leaflet/marker-shadow.png',
+  });
+
+  var map = L.map('karte-map', {
+    zoomControl: false,
+    attributionControl: false,
+    zoomSnap: 0,
+  });
+
+  var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    subdomains: 'abc', maxZoom: 19,
+    attribution: '© OpenStreetMap',
+  }).addTo(map);
+
+  function fitView() {
+    map.invalidateSize();
+    map.fitBounds(bounds, { padding: [0, 0], animate: false });
+  }
+
+  // Ensure map container has its final size before fitting
+  setTimeout(fitView, 50);
+  setTimeout(fitView, 200);  // second pass after reflow
+
+  window.addEventListener('beforeprint', fitView);
+
+  var printed = false;
+  function doPrint() {
+    if (printed) return;
+    printed = true;
+    document.getElementById('print-ts').textContent =
+      'Stand: ' + new Date().toLocaleString('de-AT', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    setTimeout(function () { window.print(); }, 600);
+  }
+
+  tiles.on('load', doPrint);
+  setTimeout(doPrint, 8000);  // Fallback
+}());
+</script>
+</body>
+</html>
