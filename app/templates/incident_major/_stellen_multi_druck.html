@@ -3,22 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{ site.einsatzgrund or site.bezeichnung }} – Einsatzstelle</title>
-{% if site.lat and site.lng %}
+<title>{{ lage.name }} – {{ sites|length + cross_markers|length }} Objekte</title>
+{% set has_maps = sites|selectattr('lat')|list or cross_markers|selectattr('lat')|list %}
+{% if has_maps %}
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
 {% endif %}
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: A4 portrait; margin: 14mm 16mm; }
-  body {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 10.5pt; color: #111; background: #fff;
-  }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #111; background: #fff; }
 
   .no-print { }
   @media print { .no-print { display: none !important; } }
 
-  /* ── Print-Button-Bar ── */
   .print-bar {
     background: #f3f4f6; border-bottom: 1px solid #d1d5db;
     padding: 8px 16px; display: flex; align-items: center; gap: 10px;
@@ -30,11 +27,15 @@
   }
   .print-btn:hover { background: #374151; }
 
-  /* ── Layout ── */
-  .page { padding: 0; max-width: 180mm; margin: 8mm auto 0; }
+  /* ── Seite pro Objekt ── */
+  .print-page {
+    max-width: 180mm; margin: 8mm auto 0; padding-bottom: 6mm;
+  }
+  .print-page + .print-page { page-break-before: always; }
 
   /* ── Header ── */
   .hdr { border-bottom: 2.5px solid #b71921; padding-bottom: 7px; margin-bottom: 10px; }
+  .hdr--cross { border-bottom-color: #6b7280; }
   .hdr__lage { font-size: 8.5pt; color: #6b7280; margin-bottom: 3px; }
   .hdr__title { font-size: 15pt; font-weight: 700; line-height: 1.2; }
   .hdr__sub { font-size: 10pt; color: #374151; margin-top: 3px; }
@@ -49,13 +50,11 @@
   .info-table td { padding: 3px 6px; vertical-align: top; font-size: 10pt; border-bottom: 1px solid #e5e7eb; word-break: break-word; overflow-wrap: break-word; }
   .info-table td:first-child { width: 32mm; font-size: 8.5pt; color: #6b7280; font-weight: 600; }
 
-  /* ── Prio-Badge ── */
   .prio-sofort   { color: #b91c1c; font-weight: 700; }
   .prio-dringend { color: #c2410c; font-weight: 700; }
   .prio-normal   { color: #92400e; font-weight: 700; }
   .prio-aufschiebbar { color: #6b7280; }
 
-  /* ── Ressourcen-Liste ── */
   .res-list { margin: 0; padding-left: 16px; }
   .res-list li { margin-bottom: 2px; }
   .res-ts { color: #9ca3af; font-size: 8pt; }
@@ -65,8 +64,12 @@
   .map-wrap h2 { font-size: 9.5pt; font-weight: 700; text-transform: uppercase;
                  letter-spacing: .04em; border-bottom: 1.5px solid #111;
                  margin-bottom: 6px; padding-bottom: 3px; }
-  #printMap { width: 100%; height: 130mm; border: 1px solid #ccc; border-radius: 3px; }
+  .print-map { width: 100%; height: 130mm; border: 1px solid #ccc; border-radius: 3px; }
   .map-coords { font-size: 7.5pt; color: #9ca3af; margin-top: 3px; }
+
+  /* ── Beschreibung (Cross-Marker) ── */
+  .desc-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;
+              padding: 8px 10px; font-size: 10pt; line-height: 1.5; margin-bottom: 10px; }
 
   /* ── Verlauf ── */
   h2 { font-size: 9.5pt; font-weight: 700; text-transform: uppercase;
@@ -85,11 +88,11 @@
                     border-radius: 3px; border: 1px solid #d1d5db; page-break-inside: avoid; }
 
   /* ── Footer ── */
-  .footer { margin-top: 16px; padding-top: 5px; border-top: 1px solid #d1d5db;
+  .footer { margin-top: 12px; padding-top: 5px; border-top: 1px solid #d1d5db;
             font-size: 8pt; color: #9ca3af; display: flex; justify-content: space-between; }
 
   @media print {
-    .page { max-width: 100%; margin: 0; }
+    .print-page { max-width: 100%; margin: 0; padding-bottom: 0; }
     body { font-size: 10pt; }
   }
 </style>
@@ -99,18 +102,30 @@
 <div class="no-print print-bar">
   <a href="/lage/{{ lage.id }}/druck" class="print-btn" style="text-decoration:none;background:#374151;">← Druckauswahl</a>
   <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
-  <span>A4 Hochformat · Einsatzstelle #{{ site.id }}</span>
+  <span>
+    {% set total = sites|length + cross_markers|length %}
+    {{ total }} Seite{{ 'n' if total != 1 else '' }}:
+    {{ sites|length }} Einsatzstelle{{ 'n' if sites|length != 1 else '' }}{% if cross_markers %}, {{ cross_markers|length }} übergreifende Meldung{{ 'en' if cross_markers|length != 1 else '' }}{% endif %}
+  </span>
   <span style="margin-left:auto;color:#6b7280;">{{ lage.name }}</span>
 </div>
 
-<div class="page">
+{% if lage.is_exercise %}
+<div class="no-print" style="background:#fef9c3;border-bottom:2px solid #fde68a;padding:6px 16px;text-align:center;color:#92400e;font-weight:700;">
+  ⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL
+</div>
+{% endif %}
+
+{# ══════════════════ EINSATZSTELLEN ══════════════════ #}
+{% for site in sites %}
+<div class="print-page">
 
   {% if lage.is_exercise %}
   <div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
   {% endif %}
 
   <div class="hdr">
-    <div class="hdr__lage">{{ lage.name }}</div>
+    <div class="hdr__lage">{{ lage.name }} · Einsatzstelle</div>
     <div class="hdr__title">{{ site.einsatzgrund or site.bezeichnung }}</div>
     {% if site.einsatzgrund and site.bezeichnung != site.einsatzgrund %}
     <div class="hdr__sub">{{ site.bezeichnung }}</div>
@@ -169,9 +184,7 @@
         {% for r in site.resources | sort(attribute='assigned_at') %}
         <li>
           <strong>{{ r.label or '–' }}</strong>
-          <span class="res-ts">
-            — zugeteilt {{ r.assigned_at|local_time if r.assigned_at else '?' }}{% if r.committed_at %} · eingesetzt {{ r.committed_at|local_time }}{% endif %}{% if r.released_at %} · abgezogen {{ r.released_at|local_time }}{% endif %}
-          </span>
+          <span class="res-ts">— zugeteilt {{ r.assigned_at|local_time if r.assigned_at else '?' }}{% if r.committed_at %} · eingesetzt {{ r.committed_at|local_time }}{% endif %}{% if r.released_at %} · abgezogen {{ r.released_at|local_time }}{% endif %}</span>
         </li>
         {% endfor %}
         </ul>
@@ -180,23 +193,19 @@
     {% endif %}
   </table>
 
-  {# ── Karte ── #}
   {% if site.lat and site.lng %}
   <div class="map-wrap">
     <h2>Karte</h2>
-    <div id="printMap"></div>
+    <div id="map-site-{{ site.id }}" class="print-map" data-lat="{{ site.lat }}" data-lng="{{ site.lng }}"></div>
     <div class="map-coords">{{ '%.5f'|format(site.lat) }}, {{ '%.5f'|format(site.lng) }}</div>
   </div>
   {% elif site.strasse or site.ort %}
   <div class="map-wrap">
     <h2>Adresse</h2>
-    <p style="font-size:10pt;">
-      {{ site.strasse or '' }} {{ site.hausnr or '' }}{% if site.ort %}, {{ site.ort }}{% endif %}
-    </p>
+    <p style="font-size:10pt;">{{ site.strasse or '' }} {{ site.hausnr or '' }}{% if site.ort %}, {{ site.ort }}{% endif %}</p>
   </div>
   {% endif %}
 
-  {# ── Verlauf ── #}
   {% if site.log_entries %}
   <h2>Verlauf &amp; Notizen</h2>
   {% for entry in site.log_entries %}
@@ -210,7 +219,6 @@
   {% endfor %}
   {% endif %}
 
-  {# ── Fotos ── #}
   {% if site.media %}
   <h2>Fotos ({{ site.media|length }})</h2>
   <div class="media-grid">
@@ -222,53 +230,177 @@
 
   <div class="footer">
     <span>{{ lage.name }} · Einsatzstelle #{{ site.id }}</span>
-    <span>Gedruckt: <span id="printTs">–</span></span>
+    <span class="print-ts"></span>
   </div>
 
-</div>{# /page #}
+</div>
+{% endfor %}
 
-{% if site.lat and site.lng %}
+{# ══════════════════ ÜBERGREIFENDE MELDUNGEN ══════════════════ #}
+{% for marker in cross_markers %}
+<div class="print-page">
+
+  {% if lage.is_exercise %}
+  <div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
+  {% endif %}
+
+  <div class="hdr hdr--cross">
+    <div class="hdr__lage">{{ lage.name }} · Übergreifende Meldung</div>
+    <div class="hdr__title">{{ marker.type_icon }} {{ marker.title }}</div>
+    <div class="hdr__sub">{{ marker.type_label }}</div>
+    <div class="hdr__meta">
+      <span>Erfasst: {{ marker.created_at|local_datetime }}</span>
+      <span>Status: {{ marker.status_label }}</span>
+      {% if marker.author_name %}<span>{{ marker.author_name }}</span>{% endif %}
+    </div>
+  </div>
+
+  <table class="info-table">
+    <tr>
+      <td>Status</td>
+      <td>{{ marker.status_label }}</td>
+    </tr>
+    <tr>
+      <td>Kategorie</td>
+      <td>{{ marker.type_label }}</td>
+    </tr>
+    {% if marker.address_line %}
+    <tr>
+      <td>Adresse</td>
+      <td>{{ marker.address_line }}</td>
+    </tr>
+    {% endif %}
+    {% if marker.lat and marker.lng %}
+    <tr>
+      <td>Koordinaten</td>
+      <td>{{ '%.5f'|format(marker.lat) }}, {{ '%.5f'|format(marker.lng) }}</td>
+    </tr>
+    {% endif %}
+    {% if marker.media %}
+    <tr>
+      <td>Fotos</td>
+      <td>{{ marker.media|length }}</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  {% if marker.description %}
+  <h2>Beschreibung</h2>
+  <div class="desc-box">{{ marker.description }}</div>
+  {% endif %}
+
+  {% if marker.lat and marker.lng %}
+  <div class="map-wrap">
+    <h2>Karte</h2>
+    <div id="map-cross-{{ marker.id }}" class="print-map" data-lat="{{ marker.lat }}" data-lng="{{ marker.lng }}"></div>
+    <div class="map-coords">{{ '%.5f'|format(marker.lat) }}, {{ '%.5f'|format(marker.lng) }}</div>
+  </div>
+  {% elif marker.address_line %}
+  <div class="map-wrap">
+    <h2>Adresse</h2>
+    <p style="font-size:10pt;">{{ marker.address_line }}</p>
+  </div>
+  {% endif %}
+
+  {% if marker.log_entries %}
+  <h2>Meldungen &amp; Notizen</h2>
+  {% for entry in marker.log_entries %}
+  <div class="log-row">
+    <span class="log-time">
+      {{ entry.ts|local_datetime }}
+      {% if entry.author_name %}<br><span class="log-author">{{ entry.author_name }}</span>{% endif %}
+    </span>
+    <span class="log-text">{{ entry.text }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if marker.media %}
+  <h2>Fotos ({{ marker.media|length }})</h2>
+  <div class="media-grid">
+    {% for m in marker.media %}
+    <img src="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/medien/{{ m.id }}/bild"
+         alt="{{ m.original_filename }}" loading="eager">
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="footer">
+    <span>{{ lage.name }} · Meldung #{{ marker.id }}</span>
+    <span class="print-ts"></span>
+  </div>
+
+</div>
+{% endfor %}
+
+{% if has_maps %}
 <script src="/static/js/leaflet.min.js"></script>
+{% endif %}
 <script>
 (function() {
-  var lat = {{ site.lat }}, lng = {{ site.lng }};
+  var tsStr = new Date().toLocaleString('de-AT', {
+    day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
+  });
+  document.querySelectorAll('.print-ts').forEach(function(el) {
+    el.textContent = 'Gedruckt: ' + tsStr;
+  });
+
+  {% if has_maps %}
   delete L.Icon.Default.prototype._getIconUrl;
   L.Icon.Default.mergeOptions({
     iconUrl: '/static/img/leaflet/marker-icon.png',
     iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
     shadowUrl: '/static/img/leaflet/marker-shadow.png',
   });
-  var map = L.map('printMap', { zoomControl: false, attributionControl: false })
-             .setView([lat, lng], 18);
-  var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    subdomains: 'abc', maxZoom: 19,
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
-  L.marker([lat, lng]).addTo(map);
 
-  setTimeout(function() { map.invalidateSize(); }, 50);
-  setTimeout(function() { map.invalidateSize(); }, 300);
-  window.addEventListener('beforeprint', function() { map.invalidateSize(); });
+  var mapEls = document.querySelectorAll('.print-map[data-lat]');
+  var maps = [];
+  var tileLayers = [];
 
+  mapEls.forEach(function(el) {
+    var lat = parseFloat(el.dataset.lat);
+    var lng = parseFloat(el.dataset.lng);
+    var m = L.map(el, { zoomControl: false, attributionControl: false }).setView([lat, lng], 18);
+    var tl = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      subdomains: 'abc', maxZoom: 19
+    }).addTo(m);
+    L.marker([lat, lng]).addTo(m);
+    setTimeout(function() { m.invalidateSize(); }, 50);
+    maps.push(m);
+    tileLayers.push(tl);
+  });
+
+  window.addEventListener('beforeprint', function() {
+    maps.forEach(function(m) { m.invalidateSize(); });
+  });
+
+  // Auto-print: wait for all tile layers to load, fallback 10s
+  var loadedCount = 0;
   var printed = false;
-  function autoPrint() {
-    if (printed) return;
-    printed = true;
-    setTimeout(function() { window.print(); }, 800);
+  function oneTileLayerLoaded() {
+    loadedCount++;
+    if (loadedCount >= tileLayers.length && !printed) {
+      printed = true;
+      setTimeout(function() { window.print(); }, 800);
+    }
   }
-  tiles.on('load', autoPrint);
-  setTimeout(autoPrint, 8000);
+  tileLayers.forEach(function(tl) {
+    tl.on('load', oneTileLayerLoaded);
+  });
+  setTimeout(function() {
+    if (!printed) { printed = true; window.print(); }
+  }, 10000);
+
+  {% else %}
+  // No maps – print after images load or 2s fallback
+  var printed = false;
+  function tryPrint() {
+    if (!printed) { printed = true; window.print(); }
+  }
+  window.addEventListener('load', function() { setTimeout(tryPrint, 300); });
+  setTimeout(tryPrint, 2000);
+  {% endif %}
 })();
 </script>
-{% else %}
-<script>
-window.addEventListener('load', function() { setTimeout(window.print, 300); });
-</script>
-{% endif %}
-<script>
-document.getElementById('printTs').textContent =
-  new Date().toLocaleString('de-AT', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-</script>
-
 </body>
 </html>

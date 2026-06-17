@@ -2,12 +2,13 @@
 import base64
 import hashlib
 import io
+import json
 import logging
 import random
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
@@ -3004,8 +3005,93 @@ async def lage_zeitreise(
 
 # ── Druckansicht ─────────────────────────────────────────────────────────────
 
+_PRIO_CLASS = {
+    SitePriority.sofort:       "badge--red",
+    SitePriority.dringend:     "badge--orange",
+    SitePriority.normal:       "badge--yellow",
+    SitePriority.aufschiebbar: "badge--gray",
+}
+
+
+def _site_to_json(site: IncidentSite, sectors: list) -> dict:
+    """Serialize an IncidentSite to a dict for the Print-Center JS."""
+    sector_name = ""
+    if site.sector_id:
+        for sec in sectors:
+            if sec.id == site.sector_id:
+                sector_name = sec.name
+                break
+    addr_parts = []
+    if site.strasse:
+        addr_parts.append(site.strasse + (" " + site.hausnr if site.hausnr else ""))
+    if site.ort:
+        addr_parts.append(site.ort)
+    addr = ", ".join(addr_parts)
+    active_res = [r for r in site.resources if r.released_at is None]
+    return {
+        "id": site.id,
+        "title": site.einsatzgrund or site.bezeichnung or f"Stelle #{site.id}",
+        "sub": site.bezeichnung if site.einsatzgrund and site.bezeichnung != site.einsatzgrund else "",
+        "prio": site.priority.name if site.priority else "",
+        "prioBadge": SITE_PRIORITY_LABEL.get(site.priority, "") if site.priority else "",
+        "prioClass": _PRIO_CLASS.get(site.priority, "") if site.priority else "",
+        "phase": PHASE_LABELS.get(site.phase, site.phase.value),
+        "phase_val": site.phase.value,
+        "sector": sector_name,
+        "sector_id": site.sector_id,
+        "addr": addr,
+        "street": site.strasse or "",
+        "resCount": len(active_res),
+    }
+
+
+def _cross_to_json(m: CrossSiteMarker) -> dict:
+    """Serialize a CrossSiteMarker to a dict for the Print-Center JS."""
+    return {
+        "id": m.id,
+        "title": m.title,
+        "icon": m.type_icon,
+        "type": m.type_label,
+        "type_val": m.marker_type,
+        "status": m.status_label,
+        "status_val": m.status,
+        "addr": m.address_line,
+    }
+
+
 @router.get("/lage/{lage_id}/druck", response_class=HTMLResponse)
 async def lage_druck(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    sectors = sorted(lage.sectors, key=lambda s: s.sort_order)
+    sites = sorted(lage.sites, key=lambda s: (s.priority.value if s.priority else 99, s.sort_index, s.id))
+    cross_markers = sorted(lage.cross_site_markers, key=lambda m: m.sort_index)
+
+    sites_json = json.dumps([_site_to_json(s, sectors) for s in sites], ensure_ascii=False)
+    cross_json = json.dumps([_cross_to_json(m) for m in cross_markers], ensure_ascii=False)
+
+    return templates.TemplateResponse(request, "incident_major/druck.html", {
+        "lage": lage,
+        "sectors": sectors,
+        "cross_markers": cross_markers,
+        "phase_labels": PHASE_LABELS,
+        "prio_label": SITE_PRIORITY_LABEL,
+        "prio_color": SITE_PRIORITY_COLOR,
+        "cross_type_label": CROSS_MARKER_TYPE_LABEL,
+        "sites_json": sites_json,
+        "cross_json": cross_json,
+    })
+
+
+@router.get("/lage/{lage_id}/druck/bericht", response_class=HTMLResponse)
+async def lage_druck_bericht(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -3049,11 +3135,14 @@ async def lage_druck(
         .all()
     )
 
-    return templates.TemplateResponse(request, "incident_major/druck.html", {
+    cross_markers = sorted(lage.cross_site_markers, key=lambda m: m.sort_index)
+
+    return templates.TemplateResponse(request, "incident_major/druck_bericht.html", {
         "user": user,
         "lage": lage,
         "active_sites": active_sites,
         "done_sites": done_sites,
+        "cross_markers": cross_markers,
         "staff_by_fn": staff_by_fn,
         "staff_fn_label": STAFF_FUNCTION_LABEL,
         "staff_functions": list(StaffFunction),
@@ -3064,6 +3153,71 @@ async def lage_druck(
         "journal_entries": journal_entries,
         "journal_categories": JOURNAL_CATEGORIES,
         "now": datetime.now(UTC),
+    })
+
+
+@router.get("/lage/{lage_id}/druck/stellen", response_class=HTMLResponse)
+async def lage_druck_stellen(
+    request: Request,
+    lage_id: int,
+    ids: str = Query(""),
+    cross_ids: str = Query(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    site_id_list = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    cross_id_list = [int(x) for x in cross_ids.split(",") if x.strip().isdigit()]
+
+    sites = []
+    if site_id_list:
+        site_map = {
+            s.id: s
+            for s in (
+                db.query(IncidentSite)
+                .filter(
+                    IncidentSite.id.in_(site_id_list),
+                    IncidentSite.major_incident_id == lage_id,
+                )
+                .options(
+                    selectinload(IncidentSite.log_entries),
+                    selectinload(IncidentSite.resources),
+                    selectinload(IncidentSite.media),
+                )
+                .all()
+            )
+        }
+        sites = [site_map[i] for i in site_id_list if i in site_map]
+
+    cross_markers = []
+    if cross_id_list:
+        cross_map = {
+            m.id: m
+            for m in (
+                db.query(CrossSiteMarker)
+                .filter(
+                    CrossSiteMarker.id.in_(cross_id_list),
+                    CrossSiteMarker.major_incident_id == lage_id,
+                )
+                .options(
+                    selectinload(CrossSiteMarker.log_entries),
+                    selectinload(CrossSiteMarker.media),
+                )
+                .all()
+            )
+        }
+        cross_markers = [cross_map[i] for i in cross_id_list if i in cross_map]
+
+    return templates.TemplateResponse(request, "incident_major/_stellen_multi_druck.html", {
+        "lage": lage,
+        "sites": sites,
+        "cross_markers": cross_markers,
+        "phase_labels": PHASE_LABELS,
+        "prio_label": SITE_PRIORITY_LABEL,
+        "site_log_kind_label": SITE_LOG_KIND_LABEL,
     })
 
 

@@ -3,296 +3,378 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{ lage.name }} – Lagebericht</title>
+<title>{{ lage.name }} – Druckauswahl</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: "Arial", sans-serif; font-size: 11pt; color: #111;
-    background: #fff; padding: 16px;
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #111; background: #f9fafb; }
+
+  .topbar {
+    background: #1f2937; color: #fff; padding: 10px 18px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   }
-  h1 { font-size: 16pt; margin-bottom: 2px; }
-  h2 { font-size: 11pt; font-weight: 700; text-transform: uppercase;
-       letter-spacing: .04em; border-bottom: 1.5px solid #111;
-       margin: 14px 0 6px; padding-bottom: 3px; }
-  h3 { font-size: 10pt; font-weight: 700; margin-bottom: 3px; }
+  .topbar a { color: #93c5fd; text-decoration: none; font-size: 9.5pt; }
+  .topbar__title { font-size: 13pt; font-weight: 700; flex: 1; }
 
-  .header { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 12px; }
-  .header__meta { font-size: 9pt; color: #555; margin-top: 4px; }
-  .exercise-banner {
-    background: #fef9c3; border: 1px solid #fde68a; color: #92400e;
-    font-weight: 700; text-align: center; padding: 5px; font-size: 10pt;
-    margin-bottom: 8px;
+  .container { max-width: 860px; margin: 0 auto; padding: 18px 16px 40px; }
+
+  /* Filter Bar */
+  .filter-bar {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 14px;
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
   }
-
-  /* Stats row */
-  .stats { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
-  .stat { flex: 1; min-width: 80px; border: 1px solid #ccc; border-radius: 4px;
-          padding: 5px 8px; text-align: center; }
-  .stat__val { font-size: 18pt; font-weight: 700; }
-  .stat__lbl { font-size: 8pt; color: #555; }
-
-  /* Stab */
-  .stab-grid { display: flex; gap: 8px; flex-wrap: wrap; }
-  .stab-fn { flex: 1; min-width: 160px; border: 1px solid #ddd;
-              border-radius: 4px; padding: 5px 8px; }
-  .stab-fn__title { font-size: 8pt; font-weight: 700; color: #555;
-                    text-transform: uppercase; margin-bottom: 3px; }
-  .stab-fn__names { font-size: 10pt; }
-
-  /* Sites */
-  .site-row { border: 1px solid #ddd; border-radius: 4px; padding: 7px 10px;
-               margin-bottom: 5px; page-break-inside: avoid; }
-  .site-row--sofort   { border-left: 4px solid #ef4444; }
-  .site-row--dringend { border-left: 4px solid #f97316; }
-  .site-row--normal   { border-left: 4px solid #eab308; }
-  .site-row--done     { opacity: .6; }
-  .site-row__header { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-  .site-row__title  { font-weight: 700; font-size: 10.5pt; flex: 1; }
-  .site-row__badge  { font-size: 7.5pt; font-weight: 700; border: 1px solid #ccc;
-                      padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
-  .site-row__badge--red    { border-color: #ef4444; color: #b91c1c; }
-  .site-row__badge--orange { border-color: #f97316; color: #c2410c; }
-  .site-row__badge--yellow { border-color: #eab308; color: #854d0e; }
-  .site-row__sub  { font-size: 9pt; color: #444; margin-top: 2px; }
-  .site-row__addr { font-size: 8.5pt; color: #555; margin-top: 1px; }
-  .site-row__res  { font-size: 8pt; color: #555; margin-top: 3px; }
-
-  /* Comm table */
-  .comm-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
-  .comm-table th { text-align: left; padding: 3px 6px;
-                   border-bottom: 1px solid #111; font-size: 8pt; }
-  .comm-table td { padding: 3px 6px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-
-  /* Journal */
-  .journal-row { padding: 5px 8px; margin-bottom: 4px; border-radius: 3px;
-                 border-left: 3px solid #ccc; page-break-inside: avoid; }
-  .journal-row--entscheidung { border-left-color: #7c3aed; }
-  .journal-row--anweisung    { border-left-color: #c2410c; }
-  .journal-row--meldung      { border-left-color: #1d4ed8; }
-  .journal-row--sonstiges    { border-left-color: #6b7280; }
-  .journal-row--lagemeldung  { border-left-color: #059669; }
-  .journal-badge { font-size: 7pt; font-weight: 700; border: 1px solid #ccc;
-                   padding: 0 4px; border-radius: 2px; margin-right: 4px; }
-  .journal-meta  { font-size: 8pt; color: #777; margin-top: 2px; }
-  .journal-skkm  { font-size: 8pt; color: #555; margin-top: 2px; }
-  .journal-body  { font-size: 9pt; margin-top: 4px; padding: 4px 6px;
-                   background: #f9fafb; border-radius: 3px; line-height: 1.5; }
-  .journal-body p { margin: 2px 0; }
-  .journal-measure { font-size: 8.5pt; margin-top: 3px; padding: 3px 6px;
-                     background: #fffbeb; border-left: 2px solid #d97706; color: #92400e; }
-
-  /* Print controls */
-  .no-print { margin-bottom: 14px; }
-  .btn-print { padding: 7px 18px; background: #111; color: #fff; border: none;
-                border-radius: 5px; cursor: pointer; font-size: 10pt; margin-right: 8px; }
-  .print-footer { margin-top: 18px; font-size: 8pt; color: #999; text-align: center; }
-
-  @media print {
-    .no-print { display: none !important; }
-    body { padding: 0; }
-    .page-break { page-break-before: always; }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; }
+  .filter-group label { font-size: 7.5pt; font-weight: 700; color: #6b7280; text-transform: uppercase; }
+  .filter-group select, .filter-group input {
+    font-size: 9.5pt; border: 1px solid #d1d5db; border-radius: 5px;
+    padding: 4px 8px; background: #fff; color: #111;
   }
+  .prio-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+  .prio-pill {
+    border: 1px solid #d1d5db; border-radius: 14px; padding: 3px 10px;
+    font-size: 8.5pt; cursor: pointer; background: #fff; transition: all .15s;
+  }
+  .prio-pill--active { background: #1f2937; color: #fff; border-color: #1f2937; }
+  .prio-pill--sofort   { border-color: #ef4444; }
+  .prio-pill--sofort.prio-pill--active   { background: #ef4444; border-color: #ef4444; }
+  .prio-pill--dringend { border-color: #f97316; }
+  .prio-pill--dringend.prio-pill--active { background: #f97316; border-color: #f97316; }
+  .prio-pill--normal   { border-color: #eab308; }
+  .prio-pill--normal.prio-pill--active   { background: #eab308; border-color: #eab308; color: #111; }
+  .prio-pill--aufschiebbar { border-color: #9ca3af; }
+  .prio-pill--aufschiebbar.prio-pill--active { background: #6b7280; border-color: #6b7280; color: #fff; }
+
+  /* Section header */
+  .section-hdr {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px; padding-bottom: 5px; border-bottom: 2px solid #111;
+  }
+  .section-hdr h2 { font-size: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .section-hdr__actions { display: flex; gap: 8px; align-items: center; font-size: 8.5pt; }
+  .toggle-link { color: #3b82f6; cursor: pointer; text-decoration: underline; }
+
+  /* Site cards */
+  .site-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 18px; }
+  .site-item {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
+    padding: 7px 10px 7px 8px; display: flex; align-items: flex-start; gap: 10px;
+    cursor: pointer;
+  }
+  .site-item:hover { border-color: #93c5fd; }
+  .site-item--checked { border-color: #3b82f6; background: #eff6ff; }
+  .site-item__prio { width: 5px; border-radius: 3px; align-self: stretch; flex-shrink: 0; }
+  .site-item__prio--sofort   { background: #ef4444; }
+  .site-item__prio--dringend { background: #f97316; }
+  .site-item__prio--normal   { background: #eab308; }
+  .site-item__prio--aufschiebbar { background: #9ca3af; }
+  .site-item__prio--none     { background: #e5e7eb; }
+  .site-item__check { margin-top: 2px; flex-shrink: 0; }
+  .site-item__body { flex: 1; min-width: 0; }
+  .site-item__title { font-weight: 700; font-size: 10pt; }
+  .site-item__sub { font-size: 8.5pt; color: #374151; margin-top: 1px; }
+  .site-item__meta { font-size: 7.5pt; color: #9ca3af; margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge { display: inline-block; font-size: 7pt; font-weight: 700; border: 1px solid #ccc;
+           padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+  .badge--red    { border-color: #ef4444; color: #b91c1c; }
+  .badge--orange { border-color: #f97316; color: #c2410c; }
+  .badge--yellow { border-color: #eab308; color: #854d0e; }
+  .badge--gray   { border-color: #9ca3af; color: #6b7280; }
+
+  /* Cross-marker items */
+  .cross-item {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
+    padding: 7px 10px 7px 8px; display: flex; align-items: flex-start; gap: 10px;
+    cursor: pointer;
+  }
+  .cross-item:hover { border-color: #93c5fd; }
+  .cross-item--checked { border-color: #3b82f6; background: #eff6ff; }
+  .cross-item__body { flex: 1; min-width: 0; }
+  .cross-item__title { font-weight: 700; font-size: 10pt; }
+  .cross-item__meta { font-size: 7.5pt; color: #9ca3af; margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* Action bar */
+  .action-bar {
+    position: sticky; bottom: 0; background: #1f2937; border-top: 2px solid #374151;
+    padding: 12px 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    z-index: 100;
+  }
+  .action-bar__count { color: #9ca3af; font-size: 9pt; flex: 1; }
+  .btn {
+    padding: 8px 18px; border: none; border-radius: 6px; font-size: 9.5pt;
+    cursor: pointer; font-weight: 600; transition: background .15s;
+  }
+  .btn--primary { background: #b71921; color: #fff; }
+  .btn--primary:hover { background: #9b161d; }
+  .btn--primary:disabled { background: #6b7280; cursor: not-allowed; }
+  .btn--secondary { background: #374151; color: #d1d5db; }
+  .btn--secondary:hover { background: #4b5563; }
+
+  .empty-hint { text-align: center; padding: 24px; color: #9ca3af; font-size: 9.5pt; }
+  .cross-filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+  .cross-filter-bar select { font-size: 9pt; border: 1px solid #d1d5db; border-radius: 5px; padding: 3px 7px; }
+  .cross-filter-bar label { font-size: 8pt; color: #6b7280; }
+
+  @media print { body { display: none; } }
 </style>
 </head>
-<body>
+<body x-data="printCenter()">
 
-<div class="no-print">
-  <button class="btn-print" onclick="window.print()">🖨 Drucken / PDF</button>
-  <a href="/lage/{{ lage.id }}" style="font-size:10pt;color:#3b82f6;">← zurück zum Board</a>
+<div class="topbar">
+  <a href="/lage/{{ lage.id }}">← Board</a>
+  <div class="topbar__title">🖨 Druckauswahl · {{ lage.name }}</div>
 </div>
 
-{% if lage.is_exercise %}
-<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – kein echter Einsatz ⚠</div>
-{% endif %}
+<div class="container">
 
-<div class="header">
-  <h1>{{ lage.name }}</h1>
-  <div class="header__meta">
-    Beginn: {{ lage.started_at|local_datetime }}
-    {% if lage.ended_at %} · Ende: {{ lage.ended_at|local_datetime }}{% endif %}
-     · Stand: {{ now|local_datetime }}
-     · Status: {{ lage.status.value }}
+  {# ═══════════════════════════════════════ EINSATZSTELLEN ═══════════════════════════════════════ #}
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Priorität</label>
+      <div class="prio-pills">
+        <button type="button" class="prio-pill" :class="{'prio-pill--active': filterPrio.length === 0}"
+          @click="filterPrio = []">Alle</button>
+        <button type="button" class="prio-pill prio-pill--sofort"
+          :class="{'prio-pill--active': filterPrio.includes('sofort')}"
+          @click="togglePrio('sofort')">Sofort</button>
+        <button type="button" class="prio-pill prio-pill--dringend"
+          :class="{'prio-pill--active': filterPrio.includes('dringend')}"
+          @click="togglePrio('dringend')">Dringend</button>
+        <button type="button" class="prio-pill prio-pill--normal"
+          :class="{'prio-pill--active': filterPrio.includes('normal')}"
+          @click="togglePrio('normal')">Normal</button>
+        <button type="button" class="prio-pill prio-pill--aufschiebbar"
+          :class="{'prio-pill--active': filterPrio.includes('aufschiebbar')}"
+          @click="togglePrio('aufschiebbar')">Aufschiebbar</button>
+      </div>
+    </div>
+    <div class="filter-group">
+      <label>Phase</label>
+      <select x-model="filterPhase">
+        <option value="">Alle</option>
+        <option value="aktiv">Aktiv (nicht erledigt)</option>
+        <option value="erledigt">Erledigt</option>
+        <option value="abgebrochen">Abgebrochen</option>
+        {% for phase, label in phase_labels.items() %}
+        <option value="{{ phase.value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if sectors %}
+    <div class="filter-group">
+      <label>Abschnitt</label>
+      <select x-model="filterSector">
+        <option value="">Alle</option>
+        {% for s in sectors %}
+        <option value="{{ s.id }}">{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div class="filter-group">
+      <label>Straße</label>
+      <input type="text" x-model="filterStreet" placeholder="Suche…" style="width:140px;">
+    </div>
   </div>
-</div>
 
-{# ── Kennzahlen ────────────────────────────────────────────────────────────── #}
-<div class="stats">
-  <div class="stat">
-    <div class="stat__val">{{ active_sites|length }}</div>
-    <div class="stat__lbl">Offen</div>
+  <div class="section-hdr">
+    <h2>Einsatzstellen (<span x-text="filteredSites.length"></span>)</h2>
+    <div class="section-hdr__actions">
+      <span class="toggle-link" @click="selectAllSites()">Alle</span>
+      <span style="color:#d1d5db;">·</span>
+      <span class="toggle-link" @click="deselectAllSites()">Keine</span>
+      <span style="color:#6b7280;" x-text="selectedIds.length + ' ausgewählt'"></span>
+    </div>
   </div>
-  <div class="stat">
-    <div class="stat__val">{{ done_sites|length }}</div>
-    <div class="stat__lbl">Erledigt</div>
+
+  <div class="site-list">
+    <template x-for="site in filteredSites" :key="site.id">
+      <div class="site-item" :class="{'site-item--checked': selectedIds.includes(site.id)}"
+           @click="toggleSite(site.id)">
+        <div class="site-item__prio" :class="'site-item__prio--' + (site.prio || 'none')"></div>
+        <input type="checkbox" class="site-item__check" :checked="selectedIds.includes(site.id)"
+               @click.stop="toggleSite(site.id)">
+        <div class="site-item__body">
+          <div class="site-item__title" x-text="site.title"></div>
+          <div class="site-item__sub" x-show="site.sub" x-text="site.sub"></div>
+          <div class="site-item__meta">
+            <span x-show="site.prioBadge" class="badge" :class="site.prioClass" x-text="site.prioBadge"></span>
+            <span class="badge" x-text="site.phase"></span>
+            <span x-show="site.sector" class="badge" x-text="site.sector"></span>
+            <span x-show="site.addr" x-text="site.addr"></span>
+            <span x-show="site.resCount > 0" x-text="'🚒 ' + site.resCount"></span>
+          </div>
+        </div>
+      </div>
+    </template>
+    <div class="empty-hint" x-show="filteredSites.length === 0">
+      Keine Einsatzstellen entsprechen den Filterkriterien.
+    </div>
   </div>
-  <div class="stat">
-    {% set res_count = namespace(n=0) %}
-    {% for s in active_sites %}
-      {% for r in s.resources %}
-        {% if r.released_at is none %}{% set res_count.n = res_count.n + 1 %}{% endif %}
+
+  {# ═══════════════════════════════════════ ÜBERGREIFENDE MELDUNGEN ═══════════════════════════════ #}
+  {% if cross_markers %}
+  <div class="section-hdr">
+    <h2>Übergreifende Meldungen (<span x-text="filteredCross.length"></span>)</h2>
+    <div class="section-hdr__actions">
+      <span class="toggle-link" @click="selectAllCross()">Alle</span>
+      <span style="color:#d1d5db;">·</span>
+      <span class="toggle-link" @click="deselectAllCross()">Keine</span>
+      <span style="color:#6b7280;" x-text="selectedCrossIds.length + ' ausgewählt'"></span>
+    </div>
+  </div>
+  <div class="cross-filter-bar">
+    <label>Status:</label>
+    <select x-model="filterCrossStatus">
+      <option value="">Alle</option>
+      <option value="aktiv">Aktiv</option>
+      <option value="erledigt">Erledigt</option>
+    </select>
+    <label>Typ:</label>
+    <select x-model="filterCrossType">
+      <option value="">Alle</option>
+      {% for type_key, type_label in cross_type_label.items() %}
+      <option value="{{ type_key }}">{{ type_label }}</option>
       {% endfor %}
-    {% endfor %}
-    <div class="stat__val">{{ res_count.n }}</div>
-    <div class="stat__lbl">Ressourcen</div>
+    </select>
   </div>
-</div>
-
-{# ── Stabsbesetzung ────────────────────────────────────────────────────────── #}
-<h2>Stabsbesetzung</h2>
-<div class="stab-grid">
-  {% for fn in staff_functions %}
-  {% set asgns = staff_by_fn[fn] %}
-  <div class="stab-fn">
-    <div class="stab-fn__title">{{ staff_fn_label[fn] }}</div>
-    <div class="stab-fn__names">
-      {% if asgns %}
-      {{ asgns|map(attribute='label')|join(', ') }}
-      {% else %}–{% endif %}
+  <div class="site-list">
+    <template x-for="cm in filteredCross" :key="cm.id">
+      <div class="cross-item" :class="{'cross-item--checked': selectedCrossIds.includes(cm.id)}"
+           @click="toggleCross(cm.id)">
+        <input type="checkbox" class="site-item__check" :checked="selectedCrossIds.includes(cm.id)"
+               @click.stop="toggleCross(cm.id)">
+        <div class="cross-item__body">
+          <div class="cross-item__title" x-text="cm.icon + ' ' + cm.title"></div>
+          <div class="cross-item__meta">
+            <span class="badge" x-text="cm.status"></span>
+            <span class="badge" x-text="cm.type"></span>
+            <span x-show="cm.addr" x-text="cm.addr"></span>
+          </div>
+        </div>
+      </div>
+    </template>
+    <div class="empty-hint" x-show="filteredCross.length === 0">
+      Keine übergreifenden Meldungen entsprechen den Filterkriterien.
     </div>
-  </div>
-  {% endfor %}
-</div>
-
-{# ── Aktive Einsatzstellen ─────────────────────────────────────────────────── #}
-<h2>Aktive Einsatzstellen ({{ active_sites|length }})</h2>
-{% for site in active_sites %}
-{% set color = prio_color[site.priority] if site.priority else '' %}
-<div class="site-row site-row--{{ color }}">
-  <div class="site-row__header">
-    <div class="site-row__title">{{ site.bezeichnung }}</div>
-    {% if site.priority %}
-    <span class="site-row__badge site-row__badge--{{ color }}">{{ prio_label[site.priority] }}</span>
-    {% endif %}
-    <span class="site-row__badge">{{ phase_labels[site.phase] }}</span>
-    {% if site.alarm_stufe %}<span class="site-row__badge">{{ site.alarm_stufe }}</span>{% endif %}
-  </div>
-  {% if site.einsatzgrund %}
-  <div class="site-row__sub">{{ site.einsatzgrund }}</div>
-  {% endif %}
-  {% if site.strasse or site.ort %}
-  <div class="site-row__addr">
-    {% if site.strasse %}{{ site.strasse }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% if site.ort %}, {% endif %}{% endif %}
-    {{ site.ort or '' }}
   </div>
   {% endif %}
-  {% set active_res = site.resources|selectattr('released_at','none')|list %}
-  {% if active_res %}
-  <div class="site-row__res">
-    Ressourcen: {{ active_res|map(attribute='label')|select|join(', ') or active_res|length ~ ' zugewiesen' }}
+
+</div>{# /container #}
+
+{# ═══════════════════════════════════════ ACTION BAR ════════════════════════════════════════════ #}
+<div class="action-bar">
+  <div class="action-bar__count">
+    <span x-text="selectedIds.length + selectedCrossIds.length"></span> ausgewählt
+    (<span x-text="selectedIds.length"></span> Stellen,
+    <span x-text="selectedCrossIds.length"></span> Meldungen)
   </div>
-  {% endif %}
-</div>
-{% else %}
-<p style="color:#666;font-size:9pt;">Keine aktiven Einsatzstellen.</p>
-{% endfor %}
-
-{# ── Erledigte Stellen ─────────────────────────────────────────────────────── #}
-{% if done_sites %}
-<h2>Erledigt ({{ done_sites|length }})</h2>
-{% for site in done_sites %}
-<div class="site-row site-row--done">
-  <div class="site-row__header">
-    <div class="site-row__title">{{ site.bezeichnung }}</div>
-    {% if site.einsatzgrund %}
-    <span style="font-size:9pt;color:#555;">{{ site.einsatzgrund }}</span>
-    {% endif %}
-  </div>
-</div>
-{% endfor %}
-{% endif %}
-
-{# ── Funkjournal ───────────────────────────────────────────────────────────── #}
-{% if comms %}
-<div class="page-break">
-  <h2>Funkjournal (letzte {{ comms|length }} Einträge)</h2>
-  <table class="comm-table">
-    <thead>
-      <tr>
-        <th>Zeit</th>
-        <th>Richtung</th>
-        <th>Kanal</th>
-        <th>Gegenüber</th>
-        <th>Inhalt</th>
-        <th>Bearbeiter</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for c in comms|reverse %}
-      <tr>
-        <td style="white-space:nowrap;">{{ c.ts|local_time }}</td>
-        <td>{% if c.direction == 'in' %}↓ Ein{% elif c.direction == 'out' %}↑ Aus{% else %}↔ Int{% endif %}</td>
-        <td>{{ c.channel or '–' }}</td>
-        <td>{{ c.partner or '–' }}</td>
-        <td>{{ c.message }}{% if c.is_request %} [Auftrag]{% endif %}</td>
-        <td>{{ c.author_name or '–' }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endif %}
-
-{# ── Lage-Journal ─────────────────────────────────────────────────────────── #}
-{% if journal_entries %}
-<div class="page-break">
-  <h2>Lage-Journal ({{ journal_entries|length }} Einträge)</h2>
-  {% for entry in journal_entries %}
-  <div class="journal-row journal-row--{{ entry.category }}">
-    <div>
-      <span class="journal-badge">{{ journal_categories.get(entry.category, entry.category)|upper }}</span>
-      <span style="font-size:10pt;font-weight:600;">{{ entry.text }}</span>
-    </div>
-    <div class="journal-meta">
-      {{ entry.ts|local_datetime }}{% if entry.author_name %} · {{ entry.author_name }}{% endif %}
-    </div>
-    {% if entry.partner_from or entry.partner_to %}
-    <div class="journal-skkm">
-      {% if entry.partner_from %}Von: <strong>{{ entry.partner_from }}</strong>{% endif %}
-      {% if entry.partner_from and entry.partner_to %} &nbsp;·&nbsp; {% endif %}
-      {% if entry.partner_to %}An: <strong>{{ entry.partner_to }}</strong>{% endif %}
-    </div>
-    {% endif %}
-    {% if entry.body_html %}
-    <div class="journal-body">{{ entry.body_html | safe }}</div>
-    {% endif %}
-    {% if entry.measure %}
-    <div class="journal-measure">⚡ Veranlassung: {{ entry.measure }}</div>
-    {% endif %}
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
-<div class="page-break">
-  <h2>Taktische Zeichen – Legende</h2>
-  <style>
-    .taktlegende { margin-top:6px; }
-    .tl-row { display:flex; align-items:center; gap:8px; padding:3px 0;
-               border-top:1px solid #eee; font-size:9pt; }
-    .tl-sym { display:inline-flex; align-items:center; justify-content:center;
-               width:20px; height:16px; border:2px solid #d11; border-radius:2px;
-               font-size:8pt; font-weight:700; flex-shrink:0; color:#d11; }
-    .tl-dot { display:inline-block; width:12px; height:12px; border-radius:50%;
-               flex-shrink:0; }
-    .tl-line { display:inline-block; width:20px; height:2px; background:#111; flex-shrink:0; }
-  </style>
-  <div class="taktlegende">
-    <div class="tl-row"><span class="tl-sym"></span> Einsatzstelle (Rot = Schadenslage)</div>
-    <div class="tl-row"><span class="tl-sym" style="border-color:#d11;border-radius:0;clip-path:polygon(50% 0%,100% 100%,0% 100%);height:18px;">△</span> Gefahr / Schaden (Rot)</div>
-    <div class="tl-row"><span class="tl-sym" style="border-radius:50%;">⊘</span> gesperrt / blockiert (Rot)</div>
-    <div class="tl-row"><span class="tl-sym" style="border-color:#111;transform:rotate(45deg);color:#111;">◇</span> Messpunkt / allgemeine Lage (Schwarz)</div>
-    <div class="tl-row"><span class="tl-dot" style="background:#d11;"></span> wasserführendes Fahrzeug (TLF, RLF, HLF, LFB)</div>
-    <div class="tl-row"><span class="tl-dot" style="background:#1f5fd1;"></span> Löschfahrzeug (LF, KLF, KLFA, MLF, KRF)</div>
-    <div class="tl-row"><span class="tl-dot" style="background:#f5c000;"></span> Sonderfahrzeug (DL, DLK, RF, WLF, ASF, …)</div>
-    <div class="tl-row"><span class="tl-dot" style="background:#22a06b;"></span> diverses Fahrzeug (MTF, KDOF, LAST, MZF, SW, …)</div>
-    <div class="tl-row"><span class="tl-dot" style="background:#fff;border:1px solid #555;"></span> andere Organisation / manuelle Markierung</div>
-    <div class="tl-row"><span class="tl-line"></span> Abschnittsgrenze (Schwarz = allgemeine Lage)</div>
-  </div>
-  <p style="font-size:8pt;color:#555;margin-top:6px;">Darstellung nach ÖBFV E-27 / ÖNORM S 2308.</p>
+  <button type="button" class="btn btn--secondary" onclick="window.open('/lage/{{ lage.id }}/druck/bericht','_blank')">
+    📋 Gesamtprotokoll
+  </button>
+  <button type="button" class="btn btn--primary"
+    :disabled="selectedIds.length + selectedCrossIds.length === 0"
+    @click="printSelected()">
+    🖨 Ausgewählte drucken
+    (<span x-text="selectedIds.length + selectedCrossIds.length"></span> Seiten)
+  </button>
 </div>
 
-<div class="print-footer">
-  {{ lage.name }} · Stand {{ now|local_datetime }} · Einsatzleiter-Hilfswerkzeug
-</div>
+<script src="/static/js/alpine.min.js" defer></script>
+<script>
+function printCenter() {
+  var SITES = {{ sites_json | safe }};
+  var CROSS = {{ cross_json | safe }};
+
+  return {
+    sites: SITES,
+    cross: CROSS,
+    selectedIds: [],
+    selectedCrossIds: [],
+    filterPrio: [],
+    filterPhase: 'aktiv',
+    filterSector: '',
+    filterStreet: '',
+    filterCrossStatus: 'aktiv',
+    filterCrossType: '',
+
+    init() {
+      // auto-select all active sites on load
+      this.selectedIds = this.sites
+        .filter(function(s) { return s.phase_val !== 'erledigt' && s.phase_val !== 'abgebrochen'; })
+        .map(function(s) { return s.id; });
+    },
+
+    get filteredSites() {
+      var self = this;
+      return self.sites.filter(function(s) {
+        if (self.filterPrio.length > 0 && !self.filterPrio.includes(s.prio)) return false;
+        if (self.filterPhase === 'aktiv' && (s.phase_val === 'erledigt' || s.phase_val === 'abgebrochen')) return false;
+        if (self.filterPhase && self.filterPhase !== 'aktiv' && s.phase_val !== self.filterPhase) return false;
+        if (self.filterSector && s.sector_id != self.filterSector) return false;
+        if (self.filterStreet && s.street && !s.street.toLowerCase().includes(self.filterStreet.toLowerCase())) return false;
+        if (self.filterStreet && !s.street) return false;
+        return true;
+      });
+    },
+
+    get filteredCross() {
+      var self = this;
+      return self.cross.filter(function(cm) {
+        if (self.filterCrossStatus && cm.status_val !== self.filterCrossStatus) return false;
+        if (self.filterCrossType && cm.type_val !== self.filterCrossType) return false;
+        return true;
+      });
+    },
+
+    togglePrio(p) {
+      var idx = this.filterPrio.indexOf(p);
+      if (idx === -1) { this.filterPrio.push(p); } else { this.filterPrio.splice(idx, 1); }
+    },
+
+    toggleSite(id) {
+      var idx = this.selectedIds.indexOf(id);
+      if (idx === -1) { this.selectedIds.push(id); } else { this.selectedIds.splice(idx, 1); }
+    },
+
+    toggleCross(id) {
+      var idx = this.selectedCrossIds.indexOf(id);
+      if (idx === -1) { this.selectedCrossIds.push(id); } else { this.selectedCrossIds.splice(idx, 1); }
+    },
+
+    selectAllSites() {
+      var self = this;
+      self.filteredSites.forEach(function(s) {
+        if (!self.selectedIds.includes(s.id)) self.selectedIds.push(s.id);
+      });
+    },
+
+    deselectAllSites() {
+      var self = this;
+      var visible = self.filteredSites.map(function(s) { return s.id; });
+      self.selectedIds = self.selectedIds.filter(function(id) { return !visible.includes(id); });
+    },
+
+    selectAllCross() {
+      var self = this;
+      self.filteredCross.forEach(function(cm) {
+        if (!self.selectedCrossIds.includes(cm.id)) self.selectedCrossIds.push(cm.id);
+      });
+    },
+
+    deselectAllCross() {
+      var self = this;
+      var visible = self.filteredCross.map(function(cm) { return cm.id; });
+      self.selectedCrossIds = self.selectedCrossIds.filter(function(id) { return !visible.includes(id); });
+    },
+
+    printSelected() {
+      if (this.selectedIds.length === 0 && this.selectedCrossIds.length === 0) return;
+      var url = '/lage/{{ lage.id }}/druck/stellen?ids=' + this.selectedIds.join(',')
+              + '&cross_ids=' + this.selectedCrossIds.join(',');
+      window.open(url, '_blank');
+    }
+  };
+}
+</script>
 </body>
 </html>

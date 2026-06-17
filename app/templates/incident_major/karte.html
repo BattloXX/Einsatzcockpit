@@ -257,8 +257,8 @@
   .karte-mode-btn, .karte-badge, #btn-pin-mode, #btn-geolocate, .veh-legend,
   #section-filters, .nocoords-box, #site-panel-wrap,
   #print-frame, #pf-bar { display:none !important; }
-  /* Karte: inline-Pixel-Breite/-Höhe aus JS haben Vorrang (kein !important bei width) */
-  #karte-map { position:static !important; height:var(--print-map-height,150mm) !important; }
+  /* Karte: JS setzt width/height inline – hier nur position überschreiben */
+  #karte-map { position:static !important; }
   #karte-legend { display:flex !important; position:static !important;
                   transform:none !important; bottom:auto; left:auto;
                   margin-top:6px; max-width:100%; }
@@ -531,7 +531,7 @@
   <div style="width:1px;background:rgba(255,255,255,.2);align-self:stretch;"></div>
   <div style="display:flex;gap:6px;">
     <button onclick="closePrintPreview()" class="btn btn--ghost btn--sm">✕ Abbrechen</button>
-    <button onclick="window.open('/lage/{{ lage.id }}/druck','_blank')" class="btn btn--ghost btn--sm" title="Textbericht in neuem Tab">📋 Bericht</button>
+    <button onclick="window.open('/lage/{{ lage.id }}/druck/bericht','_blank')" class="btn btn--ghost btn--sm" title="Gesamtprotokoll in neuem Tab">📋 Bericht</button>
     <button onclick="executePrint()" class="btn btn--primary btn--sm">Drucken</button>
   </div>
 </div>
@@ -1529,8 +1529,8 @@
     var mapEl = document.getElementById('karte-map');
     var rect  = mapEl.getBoundingClientRect();
 
-    var availW = rect.width  * 0.82;
-    var availH = rect.height * 0.80;
+    var availW = rect.width  * 0.90;
+    var availH = rect.height - 100;  // Reserve für pf-bar am unteren Rand
 
     var frameW, frameH;
     if (availW / availH > ratio) {
@@ -1594,7 +1594,7 @@
 
     // ── 2. UI-Elemente per JS ausblenden
     var _hideSels = [
-      '.karte-topbar', '.karte-controls', '.karte-bottom-shelf',
+      '.lage-topbar', '.lage-subnav', '.karte-topbar', '.karte-controls', '.karte-bottom-shelf',
       '.veh-legend', '.karte-badge', '#section-filters',
       '.nocoords-box', '#site-panel-wrap', '#print-frame', '#pf-bar'
     ];
@@ -1686,7 +1686,14 @@
     }
     var tileLayer = null;
     map.eachLayer(function(l) { if (l instanceof L.TileLayer && !tileLayer) tileLayer = l; });
-    if (tileLayer) tileLayer.once('load', onReady);
+    if (tileLayer) {
+      // Tiles schon geladen → sofort drucken, sonst auf load-Event warten
+      if (tileLayer._loading === 0) {
+        onReady();
+      } else {
+        tileLayer.once('load', onReady);
+      }
+    }
     setTimeout(onReady, 2500);
   };
 
