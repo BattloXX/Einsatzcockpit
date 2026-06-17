@@ -270,8 +270,8 @@
   {# ── Lagemeldungs-Timer (SKKM-Regelkreis) ─────────────────────────── #}
   {% if site.naechste_lagemeldung_at %}
   <div class="lm-detail-row">
-    <span class="lm-chip" data-due="{{ site.naechste_lagemeldung_at.isoformat() }}Z"
-          x-data="lmChip($el.dataset.due)" x-init="start()"
+    <span class="lm-chip"
+          x-data="lmChip('{{ site.naechste_lagemeldung_at.isoformat() }}Z')" x-init="start()"
           :class="cls" x-text="label"></span>
     {% if can_edit %}
     <button type="button" class="btn btn--xs btn--secondary"
