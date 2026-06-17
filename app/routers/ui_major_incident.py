@@ -3713,19 +3713,59 @@ async def lage_karte_druck(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
+    import json
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
     _VALID_FMTS = {"A4 portrait", "A4 landscape", "A3 portrait", "A3 landscape"}
     if fmt not in _VALID_FMTS:
         fmt = "A4 portrait"
+
+    def _site_color(s: IncidentSite) -> str:
+        c = SITE_PRIORITY_COLOR.get(s.priority) if s.priority else None
+        if c == "red":    return "#ef4444"
+        if c == "orange": return "#f97316"
+        if c == "yellow": return "#eab308"
+        if s.phase == SitePhase.erledigt: return "#22c55e"
+        return "#6b7280"
+
+    _prio_letter = {
+        SitePriority.sofort: "S", SitePriority.dringend: "D",
+        SitePriority.normal: "N", SitePriority.aufschiebbar: "A",
+    }
+
+    active_sites = [s for s in lage.sites if s.phase != SitePhase.abgebrochen]
+    map_sites_json = json.dumps([{
+        "id": s.id,
+        "bezeichnung": s.bezeichnung,
+        "einsatzgrund": s.einsatzgrund or "",
+        "lat": s.lat, "lng": s.lng,
+        "priority_letter": _prio_letter.get(s.priority, "") if s.priority else "",
+        "color": _site_color(s),
+    } for s in active_sites if s.lat and s.lng])
+
+    sectors_json = json.dumps([{
+        "id": s.id, "name": s.name,
+        "color": s.color or "#6b7280",
+        "geometry": json.loads(s.geometry) if s.geometry else None,
+    } for s in lage.sectors])
+
+    cross_markers_json = json.dumps([{
+        "id": m.id, "title": m.title,
+        "type_icon": m.type_icon, "type_label": m.type_label,
+        "status": m.status, "status_label": m.status_label,
+        "status_color": m.status_color,
+        "lat": m.lat, "lng": m.lng,
+    } for m in lage.cross_site_markers if m.lat and m.lng])
+
     return templates.TemplateResponse(request, "incident_major/karte_druck.html", {
         "lage": lage,
-        "min_lat": min_lat,
-        "min_lng": min_lng,
-        "max_lat": max_lat,
-        "max_lng": max_lng,
+        "min_lat": min_lat, "min_lng": min_lng,
+        "max_lat": max_lat, "max_lng": max_lng,
         "fmt": fmt,
+        "map_sites_json": map_sites_json,
+        "sectors_json": sectors_json,
+        "cross_markers_json": cross_markers_json,
     })
 
 
