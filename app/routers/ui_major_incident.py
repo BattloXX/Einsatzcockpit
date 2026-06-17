@@ -3701,6 +3701,34 @@ async def lage_karte(
     })
 
 
+@router.get("/lage/{lage_id}/karte/druck", response_class=HTMLResponse)
+async def lage_karte_druck(
+    request: Request,
+    lage_id: int,
+    min_lat: float = Query(...),
+    min_lng: float = Query(...),
+    max_lat: float = Query(...),
+    max_lng: float = Query(...),
+    fmt: str = Query("A4 portrait"),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    _VALID_FMTS = {"A4 portrait", "A4 landscape", "A3 portrait", "A3 landscape"}
+    if fmt not in _VALID_FMTS:
+        fmt = "A4 portrait"
+    return templates.TemplateResponse(request, "incident_major/karte_druck.html", {
+        "lage": lage,
+        "min_lat": min_lat,
+        "min_lng": min_lng,
+        "max_lat": max_lat,
+        "max_lng": max_lng,
+        "fmt": fmt,
+    })
+
+
 @router.get("/lage/{lage_id}/karte-sektoren")
 async def lage_karte_sektoren(
     request: Request,
