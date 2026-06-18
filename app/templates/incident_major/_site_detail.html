@@ -44,7 +44,7 @@
 .media-thumb:hover { opacity: .8; }
 </style>
 
-<div class="modal__header" x-data="{editing:false}">
+<div class="modal__header" x-data="{editing:false}" data-open-site-id="{{ site.id }}">
   <div style="flex:1;min-width:0;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <h3 class="modal__title" x-show="!editing">{{ site.bezeichnung }}</h3>
@@ -335,14 +335,16 @@
         {% if not dispatch.vor_ort_at %}
         <div id="dispatch-confirm-wrap-{{ e.id }}">
           <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-vor-ort"
-                hx-swap="none"
+                hx-target="#siteDetailContent"
+                hx-swap="innerHTML"
                 hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}"}'>
             <button type="submit" class="btn btn--xs btn--secondary">✓ VorOrt</button>
           </form>
         </div>
         {% endif %}
         <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-abziehen"
-              hx-swap="none"
+              hx-target="#siteDetailContent"
+              hx-swap="innerHTML"
               hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}"}'>
           <button type="submit" class="btn btn--xs btn--ghost">Abziehen</button>
         </form>
@@ -364,7 +366,8 @@
     {% if dispatchable %}
     <form style="margin-top:8px;"
           hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-disponieren"
-          hx-swap="none"
+          hx-target="#siteDetailContent"
+          hx-swap="innerHTML"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
       <div style="display:flex;gap:6px;align-items:center;">
         <select name="einheit_id" class="form-select form-select--sm" style="flex:1;">

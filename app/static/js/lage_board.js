@@ -82,12 +82,23 @@
           return;
         }
         if (msg.type === 'site:card_changed' && msg.site_id) {
-          const card = document.querySelector(`[data-site-id="${msg.site_id}"]`);
+          const card = document.querySelector(`.site-card[data-site-id="${msg.site_id}"]`);
           if (card) {
             htmx.ajax('GET', `/lage/${lageId}/stellen/${msg.site_id}/card`, {
               target: card,
               swap: 'outerHTML',
             }).then(() => scheduleInit());
+          }
+          const modal = document.getElementById('siteDetailModal');
+          const content = document.getElementById('siteDetailContent');
+          if (modal && modal.open && content) {
+            const header = content.querySelector('.modal__header[data-open-site-id]');
+            if (header && String(header.dataset.openSiteId) === String(msg.site_id)) {
+              htmx.ajax('GET', `/lage/${lageId}/stellen/${msg.site_id}`, {
+                target: '#siteDetailContent',
+                swap: 'innerHTML',
+              });
+            }
           }
           return;
         }

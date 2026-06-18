@@ -7,7 +7,8 @@
   </div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;">
     <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-vor-ort"
-          hx-swap="none">
+          hx-target="#siteDetailContent"
+          hx-swap="innerHTML">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <input type="hidden" name="einheit_id" value="{{ einheit.id }}">
       <input type="hidden" name="confirmed" value="true">

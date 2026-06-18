@@ -511,7 +511,7 @@
 {# ── Ressourcen-Journal ───────────────────────────────────────────────────── #}
 <div id="res-journal-container"
      hx-get="/lage/{{ lage.id }}/ressourcen/journal"
-     hx-trigger="load, every 30s"
+     hx-trigger="load, every 30s, ressourceChanged from:body"
      hx-swap="innerHTML">
   <div style="padding:14px 16px;font-size:.8rem;color:var(--text-muted);">Lade Journal…</div>
 </div>
@@ -532,5 +532,30 @@ function resTypeChanged(v) {
   document.getElementById('mat-qty-row').style.display = v === 'material' ? '' : 'none';
   document.getElementById('mat-unit-row').style.display= v === 'material' ? '' : 'none';
 }
+
+(function() {
+  var proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  function connect() {
+    var ws = new WebSocket(proto + '://' + location.host + '/ws/lage/{{ lage.id }}');
+    var ping;
+    ws.addEventListener('open', function() {
+      ping = setInterval(function() { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+    });
+    ws.addEventListener('message', function(evt) {
+      try {
+        var msg = JSON.parse(evt.data);
+        if (msg.type === 'site:card_changed') {
+          htmx.trigger(document.body, 'ressourceChanged');
+        }
+      } catch(e) {}
+    });
+    ws.addEventListener('close', function() {
+      clearInterval(ping);
+      setTimeout(connect, 5000);
+    });
+    ws.addEventListener('error', function() { ws.close(); });
+  }
+  connect();
+})();
 </script>
 {% endblock %}
