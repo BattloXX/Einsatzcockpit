@@ -330,10 +330,11 @@
     {% for d in dispatches %}
     {% set s = sites_by_id.get(d.site_id) %}
     {% if s %}
-    <span class="dispatch-site-badge {% if d.vor_ort_at %}dispatch-site-badge--vor-ort{% else %}dispatch-site-badge--alarmed{% endif %}"
-          title="{{ s.bezeichnung }}{% if s.ort %} · {{ s.ort }}{% endif %}">
-      {% if d.vor_ort_at %}● VorOrt{% else %}○ Disp.{% endif %}: {{ s.bezeichnung[:18] }}
-    </span>
+    <a href="/lage/{{ lage.id }}?openSite={{ d.site_id }}"
+       class="dispatch-site-badge {% if d.vor_ort_at %}dispatch-site-badge--vor-ort{% else %}dispatch-site-badge--alarmed{% endif %}"
+       title="{% if d.vor_ort_at %}Vor Ort{% else %}Disponiert{% endif %}: {{ s.bezeichnung }}{% if s.ort %} · {{ s.ort }}{% endif %}">
+      {% if d.vor_ort_at %}●{% else %}○{% endif %} {{ s.bezeichnung[:13] }}
+    </a>
     {% endif %}
     {% endfor %}
   </div>
