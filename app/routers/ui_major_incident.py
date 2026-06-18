@@ -26,6 +26,7 @@ from app.models.major_incident import (
     CrossMarkerLogEntry,
     CrossMarkerMedia,
     CrossSiteMarker,
+    EinheitSiteDispatch,
     JOURNAL_CATEGORIES,
     JOURNAL_CATEGORY_COLOR,
     JOURNAL_TEMPLATES,
@@ -636,6 +637,9 @@ async def site_detail(
         key=lambda e: (e.incident_site_id is not None, e.label),
     )
 
+    site_dispatches = resource_service.get_active_dispatches_for_site(db, site_id)
+    already_dispatched_ids = [d.einheit_id for d in site_dispatches]
+
     return templates.TemplateResponse(request, "incident_major/_site_detail.html", {
         "user": user,
         "lage": lage,
@@ -648,6 +652,8 @@ async def site_detail(
         "now": datetime.now(UTC),
         "citizen_report": citizen_report,
         "available_einheiten": available_einheiten,
+        "site_dispatches": site_dispatches,
+        "already_dispatched_ids": already_dispatched_ids,
         "site_log_kind_label": SITE_LOG_KIND_LABEL,
     })
 
@@ -670,6 +676,7 @@ async def site_card_partial(
         raise HTTPException(status_code=404)
     sectors = sorted(lage.sectors, key=lambda s: s.id)
     sectors_by_id = {s.id: s for s in sectors}
+    dispatch_counts = resource_service.get_dispatch_counts_for_site(db, site_id)
     return templates.TemplateResponse(request, "incident_major/_site_card.html", {
         "lage": lage,
         "site": site,
@@ -678,6 +685,7 @@ async def site_card_partial(
         "sectors": sectors,
         "sectors_by_id": sectors_by_id,
         "can_edit": _can_edit(user),
+        "dispatch_counts": dispatch_counts,
     })
 
 
@@ -700,20 +708,20 @@ async def site_einheit_zuweisen(
         raise HTTPException(status_code=404)
 
     try:
-        einheit = resource_service.assign_to_site(
+        resource_service.dispatch_to_site(
             db, einheit_id, lage_id, site_id,
             author_name=get_author_name(request), user_id=user.id,
         )
+        einheit = db.get(LageEinheit, einheit_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.add(SiteLogEntry(
         incident_site_id=site_id,
         kind="resource",
-        text=f"Einheit zugewiesen: {einheit.label}",
+        text=f"Einheit disponiert: {einheit.label}",
         user_id=user.id,
         author_name=get_author_name(request),
     ))
-    lagemeldung_service.ensure_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
@@ -733,12 +741,20 @@ async def site_einheit_freigeben(
     _check_org_access(user, lage)
 
     try:
-        einheit = resource_service.move_to_pool(
-            db, einheit_id, lage_id,
+        resource_service.withdraw_from_site(
+            db, einheit_id, lage_id, site_id,
             author_name=get_author_name(request), user_id=user.id,
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        einheit = db.get(LageEinheit, einheit_id)
+    except ValueError:
+        # Fallback: kein Dispatch-Eintrag → altes move_to_pool Verhalten
+        try:
+            einheit = resource_service.move_to_pool(
+                db, einheit_id, lage_id,
+                author_name=get_author_name(request), user_id=user.id,
+            )
+        except ValueError as exc2:
+            raise HTTPException(status_code=400, detail=str(exc2))
     db.add(SiteLogEntry(
         incident_site_id=site_id,
         kind="resource",
@@ -748,6 +764,151 @@ async def site_einheit_freigeben(
     ))
     site = db.get(IncidentSite, site_id)
     if site and not lagemeldung_service.has_active_resource(site, db):
+        lagemeldung_service.clear_timer(site, db)
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    return Response(status_code=204)
+
+
+# ── Mehrfach-Disposition: Disponieren / VorOrt / Abziehen ──────────────────
+
+@router.post("/lage/{lage_id}/stellen/{site_id}/einheit-disponieren", response_class=HTMLResponse)
+async def site_einheit_disponieren(
+    request: Request,
+    lage_id: int,
+    site_id: int,
+    einheit_id: int = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+
+    try:
+        resource_service.dispatch_to_site(
+            db, einheit_id, lage_id, site_id,
+            author_name=get_author_name(request), user_id=user.id,
+        )
+        einheit = db.get(LageEinheit, einheit_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    db.add(SiteLogEntry(
+        incident_site_id=site_id,
+        kind="resource",
+        text=f"Einheit disponiert: {einheit.label}",
+        user_id=user.id,
+        author_name=get_author_name(request),
+    ))
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    return Response(status_code=204)
+
+
+@router.post("/lage/{lage_id}/stellen/{site_id}/einheit-vor-ort", response_class=HTMLResponse)
+async def site_einheit_vor_ort(
+    request: Request,
+    lage_id: int,
+    site_id: int,
+    einheit_id: int = Form(...),
+    confirmed: bool = Form(False),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+
+    if confirmed:
+        resource_service.resolve_vor_ort_conflict(
+            db, einheit_id, lage_id, site_id,
+            author_name=get_author_name(request), user_id=user.id,
+        )
+        einheit = db.get(LageEinheit, einheit_id)
+        db.add(SiteLogEntry(
+            incident_site_id=site_id,
+            kind="resource",
+            text=f"Einheit verlegt (Abzug bestätigt): {einheit.label}",
+            user_id=user.id,
+            author_name=get_author_name(request),
+        ))
+        lagemeldung_service.ensure_timer(site, db)
+        db.commit()
+        await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+        return Response(status_code=204)
+
+    dispatch, conflict = resource_service.set_vor_ort_at_site(
+        db, einheit_id, lage_id, site_id,
+        author_name=get_author_name(request), user_id=user.id,
+    )
+
+    if conflict:
+        einheit = db.get(LageEinheit, einheit_id)
+        conflict_site = db.get(IncidentSite, conflict.site_id)
+        return templates.TemplateResponse(
+            request,
+            "incident_major/_einheit_vor_ort_konflikt.html",
+            {
+                "lage": lage,
+                "site": site,
+                "einheit": einheit,
+                "conflict_site": conflict_site,
+            },
+            status_code=200,
+        )
+
+    einheit = db.get(LageEinheit, einheit_id)
+    db.add(SiteLogEntry(
+        incident_site_id=site_id,
+        kind="resource",
+        text=f"Einheit vor Ort: {einheit.label}",
+        user_id=user.id,
+        author_name=get_author_name(request),
+    ))
+    lagemeldung_service.ensure_timer(site, db)
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    return Response(status_code=204)
+
+
+@router.post("/lage/{lage_id}/stellen/{site_id}/einheit-abziehen", response_class=HTMLResponse)
+async def site_einheit_abziehen(
+    request: Request,
+    lage_id: int,
+    site_id: int,
+    einheit_id: int = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+
+    try:
+        resource_service.withdraw_from_site(
+            db, einheit_id, lage_id, site_id,
+            author_name=get_author_name(request), user_id=user.id,
+        )
+        einheit = db.get(LageEinheit, einheit_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    db.add(SiteLogEntry(
+        incident_site_id=site_id,
+        kind="resource",
+        text=f"Einheit abgezogen: {einheit.label}",
+        user_id=user.id,
+        author_name=get_author_name(request),
+    ))
+    if not lagemeldung_service.has_active_resource(site, db):
         lagemeldung_service.clear_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
@@ -3910,6 +4071,7 @@ async def lage_ressourcen(
 
     sectors = sorted(lage.sectors, key=lambda s: s.sort_order)
     sites_by_id = {s.id: s for s in lage.sites}
+    all_einheiten = [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT]
 
     return templates.TemplateResponse(request, "incident_major/ressourcen.html", {
         "user": user,
@@ -3917,6 +4079,7 @@ async def lage_ressourcen(
         "kue": kue,
         "sectors": sectors,
         "sites_by_id": sites_by_id,
+        "all_einheiten": all_einheiten,
         "extra_vehicles": extra_vehicles,
         "org_members": org_members,
         "resource_service": resource_service,

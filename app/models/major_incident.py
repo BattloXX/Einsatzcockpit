@@ -273,6 +273,11 @@ class IncidentSite(Base):
     log_entries: Mapped[list[SiteLogEntry]] = relationship(
         cascade="all, delete-orphan", order_by="SiteLogEntry.ts")
     media:       Mapped[list[SiteMedia]] = relationship(cascade="all, delete-orphan")
+    dispatched_einheiten: Mapped[list[EinheitSiteDispatch]] = relationship(
+        "EinheitSiteDispatch",
+        foreign_keys="[EinheitSiteDispatch.site_id]",
+        lazy="select",
+    )
 
 
 class SiteResourceAssignment(Base):
@@ -405,6 +410,12 @@ class LageEinheit(Base):
     sector:  Mapped[Sector | None] = relationship(foreign_keys=[sector_id])
     leader:  Mapped[LageEinheitLeader | None] = relationship(
         foreign_keys=[leader_assignment_id], lazy="joined")
+    site_dispatches: Mapped[list[EinheitSiteDispatch]] = relationship(
+        "EinheitSiteDispatch",
+        foreign_keys="[EinheitSiteDispatch.einheit_id]",
+        back_populates="einheit",
+        lazy="select",
+    )
 
 
 class LageEinheitLeader(Base):
@@ -432,6 +443,28 @@ class LageEinheitLeader(Base):
     @property
     def display_name(self) -> str:
         return self.person_name or "–"
+
+
+class EinheitSiteDispatch(Base):
+    """Mehrfach-Disposition: Einheit für eine Einsatzstelle disponiert oder vor Ort."""
+    __tablename__ = "einheit_site_dispatch"
+
+    id:             Mapped[int] = mapped_column(Integer, primary_key=True)
+    einheit_id:     Mapped[int] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), index=True)
+    site_id:        Mapped[int] = mapped_column(
+        Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True)
+    dispatched_at:  Mapped[datetime] = mapped_column(DateTime)
+    vor_ort_at:     Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    withdrawn_at:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dispatched_by:  Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    author_name:    Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    site:    Mapped[IncidentSite] = relationship(
+        foreign_keys=[site_id], overlaps="dispatched_einheiten")
+    einheit: Mapped[LageEinheit] = relationship(
+        foreign_keys=[einheit_id], back_populates="site_dispatches")
 
 
 # ── Lage-Journal ──────────────────────────────────────────────────────────────

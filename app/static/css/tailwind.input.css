@@ -1016,3 +1016,22 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
 .lm-chip--amber{background:rgba(245,158,11,.18);color:#fbbf24;}
 .lm-chip--red{background:rgba(239,68,68,.18);color:#f87171;font-weight:700;}
 .lm-detail-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;}
+
+/* ── Multi-Site Dispatch ─────────────────────────────────────── */
+.dispatch-conflict-box{background:rgba(245,158,11,.12);border:1px solid #fbbf24;border-radius:6px;padding:8px 10px;margin-top:4px;font-size:.82rem;}
+.dispatch-conflict-box__title{color:#fbbf24;font-weight:600;margin-bottom:6px;}
+.dispatch-site-badge{display:inline-flex;align-items:center;gap:3px;font-size:.65rem;font-weight:600;padding:1px 6px;border-radius:3px;white-space:nowrap;}
+.dispatch-site-badge--alarmed{background:rgba(245,158,11,.2);color:#fbbf24;}
+.dispatch-site-badge--vor-ort{background:rgba(34,197,94,.2);color:#4ade80;}
+.card-badge--alarmed{background:rgba(245,158,11,.2);color:#fbbf24;font-size:.7rem;padding:1px 5px;border-radius:3px;}
+/* ── Planungs-Matrix ───────────────────────────────────────────── */
+.matrix-table{border-collapse:collapse;font-size:.8rem;min-width:100%;}
+.matrix-table th,.matrix-table td{border:1px solid rgba(255,255,255,.1);padding:4px 8px;text-align:center;white-space:nowrap;}
+.matrix-table thead th{background:var(--surface-2);font-size:.7rem;}
+.matrix-table tbody tr:nth-child(odd){background:rgba(255,255,255,.02);}
+.matrix-cell--vor-ort{background:rgba(34,197,94,.15);color:#4ade80;font-weight:700;}
+.matrix-cell--alarmed{background:rgba(245,158,11,.1);color:#fbbf24;}
+.matrix-legend{display:flex;gap:8px;margin-top:8px;font-size:.75rem;}
+/* ── Druckbericht Disponiert ─────────────────────────────────── */
+.print-inbound-res{font-size:.8rem;color:#b45309;margin-top:3px;}
+.print-label{font-weight:600;}

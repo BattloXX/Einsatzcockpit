@@ -316,52 +316,84 @@
       {% endif %}
     </div>
     {% endfor %}
-    {% elif not site_einheiten %}
+    {% elif not (site_dispatches is defined and site_dispatches) %}
     <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Keine aktiven Ressourcen.</div>
     {% endif %}
 
-    {% if available_einheiten is defined %}
-    {# ── zugewiesene LageEinheiten ──────────────────────────────────── #}
-    {% for e in site_einheiten %}
+    {# ── Disponierte LageEinheiten (Mehrfach-Dispatch-System) ──────── #}
+    {% if site_dispatches is defined %}
+    {% for dispatch in site_dispatches %}
+    {% set e = dispatch.einheit %}
     <div class="res-row">
-      <span class="res-badge" style="background:rgba(251,191,36,.2);color:#fbbf24;">
-        {%- if e.status == 'im_einsatz' %}IM EINSATZ{%- else %}BEREIT{%- endif -%}
+      <span class="res-badge {% if dispatch.vor_ort_at %}res-badge--onsite{% else %}res-badge--alarmed{% endif %}">
+        {%- if dispatch.vor_ort_at %}VOR ORT{%- else %}DISPONIERT{%- endif -%}
       </span>
       <span class="res-label">{{ e.label }}</span>
+      <span class="res-time">{{ dispatch.dispatched_at|local_time }}</span>
       {% if can_edit %}
-      <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-freigeben"
-            hx-swap="none"
-            hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}"}'
-            hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
-        <button type="submit" class="btn btn--xs btn--ghost">→ Pool</button>
-      </form>
+      <div style="display:flex;gap:4px;" onclick="event.stopPropagation()">
+        {% if not dispatch.vor_ort_at %}
+        <div id="dispatch-confirm-wrap-{{ e.id }}">
+          <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-vor-ort"
+                hx-target="#dispatch-confirm-wrap-{{ e.id }}"
+                hx-swap="outerHTML"
+                hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}"}'
+                hx-on::after-request="if(event.detail.successful && event.detail.xhr.status===204){
+                  htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',
+                    {target:'#siteDetailContent',swap:'innerHTML'});
+                  htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',
+                    {target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'});
+                }">
+            <button type="submit" class="btn btn--xs btn--secondary">✓ VorOrt</button>
+          </form>
+        </div>
+        {% endif %}
+        <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-abziehen"
+              hx-swap="none"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}"}'
+              hx-on::after-request="if(event.detail.successful){
+                htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',
+                  {target:'#siteDetailContent',swap:'innerHTML'});
+                htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',
+                  {target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'});
+              }">
+          <button type="submit" class="btn btn--xs btn--ghost">Abziehen</button>
+        </form>
+      </div>
       {% endif %}
     </div>
     {% endfor %}
-    {# ── Zuweisen-Dropdown ──────────────────────────────────────────── #}
-    {% if can_edit %}
-    {% set assignable = available_einheiten | rejectattr('incident_site_id', 'equalto', site.id) | list %}
-    {% if assignable %}
+    {% elif not site_einheiten %}
+    {% endif %}
+    {# ── Disponieren-Dropdown ───────────────────────────────────────── #}
+    {% if available_einheiten is defined and can_edit %}
+    {% set already_ids = already_dispatched_ids if already_dispatched_ids is defined else [] %}
+    {% set dispatchable = [] %}
+    {% for e in available_einheiten %}
+      {% if e.id not in already_ids and e.status != 'abgerueckt' %}
+        {% set _ = dispatchable.append(e) %}
+      {% endif %}
+    {% endfor %}
+    {% if dispatchable %}
     <form style="margin-top:8px;"
-          hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-zuweisen"
+          hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-disponieren"
           hx-swap="none"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
           hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
       <div style="display:flex;gap:6px;align-items:center;">
         <select name="einheit_id" class="form-select form-select--sm" style="flex:1;">
-          {% for e in assignable %}
+          {% for e in dispatchable %}
           <option value="{{ e.id }}"
                   style="{% if not e.incident_site_id %}color:#4ade80;{% else %}color:#fbbf24;{% endif %}">
             {% if not e.incident_site_id %}🟢{% else %}🟡{% endif %} {{ e.label }}{% if e.incident_site_id %} (anderer Einsatz){% endif %}
           </option>
           {% endfor %}
         </select>
-        <button type="submit" class="btn btn--secondary btn--sm">+ Zuweisen</button>
+        <button type="submit" class="btn btn--secondary btn--sm">+ Disponieren</button>
       </div>
     </form>
     {% else %}
     <div style="font-size:.75rem;color:var(--text-muted);margin-top:6px;font-style:italic;">Keine Einheiten verfügbar – in Ressourcenverwaltung hinzufügen.</div>
-    {% endif %}
     {% endif %}
     {% endif %}
   </div>

@@ -34,7 +34,16 @@
     <div class="site-card__meta">
       <span>{{ site.created_at|local_time }}</span>
       {% set active_res = site.resources|selectattr('released_at', 'none')|list %}
-      {% if active_res %}
+      {% if dispatch_counts is defined %}
+        {% if dispatch_counts.vor_ort > 0 %}
+        <span title="Vor Ort">🚒 {{ dispatch_counts.vor_ort }}</span>
+        {% elif active_res %}
+        <span>🚒 {{ active_res|length }}</span>
+        {% endif %}
+        {% if dispatch_counts.alarmed > 0 %}
+        <span class="card-badge--alarmed" title="Disponiert (noch nicht vor Ort)">↗ {{ dispatch_counts.alarmed }}</span>
+        {% endif %}
+      {% elif active_res %}
       <span>🚒 {{ active_res|length }}</span>
       {% endif %}
       {% if site.media %}

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.models.major_incident import (
     AUTO_KIND_LAGEMELDUNG,
     CommLogEntry,
+    EinheitSiteDispatch,
     IncidentSite,
     LageEinheit,
     SitePhase,
@@ -77,7 +78,19 @@ def has_active_resource(site: IncidentSite, db: Session) -> bool:
         )
         .first()
     )
-    return le is not None
+    if le is not None:
+        return True
+    # Dispatch-System: Timer erst wenn erste Einheit physisch vor Ort
+    esd = (
+        db.query(EinheitSiteDispatch.id)
+        .filter(
+            EinheitSiteDispatch.site_id == site.id,
+            EinheitSiteDispatch.vor_ort_at.isnot(None),
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .first()
+    )
+    return esd is not None
 
 
 def _now() -> datetime:

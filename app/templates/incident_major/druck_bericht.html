@@ -204,6 +204,19 @@
     Ressourcen: {{ active_res|map(attribute='label')|select|join(', ') or active_res|length ~ ' zugewiesen' }}
   </div>
   {% endif %}
+  {% set vor_ort_einheiten = site.dispatched_einheiten | selectattr('vor_ort_at', 'ne', none) | selectattr('withdrawn_at', 'eq', none) | list %}
+  {% set disponiert_einheiten = site.dispatched_einheiten | selectattr('vor_ort_at', 'eq', none) | selectattr('withdrawn_at', 'eq', none) | list %}
+  {% if vor_ort_einheiten %}
+  <div class="site-row__res">
+    Vor Ort: {{ vor_ort_einheiten | map(attribute='einheit') | map(attribute='label') | join(', ') }}
+  </div>
+  {% endif %}
+  {% if disponiert_einheiten %}
+  <div class="print-inbound-res">
+    <span class="print-label">Disponiert ({{ disponiert_einheiten|length }}):</span>
+    {{ disponiert_einheiten | map(attribute='einheit') | map(attribute='label') | join(', ') }}
+  </div>
+  {% endif %}
 </div>
 {% else %}
 <p style="color:#666;font-size:9pt;">Keine aktiven Einsatzstellen.</p>

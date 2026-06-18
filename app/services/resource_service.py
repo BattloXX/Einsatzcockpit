@@ -11,7 +11,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.major_incident import (
+    EinheitSiteDispatch,
     GslStaffAssignment,
+    IncidentSite,
     LageEinheit,
     LageEinheitLeader,
     LageJournalEntry,
@@ -170,24 +172,241 @@ def assign_to_site(
     author_name: str | None = None,
     user_id: int | None = None,
 ) -> LageEinheit:
-    from app.models.major_incident import IncidentSite
     e = _get_einheit(db, einheit_id, lage_id)
 
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise ValueError("Einsatzstelle nicht gefunden")
 
-    # Site impliziert den zugehörigen Sector
-    e.sector_id = site.sector_id
+    # Neuem Dispatch-System übergeben: disponieren + sofort vor Ort
+    dispatch_to_site(db, einheit_id, lage_id, site_id,
+                     author_name=author_name, user_id=user_id)
+    _, conflict = set_vor_ort_at_site(db, einheit_id, lage_id, site_id,
+                                       author_name=author_name, user_id=user_id)
+    if conflict:
+        # Altes Verhalten: Konflikt ignorieren, altes einfach überschreiben
+        resolve_vor_ort_conflict(db, einheit_id, lage_id, site_id,
+                                  author_name=author_name, user_id=user_id)
+    return e
+
+
+# ── Mehrfach-Disposition (Dispatch-System) ────────────────────────────────────
+
+def dispatch_to_site(
+    db: Session,
+    einheit_id: int,
+    lage_id: int,
+    site_id: int,
+    *,
+    author_name: str | None = None,
+    user_id: int | None = None,
+) -> EinheitSiteDispatch:
+    """Disponiert eine Einheit für eine Einsatzstelle (vor_ort_at=NULL = alarmiert).
+
+    Fehler wenn bereits aktiv disponiert (nicht abgezogen).
+    """
+    e = _get_einheit(db, einheit_id, lage_id)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise ValueError("Einsatzstelle nicht gefunden")
+
+    existing = (
+        db.query(EinheitSiteDispatch)
+        .filter(
+            EinheitSiteDispatch.einheit_id == einheit_id,
+            EinheitSiteDispatch.site_id == site_id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .first()
+    )
+    if existing:
+        raise ValueError(f"Einheit bereits für \"{site.bezeichnung}\" disponiert")
+
+    now = datetime.now(UTC)
+    dispatch = EinheitSiteDispatch(
+        einheit_id=einheit_id,
+        site_id=site_id,
+        dispatched_at=now,
+        dispatched_by=user_id,
+        author_name=author_name,
+    )
+    db.add(dispatch)
+    db.flush()
+
+    if e.status == STATUS_BEREITGESTELLT:
+        e.status = STATUS_IM_EINSATZ
+        e.committed_at = now
+
+    _journal(db, lage_id,
+             f'{e.label} → Einsatzstelle "{site.bezeichnung}" disponiert (DISPONIERT)',
+             category="ressource", author_name=author_name, user_id=user_id)
+    return dispatch
+
+
+def set_vor_ort_at_site(
+    db: Session,
+    einheit_id: int,
+    lage_id: int,
+    site_id: int,
+    *,
+    author_name: str | None = None,
+    user_id: int | None = None,
+) -> tuple[EinheitSiteDispatch | None, EinheitSiteDispatch | None]:
+    """Markiert Einheit als 'vor Ort' an site_id.
+
+    Gibt (dispatch, None) bei Erfolg zurück.
+    Gibt (None, conflict_dispatch) zurück wenn Einheit bereits vor Ort an anderer Stelle —
+    der Caller muss dann resolve_vor_ort_conflict() aufrufen nach Nutzerbestätigung.
+    """
+    e = _get_einheit(db, einheit_id, lage_id)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise ValueError("Einsatzstelle nicht gefunden")
+
+    conflict = (
+        db.query(EinheitSiteDispatch)
+        .filter(
+            EinheitSiteDispatch.einheit_id == einheit_id,
+            EinheitSiteDispatch.site_id != site_id,
+            EinheitSiteDispatch.vor_ort_at.isnot(None),
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .first()
+    )
+    if conflict:
+        return None, conflict
+
+    dispatch = (
+        db.query(EinheitSiteDispatch)
+        .filter(
+            EinheitSiteDispatch.einheit_id == einheit_id,
+            EinheitSiteDispatch.site_id == site_id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .first()
+    )
+    if not dispatch:
+        now_d = datetime.now(UTC)
+        dispatch = EinheitSiteDispatch(
+            einheit_id=einheit_id,
+            site_id=site_id,
+            dispatched_at=now_d,
+            dispatched_by=user_id,
+            author_name=author_name,
+        )
+        db.add(dispatch)
+        db.flush()
+
+    dispatch.vor_ort_at = datetime.now(UTC)
     e.incident_site_id = site_id
     if e.status == STATUS_BEREITGESTELLT:
         e.status = STATUS_IM_EINSATZ
         e.committed_at = datetime.now(UTC)
 
     _journal(db, lage_id,
-             f'{e.label} -> Einsatzstelle "{site.bezeichnung}" zugeordnet',
+             f'{e.label} → Einsatzstelle "{site.bezeichnung}" VOR ORT',
              category="ressource", author_name=author_name, user_id=user_id)
-    return e
+    return dispatch, None
+
+
+def resolve_vor_ort_conflict(
+    db: Session,
+    einheit_id: int,
+    lage_id: int,
+    new_site_id: int,
+    *,
+    author_name: str | None = None,
+    user_id: int | None = None,
+) -> EinheitSiteDispatch:
+    """Zieht Einheit von bisheriger Vor-Ort-Stelle ab und setzt Vor-Ort an new_site_id."""
+    now = datetime.now(UTC)
+    old_dispatches = (
+        db.query(EinheitSiteDispatch)
+        .filter(
+            EinheitSiteDispatch.einheit_id == einheit_id,
+            EinheitSiteDispatch.vor_ort_at.isnot(None),
+            EinheitSiteDispatch.site_id != new_site_id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .all()
+    )
+    e = _get_einheit(db, einheit_id, lage_id)
+    for d in old_dispatches:
+        d.withdrawn_at = now
+        old_site = db.get(IncidentSite, d.site_id)
+        if old_site:
+            _journal(db, lage_id,
+                     f'{e.label} von "{old_site.bezeichnung}" abgezogen (Verlegung)',
+                     category="ressource", author_name=author_name, user_id=user_id)
+    db.flush()
+
+    dispatch, _ = set_vor_ort_at_site(
+        db, einheit_id, lage_id, new_site_id,
+        author_name=author_name, user_id=user_id,
+    )
+    return dispatch
+
+
+def withdraw_from_site(
+    db: Session,
+    einheit_id: int,
+    lage_id: int,
+    site_id: int,
+    *,
+    author_name: str | None = None,
+    user_id: int | None = None,
+) -> None:
+    """Zieht Einheit von einer Einsatzstelle ab (withdrawn_at setzen)."""
+    e = _get_einheit(db, einheit_id, lage_id)
+    dispatch = (
+        db.query(EinheitSiteDispatch)
+        .filter(
+            EinheitSiteDispatch.einheit_id == einheit_id,
+            EinheitSiteDispatch.site_id == site_id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .first()
+    )
+    if not dispatch:
+        raise ValueError("Keine aktive Disposition für diese Einsatzstelle")
+
+    dispatch.withdrawn_at = datetime.now(UTC)
+    if e.incident_site_id == site_id:
+        e.incident_site_id = None
+
+    site = db.get(IncidentSite, site_id)
+    _journal(db, lage_id,
+             f'{e.label} von "{site.bezeichnung if site else site_id}" abgezogen',
+             category="ressource", author_name=author_name, user_id=user_id)
+
+
+def get_active_dispatches_for_site(
+    db: Session,
+    site_id: int,
+) -> list[EinheitSiteDispatch]:
+    """Aktive (nicht abgezogene) Dispatches für eine Einsatzstelle."""
+    db.flush()
+    return (
+        db.query(EinheitSiteDispatch)
+        .filter(
+            EinheitSiteDispatch.site_id == site_id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .order_by(EinheitSiteDispatch.dispatched_at)
+        .all()
+    )
+
+
+def get_dispatch_counts_for_site(
+    db: Session,
+    site_id: int,
+) -> dict[str, int]:
+    """Zählt disponierte (vor_ort_at NULL) und vor-Ort (vor_ort_at gesetzt) Einheiten."""
+    dispatches = get_active_dispatches_for_site(db, site_id)
+    return {
+        "alarmed": sum(1 for d in dispatches if d.vor_ort_at is None),
+        "vor_ort": sum(1 for d in dispatches if d.vor_ort_at is not None),
+    }
 
 
 def move_to_pool(
@@ -420,6 +639,20 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
             "leader": abs_asgn,
         })
 
+    einheit_ids = [e.id for e in einheiten]
+    dispatched_sites_by_einheit: dict[int, list[EinheitSiteDispatch]] = {}
+    if einheit_ids:
+        all_dispatches = (
+            db.query(EinheitSiteDispatch)
+            .filter(
+                EinheitSiteDispatch.einheit_id.in_(einheit_ids),
+                EinheitSiteDispatch.withdrawn_at.is_(None),
+            )
+            .all()
+        )
+        for d in all_dispatches:
+            dispatched_sites_by_einheit.setdefault(d.einheit_id, []).append(d)
+
     return {
         "pool": pool,
         "im_einsatz_no_sector": im_einsatz_no_sector,
@@ -430,4 +663,5 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
         "total": len(einheiten),
         "reserve_count": len(pool),
         "im_einsatz_count": sum(1 for e in einheiten if e.status == STATUS_IM_EINSATZ),
+        "dispatched_sites_by_einheit": dispatched_sites_by_einheit,
     }
