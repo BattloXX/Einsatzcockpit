@@ -1,14 +1,14 @@
 """Fremdorganisation-Ressourcen: is_external Flag auf vehicle_master
 
-Revision ID: 0058
-Revises: 0057
+Revision ID: 0078
+Revises: 0077
 Create Date: 2026-06-18 00:00:00.000000
 """
 from alembic import op
 from sqlalchemy import text
 
-revision = "0058"
-down_revision = "0057"
+revision = "0078"
+down_revision = "0077"
 branch_labels = None
 depends_on = None
 
