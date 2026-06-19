@@ -428,7 +428,7 @@
 
   {# ── Foto hochladen ───────────────────────────────────────────────── #}
   {% if can_edit %}
-  <form x-data=”{ hasFile:false, prevSrc:null, pick(e){ this.hasFile=e.target.files.length!=0; var f=e.target.files[0]; if(f){var r=new FileReader();r.onload=(ev)=>{this.prevSrc=ev.target.result};r.readAsDataURL(f);}else{this.prevSrc=null;} } }”
+  <form x-data=”{ hasFile:false, prevSrc:null, pick(e){ var s=this; s.hasFile=e.target.files.length!=0; var f=e.target.files[0]; if(f){var r=new FileReader();r.onload=function(ev){s.prevSrc=ev.target.result};r.readAsDataURL(f);}else{s.prevSrc=null;} } }”
         style=”margin-top:4px; position:relative; overflow:hidden;”
         hx-post=”/lage/{{ lage.id }}/stellen/{{ site.id }}/medien”
         hx-encoding=”multipart/form-data”
@@ -481,9 +481,10 @@
          init() {
            const dlg = this.$el.closest('dialog');
            if (!dlg) return;
-           const h = (e) => { if (this.lbOpen) { e.preventDefault(); this.lbClose(); } };
+           var _lb = this;
+           const h = function(e) { if (_lb.lbOpen) { e.preventDefault(); _lb.lbClose(); } };
            dlg.addEventListener('cancel', h);
-           this.$cleanup(() => dlg.removeEventListener('cancel', h));
+           this.$cleanup(function() { dlg.removeEventListener('cancel', h); });
          }
        }”>
     <div style=”font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;”>FOTOS</div>
