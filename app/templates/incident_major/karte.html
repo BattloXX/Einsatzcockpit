@@ -1223,6 +1223,15 @@
   window.closePanel = function() {
     document.getElementById('site-panel-wrap').classList.remove('open');
   };
+  window.closeSiteDetailPanel = function() { closePanel(); };
+
+  // Alpine nach HTMX-Swap im Panel re-initialisieren (z.B. nach Log-Eintrag oder WS-Reload)
+  document.body.addEventListener('htmx:afterSwap', function(ev) {
+    if (ev.detail && ev.detail.target && ev.detail.target.id === 'siteDetailContent') {
+      var c = ev.detail.target;
+      if (window.Alpine) Alpine.initTree(c);
+    }
+  });
 
   // ── Marker-Click → Panel statt Popup ────────────────────────────────────────
   // Wird im SITES.forEach-Loop per panel-onclick gesetzt (unten)
@@ -1294,7 +1303,15 @@
     ws.onmessage = function(ev) {
       try {
         var msg = JSON.parse(ev.data);
-        if (msg.type === 'site:sector_changed') {
+        if (msg.type === 'site:card_changed' && msg.site_id) {
+          var _panelEl = document.getElementById('siteDetailContent');
+          var _openHdr = _panelEl && _panelEl.querySelector('[data-open-site-id="' + msg.site_id + '"]');
+          if (_openHdr) {
+            htmx.ajax('GET', '/lage/' + lageId + '/stellen/' + msg.site_id, {
+              target: '#siteDetailContent', swap: 'innerHTML'
+            });
+          }
+        } else if (msg.type === 'site:sector_changed') {
           SITES.forEach(function(s) {
             if (s.id === msg.site_id) { s.sector_id = msg.sector_id != null ? msg.sector_id : null; }
           });

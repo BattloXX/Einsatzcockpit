@@ -442,7 +442,7 @@
               onclick=”openCamera('lmPhotoFile-{{ site.id }}')”>📷 Kamera</button>
       <button type=”button” class=”btn btn--ghost btn--sm”
               onclick=”openGallery('lmPhotoFile-{{ site.id }}')”>🖼️ Galerie</button>
-      <button type=”submit” class=”btn btn--primary btn--sm” x-show=”hasFile” x-cloak>Hochladen</button>
+      <button type=”submit” class=”btn btn--primary btn--sm” x-show=”hasFile” x-cloak style=”display:none”>Hochladen</button>
     </div>
     <img x-show=”prevSrc” :src=”prevSrc || ''” x-cloak
          style=”max-height:60px;border-radius:4px;margin-top:4px;display:none;”>
