@@ -42,9 +42,7 @@
   cursor: pointer; transition: opacity .12s;
 }
 .media-thumb:hover { opacity: .8; }
-.site-log__author { display:flex; align-items:center; gap:4px; margin-top:3px; }
-.site-log__avatar { width:14px; height:14px; border-radius:50%; object-fit:cover; flex-shrink:0; }
-.site-log__author-name { font-size:.65rem; color:var(--text-muted); }
+.site-log__author-name { display:block; font-size:.65rem; color:var(--text-muted); margin-top:2px; }
 </style>
 
 <div class="modal__header" x-data="{editing:false}" data-open-site-id="{{ site.id }}">
@@ -477,15 +475,7 @@
         {% endif %}
         {{ entry.text }}
         {% if entry.author_name %}
-        <span class=”site-log__author”>
-          {% if entry.user_id and users_by_id is defined %}
-          {% set entry_user = users_by_id.get(entry.user_id) %}
-          {% if entry_user and entry_user.avatar_path %}
-          <img src=”/profil/avatar/{{ entry_user.avatar_path }}” alt=”” class=”site-log__avatar”>
-          {% endif %}
-          {% endif %}
-          <span class=”site-log__author-name”>{{ entry.author_name }}</span>
-        </span>
+        <span class=”site-log__author-name”>{{ entry.author_name }}</span>
         {% endif %}
       </span>
     </div>

@@ -146,7 +146,12 @@
     {% endif %}
     <div class="topnav__user">
       <a href="/profil" class="user-badge {% if request.url.path.startswith('/profil') %}active{% endif %}"
-         style="text-decoration:none;">{{ user.display_name }}</a>
+         style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+        {% if user.avatar_path %}
+        <img src="/profil/avatar/{{ user.avatar_path }}" alt=""
+             style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+        {% endif %}
+        {{ user.display_name }}</a>
       <button type="button" class="btn btn--ghost btn--sm pwa-install-btn" style="display:none"
               title="App auf Gerät installieren">📲 Installieren</button>
       <button type="button" class="btn btn--ghost btn--sm pwa-install-ios" style="display:none"
@@ -163,7 +168,12 @@
          :class="mobileMenuOpen ? 'mobile-menu--open' : ''"
          @keydown.escape.window="mobileMenuOpen = false">
     <header class="mobile-menu__header">
-      <span class="mobile-menu__user">{{ user.display_name }}</span>
+      <span class="mobile-menu__user" style="display:flex;align-items:center;gap:8px;">
+        {% if user.avatar_path %}
+        <img src="/profil/avatar/{{ user.avatar_path }}" alt=""
+             style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+        {% endif %}
+        {{ user.display_name }}</span>
       <button type="button" class="mobile-menu__close" aria-label="Schließen"
               @click="mobileMenuOpen = false">×</button>
     </header>
