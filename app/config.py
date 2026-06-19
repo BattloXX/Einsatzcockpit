@@ -116,6 +116,8 @@ class Settings(BaseSettings):
     WEATHER_HTTP_TIMEOUT: int = 8
     WEATHER_RADIUS_KM: int = 15
     WEATHER_FALLBACK_OPENMETEO: bool = True
+    # Windy.com Vollkarte als zusätzlicher Radar-Tab per <iframe> (extern → Datenschutz).
+    WEATHER_WINDY_ENABLED: bool = True
 
     # Kachelmann Wetter (kostenpflichtige Plus-API) — Primärquelle wenn API-Key gesetzt.
     # Key wird i.d.R. in den Systemeinstellungen (kachelmann_api_key) gepflegt; ENV = Fallback.
