@@ -4,104 +4,62 @@
 <span style="font-size:.75rem;color:var(--text-muted);">Wetterdaten derzeit nicht verfügbar.</span>
 {% else %}
 
-{# ── Szenario-Warnungen ─────────────────────────────────────────────────────── #}
-{% if scenarios %}
-<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px;">
-  {% for alert in scenarios %}
-  {% set is_danger = alert.level == "danger" %}
-  <div style="background:{{ 'rgba(239,68,68,.12)' if is_danger else 'rgba(249,115,22,.12)' }};
-              border:1px solid {{ 'rgba(239,68,68,.40)' if is_danger else 'rgba(249,115,22,.40)' }};
-              border-radius:4px;padding:3px 8px;font-size:.76rem;
-              color:{{ '#f87171' if is_danger else '#fb923c' }};">
-    <strong>{{ alert.icon or '⚠' }} {{ alert.label_de }}</strong>
-    <span style="opacity:.85;margin-left:3px;font-size:.70rem;">{{ alert.detail_de }}</span>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
+{# ── Messwerte · Nowcast · Vorhersage in einer Zeile ────────────────────────── #}
+<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:5px;">
 
-{# ── Ist-Werte (kompakte Zeile) ─────────────────────────────────────────────── #}
-{% if current %}
-<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:7px;">
-  {% if current.temperature_c is not none %}
-  <span style="font-size:.84rem;">
-    🌡 <strong>{{ '%.1f'|format(current.temperature_c) }} °C</strong>
-    {% if current.humidity_pct is not none %}<span style="color:var(--text-muted);font-size:.74rem;">{{ current.humidity_pct|int }}%</span>{% endif %}
-  </span>
+  {% if current %}
+    {% if current.temperature_c is not none %}
+    <span style="font-size:.83rem;">🌡 <strong>{{ '%.1f'|format(current.temperature_c) }} °C</strong>{% if current.humidity_pct is not none %} <span style="color:var(--text-muted);font-size:.74rem;">{{ current.humidity_pct|int }}%</span>{% endif %}</span>
+    {% endif %}
+    {% if current.wind_speed_ms is not none %}
+    <span style="font-size:.81rem;">💨 {{ '%.1f'|format(current.wind_speed_ms) }} m/s <span style="color:var(--text-muted);">{{ wind_dir_label }}</span>{% if current.gust_speed_ms is not none %}<span style="color:var(--text-muted);font-size:.75rem;"> · Böe {{ '%.1f'|format(current.gust_speed_ms) }} m/s</span>{% endif %}</span>
+    {% endif %}
   {% endif %}
-  {% if current.wind_speed_ms is not none %}
-  <span style="font-size:.82rem;">
-    💨 {{ '%.1f'|format(current.wind_speed_ms) }} m/s <span style="color:var(--text-muted);">{{ wind_dir_label }}</span>
-    {% if current.gust_speed_ms is not none %}<span style="color:var(--text-muted);font-size:.76rem;"> · Böe {{ '%.1f'|format(current.gust_speed_ms) }} m/s</span>{% endif %}
-  </span>
-  {% endif %}
-</div>
-{% endif %}
 
-{# ── Nowcast + Warnungen nebeneinander ──────────────────────────────────────── #}
-<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;">
-
-  {# Nowcast-Sparkline #}
   {% if nowcast and nowcast_bars %}
-  <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">
-    <div style="font-size:.64rem;color:var(--text-muted);font-weight:600;letter-spacing:.05em;">
-      NOWCAST{% if trend_de %} · {{ trend_de }}{% endif %}
-    </div>
-    <div style="display:flex;align-items:flex-end;height:36px;gap:1px;">
+  <span style="color:var(--border);user-select:none;">│</span>
+  <div style="display:flex;align-items:center;gap:5px;">
+    <span style="font-size:.62rem;color:var(--text-muted);font-weight:600;letter-spacing:.04em;">NOWCAST{% if trend_de %} · {{ trend_de }}{% endif %}</span>
+    <div style="display:flex;align-items:flex-end;height:22px;gap:1px;">
       {% for bar in nowcast_bars %}
-      <div style="width:7px;height:{{ bar.h }}px;background:{{ bar.color }};border-radius:1px 1px 0 0;flex-shrink:0;" title="{{ bar.label }}"></div>
+      <div style="width:5px;height:{{ (bar.h * 22 // 34) or 1 }}px;background:{{ bar.color }};border-radius:1px 1px 0 0;flex-shrink:0;" title="{{ bar.label }}"></div>
       {% endfor %}
     </div>
-    <div style="display:flex;gap:1px;">
-      {% for bar in nowcast_bars %}
-      <div style="width:7px;font-size:.56rem;color:var(--text-muted);text-align:center;flex-shrink:0;">{% if loop.index0 % 4 == 0 %}+{{ loop.index0 // 4 }}h{% endif %}</div>
-      {% endfor %}
-    </div>
-    <div style="font-size:.70rem;color:var(--text-muted);">
-      {{ '%.1f'|format(nowcast.total_mm) }} mm{% if peak_label %} · Peak <strong style="color:#93c5fd;">{{ peak_label }}</strong>{% endif %}
-    </div>
+    <span style="font-size:.68rem;color:var(--text-muted);">{{ '%.1f'|format(nowcast.total_mm) }} mm{% if peak_label %} · <strong style="color:#93c5fd;">{{ peak_label }}</strong>{% endif %}</span>
   </div>
   {% elif nowcast %}
-  <div style="font-size:.76rem;color:var(--text-muted);flex-shrink:0;">Kein Niederschlag in 3 h.</div>
+  <span style="color:var(--border);user-select:none;">│</span>
+  <span style="font-size:.74rem;color:var(--text-muted);">Kein Niederschlag in 3 h</span>
   {% endif %}
 
-  {# Warnungen mit farbigem Rand #}
-  <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;">
-    {% if warn_views %}
-    <div style="font-size:.64rem;color:var(--text-muted);font-weight:600;letter-spacing:.05em;">
-      WARNUNG{% if warn_views|length > 1 %} ({{ warn_views|length }}){% endif %}
-    </div>
-    {% for w in warn_views %}
-    <div style="border-left:3px solid {{ w.color }};padding:3px 8px;background:{{ w.color }}11;border-radius:0 3px 3px 0;">
-      <div style="font-size:.76rem;font-weight:600;color:{{ w.color }};">⚠ Stufe {{ w.level }} – {{ w.event_type }}</div>
-      <div style="font-size:.65rem;color:var(--text-muted);">{{ w.zeitraum }}</div>
-      {% if w.text %}<div style="font-size:.67rem;color:var(--text-muted);margin-top:1px;">{{ w.text[:80] }}{% if w.text|length > 80 %}…{% endif %}</div>{% endif %}
-    </div>
-    {% endfor %}
-    {% else %}
-    <span style="background:rgba(34,197,94,.10);color:#4ade80;border:1px solid rgba(34,197,94,.2);padding:2px 7px;border-radius:3px;font-size:.74rem;">✓ keine aktive Warnung</span>
-    {% endif %}
-  </div>
+  {% if forecast and forecast.horizons %}
+  <span style="color:var(--border);user-select:none;">│</span>
+  {% for h in forecast.horizons %}
+  <span style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:.71rem;white-space:nowrap;">
+    <span style="color:var(--text-muted);">+{{ h.hours }}h</span>{% if h.temperature_c is not none %} {{ '%.0f'|format(h.temperature_c) }}°C{% endif %}{% if h.precipitation_acc_mm is not none %} · 🌧{{ '%.1f'|format(h.precipitation_acc_mm) }}mm{% endif %}{% if h.wind_speed_ms is not none %} · 💨{{ '%.0f'|format(h.wind_speed_ms) }}m/s{% endif %}
+  </span>
+  {% endfor %}
+  {% endif %}
 
 </div>
 
-{# ── Mittelfrist-Vorhersage (kompakte Chips) ─────────────────────────────────── #}
-{% if forecast and forecast.horizons %}
-<div style="margin-top:7px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-  <span style="font-size:.64rem;color:var(--text-muted);font-weight:600;letter-spacing:.05em;">VORHERSAGE</span>
-  {% for h in forecast.horizons %}
-  <span style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:.73rem;white-space:nowrap;">
-    <span style="color:var(--text-muted);">+{{ h.hours }}h</span>
-    {% if h.temperature_c is not none %} {{ '%.0f'|format(h.temperature_c) }}°C{% endif %}
-    {% if h.precipitation_acc_mm is not none %} · 🌧 {{ '%.1f'|format(h.precipitation_acc_mm) }} mm{% endif %}
-    {% if h.wind_speed_ms is not none %} · 💨 {{ '%.0f'|format(h.wind_speed_ms) }} m/s{% endif %}
-  </span>
+{# ── Warnungen horizontal nebeneinander ──────────────────────────────────────── #}
+{% if warn_views %}
+<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px;">
+  {% for w in warn_views %}
+  <div style="border-left:3px solid {{ w.color }};padding:2px 8px;background:{{ w.color }}11;border-radius:0 3px 3px 0;">
+    <span style="font-size:.74rem;font-weight:600;color:{{ w.color }};">⚠ Stufe {{ w.level }} – {{ w.event_type }}</span>
+    <span style="font-size:.67rem;color:var(--text-muted);margin-left:5px;">{{ w.zeitraum }}</span>
+    {% if w.text %}<span style="font-size:.64rem;color:var(--text-muted);margin-left:4px;">{{ w.text[:70] }}{% if w.text|length > 70 %}…{% endif %}</span>{% endif %}
+  </div>
   {% endfor %}
+</div>
+{% else %}
+<div style="margin-bottom:4px;">
+  <span style="background:rgba(34,197,94,.10);color:#4ade80;border:1px solid rgba(34,197,94,.2);padding:2px 7px;border-radius:3px;font-size:.74rem;">✓ keine aktive Warnung</span>
 </div>
 {% endif %}
 
 {# ── Attribution ─────────────────────────────────────────────────────────────── #}
-<div style="margin-top:5px;font-size:.63rem;color:var(--text-muted);">
-  Daten: {{ attribution }} · {{ focus_label }}
-</div>
+<div style="font-size:.62rem;color:var(--text-muted);">Daten: {{ attribution }} · {{ focus_label }}</div>
 {% endif %}
