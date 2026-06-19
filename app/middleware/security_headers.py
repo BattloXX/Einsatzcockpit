@@ -18,12 +18,14 @@ from starlette.responses import Response
 
 _CSP_BASE = (
     "default-src 'self'; "
-    "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; "
+    "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org "
+    "https://*.rainviewer.com; "
     "media-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
     "font-src 'self' data:; "
-    "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org; "
+    "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org https://api.rainviewer.com; "
+    "frame-src 'self' https://embed.windy.com; "
     "object-src 'none'; "
     "worker-src 'self'; "
     "base-uri 'self'; "

@@ -98,21 +98,25 @@
   </div>
   {% endif %}
 
-  {# ── Warn-Badge ─────────────────────────────────────────────────────────── #}
+  {# ── Warn-Badges (alle aktiven Warnungen) ───────────────────────────────── #}
   <div style="display:flex;flex-direction:column;gap:4px;">
-    <div style="font-size:.68rem;color:var(--text-muted);font-weight:600;letter-spacing:.05em;">WARNUNG</div>
-    {% if top_warning %}
-    <div>
-      <span style="background:{{ warn_color }}22;color:{{ warn_color }};border:1px solid {{ warn_color }}44;
-                   padding:3px 8px;border-radius:3px;font-size:.78rem;font-weight:600;">
-        ⚠ Stufe {{ top_warning.level }} – {{ top_warning.event_type }}
-      </span>
-      {% if top_warning.text %}
-      <div style="font-size:.72rem;color:var(--text-muted);margin-top:3px;max-width:200px;">{{ top_warning.text[:80] }}{% if top_warning.text|length > 80 %}…{% endif %}</div>
-      {% endif %}
-      {% if warnings|length > 1 %}
-      <div style="font-size:.68rem;color:var(--text-muted);">+{{ warnings|length - 1 }} weitere</div>
-      {% endif %}
+    <div style="font-size:.68rem;color:var(--text-muted);font-weight:600;letter-spacing:.05em;">
+      WARNUNG{% if warn_views and warn_views|length > 1 %} ({{ warn_views|length }}){% endif %}
+    </div>
+    {% if warn_views %}
+    <div style="display:flex;flex-direction:column;gap:5px;max-width:240px;">
+      {% for w in warn_views %}
+      <div>
+        <span style="background:{{ w.color }}22;color:{{ w.color }};border:1px solid {{ w.color }}44;
+                     padding:3px 8px;border-radius:3px;font-size:.78rem;font-weight:600;">
+          ⚠ Stufe {{ w.level }} – {{ w.event_type }}
+        </span>
+        <div style="font-size:.66rem;color:var(--text-muted);margin-top:2px;">{{ w.zeitraum }}</div>
+        {% if w.text %}
+        <div style="font-size:.72rem;color:var(--text-muted);margin-top:1px;">{{ w.text[:90] }}{% if w.text|length > 90 %}…{% endif %}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
     </div>
     {% else %}
     <span style="background:rgba(34,197,94,.10);color:#4ade80;border:1px solid rgba(34,197,94,.2);

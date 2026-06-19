@@ -111,6 +111,38 @@ def _build_nowcast_bars(now: "weather_service.NowcastResult") -> list[dict]:
     return bars
 
 
+_WEEKDAYS_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+
+
+def _fmt_warn_time(dt: datetime) -> str:
+    """Formatiert einen Warnungs-Zeitpunkt in Wiener Lokalzeit: 'Fr 19.06. 14:00'."""
+    local = dt.astimezone(weather_service._VIENNA_TZ)
+    return f"{_WEEKDAYS_DE[local.weekday()]} {local:%d.%m.} {local:%H:%M}"
+
+
+def _warn_zeitraum(valid_from: datetime, valid_to: datetime) -> str:
+    """Kompakter Gültigkeitszeitraum; bei gleichem Tag wird das Datum nicht doppelt gezeigt."""
+    a = valid_from.astimezone(weather_service._VIENNA_TZ)
+    b = valid_to.astimezone(weather_service._VIENNA_TZ)
+    if a.date() == b.date():
+        return f"{_fmt_warn_time(valid_from)}–{b:%H:%M}"
+    return f"{_fmt_warn_time(valid_from)} – {_fmt_warn_time(valid_to)}"
+
+
+def _build_warning_views(warnings: list) -> list[dict]:
+    """Baut Anzeige-dicts für ALLE aktiven Warnungen (Stufen-Farbe + Zeitraum)."""
+    views: list[dict] = []
+    for w in warnings:
+        views.append({
+            "level": w.level,
+            "event_type": w.event_type,
+            "text": w.text or "",
+            "color": weather_service._WARN_LEVEL_COLORS.get(w.level, "#6b7280"),
+            "zeitraum": _warn_zeitraum(w.valid_from, w.valid_to),
+        })
+    return views
+
+
 def _peak_label(now: "weather_service.NowcastResult") -> str | None:
     """Returns human-readable time to peak, or None if no precipitation."""
     if now.peak_mm < 0.05 or now.peak_at is None:
@@ -170,6 +202,7 @@ async def _render_weather_panel(
         "wind_dir_label": _wind_dir_label(current.wind_direction_deg if current else None),
         "forecast": forecast,
         "warnings": warnings,
+        "warn_views": _build_warning_views(warnings),
         "top_warning": top_warning,
         "warn_color": warn_color,
         "scenarios": scenarios,
@@ -487,11 +520,13 @@ async def wetter_index(
             "wind_dir_label": _wind_dir_label(current.wind_direction_deg if current else None),
             "forecast": forecast,
             "warnings": warnings,
+            "warn_views": _build_warning_views(warnings),
             "top_warning": top_warning,
             "warn_color": warn_color,
             "scenarios": scenarios,
             "attribution": _build_attribution(current, forecast, nowcast, warnings),
             "user": user,
+            "windy_enabled": settings.WEATHER_WINDY_ENABLED,
         },
     )
 
