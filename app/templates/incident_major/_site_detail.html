@@ -404,17 +404,16 @@
   <form style=”margin-top:4px;” id=”siteLogForm-{{ site.id }}”
         hx-post=”/lage/{{ lage.id }}/stellen/{{ site.id }}/log”
         hx-vals='{“_csrf”: “{{ request.state.csrf_token }}”}'>
-    <div style=”display:flex;gap:6px;align-items:center;margin-bottom:6px;”>
-      <label class=”form-label” style=”font-size:.72rem;margin:0;”>Typ</label>
-      <select name=”art” class=”form-select form-select--xs” style=”max-width:160px;”>
+    <div style=”display:flex;gap:6px;align-items:center;”>
+      <select name=”art” class=”form-select form-select--xs” style=”flex-shrink:0;”>
         <option value=”lagemeldung” selected>Lagemeldung</option>
         <option value=”massnahmen”>Maßnahmen</option>
         <option value=”note”>Notiz</option>
       </select>
-    </div>
-    <div style=”display:flex;gap:6px;align-items:stretch;”>
-      <input type=”text” name=”text” class=”form-input” placeholder=”Eintrag erfassen…”
-             required autocomplete=”off” maxlength=”500” style=”flex:1;min-width:0;width:0;”>
+      <div style=”flex:1;min-width:0;”>
+        <input type=”text” name=”text” class=”form-input” placeholder=”Eintrag erfassen…”
+               required autocomplete=”off” maxlength=”500”>
+      </div>
       <button type=”submit” class=”btn btn--secondary btn--sm” style=”flex-shrink:0;”>Speichern</button>
     </div>
     <p class=”form-hint” style=”margin-top:4px;”>Nur „Lagemeldung” setzt den Lagemeldungs-Timer zurück.</p>
