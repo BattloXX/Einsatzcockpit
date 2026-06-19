@@ -34,6 +34,19 @@ def test_build_warning_views_leere_liste():
     assert _build_warning_views([]) == []
 
 
+def test_build_warning_views_filtert_zukuenftige_nicht():
+    # _build_warning_views filtert selbst nicht – das macht _render_weather_panel.
+    # Eine zukünftige Warnung (valid_from in der Zukunft) wird TROTZDEM übergeben
+    # wenn der Aufrufer sie schon gefiltert hat; hier sicherstellen dass alle
+    # übergebenen Warnungen erscheinen.
+    future = _warn(level=2, event="Sturm",
+                   vf=datetime(2099, 1, 1, 0, 0, tzinfo=UTC),
+                   vt=datetime(2099, 1, 1, 6, 0, tzinfo=UTC))
+    views = _build_warning_views([future])
+    assert len(views) == 1
+    assert views[0]["event_type"] == "Sturm"
+
+
 def test_warn_zeitraum_gleicher_tag_zeigt_datum_nur_einmal():
     # 12:00–20:00 UTC → 14:00–22:00 Wiener Zeit (Sommerzeit, UTC+2)
     s = _warn_zeitraum(

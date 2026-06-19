@@ -190,6 +190,8 @@ async def _render_weather_panel(
         top_warning.level, "#6b7280"
     ) if top_warning else None
     scenarios = analyze_weather(current, forecast, nowcast, warnings)
+    now_utc = datetime.now(UTC)
+    active_warnings = [w for w in warnings if w.valid_from <= now_utc]
 
     ctx = {
         "no_location": False,
@@ -202,7 +204,7 @@ async def _render_weather_panel(
         "wind_dir_label": _wind_dir_label(current.wind_direction_deg if current else None),
         "forecast": forecast,
         "warnings": warnings,
-        "warn_views": _build_warning_views(warnings),
+        "warn_views": _build_warning_views(active_warnings),
         "top_warning": top_warning,
         "warn_color": warn_color,
         "scenarios": scenarios,
