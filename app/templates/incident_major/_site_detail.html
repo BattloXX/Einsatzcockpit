@@ -3,7 +3,7 @@
 .site-detail__row { display: flex; gap: 6px; align-items: baseline; margin-bottom: 5px; }
 .site-detail__label { font-size: .75rem; color: var(--text-muted); min-width: 90px; flex-shrink: 0; }
 .site-detail__value { flex: 1; }
-.site-log { margin-top: 14px; }
+.site-log { margin-top: 0; }
 .site-log__entry { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid rgba(255,255,255,.06); font-size: .8rem; align-items: flex-start; }
 .site-log__time { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; font-variant-numeric: tabular-nums; min-width: 36px; padding-top: 1px; }
 .site-log__text { flex: 1; line-height: 1.4; }
@@ -42,7 +42,10 @@
   cursor: pointer; transition: opacity .12s;
 }
 .media-thumb:hover { opacity: .8; }
-.site-log__author-name { font-size:.65rem; color:var(--text-muted); margin-left:4px; }
+.site-log__author-name { display:block; font-size:.65rem; color:var(--text-muted); margin-top:2px; }
+/* input-row im engen Seitenpanel umbrechen */
+.site-detail .input-row { flex-wrap: wrap; }
+.site-detail .input-row .form-input { flex: 1; min-width: 120px; }
 </style>
 
 <div class="modal__header" x-data="{editing:false}" data-open-site-id="{{ site.id }}">
@@ -401,7 +404,7 @@
 
   {# ── Eintrag hinzufügen (Notiz / Lagemeldung / Maßnahmen) ──────────── #}
   {% if can_edit %}
-  <form style=”margin-top:14px;” id=”siteLogForm-{{ site.id }}”
+  <form style=”margin-top:4px;” id=”siteLogForm-{{ site.id }}”
         hx-post=”/lage/{{ lage.id }}/stellen/{{ site.id }}/log”
         hx-swap=”none”
         hx-vals='{“_csrf”: “{{ request.state.csrf_token }}”}'
@@ -426,7 +429,7 @@
   {# ── Foto hochladen ───────────────────────────────────────────────── #}
   {% if can_edit %}
   <form x-data=”{ hasFile:false, prevSrc:null, pick(e){ this.hasFile=e.target.files.length>0; var f=e.target.files[0]; if(f){var r=new FileReader();r.onload=(ev)=>{this.prevSrc=ev.target.result};r.readAsDataURL(f);}else{this.prevSrc=null;} } }”
-        style=”margin-top:10px;”
+        style=”margin-top:4px; position:relative; overflow:hidden;”
         hx-post=”/lage/{{ lage.id }}/stellen/{{ site.id }}/medien”
         hx-encoding=”multipart/form-data”
         hx-swap=”none”
@@ -449,7 +452,7 @@
 
   {# ── Verlaufslog ──────────────────────────────────────────────────── #}
   <div class=”site-log”>
-    <div style=”font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;margin-top:16px;”>VERLAUF</div>
+    <div style=”font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;”>VERLAUF</div>
     {% for entry in site.log_entries|reverse %}
     <div class=”site-log__entry{% if entry.kind == 'lagemeldung' %} site-log__entry--lagemeldung{% endif %}”>
       <span class=”site-log__time”>{{ entry.ts|local_time }}</span>
@@ -457,7 +460,8 @@
         {% if site_log_kind_label and entry.kind in site_log_kind_label and entry.kind != 'note' %}
         <span class=”log-typebadge log-typebadge--{{ entry.kind }}”>{{ site_log_kind_label[entry.kind] }}</span>
         {% endif %}
-        {{ entry.text }}{% if entry.author_name %}<span class=”site-log__author-name”>· {{ entry.author_name }}</span>{% endif %}
+        {{ entry.text }}{% if entry.author_name %}
+        <span class=”site-log__author-name”>{{ entry.author_name }}</span>{% endif %}
       </span>
     </div>
     {% else %}
