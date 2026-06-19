@@ -401,47 +401,47 @@
 
   {# ── Eintrag hinzufügen (Notiz / Lagemeldung / Maßnahmen) ──────────── #}
   {% if can_edit %}
-  <form style=”margin-top:4px;” id=”siteLogForm-{{ site.id }}”
-        hx-post=”/lage/{{ lage.id }}/stellen/{{ site.id }}/log”
-        hx-target=”#siteDetailContent”
-        hx-swap=”innerHTML”
-        hx-vals='{“_csrf”: “{{ request.state.csrf_token }}”}'>
-    <div style=”display:flex;gap:6px;align-items:center;”>
-      <select name=”art” class=”form-select form-select--xs” style=”flex-shrink:0;”>
-        <option value=”lagemeldung” selected>Lagemeldung</option>
-        <option value=”massnahmen”>Maßnahmen</option>
-        <option value=”note”>Notiz</option>
+  <form style="margin-top:4px;" id="siteLogForm-{{ site.id }}"
+        hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/log"
+        hx-target="#siteDetailContent"
+        hx-swap="innerHTML"
+        hx-vals='{"_csrf": "{{ request.state.csrf_token }}"}'>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <select name="art" class="form-select form-select--xs" style="flex-shrink:0;">
+        <option value="lagemeldung" selected>Lagemeldung</option>
+        <option value="massnahmen">Maßnahmen</option>
+        <option value="note">Notiz</option>
       </select>
-      <div style=”flex:1;min-width:0;”>
-        <input type=”text” name=”text” class=”form-input” placeholder=”Eintrag erfassen…”
-               required autocomplete=”off” maxlength=”500”>
+      <div style="flex:1;min-width:0;">
+        <input type="text" name="text" class="form-input" placeholder="Eintrag erfassen…"
+               required autocomplete="off" maxlength="500">
       </div>
-      <button type=”submit” class=”btn btn--secondary btn--sm” style=”flex-shrink:0;”>Speichern</button>
+      <button type="submit" class="btn btn--secondary btn--sm" style="flex-shrink:0;">Speichern</button>
     </div>
-    <p class=”form-hint” style=”margin-top:4px;”>Nur „Lagemeldung” setzt den Lagemeldungs-Timer zurück.</p>
+    <p class="form-hint" style="margin-top:4px;">Nur „Lagemeldung“ setzt den Lagemeldungs-Timer zurück.</p>
   </form>
   {% endif %}
 
   {# ── Foto hochladen ───────────────────────────────────────────────── #}
   {% if can_edit %}
-  <form hx-post=”/lage/{{ lage.id }}/stellen/{{ site.id }}/medien”
-        hx-encoding=”multipart/form-data”
-        hx-vals='{“_csrf”:”{{ request.state.csrf_token }}”}'
-        hx-swap=”none”
-        hx-on::after-request=”if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }”
-        style=”margin-top:4px;”>
-    <input type=”file” name=”file” id=”lmPhotoFile-{{ site.id }}” accept=”image/*”
-           style=”display:none;” onchange=”_lmPhoto(this,'{{ site.id }}')”>
-    <div style=”display:flex;gap:6px;align-items:center;flex-wrap:wrap;”>
-      <button type=”button” class=”btn btn--secondary btn--sm”
-              onclick=”openCamera('lmPhotoFile-{{ site.id }}')”>📷 Kamera</button>
-      <button type=”button” class=”btn btn--ghost btn--sm”
-              onclick=”openGallery('lmPhotoFile-{{ site.id }}')”>🖼️ Galerie</button>
-      <button type=”submit” class=”btn btn--primary btn--sm”
-              id=”lmUpBtn-{{ site.id }}” style=”display:none;”>Hochladen</button>
+  <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/medien"
+        hx-encoding="multipart/form-data"
+        hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+        hx-swap="none"
+        hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }"
+        style="margin-top:4px;">
+    <input type="file" name="file" id="lmPhotoFile-{{ site.id }}" accept="image/*"
+           style="display:none;" onchange="_lmPhoto(this,'{{ site.id }}')">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button type="button" class="btn btn--secondary btn--sm"
+              onclick="openCamera('lmPhotoFile-{{ site.id }}')">📷 Kamera</button>
+      <button type="button" class="btn btn--ghost btn--sm"
+              onclick="openGallery('lmPhotoFile-{{ site.id }}')">🖼️ Galerie</button>
+      <button type="submit" class="btn btn--primary btn--sm"
+              id="lmUpBtn-{{ site.id }}" style="display:none;">Hochladen</button>
     </div>
-    <div id=”lmPrev-{{ site.id }}” style=”margin-top:4px;”></div>
-    <p class=”form-hint”>Nur Bilder · max. 10 MB · wird automatisch verkleinert</p>
+    <div id="lmPrev-{{ site.id }}" style="margin-top:4px;"></div>
+    <p class="form-hint">Nur Bilder · max. 10 MB · wird automatisch verkleinert</p>
   </form>
   <script>
   function _lmPhoto(input, sid) {
@@ -452,7 +452,7 @@
     if (input.files[0] && prev) {
       var r = new FileReader();
       r.onload = function(e) {
-        prev.innerHTML = '<img src=”' + e.target.result + '” style=”max-height:60px;border-radius:4px;”>';
+        prev.innerHTML = '<img src="' + e.target.result + '" style="max-height:60px;border-radius:4px;">';
       };
       r.readAsDataURL(input.files[0]);
     }
@@ -461,28 +461,28 @@
   {% endif %}
 
   {# ── Verlaufslog ──────────────────────────────────────────────────── #}
-  <div class=”site-log”>
-    <div style=”font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;”>VERLAUF</div>
+  <div class="site-log">
+    <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">VERLAUF</div>
     {% for entry in site.log_entries|reverse %}
-    <div class=”site-log__entry{% if entry.kind == 'lagemeldung' %} site-log__entry--lagemeldung{% endif %}”>
-      <span class=”site-log__time”>{{ entry.ts|local_time }}</span>
-      <span class=”site-log__text site-log__kind--{{ entry.kind }}”>
+    <div class="site-log__entry{% if entry.kind == 'lagemeldung' %} site-log__entry--lagemeldung{% endif %}">
+      <span class="site-log__time">{{ entry.ts|local_time }}</span>
+      <span class="site-log__text site-log__kind--{{ entry.kind }}">
         {% if site_log_kind_label and entry.kind in site_log_kind_label and entry.kind != 'note' %}
-        <span class=”log-typebadge log-typebadge--{{ entry.kind }}”>{{ site_log_kind_label[entry.kind] }}</span>
+        <span class="log-typebadge log-typebadge--{{ entry.kind }}">{{ site_log_kind_label[entry.kind] }}</span>
         {% endif %}
         {{ entry.text }}{% if entry.author_name %}
-        <span class=”site-log__author-name”>{{ entry.author_name }}</span>{% endif %}
+        <span class="site-log__author-name">{{ entry.author_name }}</span>{% endif %}
       </span>
     </div>
     {% else %}
-    <div style=”font-size:.8rem;color:var(--text-muted);”>Noch keine Einträge.</div>
+    <div style="font-size:.8rem;color:var(--text-muted);">Noch keine Einträge.</div>
     {% endfor %}
   </div>
 
   {# ── Fotos ────────────────────────────────────────────────────────── #}
   {% if site.media %}
-  <div style=”margin-top:16px;”
-       x-data=”{
+  <div style="margin-top:16px;"
+       x-data="{
          lbOpen: false,
          lbItems: [{% for m in site.media %}{{ m.id }}{% if not loop.last %},{% endif %}{% endfor %}],
          lbIdx: 0,
@@ -496,22 +496,22 @@
            dlg.addEventListener('cancel', h);
            this.$cleanup(function() { dlg.removeEventListener('cancel', h); });
          }
-       }”>
-    <div style=”font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;”>FOTOS</div>
-    <div class=”media-grid”>
+       }">
+    <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">FOTOS</div>
+    <div class="media-grid">
       {% for m in site.media %}
-      <img src=”/lage-medien/thumb/{{ m.id }}” alt=”{{ m.original_filename }}”
-           class=”media-thumb” loading=”lazy” style=”cursor:zoom-in”
-           @click=”lbShow({{ loop.index0 }})”>
+      <img src="/lage-medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}"
+           class="media-thumb" loading="lazy" style="cursor:zoom-in"
+           @click="lbShow({{ loop.index0 }})">
       {% endfor %}
     </div>
-    <div x-show=”lbOpen” x-cloak
-         style=”position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;”
-         @click.self=”lbClose()”>
-      <img :src=”'/lage-medien/' + lbItems[lbIdx]”
-           style=”max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.7);”>
-      <button @click=”lbClose()”
-              style=”position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;color:#fff;font-size:26px;line-height:1;cursor:pointer;border-radius:50%;width:40px;height:40px;”>×</button>
+    <div x-show="lbOpen" x-cloak
+         style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;"
+         @click.self="lbClose()">
+      <img :src="'/lage-medien/' + lbItems[lbIdx]"
+           style="max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.7);">
+      <button @click="lbClose()"
+              style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;color:#fff;font-size:26px;line-height:1;cursor:pointer;border-radius:50%;width:40px;height:40px;">×</button>
     </div>
   </div>
   {% endif %}

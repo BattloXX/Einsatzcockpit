@@ -7,6 +7,15 @@
 - **Real-time**: WebSockets via `/ws/lage/{lage_id}` – broadcast mit `broadcast_lage()`
 - **Sprache**: Deutsch (Österreich) – alle UI-Texte, Kommentare und Variablennamen
 
+## Pflicht: Nur gerade ASCII-Anführungszeichen in Code
+
+**In HTML/Jinja2-Templates, JavaScript und allen Code-Attributen ausschließlich gerade Anführungszeichen `"` und `'` verwenden – niemals typografische „Smart Quotes" (`“` `”` `„` `‘` `’`).**
+
+- Smart Quotes in Attributen (`hx-post`, `name`, `id`, `style`, `onclick`, `x-data` …) machen das Markup ungültig → Formulare und Skripte funktionieren stillschweigend nicht mehr (z. B. Lagemeldung/Foto-Upload in `_site_detail.html`, Vorfall 2026-06-19).
+- Typografische Anführungszeichen sind **nur im sichtbaren Anzeigetext** erlaubt (z. B. `Nur „Lagemeldung" …`), nie in Code/Attributen.
+- Beim Umstellen/Umordnen von Blöcken: keine Autokorrektur/Editor-„Smart Quotes" aktiv lassen.
+- Schnellcheck vor Commit von Templates: nach `“ ” „ ‘ ’` in Attributen suchen und durch `"` / `'` ersetzen.
+
 ## Architektur
 
 - Single-Tenant pro Org: Alle Lagen gehören zu einer `org_id` – keine Cross-Org-Queries
