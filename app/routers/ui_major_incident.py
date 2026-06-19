@@ -640,6 +640,9 @@ async def site_detail(
     site_dispatches = resource_service.get_active_dispatches_for_site(db, site_id)
     already_dispatched_ids = [d.einheit_id for d in site_dispatches]
 
+    log_user_ids = {e.user_id for e in site.log_entries if e.user_id}
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(log_user_ids)).all()} if log_user_ids else {}
+
     return templates.TemplateResponse(request, "incident_major/_site_detail.html", {
         "user": user,
         "lage": lage,
@@ -655,6 +658,7 @@ async def site_detail(
         "site_dispatches": site_dispatches,
         "already_dispatched_ids": already_dispatched_ids,
         "site_log_kind_label": SITE_LOG_KIND_LABEL,
+        "users_by_id": users_by_id,
     })
 
 
@@ -782,6 +786,8 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT
     ]
     sectors = sorted(lage.sectors, key=lambda s: s.id)
+    log_user_ids = {e.user_id for e in site.log_entries if e.user_id}
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(log_user_ids)).all()} if log_user_ids else {}
     detail_ctx = {
         "request": request,
         "user": user,
@@ -798,6 +804,7 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         "prio_color": SITE_PRIORITY_COLOR,
         "citizen_report": None,
         "now": datetime.now(UTC),
+        "users_by_id": users_by_id,
     }
     detail_html = templates.env.get_template(
         "incident_major/_site_detail.html"
