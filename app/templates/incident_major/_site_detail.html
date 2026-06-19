@@ -403,9 +403,7 @@
   {% if can_edit %}
   <form style=”margin-top:4px;” id=”siteLogForm-{{ site.id }}”
         hx-post=”/lage/{{ lage.id }}/stellen/{{ site.id }}/log”
-        hx-swap=”none”
-        hx-vals='{“_csrf”: “{{ request.state.csrf_token }}”}'
-        hx-on::after-request=”if(event.detail.successful){this.reset();htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'});htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'});}”>
+        hx-vals='{“_csrf”: “{{ request.state.csrf_token }}”}'>
     <div style=”display:flex;gap:6px;align-items:center;margin-bottom:6px;”>
       <label class=”form-label” style=”font-size:.72rem;margin:0;”>Typ</label>
       <select name=”art” class=”form-select form-select--xs” style=”max-width:160px;”>
@@ -414,10 +412,10 @@
         <option value=”note”>Notiz</option>
       </select>
     </div>
-    <div style=”display:flex;gap:6px;align-items:center;”>
+    <div style=”display:flex;gap:6px;align-items:stretch;”>
       <input type=”text” name=”text” class=”form-input” placeholder=”Eintrag erfassen…”
-             required autocomplete=”off” maxlength=”500” style=”flex:1;min-width:0;”>
-      <button type=”submit” class=”btn btn--secondary btn--sm”>Speichern</button>
+             required autocomplete=”off” maxlength=”500” style=”flex:1;min-width:0;width:0;”>
+      <button type=”submit” class=”btn btn--secondary btn--sm” style=”flex-shrink:0;”>Speichern</button>
     </div>
     <p class=”form-hint” style=”margin-top:4px;”>Nur „Lagemeldung” setzt den Lagemeldungs-Timer zurück.</p>
   </form>

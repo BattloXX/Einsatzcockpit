@@ -1044,7 +1044,8 @@ async def site_log_add(
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     if is_reset:
         await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
-    return Response(status_code=204)
+    html = _site_detail_html_with_oob(request, db, lage, site, user)
+    return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
 
 # ── Ressource zuweisen ──────────────────────────────────────────────────────
