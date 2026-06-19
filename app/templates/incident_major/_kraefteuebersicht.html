@@ -40,14 +40,15 @@
   {% if kue.dispatched_sites_by_einheit is defined %}
   {% set dispatches = kue.dispatched_sites_by_einheit.get(e.id, []) %}
   {% if dispatches %}
-  <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">
+  <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px;">
     {% for d in dispatches %}
     {% set s = sites_by_id.get(d.site_id) %}
     {% if s %}
     <a href="/lage/{{ lage.id }}?openSite={{ d.site_id }}"
        class="dispatch-site-badge {% if d.vor_ort_at %}dispatch-site-badge--vor-ort{% else %}dispatch-site-badge--alarmed{% endif %}"
        title="{% if d.vor_ort_at %}Vor Ort{% else %}Disponiert{% endif %}: {{ s.bezeichnung }}{% if s.ort %} · {{ s.ort }}{% endif %}">
-      {% if d.vor_ort_at %}●{% else %}○{% endif %} {{ s.bezeichnung[:13] }}
+      {% if d.vor_ort_at %}🚒{% else %}↗{% endif %}
+      {{ s.bezeichnung[:18] }}{% if s.bezeichnung | length > 18 %}…{% endif %}
     </a>
     {% endif %}
     {% endfor %}
@@ -191,42 +192,3 @@
 </div>
 {% endif %}
 
-
-{# ── Planungs-Matrix ─────────────────────────────────────────────────────── #}
-{% if lage.sites | length > 1 and all_einheiten is defined and all_einheiten %}
-<div style="margin-top:2rem;background:var(--surface-1);border-radius:8px;padding:16px;border:1px solid rgba(255,255,255,.06);">
-  <div style="font-size:.78rem;font-weight:700;color:var(--text-muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;">Planungs-Übersicht</div>
-  <div style="overflow-x:auto;">
-    <table class="matrix-table">
-      <thead>
-        <tr>
-          <th style="text-align:left;">Einheit</th>
-          {% for site in lage.sites %}
-          <th title="{{ site.bezeichnung }}{% if site.ort %} · {{ site.ort }}{% endif %}">
-            {{ site.bezeichnung[:14] }}{% if site.bezeichnung|length > 14 %}…{% endif %}
-          </th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for e in all_einheiten %}
-        {% set e_dispatches = kue.dispatched_sites_by_einheit.get(e.id, []) if kue.dispatched_sites_by_einheit is defined else [] %}
-        <tr>
-          <td style="text-align:left;font-weight:500;white-space:nowrap;">{{ e.label }}</td>
-          {% for site in lage.sites %}
-          {% set d = e_dispatches | selectattr('site_id', 'equalto', site.id) | first | default(none) %}
-          <td class="matrix-cell{% if d and d.vor_ort_at %} matrix-cell--vor-ort{% elif d %} matrix-cell--alarmed{% endif %}">
-            {% if d and d.vor_ort_at %}●{% elif d %}○{% else %}&nbsp;{% endif %}
-          </td>
-          {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <div class="matrix-legend">
-    <span class="dispatch-site-badge dispatch-site-badge--vor-ort">● Vor Ort</span>
-    <span class="dispatch-site-badge dispatch-site-badge--alarmed">○ Disponiert</span>
-  </div>
-</div>
-{% endif %}

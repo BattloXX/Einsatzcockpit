@@ -21,7 +21,7 @@
 /* ── Multi-Site Dispatch ─────────────────────────────────────── */
 .dispatch-conflict-box{background:rgba(245,158,11,.12);border:1px solid #fbbf24;border-radius:6px;padding:8px 10px;margin-top:4px;font-size:.82rem;}
 .dispatch-conflict-box__title{color:#fbbf24;font-weight:600;margin-bottom:6px;}
-.dispatch-site-badge{display:inline-flex;align-items:center;gap:2px;font-size:.6rem;font-weight:600;padding:1px 5px;border-radius:3px;white-space:nowrap;text-decoration:none;cursor:pointer;}
+.dispatch-site-badge{display:inline-flex;align-items:center;gap:3px;font-size:.68rem;font-weight:600;padding:2px 7px;border-radius:4px;white-space:nowrap;text-decoration:none;cursor:pointer;}
 .dispatch-site-badge--alarmed{background:rgba(245,158,11,.2);color:#fbbf24;}
 .dispatch-site-badge--vor-ort{background:rgba(34,197,94,.2);color:#4ade80;}
 .dispatch-site-badge--alarmed:hover{background:rgba(245,158,11,.35);}
@@ -35,6 +35,41 @@
 .matrix-cell--vor-ort{background:rgba(34,197,94,.15);color:#4ade80;font-weight:700;}
 .matrix-cell--alarmed{background:rgba(245,158,11,.1);color:#fbbf24;}
 .matrix-legend{display:flex;gap:8px;margin-top:8px;font-size:.75rem;}
+/* ── Ressourcen-Tabs ─────────────────────────────────────────── */
+.res-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface);padding:0 14px;}
+.res-tab{font-size:.82rem;padding:8px 16px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;font-weight:500;transition:color .15s,border-color .15s;}
+.res-tab:hover{color:var(--text);}
+.res-tab.active{color:var(--text);border-bottom-color:#818cf8;font-weight:600;}
+/* ── Planungsübersicht ───────────────────────────────────────── */
+.planung-wrap{padding:14px 16px;}
+.planung-stats{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+.planung-stat{display:inline-flex;align-items:center;gap:5px;font-size:.8rem;padding:4px 10px;border-radius:6px;background:var(--surface-elevated,#1e2130);border:1px solid var(--border);}
+.planung-stat__val{font-weight:700;}
+.planung-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+.planung-card{background:var(--surface-elevated,#1e2130);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;}
+.planung-card__head{padding:10px 12px 8px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;}
+.planung-card__prio{flex-shrink:0;font-size:.62rem;font-weight:700;padding:2px 6px;border-radius:3px;align-self:flex-start;margin-top:2px;}
+.planung-card__prio--red{background:rgba(248,113,113,.15);color:#f87171;}
+.planung-card__prio--orange{background:rgba(251,146,60,.15);color:#fb923c;}
+.planung-card__prio--yellow{background:rgba(250,204,21,.12);color:#facc15;}
+.planung-card__prio--gray{background:rgba(107,114,128,.15);color:#9ca3af;}
+.planung-card__title{font-weight:600;font-size:.88rem;line-height:1.3;flex:1;}
+.planung-card__addr{font-size:.7rem;color:var(--text-muted);margin-top:1px;}
+.planung-card__sector{font-size:.65rem;padding:1px 6px;border-radius:3px;border:1px solid;display:inline-flex;align-items:center;gap:3px;margin-top:4px;}
+.planung-card__count{text-align:right;flex-shrink:0;}
+.planung-card__count-val{font-size:1.2rem;font-weight:700;line-height:1.1;}
+.planung-card__count-lbl{font-size:.6rem;color:var(--text-muted);}
+.planung-card__body{padding:10px 12px;display:flex;flex-direction:column;gap:8px;flex:1;}
+.planung-res-group__lbl{font-size:.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;display:flex;align-items:center;gap:4px;}
+.planung-res-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.planung-chip{display:inline-flex;align-items:center;gap:3px;font-size:.72rem;padding:3px 8px;border-radius:4px;white-space:nowrap;font-weight:500;}
+.planung-chip--vor-ort{background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.2);}
+.planung-chip--alarmed{background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.18);}
+.planung-card__empty{font-size:.78rem;color:var(--text-muted);font-style:italic;}
+.planung-pool{margin-top:16px;padding:12px;background:var(--surface-elevated,#1e2130);border:1px solid var(--border);border-radius:8px;}
+.planung-pool__title{font-size:.72rem;font-weight:700;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;}
+.planung-pool-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.planung-pool-chip{display:inline-flex;align-items:center;gap:3px;font-size:.72rem;padding:3px 8px;border-radius:4px;background:rgba(255,255,255,.05);color:var(--text-muted);border:1px solid var(--border);}
 /* ── Druckbericht Disponiert ─────────────────────────────────── */
 .print-inbound-res{font-size:.8rem;color:#b45309;margin-top:3px;}
 .print-label{font-weight:600;}

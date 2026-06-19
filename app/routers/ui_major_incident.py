@@ -4207,6 +4207,51 @@ async def lage_ressourcen_kraefteuebersicht(
     })
 
 
+@router.get("/lage/{lage_id}/ressourcen/planung", response_class=HTMLResponse)
+async def lage_ressourcen_planung(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    kue = resource_service.kraefteuebersicht(db, lage)
+    einheiten_by_id = {e.id: e for e in lage.einheiten}
+    sectors_by_id = {s.id: s for s in lage.sectors}
+
+    resources_by_site: dict[int, dict] = {}
+    for einheit_id, dispatches in kue["dispatched_sites_by_einheit"].items():
+        einh = einheiten_by_id.get(einheit_id)
+        if not einh:
+            continue
+        for d in dispatches:
+            entry = resources_by_site.setdefault(d.site_id, {"vor_ort": [], "alarmed": []})
+            if d.vor_ort_at:
+                entry["vor_ort"].append(einh)
+            else:
+                entry["alarmed"].append(einh)
+
+    sites_sorted = sorted(
+        lage.sites,
+        key=lambda s: (s.priority.value if s.priority else 9),
+    )
+
+    return templates.TemplateResponse(request, "incident_major/_planung_uebersicht.html", {
+        "lage": lage,
+        "kue": kue,
+        "sectors_by_id": sectors_by_id,
+        "resources_by_site": resources_by_site,
+        "sites_sorted": sites_sorted,
+        "prio_label": SITE_PRIORITY_LABEL,
+        "prio_color": SITE_PRIORITY_COLOR,
+        "resource_service": resource_service,
+        "can_edit": _can_edit(user),
+    })
+
+
 # ── Einheiten-Pool ────────────────────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/einheiten")

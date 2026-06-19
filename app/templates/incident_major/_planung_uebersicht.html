@@ -1,0 +1,155 @@
+{# Planungsübersicht-Partial – per HTMX-Endpoint gerendert #}
+
+{# Anzahlen berechnen #}
+{% set total_vor_ort = namespace(n=0) %}
+{% set total_alarmed = namespace(n=0) %}
+{% for site_id, res in resources_by_site.items() %}
+  {% set total_vor_ort.n = total_vor_ort.n + (res.vor_ort | length) %}
+  {% set total_alarmed.n = total_alarmed.n + (res.alarmed | length) %}
+{% endfor %}
+
+<div class="planung-wrap">
+
+  {# Statistik-Leiste #}
+  <div class="planung-stats">
+    <div class="planung-stat">
+      <span class="planung-stat__val">{{ lage.sites | length }}</span>
+      <span style="color:var(--text-muted);">Einsatzstellen</span>
+    </div>
+    <div class="planung-stat" style="border-color:rgba(34,197,94,.3);">
+      <span class="planung-stat__val" style="color:#4ade80;">{{ total_vor_ort.n }}</span>
+      <span style="color:var(--text-muted);">Vor Ort</span>
+    </div>
+    <div class="planung-stat" style="border-color:rgba(245,158,11,.3);">
+      <span class="planung-stat__val" style="color:#fbbf24;">{{ total_alarmed.n }}</span>
+      <span style="color:var(--text-muted);">Disponiert</span>
+    </div>
+    <div class="planung-stat" style="border-color:rgba(251,191,36,.3);">
+      <span class="planung-stat__val" style="color:#fbbf24;">{{ kue.reserve_count }}</span>
+      <span style="color:var(--text-muted);">Pool / Reserve</span>
+    </div>
+    {% if kue.conflict_vids %}
+    <div class="planung-stat" style="border-color:rgba(248,113,113,.35);">
+      <span class="planung-stat__val" style="color:#f87171;">{{ kue.conflict_vids | length }}</span>
+      <span style="color:var(--text-muted);">Konflikte</span>
+    </div>
+    {% endif %}
+  </div>
+
+  {# Einsatzstellen-Karten-Grid (nach Priorität sortiert, vom Endpoint übergeben) #}
+  <div class="planung-grid">
+    {% for site in sites_sorted %}
+    {% set res = resources_by_site.get(site.id, {'vor_ort': [], 'alarmed': []}) %}
+    {% set prio_val = site.priority.value if site.priority else 9 %}
+    {% if prio_val == 1 %}{% set prio_cls = 'red' %}{% set prio_color_hex = '#ef4444' %}
+    {% elif prio_val == 2 %}{% set prio_cls = 'orange' %}{% set prio_color_hex = '#f97316' %}
+    {% elif prio_val == 3 %}{% set prio_cls = 'yellow' %}{% set prio_color_hex = '#eab308' %}
+    {% else %}{% set prio_cls = 'gray' %}{% set prio_color_hex = 'rgba(107,114,128,.4)' %}
+    {% endif %}
+    {% set total_res = (res.vor_ort | length) + (res.alarmed | length) %}
+
+    <div class="planung-card" style="border-left:3px solid {{ prio_color_hex }};">
+      <div class="planung-card__head">
+        {# Prio-Badge #}
+        {% if site.priority %}
+        <span class="planung-card__prio planung-card__prio--{{ prio_cls }}">
+          {{ prio_label[site.priority] }}
+        </span>
+        {% endif %}
+
+        {# Name, Adresse, Sektor #}
+        <div style="flex:1;min-width:0;">
+          <div class="planung-card__title">{{ site.bezeichnung }}</div>
+          {% if site.strasse or site.ort %}
+          <div class="planung-card__addr">
+            {% if site.strasse %}{{ site.strasse }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% if site.ort %}, {% endif %}{% endif %}
+            {% if site.ort %}{{ site.ort }}{% endif %}
+          </div>
+          {% endif %}
+          {% if site.sector_id and sectors_by_id and site.sector_id in sectors_by_id %}
+          {% set sec = sectors_by_id[site.sector_id] %}
+          <span class="planung-card__sector"
+                style="border-color:{{ sec.color or '#6b7280' }};color:{{ sec.color or '#9ca3af' }};">
+            <span style="width:5px;height:5px;border-radius:50%;background:{{ sec.color or '#6b7280' }};flex-shrink:0;"></span>
+            {{ sec.name }}
+          </span>
+          {% endif %}
+        </div>
+
+        {# Ressourcen-Zähler #}
+        <div class="planung-card__count">
+          <div class="planung-card__count-val"
+               style="color:{% if (res.vor_ort | length) > 0 %}#4ade80{% elif (res.alarmed | length) > 0 %}#fbbf24{% else %}var(--text-muted){% endif %};">
+            {{ total_res }}
+          </div>
+          <div class="planung-card__count-lbl">Einh.</div>
+        </div>
+      </div>
+
+      <div class="planung-card__body">
+        {# Vor Ort #}
+        {% if res.vor_ort %}
+        <div class="planung-res-group">
+          <div class="planung-res-group__lbl">
+            <span style="width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0;"></span>
+            Vor Ort ({{ res.vor_ort | length }})
+          </div>
+          <div class="planung-res-chips">
+            {% for e in res.vor_ort %}
+            <span class="planung-chip planung-chip--vor-ort" title="{{ e.label }}">
+              🚒 {{ e.label[:17] }}{% if e.label | length > 17 %}…{% endif %}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {# Disponiert #}
+        {% if res.alarmed %}
+        <div class="planung-res-group">
+          <div class="planung-res-group__lbl">
+            <span style="width:7px;height:7px;border-radius:50%;background:#fbbf24;flex-shrink:0;"></span>
+            Disponiert ({{ res.alarmed | length }})
+          </div>
+          <div class="planung-res-chips">
+            {% for e in res.alarmed %}
+            <span class="planung-chip planung-chip--alarmed" title="{{ e.label }}">
+              ↗ {{ e.label[:17] }}{% if e.label | length > 17 %}…{% endif %}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if not res.vor_ort and not res.alarmed %}
+        <div class="planung-card__empty">Noch keine Ressourcen zugewiesen</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# Pool / Reserve #}
+  {% if kue.pool %}
+  <div class="planung-pool">
+    <div class="planung-pool__title">Pool / Reserve – {{ kue.pool | length }} Einheiten nicht zugewiesen</div>
+    <div class="planung-pool-chips">
+      {% for e in kue.pool %}
+      <span class="planung-pool-chip" title="{{ e.label }}">
+        {{ e.label }}
+        {% if e.resource_type == 'extern' %}<span style="font-size:.6rem;opacity:.6;">EXT</span>
+        {% elif e.resource_type == 'material' %}<span style="font-size:.6rem;opacity:.6;">MAT</span>
+        {% endif %}
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not sites_sorted %}
+  <div style="padding:40px 0;text-align:center;color:var(--text-muted);font-size:.9rem;">
+    Noch keine Einsatzstellen angelegt.
+  </div>
+  {% endif %}
+
+</div>

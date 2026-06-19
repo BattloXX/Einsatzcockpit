@@ -173,8 +173,8 @@
   </nav>
 </div>
 
-{# ── Stats-Leiste + Inline-Hinzufügen ────────────────────────────────────── #}
-<div x-data="{ showAdd: false }">
+{# ── Stats-Leiste + Tab-Navigation ───────────────────────────────────────── #}
+<div x-data="{ tab: 'uebersicht', showAdd: false }">
 <div class="res-stats">
   {% if kue.el_asgn %}
   <div class="res-stat" style="flex-direction:row;gap:8px;align-items:center;min-width:0;">
@@ -274,256 +274,51 @@
   </div>
 </div>
 {% endif %}
-</div>{# /x-data showAdd #}
 
-{# ── Kräfteübersicht (live-aktualisiert via HTMX-Poll) ───────────────────── #}
-<div id="kraefteuebersicht-container"
-     hx-get="/lage/{{ lage.id }}/ressourcen/kraefteuebersicht"
-     hx-trigger="every 30s, ressourceChanged from:body"
-     hx-swap="innerHTML">
-  {% include "incident_major/_kraefteuebersicht.html" %}
+{# ── Tab-Navigation ───────────────────────────────────────────────────────── #}
+<div class="res-tabs">
+  <button class="res-tab" :class="{active: tab==='uebersicht'}" @click="tab='uebersicht'">
+    Ressourcenübersicht
+  </button>
+  <button class="res-tab" :class="{active: tab==='planung'}" @click="tab='planung'">
+    Planungsübersicht
+  </button>
+  <button class="res-tab" :class="{active: tab==='journal'}" @click="tab='journal'">
+    Ressourcenjournal
+  </button>
 </div>
 
-{% if False %}{# Platzhalter – wird nie gerendert, verhindert Jinja-Syntaxfehler #}
-{% macro einheit_card(e) %}
-{% set is_conflict = e.vehicle_id and e.vehicle_id in kue.conflict_vids %}
-<div class="einh-card{% if is_conflict %} einh-card--conflict{% endif %}">
-  <div class="einh-card__top">
-    <span class="einh-card__label" title="{{ e.label }}">{{ e.label }}</span>
-    <span class="einh-card__type">
-      {%- if e.resource_type == 'extern' -%}EXT
-      {%- elif e.resource_type == 'material' -%}MAT
-      {%- else -%}FZG{%- endif -%}
-    </span>
-    <span class="estatus estatus--{{ e.status }}">
-      {{ resource_service.STATUS_LABEL.get(e.status, e.status) }}
-    </span>
-  </div>
-  {% if e.org_name or e.bos %}
-  <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px;">
-    {% if e.bos %}<span>{{ e.bos }}</span>{% endif %}
-    {% if e.org_name %} – {{ e.org_name }}{% endif %}
-  </div>
-  {% endif %}
-  {% if e.resource_type == 'material' and e.qty %}
-  <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px;">
-    {{ e.qty }}{% if e.unit %} {{ e.unit }}{% endif %}
-  </div>
-  {% endif %}
-  <div class="einh-card__commander">
-    {% if e.leader and e.leader.end_at is none %}
-      <span>👤 <span>{{ e.leader.display_name }}</span></span>
-      <span class="einh-card__since">{{ e.leader.start_at|local_time }}</span>
-    {% elif e.commander_label %}
-      <span>👤 <span>{{ e.commander_label }}</span></span>
-    {% else %}
-      <span style="opacity:.4;font-size:.72rem;">Kein Führer eingetragen</span>
-    {% endif %}
-  </div>
-  {# ── Mehrfach-Disposition: Badges ─────────────────────────────── #}
-  {% if kue.dispatched_sites_by_einheit is defined %}
-  {% set dispatches = kue.dispatched_sites_by_einheit.get(e.id, []) %}
-  {% if dispatches %}
-  <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">
-    {% for d in dispatches %}
-    {% set s = sites_by_id.get(d.site_id) %}
-    {% if s %}
-    <a href="/lage/{{ lage.id }}?openSite={{ d.site_id }}"
-       class="dispatch-site-badge {% if d.vor_ort_at %}dispatch-site-badge--vor-ort{% else %}dispatch-site-badge--alarmed{% endif %}"
-       title="{% if d.vor_ort_at %}Vor Ort{% else %}Disponiert{% endif %}: {{ s.bezeichnung }}{% if s.ort %} · {{ s.ort }}{% endif %}">
-      {% if d.vor_ort_at %}●{% else %}○{% endif %} {{ s.bezeichnung[:13] }}
-    </a>
-    {% endif %}
-    {% endfor %}
-  </div>
-  {% endif %}
-  {% endif %}
-  {% if is_conflict %}
-  <div style="font-size:.65rem;color:#f87171;font-weight:700;margin-top:3px;">⚠ Fahrzeug mehrfach eingeteilt</div>
-  {% endif %}
-  {% if can_edit %}
-  <div class="einh-card__actions">
-    {% if sectors %}
-    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/sektor" style="display:flex;gap:3px;flex:1;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <select name="sector_id" class="sektor-select">
-        <option value="">→ Pool</option>
-        {% for s in sectors %}<option value="{{ s.id }}"{% if s.id == e.sector_id %} selected{% endif %}>{{ s.name }}</option>{% endfor %}
-      </select>
-      <button type="submit" class="btn btn--xs btn--secondary">OK</button>
-    </form>
-    {% endif %}
-    {% if e.sector_id %}
-    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/pool" style="margin:0;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--xs btn--ghost" title="In Pool zurückführen">Pool</button>
-    </form>
-    {% endif %}
-    {% if e.status != resource_service.STATUS_ABGERUECKT %}
-    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status" style="margin:0;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="hidden" name="status" value="{{ resource_service.STATUS_ABGERUECKT }}">
-      <button type="submit" class="btn btn--xs btn--ghost" title="Abgerückt markieren">Abg.</button>
-    </form>
-    {% endif %}
-    <input type="text" name="commander_label"
-           class="form-input form-input--xs" style="flex:1;min-width:60px;"
-           value="{{ e.commander_label or '' }}"
-           placeholder="Führer…" list="cmdr-datalist"
-           hx-trigger="change" hx-swap="none"
-           hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/kommandant"
-           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-           maxlength="120" autocomplete="off">
-    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/loeschen" style="margin:0;"
-          onsubmit="return confirm('{{ e.label }} entfernen?')">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--xs btn--ghost" style="color:#f87171;">✕</button>
-    </form>
-  </div>
-  {% endif %}
-</div>
-{% endmacro %}
-
-{# ── Board ───────────────────────────────────────────────────────────────── #}
-<div class="res-board">
-
-  {# Pool / Reserve #}
-  <div class="res-col res-col--pool">
-    <div class="res-col__head">
-      <span>🟡 POOL / RESERVE</span>
-      <span class="res-col__count">{{ kue.pool|length }}</span>
-    </div>
-    <div class="res-col__leader" style="color:#fbbf24;font-size:.68rem;">
-      Noch keinem Abschnitt zugeteilt (SKKM Reserve)
-    </div>
-    <div class="res-col__body">
-      {% for e in kue.pool %}{{ einheit_card(e) }}{% else %}
-      <div style="text-align:center;font-size:.8rem;color:var(--text-muted);padding:20px 0;">Reserve leer</div>
-      {% endfor %}
-    </div>
-  </div>
-
-  {# Ressourcen im Einsatz (kein Abschnitt) #}
-  <div class="res-col" style="border-color:#fbbf2455;">
-    <div class="res-col__head" style="color:#fbbf24;">
-      <span>🟠 RESSOURCEN IM EINSATZ</span>
-      <span class="res-col__count" style="background:rgba(251,191,36,.2);color:#fbbf24;">{{ kue.im_einsatz_no_sector|length }}</span>
-    </div>
-    <div class="res-col__leader" style="font-size:.68rem;">
-      Im Einsatz – noch keinem Abschnitt zugeteilt
-    </div>
-    <div class="res-col__body">
-      {% for e in kue.im_einsatz_no_sector %}{{ einheit_card(e) }}{% else %}
-      <div style="text-align:center;font-size:.8rem;color:var(--text-muted);padding:20px 0;">Keine aktiven Einheiten</div>
-      {% endfor %}
-    </div>
-  </div>
-
-  {# Abschnitt-Spalten #}
-  {% for sd in kue.sectors %}
-  {% set s = sd.sector %}
-  <div class="res-col" style="{% if s.color %}border-color:{{ s.color }}55;{% endif %}">
-    <div class="res-col__head" style="{% if s.color %}color:{{ s.color }};{% endif %}">
-      <span>{{ s.name }}</span>
-      <span class="res-col__count">{{ sd.einheiten|length }}</span>
-    </div>
-    {% if sd.leader %}
-    <div class="res-col__leader">
-      AbsLtr: <strong>{{ sd.leader.display_name }}</strong>
-      <span style="float:right;font-size:.65rem;">seit {{ sd.leader.start_at|local_time }}</span>
-    </div>
-    {% elif s.leader_label %}
-    <div class="res-col__leader">AbsLtr: <strong>{{ s.leader_label }}</strong></div>
-    {% else %}
-    <div class="res-col__leader" style="color:#f87171;font-size:.68rem;">Kein Abschnittsleiter</div>
-    {% endif %}
-    <div class="res-col__body">
-      {% for e in sd.einheiten %}{{ einheit_card(e) }}{% else %}
-      <div style="text-align:center;font-size:.8rem;color:var(--text-muted);padding:20px 0;">Keine Einheiten</div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endfor %}
-
-</div>
-
-{# ── Abgerückt ───────────────────────────────────────────────────────────── #}
-{% if kue.abgerueckt %}
-<div class="res-abgerueckt">
-  <div class="res-section" style="opacity:.65;">
-    <div class="res-section__title">ABGERÜCKT ({{ kue.abgerueckt|length }})</div>
-    <table class="res-table">
-      <thead><tr><th>Einheit</th><th>Typ</th><th>Abschnitt</th><th>Abgerückt</th></tr></thead>
-      <tbody>
-        {% for e in kue.abgerueckt %}
-        <tr>
-          <td style="font-weight:500;">{{ e.label }}</td>
-          <td style="color:var(--text-muted);font-size:.75rem;">
-            {{ resource_service.RESOURCE_TYPE_LABEL.get(e.resource_type, e.resource_type) }}
-          </td>
-          <td style="color:var(--text-muted);font-size:.75rem;">
-            {{ e.sector.name if e.sector else '–' }}
-          </td>
-          <td style="color:var(--text-muted);font-size:.75rem;white-space:nowrap;">
-            {{ e.released_at|local_time if e.released_at else '–' }}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+{# ── Tab 1: Ressourcenübersicht ───────────────────────────────────────────── #}
+<div x-show="tab==='uebersicht'">
+  <div id="kraefteuebersicht-container"
+       hx-get="/lage/{{ lage.id }}/ressourcen/kraefteuebersicht"
+       hx-trigger="every 30s, ressourceChanged from:body"
+       hx-swap="innerHTML">
+    {% include "incident_major/_kraefteuebersicht.html" %}
   </div>
 </div>
-{% endif %}
 
-
-{# ── Planungs-Matrix ─────────────────────────────────────────────────────── #}
-{% if lage.sites | length > 1 and all_einheiten is defined and all_einheiten %}
-<div style="margin-top:2rem;background:var(--surface-1);border-radius:8px;padding:16px;border:1px solid rgba(255,255,255,.06);">
-  <div style="font-size:.78rem;font-weight:700;color:var(--text-muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;">Planungs-Übersicht</div>
-  <div style="overflow-x:auto;">
-    <table class="matrix-table">
-      <thead>
-        <tr>
-          <th style="text-align:left;">Einheit</th>
-          {% for site in lage.sites %}
-          <th title="{{ site.bezeichnung }}{% if site.ort %} · {{ site.ort }}{% endif %}">
-            {{ site.bezeichnung[:14] }}{% if site.bezeichnung|length > 14 %}…{% endif %}
-          </th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for e in all_einheiten %}
-        {% set e_dispatches = kue.dispatched_sites_by_einheit.get(e.id, []) if kue.dispatched_sites_by_einheit is defined else [] %}
-        <tr>
-          <td style="text-align:left;font-weight:500;white-space:nowrap;">{{ e.label }}</td>
-          {% for site in lage.sites %}
-          {% set d = e_dispatches | selectattr('site_id', 'equalto', site.id) | first | default(none) %}
-          <td class="matrix-cell{% if d and d.vor_ort_at %} matrix-cell--vor-ort{% elif d %} matrix-cell--alarmed{% endif %}">
-            {% if d and d.vor_ort_at %}●{% elif d %}○{% else %}&nbsp;{% endif %}
-          </td>
-          {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <div class="matrix-legend">
-    <span class="dispatch-site-badge dispatch-site-badge--vor-ort">● Vor Ort</span>
-    <span class="dispatch-site-badge dispatch-site-badge--alarmed">○ Disponiert</span>
+{# ── Tab 2: Planungsübersicht ─────────────────────────────────────────────── #}
+<div x-show="tab==='planung'">
+  <div id="planung-container"
+       hx-get="/lage/{{ lage.id }}/ressourcen/planung"
+       hx-trigger="load, every 30s, ressourceChanged from:body"
+       hx-swap="innerHTML">
+    <div style="padding:14px 16px;font-size:.8rem;color:var(--text-muted);">Lade Planungsübersicht…</div>
   </div>
 </div>
-{% endif %}
-{% endif %}{# /if False – Toter Code, wird nie gerendert #}
 
-
-{# ── Ressourcen-Journal ───────────────────────────────────────────────────── #}
-<div id="res-journal-container"
-     hx-get="/lage/{{ lage.id }}/ressourcen/journal"
-     hx-trigger="load, every 30s, ressourceChanged from:body"
-     hx-swap="innerHTML">
-  <div style="padding:14px 16px;font-size:.8rem;color:var(--text-muted);">Lade Journal…</div>
+{# ── Tab 3: Ressourcenjournal ─────────────────────────────────────────────── #}
+<div x-show="tab==='journal'">
+  <div id="res-journal-container"
+       hx-get="/lage/{{ lage.id }}/ressourcen/journal"
+       hx-trigger="load, every 30s, ressourceChanged from:body"
+       hx-swap="innerHTML">
+    <div style="padding:14px 16px;font-size:.8rem;color:var(--text-muted);">Lade Journal…</div>
+  </div>
 </div>
+
+</div>{# /x-data #}
 
 {% endblock %}
 
