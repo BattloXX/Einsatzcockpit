@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ device.bezeichnung }} – UAS Ger&auml;t{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>&#x1F681; {{ device.bezeichnung }}</h1>
+    <p class="page-header__sub">{{ device.hersteller }} {{ device.typ }} &ndash; {{ device.ce_klasse }}/{{ device.unterkategorie }}</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/uas/geraete/{{ device.id }}/bearbeiten" class="btn btn--ghost">Bearbeiten</a>
+    <a href="/uas/geraete/{{ device.id }}/wartung/neu" class="btn btn--primary">+ Wartung</a>
+    <a href="/uas/geraete" class="btn btn--ghost">&#x2190; Liste</a>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+
+  {# Einsatzbereitschaft #}
+  <div class="card">
+    <div class="card-header">
+      <h2>Einsatzbereitschaft</h2>
+      {% if bereit.einsatzbereit %}
+      <span class="badge badge--success" style="margin-left:auto">&#x2713; bereit</span>
+      {% else %}
+      <span class="badge badge--error" style="margin-left:auto">&#x26A0; nicht bereit</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if not bereit.einsatzbereit %}
+      <ul style="margin:0;padding:0 0 0 1.25rem;color:var(--color-error,#e53e3e)">
+        {% for g in bereit.gruende %}<li>{{ g }}</li>{% endfor %}
+      </ul>
+      {% else %}
+      <p style="color:var(--text-muted);margin:0">Alle Voraussetzungen erf&uuml;llt.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Wartungs-Ampel #}
+  <div class="card">
+    <div class="card-header">
+      <h2>Wartungsstatus</h2>
+      {% set ws = wartung_ampel.status %}
+      {% if ws == 'gruen' %}<span class="badge badge--success" style="margin-left:auto">OK</span>
+      {% elif ws == 'gelb' %}<span class="badge badge--warn" style="margin-left:auto">bald f&auml;llig</span>
+      {% else %}<span class="badge badge--error" style="margin-left:auto">&#x26A0; f&auml;llig!</span>{% endif %}
+    </div>
+    <div class="card-body">
+      {% if wartung_ampel.naechste_faellig %}
+      <p style="margin:0">N&auml;chste Sichtkontrolle: <strong>{{ wartung_ampel.naechste_faellig }}</strong>
+      {% if wartung_ampel.tage_bis_faellig is not none %}
+      <span style="color:var(--text-muted)">(in {{ wartung_ampel.tage_bis_faellig }} Tagen)</span>
+      {% endif %}
+      </p>
+      {% else %}
+      <p style="color:var(--color-error,#e53e3e);margin:0">Noch keine monatliche Sichtkontrolle eingetragen!</p>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{# Stammdaten #}
+<div class="card mb-4">
+  <div class="card-header"><h2>Stammdaten</h2></div>
+  <div class="card-body">
+    <dl class="detail-list">
+      <dt>Registriernummer</dt>
+      <dd>{% if device.registriernummer %}{{ device.registriernummer }}{% else %}<span class="badge badge--error">fehlt!</span>{% endif %}</dd>
+      <dt>Versicherung</dt>
+      <dd>{% if device.versicherung_polizze %}{{ device.versicherung_polizze }} &ndash; g&uuml;ltig bis {{ device.versicherung_gueltig_bis or '?' }}
+      {% else %}<span class="badge badge--error">fehlt!</span>{% endif %}</dd>
+      <dt>syBOS-ID</dt><dd>{{ device.sybos_id or '–' }}</dd>
+      <dt>Beschaffung</dt><dd>{{ device.beschaffungsdatum or '–' }}</dd>
+      <dt>MTOM</dt><dd>{% if device.mtom_g %}{{ device.mtom_g }} g{% else %}–{% endif %}</dd>
+      <dt>W&auml;rmebildkamera</dt><dd>{% if device.hat_waermebildkamera %}Ja{% else %}Nein{% endif %}</dd>
+      <dt>Allwettertauglich</dt><dd>{% if device.allwettertauglich %}Ja{% else %}Nein{% endif %}</dd>
+      <dt>Status</dt><dd>{{ device.status }}</dd>
+      <dt>QR-Link</dt>
+      <dd>
+        <input type="text" value="{{ qr_url }}" readonly class="form-control" style="max-width:420px;font-size:.8rem"
+               onclick="this.select()">
+      </dd>
+    </dl>
+    {% if device.notizen %}
+    <p style="margin-top:.75rem;color:var(--text-muted)">{{ device.notizen }}</p>
+    {% endif %}
+  </div>
+</div>
+
+{# Wartungsbuch #}
+<div class="card">
+  <div class="card-header">
+    <h2>Wartungsbuch (Anh. 8.5)</h2>
+    <a href="/uas/geraete/{{ device.id }}/wartung/neu" class="btn btn--primary btn--sm" style="margin-left:auto">+ Eintrag</a>
+  </div>
+  <div class="card-body" style="padding:0">
+    {% if wartungen %}
+    <table class="data-table">
+      <thead><tr><th>Datum</th><th>Art</th><th>Pr&uuml;fer</th><th>Ergebnis</th><th>N&auml;chste F&auml;lligkeit</th><th>Bemerkung</th></tr></thead>
+      <tbody>
+      {% for w in wartungen %}
+      <tr>
+        <td>{{ w.datum }}</td>
+        <td>{{ w.art|replace('_', ' ') }}</td>
+        <td>{{ w.pruefer or '–' }}</td>
+        <td>
+          {% if w.ergebnis == 'io' %}<span class="badge badge--success">i.O.</span>
+          {% else %}<span class="badge badge--error">n.i.O.</span>{% endif %}
+        </td>
+        <td>{{ w.naechste_faellig or '–' }}</td>
+        <td style="color:var(--text-muted);font-size:.85rem">{{ w.bemerkung or '–' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="padding:1rem 1.25rem;color:var(--text-muted)">Noch keine Wartungseintr&auml;ge.</div>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+.detail-list { display:grid;grid-template-columns:180px 1fr;gap:.35rem .75rem;margin:0 }
+.detail-list dt { color:var(--text-muted);font-size:.85rem;font-weight:600 }
+.detail-list dd { margin:0 }
+</style>
+{% endblock %}

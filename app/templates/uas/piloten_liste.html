@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Piloten – UAS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>&#x1F9D1;&#x200D;&#x2708;&#xFE0F; Piloten</h1>
+    <p class="page-header__sub">Piloten, Zertifikate und Currency-Status</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/uas/piloten/neu" class="btn btn--primary">+ Pilot anlegen</a>
+    <a href="/uas/" class="btn btn--ghost">&#x2190; &Uuml;bersicht</a>
+  </div>
+</div>
+
+{% if rows %}
+<div class="card">
+  <div class="card-body" style="padding:0">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>A1/A3 g&uuml;ltig bis</th>
+          <th>A2 g&uuml;ltig bis</th>
+          <th>BOS-Stufe</th>
+          <th>LFV</th>
+          <th>Freigabe</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in rows %}
+      <tr style="{% if not row.pilot.aktiv %}opacity:.5{% endif %}">
+        <td>
+          <strong>{{ row.pilot.vorname }} {{ row.pilot.nachname }}</strong>
+          {% if not row.pilot.aktiv %}<span class="badge badge--muted" style="margin-left:.25rem">inaktiv</span>{% endif %}
+        </td>
+        <td style="font-size:.85rem">{{ row.pilot.a1a3_gueltig_bis or '–' }}</td>
+        <td style="font-size:.85rem">{{ row.pilot.a2_gueltig_bis or '–' }}</td>
+        <td>Stufe {{ row.pilot.bos_stufe }}</td>
+        <td>{% if row.pilot.lfv_zugelassen %}<span class="badge badge--success">&#x2713;</span>{% else %}<span class="badge badge--error">fehlt</span>{% endif %}</td>
+        <td>
+          {% set fs = row.freigabe.status %}
+          {% if fs == 'gruen' %}<span class="badge badge--success">&#x2713; freigegeben</span>
+          {% elif fs == 'gelb' %}<span class="badge badge--warn">&#x26A0; bald ablaufend</span>
+          {% else %}<span class="badge badge--error">&#x26D4; gesperrt</span>{% endif %}
+        </td>
+        <td><a href="/uas/piloten/{{ row.pilot.id }}" class="btn btn--ghost btn--sm">Details</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="alert">Noch keine Piloten angelegt. <a href="/uas/piloten/neu">Ersten Piloten anlegen</a>.</div>
+{% endif %}
+{% endblock %}

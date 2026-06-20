@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Ger&auml;teregister – UAS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>&#x1F681; Ger&auml;teregister</h1>
+    <p class="page-header__sub">Alle UAS-Ger&auml;te dieser Organisation</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/uas/geraete/neu" class="btn btn--primary">+ Ger&auml;t anlegen</a>
+    <a href="/uas/" class="btn btn--ghost">&#x2190; &Uuml;bersicht</a>
+  </div>
+</div>
+
+{% if rows %}
+<div class="card">
+  <div class="card-body" style="padding:0">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Bezeichnung</th>
+          <th>Typ / Hersteller</th>
+          <th>CE / Kategorie</th>
+          <th>Registrierung</th>
+          <th>Einsatzbereit</th>
+          <th>Wartung</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>
+          <strong>{{ row.device.bezeichnung }}</strong>
+          {% if row.device.hat_waermebildkamera %}<span class="badge badge--info" style="margin-left:.25rem">WBK</span>{% endif %}
+          {% if row.device.allwettertauglich %}<span class="badge badge--info" style="margin-left:.25rem">AWT</span>{% endif %}
+        </td>
+        <td style="color:var(--text-muted)">{{ row.device.hersteller }} {{ row.device.typ }}</td>
+        <td>{{ row.device.ce_klasse }} / {{ row.device.unterkategorie }}</td>
+        <td style="font-size:.85rem;color:var(--text-muted)">{{ row.device.registriernummer or '–' }}</td>
+        <td>
+          {% if row.bereit.einsatzbereit %}
+          <span class="badge badge--success">&#x2713; bereit</span>
+          {% else %}
+          <span class="badge badge--error">&#x26A0; nicht bereit</span>
+          {% endif %}
+        </td>
+        <td>
+          {% set ws = row.wartung.status %}
+          {% if ws == 'gruen' %}<span class="badge badge--success">OK</span>
+          {% elif ws == 'gelb' %}<span class="badge badge--warn">bald f&auml;llig</span>
+          {% else %}<span class="badge badge--error">f&auml;llig!</span>{% endif %}
+          {% if row.wartung.naechste_faellig %}
+          <span style="font-size:.8rem;color:var(--text-muted);margin-left:.25rem">{{ row.wartung.naechste_faellig }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.device.status == 'aktiv' %}<span class="badge badge--success">aktiv</span>
+          {% elif row.device.status == 'wartung' %}<span class="badge badge--warn">Wartung</span>
+          {% else %}<span class="badge badge--muted">ausgemustert</span>{% endif %}
+        </td>
+        <td><a href="/uas/geraete/{{ row.device.id }}" class="btn btn--ghost btn--sm">Details</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="alert">Noch keine Ger&auml;te angelegt. <a href="/uas/geraete/neu">Erstes Ger&auml;t anlegen</a>.</div>
+{% endif %}
+{% endblock %}

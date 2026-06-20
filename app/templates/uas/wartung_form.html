@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Wartung eintragen – {{ device.bezeichnung }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Wartung eintragen</h1>
+    <p class="page-header__sub">{{ device.bezeichnung }} &ndash; Anh. 8.5 RL-UAS</p>
+  </div>
+</div>
+
+<form method="post" class="card" style="max-width:760px">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <div class="card-body">
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Wartungsart</label>
+        <select name="art" class="form-control" onchange="this.form.submit()">
+          {% for a in wartung_arten %}
+          <option value="{{ a.value }}" {% if art == a.value %}selected{% endif %}>{{ a.value|replace('_',' ') }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Datum</label>
+        <input type="date" name="datum" value="{{ heute }}" class="form-control" style="max-width:180px" required>
+      </div>
+      <div class="form-group">
+        <label>Pr&uuml;fer (Name)</label>
+        <input type="text" name="pruefer" class="form-control" maxlength="150">
+      </div>
+      <div class="form-group">
+        <label>Ergebnis</label>
+        <select name="ergebnis" class="form-control" style="max-width:120px">
+          <option value="io">i.O.</option>
+          <option value="nio">n.i.O.</option>
+        </select>
+      </div>
+    </div>
+
+    <h3 style="margin-top:1.25rem;margin-bottom:.75rem;font-size:.9rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)">
+      Pr&uuml;fpunkte
+    </h3>
+    <div style="display:flex;flex-direction:column;gap:.5rem">
+    {% for p in pruefpunkte %}
+    <div style="display:flex;align-items:flex-start;gap:.75rem;padding:.5rem;background:var(--surface-low);border-radius:4px">
+      <input type="checkbox" name="punkt_{{ p.key }}" value="1" id="p_{{ p.key }}"
+             style="margin-top:3px;flex-shrink:0">
+      <div style="flex:1">
+        <label for="p_{{ p.key }}" style="font-size:.9rem;cursor:pointer">{{ p.label }}</label>
+        <input type="text" name="bemerkung_{{ p.key }}" class="form-control"
+               style="margin-top:.25rem;font-size:.82rem" placeholder="Bemerkung (optional)" maxlength="300">
+      </div>
+    </div>
+    {% endfor %}
+    </div>
+
+    <div class="form-group" style="margin-top:1rem">
+      <label>Gesamtbemerkung</label>
+      <textarea name="bemerkung" class="form-control" rows="3" maxlength="2000"></textarea>
+    </div>
+
+  </div>
+  <div class="card-footer" style="display:flex;gap:.75rem;padding:1rem 1.25rem">
+    <button type="submit" class="btn btn--primary">Wartung speichern</button>
+    <a href="/uas/geraete/{{ device.id }}" class="btn btn--ghost">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

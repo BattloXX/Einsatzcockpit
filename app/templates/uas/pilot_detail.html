@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ pilot.vorname }} {{ pilot.nachname }} – UAS Pilot{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>&#x1F9D1;&#x200D;&#x2708;&#xFE0F; {{ pilot.vorname }} {{ pilot.nachname }}</h1>
+    <p class="page-header__sub">BOS-Stufe {{ pilot.bos_stufe }}{% if pilot.lfv_zugelassen %} &ndash; LFV-zugelassen{% endif %}</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/uas/piloten/{{ pilot.id }}/bearbeiten" class="btn btn--ghost">Bearbeiten</a>
+    <a href="/uas/piloten" class="btn btn--ghost">&#x2190; Liste</a>
+  </div>
+</div>
+
+{# Freigabe-Banner #}
+{% set fs = freigabe.status %}
+<div class="alert alert--{% if fs == 'gruen' %}success{% elif fs == 'gelb' %}warn{% else %}error{% endif %}" style="margin-bottom:1rem">
+  {% if fs == 'gruen' %}
+  &#x2705; Pilot freigegeben &ndash; alle Voraussetzungen erf&uuml;llt.
+  {% elif fs == 'gelb' %}
+  &#x26A0;&#xFE0F; Voraussetzungen erf&uuml;llt, aber n&auml;chster Ablauf am {{ freigabe.naechster_ablauf }}.
+  {% else %}
+  &#x26D4; Pilot gesperrt. Fehlende Voraussetzungen:
+  <ul style="margin:.5rem 0 0 1.25rem">
+    {% for g in freigabe.fehlende %}<li>{{ g }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+
+  <div class="card">
+    <div class="card-header"><h2>Stammdaten</h2></div>
+    <div class="card-body">
+      <dl class="detail-list">
+        <dt>Geburtsdatum</dt><dd>{% if pilot.geburtsdatum %}{{ pilot.geburtsdatum }}{% else %}<span class="badge badge--error">fehlt</span>{% endif %}</dd>
+        <dt>Truppf&uuml;hrer</dt>
+        <dd>{% if pilot.ist_truppfuehrer %}<span class="badge badge--success">Ja</span>{% else %}<span class="badge badge--error">Nein</span>{% endif %}</dd>
+        <dt>LFV-Zulassung</dt>
+        <dd>{% if pilot.lfv_zugelassen %}<span class="badge badge--success">Ja</span>{% else %}<span class="badge badge--error">Nein</span>{% endif %}</dd>
+        <dt>Qualifikationen</dt>
+        <dd>
+          {% if qualifikationen.teamleiter %}<span class="badge badge--info">Teamleiter</span> {% endif %}
+          {% if qualifikationen.pilot %}<span class="badge badge--info">Pilot</span> {% endif %}
+          {% if qualifikationen.operator %}<span class="badge badge--info">Operator</span> {% endif %}
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Zertifikate</h2></div>
+    <div class="card-body">
+      <dl class="detail-list">
+        <dt>A1/A3-Nr.</dt><dd>{{ pilot.a1a3_id or '–' }}</dd>
+        <dt>A1/A3 g&uuml;ltig bis</dt>
+        <dd>{% if pilot.a1a3_gueltig_bis %}{{ pilot.a1a3_gueltig_bis }}{% else %}<span class="badge badge--error">fehlt</span>{% endif %}</dd>
+        <dt>A2-Nr.</dt><dd>{{ pilot.a2_id or '–' }}</dd>
+        <dt>A2 g&uuml;ltig bis</dt>
+        <dd>{% if pilot.a2_gueltig_bis %}{{ pilot.a2_gueltig_bis }}{% else %}<span class="badge badge--error">fehlt</span>{% endif %}</dd>
+        <dt>BOS-Stufe</dt><dd>{{ pilot.bos_stufe }}</dd>
+        <dt>BOS-Rezert. bis</dt><dd>{{ pilot.bos_rezert_bis or '–' }}</dd>
+      </dl>
+    </div>
+  </div>
+
+</div>
+
+{# Flugbewegungen / Currency #}
+<div class="card">
+  <div class="card-header">
+    <h2>Flugbewegungen (Currency RL 4.1)</h2>
+    <small style="margin-left:.5rem;color:var(--text-muted)">3 Bewegungen in 90 Tagen erforderlich</small>
+  </div>
+  <div class="card-body">
+    <form method="post" action="/uas/piloten/{{ pilot.id }}/flugbewegung"
+          style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group" style="margin:0">
+        <label style="font-size:.82rem">Datum</label>
+        <input type="date" name="datum" class="form-control" style="max-width:150px" required>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:.82rem">Dauer (min)</label>
+        <input type="number" name="dauer_min" class="form-control" style="max-width:90px" min="1" max="999">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:.82rem">Art</label>
+        <select name="art" class="form-control" style="max-width:140px">
+          <option value="einsatz">Einsatz</option>
+          <option value="ausbildung" selected>Ausbildung</option>
+          <option value="check">Check</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn--primary btn--sm">+ Bewegung</button>
+    </form>
+
+    {% if bewegungen %}
+    <table class="data-table">
+      <thead><tr><th>Datum</th><th>Art</th><th>Dauer</th></tr></thead>
+      <tbody>
+      {% for b in bewegungen %}
+      <tr>
+        <td>{{ b.datum }}</td>
+        <td>{{ b.art }}</td>
+        <td>{% if b.dauer_min %}{{ b.dauer_min }} min{% else %}–{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-muted)">Noch keine Flugbewegungen eingetragen.</p>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+.detail-list { display:grid;grid-template-columns:160px 1fr;gap:.35rem .75rem;margin:0 }
+.detail-list dt { color:var(--text-muted);font-size:.85rem;font-weight:600 }
+.detail-list dd { margin:0 }
+</style>
+{% endblock %}

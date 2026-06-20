@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}{% if device %}Ger&auml;t bearbeiten{% else %}Neues Ger&auml;t{% endif %} – UAS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{% if device %}Ger&auml;t bearbeiten{% else %}Neues Ger&auml;t anlegen{% endif %}</h1>
+    <p class="page-header__sub">RL-UAS Anh. 8.9 – Pflichtfelder: Registriernummer, Versicherung</p>
+  </div>
+</div>
+
+<form method="post" class="card" style="max-width:800px">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <div class="card-body">
+
+    <h3 class="section-title">Ger&auml;tedaten</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Bezeichnung <span class="req">*</span></label>
+        <input type="text" name="bezeichnung" value="{{ device.bezeichnung if device else '' }}"
+               class="form-control" required maxlength="150">
+      </div>
+      <div class="form-group">
+        <label>Hersteller</label>
+        <input type="text" name="hersteller" value="{{ device.hersteller if device else '' }}"
+               class="form-control" maxlength="100">
+      </div>
+      <div class="form-group">
+        <label>Typ / Modell</label>
+        <input type="text" name="typ" value="{{ device.typ if device else '' }}"
+               class="form-control" maxlength="100">
+      </div>
+      <div class="form-group">
+        <label>Registriernummer / eID <span class="req">*</span></label>
+        <input type="text" name="registriernummer" value="{{ device.registriernummer if device else '' }}"
+               class="form-control" maxlength="100" placeholder="AT-xxxxx">
+        <small class="form-hint">Pflicht gem. RL 4.1 – eID oder Betreiber-Nr.</small>
+      </div>
+    </div>
+
+    <h3 class="section-title">Klassifizierung (EASA)</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>CE-Klasse</label>
+        <select name="ce_klasse" class="form-control" style="max-width:120px">
+          {% for k in ce_klassen %}
+          <option value="{{ k.value }}" {% if device and device.ce_klasse == k.value %}selected{% elif not device and k.value == 'C2' %}selected{% endif %}>{{ k.value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Betriebskategorie</label>
+        <select name="unterkategorie" class="form-control" style="max-width:120px">
+          {% for u in unterkategorien %}
+          <option value="{{ u.value }}" {% if device and device.unterkategorie == u.value %}selected{% elif not device and u.value == 'A2' %}selected{% endif %}>{{ u.value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>MTOM (Gramm)</label>
+        <input type="number" name="mtom_g" value="{{ device.mtom_g if device and device.mtom_g is not none else '' }}"
+               class="form-control" style="max-width:120px" min="0" max="25000">
+      </div>
+      <div class="form-group">
+        <label>Leergewicht (Gramm)</label>
+        <input type="number" name="leergewicht_g" value="{{ device.leergewicht_g if device and device.leergewicht_g is not none else '' }}"
+               class="form-control" style="max-width:120px" min="0" max="25000">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label style="display:flex;align-items:center;gap:.5rem">
+          <input type="checkbox" name="hat_waermebildkamera" value="1"
+                 {% if device and device.hat_waermebildkamera %}checked{% endif %}>
+          W&auml;rmebildkamera vorhanden
+        </label>
+        <label style="display:flex;align-items:center;gap:.5rem;margin-top:.25rem">
+          <input type="checkbox" name="allwettertauglich" value="1"
+                 {% if device and device.allwettertauglich %}checked{% endif %}>
+          Allwettertauglich
+        </label>
+      </div>
+    </div>
+
+    <h3 class="section-title">Versicherung &amp; Registrierung (RL 4.1/4.8)</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Polizzen-Nr. <span class="req">*</span></label>
+        <input type="text" name="versicherung_polizze" value="{{ device.versicherung_polizze if device else '' }}"
+               class="form-control" maxlength="100">
+      </div>
+      <div class="form-group">
+        <label>G&uuml;ltig bis <span class="req">*</span></label>
+        <input type="date" name="versicherung_gueltig_bis"
+               value="{{ device.versicherung_gueltig_bis.isoformat() if device and device.versicherung_gueltig_bis else '' }}"
+               class="form-control" style="max-width:180px">
+      </div>
+      <div class="form-group">
+        <label>syBOS-ID (RL 7.6)</label>
+        <input type="text" name="sybos_id" value="{{ device.sybos_id if device else '' }}"
+               class="form-control" maxlength="50">
+      </div>
+    </div>
+
+    <h3 class="section-title">Betrieb &amp; Lebenszyklus</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Beschaffungsdatum</label>
+        <input type="date" name="beschaffungsdatum"
+               value="{{ device.beschaffungsdatum.isoformat() if device and device.beschaffungsdatum else '' }}"
+               class="form-control" style="max-width:180px">
+      </div>
+      <div class="form-group">
+        <label>Tauschintervall (Jahre)</label>
+        <input type="number" name="tauschintervall_jahre"
+               value="{{ device.tauschintervall_jahre if device else 7 }}"
+               class="form-control" style="max-width:100px" min="1" max="20">
+      </div>
+      {% if device %}
+      <div class="form-group">
+        <label>Status</label>
+        <select name="status" class="form-control" style="max-width:160px">
+          <option value="aktiv" {% if device.status == 'aktiv' %}selected{% endif %}>Aktiv</option>
+          <option value="wartung" {% if device.status == 'wartung' %}selected{% endif %}>In Wartung</option>
+          <option value="ausgemustert" {% if device.status == 'ausgemustert' %}selected{% endif %}>Ausgemustert</option>
+        </select>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label>Notizen</label>
+      <textarea name="notizen" class="form-control" rows="3" maxlength="2000">{{ device.notizen if device else '' }}</textarea>
+    </div>
+
+  </div>
+  <div class="card-footer" style="display:flex;gap:.75rem;padding:1rem 1.25rem">
+    <button type="submit" class="btn btn--primary">Speichern</button>
+    <a href="{% if device %}/uas/geraete/{{ device.id }}{% else %}/uas/geraete{% endif %}" class="btn btn--ghost">Abbrechen</a>
+  </div>
+</form>
+
+<style>
+.section-title { margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:.5rem }
+.req { color:var(--color-error,#e53e3e) }
+</style>
+{% endblock %}

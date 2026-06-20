@@ -5,14 +5,101 @@
 <div class="page-header">
   <div>
     <h1>&#x1F681; Drohne / UAS</h1>
-    <p class="page-header__sub">BOS-Drohnenmodul gemäß RL-UAS LFV Vorarlberg</p>
+    <p class="page-header__sub">BOS-Drohnenmodul gem&auml;&szlig; RL-UAS LFV Vorarlberg</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/uas/geraete/neu" class="btn btn--primary">+ Ger&auml;t</a>
+    <a href="/uas/piloten/neu" class="btn btn--ghost">+ Pilot</a>
   </div>
 </div>
 
-<div class="alert" style="background:var(--surface-low);border:1px solid var(--border);border-radius:6px;padding:1rem 1.25rem;max-width:640px">
-  <p style="margin:0;color:var(--text-muted)">
-    Das UAS-Modul wird derzeit ausgebaut. Stammdaten (Geräte, Piloten) und Flugbuch
-    werden in den nächsten Versionen hier verfügbar sein.
-  </p>
+{# Dashboard-Kacheln #}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:1.5rem">
+
+  {# Geräte #}
+  <a href="/uas/geraete" class="card card--link" style="text-decoration:none">
+    <div class="card-body" style="padding:1rem 1.25rem">
+      <div style="font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)">Ger&auml;teregister</div>
+      <div style="font-size:2rem;font-weight:700;margin:.25rem 0">&#x1F681;</div>
+      {% if dashboard.versicherung_ablauf %}
+      <div class="badge badge--warn">{{ dashboard.versicherung_ablauf|length }} Versicherung(en) ablaufend</div>
+      {% endif %}
+      {% if dashboard.wartungen_ampel %}
+      <div class="badge badge--error" style="margin-top:.25rem">{{ dashboard.wartungen_ampel|length }} Wartung(en) f&auml;llig</div>
+      {% endif %}
+    </div>
+  </a>
+
+  {# Piloten #}
+  <a href="/uas/piloten" class="card card--link" style="text-decoration:none">
+    <div class="card-body" style="padding:1rem 1.25rem">
+      <div style="font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)">Piloten</div>
+      <div style="font-size:2rem;font-weight:700;margin:.25rem 0">&#x1F9D1;&#x200D;&#x2708;&#xFE0F;</div>
+      {% if dashboard.nicht_current_piloten %}
+      <div class="badge badge--error">{{ dashboard.nicht_current_piloten|length }} Pilot(en) gesperrt</div>
+      {% endif %}
+      {% if dashboard.ablaufende_zerts %}
+      <div class="badge badge--warn" style="margin-top:.25rem">{{ dashboard.ablaufende_zerts|length }} Zertifikat(e) ablaufend</div>
+      {% endif %}
+    </div>
+  </a>
+
 </div>
+
+{# Warnungs-Bereich #}
+{% if dashboard.nicht_current_piloten or dashboard.ablaufende_zerts or dashboard.wartungen_ampel or dashboard.versicherung_ablauf %}
+<section class="card mb-4">
+  <div class="card-header"><h2>&#9888; Compliance-Warnungen</h2></div>
+  <div class="card-body" style="padding:0">
+
+    {% for row in dashboard.nicht_current_piloten %}
+    <div style="padding:.75rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:1rem">
+      <div>
+        <span class="badge badge--error">GESPERRT</span>
+        <strong style="margin-left:.5rem">{{ row.pilot.vorname }} {{ row.pilot.nachname }}</strong>
+        <div style="font-size:.82rem;color:var(--text-muted);margin-top:.25rem">
+          {% for g in row.freigabe.fehlende %}<span>&#x2022; {{ g }}</span><br>{% endfor %}
+        </div>
+      </div>
+      <a href="/uas/piloten/{{ row.pilot.id }}" class="btn btn--ghost btn--sm">Details</a>
+    </div>
+    {% endfor %}
+
+    {% for row in dashboard.ablaufende_zerts %}
+    <div style="padding:.75rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:1rem">
+      <div>
+        <span class="badge badge--warn">ABLAUF</span>
+        <strong style="margin-left:.5rem">{{ row.pilot.vorname }} {{ row.pilot.nachname }}</strong>
+        &ndash; n&auml;chster Ablauf {{ row.ablauf }}
+      </div>
+      <a href="/uas/piloten/{{ row.pilot.id }}" class="btn btn--ghost btn--sm">Details</a>
+    </div>
+    {% endfor %}
+
+    {% for row in dashboard.wartungen_ampel %}
+    <div style="padding:.75rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:1rem">
+      <div>
+        <span class="badge badge--{% if row.ampel.status == 'rot' %}error{% else %}warn{% endif %}">WARTUNG</span>
+        <strong style="margin-left:.5rem">{{ row.device.bezeichnung }}</strong>
+        {% if row.ampel.naechste_faellig %}&ndash; f&auml;llig {{ row.ampel.naechste_faellig }}{% endif %}
+      </div>
+      <a href="/uas/geraete/{{ row.device.id }}" class="btn btn--ghost btn--sm">Details</a>
+    </div>
+    {% endfor %}
+
+    {% for row in dashboard.versicherung_ablauf %}
+    <div style="padding:.75rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:1rem">
+      <div>
+        <span class="badge badge--{% if row.ueberfaellig %}error{% else %}warn{% endif %}">VERSICHERUNG</span>
+        <strong style="margin-left:.5rem">{{ row.device.bezeichnung }}</strong>
+        &ndash; g&uuml;ltig bis {{ row.gueltig_bis }}
+      </div>
+      <a href="/uas/geraete/{{ row.device.id }}" class="btn btn--ghost btn--sm">Details</a>
+    </div>
+    {% endfor %}
+
+  </div>
+</section>
+{% endif %}
+
 {% endblock %}

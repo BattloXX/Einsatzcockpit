@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{% if pilot %}Pilot bearbeiten{% else %}Neuer Pilot{% endif %} – UAS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{% if pilot %}Pilot bearbeiten{% else %}Neuer Pilot{% endif %}</h1>
+    <p class="page-header__sub">RL-UAS 4.1 – Pflichtfelder: Alter, Truppf&uuml;hrer, A1/A3, A2, BOS-Stufe, LFV-Zulassung</p>
+  </div>
+</div>
+
+<form method="post" class="card" style="max-width:800px">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <div class="card-body">
+
+    <h3 class="section-title">Stammdaten</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Nachname <span class="req">*</span></label>
+        <input type="text" name="nachname" value="{{ pilot.nachname if pilot else '' }}" class="form-control" required maxlength="100">
+      </div>
+      <div class="form-group">
+        <label>Vorname <span class="req">*</span></label>
+        <input type="text" name="vorname" value="{{ pilot.vorname if pilot else '' }}" class="form-control" required maxlength="100">
+      </div>
+      <div class="form-group">
+        <label>Geburtsdatum <span class="req">*</span></label>
+        <input type="date" name="geburtsdatum"
+               value="{{ pilot.geburtsdatum.isoformat() if pilot and pilot.geburtsdatum else '' }}"
+               class="form-control" style="max-width:180px">
+        <small class="form-hint">Pflicht: Mindestalter 18 Jahre (RL 4.1)</small>
+      </div>
+      {% if members %}
+      <div class="form-group">
+        <label>Verkn&uuml;pfung Mitglied (optional)</label>
+        <select name="person_id" class="form-control" style="max-width:320px">
+          <option value="">– kein Mitglied (extern) –</option>
+          {% for m in members %}
+          <option value="{{ m.id }}" {% if pilot and pilot.person_id == m.id %}selected{% endif %}>
+            {{ m.lastname }}, {{ m.firstname }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="form-group" style="grid-column:1/-1">
+        <label style="display:flex;align-items:center;gap:.5rem">
+          <input type="checkbox" name="ist_truppfuehrer" value="1"
+                 {% if pilot and pilot.ist_truppfuehrer %}checked{% endif %}>
+          Truppf&uuml;hrer-Qualifikation vorhanden <span class="req">*</span>
+        </label>
+      </div>
+    </div>
+
+    <h3 class="section-title">EASA-Zertifikate (Anh. 8.6/8.7)</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>A1/A3-Zertifikat-Nr. <span class="req">*</span></label>
+        <input type="text" name="a1a3_id" value="{{ pilot.a1a3_id if pilot else '' }}" class="form-control" maxlength="100">
+      </div>
+      <div class="form-group">
+        <label>A1/A3 g&uuml;ltig bis <span class="req">*</span></label>
+        <input type="date" name="a1a3_gueltig_bis"
+               value="{{ pilot.a1a3_gueltig_bis.isoformat() if pilot and pilot.a1a3_gueltig_bis else '' }}"
+               class="form-control" style="max-width:180px">
+      </div>
+      <div class="form-group">
+        <label>A2-Zertifikat-Nr. <span class="req">*</span></label>
+        <input type="text" name="a2_id" value="{{ pilot.a2_id if pilot else '' }}" class="form-control" maxlength="100">
+      </div>
+      <div class="form-group">
+        <label>A2 g&uuml;ltig bis <span class="req">*</span></label>
+        <input type="date" name="a2_gueltig_bis"
+               value="{{ pilot.a2_gueltig_bis.isoformat() if pilot and pilot.a2_gueltig_bis else '' }}"
+               class="form-control" style="max-width:180px">
+      </div>
+    </div>
+
+    <h3 class="section-title">BOS-Ausbildung (Anh. 8.8)</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>BOS-Stufe <span class="req">*</span></label>
+        <select name="bos_stufe" class="form-control" style="max-width:160px">
+          <option value="0" {% if not pilot or pilot.bos_stufe == '0' %}selected{% endif %}>Keine BOS-Ausbildung</option>
+          <option value="1" {% if pilot and pilot.bos_stufe == '1' %}selected{% endif %}>Stufe I</option>
+          <option value="2" {% if pilot and pilot.bos_stufe == '2' %}selected{% endif %}>Stufe II</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Ausbildungsdatum BOS</label>
+        <input type="date" name="bos_ausbildung_datum"
+               value="{{ pilot.bos_ausbildung_datum.isoformat() if pilot and pilot.bos_ausbildung_datum else '' }}"
+               class="form-control" style="max-width:180px">
+      </div>
+      <div class="form-group">
+        <label>Rezertifizierung bis (alle 5 J.)</label>
+        <input type="date" name="bos_rezert_bis"
+               value="{{ pilot.bos_rezert_bis.isoformat() if pilot and pilot.bos_rezert_bis else '' }}"
+               class="form-control" style="max-width:180px">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label style="display:flex;align-items:center;gap:.5rem">
+          <input type="checkbox" name="lfv_zugelassen" value="1"
+                 {% if pilot and pilot.lfv_zugelassen %}checked{% endif %}>
+          LFV-Zulassung vorhanden <span class="req">*</span>
+        </label>
+      </div>
+    </div>
+
+    <h3 class="section-title">Qualifikationen im Team (RL 5.2–5.7)</h3>
+    <div class="form-group" style="display:flex;gap:1.5rem;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" name="qualifikationen_teamleiter" value="1"
+               {% if qualifikationen and qualifikationen.teamleiter %}checked{% endif %}>
+        Teamleiter
+      </label>
+      <label style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" name="qualifikationen_pilot" value="1"
+               {% if qualifikationen and qualifikationen.pilot %}checked{% endif %}>
+        Pilot
+      </label>
+      <label style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" name="qualifikationen_operator" value="1"
+               {% if qualifikationen and qualifikationen.operator %}checked{% endif %}>
+        Operator / Bildschirmbeobachter
+      </label>
+    </div>
+
+    {% if pilot %}
+    <div class="form-group" style="margin-top:1rem">
+      <label style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" name="aktiv" value="1" {% if pilot.aktiv %}checked{% endif %}>
+        Pilot aktiv (bei Deaktivierung: nicht mehr im Drohneneinsatz w&auml;hlbar)
+      </label>
+    </div>
+    {% endif %}
+
+    <div class="form-group" style="margin-top:1rem">
+      <label>Notizen</label>
+      <textarea name="notizen" class="form-control" rows="3" maxlength="2000">{{ pilot.notizen if pilot else '' }}</textarea>
+    </div>
+
+  </div>
+  <div class="card-footer" style="display:flex;gap:.75rem;padding:1rem 1.25rem">
+    <button type="submit" class="btn btn--primary">Speichern</button>
+    <a href="{% if pilot %}/uas/piloten/{{ pilot.id }}{% else %}/uas/piloten{% endif %}" class="btn btn--ghost">Abbrechen</a>
+  </div>
+</form>
+
+<style>
+.section-title { margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:.5rem }
+.req { color:var(--color-error,#e53e3e) }
+</style>
+{% endblock %}
