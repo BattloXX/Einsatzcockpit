@@ -1,4 +1,4 @@
-"""UAS-Modul Router (PR 0–2).
+"""UAS-Modul Router (PR 0–3).
 
 Alle Routen brauchen require_uas_enabled (HTTP 404 wenn Modul inaktiv).
 Prefix: /uas
@@ -705,3 +705,374 @@ async def flugbewegung_eintragen(
     db.add(bewegung)
     db.commit()
     return RedirectResponse(f"/uas/piloten/{pilot_id}", status_code=303)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PR 3: Drohnen-Einsatz (aus Incident heraus starten)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_MINDESTBESETZUNG_EINSATZMITTEL = {
+    "pilot",
+    "luftraumbeobachter",
+}
+_MINDESTBESETZUNG_EINHEIT = {
+    "teamleiter",
+    "pilot",
+}  # +1 beliebige Unterstützung (Operator/Luftraum/Versorger/Bildschirm/Gerätewart)
+
+
+def _validate_mindestbesetzung(rollen: list) -> list[str]:
+    """RL 6.1 Mindestbesetzung prüfen. Gibt Liste fehlender Rollen zurück."""
+    besetzt = {r.rolle for r in rollen}
+    fehlt = []
+    if "pilot" not in besetzt:
+        fehlt.append("Pilot fehlt (RL 6.1)")
+    if "luftraumbeobachter" not in besetzt:
+        fehlt.append("Luftraumbeobachter fehlt (RL 6.1)")
+    # Mindestens 2 Personen gesamt
+    if len(rollen) < 2:
+        fehlt.append("Mindestens 2 Personen erforderlich (RL 6.1 Einsatzmittel)")
+    return fehlt
+
+
+@router.get("/incidents/{incident_id}/einsatz/starten", response_class=HTMLResponse)
+def einsatz_starten_form(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from app.models.incident import Incident
+    from app.models.uas import UASEinsatz
+
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(404)
+
+    existing = db.query(UASEinsatz).filter(UASEinsatz.incident_id == incident_id).first()
+    if existing:
+        return RedirectResponse(f"/uas/einsatz/{existing.id}", status_code=303)
+
+    return templates.TemplateResponse(request, "uas/einsatz_starten.html", {
+        "user": user,
+        "incident": incident,
+        "heute": date.today().isoformat(),
+    })
+
+
+@router.post("/incidents/{incident_id}/einsatz/starten")
+async def einsatz_starten_save(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+    tetra_rufname: str = Form(""),
+    betreibernummer: str = Form(""),
+    einsatzgrund: str = Form(""),
+    gesamteinsatzleiter: str = Form(""),
+    datenschutz_bestaetigt: str = Form(""),
+    alarmierung_at: str = Form(""),
+):
+    from datetime import UTC, datetime
+
+    from app.models.uas import UASEinsatz, UASEinsatzStatus
+
+    def _dt(s: str):
+        s = s.strip()
+        if not s:
+            return datetime.now(UTC)
+        try:
+            return datetime.fromisoformat(s).replace(tzinfo=UTC)
+        except ValueError:
+            return datetime.now(UTC)
+
+    einsatz = UASEinsatz(
+        org_id=user.org_id,
+        incident_id=incident_id,
+        status=UASEinsatzStatus.alarmiert.value,
+        alarmierung_at=_dt(alarmierung_at),
+        tetra_rufname=tetra_rufname.strip() or None,
+        betreibernummer=betreibernummer.strip() or None,
+        einsatzgrund=einsatzgrund.strip() or None,
+        gesamteinsatzleiter=gesamteinsatzleiter.strip() or None,
+        datenschutz_bestaetigt=datenschutz_bestaetigt in ("1", "on"),
+    )
+    db.add(einsatz)
+    db.commit()
+    return RedirectResponse(f"/uas/einsatz/{einsatz.id}", status_code=303)
+
+
+@router.get("/einsatz/{einsatz_id}", response_class=HTMLResponse)
+def einsatz_detail(
+    einsatz_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from app.models.incident import Incident
+    from app.models.uas import UASDevice, UASEinsatz, UASPilot
+    from app.services.uas_compliance import pilot_freigabe_status
+
+    einsatz = db.query(UASEinsatz).filter(
+        UASEinsatz.id == einsatz_id, UASEinsatz.org_id == user.org_id
+    ).first()
+    if not einsatz:
+        raise HTTPException(404)
+
+    incident = db.query(Incident).filter(Incident.id == einsatz.incident_id).first()
+
+    # Verfügbare Piloten (für Dropdown)
+    alle_piloten = (
+        db.query(UASPilot)
+        .filter(UASPilot.org_id == user.org_id, UASPilot.aktiv == True)  # noqa: E712
+        .order_by(UASPilot.nachname)
+        .all()
+    )
+    piloten_mit_status = [
+        {"pilot": p, "freigabe": pilot_freigabe_status(p, db)}
+        for p in alle_piloten
+    ]
+
+    # Verfügbare Geräte
+    alle_geraete = (
+        db.query(UASDevice)
+        .filter(UASDevice.org_id == user.org_id, UASDevice.status == "aktiv")
+        .order_by(UASDevice.bezeichnung)
+        .all()
+    )
+
+    mindest_fehlt = _validate_mindestbesetzung(einsatz.rollen)
+
+    komm = {}
+    if einsatz.kommunikationsmatrix:
+        try:
+            komm = json.loads(einsatz.kommunikationsmatrix)
+        except Exception:
+            pass
+
+    risiko = {}
+    if einsatz.risikobewertung:
+        try:
+            risiko = json.loads(einsatz.risikobewertung)
+        except Exception:
+            pass
+
+    from app.models.uas import UASEinsatzRolle
+    return templates.TemplateResponse(request, "uas/einsatz_detail.html", {
+        "user": user,
+        "einsatz": einsatz,
+        "incident": incident,
+        "rollen": einsatz.rollen,
+        "piloten_mit_status": piloten_mit_status,
+        "alle_geraete": alle_geraete,
+        "mindest_fehlt": mindest_fehlt,
+        "komm": komm,
+        "risiko": risiko,
+        "alle_rollen": list(UASEinsatzRolle),
+    })
+
+
+@router.post("/einsatz/{einsatz_id}/status")
+async def einsatz_status_aendern(
+    einsatz_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+    neuer_status: str = Form(...),
+):
+    from datetime import UTC, datetime
+
+    from app.models.uas import UASEinsatz, UASEinsatzStatus
+
+    einsatz = db.query(UASEinsatz).filter(
+        UASEinsatz.id == einsatz_id, UASEinsatz.org_id == user.org_id
+    ).first()
+    if not einsatz:
+        raise HTTPException(404)
+
+    jetzt = datetime.now(UTC)
+    einsatz.status = neuer_status
+
+    if neuer_status == UASEinsatzStatus.angemeldet.value:
+        einsatz.anmeldung_el_at = jetzt
+    elif neuer_status == UASEinsatzStatus.abgemeldet.value:
+        einsatz.abmeldung_el_at = jetzt
+    elif neuer_status == UASEinsatzStatus.im_einsatz.value:
+        fehlt = _validate_mindestbesetzung(einsatz.rollen)
+        if fehlt:
+            raise HTTPException(400, detail="; ".join(fehlt))
+
+    db.commit()
+    return RedirectResponse(f"/uas/einsatz/{einsatz_id}", status_code=303)
+
+
+@router.post("/einsatz/{einsatz_id}/rolle/hinzufuegen")
+async def rolle_hinzufuegen(
+    einsatz_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+    rolle: str = Form(...),
+    pilot_id: str = Form(""),
+    helfer_name: str = Form(""),
+    override_begruendung: str = Form(""),
+):
+    from app.models.uas import UASEinsatz, UASEinsatzRolleEintrag, UASPilot
+    from app.services.uas_compliance import pilot_freigabe_status
+
+    einsatz = db.query(UASEinsatz).filter(
+        UASEinsatz.id == einsatz_id, UASEinsatz.org_id == user.org_id
+    ).first()
+    if not einsatz:
+        raise HTTPException(404)
+
+    pid = int(pilot_id) if pilot_id.strip() else None
+
+    # Gesperrter Pilot ohne Override-Begründung blockieren
+    if pid:
+        pilot = db.query(UASPilot).filter(UASPilot.id == pid).first()
+        if pilot:
+            freigabe = pilot_freigabe_status(pilot, db)
+            if freigabe.status == "rot" and not override_begruendung.strip():
+                raise HTTPException(400, detail="Pilot gesperrt – Override-Begründung erforderlich")
+
+    eintrag = UASEinsatzRolleEintrag(
+        org_id=user.org_id,
+        uas_einsatz_id=einsatz_id,
+        pilot_id=pid,
+        helfer_name=helfer_name.strip() or None,
+        rolle=rolle,
+        override_begruendung=override_begruendung.strip() or None,
+    )
+    db.add(eintrag)
+    db.commit()
+    return RedirectResponse(f"/uas/einsatz/{einsatz_id}", status_code=303)
+
+
+@router.post("/einsatz/{einsatz_id}/rolle/{rolle_id}/loeschen")
+async def rolle_loeschen(
+    einsatz_id: int,
+    rolle_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from app.models.uas import UASEinsatzRolleEintrag
+
+    eintrag = db.query(UASEinsatzRolleEintrag).filter(
+        UASEinsatzRolleEintrag.id == rolle_id,
+        UASEinsatzRolleEintrag.uas_einsatz_id == einsatz_id,
+        UASEinsatzRolleEintrag.org_id == user.org_id,
+    ).first()
+    if eintrag:
+        db.delete(eintrag)
+        db.commit()
+    return RedirectResponse(f"/uas/einsatz/{einsatz_id}", status_code=303)
+
+
+@router.post("/einsatz/{einsatz_id}/kommunikationsmatrix")
+async def kommunikationsmatrix_speichern(
+    einsatz_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+    el_sprechgruppe: str = Form(""),
+    flug_sprechgruppe: str = Form(""),
+    tmo_dmo: str = Form("TMO"),
+    luftfahrt_abstimmung: str = Form(""),
+    notizen: str = Form(""),
+):
+    from app.models.uas import UASEinsatz
+
+    einsatz = db.query(UASEinsatz).filter(
+        UASEinsatz.id == einsatz_id, UASEinsatz.org_id == user.org_id
+    ).first()
+    if not einsatz:
+        raise HTTPException(404)
+
+    einsatz.kommunikationsmatrix = json.dumps({
+        "el_sprechgruppe": el_sprechgruppe.strip(),
+        "flug_sprechgruppe": flug_sprechgruppe.strip(),
+        "tmo_dmo": tmo_dmo,
+        "luftfahrt_abstimmung": luftfahrt_abstimmung.strip(),
+        "notizen": notizen.strip(),
+    }, ensure_ascii=False)
+    db.commit()
+    return RedirectResponse(f"/uas/einsatz/{einsatz_id}", status_code=303)
+
+
+@router.post("/einsatz/{einsatz_id}/risikobewertung")
+async def risikobewertung_speichern(
+    einsatz_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+    gelande: str = Form(""),
+    menschen: str = Form(""),
+    luftraum: str = Form(""),
+    wetter: str = Form(""),
+    sonstiges: str = Form(""),
+    gesamt: str = Form(""),
+):
+    from app.models.uas import UASEinsatz
+
+    einsatz = db.query(UASEinsatz).filter(
+        UASEinsatz.id == einsatz_id, UASEinsatz.org_id == user.org_id
+    ).first()
+    if not einsatz:
+        raise HTTPException(404)
+
+    einsatz.risikobewertung = json.dumps({
+        "gelande": gelande.strip(),
+        "menschen": menschen.strip(),
+        "luftraum": luftraum.strip(),
+        "wetter": wetter.strip(),
+        "sonstiges": sonstiges.strip(),
+        "gesamt": gesamt.strip(),
+    }, ensure_ascii=False)
+    db.commit()
+    return RedirectResponse(f"/uas/einsatz/{einsatz_id}", status_code=303)
+
+
+@router.get("/einsatz/{einsatz_id}/eintreffmeldung", response_class=HTMLResponse)
+def eintreffmeldung_form(
+    einsatz_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from app.models.incident import Incident
+    from app.models.uas import UASDevice, UASEinsatz
+
+    einsatz = db.query(UASEinsatz).filter(
+        UASEinsatz.id == einsatz_id, UASEinsatz.org_id == user.org_id
+    ).first()
+    if not einsatz:
+        raise HTTPException(404)
+
+    incident = db.query(Incident).filter(Incident.id == einsatz.incident_id).first()
+
+    alle_geraete = (
+        db.query(UASDevice)
+        .filter(UASDevice.org_id == user.org_id, UASDevice.status == "aktiv")
+        .order_by(UASDevice.bezeichnung)
+        .all()
+    )
+
+    return templates.TemplateResponse(request, "uas/eintreffmeldung.html", {
+        "user": user,
+        "einsatz": einsatz,
+        "incident": incident,
+        "rollen": einsatz.rollen,
+        "alle_geraete": alle_geraete,
+        "jetzt": date.today().isoformat(),
+    })

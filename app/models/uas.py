@@ -1,4 +1,4 @@
-"""UAS-Modul Datenmodelle (PR 1).
+"""UAS-Modul Datenmodelle (PR 1–3).
 
 Alle Tabellen sind org-scoped (org_id NOT NULL FK → fire_dept).
 Tenant-Scoping läuft über den SQLAlchemy-Session-Event-Listener (TenantScoped-Mixin).
@@ -259,3 +259,94 @@ class UASWartung(TenantScoped, Base):
     naechste_faellig: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     device: Mapped[UASDevice] = relationship(back_populates="wartungen")
+
+
+# ── Drohnen-Einsatz (PR 3) ────────────────────────────────────────────────────
+
+class UASEinsatzStatus(str, enum.Enum):
+    alarmiert = "alarmiert"
+    angemeldet = "angemeldet"
+    im_einsatz = "im_einsatz"
+    abgemeldet = "abgemeldet"
+    abgeschlossen = "abgeschlossen"
+
+
+class UASEinsatzRolle(str, enum.Enum):
+    teamleiter = "teamleiter"
+    pilot = "pilot"
+    operator = "operator"
+    luftraumbeobachter = "luftraumbeobachter"
+    versorger = "versorger"
+    bildschirmbeobachter = "bildschirmbeobachter"
+    geraetewart = "geraetewart"
+
+
+class UASEinsatz(TenantScoped, Base):
+    """Drohneneinsatz je Incident (1:1). Status-Lebenszyklus: alarmiert → abgeschlossen."""
+    __tablename__ = "uas_einsatz"
+    __table_args__ = (
+        Index("ix_uas_einsatz_org", "org_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+
+    incident_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default=UASEinsatzStatus.alarmiert.value
+    )
+
+    alarmierung_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    anmeldung_el_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    abmeldung_el_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    tetra_rufname: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    betreibernummer: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # Kommunikationsmatrix (JSON: {el_sprechgruppe, flug_sprechgruppe, tmo_dmo, luftfahrt_abstimmung})
+    kommunikationsmatrix: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Risikobewertung (JSON: {gelände, menschen, luftraum, wetter, sonstiges, gesamt})
+    risikobewertung: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    einsatzgrund: Mapped[str | None] = mapped_column(Text, nullable=True)
+    datenschutz_bestaetigt: Mapped[bool] = mapped_column(Boolean, default=False)
+    gesamteinsatzleiter: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    notizen: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    rollen: Mapped[list[UASEinsatzRolleEintrag]] = relationship(
+        back_populates="einsatz", cascade="all, delete-orphan"
+    )
+
+
+class UASEinsatzRolleEintrag(TenantScoped, Base):
+    """Rollenbesetzung im Drohneneinsatz (RL 5.2–5.7, 6.1)."""
+    __tablename__ = "uas_einsatz_rolle"
+    __table_args__ = (
+        Index("ix_uas_einsatz_rolle_einsatz", "uas_einsatz_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+
+    uas_einsatz_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("uas_einsatz.id", ondelete="CASCADE"), nullable=False
+    )
+    pilot_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("uas_pilot.id", ondelete="SET NULL"), nullable=True
+    )
+    helfer_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    rolle: Mapped[str] = mapped_column(String(40), nullable=False)
+    override_begruendung: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    einsatz: Mapped[UASEinsatz] = relationship(back_populates="rollen")
+    pilot: Mapped[UASPilot | None] = relationship()

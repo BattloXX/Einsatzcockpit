@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Eintreffmeldung – Drohneneinsatz #{{ einsatz.id }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>&#x1F4CB; Eintreffmeldung Drohnenteam</h1>
+    <p class="page-header__sub">Anh. 8.2 RL-UAS &ndash; Drohneneinsatz #{{ einsatz.id }}</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/uas/einsatz/{{ einsatz.id }}" class="btn btn--ghost">&#x2190; Einsatz</a>
+    <button onclick="window.print()" class="btn btn--ghost">&#x1F5A8; Drucken</button>
+  </div>
+</div>
+
+<div class="card" style="max-width:800px" id="eintreffmeldung-formular">
+  <div class="card-body">
+
+    <div style="border-bottom:2px solid var(--border);padding-bottom:1rem;margin-bottom:1.25rem">
+      <h2 style="margin:0;font-size:1.2rem">Meldeformular Drohnenteam (Anh. 8.2 RL-UAS LFV Vorarlberg)</h2>
+      <p style="color:var(--text-muted);font-size:.85rem;margin:.25rem 0 0">
+        Datum: <strong>{{ jetzt }}</strong> &nbsp;&nbsp;
+        Einsatz-Nr.: <strong>{{ incident.id if incident else '–' }}</strong>
+      </p>
+    </div>
+
+    <table class="detail-list" style="width:100%;margin-bottom:1.25rem">
+      <tr>
+        <td style="width:200px;color:var(--text-muted);font-size:.88rem;font-weight:600;padding:.35rem 0">Einsatzort</td>
+        <td style="padding:.35rem 0">
+          {% if incident and incident.address_street %}
+          {{ incident.address_street }} {{ incident.address_no or "" }}, {{ incident.address_city or "" }}
+          {% else %}–{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td style="color:var(--text-muted);font-size:.88rem;font-weight:600;padding:.35rem 0">Betreibernummer</td>
+        <td style="padding:.35rem 0">{{ einsatz.betreibernummer or '–' }}</td>
+      </tr>
+      <tr>
+        <td style="color:var(--text-muted);font-size:.88rem;font-weight:600;padding:.35rem 0">Alarmierungszeitpunkt</td>
+        <td style="padding:.35rem 0">{{ einsatz.alarmierung_at or '–' }}</td>
+      </tr>
+      <tr>
+        <td style="color:var(--text-muted);font-size:.88rem;font-weight:600;padding:.35rem 0">Anmeldung beim EL</td>
+        <td style="padding:.35rem 0">{{ einsatz.anmeldung_el_at or '–' }}</td>
+      </tr>
+      <tr>
+        <td style="color:var(--text-muted);font-size:.88rem;font-weight:600;padding:.35rem 0">Gesamteinsatzleiter</td>
+        <td style="padding:.35rem 0">{{ einsatz.gesamteinsatzleiter or '–' }}</td>
+      </tr>
+      <tr>
+        <td style="color:var(--text-muted);font-size:.88rem;font-weight:600;padding:.35rem 0">TETRA-Rufname</td>
+        <td style="padding:.35rem 0">{{ einsatz.tetra_rufname or '–' }}</td>
+      </tr>
+    </table>
+
+    <h3 style="font-size:.95rem;font-weight:700;border-bottom:1px solid var(--border);padding-bottom:.5rem;margin-bottom:.75rem">
+      Eingesetztes Material
+    </h3>
+    {% if alle_geraete %}
+    <table class="data-table" style="margin-bottom:1.25rem">
+      <thead><tr><th>Bezeichnung</th><th>Hersteller/Typ</th><th>CE-Klasse</th><th>Registriernr.</th></tr></thead>
+      <tbody>
+      {% for g in alle_geraete %}
+      <tr>
+        <td>{{ g.bezeichnung }}</td>
+        <td>{{ g.hersteller }} {{ g.typ }}</td>
+        <td>{{ g.ce_klasse }}/{{ g.unterkategorie }}</td>
+        <td style="font-size:.83rem">{{ g.registriernummer or '–' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-muted)">Kein Ger&auml;t eingetragen.</p>
+    {% endif %}
+
+    <h3 style="font-size:.95rem;font-weight:700;border-bottom:1px solid var(--border);padding-bottom:.5rem;margin-bottom:.75rem">
+      Teambesetzung (RL 5.2–5.7)
+    </h3>
+    {% if rollen %}
+    <table class="data-table" style="margin-bottom:1.25rem">
+      <thead><tr><th>Rolle</th><th>Name</th><th>Bemerkung</th></tr></thead>
+      <tbody>
+      {% for r in rollen %}
+      <tr>
+        <td>{{ r.rolle|replace('_',' ')|title }}</td>
+        <td>
+          {% if r.pilot %}{{ r.pilot.vorname }} {{ r.pilot.nachname }}{% else %}{{ r.helfer_name or '–' }}{% endif %}
+        </td>
+        <td style="font-size:.83rem;color:var(--text-muted)">{{ r.override_begruendung or '–' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-muted)">Noch keine Rollen besetzt.</p>
+    {% endif %}
+
+    <h3 style="font-size:.95rem;font-weight:700;border-bottom:1px solid var(--border);padding-bottom:.5rem;margin-bottom:.75rem">
+      Einsatzauftrag
+    </h3>
+    <p style="min-height:3rem;padding:.5rem;background:var(--surface-low);border-radius:4px">
+      {{ einsatz.einsatzgrund or '–' }}
+    </p>
+
+    <div style="margin-top:2rem;display:flex;gap:3rem">
+      <div style="flex:1;border-top:1px solid var(--border);padding-top:.5rem;font-size:.85rem;color:var(--text-muted)">
+        Teamleiter (Unterschrift)
+      </div>
+      <div style="flex:1;border-top:1px solid var(--border);padding-top:.5rem;font-size:.85rem;color:var(--text-muted)">
+        Gesamteinsatzleiter (Unterschrift)
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<style>
+@media print {
+  .page-header__actions, nav, .sidebar { display:none !important }
+  .card { border:none;box-shadow:none }
+  body { background:white;color:black }
+}
+</style>
+{% endblock %}

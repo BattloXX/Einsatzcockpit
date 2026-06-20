@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Drohneneinsatz starten – {{ incident.id }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>&#x1F681; Drohneneinsatz starten</h1>
+    <p class="page-header__sub">Einsatz #{{ incident.id }}{% if incident.address_street %} &ndash; {{ incident.address_street }} {{ incident.address_no or "" }}, {{ incident.address_city or "" }}{% endif %}</p>
+  </div>
+</div>
+
+<form method="post" class="card" style="max-width:700px">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <div class="card-body">
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Alarmierungszeitpunkt</label>
+        <input type="datetime-local" name="alarmierung_at" class="form-control" style="max-width:220px">
+      </div>
+      <div class="form-group">
+        <label>TETRA-Rufname Drohnenteam</label>
+        <input type="text" name="tetra_rufname" class="form-control" maxlength="60" placeholder="z.B. FDWOL-DT1">
+        <small class="form-hint">Sprechgruppe gem&auml;&szlig; RL 7.4</small>
+      </div>
+      <div class="form-group">
+        <label>Betreibernummer</label>
+        <input type="text" name="betreibernummer" class="form-control" maxlength="100"
+               placeholder="Registriernummer des Betreibers (A-UAS-...">
+      </div>
+      <div class="form-group">
+        <label>Gesamteinsatzleiter</label>
+        <input type="text" name="gesamteinsatzleiter" class="form-control" maxlength="150">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Einsatzgrund / Auftrag</label>
+      <textarea name="einsatzgrund" class="form-control" rows="3" maxlength="1000"
+                placeholder="Aufgabe des Drohnenteams im Einsatz"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" name="datenschutz_bestaetigt" value="1">
+        Datenschutz-Belehrung (RL 4.9/7.7) wurde erteilt &ndash; Aufnahmen nur im Einsatzgebiet,
+        Personen soweit m&ouml;glich nicht erfasst
+        <span style="color:var(--color-error,#e53e3e)">*</span>
+      </label>
+    </div>
+
+  </div>
+  <div class="card-footer" style="display:flex;gap:.75rem;padding:1rem 1.25rem">
+    <button type="submit" class="btn btn--primary">&#x1F4E1; Drohneneinsatz anlegen</button>
+    <a href="javascript:history.back()" class="btn btn--ghost">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

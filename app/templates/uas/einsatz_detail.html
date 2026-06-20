@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Drohneneinsatz #{{ einsatz.id }} – UAS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>&#x1F681; Drohneneinsatz #{{ einsatz.id }}</h1>
+    <p class="page-header__sub">
+      Einsatz #{{ incident.id if incident else einsatz.incident_id }}
+      {% if incident and incident.address_city %}&ndash; {{ incident.address_city }}{% endif %}
+    </p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/uas/einsatz/{{ einsatz.id }}/eintreffmeldung" class="btn btn--ghost">&#x1F4CB; Eintreffmeldung</a>
+    <a href="/uas/" class="btn btn--ghost">&#x2190; &Uuml;bersicht</a>
+  </div>
+</div>
+
+{# Status-Leiste #}
+<div class="card mb-4" style="padding:1rem 1.25rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+  <span style="font-weight:700">Status:</span>
+  {% set st = einsatz.status %}
+  {% if st == 'alarmiert' %}<span class="badge badge--warn">&#x1F514; alarmiert</span>
+  {% elif st == 'angemeldet' %}<span class="badge badge--info">&#x1F4E1; beim EL angemeldet</span>
+  {% elif st == 'im_einsatz' %}<span class="badge badge--success">&#x1F7E2; im Einsatz</span>
+  {% elif st == 'abgemeldet' %}<span class="badge badge--muted">&#x1F534; abgemeldet</span>
+  {% else %}<span class="badge badge--muted">abgeschlossen</span>{% endif %}
+
+  <form method="post" action="/uas/einsatz/{{ einsatz.id }}/status" style="display:flex;gap:.5rem;margin-left:auto">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    {% if st == 'alarmiert' %}
+    <button name="neuer_status" value="angemeldet" class="btn btn--primary btn--sm">An EL anmelden</button>
+    {% elif st == 'angemeldet' %}
+    <button name="neuer_status" value="im_einsatz" class="btn btn--primary btn--sm"
+            {% if mindest_fehlt %}disabled title="{{ mindest_fehlt|join('; ') }}"{% endif %}>
+      &#x1F7E2; Einsatz beginnen
+    </button>
+    {% elif st == 'im_einsatz' %}
+    <button name="neuer_status" value="abgemeldet" class="btn btn--ghost btn--sm">Beim EL abmelden</button>
+    {% elif st == 'abgemeldet' %}
+    <button name="neuer_status" value="abgeschlossen" class="btn btn--ghost btn--sm">Abschlie&szlig;en</button>
+    {% endif %}
+  </form>
+</div>
+
+{% if mindest_fehlt %}
+<div class="alert alert--error mb-4">
+  <strong>Mindestbesetzung (RL 6.1) nicht erf&uuml;llt:</strong>
+  <ul style="margin:.5rem 0 0 1.25rem">{% for f in mindest_fehlt %}<li>{{ f }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+
+{# Stammdaten #}
+<div class="card">
+  <div class="card-header"><h2>Einsatzdaten</h2></div>
+  <div class="card-body">
+    <dl class="detail-list">
+      <dt>TETRA-Rufname</dt><dd>{{ einsatz.tetra_rufname or '–' }}</dd>
+      <dt>Betreibernummer</dt><dd>{{ einsatz.betreibernummer or '–' }}</dd>
+      <dt>Gesamteinsatzleiter</dt><dd>{{ einsatz.gesamteinsatzleiter or '–' }}</dd>
+      <dt>Alarmierung</dt><dd>{{ einsatz.alarmierung_at or '–' }}</dd>
+      <dt>EL-Anmeldung</dt><dd>{{ einsatz.anmeldung_el_at or '–' }}</dd>
+      <dt>EL-Abmeldung</dt><dd>{{ einsatz.abmeldung_el_at or '–' }}</dd>
+      <dt>Datenschutz</dt>
+      <dd>{% if einsatz.datenschutz_bestaetigt %}<span class="badge badge--success">&#x2713;</span>{% else %}<span class="badge badge--error">fehlt!</span>{% endif %}</dd>
+    </dl>
+    {% if einsatz.einsatzgrund %}
+    <p style="margin-top:.75rem;color:var(--text-muted);font-size:.88rem">{{ einsatz.einsatzgrund }}</p>
+    {% endif %}
+  </div>
+</div>
+
+{# Rollenbesetzung #}
+<div class="card">
+  <div class="card-header">
+    <h2>Team-Rollen</h2>
+    <small style="color:var(--text-muted);margin-left:.5rem">RL 5.2–5.7</small>
+  </div>
+  <div class="card-body" style="padding:0">
+    {% if rollen %}
+    <table class="data-table" style="font-size:.88rem">
+      <thead><tr><th>Rolle</th><th>Person</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rollen %}
+      <tr>
+        <td>
+          {% if r.rolle == 'teamleiter' %}
+          <strong>&#x1F3F3; Teamleiter</strong>
+          <span style="color:var(--text-muted);font-size:.8rem"> (wei&szlig;er &Uuml;berwurf!)</span>
+          {% else %}
+          {{ r.rolle|replace('_',' ')|title }}
+          {% endif %}
+        </td>
+        <td>
+          {% if r.pilot %}
+          {% set fs = piloten_mit_status | selectattr("pilot.id", "eq", r.pilot.id) | first %}
+          {{ r.pilot.vorname }} {{ r.pilot.nachname }}
+          {% if fs and fs.freigabe.status == 'rot' %}
+          <span class="badge badge--error" title="{{ r.override_begruendung }}">&#x26D4;</span>
+          {% elif fs and fs.freigabe.status == 'gelb' %}
+          <span class="badge badge--warn">&#x26A0;</span>
+          {% endif %}
+          {% else %}
+          {{ r.helfer_name or '–' }}
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="/uas/einsatz/{{ einsatz.id }}/rolle/{{ r.id }}/loeschen" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button class="btn btn--ghost btn--sm" style="padding:.2rem .5rem;color:var(--color-error,#e53e3e)"
+                    onclick="return confirm('Eintrag l&ouml;schen?')">&#x2715;</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="padding:.75rem 1rem;color:var(--text-muted);margin:0">Noch keine Rollen besetzt.</p>
+    {% endif %}
+
+    {# Rolle hinzufügen #}
+    <form method="post" action="/uas/einsatz/{{ einsatz.id }}/rolle/hinzufuegen"
+          style="padding:.75rem 1rem;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:.5rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
+        <select name="rolle" class="form-control" style="max-width:180px">
+          {% for r in alle_rollen %}
+          <option value="{{ r.value }}">{{ r.value|replace('_',' ')|title }}</option>
+          {% endfor %}
+        </select>
+        <select name="pilot_id" class="form-control" style="max-width:220px">
+          <option value="">– kein Pilot (extern/Helfer) –</option>
+          {% for pw in piloten_mit_status %}
+          {% set p = pw.pilot %}
+          {% set fs = pw.freigabe.status %}
+          <option value="{{ p.id }}" style="{% if fs == 'rot' %}color:#e53e3e{% elif fs == 'gelb' %}color:#d97706{% endif %}">
+            {{ p.nachname }}, {{ p.vorname }}
+            {% if fs == 'gruen' %}(&#x2713;){% elif fs == 'gelb' %}(&#x26A0;){% else %}(&#x26D4;){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <input type="text" name="helfer_name" class="form-control" style="max-width:180px"
+               placeholder="oder: Externes Mitglied">
+        <button type="submit" class="btn btn--primary btn--sm">+ Hinzuf&uuml;gen</button>
+      </div>
+      <input type="text" name="override_begruendung" class="form-control" style="font-size:.82rem"
+             placeholder="Override-Begr&uuml;ndung (erforderlich bei gesperrtem Pilot &#x26D4;)" maxlength="500">
+    </form>
+  </div>
+</div>
+
+</div>{# /grid #}
+
+{# Kommunikationsmatrix (RL 4.5/7.4) #}
+<div class="card mb-4">
+  <div class="card-header"><h2>Kommunikationsmatrix (RL 4.5 / 7.4)</h2></div>
+  <div class="card-body">
+    <form method="post" action="/uas/einsatz/{{ einsatz.id }}/kommunikationsmatrix">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>EL-Sprechgruppe (Bezirk)</label>
+          <input type="text" name="el_sprechgruppe" class="form-control"
+                 value="{{ komm.el_sprechgruppe or '' }}" maxlength="80">
+        </div>
+        <div class="form-group">
+          <label>Flugeinsatz-Sprechgruppe</label>
+          <input type="text" name="flug_sprechgruppe" class="form-control"
+                 value="{{ komm.flug_sprechgruppe or '' }}" maxlength="80">
+        </div>
+        <div class="form-group">
+          <label>Betriebsart</label>
+          <select name="tmo_dmo" class="form-control" style="max-width:120px">
+            <option value="TMO" {% if komm.get('tmo_dmo') != 'DMO' %}selected{% endif %}>TMO</option>
+            <option value="DMO" {% if komm.get('tmo_dmo') == 'DMO' %}selected{% endif %}>DMO</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Abstimmung bemannte Luftfahrt (RL 4.5/6.2)</label>
+          <input type="text" name="luftfahrt_abstimmung" class="form-control"
+                 value="{{ komm.luftfahrt_abstimmung or '' }}" maxlength="200"
+                 placeholder="Flughafen/Leitstelle / Frequenz / Best&auml;tigung">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Notizen</label>
+          <textarea name="notizen" class="form-control" rows="2" maxlength="1000">{{ komm.notizen or '' }}</textarea>
+        </div>
+      </div>
+      <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+    </form>
+  </div>
+</div>
+
+{# Risikobewertung (RL 4.11/6.2) #}
+<div class="card">
+  <div class="card-header"><h2>Risikobewertung (RL 4.11 / 6.2)</h2></div>
+  <div class="card-body">
+    <form method="post" action="/uas/einsatz/{{ einsatz.id }}/risikobewertung">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-grid">
+        {% for feld, label in [
+          ('gelande', 'Gel&auml;nde / Hindernisse'),
+          ('menschen', 'Menschen / Bev&ouml;lkerung'),
+          ('luftraum', 'Luftraum / bemannte Luftfahrt'),
+          ('wetter', 'Wetter / Wind / Sicht'),
+          ('sonstiges', 'Sonstiges')
+        ] %}
+        <div class="form-group">
+          <label>{{ label }}</label>
+          <select name="{{ feld }}" class="form-control" style="max-width:130px">
+            <option value="">–</option>
+            <option value="niedrig" {% if risiko.get(feld) == 'niedrig' %}selected{% endif %}>Niedrig</option>
+            <option value="mittel"  {% if risiko.get(feld) == 'mittel'  %}selected{% endif %}>Mittel</option>
+            <option value="hoch"    {% if risiko.get(feld) == 'hoch'    %}selected{% endif %}>Hoch</option>
+          </select>
+        </div>
+        {% endfor %}
+        <div class="form-group">
+          <label>Gesamtrisiko</label>
+          <select name="gesamt" class="form-control" style="max-width:130px">
+            <option value="">–</option>
+            <option value="akzeptabel"  {% if risiko.get('gesamt') == 'akzeptabel'  %}selected{% endif %}>Akzeptabel</option>
+            <option value="eingeschraenkt" {% if risiko.get('gesamt') == 'eingeschraenkt' %}selected{% endif %}>Eingeschr&auml;nkt</option>
+            <option value="abbruch"     {% if risiko.get('gesamt') == 'abbruch'     %}selected{% endif %}>Abbruch</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+    </form>
+  </div>
+</div>
+
+<style>
+.detail-list { display:grid;grid-template-columns:160px 1fr;gap:.35rem .75rem;margin:0 }
+.detail-list dt { color:var(--text-muted);font-size:.85rem;font-weight:600 }
+.detail-list dd { margin:0 }
+.mb-4 { margin-bottom:1rem }
+</style>
+{% endblock %}
