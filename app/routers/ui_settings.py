@@ -69,6 +69,7 @@ def settings_page(request: Request, db=Depends(get_db), user: User = Depends(req
     is_sysadmin = has_role(user, "system_admin")
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     sys_settings = {s.key: s.value for s in db.query(SystemSettings).all()} if is_sysadmin else {}
+    from app.services.uas_service import uas_system_enabled
     return templates.TemplateResponse(request, "admin/settings.html", {
         "user": user,
         "org": org,
@@ -77,6 +78,7 @@ def settings_page(request: Request, db=Depends(get_db), user: User = Depends(req
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
         "sys_settings": sys_settings,
+        "uas_sys_enabled": uas_system_enabled(db),
         "timezones": common_timezones(),
         "default_timezone": app_settings.DEFAULT_TIMEZONE,
     })
@@ -239,20 +241,24 @@ async def save_org_settings(
         org_s.gsl_lagemeldung_interval_sofort_minutes = val
     org_s.gsl_lagemeldung_auto_auftrag = gsl_lagemeldung_auto_auftrag_raw in ("1", "true", "on")
 
-    # UAS-Modul: Org-Toggle (nur wirksam wenn System-Flag ebenfalls aktiv)
-    old_uas = org_s.uas_module_enabled
-    new_uas = uas_module_enabled_raw in ("1", "true", "on")
-    org_s.uas_module_enabled = new_uas
-    if old_uas != new_uas:
-        from app.core.audit import write_audit
-        write_audit(
-            db,
-            "uas.org_toggle",
-            org_id=effective_org_id,
-            user_id=user.id,
-            payload={"alt": old_uas, "neu": new_uas},
-            ip=request.client.host if request.client else None,
-        )
+    # UAS-Modul: Org-Toggle — nur änderbar wenn System-Flag aktiv.
+    # Wenn System-Flag AUS: Wert unverändert lassen (disabled-Checkbox liefert
+    # keinen Wert, was den Toggle sonst stillschweigend auf False setzen würde).
+    from app.services.uas_service import uas_system_enabled
+    if uas_system_enabled(db):
+        old_uas = org_s.uas_module_enabled
+        new_uas = uas_module_enabled_raw in ("1", "true", "on")
+        org_s.uas_module_enabled = new_uas
+        if old_uas != new_uas:
+            from app.core.audit import write_audit
+            write_audit(
+                db,
+                "uas.org_toggle",
+                org_id=effective_org_id,
+                user_id=user.id,
+                payload={"alt": old_uas, "neu": new_uas},
+                ip=request.client.host if request.client else None,
+            )
 
     # Wird die Lagemeldungs-Pflicht gerade erst aktiviert (Intervall aus → an), Timer für
     # bereits laufende Einsatzstellen sofort nachziehen – sonst erst beim nächsten

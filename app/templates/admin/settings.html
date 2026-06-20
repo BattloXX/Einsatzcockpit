@@ -271,19 +271,18 @@
       </div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F681; UAS-Modul (Drohne)</h3>
-      {% set _uas_sys_on = (sys_settings.get('uas_module_enabled') == 'true') if is_sysadmin else false %}
       {% set _uas_org_on = (org_settings.uas_module_enabled) if org_settings else false %}
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:.5rem;
-                      {% if not _uas_sys_on and not is_sysadmin %}opacity:.5;cursor:not-allowed{% endif %}">
+                      {% if not uas_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
           <input type="checkbox" name="uas_module_enabled_raw" value="1"
                  {% if _uas_org_on %}checked{% endif %}
-                 {% if not _uas_sys_on and not is_sysadmin %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+                 {% if not uas_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
           UAS-Modul für diese Organisation aktivieren
         </label>
         <small class="form-hint">
           Schaltet das Drohnenmodul (Geräteregister, Piloten, Flugbuch, Karten-Integration) für diese Org ein.
-          {% if not _uas_sys_on %}
+          {% if not uas_sys_enabled %}
           <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
           {% endif %}
         </small>
