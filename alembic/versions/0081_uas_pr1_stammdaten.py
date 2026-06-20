@@ -21,7 +21,7 @@ def upgrade() -> None:
     conn.execute(text("""
         CREATE TABLE uas_device (
             id              BIGINT          NOT NULL AUTO_INCREMENT,
-            org_id          INT             NULL,
+            org_id          BIGINT          NULL,
             bezeichnung     VARCHAR(150)    NOT NULL,
             hersteller      VARCHAR(100)    NOT NULL DEFAULT '',
             typ             VARCHAR(100)    NOT NULL DEFAULT '',
@@ -54,7 +54,7 @@ def upgrade() -> None:
     conn.execute(text("""
         CREATE TABLE uas_pilot (
             id              BIGINT          NOT NULL AUTO_INCREMENT,
-            org_id          INT             NULL,
+            org_id          BIGINT          NULL,
             person_id       BIGINT          NULL,
             nachname        VARCHAR(100)    NOT NULL,
             vorname         VARCHAR(100)    NOT NULL,
@@ -84,7 +84,7 @@ def upgrade() -> None:
     conn.execute(text("""
         CREATE TABLE uas_flugbewegung (
             id              BIGINT          NOT NULL AUTO_INCREMENT,
-            org_id          INT             NULL,
+            org_id          BIGINT          NULL,
             pilot_id        BIGINT          NOT NULL,
             device_id       BIGINT          NULL,
             datum           DATE            NOT NULL,
@@ -106,7 +106,7 @@ def upgrade() -> None:
     conn.execute(text("""
         CREATE TABLE uas_wartung (
             id              BIGINT          NOT NULL AUTO_INCREMENT,
-            org_id          INT             NULL,
+            org_id          BIGINT          NULL,
             device_id       BIGINT          NOT NULL,
             datum           DATE            NOT NULL,
             art             VARCHAR(40)     NOT NULL DEFAULT 'monatliche_sichtkontrolle',
