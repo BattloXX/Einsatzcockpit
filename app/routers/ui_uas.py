@@ -1561,3 +1561,120 @@ async def meldekette_update(
     ereignis.gemeldet_an = json.dumps(meldekette, ensure_ascii=False)
     db.commit()
     return RedirectResponse(f"/uas/ereignis/{ereignis_id}", status_code=303)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PR 6: Karten-Integration (Leaflet)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/einsatz/{einsatz_id}/karte", response_class=HTMLResponse)
+def einsatz_karte(
+    einsatz_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from app.models.uas import UASEinsatz, UASKartenobjekt, UASKartenobjektTyp
+
+    einsatz = db.query(UASEinsatz).filter(
+        UASEinsatz.id == einsatz_id, UASEinsatz.org_id == user.org_id
+    ).first()
+    if not einsatz:
+        raise HTTPException(404)
+
+    objekte = (
+        db.query(UASKartenobjekt)
+        .filter(UASKartenobjekt.uas_einsatz_id == einsatz_id)
+        .order_by(UASKartenobjekt.created_at)
+        .all()
+    )
+    objekte_json = []
+    for o in objekte:
+        geom = None
+        if o.geometrie:
+            try:
+                geom = json.loads(o.geometrie)
+            except Exception:
+                pass
+        objekte_json.append({
+            "id": o.id, "typ": o.typ, "label": o.label,
+            "hoehe_m": o.hoehe_m, "radius_m": o.radius_m,
+            "geometrie": geom,
+        })
+
+    return templates.TemplateResponse(request, "uas/einsatz_karte.html", {
+        "user": user,
+        "einsatz": einsatz,
+        "objekte_json": json.dumps(objekte_json, ensure_ascii=False),
+        "objekte_list": objekte_json,
+        "typen": list(UASKartenobjektTyp),
+    })
+
+
+@router.post("/einsatz/{einsatz_id}/karte/objekt")
+async def karte_objekt_hinzufuegen(
+    einsatz_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+    typ: str = Form(...),
+    label: str = Form(""),
+    lat: str = Form(""),
+    lng: str = Form(""),
+    hoehe_m: str = Form(""),
+    radius_m: str = Form(""),
+):
+    from app.models.uas import UASEinsatz, UASKartenobjekt
+
+    einsatz = db.query(UASEinsatz).filter(
+        UASEinsatz.id == einsatz_id, UASEinsatz.org_id == user.org_id
+    ).first()
+    if not einsatz:
+        raise HTTPException(404)
+
+    geometrie = None
+    if lat.strip() and lng.strip():
+        try:
+            geometrie = json.dumps({
+                "type": "Point",
+                "coordinates": [float(lng), float(lat)]
+            })
+        except ValueError:
+            pass
+
+    obj = UASKartenobjekt(
+        org_id=user.org_id,
+        uas_einsatz_id=einsatz_id,
+        typ=typ,
+        geometrie=geometrie,
+        label=label.strip() or None,
+        hoehe_m=float(hoehe_m) if hoehe_m.strip() else None,
+        radius_m=float(radius_m) if radius_m.strip() else None,
+    )
+    db.add(obj)
+    db.commit()
+    return RedirectResponse(f"/uas/einsatz/{einsatz_id}/karte", status_code=303)
+
+
+@router.post("/einsatz/{einsatz_id}/karte/objekt/{obj_id}/loeschen")
+async def karte_objekt_loeschen(
+    einsatz_id: int,
+    obj_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from app.models.uas import UASKartenobjekt
+
+    obj = db.query(UASKartenobjekt).filter(
+        UASKartenobjekt.id == obj_id,
+        UASKartenobjekt.uas_einsatz_id == einsatz_id,
+        UASKartenobjekt.org_id == user.org_id,
+    ).first()
+    if obj:
+        db.delete(obj)
+        db.commit()
+    return RedirectResponse(f"/uas/einsatz/{einsatz_id}/karte", status_code=303)

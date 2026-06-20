@@ -520,3 +520,36 @@ class UASEreignis(TenantScoped, Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )
+
+
+# ── Kartenobjekte (PR 6) ──────────────────────────────────────────────────────
+
+class UASKartenobjektTyp(str, enum.Enum):
+    start_landezone = "start_landezone"
+    pilotenzone = "pilotenzone"
+    fluggebiet = "fluggebiet"
+    drohnen_position = "drohnen_position"
+    grb_kreis = "grb_kreis"
+    lagepunkt = "lagepunkt"
+
+
+class UASKartenobjekt(TenantScoped, Base):
+    """Drohnen-Geometrien im Lagebild (RL 4.5/6.2, Start-/Landezone, Pilotenzone, GRB)."""
+    __tablename__ = "uas_kartenobjekt"
+    __table_args__ = (
+        Index("ix_uas_kartenobjekt_einsatz", "uas_einsatz_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+
+    uas_einsatz_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("uas_einsatz.id", ondelete="CASCADE"), nullable=False
+    )
+    typ: Mapped[str] = mapped_column(String(30), nullable=False)
+    geometrie: Mapped[str | None] = mapped_column(Text, nullable=True)  # GeoJSON
+    label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    hoehe_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    radius_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
