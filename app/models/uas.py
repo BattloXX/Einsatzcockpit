@@ -470,3 +470,53 @@ class UASCheckliste(TenantScoped, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     flug: Mapped[UASFlug] = relationship(back_populates="checklisten")
+
+
+# ── Ereignis / Notfall / Unfall (PR 5) ────────────────────────────────────────
+
+class UASEreignisTyp(str, enum.Enum):
+    notfall = "notfall"
+    unfall = "unfall"
+    stoerung = "stoerung"
+
+
+class UASEreignis(TenantScoped, Base):
+    """Meldepflichtiges Ereignis: Notfall, Unfall (ACG), Störung (RL 4.7, Anh. 8.3/8.4)."""
+    __tablename__ = "uas_ereignis"
+    __table_args__ = (
+        Index("ix_uas_ereignis_flug", "uas_flug_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+
+    uas_flug_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("uas_flug.id", ondelete="SET NULL"), nullable=True
+    )
+    typ: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=UASEreignisTyp.stoerung.value
+    )
+    kategorie: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # Zeitangaben (UTC + lokal, RL Anh. 8.4)
+    zeit_lokal: Mapped[str | None] = mapped_column(String(10), nullable=True)   # HH:MM
+    datum_lokal: Mapped[date | None] = mapped_column(Date, nullable=True)
+    zeit_utc: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    datum_utc: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    ort_icao: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    koordinaten: Mapped[str | None] = mapped_column(Text, nullable=True)  # GeoJSON
+    klassifizierung: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    beschreibung: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Maßnahmen + Meldekette (JSON)
+    massnahmen: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gemeldet_an: Mapped[str | None] = mapped_column(Text, nullable=True)  # {stuetzpunktleiter, behoerde_acg, ...}
+
+    acg_export_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    inhalt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )

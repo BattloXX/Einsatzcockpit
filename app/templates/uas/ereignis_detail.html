@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Ereignis #{{ ereignis.id }} – UAS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>&#x26A0;&#xFE0F; Ereignis #{{ ereignis.id }}</h1>
+    <p class="page-header__sub">
+      {{ ereignis.typ | title }}
+      {% if ereignis.kategorie %}&ndash; {{ ereignis.kategorie }}{% endif %}
+    </p>
+  </div>
+  <div class="page-header__actions">
+    {% if ereignis.uas_flug_id %}
+    <a href="/uas/flug/{{ ereignis.uas_flug_id }}" class="btn btn--ghost">&#x2190; Flug</a>
+    {% endif %}
+    <a href="/uas/notfallcheckliste" class="btn btn--ghost">&#x1F6A8; Notfallcheckliste</a>
+  </div>
+</div>
+
+{% if ereignis.typ == 'unfall' %}
+<div class="alert alert--error mb-4">
+  <strong>&#x26D4; Unfall!</strong> Meldepflicht gem&auml;&szlig; RL 4.7 &ndash;
+  Meldekette vollst&auml;ndig abarbeiten.
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+
+<div class="card">
+  <div class="card-header"><h2>Ereignisdaten (Anh. 8.4)</h2></div>
+  <div class="card-body">
+    <dl class="detail-list">
+      <dt>Typ</dt><dd>{{ ereignis.typ | title }}</dd>
+      <dt>Kategorie</dt><dd>{{ ereignis.kategorie or '–' }}</dd>
+      <dt>Klassifizierung</dt><dd>{{ ereignis.klassifizierung or '–' }}</dd>
+      <dt>Datum lokal</dt><dd>{{ ereignis.datum_lokal or '–' }}</dd>
+      <dt>Uhrzeit lokal</dt><dd>{{ ereignis.zeit_lokal or '–' }}</dd>
+      <dt>Datum UTC</dt><dd>{{ ereignis.datum_utc or '–' }}</dd>
+      <dt>Uhrzeit UTC</dt><dd>{{ ereignis.zeit_utc or '–' }}</dd>
+      <dt>Ort (ICAO)</dt><dd>{{ ereignis.ort_icao or '–' }}</dd>
+    </dl>
+  </div>
+</div>
+
+{# Meldekette (RL 4.7) #}
+<div class="card">
+  <div class="card-header"><h2>Meldekette (RL 4.7)</h2></div>
+  <div class="card-body">
+    {% set stufen = [
+      ('stuetzpunktleiter', 'St&uuml;tzpunktleiter'),
+      ('behoerde_acg', 'Beh&ouml;rde ACG'),
+      ('einsatzleitung', 'Einsatzleitung'),
+      ('lfv', 'LFV'),
+    ] %}
+    {% for key, label in stufen %}
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
+      {% if meldekette.get(key) %}
+      <span class="badge badge--success">&#x2713;</span>
+      <span style="font-size:.88rem">{{ label }}</span>
+      <span style="color:var(--text-muted);font-size:.78rem">{{ meldekette[key][:16] }}</span>
+      {% else %}
+      <form method="post" action="/uas/ereignis/{{ ereignis.id }}/meldekette" style="display:flex;align-items:center;gap:.5rem">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="stufe" value="{{ key }}">
+        <span class="badge badge--error">&#x26AA;</span>
+        <span style="font-size:.88rem">{{ label }}</span>
+        <button type="submit" class="btn btn--ghost btn--sm">Gemeldet!</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><h2>Beschreibung / Hergang</h2></div>
+  <div class="card-body">
+    <p style="white-space:pre-wrap">{{ ereignis.beschreibung or '–' }}</p>
+  </div>
+</div>
+
+<style>
+.detail-list { display:grid;grid-template-columns:160px 1fr;gap:.35rem .75rem;margin:0 }
+.detail-list dt { color:var(--text-muted);font-size:.85rem;font-weight:600 }
+.detail-list dd { margin:0 }
+.mb-4 { margin-bottom:1rem }
+</style>
+{% endblock %}

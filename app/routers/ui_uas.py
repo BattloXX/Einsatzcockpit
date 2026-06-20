@@ -1391,3 +1391,173 @@ async def nachflug_checkliste_anlegen(
         db.add(cl)
         db.commit()
     return RedirectResponse(f"/uas/flug/{flug_id}", status_code=303)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PR 5: Notfall- & Unfall-Workflow (ACG-Meldung)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/notfallcheckliste", response_class=HTMLResponse)
+def notfallcheckliste_schnell(
+    request: Request,
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    """Schnellabruf-Panel – offline-fähig, in ≤1 Tap aus aktivem Flug."""
+    from app.services.uas_ereignis import NOTFALLCHECKLISTE
+    return templates.TemplateResponse(request, "uas/notfallcheckliste.html", {
+        "user": user,
+        "vorfaelle": NOTFALLCHECKLISTE,
+    })
+
+
+@router.get("/flug/{flug_id}/ereignis/neu", response_class=HTMLResponse)
+def ereignis_neu_form(
+    flug_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from app.models.uas import UASEreignisTyp, UASFlug
+    from app.services.uas_ereignis import NOTFALLCHECKLISTE
+
+    flug = db.query(UASFlug).filter(
+        UASFlug.id == flug_id, UASFlug.org_id == user.org_id
+    ).first()
+    if not flug:
+        raise HTTPException(404)
+
+    return templates.TemplateResponse(request, "uas/ereignis_form.html", {
+        "user": user,
+        "flug": flug,
+        "typen": list(UASEreignisTyp),
+        "vorfaelle": NOTFALLCHECKLISTE,
+        "heute": date.today().isoformat(),
+    })
+
+
+@router.post("/flug/{flug_id}/ereignis/neu")
+async def ereignis_neu_save(
+    flug_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+    typ: str = Form("stoerung"),
+    kategorie: str = Form(""),
+    datum_lokal: str = Form(""),
+    zeit_lokal: str = Form(""),
+    ort_icao: str = Form(""),
+    klassifizierung: str = Form(""),
+    beschreibung: str = Form(""),
+):
+    from app.models.uas import UASEreignis, UASFlug
+    from app.services.uas_ereignis import lokal_zu_utc
+
+    flug = db.query(UASFlug).filter(
+        UASFlug.id == flug_id, UASFlug.org_id == user.org_id
+    ).first()
+    if not flug:
+        raise HTTPException(404)
+
+    datum_l = None
+    if datum_lokal.strip():
+        try:
+            datum_l = date.fromisoformat(datum_lokal.strip())
+        except ValueError:
+            datum_l = date.today()
+    else:
+        datum_l = date.today()
+
+    datum_utc_val = None
+    zeit_utc_val = None
+    if datum_l and zeit_lokal.strip():
+        datum_utc_val, zeit_utc_val = lokal_zu_utc(datum_l, zeit_lokal.strip())
+
+    ereignis = UASEreignis(
+        org_id=user.org_id,
+        uas_flug_id=flug_id,
+        typ=typ,
+        kategorie=kategorie.strip() or None,
+        datum_lokal=datum_l,
+        zeit_lokal=zeit_lokal.strip() or None,
+        datum_utc=datum_utc_val,
+        zeit_utc=zeit_utc_val,
+        ort_icao=ort_icao.strip() or None,
+        klassifizierung=klassifizierung.strip() or None,
+        beschreibung=beschreibung.strip() or None,
+        gemeldet_an=json.dumps({
+            "stuetzpunktleiter": None,
+            "behoerde_acg": None,
+            "einsatzleitung": None,
+            "lfv": None,
+        }),
+    )
+    db.add(ereignis)
+    if typ == "unfall":
+        flug.unfall = True
+    db.commit()
+    return RedirectResponse(f"/uas/ereignis/{ereignis.id}", status_code=303)
+
+
+@router.get("/ereignis/{ereignis_id}", response_class=HTMLResponse)
+def ereignis_detail(
+    ereignis_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from app.models.uas import UASEreignis
+
+    ereignis = db.query(UASEreignis).filter(
+        UASEreignis.id == ereignis_id, UASEreignis.org_id == user.org_id
+    ).first()
+    if not ereignis:
+        raise HTTPException(404)
+
+    meldekette = {}
+    if ereignis.gemeldet_an:
+        try:
+            meldekette = json.loads(ereignis.gemeldet_an)
+        except Exception:
+            pass
+
+    return templates.TemplateResponse(request, "uas/ereignis_detail.html", {
+        "user": user,
+        "ereignis": ereignis,
+        "meldekette": meldekette,
+    })
+
+
+@router.post("/ereignis/{ereignis_id}/meldekette")
+async def meldekette_update(
+    ereignis_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+    stufe: str = Form(...),
+):
+    from datetime import UTC, datetime
+
+    from app.models.uas import UASEreignis
+
+    ereignis = db.query(UASEreignis).filter(
+        UASEreignis.id == ereignis_id, UASEreignis.org_id == user.org_id
+    ).first()
+    if not ereignis:
+        raise HTTPException(404)
+
+    meldekette = {}
+    if ereignis.gemeldet_an:
+        try:
+            meldekette = json.loads(ereignis.gemeldet_an)
+        except Exception:
+            pass
+
+    meldekette[stufe] = datetime.now(UTC).isoformat()
+    ereignis.gemeldet_an = json.dumps(meldekette, ensure_ascii=False)
+    db.commit()
+    return RedirectResponse(f"/uas/ereignis/{ereignis_id}", status_code=303)

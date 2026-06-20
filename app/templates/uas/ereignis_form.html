@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Ereignis melden – Flug #{{ flug.lfd_nr }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>&#x26A0;&#xFE0F; Ereignis / Unfall melden</h1>
+    <p class="page-header__sub">Flug #{{ flug.lfd_nr }} &ndash; Anh. 8.4 RL-UAS</p>
+  </div>
+</div>
+
+<div class="card mb-4" style="background:var(--surface-low);border:1px solid var(--color-error,#e53e3e)">
+  <div class="card-body" style="padding:.75rem 1rem">
+    <strong style="color:var(--color-error,#e53e3e)">Notfall? Erst handeln, dann dokumentieren!</strong>
+    <a href="/uas/notfallcheckliste" class="btn btn--ghost btn--sm" style="margin-left:1rem">
+      &#x1F6A8; Notfallcheckliste &ouml;ffnen
+    </a>
+  </div>
+</div>
+
+<form method="post" class="card" style="max-width:720px">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <div class="card-body">
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Ereignistyp <span style="color:var(--color-error,#e53e3e)">*</span></label>
+        <select name="typ" class="form-control" style="max-width:160px" required>
+          {% for t in typen %}
+          <option value="{{ t.value }}" {% if t.value == 'stoerung' %}selected{% endif %}>
+            {{ t.value | title }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Kategorie / Vorfall-Typ</label>
+        <select name="kategorie" class="form-control" style="max-width:260px">
+          <option value="">– bitte w&auml;hlen –</option>
+          {% for v in vorfaelle %}
+          <option value="{{ v.titel }}">{{ v.titel }}</option>
+          {% endfor %}
+          <option value="Sonstiges">Sonstiges</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Datum (lokal)</label>
+        <input type="date" name="datum_lokal" value="{{ heute }}" class="form-control" style="max-width:180px">
+      </div>
+      <div class="form-group">
+        <label>Uhrzeit lokal (Europe/Vienna)</label>
+        <input type="time" name="zeit_lokal" class="form-control" style="max-width:120px">
+        <small class="form-hint">Wird automatisch nach UTC konvertiert (Anh. 8.4)</small>
+      </div>
+      <div class="form-group">
+        <label>Ort / ICAO-Code</label>
+        <input type="text" name="ort_icao" class="form-control" maxlength="10"
+               placeholder="z.B. LOWI" style="max-width:120px">
+      </div>
+      <div class="form-group">
+        <label>Klassifizierung (ACG)</label>
+        <select name="klassifizierung" class="form-control" style="max-width:220px">
+          <option value="">–</option>
+          <option value="Unfall">Unfall</option>
+          <option value="Schwerer Zwischenfall">Schwerer Zwischenfall</option>
+          <option value="Zwischenfall">Zwischenfall</option>
+          <option value="Meldepflichtiges Ereignis">Meldepflichtiges Ereignis</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Beschreibung / Hergang</label>
+      <textarea name="beschreibung" class="form-control" rows="5" maxlength="5000"
+                placeholder="Meldungsleger, Hergansgbeschreibung (max. 255 Zeichen f&uuml;r ACG-&Uuml;berschrift empfohlen) ..."></textarea>
+    </div>
+
+  </div>
+  <div class="card-footer" style="display:flex;gap:.75rem;padding:1rem 1.25rem">
+    <button type="submit" class="btn btn--primary">Ereignis speichern &amp; Meldekette starten</button>
+    <a href="/uas/flug/{{ flug.id }}" class="btn btn--ghost">Abbrechen</a>
+  </div>
+</form>
+
+<style>.mb-4{margin-bottom:1rem}</style>
+{% endblock %}
