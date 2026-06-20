@@ -73,3 +73,5 @@
 /* ── Druckbericht Disponiert ─────────────────────────────────── */
 .print-inbound-res{font-size:.8rem;color:#b45309;margin-top:3px;}
 .print-label{font-weight:600;}
+/* ── Test System Badge ───────────────────────────────────── */
+.test-system-badge{background:#1d4ed8;color:#fff;font-size:13px;font-weight:800;letter-spacing:.1em;padding:3px 10px;border-radius:4px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;white-space:nowrap;flex-shrink:0;}

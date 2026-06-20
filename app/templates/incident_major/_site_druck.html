@@ -103,6 +103,10 @@
   <span style="margin-left:auto;color:#6b7280;">{{ lage.name }}</span>
 </div>
 
+{% if TEST_SYSTEM %}
+<div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
+{% endif %}
+
 <div class="page">
 
   {% if lage.is_exercise %}

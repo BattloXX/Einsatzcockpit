@@ -273,6 +273,8 @@ APP_PORT=8092
 APP_BASE_URL=https://einsatz.example.com
 PUBLIC_BASE_URL=         # Für Mail-Links; leer = APP_BASE_URL verwenden
 DEBUG=false
+# Testsystem-Modus: zeigt "TEST SYSTEM" im Header und auf allen Ausdrucken
+TEST_SYSTEM=false
 
 # ── Bootstrap-Admin (nur Erststart relevant) ───────────────────────
 BOOTSTRAP_ADMIN_USER=admin
@@ -865,7 +867,7 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
-| **2.5.0** | 2026-06-19 | Großschadenslage-Ressourcenverwaltung (Einheiten anlegen/disponieren, Mehrfach-Disposition, Fremdorganisations-Ressourcen, Ressourcen-Journal); Taktische Lagekarte nach ÖBFV E-27 (ÖNORM-Symbole, Magnetfarben, Legende); Lagekarte-Druck A4/A3 mit Druckvorschau, Fußzeile & Print-Center; SKKM-Lagemeldungs-Regelkreis (Lage→Auftrag→Kontrolle); übergreifende Meldungen mit Status-Workflow, Medien & Druck; Einsatzkarte mit Live-Updates & Foto-Upload; Kachelmann-Wetter-Primärquelle; Bürgermeldungs-Foto-Übertragung |
+| **2.5.0** | 2026-06-19 | Großschadenslage-Ressourcenverwaltung (Einheiten anlegen/disponieren, Mehrfach-Disposition, Fremdorganisations-Ressourcen, Ressourcen-Journal); Taktische Lagekarte nach ÖBFV E-27 (ÖNORM-Symbole, Magnetfarben, Legende); Lagekarte-Druck A4/A3 mit Druckvorschau, Fußzeile & Print-Center; SKKM-Lagemeldungs-Regelkreis (Lage→Auftrag→Kontrolle); übergreifende Meldungen mit Status-Workflow, Medien & Druck; Einsatzkarte mit Live-Updates & Foto-Upload; Kachelmann-Wetter-Primärquelle; Bürgermeldungs-Foto-Übertragung; Testsystem-Modus (`TEST_SYSTEM=true`: Badge im Header + Hinweis auf allen Ausdrucken) |
 | **2.4.0** | 2026-06-13 | Wetterdaten-Integration: Nowcast (15-min), Ist-Werte, +6/+12/+24h-Vorhersage, Unwetterwarnungen (GeoSphere Austria CC BY 4.0); Sturm- und Waldbrand-Szenario-Alerts; Radar-Layer (RainViewer) auf Lagekarte; Wetter-Panel in GSL-Board und Einzeleinsatz; globale `/wetter`-Seite; org-spezifisches Opt-out |
 | **2.3.0** | 2026-06-13 | Großschadenslage-Karte: Abschnitte live ohne Reload, Pin-Modus mit Reverse Geocoding, Geoman-Toolbar auf Deutsch; Stab: BMI SKKM-Einsatzjournal als erstes Tab; Dashboard: Abschnitt-Polygone auf Mini-Karte |
 | **2.2.0** | 2026-06-11 | Multi-Tenancy vollständig (12 PRs): Row-Level-Isolation, Org-Onboarding, KI je Org, Speicher-Quotas, Einladungsmodell, Auto-Schließen, Rate-Limiting, API-Härtung, System-Konsole, Migration-Runbook |

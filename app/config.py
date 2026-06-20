@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = ""  # Für Mail-Links; leer = falls leer APP_BASE_URL verwenden
     APP_VERSION: str = "2.2.0"
     DEBUG: bool = False
+    TEST_SYSTEM: bool = False
 
     # Cookie-Flags
     COOKIE_SECURE: bool = False  # In Produktion auf true (HTTPS)

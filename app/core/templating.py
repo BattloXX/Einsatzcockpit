@@ -182,3 +182,4 @@ templates.env.globals["lagekarte_url"] = resolve_lagekarte_url
 from app.config import settings as _settings  # noqa: E402
 
 templates.env.globals["WEATHER_ENABLED"] = _settings.WEATHER_ENABLED
+templates.env.globals["TEST_SYSTEM"] = _settings.TEST_SYSTEM

@@ -42,6 +42,10 @@
   <a href="javascript:window.close()" style="font-size:10pt;color:#3b82f6;">✕ Schließen</a>
 </div>
 
+{% if TEST_SYSTEM %}
+<div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
+{% endif %}
+
 <div class="header">
   <h1>{{ lage.name }} – Journaleintrag</h1>
   <div class="header__meta">Stand: {{ now|local_datetime }}</div>

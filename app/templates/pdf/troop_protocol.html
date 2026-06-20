@@ -46,6 +46,9 @@
 </head>
 <body>
 
+{% if TEST_SYSTEM %}
+<div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
+{% endif %}
 {% if incident.is_exercise %}
 <div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTEINSATZ ⚠</div>
 {% endif %}

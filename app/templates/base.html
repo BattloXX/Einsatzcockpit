@@ -39,6 +39,9 @@
         <span class="topnav__title">{{ _org_name }}</span>
         {% endif %}
       </a>
+      {% if TEST_SYSTEM %}
+      <span class="test-system-badge">TEST SYSTEM</span>
+      {% endif %}
     </div>
     <div class="topnav__links">
       <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Übersicht</a>
