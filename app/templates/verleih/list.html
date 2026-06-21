@@ -161,6 +161,11 @@ document.addEventListener('htmx:afterRequest', function(ev) {
     openVerleihPanel();
   }
 });
+// PIN-Versand-Rueckmeldung beim Anlegen
+document.body.addEventListener('verleihNachricht', function(ev) {
+  var msg = ev.detail && ev.detail.value;
+  if (msg) alert(msg);
+});
 // Karten-Aktualisierung nach Rueckgabe
 document.body.addEventListener('verleihKarteAktualisieren', function(ev) {
   var aid = ev.detail && ev.detail.value;

@@ -372,8 +372,10 @@ async def verleih_neu(
     adresse = str(form.get("adresse", "")).strip()
     telefon = str(form.get("telefon", "")).strip()
     pin_raw = str(form.get("pin", "")).strip()
+    send_pin_flag = str(form.get("send_pin", "")).strip() == "1"
     site_id_raw = str(form.get("site_id", "")).strip()
     site_id = int(site_id_raw) if site_id_raw.isdigit() else None
+    pin_to_use = pin_raw if pin_raw else (svc.generate_pin() if send_pin_flag else None)
 
     # Positionen aus dynamischen Feldern
     bez_list = form.getlist("pos_bezeichnung[]")
@@ -406,14 +408,14 @@ async def verleih_neu(
         site_id=site_id,
         positionen=positionen,
         user_id=user.id,
-        pin=pin_raw or None,
+        pin=pin_to_use,
     )
 
     # Journal-Eintrag
     try:
         from app.core.security import get_author_name
         from app.models.major_incident import LageJournalEntry
-        artikel_text = ausleihe.artikel_bezeichnungen or "Material"
+        artikel_text = ", ".join(p["bezeichnung"] for p in positionen) or "Material"
         journal = LageJournalEntry(
             major_incident_id=lage_id,
             category="sonstiges",
@@ -426,13 +428,43 @@ async def verleih_neu(
     except Exception:
         logger.warning("Journal-Eintrag fuer Verleih fehlgeschlagen", exc_info=True)
 
+    # PIN per SMS versenden
+    pin_nachricht = None
+    if send_pin_flag and pin_to_use:
+        if telefon:
+            from app.services.sms_service import send_sms
+            try:
+                from app.models.master import FireDept
+                dept = db.get(FireDept, lage.org_id)
+                org_name = dept.name if dept else "Feuerwehr"
+            except Exception:
+                org_name = "Feuerwehr"
+            sms_text_pin = f"Ihr Geraeteausleihe-PIN: {pin_to_use} - {org_name}"
+            sms_ok = await send_sms(lage.org_id, telefon, sms_text_pin)
+            pin_nachricht = "PIN-SMS erfolgreich versendet" if sms_ok else "PIN generiert - SMS fehlgeschlagen (Gateway pruefen)"
+        else:
+            pin_nachricht = f"PIN generiert: {pin_to_use}"
+
+    # Fotos speichern
+    fotos_raw = form.getlist("fotos")
+    for f in fotos_raw:
+        if hasattr(f, "filename") and f.filename:
+            try:
+                await svc.save_verleih_foto(f, ausleihe.id, lage.org_id, user.id, db)
+            except Exception:
+                logger.warning("Foto-Upload beim Anlegen fehlgeschlagen", exc_info=True)
+
     await broadcast_lage(lage_id, {"type": "verleih:changed", "lage_id": lage_id})
+
+    trigger = {"verleihChanged": True}
+    if pin_nachricht:
+        trigger["verleihNachricht"] = pin_nachricht
 
     return templates.TemplateResponse(request, "verleih/_ausleihe_card.html", {
         "a": ausleihe,
         "lage": lage,
         "can_edit": _can_edit(user),
-    }, headers={"HX-Trigger": "verleihChanged"})
+    }, headers={"HX-Trigger": json.dumps(trigger)})
 
 
 # ── GSL: Ausleihe-Detail ──────────────────────────────────────────────────────

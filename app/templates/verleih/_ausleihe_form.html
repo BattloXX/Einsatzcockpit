@@ -8,6 +8,7 @@
   <form hx-post="/lage/{{ lage.id }}/verleih/neu"
         hx-target="#verleih-grid"
         hx-swap="beforeend"
+        hx-encoding="multipart/form-data"
         hx-on::after-request="closeVerleihPanel()"
         style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -23,7 +24,8 @@
     </div>
     <div class="form-group">
       <label class="form-label">Telefonnummer</label>
-      <input type="tel" name="telefon" class="form-input" maxlength="50" placeholder="+43 660 ...">
+      <input type="tel" name="telefon" class="form-input" maxlength="50" placeholder="+43 660 ..."
+             x-model="telefon">
     </div>
 
     <!-- PIN -->
@@ -33,6 +35,16 @@
       </label>
       <input type="text" name="pin" class="form-input" maxlength="6" pattern="[0-9]*" inputmode="numeric"
              placeholder="z.B. 123456" style="max-width:140px;font-family:JetBrains Mono,monospace;letter-spacing:.2em;">
+    </div>
+
+    <!-- PIN per SMS senden -->
+    <div class="form-group" x-show="telefon.trim()">
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:.85rem;padding:2px 0;">
+        <input type="checkbox" name="send_pin" value="1" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;">
+        <span>PIN generieren + per SMS senden
+          <span style="display:block;font-size:.72rem;color:var(--text-muted);">Ohne manuellen PIN wird automatisch ein 6-stelliger PIN erstellt.</span>
+        </span>
+      </label>
     </div>
 
     <!-- Einsatzstelle -->
@@ -80,7 +92,6 @@
       <template x-for="(row, idx) in rows" :key="idx">
         <div style="display:flex;gap:6px;margin-bottom:8px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:8px;">
           <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
-            <!-- Artikel-Autocomplete -->
             <input type="text" class="form-input form-input--xs"
                    placeholder="Bezeichnung *"
                    :name="'pos_bezeichnung[]'"
@@ -97,20 +108,25 @@
                      placeholder="Artikelnr"
                      :name="'pos_artikel_nr[]'"
                      x-model="row.artikel_nr">
-              <!-- Barcode-Scan-Button -->
               <button type="button" class="btn btn--ghost btn--xs" style="padding:3px 7px;font-size:.8rem;"
-                      :title="barcodeApiAvailable ? 'Barcode scannen' : 'Barcode-Scanner nicht unterstuetzt'"
+                      :title="barcodeApiAvailable ? 'Barcode/QR-Code scannen' : 'Kamera-Scan nicht unterstuetzt'"
                       :disabled="!barcodeApiAvailable"
                       @click="triggerScan(idx)">
                 &#128247;
               </button>
               <input type="hidden" :name="'pos_artikel_id[]'" x-model="row.artikel_id">
-              <input type="number" class="form-input form-input--xs" style="width:60px;"
+              <button type="button" class="btn btn--ghost btn--xs" style="padding:2px 8px;"
+                      @click="row.menge = Math.max(1, Number(row.menge) - 1)"
+                      :disabled="!row.ist_mengenartikel && row.artikel_id">-</button>
+              <input type="number" class="form-input form-input--xs" style="width:44px;text-align:center;"
                      :name="'pos_menge[]'"
                      x-model="row.menge"
                      min="1"
                      :readonly="!row.ist_mengenartikel && row.artikel_id"
                      :title="!row.ist_mengenartikel && row.artikel_id ? 'Eindeutiger Artikel: Menge = 1' : ''">
+              <button type="button" class="btn btn--ghost btn--xs" style="padding:2px 8px;"
+                      @click="row.menge = Number(row.menge) + 1"
+                      :disabled="!row.ist_mengenartikel && row.artikel_id">+</button>
             </div>
           </div>
           <button type="button" class="btn btn--danger btn--xs" style="flex-shrink:0;margin-top:2px;" @click="removeRow(idx)">x</button>
@@ -119,15 +135,31 @@
       <button type="button" class="btn btn--ghost btn--xs" @click="addRow()" style="width:100%;">+ Artikel hinzufuegen</button>
     </div>
 
+    <!-- Fotos -->
+    <div class="form-group">
+      <label class="form-label">Fotos <span style="font-size:.72rem;color:var(--text-muted);">(optional – Beweis beim Ausleihen)</span></label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 10px;border:1px dashed var(--border);border-radius:8px;font-size:.82rem;color:var(--text-muted);">
+        <input type="file" name="fotos" accept="image/*" multiple style="display:none;"
+               @change="fotoCount = $event.target.files.length">
+        &#128247; Fotos aufnehmen / auswahlen
+        <span x-show="fotoCount > 0" style="font-size:.8rem;background:rgba(34,197,94,.15);color:#4ade80;padding:1px 8px;border-radius:8px;" x-text="fotoCount + ' Foto(s)'"></span>
+      </label>
+    </div>
+
     <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px;">
       <button type="button" class="btn btn--ghost" onclick="closeVerleihPanel()">Abbrechen</button>
       <button type="submit" class="btn btn--primary">Ausleihe anlegen</button>
     </div>
   </form>
 
-  <!-- Gemeinsamer Barcode-File-Input (ausserhalb x-for, wird per x-ref referenziert) -->
-  <input type="file" x-ref="barcodeFileInput" accept="image/*" capture="environment"
-         style="display:none;" @change="onScanFile($event)">
+  <!-- Live-Scan-Modal (Barcode/QR via Kamera) -->
+  <div x-show="scanModalOpen" x-cloak
+       style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;">
+    <div style="font-size:.85rem;color:#ccc;margin-bottom:12px;">Barcode / QR-Code vor die Kamera halten</div>
+    <video x-ref="scanVideo" autoplay playsinline muted
+           style="width:min(90vw,360px);max-height:60vh;border-radius:12px;background:#111;"></video>
+    <button type="button" class="btn btn--ghost" style="margin-top:16px;" @click="stopScan()">Abbrechen</button>
+  </div>
 </div>
 
 <script>
@@ -137,10 +169,14 @@ function verleihForm(initialSites, lageId, initialArtikel) {
     siteList: initialSites || [],
     artikelList: initialArtikel || [],
     scanIdx: -1,
+    scanModalOpen: false,
+    scanStream: null,
     newSiteOpen: false,
     newSiteName: '',
     newSiteError: '',
-    barcodeApiAvailable: ('BarcodeDetector' in window),
+    barcodeApiAvailable: ('BarcodeDetector' in window && !!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia),
+    telefon: '',
+    fotoCount: 0,
     rows: [{ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true }],
     addRow() {
       this.rows.push({ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true });
@@ -194,34 +230,60 @@ function verleihForm(initialSites, lageId, initialArtikel) {
       }
     },
     triggerScan(idx) {
+      if (!this.barcodeApiAvailable) return;
       this.scanIdx = idx;
-      this.$refs.barcodeFileInput.click();
+      this.scanModalOpen = true;
+      this.$nextTick(function() { this.startScan(); }.bind(this));
     },
-    async onScanFile(ev) {
-      var file = ev.target.files[0];
-      var idx = this.scanIdx;
-      ev.target.value = '';
-      if (!file || idx < 0 || idx >= this.rows.length) return;
+    async startScan() {
       try {
-        var bitmap = await createImageBitmap(file);
-        var detector = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','code_39','qr_code','data_matrix'] });
-        var codes = await detector.detect(bitmap);
-        if (codes.length === 0) {
-          alert('Kein Barcode erkannt – bitte Artikelnummer manuell eingeben.');
+        this.scanStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } }
+        });
+        var video = this.$refs.scanVideo;
+        video.srcObject = this.scanStream;
+        await video.play();
+        this._scanLoop();
+      } catch(e) {
+        this.stopScan();
+        alert('Kamera-Zugriff nicht moeglich: ' + e.message);
+      }
+    },
+    async _scanLoop() {
+      if (!this.scanModalOpen) return;
+      var video = this.$refs.scanVideo;
+      if (!video || video.readyState < 2) {
+        requestAnimationFrame(this._scanLoop.bind(this));
+        return;
+      }
+      try {
+        var det = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','code_39','qr_code','data_matrix'] });
+        var codes = await det.detect(video);
+        if (codes.length > 0) {
+          var val = codes[0].rawValue;
+          var idx = this.scanIdx;
+          this.stopScan();
+          if (idx >= 0 && idx < this.rows.length) {
+            this.rows[idx].artikel_nr = val;
+            var match = this.artikelList.find(function(a) { return a.artikel_nr === val; });
+            if (match) {
+              this.rows[idx].bezeichnung = match.bezeichnung;
+              this.rows[idx].artikel_id = String(match.id);
+              this.rows[idx].ist_mengenartikel = match.ist_mengenartikel;
+              if (!match.ist_mengenartikel) this.rows[idx].menge = 1;
+            }
+          }
           return;
         }
-        var scanned = codes[0].rawValue;
-        this.rows[idx].artikel_nr = scanned;
-        // Artikel-Stammdaten aus Liste nachschlagen
-        var match = this.artikelList.find(function(a) { return a.artikel_nr === scanned; });
-        if (match) {
-          this.rows[idx].bezeichnung = match.bezeichnung;
-          this.rows[idx].artikel_id = String(match.id);
-          this.rows[idx].ist_mengenartikel = match.ist_mengenartikel;
-          if (!match.ist_mengenartikel) this.rows[idx].menge = 1;
-        }
-      } catch(e) {
-        alert('Scan fehlgeschlagen: ' + e.message);
+      } catch(e) { /* weiter scannen */ }
+      if (this.scanModalOpen) requestAnimationFrame(this._scanLoop.bind(this));
+    },
+    stopScan() {
+      this.scanModalOpen = false;
+      this.scanIdx = -1;
+      if (this.scanStream) {
+        this.scanStream.getTracks().forEach(function(t) { t.stop(); });
+        this.scanStream = null;
       }
     },
   };

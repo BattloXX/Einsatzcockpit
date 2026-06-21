@@ -161,18 +161,30 @@
                        x-model="row.bezeichnung"
                        required
                        list="detail-artikel-datalist">
-                <div style="display:flex;gap:4px;">
+                <div style="display:flex;gap:4px;align-items:center;">
                   <input type="text" class="form-input form-input--xs" style="flex:1;"
                          placeholder="Artikelnr"
                          :name="'pos_artikel_nr[]'"
                          x-model="row.artikel_nr">
+                  <button type="button" class="btn btn--ghost btn--xs" style="padding:3px 7px;font-size:.8rem;"
+                          :title="addScanAvailable ? 'Barcode/QR-Code scannen' : 'Kamera-Scan nicht unterstuetzt'"
+                          :disabled="!addScanAvailable"
+                          @click="triggerAddScan(idx)">
+                    &#128247;
+                  </button>
                   <input type="hidden" :name="'pos_artikel_id[]'" x-model="row.artikel_id">
-                  <input type="number" class="form-input form-input--xs" style="width:56px;"
+                  <button type="button" class="btn btn--ghost btn--xs" style="padding:2px 7px;"
+                          @click="row.menge = Math.max(1, Number(row.menge) - 1)"
+                          :disabled="!row.ist_mengenartikel && row.artikel_id">-</button>
+                  <input type="number" class="form-input form-input--xs" style="width:44px;text-align:center;"
                          :name="'pos_menge[]'"
                          x-model="row.menge"
                          min="1"
                          :readonly="!row.ist_mengenartikel && row.artikel_id"
                          :title="!row.ist_mengenartikel && row.artikel_id ? 'Eindeutiger Artikel: Menge = 1' : ''">
+                  <button type="button" class="btn btn--ghost btn--xs" style="padding:2px 7px;"
+                          @click="row.menge = Number(row.menge) + 1"
+                          :disabled="!row.ist_mengenartikel && row.artikel_id">+</button>
                 </div>
               </div>
               <button type="button" class="btn btn--danger btn--xs" style="flex-shrink:0;margin-top:2px;"
@@ -299,6 +311,15 @@
     </div>
 
   </div>
+
+  <!-- Live-Scan-Modal fuer Nachtrag (Barcode/QR via Kamera) -->
+  <div x-show="addScanModalOpen" x-cloak
+       style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;">
+    <div style="font-size:.85rem;color:#ccc;margin-bottom:12px;">Barcode / QR-Code vor die Kamera halten</div>
+    <video x-ref="addScanVideo" autoplay playsinline muted
+           style="width:min(90vw,360px);max-height:60vh;border-radius:12px;background:#111;"></video>
+    <button type="button" class="btn btn--ghost" style="margin-top:16px;" @click="stopAddScan()">Abbrechen</button>
+  </div>
 </div>
 
 <style>
@@ -315,6 +336,10 @@ function detailPanel(initialArtikel) {
     addItemsOpen: false,
     artikelList: initialArtikel || [],
     addRows: [{ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true }],
+    addScanIdx: -1,
+    addScanModalOpen: false,
+    addScanStream: null,
+    addScanAvailable: ('BarcodeDetector' in window && !!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia),
     addAddRow() {
       this.addRows.push({ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true });
     },
@@ -324,6 +349,63 @@ function detailPanel(initialArtikel) {
     },
     resetAddRows() {
       this.addRows = [{ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true }];
+    },
+    triggerAddScan(idx) {
+      if (!this.addScanAvailable) return;
+      this.addScanIdx = idx;
+      this.addScanModalOpen = true;
+      this.$nextTick(function() { this.startAddScan(); }.bind(this));
+    },
+    async startAddScan() {
+      try {
+        this.addScanStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } }
+        });
+        var video = this.$refs.addScanVideo;
+        video.srcObject = this.addScanStream;
+        await video.play();
+        this._addScanLoop();
+      } catch(e) {
+        this.stopAddScan();
+        alert('Kamera-Zugriff nicht moeglich: ' + e.message);
+      }
+    },
+    async _addScanLoop() {
+      if (!this.addScanModalOpen) return;
+      var video = this.$refs.addScanVideo;
+      if (!video || video.readyState < 2) {
+        requestAnimationFrame(this._addScanLoop.bind(this));
+        return;
+      }
+      try {
+        var det = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','code_39','qr_code','data_matrix'] });
+        var codes = await det.detect(video);
+        if (codes.length > 0) {
+          var val = codes[0].rawValue;
+          var idx = this.addScanIdx;
+          this.stopAddScan();
+          if (idx >= 0 && idx < this.addRows.length) {
+            this.addRows[idx].artikel_nr = val;
+            var match = this.artikelList.find(function(a) { return a.artikel_nr === val; });
+            if (match) {
+              this.addRows[idx].bezeichnung = match.bezeichnung;
+              this.addRows[idx].artikel_id = String(match.id);
+              this.addRows[idx].ist_mengenartikel = match.ist_mengenartikel;
+              if (!match.ist_mengenartikel) this.addRows[idx].menge = 1;
+            }
+          }
+          return;
+        }
+      } catch(e) { /* weiter scannen */ }
+      if (this.addScanModalOpen) requestAnimationFrame(this._addScanLoop.bind(this));
+    },
+    stopAddScan() {
+      this.addScanModalOpen = false;
+      this.addScanIdx = -1;
+      if (this.addScanStream) {
+        this.addScanStream.getTracks().forEach(function(t) { t.stop(); });
+        this.addScanStream = null;
+      }
     },
   };
 }
