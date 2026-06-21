@@ -371,6 +371,7 @@ async def verleih_neu(
     name = str(form.get("name", "")).strip()
     adresse = str(form.get("adresse", "")).strip()
     telefon = str(form.get("telefon", "")).strip()
+    notizen = str(form.get("notizen", "")).strip()
     pin_raw = str(form.get("pin", "")).strip()
     send_pin_flag = str(form.get("send_pin", "")).strip() == "1"
     site_id_raw = str(form.get("site_id", "")).strip()
@@ -409,6 +410,7 @@ async def verleih_neu(
         positionen=positionen,
         user_id=user.id,
         pin=pin_to_use,
+        notizen=notizen or None,
     )
 
     # Journal-Eintrag
@@ -644,6 +646,7 @@ async def schnell_einsatzstelle(
     request: Request,
     lage_id: int,
     bezeichnung: str = Form(...),
+    ort: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -657,7 +660,7 @@ async def schnell_einsatzstelle(
     if not bezeichnung:
         raise HTTPException(400, "Bezeichnung fehlt")
     from app.services.major_incident_service import create_site
-    site = create_site(db, lage, bezeichnung=bezeichnung, created_by=user.id)
+    site = create_site(db, lage, bezeichnung=bezeichnung, ort=ort.strip()[:120] or None, created_by=user.id)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
     return JSONResponse({"id": site.id, "bezeichnung": site.bezeichnung})
@@ -837,3 +840,22 @@ async def positionen_hinzufuegen(
     return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
         _detail_ctx(db, user, lage, ausleihe, add_ok=True),
         headers={"HX-Trigger": json.dumps({"verleihKarteAktualisieren": str(ausleihe.id)})})
+
+
+@router.post("/lage/{lage_id}/verleih/{ausleihe_id}/notizen", response_class=HTMLResponse)
+async def notizen_aktualisieren(
+    request: Request,
+    lage_id: int,
+    ausleihe_id: int,
+    notizen: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org(user, lage)
+    ausleihe = _ausleihe_or_404(ausleihe_id, db)
+    ausleihe.notizen = notizen.strip() or None
+    db.commit()
+    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+        _detail_ctx(db, user, lage, ausleihe, notizen_ok=True))

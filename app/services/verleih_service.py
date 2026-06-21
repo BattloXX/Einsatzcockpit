@@ -86,6 +86,7 @@ def create_ausleihe(
     positionen: list[dict],
     user_id: int | None,
     pin: str | None = None,
+    notizen: str | None = None,
 ) -> VerleihAusleihe:
     org = get_org_settings(db, org_id)
     erinnerung_stunden = org.gsl_verleih_erinnerung_stunden if org else None
@@ -98,6 +99,7 @@ def create_ausleihe(
         adresse=adresse or None,
         telefon=telefon or None,
         pin=pin or None,
+        notizen=notizen or None,
         created_by_user_id=user_id,
     )
     if erinnerung_stunden:

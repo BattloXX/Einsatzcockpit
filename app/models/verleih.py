@@ -114,6 +114,7 @@ class VerleihAusleihe(TenantScoped, Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     adresse: Mapped[str | None] = mapped_column(String(300), nullable=True)
     telefon: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    notizen: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[VerleihStatus] = mapped_column(
         Enum(VerleihStatus), nullable=False, default=VerleihStatus.ausgeliehen
     )

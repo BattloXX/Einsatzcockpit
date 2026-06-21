@@ -278,6 +278,31 @@
     </div>
     {% endif %}
 
+    <!-- Notizen -->
+    <div>
+      <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Notizen</div>
+      {% if notizen_ok is defined %}
+      <div class="alert alert--success" style="font-size:.78rem;padding:4px 8px;margin-bottom:6px;">Notiz gespeichert.</div>
+      {% endif %}
+      {% if can_edit %}
+      <form hx-post="/lage/{{ lage.id }}/verleih/{{ a.id }}/notizen"
+            hx-target="#verleih-detail-panel"
+            hx-swap="innerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <textarea name="notizen" class="form-input" rows="3"
+                  style="resize:vertical;font-size:.83rem;"
+                  placeholder="Interne Bemerkungen...">{{ a.notizen or '' }}</textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:4px;">
+          <button type="submit" class="btn btn--ghost btn--xs">Speichern</button>
+        </div>
+      </form>
+      {% elif a.notizen %}
+      <div style="font-size:.85rem;white-space:pre-wrap;color:var(--text);">{{ a.notizen }}</div>
+      {% else %}
+      <span style="font-size:.82rem;color:var(--text-muted);">Keine Notizen</span>
+      {% endif %}
+    </div>
+
     <!-- Fotos -->
     <div>
       <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;">Fotos (Beweis)</div>

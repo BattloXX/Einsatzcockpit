@@ -20,7 +20,8 @@
     </div>
     <div class="form-group">
       <label class="form-label">Adresse</label>
-      <input type="text" name="adresse" class="form-input" maxlength="300" placeholder="Strasse, Ort">
+      <input type="text" name="adresse" class="form-input" maxlength="300" placeholder="Strasse, Ort"
+             x-model="adresse">
     </div>
     <div class="form-group">
       <label class="form-label">Telefonnummer</label>
@@ -135,6 +136,12 @@
       <button type="button" class="btn btn--ghost btn--xs" @click="addRow()" style="width:100%;">+ Artikel hinzufuegen</button>
     </div>
 
+    <!-- Notizen -->
+    <div class="form-group">
+      <label class="form-label">Notizen <span style="font-size:.72rem;color:var(--text-muted);">(optional)</span></label>
+      <textarea name="notizen" class="form-input" rows="2" style="resize:vertical;font-size:.83rem;" placeholder="Interne Bemerkungen zum Verleih..."></textarea>
+    </div>
+
     <!-- Fotos -->
     <div class="form-group">
       <label class="form-label">Fotos <span style="font-size:.72rem;color:var(--text-muted);">(optional – Beweis beim Ausleihen)</span></label>
@@ -176,6 +183,7 @@ function verleihForm(initialSites, lageId, initialArtikel) {
     newSiteError: '',
     barcodeApiAvailable: ('BarcodeDetector' in window && !!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia),
     telefon: '',
+    adresse: '',
     fotoCount: 0,
     rows: [{ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true }],
     addRow() {
@@ -212,6 +220,7 @@ function verleihForm(initialSites, lageId, initialArtikel) {
       try {
         var fd = new FormData();
         fd.append('bezeichnung', name);
+        fd.append('ort', this.adresse.trim());
         fd.append('_csrf', document.querySelector('[name="_csrf"]').value);
         var res = await fetch('/lage/' + this.lageId + '/verleih/schnell-einsatzstelle', {
           method: 'POST', body: fd
