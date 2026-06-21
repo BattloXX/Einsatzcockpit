@@ -37,6 +37,22 @@
   </div>
 </div>
 
+{% if einsatz.status == 'abgeschlossen' %}
+<div class="alert alert--locked" style="margin-bottom:1rem">
+  <div style="display:flex;align-items:flex-start;gap:.75rem">
+    <span style="font-size:1.3rem;line-height:1;flex-shrink:0">&#x1F512;</span>
+    <div>
+      <strong>Einsatz abgeschlossen &ndash; Protokoll gesperrt</strong><br>
+      <span style="font-size:.88rem">
+        Dieser Drohneneinsatz ist abgeschlossen. Gem&auml;&szlig; Protokollpflicht (RL-UAS LFV Vorarlberg)
+        k&ouml;nnen keine weiteren Fl&uuml;ge erfasst werden und der Einsatz kann nicht wieder ge&ouml;ffnet werden.
+        Alle Eintr&auml;ge sind schreibgesch&uuml;tzt (Audit-Trail).
+      </span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if mindest_fehlt %}
 <div class="alert alert--error" style="margin-bottom:1rem">
   <strong>Mindestbesetzung (RL 6.1) nicht erf&uuml;llt:</strong>
@@ -233,7 +249,11 @@
 <div class="card mb-4">
   <div class="card-header">
     <h2>&#x2708; Flugbuch</h2>
+    {% if einsatz.status != 'abgeschlossen' %}
     <a href="/uas/einsatz/{{ einsatz.id }}/flug/neu" class="btn btn--primary btn--sm" style="margin-left:auto">+ Neuer Flug</a>
+    {% else %}
+    <span class="badge badge--muted" style="margin-left:auto">&#x1F512; gesperrt</span>
+    {% endif %}
   </div>
   {% if fluege %}
   <div style="overflow-x:auto">
@@ -277,7 +297,11 @@
   </div>
   {% else %}
   <div style="padding:1.25rem 1rem;color:var(--text-muted);font-size:.88rem">
+    {% if einsatz.status != 'abgeschlossen' %}
     Noch keine Fl&uuml;ge erfasst. &rarr; <a href="/uas/einsatz/{{ einsatz.id }}/flug/neu" class="link">Ersten Flug anlegen</a>
+    {% else %}
+    Keine Fl&uuml;ge vorhanden.
+    {% endif %}
   </div>
   {% endif %}
 </div>
@@ -298,5 +322,12 @@
 .uas-table td { padding:.5rem .75rem;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle }
 .uas-table tbody tr:hover { background:rgba(255,255,255,.03) }
 .uas-table tbody tr:last-child td { border-bottom:none }
+.alert--locked {
+  background:rgba(99,102,241,.09);
+  border:1px solid rgba(99,102,241,.3);
+  border-radius:7px;
+  padding:.85rem 1rem;
+  color:var(--text);
+}
 </style>
 {% endblock %}
