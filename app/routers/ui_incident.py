@@ -771,9 +771,14 @@ async def incident_dashboard(
         qr_img.save(buf, format="PNG")
         qr_img_b64 = base64.b64encode(buf.getvalue()).decode()
 
+    # Drohnen-Panel: immer anzeigen, sobald ein Drohneneinsatz mit diesem Einsatz
+    # verknüpft ist – unabhängig vom Modul-Flag oder Betrachter (z. B. System-Admin
+    # ohne Org-Kontext). Das Modul-Flag steuert nur das Anlegen/Verwalten; eine
+    # bereits laufende Drohne gehört immer auf das Einsatz-Dashboard.
+    # Fail-safe gekapselt, damit fehlende UAS-Tabellen das Dashboard nie blockieren.
     uas_einsatz = None
     uas_flug_count = 0
-    if getattr(request.state, "uas_module_enabled", False):
+    try:
         from app.models.uas import UASEinsatz, UASFlug
         uas_einsatz = db.query(UASEinsatz).filter(
             UASEinsatz.incident_id == incident_id
@@ -786,6 +791,9 @@ async def incident_dashboard(
             uas_flug_count = db.query(UASFlug).filter(
                 UASFlug.uas_einsatz_id == uas_einsatz.id
             ).count()
+    except Exception:
+        uas_einsatz = None
+        uas_flug_count = 0
 
     return templates.TemplateResponse(
         request,
