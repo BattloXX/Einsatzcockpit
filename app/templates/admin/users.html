@@ -77,13 +77,16 @@
       </td>
       <td style="display:flex; gap:4px; flex-wrap:wrap;">
         <button type="button" class="btn btn--ghost btn--xs"
-                onclick="openEditUser({{ u.id }}, {{ {
-                  'display_name': u.display_name,
-                  'full_name': u.full_name or '',
-                  'email': u.email or '',
-                  'phone': u.phone or '',
-                  'org_id': u.org_id or 0,
-                }|tojson|forceescape }}, {{ u.roles|map(attribute='code')|list|tojson|e }})"
+                data-user-id="{{ u.id }}"
+                data-user='{{ {
+                  "display_name": u.display_name or "",
+                  "full_name": u.full_name or "",
+                  "email": u.email or "",
+                  "phone": u.phone or "",
+                  "org_id": u.org_id or 0,
+                }|tojson }}'
+                data-user-roles='{{ u.roles|map(attribute="code")|list|tojson }}'
+                onclick="openEditUser(this)"
                 {{ tip('Name, E-Mail, Telefon, Rollen bearbeiten') }}>
           Bearbeiten
         </button>
@@ -241,7 +244,12 @@ function checkBulkUsers() {
   if (!checked) { alert('Keine Benutzer ausgewählt.'); return false; }
   return confirm(checked + ' Benutzer endgültig löschen? Dies kann nicht rückgängig gemacht werden!');
 }
-function openEditUser(id, data, currentRoles) {
+function openEditUser(btn) {
+  let data = {};
+  let currentRoles = [];
+  try { data = JSON.parse(btn.dataset.user || '{}'); } catch (e) { data = {}; }
+  try { currentRoles = JSON.parse(btn.dataset.userRoles || '[]'); } catch (e) { currentRoles = []; }
+  const id = btn.dataset.userId;
   document.getElementById('eu_display_name').value = data.display_name || '';
   document.getElementById('eu_full_name').value = data.full_name || '';
   document.getElementById('eu_email').value = data.email || '';
