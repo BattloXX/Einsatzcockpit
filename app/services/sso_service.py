@@ -113,7 +113,7 @@ def build_authorize_url(
     authority_base: str | None = None,
     login_hint: str | None = None,
 ) -> str:
-    authority = _authority(tenant_id, authority_base)
+    base = (authority_base or settings.MS_LOGIN_BASE_URL).rstrip("/")
     params: dict[str, str] = {
         "response_type": "code",
         "client_id": client_id,
@@ -127,7 +127,7 @@ def build_authorize_url(
     }
     if login_hint:
         params["login_hint"] = login_hint
-    return f"{authority}/oauth2/v2.0/authorize?{urlencode(params)}"
+    return f"{base}/{tenant_id}/oauth2/v2.0/authorize?{urlencode(params)}"
 
 
 # ── Token-Tausch ──────────────────────────────────────────────────────────────
@@ -143,8 +143,8 @@ async def exchange_code(
     authority_base: str | None = None,
 ) -> dict[str, Any]:
     """Tauscht Authorization Code gegen Token-Antwort (access_token + id_token)."""
-    authority = _authority(tenant_id, authority_base)
-    token_url = f"{authority}/oauth2/v2.0/token"
+    base = (authority_base or settings.MS_LOGIN_BASE_URL).rstrip("/")
+    token_url = f"{base}/{tenant_id}/oauth2/v2.0/token"
     async with httpx.AsyncClient(timeout=settings.SSO_HTTP_TIMEOUT) as client:
         resp = await client.post(token_url, data={
             "grant_type": "authorization_code",

@@ -11,7 +11,7 @@
   {% set active_group = 'verwaltung' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
-       or '/admin/konfig' in _p or '/admin/sso' in _p or _p.startswith('/uas') %}
+       or '/admin/konfig' in _p or '/admin/sso' in _p %}
   {% set active_group = 'einstellungen' %}
 {% else %}
   {% set active_group = 'stammdaten' %}
@@ -209,6 +209,11 @@
                {{ tip('Automatische Erinnerungen pro Stichwort') }}>
               <span class="admin-nav__icon">🔔</span>Default-Meldungen
             </a>
+            <a href="/uas"
+               class="admin-nav__item {% if request.url.path.startswith('/uas') %}is-active{% endif %}"
+               {{ tip('BOS-Drohnenmodul: Geräte, Piloten, Flugbuch, Wartung') }}>
+              <span class="admin-nav__icon">&#x1F681;</span>Drohne / UAS
+            </a>
           </div>
         </div>
 
@@ -273,11 +278,6 @@
                class="admin-nav__item {% if '/admin/sso' in request.url.path %}is-active{% endif %}"
                {{ tip('Microsoft 365 / Entra ID Single Sign-On konfigurieren') }}>
               <span class="admin-nav__icon">🔑</span>SSO / Microsoft 365
-            </a>
-            <a href="/uas"
-               class="admin-nav__item {% if request.url.path.startswith('/uas') %}is-active{% endif %}"
-               {{ tip('BOS-Drohnenmodul: Geräte, Piloten, Flugbuch, Wartung') }}>
-              <span class="admin-nav__icon">&#x1F681;</span>Drohne / UAS
             </a>
             {% if is_sysadmin %}
             <a href="/admin/ki-prompts"

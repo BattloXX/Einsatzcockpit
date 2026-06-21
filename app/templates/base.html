@@ -68,6 +68,9 @@
             <a href="/admin/meldungsvorlagen" class="nav-dropdown__item">💬 Meldungsvorlagen</a>
             <a href="/admin/lage-hinweise" class="nav-dropdown__item">💡 Lage-Hinweise</a>
             <a href="/admin/default-meldungen" class="nav-dropdown__item">🔔 Default-Meldungen</a>
+            {% if request.state.uas_module_enabled %}
+            <a href="/uas" class="nav-dropdown__item">&#x1F681; Drohne / UAS</a>
+            {% endif %}
           </div>
           <div class="nav-dropdown__group">
             <span class="nav-dropdown__label">Verwaltung</span>
@@ -82,9 +85,6 @@
             <span class="nav-dropdown__label">Einstellungen</span>
             <a href="/admin/settings" class="nav-dropdown__item">🏛️ Organisation</a>
             <a href="/admin/sso" class="nav-dropdown__item">🔑 SSO / Microsoft 365</a>
-            {% if request.state.uas_module_enabled %}
-            <a href="/uas" class="nav-dropdown__item">&#x1F681; Drohne / UAS</a>
-            {% endif %}
             {% if 'system_admin' in user_roles %}
             <a href="/admin/ki-prompts" class="nav-dropdown__item">✨ KI-Prompts</a>
             <a href="/admin/system-einstellungen" class="nav-dropdown__item">⚙️ System</a>

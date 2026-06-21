@@ -1,0 +1,10 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+
+{% block admin_breadcrumb %}
+  {{ breadcrumb([{'label': 'Drohne / UAS', 'href': '/uas'}] + (uas_breadcrumb or [])) }}
+{% endblock %}
+
+{% block admin_content %}
+{% block uas_content %}{% endblock %}
+{% endblock %}
