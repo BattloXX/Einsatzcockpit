@@ -17,7 +17,7 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
     conn.execute(text("""
-        CREATE TABLE verleih_artikel (
+        CREATE TABLE IF NOT EXISTS verleih_artikel (
             id                  BIGINT NOT NULL AUTO_INCREMENT,
             org_id              BIGINT NULL,
             artikel_nr          VARCHAR(100) NULL,
@@ -36,7 +36,7 @@ def upgrade() -> None:
     """))
 
     conn.execute(text("""
-        CREATE TABLE verleih_stueckliste (
+        CREATE TABLE IF NOT EXISTS verleih_stueckliste (
             id                  BIGINT NOT NULL AUTO_INCREMENT,
             org_id              BIGINT NULL,
             bezeichnung         VARCHAR(200) NOT NULL,
@@ -52,7 +52,7 @@ def upgrade() -> None:
     """))
 
     conn.execute(text("""
-        CREATE TABLE verleih_stueckliste_position (
+        CREATE TABLE IF NOT EXISTS verleih_stueckliste_position (
             id                  BIGINT NOT NULL AUTO_INCREMENT,
             stueckliste_id      BIGINT NOT NULL,
             artikel_id          BIGINT NULL,
@@ -69,11 +69,11 @@ def upgrade() -> None:
     """))
 
     conn.execute(text("""
-        CREATE TABLE verleih_ausleihe (
+        CREATE TABLE IF NOT EXISTS verleih_ausleihe (
             id                       BIGINT NOT NULL AUTO_INCREMENT,
             org_id                   BIGINT NULL,
-            lage_id                  BIGINT NOT NULL,
-            site_id                  BIGINT NULL,
+            lage_id                  INT NOT NULL,
+            site_id                  INT NULL,
             name                     VARCHAR(200) NOT NULL,
             adresse                  VARCHAR(300) NULL,
             telefon                  VARCHAR(50) NULL,
@@ -103,7 +103,7 @@ def upgrade() -> None:
     """))
 
     conn.execute(text("""
-        CREATE TABLE verleih_position (
+        CREATE TABLE IF NOT EXISTS verleih_position (
             id                  BIGINT NOT NULL AUTO_INCREMENT,
             ausleihe_id         BIGINT NOT NULL,
             org_id              BIGINT NOT NULL,
