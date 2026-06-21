@@ -1,7 +1,16 @@
-﻿{% extends "uas/_layout.html" %}
+﻿{% extends "uas/_incident_layout.html" %}
 {% block title %}Karte – Drohneneinsatz #{{ einsatz.id }}{% endblock %}
 
 {% block uas_content %}
+{% set _farben = {
+  'start_landezone': '#22c55e',
+  'pilotenzone':     '#f59e0b',
+  'fluggebiet':      '#3b82f6',
+  'drohnen_position':'#a855f7',
+  'grb_kreis':       '#ef4444',
+  'lagepunkt':       '#06b6d4'
+} %}
+
 <div class="page-header">
   <div>
     <h1>&#x1F5FA;&#xFE0F; Karte – Einsatz #{{ einsatz.id }}</h1>
@@ -12,7 +21,7 @@
   </div>
 </div>
 
-{# Annäherungs-/Landebefehl-Banner (RL 4.5/6.2) #}
+{# Annaeherungs-/Landebefehl-Banner (RL 4.5/6.2) #}
 <div id="landebanner" style="display:none;background:#e53e3e;color:#fff;padding:1rem 1.25rem;
      border-radius:6px;margin-bottom:.75rem;font-size:1rem;font-weight:700">
   &#x26A0;&#xFE0F; BEMANNTE LUFTFAHRT IM N&Auml;HERUNGSBEREICH &ndash; DROHNE SOFORT LANDEN! (RL 4.5/6.2)
@@ -27,7 +36,7 @@
 <div style="display:grid;grid-template-columns:1fr 340px;gap:1rem">
 
   {# Leaflet Map #}
-  <div id="uas-map" style="height:520px;border-radius:6px;border:1px solid var(--border)"></div>
+  <div id="uas-map" style="height:560px;border-radius:6px;border:1px solid var(--border)"></div>
 
   {# Objekte-Sidebar #}
   <div>
@@ -58,12 +67,17 @@
 
     <div class="card">
       <div class="card-header"><h2 style="font-size:.95rem">Objekte ({{ objekte_list | length }})</h2></div>
-      <div class="card-body" style="padding:0;max-height:280px;overflow-y:auto">
+      <div class="card-body" style="padding:0;max-height:340px;overflow-y:auto">
         {% for o in objekte_list %}
-        <div style="padding:.5rem .75rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-          <div style="font-size:.85rem">
-            <strong>{{ o.typ | replace('_',' ') | title }}</strong><br>
-            <span style="color:var(--text-muted)">{{ o.label or '' }}</span>
+        {% set _farbe = _farben.get(o.typ, '#888') %}
+        <div style="padding:.5rem .75rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:.5rem">
+          <div style="font-size:.85rem;flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:.4rem">
+              <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:{{ _farbe }};flex-shrink:0"></span>
+              <strong>{{ o.typ | replace('_',' ') | title }}</strong>
+              {% if o.radius_m %}<span style="font-size:.75rem;color:var(--text-muted)">&empty;{{ o.radius_m | int }} m</span>{% endif %}
+            </div>
+            {% if o.label %}<span style="color:var(--text-muted);font-size:.8rem">{{ o.label }}</span>{% endif %}
           </div>
           <form method="post" action="/uas/einsatz/{{ einsatz.id }}/karte/objekt/{{ o.id }}/loeschen" style="display:inline">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -76,6 +90,19 @@
         {% endfor %}
       </div>
     </div>
+
+    {# Legende #}
+    <div class="card" style="margin-top:.75rem">
+      <div class="card-header"><h2 style="font-size:.9rem">Legende</h2></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:.35rem;padding:.6rem .75rem">
+        {% for key, farbe in _farben.items() %}
+        <div style="display:flex;align-items:center;gap:.5rem;font-size:.8rem">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:{{ farbe }};flex-shrink:0"></span>
+          {{ key | replace('_',' ') | title }}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
   </div>
 
 </div>
@@ -84,7 +111,7 @@
 <script src="/static/js/leaflet.min.js"></script>
 <script>
 (function(){
-  var map = L.map('uas-map').setView([47.35, 9.75], 13);
+  var map = L.map('uas-map').setView([{{ inc_lat }}, {{ inc_lng }}], 15);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap'
   }).addTo(map);
@@ -109,13 +136,18 @@
     if(g.type === 'Point'){
       var latlng = [g.coordinates[1], g.coordinates[0]];
       var marker = L.circleMarker(latlng, {radius:8, fillColor:farbe, color:farbe, fillOpacity:.8}).addTo(map);
-      if(o.label) marker.bindTooltip(o.label);
-      if(typ === 'grb_kreis' && o.radius_m){
-        L.circle(latlng, {radius:o.radius_m, color:farbe, fillColor:farbe, fillOpacity:.15}).addTo(map);
-      }
-      if(typ === 'pilotenzone' && o.radius_m){
-        L.circle(latlng, {radius:o.radius_m, color:farbe, fillColor:farbe, fillOpacity:.15,
-          dashArray:'6'}).addTo(map).bindTooltip('Pilotenzone – funk-/mobilfrei (RL 5.5)');
+      var tipLabel = o.label || typ.replace(/_/g,' ');
+      if(o.radius_m) tipLabel += ' (Ø' + o.radius_m + ' m)';
+      marker.bindTooltip(tipLabel);
+
+      if(o.radius_m){
+        var circleOpts = {radius: o.radius_m, color: farbe, fillColor: farbe, fillOpacity: .12, weight: 1.5};
+        if(typ === 'pilotenzone'){
+          circleOpts.dashArray = '6';
+          L.circle(latlng, circleOpts).addTo(map).bindTooltip('Pilotenzone – funk-/mobilfrei (RL 5.5)');
+        } else {
+          L.circle(latlng, circleOpts).addTo(map);
+        }
       }
     }
   });

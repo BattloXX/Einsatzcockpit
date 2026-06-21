@@ -69,11 +69,14 @@
     <div class="form-grid">
       <div class="form-group">
         <label>Startort</label>
-        <input type="text" name="start_ort" class="form-control" maxlength="200">
+        <input type="text" name="start_ort" class="form-control" maxlength="200"
+               value="{{ default_start_ort | default('') }}">
+        {% if default_start_ort %}<small class="form-hint">Vorbelegt aus Karte (Start-/Landezone)</small>{% endif %}
       </div>
       <div class="form-group">
         <label>Landungsort</label>
-        <input type="text" name="landung_ort" class="form-control" maxlength="200">
+        <input type="text" name="landung_ort" class="form-control" maxlength="200"
+               value="{{ default_landung_ort | default('') }}">
       </div>
     </div>
 
@@ -118,7 +121,8 @@
     <div class="form-grid">
       <div class="form-group">
         <label>Gesamteinsatzleiter</label>
-        <input type="text" name="gesamteinsatzleiter" class="form-control" maxlength="150">
+        <input type="text" name="gesamteinsatzleiter" class="form-control" maxlength="150"
+               value="{{ default_gesamteinsatzleiter | default('') }}">
       </div>
       <div class="form-group">
         <label>Einsatzleiter Drohne (Teamleiter)</label>

@@ -1097,8 +1097,9 @@ def flug_neu_form(
     user: User = Depends(require_role("recorder")),
     _guard: None = Depends(require_uas_enabled),
 ):
+    from app.models.incident import Incident
     from app.models.uas import (
-        UASDevice, UASEinsatz, UASFlugDurchfuehrung, UASFlugGrundlage, UASPilot,
+        UASDevice, UASEinsatz, UASFlugDurchfuehrung, UASFlugGrundlage, UASKartenobjekt, UASPilot,
     )
     from app.services.uas_compliance import pilot_freigabe_status
 
@@ -1107,6 +1108,36 @@ def flug_neu_form(
     ).first()
     if not einsatz:
         raise HTTPException(404)
+
+    incident = db.query(Incident).filter(Incident.id == einsatz.incident_id).first()
+
+    # Gesamteinsatzleiter: aus Einsatz, sonst aus übergeordnetem Incident
+    default_gel = einsatz.gesamteinsatzleiter or ""
+    if not default_gel and incident:
+        default_gel = incident.incident_leader_name or ""
+
+    # Start-/Landungsort vorbelegen: erste start_landezone aus Karte
+    start_obj = (
+        db.query(UASKartenobjekt)
+        .filter(
+            UASKartenobjekt.uas_einsatz_id == einsatz_id,
+            UASKartenobjekt.typ == "start_landezone",
+        )
+        .order_by(UASKartenobjekt.created_at)
+        .first()
+    )
+    default_start_ort = ""
+    if start_obj:
+        if start_obj.label:
+            default_start_ort = start_obj.label
+        elif start_obj.geometrie:
+            try:
+                g = json.loads(start_obj.geometrie)
+                if g.get("type") == "Point":
+                    _lng, _lat = g["coordinates"]
+                    default_start_ort = f"{_lat:.5f}, {_lng:.5f}"
+            except Exception:
+                pass
 
     piloten = db.query(UASPilot).filter(
         UASPilot.org_id == user.org_id, UASPilot.aktiv == True  # noqa: E712
@@ -1118,11 +1149,15 @@ def flug_neu_form(
     return templates.TemplateResponse(request, "uas/flug_form.html", {
         "user": user,
         "einsatz": einsatz,
+        "incident": incident,
         "piloten": [{"pilot": p, "freigabe": pilot_freigabe_status(p, db)} for p in piloten],
         "geraete": geraete,
         "durchfuehrungen": list(UASFlugDurchfuehrung),
         "grundlagen": list(UASFlugGrundlage),
         "heute": date.today().isoformat(),
+        "default_gesamteinsatzleiter": default_gel,
+        "default_start_ort": default_start_ort,
+        "default_landung_ort": default_start_ort,
     })
 
 
@@ -1591,6 +1626,7 @@ def einsatz_karte(
     user: User = Depends(require_role("recorder")),
     _guard: None = Depends(require_uas_enabled),
 ):
+    from app.models.incident import Incident
     from app.models.uas import UASEinsatz, UASKartenobjekt, UASKartenobjektTyp
 
     einsatz = db.query(UASEinsatz).filter(
@@ -1598,6 +1634,10 @@ def einsatz_karte(
     ).first()
     if not einsatz:
         raise HTTPException(404)
+
+    incident = db.query(Incident).filter(Incident.id == einsatz.incident_id).first()
+    inc_lat = incident.lat if incident and incident.lat is not None else 47.35
+    inc_lng = incident.lng if incident and incident.lng is not None else 9.75
 
     objekte = (
         db.query(UASKartenobjekt)
@@ -1622,6 +1662,9 @@ def einsatz_karte(
     return templates.TemplateResponse(request, "uas/einsatz_karte.html", {
         "user": user,
         "einsatz": einsatz,
+        "incident": incident,
+        "inc_lat": inc_lat,
+        "inc_lng": inc_lng,
         "objekte_json": json.dumps(objekte_json, ensure_ascii=False),
         "objekte_list": objekte_json,
         "typen": list(UASKartenobjektTyp),
@@ -1826,6 +1869,55 @@ def einsatz_pdf_eintreffmeldung(
     pdf = eintreffmeldung_pdf(einsatz, piloten)
     return _Response(content=pdf, media_type="application/pdf",
                      headers={"Content-Disposition": f"attachment; filename=eintreffmeldung_einsatz{einsatz_id}.pdf"})
+
+
+@router.get("/einsatz/{einsatz_id}/pdf/gesamt")
+def einsatz_pdf_gesamt(
+    einsatz_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from app.models.incident import Incident
+    from app.models.uas import UASDevice, UASEinsatz, UASFlug, UASPilot
+    from app.services.uas_pdf import einsatz_gesamt_pdf
+
+    einsatz = db.query(UASEinsatz).filter(
+        UASEinsatz.id == einsatz_id, UASEinsatz.org_id == user.org_id
+    ).first()
+    if not einsatz:
+        raise HTTPException(404)
+
+    incident = db.query(Incident).filter(Incident.id == einsatz.incident_id).first()
+
+    fluege = (
+        db.query(UASFlug)
+        .filter(UASFlug.uas_einsatz_id == einsatz_id, UASFlug.org_id == user.org_id)
+        .order_by(UASFlug.lfd_nr)
+        .all()
+    )
+
+    fluege_daten = []
+    for flug in fluege:
+        pilot = db.query(UASPilot).filter(UASPilot.id == flug.pilot_id).first() if flug.pilot_id else None
+        device = db.query(UASDevice).filter(UASDevice.id == flug.device_id).first() if flug.device_id else None
+        checklisten_parsed = []
+        for cl in sorted(flug.checklisten, key=lambda c: c.created_at):
+            punkte = []
+            if cl.punkte:
+                try:
+                    punkte = json.loads(cl.punkte)
+                except Exception:
+                    pass
+            checklisten_parsed.append({"checkliste": cl, "punkte": punkte})
+        fluege_daten.append({
+            "flug": flug, "pilot": pilot, "device": device,
+            "checklisten": checklisten_parsed,
+        })
+
+    pdf = einsatz_gesamt_pdf(einsatz, incident=incident, rollen=einsatz.rollen, fluege_daten=fluege_daten)
+    return _Response(content=pdf, media_type="application/pdf",
+                     headers={"Content-Disposition": f"attachment; filename=drohneneinsatz_{einsatz_id}_gesamt.pdf"})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
