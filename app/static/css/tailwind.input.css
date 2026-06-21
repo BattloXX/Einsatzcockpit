@@ -1237,3 +1237,10 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   transition: color .12s;
 }
 .admin-back-link:hover { color: var(--on-surface); text-decoration: none; }
+
+/* ── Mobile: Burger verstecken, Bottom-Nav übernimmt ─────── */
+@media (max-width: 900px) {
+  .topnav__burger { display: none; }
+  /* Scrollbarer Lage-Body muss Bottom-Nav freilassen */
+  .lage-page__body { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+}
