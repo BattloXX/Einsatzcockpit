@@ -22,6 +22,29 @@
   </div>
 </div>
 
+{# ── Schnellzugriff-Leiste ── #}
+<div class="flug-quicknav">
+  <a href="/uas/flug/{{ flug.id }}/ereignis/neu" class="flug-qbtn flug-qbtn--danger">
+    &#x1F6A8; Notfall / Ereignis
+  </a>
+  <a href="/uas/flug/{{ flug.id }}/medien" class="flug-qbtn">
+    &#x1F4F7; Medien / Aufnahmen
+  </a>
+  <a href="/uas/notfallcheckliste" class="flug-qbtn" target="_blank" rel="noopener">
+    &#x1F4CB; Notfallcheckliste
+  </a>
+  <div class="flug-qbtn-group">
+    <a href="/uas/flug/{{ flug.id }}/pdf/flugbuch" class="flug-qbtn flug-qbtn--pdf" target="_blank">
+      &#x1F4C4; PDF Flugbuch
+    </a>
+    {% for row in checklisten %}
+    <a href="/uas/flug/{{ flug.id }}/pdf/checkliste/{{ row.checkliste.id }}" class="flug-qbtn flug-qbtn--pdf" target="_blank">
+      &#x1F4C4; PDF {% if row.checkliste.typ == 'vorflug' %}Vorflug{% else %}Nachflug{% endif %}-CL
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
 {# Flugsicherheitswerte #}
 {% if flug.geplante_flughoehe_m %}
 <div class="card mb-4">
@@ -139,6 +162,37 @@
 {% endif %}
 {% endif %}
 
+{# ── Ereignisse / Notfall-Unfall-Protokoll ── #}
+{% if ereignisse %}
+<div class="card mb-4">
+  <div class="card-header">
+    <h2>&#x26A0; Ereignisse</h2>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:0">
+    {% for e in ereignisse %}
+    <div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 1rem;border-bottom:1px solid rgba(255,255,255,.04)">
+      <span class="badge {% if e.typ == 'unfall' %}badge--error{% elif e.typ == 'notfall' %}badge--warn{% else %}badge--muted{% endif %}">
+        {% if e.typ == 'unfall' %}&#x1F534; Unfall{% elif e.typ == 'notfall' %}&#x26A0; Notfall{% else %}&#x2139; St&ouml;rung{% endif %}
+      </span>
+      <span style="font-size:.88rem;color:var(--text)">{{ e.beschreibung[:80] if e.beschreibung else '(keine Beschreibung)' }}</span>
+      <span style="font-size:.78rem;color:var(--text-muted);margin-left:auto">{{ e.datum_lokal or '' }}</span>
+      <a href="/uas/ereignis/{{ e.id }}" class="btn btn--ghost btn--sm">Details</a>
+      <a href="/uas/ereignis/{{ e.id }}/pdf/protokoll" class="btn btn--ghost btn--sm" target="_blank">&#x1F4C4; PDF</a>
+      {% if e.typ == 'unfall' %}
+      <a href="/uas/ereignis/{{ e.id }}/pdf/acg" class="btn btn--ghost btn--sm" target="_blank">&#x1F4C4; ACG</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div style="margin-bottom:1rem">
+  <a href="/uas/flug/{{ flug.id }}/ereignis/neu" class="btn btn--ghost btn--sm">
+    + Ereignis / St&ouml;rung melden
+  </a>
+</div>
+{% endif %}
+
 {% if flug.inhalt_hash %}
 <p style="margin-top:1rem;font-size:.75rem;color:var(--text-muted)">
   Audit-Hash: <code>{{ flug.inhalt_hash[:16] }}…</code>
@@ -151,5 +205,25 @@
 .kachel__label { font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem }
 .kachel__wert { font-size:1.1rem;font-weight:700 }
 .mb-4 { margin-bottom:1rem }
+.flug-quicknav {
+  display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+  padding:.6rem 0;margin-bottom:1rem;
+  border-bottom:1px solid var(--border);
+}
+.flug-qbtn {
+  display:inline-flex;align-items:center;gap:.35rem;
+  padding:.4rem .85rem;border-radius:5px;font-size:.82rem;
+  color:var(--text);text-decoration:none;
+  background:var(--surface-low);border:1px solid var(--border);
+  transition:background .12s,border-color .12s;white-space:nowrap;
+}
+.flug-qbtn:hover { background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18) }
+.flug-qbtn--danger {
+  color:#fca5a5;border-color:rgba(239,68,68,.35);
+  background:rgba(239,68,68,.08);
+}
+.flug-qbtn--danger:hover { background:rgba(239,68,68,.16) }
+.flug-qbtn--pdf { color:var(--text-muted) }
+.flug-qbtn-group { display:contents }
 </style>
 {% endblock %}

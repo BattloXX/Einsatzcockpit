@@ -221,10 +221,82 @@
   </div>
 </div>
 
+{# ── Einsatz-Schnellzugriff ── #}
+<div class="uas-quicknav" style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+  <a href="/uas/einsatz/{{ einsatz.id }}/karte" class="btn btn--ghost">&#x1F5FA; Karte</a>
+  <a href="/uas/einsatz/{{ einsatz.id }}/eintreffmeldung" class="btn btn--ghost">&#x1F4CB; Eintreffmeldung</a>
+  <a href="/uas/notfallcheckliste" class="btn btn--ghost" target="_blank">&#x1F6A8; Notfallcheckliste</a>
+  <a href="/uas/einsatz/{{ einsatz.id }}/pdf/eintreffmeldung" class="btn btn--ghost" target="_blank">&#x1F4C4; PDF Eintreffmeldung</a>
+</div>
+
+{# ── Flugbuch ── #}
+<div class="card mb-4">
+  <div class="card-header">
+    <h2>&#x2708; Flugbuch</h2>
+    <a href="/uas/einsatz/{{ einsatz.id }}/flug/neu" class="btn btn--primary btn--sm" style="margin-left:auto">+ Neuer Flug</a>
+  </div>
+  {% if fluege %}
+  <div style="overflow-x:auto">
+    <table class="uas-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Datum</th>
+          <th>Pilot</th>
+          <th>Ger&auml;t</th>
+          <th>Durchf&uuml;hrung</th>
+          <th>Dauer</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in fluege %}
+        <tr>
+          <td>{{ f.lfd_nr }}</td>
+          <td>{{ f.datum }}</td>
+          <td>{% if f.pilot %}{{ f.pilot.nachname }}, {{ f.pilot.vorname }}{% else %}<span class="text-muted">&ndash;</span>{% endif %}</td>
+          <td>{% if f.device %}{{ f.device.bezeichnung }}{% else %}<span class="text-muted">&ndash;</span>{% endif %}</td>
+          <td><span class="badge badge--muted">{{ f.durchfuehrung|upper }}</span></td>
+          <td>{% if f.dauer_min %}{{ f.dauer_min }} min{% else %}&ndash;{% endif %}</td>
+          <td>
+            {% if f.status == 'offen' %}
+            <span class="badge badge--warn">offen</span>
+            {% else %}
+            <span class="badge badge--success">&#x2713; abgeschl.</span>
+            {% endif %}
+            {% if f.unfall %}<span class="badge badge--error">&#x26A0; Unfall</span>{% endif %}
+          </td>
+          <td>
+            <a href="/uas/flug/{{ f.id }}" class="btn btn--ghost btn--sm">Details</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="padding:1.25rem 1rem;color:var(--text-muted);font-size:.88rem">
+    Noch keine Fl&uuml;ge erfasst. &rarr; <a href="/uas/einsatz/{{ einsatz.id }}/flug/neu" class="link">Ersten Flug anlegen</a>
+  </div>
+  {% endif %}
+</div>
+
 <style>
 .detail-list { display:grid;grid-template-columns:150px 1fr;gap:.3rem .75rem;margin:0 }
 .detail-list dt { color:var(--text-muted);font-size:.82rem;font-weight:600 }
 .detail-list dd { margin:0;font-size:.9rem }
 .mb-4 { margin-bottom:1rem }
+.text-muted { color:var(--text-muted) }
+.link { color:var(--ampel-gruen,#4ade80);text-decoration:underline }
+.uas-table { width:100%;border-collapse:collapse;font-size:.88rem }
+.uas-table th {
+  text-align:left;padding:.4rem .75rem;
+  font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--text-muted);border-bottom:1px solid var(--border);
+}
+.uas-table td { padding:.5rem .75rem;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle }
+.uas-table tbody tr:hover { background:rgba(255,255,255,.03) }
+.uas-table tbody tr:last-child td { border-bottom:none }
 </style>
 {% endblock %}

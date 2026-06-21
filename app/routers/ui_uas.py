@@ -860,7 +860,13 @@ def einsatz_detail(
         except Exception:
             pass
 
-    from app.models.uas import UASEinsatzRolle
+    from app.models.uas import UASEinsatzRolle, UASFlug
+    fluege = (
+        db.query(UASFlug)
+        .filter(UASFlug.uas_einsatz_id == einsatz_id, UASFlug.org_id == user.org_id)
+        .order_by(UASFlug.lfd_nr)
+        .all()
+    )
     return templates.TemplateResponse(request, "uas/einsatz_detail.html", {
         "user": user,
         "einsatz": einsatz,
@@ -872,6 +878,7 @@ def einsatz_detail(
         "komm": komm,
         "risiko": risiko,
         "alle_rollen": list(UASEinsatzRolle),
+        "fluege": fluege,
     })
 
 
@@ -1238,12 +1245,21 @@ def flug_detail(
                 pass
         checklisten_parsed.append({"checkliste": cl, "punkte": punkte})
 
+    from app.models.uas import UASEreignis
+    ereignisse = (
+        db.query(UASEreignis)
+        .filter(UASEreignis.uas_flug_id == flug_id, UASEreignis.org_id == user.org_id)
+        .order_by(UASEreignis.created_at)
+        .all()
+    )
+
     return templates.TemplateResponse(request, "uas/flug_detail.html", {
         "user": user,
         "flug": flug,
         "sicherheit": sicherheit,
         "flughoehe_konform": konform,
         "checklisten": checklisten_parsed,
+        "ereignisse": ereignisse,
     })
 
 
