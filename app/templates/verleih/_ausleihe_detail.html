@@ -1,4 +1,4 @@
-<div style="padding:0;" x-data="{ smsModalOpen: false, erinnerungModalOpen: false }">
+<div style="padding:0;" x-data='detailPanel({{ artikel_data|tojson }})'>
   <!-- Header -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
     <div>
@@ -89,7 +89,20 @@
 
     <!-- Positionen -->
     <div>
-      <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;">Positionen</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Positionen</div>
+        {% if can_edit and a.status.value == 'ausgeliehen' %}
+        <button type="button" class="btn btn--ghost btn--xs" @click="addItemsOpen=!addItemsOpen" x-show="!addItemsOpen">+ Material</button>
+        {% endif %}
+      </div>
+
+      {% if add_ok is defined %}
+      <div class="alert alert--success" style="font-size:.78rem;padding:4px 8px;margin-bottom:8px;">Material hinzugefuegt.</div>
+      {% endif %}
+      {% if add_error is defined %}
+      <div class="alert alert--danger" style="font-size:.78rem;padding:4px 8px;margin-bottom:8px;">{{ add_error }}</div>
+      {% endif %}
+
       {% for p in a.positionen %}
       <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.04);margin-bottom:5px;gap:8px;">
         <div style="flex:1;min-width:0;">
@@ -124,6 +137,55 @@
           Alle zurückgegeben
         </button>
       </form>
+      {% endif %}
+
+      <!-- Inline-Formular: Material nachtraeglich hinzufuegen -->
+      {% if can_edit %}
+      <div x-show="addItemsOpen" x-cloak style="margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">Material hinzufuegen</div>
+        <datalist id="detail-artikel-datalist">
+          {% for a_item in artikel %}
+          <option value="{{ a_item.bezeichnung }}"{% if a_item.artikel_nr %} data-nr="{{ a_item.artikel_nr }}"{% endif %}>{{ a_item.artikel_nr or '' }}</option>
+          {% endfor %}
+        </datalist>
+        <form hx-post="/lage/{{ lage.id }}/verleih/{{ a.id }}/positionen-hinzufuegen"
+              hx-target="#verleih-detail-panel"
+              hx-swap="innerHTML">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <template x-for="(row, idx) in addRows" :key="idx">
+            <div style="display:flex;gap:6px;margin-bottom:6px;align-items:flex-start;border:1px solid var(--border);border-radius:6px;padding:6px 8px;">
+              <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+                <input type="text" class="form-input form-input--xs"
+                       placeholder="Bezeichnung *"
+                       :name="'pos_bezeichnung[]'"
+                       x-model="row.bezeichnung"
+                       required
+                       list="detail-artikel-datalist">
+                <div style="display:flex;gap:4px;">
+                  <input type="text" class="form-input form-input--xs" style="flex:1;"
+                         placeholder="Artikelnr"
+                         :name="'pos_artikel_nr[]'"
+                         x-model="row.artikel_nr">
+                  <input type="hidden" :name="'pos_artikel_id[]'" x-model="row.artikel_id">
+                  <input type="number" class="form-input form-input--xs" style="width:56px;"
+                         :name="'pos_menge[]'"
+                         x-model="row.menge"
+                         min="1"
+                         :readonly="!row.ist_mengenartikel && row.artikel_id"
+                         :title="!row.ist_mengenartikel && row.artikel_id ? 'Eindeutiger Artikel: Menge = 1' : ''">
+                </div>
+              </div>
+              <button type="button" class="btn btn--danger btn--xs" style="flex-shrink:0;margin-top:2px;"
+                      @click="removeAddRow(idx)">x</button>
+            </div>
+          </template>
+          <button type="button" class="btn btn--ghost btn--xs" @click="addAddRow()" style="width:100%;margin-bottom:8px;">+ Zeile</button>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn btn--ghost btn--xs" @click="addItemsOpen=false;resetAddRows()">Abbrechen</button>
+            <button type="submit" class="btn btn--primary btn--xs" style="flex:1;">Hinzufuegen</button>
+          </div>
+        </form>
+      </div>
       {% endif %}
     </div>
 
@@ -244,3 +306,25 @@
 .status-chip--ausgeliehen { background:rgba(251,191,36,.2);color:#fbbf24; }
 .status-chip--zurueck     { background:rgba(34,197,94,.15);color:#4ade80; }
 </style>
+
+<script>
+function detailPanel(initialArtikel) {
+  return {
+    smsModalOpen: false,
+    erinnerungModalOpen: false,
+    addItemsOpen: false,
+    artikelList: initialArtikel || [],
+    addRows: [{ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true }],
+    addAddRow() {
+      this.addRows.push({ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true });
+    },
+    removeAddRow(i) {
+      this.addRows.splice(i, 1);
+      if (!this.addRows.length) this.addAddRow();
+    },
+    resetAddRows() {
+      this.addRows = [{ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true }];
+    },
+  };
+}
+</script>

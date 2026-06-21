@@ -57,6 +57,33 @@ def _can_edit(user) -> bool:
     return has_role(user, "incident_leader", "admin", "org_admin", "recorder")
 
 
+def _detail_ctx(db: Session, user, lage, ausleihe, **extra) -> dict:
+    site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
+    artikel = svc.get_artikel_aktiv(db)
+    artikel_data = [
+        {
+            "id": a.id,
+            "artikel_nr": a.artikel_nr or "",
+            "bezeichnung": a.bezeichnung,
+            "ist_mengenartikel": a.ist_mengenartikel,
+        }
+        for a in artikel if a.artikel_nr
+    ]
+    ctx = {
+        "user": user,
+        "lage": lage,
+        "a": ausleihe,
+        "site": site,
+        "can_edit": _can_edit(user),
+        "sms_text": svc.get_sms_ausleih_text(db, lage.org_id, ausleihe),
+        "erinnerung_text": svc.get_sms_erinnerung_text(db, lage.org_id, ausleihe),
+        "artikel": artikel,
+        "artikel_data": artikel_data,
+    }
+    ctx.update(extra)
+    return ctx
+
+
 # ── Admin: Artikelstammdaten ──────────────────────────────────────────────────
 
 @router.get("/admin/verleih-artikel", response_class=HTMLResponse)
@@ -305,6 +332,16 @@ async def verleih_neu_form(
     stuecklisten = svc.get_stuecklisten_aktiv(db)
     artikel = svc.get_artikel_aktiv(db)
     sites_data = [{"id": s.id, "bezeichnung": s.bezeichnung} for s in sites]
+    artikel_data = [
+        {
+            "id": a.id,
+            "artikel_nr": a.artikel_nr or "",
+            "bezeichnung": a.bezeichnung,
+            "ist_mengenartikel": a.ist_mengenartikel,
+        }
+        for a in artikel
+        if a.artikel_nr
+    ]
 
     return templates.TemplateResponse(request, "verleih/_ausleihe_form.html", {
         "user": user,
@@ -313,6 +350,7 @@ async def verleih_neu_form(
         "sites_data": sites_data,
         "stuecklisten": stuecklisten,
         "artikel": artikel,
+        "artikel_data": artikel_data,
     })
 
 
@@ -373,8 +411,8 @@ async def verleih_neu(
 
     # Journal-Eintrag
     try:
+        from app.core.security import get_author_name
         from app.models.major_incident import LageJournalEntry
-        from app.routers.ui_major_incident import get_author_name
         artikel_text = ausleihe.artikel_bezeichnungen or "Material"
         journal = LageJournalEntry(
             major_incident_id=lage_id,
@@ -412,19 +450,8 @@ async def verleih_detail(
     _check_org(user, lage)
     ausleihe = _ausleihe_or_404(ausleihe_id, db)
 
-    site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
-    sms_text = svc.get_sms_ausleih_text(db, lage.org_id, ausleihe)
-    erinnerung_text = svc.get_sms_erinnerung_text(db, lage.org_id, ausleihe)
-
-    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html", {
-        "user": user,
-        "lage": lage,
-        "a": ausleihe,
-        "site": site,
-        "can_edit": _can_edit(user),
-        "sms_text": sms_text,
-        "erinnerung_text": erinnerung_text,
-    })
+    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+        _detail_ctx(db, user, lage, ausleihe))
 
 
 # ── GSL: Rückgabe ─────────────────────────────────────────────────────────────
@@ -464,18 +491,9 @@ async def position_zurueck(
     ausleihe = svc.return_position(db, position_id)
     await broadcast_lage(lage_id, {"type": "verleih:changed", "lage_id": lage_id})
 
-    site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
-    sms_text = svc.get_sms_ausleih_text(db, lage.org_id, ausleihe)
-    erinnerung_text = svc.get_sms_erinnerung_text(db, lage.org_id, ausleihe)
-    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html", {
-        "user": user,
-        "lage": lage,
-        "a": ausleihe,
-        "site": site,
-        "can_edit": _can_edit(user),
-        "sms_text": sms_text,
-        "erinnerung_text": erinnerung_text,
-    }, headers={"HX-Trigger": json.dumps({"verleihKarteAktualisieren": str(ausleihe.id)})})
+    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+        _detail_ctx(db, user, lage, ausleihe),
+        headers={"HX-Trigger": json.dumps({"verleihKarteAktualisieren": str(ausleihe.id)})})
 
 
 @router.post("/lage/{lage_id}/verleih/{ausleihe_id}/alle-zurueck", response_class=HTMLResponse)
@@ -493,18 +511,9 @@ async def alle_zurueck(
     ausleihe = svc.return_all(db, ausleihe_id)
     await broadcast_lage(lage_id, {"type": "verleih:changed", "lage_id": lage_id})
 
-    site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
-    sms_text = svc.get_sms_ausleih_text(db, lage.org_id, ausleihe)
-    erinnerung_text = svc.get_sms_erinnerung_text(db, lage.org_id, ausleihe)
-    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html", {
-        "user": user,
-        "lage": lage,
-        "a": ausleihe,
-        "site": site,
-        "can_edit": _can_edit(user),
-        "sms_text": sms_text,
-        "erinnerung_text": erinnerung_text,
-    }, headers={"HX-Trigger": json.dumps({"verleihKarteAktualisieren": str(ausleihe.id)})})
+    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+        _detail_ctx(db, user, lage, ausleihe),
+        headers={"HX-Trigger": json.dumps({"verleihKarteAktualisieren": str(ausleihe.id)})})
 
 
 # ── GSL: Stückliste laden (HTMX-JSON) ────────────────────────────────────────
@@ -564,20 +573,9 @@ async def pin_senden(
         sms_text = f"Ihr Geraeteausleihe-PIN: {pin} - {org_name}"
         sms_ok = await send_sms(lage.org_id, ausleihe.telefon, sms_text)
 
-    site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
-    sms_ausleih_text = svc.get_sms_ausleih_text(db, lage.org_id, ausleihe)
-    erinnerung_text = svc.get_sms_erinnerung_text(db, lage.org_id, ausleihe)
-    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html", {
-        "user": user,
-        "lage": lage,
-        "a": ausleihe,
-        "site": site,
-        "can_edit": _can_edit(user),
-        "sms_text": sms_ausleih_text,
-        "erinnerung_text": erinnerung_text,
-        "pin_sms_ok": sms_ok,
-        "pin_sms_sent": bool(ausleihe.telefon),
-    })
+    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+        _detail_ctx(db, user, lage, ausleihe,
+                    pin_sms_ok=sms_ok, pin_sms_sent=bool(ausleihe.telefon)))
 
 
 @router.post("/lage/{lage_id}/verleih/{ausleihe_id}/sms-ausleih", response_class=HTMLResponse)
@@ -602,19 +600,11 @@ async def sms_ausleih_senden(
             ausleihe.sms_ausleih_gesendet = True
             db.commit()
 
-    site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
-    erinnerung_text = svc.get_sms_erinnerung_text(db, lage.org_id, ausleihe)
-    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html", {
-        "user": user,
-        "lage": lage,
-        "a": ausleihe,
-        "site": site,
-        "can_edit": _can_edit(user),
-        "sms_text": sms_text,
-        "erinnerung_text": erinnerung_text,
-        "sms_ausleih_ok": sms_ok,
-        "sms_ausleih_no_phone": not ausleihe.telefon,
-    })
+    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+        _detail_ctx(db, user, lage, ausleihe,
+                    sms_text=sms_text,
+                    sms_ausleih_ok=sms_ok,
+                    sms_ausleih_no_phone=not ausleihe.telefon))
 
 
 @router.post("/lage/{lage_id}/verleih/schnell-einsatzstelle")
@@ -658,19 +648,8 @@ async def verleih_foto_upload(
     await svc.save_verleih_foto(foto, ausleihe_id, lage.org_id, user.id, db)
     ausleihe = _ausleihe_or_404(ausleihe_id, db)
 
-    site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
-    sms_text = svc.get_sms_ausleih_text(db, lage.org_id, ausleihe)
-    erinnerung_text = svc.get_sms_erinnerung_text(db, lage.org_id, ausleihe)
-    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html", {
-        "user": user,
-        "lage": lage,
-        "a": ausleihe,
-        "site": site,
-        "can_edit": _can_edit(user),
-        "sms_text": sms_text,
-        "erinnerung_text": erinnerung_text,
-        "foto_ok": True,
-    })
+    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+        _detail_ctx(db, user, lage, ausleihe, foto_ok=True))
 
 
 @router.get("/lage/{lage_id}/verleih/{ausleihe_id}/foto/{foto_id}/bild")
@@ -710,8 +689,8 @@ async def verleih_drucken(
     site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
 
     try:
+        from app.core.security import get_author_name
         from app.models.major_incident import LageJournalEntry
-        from app.routers.ui_major_incident import get_author_name
         journal = LageJournalEntry(
             major_incident_id=lage_id,
             category="sonstiges",
@@ -759,16 +738,70 @@ async def erinnerung_manuell(
             ausleihe.erinnerung_gesendet_at = datetime.now(UTC)
             db.commit()
 
-    site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
-    sms_ausleih_text = svc.get_sms_ausleih_text(db, lage.org_id, ausleihe)
-    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html", {
-        "user": user,
-        "lage": lage,
-        "a": ausleihe,
-        "site": site,
-        "can_edit": _can_edit(user),
-        "sms_text": sms_ausleih_text,
-        "erinnerung_text": sms_text,
-        "erinnerung_ok": sms_ok,
-        "erinnerung_no_phone": not ausleihe.telefon,
-    })
+    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+        _detail_ctx(db, user, lage, ausleihe,
+                    erinnerung_text=sms_text,
+                    erinnerung_ok=sms_ok,
+                    erinnerung_no_phone=not ausleihe.telefon))
+
+
+# ── GSL: Positionen nachträglich hinzufügen ───────────────────────────────────
+
+@router.post("/lage/{lage_id}/verleih/{ausleihe_id}/positionen-hinzufuegen", response_class=HTMLResponse)
+async def positionen_hinzufuegen(
+    request: Request,
+    lage_id: int,
+    ausleihe_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org(user, lage)
+    ausleihe = _ausleihe_or_404(ausleihe_id, db)
+
+    form = await request.form()
+    bez_list = form.getlist("pos_bezeichnung[]")
+    nr_list  = form.getlist("pos_artikel_nr[]")
+    menge_list = form.getlist("pos_menge[]")
+    aid_list = form.getlist("pos_artikel_id[]")
+
+    positionen = []
+    for i, bz in enumerate(bez_list):
+        bz = bz.strip()
+        if not bz:
+            continue
+        positionen.append({
+            "bezeichnung": bz,
+            "artikel_nr": nr_list[i].strip() if i < len(nr_list) else None,
+            "menge": int(menge_list[i]) if i < len(menge_list) and str(menge_list[i]).isdigit() else 1,
+            "artikel_id": int(aid_list[i]) if i < len(aid_list) and str(aid_list[i]).isdigit() else None,
+        })
+
+    if not positionen:
+        return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+            _detail_ctx(db, user, lage, ausleihe, add_error="Mindestens eine Position erforderlich"))
+
+    ausleihe = svc.add_positionen(db, ausleihe_id, lage.org_id, positionen)
+
+    try:
+        from app.core.security import get_author_name
+        from app.models.major_incident import LageJournalEntry
+        artikel_text = ", ".join(p["bezeichnung"] for p in positionen)
+        journal = LageJournalEntry(
+            major_incident_id=lage_id,
+            category="sonstiges",
+            text=f"Geraeteverleih Nachtrag: {artikel_text} an {ausleihe.name} hinzugefuegt",
+            author_name=get_author_name(request),
+            user_id=getattr(user, "id", None),
+        )
+        db.add(journal)
+        db.commit()
+    except Exception:
+        logger.warning("Journal-Eintrag fuer Verleih-Nachtrag fehlgeschlagen", exc_info=True)
+
+    await broadcast_lage(lage_id, {"type": "verleih:changed", "lage_id": lage_id})
+
+    return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
+        _detail_ctx(db, user, lage, ausleihe, add_ok=True),
+        headers={"HX-Trigger": json.dumps({"verleihKarteAktualisieren": str(ausleihe.id)})})

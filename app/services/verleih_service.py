@@ -148,6 +148,31 @@ def return_position(db: Session, position_id: int) -> VerleihAusleihe:
     return ausleihe
 
 
+def add_positionen(
+    db: Session,
+    ausleihe_id: int,
+    org_id: int,
+    positionen: list[dict],
+) -> VerleihAusleihe:
+    for p in positionen:
+        pos = VerleihPosition(
+            ausleihe_id=ausleihe_id,
+            org_id=org_id,
+            artikel_id=p.get("artikel_id"),
+            bezeichnung=p["bezeichnung"],
+            artikel_nr=p.get("artikel_nr") or None,
+            menge=int(p.get("menge", 1)),
+        )
+        db.add(pos)
+    ausleihe = _fetch_ausleihe(db, ausleihe_id)
+    if ausleihe.status == VerleihStatus.zurueckgegeben:
+        ausleihe.status = VerleihStatus.ausgeliehen
+        ausleihe.zurueckgegeben_at = None
+    db.commit()
+    db.refresh(ausleihe)
+    return ausleihe
+
+
 def return_all(db: Session, ausleihe_id: int) -> VerleihAusleihe:
     now = datetime.now(UTC)
     ausleihe = _fetch_ausleihe(db, ausleihe_id)

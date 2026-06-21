@@ -1,4 +1,4 @@
-<div style="padding:0;" x-data='verleihForm({{ sites_data|tojson }}, {{ lage.id }})'>
+<div style="padding:0;" x-data='verleihForm({{ sites_data|tojson }}, {{ lage.id }}, {{ artikel_data|tojson }})'>
   <!-- Header -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
     <strong>Neue Ausleihe</strong>
@@ -100,11 +100,10 @@
               <!-- Barcode-Scan-Button -->
               <button type="button" class="btn btn--ghost btn--xs" style="padding:3px 7px;font-size:.8rem;"
                       :title="barcodeApiAvailable ? 'Barcode scannen' : 'Barcode-Scanner nicht unterstuetzt'"
+                      :disabled="!barcodeApiAvailable"
                       @click="triggerScan(idx)">
                 &#128247;
               </button>
-              <input type="file" accept="image/*" capture="environment" style="display:none;"
-                     @change="onScanFile($event, idx)">
               <input type="hidden" :name="'pos_artikel_id[]'" x-model="row.artikel_id">
               <input type="number" class="form-input form-input--xs" style="width:60px;"
                      :name="'pos_menge[]'"
@@ -125,13 +124,19 @@
       <button type="submit" class="btn btn--primary">Ausleihe anlegen</button>
     </div>
   </form>
+
+  <!-- Gemeinsamer Barcode-File-Input (ausserhalb x-for, wird per x-ref referenziert) -->
+  <input type="file" x-ref="barcodeFileInput" accept="image/*" capture="environment"
+         style="display:none;" @change="onScanFile($event)">
 </div>
 
 <script>
-function verleihForm(initialSites, lageId) {
+function verleihForm(initialSites, lageId, initialArtikel) {
   return {
     lageId: lageId,
     siteList: initialSites || [],
+    artikelList: initialArtikel || [],
+    scanIdx: -1,
     newSiteOpen: false,
     newSiteName: '',
     newSiteError: '',
@@ -189,30 +194,35 @@ function verleihForm(initialSites, lageId) {
       }
     },
     triggerScan(idx) {
-      var input = this.$el.querySelectorAll('input[type=file][capture]')[idx];
-      if (input) input.click();
+      this.scanIdx = idx;
+      this.$refs.barcodeFileInput.click();
     },
-    async onScanFile(ev, idx) {
+    async onScanFile(ev) {
       var file = ev.target.files[0];
-      if (!file) return;
-      if (!('BarcodeDetector' in window)) {
-        alert('Barcode-Scanner wird von diesem Geraet nicht unterstuetzt. Bitte manuell eingeben.');
-        ev.target.value = '';
-        return;
-      }
+      var idx = this.scanIdx;
+      ev.target.value = '';
+      if (!file || idx < 0 || idx >= this.rows.length) return;
       try {
         var bitmap = await createImageBitmap(file);
         var detector = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','code_39','qr_code','data_matrix'] });
         var codes = await detector.detect(bitmap);
-        if (codes.length > 0) {
-          this.rows[idx].artikel_nr = codes[0].rawValue;
-        } else {
+        if (codes.length === 0) {
           alert('Kein Barcode erkannt – bitte Artikelnummer manuell eingeben.');
+          return;
+        }
+        var scanned = codes[0].rawValue;
+        this.rows[idx].artikel_nr = scanned;
+        // Artikel-Stammdaten aus Liste nachschlagen
+        var match = this.artikelList.find(function(a) { return a.artikel_nr === scanned; });
+        if (match) {
+          this.rows[idx].bezeichnung = match.bezeichnung;
+          this.rows[idx].artikel_id = String(match.id);
+          this.rows[idx].ist_mengenartikel = match.ist_mengenartikel;
+          if (!match.ist_mengenartikel) this.rows[idx].menge = 1;
         }
       } catch(e) {
         alert('Scan fehlgeschlagen: ' + e.message);
       }
-      ev.target.value = '';
     },
   };
 }
