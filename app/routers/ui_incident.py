@@ -638,6 +638,24 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     ]
     _bs = db.get(SystemSettings, "breathing_enabled")
     breathing_enabled = (_bs.value if _bs else "true") != "false"
+
+    # Drohnen-Button: UASEinsatz verknüpft? Starten-Berechtigung?
+    uas_einsatz_id = None
+    can_start_uas = False
+    try:
+        from app.models.uas import UASEinsatz
+        from app.services.uas_service import uas_effective_enabled
+        _ue = db.query(UASEinsatz).filter(UASEinsatz.incident_id == incident_id).first()
+        if _ue:
+            uas_einsatz_id = _ue.id
+        uas_org_enabled = uas_effective_enabled(incident.primary_org_id, db)
+        can_start_uas = uas_org_enabled and has_role(
+            user, "recorder", "breathing_supervisor", "incident_leader"
+        )
+    except Exception:
+        uas_einsatz_id = None
+        can_start_uas = False
+
     lage_sprueche = (
         db.query(IncidentCommLog)
         .filter(
@@ -672,6 +690,8 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         "breathing_enabled": breathing_enabled,
         "lage_sprueche": lage_sprueche,
         "weather_enabled": _weather_enabled,
+        "uas_einsatz_id": uas_einsatz_id,
+        "can_start_uas": can_start_uas,
     })
 
 

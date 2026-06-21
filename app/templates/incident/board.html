@@ -154,6 +154,13 @@
     <a href="/einsatz/{{ incident.id }}/atemschutz" class="btn btn--sm btn--secondary"
        {{ tip('Atemschutzüberwachung — Pressluft-Trupp-Steuerung') }}>🫁 AS</a>
     {% endif %}
+    {% if uas_einsatz_id %}
+    <a href="/uas/einsatz/{{ uas_einsatz_id }}" class="btn btn--sm btn--secondary"
+       {{ tip('Drohneneinsatz öffnen') }}>🚁 Drohne</a>
+    {% elif can_start_uas %}
+    <a href="/uas/incidents/{{ incident.id }}/einsatz/starten" class="btn btn--sm btn--secondary"
+       {{ tip('Drohneneinsatz zu diesem Einsatz starten') }}>🚁 Drohne starten</a>
+    {% endif %}
     <a href="/einsatz/{{ incident.id }}/dashboard" target="_blank" rel="noopener noreferrer"
        class="btn btn--sm btn--secondary"
        {{ tip('Übersichts-Dashboard in neuem Fenster öffnen') }}>📊 Dashboard</a>
