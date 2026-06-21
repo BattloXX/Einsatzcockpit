@@ -149,8 +149,11 @@ async def sso_settings_save(
                 ip=request.client.host if request.client else None)
     db.commit()
 
-    suffix = f"?org_id={effective_org_id}" if effective_org_id != user.org_id else ""
-    return RedirectResponse(f"/admin/sso{suffix}&flash=saved", status_code=302)
+    if effective_org_id != user.org_id:
+        redirect_url = f"/admin/sso?org_id={effective_org_id}&flash=saved"
+    else:
+        redirect_url = "/admin/sso?flash=saved"
+    return RedirectResponse(redirect_url, status_code=302)
 
 
 # ── POST /admin/sso/test ──────────────────────────────────────────────────────
