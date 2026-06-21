@@ -701,6 +701,7 @@ async def edit_user(
     display_name: str = Form(...),
     full_name: str = Form(""), email: str = Form(""), phone: str = Form(""),
     org_id: int | None = Form(None),
+    role_codes: list[str] = Form([]),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     current_user = request.state.user
@@ -720,6 +721,11 @@ async def edit_user(
     u.phone = phone.strip() or None
     if has_role(current_user, "system_admin") and org_id is not None:
         u.org_id = org_id if org_id != 0 else None
+    db.query(UserRole).filter(UserRole.user_id == user_id).delete()
+    for code in role_codes:
+        role = db.query(Role).filter(Role.code == code).first()
+        if role:
+            db.add(UserRole(user_id=user_id, role_id=role.id))
     write_audit(db, "admin.user.edited", user_id=current_user.id,
                 entity_type="user", entity_id=user_id)
     db.commit()

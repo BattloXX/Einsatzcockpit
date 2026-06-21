@@ -83,14 +83,9 @@
                   'email': u.email or '',
                   'phone': u.phone or '',
                   'org_id': u.org_id or 0,
-                }|tojson|forceescape }})"
-                {{ tip('Name, E-Mail, Telefon bearbeiten') }}>
+                }|tojson|forceescape }}, {{ u.roles|map(attribute='code')|list|tojson|e }})"
+                {{ tip('Name, E-Mail, Telefon, Rollen bearbeiten') }}>
           Bearbeiten
-        </button>
-        <button type="button" class="btn btn--ghost btn--xs"
-                onclick="openRolesEditor({{ u.id }}, '{{ u.username|e }}', {{ u.roles|map(attribute='code')|list|tojson|e }})"
-                {{ tip('Rollen-Zuweisung ändern') }}>
-          Rollen
         </button>
         {% if u.email %}
         <button type="button" class="btn btn--ghost btn--xs"
@@ -199,6 +194,14 @@
           </select>
         </div>
         {% endif %}
+        <div class="form-group">
+          <label class="form-label">Rollen</label>
+          {% for r in roles %}
+          <label class="checkbox-label">
+            <input type="checkbox" name="role_codes" value="{{ r.code }}" class="eu-role-check"> {{ r.label }} ({{ r.code }})
+          </label>
+          {% endfor %}
+        </div>
       </div>
       <div class="modal__footer">
         <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -208,27 +211,6 @@
   </div>
 </dialog>
 
-<!-- Rollen bearbeiten -->
-<dialog class="modal" id="rolesEditorModal">
-  <div class="modal__content">
-    <div class="modal__header"><h3>Rollen für <span id="re_username"></span></h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
-    <form method="post" id="rolesEditorForm">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div class="modal__body">
-        {% for r in roles %}
-        <label class="checkbox-label">
-          <input type="checkbox" name="role_codes" value="{{ r.code }}" class="role-check"> {{ r.label }} ({{ r.code }})
-        </label>
-        {% endfor %}
-      </div>
-      <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
-        <button type="submit" class="btn btn--primary">Speichern</button>
-      </div>
-    </form>
-  </div>
-</dialog>
 {% endblock %}
 
 {% block scripts %}
@@ -259,23 +241,19 @@ function checkBulkUsers() {
   if (!checked) { alert('Keine Benutzer ausgewählt.'); return false; }
   return confirm(checked + ' Benutzer endgültig löschen? Dies kann nicht rückgängig gemacht werden!');
 }
-function openEditUser(id, data) {
+function openEditUser(id, data, currentRoles) {
   document.getElementById('eu_display_name').value = data.display_name || '';
   document.getElementById('eu_full_name').value = data.full_name || '';
   document.getElementById('eu_email').value = data.email || '';
   document.getElementById('eu_phone').value = data.phone || '';
   const orgSel = document.getElementById('eu_org_id');
   if (orgSel) orgSel.value = data.org_id || 0;
+  document.querySelectorAll('.eu-role-check').forEach(cb => {
+    cb.checked = Array.isArray(currentRoles) && currentRoles.includes(cb.value);
+  });
   document.getElementById('editUserForm').action = `/admin/benutzer/${id}/edit`;
   document.getElementById('editUserModal').showModal();
 }
-function openRolesEditor(id, username, currentRoles) {
-  document.getElementById('re_username').textContent = username;
-  document.getElementById('rolesEditorForm').action = `/admin/benutzer/${id}/rollen`;
-  document.querySelectorAll('.role-check').forEach(cb => {
-    cb.checked = currentRoles.includes(cb.value);
-  });
-  document.getElementById('rolesEditorModal').showModal();
-}
+
 </script>
 {% endblock %}
