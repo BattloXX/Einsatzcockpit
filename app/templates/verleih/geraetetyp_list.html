@@ -1,0 +1,112 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Geraeteverleih &ndash; Geraetetypen{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Geraeteverleih &ndash; Geraetetypen</h1>
+      <p class="page-header__sub">Kategorien fuer Geraete. Stucklisten-Positionen koennen einen Geraetetyp fordern, damit beim Ausleihen das konkrete Geraet per Artikelnr ausgewaehlt werden muss.</p>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <a href="/admin/verleih-uebersicht" class="btn btn--ghost">Aktive Ausleihen</a>
+      <a href="/admin/verleih-artikel" class="btn btn--ghost">Artikel</a>
+      <a href="/admin/verleih-stuecklisten" class="btn btn--ghost">Stucklisten</a>
+      <button class="btn btn--primary" onclick="document.getElementById('newGtModal').showModal()">+ Geraetetyp anlegen</button>
+    </div>
+  </div>
+
+  {% if saved %}<div class="alert alert--success" style="margin-bottom:12px;">Gespeichert.</div>{% endif %}
+
+  {% if geraetetypen %}
+  <table class="table-admin">
+    <thead>
+      <tr>
+        <th>Geraetetyp</th>
+        <th>Beschreibung</th>
+        <th>Artikel</th>
+        <th>Aktionen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for gt in geraetetypen %}
+      <tr id="gt-row-{{ gt.id }}">
+        <td><strong>{{ gt.name }}</strong></td>
+        <td style="color:var(--text-muted);font-size:.85rem;">{{ gt.beschreibung or '&ndash;' }}</td>
+        <td>
+          <span style="font-size:.82rem;color:var(--text-muted);">{{ artikel_counts.get(gt.id, 0) }} Artikel</span>
+        </td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn--ghost btn--xs"
+                  onclick="document.getElementById('editGtModal-{{ gt.id }}').showModal()">Bearbeiten</button>
+          <button class="btn btn--danger btn--xs"
+                  hx-post="/admin/verleih-geraetetypen/{{ gt.id }}/loeschen"
+                  hx-target="#gt-row-{{ gt.id }}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Geraetetyp '{{ gt.name }}' deaktivieren?">Deaktivieren</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--text-muted);padding:24px 0;">Noch keine Geraetetypen angelegt.</p>
+  {% endif %}
+</div>
+
+<!-- ── Neuer Geraetetyp ─────────────────────────────────────────────────── -->
+<dialog class="modal" id="newGtModal">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Neuer Geraetetyp</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">x</button>
+    </div>
+    <form method="post" action="/admin/verleih-geraetetypen/neu">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Name *</label>
+          <input type="text" name="name" class="form-input" required maxlength="200" placeholder="z.B. Pumpe">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Beschreibung</label>
+          <textarea name="beschreibung" class="form-input" rows="2" maxlength="500" placeholder="Optional"></textarea>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- ── Edit-Modals ──────────────────────────────────────────────────────── -->
+{% for gt in geraetetypen %}
+<dialog class="modal" id="editGtModal-{{ gt.id }}">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Geraetetyp bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">x</button>
+    </div>
+    <form method="post" action="/admin/verleih-geraetetypen/{{ gt.id }}/bearbeiten">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group">
+          <label class="form-label">Name *</label>
+          <input type="text" name="name" class="form-input" required maxlength="200" value="{{ gt.name }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Beschreibung</label>
+          <textarea name="beschreibung" class="form-input" rows="2" maxlength="500">{{ gt.beschreibung or '' }}</textarea>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endfor %}
+{% endblock %}

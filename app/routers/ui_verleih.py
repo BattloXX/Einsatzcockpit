@@ -17,6 +17,7 @@ from app.models.verleih import (
     VerleihArtikel,
     VerleihAusleihe,
     VerleihFoto,
+    VerleihGeraetetyp,
     VerleihPosition,
     VerleihStatus,
     VerleihStueckliste,
@@ -95,9 +96,11 @@ async def verleih_artikel_liste(
 ):
     user = request.state.user
     artikel = svc.get_artikel_aktiv(db)
+    geraetetypen = svc.get_geraetetypen_aktiv(db)
     return templates.TemplateResponse(request, "verleih/artikel_list.html", {
         "user": user,
         "artikel": artikel,
+        "geraetetypen": geraetetypen,
     })
 
 
@@ -109,15 +112,26 @@ async def verleih_artikel_neu(
     ist_mengenartikel: str = Form(""),
     lagerbestand: str = Form(""),
     notizen: str = Form(""),
+    geraetetyp_id: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
     user = request.state.user
     org_id = user.org_id
+    clean_nr = artikel_nr.strip() or None
+    if clean_nr and not svc.artikel_nr_eindeutig(db, org_id, clean_nr):
+        geraetetypen = svc.get_geraetetypen_aktiv(db)
+        artikel = svc.get_artikel_aktiv(db)
+        return templates.TemplateResponse(request, "verleih/artikel_list.html", {
+            "user": user, "artikel": artikel, "geraetetypen": geraetetypen,
+            "error": f"Artikelnr '{clean_nr}' ist in dieser Organisation bereits vergeben.",
+        })
+    gtyp_id = int(geraetetyp_id) if geraetetyp_id.strip().isdigit() else None
     a = VerleihArtikel(
         org_id=org_id,
-        artikel_nr=artikel_nr.strip() or None,
+        artikel_nr=clean_nr,
         bezeichnung=bezeichnung.strip(),
+        geraetetyp_id=gtyp_id,
         ist_mengenartikel=bool(ist_mengenartikel),
         lagerbestand=int(lagerbestand) if lagerbestand.strip().isdigit() else None,
         notizen=notizen.strip() or None,
@@ -125,9 +139,11 @@ async def verleih_artikel_neu(
     db.add(a)
     db.commit()
     artikel = svc.get_artikel_aktiv(db)
+    geraetetypen = svc.get_geraetetypen_aktiv(db)
     return templates.TemplateResponse(request, "verleih/artikel_list.html", {
         "user": user,
         "artikel": artikel,
+        "geraetetypen": geraetetypen,
         "saved": True,
     })
 
@@ -141,14 +157,19 @@ async def verleih_artikel_bearbeiten(
     ist_mengenartikel: str = Form(""),
     lagerbestand: str = Form(""),
     notizen: str = Form(""),
+    geraetetyp_id: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
     a = db.get(VerleihArtikel, artikel_id)
     if not a:
         raise HTTPException(404, "Artikel nicht gefunden")
+    clean_nr = artikel_nr.strip() or None
+    if clean_nr and not svc.artikel_nr_eindeutig(db, a.org_id, clean_nr, exclude_id=artikel_id):
+        raise HTTPException(409, f"Artikelnr '{clean_nr}' ist bereits vergeben")
     a.bezeichnung = bezeichnung.strip()
-    a.artikel_nr = artikel_nr.strip() or None
+    a.artikel_nr = clean_nr
+    a.geraetetyp_id = int(geraetetyp_id) if geraetetyp_id.strip().isdigit() else None
     a.ist_mengenartikel = bool(ist_mengenartikel)
     a.lagerbestand = int(lagerbestand) if lagerbestand.strip().isdigit() else None
     a.notizen = notizen.strip() or None
@@ -208,10 +229,12 @@ async def stuecklisten_liste(
     user = request.state.user
     stuecklisten = svc.get_stuecklisten_aktiv(db)
     artikel = svc.get_artikel_aktiv(db)
+    geraetetypen = svc.get_geraetetypen_aktiv(db)
     return templates.TemplateResponse(request, "verleih/stueckliste_list.html", {
         "user": user,
         "stuecklisten": stuecklisten,
         "artikel": artikel,
+        "geraetetypen": geraetetypen,
     })
 
 
@@ -233,21 +256,24 @@ async def stueckliste_neu(
     db.add(sl)
     db.flush()
 
-    # Positionen aus form (positionen_artikel_id[], positionen_menge[], positionen_bezeichnung[])
-    artikel_ids = form.getlist("positionen_artikel_id[]")
-    mengen = form.getlist("positionen_menge[]")
-    pos_bezs = form.getlist("positionen_bezeichnung[]")
-    artikel_nrs = form.getlist("positionen_artikel_nr[]")
+    # Positionen aus form
+    artikel_ids   = form.getlist("positionen_artikel_id[]")
+    mengen        = form.getlist("positionen_menge[]")
+    pos_bezs      = form.getlist("positionen_bezeichnung[]")
+    artikel_nrs   = form.getlist("positionen_artikel_nr[]")
+    geraetetyp_ids = form.getlist("positionen_geraetetyp_id[]")
     for i, bz in enumerate(pos_bezs):
         bz = bz.strip()
         if not bz:
             continue
-        aid = artikel_ids[i] if i < len(artikel_ids) else ""
+        aid  = artikel_ids[i]    if i < len(artikel_ids)    else ""
         menge = int(mengen[i]) if i < len(mengen) and str(mengen[i]).isdigit() else 1
-        anr = artikel_nrs[i] if i < len(artikel_nrs) else ""
+        anr  = artikel_nrs[i]   if i < len(artikel_nrs)    else ""
+        gtid = geraetetyp_ids[i] if i < len(geraetetyp_ids) else ""
         pos = VerleihStuecklistePosition(
             stueckliste_id=sl.id,
             artikel_id=int(aid) if aid.isdigit() else None,
+            geraetetyp_id=int(gtid) if gtid.strip().isdigit() else None,
             bezeichnung=bz,
             artikel_nr=anr.strip() or None,
             menge=menge,
@@ -257,10 +283,12 @@ async def stueckliste_neu(
     db.commit()
     stuecklisten = svc.get_stuecklisten_aktiv(db)
     artikel = svc.get_artikel_aktiv(db)
+    geraetetypen = svc.get_geraetetypen_aktiv(db)
     return templates.TemplateResponse(request, "verleih/stueckliste_list.html", {
         "user": user,
         "stuecklisten": stuecklisten,
         "artikel": artikel,
+        "geraetetypen": geraetetypen,
         "saved": True,
     })
 
@@ -292,20 +320,23 @@ async def stueckliste_bearbeiten(
         db.delete(pos)
     db.flush()
 
-    artikel_ids = form.getlist("positionen_artikel_id[]")
-    mengen = form.getlist("positionen_menge[]")
-    pos_bezs = form.getlist("positionen_bezeichnung[]")
-    artikel_nrs = form.getlist("positionen_artikel_nr[]")
+    artikel_ids    = form.getlist("positionen_artikel_id[]")
+    mengen         = form.getlist("positionen_menge[]")
+    pos_bezs       = form.getlist("positionen_bezeichnung[]")
+    artikel_nrs    = form.getlist("positionen_artikel_nr[]")
+    geraetetyp_ids = form.getlist("positionen_geraetetyp_id[]")
     for i, bz in enumerate(pos_bezs):
         bz = bz.strip()
         if not bz:
             continue
-        aid = artikel_ids[i] if i < len(artikel_ids) else ""
+        aid  = artikel_ids[i]    if i < len(artikel_ids)    else ""
         menge = int(mengen[i]) if i < len(mengen) and str(mengen[i]).isdigit() else 1
-        anr = artikel_nrs[i] if i < len(artikel_nrs) else ""
+        anr  = artikel_nrs[i]   if i < len(artikel_nrs)    else ""
+        gtid = geraetetyp_ids[i] if i < len(geraetetyp_ids) else ""
         pos = VerleihStuecklistePosition(
             stueckliste_id=sl.id,
             artikel_id=int(aid) if aid.isdigit() else None,
+            geraetetyp_id=int(gtid) if gtid.strip().isdigit() else None,
             bezeichnung=bz,
             artikel_nr=anr.strip() or None,
             menge=menge,
@@ -315,10 +346,12 @@ async def stueckliste_bearbeiten(
     db.commit()
     stuecklisten = svc.get_stuecklisten_aktiv(db)
     artikel = svc.get_artikel_aktiv(db)
+    geraetetypen = svc.get_geraetetypen_aktiv(db)
     return templates.TemplateResponse(request, "verleih/stueckliste_list.html", {
         "user": user,
         "stuecklisten": stuecklisten,
         "artikel": artikel,
+        "geraetetypen": geraetetypen,
         "saved": True,
     })
 
@@ -666,16 +699,31 @@ async def stueckliste_positionen(
     ).filter_by(id=sl_id, aktiv=True).first()
     if not sl:
         return JSONResponse([])
-    return JSONResponse([
-        {
+    result = []
+    for p in sl.positionen:
+        row: dict = {
             "bezeichnung": p.bezeichnung or (p.artikel.bezeichnung if p.artikel else ""),
             "artikel_nr": p.artikel_nr or (p.artikel.artikel_nr if p.artikel else "") or "",
             "menge": p.menge,
             "artikel_id": p.artikel_id or "",
             "ist_mengenartikel": p.artikel.ist_mengenartikel if p.artikel else True,
+            "geraetetyp_id": p.geraetetyp_id or "",
+            "geraetetyp_name": p.geraetetyp.name if p.geraetetyp else "",
+            "verfuegbare_artikel": [],
         }
-        for p in sl.positionen
-    ])
+        if p.geraetetyp_id:
+            verfuegbar = svc.get_artikel_by_geraetetyp(db, p.geraetetyp_id)
+            row["verfuegbare_artikel"] = [
+                {
+                    "id": a.id,
+                    "artikel_nr": a.artikel_nr or "",
+                    "bezeichnung": a.bezeichnung,
+                    "verfuegbarkeit": a.verfuegbarkeit or "verfuegbar",
+                }
+                for a in verfuegbar
+            ]
+        result.append(row)
+    return JSONResponse(result)
 
 
 # ── GSL: PIN + SMS ────────────────────────────────────────────────────────────
@@ -993,6 +1041,8 @@ async def etiketten_drucken(
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
+    from app.utils.barcode import code128b_svg
+
     user = request.state.user
     id_list: list[int] = []
     for raw in ids.split(","):
@@ -1001,16 +1051,26 @@ async def etiketten_drucken(
             id_list.append(int(raw))
 
     if id_list:
-        artikel = db.query(VerleihArtikel).filter(
+        artikel_objs = db.query(VerleihArtikel).filter(
             VerleihArtikel.id.in_(id_list),
             VerleihArtikel.aktiv == True,  # noqa: E712
         ).order_by(VerleihArtikel.bezeichnung).all()
     else:
-        artikel = svc.get_artikel_aktiv(db)
+        artikel_objs = svc.get_artikel_aktiv(db)
 
     from app.models.master import FireDept
     dept = db.get(FireDept, user.org_id)
     org_name = dept.name if dept else "Feuerwehr"
+
+    artikel = [
+        {
+            "id": a.id,
+            "bezeichnung": a.bezeichnung,
+            "artikel_nr": a.artikel_nr or "",
+            "barcode_svg": code128b_svg(a.artikel_nr) if a.artikel_nr else "",
+        }
+        for a in artikel_objs
+    ]
 
     return templates.TemplateResponse(request, "verleih/etiketten_druck.html", {
         "user": user,
@@ -1018,6 +1078,92 @@ async def etiketten_drucken(
         "org_name": org_name,
         "vorlage": vorlage,
     })
+
+
+# ── Admin: Gerätetypen ────────────────────────────────────────────────────────
+
+@router.get("/admin/verleih-geraetetypen", response_class=HTMLResponse)
+async def geraetetypen_liste(
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin", "org_admin")),
+):
+    user = request.state.user
+    geraetetypen = svc.get_geraetetypen_aktiv(db)
+    artikel = svc.get_artikel_aktiv(db)
+    from collections import Counter
+    counts = Counter(a.geraetetyp_id for a in artikel if a.geraetetyp_id)
+    return templates.TemplateResponse(request, "verleih/geraetetyp_list.html", {
+        "user": user,
+        "geraetetypen": geraetetypen,
+        "artikel_counts": counts,
+    })
+
+
+@router.post("/admin/verleih-geraetetypen/neu", response_class=HTMLResponse)
+async def geraetetyp_neu(
+    request: Request,
+    name: str = Form(...),
+    beschreibung: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin", "org_admin")),
+):
+    from datetime import UTC, datetime as _dt
+    user = request.state.user
+    gt = VerleihGeraetetyp(
+        org_id=user.org_id,
+        name=name.strip(),
+        beschreibung=beschreibung.strip() or None,
+        created_at=_dt.now(UTC),
+    )
+    db.add(gt)
+    db.commit()
+    geraetetypen = svc.get_geraetetypen_aktiv(db)
+    artikel = svc.get_artikel_aktiv(db)
+    from collections import Counter
+    counts = Counter(a.geraetetyp_id for a in artikel if a.geraetetyp_id)
+    return templates.TemplateResponse(request, "verleih/geraetetyp_list.html", {
+        "user": user, "geraetetypen": geraetetypen, "artikel_counts": counts, "saved": True,
+    })
+
+
+@router.post("/admin/verleih-geraetetypen/{gt_id}/bearbeiten", response_class=HTMLResponse)
+async def geraetetyp_bearbeiten(
+    request: Request,
+    gt_id: int,
+    name: str = Form(...),
+    beschreibung: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin", "org_admin")),
+):
+    user = request.state.user
+    gt = db.get(VerleihGeraetetyp, gt_id)
+    if not gt:
+        raise HTTPException(404, "Geraetetyp nicht gefunden")
+    gt.name = name.strip()
+    gt.beschreibung = beschreibung.strip() or None
+    db.commit()
+    geraetetypen = svc.get_geraetetypen_aktiv(db)
+    artikel = svc.get_artikel_aktiv(db)
+    from collections import Counter
+    counts = Counter(a.geraetetyp_id for a in artikel if a.geraetetyp_id)
+    return templates.TemplateResponse(request, "verleih/geraetetyp_list.html", {
+        "user": user, "geraetetypen": geraetetypen, "artikel_counts": counts, "saved": True,
+    })
+
+
+@router.post("/admin/verleih-geraetetypen/{gt_id}/loeschen", response_class=HTMLResponse)
+async def geraetetyp_loeschen(
+    request: Request,
+    gt_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin", "org_admin")),
+):
+    gt = db.get(VerleihGeraetetyp, gt_id)
+    if gt:
+        gt.aktiv = False
+        db.commit()
+    return Response(content="", status_code=200)
 
 
 @router.post("/lage/{lage_id}/verleih/{ausleihe_id}/notizen", response_class=HTMLResponse)

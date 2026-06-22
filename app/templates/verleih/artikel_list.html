@@ -1,23 +1,24 @@
 {% extends "admin/_layout.html" %}
-{% block title %}Geräteverleih – Artikelstammdaten{% endblock %}
+{% block title %}Geraeteverleih &ndash; Artikelstammdaten{% endblock %}
 
 {% block admin_content %}
 <div class="page-content" x-data="artikelDruck()">
   <div class="page-header">
     <div>
-      <h1>Geräteverleih – Artikel</h1>
+      <h1>Geraeteverleih &ndash; Artikel</h1>
       <p class="page-header__sub">Org-weite Artikelstammdaten. Eindeutige Artikel (z.B. Pumpe 2) vs. Mengenartikel (z.B. C-Schlauch).</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <a href="/admin/verleih-uebersicht" class="btn btn--ghost">Übersicht aktive Ausleihen</a>
-      <a href="/admin/verleih-stuecklisten" class="btn btn--ghost">Stücklisten</a>
+      <a href="/admin/verleih-uebersicht" class="btn btn--ghost">Aktive Ausleihen</a>
+      <a href="/admin/verleih-stuecklisten" class="btn btn--ghost">Stucklisten</a>
+      <a href="/admin/verleih-geraetetypen" class="btn btn--ghost">Geraetetypen</a>
       <!-- Etiketten-Druck -->
       <div style="display:flex;gap:4px;align-items:center;">
         <select x-model="vorlage" class="form-select" style="font-size:.8rem;padding:4px 8px;height:32px;">
           <option value="standard">Standard A4</option>
           <option value="avery_l6011_8">AVERY L6011-8</option>
         </select>
-        <button class="btn btn--ghost" @click="druckenOeffnen()" :disabled="selected.size === 0 && !alleGewaehlt">
+        <button class="btn btn--ghost" @click="druckenOeffnen()">
           Etiketten drucken
           <span x-show="selected.size > 0" x-text="'(' + selected.size + ')'"></span>
           <span x-show="selected.size === 0">alle</span>
@@ -28,13 +29,14 @@
   </div>
 
   {% if saved %}<div class="alert alert--success" style="margin-bottom:12px;">Gespeichert.</div>{% endif %}
+  {% if error %}<div class="alert alert--danger" style="margin-bottom:12px;">{{ error }}</div>{% endif %}
 
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:.83rem;color:var(--text-muted);">
     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
       <input type="checkbox" @change="toggleAlle($event)" :checked="alleGewaehlt" style="width:15px;height:15px;">
-      Alle auswahlen
+      Alle auswaehlen
     </label>
-    <span x-show="selected.size > 0" x-text="selected.size + ' Artikel ausgewahlt'"></span>
+    <span x-show="selected.size > 0" x-text="selected.size + ' Artikel ausgewaehlt'"></span>
   </div>
 
   <table class="table-admin">
@@ -43,10 +45,10 @@
         <th style="width:30px;"></th>
         <th>Artikelnr</th>
         <th>Bezeichnung</th>
+        <th>Geraetetyp</th>
         <th>Typ</th>
         <th>Status</th>
         <th>Lagerbestand</th>
-        <th>Notizen</th>
         <th>Aktionen</th>
       </tr>
     </thead>
@@ -58,8 +60,11 @@
                  :checked="selected.has({{ a.id }})"
                  @change="toggleArtikel({{ a.id }}, $event.target.checked)">
         </td>
-        <td><code>{{ a.artikel_nr or '–' }}</code></td>
+        <td><code>{{ a.artikel_nr or '&ndash;' }}</code></td>
         <td><strong>{{ a.bezeichnung }}</strong></td>
+        <td style="font-size:.82rem;color:var(--text-muted);">
+          {% if a.geraetetyp %}{{ a.geraetetyp.name }}{% else %}&ndash;{% endif %}
+        </td>
         <td>
           {% if a.ist_mengenartikel %}
           <span class="badge-pill badge-pill--blue">Menge</span>
@@ -75,11 +80,10 @@
             <span class="badge-pill" style="background:rgba(34,197,94,.12);color:#4ade80;">verfuegbar</span>
             {% endif %}
           {% else %}
-          <span style="color:var(--text-muted);font-size:.8rem;">–</span>
+          <span style="color:var(--text-muted);font-size:.8rem;">&ndash;</span>
           {% endif %}
         </td>
-        <td>{{ a.lagerbestand if a.lagerbestand is not none else '–' }}</td>
-        <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ a.notizen or '–' }}</td>
+        <td>{{ a.lagerbestand if a.lagerbestand is not none else '&ndash;' }}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn--ghost btn--xs" onclick="document.getElementById('editArtikelModal-{{ a.id }}').showModal()">Bearbeiten</button>
           {% if not a.ist_mengenartikel %}
@@ -122,12 +126,21 @@
           <input type="text" name="bezeichnung" class="form-input" required maxlength="200" placeholder="z.B. Pumpe Fussach 1">
         </div>
         <div class="form-group">
-          <label class="form-label">Artikelnr / Inventarnummer</label>
-          <input type="text" name="artikel_nr" class="form-input" maxlength="100" placeholder="z.B. 1212 (auch fuer Mengenartikel moglich)">
+          <label class="form-label">Artikelnr / Inventarnummer <span style="font-size:.72rem;color:var(--text-muted);">(muss org-weit eindeutig sein)</span></label>
+          <input type="text" name="artikel_nr" class="form-input" maxlength="100" placeholder="z.B. P001">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Geraetetyp</label>
+          <select name="geraetetyp_id" class="form-select">
+            <option value="">-- kein Typ --</option>
+            {% for gt in geraetetypen %}
+            <option value="{{ gt.id }}">{{ gt.name }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="form-group" style="display:flex;align-items:center;gap:10px;">
           <input type="checkbox" name="ist_mengenartikel" id="new_ist_menge" value="1" style="width:18px;height:18px;">
-          <label for="new_ist_menge" class="form-label" style="margin:0;">Mengenartikel (Stuckzahl frei wahlbar, z.B. C-Schlauch)</label>
+          <label for="new_ist_menge" class="form-label" style="margin:0;">Mengenartikel (Stuckzahl frei waehlbar, z.B. C-Schlauch)</label>
         </div>
         <div class="form-group">
           <label class="form-label">Lagerbestand (nur fuer Mengenartikel)</label>
@@ -165,8 +178,17 @@
           <input type="text" name="bezeichnung" class="form-input" required maxlength="200" value="{{ a.bezeichnung }}">
         </div>
         <div class="form-group">
-          <label class="form-label">Artikelnr</label>
+          <label class="form-label">Artikelnr <span style="font-size:.72rem;color:var(--text-muted);">(muss org-weit eindeutig sein)</span></label>
           <input type="text" name="artikel_nr" class="form-input" maxlength="100" value="{{ a.artikel_nr or '' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Geraetetyp</label>
+          <select name="geraetetyp_id" class="form-select">
+            <option value="">-- kein Typ --</option>
+            {% for gt in geraetetypen %}
+            <option value="{{ gt.id }}" {% if a.geraetetyp_id == gt.id %}selected{% endif %}>{{ gt.name }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="form-group" style="display:flex;align-items:center;gap:10px;">
           <input type="checkbox" name="ist_mengenartikel" id="edit_menge_{{ a.id }}" value="1" {% if a.ist_mengenartikel %}checked{% endif %} style="width:18px;height:18px;">
@@ -201,17 +223,13 @@ function artikelDruck() {
       else this.selected.delete(id);
     },
     toggleAlle(ev) {
-      if (ev.target.checked) {
-        this.selected.clear();
-      } else {
-        this.selected.clear();
-      }
+      this.selected.clear();
     },
     druckenOeffnen() {
       var ids = this.selected.size > 0 ? Array.from(this.selected).join(',') : '';
       var url = '/admin/verleih-artikel/etiketten?vorlage=' + encodeURIComponent(this.vorlage);
       if (ids) url += '&ids=' + ids;
-      window.open(url, '_blank', 'width=900,height=700');
+      window.open(url, '_blank', 'width=900,height=750');
     },
   };
 }

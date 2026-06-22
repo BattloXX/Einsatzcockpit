@@ -34,6 +34,26 @@ class ArtikelVerfuegbarkeit(str, enum.Enum):
     ausgeliehen = "ausgeliehen"
 
 
+class VerleihGeraetetyp(TenantScoped, Base):
+    """Geraetetyp – kategorisiert Artikel (z.B. 'Pumpe', 'Atemschutzgeraet')."""
+    __tablename__ = "verleih_geraetetyp"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    beschreibung: Mapped[str | None] = mapped_column(Text, nullable=True)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    artikel: Mapped[list[VerleihArtikel]] = relationship(
+        back_populates="geraetetyp", passive_deletes=True
+    )
+
+    __table_args__ = (
+        Index("ix_verleih_geraetetyp_org", "org_id"),
+    )
+
+
 class VerleihArtikel(TenantScoped, Base):
     """Artikelstammdaten – org-weit, zwei Typen: eindeutig vs. Menge."""
     __tablename__ = "verleih_artikel"
@@ -42,8 +62,11 @@ class VerleihArtikel(TenantScoped, Base):
     # org_id via TenantScoped
     artikel_nr: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bezeichnung: Mapped[str] = mapped_column(String(200), nullable=False)
+    geraetetyp_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("verleih_geraetetyp.id", ondelete="SET NULL"), nullable=True
+    )
     # False = eindeutiger Artikel (z.B. "Pumpe 2"), Menge immer 1
-    # True  = Mengenartikel (z.B. "C-Schlauch"),   Menge frei wählbar
+    # True  = Mengenartikel (z.B. "C-Schlauch"),   Menge frei waehlbar
     ist_mengenartikel: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Nur fuer eindeutige Artikel relevant (ist_mengenartikel=False)
     verfuegbarkeit: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -55,6 +78,7 @@ class VerleihArtikel(TenantScoped, Base):
         DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )
 
+    geraetetyp: Mapped[VerleihGeraetetyp | None] = relationship(back_populates="artikel")
     stueckliste_positionen: Mapped[list[VerleihStuecklistePosition]] = relationship(
         back_populates="artikel", passive_deletes=True
     )
@@ -98,12 +122,17 @@ class VerleihStuecklistePosition(Base):
     artikel_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("verleih_artikel.id", ondelete="SET NULL"), nullable=True
     )
+    # Wenn geraetetyp_id gesetzt: beim Ausleihen muss ein konkreter Artikel des Typs gewaehlt werden
+    geraetetyp_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("verleih_geraetetyp.id", ondelete="SET NULL"), nullable=True
+    )
     bezeichnung: Mapped[str | None] = mapped_column(String(200), nullable=True)
     artikel_nr: Mapped[str | None] = mapped_column(String(100), nullable=True)
     menge: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     stueckliste: Mapped[VerleihStueckliste] = relationship(back_populates="positionen")
     artikel: Mapped[VerleihArtikel | None] = relationship(back_populates="stueckliste_positionen")
+    geraetetyp: Mapped[VerleihGeraetetyp | None] = relationship()
 
 
 class VerleihAusleihe(TenantScoped, Base):

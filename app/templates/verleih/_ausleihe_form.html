@@ -104,20 +104,46 @@
               <option value="{{ a.bezeichnung }}"{% if a.artikel_nr %} data-nr="{{ a.artikel_nr }}"{% endif %}>{{ a.artikel_nr or '' }}</option>
               {% endfor %}
             </datalist>
-            <div style="display:flex;gap:4px;align-items:center;">
-              <input type="text" class="form-input form-input--xs" style="flex:1;"
-                     placeholder="Artikelnr"
-                     :name="'pos_artikel_nr[]'"
-                     x-model="row.artikel_nr"
-                     @input="onArtikelNrInput(idx, $event.target.value)">
-              <button type="button" class="btn btn--ghost btn--xs" style="padding:3px 7px;font-size:.8rem;"
-                      :title="barcodeApiAvailable ? 'Barcode/QR-Code scannen' : 'Kamera-Scan nicht unterstuetzt'"
-                      :disabled="!barcodeApiAvailable"
-                      @click="triggerScan(idx)">
-                &#128247;
-              </button>
-              <input type="hidden" :name="'pos_artikel_id[]'" x-model="row.artikel_id">
-            </div>
+            <!-- Geraetetyp-Position: Artikelauswahl per Dropdown -->
+            <template x-if="row.geraetetyp_id">
+              <div>
+                <div style="font-size:.72rem;color:#60a5fa;margin-bottom:3px;">
+                  Geraetetyp: <strong x-text="row.geraetetyp_name"></strong> &ndash; Geraet auswaehlen:
+                </div>
+                <select class="form-select form-select--xs"
+                        @change="onGeraetetypArtikelWahl(idx, $event)"
+                        style="width:100%;">
+                  <option value="">-- Geraet auswaehlen --</option>
+                  <template x-for="ga in row.verfuegbare_artikel" :key="ga.id">
+                    <option :value="String(ga.id)"
+                            :data-nr="ga.artikel_nr"
+                            :data-vfg="ga.verfuegbarkeit"
+                            :selected="String(ga.id) === String(row.artikel_id)"
+                            x-text="ga.artikel_nr ? ga.artikel_nr + ' ' + ga.bezeichnung : ga.bezeichnung">
+                    </option>
+                  </template>
+                </select>
+                <input type="hidden" :name="'pos_artikel_nr[]'" x-model="row.artikel_nr">
+                <input type="hidden" :name="'pos_artikel_id[]'" x-model="row.artikel_id">
+              </div>
+            </template>
+            <!-- Normaler Freitext-Modus -->
+            <template x-if="!row.geraetetyp_id">
+              <div style="display:flex;gap:4px;align-items:center;">
+                <input type="text" class="form-input form-input--xs" style="flex:1;"
+                       placeholder="Artikelnr"
+                       :name="'pos_artikel_nr[]'"
+                       x-model="row.artikel_nr"
+                       @input="onArtikelNrInput(idx, $event.target.value)">
+                <button type="button" class="btn btn--ghost btn--xs" style="padding:3px 7px;font-size:.8rem;"
+                        :title="barcodeApiAvailable ? 'Barcode/QR-Code scannen' : 'Kamera-Scan nicht unterstuetzt'"
+                        :disabled="!barcodeApiAvailable"
+                        @click="triggerScan(idx)">
+                  &#128247;
+                </button>
+                <input type="hidden" :name="'pos_artikel_id[]'" x-model="row.artikel_id">
+              </div>
+            </template>
             <!-- Verfuegbarkeitswarnung fuer eindeutige ausgeliehene Artikel -->
             <div x-show="row.artikel_id && row.verfuegbarkeit === 'ausgeliehen' && !row.ist_mengenartikel"
                  x-cloak
@@ -195,9 +221,9 @@ function verleihForm(initialSites, lageId, initialArtikel) {
     telefon: '',
     adresse: '',
     fotoCount: 0,
-    rows: [{ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true, verfuegbarkeit: 'verfuegbar' }],
+    rows: [{ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true, verfuegbarkeit: 'verfuegbar', geraetetyp_id: '', geraetetyp_name: '', verfuegbare_artikel: [] }],
     addRow() {
-      this.rows.push({ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true, verfuegbarkeit: 'verfuegbar' });
+      this.rows.push({ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true, verfuegbarkeit: 'verfuegbar', geraetetyp_id: '', geraetetyp_name: '', verfuegbare_artikel: [] });
     },
     removeRow(i) {
       this.rows.splice(i, 1);
@@ -235,11 +261,24 @@ function verleihForm(initialSites, lageId, initialArtikel) {
               artikel_id: p.artikel_id || '',
               ist_mengenartikel: p.ist_mengenartikel !== false,
               verfuegbarkeit: match ? (match.verfuegbarkeit || 'verfuegbar') : 'verfuegbar',
+              geraetetyp_id: p.geraetetyp_id || '',
+              geraetetyp_name: p.geraetetyp_name || '',
+              verfuegbare_artikel: p.verfuegbare_artikel || [],
             };
           });
         }
       } catch(e) { console.error('Stuckliste laden fehlgeschlagen', e); }
       ev.target.value = '';
+    },
+    onGeraetetypArtikelWahl(idx, ev) {
+      var opt = ev.target.selectedOptions[0];
+      if (!opt || !opt.value) return;
+      this.rows[idx].artikel_id = opt.value;
+      this.rows[idx].artikel_nr = opt.dataset.nr || '';
+      var match = this.artikelList.find(function(a) { return String(a.id) === opt.value; });
+      this.rows[idx].verfuegbarkeit = match ? (match.verfuegbarkeit || 'verfuegbar') : (opt.dataset.vfg || 'verfuegbar');
+      this.rows[idx].ist_mengenartikel = false;
+      this.rows[idx].menge = 1;
     },
     async createSite() {
       var name = this.newSiteName.trim();

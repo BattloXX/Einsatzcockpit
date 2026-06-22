@@ -2,8 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Artikeletiketten – {{ org_name }}</title>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<title>Artikeletiketten &ndash; {{ org_name }}</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; background: #fff; color: #111; }
@@ -21,94 +20,97 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; background: #
 .topbar__info { font-size: 8.5pt; color: rgba(255,255,255,.6); }
 
 /* ─── Standard A4: flexibles Raster ─────────────────────────────────── */
-.standard-page {
-  padding: 15mm;
-}
-.standard-grid {
-  display: flex; flex-wrap: wrap; gap: 8mm;
-}
+.standard-page { padding: 12mm 14mm; }
+.standard-grid { display: flex; flex-wrap: wrap; gap: 7mm; }
 .std-label {
-  width: 86mm; min-height: 42mm; max-height: 52mm;
+  width: 87mm; min-height: 44mm;
   border: 1.5px solid #374151; border-radius: 4px;
-  padding: 6mm 7mm; display: flex; flex-direction: column; gap: 3mm;
+  padding: 5mm 6mm; display: flex; flex-direction: column; gap: 2.5mm;
   page-break-inside: avoid; overflow: hidden;
 }
 .std-label__org {
-  font-size: 7pt; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .06em; color: #6b7280; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
-}
-.std-label__name {
-  font-size: 11pt; font-weight: 700; line-height: 1.2;
-  overflow: hidden; display: -webkit-box;
-  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-}
-.std-label__bc { text-align: center; }
-.std-label__bc svg { max-width: 100%; height: 22mm; }
-.std-label__nr {
-  font-family: "Courier New", monospace; font-size: 9pt; font-weight: 700;
-  text-align: center; letter-spacing: .08em; color: #374151;
-}
-.std-label--no-nr .std-label__nr { display: none; }
-
-/* ─── AVERY L6011-8: 2 Spalten x 4 Zeilen, je 99,1 x 67,7 mm ───────── */
-.avery-page {
-  width: 210mm; min-height: 297mm;
-}
-.avery-grid {
-  display: grid;
-  grid-template-columns: 99.1mm 99.1mm;
-  grid-template-rows: repeat(4, 67.7mm);
-  margin: 13.1mm 5.9mm;
-  gap: 0;
-}
-.avery-label {
-  width: 99.1mm; height: 67.7mm;
-  padding: 5mm 6mm 4mm;
-  display: flex; flex-direction: column; gap: 2mm;
-  page-break-inside: avoid; overflow: hidden;
-  border: 0.3mm dashed #d1d5db; /* nur am Bildschirm sichtbar – Schneidehilfe */
-}
-.avery-label__org {
   font-size: 6.5pt; font-weight: 700; text-transform: uppercase;
   letter-spacing: .07em; color: #6b7280; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
-.avery-label__name {
-  font-size: 11pt; font-weight: 700; line-height: 1.2; flex: 1;
+.std-label__name {
+  font-size: 10pt; font-weight: 700; line-height: 1.2;
   overflow: hidden; display: -webkit-box;
   -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-.avery-label__bc { text-align: center; }
-.avery-label__bc svg { max-width: 100%; height: 22mm; }
+.std-label__bc { flex: 1; display: flex; align-items: center; }
+.std-label__bc svg { width: 100%; height: 18mm; }
+.std-label__nr {
+  font-family: "Courier New", monospace; font-size: 8.5pt; font-weight: 700;
+  text-align: center; letter-spacing: .08em; color: #374151;
+}
+.std-label__nonr {
+  font-family: Arial; font-style: italic; font-size: 7.5pt;
+  font-weight: 400; text-align: center; color: #9ca3af;
+}
+
+/* ─── AVERY L6011-8: 2 Spalten x 4 Zeilen, je 99,1 x 67,7 mm ───────── */
+.avery-page { width: 210mm; }
+.avery-grid {
+  display: grid;
+  grid-template-columns: 99.1mm 99.1mm;
+  grid-template-rows: repeat(4, 67.7mm);
+  margin-top: 13.1mm;
+  margin-bottom: 13.1mm;
+  margin-left: 5.9mm;
+  margin-right: 5.9mm;
+  gap: 0;
+}
+.avery-label {
+  width: 99.1mm; height: 67.7mm;
+  padding: 5mm 7mm 4mm;
+  display: flex; flex-direction: column; gap: 2mm;
+  page-break-inside: avoid; overflow: hidden;
+  /* Schneidehilfe am Bildschirm */
+  outline: 0.3mm dashed #d1d5db;
+}
+.avery-label__org {
+  font-size: 6pt; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: #6b7280; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.avery-label__name {
+  font-size: 11pt; font-weight: 700; line-height: 1.2;
+  overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.avery-label__bc { flex: 1; display: flex; align-items: center; }
+.avery-label__bc svg { width: 100%; height: 100%; }
 .avery-label__nr {
   font-family: "Courier New", monospace; font-size: 9pt; font-weight: 700;
   text-align: center; letter-spacing: .08em; color: #374151;
 }
+.avery-label__nonr {
+  font-family: Arial; font-style: italic; font-size: 7.5pt;
+  font-weight: 400; text-align: center; color: #9ca3af;
+}
 
 @media print {
   .topbar { display: none !important; }
-  @page { size: A4; margin: 0; }
-
-  /* Standard: eigene Seitenraender im Container */
-  .standard-page { padding: 12mm 13mm; }
-
-  /* AVERY: exakte Seitengroesse, kein Rand */
-  .avery-page { width: 210mm; min-height: 297mm; }
-  .avery-grid { margin: 13.1mm 5.9mm; }
-
-  /* Schneidehilfe-Rahmen beim Druck ausblenden */
-  .avery-label { border-color: transparent; }
+  @page { size: A4 portrait; margin: 0; }
+  .standard-page { padding: 12mm 14mm; }
+  .avery-page { width: 210mm; }
+  .avery-grid {
+    margin-top: 13.1mm; margin-bottom: 13.1mm;
+    margin-left: 5.9mm; margin-right: 5.9mm;
+  }
+  /* Schneidehilfe ausblenden */
+  .avery-label { outline: none; }
 }
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="topbar__title">Artikeletiketten – {{ org_name }}</div>
+  <div class="topbar__title">Artikeletiketten &ndash; {{ org_name }}</div>
   <span class="topbar__info">
-    {% if vorlage == 'avery_l6011_8' %}AVERY Zweckform L6011-8 (2×4 / A4){% else %}Standard A4{% endif %}
-    &nbsp;·&nbsp; {{ artikel|length }} Artikel
+    {% if vorlage == 'avery_l6011_8' %}AVERY Zweckform L6011-8 (2&times;4 / A4){% else %}Standard A4{% endif %}
+    &nbsp;&middot;&nbsp; {{ artikel|length }} Artikel
   </span>
   <button class="topbar__btn" onclick="window.print()">Drucken</button>
   <button class="topbar__btn" onclick="window.close()">Schliessen</button>
@@ -117,20 +119,20 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; background: #
 {% if artikel %}
 
 {% if vorlage == 'avery_l6011_8' %}
-<!-- ── AVERY L6011-8 ────────────────────────────────────────────────── -->
+<!-- ── AVERY L6011-8 ──────────────────────────────────────────────────── -->
 <div class="avery-page">
   <div class="avery-grid">
     {% for a in artikel %}
     <div class="avery-label">
       <div class="avery-label__org">{{ org_name }}</div>
       <div class="avery-label__name">{{ a.bezeichnung }}</div>
-      {% if a.artikel_nr %}
-      <div class="avery-label__bc">
-        <svg class="barcode-svg" data-nr="{{ a.artikel_nr }}"></svg>
-      </div>
+      {% if a.barcode_svg %}
+      <div class="avery-label__bc">{{ a.barcode_svg | safe }}</div>
       <div class="avery-label__nr">{{ a.artikel_nr }}</div>
+      {% elif a.artikel_nr %}
+      <div class="avery-label__nr" style="font-size:11pt;margin-top:auto;">{{ a.artikel_nr }}</div>
       {% else %}
-      <div class="avery-label__nr" style="color:#9ca3af;font-family:Arial;font-style:italic;font-size:8pt;font-weight:400;">keine Artikelnr</div>
+      <div class="avery-label__nonr">keine Artikelnr</div>
       {% endif %}
     </div>
     {% endfor %}
@@ -138,20 +140,20 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; background: #
 </div>
 
 {% else %}
-<!-- ── Standard A4 ─────────────────────────────────────────────────── -->
+<!-- ── Standard A4 ──────────────────────────────────────────────────── -->
 <div class="standard-page">
   <div class="standard-grid">
     {% for a in artikel %}
-    <div class="std-label{% if not a.artikel_nr %} std-label--no-nr{% endif %}">
+    <div class="std-label">
       <div class="std-label__org">{{ org_name }}</div>
       <div class="std-label__name">{{ a.bezeichnung }}</div>
-      {% if a.artikel_nr %}
-      <div class="std-label__bc">
-        <svg class="barcode-svg" data-nr="{{ a.artikel_nr }}"></svg>
-      </div>
+      {% if a.barcode_svg %}
+      <div class="std-label__bc">{{ a.barcode_svg | safe }}</div>
       <div class="std-label__nr">{{ a.artikel_nr }}</div>
+      {% elif a.artikel_nr %}
+      <div class="std-label__nr" style="font-size:11pt;">{{ a.artikel_nr }}</div>
       {% else %}
-      <div class="std-label__nr" style="color:#9ca3af;font-family:Arial;font-style:italic;font-size:8pt;font-weight:400;">keine Artikelnr</div>
+      <div class="std-label__nonr">keine Artikelnr</div>
       {% endif %}
     </div>
     {% endfor %}
@@ -163,26 +165,5 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; background: #
 <div style="padding:40px;text-align:center;color:#6b7280;">Keine Artikel ausgewaehlt.</div>
 {% endif %}
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.barcode-svg[data-nr]').forEach(function(svg) {
-    var nr = svg.getAttribute('data-nr');
-    if (!nr) return;
-    try {
-      JsBarcode(svg, nr, {
-        format: 'CODE128',
-        width: 1.8,
-        height: 60,
-        displayValue: false,
-        margin: 0,
-        background: 'transparent',
-        lineColor: '#111',
-      });
-    } catch(e) {
-      svg.style.display = 'none';
-    }
-  });
-});
-</script>
 </body>
 </html>

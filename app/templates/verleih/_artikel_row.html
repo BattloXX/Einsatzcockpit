@@ -4,10 +4,11 @@
            :checked="selected.has({{ a.id }})"
            @change="toggleArtikel({{ a.id }}, $event.target.checked)">
   </td>
-  <td>
-    <code>{{ a.artikel_nr or '–' }}</code>
-  </td>
+  <td><code>{{ a.artikel_nr or '&ndash;' }}</code></td>
   <td><strong>{{ a.bezeichnung }}</strong></td>
+  <td style="font-size:.82rem;color:var(--text-muted);">
+    {% if a.geraetetyp %}{{ a.geraetetyp.name }}{% else %}&ndash;{% endif %}
+  </td>
   <td>
     {% if a.ist_mengenartikel %}
     <span class="badge-pill badge-pill--blue">Menge</span>
@@ -23,11 +24,10 @@
       <span class="badge-pill" style="background:rgba(34,197,94,.12);color:#4ade80;">verfuegbar</span>
       {% endif %}
     {% else %}
-    <span style="color:var(--text-muted);font-size:.8rem;">–</span>
+    <span style="color:var(--text-muted);font-size:.8rem;">&ndash;</span>
     {% endif %}
   </td>
-  <td>{{ a.lagerbestand if a.lagerbestand is not none else '–' }}</td>
-  <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ a.notizen or '–' }}</td>
+  <td>{{ a.lagerbestand if a.lagerbestand is not none else '&ndash;' }}</td>
   <td style="white-space:nowrap;">
     <button class="btn btn--ghost btn--xs" onclick="document.getElementById('editArtikelModal-{{ a.id }}').showModal()">Bearbeiten</button>
     {% if not a.ist_mengenartikel %}

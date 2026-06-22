@@ -16,6 +16,7 @@ from app.models.verleih import (
     VerleihArtikel,
     VerleihAusleihe,
     VerleihFoto,
+    VerleihGeraetetyp,
     VerleihPosition,
     VerleihStatus,
     VerleihStueckliste,
@@ -52,6 +53,28 @@ def get_org_settings(db: Session, org_id: int) -> OrgSettings | None:
 
 def get_artikel_aktiv(db: Session) -> list[VerleihArtikel]:
     return db.query(VerleihArtikel).filter_by(aktiv=True).order_by(VerleihArtikel.bezeichnung).all()
+
+
+def get_geraetetypen_aktiv(db: Session) -> list[VerleihGeraetetyp]:
+    return db.query(VerleihGeraetetyp).filter_by(aktiv=True).order_by(VerleihGeraetetyp.name).all()
+
+
+def get_artikel_by_geraetetyp(db: Session, geraetetyp_id: int) -> list[VerleihArtikel]:
+    """Aktive, verfuegbare Artikel eines Geraetetyps – fuer Auswahl beim Ausleihen."""
+    return (
+        db.query(VerleihArtikel)
+        .filter_by(aktiv=True, geraetetyp_id=geraetetyp_id)
+        .order_by(VerleihArtikel.artikel_nr, VerleihArtikel.bezeichnung)
+        .all()
+    )
+
+
+def artikel_nr_eindeutig(db: Session, org_id: int, artikel_nr: str, exclude_id: int | None = None) -> bool:
+    """Prueft ob die Artikelnr innerhalb der Org noch nicht vergeben ist."""
+    q = db.query(VerleihArtikel).filter_by(aktiv=True, org_id=org_id, artikel_nr=artikel_nr)
+    if exclude_id:
+        q = q.filter(VerleihArtikel.id != exclude_id)
+    return q.first() is None
 
 
 def _mark_artikel_ausgeliehen(db: Session, artikel_id: int | None) -> None:
