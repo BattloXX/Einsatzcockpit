@@ -33,7 +33,7 @@
       <td class="fj-msg">
         {{ c.message }}
         {% if c.is_request %}<span class="fj-req-badge">Auftrag</span>{% endif %}
-        {% if is_auto_lm and can_edit %}
+        {% if is_auto_lm and can_note %}
         {% set rel_site = sites_by_id.get(c.related_site_id) %}
         <div style="margin-top:5px;">
           <button type="button" class="btn btn--xs btn--secondary"

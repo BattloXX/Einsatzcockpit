@@ -108,6 +108,45 @@
   </div>
   {% endif %}
 
+  {% if uas_einsatz %}
+  <div class="detail-box detail-box--full">
+    <h3>&#x1F681; Drohneneinsatz</h3>
+    <dl class="detail-list">
+      <dt>Status</dt>
+      <dd>
+        {% if uas_einsatz.status == 'abgeschlossen' %}<span class="badge badge--success">abgeschlossen</span>
+        {% elif uas_einsatz.status == 'im_einsatz' %}<span class="badge badge--error">im Einsatz</span>
+        {% elif uas_einsatz.status == 'abgemeldet' %}<span class="badge badge--warn">abgemeldet</span>
+        {% elif uas_einsatz.status == 'angemeldet' %}<span class="badge badge--info">angemeldet</span>
+        {% else %}<span class="badge badge--muted">alarmiert</span>{% endif %}
+      </dd>
+      {% if uas_einsatz.alarmierung_at %}
+      <dt>Alarmierung</dt><dd>{{ uas_einsatz.alarmierung_at|local_datetime }} Uhr</dd>
+      {% endif %}
+      {% if uas_einsatz.anmeldung_el_at %}
+      <dt>Anmeldung EL</dt><dd>{{ uas_einsatz.anmeldung_el_at|local_datetime }} Uhr</dd>
+      {% endif %}
+      {% if uas_einsatz.abmeldung_el_at %}
+      <dt>Abmeldung EL</dt><dd>{{ uas_einsatz.abmeldung_el_at|local_datetime }} Uhr</dd>
+      {% endif %}
+      {% if uas_einsatz.einsatzgrund %}
+      <dt>Einsatzgrund</dt><dd>{{ uas_einsatz.einsatzgrund }}</dd>
+      {% endif %}
+      {% if uas_einsatz.tetra_rufname %}
+      <dt>TETRA-Rufname</dt><dd>{{ uas_einsatz.tetra_rufname }}</dd>
+      {% endif %}
+      {% if uas_einsatz.gesamteinsatzleiter %}
+      <dt>Gesamteinsatzleiter</dt><dd>{{ uas_einsatz.gesamteinsatzleiter }}</dd>
+      {% endif %}
+    </dl>
+    <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap">
+      <a href="/uas/einsatz/{{ uas_einsatz.id }}" class="btn btn--ghost btn--sm">&#x2192; Drohneneinsatz-Detail</a>
+      <a href="/uas/einsatz/{{ uas_einsatz.id }}/pdf/eintreffmeldung" class="btn btn--ghost btn--sm">&#x1F4C4; Eintreffmeldung</a>
+      <a href="/uas/einsatz/{{ uas_einsatz.id }}/pdf/gesamt" class="btn btn--ghost btn--sm">&#x1F4CB; Gesamtbericht</a>
+    </div>
+  </div>
+  {% endif %}
+
   {% if ai_enabled or incident.ai_report_draft %}
   <div class="detail-box detail-box--full">
     <h3>KI-Verlaufsbericht</h3>

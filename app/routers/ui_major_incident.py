@@ -200,6 +200,10 @@ def _can_edit(user) -> bool:
     return has_role(user, "incident_leader", "admin", "org_admin", "recorder")
 
 
+def _can_note(user) -> bool:
+    return has_role(user, "incident_leader", "admin", "org_admin", "recorder", "readonly")
+
+
 def _can_manage(user) -> bool:
     return has_role(user, "incident_leader", "admin", "org_admin")
 
@@ -673,6 +677,7 @@ async def site_detail(
         "prio_label": SITE_PRIORITY_LABEL,
         "prio_color": SITE_PRIORITY_COLOR,
         "can_edit": _can_edit(user),
+        "can_note": _can_note(user),
         "sectors": sectors,
         "now": datetime.now(UTC),
         "citizen_report": citizen_report,
@@ -816,6 +821,7 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         "lage": lage,
         "site": site,
         "can_edit": _can_edit(user),
+        "can_note": _can_note(user),
         "available_einheiten": available_einheiten,
         "site_dispatches": site_dispatches,
         "already_dispatched_ids": already_dispatched_ids,
@@ -1039,7 +1045,7 @@ async def site_log_add(
     text: str = Form(...),
     art: str = Form("note"),
     db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
@@ -1308,6 +1314,7 @@ async def site_pin_save(
         "prio_label": SITE_PRIORITY_LABEL,
         "prio_color": SITE_PRIORITY_COLOR,
         "can_edit": _can_edit(user),
+        "can_note": _can_note(user),
         "vehicles": vehicles,
         "sectors": sectors,
         "now": datetime.now(UTC),
@@ -1324,7 +1331,7 @@ async def site_media_upload(
     site_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
@@ -2462,6 +2469,7 @@ async def funkjournal_rows(
     return templates.TemplateResponse(request, "incident_major/_funkjournal_rows.html", {
         "lage": lage,
         "can_edit": _can_edit(user),
+        "can_note": _can_note(user),
         **ctx,
     })
 
@@ -2482,6 +2490,7 @@ async def lage_funkjournal(
         "user": user,
         "lage": lage,
         "can_edit": _can_edit(user),
+        "can_note": _can_note(user),
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db, lage.org_id),
         **ctx,
@@ -2500,7 +2509,7 @@ async def funkjournal_add(
     is_request: bool = Form(False),
     related_site_id: int | None = Form(None),
     db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
     user = request.state.user
     lage = _lage_or_404(lage_id, db)

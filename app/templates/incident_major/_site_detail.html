@@ -400,7 +400,7 @@
   </div>
 
   {# ── Eintrag hinzufügen (Notiz / Lagemeldung / Maßnahmen) ──────────── #}
-  {% if can_edit %}
+  {% if can_note %}
   <form style="margin-top:4px;" id="siteLogForm-{{ site.id }}"
         hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/log"
         hx-target="#siteDetailContent"
@@ -423,7 +423,7 @@
   {% endif %}
 
   {# ── Foto hochladen ───────────────────────────────────────────────── #}
-  {% if can_edit %}
+  {% if can_note %}
   <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/medien"
         hx-encoding="multipart/form-data"
         hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'

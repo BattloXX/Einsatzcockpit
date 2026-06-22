@@ -1493,7 +1493,7 @@ async def add_log(
     entity_type: str = Form(""),
     entity_id: int | None = Form(None),
     db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "recorder")),
+    _=Depends(require_role("incident_leader", "admin", "recorder", "readonly")),
 ):
     etype = entity_type.strip() or None
     entry = IncidentLog(
@@ -1894,11 +1894,12 @@ async def vehicle_detail(
         .all()
     )
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     vehicle_logs = _entity_logs(db, incident_id, "vehicle", vehicle_id)
     return templates.TemplateResponse(request, "incident/_vehicle_modal.html", {
         "user": user, "incident": incident, "vehicle": vehicle,
         "members": commander_candidates, "recent_changes": recent_changes,
-        "can_edit": can_edit, "unit_status_values": UNIT_STATUS_VALUES,
+        "can_edit": can_edit, "can_note": can_note, "unit_status_values": UNIT_STATUS_VALUES,
         "bos_values": BOS_VALUES, "entity_logs": vehicle_logs,
     })
 
@@ -1953,9 +1954,10 @@ async def task_detail(
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     task_logs = _entity_logs(db, incident_id, "task", task_id)
     return templates.TemplateResponse(request, "incident/_task_modal.html", {
-        "user": user, "incident": incident, "task": task, "can_edit": can_edit,
+        "user": user, "incident": incident, "task": task, "can_edit": can_edit, "can_note": can_note,
         "entity_logs": task_logs,
     })
 
@@ -1974,9 +1976,10 @@ async def message_detail(
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
-        "user": user, "incident": incident, "msg": msg, "can_edit": can_edit,
+        "user": user, "incident": incident, "msg": msg, "can_edit": can_edit, "can_note": can_note,
         "entity_logs": entity_logs,
     })
 
@@ -1997,9 +2000,10 @@ async def update_message_endpoint(
     await manager.broadcast(incident_id, {"type": "message_updated", "reload_board": True})
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
-        "user": request.state.user, "incident": incident, "msg": msg, "can_edit": can_edit,
+        "user": request.state.user, "incident": incident, "msg": msg, "can_edit": can_edit, "can_note": can_note,
         "entity_logs": entity_logs,
     })
 
@@ -2018,9 +2022,10 @@ async def person_detail(
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
-        "user": user, "incident": incident, "person": person, "can_edit": can_edit,
+        "user": user, "incident": incident, "person": person, "can_edit": can_edit, "can_note": can_note,
         "person_status_values": PERSON_STATUS_VALUES, "entity_logs": person_logs,
     })
 
@@ -2047,9 +2052,10 @@ async def update_person_endpoint(
     await manager.broadcast(incident_id, {"type": "person_updated", "reload_board": True})
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
-        "user": request.state.user, "incident": incident, "person": person, "can_edit": can_edit,
+        "user": request.state.user, "incident": incident, "person": person, "can_edit": can_edit, "can_note": can_note,
         "person_status_values": PERSON_STATUS_VALUES, "entity_logs": person_logs,
     })
 
@@ -2111,9 +2117,10 @@ async def update_task_endpoint(
     await manager.broadcast(incident_id, {"type": "task_updated", "reload_board": True})
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     task_logs = _entity_logs(db, incident_id, "task", task_id)
     return templates.TemplateResponse(request, "incident/_task_modal.html", {
-        "user": request.state.user, "incident": incident, "task": task, "can_edit": can_edit,
+        "user": request.state.user, "incident": incident, "task": task, "can_edit": can_edit, "can_note": can_note,
         "entity_logs": task_logs,
     })
 
@@ -2267,7 +2274,7 @@ async def upload_task_media(
     incident_id: int, task_id: int, request: Request,
     files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "recorder")),
+    _=Depends(require_role("incident_leader", "admin", "recorder", "readonly")),
 ):
     task = db.get(Task, task_id)
     if not task or task.incident_id != incident_id:
@@ -2290,9 +2297,10 @@ async def upload_task_media(
     incident = _incident_or_404(incident_id, db)
     await manager.broadcast(incident_id, {"type": "task_updated", "task_id": task_id, "reload_board": False})
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     return templates.TemplateResponse(request, "incident/_task_media.html", {
         "user": request.state.user, "task": task, "incident": incident,
-        "can_edit": can_edit, "errors": errors,
+        "can_edit": can_edit, "can_note": can_note, "errors": errors,
     })
 
 
@@ -2317,9 +2325,10 @@ async def delete_task_media(
     incident = _incident_or_404(incident_id, db)
     await manager.broadcast(incident_id, {"type": "task_updated", "task_id": task_id, "reload_board": False})
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     return templates.TemplateResponse(request, "incident/_task_media.html", {
         "user": user, "task": task, "incident": incident,
-        "can_edit": can_edit, "errors": [],
+        "can_edit": can_edit, "can_note": can_note, "errors": [],
     })
 
 
@@ -2330,7 +2339,7 @@ async def upload_message_media(
     incident_id: int, message_id: int, request: Request,
     files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "recorder")),
+    _=Depends(require_role("incident_leader", "admin", "recorder", "readonly")),
 ):
     msg = db.get(Message, message_id)
     if not msg or msg.incident_id != incident_id:
@@ -2349,9 +2358,10 @@ async def upload_message_media(
     db.refresh(msg, ["media"])
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
-        "user": request.state.user, "incident": incident, "msg": msg, "can_edit": can_edit,
+        "user": request.state.user, "incident": incident, "msg": msg, "can_edit": can_edit, "can_note": can_note,
         "entity_logs": entity_logs,
     })
 
@@ -2372,9 +2382,10 @@ async def delete_message_media(
     db.refresh(msg, ["media"])
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
-        "user": request.state.user, "incident": incident, "msg": msg, "can_edit": can_edit,
+        "user": request.state.user, "incident": incident, "msg": msg, "can_edit": can_edit, "can_note": can_note,
         "entity_logs": entity_logs,
     })
 
@@ -2386,7 +2397,7 @@ async def upload_person_media(
     incident_id: int, person_id: int, request: Request,
     files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "recorder")),
+    _=Depends(require_role("incident_leader", "admin", "recorder", "readonly")),
 ):
     person = db.get(RescuedPerson, person_id)
     if not person or person.incident_id != incident_id:
@@ -2405,9 +2416,10 @@ async def upload_person_media(
     db.refresh(person, ["media"])
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
-        "user": request.state.user, "incident": incident, "person": person, "can_edit": can_edit,
+        "user": request.state.user, "incident": incident, "person": person, "can_edit": can_edit, "can_note": can_note,
         "entity_logs": person_logs,
     })
 
@@ -2428,9 +2440,10 @@ async def delete_person_media(
     db.refresh(person, ["media"])
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
-        "user": request.state.user, "incident": incident, "person": person, "can_edit": can_edit,
+        "user": request.state.user, "incident": incident, "person": person, "can_edit": can_edit, "can_note": can_note,
         "entity_logs": person_logs,
     })
 
@@ -2682,6 +2695,7 @@ async def funkjournal_page(
         "comms": comms,
         "open_requests": open_requests,
         "can_edit": has_role(user, "incident_leader", "admin", "org_admin", "recorder"),
+        "can_note": has_role(user, "incident_leader", "admin", "org_admin", "recorder", "readonly"),
         "uas_einsatz_id": fj_uas_einsatz_id,
     })
 
@@ -2697,7 +2711,7 @@ async def funkjournal_add(
     is_request: bool = Form(False),
     is_lage_relevant: bool = Form(False),
     db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
     user = request.state.user
     incident = db.get(Incident, incident_id)

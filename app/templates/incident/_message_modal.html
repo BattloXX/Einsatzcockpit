@@ -46,11 +46,23 @@
                 placeholder="Ergänzende Beschreibung, Sachstand, Auftrag …">{{ msg.detail or '' }}</textarea>
     </div>
   </form>
+  {% else %}
+  <div class="form-group">
+    <p class="modal__subtitle">Überschrift</p>
+    <p><strong>{{ msg.title }}</strong></p>
+  </div>
+  {% if msg.detail %}
+  <div class="form-group">
+    <p class="modal__subtitle">Ergänzung</p>
+    <p>{{ msg.detail }}</p>
+  </div>
+  {% endif %}
+  {% endif %}
 
   <hr style="border:none; border-top:1px solid var(--border-color, #374151); margin:16px 0 8px;">
   <div>
     <p class="form-label" style="margin-bottom:6px;">NOTIZEN</p>
-    {% if can_edit %}
+    {% if can_note %}
     <form hx-post="/einsatz/{{ incident.id }}/log"
           hx-swap="none"
           hx-on::after-request="if(event.detail.successful){this.reset();htmx.ajax('GET','/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/detail',{target:'#cardDetailBody',swap:'innerHTML'})}"
@@ -125,12 +137,14 @@
           {% endif %}
         </a>
         {% endif %}
+        {% if can_edit %}
         <form hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/medien/{{ m.id }}/loeschen"
               hx-target="#cardDetailBody" hx-swap="innerHTML" style="margin:0;">
           <button type="submit"
                   style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.75);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;"
                   title="Löschen">×</button>
         </form>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -149,6 +163,7 @@
     </div>
     </div>
     {% endif %}
+    {% if can_note %}
     <form hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/medien"
           hx-encoding="multipart/form-data"
           hx-target="#cardDetailBody"
@@ -166,19 +181,8 @@
       </div>
       <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB · Video 50 MB. Bilder werden automatisch verkleinert.</p>
     </form>
+    {% endif %}
   </div>
-  {% else %}
-  <div class="form-group">
-    <p class="modal__subtitle">Überschrift</p>
-    <p><strong>{{ msg.title }}</strong></p>
-  </div>
-  {% if msg.detail %}
-  <div class="form-group">
-    <p class="modal__subtitle">Ergänzung</p>
-    <p>{{ msg.detail }}</p>
-  </div>
-  {% endif %}
-  {% endif %}
 </div>
 
 {% if can_edit %}

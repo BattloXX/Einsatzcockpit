@@ -130,7 +130,7 @@
 <div class="fj-wrap">
 
   {# ── Eintrag hinzufügen ────────────────────────────────────────────────────── #}
-  {% if can_edit %}
+  {% if can_note %}
   <div class="fj-add" x-data="fjForm()">
     <div class="fj-add__title">EINTRAG HINZUFÜGEN</div>
     <form hx-post="/einsatz/{{ incident.id }}/funkjournal"

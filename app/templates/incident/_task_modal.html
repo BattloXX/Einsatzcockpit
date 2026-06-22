@@ -97,7 +97,7 @@
   <hr style="border:none; border-top:1px solid var(--border-color, #374151); margin:16px 0 8px;">
   <div>
     <p class="form-label" style="margin-bottom:6px;">NOTIZEN</p>
-    {% if can_edit %}
+    {% if can_note %}
     <form hx-post="/einsatz/{{ incident.id }}/log"
           hx-swap="none"
           hx-on::after-request="if(event.detail.successful){this.reset();htmx.ajax('GET','/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/detail',{target:'#cardDetailBody',swap:'innerHTML'})}"

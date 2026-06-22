@@ -151,7 +151,7 @@
   <!-- Notizen -->
   <div class="detail-section">
     <div class="detail-section__title">NOTIZEN</div>
-    {% if can_edit %}
+    {% if can_note %}
     <form hx-post="/einsatz/{{ incident.id }}/log"
           hx-swap="none"
           hx-on::after-request="if(event.detail.successful){this.reset();htmx.ajax('GET','/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/detail',{target:'#cardDetailBody',swap:'innerHTML'})}"

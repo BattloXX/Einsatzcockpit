@@ -47,6 +47,142 @@ def uas_index(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Verwaltung: Einsätze-Übersicht
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/einsaetze", response_class=HTMLResponse)
+def einsaetze_liste(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    from sqlalchemy import func
+    from sqlalchemy.orm import selectinload
+
+    from app.models.incident import Incident
+    from app.models.uas import UASEinsatz, UASEinsatzRolleEintrag, UASFlug
+
+    einsaetze = (
+        db.query(UASEinsatz)
+        .options(selectinload(UASEinsatz.rollen).selectinload(UASEinsatzRolleEintrag.pilot))
+        .filter(UASEinsatz.org_id == user.org_id)
+        .order_by(UASEinsatz.alarmierung_at.desc(), UASEinsatz.created_at.desc())
+        .all()
+    )
+
+    incident_ids = [e.incident_id for e in einsaetze]
+    incidents: dict[int, Incident] = {}
+    if incident_ids:
+        for inc in db.query(Incident).filter(Incident.id.in_(incident_ids)).all():
+            incidents[inc.id] = inc
+
+    flug_counts: dict[int, int] = {}
+    if einsaetze:
+        for eid, cnt in (
+            db.query(UASFlug.uas_einsatz_id, func.count(UASFlug.id))
+            .filter(UASFlug.org_id == user.org_id)
+            .group_by(UASFlug.uas_einsatz_id)
+            .all()
+        ):
+            flug_counts[eid] = cnt
+
+    rows = []
+    for e in einsaetze:
+        piloten = []
+        for r in (e.rollen or []):
+            if r.rolle in ("pilot", "teamleiter"):
+                if r.pilot:
+                    piloten.append(f"{r.pilot.vorname} {r.pilot.nachname}")
+                elif r.helfer_name:
+                    piloten.append(r.helfer_name)
+        rows.append({
+            "einsatz": e,
+            "incident": incidents.get(e.incident_id),
+            "flug_count": flug_counts.get(e.id, 0),
+            "piloten": piloten,
+        })
+
+    return templates.TemplateResponse(request, "uas/einsaetze_liste.html", {
+        "user": user,
+        "rows": rows,
+        "uas_breadcrumb": [{"label": "Einsätze", "href": "/uas/einsaetze"}],
+    })
+
+
+@router.get("/einsaetze/export.csv")
+def einsaetze_csv_export(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_uas_enabled),
+):
+    import csv
+    import io
+
+    from sqlalchemy import func
+
+    from app.models.incident import Incident
+    from app.models.uas import UASEinsatz, UASFlug
+
+    einsaetze = (
+        db.query(UASEinsatz)
+        .filter(UASEinsatz.org_id == user.org_id)
+        .order_by(UASEinsatz.alarmierung_at.desc(), UASEinsatz.created_at.desc())
+        .all()
+    )
+
+    incident_ids = [e.incident_id for e in einsaetze]
+    incidents: dict[int, Incident] = {}
+    if incident_ids:
+        for inc in db.query(Incident).filter(Incident.id.in_(incident_ids)).all():
+            incidents[inc.id] = inc
+
+    flug_counts: dict[int, int] = {}
+    if einsaetze:
+        for eid, cnt in (
+            db.query(UASFlug.uas_einsatz_id, func.count(UASFlug.id))
+            .filter(UASFlug.org_id == user.org_id)
+            .group_by(UASFlug.uas_einsatz_id)
+            .all()
+        ):
+            flug_counts[eid] = cnt
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter=";")
+    writer.writerow([
+        "ID", "Datum Alarmierung", "Stichwort", "Adresse", "Status",
+        "Einsatzgrund", "Tetra-Rufname", "Gesamteinsatzleiter", "Anzahl Fluege",
+    ])
+    for e in einsaetze:
+        inc = incidents.get(e.incident_id)
+        alarm_str = e.alarmierung_at.strftime("%d.%m.%Y %H:%M") if e.alarmierung_at else ""
+        addr = ""
+        if inc:
+            parts = [inc.address_street or "", inc.address_no or ""]
+            street = " ".join(p for p in parts if p).strip()
+            addr = f"{street}, {inc.address_city or ''}".strip(", ")
+        writer.writerow([
+            e.id,
+            alarm_str,
+            inc.alarm_type_code if inc else "",
+            addr,
+            e.status,
+            e.einsatzgrund or "",
+            e.tetra_rufname or "",
+            e.gesamteinsatzleiter or "",
+            flug_counts.get(e.id, 0),
+        ])
+
+    content = "﻿" + buf.getvalue()
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=drohneneinsaetze.csv"},
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # PR 2: Geräteregister
 # ══════════════════════════════════════════════════════════════════════════════
 

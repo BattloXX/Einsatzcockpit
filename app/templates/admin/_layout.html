@@ -342,10 +342,15 @@
         </button>
         <div x-show="groups.uas" x-transition.opacity.duration.120ms>
           <div class="admin-nav__group-items">
+            <a href="/uas/einsaetze"
+               class="admin-nav__item {% if '/uas/einsaetze' in request.url.path %}is-active{% endif %}"
+               {{ tip('Alle Drohneneinsätze: Übersicht und Export') }}>
+              <span class="admin-nav__icon">📋</span>Eins&auml;tze
+            </a>
             <a href="/uas/geraete"
                class="admin-nav__item {% if '/uas/geraete' in request.url.path %}is-active{% endif %}"
                {{ tip('UAS-Geräteliste: Drohnen und Zubehoer') }}>
-              <span class="admin-nav__icon">🚁</span>Geräte
+              <span class="admin-nav__icon">🚁</span>Ger&auml;te
             </a>
             <a href="/uas/piloten"
                class="admin-nav__item {% if '/uas/piloten' in request.url.path %}is-active{% endif %}"
@@ -355,7 +360,7 @@
             <a href="/uas/dsgvo-uebersicht"
                class="admin-nav__item {% if '/uas/dsgvo' in request.url.path %}is-active{% endif %}"
                {{ tip('DSGVO-Übersicht und Compliance-Status') }}>
-              <span class="admin-nav__icon">📋</span>DSGVO
+              <span class="admin-nav__icon">🔒</span>DSGVO
             </a>
           </div>
         </div>

@@ -78,8 +78,19 @@ async def archive_list(request: Request, db: Session = Depends(get_db)):
     if not user:
         return RedirectResponse("/login", status_code=302)
     incidents = _scoped_incidents_query(db, user).order_by(Incident.started_at.desc()).all()
+
+    uas_incident_ids: set[int] = set()
+    if getattr(request.state, "uas_module_enabled", False) and user.org_id:
+        from app.models.uas import UASEinsatz
+        uas_incident_ids = {
+            row[0]
+            for row in db.query(UASEinsatz.incident_id)
+            .filter(UASEinsatz.org_id == user.org_id)
+            .all()
+        }
+
     return templates.TemplateResponse(request, "archive/list.html", {
-        "user": user, "incidents": incidents,
+        "user": user, "incidents": incidents, "uas_incident_ids": uas_incident_ids,
     })
 
 
@@ -95,9 +106,20 @@ async def archive_detail(incident_id: int, request: Request, db: Session = Depen
         raise _deny_access(user, incident)
     db.refresh(incident, ["columns", "vehicles", "tasks", "messages", "rescued_persons",
                            "breathing_troops", "log_entries"])
+
+    uas_einsatz = None
+    if getattr(request.state, "uas_module_enabled", False):
+        from app.models.uas import UASEinsatz
+        uas_einsatz = (
+            db.query(UASEinsatz)
+            .filter(UASEinsatz.incident_id == incident_id)
+            .first()
+        )
+
     return templates.TemplateResponse(request, "archive/detail.html", {
         "user": user, "incident": incident,
         "ai_enabled": ai_is_enabled(),
+        "uas_einsatz": uas_einsatz,
     })
 
 

@@ -89,7 +89,7 @@
 </div>
 {% endif %}
 
-{% if can_edit %}
+{% if can_note %}
 <form hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/medien"
       hx-encoding="multipart/form-data"
       hx-target="#taskMediaSection"

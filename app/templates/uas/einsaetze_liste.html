@@ -1,0 +1,106 @@
+{% extends "uas/_layout.html" %}
+{% block title %}Drohneneins&auml;tze – UAS{% endblock %}
+
+{% block uas_content %}
+<div class="page-header">
+  <div>
+    <h1>&#x1F681; Drohneneins&auml;tze</h1>
+    <p class="page-header__sub">Alle erfassten UAS-Eins&auml;tze dieser Organisation</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/uas/einsaetze/export.csv" class="btn btn--ghost">&#x2B73; CSV-Export</a>
+    <a href="/uas/" class="btn btn--ghost">&#x2190; &Uuml;bersicht</a>
+  </div>
+</div>
+
+<div x-data="{search: '', status: ''}">
+  <div class="filter-bar">
+    <input type="text" x-model="search" placeholder="Suche (Stichwort, Adresse, Pilot…)" class="form-input form-input--search">
+    <select x-model="status" class="form-select" style="max-width:200px">
+      <option value="">Alle Status</option>
+      <option value="alarmiert">Alarmiert</option>
+      <option value="angemeldet">Angemeldet</option>
+      <option value="im_einsatz">Im Einsatz</option>
+      <option value="abgemeldet">Abgemeldet</option>
+      <option value="abgeschlossen">Abgeschlossen</option>
+    </select>
+  </div>
+
+  {% if rows %}
+  <div class="card" style="margin-top:1rem">
+    <div class="card-body" style="padding:0">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Datum</th>
+            <th>Stichwort</th>
+            <th>Adresse</th>
+            <th>Status</th>
+            <th>Einsatzgrund</th>
+            <th>Pilot(en)</th>
+            <th>Fl&uuml;ge</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+        {% set e = row.einsatz %}
+        {% set inc = row.incident %}
+        <tr
+          data-status="{{ e.status }}"
+          data-search="{{ (inc.alarm_type_code if inc else '') }} {{ (inc.address_street if inc else '') }} {{ (inc.address_no if inc else '') }} {{ (inc.address_city if inc else '') }} {{ row.piloten|join(' ') }} {{ e.einsatzgrund or '' }}"
+          x-show="(status === '' || $el.getAttribute('data-status') === status) && (search === '' || $el.getAttribute('data-search').toLowerCase().includes(search.toLowerCase()))">
+          <td style="color:var(--text-muted);font-size:.85rem">{{ e.id }}</td>
+          <td style="white-space:nowrap">
+            {% if e.alarmierung_at %}
+              {{ e.alarmierung_at|local_datetime }}
+            {% elif inc and inc.started_at %}
+              {{ inc.started_at|local_datetime }}
+            {% else %}–{% endif %}
+          </td>
+          <td>
+            {% if inc %}
+            <span class="alarm-badge alarm-badge--sm alarm-badge--{{ inc.alarm_type_code[:1]|lower }}">{{ inc.alarm_type_code }}</span>
+            {% else %}<span class="text-muted">–</span>{% endif %}
+          </td>
+          <td style="font-size:.88rem;color:var(--text-muted)">
+            {% if inc %}
+              {{ inc.address_street or '' }} {{ inc.address_no or '' }}{% if inc.address_city %}, {{ inc.address_city }}{% endif %}
+            {% else %}–{% endif %}
+          </td>
+          <td>
+            {% if e.status == 'abgeschlossen' %}<span class="badge badge--success">abgeschlossen</span>
+            {% elif e.status == 'im_einsatz' %}<span class="badge badge--error">im Einsatz</span>
+            {% elif e.status == 'abgemeldet' %}<span class="badge badge--warn">abgemeldet</span>
+            {% elif e.status == 'angemeldet' %}<span class="badge badge--info">angemeldet</span>
+            {% else %}<span class="badge badge--muted">alarmiert</span>{% endif %}
+          </td>
+          <td style="font-size:.88rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="{{ e.einsatzgrund or '' }}">
+            {{ e.einsatzgrund or '–' }}
+          </td>
+          <td style="font-size:.88rem">
+            {% if row.piloten %}{{ row.piloten|join(', ') }}{% else %}<span class="text-muted">–</span>{% endif %}
+          </td>
+          <td style="text-align:center">
+            {% if row.flug_count > 0 %}
+            <span class="badge badge--info">{{ row.flug_count }}</span>
+            {% else %}<span class="text-muted">0</span>{% endif %}
+          </td>
+          <td style="white-space:nowrap">
+            <a href="/uas/einsatz/{{ e.id }}" class="btn btn--ghost btn--sm">Detail</a>
+            <a href="/uas/einsatz/{{ e.id }}/pdf/eintreffmeldung" class="btn btn--ghost btn--sm" title="Eintreffmeldung PDF">&#x1F4C4;</a>
+            <a href="/uas/einsatz/{{ e.id }}/pdf/gesamt" class="btn btn--ghost btn--sm" title="Gesamtbericht PDF">&#x1F4CB;</a>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="alert" style="margin-top:1rem">Noch keine Drohneneins&auml;tze erfasst.</div>
+  {% endif %}
+</div>
+{% endblock %}

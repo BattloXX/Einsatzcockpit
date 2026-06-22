@@ -79,7 +79,7 @@
 <div class="fj-wrap">
 
   {# ── Eintrag hinzufügen ────────────────────────────────────────────────────── #}
-  {% if can_edit %}
+  {% if can_note %}
   <div class="fj-add" x-data="fjForm()">
     <div class="fj-add__title">EINTRAG HINZUFÜGEN</div>
     <form hx-post="/lage/{{ lage.id }}/funkjournal"
@@ -206,7 +206,7 @@
 </dialog>
 
 <!-- ── Kompaktes Lagemeldung-Popup (aus Auftragszeile) ──────────────────── -->
-{% if can_edit %}
+{% if can_note %}
 <dialog class="modal" id="fjLmDialog">
   <div class="modal__content" style="min-width:min(440px,95vw);">
     <div class="modal__header">

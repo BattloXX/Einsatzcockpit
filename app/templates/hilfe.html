@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}Dokumentation &amp; Hilfe{% endblock %}
+
+{% block head_extra %}
+<style>
+.hilfe-cluster {
+  border: 1px solid var(--border);
+  border-radius: .5rem;
+  margin-bottom: .75rem;
+  overflow: hidden;
+}
+.hilfe-cluster__hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background: var(--surface-mid);
+  cursor: pointer; user-select: none;
+  border: none; width: 100%; text-align: left;
+  font-size: 1rem; font-weight: 600; color: var(--on-surface);
+  transition: background .12s;
+}
+.hilfe-cluster__hdr:hover { background: var(--surface-high); }
+.hilfe-cluster__icon { font-size: 1.25rem; margin-right: .5rem; }
+.hilfe-cluster__arrow { font-size: .85rem; opacity: .6; transition: transform .2s; flex-shrink: 0; }
+.hilfe-cluster__arrow--open { transform: rotate(90deg); }
+.hilfe-cluster__body { padding: 1.25rem; background: var(--surface-low); }
+.hilfe-topic { margin-bottom: 1.5rem; }
+.hilfe-topic:last-child { margin-bottom: 0; }
+.hilfe-topic h4 { margin: 0 0 .5rem; font-size: .95rem; color: var(--on-surface); }
+.hilfe-topic p, .hilfe-topic ul, .hilfe-topic ol {
+  margin: 0 0 .5rem; font-size: .9rem; color: var(--text-muted); line-height: 1.6;
+}
+.hilfe-topic ul, .hilfe-topic ol { padding-left: 1.2em; }
+.hilfe-topic li { margin-bottom: .2rem; }
+.hilfe-badge {
+  display: inline-block; padding: 1px 7px; border-radius: 3px;
+  font-size: .72rem; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; margin-right: .25rem; vertical-align: middle;
+}
+.hilfe-badge--role { background: rgba(183,25,33,.15); color: var(--red-light,#f87171); }
+.hilfe-badge--tip { background: rgba(34,197,94,.12); color: #4ade80; }
+.hilfe-divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Dokumentation &amp; Hilfe</h2>
+    <p class="page-header__sub">Kurzanleitung nach Themenbereich</p>
+  </div>
+</div>
+
+<div x-data="{open: 'erste-schritte'}">
+
+  <!-- ── Cluster 1: Erste Schritte ─────────────────────────────────────── -->
+  <div class="hilfe-cluster">
+    <button type="button" class="hilfe-cluster__hdr" @click="open = open === 'erste-schritte' ? null : 'erste-schritte'">
+      <span><span class="hilfe-cluster__icon">&#x1F680;</span> Erste Schritte</span>
+      <span class="hilfe-cluster__arrow" :class="open === 'erste-schritte' && 'hilfe-cluster__arrow--open'">&#x203A;</span>
+    </button>
+    <div class="hilfe-cluster__body" x-show="open === 'erste-schritte'" x-transition.opacity.duration.150ms>
+
+      <div class="hilfe-topic">
+        <h4>Anmelden</h4>
+        <p>Ruf <strong>/login</strong> auf und gib Benutzername und Passwort ein. Beim ersten Login vergib sofort ein eigenes Passwort unter <strong>Mein Profil → Passwort &auml;ndern</strong>.</p>
+        <ul>
+          <li>Falls SSO (Microsoft 365) aktiv ist, erscheint die Schaltfl&auml;che <em>„Anmelden mit Microsoft"</em>.</li>
+          <li>Gesperrte Accounts: Wende dich an deinen Org-Admin.</li>
+        </ul>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>App als PWA installieren</h4>
+        <p>Die App l&auml;sst sich wie eine native App auf Desktop und Mobilger&auml;te installieren:</p>
+        <ul>
+          <li><strong>Chrome/Edge</strong>: Adressleiste → Installations-Symbol &#x2795; anklicken oder Meni&uuml; → „App installieren".</li>
+          <li><strong>Safari (iOS)</strong>: Teilen-Button &#x2B06; → „Zum Home-Bildschirm" → Hinzuf&uuml;gen.</li>
+        </ul>
+        <p>Installierte Apps starten ohne Browser-Leiste und k&ouml;nnen Push-Benachrichtigungen empfangen.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Profil &amp; Benachrichtigungen</h4>
+        <p>Unter <strong>Mein Profil</strong> kannst du:</p>
+        <ul>
+          <li>Avatar hochladen</li>
+          <li>Push-Benachrichtigungen (Alarm-Popup) aktivieren</li>
+          <li>Ger&auml;te-Tokens verwalten (f&uuml;r Tablet-Accounts)</li>
+        </ul>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Rollen im &Uuml;berblick</h4>
+        <ul>
+          <li><span class="hilfe-badge hilfe-badge--role">readonly</span> Ansicht Lage &amp; Archiv, kein Bearbeiten</li>
+          <li><span class="hilfe-badge hilfe-badge--role">recorder</span> Einsatz-Erfassung, Atemschutz, Medien, Drohne</li>
+          <li><span class="hilfe-badge hilfe-badge--role">incident_leader</span> Einsatzleiter-Funktionen, Fahrzeuge, Auftr&auml;ge</li>
+          <li><span class="hilfe-badge hilfe-badge--role">org_admin</span> Vollzugriff auf Stammdaten &amp; Einstellungen</li>
+          <li><span class="hilfe-badge hilfe-badge--role">system_admin</span> Plattform-Administration, alle Orgs</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Cluster 2: Einsätze ───────────────────────────────────────────── -->
+  <div class="hilfe-cluster">
+    <button type="button" class="hilfe-cluster__hdr" @click="open = open === 'einsaetze' ? null : 'einsaetze'">
+      <span><span class="hilfe-cluster__icon">&#x1F6A8;</span> Eins&auml;tze</span>
+      <span class="hilfe-cluster__arrow" :class="open === 'einsaetze' && 'hilfe-cluster__arrow--open'">&#x203A;</span>
+    </button>
+    <div class="hilfe-cluster__body" x-show="open === 'einsaetze'" x-transition.opacity.duration.150ms>
+
+      <div class="hilfe-topic">
+        <h4>Neuen Einsatz anlegen</h4>
+        <p><span class="hilfe-badge hilfe-badge--role">recorder</span> Auf der &Uuml;bersichtsseite <strong>„+ Neuer Einsatz"</strong> klicken → Alarmtyp, Adresse und optionale API-Daten eintragen → Speichern.</p>
+        <p>API-Alarme (z.B. BMA/ILS) legen Eins&auml;tze automatisch an und sind auf dem Board sofort sichtbar.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Einsatz-Board</h4>
+        <p>Das Board zeigt alle aktiven Fahrzeuge und Auftr&auml;ge in Kacheln. Aktionen:</p>
+        <ul>
+          <li><strong>Fahrzeug zuweisen</strong>: Kachel anklicken → „Fahrzeug hinzuf&uuml;gen"</li>
+          <li><strong>Auftrag erstellen</strong>: &Uuml;ber das Plus-Symbol in der Auftragsspalte</li>
+          <li><strong>Priorit&auml;t setzen</strong>: Schaltfl&auml;chen Hoch / Mittel / Niedrig in der Karte</li>
+          <li><strong>Fotos hinzuf&uuml;gen</strong>: Im Detailbereich unter dem Kachel-Bild</li>
+          <li><strong>Funkjournal</strong>: Separate Ansicht f&uuml;r alle Funkeintr&auml;ge</li>
+        </ul>
+        <p><span class="hilfe-badge hilfe-badge--tip">Tipp</span> Live-Updates laufen &uuml;ber WebSocket – kein Reload n&ouml;tig.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Atemschutz</h4>
+        <p><span class="hilfe-badge hilfe-badge--role">recorder</span> Im Board-Men&uuml; → Atemschutz. Trupps anlegen, Ein- und Ausgangszeit erfassen. PDF-Protokoll direkt aus dem Trupp-Detail.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Einsatz abschlie&szlig;en &amp; Archiv</h4>
+        <p><span class="hilfe-badge hilfe-badge--role">incident_leader</span> &Uuml;ber „Einsatz beenden" auf der Dashboard-Seite. Abgeschlossene Eins&auml;tze sind unter <strong>/archiv</strong> einsehbar. Im Archiv stehen PDF-Export und optionaler KI-Verlaufsbericht zur Verf&uuml;gung.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Ger&auml;teverleih</h4>
+        <p><span class="hilfe-badge hilfe-badge--role">recorder</span> Unter <strong>/verleih</strong>: Artikel aus der Stammliste ausw&auml;hlen, Ausleihe anlegen, R&uuml;ckgabe best&auml;tigen. Ausleih-PDF f&uuml;r Unterschrift verf&uuml;gbar.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Cluster 3: Großschadenslage ──────────────────────────────────── -->
+  <div class="hilfe-cluster">
+    <button type="button" class="hilfe-cluster__hdr" @click="open = open === 'gsl' ? null : 'gsl'">
+      <span><span class="hilfe-cluster__icon">&#x1F6A7;</span> Gro&szlig;schadenslage (GSL)</span>
+      <span class="hilfe-cluster__arrow" :class="open === 'gsl' && 'hilfe-cluster__arrow--open'">&#x203A;</span>
+    </button>
+    <div class="hilfe-cluster__body" x-show="open === 'gsl'" x-transition.opacity.duration.150ms>
+
+      <div class="hilfe-topic">
+        <h4>Lage starten</h4>
+        <p><span class="hilfe-badge hilfe-badge--role">incident_leader</span> Auf der &Uuml;bersichtsseite <strong>„+ Neue Lage"</strong> → Bezeichnung, Alarmtyp und Ort eintragen. Die Lage bekommt eine eigene URL mit QR-Code f&uuml;r externe Ger&auml;te.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Stellen &amp; Board</h4>
+        <p>Einsatzstellen werden als Kacheln auf dem Board angezeigt. Pro Stelle:</p>
+        <ul>
+          <li><strong>Lagemeldungen erfassen</strong>: Textmeldung mit Zeitstempel</li>
+          <li><strong>Auftrag vergeben</strong>: Direkt aus dem Detailbereich</li>
+          <li><strong>Kontrollmeldung</strong>: Best&auml;tigung durch Stellen-Verantwortliche</li>
+          <li><strong>Fotos</strong>: Mehrere Fotos je Stelle m&ouml;glich</li>
+          <li><strong>Koordinaten (Pin)</strong>: Standort per Karte setzen oder korrigieren</li>
+        </ul>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Ressourcen &amp; Kr&auml;fte&uuml;bersicht</h4>
+        <p>Ressourcenplanung zeigt alle zugewiesenen Einheiten. Die Kr&auml;fte&uuml;bersicht addiert automatisch Mannst&auml;rke und Fahrzeugtypen.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Lagekarte</h4>
+        <p>Die interaktive Karte (<strong>/lage/…/karte</strong>) zeigt alle Stellen mit Pins. Stellen k&ouml;nnen direkt auf der Karte positioniert werden. Druckversion vorhanden.</p>
+        <p>Externe Systeme k&ouml;nnen den GeoJSON-Feed &uuml;ber einen <strong>Lagekarte-Token</strong> (Verwaltung → Lagekarte-Tokens) abrufen.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Stab-Journal</h4>
+        <p>Alle Aktionen werden im Stab-Einsatzjournal automatisch protokolliert. Der Stab-Bereich enth&auml;lt au&szlig;erdem die Lagemeldungs-Regelkreis-Ansicht (Lage → Auftrag → Kontrolle).</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>B&uuml;rger-Meldungen</h4>
+        <p>B&uuml;rger k&ouml;nnen &uuml;ber einen &ouml;ffentlichen Link Lagemeldungen einreichen. Die Meldungen erscheinen unter <strong>Meldungen</strong> und k&ouml;nnen als neue Stelle &uuml;bernommen werden.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Drohne / UAS in der Lage</h4>
+        <p>Wenn das UAS-Modul aktiviert ist, erscheint im Incident-Dashboard der Button <strong>&#x1F681; Drohneneinsatz starten</strong>. Der Drohneneinsatz ist 1:1 mit dem Incident verkn&uuml;pft und enth&auml;lt Rollenbesetzung, Flugbuch, Checklisten und Karte.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Cluster 4: Verwaltung ─────────────────────────────────────────── -->
+  <div class="hilfe-cluster">
+    <button type="button" class="hilfe-cluster__hdr" @click="open = open === 'verwaltung' ? null : 'verwaltung'">
+      <span><span class="hilfe-cluster__icon">&#x2699;&#xFE0F;</span> Verwaltung</span>
+      <span class="hilfe-cluster__arrow" :class="open === 'verwaltung' && 'hilfe-cluster__arrow--open'">&#x203A;</span>
+    </button>
+    <div class="hilfe-cluster__body" x-show="open === 'verwaltung'" x-transition.opacity.duration.150ms>
+
+      <div class="hilfe-topic">
+        <h4>Benutzer &amp; Rollen</h4>
+        <p><span class="hilfe-badge hilfe-badge--role">org_admin</span> Unter <strong>Verwaltung → Benutzer</strong>: Accounts anlegen, Passwort setzen, Rollen zuweisen. Ger&auml;te-Accounts (Tablets) &uuml;ber <strong>Ger&auml;te-Login → Token erstellen</strong>.</p>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Stammdaten</h4>
+        <ul>
+          <li><strong>Ressourcen</strong>: Fahrzeuge, Ger&auml;te, Einheiten mit Sybos-Nummern</li>
+          <li><strong>Mitglieder</strong>: Mannschaftsliste mit Qualifikationen (AGT, GK, …)</li>
+          <li><strong>Alarmtypen</strong>: Stichwort-Definitionen mit Fahrzeugzuordnung</li>
+          <li><strong>Ausrückordnung</strong>: Welche Fahrzeuge r&uuml;cken bei welchem Stichwort aus</li>
+          <li><strong>Auftragsvorlagen</strong>: Vorkonfigurierte Standard-Auftr&auml;ge je Stichwort</li>
+        </ul>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Drohne / UAS – Verwaltung</h4>
+        <p><span class="hilfe-badge hilfe-badge--role">org_admin</span> Unter <strong>&#x1F681; Drohne / UAS</strong>:</p>
+        <ul>
+          <li><strong>Eins&auml;tze</strong>: Alle Drohneneins&auml;tze mit CSV-Export und PDF-Berichten</li>
+          <li><strong>Ger&auml;te</strong>: Ger&auml;teregister inkl. Versicherung, CE-Klasse, Wartungsplan</li>
+          <li><strong>Piloten</strong>: Lizenzen, Currency-Pr&uuml;fung (3 Fl&uuml;ge in 90 Tagen), Zertifikat-Ablauf</li>
+          <li><strong>DSGVO</strong>: Medien-Aufbewahrungsfristen gem. RL 7.3/7.4</li>
+        </ul>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Einstellungen</h4>
+        <ul>
+          <li><strong>Organisation</strong>: Name, Logo, Farbe, Zeitzone</li>
+          <li><strong>GSL-Einstellungen</strong>: Module je Org aktivieren (Drohne, Verleih, …)</li>
+          <li><strong>SSO / Microsoft 365</strong>: Entra ID OIDC-Konfiguration</li>
+          <li><strong>API-Keys</strong>: F&uuml;r externe Alarmquellen (ILS, BMA, …)</li>
+          <li><strong>Backup</strong>: Stammdaten als JSON sichern oder einspielen</li>
+        </ul>
+      </div>
+      <hr class="hilfe-divider">
+
+      <div class="hilfe-topic">
+        <h4>Audit-Log</h4>
+        <p><span class="hilfe-badge hilfe-badge--role">org_admin</span> Alle sicherheitsrelevanten Aktionen (Login, Passwort, Rollenwechsel, API-Zugriffe) sind unter <strong>Verwaltung → Audit-Log</strong> l&uuml;ckenlos protokolliert.</p>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

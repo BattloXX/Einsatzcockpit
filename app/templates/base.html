@@ -113,6 +113,7 @@
              style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;">
         {% endif %}
         {{ user.display_name }}</a>
+      <a href="/hilfe" class="topnav__admin-link {% if request.url.path == '/hilfe' %}active{% endif %}">? Hilfe</a>
       {% if is_admin %}
       <a href="/admin" class="topnav__admin-link {% if '/admin' in request.url.path %}active{% endif %}">⚙ Verwaltung</a>
       {% endif %}
@@ -153,6 +154,7 @@
     </nav>
     <footer class="mobile-menu__footer">
       <a href="/profil" class="mobile-menu__link {% if request.url.path.startswith('/profil') %}active{% endif %}">👤 Mein Profil</a>
+      <a href="/hilfe" class="mobile-menu__link {% if request.url.path == '/hilfe' %}active{% endif %}">❓ Hilfe</a>
       {% if is_admin %}
       <a href="/admin" class="mobile-menu__link {% if '/admin' in request.url.path %}active{% endif %}">⚙ Verwaltung</a>
       {% endif %}
