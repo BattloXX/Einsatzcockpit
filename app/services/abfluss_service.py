@@ -141,13 +141,20 @@ async def _fetch_from_vowis(hzbnr: str) -> tuple[float | None, datetime | None, 
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-            return _parse_html(resp.text)
+            wert, zeitstempel, hq = _parse_html(resp.text)
+            if wert is None:
+                snippet = resp.text[:500].replace("\n", " ").replace("\r", "")
+                logger.warning(
+                    "Abfluss-Parsing: kein Wert gefunden fuer hzbnr=%s url=%s – HTML-Anfang: %s",
+                    hzbnr, url, snippet,
+                )
+            return wert, zeitstempel, hq
     except httpx.TimeoutException:
-        logger.warning("Abfluss-Timeout: hzbnr=%s", hzbnr)
+        logger.warning("Abfluss-Timeout: hzbnr=%s url=%s", hzbnr, url)
     except httpx.HTTPStatusError as exc:
-        logger.warning("Abfluss-HTTP-Fehler %s: hzbnr=%s", exc.response.status_code, hzbnr)
+        logger.warning("Abfluss-HTTP-Fehler %s: hzbnr=%s url=%s", exc.response.status_code, hzbnr, url)
     except Exception as exc:
-        logger.warning("Abfluss-Fehler: hzbnr=%s – %s", hzbnr, exc)
+        logger.warning("Abfluss-Fehler: hzbnr=%s url=%s – %s", hzbnr, url, exc)
     return None, None, None
 
 
@@ -181,7 +188,9 @@ async def refresh_station(org_id: int, hzbnr: str, name: str, beschreibung: str 
             st.verlauf.append(messung)
         st.aktuell = messung
         st.letzter_fehler = None
+        logger.debug("Abfluss OK: hzbnr=%s name=%r wert=%.3f m³/s ts=%s", hzbnr, name, wert, zeitstempel)
     else:
+        logger.warning("Abfluss kein Wert: hzbnr=%s name=%r org_id=%s", hzbnr, name, org_id)
         st.letzter_fehler = "Keine Daten verfügbar"
 
     if hq is not None:
