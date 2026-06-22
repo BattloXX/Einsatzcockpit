@@ -298,7 +298,7 @@
 
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:6px;">
             <div>
-              <div style="font-size:.82rem;font-weight:700;color:var(--text);">{{ av.name }}</div>
+              <a href="https://vowis.vorarlberg.at/stationsInfo/_Abfluss/ofwStation.aspx?hzbnr={{ av.hzbnr }}" target="_blank" rel="noopener" style="font-size:.82rem;font-weight:700;color:var(--text);text-decoration:none;">{{ av.name }} &#x2197;</a>
               {% if av.beschreibung %}
               <div style="font-size:.68rem;color:var(--text-muted);margin-top:1px;">{{ av.beschreibung }}</div>
               {% endif %}
