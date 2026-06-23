@@ -81,6 +81,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Geräteverleih (Admin)](Administration-Geraeteverleih) | Artikel und Stücklisten pflegen, Verleih-Übersicht |
 | [Drohne / UAS](Administration-Drohne-UAS) | Modul aktivieren, Geräteregister, Wartungsbuch, Pilotenregister, Compliance |
 | [Single Sign-On (Entra ID)](Administration-Single-Sign-On) | Microsoft-365-Login einrichten, Gruppen-Mapping, JIT-Provisioning |
+| [Lokale Wetterstation](Administration-Wetterstation) | Davis/Meteobridge-Anbindung: Station anlegen, Push-Token, Meteobridge-URL, Datenbankarchitektur |
 
 ### Entwickler
 | Seite | Beschreibung |

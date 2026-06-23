@@ -71,6 +71,23 @@ Auf der Einstellungsseite sieht der System-Admin zusätzlich:
 
 Globale Auto-Schließ-Defaults (gelten für alle Orgs, die kein eigenes Limit gesetzt haben) werden in den System-Einstellungen konfiguriert.
 
+## Lokale Wetterstation
+
+Orgs mit einer Davis Vantage Pro 2 Plus (oder kompatibler Station) können diese über **Admin → Einstellungen → Wetterstation** anbinden.
+
+**Station anlegen:**
+1. „Station hinzufügen" — Name eingeben, optionale GPS-Koordinaten
+2. Der einmalige **Push-Token** (`wxst_...`) und die fertige **Meteobridge-URL** werden angezeigt
+3. URL in **Meteobridge PRO RED → Services → Custom Push** eintragen, Intervall 5 min, Methode GET
+
+> Token wird nur einmalig angezeigt — sofort in Meteobridge eintragen.
+
+**Token rotieren:** „Token neu generieren" widerruft den alten Token sofort.
+
+**Station entfernen:** Löscht Station und Token; historische Zeitreihen werden beim nächsten Retention-Lauf bereinigt.
+
+Vollständige Anleitung: [Lokale Wetterstation (Admin)](Administration-Wetterstation)
+
 ## System-Update (nur system_admin)
 
 Neue Versionen können über `/admin/system/update` per ZIP-Upload eingespielt werden.

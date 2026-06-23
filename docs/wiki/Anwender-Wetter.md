@@ -12,6 +12,25 @@ Das Wetter-Modul ist systemweit standardmäßig aktiv. Jede Organisation kann es
 
 ---
 
+## Lokale Wetterstation
+
+Orgs mit einer konfigurierten **Davis Vantage Pro 2 Plus / Meteobridge**-Station sehen im Wetter-Panel zusätzlich eine **Lokale Wetterstation**-Karte:
+
+| Element | Beschreibung |
+|---------|-------------|
+| **Live / Offline** | Grüner Punkt: letzter Push < 15 min — Grauer Punkt: kein aktueller Empfang |
+| **Letzter Empfang** | Zeitstempel des letzten Pushes, z.B. „vor 3 min" |
+| **Messwerte** | Temperatur, Luftfeuchtigkeit, Wind + Böen + Windrichtung, Luftdruck, Regenrate, Taupunkt, Solar, UV — jeweils nur wenn übermittelt |
+| **24-h-Sparkline** | Miniplot der letzten 24 Stunden: Temperatur (orange) und Wind (blau); erscheint sobald genügend Verlauf vorhanden |
+
+Die lokale Station erscheint **zuerst** im Wetter-Panel — noch vor den externen Wetterdiensten.
+
+Wenn die Station **online** ist, werden ihre Messwerte automatisch für die **Szenario-Analyse** (Sturm, Waldbrand) herangezogen statt des NWP-Modellwertes. Lokale Böen aus dem Garten der Feuerwehr sind verlässlicher als ein Gitterpunkt-Modell.
+
+> Administration der Wetterstation: [Admin → Lokale Wetterstation](Administration-Wetterstation)
+
+---
+
 ## Einsatz-Board (Wetter-Panel)
 
 Im laufenden Einsatz erscheint rechts im Board ein **Wetter-Panel** mit:

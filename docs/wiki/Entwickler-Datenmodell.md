@@ -361,6 +361,41 @@ verleih_foto
   created_at, created_by_user_id FK?
 ```
 
+## Lokale Wetterstation
+
+Die Wetterstation nutzt **zwei getrennte Datenbanken** — die operative DB enthält nur den Snapshot, die Zeitreihe liegt in einer separaten Wetter-DB.
+
+**Haupt-DB (`einsatzleiter`):**
+```
+weather_station  [TenantScoped: org_id]
+  id, org_id FK → fire_dept
+  name (VARCHAR 100)
+  ingest_token_hash (VARCHAR 64 UNIQUE)   ← SHA-256 des wxst_-Tokens
+  active (BOOL, Default 1)
+  lat, lng (Dezimalgrad, optional)
+  last_seen_at    ← Zeitstempel letzter erfolgreicher Push
+  last_measured_at ← Zeitstempel des gemessenen Zeitpunkts
+  last_temp_c, last_hum_pct
+  last_wind_ms, last_gust_ms, last_wind_dir (VARCHAR 3, z.B. "NW")
+  last_pressure_hpa
+  last_rain_rate_mmh, last_rain_day_mm
+  last_dew_c, last_solar_wm2, last_uv_index
+```
+
+**Wetter-DB (`einsatzleiter_weather`) — eigener Connection-Pool:**
+```
+weather_reading
+  id, org_id, station_id (kein FK-Constraint in separater DB)
+  ts (DATETIME UTC)
+  temp_c, hum_pct, wind_ms, gust_ms, wind_dir
+  pressure_hpa, rain_rate_mmh, rain_day_mm
+  dew_c, solar_wm2, uv_index
+
+  INDEX (org_id, station_id, ts)   ← Haupt-Abfrage-Index
+```
+
+Die Zeitreihe wird täglich um 03:30 (Europe/Vienna) bereinigt — Retention konfigurierbar via `WEATHER_READING_RETENTION_DAYS`.
+
 ## Wichtige Indexe
 
 ```sql

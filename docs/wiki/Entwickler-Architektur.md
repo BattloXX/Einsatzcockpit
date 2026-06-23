@@ -36,6 +36,7 @@ Browser (HTMX + Alpine.js + WebSocket)
     │   ├── ui_stats.py         – Statistik-Dashboard
     │   ├── ui_push.py          – Web-Push-Verwaltung
     │   ├── ui_weather.py       – Wetter-Panel, /wetter-Seite
+    │   ├── api_weather.py      – Push-Ingest /api/v1/weather/ingest (Meteobridge)
     │   ├── ui_uas.py           – UAS/Drohnen-Modul (Geräte, Piloten, Einsätze)
     │   ├── ui_verleih.py       – Geräteverleih (Ausleihe, Stücklisten)
     │   ├── ui_profile.py       – Benutzer-Profil (Name/E-Mail/Passwort/Avatar)
@@ -64,6 +65,8 @@ Browser (HTMX + Alpine.js + WebSocket)
     │   ├── weather_service.py        – Wetter-Aggregation + Cache + Fallback
     │   ├── kachelmann_service.py     – Kachelmann Plus-API-Client
     │   ├── weather_focus.py          – Sturm-/Waldbrand-Szenario-Analyse
+    │   ├── weather_station_service.py– Push-Ingest + Snapshot-Upsert + Org-Isolation
+    │   ├── weather_retention.py      – Nacht-Retention-Loop (03:30 täglich)
     │   ├── geocoding.py / geo_service.py  – Adresse ↔ Koordinaten
     │   ├── address_autocomplete.py   – Adress-Suche (Bürgerportal, Pin)
     │   ├── media_service.py          – Upload-Pipeline (Bild/PDF/Video/HEIC)
@@ -97,12 +100,15 @@ Browser (HTMX + Alpine.js + WebSocket)
         ├── sso.py            – OrgSsoConfig, OrgSsoGroupMap
         ├── uas.py            – UASDevice, UASPilot, UASEinsatz, UASFlug, UASEreignis, ...
         ├── verleih.py        – VerleihArtikel, VerleihStueckliste, VerleihAusleihe, ...
+        ├── weather.py        – WeatherStation (TenantScoped, Haupt-DB), WeatherReading (Wetter-DB)
         ├── invitation.py     – OrgInvitation
         └── breathing.py      – BreathingTroop, TroopMember, PressureLog
          │
     SQLAlchemy 2.x (ORM + do_orm_execute Tenant-Filter + Alembic)
+    db_weather.py             – zweiter Engine/Pool (pool_size=3) für Wetter-Zeitreihe
          │
-    MariaDB 10.11 (UTF8MB4, InnoDB, 93 Migrationen)
+    MariaDB 10.11 (UTF8MB4, InnoDB, 97 Migrationen)
+    + MariaDB einsatzleiter_weather (Zeitreihen-DB, separater Pool)
 ```
 
 ## Multi-Tenancy: Row-Level-Isolation

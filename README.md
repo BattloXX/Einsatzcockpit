@@ -6,7 +6,7 @@
 [![CI](https://github.com/BattloXX/Einsatzleiter-Hilfswerkzeug/actions/workflows/ci.yml/badge.svg)](https://github.com/BattloXX/Einsatzleiter-Hilfswerkzeug/actions)
 ![Python](https://img.shields.io/badge/python-3.14-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green)
-![Version](https://img.shields.io/badge/version-2.7.0-orange)
+![Version](https://img.shields.io/badge/version-2.8.0-orange)
 
 ---
 
@@ -58,6 +58,7 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **System-Admin-Konsole** | Per-Org KPI-Übersicht mit Schnellzugriff für Systemadministratoren |
 | **Auto-Schließen** | Inaktive Einsätze werden nach konfigurierbarer Zeit automatisch geschlossen (systemweit und pro Org) |
 | **Wetterdaten-Integration** | Echtzeit-Nowcast (15-min), Ist-Werte, +6/+12/+24h-Vorhersage und Unwetterwarnungen; Kachelmann Plus-API als Primärquelle mit GeoSphere Austria/ZAMG-Ergänzung und Open-Meteo-Fallback; Sturm- und Waldbrand-Szenario-Indikatoren; Radar-Overlay (RainViewer) auf der Lagekarte; globale `/wetter`-Seite; opt-out je Org |
+| **Lokale Wetterstation** | Davis Vantage Pro 2 Plus via Meteobridge PRO RED: HTTPS-Push-Ingest (wxst_-Token, Rate-Limiting 120/min), denormalisierter Ist-Stand-Snapshot in Haupt-DB, separate Zeitreihen-DB (kein Bloat), Online/Offline-Indikator, 24-h-Sparkline (Temp/Wind), Echtzeit-Szenario-Analyse aus lokalen Messwerten; Nacht-Retention 03:30 |
 | **UAS / Drohnen-Modul** | Vollständige BOS-Drohnendokumentation gemäß RL-UAS LFV Vorarlberg 2024: Geräteregister, Wartungsbuch, Pilotenregister, Flugbuch, Vor-/Nachflug-Checklisten (4-Augen), Notfall-/Unfall-Workflow, ACG-Meldung, Lagekarte, DSGVO-Medien, PDF-Anhänge 8.1–8.6; zweistufiger Feature-Flag |
 | **Single Sign-On (Entra ID)** | Microsoft-365-Login pro Org: BYO App-Registrierung, OAuth2/PKCE/OIDC, JIT-Provisioning, Gruppen→Rollen-Mapping, enforce_sso; Client Secret Fernet-verschlüsselt |
 | **Geräteverleih** | Artikel- und Stücklisten-Stammdaten; Ausgabe & Rücknahme von Material im GSL-Kontext; Barcode/QR-Scan im Browser; SMS-Erinnerungen; Foto-Dokumentation; Druckschein |
@@ -346,6 +347,13 @@ WEATHER_HTTP_TIMEOUT=8           # Sekunden; externe API-Anfragen
 WEATHER_RADIUS_KM=15             # Fokus-Radius für Radarkarte
 WEATHER_FALLBACK_OPENMETEO=true  # Open-Meteo als Fallback wenn Primärquelle nicht erreichbar
 
+# ── Lokale Wetterstation (Davis / Meteobridge) ────────────────────────
+# Separate DB für die Zeitreihe — kein Bloat der operativen DB. Leer = Feature deaktiviert.
+WEATHER_DATABASE_URL=mysql+pymysql://einsatzleiter:passwort@127.0.0.1:3306/einsatzleiter_weather
+WEATHER_STATION_INGEST_ENABLED=true   # Push-Endpoint aktivieren
+WEATHER_READING_RETENTION_DAYS=365   # Aufbewahrungsdauer historischer Messwerte (Tage)
+WEATHER_INGEST_MIN_INTERVAL_S=60     # Mindestabstand zwischen akzeptierten Pushes (Sekunden)
+
 # ── SSO / Microsoft Entra ID ───────────────────────────────────────
 # Voraussetzung: SSO-Konfiguration in der Org-Verwaltung (Admin → SSO)
 # Wird im Tool pro Org eingerichtet (BYO App-Registrierung)
@@ -407,6 +415,10 @@ alembic downgrade -1
 | `0091_verleih_foto.py` | Geräteverleih: Foto-Anhänge |
 | `0092_verleih_ausleihe_notizen.py` | Geräteverleih: Notizfeld für Ausleihen |
 | `0093_uas_medien_upload.py` | UAS-Medien: echter Datei-Upload mit Bild/Video-Konvertierung |
+| `0094_orgsettings_abfluss.py` | OrgSettings: Pegelmessstationen-JSON (Abfluss-Widget) |
+| `0095_verleih_artikel_status.py` | Geräteverleih: Verfügbarkeitsstatus für eindeutige Artikel |
+| `0096_verleih_geraetetyp.py` | Geräteverleih: Gerätetypen, Artikel-FK, Stücklisten-FK, eindeutige Artikelnr |
+| `0097_weather_station.py` | Lokale Wetterstation: `weather_station`-Tabelle (Haupt-DB); `weather_reading` via `create_all` in separater Wetter-DB |
 
 Vollständiger Migrationsleitfaden: [`docs/MIGRATION_RUNBOOK.md`](docs/MIGRATION_RUNBOOK.md)
 
@@ -473,7 +485,7 @@ CI (GitHub Actions): Lint (ruff) + Typecheck (mypy) + pytest mit MariaDB-Service
 
 ### Test-Struktur
 
-**26 Testmodule, 335+ Testfunktionen.** Auswahl:
+**35 Testmodule, 458+ Testfunktionen.** Auswahl:
 
 ```
 tests/
@@ -495,6 +507,7 @@ tests/
 ├── test_weather_service.py     Wetter-Aggregation + Fallback
 ├── test_kachelmann_service.py  Kachelmann Plus-API
 ├── test_weather_focus.py       Sturm-/Waldbrand-Szenario-Analyse
+├── test_weather_ingest.py      Lokale Wetterstation: Push-Ingest, Snapshot, Sparkline, Szenario (18 Tests)
 ├── test_address_autocomplete.py / test_address_edit.py  Adress-Suche & -Bearbeitung
 ├── test_ai_*.py                KI: Vorschläge, Lagebild, Bericht, Service
 └── test_smoke.py               Import-Smoke-Tests
@@ -572,6 +585,7 @@ tests/
 │    ui_gsl_staff     – Stab, SKKM-Einsatzjournal         │
 │    lagekarte_api    – Lagekarte, Abschnitte, Marker     │
 │    ui_weather       – Wetter-Panel, /wetter             │
+│    api_weather      – Push-Ingest /api/v1/weather/ingest│
 │    ui_media         – Galerie, /medien/datei/{id}       │
 │    ui_breathing     – Atemschutzüberwachung             │
 │    ui_archive       – Archiv, PDF-Export                │
@@ -619,6 +633,8 @@ tests/
 │    weather_service       – Wetter-Aggregation            │
 │    kachelmann_service    – Kachelmann Plus-API           │
 │    weather_focus         – Sturm-/Waldbrand-Szenario     │
+│    weather_station_service– Push-Ingest + Snapshot       │
+│    weather_retention     – Nacht-Retention-Loop          │
 │    geocoding/geo_service – Adresse↔Koordinaten           │
 │    media_service         – Upload-Pipeline               │
 │    lage_media_service    – GSL-Medien                    │
@@ -634,10 +650,10 @@ tests/
 └────────────────────────────┬────────────────────────────┘
               ┌──────────────┼──────────────┐
 ┌─────────────▼──┐  ┌───────▼──────┐  ┌───▼──────────────┐
-│  MariaDB 10.11 │  │ app_storage/ │  │ app/static/      │
-│  (utf8mb4)     │  │ incident_    │  │ css, js, img     │
-│  79 Migrationen│  │ media/       │  │ (kein Auth nötig)│
-└────────────────┘  └─────────────┘  └──────────────────┘
+│  MariaDB 10.11 │  │ MariaDB      │  │ app_storage/ │  │ app/static/      │
+│  (utf8mb4)     │  │ _weather     │  │ incident_    │  │ css, js, img     │
+│  97 Migrationen│  │ (Zeitreihe)  │  │ media/       │  │ (kein Auth nötig)│
+└────────────────┘  └─────────────┘  └─────────────┘  └──────────────────┘
 ```
 
 ---
@@ -787,6 +803,7 @@ app/
 ├── main.py              FastAPI-App, Middleware, Router-Registrierung
 ├── config.py            Einstellungen (pydantic-settings, .env)
 ├── db.py                SQLAlchemy-Engine, SessionLocal, Base
+├── db_weather.py        Zweiter Engine/Pool (pool_size=3) für Wetter-Zeitreihen-DB
 ├── cli.py               CLI: create-admin, create-api-key, generate-vapid
 ├── seed_data.py         Initialdaten (Rollen, Alarmtypen, ...)
 ├── core/
@@ -809,13 +826,15 @@ app/
 │   │                    AlarmType (TenantScoped), SeedTemplate, ...
 │   ├── invitation.py    OrgInvitation
 │   ├── breathing.py     BreathingTroop, TroopMember, PressureLog
+│   ├── weather.py       WeatherStation (TenantScoped, Haupt-DB), WeatherReading (Wetter-DB)
 │   └── password_reset.py
 ├── routers/
 │   ├── ui_incident.py        Board, Aufgaben, Fahrzeuge, Media-Upload
 │   ├── ui_major_incident.py  Großschadenslage, Einsatzkarte, Disposition
 │   ├── ui_gsl_staff.py       Stab, SKKM-Einsatzjournal, Funkjournal
 │   ├── lagekarte_api.py      Lagekarte, Abschnitte, Marker, Druck
-│   ├── ui_weather.py         Wetter-Panel, globale /wetter-Seite
+│   ├── ui_weather.py         Wetter-Panel, globale /wetter-Seite, /wetter/station/{id}/sparkline
+│   ├── api_weather.py        Push-Ingest GET/POST /api/v1/weather/ingest
 │   ├── ui_media.py           Galerie (/medien), geschützte Datei-Auslieferung
 │   ├── ui_breathing.py       Atemschutzüberwachung
 │   ├── ui_archive.py         Archiv, PDF-Export
@@ -846,6 +865,8 @@ app/
 │   ├── weather_service.py       Wetter-Aggregation + Cache + Fallback
 │   ├── kachelmann_service.py    Kachelmann Plus-API-Client
 │   ├── weather_focus.py         Sturm-/Waldbrand-Szenario-Analyse
+│   ├── weather_station_service.py Push-Ingest + Snapshot-Upsert + Plausibilitäts-Clamping
+│   ├── weather_retention.py     Nacht-Retention-Loop (03:30 täglich, Europe/Vienna)
 │   ├── geocoding.py / geo_service.py  Adresse ↔ Koordinaten
 │   ├── address_autocomplete.py  Adress-Suche (Bürgerportal, Pin)
 │   ├── media_service.py         Upload-Pipeline (Bild/PDF/Video/HEIC)
@@ -878,12 +899,12 @@ app/
     ├── media/               gallery.html
     ├── admin/               sysadmin_orgs.html, konfig.html, ...
     └── ...
-alembic/versions/            Migrationen 0001–0093
+alembic/versions/            Migrationen 0001–0097
 docs/
 ├── MIGRATION_RUNBOOK.md     Vollständiger Migrationsleitfaden
 ├── multi-tenancy-konzept.md Technisches Konzeptdokument
 └── wiki/                    GitHub-Wiki-Quelldateien (Home, Anwender, Admin, Entwickler)
-tests/                       pytest-Suite (26+ Testmodule, 335+ Tests)
+tests/                       pytest-Suite (35+ Testmodule, 458+ Tests)
 app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 ```
 
@@ -902,6 +923,7 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **2.8.0** | 2026-06-23 | Lokale Wetterstation (Davis Vantage Pro 2 Plus / Meteobridge PRO RED): HTTPS-Push-Ingest mit `wxst_`-Token-Auth, Rate-Limiting 120/min, denormalisierter Ist-Stand-Snapshot (Haupt-DB), separate Zeitreihen-DB `einsatzleiter_weather` (kein Bloat), Online/Offline-Indikator (15-min-Schwelle), 24-h-Sparkline Temp/Wind (lazy HTMX), Echtzeit-Szenario-Analyse aus lokalen Messwerten (Sturm/Waldbrand/Glatteis), nächtliche Retention (03:30, tägl.); Token-Verwaltung in Org-Einstellungen |
 | **2.7.0** | 2026-06-22 | Geräteverleih-Modul (Artikel, Stücklisten, Barcode-Scan, SMS-Erinnerungen, Foto, Druckschein); Mobil-Navigation GSL (Burger-Menü, Bottom-Tab-Bar); UAS: echter Medien-Upload (Bild/Video), Abschluss-Banner, Flugbuch-Sperre; Drohneneinsatz direkt vom Einsatz-Board startbar; SSO: login_hint, Security-Fixes; Admin-Sidebar Mobiloptimierung |
 | **2.6.0** | 2026-06-20 | UAS/Drohnen-Modul vollständig (PR 0–8): Geräteregister, Wartungsbuch, Pilotenregister (Lizenzen/Qualifikationen), UAS-Einsatz (Status-Workflow, Mindestbesetzung), Flugbuch mit Vor-/Nachflug-Checklisten (4-Augen), Notfall-/Unfall-Workflow (ACG-Meldung, Meldekette), Karte (GeoJSON, Landebefehl-Banner), PDF-Anhänge 8.1–8.6, DSGVO-Medien-Workflow, Compliance-Dashboard; SSO Microsoft Entra ID (PR 1–6): PKCE/OIDC, JIT-Provisioning, Gruppen→Rollen-Mapping, enforce_sso, Fernet-verschlüsseltes Secret |
 | **2.5.0** | 2026-06-19 | GSL-Ressourcenverwaltung (Einheiten anlegen/disponieren, Mehrfach-Disposition, Fremdorganisations-Ressourcen, Ressourcen-Journal); Taktische Lagekarte nach ÖBFV E-27 (ÖNORM-Symbole, Magnetfarben, Legende); Lagekarte-Druck A4/A3 mit Druckvorschau, Fußzeile & Print-Center; SKKM-Lagemeldungs-Regelkreis (Lage→Auftrag→Kontrolle); übergreifende Meldungen mit Status-Workflow, Medien & Druck; Einsatzkarte mit Live-Updates & Foto-Upload; Kachelmann-Wetter-Primärquelle; Bürgermeldungs-Foto-Übertragung; Testsystem-Modus |
