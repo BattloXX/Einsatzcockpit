@@ -2,24 +2,24 @@
 
 <div{% if _has_pegel %} x-data="{_t: localStorage.getItem('wp_tab') || 'wetter', _setTab(v){this._t=v;localStorage.setItem('wp_tab',v);}}"{% endif %}>
 
-{# ── Tab-Leiste (nur wenn Pegel-Stationen konfiguriert) ─────────────────────── #}
+{# ── Segmented Tab Control (nur wenn Pegel-Stationen konfiguriert) ────────── #}
 {% if _has_pegel %}
-<div style="display:flex;gap:0;margin-bottom:8px;border-bottom:1px solid var(--border);">
+<div style="display:inline-flex;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:8px;padding:3px;gap:2px;margin-bottom:10px;">
   <button type="button" @click="_setTab('wetter')"
-          :style="_t==='wetter' ? 'color:var(--text-primary);border-bottom:2px solid var(--primary,#3b82f6);' : 'color:var(--text-muted);border-bottom:2px solid transparent;'"
-          style="background:none;border:none;border-bottom:2px solid transparent;padding:4px 12px 6px;font-size:.76rem;font-weight:600;cursor:pointer;line-height:1.2;transition:color .15s;">
+          :style="_t==='wetter' ? 'background:rgba(255,255,255,.14);color:var(--text-primary);box-shadow:0 1px 3px rgba(0,0,0,.4);' : 'background:transparent;color:var(--text-muted);'"
+          style="border:none;border-radius:6px;padding:4px 14px;font-size:.76rem;font-weight:600;cursor:pointer;transition:all .12s;line-height:1.3;white-space:nowrap;">
     &#x2601; Wetter
   </button>
   <button type="button" @click="_setTab('pegel')"
-          :style="_t==='pegel' ? 'color:var(--text-primary);border-bottom:2px solid var(--primary,#3b82f6);' : 'color:var(--text-muted);border-bottom:2px solid transparent;'"
-          style="background:none;border:none;border-bottom:2px solid transparent;padding:4px 12px 6px;font-size:.76rem;font-weight:600;cursor:pointer;line-height:1.2;transition:color .15s;">
+          :style="_t==='pegel' ? 'background:rgba(255,255,255,.14);color:var(--text-primary);box-shadow:0 1px 3px rgba(0,0,0,.4);' : 'background:transparent;color:var(--text-muted);'"
+          style="border:none;border-radius:6px;padding:4px 14px;font-size:.76rem;font-weight:600;cursor:pointer;transition:all .12s;line-height:1.3;white-space:nowrap;">
     &#x1F30A; Pegel
   </button>
 </div>
 <div x-show="_t==='wetter'" style="display:block;">
 {% endif %}
 
-{# ── Wetter-Inhalt ────────────────────────────────────────────────────────────── #}
+{# ── Wetter-Inhalt ─────────────────────────────────────────────────────────── #}
 {% if no_location %}
 <span style="font-size:.75rem;color:var(--text-muted);">Standortkoordinaten fehlen &ndash; Wetterdaten nicht verf&uuml;gbar.</span>
 {% elif not nowcast and not current and not forecast %}
@@ -65,7 +65,7 @@
 
 </div>
 
-{# ── Warnungen horizontal nebeneinander ──────────────────────────────────────── #}
+{# ── Warnungen horizontal nebeneinander ─────────────────────────────────────── #}
 {% if warn_views %}
 <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px;">
   {% for w in warn_views %}
@@ -82,24 +82,25 @@
 </div>
 {% endif %}
 
-{# ── Attribution ─────────────────────────────────────────────────────────────── #}
+{# ── Attribution ──────────────────────────────────────────────────────────── #}
 <div style="font-size:.62rem;color:var(--text-muted);">Daten: {{ attribution }} &middot; {{ focus_label }}</div>
 {% endif %}
 
-{# ── Pegel-Tab ────────────────────────────────────────────────────────────────── #}
+{# ── Pegel-Tab ─────────────────────────────────────────────────────────────── #}
 {% if _has_pegel %}
 </div>{# end wetter tab content #}
 <div x-show="_t==='pegel'" style="display:none;">
 
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:6px;margin-bottom:4px;">
   {% for av in abfluss_views %}
-  <div style="background:rgba(255,255,255,.04);border-left:3px solid {{ av.stufe_farbe }};border-radius:0 4px 4px 0;padding:7px 10px;{% if not loop.last %}margin-bottom:5px;{% endif %}">
+  <div style="background:rgba(255,255,255,.04);border-left:3px solid {{ av.stufe_farbe }};border-radius:0 4px 4px 0;padding:7px 10px;">
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
       <a href="https://vowis.vorarlberg.at/stationsInfo/_Abfluss/ofwStation.aspx?hzbnr={{ av.hzbnr }}" target="_blank" rel="noopener" style="font-size:.80rem;font-weight:600;color:var(--text-primary);text-decoration:none;">{{ av.name }} &#x2197;</a>
       <span style="font-size:.69rem;font-weight:700;color:{{ av.stufe_farbe }};background:{{ av.stufe_farbe }}22;padding:1px 8px;border-radius:10px;white-space:nowrap;border:1px solid {{ av.stufe_farbe }}44;">{{ av.stufe_label }}</span>
     </div>
 
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:nowrap;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       {% if av.wert is not none %}
       <span style="font-size:1.05rem;font-weight:700;color:{{ av.stufe_farbe }};font-variant-numeric:tabular-nums;min-width:78px;flex-shrink:0;">
         {{ '%.2f'|format(av.wert) }}&thinsp;m&sup3;/s
@@ -132,8 +133,9 @@
   {% else %}
   <span style="font-size:.78rem;color:var(--text-muted);">Keine Stationen konfiguriert.</span>
   {% endfor %}
+  </div>{# end grid #}
 
-  <div style="font-size:.60rem;color:var(--text-muted);margin-top:6px;">Quelle: vowis.vorarlberg.at (Abfluss) &middot; Aktualisierung alle 10&thinsp;min</div>
+  <div style="font-size:.60rem;color:var(--text-muted);">Quelle: vowis.vorarlberg.at (Abfluss) &middot; Aktualisierung alle 10&thinsp;min</div>
 </div>
 {% endif %}
 
