@@ -305,6 +305,8 @@ class OrgSettings(Base):
     position_retention_days: Mapped[int] = mapped_column(Integer, default=30)
     # Wetter-Integration: NULL = globale Einstellung nutzen, True/False = org-spezifisch
     weather_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Wetter-Dashboard-Token (SHA256-Hash); NULL = kein Dashboard aktiviert
+    weather_dashboard_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
 
     # GSL-Lagemeldungs-Regelkreis (SKKM): Intervall der Lagemeldungs-Pflicht je Einsatz.
     # NULL beim Default-Intervall ⇒ gesamte Logik deaktiviert (kein Timer/Auftrag/Chip).

@@ -59,6 +59,11 @@ def generate_weather_station_token() -> str:
     return "wxst_" + secrets.token_urlsafe(32)
 
 
+def generate_weather_dashboard_token() -> str:
+    """Öffentlicher Infoscreen-Token für das Wetter-Dashboard einer Org."""
+    return "wxdb_" + secrets.token_urlsafe(32)
+
+
 def sign_session(
     user_id: int,
     *,

@@ -402,6 +402,140 @@ async def abfluss_station_remove(
     return RedirectResponse(f"/admin/settings?saved=1{org_suffix}#pegel", status_code=303)
 
 
+# ── Wetter-Einstellungsseite ─────────────────────────────────────────────────
+
+def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
+    """Baut den Template-Kontext fuer admin/settings_wetter.html."""
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = org_id if (is_sysadmin and org_id) else user.org_id
+    org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
+    org_settings = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+        if effective_org_id else None
+    )
+    all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
+    from app.models.weather import WeatherStation
+    weather_stations = (
+        db.query(WeatherStation)
+        .filter(WeatherStation.org_id == effective_org_id)
+        .order_by(WeatherStation.name)
+        .all()
+        if effective_org_id else []
+    )
+    base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
+    ctx = {
+        "user": user,
+        "org": org,
+        "org_settings": org_settings,
+        "is_sysadmin": is_sysadmin,
+        "all_orgs": all_orgs,
+        "weather_stations": weather_stations,
+        "new_station_token": None,
+        "new_station_id": None,
+        "new_dashboard_token": None,
+        "weather_db_enabled": bool(app_settings.WEATHER_DATABASE_URL),
+        "public_base_url": base_url,
+        "dashboard_url": f"{base_url}/wetter/infoscreen/DASHBOARD_TOKEN",
+    }
+    ctx.update(extra)
+    return ctx
+
+
+@router.get("/settings/wetter", response_class=HTMLResponse)
+def weather_settings_page(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    org_id: int | None = None,
+):
+    return templates.TemplateResponse(
+        request, "admin/settings_wetter.html",
+        _weather_settings_context(request, db, user, org_id),
+    )
+
+
+@router.post("/settings/wetter/dashboard-token/generate", response_class=HTMLResponse)
+async def weather_dashboard_token_generate(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
+    from app.core.security import generate_weather_dashboard_token, hash_api_key
+
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+    org_id_param = effective_org_id if is_sysadmin else None
+    if not effective_org_id:
+        return RedirectResponse("/admin/settings/wetter", status_code=303)
+
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+    if not org_settings:
+        org_settings = OrgSettings(org_id=effective_org_id)
+        db.add(org_settings)
+
+    raw = generate_weather_dashboard_token()
+    org_settings.weather_dashboard_token_hash = hash_api_key(raw)
+    db.commit()
+
+    base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
+    return templates.TemplateResponse(
+        request, "admin/settings_wetter.html",
+        _weather_settings_context(
+            request, db, user, org_id_param,
+            new_dashboard_token=raw,
+            dashboard_url=f"{base_url}/wetter/infoscreen/{raw}",
+        ),
+    )
+
+
+@router.post("/settings/wetter/dashboard-token/revoke")
+async def weather_dashboard_token_revoke(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+    if org_settings:
+        org_settings.weather_dashboard_token_hash = None
+        db.commit()
+
+    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
+    return RedirectResponse(f"/admin/settings/wetter{org_suffix}#dashboard", status_code=303)
+
+
+@router.post("/settings/wetter/weather-toggle", response_class=HTMLResponse)
+async def weather_toggle(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    enabled_raw: str = Form(""),
+    target_org_id: int | None = Form(None),
+):
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+    if not effective_org_id:
+        return RedirectResponse("/admin/settings/wetter", status_code=303)
+
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+    if not org_settings:
+        org_settings = OrgSettings(org_id=effective_org_id)
+        db.add(org_settings)
+
+    org_settings.weather_enabled = bool(enabled_raw)
+    db.commit()
+
+    org_id_param = effective_org_id if is_sysadmin else None
+    return templates.TemplateResponse(
+        request, "admin/settings_wetter.html",
+        _weather_settings_context(request, db, user, org_id_param),
+    )
+
+
 # ── Lokale Wetterstationen (Davis/Meteobridge) ───────────────────────────────
 
 def _parse_coord(raw: str | None, lo: float, hi: float) -> float | None:
@@ -431,13 +565,14 @@ async def weather_station_add(
     effective_org_id = target_org_id if has_role(user, "system_admin") and target_org_id else user.org_id
     org_id_param = effective_org_id if has_role(user, "system_admin") else None
     if not effective_org_id:
-        return RedirectResponse("/admin/settings", status_code=303)
+        return RedirectResponse("/admin/settings/wetter", status_code=303)
 
     name = name.strip()[:150]
     if not name:
         return templates.TemplateResponse(
-            request, "admin/settings.html",
-            _settings_context(request, db, user, org_id_param, weather_error="Name darf nicht leer sein."),
+            request, "admin/settings_wetter.html",
+            _weather_settings_context(request, db, user, org_id_param,
+                                      weather_error="Name darf nicht leer sein."),
         )
 
     raw = generate_weather_station_token()
@@ -453,9 +588,9 @@ async def weather_station_add(
     db.commit()
 
     return templates.TemplateResponse(
-        request, "admin/settings.html",
-        _settings_context(request, db, user, org_id_param,
-                          new_station_token=raw, new_station_id=station.id),
+        request, "admin/settings_wetter.html",
+        _weather_settings_context(request, db, user, org_id_param,
+                                  new_station_token=raw, new_station_id=station.id),
     )
 
 
@@ -482,9 +617,9 @@ async def weather_station_regenerate(
     db.commit()
 
     return templates.TemplateResponse(
-        request, "admin/settings.html",
-        _settings_context(request, db, user, org_id_param,
-                          new_station_token=raw, new_station_id=station.id),
+        request, "admin/settings_wetter.html",
+        _weather_settings_context(request, db, user, org_id_param,
+                                  new_station_token=raw, new_station_id=station.id),
     )
 
 
@@ -504,8 +639,8 @@ async def weather_station_remove(
         db.delete(station)
         db.commit()
 
-    org_suffix = f"&org_id={effective_org_id}" if has_role(user, "system_admin") else ""
-    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}#wetterstation", status_code=303)
+    org_suffix = f"?org_id={effective_org_id}" if has_role(user, "system_admin") else ""
+    return RedirectResponse(f"/admin/settings/wetter{org_suffix}#wetterstation", status_code=303)
 
 
 # ── Organisations-Verwaltung (system_admin) ──────────────────────────────────

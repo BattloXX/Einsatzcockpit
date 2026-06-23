@@ -826,3 +826,94 @@ async def station_sparkline(
             "wind_svg": _build_sparkline_svg(readings, "wind_ms"),
         },
     )
+
+
+# ── Oeffentliches Wetter-Infoscreen-Dashboard (Token-Auth, kein Login) ────────
+
+@router.get(
+    "/wetter/infoscreen/{token}",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def weather_infoscreen(
+    request: Request,
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Vollbild-Wetter-Dashboard fuer FullHD-Infoscreens. Zugriff nur mit gueltigem Token."""
+    from app.core.security import hash_api_key
+    from app.models.master import FireDept, OrgSettings
+
+    token_hash = hash_api_key(token)
+    # OrgSettings ist nicht TenantScoped – direkter Lookup ohne Tenant-Bypass noetig
+    org_settings = (
+        db.query(OrgSettings)
+        .execution_options(include_all_tenants=True)
+        .filter(OrgSettings.weather_dashboard_token_hash == token_hash)
+        .first()
+    )
+    if not org_settings:
+        raise HTTPException(status_code=401, detail="Ungueltiger oder gesperrter Dashboard-Token.")
+
+    org = db.query(FireDept).filter(FireDept.id == org_settings.org_id).first()
+    if not org:
+        raise HTTPException(status_code=404)
+
+    station_views = _build_station_views(org.id, db)
+    abfluss_views = await _build_abfluss_views(org.id, db)
+
+    # Koordinaten fuer externe Wetter-APIs: erst Station, dann Org-Fallback
+    lat: float | None = None
+    lng: float | None = None
+    if station_views:
+        from app.models.weather import WeatherStation
+        for sv in station_views:
+            st = db.get(WeatherStation, sv["id"])
+            if st and st.lat is not None and st.lng is not None:
+                lat, lng = st.lat, st.lng
+                break
+    if lat is None and org.fallback_lat and org.fallback_lng:
+        lat, lng = org.fallback_lat, org.fallback_lng
+
+    warnings: list = []
+    current = None
+    nowcast = None
+    if lat is not None and lng is not None:
+        results = await asyncio.gather(
+            weather_service.get_warnings(lat, lng),
+            weather_service.get_current(lat, lng),
+            weather_service.get_nowcast(lat, lng),
+            return_exceptions=True,
+        )
+        if not isinstance(results[0], Exception):
+            warnings = results[0]
+        if not isinstance(results[1], Exception):
+            current = results[1]
+        if not isinstance(results[2], Exception):
+            nowcast = results[2]
+
+    now_utc = datetime.now(UTC)
+    active_warnings = [w for w in warnings if w.valid_from <= now_utc]
+    station_current = _station_current_weather(station_views)
+    base_url = (settings.PUBLIC_BASE_URL or settings.APP_BASE_URL).rstrip("/")
+
+    return templates.TemplateResponse(
+        request,
+        "weather/infoscreen.html",
+        {
+            "org": org,
+            "org_settings": org_settings,
+            "station": station_views[0] if station_views else None,
+            "station_views": station_views,
+            "abfluss_views": abfluss_views,
+            "current": current,
+            "station_current": station_current,
+            "warnings": active_warnings,
+            "warn_views": _build_warning_views(active_warnings),
+            "top_warning": active_warnings[0] if active_warnings else None,
+            "nowcast": nowcast,
+            "nowcast_bars": _build_nowcast_bars(nowcast) if nowcast else [],
+            "attribution": _build_attribution(current, None, nowcast, active_warnings, station_current),
+            "public_base_url": base_url,
+        },
+    )

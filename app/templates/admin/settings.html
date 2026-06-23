@@ -394,121 +394,20 @@
   </div>
 </section>
 
-{# ── Lokale Wetterstation (Davis/Meteobridge) ─────────────────────────────── #}
-<section class="card mb-4" id="wetterstation">
-  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
-    <h2>&#x1F321;&#xFE0F; Eigene Wetterstation</h2>
-    <span class="badge badge--muted" style="font-size:.72rem;">Wetter-Panel &rsaquo; Ist-Stand</span>
-  </div>
-  <div class="card-body">
-
-    {% if weather_error %}
-    <div class="alert alert--error" style="margin-bottom:1rem;">{{ weather_error }}</div>
-    {% endif %}
-
-    <div class="alert" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:.6rem .9rem;font-size:.82rem;color:var(--text-primary);margin-bottom:1.25rem;">
-      <strong>So binden Sie Ihre Station an:</strong>
-      Die Station (z.&thinsp;B. Davis Vantage Pro 2 &uuml;ber eine <em>Meteobridge</em>) sendet ihre Messwerte
-      per HTTPS an diese Plattform (Push). Legen Sie unten eine Station an &ndash; Sie erhalten dann
-      <strong>einmalig</strong> einen Token und eine fertige Push-URL, die Sie in der Meteobridge unter
-      <code style="background:rgba(255,255,255,.1);padding:0 4px;border-radius:3px;">Services &rsaquo; Custom HTTP</code>
-      eintragen. Die Daten sind ausschlie&szlig;lich f&uuml;r Ihre Organisation sichtbar.
-      {% if not weather_db_enabled %}<br><strong style="color:var(--ampel-gelb,#eab308);">Hinweis:</strong>
-      Historien-Datenbank nicht konfiguriert &ndash; es wird nur der aktuelle Ist-Stand gespeichert (kein Verlauf).{% endif %}
-    </div>
-
-    {% if new_station_token %}
-    <div class="alert" style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.35);border-radius:6px;padding:.8rem 1rem;margin-bottom:1.25rem;">
-      <strong>&#x2705; Station gespeichert &ndash; Token wird nur jetzt angezeigt!</strong>
-      <p style="font-size:.82rem;color:var(--text-muted);margin:.4rem 0;">
-        Kopieren Sie die folgende Push-URL in die Meteobridge. Der Token kann sp&auml;ter nicht erneut
-        eingesehen werden (nur neu erzeugt).
+{% if org %}
+<section class="card mb-4" style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.2);">
+  <div class="card-body" style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+    <div>
+      <strong>&#x1F321;&#xFE0F; Wetter-Einstellungen wurden verschoben</strong>
+      <p style="margin:.25rem 0 0;font-size:.85rem;color:var(--text-muted);">
+        Wetterstation, Infoscreen-Dashboard und Wetter-Aktivierung finden Sie jetzt unter
+        <strong>Einstellungen &rsaquo; Wetter</strong>.
       </p>
-      <textarea id="wxPushUrl" readonly rows="3"
-                style="width:100%;font-family:var(--font-mono,monospace);font-size:.76rem;background:rgba(0,0,0,.25);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:.5rem;resize:vertical;">{{ public_base_url }}/api/v1/weather/ingest?token={{ new_station_token }}&temp=[th0temp-act]&hum=[th0hum-act]&wind=[wind0wind-act]&gust=[wind0gust-act]&dir=[wind0dir-act]&press=[thb0seapress-act]&rainrate=[rain0rate-act]&rainday=[rain0total-daysum]&dew=[th0dew-act]&solar=[sol0rad-act]&uv=[uv0index-act]&ts=[epoch]</textarea>
-      <button type="button" class="btn btn--sm btn--primary" style="margin-top:.5rem;"
-              onclick="var t=document.getElementById('wxPushUrl');t.select();navigator.clipboard.writeText(t.value);this.textContent='Kopiert';">
-        URL kopieren
-      </button>
     </div>
-    {% endif %}
-
-    {% if weather_stations %}
-    <table style="width:100%;border-collapse:collapse;margin-bottom:1.25rem;font-size:.85rem;">
-      <thead>
-        <tr style="border-bottom:1px solid var(--border);">
-          <th style="text-align:left;padding:4px 10px 6px 0;color:var(--text-muted);font-weight:600;">Name</th>
-          <th style="text-align:left;padding:4px 10px 6px;color:var(--text-muted);font-weight:600;">Koordinaten</th>
-          <th style="text-align:left;padding:4px 10px 6px;color:var(--text-muted);font-weight:600;">Zuletzt empfangen</th>
-          <th style="width:180px;"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for st in weather_stations %}
-        <tr style="border-bottom:1px solid var(--border-subtle);">
-          <td style="padding:7px 10px 7px 0;">{{ st.name }}</td>
-          <td style="padding:7px 10px;color:var(--text-muted);font-size:.80rem;">
-            {% if st.lat is not none and st.lng is not none %}{{ "%.4f"|format(st.lat) }}, {{ "%.4f"|format(st.lng) }}{% else %}&ndash;{% endif %}
-          </td>
-          <td style="padding:7px 10px;color:var(--text-muted);font-size:.80rem;">
-            {% if st.last_seen_at %}{{ st.last_seen_at | local_datetime }}{% else %}<em>noch nie</em>{% endif %}
-          </td>
-          <td style="padding:7px 0;text-align:right;">
-            <form method="post" action="/admin/settings/weather/regenerate" style="display:inline;">
-              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <input type="hidden" name="station_id" value="{{ st.id }}">
-              {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-              <button type="submit" class="btn btn--sm"
-                      onclick="return confirm('Neuen Token erzeugen? Der alte Token wird sofort ung&uuml;ltig.');">
-                Token neu
-              </button>
-            </form>
-            <form method="post" action="/admin/settings/weather/remove" style="display:inline;">
-              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <input type="hidden" name="station_id" value="{{ st.id }}">
-              {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-              <button type="submit" class="btn btn--danger btn--sm"
-                      onclick="return confirm('Station entfernen?');">
-                Entfernen
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1.25rem;">
-      Noch keine Station konfiguriert. Unten hinzuf&uuml;gen.
-    </p>
-    {% endif %}
-
-    <form method="post" action="/admin/settings/weather/add">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-      <fieldset style="border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;">
-        <legend style="font-size:.80rem;font-weight:600;color:var(--text-muted);padding:0 6px;">Station hinzuf&uuml;gen</legend>
-        <div style="display:grid;grid-template-columns:1fr 140px 140px auto;gap:.5rem;align-items:end;">
-          <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">Name *</label>
-            <input type="text" name="name" class="form-control" required
-                   placeholder="FW-Haus Wolfurt" maxlength="150">
-          </div>
-          <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">Breite (lat)</label>
-            <input type="text" name="lat" class="form-control" placeholder="47.466" inputmode="decimal">
-          </div>
-          <div>
-            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">L&auml;nge (lng)</label>
-            <input type="text" name="lng" class="form-control" placeholder="9.738" inputmode="decimal">
-          </div>
-          <div>
-            <button type="submit" class="btn btn--primary">Hinzuf&uuml;gen</button>
-          </div>
-        </div>
-      </fieldset>
-    </form>
-
+    <a href="/admin/settings/wetter{% if is_sysadmin and org %}?org_id={{ org.id }}{% endif %}"
+       class="btn btn--primary btn--sm" style="white-space:nowrap;">
+      &#x2192; Wetter-Einstellungen
+    </a>
   </div>
 </section>
 {% endif %}

@@ -11,7 +11,8 @@
   {% set active_group = 'verwaltung' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
-       or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p %}
+       or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
+       or _p == '/admin/settings/wetter' or _p.startswith('/admin/settings/wetter?') %}
   {% set active_group = 'einstellungen' %}
 {% elif _p.startswith('/uas/') %}
   {% set active_group = 'uas' %}
@@ -291,6 +292,11 @@
                class="admin-nav__item {% if '/admin/gsl-einstellungen' in request.url.path %}is-active{% endif %}"
                {{ tip('GSL: Module, Lagemeldung, Geräteverleih je Org konfigurieren') }}>
               <span class="admin-nav__icon">🚨</span>GSL-Einstellungen
+            </a>
+            <a href="/admin/settings/wetter"
+               class="admin-nav__item {% if request.url.path == '/admin/settings/wetter' or request.url.path.startswith('/admin/settings/wetter') %}is-active{% endif %}"
+               {{ tip('Eigene Wetterstation, Infoscreen-Dashboard-Link, Wetter aktivieren/deaktivieren') }}>
+              <span class="admin-nav__icon">&#x1F321;&#xFE0F;</span>Wetter
             </a>
             <a href="/admin/sso"
                class="admin-nav__item {% if '/admin/sso' in request.url.path %}is-active{% endif %}"
