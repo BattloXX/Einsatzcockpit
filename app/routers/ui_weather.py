@@ -915,5 +915,7 @@ async def weather_infoscreen(
             "nowcast_bars": _build_nowcast_bars(nowcast) if nowcast else [],
             "attribution": _build_attribution(current, None, nowcast, active_warnings, station_current),
             "public_base_url": base_url,
+            "map_lat": lat,
+            "map_lng": lng,
         },
     )

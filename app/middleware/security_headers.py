@@ -42,7 +42,7 @@ _CSP_INFOSCREEN = (
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; "
     "font-src 'self' data: https://fonts.gstatic.com; "
     "connect-src 'self'; "
-    "frame-src 'none'; "
+    "frame-src https://embed.windy.com; "
     "object-src 'none'; "
     "base-uri 'self'; "
     "form-action 'none'; "
