@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.templating import templates
+from app.core.timezones import local_input_to_utc, now_local
 from app.db import get_db
 from app.models.fahrtenbuch import FahrtErfassungsweg, FahrtKategorie, Fahrtzweck, Zielort
 from app.models.incident import Incident
@@ -331,7 +332,7 @@ async def _render_erfassung(
         "doppelfahrt_warnung": doppelfahrt_warnung,
         "fehler": fehler,
         "form_daten": form_daten or {},
-        "now": datetime.now(UTC),
+        "now": now_local(org),
     })
 
 
@@ -353,12 +354,7 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
         return v or None
 
     zeitpunkt_raw = _str("zeitpunkt")
-    zeitpunkt = None
-    if zeitpunkt_raw:
-        try:
-            zeitpunkt = datetime.fromisoformat(zeitpunkt_raw).replace(tzinfo=UTC)
-        except ValueError:
-            zeitpunkt = None
+    zeitpunkt = local_input_to_utc(zeitpunkt_raw) if zeitpunkt_raw else None
 
     token_label = None
     if token_org and not user:

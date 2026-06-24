@@ -52,6 +52,33 @@ def format_local_iso(dt: datetime | None, org: Any | None = None) -> str:
     return local.isoformat() if local else ""
 
 
+def now_local(org: Any | None = None) -> datetime:
+    """Aktuelle Zeit in der Org-Zeitzone (für Template-Default-Werte)."""
+    return datetime.now(org_tz(org))
+
+
+def local_input_to_utc(value: str, org: Any | None = None) -> datetime | None:
+    """Parst einen datetime-local-String (YYYY-MM-DDTHH:MM) als lokale Orgszeit, gibt naive UTC zurück."""
+    try:
+        naive = datetime.fromisoformat(value.strip())
+        return naive.replace(tzinfo=org_tz(org)).astimezone(UTC).replace(tzinfo=None)
+    except (ValueError, TypeError):
+        return None
+
+
+def local_date_to_utc(date_str: str, end: bool = False, org: Any | None = None) -> datetime | None:
+    """Parst ein Datumsfeld (YYYY-MM-DD) als lokale Orgszeit, gibt naive UTC zurück.
+
+    end=True: letzter Moment des Tages (23:59:59 lokal → UTC).
+    """
+    try:
+        suffix = "T23:59:59" if end else "T00:00:00"
+        naive = datetime.fromisoformat(date_str.strip() + suffix)
+        return naive.replace(tzinfo=org_tz(org)).astimezone(UTC).replace(tzinfo=None)
+    except (ValueError, TypeError):
+        return None
+
+
 def common_timezones() -> list[str]:
     """Sortierte Liste haeufig benoetigter Zeitzonen + alle europaeischen."""
     preferred = [

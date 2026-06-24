@@ -4,7 +4,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.permissions import has_role, is_fahrtenbuch_admin
+from app.core.permissions import has_role
+from app.core.timezones import local_date_to_utc
 from app.core.templating import templates
 from app.db import get_db
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck
@@ -64,10 +65,7 @@ async def stats(request: Request, db: Session = Depends(get_db)):
         .limit(12)
     ).all()
 
-    # Fahrtenbuch-Statistik (nur wenn berechtigt)
-    fb_stats = None
-    if is_fahrtenbuch_admin(user) or has_role(user, "incident_leader"):
-        fb_stats = _fahrtenbuch_stats(user.org_id, db)
+    fb_stats = _fahrtenbuch_stats(user.org_id, db) if user.org_id else None
 
     return templates.TemplateResponse(request, "stats/dashboard.html", {
         "user": user,
@@ -88,11 +86,7 @@ async def stats_fahrtenbuch(
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
-    if not (is_fahrtenbuch_admin(user) or has_role(user, "incident_leader")):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Keine Berechtigung")
 
-    from datetime import UTC, datetime
     q = (
         db.query(Fahrt)
         .filter(
@@ -104,15 +98,13 @@ async def stats_fahrtenbuch(
         .options(joinedload(Fahrt.fahrzeug))
     )
     if von:
-        try:
-            q = q.filter(Fahrt.zeitpunkt >= datetime.fromisoformat(von))
-        except ValueError:
-            pass
+        dt = local_date_to_utc(von)
+        if dt:
+            q = q.filter(Fahrt.zeitpunkt >= dt)
     if bis:
-        try:
-            q = q.filter(Fahrt.zeitpunkt <= datetime.fromisoformat(bis + "T23:59:59"))
-        except ValueError:
-            pass
+        dt = local_date_to_utc(bis, end=True)
+        if dt:
+            q = q.filter(Fahrt.zeitpunkt <= dt)
     if fahrzeug_id:
         q = q.filter(Fahrt.fahrzeug_id == fahrzeug_id)
     if fahrttyp:

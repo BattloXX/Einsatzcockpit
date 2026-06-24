@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.audit import write_audit
 from app.core.permissions import is_fahrtenbuch_admin, require_role
+from app.core.timezones import local_date_to_utc
 from app.core.templating import templates
 from app.db import get_db
 from app.models.fahrtenbuch import Fahrt, FahrtBenachrichtigung, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
@@ -58,15 +59,13 @@ async def fahrten_liste(
         except ValueError:
             pass
     if von:
-        try:
-            q = q.filter(Fahrt.zeitpunkt >= datetime.fromisoformat(von))
-        except ValueError:
-            pass
+        dt = local_date_to_utc(von)
+        if dt:
+            q = q.filter(Fahrt.zeitpunkt >= dt)
     if bis:
-        try:
-            q = q.filter(Fahrt.zeitpunkt <= datetime.fromisoformat(bis + "T23:59:59"))
-        except ValueError:
-            pass
+        dt = local_date_to_utc(bis, end=True)
+        if dt:
+            q = q.filter(Fahrt.zeitpunkt <= dt)
     if fahrzeug_id:
         q = q.filter(Fahrt.fahrzeug_id == fahrzeug_id)
     if fahrttyp:
@@ -135,15 +134,13 @@ async def fahrten_export(
         except ValueError:
             pass
     if von:
-        try:
-            q = q.filter(Fahrt.zeitpunkt >= datetime.fromisoformat(von))
-        except ValueError:
-            pass
+        dt = local_date_to_utc(von)
+        if dt:
+            q = q.filter(Fahrt.zeitpunkt >= dt)
     if bis:
-        try:
-            q = q.filter(Fahrt.zeitpunkt <= datetime.fromisoformat(bis + "T23:59:59"))
-        except ValueError:
-            pass
+        dt = local_date_to_utc(bis, end=True)
+        if dt:
+            q = q.filter(Fahrt.zeitpunkt <= dt)
     if fahrzeug_id:
         q = q.filter(Fahrt.fahrzeug_id == fahrzeug_id)
     if fahrttyp:
