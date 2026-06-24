@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.permissions import has_role, is_fahrtenbuch_admin
 from app.core.templating import templates
@@ -101,6 +101,7 @@ async def stats_fahrtenbuch(
             Fahrt.nicht_statistikrelevant == False,  # noqa: E712
         )
         .execution_options(include_all_tenants=True)
+        .options(joinedload(Fahrt.fahrzeug))
     )
     if von:
         try:

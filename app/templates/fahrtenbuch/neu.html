@@ -3,11 +3,30 @@
 
 {% block content %}
 <div class="container" style="max-width:680px;margin:0 auto;padding:1rem;">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;">
-    {% if not token_org %}
-    <a href="/" class="btn btn--ghost btn--sm">&#8592; Zurück</a>
-    {% endif %}
-    <h1 style="font-size:1.4rem;font-weight:700;margin:0;">Fahrt erfassen</h1>
+
+  {# ── Org-Branding Header ────────────────────────────────────────── #}
+  <div style="margin-bottom:1.5rem;">
+    <div style="display:flex;align-items:flex-start;gap:1rem;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:.875rem;min-width:0;">
+        {% if org and org.logo_path %}
+        <img src="{{ org.logo_path }}" alt="{{ org.name }}"
+             style="max-height:52px;max-width:84px;object-fit:contain;flex-shrink:0;"
+             onerror="this.style.display='none'">
+        {% else %}
+        <span style="font-size:2.25rem;flex-shrink:0;line-height:1;">&#x1F697;</span>
+        {% endif %}
+        <div style="min-width:0;">
+          {% if org %}
+          <div style="font-size:.72rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ org.name }}</div>
+          {% endif %}
+          <h1 style="font-size:1.3rem;font-weight:700;margin:0;line-height:1.25;">Digitales Fahrtenbuch</h1>
+        </div>
+      </div>
+      {% if not token_org %}
+      <a href="/" class="btn btn--ghost btn--sm" style="flex-shrink:0;margin-top:.2rem;">&#8592; Zurück</a>
+      {% endif %}
+    </div>
+    <p style="font-size:.875rem;color:var(--text-muted);margin:.625rem 0 0;">Fahrzeugbewegungen, km-Stände und Betriebsstunden lückenlos digital erfassen.</p>
   </div>
 
   {% if fehler %}
@@ -68,12 +87,14 @@
       <select name="zielort_id" id="zielort_id" class="form-control">
         <option value="">— wählen —</option>
         {% for zo in zielorte %}
-        <option value="{{ zo.id }}">{{ zo.name }}</option>
+        <option value="{{ zo.id }}"
+          {% if form_daten.get('zielort_id') == zo.id|string %}selected{% endif %}>{{ zo.name }}</option>
         {% endfor %}
         <option value="">Freitext ↓</option>
       </select>
       <input type="text" name="zielort_freitext" class="form-control" placeholder="Sonstiger Zielort (optional)"
-             style="margin-top:.5rem;">
+             style="margin-top:.5rem;"
+             value="{{ form_daten.get('zielort_freitext', '') }}">
     </div>
 
     {# 6. Zweck #}
@@ -83,10 +104,14 @@
               hx-get="/fahrtenbuch/hx/zweck-felder"
               hx-target="#zweck-felder"
               hx-trigger="change"
-              hx-include="[name='zweck_id']">
+              hx-include="[name='zweck_id']"
+              {% if form_daten.get('zweck_id') %}
+              x-init="$nextTick(() => $el.dispatchEvent(new Event('change')))"
+              {% endif %}>
         <option value="">— Zweck wählen —</option>
         {% for z in zwecke %}
-        <option value="{{ z.id }}">{{ z.name }}</option>
+        <option value="{{ z.id }}"
+          {% if form_daten.get('zweck_id') == z.id|string %}selected{% endif %}>{{ z.name }}</option>
         {% endfor %}
       </select>
     </div>
@@ -95,11 +120,12 @@
     <div id="zweck-felder"></div>
 
     {# 7. Schaden #}
-    <div class="form-group" x-data="{schaden: false}">
+    <div class="form-group" x-data="{schaden: {{ 'true' if form_daten.get('schaden_vorhanden') else 'false' }}}">
       <label class="form-label">Schaden / Defekt?</label>
       <div style="display:flex;gap:1rem;margin-top:.4rem;">
         <label class="form-label" style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
           <input type="checkbox" name="schaden_vorhanden" value="on" @change="schaden=$event.target.checked"
+                 {% if form_daten.get('schaden_vorhanden') %}checked{% endif %}
                  style="width:20px;height:20px;"> Schaden vorhanden
         </label>
       </div>
@@ -111,17 +137,19 @@
           <label class="form-label">Betriebsfähig?</label>
           <div style="display:flex;gap:1rem;margin-top:.3rem;">
             <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
-              <input type="radio" name="schaden_betriebsfaehig" value="on"> Ja
+              <input type="radio" name="schaden_betriebsfaehig" value="on"
+                     {% if form_daten.get('schaden_betriebsfaehig') == 'on' %}checked{% endif %}> Ja
             </label>
             <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
-              <input type="radio" name="schaden_betriebsfaehig" value=""> Nein
+              <input type="radio" name="schaden_betriebsfaehig" value=""
+                     {% if form_daten.get('schaden_vorhanden') and form_daten.get('schaden_betriebsfaehig') != 'on' %}checked{% endif %}> Nein
             </label>
           </div>
         </div>
         <div>
           <label class="form-label" for="schaden_beschreibung">Beschreibung *</label>
           <textarea name="schaden_beschreibung" id="schaden_beschreibung" class="form-control"
-                    rows="3" :required="schaden" placeholder="Schadensbeschreibung…"></textarea>
+                    rows="3" :required="schaden" placeholder="Schadensbeschreibung…">{{ form_daten.get('schaden_beschreibung', '') }}</textarea>
         </div>
       </div>
     </div>
@@ -130,13 +158,13 @@
     <div class="form-group">
       <label class="form-label" for="zeitpunkt">Zeitpunkt (Ankunftszeit)</label>
       <input type="datetime-local" name="zeitpunkt" id="zeitpunkt" class="form-control"
-             value="{{ now.strftime('%Y-%m-%dT%H:%M') }}">
+             value="{{ form_daten.get('zeitpunkt') or now.strftime('%Y-%m-%dT%H:%M') }}">
     </div>
 
     {# 9. Bemerkung #}
     <div class="form-group">
       <label class="form-label" for="bemerkung">Bemerkung</label>
-      <textarea name="bemerkung" id="bemerkung" class="form-control" rows="2"></textarea>
+      <textarea name="bemerkung" id="bemerkung" class="form-control" rows="2">{{ form_daten.get('bemerkung', '') }}</textarea>
     </div>
 
     {# 9. Doppelfahrt-Bestätigung #}
@@ -157,10 +185,10 @@
 function fahrtForm() {
   return { fahrzeugId: '{{ preset_fahrzeug.id if preset_fahrzeug else "" }}' };
 }
-function maschinistAutocomplete(prefix) {
+function maschinistAutocomplete(prefix, initialName, initialId) {
   return {
-    query: '',
-    memberId: '',
+    query: initialName || '',
+    memberId: initialId || '',
     open: false,
     init() {
       this.$el.addEventListener('member-selected', (e) => {

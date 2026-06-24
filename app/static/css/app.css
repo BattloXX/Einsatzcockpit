@@ -125,3 +125,5 @@
 @media(min-width:901px){.lage-burger-btn{display:none!important;}.lage-mobile-nav{display:none!important;}}
 /* lage-ctx-bar als Containing-Block (position:relative) für das absolute Dropdown */
 .lage-ctx-bar{position:relative;}
+/* ── Autocomplete ─────────────────────────────────────────────── */
+.autocomplete-list{list-style:none;margin:0;padding:.25rem 0;}.autocomplete-item{padding:.5rem .75rem;cursor:pointer;font-size:.9rem;border-radius:.25rem;transition:background .1s;}.autocomplete-item:hover{background:var(--surface-highest);color:var(--on-surface);}

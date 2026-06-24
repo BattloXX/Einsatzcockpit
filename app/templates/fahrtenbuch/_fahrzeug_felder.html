@@ -1,7 +1,7 @@
 {# Dynamisch per HTMX geladen: fahrzeug-spezifische Felder #}
 {% if fahrzeug %}
 
-<div class="form-group" x-data="maschinistAutocomplete('maschinist')">
+<div class="form-group" x-data="maschinistAutocomplete('maschinist', '{{ form_daten.get('maschinist_name', '') }}', '{{ form_daten.get('maschinist_member_id', '') }}')">
   <label class="form-label" for="maschinist_name">Maschinist *</label>
   <input type="hidden" name="maschinist_member_id" :value="memberId">
   <div style="position:relative;">
@@ -19,7 +19,7 @@
 </div>
 
 {% if fahrzeug.erfasst_km %}
-<div class="form-group" x-data="{ km: null, aktuell: {{ fahrzeug.km_aktuell }} }">
+<div class="form-group" x-data="{ km: {{ form_daten.get('km_stand_neu') or 'null' }}, aktuell: {{ fahrzeug.km_aktuell }} }">
   <label class="form-label" for="km_stand_neu">
     km-Stand (aktuell: {{ fahrzeug.km_aktuell }} km) *
   </label>
@@ -37,12 +37,22 @@
        style="margin-top:.3rem;font-size:.85rem;color:var(--text-muted);">
     Delta: <strong x-text="(km - aktuell) + ' km'"></strong>
   </div>
-  <div id="km-check" style="margin-top:.3rem;"></div>
+  <div id="km-check" style="margin-top:.3rem;">
+    {% if fehler == 'km_warnung_nicht_bestaetigt' %}
+    <div style="font-size:.85rem;padding:.3rem .5rem;background:rgba(245,158,11,.12);border-radius:.3rem;">
+      <span style="color:#f59e0b;display:block;">&#9888; km-Wert wirkt hoch, bitte prüfen.</span>
+      <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;cursor:pointer;">
+        <input type="checkbox" name="km_warnung_bestaetigt" value="on" style="width:18px;height:18px;">
+        Geprüft &amp; korrekt
+      </label>
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endif %}
 
 {% if fahrzeug.erfasst_betriebsstunden %}
-<div class="form-group" x-data="{ bh: null, aktuell: {{ fahrzeug.betriebsstunden_aktuell }} }">
+<div class="form-group" x-data="{ bh: {{ form_daten.get('betriebsstunden_neu') or 'null' }}, aktuell: {{ fahrzeug.betriebsstunden_aktuell }} }">
   <label class="form-label" for="betriebsstunden_neu">
     Betriebsstunden-Stand (aktuell: {{ fahrzeug.betriebsstunden_aktuell }} h)
   </label>
@@ -60,12 +70,22 @@
        style="margin-top:.3rem;font-size:.85rem;color:var(--text-muted);">
     Delta: <strong x-text="(Math.round((bh - aktuell) * 10) / 10) + ' h'"></strong>
   </div>
-  <div id="bh-check" style="margin-top:.3rem;"></div>
+  <div id="bh-check" style="margin-top:.3rem;">
+    {% if fehler == 'bh_warnung_nicht_bestaetigt' %}
+    <div style="font-size:.85rem;padding:.3rem .5rem;background:rgba(245,158,11,.12);border-radius:.3rem;">
+      <span style="color:#f59e0b;display:block;">&#9888; BH-Wert wirkt hoch, bitte prüfen.</span>
+      <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;cursor:pointer;">
+        <input type="checkbox" name="bh_warnung_bestaetigt" value="on" style="width:18px;height:18px;">
+        Geprüft &amp; korrekt
+      </label>
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endif %}
 
 {% if fahrzeug.zweiter_maschinist_pflicht %}
-<div class="form-group" x-data="maschinistAutocomplete('maschinist2')">
+<div class="form-group" x-data="maschinistAutocomplete('maschinist2', '{{ form_daten.get('maschinist2_name', '') }}', '{{ form_daten.get('maschinist2_member_id', '') }}')">
   <label class="form-label" for="maschinist2_name">2. Maschinist *</label>
   <input type="hidden" name="maschinist2_member_id" :value="memberId">
   <div style="position:relative;">
@@ -86,7 +106,7 @@
 {% if fahrzeug.seilwinde_abfrage %}
 <fieldset style="border:1px solid var(--border);border-radius:.5rem;padding:1rem;margin-top:.5rem;">
   <legend style="font-weight:600;padding:0 .5rem;">Seilwinde</legend>
-  <div class="form-group" x-data="{ sw: null, aktuell: {{ fahrzeug.seilwinde_bh_aktuell }} }">
+  <div class="form-group" x-data="{ sw: {{ form_daten.get('seilwinde_bh_neu') or 'null' }}, aktuell: {{ fahrzeug.seilwinde_bh_aktuell }} }">
     <label class="form-label" for="seilwinde_bh_neu">
       Seilwinde BH-Stand (aktuell: {{ fahrzeug.seilwinde_bh_aktuell }} h)
     </label>
@@ -104,9 +124,19 @@
          style="margin-top:.3rem;font-size:.85rem;color:var(--text-muted);">
       Delta: <strong x-text="(Math.round((sw - aktuell) * 10) / 10) + ' h'"></strong>
     </div>
-    <div id="sw-check" style="margin-top:.3rem;"></div>
+    <div id="sw-check" style="margin-top:.3rem;">
+      {% if fehler == 'seilwinde_warnung_nicht_bestaetigt' %}
+      <div style="font-size:.85rem;padding:.3rem .5rem;background:rgba(245,158,11,.12);border-radius:.3rem;">
+        <span style="color:#f59e0b;display:block;">&#9888; Seilwinden-BH-Wert wirkt hoch, bitte prüfen.</span>
+        <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;cursor:pointer;">
+          <input type="checkbox" name="seilwinde_warnung_bestaetigt" value="on" style="width:18px;height:18px;">
+          Geprüft &amp; korrekt
+        </label>
+      </div>
+      {% endif %}
+    </div>
   </div>
-  <div class="form-group" x-data="maschinistAutocomplete('seilwinde')">
+  <div class="form-group" x-data="maschinistAutocomplete('seilwinde', '{{ form_daten.get('seilwinde_bediener_name', '') }}', '{{ form_daten.get('seilwinde_bediener_member_id', '') }}')">
     <label class="form-label" for="seilwinde_bediener_name">Bediener (optional)</label>
     <input type="hidden" name="seilwinde_bediener_member_id" :value="memberId">
     <div style="position:relative;">
@@ -127,17 +157,20 @@
     <label class="form-label" for="seilwinde_zuege">Anzahl Züge</label>
     <input type="number" name="seilwinde_zuege" id="seilwinde_zuege"
            class="form-control" inputmode="numeric" min="0" step="1"
-           placeholder="0">
+           placeholder="0"
+           value="{{ form_daten.get('seilwinde_zuege', '') }}">
   </div>
 
   <div class="form-group">
     <label class="form-label">Seilwinden-Wartung durchgeführt?</label>
     <div style="display:flex;gap:1.25rem;margin-top:.4rem;">
       <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
-        <input type="radio" name="seilwinde_wartung" value="ja"> Ja
+        <input type="radio" name="seilwinde_wartung" value="ja"
+               {% if form_daten.get('seilwinde_wartung') == 'ja' %}checked{% endif %}> Ja
       </label>
       <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
-        <input type="radio" name="seilwinde_wartung" value="nein"> Nein
+        <input type="radio" name="seilwinde_wartung" value="nein"
+               {% if form_daten.get('seilwinde_wartung') == 'nein' %}checked{% endif %}> Nein
       </label>
     </div>
   </div>

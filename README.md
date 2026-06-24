@@ -63,6 +63,7 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **Single Sign-On (Entra ID)** | Microsoft-365-Login pro Org: BYO App-Registrierung, OAuth2/PKCE/OIDC, JIT-Provisioning, Gruppen→Rollen-Mapping, enforce_sso; Client Secret Fernet-verschlüsselt |
 | **Geräteverleih** | Artikel- und Stücklisten-Stammdaten; Ausgabe & Rücknahme von Material im GSL-Kontext; Barcode/QR-Scan im Browser; SMS-Erinnerungen; Foto-Dokumentation; Druckschein |
 | **Benutzer-Profil** | Eigener Name, E-Mail, Passwort und Avatar; Profilbild erscheint in Log-Einträgen und Stab |
+| **Digitales Fahrtenbuch** | Fahrterfassung mit km/BH-Zählerstand, Seilwinde (BH, Züge, Wartung), Maschinist-Autocomplete, Fahrtzweck, Zielort, Schadensangabe (Mail+Teams); Token/QR-Zugang ohne Login; Doppelfahrt-Erkennung; Korrektur-/Storno-Workflow; Zählerstand-Berechnung; Benachrichtigungs-Audit |
 
 ---
 
@@ -419,6 +420,8 @@ alembic downgrade -1
 | `0095_verleih_artikel_status.py` | Geräteverleih: Verfügbarkeitsstatus für eindeutige Artikel |
 | `0096_verleih_geraetetyp.py` | Geräteverleih: Gerätetypen, Artikel-FK, Stücklisten-FK, eindeutige Artikelnr |
 | `0097_weather_station.py` | Lokale Wetterstation: `weather_station`-Tabelle (Haupt-DB); `weather_reading` via `create_all` in separater Wetter-DB |
+| `0098–0100_fahrtenbuch_*.py` | Digitales Fahrtenbuch: Modelle, Stammdaten (Zweck, Zielort), Erfassungsformular, Token/QR, Admin-Verwaltung |
+| `0101_fahrtenbuch_seilwinde_felder.py` | Fahrtenbuch: `seilwinde_zuege` (INT) und `seilwinde_wartung` (TINYINT) in Tabelle `fahrt` |
 
 Vollständiger Migrationsleitfaden: [`docs/MIGRATION_RUNBOOK.md`](docs/MIGRATION_RUNBOOK.md)
 
@@ -606,6 +609,7 @@ tests/
 │    api_v1           – REST-API (Alarmierung, Lage)      │
 │    device_api       – SMS-Gateway-/Geräte-Anbindung     │
 │    ws               – WebSocket Pub/Sub                 │
+│    ui_fahrtenbuch   – Fahrtenbuch Erfassung + Verwaltung │
 │    auth             – Login/Logout/QR-Login             │
 │                                                         │
 │  Core:                                                  │
@@ -923,6 +927,7 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **2.9.0** | 2026-06-24 | Digitales Fahrtenbuch: Fahrterfassung mit km/BH-Zähler, Seilwinde (BH, Züge, Wartung), Maschinist-Autocomplete, Token/QR-Zugang ohne Login, Doppelfahrt-Erkennung, Schadensmeldung (Mail + Teams-Webhook), Korrektur-/Storno-Workflow; Admin-Bereich (Fahrzeuge, Zwecke, Zielorte, Einstellungen) |
 | **2.8.0** | 2026-06-23 | Lokale Wetterstation (Davis Vantage Pro 2 Plus / Meteobridge PRO RED): HTTPS-Push-Ingest mit `wxst_`-Token-Auth, Rate-Limiting 120/min, denormalisierter Ist-Stand-Snapshot (Haupt-DB), separate Zeitreihen-DB `einsatzleiter_weather` (kein Bloat), Online/Offline-Indikator (15-min-Schwelle), 24-h-Sparkline Temp/Wind (lazy HTMX), Echtzeit-Szenario-Analyse aus lokalen Messwerten (Sturm/Waldbrand/Glatteis), nächtliche Retention (03:30, tägl.); Token-Verwaltung in Org-Einstellungen |
 | **2.7.0** | 2026-06-22 | Geräteverleih-Modul (Artikel, Stücklisten, Barcode-Scan, SMS-Erinnerungen, Foto, Druckschein); Mobil-Navigation GSL (Burger-Menü, Bottom-Tab-Bar); UAS: echter Medien-Upload (Bild/Video), Abschluss-Banner, Flugbuch-Sperre; Drohneneinsatz direkt vom Einsatz-Board startbar; SSO: login_hint, Security-Fixes; Admin-Sidebar Mobiloptimierung |
 | **2.6.0** | 2026-06-20 | UAS/Drohnen-Modul vollständig (PR 0–8): Geräteregister, Wartungsbuch, Pilotenregister (Lizenzen/Qualifikationen), UAS-Einsatz (Status-Workflow, Mindestbesetzung), Flugbuch mit Vor-/Nachflug-Checklisten (4-Augen), Notfall-/Unfall-Workflow (ACG-Meldung, Meldekette), Karte (GeoJSON, Landebefehl-Banner), PDF-Anhänge 8.1–8.6, DSGVO-Medien-Workflow, Compliance-Dashboard; SSO Microsoft Entra ID (PR 1–6): PKCE/OIDC, JIT-Provisioning, Gruppen→Rollen-Mapping, enforce_sso, Fernet-verschlüsseltes Secret |

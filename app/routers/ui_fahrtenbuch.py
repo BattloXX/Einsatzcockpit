@@ -13,7 +13,7 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.fahrtenbuch import FahrtErfassungsweg, FahrtKategorie, Fahrtzweck, Zielort
 from app.models.incident import Incident
-from app.models.master import Member, MemberQualification, OrgSettings, Qualification, VehicleMaster
+from app.models.master import FireDept, Member, MemberQualification, OrgSettings, Qualification, VehicleMaster
 from app.services.fahrtenbuch_service import erstelle_fahrt, pruefe_doppelfahrt, pruefe_zaehler
 from app.services.schaden_service import melde_schaden
 
@@ -169,6 +169,8 @@ async def hx_fahrzeug_felder(
         return HTMLResponse("")
     return templates.TemplateResponse(request, "fahrtenbuch/_fahrzeug_felder.html", {
         "fahrzeug": fahrzeug,
+        "form_daten": {},
+        "fehler": None,
     })
 
 
@@ -293,6 +295,8 @@ async def _render_erfassung(
         .all()
     )
 
+    org = db.query(FireDept).filter(FireDept.id == org_id).execution_options(include_all_tenants=True).first()
+
     preset_fahrzeug = None
     doppelfahrt_warnung = False
     if preset_fahrzeug_id:
@@ -303,6 +307,7 @@ async def _render_erfassung(
     return templates.TemplateResponse(request, "fahrtenbuch/neu.html", {
         "user": user,
         "token_org": token_org,
+        "org": org,
         "fahrzeuge": fahrzeuge,
         "zwecke": zwecke,
         "zielorte": zielorte,

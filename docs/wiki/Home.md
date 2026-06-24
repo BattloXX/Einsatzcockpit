@@ -67,6 +67,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [GSL-Ressourcenverwaltung](Anwender-GSL-Ressourcenverwaltung) | Einheiten anlegen, disponieren, Mehrfach-Disposition, Fremdorg |
 | [Geräteverleih](Anwender-Geraeteverleih) | Ausgabe & Rücknahme von Material in der GSL, Barcode-Scan |
 | [Drohne / UAS](Anwender-Drohne-UAS) | BOS-Drohneneinsatz: starten, Flugbuch, Checklisten, Notfall, Medien, PDF |
+| [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
 
 ### Administration
 | Seite | Beschreibung |
@@ -82,6 +83,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Drohne / UAS](Administration-Drohne-UAS) | Modul aktivieren, Geräteregister, Wartungsbuch, Pilotenregister, Compliance |
 | [Single Sign-On (Entra ID)](Administration-Single-Sign-On) | Microsoft-365-Login einrichten, Gruppen-Mapping, JIT-Provisioning |
 | [Lokale Wetterstation](Administration-Wetterstation) | Davis/Meteobridge-Anbindung: Station anlegen, Push-Token, Meteobridge-URL, Datenbankarchitektur |
+| [Fahrtenbuch](Administration-Fahrtenbuch) | Fahrzeuge konfigurieren, Zwecke/Zielorte, Token/QR, Schadensmeldung, Fahrten-Verwaltung |
 
 ### Entwickler
 | Seite | Beschreibung |
