@@ -51,7 +51,7 @@
 
   <form method="post" action="/fahrtenbuch"
         x-data="fahrtForm()"
-        @submit="checkZaehlerWarnings($event)"
+        @submit="onSubmit($event)"
         style="display:flex;flex-direction:column;gap:1.25rem;">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="t" value="{{ fab_token }}">
@@ -177,7 +177,10 @@
     </label>
     {% endif %}
 
-    <button type="submit" class="btn btn--primary btn--lg" style="margin-top:.5rem;">
+    <button type="submit" class="btn btn--primary btn--lg" style="margin-top:.5rem;"
+            :disabled="submitting"
+            :style="submitting ? 'opacity:.7;cursor:not-allowed;' : ''"
+            x-text="submitting ? 'Wird gespeichert …' : 'Fahrt speichern'">
       Fahrt speichern
     </button>
   </form>
@@ -188,21 +191,23 @@ window.FAB_TOKEN = "{{ fab_token }}";
 function fahrtForm() {
   return {
     fahrzeugId: '{{ preset_fahrzeug.id if preset_fahrzeug else "" }}',
-  };
-}
-function checkZaehlerWarnings(e) {
-  const checks = ['#km-check', '#bh-check', '#sw-check'];
-  for (const sel of checks) {
-    const el = document.querySelector(sel);
-    if (!el) continue;
-    const cb = el.querySelector('input[type="checkbox"]');
-    if (cb && !cb.checked) {
-      e.preventDefault();
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      cb.focus();
-      return;
+    submitting: false,
+    onSubmit(e) {
+      const checks = ['#km-check', '#bh-check', '#sw-check'];
+      for (const sel of checks) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const cb = el.querySelector('input[type="checkbox"]');
+        if (cb && !cb.checked) {
+          e.preventDefault();
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          cb.focus();
+          return;
+        }
+      }
+      this.submitting = true;
     }
-  }
+  };
 }
 function maschinistAutocomplete(prefix, initialName, initialId) {
   return {

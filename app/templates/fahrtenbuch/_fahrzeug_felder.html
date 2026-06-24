@@ -17,6 +17,7 @@
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="maschinist-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>
+  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
 </div>
 
 {% if fahrzeug.erfasst_km %}
@@ -100,6 +101,7 @@
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="maschinist2-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>
+  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
 </div>
 {% endif %}
 
@@ -151,6 +153,7 @@
              @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
       <div id="seilwinde-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
     </div>
+    <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
   </div>
 
   <div class="form-group">
