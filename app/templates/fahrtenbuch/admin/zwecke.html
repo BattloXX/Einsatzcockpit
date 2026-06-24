@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Fahrtenbuch – Zwecke{% endblock %}
+{% block content %}
+<div class="container" style="max-width:800px;margin:0 auto;padding:1rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1.25rem;">
+    <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Fahrtzwecke</h1>
+    <a href="/admin/fahrtenbuch/fahrzeuge" class="btn btn--ghost btn--sm">Fahrzeuge</a>
+  </div>
+
+  {% if request.query_params.get('saved') %}
+  <div class="alert alert--success" style="margin-bottom:1rem;">Gespeichert.</div>
+  {% endif %}
+
+  {# Neuer Zweck #}
+  <div style="border:1px solid var(--border);border-radius:.5rem;padding:1rem;margin-bottom:1.5rem;">
+    <h2 style="font-size:1rem;margin:0 0 .75rem;">Neuer Zweck</h2>
+    <form method="post" action="/admin/fahrtenbuch/zwecke/neu" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div>
+        <label class="form-label" style="font-size:.8rem;">Name</label>
+        <input type="text" name="name" class="form-control form-control--sm" required placeholder="Bezeichnung">
+      </div>
+      <div>
+        <label class="form-label" style="font-size:.8rem;">Kategorie</label>
+        <select name="kategorie" class="form-control form-control--sm" required>
+          <option value="einsatz">Einsatz</option>
+          <option value="uebung">Übung</option>
+          <option value="sonstige">Sonstige</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label" style="font-size:.8rem;">Reihenfolge</label>
+        <input type="number" name="sort" class="form-control form-control--sm" value="0" style="width:70px;">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.25rem;">
+        <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+          <input type="checkbox" name="verlangt_ausbildner" value="on"> Ausbildner erforderlich
+        </label>
+        <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+          <input type="checkbox" name="verlangt_gruppenkommandant" value="on"> GK erforderlich
+        </label>
+      </div>
+      <button type="submit" class="btn btn--primary btn--sm">Hinzufügen</button>
+    </form>
+  </div>
+
+  {# Liste #}
+  <table class="table">
+    <thead>
+      <tr><th>Name</th><th>Kategorie</th><th>Flags</th><th>Aktiv</th><th>Sort</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for z in zwecke %}
+      <tr>
+        <td>{{ z.name }}</td>
+        <td>{{ z.kategorie.value }}</td>
+        <td>
+          {% if z.verlangt_ausbildner %}<span class="badge badge--blue">Ausbildner</span>{% endif %}
+          {% if z.verlangt_gruppenkommandant %}<span class="badge badge--blue">GK</span>{% endif %}
+        </td>
+        <td>{% if z.aktiv %}Ja{% else %}<span class="badge badge--gray">Nein</span>{% endif %}</td>
+        <td>{{ z.sort }}</td>
+        <td>
+          <details>
+            <summary class="btn btn--ghost btn--xs">Bearbeiten</summary>
+            <form method="post" action="/admin/fahrtenbuch/zwecke/{{ z.id }}/bearbeiten"
+                  style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:flex-end;margin-top:.5rem;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="text" name="name" value="{{ z.name }}" class="form-control form-control--sm" required>
+              <select name="kategorie" class="form-control form-control--sm">
+                <option value="einsatz" {% if z.kategorie.value == 'einsatz' %}selected{% endif %}>Einsatz</option>
+                <option value="uebung" {% if z.kategorie.value == 'uebung' %}selected{% endif %}>Übung</option>
+                <option value="sonstige" {% if z.kategorie.value == 'sonstige' %}selected{% endif %}>Sonstige</option>
+              </select>
+              <input type="number" name="sort" value="{{ z.sort }}" class="form-control form-control--sm" style="width:60px;">
+              <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+                <input type="checkbox" name="verlangt_ausbildner" value="on" {% if z.verlangt_ausbildner %}checked{% endif %}> Ausb.
+              </label>
+              <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+                <input type="checkbox" name="verlangt_gruppenkommandant" value="on" {% if z.verlangt_gruppenkommandant %}checked{% endif %}> GK
+              </label>
+              <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+                <input type="checkbox" name="aktiv" value="on" {% if z.aktiv %}checked{% endif %}> Aktiv
+              </label>
+              <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Keine Zwecke</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

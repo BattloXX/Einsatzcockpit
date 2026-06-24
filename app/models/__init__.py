@@ -70,6 +70,15 @@ from app.models.verleih import (
     VerleihStuecklistePosition,
 )
 from app.models.weather import WeatherReading, WeatherStation
+from app.models.fahrtenbuch import (
+    Fahrt,
+    FahrtBenachrichtigung,
+    FahrtErfassungsweg,
+    FahrtKategorie,
+    FahrtStatus,
+    Fahrtzweck,
+    Zielort,
+)
 
 __all__ = [
     "OrgSsoConfig", "OrgSsoGroupMap",
@@ -92,4 +101,6 @@ __all__ = [
     "VerleihArtikel", "VerleihStueckliste", "VerleihStuecklistePosition",
     "VerleihAusleihe", "VerleihPosition", "VerleihStatus", "VerleihFoto",
     "WeatherStation", "WeatherReading",
+    "Fahrtzweck", "Zielort", "Fahrt", "FahrtBenachrichtigung",
+    "FahrtKategorie", "FahrtStatus", "FahrtErfassungsweg",
 ]

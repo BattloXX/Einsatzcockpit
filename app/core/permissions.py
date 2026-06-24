@@ -4,9 +4,10 @@ from fastapi import HTTPException, Request
 
 # Hierarchy: system_admin > admin/org_admin > incident_leader > breathing_supervisor > recorder > readonly
 ROLES = {
-    "system_admin": 200,   # cross-org, full system access
-    "admin": 100,          # backward-compat alias for org_admin
-    "org_admin": 100,      # full access within their organisation
+    "system_admin": 200,        # cross-org, full system access
+    "admin": 100,               # backward-compat alias for org_admin
+    "org_admin": 100,           # full access within their organisation
+    "fahrtenbuch_admin": 80,    # Fahrtenbuch-Verwaltung der eigenen Org (ohne Benutzerverwaltung)
     "incident_leader": 70,
     "breathing_supervisor": 50,
     "recorder": 30,
@@ -18,6 +19,9 @@ SUPERADMIN_ROLES = {"system_admin"}
 
 # Roles that grant full access within an org
 ORG_ADMIN_ROLES = {"system_admin", "admin", "org_admin"}
+
+# Roles that can manage Fahrtenbuch (Verwaltung, Storno, Korrektur, Stammdaten)
+FAHRTENBUCH_ADMIN_ROLES = {"system_admin", "admin", "org_admin", "fahrtenbuch_admin"}
 
 
 def require_role(*roles: str) -> Callable:
@@ -85,3 +89,8 @@ def same_org_or_system_admin(user, target_org_id: int) -> bool:
     if "system_admin" in {r.code for r in user.roles}:
         return True
     return user.org_id == target_org_id
+
+
+def is_fahrtenbuch_admin(user) -> bool:
+    """True if user can manage Fahrtenbuch (org_admin, fahrtenbuch_admin, or system_admin)."""
+    return has_role(user, "fahrtenbuch_admin")

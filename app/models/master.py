@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
@@ -69,6 +70,29 @@ class VehicleMaster(Base):
     adhoc_org_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     adhoc_org_short: Mapped[str | None] = mapped_column(String(3), nullable=True)
 
+    # Fahrtenbuch: Stammdaten / Plausibilität
+    kennzeichen: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    km_aktuell: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    betriebsstunden_aktuell: Mapped[Decimal] = mapped_column(Numeric(10, 1), default=0, nullable=False)
+    seilwinde_bh_aktuell: Mapped[Decimal] = mapped_column(Numeric(10, 1), default=0, nullable=False)
+
+    # Generische Erfassungs-Flags
+    erfasst_km: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    erfasst_betriebsstunden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    zweiter_maschinist_pflicht: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    seilwinde_abfrage: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Plausibilitäts-Schwellen
+    warn_schwelle_km: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    warn_schwelle_bh: Mapped[Decimal] = mapped_column(Numeric(6, 1), default=10, nullable=False)
+
+    # Token / QR für vorausgefülltes Formular
+    qr_token: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
+
+    # Schaden-Empfänger Override
+    schaden_mail_override: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    schaden_teams_webhook_override: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
     dept: Mapped[FireDept] = relationship(back_populates="vehicles")
 
     @property
@@ -113,6 +137,7 @@ class Member(TenantScoped, Base):
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    ist_gruppenkommandant: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     org: Mapped[FireDept | None] = relationship(back_populates="members", foreign_keys="Member.org_id")
     qualifications: Mapped[list[MemberQualification]] = relationship(
@@ -339,6 +364,12 @@ class OrgSettings(Base):
 
     # Pegel-/Abflusskonfiguration: JSON-Array [{hzbnr, name, beschreibung}]
     abfluss_stationen: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Fahrtenbuch-Konfiguration je Org
+    fahrtenbuch_token: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
+    schaden_mail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    schaden_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    fahrt_doppel_minuten: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
 
     org: Mapped[FireDept] = relationship(back_populates="settings")
 

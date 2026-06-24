@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Fahrt gespeichert{% endblock %}
+{% block content %}
+<div class="container" style="max-width:560px;margin:0 auto;padding:2rem 1rem;text-align:center;">
+  <div style="font-size:3rem;margin-bottom:1rem;">&#10003;</div>
+  <h1 style="font-size:1.5rem;font-weight:700;margin-bottom:.5rem;">Fahrt gespeichert</h1>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">
+    {{ fahrt.zeitpunkt.strftime('%d.%m.%Y %H:%M') }} &middot;
+    {{ fahrt.fahrzeug.code if fahrt.fahrzeug else '' }}
+    {% if fahrt.km_delta %}
+    &middot; {{ fahrt.km_delta }} km
+    {% endif %}
+    {% if fahrt.betriebsstunden_delta %}
+    &middot; {{ fahrt.betriebsstunden_delta }} BH
+    {% endif %}
+  </p>
+  {% if fahrt.schaden_vorhanden %}
+  <div class="alert alert--warn" style="margin-bottom:1.5rem;">
+    Schadenmeldung wurde versandt.
+  </div>
+  {% endif %}
+  <div style="display:flex;flex-direction:column;gap:.75rem;align-items:center;">
+    {% if token_org %}
+    <a href="{{ request.url }}" class="btn btn--primary btn--lg" style="width:100%;max-width:320px;">
+      Weitere Fahrt erfassen
+    </a>
+    {% else %}
+    <a href="/fahrtenbuch/neu" class="btn btn--primary btn--lg" style="width:100%;max-width:320px;">
+      Weitere Fahrt erfassen
+    </a>
+    <a href="/verwaltung/fahrten/{{ fahrt.id }}" class="btn btn--ghost" style="width:100%;max-width:320px;">
+      Fahrt ansehen
+    </a>
+    <a href="/" class="btn btn--ghost" style="width:100%;max-width:320px;">
+      Zur Übersicht
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

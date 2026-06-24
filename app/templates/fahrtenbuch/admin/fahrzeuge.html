@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Fahrtenbuch – Fahrzeuge{% endblock %}
+{% block content %}
+<div class="container" style="max-width:900px;margin:0 auto;padding:1rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1.25rem;">
+    <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Fahrzeuge – Fahrtenbuch-Einstellungen</h1>
+    <div style="display:flex;gap:.5rem;">
+      <a href="/admin/fahrtenbuch/zwecke" class="btn btn--ghost btn--sm">Zwecke</a>
+      <a href="/admin/fahrtenbuch/zielorte" class="btn btn--ghost btn--sm">Zielorte</a>
+      <a href="/admin/fahrtenbuch/token" class="btn btn--ghost btn--sm">Token/QR</a>
+    </div>
+  </div>
+
+  {% if saved %}
+  <div class="alert alert--success" style="margin-bottom:1rem;">Gespeichert.</div>
+  {% endif %}
+  {% if zaehler_saved %}
+  <div class="alert alert--success" style="margin-bottom:1rem;">Zählerstand aktualisiert.</div>
+  {% endif %}
+
+  <div style="display:flex;flex-direction:column;gap:1.25rem;">
+    {% for fz in fahrzeuge %}
+    <details style="border:1px solid var(--border);border-radius:.5rem;">
+      <summary style="padding:.85rem 1rem;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:.75rem;">
+        {{ fz.code }}
+        {% if fz.kennzeichen %}<span style="color:var(--text-muted);font-weight:400;">{{ fz.kennzeichen }}</span>{% endif %}
+        <span style="margin-left:auto;display:flex;gap:.4rem;font-weight:400;">
+          {% if fz.erfasst_km %}<span class="badge badge--blue">km</span>{% endif %}
+          {% if fz.erfasst_betriebsstunden %}<span class="badge badge--blue">BH</span>{% endif %}
+          {% if fz.seilwinde_abfrage %}<span class="badge badge--blue">Seilwinde</span>{% endif %}
+        </span>
+      </summary>
+      <div style="padding:1rem;border-top:1px solid var(--border);">
+        <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/fahrtenbuch"
+              style="display:flex;flex-direction:column;gap:.75rem;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+
+          <div style="display:flex;flex-wrap:wrap;gap:.75rem;">
+            <div>
+              <label class="form-label" style="font-size:.8rem;">Kennzeichen</label>
+              <input type="text" name="kennzeichen" value="{{ fz.kennzeichen or '' }}" class="form-control form-control--sm" placeholder="W-12345A">
+            </div>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:1rem;">
+            <label style="font-size:.85rem;display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+              <input type="checkbox" name="erfasst_km" value="on" {% if fz.erfasst_km %}checked{% endif %}> km erfassen
+            </label>
+            <label style="font-size:.85rem;display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+              <input type="checkbox" name="erfasst_betriebsstunden" value="on" {% if fz.erfasst_betriebsstunden %}checked{% endif %}> Betriebsstunden erfassen
+            </label>
+            <label style="font-size:.85rem;display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+              <input type="checkbox" name="zweiter_maschinist_pflicht" value="on" {% if fz.zweiter_maschinist_pflicht %}checked{% endif %}> 2. Maschinist Pflicht
+            </label>
+            <label style="font-size:.85rem;display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+              <input type="checkbox" name="seilwinde_abfrage" value="on" {% if fz.seilwinde_abfrage %}checked{% endif %}> Seilwinde abfragen
+            </label>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:.75rem;">
+            <div>
+              <label class="form-label" style="font-size:.8rem;">Warnschwelle km</label>
+              <input type="number" name="warn_schwelle_km" value="{{ fz.warn_schwelle_km }}" class="form-control form-control--sm" style="width:80px;">
+            </div>
+            <div>
+              <label class="form-label" style="font-size:.8rem;">Warnschwelle BH</label>
+              <input type="number" name="warn_schwelle_bh" value="{{ fz.warn_schwelle_bh }}" step="0.1" class="form-control form-control--sm" style="width:80px;">
+            </div>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:.75rem;">
+            <div>
+              <label class="form-label" style="font-size:.8rem;">Schaden-Mail Override</label>
+              <input type="email" name="schaden_mail_override" value="{{ fz.schaden_mail_override or '' }}" class="form-control form-control--sm" placeholder="geraetewart@ff.at">
+            </div>
+            <div>
+              <label class="form-label" style="font-size:.8rem;">Teams-Webhook Override</label>
+              <input type="url" name="schaden_teams_webhook_override" value="{{ fz.schaden_teams_webhook_override or '' }}" class="form-control form-control--sm" placeholder="https://...">
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn--primary btn--sm" style="align-self:flex-start;">Speichern</button>
+        </form>
+
+        {# Aktuelle Zählerstände + Korrektur #}
+        <hr style="margin:1rem 0;">
+        <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:.5rem;">Aktuelle Zählerstände</div>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:.75rem;">
+          <div>km: <strong>{{ fz.km_aktuell }}</strong></div>
+          <div>BH: <strong>{{ fz.betriebsstunden_aktuell }}</strong> h</div>
+          <div>Seilwinde BH: <strong>{{ fz.seilwinde_bh_aktuell }}</strong> h</div>
+        </div>
+        <details>
+          <summary class="btn btn--ghost btn--xs">Zähler korrigieren (Admin)</summary>
+          <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/zaehler-korrektur"
+                style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;margin-top:.75rem;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <div>
+              <label class="form-label" style="font-size:.8rem;">Art</label>
+              <select name="art" class="form-control form-control--sm">
+                <option value="km">km</option>
+                <option value="bh">Betriebsstunden</option>
+                <option value="seilwinde_bh">Seilwinde BH</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label" style="font-size:.8rem;">Neuer Wert</label>
+              <input type="number" name="wert" step="0.1" class="form-control form-control--sm" style="width:100px;" required>
+            </div>
+            <button type="submit" class="btn btn--ghost btn--sm">Korrigieren</button>
+          </form>
+        </details>
+
+        {# QR-Code #}
+        <hr style="margin:1rem 0;">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+          {% if fz.qr_token %}
+          <span style="font-size:.8rem;color:var(--text-muted);">QR-Token vorhanden</span>
+          {% endif %}
+          <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/qr">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--ghost btn--xs">
+              {% if fz.qr_token %}QR neu generieren & herunterladen{% else %}QR-Code generieren{% endif %}
+            </button>
+          </form>
+        </div>
+      </div>
+    </details>
+    {% else %}
+    <div style="text-align:center;color:var(--text-muted);padding:2rem;">Keine Fahrzeuge gefunden</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

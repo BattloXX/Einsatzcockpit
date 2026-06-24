@@ -32,6 +32,8 @@ from app.routers import (
     ui_archive,
     ui_backup,
     ui_breathing,
+    ui_fahrtenbuch,
+    ui_fahrtenbuch_admin,
     ui_gsl_staff,
     ui_hilfe,
     ui_incident,
@@ -391,6 +393,8 @@ app.include_router(ui_profile.router)
 app.include_router(ui_weather.router)
 app.include_router(ui_uas.router)
 app.include_router(ui_verleih.router)
+app.include_router(ui_fahrtenbuch.router)
+app.include_router(ui_fahrtenbuch_admin.router)
 
 
 @app.exception_handler(HTTPException)

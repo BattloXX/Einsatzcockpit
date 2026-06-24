@@ -24,6 +24,7 @@ ROLES = [
     {"code": "system_admin",         "label": "Systemadministrator (organisationsübergreifend)"},
     {"code": "admin",                "label": "Administrator (Organisations-Admin)"},
     {"code": "org_admin",            "label": "Organisations-Administrator"},
+    {"code": "fahrtenbuch_admin",    "label": "Fahrtenbuch-Administrator"},
     {"code": "incident_leader",      "label": "Einsatzleiter"},
     {"code": "breathing_supervisor", "label": "AS-Überwacher"},
     {"code": "recorder",             "label": "Bearbeiter"},
@@ -218,6 +219,7 @@ def seed(db=None):
         _upsert_default_messages(db)
         _upsert_lage_hints(db)
         _upsert_seed_templates(db)
+        _upsert_fahrtenbuch_stammdaten(db)
         db.commit()
         print("✓ Seed-Daten eingespielt.")
     finally:
@@ -474,6 +476,52 @@ def _upsert_seed_templates(db):
             type="lage_hint", data=json.dumps({"text": text, "alarm_codes": []}),
             display_order=order + i,
         ))
+
+
+_FAHRTENBUCH_ZWECKE = [
+    {"name": "Einsatz",               "kategorie": "einsatz",  "verlangt_ausbildner": False, "verlangt_gruppenkommandant": False, "sort": 0},
+    {"name": "Übung",                 "kategorie": "uebung",   "verlangt_ausbildner": False, "verlangt_gruppenkommandant": False, "sort": 1},
+    {"name": "Maschinistenausbildung","kategorie": "uebung",   "verlangt_ausbildner": True,  "verlangt_gruppenkommandant": False, "sort": 2},
+    {"name": "Gruppenübung",          "kategorie": "uebung",   "verlangt_ausbildner": False, "verlangt_gruppenkommandant": True,  "sort": 3},
+    {"name": "Überstellung/Service",  "kategorie": "sonstige", "verlangt_ausbildner": False, "verlangt_gruppenkommandant": False, "sort": 4},
+]
+
+_FAHRTENBUCH_ZIELORTE = [
+    {"name": "Gerätehaus",          "sort": 0},
+    {"name": "Bezirksalarmzentrale","sort": 1},
+    {"name": "Übungsplatz",         "sort": 2},
+    {"name": "Werkstatt/Service",   "sort": 3},
+]
+
+
+def _upsert_fahrtenbuch_stammdaten(db):
+    try:
+        from app.models.fahrtenbuch import Fahrtzweck, Zielort
+    except ImportError:
+        return
+    home = db.query(FireDept).order_by(FireDept.id).first()
+    if not home:
+        return
+    for z in _FAHRTENBUCH_ZWECKE:
+        existing = db.query(Fahrtzweck).filter(
+            Fahrtzweck.org_id == home.id, Fahrtzweck.name == z["name"]
+        ).first()
+        if not existing:
+            from app.models.fahrtenbuch import FahrtKategorie
+            db.add(Fahrtzweck(
+                org_id=home.id,
+                name=z["name"],
+                kategorie=FahrtKategorie(z["kategorie"]),
+                verlangt_ausbildner=z["verlangt_ausbildner"],
+                verlangt_gruppenkommandant=z["verlangt_gruppenkommandant"],
+                sort=z["sort"],
+            ))
+    for zo in _FAHRTENBUCH_ZIELORTE:
+        existing = db.query(Zielort).filter(
+            Zielort.org_id == home.id, Zielort.name == zo["name"]
+        ).first()
+        if not existing:
+            db.add(Zielort(org_id=home.id, name=zo["name"], sort=zo["sort"]))
 
 
 if __name__ == "__main__":

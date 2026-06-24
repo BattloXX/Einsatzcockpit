@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Fahrt #{{ fahrt.id }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width:720px;margin:0 auto;padding:1rem;">
+  <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;">
+    <a href="/verwaltung/fahrten" class="btn btn--ghost btn--sm">&#8592; Liste</a>
+    <h1 style="font-size:1.3rem;font-weight:700;margin:0;">
+      Fahrt #{{ fahrt.id }}
+      <span class="badge badge--{% if fahrt.status.value == 'aktiv' %}green{% else %}gray{% endif %}" style="font-size:.8rem;vertical-align:middle;">
+        {{ fahrt.status.value }}
+      </span>
+    </h1>
+  </div>
+
+  {% if request.query_params.get('storniert') %}
+  <div class="alert alert--warn" style="margin-bottom:1rem;">Fahrt wurde storniert.</div>
+  {% endif %}
+  {% if request.query_params.get('korrigiert') %}
+  <div class="alert alert--success" style="margin-bottom:1rem;">Korrektur gespeichert.</div>
+  {% endif %}
+
+  {# Revisionskette #}
+  {% if original %}
+  <div style="padding:.6rem .9rem;background:rgba(245,158,11,.1);border-radius:.4rem;margin-bottom:1rem;font-size:.85rem;">
+    Korrektur von <a href="/verwaltung/fahrten/{{ original.id }}">#{{ original.id }}</a>
+    ({{ original.zeitpunkt.strftime('%d.%m.%Y %H:%M') }})
+  </div>
+  {% endif %}
+  {% if ersatz %}
+  <div style="padding:.6rem .9rem;background:rgba(245,158,11,.1);border-radius:.4rem;margin-bottom:1rem;font-size:.85rem;">
+    Ersetzt durch <a href="/verwaltung/fahrten/{{ ersatz.id }}">#{{ ersatz.id }}</a>
+  </div>
+  {% endif %}
+
+  {# Hauptdaten #}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1.5rem;margin-bottom:1.5rem;">
+    <div><span class="label">Zeitpunkt</span><div>{{ fahrt.zeitpunkt.strftime('%d.%m.%Y %H:%M') }}</div></div>
+    <div><span class="label">Fahrzeug</span><div>{{ fahrt.fahrzeug.code if fahrt.fahrzeug else '—' }}{% if fahrt.fahrzeug and fahrt.fahrzeug.kennzeichen %} ({{ fahrt.fahrzeug.kennzeichen }}){% endif %}</div></div>
+    <div><span class="label">Maschinist</span><div>{{ fahrt.maschinist_name or '—' }}</div></div>
+    {% if fahrt.maschinist2_name %}
+    <div><span class="label">2. Maschinist</span><div>{{ fahrt.maschinist2_name }}</div></div>
+    {% endif %}
+    {% if fahrt.km_stand_neu is not none %}
+    <div><span class="label">km-Stand</span><div>{{ fahrt.km_stand_neu }} km{% if fahrt.km_delta is not none %} <small>(+{{ fahrt.km_delta }} km)</small>{% endif %}</div></div>
+    {% endif %}
+    {% if fahrt.betriebsstunden_neu is not none %}
+    <div><span class="label">Betriebsstunden</span><div>{{ fahrt.betriebsstunden_neu }} h{% if fahrt.betriebsstunden_delta is not none %} <small>(+{{ fahrt.betriebsstunden_delta }})</small>{% endif %}</div></div>
+    {% endif %}
+    {% if fahrt.seilwinde_bh_neu is not none %}
+    <div><span class="label">Seilwinde BH</span><div>{{ fahrt.seilwinde_bh_neu }} h</div></div>
+    {% endif %}
+    <div><span class="label">Zielort</span><div>{{ fahrt.zielort.name if fahrt.zielort else fahrt.zielort_freitext or '—' }}</div></div>
+    <div><span class="label">Zweck</span><div>{{ fahrt.zweck.name if fahrt.zweck else '—' }}</div></div>
+    <div><span class="label">Fahrttyp</span><div>
+      <span class="badge badge--{% if fahrt.fahrttyp.value == 'einsatz' %}red{% elif fahrt.fahrttyp.value == 'uebung' %}blue{% else %}gray{% endif %}">
+        {{ fahrt.fahrttyp.value|capitalize }}
+      </span>
+    </div></div>
+    {% if fahrt.ausbildner_name %}
+    <div><span class="label">Ausbildner</span><div>{{ fahrt.ausbildner_name }}</div></div>
+    {% endif %}
+    {% if fahrt.gruppenkommandant_name %}
+    <div><span class="label">Gruppenkommandant</span><div>{{ fahrt.gruppenkommandant_name }}</div></div>
+    {% endif %}
+    {% if fahrt.incident_id %}
+    <div><span class="label">Einsatz-Nr.</span><div>#{{ fahrt.incident_id }}</div></div>
+    {% endif %}
+    <div><span class="label">Statistikrelevant</span><div>{% if fahrt.nicht_statistikrelevant %}<span class="badge badge--gray">nein</span>{% else %}Ja{% endif %}</div></div>
+    <div><span class="label">Erfasst via</span><div>{{ fahrt.erfasst_via.value }}{% if fahrt.token_label %} ({{ fahrt.token_label }}){% endif %}</div></div>
+  </div>
+
+  {% if fahrt.schaden_vorhanden %}
+  <div style="border:1px solid var(--red-light);border-radius:.5rem;padding:1rem;margin-bottom:1.5rem;">
+    <div style="font-weight:700;color:var(--red-light);margin-bottom:.5rem;">&#9888; Schaden gemeldet</div>
+    <p>Betriebsfähig: <strong>{% if fahrt.schaden_betriebsfaehig %}Ja{% else %}Nein{% endif %}</strong></p>
+    {% if fahrt.schaden_beschreibung %}<p>{{ fahrt.schaden_beschreibung }}</p>{% endif %}
+
+    {# Benachrichtigungsprotokoll #}
+    {% if fahrt.benachrichtigungen %}
+    <table class="table" style="font-size:.8rem;margin-top:.75rem;">
+      <thead><tr><th>Kanal</th><th>Empfänger</th><th>Status</th><th>Gesendet</th></tr></thead>
+      <tbody>
+        {% for b in fahrt.benachrichtigungen %}
+        <tr>
+          <td>{{ b.kanal }}</td>
+          <td style="word-break:break-all;">{{ b.empfaenger[:60] }}{% if b.empfaenger|length > 60 %}…{% endif %}</td>
+          <td><span class="badge badge--{% if b.status == 'gesendet' %}green{% else %}red{% endif %}">{{ b.status }}</span></td>
+          <td>{{ b.gesendet_am.strftime('%d.%m. %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if fahrt.status.value == 'aktiv' %}
+    <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/schaden-retry" style="margin-top:.75rem;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--ghost btn--sm">Erneut senden</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if fahrt.bemerkung %}
+  <div style="margin-bottom:1.5rem;">
+    <div class="label">Bemerkung</div>
+    <div>{{ fahrt.bemerkung }}</div>
+  </div>
+  {% endif %}
+
+  {% if fahrt.storno_grund %}
+  <div style="margin-bottom:1.5rem;">
+    <div class="label">Storno-Grund</div>
+    <div>{{ fahrt.storno_grund }}</div>
+  </div>
+  {% endif %}
+
+  {# Aktionen #}
+  {% if fahrt.status.value == 'aktiv' %}
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:1rem;">
+    <a href="/verwaltung/fahrten/{{ fahrt.id }}/korrektur" class="btn btn--ghost btn--sm">Korrigieren</a>
+
+    <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/statistikflag">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--ghost btn--sm">
+        Statistik {{ 'aktivieren' if fahrt.nicht_statistikrelevant else 'deaktivieren' }}
+      </button>
+    </form>
+
+    <div x-data="{open:false}" style="position:relative;">
+      <button type="button" class="btn btn--ghost btn--sm" style="color:var(--red-light);" @click="open=!open">
+        Stornieren
+      </button>
+      <div x-show="open" x-cloak @click.outside="open=false"
+           style="position:absolute;bottom:calc(100% + 4px);left:0;z-index:100;
+                  background:var(--surface-mid);border:1px solid var(--border);
+                  border-radius:.5rem;padding:1rem;min-width:280px;box-shadow:0 8px 24px rgba(0,0,0,.4);">
+        <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/storno">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <label class="form-label" style="font-size:.85rem;">Storno-Grund</label>
+          <textarea name="grund" class="form-control" rows="2" style="margin-bottom:.5rem;" placeholder="Grund…"></textarea>
+          <button type="submit" class="btn btn--primary btn--sm" style="background:var(--red);border-color:var(--red);">
+            Jetzt stornieren
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

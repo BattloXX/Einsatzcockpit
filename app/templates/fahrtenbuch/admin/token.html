@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Fahrtenbuch-Token{% endblock %}
+{% block content %}
+<div class="container" style="max-width:640px;margin:0 auto;padding:1rem;">
+  <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:1.25rem;">Fahrtenbuch-Token</h1>
+
+  {% if saved %}
+  <div class="alert alert--success" style="margin-bottom:1rem;">Token wurde generiert/rotiert.</div>
+  {% endif %}
+
+  {% if org and org.fahrtenbuch_token %}
+  <div style="border:1px solid var(--border);border-radius:.5rem;padding:1rem;margin-bottom:1.5rem;">
+    <div class="form-label" style="margin-bottom:.4rem;">Aktueller Token-Link</div>
+    <code style="word-break:break-all;font-size:.9rem;">{{ base_url }}/f/{{ org.fahrtenbuch_token }}</code>
+    <div style="margin-top:.75rem;font-size:.85rem;color:var(--text-muted);">
+      Dieser Link ermöglicht das Erfassen von Fahrten ohne Login. Gib ihn an Maschinisten weiter.
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert--warn" style="margin-bottom:1.5rem;">Noch kein Token generiert.</div>
+  {% endif %}
+
+  <form method="post" action="/admin/fahrtenbuch/token">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" class="btn btn--primary">
+      {% if org and org.fahrtenbuch_token %}Token rotieren{% else %}Token generieren{% endif %}
+    </button>
+  </form>
+
+  <hr style="margin:2rem 0;">
+
+  <h2 style="font-size:1.1rem;font-weight:600;margin-bottom:.75rem;">Fahrzeug-QR-Codes</h2>
+  <p style="font-size:.85rem;color:var(--text-muted);">
+    Unter <a href="/admin/fahrtenbuch/fahrzeuge">Fahrtenbuch-Fahrzeuge</a> kannst du pro Fahrzeug
+    einen QR-Code generieren, der das Fahrzeug im Formular vorausfüllt.
+  </p>
+</div>
+{% endblock %}

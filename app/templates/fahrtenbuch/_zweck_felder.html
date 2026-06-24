@@ -1,0 +1,51 @@
+{# Dynamisch per HTMX geladen: zweck-spezifische Felder #}
+{% if zweck %}
+
+{% if zweck.verlangt_ausbildner %}
+<div class="form-group" x-data="maschinistAutocomplete('ausbildner')">
+  <label class="form-label" for="ausbildner_name">Ausbildner *</label>
+  <input type="hidden" name="ausbildner_member_id" :value="memberId">
+  <div style="position:relative;">
+    <input type="text" name="ausbildner_name" id="ausbildner_name"
+           class="form-control form-control--lg"
+           placeholder="Name tippen…" required autocomplete="off"
+           x-model="query"
+           hx-get="/fahrtenbuch/hx/maschinist"
+           hx-target="#ausbildner-suggestions"
+           hx-trigger="input changed delay:200ms"
+           hx-include="[name='ausbildner_name']"
+           @focus="open=true" @blur="setTimeout(()=>open=false,150)">
+    <div id="ausbildner-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+  </div>
+</div>
+{% endif %}
+
+{% if zweck.verlangt_gruppenkommandant %}
+<div class="form-group">
+  <label class="form-label" for="gruppenkommandant_member_id">Gruppenkommandant *</label>
+  <select name="gruppenkommandant_member_id" id="gruppenkommandant_member_id"
+          class="form-control form-control--lg" required>
+    <option value="">— GK wählen —</option>
+    {% for m in gk_members %}
+    <option value="{{ m.id }}">{{ m.full_name }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+
+{% if zweck.kategorie.value == 'einsatz' and incidents %}
+<div class="form-group">
+  <label class="form-label" for="incident_id">Einsatz-Verknüpfung (optional)</label>
+  <select name="incident_id" id="incident_id" class="form-control">
+    <option value="">— keinen Einsatz verknüpfen —</option>
+    {% for inc in incidents %}
+    <option value="{{ inc.id }}">
+      {{ inc.alarm_type_code }} – {{ inc.started_at.strftime('%d.%m.%Y %H:%M') }}
+      {% if inc.address_street %}– {{ inc.address_street }}{% endif %}
+    </option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+
+{% endif %}

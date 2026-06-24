@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Fahrt korrigieren #{{ fahrt.id }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width:680px;margin:0 auto;padding:1rem;">
+  <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;">
+    <a href="/verwaltung/fahrten/{{ fahrt.id }}" class="btn btn--ghost btn--sm">&#8592; Zurück</a>
+    <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Fahrt #{{ fahrt.id }} korrigieren</h1>
+  </div>
+
+  <div style="padding:.6rem .9rem;background:rgba(245,158,11,.1);border-radius:.4rem;margin-bottom:1.25rem;font-size:.85rem;">
+    Die ursprüngliche Fahrt wird als „ersetzt" markiert und eine neue Version erstellt.
+  </div>
+
+  <form method="post" style="display:flex;flex-direction:column;gap:1rem;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+
+    <div class="form-group">
+      <label class="form-label">Fahrzeug *</label>
+      <select name="fahrzeug_id" class="form-control" required>
+        {% for fz in fahrzeuge %}
+        <option value="{{ fz.id }}" {% if fz.id == fahrt.fahrzeug_id %}selected{% endif %}>
+          {{ fz.code }}{% if fz.kennzeichen %} ({{ fz.kennzeichen }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Maschinist *</label>
+      <input type="hidden" name="maschinist_member_id" value="{{ fahrt.maschinist_member_id or '' }}">
+      <input type="text" name="maschinist_name" class="form-control" value="{{ fahrt.maschinist_name }}" required>
+    </div>
+
+    {% if fahrt.fahrzeug and fahrt.fahrzeug.erfasst_km %}
+    <div class="form-group">
+      <label class="form-label">km-Stand *</label>
+      <input type="number" name="km_stand_neu" class="form-control" inputmode="numeric"
+             value="{{ fahrt.km_stand_neu or '' }}">
+    </div>
+    {% endif %}
+
+    {% if fahrt.fahrzeug and fahrt.fahrzeug.erfasst_betriebsstunden %}
+    <div class="form-group">
+      <label class="form-label">Betriebsstunden</label>
+      <input type="number" name="betriebsstunden_neu" class="form-control" step="0.1"
+             value="{{ fahrt.betriebsstunden_neu or '' }}">
+    </div>
+    {% endif %}
+
+    <div class="form-group">
+      <label class="form-label">Zielort</label>
+      <select name="zielort_id" class="form-control">
+        <option value="">— wählen —</option>
+        {% for zo in zielorte %}
+        <option value="{{ zo.id }}" {% if fahrt.zielort_id == zo.id %}selected{% endif %}>{{ zo.name }}</option>
+        {% endfor %}
+      </select>
+      <input type="text" name="zielort_freitext" class="form-control" style="margin-top:.5rem;"
+             value="{{ fahrt.zielort_freitext or '' }}" placeholder="Freitext">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Zweck *</label>
+      <select name="zweck_id" class="form-control" required>
+        {% for z in zwecke %}
+        <option value="{{ z.id }}" {% if fahrt.zweck_id == z.id %}selected{% endif %}>{{ z.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Zeitpunkt</label>
+      <input type="datetime-local" name="zeitpunkt" class="form-control"
+             value="{{ fahrt.zeitpunkt.strftime('%Y-%m-%dT%H:%M') }}">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Bemerkung</label>
+      <textarea name="bemerkung" class="form-control" rows="2">{{ fahrt.bemerkung or '' }}</textarea>
+    </div>
+
+    <button type="submit" class="btn btn--primary">Korrektur speichern</button>
+  </form>
+</div>
+{% endblock %}

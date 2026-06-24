@@ -32,6 +32,30 @@
     <canvas id="alarmChart"></canvas>
   </div>
 </div>
+{% if fb_stats %}
+<div class="kpi-grid" style="margin-top:1.5rem;">
+  <div class="kpi-card">
+    <div class="kpi-card__value">{{ fb_stats.total }}</div>
+    <div class="kpi-card__label">Fahrten gesamt</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-card__value">{{ fb_stats.einsatz }}</div>
+    <div class="kpi-card__label">Einsatzfahrten</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-card__value">{{ fb_stats.uebung }}</div>
+    <div class="kpi-card__label">Übungsfahrten</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-card__value">{{ fb_stats.km_sum }}</div>
+    <div class="kpi-card__label">km gesamt</div>
+  </div>
+</div>
+<div style="margin-top:.75rem;">
+  <a href="/statistik/fahrtenbuch" class="btn btn--ghost btn--sm">Fahrtenbuch-Statistik &rarr;</a>
+  <a href="/verwaltung/fahrten" class="btn btn--ghost btn--sm" style="margin-left:.5rem;">Fahrtenbuch-Verwaltung &rarr;</a>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

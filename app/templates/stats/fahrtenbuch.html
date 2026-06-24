@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Fahrtenbuch-Statistik{% endblock %}
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1100px;margin:0 auto;padding:1rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1.25rem;">
+    <h1 style="font-size:1.4rem;font-weight:700;margin:0;">Fahrtenbuch-Statistik</h1>
+    <a href="/statistik" class="btn btn--ghost btn--sm">&#8592; Dashboard</a>
+  </div>
+
+  {# Filter #}
+  <form method="get" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;align-items:flex-end;">
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Von</label>
+      <input type="date" name="von" value="{{ filter.von }}" class="form-control form-control--sm">
+    </div>
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Bis</label>
+      <input type="date" name="bis" value="{{ filter.bis }}" class="form-control form-control--sm">
+    </div>
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Fahrzeug</label>
+      <select name="fahrzeug_id" class="form-control form-control--sm">
+        <option value="0">Alle</option>
+        {% for fz in fahrzeuge %}
+        <option value="{{ fz.id }}" {% if filter.fahrzeug_id == fz.id %}selected{% endif %}>{{ fz.code }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Typ</label>
+      <select name="fahrttyp" class="form-control form-control--sm">
+        <option value="">Alle</option>
+        <option value="einsatz" {% if filter.fahrttyp == 'einsatz' %}selected{% endif %}>Einsatz</option>
+        <option value="uebung" {% if filter.fahrttyp == 'uebung' %}selected{% endif %}>Übung</option>
+        <option value="sonstige" {% if filter.fahrttyp == 'sonstige' %}selected{% endif %}>Sonstige</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Gruppierung</label>
+      <select name="gruppierung" class="form-control form-control--sm">
+        <option value="fahrzeug" {% if gruppierung == 'fahrzeug' %}selected{% endif %}>Je Fahrzeug</option>
+        <option value="maschinist" {% if gruppierung == 'maschinist' %}selected{% endif %}>Je Maschinist</option>
+        <option value="ausbildner" {% if gruppierung == 'ausbildner' %}selected{% endif %}>Je Ausbildner</option>
+        <option value="gruppenkommandant" {% if gruppierung == 'gruppenkommandant' %}selected{% endif %}>Je Gruppenkommandant</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn--ghost btn--sm">Anzeigen</button>
+    <a href="/statistik/fahrtenbuch" class="btn btn--ghost btn--sm">Reset</a>
+  </form>
+
+  <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem;">
+    {{ gesamt_fahrten }} Fahrten in der Auswahl (statistikrelevant, aktiv)
+  </p>
+
+  {# Chart #}
+  {% if gruppen %}
+  <div style="max-height:300px;margin-bottom:1.5rem;">
+    <canvas id="fbChart"></canvas>
+  </div>
+  {% endif %}
+
+  {# Tabelle #}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>{{ gruppierung|capitalize }}</th>
+        <th>Einsatz</th>
+        <th>Übung</th>
+        <th>Sonstige</th>
+        <th>Gesamt</th>
+        <th>km</th>
+        <th>BH</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in gruppen %}
+      <tr>
+        <td>{{ g.label }}</td>
+        <td>{{ g.einsatz }}</td>
+        <td>{{ g.uebung }}</td>
+        <td>{{ g.sonstige }}</td>
+        <td><strong>{{ g.einsatz + g.uebung + g.sonstige }}</strong></td>
+        <td>{{ g.km_sum }}</td>
+        <td>{{ g.bh_sum }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Keine Daten</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if gruppen %}
+<script>
+const labels = {{ gruppen|map(attribute='label')|list|tojson }};
+const einsatzData = {{ gruppen|map(attribute='einsatz')|list|tojson }};
+const uebungData  = {{ gruppen|map(attribute='uebung')|list|tojson }};
+new Chart(document.getElementById('fbChart'), {
+  type: 'bar',
+  data: {
+    labels: labels,
+    datasets: [
+      { label: 'Einsatz', data: einsatzData, backgroundColor: '#d42225' },
+      { label: 'Übung',   data: uebungData,  backgroundColor: '#1877f2' },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

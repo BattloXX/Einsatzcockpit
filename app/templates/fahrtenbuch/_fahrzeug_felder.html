@@ -1,0 +1,96 @@
+{# Dynamisch per HTMX geladen: fahrzeug-spezifische Felder #}
+{% if fahrzeug %}
+
+{% if fahrzeug.erfasst_km %}
+<div class="form-group">
+  <label class="form-label" for="km_stand_neu">
+    km-Stand (aktuell: {{ fahrzeug.km_aktuell }} km) *
+  </label>
+  <input type="number" name="km_stand_neu" id="km_stand_neu"
+         class="form-control form-control--lg" inputmode="numeric"
+         min="{{ fahrzeug.km_aktuell }}" step="1"
+         placeholder="{{ fahrzeug.km_aktuell }}"
+         hx-post="/fahrtenbuch/hx/zaehler-check"
+         hx-target="#km-check"
+         hx-trigger="blur"
+         hx-vals='{"art":"km","fahrzeug_id":"{{ fahrzeug.id }}"}'
+         hx-include="[name='km_stand_neu']">
+  <div id="km-check" style="margin-top:.3rem;"></div>
+</div>
+{% endif %}
+
+{% if fahrzeug.erfasst_betriebsstunden %}
+<div class="form-group">
+  <label class="form-label" for="betriebsstunden_neu">
+    Betriebsstunden-Stand (aktuell: {{ fahrzeug.betriebsstunden_aktuell }} h)
+  </label>
+  <input type="number" name="betriebsstunden_neu" id="betriebsstunden_neu"
+         class="form-control form-control--lg" inputmode="decimal" step="0.1"
+         min="{{ fahrzeug.betriebsstunden_aktuell }}"
+         placeholder="{{ fahrzeug.betriebsstunden_aktuell }}"
+         hx-post="/fahrtenbuch/hx/zaehler-check"
+         hx-target="#bh-check"
+         hx-trigger="blur"
+         hx-vals='{"art":"bh","fahrzeug_id":"{{ fahrzeug.id }}"}'
+         hx-include="[name='betriebsstunden_neu']">
+  <div id="bh-check" style="margin-top:.3rem;"></div>
+</div>
+{% endif %}
+
+{% if fahrzeug.zweiter_maschinist_pflicht %}
+<div class="form-group" x-data="maschinistAutocomplete('maschinist2')">
+  <label class="form-label" for="maschinist2_name">2. Maschinist *</label>
+  <input type="hidden" name="maschinist2_member_id" :value="memberId">
+  <div style="position:relative;">
+    <input type="text" name="maschinist2_name" id="maschinist2_name"
+           class="form-control form-control--lg"
+           placeholder="Name tippen…" required autocomplete="off"
+           x-model="query"
+           hx-get="/fahrtenbuch/hx/maschinist"
+           hx-target="#maschinist2-suggestions"
+           hx-trigger="input changed delay:200ms"
+           hx-include="[name='maschinist2_name']"
+           @focus="open=true" @blur="setTimeout(()=>open=false,150)">
+    <div id="maschinist2-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+  </div>
+</div>
+{% endif %}
+
+{% if fahrzeug.seilwinde_abfrage %}
+<fieldset style="border:1px solid var(--border);border-radius:.5rem;padding:1rem;margin-top:.5rem;">
+  <legend style="font-weight:600;padding:0 .5rem;">Seilwinde</legend>
+  <div class="form-group">
+    <label class="form-label" for="seilwinde_bh_neu">
+      Seilwinde BH-Stand (aktuell: {{ fahrzeug.seilwinde_bh_aktuell }} h)
+    </label>
+    <input type="number" name="seilwinde_bh_neu" id="seilwinde_bh_neu"
+           class="form-control" inputmode="decimal" step="0.1"
+           min="{{ fahrzeug.seilwinde_bh_aktuell }}"
+           placeholder="{{ fahrzeug.seilwinde_bh_aktuell }}"
+           hx-post="/fahrtenbuch/hx/zaehler-check"
+           hx-target="#sw-check"
+           hx-trigger="blur"
+           hx-vals='{"art":"seilwinde_bh","fahrzeug_id":"{{ fahrzeug.id }}"}'
+           hx-include="[name='seilwinde_bh_neu']">
+    <div id="sw-check" style="margin-top:.3rem;"></div>
+  </div>
+  <div class="form-group" x-data="maschinistAutocomplete('seilwinde')">
+    <label class="form-label" for="seilwinde_bediener_name">Bediener (optional)</label>
+    <input type="hidden" name="seilwinde_bediener_member_id" :value="memberId">
+    <div style="position:relative;">
+      <input type="text" name="seilwinde_bediener_name" id="seilwinde_bediener_name"
+             class="form-control"
+             placeholder="Name tippen (optional)" autocomplete="off"
+             x-model="query"
+             hx-get="/fahrtenbuch/hx/maschinist"
+             hx-target="#seilwinde-suggestions"
+             hx-trigger="input changed delay:200ms"
+             hx-include="[name='seilwinde_bediener_name']"
+             @focus="open=true" @blur="setTimeout(()=>open=false,150)">
+      <div id="seilwinde-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+    </div>
+  </div>
+</fieldset>
+{% endif %}
+
+{% endif %}

@@ -1,0 +1,27 @@
+{# HTMX-Partial: Zähler-Prüfung Ergebnis #}
+{% if fehler %}
+<div style="color:var(--red-light);font-size:.85rem;padding:.3rem .5rem;background:rgba(220,38,38,.1);border-radius:.3rem;">
+  &#9888; {{ fehler }}
+</div>
+{% elif erg %}
+<div style="font-size:.85rem;padding:.3rem .5rem;{% if erg.warnung %}background:rgba(245,158,11,.12);border-radius:.3rem;{% endif %}">
+  {% if art == 'km' %}
+    Gefahrene km: <strong>{{ erg.delta }}</strong>
+    (von {{ erg.aktuell }} auf {{ erg.neu }})
+  {% elif art == 'bh' %}
+    BH-Delta: <strong>{{ erg.delta }}</strong> h
+    (von {{ erg.aktuell }} auf {{ erg.neu }})
+  {% else %}
+    Seilwinde-Delta: <strong>{{ erg.delta }}</strong> h
+  {% endif %}
+  {% if erg.warnung %}
+  <span style="color:#f59e0b;display:block;margin-top:.3rem;">
+    &#9888; Wert wirkt hoch, bitte prüfen.
+  </span>
+  <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;cursor:pointer;">
+    <input type="checkbox" name="{{ art }}_warnung_bestaetigt" value="on" style="width:18px;height:18px;">
+    Geprüft &amp; korrekt
+  </label>
+  {% endif %}
+</div>
+{% endif %}

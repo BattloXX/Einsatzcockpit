@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Fahrtenbuch – Zielorte{% endblock %}
+{% block content %}
+<div class="container" style="max-width:700px;margin:0 auto;padding:1rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+    <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Zielorte</h1>
+  </div>
+
+  {% if request.query_params.get('saved') %}
+  <div class="alert alert--success" style="margin-bottom:1rem;">Gespeichert.</div>
+  {% endif %}
+
+  <div style="border:1px solid var(--border);border-radius:.5rem;padding:1rem;margin-bottom:1.5rem;">
+    <h2 style="font-size:1rem;margin:0 0 .75rem;">Neuer Zielort</h2>
+    <form method="post" action="/admin/fahrtenbuch/zielorte/neu" style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div>
+        <label class="form-label" style="font-size:.8rem;">Name</label>
+        <input type="text" name="name" class="form-control form-control--sm" required placeholder="Bezeichnung">
+      </div>
+      <div>
+        <label class="form-label" style="font-size:.8rem;">Sort</label>
+        <input type="number" name="sort" class="form-control form-control--sm" value="0" style="width:70px;">
+      </div>
+      <button type="submit" class="btn btn--primary btn--sm">Hinzufügen</button>
+    </form>
+  </div>
+
+  <table class="table">
+    <thead><tr><th>Name</th><th>Sort</th><th>Aktiv</th><th></th></tr></thead>
+    <tbody>
+      {% for zo in zielorte %}
+      <tr>
+        <td>{{ zo.name }}</td>
+        <td>{{ zo.sort }}</td>
+        <td>{% if zo.aktiv %}Ja{% else %}<span class="badge badge--gray">Nein</span>{% endif %}</td>
+        <td>
+          <details>
+            <summary class="btn btn--ghost btn--xs">Bearbeiten</summary>
+            <form method="post" action="/admin/fahrtenbuch/zielorte/{{ zo.id }}/bearbeiten"
+                  style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:flex-end;margin-top:.5rem;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="text" name="name" value="{{ zo.name }}" class="form-control form-control--sm" required>
+              <input type="number" name="sort" value="{{ zo.sort }}" class="form-control form-control--sm" style="width:60px;">
+              <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+                <input type="checkbox" name="aktiv" value="on" {% if zo.aktiv %}checked{% endif %}> Aktiv
+              </label>
+              <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Keine Zielorte</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

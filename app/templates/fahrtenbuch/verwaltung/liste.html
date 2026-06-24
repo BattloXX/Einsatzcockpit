@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Fahrtenbuch – Verwaltung{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1200px;margin:0 auto;padding:1rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1.25rem;">
+    <h1 style="font-size:1.4rem;font-weight:700;margin:0;">Fahrtenbuch</h1>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+      <a href="/fahrtenbuch/neu" class="btn btn--primary btn--sm">+ Fahrt erfassen</a>
+      <a href="/verwaltung/fahrten/export.xlsx?{{ request.query_string.decode() }}" class="btn btn--ghost btn--sm">Excel-Export</a>
+    </div>
+  </div>
+
+  {# Filter #}
+  <form method="get" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;align-items:flex-end;">
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Von</label>
+      <input type="date" name="von" value="{{ filter.von }}" class="form-control form-control--sm">
+    </div>
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Bis</label>
+      <input type="date" name="bis" value="{{ filter.bis }}" class="form-control form-control--sm">
+    </div>
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Fahrzeug</label>
+      <select name="fahrzeug_id" class="form-control form-control--sm">
+        <option value="0">Alle</option>
+        {% for fz in fahrzeuge %}
+        <option value="{{ fz.id }}" {% if filter.fahrzeug_id == fz.id %}selected{% endif %}>{{ fz.code }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Typ</label>
+      <select name="fahrttyp" class="form-control form-control--sm">
+        <option value="">Alle</option>
+        <option value="einsatz" {% if filter.fahrttyp == 'einsatz' %}selected{% endif %}>Einsatz</option>
+        <option value="uebung" {% if filter.fahrttyp == 'uebung' %}selected{% endif %}>Übung</option>
+        <option value="sonstige" {% if filter.fahrttyp == 'sonstige' %}selected{% endif %}>Sonstige</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label" style="font-size:.8rem;">Status</label>
+      <select name="status" class="form-control form-control--sm">
+        <option value="aktiv" {% if filter.status == 'aktiv' %}selected{% endif %}>Aktiv</option>
+        <option value="storniert" {% if filter.status == 'storniert' %}selected{% endif %}>Storniert</option>
+        <option value="ersetzt" {% if filter.status == 'ersetzt' %}selected{% endif %}>Ersetzt</option>
+        <option value="alle" {% if filter.status == 'alle' %}selected{% endif %}>Alle</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn--ghost btn--sm">Filter</button>
+    <a href="/verwaltung/fahrten" class="btn btn--ghost btn--sm">Reset</a>
+  </form>
+
+  <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.75rem;">
+    {{ gesamt }} Eintrag{% if gesamt != 1 %}e{% endif %}
+    {% if gesamt > pro_seite %} (Seite {{ seite }}){% endif %}
+  </p>
+
+  {# Desktop-Tabelle / Mobile-Karten #}
+  <div class="table-responsive">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Datum/Zeit</th>
+          <th>Fahrzeug</th>
+          <th>Maschinist</th>
+          <th>km</th>
+          <th>Typ</th>
+          <th>Zweck</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in fahrten %}
+        <tr style="{% if f.status.value != 'aktiv' %}opacity:.6;{% endif %}">
+          <td>{{ f.zeitpunkt.strftime('%d.%m.%Y %H:%M') }}</td>
+          <td>{{ f.fahrzeug.code if f.fahrzeug else '—' }}</td>
+          <td>{{ f.maschinist_name or '—' }}</td>
+          <td>
+            {% if f.km_stand_neu is not none %}
+              {{ f.km_stand_neu }} km
+              {% if f.km_delta is not none %}<small style="color:var(--text-muted);"> (+{{ f.km_delta }})</small>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <span class="badge badge--{% if f.fahrttyp.value == 'einsatz' %}red{% elif f.fahrttyp.value == 'uebung' %}blue{% else %}gray{% endif %}">
+              {{ f.fahrttyp.value|capitalize }}
+            </span>
+          </td>
+          <td>{{ f.zweck.name if f.zweck else '—' }}</td>
+          <td>
+            {% if f.status.value != 'aktiv' %}
+            <span class="badge badge--gray">{{ f.status.value }}</span>
+            {% endif %}
+            {% if f.nicht_statistikrelevant %}
+            <span class="badge badge--gray" title="nicht statistikrelevant">n.s.</span>
+            {% endif %}
+            {% if f.schaden_vorhanden %}
+            <span class="badge badge--red" title="Schaden">&#9888;</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/verwaltung/fahrten/{{ f.id }}" class="btn btn--ghost btn--xs">Detail</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Keine Fahrten gefunden</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Paginierung #}
+  {% if gesamt > pro_seite %}
+  <div style="display:flex;gap:.5rem;margin-top:1rem;justify-content:center;">
+    {% if seite > 1 %}
+    <a href="?{{ request.query_string.decode() }}&seite={{ seite - 1 }}" class="btn btn--ghost btn--sm">&#8592; Zurück</a>
+    {% endif %}
+    <span style="padding:.4rem .75rem;font-size:.85rem;">{{ seite }} / {{ ((gesamt - 1) // pro_seite + 1) }}</span>
+    {% if seite * pro_seite < gesamt %}
+    <a href="?{{ request.query_string.decode() }}&seite={{ seite + 1 }}" class="btn btn--ghost btn--sm">Weiter &#8594;</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

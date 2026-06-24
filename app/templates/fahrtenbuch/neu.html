@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Fahrt erfassen{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:680px;margin:0 auto;padding:1rem;">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;">
+    {% if not token_org %}
+    <a href="/" class="btn btn--ghost btn--sm">&#8592; Zurück</a>
+    {% endif %}
+    <h1 style="font-size:1.4rem;font-weight:700;margin:0;">Fahrt erfassen</h1>
+  </div>
+
+  {% if fehler %}
+  <div class="alert alert--error" style="margin-bottom:1rem;">
+    {% if fehler == "km_warnung_nicht_bestaetigt" %}
+      Bitte den km-Warnhinweis bestätigen.
+    {% elif fehler == "bh_warnung_nicht_bestaetigt" %}
+      Bitte den Betriebsstunden-Warnhinweis bestätigen.
+    {% elif fehler == "seilwinde_warnung_nicht_bestaetigt" %}
+      Bitte den Seilwinden-Warnhinweis bestätigen.
+    {% else %}
+      Fehler: {{ fehler }}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if doppelfahrt_warnung %}
+  <div class="alert alert--warn" style="margin-bottom:1rem;" id="doppelfahrt-hinweis">
+    &#9888; Für dieses Fahrzeug wurde in den letzten Minuten bereits eine Fahrt erfasst.
+  </div>
+  {% endif %}
+
+  <form method="post" action="/fahrtenbuch"
+        x-data="fahrtForm()"
+        style="display:flex;flex-direction:column;gap:1.25rem;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+
+    {# 1. Fahrzeug #}
+    <div class="form-group">
+      <label class="form-label" for="fahrzeug_id">Fahrzeug *</label>
+      <select name="fahrzeug_id" id="fahrzeug_id" class="form-control form-control--lg"
+              required
+              hx-get="/fahrtenbuch/hx/fahrzeug-felder"
+              hx-target="#fahrzeug-felder"
+              hx-trigger="change"
+              hx-include="[name='fahrzeug_id']"
+              @change="fahrzeugId = $event.target.value">
+        <option value="">— Fahrzeug wählen —</option>
+        {% for fz in fahrzeuge %}
+        <option value="{{ fz.id }}"
+          {% if preset_fahrzeug and fz.id == preset_fahrzeug.id %}selected{% endif %}>
+          {{ fz.code }}{% if fz.kennzeichen %} ({{ fz.kennzeichen }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Dynamische Fahrzeug-Felder (km/BH/2. Maschinist/Seilwinde) #}
+    <div id="fahrzeug-felder">
+      {% if preset_fahrzeug %}
+        {% include "fahrtenbuch/_fahrzeug_felder.html" with context %}
+      {% endif %}
+    </div>
+
+    {# 2. Maschinist #}
+    <div class="form-group" x-data="maschinistAutocomplete('maschinist')">
+      <label class="form-label" for="maschinist_name">Maschinist *</label>
+      <input type="hidden" name="maschinist_member_id" :value="memberId">
+      <div style="position:relative;">
+        <input type="text" name="maschinist_name" id="maschinist_name"
+               class="form-control form-control--lg"
+               placeholder="Name tippen…" required autocomplete="off"
+               x-model="query"
+               hx-get="/fahrtenbuch/hx/maschinist"
+               hx-target="#maschinist-suggestions"
+               hx-trigger="input changed delay:200ms"
+               hx-include="[name='maschinist_name']"
+               @htmx:before-request="query.length >= 2 || $event.preventDefault()"
+               @focus="open=true" @blur="setTimeout(()=>open=false,150)">
+        <div id="maschinist-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+      </div>
+    </div>
+
+    {# 5. Zielort #}
+    <div class="form-group">
+      <label class="form-label" for="zielort_id">Zielort</label>
+      <select name="zielort_id" id="zielort_id" class="form-control">
+        <option value="">— wählen —</option>
+        {% for zo in zielorte %}
+        <option value="{{ zo.id }}">{{ zo.name }}</option>
+        {% endfor %}
+        <option value="">Freitext ↓</option>
+      </select>
+      <input type="text" name="zielort_freitext" class="form-control" placeholder="Sonstiger Zielort (optional)"
+             style="margin-top:.5rem;">
+    </div>
+
+    {# 6. Zweck #}
+    <div class="form-group">
+      <label class="form-label" for="zweck_id">Zweck *</label>
+      <select name="zweck_id" id="zweck_id" class="form-control form-control--lg" required
+              hx-get="/fahrtenbuch/hx/zweck-felder"
+              hx-target="#zweck-felder"
+              hx-trigger="change"
+              hx-include="[name='zweck_id']">
+        <option value="">— Zweck wählen —</option>
+        {% for z in zwecke %}
+        <option value="{{ z.id }}">{{ z.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Dynamische Zweck-Felder (Ausbildner/GK/Einsatz) #}
+    <div id="zweck-felder"></div>
+
+    {# 7. Schaden #}
+    <div class="form-group" x-data="{schaden: false}">
+      <label class="form-label">Schaden / Defekt?</label>
+      <div style="display:flex;gap:1rem;margin-top:.4rem;">
+        <label class="form-label" style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+          <input type="checkbox" name="schaden_vorhanden" value="on" @change="schaden=$event.target.checked"
+                 style="width:20px;height:20px;"> Schaden vorhanden
+        </label>
+      </div>
+      <div x-show="schaden" x-cloak style="margin-top:.75rem;display:flex;flex-direction:column;gap:.75rem;">
+        <div style="padding:.75rem;background:rgba(220,38,38,.1);border-radius:.4rem;font-size:.85rem;color:var(--red-light);">
+          Wird per Mail &amp; Teams an die Gerätewarte gemeldet.
+        </div>
+        <div>
+          <label class="form-label">Betriebsfähig?</label>
+          <div style="display:flex;gap:1rem;margin-top:.3rem;">
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+              <input type="radio" name="schaden_betriebsfaehig" value="on"> Ja
+            </label>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+              <input type="radio" name="schaden_betriebsfaehig" value=""> Nein
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="form-label" for="schaden_beschreibung">Beschreibung *</label>
+          <textarea name="schaden_beschreibung" id="schaden_beschreibung" class="form-control"
+                    rows="3" :required="schaden" placeholder="Schadensbeschreibung…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    {# 8. Zeitpunkt #}
+    <div class="form-group">
+      <label class="form-label" for="zeitpunkt">Zeitpunkt (Ankunftszeit)</label>
+      <input type="datetime-local" name="zeitpunkt" id="zeitpunkt" class="form-control"
+             value="{{ now.strftime('%Y-%m-%dT%H:%M') }}">
+    </div>
+
+    {# 9. Bemerkung #}
+    <div class="form-group">
+      <label class="form-label" for="bemerkung">Bemerkung</label>
+      <textarea name="bemerkung" id="bemerkung" class="form-control" rows="2"></textarea>
+    </div>
+
+    {# 9. Doppelfahrt-Bestätigung #}
+    {% if doppelfahrt_warnung %}
+    <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+      <input type="checkbox" name="doppelfahrt_bestaetigt" value="on" required style="width:20px;height:20px;">
+      <span>Ja, ich bestätige die Doppelfahrt-Meldung</span>
+    </label>
+    {% endif %}
+
+    <button type="submit" class="btn btn--primary btn--lg" style="margin-top:.5rem;">
+      Fahrt speichern
+    </button>
+  </form>
+</div>
+
+<script>
+function fahrtForm() {
+  return { fahrzeugId: '{{ preset_fahrzeug.id if preset_fahrzeug else "" }}' };
+}
+function maschinistAutocomplete(prefix) {
+  return {
+    query: '',
+    memberId: '',
+    open: false,
+    select(id, name) {
+      this.memberId = id;
+      this.query = name;
+      this.open = false;
+    }
+  };
+}
+// Autocomplete item click delegation
+document.addEventListener('click', function(e) {
+  const item = e.target.closest('.autocomplete-item');
+  if (!item) return;
+  const input = item.closest('[x-data]');
+  if (!input) return;
+  const alpine = input._x_dataStack?.[0];
+  if (alpine && alpine.select) {
+    alpine.select(item.dataset.memberId, item.dataset.name);
+  }
+});
+</script>
+{% endblock %}
