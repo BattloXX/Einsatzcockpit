@@ -1,14 +1,14 @@
 """Digitales Fahrten- & Betriebsbuch
 
-Revision ID: 0027
-Revises: 0026
+Revision ID: 0099
+Revises: 0098
 Create Date: 2026-06-24
 """
 from alembic import op
 from sqlalchemy import text
 
-revision = "0027"
-down_revision = "0026"
+revision = "0099"
+down_revision = "0098"
 branch_labels = None
 depends_on = None
 
