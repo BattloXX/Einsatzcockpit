@@ -151,11 +151,17 @@
       <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
-      <p style="margin-bottom:12px;font-size:.85rem;color:var(--text-muted);">
-        Excel-Datei (.xlsx) mit den Spalten <strong>Nachname</strong>, <strong>Vorname</strong>
-        sowie optional <strong>Telefon</strong> und <strong>E-Mail</strong>.
-        Bereits vorhandene Einträge (gleicher Name) werden übersprungen.
+      <p style="margin-bottom:8px;font-size:.85rem;color:var(--text-muted);">
+        Excel-Datei (.xlsx) mit den Spalten <strong>Vorname</strong> und <strong>Zuname/Nachname</strong>
+        sowie optional <strong>Telefon</strong>, <strong>E-Mail</strong> und <strong>Bezeichnung</strong>.
       </p>
+      <ul style="margin:0 0 12px 0;padding-left:18px;font-size:.82rem;color:var(--text-muted);line-height:1.7;">
+        <li><strong>Neue Mitglieder</strong> werden angelegt.</li>
+        <li><strong>Bestehende Mitglieder</strong> (gleicher Name) werden aktualisiert: Telefon und E-Mail werden überschrieben, sofern in der Datei vorhanden.</li>
+        <li><strong>Einsatzfunktionen-Liste</strong> (Bezeichnung = z. B. „Maschinist", „Atemschutz"): Qualifikationen werden additiv ergänzt – nie gelöscht.</li>
+        <li><strong>Adressliste</strong> (Bezeichnung = „Aktiv"): Nur Kontaktdaten werden aktualisiert, Qualifikationen bleiben unverändert.</li>
+        <li>Beide Listen können nacheinander importiert werden – ohne Konflikte.</li>
+      </ul>
       <div class="form-group">
         <label class="form-label">Excel-Datei (.xlsx)</label>
         <input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

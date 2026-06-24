@@ -653,9 +653,9 @@ async def import_members_excel(
                 Member.firstname == firstname,
             ).first()
             if existing:
-                if not existing.phone and phone:
+                if phone:
                     existing.phone = phone
-                if not existing.email and email:
+                if email:
                     existing.email = email
                 existing.active = True
                 member = existing
