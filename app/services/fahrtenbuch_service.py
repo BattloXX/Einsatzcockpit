@@ -182,6 +182,8 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
         seilwinde_warnung_bestaetigt=bool(daten.get("seilwinde_warnung_bestaetigt")),
         seilwinde_bediener_member_id=daten.get("seilwinde_bediener_member_id"),
         seilwinde_bediener_name=daten.get("seilwinde_bediener_name"),
+        seilwinde_zuege=daten.get("seilwinde_zuege"),
+        seilwinde_wartung=daten.get("seilwinde_wartung"),
         zielort_id=daten.get("zielort_id"),
         zielort_freitext=daten.get("zielort_freitext"),
         zweck_id=daten["zweck_id"],

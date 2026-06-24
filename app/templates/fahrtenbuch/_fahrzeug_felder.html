@@ -1,6 +1,23 @@
 {# Dynamisch per HTMX geladen: fahrzeug-spezifische Felder #}
 {% if fahrzeug %}
 
+<div class="form-group" x-data="maschinistAutocomplete('maschinist')">
+  <label class="form-label" for="maschinist_name">Maschinist *</label>
+  <input type="hidden" name="maschinist_member_id" :value="memberId">
+  <div style="position:relative;">
+    <input type="text" name="maschinist_name" id="maschinist_name"
+           class="form-control form-control--lg"
+           placeholder="Name tippen…" required autocomplete="off"
+           x-model="query"
+           hx-get="/fahrtenbuch/hx/maschinist"
+           hx-target="#maschinist-suggestions"
+           hx-trigger="input changed delay:200ms"
+           hx-include="[name='maschinist_name']"
+           @focus="open=true" @blur="open=false">
+    <div id="maschinist-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+  </div>
+</div>
+
 {% if fahrzeug.erfasst_km %}
 <div class="form-group" x-data="{ km: null, aktuell: {{ fahrzeug.km_aktuell }} }">
   <label class="form-label" for="km_stand_neu">
@@ -101,8 +118,27 @@
              hx-target="#seilwinde-suggestions"
              hx-trigger="input changed delay:200ms"
              hx-include="[name='seilwinde_bediener_name']"
-             @focus="open=true" @blur="setTimeout(()=>open=false,150)">
+             @focus="open=true" @blur="open=false">
       <div id="seilwinde-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label" for="seilwinde_zuege">Anzahl Züge</label>
+    <input type="number" name="seilwinde_zuege" id="seilwinde_zuege"
+           class="form-control" inputmode="numeric" min="0" step="1"
+           placeholder="0">
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Seilwinden-Wartung durchgeführt?</label>
+    <div style="display:flex;gap:1.25rem;margin-top:.4rem;">
+      <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+        <input type="radio" name="seilwinde_wartung" value="ja"> Ja
+      </label>
+      <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+        <input type="radio" name="seilwinde_wartung" value="nein"> Nein
+      </label>
     </div>
   </div>
 </fieldset>

@@ -49,6 +49,12 @@
     {% if fahrt.seilwinde_bh_neu is not none %}
     <div><span class="label">Seilwinde BH</span><div>{{ fahrt.seilwinde_bh_neu }} h</div></div>
     {% endif %}
+    {% if fahrt.seilwinde_zuege is not none %}
+    <div><span class="label">Seilwinde Züge</span><div>{{ fahrt.seilwinde_zuege }}</div></div>
+    {% endif %}
+    {% if fahrt.seilwinde_wartung is not none %}
+    <div><span class="label">Seilwinden-Wartung</span><div>{{ "Ja" if fahrt.seilwinde_wartung else "Nein" }}</div></div>
+    {% endif %}
     <div><span class="label">Zielort</span><div>{{ fahrt.zielort.name if fahrt.zielort else fahrt.zielort_freitext or '—' }}</div></div>
     <div><span class="label">Zweck</span><div>{{ fahrt.zweck.name if fahrt.zweck else '—' }}</div></div>
     <div><span class="label">Fahrttyp</span><div>

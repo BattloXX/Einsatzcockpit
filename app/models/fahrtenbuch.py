@@ -119,6 +119,8 @@ class Fahrt(Base):
         BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
     )
     seilwinde_bediener_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    seilwinde_zuege: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    seilwinde_wartung: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Ziel & Zweck
     zielort_id: Mapped[int | None] = mapped_column(

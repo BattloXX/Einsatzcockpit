@@ -129,7 +129,7 @@ async def hx_maschinist_autocomplete(
 ):
     # HTMX sendet den Feldnamen als Parameter-Key (maschinist_name, ausbildner_name …)
     qp = request.query_params
-    q = qp.get("q") or qp.get("maschinist_name") or qp.get("ausbildner_name") or ""
+    q = qp.get("q") or qp.get("maschinist_name") or qp.get("ausbildner_name") or qp.get("gruppenkommandant_name") or ""
     user = _current_user(request)
     token_org: OrgSettings | None = getattr(request.state, "fahrtenbuch_org", None)
     org_id = user.org_id if user else (token_org.org_id if token_org else None)
@@ -363,6 +363,8 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
         "seilwinde_warnung_bestaetigt": _bool("seilwinde_warnung_bestaetigt"),
         "seilwinde_bediener_member_id": _int("seilwinde_bediener_member_id"),
         "seilwinde_bediener_name": _str("seilwinde_bediener_name"),
+        "seilwinde_zuege": _int("seilwinde_zuege"),
+        "seilwinde_wartung": (True if form.get("seilwinde_wartung") == "ja" else (False if form.get("seilwinde_wartung") == "nein" else None)),
         "zielort_id": _int("zielort_id"),
         "zielort_freitext": _str("zielort_freitext"),
         "zweck_id": _int("zweck_id"),
