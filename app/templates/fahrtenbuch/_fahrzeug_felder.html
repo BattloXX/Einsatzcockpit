@@ -13,6 +13,7 @@
            hx-target="#maschinist-suggestions"
            hx-trigger="input changed delay:200ms"
            hx-include="[name='maschinist_name']"
+           hx-vals='js:{t:window.FAB_TOKEN||""}'
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="maschinist-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>
@@ -95,6 +96,7 @@
            hx-target="#maschinist2-suggestions"
            hx-trigger="input changed delay:200ms"
            hx-include="[name='maschinist2_name']"
+           hx-vals='js:{t:window.FAB_TOKEN||""}'
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="maschinist2-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>
@@ -145,6 +147,7 @@
              hx-target="#seilwinde-suggestions"
              hx-trigger="input changed delay:200ms"
              hx-include="[name='seilwinde_bediener_name']"
+             hx-vals='js:{t:window.FAB_TOKEN||""}'
              @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
       <div id="seilwinde-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
     </div>

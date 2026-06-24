@@ -54,6 +54,7 @@
         @submit="checkZaehlerWarnings($event)"
         style="display:flex;flex-direction:column;gap:1.25rem;">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="t" value="{{ fab_token }}">
 
     {# 1. Fahrzeug #}
     <div class="form-group">
@@ -105,7 +106,7 @@
               hx-get="/fahrtenbuch/hx/zweck-felder"
               hx-target="#zweck-felder"
               hx-trigger="change"
-              hx-include="[name='zweck_id']"
+              hx-include="[name='zweck_id'],[name='t']"
               {% if form_daten.get('zweck_id') %}
               x-init="$nextTick(() => $el.dispatchEvent(new Event('change')))"
               {% endif %}>
@@ -183,6 +184,7 @@
 </div>
 
 <script>
+window.FAB_TOKEN = "{{ fab_token }}";
 function fahrtForm() {
   return {
     fahrzeugId: '{{ preset_fahrzeug.id if preset_fahrzeug else "" }}',

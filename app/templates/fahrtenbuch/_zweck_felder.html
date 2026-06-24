@@ -14,6 +14,7 @@
            hx-target="#ausbildner-suggestions"
            hx-trigger="input changed delay:200ms"
            hx-include="[name='ausbildner_name']"
+           hx-vals='js:{t:window.FAB_TOKEN||""}'
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="ausbildner-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>
@@ -33,6 +34,7 @@
            hx-target="#gk-suggestions"
            hx-trigger="input changed delay:200ms"
            hx-include="[name='gruppenkommandant_name']"
+           hx-vals='js:{t:window.FAB_TOKEN||""}'
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="gk-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>

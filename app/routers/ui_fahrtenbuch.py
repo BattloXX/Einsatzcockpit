@@ -62,14 +62,18 @@ async def fahrtenbuch_speichern(
     db: Session = Depends(get_db),
 ):
     user = _current_user(request)
-    # Token-basierter Zugriff: org_id aus Session-State
     token_org: OrgSettings | None = getattr(request.state, "fahrtenbuch_org", None)
+    form = await request.form()
+    # Token-basierter Zugriff ohne Middleware-State: "t" aus dem Formular lesen
+    if not user and not token_org:
+        t = form.get("t", "")
+        if t:
+            token_org = _resolve_org_by_token(t, db)
     if not user and not token_org:
         raise HTTPException(status_code=401, detail="Nicht authentifiziert")
 
     org_id = user.org_id if user else token_org.org_id
 
-    form = await request.form()
     daten = _form_zu_daten(form, org_id=org_id, user=user, token_org=token_org)
 
     try:
@@ -86,7 +90,7 @@ async def fahrtenbuch_speichern(
         return await _render_erfassung(
             request, db, user=user, preset_fahrzeug_id=fahrzeug_id,
             fehler=exc.detail, form_daten=dict(form),
-            token_org=token_org,
+            token_org=token_org, fab_token=form.get("t", "") or None,
         )
 
     return templates.TemplateResponse(request, "fahrtenbuch/erfolg.html", {
@@ -104,7 +108,7 @@ async def token_formular(request: Request, token: str, db: Session = Depends(get
     if not org_settings:
         raise HTTPException(status_code=404, detail="Token ungültig")
     request.state.fahrtenbuch_org = org_settings
-    return await _render_erfassung(request, db, token_org=org_settings)
+    return await _render_erfassung(request, db, token_org=org_settings, fab_token=token)
 
 
 @router.get("/f/{token}/v/{qr_token}", response_class=HTMLResponse)
@@ -117,7 +121,7 @@ async def token_qr_formular(request: Request, token: str, qr_token: str, db: Ses
         raise HTTPException(status_code=404, detail="Fahrzeug-QR ungültig")
     request.state.fahrtenbuch_org = org_settings
     return await _render_erfassung(
-        request, db, token_org=org_settings, preset_fahrzeug_id=fahrzeug.id
+        request, db, token_org=org_settings, preset_fahrzeug_id=fahrzeug.id, fab_token=token
     )
 
 
@@ -132,6 +136,10 @@ async def hx_maschinist_autocomplete(
     q = qp.get("q") or qp.get("maschinist_name") or qp.get("ausbildner_name") or qp.get("gruppenkommandant_name") or qp.get("seilwinde_bediener_name") or ""
     user = _current_user(request)
     token_org: OrgSettings | None = getattr(request.state, "fahrtenbuch_org", None)
+    if not user and not token_org:
+        t = qp.get("t", "")
+        if t:
+            token_org = _resolve_org_by_token(t, db)
     org_id = user.org_id if user else (token_org.org_id if token_org else None)
     if not org_id or len(q) < 2:
         return HTMLResponse("")
@@ -181,6 +189,10 @@ async def hx_zweck_felder(
 ):
     user = _current_user(request)
     token_org: OrgSettings | None = getattr(request.state, "fahrtenbuch_org", None)
+    if not user and not token_org:
+        t = request.query_params.get("t", "")
+        if t:
+            token_org = _resolve_org_by_token(t, db)
     org_id = user.org_id if user else (token_org.org_id if token_org else None)
 
     zweck = db.query(Fahrtzweck).filter(Fahrtzweck.id == zweck_id).first() if zweck_id else None
@@ -262,6 +274,7 @@ async def _render_erfassung(
     *,
     user=None,
     token_org: OrgSettings | None = None,
+    fab_token: str | None = None,
     preset_fahrzeug_id: int | None = None,
     fehler: str | None = None,
     form_daten: dict | None = None,
@@ -308,6 +321,7 @@ async def _render_erfassung(
     return templates.TemplateResponse(request, "fahrtenbuch/neu.html", {
         "user": user,
         "token_org": token_org,
+        "fab_token": fab_token or "",
         "org": org,
         "fahrzeuge": fahrzeuge,
         "zwecke": zwecke,
