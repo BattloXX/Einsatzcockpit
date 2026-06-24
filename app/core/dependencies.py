@@ -26,6 +26,16 @@ def _set_uas_state(request: HTTPConnection, org_id: int | None, db: Session) -> 
         request.state.uas_module_enabled = False
 
 
+def _set_fahrtenbuch_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
+    """Setzt request.state.fahrtenbuch_modul_aktiv fail-safe (nie crashen)."""
+    try:
+        from app.models.master import OrgSettings
+        org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first() if org_id else None
+        request.state.fahrtenbuch_modul_aktiv = bool(org_s and org_s.fahrtenbuch_modul_aktiv)
+    except Exception:
+        request.state.fahrtenbuch_modul_aktiv = False
+
+
 def _resolve_current_org(
     request: HTTPConnection,
     db: Session = Depends(get_db),
@@ -38,8 +48,9 @@ def _resolve_current_org(
 
     Setzt zusätzlich request.state.uas_module_enabled (True/False).
     """
-    # UAS-Modul-Default: aus (wird unten ggf. überschrieben)
+    # Modul-Defaults: aus (wird unten ggf. überschrieben)
     request.state.uas_module_enabled = False
+    request.state.fahrtenbuch_modul_aktiv = False
 
     user = getattr(request.state, "user", None)
     if user is None:
@@ -63,6 +74,7 @@ def _resolve_current_org(
             )
             set_tenant_context(db, org_id)
             _set_uas_state(request, org_id, db)
+            _set_fahrtenbuch_state(request, org_id, db)
             return org_id
         set_tenant_context(db, None)
         return None
@@ -70,6 +82,7 @@ def _resolve_current_org(
     org_id = user.org_id
     set_tenant_context(db, org_id)
     _set_uas_state(request, org_id, db)
+    _set_fahrtenbuch_state(request, org_id, db)
     return org_id
 
 

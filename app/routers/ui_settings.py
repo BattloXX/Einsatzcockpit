@@ -129,6 +129,7 @@ async def save_org_settings(
     gsl_lagemeldung_sofort_raw: str = Form(""),
     gsl_lagemeldung_auto_auftrag_raw: str = Form(""),
     uas_module_enabled_raw: str = Form(""),
+    fahrtenbuch_modul_aktiv_raw: str = Form(""),
 ):
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = target_org_id if is_sysadmin and target_org_id else user.org_id
@@ -276,6 +277,21 @@ async def save_org_settings(
                 payload={"alt": old_uas, "neu": new_uas},
                 ip=request.client.host if request.client else None,
             )
+
+    # Fahrtenbuch-Modul: Org-Toggle
+    old_fb = org_s.fahrtenbuch_modul_aktiv
+    new_fb = fahrtenbuch_modul_aktiv_raw in ("1", "true", "on")
+    org_s.fahrtenbuch_modul_aktiv = new_fb
+    if old_fb != new_fb:
+        from app.core.audit import write_audit
+        write_audit(
+            db,
+            "fahrtenbuch.org_toggle",
+            org_id=effective_org_id,
+            user_id=user.id,
+            payload={"alt": old_fb, "neu": new_fb},
+            ip=request.client.host if request.client else None,
+        )
 
     # Wird die Lagemeldungs-Pflicht gerade erst aktiviert (Intervall aus → an), Timer für
     # bereits laufende Einsatzstellen sofort nachziehen – sonst erst beim nächsten

@@ -16,6 +16,8 @@
   {% set active_group = 'einstellungen' %}
 {% elif _p.startswith('/uas/') %}
   {% set active_group = 'uas' %}
+{% elif '/admin/fahrtenbuch' in _p or '/verwaltung/fahrten' in _p %}
+  {% set active_group = 'fahrtenbuch' %}
 {% elif _p == '/admin/hilfe' %}
   {% set active_group = 'hilfe' %}
 {% else %}
@@ -380,6 +382,43 @@
         </div>
         {% endif %}
 
+        {% if request.state.fahrtenbuch_modul_aktiv %}
+        <!-- ── Fahrtenbuch ───────────────────────────────────────────── -->
+        <button class="admin-nav__group-hdr" type="button" @click="toggle('fahrtenbuch')">
+          <span>&#x1F697; Fahrtenbuch</span>
+          <span class="admin-nav__group-arrow" :class="groups.fahrtenbuch && 'is-open'">›</span>
+        </button>
+        <div x-show="groups.fahrtenbuch" x-transition.opacity.duration.120ms>
+          <div class="admin-nav__group-items">
+            <a href="/verwaltung/fahrten"
+               class="admin-nav__item {% if '/verwaltung/fahrten' in request.url.path %}is-active{% endif %}"
+               {{ tip('Alle Fahrten: Übersicht, Detail, Storno, Export') }}>
+              <span class="admin-nav__icon">📋</span>Fahrten
+            </a>
+            <a href="/admin/fahrtenbuch/fahrzeuge"
+               class="admin-nav__item {% if '/admin/fahrtenbuch/fahrzeuge' in request.url.path %}is-active{% endif %}"
+               {{ tip('Fahrtenbuch-Felder je Fahrzeug: km, BH, Seilwinde, QR-Token') }}>
+              <span class="admin-nav__icon">🚒</span>Fahrzeuge
+            </a>
+            <a href="/admin/fahrtenbuch/zwecke"
+               class="admin-nav__item {% if '/admin/fahrtenbuch/zwecke' in request.url.path %}is-active{% endif %}"
+               {{ tip('Fahrtzwecke: Einsatz, Übung, Sonstige – Pflichtfelder je Zweck') }}>
+              <span class="admin-nav__icon">🏷️</span>Fahrtzwecke
+            </a>
+            <a href="/admin/fahrtenbuch/zielorte"
+               class="admin-nav__item {% if '/admin/fahrtenbuch/zielorte' in request.url.path %}is-active{% endif %}"
+               {{ tip('Häufige Zielorte als Schnellauswahl') }}>
+              <span class="admin-nav__icon">📍</span>Zielorte
+            </a>
+            <a href="/admin/fahrtenbuch/token"
+               class="admin-nav__item {% if '/admin/fahrtenbuch/token' in request.url.path %}is-active{% endif %}"
+               {{ tip('Org-Token und QR-Codes für Tablet-/Token-Erfassung') }}>
+              <span class="admin-nav__icon">🔑</span>Token / QR
+            </a>
+          </div>
+        </div>
+        {% endif %}
+
       </nav>
     </div>
   </aside>
@@ -394,7 +433,7 @@ function adminNav(activeGroup) {
   var STORE = 'admin_nav_groups';
   var s = {};
   try { s = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch(e) {}
-  var labels = { stammdaten: 'Stammdaten', verwaltung: 'Verwaltung', einstellungen: 'Einstellungen', uas: 'Drohne / UAS' };
+  var labels = { stammdaten: 'Stammdaten', verwaltung: 'Verwaltung', einstellungen: 'Einstellungen', uas: 'Drohne / UAS', fahrtenbuch: 'Fahrtenbuch' };
   var mobile = window.matchMedia('(max-width: 1100px)').matches;
 
   function grpInit(g, desktopDefault) {
@@ -410,6 +449,7 @@ function adminNav(activeGroup) {
       verwaltung:   grpInit('verwaltung',   true),
       einstellungen:grpInit('einstellungen',false),
       uas:          grpInit('uas',          false),
+      fahrtenbuch:  grpInit('fahrtenbuch',  false),
     },
     isMobile: function() { return window.matchMedia('(max-width: 1100px)').matches; },
     toggle: function(group) {

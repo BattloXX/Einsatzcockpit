@@ -21,7 +21,7 @@
   {% if user %}
   {% set user_roles = user.roles|map(attribute='code')|list %}
   {% set is_admin = ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles) %}
-  {% set is_fahrtenbuch = ('fahrtenbuch_admin' in user_roles or 'incident_leader' in user_roles or is_admin) %}
+  {% set is_fahrtenbuch = request.state.fahrtenbuch_modul_aktiv and ('fahrtenbuch_admin' in user_roles or 'incident_leader' in user_roles or is_admin) %}
   <nav class="topnav" id="topnav">
     <button type="button" class="topnav__burger" aria-label="Menu oeffnen"
             @click="mobileMenuOpen = !mobileMenuOpen"

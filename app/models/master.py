@@ -366,6 +366,7 @@ class OrgSettings(Base):
     abfluss_stationen: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Fahrtenbuch-Konfiguration je Org
+    fahrtenbuch_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     fahrtenbuch_token: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
     schaden_mail: Mapped[str | None] = mapped_column(String(255), nullable=True)
     schaden_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)

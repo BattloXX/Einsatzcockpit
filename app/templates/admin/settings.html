@@ -288,6 +288,20 @@
         </small>
       </div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F697; Fahrtenbuch</h3>
+      {% set _fb_on = (org_settings.fahrtenbuch_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;">
+          <input type="checkbox" name="fahrtenbuch_modul_aktiv_raw" value="1"
+                 {% if _fb_on %}checked{% endif %}>
+          Fahrtenbuch-Modul für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet das digitale Fahrten- &amp; Betriebsbuch (Fahrterfassung, QR-Token, km/BH-Zähler, Statistik) für diese Org ein.
+          Admins sehen dann den Bereich „Fahrtenbuch" im Verwaltungsmenü.
+        </small>
+      </div>
+
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
