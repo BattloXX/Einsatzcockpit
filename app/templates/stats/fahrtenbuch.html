@@ -5,7 +5,7 @@
 
 {% block head_extra %}
 {{ super() }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="/static/js/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block admin_content %}
@@ -17,6 +17,12 @@
 </div>
 
 <form method="get" class="card" style="padding:1rem;margin-bottom:1.25rem;">
+  <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.625rem;">
+    <button type="button" class="btn btn--ghost btn--sm" onclick="setZeitraum('dieses_jahr')">Dieses Jahr</button>
+    <button type="button" class="btn btn--ghost btn--sm" onclick="setZeitraum('letztes_jahr')">Letztes Jahr</button>
+    <button type="button" class="btn btn--ghost btn--sm" onclick="setZeitraum('dieser_monat')">Dieser Monat</button>
+    <button type="button" class="btn btn--ghost btn--sm" onclick="setZeitraum('letzter_monat')">Letzter Monat</button>
+  </div>
   <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">
     <div class="form-group" style="margin:0;">
       <label class="form-label" style="font-size:.8rem;">Von</label>
@@ -66,7 +72,7 @@
 
 {% if gruppen %}
 <div class="card" style="padding:1rem;margin-bottom:1.25rem;">
-  <div style="position:relative;height:300px;">
+  <div style="position:relative;height:320px;">
     <canvas id="fbChart"></canvas>
   </div>
 </div>
@@ -105,27 +111,93 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+function setZeitraum(preset) {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  let von, bis;
+  if (preset === 'dieses_jahr') {
+    von = y + '-01-01'; bis = y + '-12-31';
+  } else if (preset === 'letztes_jahr') {
+    von = (y - 1) + '-01-01'; bis = (y - 1) + '-12-31';
+  } else if (preset === 'dieser_monat') {
+    const mm = String(m + 1).padStart(2, '0');
+    const last = new Date(y, m + 1, 0).getDate();
+    von = y + '-' + mm + '-01';
+    bis = y + '-' + mm + '-' + String(last).padStart(2, '0');
+  } else if (preset === 'letzter_monat') {
+    const lm = m === 0 ? 12 : m;
+    const ly = m === 0 ? y - 1 : y;
+    const mm = String(lm).padStart(2, '0');
+    const last = new Date(ly, lm, 0).getDate();
+    von = ly + '-' + mm + '-01';
+    bis = ly + '-' + mm + '-' + String(last).padStart(2, '0');
+  }
+  document.querySelector('[name="von"]').value = von;
+  document.querySelector('[name="bis"]').value = bis;
+  document.querySelector('form[method="get"]').submit();
+}
+</script>
+
 {% if gruppen %}
 <script>
 const labels = {{ gruppen|map(attribute='label')|list|tojson }};
-const einsatzData  = {{ gruppen|map(attribute='einsatz')|list|tojson }};
-const uebungData   = {{ gruppen|map(attribute='uebung')|list|tojson }};
-const sonstigeData = {{ gruppen|map(attribute='sonstige')|list|tojson }};
+const gruppierung = {{ gruppierung|tojson }};
+
+{% if gruppierung == 'fahrzeug' %}
+const datasets = [
+  { label: 'Einsatz',  data: {{ gruppen|map(attribute='einsatz')|list|tojson }},  backgroundColor: '#d42225' },
+  { label: 'Übung',   data: {{ gruppen|map(attribute='uebung')|list|tojson }},   backgroundColor: '#1877f2' },
+  { label: 'Sonstige', data: {{ gruppen|map(attribute='sonstige')|list|tojson }}, backgroundColor: '#6b7280' },
+];
+{% else %}
+const perFahrzeugData = {{ gruppen|map(attribute='per_fahrzeug')|list|tojson }};
+const palette = [
+  ['#b71c1c', '#e57373'],
+  ['#0d47a1', '#64b5f6'],
+  ['#1b5e20', '#69f0ae'],
+  ['#e65100', '#ffcc80'],
+  ['#4a148c', '#ce93d8'],
+  ['#006064', '#80deea'],
+];
+const vehicleMap = {};
+perFahrzeugData.forEach(function(pf) {
+  Object.keys(pf).forEach(function(fzId) {
+    if (!vehicleMap[fzId]) vehicleMap[fzId] = pf[fzId].label;
+  });
+});
+const vehicleIds = Object.keys(vehicleMap);
+const datasets = [];
+vehicleIds.forEach(function(fzId, idx) {
+  const colors = palette[idx % palette.length];
+  const lbl = vehicleMap[fzId];
+  datasets.push({
+    label: lbl + ' – Einsatz',
+    data: perFahrzeugData.map(function(pf) { return pf[fzId] ? pf[fzId].einsatz : 0; }),
+    backgroundColor: colors[0],
+    stack: 'v' + fzId,
+  });
+  datasets.push({
+    label: lbl + ' – Übung',
+    data: perFahrzeugData.map(function(pf) { return pf[fzId] ? pf[fzId].uebung : 0; }),
+    backgroundColor: colors[1],
+    stack: 'v' + fzId,
+  });
+});
+{% endif %}
+
 new Chart(document.getElementById('fbChart'), {
   type: 'bar',
-  data: {
-    labels: labels,
-    datasets: [
-      { label: 'Einsatz',  data: einsatzData,  backgroundColor: '#d42225' },
-      { label: 'Übung',    data: uebungData,   backgroundColor: '#1877f2' },
-      { label: 'Sonstige', data: sonstigeData, backgroundColor: '#6b7280' },
-    ]
-  },
+  data: { labels: labels, datasets: datasets },
   options: {
     responsive: true,
     maintainAspectRatio: false,
     plugins: { legend: { position: 'top' } },
-    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+    scales: {
+      x: { stacked: true },
+      y: { stacked: true, beginAtZero: true }
+    }
   }
 });
 </script>

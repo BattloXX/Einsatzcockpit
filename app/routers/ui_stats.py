@@ -179,6 +179,7 @@ def _gruppiere_fahrten(fahrten: list, gruppierung: str, fahrzeuge: list) -> list
     gruppen: dict[str, dict] = defaultdict(lambda: {
         "label": "", "einsatz": 0, "uebung": 0, "sonstige": 0,
         "km_sum": 0, "bh_sum": Decimal("0"),
+        "per_fahrzeug": {},
     })
 
     for f in fahrten:
@@ -206,14 +207,23 @@ def _gruppiere_fahrten(fahrten: list, gruppierung: str, fahrzeuge: list) -> list
         g["label"] = label
         if f.fahrttyp == FahrtKategorie.einsatz:
             g["einsatz"] += 1
+            typ = "einsatz"
         elif f.fahrttyp == FahrtKategorie.uebung:
             g["uebung"] += 1
+            typ = "uebung"
         else:
             g["sonstige"] += 1
+            typ = "sonstige"
         if f.km_delta:
             g["km_sum"] += int(f.km_delta)
         if f.betriebsstunden_delta:
             g["bh_sum"] += Decimal(str(f.betriebsstunden_delta))
+
+        if f.fahrzeug_id and f.fahrzeug:
+            fz_key = str(f.fahrzeug_id)
+            if fz_key not in g["per_fahrzeug"]:
+                g["per_fahrzeug"][fz_key] = {"label": f.fahrzeug.code, "einsatz": 0, "uebung": 0, "sonstige": 0}
+            g["per_fahrzeug"][fz_key][typ] += 1
 
     result = sorted(gruppen.values(), key=lambda x: -(x["einsatz"] + x["uebung"] + x["sonstige"]))
     return result
