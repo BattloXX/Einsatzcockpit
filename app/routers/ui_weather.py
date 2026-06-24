@@ -362,25 +362,27 @@ def _build_infoscreen_metric_history(
     from app.db_weather import get_weather_session, weather_db_enabled
     from app.models.weather import WeatherReading
 
-    if not weather_db_enabled():
-        return {}
-
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
-    session = get_weather_session()
-    try:
-        readings = (
-            session.query(WeatherReading)
-            .filter(
-                WeatherReading.org_id == org_id,
-                WeatherReading.station_id == station_id,
-                WeatherReading.ts >= cutoff,
+
+    if weather_db_enabled():
+        session = get_weather_session()
+        try:
+            readings = (
+                session.query(WeatherReading)
+                .filter(
+                    WeatherReading.org_id == org_id,
+                    WeatherReading.station_id == station_id,
+                    WeatherReading.ts >= cutoff,
+                )
+                .order_by(WeatherReading.ts)
+                .limit(1200)
+                .all()
             )
-            .order_by(WeatherReading.ts)
-            .limit(1200)
-            .all()
-        )
-    finally:
-        session.close()
+        finally:
+            session.close()
+    else:
+        from app.services.weather_station_service import get_station_history
+        readings = get_station_history(station_id, cutoff)
 
     result: dict = {}
     for name, field in [

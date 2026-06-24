@@ -399,120 +399,137 @@
       {% endif %}
     </div>
 
-    {# Rechts: Warnungen ODER 7-Tage-Vorschau (Feature 2, 6) #}
-    {% if warnings %}
-    <div class="col-span-3 rounded-xl p-4 flex flex-col border-2 border-error warn-pulse" style="min-height:0;">
-      <div class="flex items-center gap-4 mb-3">
-        <span style="font-size:48px;line-height:1;">&#x26A0;&#xFE0F;</span>
-        <div>
-          <h2 class="font-sans font-bold text-on-error-container" style="font-size:26px;line-height:1.1;">AMTLICHE WARNUNGEN</h2>
-          <p class="font-mono text-label-caps text-on-error-container tracking-widest mt-1">
-            {{ warnings|length }} AKTIVE WARNUNG{{ 'EN' if warnings|length > 1 else '' }} &bull; ZAMG / GEOSPHERE AUSTRIA
-          </p>
-        </div>
-      </div>
-      <div class="flex-1 flex flex-col gap-2 overflow-hidden">
-        {% for w in warn_views[:4] %}
-        <div class="flex items-center justify-between px-4 py-2 rounded-lg border-l-8"
-             style="background:rgba(0,0,0,.2);border-color:{{ w.color }};">
-          <div class="flex flex-col gap-0.5">
-            <span class="font-sans font-semibold text-on-error-container" style="font-size:15px;">
-              {{ w.event_type }}{% if w.level %} &ndash; Stufe {{ w.level }}{% endif %}
-            </span>
-            {% if w.text %}<span class="font-sans text-on-error-container" style="font-size:13px;opacity:.9;">{{ w.text[:130] }}</span>{% endif %}
-            <span class="font-mono text-on-error-container" style="font-size:10px;opacity:.75;">{{ w.zeitraum }}</span>
-          </div>
-          <span class="font-sans font-black text-on-error-container" style="font-size:36px;">!</span>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
+    {# ═══════════════════════════════════════════════════════════════════════
+       RECHTE SPALTE (col 3–5, Zeilen 2+3): Warnungen / Vorschau + Radar
+       Der Warnbereich wächst/schrumpft dynamisch, der Radar füllt den Rest.
+       ═══════════════════════════════════════════════════════════════════════ #}
+    <div class="col-span-3 flex flex-col gap-3" style="grid-row:2/4;min-height:0;">
 
-    {% else %}
-    {# Keine Warnungen → 7-Tage-Vorschau (Feature 6) #}
-    <div class="col-span-3 rounded-xl p-4 flex flex-col border border-outline-variant bg-surface-container-low" style="min-height:0;">
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-3">
-          <span style="font-size:28px;line-height:1;">&#x2705;</span>
+      {# Warnungen – auto-Höhe (1 Warnung ≈ 80px, 4 Warnungen ≈ 280px) #}
+      {% if warnings %}
+      <div class="flex-shrink-0 rounded-xl p-4 flex flex-col border-2 border-error warn-pulse">
+        <div class="flex items-center gap-4 mb-2">
+          <span style="font-size:40px;line-height:1;">&#x26A0;&#xFE0F;</span>
           <div>
-            <h2 class="font-sans font-bold text-on-surface" style="font-size:18px;">Keine aktiven Warnungen</h2>
-            <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">ZAMG / GEOSPHERE AUSTRIA &bull; LAUFEND GEPRÜFT</span>
+            <h2 class="font-sans font-bold text-on-error-container" style="font-size:24px;line-height:1.1;">AMTLICHE WARNUNGEN</h2>
+            <p class="font-mono text-label-caps text-on-error-container tracking-widest" style="font-size:10px;">
+              {{ warnings|length }} AKTIVE WARNUNG{{ 'EN' if warnings|length > 1 else '' }} &bull; ZAMG / GEOSPHERE AUSTRIA
+            </p>
           </div>
         </div>
-        <span class="font-mono text-label-caps text-on-surface-variant px-2 py-1 bg-surface-container-highest rounded" style="font-size:10px;">7-TAGE-VORSCHAU</span>
-      </div>
-
-      {% if daily_forecast and daily_forecast.days %}
-      {# 7-Tage-Balken-Temperaturdiagramm #}
-      {% set all_max = daily_forecast.days | map(attribute='temp_max_c') | reject('none') | list %}
-      {% set all_min = daily_forecast.days | map(attribute='temp_min_c') | reject('none') | list %}
-      {% set t_max = (all_max | max) if all_max else 30 %}
-      {% set t_min = (all_min | min) if all_min else 0 %}
-      {% set t_span = ((t_max - t_min) or 10) %}
-
-      <div class="flex-1 flex gap-2 items-end">
-        {% for day in daily_forecast.days %}
-        <div class="flex-1 flex flex-col items-center gap-1" style="min-width:0;">
-          {# Regen-Indikator oben #}
-          <div class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;white-space:nowrap;">
-            {% if day.precip_mm is not none and day.precip_mm > 0.5 %}
-            &#x1F327; {{ "%.0f"|format(day.precip_mm) }}&thinsp;mm
-            {% elif day.precip_mm is not none and day.precip_mm > 0 %}
-            &#x1F4A7; spur
-            {% else %}
-            &#x2600;
-            {% endif %}
+        <div class="flex flex-col gap-1.5">
+          {% for w in warn_views[:4] %}
+          <div class="flex items-center justify-between px-3 py-2 rounded-lg border-l-8"
+               style="background:rgba(0,0,0,.2);border-color:{{ w.color }};">
+            <div class="flex flex-col gap-0.5">
+              <span class="font-sans font-semibold text-on-error-container" style="font-size:14px;">
+                {{ w.event_type }}{% if w.level %} &ndash; Stufe {{ w.level }}{% endif %}
+              </span>
+              {% if w.text %}<span class="font-sans text-on-error-container" style="font-size:12px;opacity:.9;">{{ w.text[:140] }}</span>{% endif %}
+              <span class="font-mono text-on-error-container" style="font-size:10px;opacity:.75;">{{ w.zeitraum }}</span>
+            </div>
+            <span class="font-sans font-black text-on-error-container ml-3" style="font-size:32px;">!</span>
           </div>
-          {# Temperatur-Balken-Paar #}
-          <div class="w-full flex gap-0.5 items-end" style="height:80px;">
-            {% if day.temp_max_c is not none %}
-            {% set max_h = ((day.temp_max_c - t_min) / t_span * 72)|int + 4 %}
-            <div class="flex-1 rounded-t" style="height:{{ [max_h, 4]|max }}px;background:#ffb3ac;min-width:0;" title="{{ day.temp_max_c }}°C max"></div>
-            {% endif %}
-            {% if day.temp_min_c is not none %}
-            {% set min_h = ((day.temp_min_c - t_min) / t_span * 72)|int + 4 %}
-            <div class="flex-1 rounded-t" style="height:{{ [min_h, 4]|max }}px;background:#bcc7de;min-width:0;" title="{{ day.temp_min_c }}°C min"></div>
-            {% endif %}
-          </div>
-          {# Temp-Labels #}
-          <div class="font-mono text-on-surface-variant" style="font-size:10px;text-align:center;white-space:nowrap;">
-            {% if day.temp_max_c is not none %}<span style="color:#ffb3ac;">{{ "%.0f"|format(day.temp_max_c) }}°</span>{% endif %}
-            {% if day.temp_min_c is not none %}&thinsp;<span style="color:#bcc7de;">{{ "%.0f"|format(day.temp_min_c) }}°</span>{% endif %}
-          </div>
-          {# Windsymbol #}
-          {% if day.wind_max_ms is not none %}
-          <div class="font-mono text-on-surface-variant" style="font-size:9px;">
-            &#x1F4A8; {{ "%.0f"|format(day.wind_max_ms) }}&thinsp;m/s
-          </div>
-          {% endif %}
-          {# Datum #}
-          <div class="font-mono font-bold text-on-surface" style="font-size:{% if loop.first %}12px{% else %}10px{% endif %};">{{ day.date_label }}</div>
-          {% if loop.first %}
-          <span class="font-mono text-label-caps" style="font-size:8px;color:#22c55e;">HEUTE</span>
-          {% endif %}
+          {% endfor %}
         </div>
-        {% endfor %}
-      </div>
-      {# Legende #}
-      <div class="flex items-center gap-4 mt-2 pt-2 border-t border-outline-variant">
-        <div class="flex items-center gap-1"><div style="width:10px;height:10px;background:#ffb3ac;border-radius:2px;"></div><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">MAX</span></div>
-        <div class="flex items-center gap-1"><div style="width:10px;height:10px;background:#bcc7de;border-radius:2px;"></div><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">MIN</span></div>
-        <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;margin-left:auto;">Open-Meteo (CC BY 4.0)</span>
-      </div>
-
-      {% else %}
-      <div class="flex-1 flex items-center justify-center gap-6">
-        {% if eff_temp is not none %}<div class="text-center"><span class="font-mono text-label-caps text-on-surface-variant">TEMPERATUR</span><div class="font-sans font-bold text-on-surface" style="font-size:30px;">{{ "%.1f"|format(eff_temp) }}°C</div></div>{% endif %}
-        {% if eff_wind is not none %}<div class="text-center"><span class="font-mono text-label-caps text-on-surface-variant">WIND</span><div class="font-sans font-bold text-on-surface" style="font-size:30px;">{{ "%.1f"|format(eff_wind) }}&thinsp;m/s</div></div>{% endif %}
-        {% if eff_hum is not none %}<div class="text-center"><span class="font-mono text-label-caps text-on-surface-variant">FEUCHTE</span><div class="font-sans font-bold text-on-surface" style="font-size:30px;">{{ "%d"|format(eff_hum|int) }}%</div></div>{% endif %}
-        <p class="font-mono text-label-caps text-on-surface-variant">7-Tage-Vorschau nicht verfügbar</p>
       </div>
       {% endif %}
-    </div>
-    {% endif %}
+
+      {# 7-Tage-Vorschau – kompakt, nur wenn keine Warnungen #}
+      {% if not warnings %}
+      <div class="flex-shrink-0 rounded-xl px-4 py-3 border border-outline-variant bg-surface-container-low">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <span style="font-size:20px;line-height:1;">&#x2705;</span>
+            <span class="font-sans font-semibold text-on-surface" style="font-size:15px;">Keine aktiven Warnungen</span>
+            <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">ZAMG</span>
+          </div>
+          <span class="font-mono text-label-caps text-on-surface-variant px-2 py-0.5 bg-surface-container-highest rounded" style="font-size:9px;">7-TAGE-VORSCHAU</span>
+        </div>
+        {% if daily_forecast and daily_forecast.days %}
+        {% set all_max = daily_forecast.days | map(attribute='temp_max_c') | reject('none') | list %}
+        {% set all_min = daily_forecast.days | map(attribute='temp_min_c') | reject('none') | list %}
+        {% set t_max = (all_max | max) if all_max else 30 %}
+        {% set t_min = (all_min | min) if all_min else 0 %}
+        {% set t_span = ((t_max - t_min) or 10) %}
+        <div class="flex gap-1.5 items-end">
+          {% for day in daily_forecast.days %}
+          <div class="flex-1 flex flex-col items-center gap-0.5" style="min-width:0;">
+            <div class="font-mono text-label-caps text-on-surface-variant" style="font-size:8px;white-space:nowrap;">
+              {% if day.precip_mm is not none and day.precip_mm > 0.5 %}&#x1F327;{{ "%.0f"|format(day.precip_mm) }}mm
+              {% elif day.precip_mm is not none and day.precip_mm > 0 %}&#x1F4A7;spur
+              {% else %}&#x2600;{% endif %}
+            </div>
+            <div class="w-full flex gap-0.5 items-end" style="height:56px;">
+              {% if day.temp_max_c is not none %}
+              {% set max_h = ((day.temp_max_c - t_min) / t_span * 50)|int + 4 %}
+              <div class="flex-1 rounded-t" style="height:{{ [max_h,4]|max }}px;background:#ffb3ac;min-width:0;"></div>
+              {% endif %}
+              {% if day.temp_min_c is not none %}
+              {% set min_h = ((day.temp_min_c - t_min) / t_span * 50)|int + 4 %}
+              <div class="flex-1 rounded-t" style="height:{{ [min_h,4]|max }}px;background:#bcc7de;min-width:0;"></div>
+              {% endif %}
+            </div>
+            <div class="font-mono text-on-surface-variant" style="font-size:9px;text-align:center;white-space:nowrap;">
+              {% if day.temp_max_c is not none %}<span style="color:#ffb3ac;">{{ "%.0f"|format(day.temp_max_c) }}°</span>{% endif %}
+              {% if day.temp_min_c is not none %}<span style="color:#bcc7de;">{{ "%.0f"|format(day.temp_min_c) }}°</span>{% endif %}
+            </div>
+            <div class="font-mono font-bold text-on-surface" style="font-size:{% if loop.first %}11px{% else %}9px{% endif %};">{{ day.date_label }}</div>
+            {% if loop.first %}<span class="font-mono text-label-caps" style="font-size:7px;color:#22c55e;">HEUTE</span>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <div class="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-outline-variant">
+          <div class="flex items-center gap-1"><div style="width:8px;height:8px;background:#ffb3ac;border-radius:1px;"></div><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:8px;">MAX</span></div>
+          <div class="flex items-center gap-1"><div style="width:8px;height:8px;background:#bcc7de;border-radius:1px;"></div><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:8px;">MIN</span></div>
+          <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:8px;margin-left:auto;">Open-Meteo CC BY 4.0</span>
+        </div>
+        {% else %}
+        <div class="flex items-center gap-6 py-1">
+          {% if eff_temp is not none %}<div class="text-center"><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">TEMP</span><div class="font-sans font-bold text-on-surface" style="font-size:22px;">{{ "%.1f"|format(eff_temp) }}°C</div></div>{% endif %}
+          {% if eff_wind is not none %}<div class="text-center"><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">WIND</span><div class="font-sans font-bold text-on-surface" style="font-size:22px;">{{ "%.1f"|format(eff_wind) }}m/s</div></div>{% endif %}
+          {% if eff_hum is not none %}<div class="text-center"><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">FEUCHTE</span><div class="font-sans font-bold text-on-surface" style="font-size:22px;">{{ "%d"|format(eff_hum|int) }}%</div></div>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# Radar – füllt den verbleibenden Platz der rechten Spalte #}
+      <div class="flex-1 min-h-0 rounded-xl overflow-hidden border border-outline-variant" style="position:relative;">
+        {% if map_lat is not none and map_lng is not none %}
+        <iframe
+          src="https://embed.windy.com/embed2.html?lat={{ map_lat }}&lon={{ map_lng }}&detailLat={{ map_lat }}&detailLon={{ map_lng }}&zoom=8&level=surface&overlay=rain&type=map&menu=false&message=false&marker=false&calendar=now&pressure=false&detail=false&radarRange=-1"
+          style="width:100%;height:100%;border:none;display:block;"
+          loading="eager" allowfullscreen></iframe>
+        <div style="position:absolute;top:8px;left:8px;background:rgba(11,19,38,.90);border:1px solid rgba(91,64,61,.5);border-radius:6px;padding:4px 10px;pointer-events:none;">
+          <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">
+            &#x1F6F0; NIEDERSCHLAGS-RADAR{% if station and station.online %}&bull; <span style="color:#22c55e;">LIVE</span>{% endif %}
+          </span>
+        </div>
+        <div style="position:absolute;bottom:8px;right:8px;background:rgba(11,19,38,.90);border:1px solid rgba(91,64,61,.4);border-radius:6px;padding:5px 9px;">
+          <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;display:block;margin-bottom:3px;">NIEDERSCHLAG (dBZ)</span>
+          <div style="display:flex;height:8px;width:110px;border-radius:2px;overflow:hidden;">
+            <div style="background:#93c5fd;width:25%;"></div><div style="background:#4ade80;width:25%;"></div>
+            <div style="background:#facc15;width:25%;"></div><div style="background:#ef4444;width:25%;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:7px;color:#e4beba;margin-top:2px;">
+            <span>0</span><span>20</span><span>40</span><span>60+</span>
+          </div>
+        </div>
+        {% else %}
+        <div class="flex items-center justify-center h-full bg-surface-container-low">
+          <div class="text-center">
+            <span style="font-size:40px;line-height:1;opacity:.4;">&#x1F5FA;&#xFE0F;</span>
+            <p class="font-mono text-label-caps text-on-surface-variant mt-3 uppercase">Kein Standort konfiguriert</p>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+    </div>{# Ende rechte Spalte #}
 
     {# ═══════════════════════════════════════════════════════════════════════
-       ROW 3: Pegelstationen mit HQ-Markierungen (links) + Radar (rechts)
+       ROW 3 LINKS: Pegelstationen mit HQ-Markierungen
        ═══════════════════════════════════════════════════════════════════════ #}
 
     {# Pegelstationen (Feature 4: HQ-Schwellen) #}
@@ -577,38 +594,6 @@
         <div class="text-center">
           <span style="font-size:36px;line-height:1;opacity:.4;">&#x1F4A7;</span>
           <p class="font-mono text-label-caps text-on-surface-variant mt-2 uppercase">Keine Pegel konfiguriert</p>
-        </div>
-      </div>
-      {% endif %}
-    </div>
-
-    {# Radar #}
-    <div class="col-span-3 rounded-xl overflow-hidden border border-outline-variant" style="position:relative;min-height:0;">
-      {% if map_lat is not none and map_lng is not none %}
-      <iframe
-        src="https://embed.windy.com/embed2.html?lat={{ map_lat }}&lon={{ map_lng }}&detailLat={{ map_lat }}&detailLon={{ map_lng }}&zoom=8&level=surface&overlay=rain&type=map&menu=false&message=false&marker=false&calendar=now&pressure=false&detail=false&radarRange=-1"
-        style="width:100%;height:100%;border:none;display:block;"
-        loading="eager" allowfullscreen></iframe>
-      <div style="position:absolute;top:8px;left:8px;background:rgba(11,19,38,.90);border:1px solid rgba(91,64,61,.5);border-radius:6px;padding:4px 10px;pointer-events:none;">
-        <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">
-          &#x1F6F0; NIEDERSCHLAGS-RADAR{% if station and station.online %}&bull; <span style="color:#22c55e;">LIVE</span>{% endif %}
-        </span>
-      </div>
-      <div style="position:absolute;bottom:8px;right:8px;background:rgba(11,19,38,.90);border:1px solid rgba(91,64,61,.4);border-radius:6px;padding:5px 9px;">
-        <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;display:block;margin-bottom:3px;">NIEDERSCHLAG (dBZ)</span>
-        <div style="display:flex;height:8px;width:110px;border-radius:2px;overflow:hidden;">
-          <div style="background:#93c5fd;width:25%;"></div><div style="background:#4ade80;width:25%;"></div>
-          <div style="background:#facc15;width:25%;"></div><div style="background:#ef4444;width:25%;"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:7px;color:#e4beba;margin-top:2px;">
-          <span>0</span><span>20</span><span>40</span><span>60+</span>
-        </div>
-      </div>
-      {% else %}
-      <div class="flex-1 flex items-center justify-center h-full bg-surface-container-low">
-        <div class="text-center">
-          <span style="font-size:40px;line-height:1;opacity:.4;">&#x1F5FA;&#xFE0F;</span>
-          <p class="font-mono text-label-caps text-on-surface-variant mt-3 uppercase">Kein Standort konfiguriert</p>
         </div>
       </div>
       {% endif %}

@@ -15,8 +15,10 @@ Station geschrieben.
 from __future__ import annotations
 
 import logging
+from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,11 @@ from app.db_weather import get_weather_session, weather_db_enabled
 from app.models.weather import WeatherReading, WeatherStation
 
 logger = logging.getLogger("einsatzleiter.weather")
+
+# In-Memory-Ringpuffer: bis zu 48 h Verlauf pro Station (Fallback ohne Wetter-DB).
+# station_id → deque von SimpleNamespace-Objekten (ts + alle FIELDS)
+_HISTORY_MAX = 2880  # 48 h bei 1 Push/min
+_station_history: dict[int, deque] = {}
 
 
 # ── Plausibilitätsgrenzen (Ausreißer werden verworfen, nicht der ganze Push) ───
@@ -140,4 +147,17 @@ def ingest(
             if wdb is not None:
                 wdb.close()
 
+    # 3. In-Memory-Ringpuffer (immer, auch ohne Wetter-DB)
+    if station.id not in _station_history:
+        _station_history[station.id] = deque(maxlen=_HISTORY_MAX)
+    _station_history[station.id].append(SimpleNamespace(ts=measured, **clean))
+
     return IngestResult(accepted=True, stored_history=stored)
+
+
+def get_station_history(station_id: int, cutoff: datetime) -> list:
+    """Gibt In-Memory-Verlauf einer Station ab ``cutoff`` zurück (SimpleNamespace-Objekte)."""
+    buf = _station_history.get(station_id)
+    if not buf:
+        return []
+    return [r for r in buf if r.ts >= cutoff]
