@@ -224,7 +224,7 @@ function maschinistAutocomplete(prefix, initialName, initialId) {
     }
   };
 }
-document.addEventListener('mousedown', function(e) {
+document.addEventListener('pointerdown', function(e) {
   const item = e.target.closest('.autocomplete-item');
   if (!item) return;
   e.preventDefault();
