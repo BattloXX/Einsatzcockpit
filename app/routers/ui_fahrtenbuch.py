@@ -269,7 +269,13 @@ async def _render_erfassung(
 
     fahrzeuge = (
         db.query(VehicleMaster)
-        .filter(VehicleMaster.dept_id == org_id, VehicleMaster.active == True, VehicleMaster.deleted == False)  # noqa: E712
+        .filter(
+            VehicleMaster.dept_id == org_id,
+            VehicleMaster.active == True,  # noqa: E712
+            VehicleMaster.deleted == False,  # noqa: E712
+            VehicleMaster.is_adhoc == False,  # noqa: E712
+            VehicleMaster.is_external == False,  # noqa: E712
+        )
         .execution_options(include_all_tenants=True)
         .order_by(VehicleMaster.display_order)
         .all()

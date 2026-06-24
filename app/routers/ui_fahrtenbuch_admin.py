@@ -85,7 +85,12 @@ async def fahrten_liste(
 
     fahrzeuge = (
         db.query(VehicleMaster)
-        .filter(VehicleMaster.dept_id == user.org_id, VehicleMaster.active == True)  # noqa: E712
+        .filter(
+            VehicleMaster.dept_id == user.org_id,
+            VehicleMaster.active == True,  # noqa: E712
+            VehicleMaster.is_adhoc == False,  # noqa: E712
+            VehicleMaster.is_external == False,  # noqa: E712
+        )
         .execution_options(include_all_tenants=True)
         .order_by(VehicleMaster.display_order)
         .all()
@@ -230,7 +235,12 @@ async def fahrt_korrektur_formular(
         raise HTTPException(status_code=404)
     fahrzeuge = (
         db.query(VehicleMaster)
-        .filter(VehicleMaster.dept_id == user.org_id, VehicleMaster.active == True)  # noqa: E712
+        .filter(
+            VehicleMaster.dept_id == user.org_id,
+            VehicleMaster.active == True,  # noqa: E712
+            VehicleMaster.is_adhoc == False,  # noqa: E712
+            VehicleMaster.is_external == False,  # noqa: E712
+        )
         .execution_options(include_all_tenants=True)
         .order_by(VehicleMaster.display_order)
         .all()
