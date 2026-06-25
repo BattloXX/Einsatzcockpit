@@ -728,8 +728,8 @@ async def weather_alert_channels_save(
         org_s.bodensee_temp_override_at = None
 
     db.commit()
-    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
-    return RedirectResponse(f"/admin/settings/wetter{org_suffix}?saved=1#warnungen", status_code=303)
+    qs = f"org_id={effective_org_id}&saved=1" if is_sysadmin else "saved=1"
+    return RedirectResponse(f"/admin/settings/wetter?{qs}#warnungen", status_code=303)
 
 
 @router.post("/settings/wetter/alert-rule/{rule_id}")
@@ -784,8 +784,8 @@ async def weather_alert_rule_save(
     rule.updated_at = datetime.now(UTC)
     db.commit()
 
-    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
-    return RedirectResponse(f"/admin/settings/wetter{org_suffix}?saved=1#warnungen", status_code=303)
+    qs = f"org_id={effective_org_id}&saved=1" if is_sysadmin else "saved=1"
+    return RedirectResponse(f"/admin/settings/wetter?{qs}#warnungen", status_code=303)
 
 
 @router.post("/settings/wetter/alert-test/mail")
@@ -818,9 +818,9 @@ async def weather_alert_test_mail(
         except Exception as exc:
             error = str(exc)[:200]
 
-    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
     param = f"alert_mail_error={error.replace(' ', '+')}" if error else "alert_mail_ok=1"
-    return RedirectResponse(f"/admin/settings/wetter{org_suffix}?{param}#warnungen", status_code=303)
+    org_pre = f"org_id={effective_org_id}&" if is_sysadmin else ""
+    return RedirectResponse(f"/admin/settings/wetter?{org_pre}{param}#warnungen", status_code=303)
 
 
 @router.post("/settings/wetter/alert-test/teams")
@@ -846,9 +846,9 @@ async def weather_alert_test_teams(
         if not ok:
             error = "Teams-Post fehlgeschlagen (Webhook-URL prüfen)"
 
-    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
     param = f"alert_teams_error={error.replace(' ', '+')}" if error else "alert_teams_ok=1"
-    return RedirectResponse(f"/admin/settings/wetter{org_suffix}?{param}#warnungen", status_code=303)
+    org_pre = f"org_id={effective_org_id}&" if is_sysadmin else ""
+    return RedirectResponse(f"/admin/settings/wetter?{org_pre}{param}#warnungen", status_code=303)
 
 
 # ── Lokale Wetterstationen (Davis/Meteobridge) ───────────────────────────────
