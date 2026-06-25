@@ -68,16 +68,24 @@ def _admin_check(request: Request):
 @router.get("/benutzer", response_class=HTMLResponse)
 async def users_list(request: Request, db: Session = Depends(get_db),
                      _=Depends(require_role("admin"))):
+    from app.config import settings as app_settings
+    from app.models.sso import OrgSsoConfig
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
     users = _org_filter(db.query(User), user, User.org_id).filter(User.is_device == False).order_by(User.username).all()  # noqa: E712
     roles = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
+    sso_cfg = db.query(OrgSsoConfig).filter(OrgSsoConfig.org_id == user.org_id).first() if user.org_id else None
+    org_sso_enabled = (
+        app_settings.SSO_ENABLED
+        and (is_sysadmin or bool(sso_cfg and sso_cfg.enabled and sso_cfg.is_fully_configured))
+    )
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": user,
         "users": users, "roles": roles,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
+        "org_sso_enabled": org_sso_enabled,
         "saved": request.query_params.get("saved"),
         "deleted": request.query_params.get("deleted"),
         "mail_sent": request.query_params.get("mail"),
@@ -92,9 +100,13 @@ async def create_user(
     full_name: str = Form(""), email: str = Form(""), phone: str = Form(""),
     password: str = Form(""), role_codes: list[str] = Form([]),
     org_id: int | None = Form(None),
+    send_welcome: bool = Form(False),
+    send_sso_info: bool = Form(False),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     import secrets as _sec
+    from app.config import settings as app_settings
+    from app.models.sso import OrgSsoConfig
     current_user = request.state.user
     email_clean = (email or "").strip().lower() or None
     if email_clean:
@@ -127,18 +139,41 @@ async def create_user(
                 entity_type="user", entity_id=new_user.id,
                 payload={"role_codes": role_codes})
     db.commit()
-    if email_clean:
+    app_url = app_settings.effective_public_base_url.rstrip("/")
+    is_test = app_settings.TEST_SYSTEM
+    display = new_user.full_name or new_user.display_name or username
+    if email_clean and send_welcome:
         try:
             from app.services.mail_service import send_welcome_mail
             await send_welcome_mail(
                 to=email_clean,
                 username=username,
                 password=password,
-                user_display_name=new_user.full_name or new_user.display_name or username,
+                user_display_name=display,
+                app_url=app_url,
+                is_test=is_test,
                 db=db,
             )
         except Exception:
             logger_admin.warning("Willkommensmail an %s konnte nicht gesendet werden", email_clean)
+    if email_clean and send_sso_info:
+        try:
+            from app.services.mail_service import send_sso_welcome_mail
+            org = db.query(FireDept).filter(FireDept.id == target_org_id).first()
+            org_slug = org.slug if org else ""
+            if org_slug:
+                await send_sso_welcome_mail(
+                    to=email_clean,
+                    user_display_name=display,
+                    app_url=app_url,
+                    org_slug=org_slug,
+                    is_test=is_test,
+                    db=db,
+                )
+            else:
+                logger_admin.warning("SSO-Mail nicht versendbar: org_slug unbekannt für org_id=%s", target_org_id)
+        except Exception:
+            logger_admin.warning("SSO-Willkommensmail an %s konnte nicht gesendet werden", email_clean)
     is_sysadmin = has_role(current_user, "system_admin")
     users = (
         _org_filter(db.query(User), current_user, User.org_id)
@@ -148,10 +183,16 @@ async def create_user(
     )
     roles_list = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
+    sso_cfg_cur = db.query(OrgSsoConfig).filter(OrgSsoConfig.org_id == current_user.org_id).first() if current_user.org_id else None
+    org_sso_enabled = (
+        app_settings.SSO_ENABLED
+        and (is_sysadmin or bool(sso_cfg_cur and sso_cfg_cur.enabled and sso_cfg_cur.is_fully_configured))
+    )
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": current_user,
         "users": users, "roles": roles_list,
         "is_sysadmin": is_sysadmin, "all_orgs": all_orgs,
+        "org_sso_enabled": org_sso_enabled,
         "new_password": password, "new_password_user": username,
     })
 

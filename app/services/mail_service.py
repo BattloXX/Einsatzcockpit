@@ -211,15 +211,31 @@ async def send_contact_message(*, name: str, reply_email: str, message: str, db=
 
 
 async def send_welcome_mail(*, to: str, username: str, password: str,
-                            user_display_name: str, db=None) -> None:
+                            user_display_name: str, app_url: str = "",
+                            is_test: bool = False, db=None) -> None:
     smtp_cfg = get_smtp_cfg(db)
     subject = "Willkommen im Einsatzleiter-Hilfswerkzeug – Zugangsdaten"
+    test_notice_txt = "\n⚠️  HINWEIS: Dies ist ein TESTSYSTEM – bitte keine Echtdaten eingeben.\n" if is_test else ""
+    test_notice_html = (
+        '<p style="background:#7c3c00;color:#ffe0b2;padding:8px 12px;border-radius:4px;font-weight:bold;">'
+        '⚠️  HINWEIS: Dies ist ein TESTSYSTEM – bitte keine Echtdaten eingeben.</p>'
+    ) if is_test else ""
+    url_txt = f"\nAnmelden unter: {app_url}\n" if app_url else ""
+    safe_url = html.escape(app_url) if app_url else ""
+    url_html = (
+        f'<p style="text-align:center;margin:16px 0;">'
+        f'<a href="{safe_url}" style="background:#d42225;color:#fff;padding:10px 18px;'
+        f'border-radius:6px;text-decoration:none;display:inline-block;">Jetzt anmelden</a></p>'
+        f'<p style="font-size:0.85rem;color:#666;">URL: <code>{safe_url}</code></p>'
+    ) if app_url else ""
     body_txt = (
         f"Hallo {user_display_name},\n\n"
-        f"Dein Account für das Einsatzleiter-Hilfswerkzeug wurde eingerichtet.\n\n"
-        f"Benutzername: {username}\n"
-        f"Passwort:     {password}\n\n"
-        f"Bitte ändere dein Passwort nach dem ersten Login.\n\n"
+        f"Dein Account für das Einsatzleiter-Hilfswerkzeug wurde eingerichtet.\n"
+        f"{test_notice_txt}"
+        f"\nBenutzername: {username}\n"
+        f"Passwort:     {password}\n"
+        f"{url_txt}"
+        f"\nBitte ändere dein Passwort nach dem ersten Login.\n\n"
         f"Mit freundlichen Grüßen\n"
         f"Einsatzleiter-Hilfswerkzeug"
     )
@@ -230,6 +246,7 @@ async def send_welcome_mail(*, to: str, username: str, password: str,
 <html lang="de"><body style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto;">
 <p>Hallo <strong>{safe_name}</strong>,</p>
 <p>Dein Account für das Einsatzleiter-Hilfswerkzeug wurde eingerichtet.</p>
+{test_notice_html}
 <table style="border-collapse:collapse;margin:12px 0;">
 <tr><td style="padding:4px 12px 4px 0;color:#666;">Benutzername:</td>
     <td style="padding:4px 0;"><code>{safe_user}</code></td></tr>
@@ -237,7 +254,58 @@ async def send_welcome_mail(*, to: str, username: str, password: str,
     <td style="padding:4px 0;"><code>{safe_pw}</code></td></tr>
 </table>
 <p><strong>Bitte ändere dein Passwort nach dem ersten Login.</strong></p>
+{url_html}
 <p style="font-size:0.85rem;color:#666;">Bewahre deine Zugangsdaten sicher auf.</p>
+</body></html>
+"""
+    msg = _build_message(to=to, subject=subject, body_txt=body_txt,
+                         body_html=body_html, smtp_cfg=smtp_cfg)
+    await _send(msg, smtp_cfg)
+
+
+async def send_sso_welcome_mail(*, to: str, user_display_name: str,
+                                 app_url: str, org_slug: str,
+                                 is_test: bool = False, db=None) -> None:
+    smtp_cfg = get_smtp_cfg(db)
+    subject = "Anmeldung per Microsoft-Login – Einsatzleiter-Hilfswerkzeug"
+    sso_url = f"{app_url.rstrip('/')}/sso/{org_slug}/login"
+    safe_url = html.escape(app_url.rstrip("/"))
+    safe_sso_url = html.escape(sso_url)
+    safe_name = html.escape(user_display_name)
+    test_notice_txt = "\n⚠️  HINWEIS: Dies ist ein TESTSYSTEM – bitte keine Echtdaten eingeben.\n" if is_test else ""
+    test_notice_html = (
+        '<p style="background:#7c3c00;color:#ffe0b2;padding:8px 12px;border-radius:4px;font-weight:bold;">'
+        '⚠️  HINWEIS: Dies ist ein TESTSYSTEM – bitte keine Echtdaten eingeben.</p>'
+    ) if is_test else ""
+    body_txt = (
+        f"Hallo {user_display_name},\n\n"
+        f"Dein Account für das Einsatzleiter-Hilfswerkzeug wurde eingerichtet.\n"
+        f"Du kannst dich mit deinem Microsoft-/Office-365-Account anmelden.\n"
+        f"{test_notice_txt}"
+        f"\nAnmeldung per Microsoft-Login:\n  {sso_url}\n\n"
+        f"Alternativ: Gehe auf {app_url.rstrip('/')} und klicke auf \"Mit Microsoft anmelden\".\n\n"
+        f"Mit freundlichen Grüßen\n"
+        f"Einsatzleiter-Hilfswerkzeug"
+    )
+    body_html = f"""<!doctype html>
+<html lang="de"><body style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto;">
+<p>Hallo <strong>{safe_name}</strong>,</p>
+<p>Dein Account für das Einsatzleiter-Hilfswerkzeug wurde eingerichtet.<br>
+Du kannst dich mit deinem <strong>Microsoft-/Office-365-Account</strong> anmelden.</p>
+{test_notice_html}
+<p style="text-align:center;margin:20px 0;">
+  <a href="{safe_sso_url}" style="background:#0078d4;color:#fff;padding:12px 24px;
+     border-radius:6px;text-decoration:none;display:inline-block;font-size:1rem;">
+    &#128274; Mit Microsoft anmelden
+  </a>
+</p>
+<p style="font-size:0.85rem;color:#666;">
+  Direkter SSO-Link: <code>{safe_sso_url}</code><br>
+  Oder gehe auf <a href="{safe_url}">{safe_url}</a> und klicke auf &bdquo;Mit Microsoft anmelden&ldquo;.
+</p>
+<p style="font-size:0.85rem;color:#666;">
+  Kein eigenes Passwort erforderlich – die Anmeldung erfolgt vollständig über Microsoft.
+</p>
 </body></html>
 """
     msg = _build_message(to=to, subject=subject, body_txt=body_txt,
