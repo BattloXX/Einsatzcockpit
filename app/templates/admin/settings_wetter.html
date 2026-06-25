@@ -381,6 +381,201 @@
   </div>
 </section>
 
+{# ── Wetterwarnungen & Benachrichtigungen ────────────────────────────────── #}
+<section class="card mb-4" id="warnungen">
+  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+    <h2>&#x1F514; Wetterwarnungen &amp; Benachrichtigungen</h2>
+    <span class="badge badge--muted" style="font-size:.72rem;">Mail &bull; MS Teams</span>
+  </div>
+  <div class="card-body">
+
+    {% if request.query_params.get('alert_mail_ok') %}
+    <div class="alert alert--success mb-4">Test-Mail erfolgreich gesendet.</div>
+    {% endif %}
+    {% if request.query_params.get('alert_mail_error') %}
+    <div class="alert alert--error mb-4">Mail-Fehler: {{ request.query_params.get('alert_mail_error') }}</div>
+    {% endif %}
+    {% if request.query_params.get('alert_teams_ok') %}
+    <div class="alert alert--success mb-4">Test-Teams-Card erfolgreich gesendet.</div>
+    {% endif %}
+    {% if request.query_params.get('alert_teams_error') %}
+    <div class="alert alert--error mb-4">Teams-Fehler: {{ request.query_params.get('alert_teams_error') }}</div>
+    {% endif %}
+
+    <div class="alert" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:.6rem .9rem;font-size:.82rem;color:var(--text-primary);margin-bottom:1.25rem;">
+      Der Loop pr&uuml;ft alle <strong>5 Minuten</strong> alle aktivierten Regeln anhand der
+      aktuellen Wetterdaten (Station, Nowcast, Prognose, amtliche Warnungen). Meldungen gehen
+      an die Org-weiten Empf&auml;nger unten &ndash; oder an den im Regel-Override eingetragenen Empf&auml;nger.
+      Cooldown verhindert Doppelmeldungen; Eskalation (Vorwarnung&nbsp;&rarr;&nbsp;Akut) wird immer sofort zugestellt.
+    </div>
+
+    {# Org-weite Kanal-Konfiguration #}
+    <form method="post" action="/admin/settings/wetter/alert-channels" style="margin-bottom:1.5rem;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+      <fieldset style="border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;">
+        <legend style="font-size:.80rem;font-weight:600;color:var(--text-muted);padding:0 6px;">Org-weite Empf&auml;nger</legend>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
+          <div>
+            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">E-Mail-Verteiler</label>
+            <input type="email" name="alert_mail" class="form-control"
+                   value="{{ org_settings.weather_alert_mail or '' }}"
+                   placeholder="warnungen@feuerwehr.at" maxlength="255">
+            <span class="form-hint">Mehrere Adressen kommagetrennt</span>
+          </div>
+          <div>
+            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">MS-Teams-Webhook-URL</label>
+            <input type="url" name="alert_teams_webhook" class="form-control"
+                   value="{{ org_settings.weather_alert_teams_webhook_url or '' }}"
+                   placeholder="https://outlook.office.com/webhook/..." maxlength="1000">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr;gap:.75rem;align-items:end;margin-bottom:.75rem;">
+          <div>
+            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:3px;">Bodensee-Temp. Override (°C)</label>
+            <input type="number" name="bodensee_temp_override" class="form-control"
+                   value="{{ '%.1f'|format(org_settings.bodensee_temp_override_c) if org_settings and org_settings.bodensee_temp_override_c is not none else '' }}"
+                   placeholder="z.B. 12.5" step="0.1" min="-5" max="30">
+            {% if org_settings and org_settings.bodensee_temp_override_at %}
+            <span class="form-hint">Letzter Wert: {{ org_settings.bodensee_temp_override_at | local_datetime }}</span>
+            {% endif %}
+          </div>
+          <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;">
+            F&uuml;r Lake-Effekt-Regel. Leer = automatischer Klimatologie-Fallback.
+            G&uuml;ltig 14 Tage ab Speichern.
+          </div>
+        </div>
+        <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+          <button type="submit" class="btn btn--primary btn--sm">Empf&auml;nger speichern</button>
+          <form method="post" action="/admin/settings/wetter/alert-test/mail" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+            <button type="submit" class="btn btn--sm">&#x2709; Test-Mail senden</button>
+          </form>
+          <form method="post" action="/admin/settings/wetter/alert-test/teams" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+            <button type="submit" class="btn btn--sm">&#x1F4E2; Test-Teams-Card</button>
+          </form>
+        </div>
+      </fieldset>
+    </form>
+
+    {# Regelkatalog #}
+    {% if alert_rules %}
+    <h3 style="font-size:.88rem;font-weight:600;color:var(--text-muted);margin:.25rem 0 .75rem;">Warnregeln</h3>
+    {% for rule in alert_rules %}
+    <details style="border:1px solid var(--border);border-radius:6px;margin-bottom:.5rem;"
+             {% if rule.enabled %}open{% endif %}>
+      <summary style="padding:.6rem .9rem;cursor:pointer;display:flex;align-items:center;gap:.75rem;list-style:none;font-weight:600;font-size:.85rem;">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                     background:{% if rule.enabled %}#22c55e{% else %}#6b7280{% endif %};
+                     flex-shrink:0;"></span>
+        {{ rule_labels.get(rule.key, rule.key) }}
+        {% if not rule.enabled %}<span style="font-weight:400;color:var(--text-muted);font-size:.78rem;">(deaktiviert)</span>{% endif %}
+      </summary>
+      <div style="padding:.75rem 1rem;border-top:1px solid var(--border-subtle);">
+        <form method="post" action="/admin/settings/wetter/alert-rule/{{ rule.id }}">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+
+          <div style="display:flex;flex-wrap:wrap;gap:1.25rem;margin-bottom:.75rem;">
+            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+              <input type="checkbox" name="enabled" value="1" {% if rule.enabled %}checked{% endif %}>
+              Aktiv
+            </label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+              <input type="checkbox" name="vorwarnung" value="1" {% if rule.vorwarnung %}checked{% endif %}>
+              Vorwarnung
+            </label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+              <input type="checkbox" name="eskalation" value="1" {% if rule.eskalation %}checked{% endif %}>
+              Eskalation
+            </label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+              <input type="checkbox" name="channel_mail" value="1" {% if rule.channel_mail %}checked{% endif %}>
+              &#x2709; Mail
+            </label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;cursor:pointer;">
+              <input type="checkbox" name="channel_teams" value="1" {% if rule.channel_teams %}checked{% endif %}>
+              &#x1F4AC; Teams
+            </label>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 140px;gap:.5rem;margin-bottom:.75rem;">
+            <div>
+              <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:2px;">Mail-Override (Regel-spezifisch)</label>
+              <input type="email" name="mail_override" class="form-control" style="font-size:.82rem;"
+                     value="{{ rule.mail_override or '' }}" placeholder="leer = Org-Standard" maxlength="255">
+            </div>
+            <div>
+              <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:2px;">Teams-Webhook-Override</label>
+              <input type="url" name="teams_webhook_override" class="form-control" style="font-size:.82rem;"
+                     value="{{ rule.teams_webhook_override or '' }}" placeholder="leer = Org-Standard" maxlength="1000">
+            </div>
+            <div>
+              <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:2px;">Cooldown (Minuten)</label>
+              <input type="number" name="cooldown_min" class="form-control" style="font-size:.82rem;"
+                     value="{{ rule.cooldown_min }}" min="1" max="1440">
+            </div>
+          </div>
+
+          <div style="margin-bottom:.75rem;">
+            <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:2px;">
+              Schwellwerte (JSON &ndash; Defaults s. Dokumentation)
+            </label>
+            <textarea name="params_json" class="form-control"
+                      style="font-family:var(--font-mono,monospace);font-size:.76rem;resize:vertical;"
+                      rows="2">{{ rule.params | tojson if rule.params else (rule_defaults.get(rule.key, {}) | tojson) }}</textarea>
+          </div>
+
+          <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+        </form>
+      </div>
+    </details>
+    {% endfor %}
+    {% endif %}
+
+    {# Versand-Protokoll #}
+    {% if alert_logs %}
+    <h3 style="font-size:.88rem;font-weight:600;color:var(--text-muted);margin:1.25rem 0 .5rem;">Letzte Versand-Protokolle</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:.80rem;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);">
+          <th style="text-align:left;padding:3px 8px 5px 0;color:var(--text-muted);font-weight:600;">Zeit</th>
+          <th style="text-align:left;padding:3px 8px 5px;color:var(--text-muted);font-weight:600;">Regel</th>
+          <th style="text-align:left;padding:3px 8px 5px;color:var(--text-muted);font-weight:600;">Stufe</th>
+          <th style="text-align:left;padding:3px 8px 5px;color:var(--text-muted);font-weight:600;">Kanal</th>
+          <th style="text-align:left;padding:3px 8px 5px;color:var(--text-muted);font-weight:600;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in alert_logs %}
+        <tr style="border-bottom:1px solid var(--border-subtle);">
+          <td style="padding:4px 8px 4px 0;color:var(--text-muted);">{{ log.gesendet_am | local_datetime }}</td>
+          <td style="padding:4px 8px;">{{ rule_labels.get(log.key, log.key) }}</td>
+          <td style="padding:4px 8px;">
+            <span style="color:{% if log.state == 'akut' %}var(--red){% else %}#f59e0b{% endif %}">
+              {{ log.state }}
+            </span>
+          </td>
+          <td style="padding:4px 8px;">{{ log.kanal }}</td>
+          <td style="padding:4px 8px;">
+            {% if log.status == 'gesendet' %}
+            <span style="color:var(--ampel-gruen,#22c55e);">&#x2713; gesendet</span>
+            {% else %}
+            <span style="color:var(--red);" title="{{ log.fehlertext or '' }}">&#x2717; Fehler</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+  </div>
+</section>
+
 {# ── Kachelmann Wetter API ───────────────────────────────────────────────── #}
 <section class="card mb-4" id="kachelmann">
   <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">

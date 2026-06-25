@@ -463,6 +463,9 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
     )
     from app.services import kachelmann_service
     base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
+    alert_rules = _alert_rules_for_template(db, effective_org_id)
+    alert_logs = _alert_logs_for_template(db, effective_org_id)
+    from app.services.weather_alert_service import RULE_LABELS, RULE_DEFAULTS
     ctx = {
         "user": user,
         "org": org,
@@ -478,6 +481,10 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
         "dashboard_url": f"{base_url}/wetter/infoscreen/DASHBOARD_TOKEN",
         "kachelmann_is_configured": kachelmann_service.is_configured(),
         "dashboard_qr": None,
+        "alert_rules": alert_rules,
+        "alert_logs": alert_logs,
+        "rule_labels": RULE_LABELS,
+        "rule_defaults": RULE_DEFAULTS,
     }
     ctx.update(extra)
     # QR-Code nur wenn gerade eine frische URL bekannt ist
@@ -650,6 +657,198 @@ async def weather_kachelmann_save(
         pass
 
     return RedirectResponse("/admin/settings/wetter?saved=1#kachelmann", status_code=303)
+
+
+# ── Wetterwarnungen ──────────────────────────────────────────────────────────
+
+def _alert_rules_for_template(db, org_id: int) -> list:
+    """Lädt WeatherAlertRule-Einträge für das Template (stellt Seeding sicher)."""
+    if not org_id:
+        return []
+    from app.services.weather_alert_service import ensure_rules
+    ensure_rules(org_id, db)
+    from app.models.weather_alert import WeatherAlertRule
+    return (
+        db.query(WeatherAlertRule)
+        .filter(WeatherAlertRule.org_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .order_by(WeatherAlertRule.key)
+        .all()
+    )
+
+
+def _alert_logs_for_template(db, org_id: int, limit: int = 20) -> list:
+    if not org_id:
+        return []
+    from app.models.weather_alert import WeatherAlertLog
+    return (
+        db.query(WeatherAlertLog)
+        .filter(WeatherAlertLog.org_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .order_by(WeatherAlertLog.gesendet_am.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+@router.post("/settings/wetter/alert-channels")
+async def weather_alert_channels_save(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    alert_mail: str = Form(""),
+    alert_teams_webhook: str = Form(""),
+    bodensee_temp_override: str = Form(""),
+    target_org_id: int | None = Form(None),
+):
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+    if not effective_org_id:
+        return RedirectResponse("/admin/settings/wetter", status_code=303)
+
+    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+    if not org_s:
+        org_s = OrgSettings(org_id=effective_org_id)
+        db.add(org_s)
+
+    org_s.weather_alert_mail = alert_mail.strip()[:255] or None
+    webhook = alert_teams_webhook.strip()
+    org_s.weather_alert_teams_webhook_url = webhook[:1000] if webhook.startswith("https://") else None
+
+    bodensee_raw = bodensee_temp_override.strip()
+    if bodensee_raw:
+        try:
+            from datetime import UTC, datetime
+            org_s.bodensee_temp_override_c = float(bodensee_raw.replace(",", "."))
+            org_s.bodensee_temp_override_at = datetime.now(UTC)
+        except ValueError:
+            pass
+    else:
+        org_s.bodensee_temp_override_c = None
+        org_s.bodensee_temp_override_at = None
+
+    db.commit()
+    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
+    return RedirectResponse(f"/admin/settings/wetter{org_suffix}?saved=1#warnungen", status_code=303)
+
+
+@router.post("/settings/wetter/alert-rule/{rule_id}")
+async def weather_alert_rule_save(
+    request: Request,
+    rule_id: int,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    enabled: str = Form(""),
+    vorwarnung: str = Form(""),
+    eskalation: str = Form(""),
+    channel_mail: str = Form(""),
+    channel_teams: str = Form(""),
+    mail_override: str = Form(""),
+    teams_webhook_override: str = Form(""),
+    cooldown_min: str = Form(""),
+    params_json: str = Form(""),
+    target_org_id: int | None = Form(None),
+):
+    import json
+
+    from app.models.weather_alert import WeatherAlertRule
+
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+    if not effective_org_id:
+        return RedirectResponse("/admin/settings/wetter", status_code=303)
+
+    rule = db.get(WeatherAlertRule, rule_id)
+    if not rule or rule.org_id != effective_org_id:
+        raise HTTPException(status_code=404, detail="Regel nicht gefunden")
+
+    rule.enabled         = enabled in ("1", "true", "on")
+    rule.vorwarnung      = vorwarnung in ("1", "true", "on")
+    rule.eskalation      = eskalation in ("1", "true", "on")
+    rule.channel_mail    = channel_mail in ("1", "true", "on")
+    rule.channel_teams   = channel_teams in ("1", "true", "on")
+    rule.mail_override   = mail_override.strip()[:255] or None
+    webhook = teams_webhook_override.strip()
+    rule.teams_webhook_override = webhook[:1000] if webhook.startswith("https://") else None
+    try:
+        rule.cooldown_min = max(1, int(cooldown_min)) if cooldown_min.strip() else 60
+    except ValueError:
+        pass
+    if params_json.strip():
+        try:
+            rule.params = json.loads(params_json)
+        except (ValueError, json.JSONDecodeError):
+            pass
+
+    from datetime import UTC, datetime
+    rule.updated_at = datetime.now(UTC)
+    db.commit()
+
+    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
+    return RedirectResponse(f"/admin/settings/wetter{org_suffix}?saved=1#warnungen", status_code=303)
+
+
+@router.post("/settings/wetter/alert-test/mail")
+async def weather_alert_test_mail(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+    if not effective_org_id:
+        return RedirectResponse("/admin/settings/wetter", status_code=303)
+
+    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+    mail_to = org_s.weather_alert_mail if org_s else None
+    error: str | None = None
+    if not mail_to:
+        error = "Kein E-Mail-Empfänger konfiguriert."
+    else:
+        try:
+            from app.services.mail_service import _build_message, _send, get_smtp_cfg
+            from app.models.master import FireDept
+            org = db.query(FireDept).filter(FireDept.id == effective_org_id).first()
+            smtp_cfg = get_smtp_cfg()
+            betreff = f"[Wetterwarnung Test] – {org.name if org else ''}"
+            body = "Dies ist eine Test-Wetterwarnung von Einsatzcockpit.\n\nGeoSphere Austria (CC BY 4.0)"
+            msg = _build_message(to=mail_to, subject=betreff, body_txt=body, smtp_cfg=smtp_cfg)
+            await _send(msg, smtp_cfg)
+        except Exception as exc:
+            error = str(exc)[:200]
+
+    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
+    param = f"alert_mail_error={error.replace(' ', '+')}" if error else "alert_mail_ok=1"
+    return RedirectResponse(f"/admin/settings/wetter{org_suffix}?{param}#warnungen", status_code=303)
+
+
+@router.post("/settings/wetter/alert-test/teams")
+async def weather_alert_test_teams(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+    if not effective_org_id:
+        return RedirectResponse("/admin/settings/wetter", status_code=303)
+
+    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+    webhook = org_s.weather_alert_teams_webhook_url if org_s else None
+    error: str | None = None
+    if not webhook:
+        error = "Kein Teams-Webhook konfiguriert."
+    else:
+        from app.services.weather_alert_dispatch import _post_teams
+        ok = _post_teams(webhook, "Wetterwarnung Test", "Dies ist eine Test-Wetterwarnung.", None, "f59e0b")
+        if not ok:
+            error = "Teams-Post fehlgeschlagen (Webhook-URL prüfen)"
+
+    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
+    param = f"alert_teams_error={error.replace(' ', '+')}" if error else "alert_teams_ok=1"
+    return RedirectResponse(f"/admin/settings/wetter{org_suffix}?{param}#warnungen", status_code=303)
 
 
 # ── Lokale Wetterstationen (Davis/Meteobridge) ───────────────────────────────

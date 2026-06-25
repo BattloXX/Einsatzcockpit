@@ -143,6 +143,12 @@ class Settings(BaseSettings):
     # Mindestabstand zwischen zwei akzeptierten Pushes je Station (Flood-Schutz).
     WEATHER_INGEST_MIN_INTERVAL_S: int = 60
 
+    # Wetterwarnungen – automatischer Versand per Mail / Teams
+    WEATHER_ALERTS_ENABLED: bool = True      # globaler Kill-Switch
+    WEATHER_ALERT_INTERVAL_S: int = 300      # Loop-Intervall (5 min)
+    BODENSEE_TEMP_FETCH_ENABLED: bool = False  # optionaler externer Adapter (nicht aktiv)
+    BODENSEE_TEMP_SOURCE_URL: str = ""       # URL für externen Temperatur-Adapter
+
     # Fernet-Verschlüsselung (Client Secrets, KI-API-Keys)
     # Eigener Key für Datenverschlüsselung; unabhängig von SECRET_KEY rotierbar.
     # Generieren: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

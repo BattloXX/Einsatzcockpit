@@ -111,6 +111,10 @@ async def lifespan(app: FastAPI):
     from app.services.weather_retention import weather_retention_loop
     weather_retention_task = asyncio.create_task(weather_retention_loop())
 
+    # Background-Loop für Wetterwarnungen (alle 5 Minuten je Org)
+    from app.services.weather_alert_loop import weather_alert_loop
+    weather_alert_task = asyncio.create_task(weather_alert_loop())
+
     try:
         yield
     finally:
@@ -120,8 +124,9 @@ async def lifespan(app: FastAPI):
         lagemeldung_task.cancel()
         verleih_task.cancel()
         weather_retention_task.cancel()
+        weather_alert_task.cancel()
         for t in (autoclose_task, watchdog_task, reminder_task, lagemeldung_task, verleih_task,
-                  weather_retention_task):
+                  weather_retention_task, weather_alert_task):
             try:
                 await t
             except (asyncio.CancelledError, Exception):

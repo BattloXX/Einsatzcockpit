@@ -87,6 +87,10 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "verleih_ausleihe",
     # Lokale Wetterstation (TenantScoped via Mixin) — Org-Isolation Fail-Closed
     "weather_station",
+    # Wetterwarnungen (TenantScoped via Mixin) — Org-Isolation Fail-Closed
+    "weather_alert_rule",
+    "weather_alert_state",
+    "weather_alert_log",
     # Fahrtenbuch-Modul (TenantScoped via Mixin)
     "fahrtzweck",
     "zielort",

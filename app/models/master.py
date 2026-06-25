@@ -374,6 +374,13 @@ class OrgSettings(Base):
     schaden_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     fahrt_doppel_minuten: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
 
+    # Wetterwarnung-Kanäle: Org-weite Empfänger (Regel-Override hat Vorrang)
+    weather_alert_mail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    weather_alert_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # Bodensee-Seewassertemperatur manuell (für Lake-Effekt-Regel)
+    bodensee_temp_override_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bodensee_temp_override_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     org: Mapped[FireDept] = relationship(back_populates="settings")
 
     @property
