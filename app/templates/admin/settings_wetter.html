@@ -385,7 +385,10 @@
 <section class="card mb-4" id="warnungen">
   <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
     <h2>&#x1F514; Wetterwarnungen &amp; Benachrichtigungen</h2>
-    <span class="badge badge--muted" style="font-size:.72rem;">Mail &bull; MS Teams</span>
+    <a href="https://github.com/BattloXX/Einsatzcockpit/wiki/Administration-Wetterwarnungen"
+       target="_blank" rel="noopener"
+       style="font-size:.78rem;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:.3rem;"
+       title="Dokumentation im Wiki">&#x1F517; Dokumentation &nbsp;&#x2197;</a>
   </div>
   <div class="card-body">
 
@@ -463,6 +466,51 @@
 
     {# Regelkatalog #}
     {% if alert_rules %}
+    {% set param_hints = {
+      "sturm":
+        "vorwarn_gust_ms: Pr&ouml;gnose-B&ouml;e (m/s) in &le;6&thinsp;h f&uuml;r Vorwarnung (Standard 17 &asymp; 61&thinsp;km/h, Bft&thinsp;8) &bull;
+         akut_gust_ms: gemessene B&ouml;e (m/s) f&uuml;r Akut-Alarm (Standard 25 &asymp; 90&thinsp;km/h, Bft&thinsp;10)",
+      "starkregen":
+        "vorwarn_mmh: Nowcast-Peak (mm/h) in &le;60&thinsp;min f&uuml;r Vorwarnung &bull;
+         akut_mmh: gemessene Niederschlagsrate (mm/h) f&uuml;r Akut-Alarm",
+      "schneefall":
+        "temp_max_c: max. Temperatur (&deg;C) f&uuml;r Schneef&auml;higkeit &bull;
+         vorwarn_mmh: Prognose-Niederschlag (mm/h) bei T &le; temp_max_c &bull;
+         akut_mmh: gemessene Rate (mm/h) bei T &le; temp_max_c (&asymp; 5&thinsp;cm/h Schnee)",
+      "glatteis":
+        "temp_max_c: max. Temp. (&deg;C) f&uuml;r Gefrierregen-Risiko &bull;
+         temp_min_reif_c: untere Temp.-Grenze (&deg;C) f&uuml;r Reifgl&auml;tte-Erkennung &bull;
+         spread_max_k: max. Taupunkt-Spread T&minus;Td (K) bei T&thinsp;&lt;&thinsp;0 f&uuml;r Reifgl&auml;tte",
+      "gewitter":
+        "min_level: Mindeststufe amtliche ZAMG-Warnung (1&ndash;4; 2 = erhebliche Gef&auml;hrdung)",
+      "lake_effekt":
+        "temp_max_c: max. Lufttemperatur (&deg;C, schneef&auml;hig) &bull;
+         delta_t_min: Mindest-&Delta;T Bodensee&minus;Luft (K, Standard 12) &bull;
+         dir_min/dir_max: Windrichtungssektor vom See (&deg;, Standard 260&ndash;330&deg;) &bull;
+         v_min/v_max: Wind-Geschwindigkeitsbereich (m/s) &bull;
+         rh_min: Mindestluftfeuchte (%) als Feuchte-Nachweis",
+      "amtlich":
+        "min_level: Mindeststufe weiterzuleitender Warnungen (1&ndash;4) &bull;
+         nur_typen: leere Liste [] = alle Typen; oder z.B. [&quot;WIND&quot;,&quot;RAIN&quot;] f&uuml;r gezielte Filterung",
+      "foehn":
+        "dir_min/dir_max: S&uuml;dwind-Sektor (&deg;, Standard 150&ndash;210&deg;) &bull;
+         vorwarn_gust_ms: Prognose-B&ouml;e (m/s) &bull;
+         akut_gust_ms: gemessene B&ouml;e (m/s) bei S&uuml;drichtung &amp; Trockenheit &bull;
+         rh_max_pct: max. Luftfeuchte (%) f&uuml;r F&ouml;hn-Erkennung",
+      "waldbrand":
+        "trocken_tage: L&auml;nge der Trockenperiode in Tagen &bull;
+         max_nieder_mm: max. erlaubter Niederschlag (mm) in diesem Zeitraum &bull;
+         temp_min_c: Mindesttemperatur (&deg;C) &bull;
+         rh_max_pct: max. Luftfeuchte (%) &bull;
+         wind_min_ms: Mindestwind (m/s) &mdash; erfordert Wetter-DB mit Messverlauf",
+      "tauwetter":
+        "temp_anstieg_k: Temperaturanstieg (K) in &le;24&thinsp;h aus Prognose f&uuml;r Vorwarnung &bull;
+         temp_schwelle_c: aktuell gemessene Temp. (&deg;C) f&uuml;r Akut (kombiniert mit steigendem Pegel) &mdash;
+         erfordert konfigurierte Pegelmessstation",
+      "downburst":
+        "min_level: Mindeststufe amtliche Schwergewitter-/Sturmwarnung (3 = gro&szlig;e Gef&auml;hrdung) &bull;
+         boe_sprung_ms: (reserviert)"
+    } %}
     <h3 style="font-size:.88rem;font-weight:600;color:var(--text-muted);margin:.25rem 0 .75rem;">Warnregeln</h3>
     {% for rule in alert_rules %}
     <details style="border:1px solid var(--border);border-radius:6px;margin-bottom:.5rem;"
@@ -522,11 +570,14 @@
 
           <div style="margin-bottom:.75rem;">
             <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:2px;">
-              Schwellwerte (JSON &ndash; Defaults s. Dokumentation)
+              Schwellwerte (JSON)
             </label>
             <textarea name="params_json" class="form-control"
                       style="font-family:var(--font-mono,monospace);font-size:.76rem;resize:vertical;"
                       rows="2">{{ rule.params | tojson if rule.params else (rule_defaults.get(rule.key, {}) | tojson) }}</textarea>
+            {% if param_hints.get(rule.key) %}
+            <p class="form-hint" style="margin-top:.35rem;line-height:1.5;">{{ param_hints[rule.key] | safe }}</p>
+            {% endif %}
           </div>
 
           <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
