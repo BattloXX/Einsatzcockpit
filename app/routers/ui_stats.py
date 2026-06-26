@@ -175,52 +175,54 @@ def _gruppiere_fahrten(fahrten: list, gruppierung: str, fahrzeuge: list) -> list
     })
 
     for f in fahrten:
+        entries: list[tuple[str, str]] = []
+
         if gruppierung == "fahrzeug":
-            key = str(f.fahrzeug_id)
-            label = f.fahrzeug.code if f.fahrzeug else key
+            entries.append((str(f.fahrzeug_id), f.fahrzeug.code if f.fahrzeug else str(f.fahrzeug_id)))
         elif gruppierung == "maschinist":
-            key = str(f.maschinist_member_id or f.maschinist_name)
-            label = f.maschinist_name or key
+            k = str(f.maschinist_member_id or f.maschinist_name)
+            entries.append((k, f.maschinist_name or k))
+            if f.maschinist2_name or f.maschinist2_member_id:
+                k2 = "2ma_" + str(f.maschinist2_member_id or f.maschinist2_name)
+                entries.append((k2, (f.maschinist2_name or k2[4:]) + " (2.MA)"))
         elif gruppierung == "ausbildner":
             if not f.ausbildner_name and not f.ausbildner_member_id:
                 continue
-            key = str(f.ausbildner_member_id or f.ausbildner_name)
-            label = f.ausbildner_name or key
+            k = str(f.ausbildner_member_id or f.ausbildner_name)
+            entries.append((k, f.ausbildner_name or k))
         elif gruppierung == "gruppenkommandant":
             if not f.gruppenkommandant_name and not f.gruppenkommandant_member_id:
                 continue
-            key = str(f.gruppenkommandant_member_id or f.gruppenkommandant_name)
-            label = f.gruppenkommandant_name or key
+            k = str(f.gruppenkommandant_member_id or f.gruppenkommandant_name)
+            entries.append((k, f.gruppenkommandant_name or k))
         elif gruppierung == "korbmaschinist":
             if not f.maschinist2_name and not f.maschinist2_member_id:
                 continue
-            key = str(f.maschinist2_member_id or f.maschinist2_name)
-            label = f.maschinist2_name or key
+            k = str(f.maschinist2_member_id or f.maschinist2_name)
+            entries.append((k, f.maschinist2_name or k))
         else:
-            key = "gesamt"
-            label = "Gesamt"
+            entries.append(("gesamt", "Gesamt"))
 
-        g = gruppen[key]
-        g["label"] = label
         if f.fahrttyp == FahrtKategorie.einsatz:
-            g["einsatz"] += 1
             typ = "einsatz"
         elif f.fahrttyp == FahrtKategorie.uebung:
-            g["uebung"] += 1
             typ = "uebung"
         else:
-            g["sonstige"] += 1
             typ = "sonstige"
-        if f.km_delta:
-            g["km_sum"] += int(f.km_delta)
-        if f.betriebsstunden_delta:
-            g["bh_sum"] += Decimal(str(f.betriebsstunden_delta))
 
-        if f.fahrzeug_id and f.fahrzeug:
-            fz_key = str(f.fahrzeug_id)
-            if fz_key not in g["per_fahrzeug"]:
-                g["per_fahrzeug"][fz_key] = {"label": f.fahrzeug.code, "einsatz": 0, "uebung": 0, "sonstige": 0}
-            g["per_fahrzeug"][fz_key][typ] += 1
+        for key, label in entries:
+            g = gruppen[key]
+            g["label"] = label
+            g[typ] += 1
+            if f.km_delta:
+                g["km_sum"] += int(f.km_delta)
+            if f.betriebsstunden_delta:
+                g["bh_sum"] += Decimal(str(f.betriebsstunden_delta))
+            if f.fahrzeug_id and f.fahrzeug:
+                fz_key = str(f.fahrzeug_id)
+                if fz_key not in g["per_fahrzeug"]:
+                    g["per_fahrzeug"][fz_key] = {"label": f.fahrzeug.code, "einsatz": 0, "uebung": 0, "sonstige": 0}
+                g["per_fahrzeug"][fz_key][typ] += 1
 
     result = sorted(gruppen.values(), key=lambda x: -(x["einsatz"] + x["uebung"] + x["sonstige"]))
     return result
