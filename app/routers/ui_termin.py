@@ -92,7 +92,7 @@ async def termin_liste(
     request: Request,
     typ: str | None = None,
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     q = db.query(Termin)
@@ -114,7 +114,7 @@ async def termin_neu_formular(
     request: Request,
     typ: str = "uebung",
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if not _can_edit(user):
@@ -181,7 +181,7 @@ async def termin_detail(
     request: Request,
     termin_id: int,
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     termin = _termin_or_404(termin_id, db)
@@ -205,7 +205,7 @@ async def termin_bearbeiten_formular(
     request: Request,
     termin_id: int,
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if not _can_edit(user):
@@ -231,7 +231,7 @@ async def termin_speichern(
     ganztaegig: str = Form(""),
     status: str = Form("geplant"),
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if not _can_edit(user):
@@ -264,7 +264,7 @@ async def termin_loeschen(
     request: Request,
     termin_id: int,
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if not _can_edit(user):
@@ -294,7 +294,7 @@ async def teilnahme_liste(
     bezug_typ: str,
     bezug_id: int,
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
@@ -523,7 +523,7 @@ async def teilnahme_druck(
     bezug_typ: str,
     bezug_id: int,
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
@@ -548,7 +548,7 @@ async def teilnahme_export_pdf(
     bezug_typ: str,
     bezug_id: int,
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
@@ -581,7 +581,7 @@ async def teilnahme_export_xlsx(
     bezug_typ: str,
     bezug_id: int,
     db: Session = Depends(get_db),
-    _=Depends(CurrentOrgId),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
