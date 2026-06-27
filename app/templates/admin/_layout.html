@@ -7,8 +7,10 @@
 {% set _p = request.url.path %}
 {% if '/admin/geraete-login' in _p or '/admin/push' in _p or '/admin/benutzer' in _p
      or '/admin/api-keys' in _p or '/admin/lagekarte-tokens' in _p or '/admin/audit' in _p
-     or '/admin/sms-test' in _p %}
+     or '/admin/sms-test' in _p or '/admin/sms-senden' in _p %}
   {% set active_group = 'verwaltung' %}
+{% elif '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p %}
+  {% set active_group = 'stammdaten' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
@@ -230,6 +232,16 @@
                {{ tip('Geräteverleih Artikelstammdaten und Stücklisten') }}>
               <span class="admin-nav__icon">📦</span>Geräteverleih
             </a>
+            <a href="/admin/sms-gruppen"
+               class="admin-nav__item {% if '/admin/sms-gruppen' in request.url.path %}is-active{% endif %}"
+               {{ tip('SMS-Gruppen: Benannte Empfaengergruppen fuer den SMS-Versand') }}>
+              <span class="admin-nav__icon">👥</span>SMS-Gruppen
+            </a>
+            <a href="/admin/einsatzinfo-sms"
+               class="admin-nav__item {% if '/admin/einsatzinfo-sms' in request.url.path %}is-active{% endif %}"
+               {{ tip('Einsatzinfo-SMS: automatischer Versand bei Alarm, Verteiler je Stichwort') }}>
+              <span class="admin-nav__icon">📨</span>Einsatzinfo-SMS
+            </a>
           </div>
         </div>
 
@@ -274,6 +286,11 @@
                class="admin-nav__item {% if '/admin/sms-test' in request.url.path %}is-active{% endif %}"
                {{ tip('SMS-Versand über Gateway testen') }}>
               <span class="admin-nav__icon">💬</span>SMS-Test
+            </a>
+            <a href="/admin/sms-senden"
+               class="admin-nav__item {% if '/admin/sms-senden' in request.url.path %}is-active{% endif %}"
+               {{ tip('SMS manuell an Gruppen oder Mitglieder senden') }}>
+              <span class="admin-nav__icon">✉️</span>SMS senden
             </a>
           </div>
         </div>

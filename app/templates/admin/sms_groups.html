@@ -1,0 +1,131 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}SMS-Gruppen – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'SMS-Gruppen'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>SMS-Gruppen</h1>
+      <p class="page-header__sub">Benannte Empfaengergruppen fuer den SMS-Versand verwalten.</p>
+    </div>
+  </div>
+
+  {% if saved %}
+  <div class="alert alert--success">Aenderungen gespeichert.</div>
+  {% endif %}
+  {% if error == 'empty' %}
+  <div class="alert alert--danger">Name darf nicht leer sein.</div>
+  {% endif %}
+
+  <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:24px;align-items:start;">
+
+    <!-- Neue Gruppe anlegen -->
+    <div class="chart-box">
+      <h3 style="margin-bottom:16px;">Neue Gruppe anlegen</h3>
+      <form method="post" action="/admin/sms-gruppen/neu">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-group">
+          <label class="form-label">Name <span style="color:var(--color-danger)">*</span></label>
+          <input type="text" name="name" class="form-input" required maxlength="150"
+                 placeholder="z.B. Kommando, Atemschutz, Alle">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Beschreibung</label>
+          <input type="text" name="description" class="form-input" maxlength="500"
+                 placeholder="Optional – kurze Beschreibung">
+        </div>
+        <div style="margin-top:16px;">
+          <button type="submit" class="btn btn--primary">Anlegen</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Gruppen-Liste -->
+    <div>
+      {% if not groups %}
+      <p class="text-muted">Noch keine SMS-Gruppen angelegt.</p>
+      {% endif %}
+      {% for grp in groups %}
+      <div class="chart-box" style="margin-bottom:18px;" id="gruppe-{{ grp.id }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div>
+            <strong style="font-size:1.05rem;">{{ grp.name }}</strong>
+            {% if grp.description %}
+            <span class="text-muted" style="font-size:.85rem;margin-left:8px;">{{ grp.description }}</span>
+            {% endif %}
+            <span class="badge-pill badge-pill--gray" style="font-size:.75rem;margin-left:8px;">
+              {{ grp.members|length }} Mitglied{{ 'er' if grp.members|length != 1 else '' }}
+            </span>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn--ghost btn--xs"
+                    onclick="toggleEdit({{ grp.id }})">Bearbeiten</button>
+            <form method="post" action="/admin/sms-gruppen/{{ grp.id }}/loeschen"
+                  onsubmit="return confirm('Gruppe \'{{ grp.name }}\' wirklich loeschen?')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Loeschen</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Name bearbeiten (ausgeklappt) -->
+        <div id="edit-{{ grp.id }}" style="display:none;margin-bottom:12px;padding:12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">
+          <form method="post" action="/admin/sms-gruppen/{{ grp.id }}/edit" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <div class="form-group" style="flex:1;min-width:160px;margin:0;">
+              <label class="form-label" style="font-size:.8rem;">Name</label>
+              <input type="text" name="name" class="form-input" value="{{ grp.name }}" required maxlength="150">
+            </div>
+            <div class="form-group" style="flex:2;min-width:200px;margin:0;">
+              <label class="form-label" style="font-size:.8rem;">Beschreibung</label>
+              <input type="text" name="description" class="form-input"
+                     value="{{ grp.description or '' }}" maxlength="500">
+            </div>
+            <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
+          </form>
+        </div>
+
+        <!-- Mitglieder-Auswahl -->
+        {% set grp_member_ids = grp.members|map(attribute='member_id')|list %}
+        <form method="post" action="/admin/sms-gruppen/{{ grp.id }}/mitglieder">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <div style="margin-bottom:8px;font-size:.85rem;font-weight:600;color:var(--text-muted);">MITGLIEDER ZUWEISEN</div>
+          {% if members %}
+          <div style="columns:2 200px;gap:8px;max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:8px;">
+            {% for m in members %}
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:2px 0;break-inside:avoid;">
+              <input type="checkbox" name="member_id" value="{{ m.id }}"
+                     {% if m.id in grp_member_ids %}checked{% endif %}
+                     style="flex-shrink:0;">
+              <span style="font-size:.9rem;">{{ m.lastname }}, {{ m.firstname }}
+                {% if not m.phone %}<span class="text-muted" style="font-size:.75rem;">(keine Tel.)</span>{% endif %}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          <div style="margin-top:10px;">
+            <button type="submit" class="btn btn--primary btn--xs">Mitglieder speichern</button>
+          </div>
+          {% else %}
+          <p class="text-muted" style="font-size:.85rem;">Keine aktiven Mitglieder vorhanden.
+            <a href="/admin/mitglieder">Mitglieder verwalten</a></p>
+          {% endif %}
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleEdit(id) {
+  var el = document.getElementById('edit-' + id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

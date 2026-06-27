@@ -1,0 +1,205 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Einsatzinfo-SMS – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Einsatzinfo-SMS'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Einsatzinfo-SMS</h1>
+      <p class="page-header__sub">
+        Konfiguriere, wer bei einem Alarm automatisch eine SMS erhaelt, und welchen Text sie enthaelt.
+      </p>
+    </div>
+  </div>
+
+  {% if saved %}
+  <div class="alert alert--success">Einstellungen gespeichert.</div>
+  {% endif %}
+
+  <!-- ── Allgemeine Einstellungen ─────────────────────────────────────────── -->
+  <div class="admin-section-title">Allgemeine Einstellungen</div>
+  <div class="chart-box" style="margin-bottom:24px;">
+    <form method="post" action="/admin/einsatzinfo-sms/einstellungen">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div>
+          <div class="form-group">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+              <input type="checkbox" name="enabled" value="true"
+                     {% if org_settings and org_settings.einsatzinfo_sms_enabled %}checked{% endif %}>
+              <span><strong>Einsatzinfo-SMS aktiviert</strong><br>
+              <small class="text-muted">Bei jedem Alarm automatisch SMS versenden (falls Gateway verbunden).</small></span>
+            </label>
+          </div>
+          <div class="form-group" style="margin-top:12px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+              <input type="checkbox" name="send_exercise" value="true"
+                     {% if org_settings and org_settings.einsatzinfo_sms_send_exercise %}checked{% endif %}>
+              <span>Auch bei <strong>Uebungen</strong> senden
+              <small class="text-muted">(mit [UEBUNG]-Prafix)</small></span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Org-Standard-Vorlage</label>
+          <textarea name="template" class="form-input" rows="3" maxlength="500"
+                    placeholder="{{ default_template }}"
+                    style="resize:vertical;font-family:monospace;font-size:.88rem;">{{ (org_settings.einsatzinfo_sms_template if org_settings and org_settings.einsatzinfo_sms_template) or '' }}</textarea>
+          <div class="form-help" style="margin-top:4px;font-size:.8rem;color:var(--text-muted);">
+            Platzhalter:
+            <code>{stichwort}</code> <code>{adresse}</code> <code>{ort}</code>
+            <code>{meldung}</code> <code>{einsatzgrund}</code>
+            <code>{datum}</code> <code>{zeit}</code><br>
+            Leer lassen = Systemdefault: <em>{{ default_template }}</em>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button type="submit" class="btn btn--primary">Einstellungen speichern</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Basis-Verteiler ──────────────────────────────────────────────────── -->
+  <div class="admin-section-title" style="margin-top:24px;">
+    Basis-Verteiler
+    <small style="font-weight:400;color:var(--text-muted)">(gilt fuer alle Stichworte)</small>
+  </div>
+  <div class="chart-box" style="margin-bottom:24px;">
+    <form method="post" action="/admin/einsatzinfo-sms/basis-verteiler">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <!-- Gruppen -->
+        <div>
+          <div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:8px;">GRUPPEN</div>
+          {% if groups %}
+          <div style="border:1px solid var(--border);border-radius:4px;padding:8px;">
+            {% for grp in groups %}
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0;">
+              <input type="checkbox" name="group_id" value="{{ grp.id }}"
+                     {% if grp.id in basis_group_ids %}checked{% endif %}>
+              <span>{{ grp.name }}
+                <span class="badge-pill badge-pill--gray" style="font-size:.7rem;">{{ grp.members|length }}</span>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-muted" style="font-size:.85rem;">Keine Gruppen. <a href="/admin/sms-gruppen">Gruppen anlegen</a></p>
+          {% endif %}
+        </div>
+        <!-- Einzelne Mitglieder -->
+        <div>
+          <div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:8px;">EINZELNE MITGLIEDER</div>
+          {% if members %}
+          <div style="border:1px solid var(--border);border-radius:4px;padding:8px;max-height:200px;overflow-y:auto;">
+            {% for m in members %}
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0;font-size:.88rem;">
+              <input type="checkbox" name="member_id" value="{{ m.id }}"
+                     {% if m.id in basis_member_ids %}checked{% endif %}>
+              {{ m.lastname }}, {{ m.firstname }}
+              {% if not m.phone %}<span class="text-muted" style="font-size:.75rem;">(keine Tel.)</span>{% endif %}
+            </label>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-muted" style="font-size:.85rem;">Keine aktiven Mitglieder.</p>
+          {% endif %}
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button type="submit" class="btn btn--primary">Basis-Verteiler speichern</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Je-Stichwort-Konfiguration ──────────────────────────────────────── -->
+  <div class="admin-section-title" style="margin-top:8px;">
+    Stichwort-spezifischer Verteiler
+    <small style="font-weight:400;color:var(--text-muted)">(optional – ergaenzt den Basis-Verteiler)</small>
+  </div>
+
+  {% if not alarm_types %}
+  <div class="chart-box" style="margin-bottom:16px;">
+    <p class="text-muted">Keine Alarmtypen vorhanden. <a href="/admin/alarmtypen">Alarmtypen konfigurieren</a></p>
+  </div>
+  {% endif %}
+
+  {% for at in alarm_types %}
+  {% set at_data = stichwort_recipients.get(at.id, {}) %}
+  {% set at_group_ids = at_data.get('group_ids', set()) %}
+  {% set at_member_ids = at_data.get('member_ids', set()) %}
+  <div class="chart-box" style="margin-bottom:14px;" id="stichwort-{{ at.id }}">
+    <details>
+      <summary style="cursor:pointer;display:flex;align-items:center;gap:12px;list-style:none;user-select:none;">
+        <span style="font-size:1rem;">&#9656;</span>
+        <span class="badge-pill" style="font-size:.82rem;background:var(--surface);border:1px solid var(--border);">
+          {{ at.code }}
+        </span>
+        <span style="font-weight:600;">{{ at.label or at.code }}</span>
+        {% if at_group_ids or at_member_ids %}
+        <span class="badge-pill badge-pill--green" style="font-size:.72rem;">
+          {{ (at_group_ids|length) + (at_member_ids|length) }} Empf.
+        </span>
+        {% endif %}
+        {% if at.einsatzinfo_sms_template %}
+        <span class="badge-pill badge-pill--gray" style="font-size:.72rem;">eigene Vorlage</span>
+        {% endif %}
+      </summary>
+      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
+        <form method="post" action="/admin/einsatzinfo-sms/stichwort/{{ at.id }}">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <div class="form-group">
+            <label class="form-label" style="font-size:.85rem;">Vorlagen-Override (leer = Org-Standard verwenden)</label>
+            <textarea name="template_override" class="form-input" rows="2" maxlength="500"
+                      style="resize:vertical;font-family:monospace;font-size:.85rem;"
+                      placeholder="Leer lassen fuer Org-Standard-Vorlage">{{ at.einsatzinfo_sms_template or '' }}</textarea>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;">
+            <div>
+              <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px;">GRUPPEN</div>
+              {% if groups %}
+              <div style="border:1px solid var(--border);border-radius:4px;padding:6px;">
+                {% for grp in groups %}
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0;font-size:.88rem;">
+                  <input type="checkbox" name="group_id" value="{{ grp.id }}"
+                         {% if grp.id in at_group_ids %}checked{% endif %}>
+                  {{ grp.name }} <span class="badge-pill badge-pill--gray" style="font-size:.7rem;">{{ grp.members|length }}</span>
+                </label>
+                {% endfor %}
+              </div>
+              {% else %}
+              <p class="text-muted" style="font-size:.82rem;">Keine Gruppen. <a href="/admin/sms-gruppen">Anlegen</a></p>
+              {% endif %}
+            </div>
+            <div>
+              <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px;">MITGLIEDER</div>
+              {% if members %}
+              <div style="border:1px solid var(--border);border-radius:4px;padding:6px;max-height:160px;overflow-y:auto;">
+                {% for m in members %}
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:2px 0;font-size:.85rem;">
+                  <input type="checkbox" name="member_id" value="{{ m.id }}"
+                         {% if m.id in at_member_ids %}checked{% endif %}>
+                  {{ m.lastname }}, {{ m.firstname }}
+                  {% if not m.phone %}<span class="text-muted" style="font-size:.73rem;">(keine Tel.)</span>{% endif %}
+                </label>
+                {% endfor %}
+              </div>
+              {% else %}
+              <p class="text-muted" style="font-size:.82rem;">Keine aktiven Mitglieder.</p>
+              {% endif %}
+            </div>
+          </div>
+          <div style="margin-top:12px;">
+            <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
+          </div>
+        </form>
+      </div>
+    </details>
+  </div>
+  {% endfor %}
+
+</div>
+{% endblock %}

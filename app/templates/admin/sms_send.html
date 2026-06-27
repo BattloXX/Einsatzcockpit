@@ -1,0 +1,224 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}SMS senden – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'SMS senden'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>SMS senden</h1>
+      <p class="page-header__sub">Manuelle SMS an Gruppen, einzelne Mitglieder oder eine Nummer senden.</p>
+    </div>
+    <div>
+      {% if gateway_connected %}
+      <span class="badge-pill badge-pill--green" style="font-size:.8rem;">&#x25cf; SMS-Gateway verbunden</span>
+      {% else %}
+      <span class="badge-pill badge-pill--red" style="font-size:.8rem;">&#x25cf; SMS-Gateway nicht verbunden</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if sent is not none %}
+  {% if sent|int > 0 %}
+  <div class="alert alert--success">
+    {{ sent }} SMS erfolgreich versendet.
+  </div>
+  {% else %}
+  <div class="alert alert--danger">
+    Keine SMS zugestellt (Gateway pruefen oder Empfaenger-Telefonnummern kontrollieren).
+  </div>
+  {% endif %}
+  {% endif %}
+  {% if error == 'empty' %}
+  <div class="alert alert--danger">Nachrichtentext darf nicht leer sein.</div>
+  {% endif %}
+  {% if error == 'no_gateway' %}
+  <div class="alert alert--danger">Kein SMS-Gateway verbunden. Bitte Gateway-Geraet verbinden.</div>
+  {% endif %}
+  {% if error == 'no_recipients' %}
+  <div class="alert alert--danger">Keine Empfaenger ausgewaehlt oder Empfaenger haben keine Telefonnummer.</div>
+  {% endif %}
+
+  <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start;">
+
+    <!-- ── SMS verfassen ── -->
+    <div class="chart-box"
+         x-data="{ targetType: 'group' }">
+      <h3 style="margin-bottom:16px;">Nachricht verfassen</h3>
+      <form method="post" action="/admin/sms-senden/senden">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+
+        <!-- Empfaenger-Art -->
+        <div class="form-group">
+          <label class="form-label">Empfaenger</label>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="radio" name="target_type" value="group"
+                     x-model="targetType" {% if not groups %}disabled{% endif %}>
+              <span>Gruppen
+              {% if not groups %}
+              <span class="text-muted" style="font-size:.82rem;">(keine Gruppen angelegt)</span>
+              {% endif %}
+              </span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="radio" name="target_type" value="member" x-model="targetType">
+              Einzelne Mitglieder
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="radio" name="target_type" value="adhoc" x-model="targetType">
+              Ad-hoc-Nummer
+            </label>
+          </div>
+        </div>
+
+        <!-- Gruppen-Auswahl -->
+        <div x-show="targetType === 'group'" class="form-group">
+          {% if groups %}
+          <label class="form-label" style="font-size:.85rem;">Gruppen auswaehlen</label>
+          <div style="border:1px solid var(--border);border-radius:4px;padding:8px;">
+            {% for grp in groups %}
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0;">
+              <input type="checkbox" name="group_id" value="{{ grp.id }}">
+              <span>{{ grp.name }}
+                <span class="badge-pill badge-pill--gray" style="font-size:.72rem;">
+                  {{ grp.members|length }} Mitgl.
+                </span>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-muted" style="font-size:.85rem;">Keine Gruppen vorhanden.
+            <a href="/admin/sms-gruppen">Gruppen anlegen</a></p>
+          {% endif %}
+        </div>
+
+        <!-- Mitglieder-Auswahl -->
+        <div x-show="targetType === 'member'" class="form-group">
+          <label class="form-label" style="font-size:.85rem;">Mitglieder auswaehlen</label>
+          {% if members %}
+          <div style="border:1px solid var(--border);border-radius:4px;padding:8px;max-height:220px;overflow-y:auto;">
+            {% for m in members %}
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0;font-size:.88rem;">
+              <input type="checkbox" name="member_id" value="{{ m.id }}">
+              {{ m.lastname }}, {{ m.firstname }}
+              {% if m.phone %}
+              <span class="text-muted" style="font-size:.78rem;">{{ m.phone }}</span>
+              {% else %}
+              <span class="text-muted" style="font-size:.78rem;">(keine Tel.)</span>
+              {% endif %}
+            </label>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-muted" style="font-size:.85rem;">Keine aktiven Mitglieder vorhanden.</p>
+          {% endif %}
+        </div>
+
+        <!-- Ad-hoc-Nummer -->
+        <div x-show="targetType === 'adhoc'" class="form-group">
+          <label class="form-label">Telefonnummer</label>
+          <input type="tel" name="adhoc_number" class="form-input"
+                 placeholder="+43 660 1234567">
+        </div>
+
+        <!-- Nachrichtentext -->
+        <div class="form-group" style="margin-top:4px;">
+          <label class="form-label">Nachricht <span style="color:var(--color-danger)">*</span></label>
+          <textarea name="text" class="form-input" required maxlength="500" rows="4"
+                    placeholder="Nachrichtentext (max. 500 Zeichen)"
+                    style="resize:vertical;"></textarea>
+        </div>
+
+        <div style="margin-top:16px;">
+          <button type="submit" class="btn btn--primary"
+                  {% if not gateway_connected %}disabled{% endif %}>
+            SMS senden
+          </button>
+          {% if not gateway_connected %}
+          <span class="text-muted" style="font-size:.85rem;margin-left:10px;">Gateway nicht verbunden</span>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    <!-- ── Hinweise ── -->
+    <div>
+      <div class="chart-box" style="margin-bottom:16px;">
+        <h3 style="margin-bottom:10px;">Hinweise</h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.75;color:var(--color-text-muted);font-size:.9rem;">
+          <li>Mitglieder ohne Telefonnummer erhalten keine SMS.</li>
+          <li>Bei Gruppen und Mitglieder-Auswahl werden Duplikate (gleiche Nummer) automatisch eliminiert.</li>
+          <li>Jeder Versand wird im Protokoll unten aufgezeichnet.</li>
+          <li>Das SMS-Gateway muss verbunden sein (Geraete-Login).</li>
+        </ul>
+      </div>
+      <div class="chart-box">
+        <h3 style="margin-bottom:10px;">Gruppen verwalten</h3>
+        <p style="font-size:.88rem;color:var(--color-text-muted);margin-bottom:10px;">
+          Gruppen beinhalten Mitglieder und koennen auch fuer den automatischen
+          Einsatzinfo-Versand konfiguriert werden.
+        </p>
+        <a href="/admin/sms-gruppen" class="btn btn--ghost btn--xs">Gruppen verwalten</a>
+        <a href="/admin/einsatzinfo-sms" class="btn btn--ghost btn--xs" style="margin-left:6px;">Einsatzinfo-SMS</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Protokoll ── -->
+  <div class="admin-section-title" style="margin-top:32px;">
+    Versandprotokoll <small style="font-weight:400;color:var(--color-text-muted)">(letzte 30)</small>
+  </div>
+  {% if sms_logs %}
+  <div style="overflow-x:auto;margin-bottom:24px;">
+    <table class="table-admin" style="min-width:560px;">
+      <thead>
+        <tr>
+          <th style="width:130px;">Zeitpunkt</th>
+          <th style="width:80px;">Art</th>
+          <th>Text</th>
+          <th style="width:80px;">Stichwort</th>
+          <th style="width:100px;text-align:right;">Versendet</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in sms_logs %}
+        <tr>
+          <td style="white-space:nowrap;color:var(--color-text-muted);font-size:.83rem;">
+            {{ (entry.sent_at|local).strftime('%d.%m.%Y %H:%M') if entry.sent_at else '–' }}
+          </td>
+          <td>
+            {% if entry.source == 'alarm' %}
+            <span class="badge-pill badge-pill--red" style="font-size:.73rem;">Alarm</span>
+            {% else %}
+            <span class="badge-pill badge-pill--gray" style="font-size:.73rem;">Manuell</span>
+            {% endif %}
+          </td>
+          <td style="font-size:.88rem;max-width:320px;">
+            {{ entry.text[:80] }}{% if entry.text|length > 80 %}…{% endif %}
+          </td>
+          <td style="font-size:.85rem;color:var(--color-text-muted);">
+            {{ entry.alarm_type_code or '–' }}
+          </td>
+          <td style="text-align:right;">
+            {% if entry.success_count == entry.recipient_count %}
+            <span style="color:var(--green-light, #4ade80);">{{ entry.success_count }}</span>
+            {% else %}
+            <span style="color:var(--red-light, #f87171);">{{ entry.success_count }}</span>
+            {% endif %}
+            <span class="text-muted">/{{ entry.recipient_count }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted" style="margin-bottom:24px;">Noch keine SMS versendet.</p>
+  {% endif %}
+
+</div>
+{% endblock %}

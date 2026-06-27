@@ -71,6 +71,7 @@ from app.models.verleih import (
 )
 from app.models.weather import WeatherReading, WeatherStation
 from app.models.weather_alert import WeatherAlertRule, WeatherAlertState, WeatherAlertLog
+from app.models.sms import SmsGroup, SmsGroupMember, SmsEinsatzinfoRecipient, SmsLog
 from app.models.fahrtenbuch import (
     Fahrt,
     FahrtBenachrichtigung,
@@ -103,6 +104,7 @@ __all__ = [
     "VerleihAusleihe", "VerleihPosition", "VerleihStatus", "VerleihFoto",
     "WeatherStation", "WeatherReading",
     "WeatherAlertRule", "WeatherAlertState", "WeatherAlertLog",
+    "SmsGroup", "SmsGroupMember", "SmsEinsatzinfoRecipient", "SmsLog",
     "Fahrtzweck", "Zielort", "Fahrt", "FahrtBenachrichtigung",
     "FahrtKategorie", "FahrtStatus", "FahrtErfassungsweg",
 ]

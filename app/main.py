@@ -47,6 +47,7 @@ from app.routers import (
     ui_sso,
     ui_stats,
     ui_sysadmin,
+    ui_sms,
     ui_uas,
     ui_verleih,
     ui_weather,
@@ -388,6 +389,7 @@ app.include_router(ui_breathing.router)
 app.include_router(ui_archive.router)
 app.include_router(ui_hilfe.router)
 app.include_router(ui_admin.router)
+app.include_router(ui_sms.router)
 app.include_router(ui_stats.router)
 app.include_router(ui_push.router)
 app.include_router(ui_settings.router)

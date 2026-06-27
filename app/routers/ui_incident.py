@@ -342,6 +342,22 @@ async def new_incident(
         _create_neighbor_invitations, db, incident, alarm_type_code, user.org_id, user.id,
     )
 
+    # Einsatzinfo-SMS in Background – nach Gateway-Status und Org-Einstellungen gated
+    if user.org_id:
+        from app.services.sms_dispatch_service import dispatch_einsatzinfo
+        address_str = " ".join(filter(None, [address_street, address_no, address_city]))
+        background_tasks.add_task(
+            dispatch_einsatzinfo,
+            user.org_id,
+            alarm_type_code,
+            address_str,
+            address_city or None,
+            report_text or None,
+            None,  # einsatzgrund: nur ueber API verfuegbar
+            is_exercise,
+            user.id,
+        )
+
     if ai_is_enabled() and not is_exercise:
         background_tasks.add_task(
             _trigger_ai_task_suggestions,

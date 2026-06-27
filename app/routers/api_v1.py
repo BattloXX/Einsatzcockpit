@@ -600,6 +600,20 @@ async def create_incident_api(
         _create_neighbor_invitations_api, db, incident, alarm_type_code, api_key.org_id,
     )
 
+    # Einsatzinfo-SMS in Background – nach Gateway-Status und Org-Einstellungen gated
+    if api_key.org_id:
+        from app.services.sms_dispatch_service import dispatch_einsatzinfo
+        background_tasks.add_task(
+            dispatch_einsatzinfo,
+            api_key.org_id,
+            alarm_type_code,
+            address,
+            payload.Ort,
+            payload.Meldung,
+            payload.Einsatzgrund,
+            payload.Uebung,
+        )
+
     # Web Push in Background – blockierende Netzwerk-Calls (pywebpush/FCM) nicht im Event-Loop
     push_title = f"{exercise_prefix}🚒 Einsatz: {alarm_type_code}"
     push_body = address or payload.Meldung or "Kein Ort angegeben"

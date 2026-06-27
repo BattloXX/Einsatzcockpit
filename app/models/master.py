@@ -178,6 +178,8 @@ class AlarmType(TenantScoped, Base):
     default_first_train_only: Mapped[bool] = mapped_column(Boolean, default=False)
     notify_neighbors: Mapped[bool] = mapped_column(Boolean, default=False)
     triggers_major_incident: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Stichwort-spezifische SMS-Vorlage; überschreibt den Org-Standard wenn gesetzt
+    einsatzinfo_sms_template: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class TaskSuggestion(TenantScoped, Base):
@@ -380,6 +382,15 @@ class OrgSettings(Base):
     # Bodensee-Seewassertemperatur manuell (für Lake-Effekt-Regel)
     bodensee_temp_override_c: Mapped[float | None] = mapped_column(Float, nullable=True)
     bodensee_temp_override_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # SMS-Einsatzinfo: automatischer Versand bei Alarmeingang
+    # Aktivierungsschalter
+    einsatzinfo_sms_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Vorlage mit Platzhaltern {stichwort} {adresse} {ort} {meldung} {einsatzgrund} {datum} {zeit}
+    # NULL → systemweiter Default wird genutzt
+    einsatzinfo_sms_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # True = auch bei Übungen senden (mit [ÜBUNG]-Präfix)
+    einsatzinfo_sms_send_exercise: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     org: Mapped[FireDept] = relationship(back_populates="settings")
 
