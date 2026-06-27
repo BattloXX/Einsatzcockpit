@@ -87,6 +87,10 @@
     }
     .board-tabs { display: none !important; }
   }
+  /* Mannschaft-Panel nur auf Mobile sichtbar */
+  @media (min-width: 769px) {
+    #mobile-mannschaft-panel { display: none !important; }
+  }
 </style>
 {% endblock %}
 
@@ -529,6 +533,31 @@
       <button class="kanban-add-col" type="button"
               onclick="document.getElementById('addColumnDialog').showModal()"
               title="Neuen Abschnitt/Spalte hinzufügen">+</button>
+    </div>
+    {% endif %}
+
+    <!-- Mannschaft-Panel (nur Mobile, data-lane="mannschaft" wird von buildLaneDropdown erkannt) -->
+    {% if can_edit %}
+    <div class="kanban-col" data-lane="mannschaft" id="mobile-mannschaft-panel">
+      <div class="kanban-col__header">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+            <span class="kanban-col__title">&#128101; Mannschaft</span>
+            <button class="kanban-col__add-btn" type="button"
+                    onclick="document.getElementById('mannschaft-auswahl-dialog').showModal()"
+                    title="Teilnehmer hinzufügen">
+              <span class="kanban-col__add-label">+ Teilnehmer</span>
+              <span class="kanban-col__add-icon" aria-hidden="true">+</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="kanban-col__body" id="mobile-mannschaft-container"
+           hx-get="/teilnahme/einsatz/{{ incident.id }}/liste"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div style="padding:16px;text-align:center;color:var(--text-muted);font-size:.85rem;">Lade&#x2026;</div>
+      </div>
     </div>
     {% endif %}
   </div>
@@ -1263,6 +1292,18 @@ function lageTicker(hints, aiFlags) {
     const lane = tab.dataset.lane;
     if (!applyLane(lane)) return;
     try { localStorage.setItem(LANE_KEY, lane); } catch (e) { /* noop */ }
+  });
+})();
+
+// Mannschaft-Panel auf Mobile nach Dialog-Close aktualisieren
+(function() {
+  var dlg = document.getElementById('mannschaft-auswahl-dialog');
+  if (!dlg) return;
+  dlg.addEventListener('close', function() {
+    htmx.ajax('GET', '/teilnahme/einsatz/{{ incident.id }}/liste', {
+      target: '#mobile-mannschaft-container',
+      swap: 'innerHTML'
+    });
   });
 })();
 </script>
