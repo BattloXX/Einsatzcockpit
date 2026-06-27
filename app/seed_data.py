@@ -479,11 +479,16 @@ def _upsert_seed_templates(db):
 
 
 _FAHRTENBUCH_ZWECKE = [
-    {"name": "Einsatz",               "kategorie": "einsatz",  "verlangt_ausbildner": False, "verlangt_gruppenkommandant": False, "sort": 0},
-    {"name": "Übung",                 "kategorie": "uebung",   "verlangt_ausbildner": False, "verlangt_gruppenkommandant": False, "sort": 1},
-    {"name": "Maschinistenausbildung","kategorie": "uebung",   "verlangt_ausbildner": True,  "verlangt_gruppenkommandant": False, "sort": 2},
-    {"name": "Gruppenübung",          "kategorie": "uebung",   "verlangt_ausbildner": False, "verlangt_gruppenkommandant": True,  "sort": 3},
-    {"name": "Überstellung/Service",  "kategorie": "sonstige", "verlangt_ausbildner": False, "verlangt_gruppenkommandant": False, "sort": 4},
+    {"name": "Einsatz",                "kategorie": "einsatz",
+     "verlangt_ausbildner": False, "verlangt_gruppenkommandant": False, "sort": 0},
+    {"name": "Übung",                  "kategorie": "uebung",
+     "verlangt_ausbildner": False, "verlangt_gruppenkommandant": False, "sort": 1},
+    {"name": "Maschinistenausbildung", "kategorie": "uebung",
+     "verlangt_ausbildner": True,  "verlangt_gruppenkommandant": False, "sort": 2},
+    {"name": "Gruppenübung",           "kategorie": "uebung",
+     "verlangt_ausbildner": False, "verlangt_gruppenkommandant": True,  "sort": 3},
+    {"name": "Überstellung/Service",   "kategorie": "sonstige",
+     "verlangt_ausbildner": False, "verlangt_gruppenkommandant": False, "sort": 4},
 ]
 
 _FAHRTENBUCH_ZIELORTE = [

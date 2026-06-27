@@ -13,20 +13,16 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.audit import write_audit
+from app.core.html_utils import sanitize_html
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
 from app.core.security import get_author_name, sign_lage_qr_token, sign_session, unsign_lage_qr_token
 from app.core.templating import templates
 from app.db import get_db
-from app.core.html_utils import sanitize_html
 from app.models.major_incident import (
     CROSS_MARKER_STATUS_COLOR,
     CROSS_MARKER_STATUS_LABEL,
     CROSS_MARKER_TYPE_ICON,
     CROSS_MARKER_TYPE_LABEL,
-    CrossMarkerLogEntry,
-    CrossMarkerMedia,
-    CrossSiteMarker,
-    EinheitSiteDispatch,
     JOURNAL_CATEGORIES,
     JOURNAL_CATEGORY_COLOR,
     JOURNAL_TEMPLATES,
@@ -38,9 +34,11 @@ from app.models.major_incident import (
     STAFF_FUNCTION_LABEL,
     CitizenReport,
     CommLogEntry,
+    CrossMarkerLogEntry,
+    CrossMarkerMedia,
+    CrossSiteMarker,
     IncidentSite,
     LageEinheit,
-    LageEinheitLeader,
     LageJournalEntry,
     LageJournalMedia,
     LageToken,
@@ -86,7 +84,8 @@ def _get_mi_features(db: Session, org_id: int | None = None) -> dict[str, bool]:
     Effektiv = SystemSettings[key] AND OrgSettings.mi_feature_*
     Fehlen OrgSettings-Spalten (Altinstanz), gelten SystemSettings allein.
     """
-    from app.models.master import OrgSettings as _OS, SystemSettings as _SS
+    from app.models.master import OrgSettings as _OS
+    from app.models.master import SystemSettings as _SS
 
     # Globale Masterschalter (SystemSettings Key-Value)
     rows = db.query(_SS).filter(_SS.key.in_(_MI_FEATURE_KEYS)).all()
@@ -355,7 +354,8 @@ async def lage_board(
     )
 
     from app.config import settings as _cfg
-    from app.models.master import OrgSettings as _OS, FireDept as _FD
+    from app.models.master import FireDept as _FD
+    from app.models.master import OrgSettings as _OS
     _org_s = db.query(_OS).filter(_OS.org_id == lage.org_id).first() if lage.org_id else None
     _weather_enabled = (
         _cfg.WEATHER_ENABLED
@@ -2244,7 +2244,10 @@ async def cross_marker_delete(
         raise HTTPException(status_code=404)
     db.delete(m)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "deleted": True, "reload_board": False})
+    await broadcast_lage(lage_id, {
+        "type": "cross_marker:changed", "marker_id": mid,
+        "deleted": True, "reload_board": False,
+    })
     return Response(status_code=204)
 
 
@@ -3015,6 +3018,7 @@ async def meldung_annehmen(
         # Bürgermeldungs-Foto auf Einsatzstelle übertragen
         if report.photo_filename:
             from pathlib import Path as _Path
+
             from app.services.lage_media_service import copy_citizen_photo_to_site
             citizen_photo = _Path("app_storage/citizen_media") / report.photo_filename
             media_obj = copy_citizen_photo_to_site(
@@ -4008,10 +4012,14 @@ async def lage_karte_druck(
 
     def _site_color(s: IncidentSite) -> str:
         c = SITE_PRIORITY_COLOR.get(s.priority) if s.priority else None
-        if c == "red":    return "#ef4444"
-        if c == "orange": return "#f97316"
-        if c == "yellow": return "#eab308"
-        if s.phase == SitePhase.erledigt: return "#22c55e"
+        if c == "red":
+            return "#ef4444"
+        if c == "orange":
+            return "#f97316"
+        if c == "yellow":
+            return "#eab308"
+        if s.phase == SitePhase.erledigt:
+            return "#22c55e"
         return "#6b7280"
 
     _prio_letter = {

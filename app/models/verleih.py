@@ -24,12 +24,12 @@ from app.core.tenant import TenantScoped
 from app.db import Base
 
 
-class VerleihStatus(str, enum.Enum):
+class VerleihStatus(enum.StrEnum):
     ausgeliehen    = "ausgeliehen"
     zurueckgegeben = "zurueckgegeben"
 
 
-class ArtikelVerfuegbarkeit(str, enum.Enum):
+class ArtikelVerfuegbarkeit(enum.StrEnum):
     verfuegbar  = "verfuegbar"
     ausgeliehen = "ausgeliehen"
 
@@ -171,7 +171,7 @@ class VerleihAusleihe(TenantScoped, Base):
     positionen: Mapped[list[VerleihPosition]] = relationship(
         back_populates="ausleihe", cascade="all, delete-orphan", order_by="VerleihPosition.id"
     )
-    fotos: Mapped[list["VerleihFoto"]] = relationship(
+    fotos: Mapped[list[VerleihFoto]] = relationship(
         back_populates="ausleihe", cascade="all, delete-orphan", order_by="VerleihFoto.id"
     )
 

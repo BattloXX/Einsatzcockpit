@@ -9,7 +9,6 @@ from dataclasses import dataclass
 
 from app.models.major_incident import IncidentSite, MajorIncident, SitePhase
 
-
 _DONE_PHASES = frozenset({SitePhase.erledigt, SitePhase.abgebrochen})
 
 

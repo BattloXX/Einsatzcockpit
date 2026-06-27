@@ -302,11 +302,13 @@ async def send_sso_welcome_mail(*, to: str, user_display_name: str,
 <p>Dein Account bei Einsatzcockpit wurde eingerichtet.<br>
 Du kannst dich mit deinem <strong>dienstlichen Microsoft-Account der {safe_org}</strong> anmelden.</p>
 {test_notice_html}
-<div style="background:#e8f4fd;border-left:4px solid #0078d4;padding:12px 16px;border-radius:0 4px 4px 0;margin:16px 0;font-size:0.95rem;">
+<div style="background:#e8f4fd;border-left:4px solid #0078d4;padding:12px 16px;
+border-radius:0 4px 4px 0;margin:16px 0;font-size:0.95rem;">
   <strong>Welches Konto verwenden?</strong><br><br>
   Melde dich mit deinem <strong>dienstlichen Microsoft-Account der {safe_org}</strong> an –
   also dem Konto, das du auch für Microsoft 365 / Teams der {safe_org} verwendest.<br><br>
-  <span style="color:#c0392b;font-weight:bold;">&#10060; Kein privates Microsoft-, Hotmail- oder Outlook.com-Konto verwenden!</span>
+  <span style="color:#c0392b;font-weight:bold;">&#10060; Kein privates
+  Microsoft-, Hotmail- oder Outlook.com-Konto verwenden!</span>
 </div>
 <p style="text-align:center;margin:20px 0;">
   <a href="{safe_sso_url}" style="background:#0078d4;color:#fff;padding:12px 24px;

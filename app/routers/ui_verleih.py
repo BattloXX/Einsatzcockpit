@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
@@ -18,7 +18,6 @@ from app.models.verleih import (
     VerleihAusleihe,
     VerleihFoto,
     VerleihGeraetetyp,
-    VerleihPosition,
     VerleihStatus,
     VerleihStueckliste,
     VerleihStuecklistePosition,
@@ -389,7 +388,7 @@ async def admin_verleih_uebersicht(
     ausleihen = q.all()
     lage_ids = {a.lage_id for a in ausleihen}
     lagen = (
-        {l.id: l for l in db.query(MajorIncident).filter(MajorIncident.id.in_(lage_ids)).all()}
+        {lag.id: lag for lag in db.query(MajorIncident).filter(MajorIncident.id.in_(lage_ids)).all()}
         if lage_ids else {}
     )
     return templates.TemplateResponse(request, "verleih/admin_uebersicht.html", {
@@ -413,7 +412,7 @@ async def verleih_liste(
     lage = _lage_or_404(lage_id, db)
     _check_org(user, lage)
 
-    from app.routers.ui_major_incident import _get_mi_features, _nav_counts, _can_manage
+    from app.routers.ui_major_incident import _can_manage, _get_mi_features, _nav_counts
     features = _get_mi_features(db, lage.org_id)
     if not features.get("geraeteverleih"):
         raise HTTPException(403, "Geräteverleih nicht aktiviert")
@@ -556,7 +555,10 @@ async def verleih_neu(
                 major_incident_id=lage_id,
                 category="sonstiges",
                 text=eintrag_text,
-                body_html=f'<a href="/lage/{lage_id}/verleih" style="color:inherit;opacity:.75;font-size:.9em;">→ Geräteverleih öffnen</a>',
+                body_html=(
+                    f'<a href="/lage/{lage_id}/verleih"'
+                    ' style="color:inherit;opacity:.75;font-size:.9em;">→ Geräteverleih öffnen</a>'
+                ),
                 author_name=get_author_name(request),
                 user_id=getattr(user, "id", None),
             )
@@ -578,7 +580,10 @@ async def verleih_neu(
                 org_name = "Feuerwehr"
             sms_text_pin = f"Ihr Geraeteausleihe-PIN: {pin_to_use} - {org_name}"
             sms_ok = await send_sms(lage.org_id, telefon, sms_text_pin)
-            pin_nachricht = "PIN-SMS erfolgreich versendet" if sms_ok else "PIN generiert - SMS fehlgeschlagen (Gateway pruefen)"
+            pin_nachricht = (
+                "PIN-SMS erfolgreich versendet"
+                if sms_ok else "PIN generiert - SMS fehlgeschlagen (Gateway pruefen)"
+            )
         else:
             pin_nachricht = f"PIN generiert: {pin_to_use}"
 
@@ -999,7 +1004,10 @@ async def positionen_hinzufuegen(
                 major_incident_id=lage_id,
                 category="sonstiges",
                 text=eintrag_text,
-                body_html=f'<a href="/lage/{lage_id}/verleih" style="color:inherit;opacity:.75;font-size:.9em;">→ Geräteverleih öffnen</a>',
+                body_html=(
+                    f'<a href="/lage/{lage_id}/verleih"'
+                    ' style="color:inherit;opacity:.75;font-size:.9em;">→ Geräteverleih öffnen</a>'
+                ),
                 author_name=get_author_name(request),
                 user_id=getattr(user, "id", None),
             )
@@ -1108,7 +1116,8 @@ async def geraetetyp_neu(
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
-    from datetime import UTC, datetime as _dt
+    from datetime import UTC
+    from datetime import datetime as _dt
     user = request.state.user
     gt = VerleihGeraetetyp(
         org_id=user.org_id,

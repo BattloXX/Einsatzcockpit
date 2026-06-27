@@ -3,22 +3,24 @@ from __future__ import annotations
 
 import logging
 import secrets
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
-from sqlalchemy import func, or_
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.audit import write_audit
-from app.core.permissions import is_fahrtenbuch_admin, require_role
-from app.core.timezones import local_date_to_utc
+from app.core.permissions import is_fahrtenbuch_admin
 from app.core.templating import templates
+from app.core.timezones import local_date_to_utc
 from app.db import get_db
-from app.models.fahrtenbuch import Fahrt, FahrtBenachrichtigung, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
-from app.models.master import Member, OrgSettings, VehicleMaster
+from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
+from app.models.master import OrgSettings, VehicleMaster
 from app.services.excel_export_service import exportiere_fahrten
-from app.services.fahrtenbuch_service import korrigiere_fahrt, recompute_zaehlerstand, stammdaten_korrektur_zaehler, storniere_fahrt
+from app.services.fahrtenbuch_service import (
+    korrigiere_fahrt,
+    stammdaten_korrektur_zaehler,
+    storniere_fahrt,
+)
 from app.services.schaden_service import melde_schaden
 
 router = APIRouter()
@@ -184,10 +186,20 @@ async def fahrt_detail(request: Request, fahrt_id: int, db: Session = Depends(ge
 
     original = None
     if fahrt.original_fahrt_id:
-        original = db.query(Fahrt).filter(Fahrt.id == fahrt.original_fahrt_id).execution_options(include_all_tenants=True).first()
+        original = (
+            db.query(Fahrt)
+            .filter(Fahrt.id == fahrt.original_fahrt_id)
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
     ersatz = None
     if fahrt.ersetzt_durch_id:
-        ersatz = db.query(Fahrt).filter(Fahrt.id == fahrt.ersetzt_durch_id).execution_options(include_all_tenants=True).first()
+        ersatz = (
+            db.query(Fahrt)
+            .filter(Fahrt.id == fahrt.ersetzt_durch_id)
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
 
     return templates.TemplateResponse(request, "fahrtenbuch/verwaltung/detail.html", {
         "user": user, "fahrt": fahrt, "original": original, "ersatz": ersatz,
@@ -482,13 +494,14 @@ async def qr_generieren(
     # Org-Token für den QR-Link ermitteln
     org = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     if not org or not org.fahrtenbuch_token:
-        return RedirectResponse(f"/admin/fahrtenbuch/fahrzeuge?qr_kein_org_token=1", status_code=303)
+        return RedirectResponse("/admin/fahrtenbuch/fahrzeuge?qr_kein_org_token=1", status_code=303)
 
     base_url = str(request.base_url).rstrip("/")
     url = f"{base_url}/f/{org.fahrtenbuch_token}/v/{fz.qr_token}"
     # QR-Code als PNG erzeugen
     try:
         import io
+
         import qrcode  # type: ignore
         img = qrcode.make(url)
         buf = io.BytesIO()
@@ -499,7 +512,7 @@ async def qr_generieren(
             headers={"Content-Disposition": f"attachment; filename=\"qr_{fz.code}.png\""},
         )
     except ImportError:
-        return RedirectResponse(f"/admin/fahrtenbuch/fahrzeuge?qr_lib_fehlt=1", status_code=303)
+        return RedirectResponse("/admin/fahrtenbuch/fahrzeuge?qr_lib_fehlt=1", status_code=303)
 
 
 @router.post("/admin/fahrtenbuch/token")

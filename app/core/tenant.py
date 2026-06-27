@@ -18,7 +18,7 @@ Kontextwerte:
 """
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, event, or_
+from sqlalchemy import BigInteger, ForeignKey, event, or_
 from sqlalchemy.orm import Mapped, Session, declared_attr, mapped_column, with_loader_criteria
 
 # Sentinel: unterscheidet "nie gesetzt" von "explizit None (system_admin)"

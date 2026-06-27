@@ -15,7 +15,6 @@ from app.core.audit import write_audit
 from app.models.fahrtenbuch import (
     Fahrt,
     FahrtErfassungsweg,
-    FahrtKategorie,
     FahrtStatus,
     Fahrtzweck,
 )
@@ -125,7 +124,12 @@ def recompute_zaehlerstand(fahrzeug: VehicleMaster, art: str, db: Session) -> No
 def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
     """Validiert und speichert eine neue Fahrt. Aktualisiert Zählerstände atomar."""
     fahrzeug_id = daten["fahrzeug_id"]
-    fahrzeug = db.query(VehicleMaster).filter(VehicleMaster.id == fahrzeug_id).execution_options(include_all_tenants=True).first()
+    fahrzeug = (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.id == fahrzeug_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
     if not fahrzeug:
         raise HTTPException(status_code=404, detail="Fahrzeug nicht gefunden")
 
@@ -240,7 +244,12 @@ def storniere_fahrt(fahrt: Fahrt, grund: str, user_id: int, db: Session) -> None
         payload={"grund": grund},
     )
     # Zählerstände auf höchsten aktiven Wert zurücksetzen
-    fahrzeug = db.query(VehicleMaster).filter(VehicleMaster.id == fahrt.fahrzeug_id).execution_options(include_all_tenants=True).first()
+    fahrzeug = (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.id == fahrt.fahrzeug_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
     if fahrzeug:
         for art in ["km", "bh", "seilwinde_bh"]:
             recompute_zaehlerstand(fahrzeug, art, db)

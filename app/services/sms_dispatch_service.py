@@ -66,7 +66,7 @@ def _normalize_phone(phone: str) -> str:
 
 
 def collect_einsatzinfo_recipients(
-    db: "Session",
+    db: Session,
     org_id: int,
     alarm_type_id: int | None,
 ) -> dict[str, object]:

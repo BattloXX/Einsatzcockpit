@@ -5,8 +5,8 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.permissions import has_role
-from app.core.timezones import local_date_to_utc
 from app.core.templating import templates
+from app.core.timezones import local_date_to_utc
 from app.db import get_db
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck
 from app.models.incident import Incident, IncidentOrg

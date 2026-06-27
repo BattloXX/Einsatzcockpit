@@ -4,13 +4,11 @@ Alle Funktionen sind reine Service-Logik ohne HTTP-Abhängigkeiten.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Literal
 
 from sqlalchemy.orm import Session
-
 
 # ── Datentypen ────────────────────────────────────────────────────────────────
 

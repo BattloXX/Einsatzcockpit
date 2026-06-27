@@ -4,20 +4,20 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     DateTime,
     Float,
     Index,
     Integer,
-    JSON,
     String,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db import Base
 from app.core.tenant import TenantScoped
+from app.db import Base
 
 
 class WeatherAlertRule(Base, TenantScoped):

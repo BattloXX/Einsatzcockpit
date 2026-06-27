@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
 from app.db import Base
+
+if TYPE_CHECKING:
+    from app.models.master import Member, VehicleMaster
 
 
 class Termin(TenantScoped, Base):
@@ -96,13 +100,13 @@ class Teilnahme(TenantScoped, Base):
     )
     hinzugefuegt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    mitglied: Mapped["Member | None"] = relationship(  # type: ignore[name-defined]
+    mitglied: Mapped[Member | None] = relationship(  # type: ignore[name-defined]
         "Member", lazy="joined", foreign_keys="[Teilnahme.mitglied_id]"
     )
-    funktion: Mapped["Funktion | None"] = relationship(
+    funktion: Mapped[Funktion | None] = relationship(
         "Funktion", lazy="joined", foreign_keys="[Teilnahme.funktion_id]"
     )
-    fahrzeug: Mapped["VehicleMaster | None"] = relationship(  # type: ignore[name-defined]
+    fahrzeug: Mapped[VehicleMaster | None] = relationship(  # type: ignore[name-defined]
         "VehicleMaster", lazy="joined", foreign_keys="[Teilnahme.fahrzeug_id]"
     )
 

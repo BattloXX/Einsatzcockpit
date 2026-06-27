@@ -105,6 +105,7 @@ async def create_user(
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     import secrets as _sec
+
     from app.config import settings as app_settings
     from app.models.sso import OrgSsoConfig
     current_user = request.state.user
@@ -184,7 +185,10 @@ async def create_user(
     )
     roles_list = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
-    sso_cfg_cur = db.query(OrgSsoConfig).filter(OrgSsoConfig.org_id == current_user.org_id).first() if current_user.org_id else None
+    sso_cfg_cur = (
+        db.query(OrgSsoConfig).filter(OrgSsoConfig.org_id == current_user.org_id).first()
+        if current_user.org_id else None
+    )
     org_sso_enabled = (
         app_settings.SSO_ENABLED
         and (is_sysadmin or bool(sso_cfg_cur and sso_cfg_cur.enabled and sso_cfg_cur.is_fully_configured))

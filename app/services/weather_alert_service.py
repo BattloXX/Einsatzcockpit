@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger("einsatzleiter.weather_alert")
@@ -33,8 +33,14 @@ RULE_DEFAULTS: dict[str, dict] = {
         "v_min": 2.0, "v_max": 14.0, "rh_min": 80.0,
     },
     "amtlich":     {"min_level": 2, "nur_typen": []},
-    "foehn":       {"dir_min": 150.0, "dir_max": 210.0, "vorwarn_gust_ms": 13.0, "akut_gust_ms": 15.0, "rh_max_pct": 40.0},
-    "waldbrand":   {"trocken_tage": 5, "max_nieder_mm": 1.0, "temp_min_c": 25.0, "rh_max_pct": 35.0, "wind_min_ms": 3.0},
+    "foehn": {
+        "dir_min": 150.0, "dir_max": 210.0,
+        "vorwarn_gust_ms": 13.0, "akut_gust_ms": 15.0, "rh_max_pct": 40.0,
+    },
+    "waldbrand": {
+        "trocken_tage": 5, "max_nieder_mm": 1.0,
+        "temp_min_c": 25.0, "rh_max_pct": 35.0, "wind_min_ms": 3.0,
+    },
     "tauwetter":   {"temp_anstieg_k": 8.0, "temp_schwelle_c": 2.0, "pegel_trend": "steigend"},
     "downburst":   {"min_level": 3, "boe_sprung_ms": 25.0},
 }

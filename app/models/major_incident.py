@@ -192,7 +192,7 @@ class MajorIncident(Base):
     comms:          Mapped[list[CommLogEntry]] = relationship(cascade="all, delete-orphan")
     journal_entries: Mapped[list[LageJournalEntry]] = relationship(cascade="all, delete-orphan")
     einheiten:      Mapped[list[LageEinheit]] = relationship(cascade="all, delete-orphan")
-    cross_site_markers: Mapped[list["CrossSiteMarker"]] = relationship(cascade="all, delete-orphan")
+    cross_site_markers: Mapped[list[CrossSiteMarker]] = relationship(cascade="all, delete-orphan")
 
 
 class Sector(Base):
@@ -489,19 +489,31 @@ JOURNAL_CATEGORY_COLOR = {
 JOURNAL_TEMPLATES: dict[str, dict] = {
     "meldung": {
         "subject": "Meldung: ",
-        "body": "<p><strong>Von:</strong> </p><p><strong>Inhalt:</strong> </p><p><strong>Zeitbezug:</strong> </p><p><strong>Quelle/Zuverlässigkeit:</strong> </p>",
+        "body": (  # noqa: E501
+            "<p><strong>Von:</strong> </p><p><strong>Inhalt:</strong> </p>"
+            "<p><strong>Zeitbezug:</strong> </p><p><strong>Quelle/Zuverlässigkeit:</strong> </p>"
+        ),
     },
     "anweisung": {
         "subject": "Auftrag: ",
-        "body": "<p><strong>An:</strong> </p><p><strong>Auftrag:</strong> </p><p><strong>Frist:</strong> </p><p><strong>Rückmeldung erwartet bis:</strong> </p>",
+        "body": (
+            "<p><strong>An:</strong> </p><p><strong>Auftrag:</strong> </p>"
+            "<p><strong>Frist:</strong> </p><p><strong>Rückmeldung erwartet bis:</strong> </p>"
+        ),
     },
     "entscheidung": {
         "subject": "Entscheidung: ",
-        "body": "<p><strong>Lagebezug:</strong> </p><p><strong>Entscheidung:</strong> </p><p><strong>Begründung:</strong> </p><p><strong>Veranlassung/Folgemaßnahmen:</strong> </p>",
+        "body": (
+            "<p><strong>Lagebezug:</strong> </p><p><strong>Entscheidung:</strong> </p>"
+            "<p><strong>Begründung:</strong> </p><p><strong>Veranlassung/Folgemaßnahmen:</strong> </p>"
+        ),
     },
     "lagemeldung": {
         "subject": "Lagebild Stand ",
-        "body": "<p><strong>Allgemeine Lage:</strong> </p><p><strong>Eigene Lage (Kräfte):</strong> </p><p><strong>Gefahren/Entwicklung:</strong> </p><p><strong>Maßnahmen:</strong> </p>",
+        "body": (
+            "<p><strong>Allgemeine Lage:</strong> </p><p><strong>Eigene Lage (Kräfte):</strong> </p>"
+            "<p><strong>Gefahren/Entwicklung:</strong> </p><p><strong>Maßnahmen:</strong> </p>"
+        ),
     },
     "sonstiges": {"subject": "", "body": ""},
 }
@@ -524,7 +536,7 @@ class LageJournalEntry(Base):
     user_id:           Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id"), nullable=True)
 
-    media: Mapped[list["LageJournalMedia"]] = relationship(
+    media: Mapped[list[LageJournalMedia]] = relationship(
         "LageJournalMedia", cascade="all, delete-orphan", lazy="select",
         foreign_keys="LageJournalMedia.journal_entry_id",
     )
@@ -543,7 +555,8 @@ class LageJournalMedia(Base):
     uploaded_by:      Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     author_name:      Mapped[str | None] = mapped_column(String(120), nullable=True)
     bytes:            Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    org_id:           Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
+    org_id:           Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
 
 
 # ── Lage-QR-Token (Schnellzugang per QR-Code) ────────────────────────────────
@@ -655,9 +668,9 @@ class CrossSiteMarker(Base):
     def status_color(self) -> str:
         return CROSS_MARKER_STATUS_COLOR.get(self.status, "#6b7280")
 
-    log_entries: Mapped[list["CrossMarkerLogEntry"]] = relationship(
+    log_entries: Mapped[list[CrossMarkerLogEntry]] = relationship(
         cascade="all, delete-orphan", order_by="CrossMarkerLogEntry.ts")
-    media: Mapped[list["CrossMarkerMedia"]] = relationship(cascade="all, delete-orphan")
+    media: Mapped[list[CrossMarkerMedia]] = relationship(cascade="all, delete-orphan")
 
     @property
     def address_line(self) -> str:

@@ -469,7 +469,7 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
     base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
     alert_rules = _alert_rules_for_template(db, effective_org_id)
     alert_logs = _alert_logs_for_template(db, effective_org_id)
-    from app.services.weather_alert_service import RULE_LABELS, RULE_DEFAULTS
+    from app.services.weather_alert_service import RULE_DEFAULTS, RULE_LABELS
     ctx = {
         "user": user,
         "org": org,
@@ -811,8 +811,8 @@ async def weather_alert_test_mail(
         error = "Kein E-Mail-Empfänger konfiguriert."
     else:
         try:
-            from app.services.mail_service import _build_message, _send, get_smtp_cfg
             from app.models.master import FireDept
+            from app.services.mail_service import _build_message, _send, get_smtp_cfg
             org = db.query(FireDept).filter(FireDept.id == effective_org_id).first()
             smtp_cfg = get_smtp_cfg()
             betreff = f"[Wetterwarnung Test] – {org.name if org else ''}"

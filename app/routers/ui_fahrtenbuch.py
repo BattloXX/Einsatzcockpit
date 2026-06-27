@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import secrets
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -32,11 +31,21 @@ except ImportError:
 
 def _resolve_org_by_token(token: str, db: Session):
     """Liefert OrgSettings zur Token-Org oder None."""
-    return db.query(OrgSettings).filter(OrgSettings.fahrtenbuch_token == token).execution_options(include_all_tenants=True).first()
+    return (
+        db.query(OrgSettings)
+        .filter(OrgSettings.fahrtenbuch_token == token)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
 
 
 def _resolve_vehicle_by_qr(qr_token: str, db: Session):
-    return db.query(VehicleMaster).filter(VehicleMaster.qr_token == qr_token).execution_options(include_all_tenants=True).first()
+    return (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.qr_token == qr_token)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
 
 
 def _current_user(request: Request):
@@ -87,7 +96,6 @@ async def fahrtenbuch_speichern(
         db.rollback()
         # Warnung-Flags: Formular erneut anzeigen mit Fehlermeldung
         fahrzeug_id = int(form.get("fahrzeug_id") or 0)
-        fahrzeug = db.query(VehicleMaster).filter(VehicleMaster.id == fahrzeug_id).execution_options(include_all_tenants=True).first() if fahrzeug_id else None
         return await _render_erfassung(
             request, db, user=user, preset_fahrzeug_id=fahrzeug_id,
             fehler=exc.detail, form_daten=dict(form),
@@ -135,7 +143,11 @@ async def hx_maschinist_autocomplete(
 ):
     # HTMX sendet den Feldnamen als Parameter-Key (maschinist_name, ausbildner_name …)
     qp = request.query_params
-    q = qp.get("q") or qp.get("maschinist_name") or qp.get("maschinist2_name") or qp.get("ausbildner_name") or qp.get("gruppenkommandant_name") or qp.get("seilwinde_bediener_name") or ""
+    q = (
+        qp.get("q") or qp.get("maschinist_name") or qp.get("maschinist2_name")
+        or qp.get("ausbildner_name") or qp.get("gruppenkommandant_name")
+        or qp.get("seilwinde_bediener_name") or ""
+    )
     user = _current_user(request)
     token_org: OrgSettings | None = getattr(request.state, "fahrtenbuch_org", None)
     if not user and not token_org:
@@ -381,7 +393,10 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
         "seilwinde_bediener_member_id": _int("seilwinde_bediener_member_id"),
         "seilwinde_bediener_name": _str("seilwinde_bediener_name"),
         "seilwinde_zuege": _int("seilwinde_zuege"),
-        "seilwinde_wartung": (True if form.get("seilwinde_wartung") == "ja" else (False if form.get("seilwinde_wartung") == "nein" else None)),
+        "seilwinde_wartung": (
+            True if form.get("seilwinde_wartung") == "ja"
+            else (False if form.get("seilwinde_wartung") == "nein" else None)
+        ),
         "zielort_id": _int("zielort_id"),
         "zielort_freitext": _str("zielort_freitext"),
         "zweck_id": _int("zweck_id"),

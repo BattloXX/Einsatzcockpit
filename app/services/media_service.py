@@ -528,7 +528,6 @@ async def store_upload_for_uas_medien(
     Videos per ffmpeg transkodiert. Gibt ein befuelltes UASMedien-Objekt zurueck
     (noch nicht commitet).
     """
-    from datetime import date as _date
 
     from app.models.uas import UASMedien, UASMedienDsgvoStatus
 

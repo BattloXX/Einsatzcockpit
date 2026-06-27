@@ -7,12 +7,17 @@ Zwei Erweiterungen:
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
 from app.db import Base
+
+if TYPE_CHECKING:
+    from app.models.master import AlarmType, Member
+    from app.models.user import User
 
 
 class SmsGroup(TenantScoped, Base):
@@ -43,7 +48,7 @@ class SmsGroupMember(Base):
     )
 
     group: Mapped[SmsGroup] = relationship(back_populates="members")
-    member: Mapped["app.models.master.Member"] = relationship(lazy="joined")  # type: ignore[name-defined]
+    member: Mapped[Member] = relationship(lazy="joined")
 
 
 class SmsEinsatzinfoRecipient(TenantScoped, Base):
@@ -68,9 +73,9 @@ class SmsEinsatzinfoRecipient(TenantScoped, Base):
         BigInteger, ForeignKey("member.id", ondelete="CASCADE"), nullable=True
     )
 
-    alarm_type: Mapped["app.models.master.AlarmType | None"] = relationship(lazy="joined")  # type: ignore[name-defined]
+    alarm_type: Mapped[AlarmType | None] = relationship(lazy="joined")
     group: Mapped[SmsGroup | None] = relationship(lazy="joined")
-    member: Mapped["app.models.master.Member | None"] = relationship(lazy="joined")  # type: ignore[name-defined]
+    member: Mapped[Member | None] = relationship(lazy="joined")
 
     @property
     def is_global(self) -> bool:
@@ -95,6 +100,6 @@ class SmsLog(TenantScoped, Base):
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
 
-    triggered_by: Mapped["app.models.user.User | None"] = relationship(  # type: ignore[name-defined]
+    triggered_by: Mapped[User | None] = relationship(
         "User", foreign_keys=[triggered_by_user_id], lazy="joined"
     )

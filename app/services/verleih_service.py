@@ -9,7 +9,6 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.major_incident import IncidentSite
 from app.models.master import OrgSettings
 from app.models.verleih import (
     ArtikelVerfuegbarkeit,

@@ -94,7 +94,7 @@ def _org_weather_enabled(org_id: int | None, db: Session) -> bool:
     return bool(s.weather_enabled)
 
 
-def _build_nowcast_bars(now: "weather_service.NowcastResult") -> list[dict]:
+def _build_nowcast_bars(now: weather_service.NowcastResult) -> list[dict]:
     """Pre-computes bar chart data for the Nowcast sparkline in the template."""
     max_rr = max((s.precipitation_mm for s in now.steps), default=0.0) or 0.1
     bars = []
@@ -146,7 +146,7 @@ def _build_warning_views(warnings: list) -> list[dict]:
     return views
 
 
-def _peak_label(now: "weather_service.NowcastResult") -> str | None:
+def _peak_label(now: weather_service.NowcastResult) -> str | None:
     """Returns human-readable time to peak, or None if no precipitation."""
     if now.peak_mm < 0.05 or now.peak_at is None:
         return None
@@ -174,9 +174,10 @@ async def _build_abfluss_views(org_id: int | None, db: Session) -> list[dict]:
     """Pegel-Stationen der Org laden, Daten aktualisieren und template-ready Views bauen."""
     if not org_id:
         return []
+    from zoneinfo import ZoneInfo
+
     from app.models.master import OrgSettings as _OS
     from app.services import abfluss_service
-    from zoneinfo import ZoneInfo
 
     org_s = db.query(_OS).filter(_OS.org_id == org_id).first()
     if not org_s:
@@ -828,10 +829,14 @@ async def wetter_index(
                       ("forecast", forecast), ("warnings", warnings)]:
         if isinstance(val, Exception):
             logger.warning("Wetter-Seite %s-Fehler: %s", name, val)
-    if isinstance(nowcast, Exception):   nowcast = None
-    if isinstance(current, Exception):   current = None
-    if isinstance(forecast, Exception):  forecast = None
-    if isinstance(warnings, Exception):  warnings = []
+    if isinstance(nowcast, Exception):
+        nowcast = None
+    if isinstance(current, Exception):
+        current = None
+    if isinstance(forecast, Exception):
+        forecast = None
+    if isinstance(warnings, Exception):
+        warnings = []
 
     nowcast_bars = _build_nowcast_bars(nowcast) if nowcast else []
     peak_label = _peak_label(nowcast) if nowcast else None

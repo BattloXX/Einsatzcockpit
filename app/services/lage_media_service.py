@@ -1,4 +1,5 @@
-"""Bild-Upload für Einsatzstellen (SiteMedia), Einsatzjournal (LageJournalMedia) und CrossSiteMarker (CrossMarkerMedia)."""
+"""Bild-Upload für Einsatzstellen (SiteMedia), Einsatzjournal (LageJournalMedia)
+und CrossSiteMarker (CrossMarkerMedia)."""
 from __future__ import annotations
 
 import io
@@ -112,7 +113,7 @@ def copy_citizen_photo_to_site(
     user_id: int | None = None,
     author_name: str | None = None,
     db=None,
-) -> "SiteMedia | None":
+) -> SiteMedia | None:
     """Überträgt ein Bürgermeldungs-Foto auf eine Einsatzstelle (SiteMedia)."""
     if not citizen_photo_path.exists():
         return None

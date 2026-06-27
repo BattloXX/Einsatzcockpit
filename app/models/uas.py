@@ -15,7 +15,6 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
     Float,
     ForeignKey,
     Index,
@@ -28,10 +27,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.tenant import TenantScoped
 from app.db import Base
 
-
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
-class UASDeviceCeKlasse(str, enum.Enum):
+class UASDeviceCeKlasse(enum.StrEnum):
     C0 = "C0"
     C1 = "C1"
     C2 = "C2"
@@ -40,36 +38,36 @@ class UASDeviceCeKlasse(str, enum.Enum):
     keine = "keine"  # privat/unbemustert
 
 
-class UASDeviceUnterkategorie(str, enum.Enum):
+class UASDeviceUnterkategorie(enum.StrEnum):
     A1 = "A1"
     A2 = "A2"
     A3 = "A3"
 
 
-class UASDeviceStatus(str, enum.Enum):
+class UASDeviceStatus(enum.StrEnum):
     aktiv = "aktiv"
     wartung = "wartung"
     ausgemustert = "ausgemustert"
 
 
-class UASBosStufe(str, enum.Enum):
+class UASBosStufe(enum.StrEnum):
     stufe_0 = "0"  # keine BOS-Ausbildung
     stufe_1 = "1"
     stufe_2 = "2"
 
 
-class UASWartungArt(str, enum.Enum):
+class UASWartungArt(enum.StrEnum):
     monatliche_sichtkontrolle = "monatliche_sichtkontrolle"
     jahresservice = "jahresservice"
     reparatur = "reparatur"
 
 
-class UASWartungErgebnis(str, enum.Enum):
+class UASWartungErgebnis(enum.StrEnum):
     io = "io"    # in Ordnung
     nio = "nio"  # nicht in Ordnung
 
 
-class UASFlugbewegungArt(str, enum.Enum):
+class UASFlugbewegungArt(enum.StrEnum):
     einsatz = "einsatz"
     ausbildung = "ausbildung"
     check = "check"
@@ -263,7 +261,7 @@ class UASWartung(TenantScoped, Base):
 
 # ── Drohnen-Einsatz (PR 3) ────────────────────────────────────────────────────
 
-class UASEinsatzStatus(str, enum.Enum):
+class UASEinsatzStatus(enum.StrEnum):
     alarmiert = "alarmiert"
     angemeldet = "angemeldet"
     im_einsatz = "im_einsatz"
@@ -271,7 +269,7 @@ class UASEinsatzStatus(str, enum.Enum):
     abgeschlossen = "abgeschlossen"
 
 
-class UASEinsatzRolle(str, enum.Enum):
+class UASEinsatzRolle(enum.StrEnum):
     teamleiter = "teamleiter"
     pilot = "pilot"
     operator = "operator"
@@ -354,25 +352,25 @@ class UASEinsatzRolleEintrag(TenantScoped, Base):
 
 # ── Flugbuch & Checklisten (PR 4) ─────────────────────────────────────────────
 
-class UASFlugDurchfuehrung(str, enum.Enum):
+class UASFlugDurchfuehrung(enum.StrEnum):
     vlos = "vlos"
     evlos = "evlos"
     bvlos = "bvlos"
 
 
-class UASFlugGrundlage(str, enum.Enum):
+class UASFlugGrundlage(enum.StrEnum):
     open_a1 = "open_a1"
     open_a2 = "open_a2"
     open_a3 = "open_a3"
     specific_bescheid = "specific_bescheid"
 
 
-class UASFlugStatus(str, enum.Enum):
+class UASFlugStatus(enum.StrEnum):
     offen = "offen"
     abgeschlossen = "abgeschlossen"
 
 
-class UASChecklisteTyp(str, enum.Enum):
+class UASChecklisteTyp(enum.StrEnum):
     vorflug = "vorflug"
     nachflug = "nachflug"
     check = "check"
@@ -474,7 +472,7 @@ class UASCheckliste(TenantScoped, Base):
 
 # ── Ereignis / Notfall / Unfall (PR 5) ────────────────────────────────────────
 
-class UASEreignisTyp(str, enum.Enum):
+class UASEreignisTyp(enum.StrEnum):
     notfall = "notfall"
     unfall = "unfall"
     stoerung = "stoerung"
@@ -524,7 +522,7 @@ class UASEreignis(TenantScoped, Base):
 
 # ── Kartenobjekte (PR 6) ──────────────────────────────────────────────────────
 
-class UASKartenobjektTyp(str, enum.Enum):
+class UASKartenobjektTyp(enum.StrEnum):
     start_landezone = "start_landezone"
     pilotenzone = "pilotenzone"
     fluggebiet = "fluggebiet"
@@ -557,14 +555,14 @@ class UASKartenobjekt(TenantScoped, Base):
 
 # ── Medien & DSGVO (PR 8) ────────────────────────────────────────────────────
 
-class UASMedienTyp(str, enum.Enum):
+class UASMedienTyp(enum.StrEnum):
     foto = "foto"
     video = "video"
     dokument = "dokument"
     sonstiges = "sonstiges"
 
 
-class UASMedienDsgvoStatus(str, enum.Enum):
+class UASMedienDsgvoStatus(enum.StrEnum):
     erfasst = "erfasst"
     begruendet = "begruendet"
     zur_loeschung = "zur_loeschung"

@@ -5,7 +5,7 @@ import io
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.models.uas import UASCheckliste, UASEreignis, UASFlug, UASPilot, UASWartung
+    pass
 
 _CSS_BASE = """
 @page { margin: 1.5cm; font-size: 11pt; }

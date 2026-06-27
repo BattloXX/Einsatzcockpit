@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime
 
 import qrcode
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -2754,7 +2754,7 @@ async def mannschaft_page(
     if not incident or not can_access_incident(user, incident):
         raise HTTPException(status_code=404)
 
-    from app.routers.ui_termin import _lade_teilnahmen, _load_funktionen, _load_fahrzeuge
+    from app.routers.ui_termin import _lade_teilnahmen, _load_fahrzeuge, _load_funktionen
 
     teilnahmen = _lade_teilnahmen(db, "einsatz", incident_id)
     funktionen = _load_funktionen(db, getattr(user, "org_id", None))

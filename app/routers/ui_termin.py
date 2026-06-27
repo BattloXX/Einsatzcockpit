@@ -4,15 +4,14 @@ from __future__ import annotations
 import io
 import logging
 from datetime import UTC, datetime
-from typing import Literal
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import CurrentOrgId
-from app.core.permissions import has_role, require_role
+from app.core.permissions import has_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import Member, VehicleMaster
@@ -587,7 +586,7 @@ async def teilnahme_export_xlsx(
     db: Session = Depends(get_db),
     _: CurrentOrgId = None,
 ):
-    user = _require_login(request)
+    _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
         raise HTTPException(status_code=422, detail="Ungültiger Bezug-Typ")
     teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id)

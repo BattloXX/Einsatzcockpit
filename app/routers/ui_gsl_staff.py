@@ -18,7 +18,8 @@ from app.models.major_incident import (
     MajorIncident,
     MajorIncidentStatus,
 )
-from app.services import gsl_staff_service as svc, resource_service
+from app.services import gsl_staff_service as svc
+from app.services import resource_service
 from app.services.broadcast import broadcast_lage
 
 router = APIRouter()

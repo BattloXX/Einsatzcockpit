@@ -9,14 +9,14 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import settings
 from app.core.audit import write_audit
-from app.core.crypto import decrypt_secret, encrypt_secret
-from app.services.sso_service import validate_authority_base
+from app.core.crypto import encrypt_secret
 from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import FireDept
 from app.models.sso import OrgSsoConfig, OrgSsoGroupMap
 from app.models.user import Role, User
+from app.services.sso_service import validate_authority_base
 
 router = APIRouter(prefix="/admin")
 
@@ -61,7 +61,10 @@ def sso_settings_page(
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
 
     org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
-    config = db.query(OrgSsoConfig).filter(OrgSsoConfig.org_id == effective_org_id).first() if effective_org_id else None
+    config = (
+        db.query(OrgSsoConfig).filter(OrgSsoConfig.org_id == effective_org_id).first()
+        if effective_org_id else None
+    )
 
     roles = db.query(Role).filter(Role.code != "system_admin").order_by(Role.label).all()
     redirect_uri = (
@@ -172,6 +175,7 @@ async def sso_test_connection(
 
     try:
         import httpx
+
         from app.services.sso_service import _authority
         authority = _authority(cfg.tenant_id, cfg.authority_base)
         async with httpx.AsyncClient(timeout=settings.SSO_HTTP_TIMEOUT) as client:

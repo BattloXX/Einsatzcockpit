@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.core.permissions import has_role, require_role
+from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import AlarmType, Member, OrgSettings
@@ -620,8 +620,8 @@ async def sms_send_execute(
     if not phones:
         return RedirectResponse("/admin/sms-senden?error=no_recipients", status_code=303)
 
-    from app.services.sms_dispatch_service import send_bulk
     from app.core.audit import write_audit
+    from app.services.sms_dispatch_service import send_bulk
 
     jobs = [(phone, text) for phone in phones]
     total, success = await send_bulk(org_id, jobs)

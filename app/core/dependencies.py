@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
-from starlette.requests import HTTPConnection
 from sqlalchemy.orm import Session
+from starlette.requests import HTTPConnection
 
 from app.core.audit import write_audit
 from app.core.tenant import set_tenant_context
@@ -30,7 +30,13 @@ def _set_fahrtenbuch_state(request: HTTPConnection, org_id: int | None, db: Sess
     """Setzt request.state.fahrtenbuch_modul_aktiv fail-safe (nie crashen)."""
     try:
         from app.models.master import OrgSettings
-        org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first() if org_id else None
+        org_s = (
+            db.query(OrgSettings)
+            .filter(OrgSettings.org_id == org_id)
+            .execution_options(include_all_tenants=True)
+            .first()
+            if org_id else None
+        )
         request.state.fahrtenbuch_modul_aktiv = bool(org_s and org_s.fahrtenbuch_modul_aktiv)
     except Exception:
         request.state.fahrtenbuch_modul_aktiv = False

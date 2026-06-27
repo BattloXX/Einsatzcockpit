@@ -5,9 +5,7 @@ import io
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy.orm import Session
-
-from app.models.fahrtenbuch import Fahrt, FahrtStatus
+from app.models.fahrtenbuch import Fahrt
 
 
 def _val(v: Any) -> str:

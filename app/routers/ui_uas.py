@@ -6,7 +6,6 @@ Prefix: /uas
 from __future__ import annotations
 
 import json
-import secrets
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -441,16 +440,26 @@ def geraet_per_qr(
 
 # Prüfpunkte-Vorlage laut Anhang 8.5
 _PRUEFPUNKTE_MONATLICH = [
-    {"key": "p01", "label": "Propeller / Rotoren: Beschädigungen, Risse, Verbiegungen?", "erledigt": False, "bemerkung": ""},
-    {"key": "p02", "label": "Motoren: Lagerspiel, Geräusche, Verschmutzung", "erledigt": False, "bemerkung": ""},
-    {"key": "p03", "label": "Rahmen / Arme: Risse, Brüche, Verbindungselemente fest?", "erledigt": False, "bemerkung": ""},
-    {"key": "p04", "label": "Akkus: Aufblähung, Beschädigungen, Kapazitätsverlust?", "erledigt": False, "bemerkung": ""},
-    {"key": "p05", "label": "Ladegeräte und Kabel: Zustand, Isolierung", "erledigt": False, "bemerkung": ""},
-    {"key": "p06", "label": "Kamera / Gimbal: Befestigung, Funktion, Sauberkeit", "erledigt": False, "bemerkung": ""},
-    {"key": "p07", "label": "Fernsteuerung: Akku, Display, Antennen, Verbindungstest", "erledigt": False, "bemerkung": ""},
-    {"key": "p08", "label": "Failsafe-Einstellungen (RTH, Lost-Link) geprüft?", "erledigt": False, "bemerkung": ""},
-    {"key": "p09", "label": "Firmware / Software: aktueller Stand?", "erledigt": False, "bemerkung": ""},
-    {"key": "p10", "label": "Lagerung: Transportkoffer, Temperaturbedingungen OK?", "erledigt": False, "bemerkung": ""},
+    {"key": "p01", "label": "Propeller / Rotoren: Beschädigungen, Risse, Verbiegungen?",
+     "erledigt": False, "bemerkung": ""},
+    {"key": "p02", "label": "Motoren: Lagerspiel, Geräusche, Verschmutzung",
+     "erledigt": False, "bemerkung": ""},
+    {"key": "p03", "label": "Rahmen / Arme: Risse, Brüche, Verbindungselemente fest?",
+     "erledigt": False, "bemerkung": ""},
+    {"key": "p04", "label": "Akkus: Aufblähung, Beschädigungen, Kapazitätsverlust?",
+     "erledigt": False, "bemerkung": ""},
+    {"key": "p05", "label": "Ladegeräte und Kabel: Zustand, Isolierung",
+     "erledigt": False, "bemerkung": ""},
+    {"key": "p06", "label": "Kamera / Gimbal: Befestigung, Funktion, Sauberkeit",
+     "erledigt": False, "bemerkung": ""},
+    {"key": "p07", "label": "Fernsteuerung: Akku, Display, Antennen, Verbindungstest",
+     "erledigt": False, "bemerkung": ""},
+    {"key": "p08", "label": "Failsafe-Einstellungen (RTH, Lost-Link) geprüft?",
+     "erledigt": False, "bemerkung": ""},
+    {"key": "p09", "label": "Firmware / Software: aktueller Stand?",
+     "erledigt": False, "bemerkung": ""},
+    {"key": "p10", "label": "Lagerung: Transportkoffer, Temperaturbedingungen OK?",
+     "erledigt": False, "bemerkung": ""},
 ]
 
 _PRUEFPUNKTE_JAHRESSERVICE = _PRUEFPUNKTE_MONATLICH + [
@@ -1235,7 +1244,12 @@ def flug_neu_form(
 ):
     from app.models.incident import Incident
     from app.models.uas import (
-        UASDevice, UASEinsatz, UASFlugDurchfuehrung, UASFlugGrundlage, UASKartenobjekt, UASPilot,
+        UASDevice,
+        UASEinsatz,
+        UASFlugDurchfuehrung,
+        UASFlugGrundlage,
+        UASKartenobjekt,
+        UASPilot,
     )
     from app.services.uas_compliance import pilot_freigabe_status
 
@@ -1444,7 +1458,7 @@ async def flug_abschliessen(
     landung_at: str = Form(""),
     start_at: str = Form(""),
 ):
-    from datetime import UTC, datetime
+    from datetime import datetime
 
     from app.models.uas import UASFlug, UASFlugStatus
     from app.services.uas_flugbuch import berechne_dauer_min, inhalt_hash
@@ -1879,7 +1893,7 @@ async def karte_objekt_loeschen(
 # PR 7: PDF-Export (WeasyPrint, ÖBFV Anh. 8.1–8.6)
 # ══════════════════════════════════════════════════════════════════════════════
 
-from fastapi.responses import Response as _Response
+from fastapi.responses import Response as _Response  # noqa: E402
 
 
 @router.get("/flug/{flug_id}/pdf/flugbuch")
@@ -2204,6 +2218,7 @@ async def medien_status_aendern(
     begruendung: str = Form(""),
 ):
     from datetime import UTC, datetime
+
     from app.models.uas import UASMedien, UASMedienDsgvoStatus
 
     m = db.query(UASMedien).filter(UASMedien.id == medien_id, UASMedien.org_id == user.org_id).first()
@@ -2233,6 +2248,7 @@ def dsgvo_uebersicht(
     _guard: None = Depends(require_uas_enabled),
 ):
     from datetime import date
+
     from app.models.uas import UASMedien, UASMedienDsgvoStatus
 
     heute = date.today()

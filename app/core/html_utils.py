@@ -11,8 +11,8 @@ _ALLOWED_ATTRIBUTES = {"a": {"href", "rel", "target"}}
 
 def _stdlib_sanitize(raw: str) -> str:
     """Minimal allowlist sanitizer using only stdlib html.parser."""
-    from html.parser import HTMLParser
     import html as _html
+    from html.parser import HTMLParser
 
     class _Parser(HTMLParser):
         def __init__(self) -> None:

@@ -4,12 +4,15 @@ from __future__ import annotations
 import enum
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.master import VehicleMaster
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     Index,
     Integer,
@@ -17,25 +20,28 @@ from sqlalchemy import (
     String,
     Text,
 )
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
 from app.db import Base
 
 
-class FahrtKategorie(str, enum.Enum):
+class FahrtKategorie(enum.StrEnum):
     einsatz = "einsatz"
     uebung = "uebung"
     sonstige = "sonstige"
 
 
-class FahrtStatus(str, enum.Enum):
+class FahrtStatus(enum.StrEnum):
     aktiv = "aktiv"
     storniert = "storniert"
     ersetzt = "ersetzt"
 
 
-class FahrtErfassungsweg(str, enum.Enum):
+class FahrtErfassungsweg(enum.StrEnum):
     web = "web"
     token = "token"
 
@@ -182,7 +188,7 @@ class Fahrt(Base):
     token_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     # Relationships
-    fahrzeug: Mapped["VehicleMaster"] = relationship(foreign_keys=[fahrzeug_id])  # type: ignore[name-defined]
+    fahrzeug: Mapped[VehicleMaster] = relationship(foreign_keys=[fahrzeug_id])  # type: ignore[name-defined]
     zweck: Mapped[Fahrtzweck] = relationship(foreign_keys=[zweck_id])
     zielort: Mapped[Zielort | None] = relationship(foreign_keys=[zielort_id])
     benachrichtigungen: Mapped[list[FahrtBenachrichtigung]] = relationship(

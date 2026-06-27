@@ -6,7 +6,7 @@ Attribution (CC BY 4.0 required): use GEOSPHERE_ATTRIBUTION in any UI showing th
 """
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -47,7 +47,7 @@ def has_cached(lat: float, lng: float) -> bool:
     return _cache_get(_cache_key("nowcast", lat, lng)) is not None
 
 
-def get_cached_nowcast(lat: float, lng: float) -> "NowcastResult | None":
+def get_cached_nowcast(lat: float, lng: float) -> NowcastResult | None:
     """Returns cached NowcastResult without triggering a fetch."""
     return _cache_get(_cache_key("nowcast", lat, lng))
 
@@ -817,7 +817,7 @@ def _wildfire_alerts(
     return []
 
 
-def _fc_acc_at(forecast: "ForecastResult | None", hours: int) -> float | None:
+def _fc_acc_at(forecast: ForecastResult | None, hours: int) -> float | None:
     """Akkumulierter Niederschlag bis zum Horizont <= hours (mm)."""
     if not forecast:
         return None
@@ -829,8 +829,8 @@ def _fc_acc_at(forecast: "ForecastResult | None", hours: int) -> float | None:
 
 
 def _heavy_rain_alerts(
-    nowcast: "NowcastResult | None",
-    forecast: "ForecastResult | None",
+    nowcast: NowcastResult | None,
+    forecast: ForecastResult | None,
 ) -> list[ScenarioAlert]:
     """Starkregen / Hochwasser – hohe Niederschlagsmengen kurzfristig/mittelfristig."""
     now_total = nowcast.total_mm if nowcast else None
@@ -867,9 +867,9 @@ def _heavy_rain_alerts(
 
 
 def _snow_alerts(
-    current: "CurrentWeather | None",
-    nowcast: "NowcastResult | None",
-    forecast: "ForecastResult | None",
+    current: CurrentWeather | None,
+    nowcast: NowcastResult | None,
+    forecast: ForecastResult | None,
 ) -> list[ScenarioAlert]:
     """Schneefall / Schneelast – Niederschlag bei Temperaturen um/unter dem Gefrierpunkt."""
     temp = current.temperature_c if current else None
@@ -914,7 +914,7 @@ def _snow_alerts(
 
 
 def _thunderstorm_alerts(
-    warnings: "list[WeatherWarning] | None",
+    warnings: list[WeatherWarning] | None,
 ) -> list[ScenarioAlert]:
     """Gewitter – aus amtlichen ZAMG-Warnungen abgeleitet."""
     if not warnings:
@@ -932,8 +932,8 @@ def _thunderstorm_alerts(
 
 
 def _ice_alerts(
-    current: "CurrentWeather | None",
-    nowcast: "NowcastResult | None",
+    current: CurrentWeather | None,
+    nowcast: NowcastResult | None,
 ) -> list[ScenarioAlert]:
     """Glatteis / gefrierender Regen – Niederschlag im Temperaturfenster um 0 °C."""
     temp = current.temperature_c if current else None
@@ -958,10 +958,10 @@ def _ice_alerts(
 
 
 def analyze_weather(
-    current: "CurrentWeather | None",
-    forecast: "ForecastResult | None",
-    nowcast: "NowcastResult | None" = None,
-    warnings: "list[WeatherWarning] | None" = None,
+    current: CurrentWeather | None,
+    forecast: ForecastResult | None,
+    nowcast: NowcastResult | None = None,
+    warnings: list[WeatherWarning] | None = None,
 ) -> list[ScenarioAlert]:
     """Returns scenario alerts (storm, wildfire, rain, snow, thunder, ice).
 
@@ -983,7 +983,7 @@ def analyze_weather(
 _WEEKDAYS_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
 
-async def get_daily_forecast(lat: float, lng: float) -> "DailyForecast | None":
+async def get_daily_forecast(lat: float, lng: float) -> DailyForecast | None:
     """7-Tage-Tagesvorhersage: Temp-Min/Max, Niederschlag, Windspitze (Open-Meteo daily).
 
     Gecacht fuer 1 Stunde (genug fuer ein Dashboard das alle 5 min neu laedt).
