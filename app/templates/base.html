@@ -188,21 +188,16 @@
       <span class="bottom-nav__icon">📚</span>
       <span>Archiv</span>
     </a>
+    <a href="/statistik" class="bottom-nav__item {% if '/statistik' in _p %}bottom-nav__item--active{% endif %}">
+      <span class="bottom-nav__icon">📊</span>
+      <span>Statistik</span>
+    </a>
     {% if WEATHER_ENABLED %}
     <a href="/wetter" class="bottom-nav__item {% if _p.startswith('/wetter') %}bottom-nav__item--active{% endif %}">
       <span class="bottom-nav__icon">🌦</span>
       <span>Wetter</span>
     </a>
-    {% else %}
-    <a href="/statistik" class="bottom-nav__item {% if '/statistik' in _p %}bottom-nav__item--active{% endif %}">
-      <span class="bottom-nav__icon">📊</span>
-      <span>Statistik</span>
-    </a>
     {% endif %}
-    <button type="button" class="bottom-nav__item" @click="mobileMenuOpen = !mobileMenuOpen" aria-label="Mehr">
-      <span class="bottom-nav__icon">☰</span>
-      <span>Mehr</span>
-    </button>
   </nav>
 
   <!-- iOS-Safari Install-Hinweis -->

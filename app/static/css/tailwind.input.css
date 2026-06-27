@@ -173,12 +173,12 @@ a:hover { text-decoration: underline; }
 /* Burger-Button (nur Mobile sichtbar) */
 .topnav__burger {
   display: none; align-items: center; justify-content: center; flex-direction: column;
-  width: 40px; height: 40px; gap: 5px; padding: 0;
-  background: transparent; border: 1px solid rgba(255,255,255,.25);
-  border-radius: 6px; cursor: pointer; flex-shrink: 0;
+  width: 44px; height: 44px; gap: 6px; padding: 0;
+  background: rgba(0,0,0,.22); border: 1.5px solid rgba(255,255,255,.45);
+  border-radius: 8px; cursor: pointer; flex-shrink: 0;
   transition: var(--transition);
 }
-.topnav__burger:hover { background: rgba(255,255,255,.12); }
+.topnav__burger:hover { background: rgba(0,0,0,.35); border-color: rgba(255,255,255,.7); }
 .topnav__burger:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .topnav__burger-bar {
   display: block; width: 22px; height: 2px; background: #fff; border-radius: 1px;
@@ -1184,10 +1184,10 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
     right: 0;
     background: var(--surface-low);
     border-top: 1px solid var(--border);
-    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    height: calc(58px + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
     z-index: 110;
-    box-shadow: 0 -2px 12px rgba(0,0,0,.35);
+    box-shadow: 0 -2px 16px rgba(0,0,0,.45);
   }
   .bottom-nav__item {
     flex: 1;
@@ -1195,23 +1195,36 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 3px;
     text-decoration: none;
     color: var(--text-muted);
-    font-size: .6rem;
+    font-size: .62rem;
     font-weight: 500;
     padding: 8px 4px;
     border: none;
     background: none;
     cursor: pointer;
-    transition: color .15s;
+    transition: color .15s, background .15s;
     min-height: 44px;
+    position: relative;
   }
-  .bottom-nav__item:hover, .bottom-nav__item--active { color: #fff; text-decoration: none; }
-  .bottom-nav__icon { font-size: 1.3rem; line-height: 1; }
+  .bottom-nav__item:hover { color: var(--on-surface); text-decoration: none; }
+  .bottom-nav__item--active {
+    color: #fff;
+    text-decoration: none;
+  }
+  .bottom-nav__item--active::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 20%; right: 20%;
+    height: 2px;
+    background: var(--red);
+    border-radius: 0 0 2px 2px;
+  }
+  .bottom-nav__icon { font-size: 1.4rem; line-height: 1; }
   /* Push content above bottom nav */
-  .main-content { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
-  .toast-container { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .main-content { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+  .toast-container { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* ── Admin: Verwaltung-Eintrag im Topnav ──────────────────────── */
@@ -1243,11 +1256,10 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
 }
 .admin-back-link:hover { color: var(--on-surface); text-decoration: none; }
 
-/* ── Mobile: Burger verstecken, Bottom-Nav übernimmt ─────── */
+/* ── Mobile: Bottom-Nav Platz freilassen ─────── */
 @media (max-width: 900px) {
-  .topnav__burger { display: none; }
   /* Scrollbarer Lage-Body muss Bottom-Nav freilassen */
-  .lage-page__body { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+  .lage-page__body { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* ── Lage Mobile Burger-Navigation ───────────────────────────────── */

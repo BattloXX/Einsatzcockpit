@@ -108,8 +108,8 @@
 .lage-status--standby{background:rgba(245,158,11,.15);color:#fbbf24;}
 /* ── exercise-topbar (global) ─────────────────────────────────── */
 .exercise-topbar{background:#92400e;color:#fde68a;text-align:center;font-weight:700;font-size:.82rem;padding:4px;letter-spacing:.05em;}
-/* ── Mobile: Burger verstecken (Bottom-Nav übernimmt) + Lage-Body-Padding ── */
-@media(max-width:900px){.topnav__burger{display:none;}.lage-page__body{padding-bottom:calc(56px + env(safe-area-inset-bottom,0px));}}
+/* ── Mobile: Bottom-Nav Platz freilassen ── */
+@media(max-width:900px){.lage-page__body{padding-bottom:calc(58px + env(safe-area-inset-bottom,0px));}}
 /* ── Lage Mobile Burger-Navigation ───────────────────────────────── */
 .lage-burger-btn{display:none;align-items:center;gap:5px;margin-left:auto;flex-shrink:0;padding:5px 10px;background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.82rem;cursor:pointer;white-space:nowrap;line-height:1.2;}
 .lage-burger-btn:hover{background:rgba(255,255,255,.12);}
@@ -127,3 +127,17 @@
 .lage-ctx-bar{position:relative;}
 /* ── Autocomplete ─────────────────────────────────────────────── */
 .autocomplete-list{list-style:none;margin:0;padding:.25rem 0;}.autocomplete-item{padding:.5rem .75rem;cursor:pointer;font-size:.9rem;border-radius:.25rem;transition:background .1s;}.autocomplete-item:hover{background:var(--surface-highest);color:var(--on-surface);}
+/* ── Burger-Button: prominenter auf Mobile ─────────────────────── */
+.topnav__burger{width:44px;height:44px;gap:6px;background:rgba(0,0,0,.22);border:1.5px solid rgba(255,255,255,.45);border-radius:8px;}
+.topnav__burger:hover{background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.7);}
+@media(max-width:900px){.topnav__burger{display:inline-flex;}}
+/* ── Bottom-Nav: verbessert ─────────────────────────────────────── */
+@media(max-width:900px){
+  .bottom-nav{height:calc(58px + env(safe-area-inset-bottom,0px));box-shadow:0 -2px 16px rgba(0,0,0,.45);}
+  .bottom-nav__item{gap:3px;font-size:.62rem;position:relative;transition:color .15s,background .15s;}
+  .bottom-nav__item--active{color:#fff;}
+  .bottom-nav__item--active::before{content:'';position:absolute;top:0;left:20%;right:20%;height:2px;background:var(--red);border-radius:0 0 2px 2px;}
+  .bottom-nav__icon{font-size:1.4rem;}
+  .main-content{padding-bottom:calc(58px + env(safe-area-inset-bottom,0px));}
+  .toast-container{bottom:calc(66px + env(safe-area-inset-bottom,0px));}
+}
