@@ -129,8 +129,8 @@
 
   {% for at in alarm_types %}
   {% set at_data = stichwort_recipients.get(at.id, {}) %}
-  {% set at_group_ids = at_data.get('group_ids', set()) %}
-  {% set at_member_ids = at_data.get('member_ids', set()) %}
+  {% set at_group_ids = at_data.get('group_ids') or [] %}
+  {% set at_member_ids = at_data.get('member_ids') or [] %}
   <div class="chart-box" style="margin-bottom:14px;" id="stichwort-{{ at.id }}">
     <details>
       <summary style="cursor:pointer;display:flex;align-items:center;gap:12px;list-style:none;user-select:none;">
