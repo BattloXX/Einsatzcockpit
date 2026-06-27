@@ -9,7 +9,7 @@
      or '/admin/api-keys' in _p or '/admin/lagekarte-tokens' in _p or '/admin/audit' in _p
      or '/admin/sms-test' in _p or '/admin/sms-senden' in _p %}
   {% set active_group = 'verwaltung' %}
-{% elif '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p %}
+{% elif '/admin/gruppen' in _p or '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p %}
   {% set active_group = 'stammdaten' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
@@ -28,6 +28,9 @@
 
 {% block head_extra %}
 <style>
+/* Sicherstellen dass x-cloak immer funktioniert, unabhaengig von app.css-Version */
+[x-cloak] { display: none !important; }
+
 /* ── Admin Layout ──────────────────────────────────────────────── */
 .admin-shell {
   display: grid;
@@ -232,10 +235,10 @@
                {{ tip('Geräteverleih Artikelstammdaten und Stücklisten') }}>
               <span class="admin-nav__icon">📦</span>Geräteverleih
             </a>
-            <a href="/admin/sms-gruppen"
-               class="admin-nav__item {% if '/admin/sms-gruppen' in request.url.path %}is-active{% endif %}"
-               {{ tip('SMS-Gruppen: Benannte Empfaengergruppen fuer den SMS-Versand') }}>
-              <span class="admin-nav__icon">👥</span>SMS-Gruppen
+            <a href="/admin/gruppen"
+               class="admin-nav__item {% if '/admin/gruppen' in request.url.path %}is-active{% endif %}"
+               {{ tip('Gruppen: Benannte Empfaengergruppen (fuer SMS-Versand, Benachrichtigungen, etc.)') }}>
+              <span class="admin-nav__icon">👥</span>Gruppen
             </a>
             <a href="/admin/einsatzinfo-sms"
                class="admin-nav__item {% if '/admin/einsatzinfo-sms' in request.url.path %}is-active{% endif %}"

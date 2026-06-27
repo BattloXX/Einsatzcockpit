@@ -130,6 +130,7 @@ async def save_org_settings(
     gsl_lagemeldung_auto_auftrag_raw: str = Form(""),
     uas_module_enabled_raw: str = Form(""),
     fahrtenbuch_modul_aktiv_raw: str = Form(""),
+    einsatzinfo_sms_enabled_raw: str = Form(""),
 ):
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = target_org_id if is_sysadmin and target_org_id else user.org_id
@@ -292,6 +293,9 @@ async def save_org_settings(
             payload={"alt": old_fb, "neu": new_fb},
             ip=request.client.host if request.client else None,
         )
+
+    # Einsatzinfo-SMS: Org-Toggle
+    org_s.einsatzinfo_sms_enabled = einsatzinfo_sms_enabled_raw in ("1", "true", "on")
 
     # Wird die Lagemeldungs-Pflicht gerade erst aktiviert (Intervall aus → an), Timer für
     # bereits laufende Einsatzstellen sofort nachziehen – sonst erst beim nächsten

@@ -40,7 +40,7 @@
   <div class="alert alert--danger">Keine Empfaenger ausgewaehlt oder Empfaenger haben keine Telefonnummer.</div>
   {% endif %}
 
-  <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start;">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;align-items:start;">
 
     <!-- ── SMS verfassen ── -->
     <div class="chart-box"
@@ -91,7 +91,7 @@
           </div>
           {% else %}
           <p class="text-muted" style="font-size:.85rem;">Keine Gruppen vorhanden.
-            <a href="/admin/sms-gruppen">Gruppen anlegen</a></p>
+            <a href="/admin/gruppen">Gruppen anlegen</a></p>
           {% endif %}
         </div>
 
@@ -161,7 +161,7 @@
           Gruppen beinhalten Mitglieder und koennen auch fuer den automatischen
           Einsatzinfo-Versand konfiguriert werden.
         </p>
-        <a href="/admin/sms-gruppen" class="btn btn--ghost btn--xs">Gruppen verwalten</a>
+        <a href="/admin/gruppen" class="btn btn--ghost btn--xs">Gruppen verwalten</a>
         <a href="/admin/einsatzinfo-sms" class="btn btn--ghost btn--xs" style="margin-left:6px;">Einsatzinfo-SMS</a>
       </div>
     </div>

@@ -302,6 +302,20 @@
         </small>
       </div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F4F1; SMS</h3>
+      {% set _sms_on = (org_settings.einsatzinfo_sms_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;">
+          <input type="checkbox" name="einsatzinfo_sms_enabled_raw" value="1"
+                 {% if _sms_on %}checked{% endif %}>
+          Einsatzinfo-SMS aktivieren
+        </label>
+        <small class="form-hint">
+          Bei Alarmeingang automatisch SMS versenden (Gateway-Verbindung erforderlich).
+          <a href="/admin/einsatzinfo-sms">Verteiler und Vorlagen konfigurieren &#x203A;</a>
+        </small>
+      </div>
+
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>

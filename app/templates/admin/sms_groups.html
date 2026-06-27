@@ -1,14 +1,14 @@
 {% extends "admin/_layout.html" %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
-{% block title %}SMS-Gruppen – Admin{% endblock %}
-{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'SMS-Gruppen'}]) }}{% endblock %}
+{% block title %}Gruppen – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Gruppen'}]) }}{% endblock %}
 
 {% block admin_content %}
 <div class="page-content">
   <div class="page-header">
     <div>
-      <h1>SMS-Gruppen</h1>
-      <p class="page-header__sub">Benannte Empfaengergruppen fuer den SMS-Versand verwalten.</p>
+      <h1>Gruppen</h1>
+      <p class="page-header__sub">Benannte Empfaengergruppen verwalten (werden fuer SMS-Versand, Benachrichtigungen und andere Funktionen verwendet).</p>
     </div>
   </div>
 
@@ -19,12 +19,12 @@
   <div class="alert alert--danger">Name darf nicht leer sein.</div>
   {% endif %}
 
-  <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:24px;align-items:start;">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;align-items:start;">
 
     <!-- Neue Gruppe anlegen -->
     <div class="chart-box">
       <h3 style="margin-bottom:16px;">Neue Gruppe anlegen</h3>
-      <form method="post" action="/admin/sms-gruppen/neu">
+      <form method="post" action="/admin/gruppen/neu">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <div class="form-group">
           <label class="form-label">Name <span style="color:var(--color-danger)">*</span></label>
@@ -45,7 +45,7 @@
     <!-- Gruppen-Liste -->
     <div>
       {% if not groups %}
-      <p class="text-muted">Noch keine SMS-Gruppen angelegt.</p>
+      <p class="text-muted">Noch keine Gruppen angelegt.</p>
       {% endif %}
       {% for grp in groups %}
       <div class="chart-box" style="margin-bottom:18px;" id="gruppe-{{ grp.id }}">
@@ -62,7 +62,7 @@
           <div style="display:flex;gap:6px;">
             <button class="btn btn--ghost btn--xs"
                     onclick="toggleEdit({{ grp.id }})">Bearbeiten</button>
-            <form method="post" action="/admin/sms-gruppen/{{ grp.id }}/loeschen"
+            <form method="post" action="/admin/gruppen/{{ grp.id }}/loeschen"
                   onsubmit="return confirm('Gruppe \'{{ grp.name }}\' wirklich loeschen?')">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <button type="submit" class="btn btn--danger btn--xs">Loeschen</button>
@@ -72,7 +72,7 @@
 
         <!-- Name bearbeiten (ausgeklappt) -->
         <div id="edit-{{ grp.id }}" style="display:none;margin-bottom:12px;padding:12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">
-          <form method="post" action="/admin/sms-gruppen/{{ grp.id }}/edit" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+          <form method="post" action="/admin/gruppen/{{ grp.id }}/edit" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <div class="form-group" style="flex:1;min-width:160px;margin:0;">
               <label class="form-label" style="font-size:.8rem;">Name</label>
@@ -89,7 +89,7 @@
 
         <!-- Mitglieder-Auswahl -->
         {% set grp_member_ids = grp.members|map(attribute='member_id')|list %}
-        <form method="post" action="/admin/sms-gruppen/{{ grp.id }}/mitglieder">
+        <form method="post" action="/admin/gruppen/{{ grp.id }}/mitglieder">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <div style="margin-bottom:8px;font-size:.85rem;font-weight:600;color:var(--text-muted);">MITGLIEDER ZUWEISEN</div>
           {% if members %}

@@ -48,7 +48,7 @@ def _active_members(db: Session, org_id: int) -> list[Member]:
 
 # ── SMS-Gruppen ───────────────────────────────────────────────────────────────
 
-@router.get("/sms-gruppen", response_class=HTMLResponse)
+@router.get("/gruppen", response_class=HTMLResponse)
 async def sms_groups_page(
     request: Request,
     db: Session = Depends(get_db),
@@ -67,7 +67,7 @@ async def sms_groups_page(
     })
 
 
-@router.post("/sms-gruppen/neu")
+@router.post("/gruppen/neu")
 async def sms_group_create(
     request: Request,
     name: str = Form(...),
@@ -91,10 +91,10 @@ async def sms_group_create(
     write_audit(db, "admin.sms_group.created", org_id=org_id, user_id=user.id,
                 entity_type="sms_group", payload={"name": name})
     db.commit()
-    return RedirectResponse(f"/admin/sms-gruppen?saved=1#gruppe-{grp.id}", status_code=303)
+    return RedirectResponse(f"/admin/gruppen?saved=1#gruppe-{grp.id}", status_code=303)
 
 
-@router.post("/sms-gruppen/{group_id}/edit")
+@router.post("/gruppen/{group_id}/edit")
 async def sms_group_edit(
     group_id: int,
     request: Request,
@@ -113,10 +113,10 @@ async def sms_group_edit(
     write_audit(db, "admin.sms_group.edited", org_id=org_id, user_id=user.id,
                 entity_type="sms_group", entity_id=group_id)
     db.commit()
-    return RedirectResponse(f"/admin/sms-gruppen?saved=1#gruppe-{group_id}", status_code=303)
+    return RedirectResponse(f"/admin/gruppen?saved=1#gruppe-{group_id}", status_code=303)
 
 
-@router.post("/sms-gruppen/{group_id}/loeschen")
+@router.post("/gruppen/{group_id}/loeschen")
 async def sms_group_delete(
     group_id: int,
     request: Request,
@@ -132,10 +132,10 @@ async def sms_group_delete(
     write_audit(db, "admin.sms_group.deleted", org_id=org_id, user_id=user.id,
                 entity_type="sms_group", entity_id=group_id)
     db.commit()
-    return RedirectResponse("/admin/sms-gruppen?saved=1", status_code=303)
+    return RedirectResponse("/admin/gruppen?saved=1", status_code=303)
 
 
-@router.post("/sms-gruppen/{group_id}/mitglieder")
+@router.post("/gruppen/{group_id}/mitglieder")
 async def sms_group_set_members(
     group_id: int,
     request: Request,
@@ -170,6 +170,7 @@ async def sms_group_set_members(
         "groups": groups,
         "members": members,
         "saved": "1",
+        "error": None,
     })
 
 
