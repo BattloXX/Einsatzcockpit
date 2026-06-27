@@ -1,6 +1,7 @@
-"""PDF generation via WeasyPrint."""
+"""PDF generation via WeasyPrint (mit xhtml2pdf-Fallback)."""
 import base64
 import io
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,8 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept
+
+logger = logging.getLogger("einsatzleiter.pdf")
 
 
 def _media_b64_uri(media) -> str:
@@ -97,10 +100,17 @@ def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
         media_b64=_media_b64_uri,
         media_exists=_media_file_exists,
     )
-    from weasyprint import HTML  # noqa: PLC0415 – lazy: GTK not available on Windows
-    buf = io.BytesIO()
-    HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
-    return buf.getvalue()
+    try:
+        from weasyprint import HTML  # noqa: PLC0415
+        buf = io.BytesIO()
+        HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+        return buf.getvalue()
+    except Exception as exc:
+        logger.warning("WeasyPrint fehlgeschlagen (Einsatz-PDF), Fallback auf xhtml2pdf: %s", exc)
+        from xhtml2pdf import pisa  # noqa: PLC0415
+        buf = io.BytesIO()
+        pisa.CreatePDF(io.StringIO(html_str), dest=buf)
+        return buf.getvalue()
 
 
 def render_troop_pdf(troop, incident: Incident, base_url: str = "") -> bytes:
@@ -116,10 +126,17 @@ def render_troop_pdf(troop, incident: Incident, base_url: str = "") -> bytes:
         base_url=base_url,
         user=pseudo_user,
     )
-    from weasyprint import HTML  # noqa: PLC0415 – lazy: GTK not available on Windows
-    buf = io.BytesIO()
-    HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
-    return buf.getvalue()
+    try:
+        from weasyprint import HTML  # noqa: PLC0415
+        buf = io.BytesIO()
+        HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+        return buf.getvalue()
+    except Exception as exc:
+        logger.warning("WeasyPrint fehlgeschlagen (Trupp-PDF), Fallback auf xhtml2pdf: %s", exc)
+        from xhtml2pdf import pisa  # noqa: PLC0415
+        buf = io.BytesIO()
+        pisa.CreatePDF(io.StringIO(html_str), dest=buf)
+        return buf.getvalue()
 
 
 def render_teilnahme_pdf(

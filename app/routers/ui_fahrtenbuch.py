@@ -63,7 +63,20 @@ async def fahrtenbuch_neu(
     user = _current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=302)
-    return await _render_erfassung(request, db, user=user, preset_fahrzeug_id=fahrzeug)
+    preset = fahrzeug
+    # Gerätesession: Fahrzeug des Geräts vorauswählen wenn kein expliziter Parameter
+    if preset is None and getattr(request.state, "is_device", False):
+        from app.models.user import DeviceToken
+        dev = (
+            db.query(DeviceToken)
+            .filter(DeviceToken.user_id == user.id, DeviceToken.revoked_at.is_(None))
+            .order_by(DeviceToken.created_at.desc())
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
+        if dev and dev.vehicle_master_id:
+            preset = dev.vehicle_master_id
+    return await _render_erfassung(request, db, user=user, preset_fahrzeug_id=preset)
 
 
 @router.post("/fahrtenbuch", response_class=HTMLResponse)

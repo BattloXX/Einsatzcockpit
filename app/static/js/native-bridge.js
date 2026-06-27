@@ -79,6 +79,31 @@
 
   // ─── Standort-Tracking ──────────────────────────────────────────────────────
   let _locationWatch = null;
+  let _periodicGpsInterval = null;
+  let _lastSentLat = null;
+  let _lastSentLng = null;
+
+  // Haversine-Distanz in Metern zwischen zwei GPS-Punkten
+  function _gpsDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2
+      + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function _sendLocation(lat, lng, accuracy) {
+    // Nur senden wenn >= 10 m Abstand zur letzten Übermittlung
+    if (_lastSentLat !== null && _gpsDistance(lat, lng, _lastSentLat, _lastSentLng) < 10) return;
+    _lastSentLat = lat;
+    _lastSentLng = lng;
+    fetch('/api/v1/device/location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ lat, lng, accuracy }),
+    }).catch(() => {});
+  }
 
   function startLocation() {
     if (!_isNative()) return;
@@ -95,19 +120,33 @@
         },
         function callback(loc, err) {
           if (err) return;
-          fetch('/api/v1/device/location', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ lat: loc.latitude, lng: loc.longitude, accuracy: loc.accuracy }),
-          }).catch(() => {});
+          _sendLocation(loc.latitude, loc.longitude, loc.accuracy);
         },
       ).then((id) => { _locationWatch = id; });
+
+      // Periodischer Fallback alle 3 Minuten: aktuelle Position holen und senden wenn verändert
+      if (!_periodicGpsInterval) {
+        _periodicGpsInterval = setInterval(() => {
+          if (!_locationWatch) return;
+          navigator.geolocation.getCurrentPosition(
+            (pos) => _sendLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+            () => {},
+            { timeout: 10000, maximumAge: 30000 },
+          );
+        }, 3 * 60 * 1000);
+      }
     } catch (e) {
       console.warn('[ELNative] BackgroundGeolocation Fehler:', e);
     }
   }
 
   function stopLocation() {
+    if (_periodicGpsInterval) {
+      clearInterval(_periodicGpsInterval);
+      _periodicGpsInterval = null;
+    }
+    _lastSentLat = null;
+    _lastSentLng = null;
     if (!_isNative() || !_locationWatch) return;
     try {
       const { BackgroundGeolocation } = window.Capacitor.Plugins;

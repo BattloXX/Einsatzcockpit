@@ -232,6 +232,7 @@ async def session_middleware(request: Request, call_next):
     request.state.display_name = None
     request.state.qr_incident_id = None
     request.state.qr_lage_id = None
+    request.state.is_device = False
     _refresh_user_id: int | None = None  # set for non-QR sessions to trigger cookie refresh
 
     if token:
@@ -278,6 +279,7 @@ async def session_middleware(request: Request, call_next):
                 request.state.display_name = display_name
                 request.state.qr_incident_id = qr_incident_id
                 request.state.qr_lage_id = qr_lage_id
+                request.state.is_device = is_device
             except Exception:
                 # Transienter DB-Fehler darf anonyme Routen nicht blockieren.
                 logger.exception("session_middleware: User-Lookup fehlgeschlagen")
