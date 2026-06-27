@@ -55,10 +55,12 @@
   {% endfor %}
 
   <!-- Submit-Button unten -->
-  <div style="position:sticky;bottom:0;padding:10px 16px;background:var(--surface);border-top:1px solid var(--border);">
+  <div style="position:sticky;bottom:0;padding:10px 16px;background:var(--surface);border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
     <button type="submit" class="btn btn--primary" style="width:100%;">
       Auswahl hinzufügen
     </button>
+    <button type="button" onclick="document.getElementById('{{ _dialog_id }}').close()"
+            class="btn btn--ghost" style="width:100%;font-size:.85rem;">Schliessen</button>
   </div>
 </form>
 {% else %}
@@ -70,5 +72,9 @@
   {% else %}
   Alle Mitglieder sind bereits als Teilnehmer erfasst.
   {% endif %}
+  <div style="margin-top:16px;">
+    <button type="button" onclick="document.getElementById('{{ _dialog_id }}').close()"
+            class="btn btn--ghost" style="font-size:.85rem;">Schliessen</button>
+  </div>
 </div>
 {% endif %}
