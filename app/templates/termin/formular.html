@@ -49,13 +49,13 @@
       <div>
         <label for="beginn" style="display:block;font-size:.8rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Beginn *</label>
         <input type="datetime-local" id="beginn" name="beginn" required
-               value="{% if termin %}{{ termin.beginn.strftime('%Y-%m-%dT%H:%M') }}{% endif %}"
+               value="{% if termin %}{{ (termin.beginn|local).strftime('%Y-%m-%dT%H:%M') }}{% endif %}"
                class="form-input" style="width:100%;">
       </div>
       <div>
         <label for="ende" style="display:block;font-size:.8rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Ende</label>
         <input type="datetime-local" id="ende" name="ende"
-               value="{% if termin and termin.ende %}{{ termin.ende.strftime('%Y-%m-%dT%H:%M') }}{% endif %}"
+               value="{% if termin and termin.ende %}{{ (termin.ende|local).strftime('%Y-%m-%dT%H:%M') }}{% endif %}"
                class="form-input" style="width:100%;">
       </div>
     </div>

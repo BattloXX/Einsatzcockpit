@@ -38,7 +38,7 @@
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:.95rem;margin-bottom:4px;">{{ t.titel }}</div>
           <div style="font-size:.8rem;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;">
-            <span>{{ t.beginn.strftime('%d.%m.%Y %H:%M') }}</span>
+            <span>{{ t.beginn|local_datetime }}</span>
             {% if t.ort %}<span>📍 {{ t.ort }}</span>{% endif %}
           </div>
         </div>

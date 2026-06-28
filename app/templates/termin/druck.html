@@ -27,9 +27,9 @@
     <h1 style="font-size:1.4rem;font-weight:700;margin:0 0 4px;">Teilnehmerliste</h1>
     <h2 style="font-size:1.1rem;margin:0 0 8px;font-weight:600;">{{ titel }}</h2>
     <div style="font-size:.85rem;display:flex;gap:16px;flex-wrap:wrap;">
-      {% if beginn %}<span>Datum: {{ beginn.strftime('%d.%m.%Y %H:%M') }}</span>{% endif %}
+      {% if beginn %}<span>Datum: {{ beginn|local_datetime }}</span>{% endif %}
       {% if ort %}<span>Ort: {{ ort }}</span>{% endif %}
-      <span>Erstellt: {{ now.strftime('%d.%m.%Y %H:%M') }}</span>
+      <span>Erstellt: {{ now|local_datetime }}</span>
     </div>
   </div>
 
@@ -72,7 +72,7 @@
         <td style="padding:8px 10px;color:#555;">{{ t.notiz or '' }}</td>
         <td style="padding:8px 10px;font-size:.78rem;color:#555;line-height:1.4;">
           {{ t.hinzugefuegt_von_user.display_name if t.hinzugefuegt_von_user else '–' }}<br>
-          {{ t.hinzugefuegt_am.strftime('%d.%m.%Y %H:%M') }}
+          {{ t.hinzugefuegt_am|local_datetime }}
         </td>
         <td style="padding:8px 10px;"></td>
       </tr>

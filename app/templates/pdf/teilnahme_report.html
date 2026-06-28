@@ -37,7 +37,7 @@
         <div style="font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;opacity:.85;margin-bottom:3pt;">Teilnehmerliste</div>
         <div style="font-size:14pt;font-weight:700;color:#fff;margin:0 0 4pt;">{{ titel }}</div>
         <div class="meta">
-          {% if beginn %}Datum: {{ beginn.strftime('%d.%m.%Y %H:%M') }} &nbsp;{% endif %}
+          {% if beginn %}Datum: {{ beginn|local_datetime }} &nbsp;{% endif %}
           {% if ort %}Ort: {{ ort }}{% endif %}
         </div>
       </td>
@@ -89,7 +89,7 @@
       <td style="color:#555;">{{ t.notiz or '' }}</td>
       <td style="font-size:7.5pt;color:#555;line-height:1.4;">
         {{ t.hinzugefuegt_von_user.display_name if t.hinzugefuegt_von_user else '–' }}<br>
-        {{ t.hinzugefuegt_am.strftime('%d.%m.%Y %H:%M') }}
+        {{ t.hinzugefuegt_am|local_datetime }}
       </td>
     </tr>
     {% endfor %}
@@ -106,7 +106,7 @@
   &nbsp;|&nbsp; Entschuldigt: <strong>{{ n_ents }}</strong>
   {% endif %}
   {% endif %}
-  &nbsp;|&nbsp; Erstellt: {{ now.strftime('%d.%m.%Y %H:%M') }}
+  &nbsp;|&nbsp; Erstellt: {{ now|local_datetime }}
 </div>
 
 </body>

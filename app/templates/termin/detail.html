@@ -21,7 +21,7 @@
         </div>
         <h1 style="font-size:1.4rem;font-weight:700;margin:0 0 8px;">{{ termin.titel }}</h1>
         <div style="font-size:.85rem;color:var(--text-muted);display:flex;flex-direction:column;gap:3px;">
-          <span>🗓 {{ termin.beginn.strftime('%d.%m.%Y %H:%M') }}{% if termin.ende %} – {{ termin.ende.strftime('%H:%M') }}{% endif %}</span>
+          <span>🗓 {{ termin.beginn|local_datetime }}{% if termin.ende %} – {{ termin.ende|local_time }}{% endif %}</span>
           {% if termin.ort %}<span>📍 {{ termin.ort }}</span>{% endif %}
           {% if termin.beschreibung %}<span style="margin-top:4px;color:var(--text);">{{ termin.beschreibung }}</span>{% endif %}
         </div>
@@ -50,7 +50,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         {% if can_edit %}
         <button type="button" class="btn btn--primary btn--sm"
-                onclick="document.getElementById('auswahl-dialog').showModal()">
+                onclick="_openAuswahlDialog()">
           + Teilnehmer
         </button>
         {% endif %}
@@ -139,7 +139,34 @@ function _refreshAuswahlListe() {
     swap: "innerHTML"
   });
 }
-// Dialog-Cleanup: Auswahlliste beim Öffnen neu laden
+function _openAuswahlDialog() {
+  document.getElementById("suche-input").value = "";
+  document.getElementById("auswahl-dialog").showModal();
+}
+// Selektion beim Durchsuchen erhalten: Auswahl vor/nach HTMX-Swap sichern
+document.addEventListener("htmx:beforeSwap", function(e) {
+  if (e.detail.target.id !== "auswahl-liste") return;
+  var el = e.detail.target;
+  window._auswahlSel = new Set(
+    [...el.querySelectorAll("input[name='mitglied_id']:checked")].map(function(cb) { return cb.value; })
+  );
+  window._auswahlRadios = {};
+  el.querySelectorAll("input[type='radio']:checked").forEach(function(r) {
+    window._auswahlRadios[r.name] = r.value;
+  });
+});
+document.addEventListener("htmx:afterSwap", function(e) {
+  if (e.detail.target.id !== "auswahl-liste") return;
+  var el = e.detail.target;
+  (window._auswahlSel || new Set()).forEach(function(id) {
+    var cb = el.querySelector("input[name='mitglied_id'][value='" + id + "']");
+    if (cb) cb.checked = true;
+  });
+  Object.keys(window._auswahlRadios || {}).forEach(function(name) {
+    var r = el.querySelector("input[type='radio'][name='" + name + "'][value='" + (window._auswahlRadios[name]) + "']");
+    if (r) r.checked = true;
+  });
+});
 document.getElementById("auswahl-dialog").addEventListener("click", function(e) {
   if (e.target === this) this.close();
 });

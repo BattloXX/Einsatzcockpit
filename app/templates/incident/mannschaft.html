@@ -72,7 +72,7 @@
     <div style="display:flex;gap:8px;align-items:center;">
       {% if can_edit %}
       <button type="button" class="btn btn--primary btn--sm"
-              onclick="document.getElementById('auswahl-dialog').showModal()">
+              onclick="_openAuswahlDialog()">
         + Teilnehmer
       </button>
       {% endif %}
@@ -155,6 +155,33 @@
 </dialog>
 
 <script>
+function _refreshAuswahlListe() {
+  htmx.ajax("GET", "/teilnahme/einsatz/{{ incident.id }}/auswahl", {
+    target: "#auswahl-liste",
+    swap: "innerHTML"
+  });
+}
+function _openAuswahlDialog() {
+  document.getElementById("suche-input").value = "";
+  _refreshAuswahlListe();
+  document.getElementById("auswahl-dialog").showModal();
+}
+// Selektion beim Durchsuchen erhalten: Auswahl vor/nach HTMX-Swap sichern
+document.addEventListener("htmx:beforeSwap", function(e) {
+  if (e.detail.target.id !== "auswahl-liste") return;
+  var el = e.detail.target;
+  window._auswahlSel = new Set(
+    [...el.querySelectorAll("input[name='mitglied_id']:checked")].map(function(cb) { return cb.value; })
+  );
+});
+document.addEventListener("htmx:afterSwap", function(e) {
+  if (e.detail.target.id !== "auswahl-liste") return;
+  var el = e.detail.target;
+  (window._auswahlSel || new Set()).forEach(function(id) {
+    var cb = el.querySelector("input[name='mitglied_id'][value='" + id + "']");
+    if (cb) cb.checked = true;
+  });
+});
 document.getElementById("auswahl-dialog").addEventListener("click", function(e) {
   if (e.target === this) this.close();
 });

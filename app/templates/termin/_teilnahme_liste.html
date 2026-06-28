@@ -121,10 +121,10 @@
         {% if t.hinzugefuegt_von_user %}
         <span style="font-size:.72rem;color:var(--text-muted);line-height:1.4;display:block;">
           {{ t.hinzugefuegt_von_user.display_name }}<br>
-          {{ t.hinzugefuegt_am.strftime('%d.%m. %H:%M') }}
+          {{ (t.hinzugefuegt_am|local).strftime('%d.%m. %H:%M') }}
         </span>
         {% else %}
-        <span style="font-size:.72rem;color:var(--text-muted);">{{ t.hinzugefuegt_am.strftime('%d.%m. %H:%M') }}</span>
+        <span style="font-size:.72rem;color:var(--text-muted);">{{ (t.hinzugefuegt_am|local).strftime('%d.%m. %H:%M') }}</span>
         {% endif %}
       </td>
 

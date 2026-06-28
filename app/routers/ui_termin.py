@@ -5,6 +5,8 @@ import io
 import logging
 from datetime import UTC, datetime
 
+from app.core.timezones import format_local_datetime, local_input_to_utc
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import select as sa_select
@@ -145,16 +147,10 @@ async def termin_anlegen(
         raise HTTPException(status_code=403, detail="Keine Berechtigung")
     if typ not in ("uebung", "veranstaltung"):
         raise HTTPException(status_code=422, detail="Ungültiger Typ")
-    try:
-        beginn_dt = datetime.fromisoformat(beginn)
-    except ValueError:
+    beginn_dt = local_input_to_utc(beginn, user.org)
+    if beginn_dt is None:
         raise HTTPException(status_code=422, detail="Ungültiges Datum")
-    ende_dt: datetime | None = None
-    if ende:
-        try:
-            ende_dt = datetime.fromisoformat(ende)
-        except ValueError:
-            pass
+    ende_dt = local_input_to_utc(ende, user.org) if ende else None
     t = Termin(
         org_id=org_id,
         typ=typ,
@@ -237,16 +233,10 @@ async def termin_speichern(
     if not _can_edit(user):
         raise HTTPException(status_code=403, detail="Keine Berechtigung")
     termin = _termin_or_404(termin_id, db)
-    try:
-        beginn_dt = datetime.fromisoformat(beginn)
-    except ValueError:
+    beginn_dt = local_input_to_utc(beginn, user.org)
+    if beginn_dt is None:
         raise HTTPException(status_code=422, detail="Ungültiges Datum")
-    ende_dt: datetime | None = None
-    if ende:
-        try:
-            ende_dt = datetime.fromisoformat(ende)
-        except ValueError:
-            pass
+    ende_dt = local_input_to_utc(ende, user.org) if ende else None
     termin.typ = typ if typ in ("uebung", "veranstaltung") else termin.typ
     termin.titel = titel.strip()
     termin.beschreibung = beschreibung.strip() or None
@@ -602,13 +592,13 @@ async def teilnahme_export_xlsx(
     db: Session = Depends(get_db),
     _: CurrentOrgId = None,
 ):
-    _require_login(request)
+    user = _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
         raise HTTPException(status_code=422, detail="Ungültiger Bezug-Typ")
     teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id)
     titel, beginn_dt, ort_str = _bezug_meta(db, bezug_typ, bezug_id)
 
-    xlsx_bytes = _build_xlsx(teilnahmen, bezug_typ, titel, beginn_dt, ort_str)
+    xlsx_bytes = _build_xlsx(teilnahmen, bezug_typ, titel, beginn_dt, ort_str, org=user.org)
     safe_titel = titel.replace(" ", "_")[:40] if titel else bezug_typ
     filename = f"Teilnahme_{safe_titel}.xlsx"
     return StreamingResponse(
@@ -640,6 +630,7 @@ def _build_xlsx(
     titel: str,
     beginn: datetime | None,
     ort: str | None,
+    org=None,
 ) -> bytes:
     import openpyxl
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -683,7 +674,7 @@ def _build_xlsx(
             ]
         row_data.append(t.notiz or "")
         row_data.append(t.hinzugefuegt_von_user.display_name if t.hinzugefuegt_von_user else "")
-        row_data.append(t.hinzugefuegt_am.strftime("%d.%m.%Y %H:%M"))
+        row_data.append(format_local_datetime(t.hinzugefuegt_am, org))
         for ci, val in enumerate(row_data, start=1):
             ws.cell(row=ri, column=ci, value=val)
 
@@ -702,7 +693,7 @@ def _build_xlsx(
     ws["A1"].comment = None  # vorsorglich
     meta_parts = [titel]
     if beginn:
-        meta_parts.append(beginn.strftime("%d.%m.%Y %H:%M"))
+        meta_parts.append(format_local_datetime(beginn, org))
     if ort:
         meta_parts.append(ort)
     ws["A1"].comment = None  # keep it clean
