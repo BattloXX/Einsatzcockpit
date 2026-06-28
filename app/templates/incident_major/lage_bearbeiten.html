@@ -60,7 +60,7 @@
   <div style="margin-top:32px;border-top:1px solid var(--border-color,#333);padding-top:24px;">
     <h3 style="margin-bottom:8px;font-size:1rem;color:#f87171;">Lage ist abgeschlossen</h3>
     <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:16px;">
-      Diese Lage wurde am {{ lage.ended_at.strftime('%d.%m.%Y um %H:%M Uhr') if lage.ended_at else '–' }} beendet.
+      Diese Lage wurde am {{ (lage.ended_at|local).strftime('%d.%m.%Y um %H:%M Uhr') if lage.ended_at else '–' }} beendet.
       Nur Org-Admins und System-Admins können sie wiedereröffnen.
     </p>
     <form method="post" action="/lage/{{ lage.id }}/wiederoeffnen"

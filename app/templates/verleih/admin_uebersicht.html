@@ -63,8 +63,8 @@
           </ul>
         </td>
         <td style="font-size:.82rem;white-space:nowrap;">
-          {{ a.ausgeliehen_at.strftime('%d.%m.%Y') }}<br>
-          <span style="color:var(--text-muted);">{{ a.ausgeliehen_at.strftime('%H:%M') }} Uhr</span>
+          {{ (a.ausgeliehen_at|local).strftime('%d.%m.%Y') }}<br>
+          <span style="color:var(--text-muted);">{{ (a.ausgeliehen_at|local).strftime('%H:%M') }} Uhr</span>
         </td>
         <td>
           {% if lage %}

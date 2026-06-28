@@ -72,7 +72,7 @@
         {% if m.width and m.height %}<span>{{ m.width }}&times;{{ m.height }}</span>{% endif %}
         {% if m.duration_s %}<span>{{ (m.duration_s | int) // 60 }}:{{ '%02d' % (m.duration_s | int % 60) }}</span>{% endif %}
         {% if m.loeschfrist %}<span>L&ouml;schfrist: {{ m.loeschfrist }}</span>{% endif %}
-        <span>{{ m.created_at | string | truncate(16, True, '') }}</span>
+        <span>{{ m.created_at|local_datetime }}</span>
       </div>
 
       {% if m.begruendung %}
@@ -113,7 +113,7 @@
 
         {% else %}
         <span style="font-size:.78rem;color:var(--text-muted)">
-          {{ m.geloescht_at | string | truncate(16, True, '') }}
+          {{ m.geloescht_at|local_datetime }}
         </span>
         {% endif %}
       </div>

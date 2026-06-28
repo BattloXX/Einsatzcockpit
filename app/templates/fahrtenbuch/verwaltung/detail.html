@@ -23,7 +23,7 @@
   {% if original %}
   <div style="padding:.6rem .9rem;background:rgba(245,158,11,.1);border-radius:.4rem;margin-bottom:1rem;font-size:.85rem;">
     Korrektur von <a href="/verwaltung/fahrten/{{ original.id }}">#{{ original.id }}</a>
-    ({{ original.zeitpunkt.strftime('%d.%m.%Y %H:%M') }})
+    ({{ original.zeitpunkt|local_datetime }})
   </div>
   {% endif %}
   {% if ersatz %}
@@ -34,7 +34,7 @@
 
   {# Hauptdaten #}
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1.5rem;margin-bottom:1.5rem;">
-    <div><span class="label">Zeitpunkt</span><div>{{ fahrt.zeitpunkt.strftime('%d.%m.%Y %H:%M') }}</div></div>
+    <div><span class="label">Zeitpunkt</span><div>{{ fahrt.zeitpunkt|local_datetime }}</div></div>
     <div><span class="label">Fahrzeug</span><div>{{ fahrt.fahrzeug.code if fahrt.fahrzeug else '—' }}{% if fahrt.fahrzeug and fahrt.fahrzeug.kennzeichen %} ({{ fahrt.fahrzeug.kennzeichen }}){% endif %}</div></div>
     <div><span class="label">Maschinist</span><div>{{ fahrt.maschinist_name or '—' }}</div></div>
     {% if fahrt.maschinist2_name %}
@@ -91,7 +91,7 @@
           <td>{{ b.kanal }}</td>
           <td style="word-break:break-all;">{{ b.empfaenger[:60] }}{% if b.empfaenger|length > 60 %}…{% endif %}</td>
           <td><span class="badge badge--{% if b.status == 'gesendet' %}green{% else %}red{% endif %}">{{ b.status }}</span></td>
-          <td>{{ b.gesendet_am.strftime('%d.%m. %H:%M') }}</td>
+          <td>{{ (b.gesendet_am|local).strftime('%d.%m. %H:%M') }}</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -5,7 +5,7 @@
   <div style="font-size:3rem;margin-bottom:1rem;">&#10003;</div>
   <h1 style="font-size:1.5rem;font-weight:700;margin-bottom:.5rem;">Fahrt gespeichert</h1>
   <p style="color:var(--text-muted);margin-bottom:1.5rem;">
-    {{ fahrt.zeitpunkt.strftime('%d.%m.%Y %H:%M') }} &middot;
+    {{ fahrt.zeitpunkt|local_datetime }} &middot;
     {{ fahrt.fahrzeug.code if fahrt.fahrzeug else '' }}
     {% if fahrt.km_delta %}
     &middot; {{ fahrt.km_delta }} km

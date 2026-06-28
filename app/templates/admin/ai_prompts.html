@@ -99,7 +99,7 @@
                   {% if loop.first %}<span style="font-size:.72rem; color:#a78bfa; margin-left:4px;">aktiv</span>{% endif %}
                 </td>
                 <td style="color:#6b7280;">
-                  {{ v.created_at.strftime('%d.%m.%y %H:%M') if v.created_at else '–' }}
+                  {{ (v.created_at|local).strftime('%d.%m.%y %H:%M') if v.created_at else '–' }}
                 </td>
                 <td style="color:#6b7280;">{{ v.created_by_username or '–' }}</td>
                 <td style="font-family:monospace; color:#374151; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"

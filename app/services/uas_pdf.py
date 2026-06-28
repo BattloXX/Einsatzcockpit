@@ -4,6 +4,8 @@ from __future__ import annotations
 import io
 from typing import TYPE_CHECKING
 
+from app.core.timezones import format_local_datetime
+
 if TYPE_CHECKING:
     pass
 
@@ -75,7 +77,7 @@ def _parse_punkte(punkte_field) -> list:
     return []
 
 
-def checkliste_pdf(checkliste, flug_id: int | None = None) -> bytes:
+def checkliste_pdf(checkliste, flug_id: int | None = None, org=None) -> bytes:
     punkte = _parse_punkte(checkliste.punkte)
     rows = ""
     for p in punkte:
@@ -93,7 +95,7 @@ def checkliste_pdf(checkliste, flug_id: int | None = None) -> bytes:
 <tbody>{rows}</tbody></table>
 <p>Erledigt von (Pilot): {checkliste.erledigt_von_pilot or "–"}<br>
    Zweitperson: {checkliste.erledigt_von_zweitperson or "–"}<br>
-   Abgeschlossen: {checkliste.abgeschlossen_at or "–"}</p>
+   Abgeschlossen: {format_local_datetime(checkliste.abgeschlossen_at, org) or "–"}</p>
 <p class="footer">Erstellt gem. RL-UAS LFV Vorarlberg Jan 2024 | Formular Anh. 8.2</p>
 </body></html>"""
     return _render_pdf(html)
@@ -178,7 +180,7 @@ def wartungsbuch_pdf(wartungen: list, device=None) -> bytes:
 
 # ── Gesamt-PDF: Drohneneinsatz komplett ──────────────────────────────────────
 
-def einsatz_gesamt_pdf(einsatz, incident=None, rollen=None, fluege_daten=None) -> bytes:
+def einsatz_gesamt_pdf(einsatz, incident=None, rollen=None, fluege_daten=None, org=None) -> bytes:
     """Vollständiges Protokoll eines Drohneneinsatzes für den PDF-Druck."""
     import json as _j
 
@@ -202,9 +204,9 @@ def einsatz_gesamt_pdf(einsatz, incident=None, rollen=None, fluege_daten=None) -
         ("TETRA-Rufname", einsatz.tetra_rufname or "–"),
         ("Betreibernummer", einsatz.betreibernummer or "–"),
         ("Gesamteinsatzleiter", einsatz.gesamteinsatzleiter or "–"),
-        ("Alarmierung", str(einsatz.alarmierung_at or "–")),
-        ("EL-Anmeldung", str(einsatz.anmeldung_el_at or "–")),
-        ("EL-Abmeldung", str(einsatz.abmeldung_el_at or "–")),
+        ("Alarmierung", format_local_datetime(einsatz.alarmierung_at, org) or "–"),
+        ("EL-Anmeldung", format_local_datetime(einsatz.anmeldung_el_at, org) or "–"),
+        ("EL-Abmeldung", format_local_datetime(einsatz.abmeldung_el_at, org) or "–"),
         ("Datenschutz best.", "Ja" if einsatz.datenschutz_bestaetigt else "Nein"),
     ]
     if einsatz.einsatzgrund:
@@ -276,8 +278,8 @@ def einsatz_gesamt_pdf(einsatz, incident=None, rollen=None, fluege_daten=None) -
             ("Nachtbetrieb", "Ja" if flug.nachtbetrieb else "Nein"),
             ("Startort", flug.start_ort or "–"),
             ("Landungsort", flug.landung_ort or "–"),
-            ("Start-Zeit", str(flug.start_at or "–")),
-            ("Landungs-Zeit", str(flug.landung_at or "–")),
+            ("Start-Zeit", format_local_datetime(flug.start_at, org) or "–"),
+            ("Landungs-Zeit", format_local_datetime(flug.landung_at, org) or "–"),
             ("Dauer (min)", str(flug.dauer_min or "–")),
             ("Gesamteinsatzleiter", flug.gesamteinsatzleiter or "–"),
             ("EL Drohne", flug.einsatzleiter_drohne or "–"),
@@ -309,7 +311,7 @@ def einsatz_gesamt_pdf(einsatz, incident=None, rollen=None, fluege_daten=None) -
                 f"<tbody>{cl_rows or '<tr><td colspan=2>Keine Einträge</td></tr>'}</tbody></table>"
                 f"<p style='font-size:9pt'>Pilot: {cl.erledigt_von_pilot or '–'} | "
                 f"Zweitperson: {cl.erledigt_von_zweitperson or '–'} | "
-                f"Abgeschlossen: {cl.abgeschlossen_at or '–'}</p>"
+                f"Abgeschlossen: {format_local_datetime(cl.abgeschlossen_at, org) or '–'}</p>"
             )
 
         fluege_html += (

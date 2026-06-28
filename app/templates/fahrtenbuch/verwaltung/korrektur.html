@@ -101,7 +101,7 @@
     <div class="form-group">
       <label class="form-label">Zeitpunkt</label>
       <input type="datetime-local" name="zeitpunkt" class="form-control"
-             value="{{ fahrt.zeitpunkt.strftime('%Y-%m-%dT%H:%M') }}">
+             value="{{ (fahrt.zeitpunkt|local).strftime('%Y-%m-%dT%H:%M') }}">
     </div>
 
     <div class="form-group">

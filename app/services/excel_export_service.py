@@ -5,6 +5,7 @@ import io
 from datetime import datetime
 from typing import Any
 
+from app.core.timezones import format_local_datetime
 from app.models.fahrtenbuch import Fahrt
 
 
@@ -18,7 +19,7 @@ def _val(v: Any) -> str:
     return str(v)
 
 
-def exportiere_fahrten(fahrten: list[Fahrt]) -> bytes:
+def exportiere_fahrten(fahrten: list[Fahrt], org=None) -> bytes:
     """Erstellt eine Excel-Datei mit allen übergebenen Fahrten.
 
     Gibt die rohen Bytes zurück (geeignet für StreamingResponse).
@@ -59,7 +60,7 @@ def exportiere_fahrten(fahrten: list[Fahrt]) -> bytes:
         zweck = f.zweck
         zielort_text = (f.zielort.name if f.zielort else None) or f.zielort_freitext or ""
         row = [
-            f.zeitpunkt.strftime("%d.%m.%Y %H:%M") if f.zeitpunkt else "",
+            format_local_datetime(f.zeitpunkt, org) if f.zeitpunkt else "",
             fz.code if fz else "",
             fz.kennzeichen if fz and fz.kennzeichen else "",
             f.maschinist_name or "",

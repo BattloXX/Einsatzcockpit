@@ -361,7 +361,7 @@ async def _render_erfassung(
     })
 
 
-def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | None = None) -> dict:
+def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | None = None, org=None) -> dict:
     def _int(key: str) -> int | None:
         v = form.get(key, "").strip()
         return int(v) if v else None
@@ -379,7 +379,13 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
         return v or None
 
     zeitpunkt_raw = _str("zeitpunkt")
-    zeitpunkt = local_input_to_utc(zeitpunkt_raw) if zeitpunkt_raw else None
+    # Org-Objekt für Zeitzonenumrechnung (lokal→UTC). Aus user.org bzw. token_org.org ableiten,
+    # falls der Aufrufer kein explizites org-Objekt mitgibt.
+    if org is None:
+        org = getattr(user, "org", None)
+    if org is None and token_org is not None:
+        org = getattr(token_org, "org", None)
+    zeitpunkt = local_input_to_utc(zeitpunkt_raw, org) if zeitpunkt_raw else None
 
     token_label = None
     if token_org and not user:

@@ -35,7 +35,7 @@
           {% if org.logo_path %}<img src="{{ org.logo_path }}" alt="" style="height:24px;margin-right:6px">{% endif %}
           <strong>{{ org.name }}</strong>
           {% if org.deleted_at %}
-          <span class="badge badge-danger">Gelöscht {{ org.deleted_at.strftime('%d.%m.%Y') }}</span>
+          <span class="badge badge-danger">Gelöscht {{ (org.deleted_at|local).strftime('%d.%m.%Y') }}</span>
           {% endif %}
         </td>
         <td><code>{{ org.slug }}</code></td>

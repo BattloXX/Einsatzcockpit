@@ -55,7 +55,7 @@
         <td style="text-align:right">{{ row.total_incidents }}</td>
         <td>
           {% if row.last_incident_at %}
-            {{ row.last_incident_at.strftime('%d.%m.%Y %H:%M') }}
+            {{ row.last_incident_at|local_datetime }}
           {% else %}
             <span class="text-muted">—</span>
           {% endif %}

@@ -70,9 +70,9 @@
       <dt>TETRA-Rufname</dt><dd>{{ einsatz.tetra_rufname or '&ndash;' }}</dd>
       <dt>Betreibernummer</dt><dd>{{ einsatz.betreibernummer or '&ndash;' }}</dd>
       <dt>Gesamteinsatzleiter</dt><dd>{{ einsatz.gesamteinsatzleiter or '&ndash;' }}</dd>
-      <dt>Alarmierung</dt><dd>{{ einsatz.alarmierung_at or '&ndash;' }}</dd>
-      <dt>EL-Anmeldung</dt><dd>{{ einsatz.anmeldung_el_at or '&ndash;' }}</dd>
-      <dt>EL-Abmeldung</dt><dd>{{ einsatz.abmeldung_el_at or '&ndash;' }}</dd>
+      <dt>Alarmierung</dt><dd>{{ einsatz.alarmierung_at|local_datetime or '&ndash;' }}</dd>
+      <dt>EL-Anmeldung</dt><dd>{{ einsatz.anmeldung_el_at|local_datetime or '&ndash;' }}</dd>
+      <dt>EL-Abmeldung</dt><dd>{{ einsatz.abmeldung_el_at|local_datetime or '&ndash;' }}</dd>
       <dt>Datenschutz</dt>
       <dd>{% if einsatz.datenschutz_bestaetigt %}<span class="badge badge--success">&#x2713; best&auml;tigt</span>{% else %}<span class="badge badge--error">&#x26A0; fehlt!</span>{% endif %}</dd>
     </dl>

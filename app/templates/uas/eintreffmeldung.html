@@ -39,11 +39,11 @@
       </tr>
       <tr>
         <td style="color:var(--text-muted);font-size:.88rem;font-weight:600;padding:.35rem 0">Alarmierungszeitpunkt</td>
-        <td style="padding:.35rem 0">{{ einsatz.alarmierung_at or '–' }}</td>
+        <td style="padding:.35rem 0">{{ einsatz.alarmierung_at|local_datetime or '–' }}</td>
       </tr>
       <tr>
         <td style="color:var(--text-muted);font-size:.88rem;font-weight:600;padding:.35rem 0">Anmeldung beim EL</td>
-        <td style="padding:.35rem 0">{{ einsatz.anmeldung_el_at or '–' }}</td>
+        <td style="padding:.35rem 0">{{ einsatz.anmeldung_el_at|local_datetime or '–' }}</td>
       </tr>
       <tr>
         <td style="color:var(--text-muted);font-size:.88rem;font-weight:600;padding:.35rem 0">Gesamteinsatzleiter</td>

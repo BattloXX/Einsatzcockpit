@@ -11,7 +11,7 @@
     </span>
   </div>
   <div class="ausleihe-card__meta">
-    <span>{{ a.ausgeliehen_at.strftime('%d.%m. %H:%M') }}</span>
+    <span>{{ (a.ausgeliehen_at|local).strftime('%d.%m. %H:%M') }}</span>
     {% if a.telefon %}<span>{{ a.telefon }}</span>{% endif %}
     {% if a.site_id %}<span>📍 Einsatzstelle</span>{% endif %}
     {% if a.pin %}<span>PIN: {{ a.pin }}</span>{% endif %}

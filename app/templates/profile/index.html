@@ -124,11 +124,11 @@
         <dd>{{ profile_user.roles|map(attribute='label')|join(', ') or '—' }}</dd>
         {% if profile_user.created_at %}
         <dt style="color:var(--text-muted);">Erstellt am</dt>
-        <dd>{{ profile_user.created_at.strftime('%d.%m.%Y') }}</dd>
+        <dd>{{ (profile_user.created_at|local).strftime('%d.%m.%Y') }}</dd>
         {% endif %}
         {% if profile_user.last_login_at %}
         <dt style="color:var(--text-muted);">Letzter Login</dt>
-        <dd>{{ profile_user.last_login_at.strftime('%d.%m.%Y %H:%M') }} Uhr</dd>
+        <dd>{{ profile_user.last_login_at|local_datetime }} Uhr</dd>
         {% endif %}
       </dl>
     </div>

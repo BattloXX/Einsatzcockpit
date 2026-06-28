@@ -118,7 +118,7 @@
       {% if cl.typ == 'vorflug' %}&#x2705; Vorflug-Checkliste{% else %}&#x1F534; Nachflug-Checkliste{% endif %}
     </h2>
     {% if cl.abgeschlossen_at %}
-    <span class="badge badge--success" style="margin-left:auto">abgeschlossen {{ cl.abgeschlossen_at | string | truncate(16, True, '') }}</span>
+    <span class="badge badge--success" style="margin-left:auto">abgeschlossen {{ cl.abgeschlossen_at|local_datetime }}</span>
     {% else %}
     <span class="badge badge--warn" style="margin-left:auto">offen</span>
     {% endif %}

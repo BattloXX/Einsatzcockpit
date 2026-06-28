@@ -1,5 +1,5 @@
 """PR 7: PDF-Export – Service-Logik (ohne WeasyPrint-Aufruf)."""
-from datetime import date
+from datetime import date, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -33,7 +33,7 @@ def _make_checkliste():
         id=1, typ="vorflug",
         punkte=[{"text": "Akku laden", "erledigt": True}, {"text": "GPS prüfen", "erledigt": False}],
         erledigt_von_pilot="Max", erledigt_von_zweitperson="Anna",
-        abgeschlossen_at="2026-06-20T12:00:00",
+        abgeschlossen_at=datetime(2026, 6, 20, 12, 0, 0),
     )
 
 

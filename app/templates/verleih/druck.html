@@ -115,7 +115,7 @@
     <div class="header-block__doc">
       <span>Verleihschein Nr.</span>
       <strong>VL-{{ a.id }}</strong>
-      <span style="display:block;margin-top:2px;">{{ a.ausgeliehen_at.strftime('%d.%m.%Y %H:%M') }} Uhr</span>
+      <span style="display:block;margin-top:2px;">{{ a.ausgeliehen_at|local_datetime }} Uhr</span>
     </div>
   </div>
 

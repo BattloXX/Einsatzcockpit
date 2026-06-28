@@ -50,7 +50,7 @@
     <option value="">— keinen Einsatz verknüpfen —</option>
     {% for inc in incidents %}
     <option value="{{ inc.id }}">
-      {{ inc.alarm_type_code }} – {{ inc.started_at.strftime('%d.%m.%Y %H:%M') }}
+      {{ inc.alarm_type_code }} – {{ inc.started_at|local_datetime }}
       {% if inc.address_street %}– {{ inc.address_street }}{% endif %}
     </option>
     {% endfor %}

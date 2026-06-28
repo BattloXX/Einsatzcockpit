@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.permissions import require_role
 from app.core.templating import templates
+from app.core.timezones import format_local_datetime
 from app.db import get_db
 from app.models.user import User
 
@@ -155,7 +156,7 @@ def einsaetze_csv_export(
     ])
     for e in einsaetze:
         inc = incidents.get(e.incident_id)  # type: ignore[assignment]
-        alarm_str = e.alarmierung_at.strftime("%d.%m.%Y %H:%M") if e.alarmierung_at else ""
+        alarm_str = format_local_datetime(e.alarmierung_at, user.org) if e.alarmierung_at else ""
         addr = ""
         if inc:
             parts = [inc.address_street or "", inc.address_no or ""]
@@ -1934,7 +1935,7 @@ def flug_pdf_checkliste(
     ).first()
     if not cl:
         raise HTTPException(404)
-    pdf = checkliste_pdf(cl, flug_id=flug_id)
+    pdf = checkliste_pdf(cl, flug_id=flug_id, org=user.org)
     return _Response(content=pdf, media_type="application/pdf",
                      headers={"Content-Disposition": f"attachment; filename=checkliste_{cl.typ}_flug{flug_id}.pdf"})
 
@@ -2065,7 +2066,7 @@ def einsatz_pdf_gesamt(
             "checklisten": checklisten_parsed,
         })
 
-    pdf = einsatz_gesamt_pdf(einsatz, incident=incident, rollen=einsatz.rollen, fluege_daten=fluege_daten)
+    pdf = einsatz_gesamt_pdf(einsatz, incident=incident, rollen=einsatz.rollen, fluege_daten=fluege_daten, org=user.org)
     return _Response(content=pdf, media_type="application/pdf",
                      headers={"Content-Disposition": f"attachment; filename=drohneneinsatz_{einsatz_id}_gesamt.pdf"})
 

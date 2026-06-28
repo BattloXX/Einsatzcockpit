@@ -75,7 +75,7 @@
         {{ m.loeschfrist or '–' }}
       </td>
       <td style="font-size:.8rem;max-width:200px">{{ m.begruendung or '–' }}</td>
-      <td style="font-size:.78rem;color:var(--text-muted)">{{ m.created_at | string | truncate(10, True, '') }}</td>
+      <td style="font-size:.78rem;color:var(--text-muted)">{{ (m.created_at|local).strftime('%d.%m.%Y') if m.created_at else '–' }}</td>
     </tr>
     {% endfor %}
     </tbody>

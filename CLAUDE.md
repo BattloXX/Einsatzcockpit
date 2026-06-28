@@ -74,6 +74,46 @@
 - Stab-Einsatzjournal: Client-seitige Textsuche in `.journal-row` Elementen
 - Board: Existing `applyBoardFilters()` Funktion
 
+## Pflicht: Zeitzonen (DB = UTC, Anzeige = Org-Zeitzone)
+
+**Die DB speichert IMMER naive UTC. Niemals lokale Zeit in `DateTime`-Spalten schreiben.**
+
+Die Anzeige-Zeitzone ist pro Org konfigurierbar (`FireDept.timezone`, IANA-Name, z.B.
+`"Europe/Vienna"`). Fallback: `settings.DEFAULT_TIMEZONE = "Europe/Vienna"`.
+Hilfsfunktionen: `app/core/timezones.py`. Jinja-Filter: `local`, `local_time`, `local_datetime`,
+`local_iso` (lesen `user.org` aus dem Template-Context).
+
+### Regeln
+
+| Situation | Richtig | Falsch |
+|---|---|---|
+| Datetime im Template anzeigen | `{{ x\|local_datetime }}` oder `{{ (x\|local).strftime('...') }}` | `{{ x.strftime('...') }}` |
+| `datetime-local`-Input vorbelegen | `value="{{ (x\|local).strftime('%Y-%m-%dT%H:%M') }}"` | `value="{{ x.strftime('%Y-%m-%dT%H:%M') }}"` |
+| Datetime in Python ausgeben (PDF/CSV/XLSX) | `format_local_datetime(x, org)` | `str(x)` oder `x.strftime(...)` |
+| Form-Input speichern | `local_input_to_utc(wert, org)` | direkt speichern |
+| Datumsfilter (Query-Range) | `local_date_to_utc(von, org=org)` | `local_date_to_utc(von)` |
+
+- **Reine `date`-Felder** (kein Zeitanteil, z.B. `flug.datum`, `wartung.faellig_am`) → keine Konvertierung.
+- **JS-Konsum mit Z-Suffix** (`strftime('%Y-%m-%dT%H:%M:%SZ')`) → korrekt, JS rechnet selbst um.
+- **Service-Funktionen**, die Datetimes ausgeben (PDF, XLSX), erhalten `org` als Parameter.
+
+### Schnellcheck vor Commit
+
+```
+# Darf in Templates nicht vorkommen (außer date-only oder Z-Suffix für JS):
+rg "\.strftime\(" app/templates
+
+# Darf in uas_pdf.py nicht vorkommen:
+rg "str\(.*_at" app/services/uas_pdf.py
+```
+
+### Referenz-Implementierung
+
+Termin/Teilnahme (`app/routers/ui_termin.py` + `app/templates/termin/`) und
+Incident-PDF (`app/services/pdf_service.py`) sind korrekte Muster.
+
+---
+
 ## Neue Features – Checkliste
 
 Beim Entwickeln neuer Features prüfen:
@@ -82,3 +122,4 @@ Beim Entwickeln neuer Features prüfen:
 - [ ] WebSocket-Broadcast für Multi-User-Sync eingeplant
 - [ ] Mobile Ansicht berücksichtigt (≤760px)
 - [ ] CSRF-Token in allen POST-Formularen (`_csrf`)
+- [ ] Alle Datetime-Ausgaben über `|local*` / `format_local_datetime(.., org)` – kein rohes `.strftime()` auf DB-Datetimes

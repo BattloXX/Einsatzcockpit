@@ -69,7 +69,7 @@
       <tbody>
         {% for f in fahrten %}
         <tr style="{% if f.status.value != 'aktiv' %}opacity:.6;{% endif %}">
-          <td>{{ f.zeitpunkt.strftime('%d.%m.%Y %H:%M') }}</td>
+          <td>{{ f.zeitpunkt|local_datetime }}</td>
           <td>{{ f.fahrzeug.code if f.fahrzeug else '—' }}</td>
           <td>{{ f.maschinist_name or '—' }}</td>
           <td>

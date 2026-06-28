@@ -30,9 +30,9 @@
         </a>
       </div>
       {% endif %}
-      <div><span style="color:var(--text-muted);">Ausgeliehen</span><br><strong>{{ a.ausgeliehen_at.strftime('%d.%m.%Y %H:%M') }}</strong></div>
+      <div><span style="color:var(--text-muted);">Ausgeliehen</span><br><strong>{{ a.ausgeliehen_at|local_datetime }}</strong></div>
       {% if a.zurueckgegeben_at %}
-      <div><span style="color:var(--text-muted);">Zurückgegeben</span><br><strong>{{ a.zurueckgegeben_at.strftime('%d.%m.%Y %H:%M') }}</strong></div>
+      <div><span style="color:var(--text-muted);">Zurückgegeben</span><br><strong>{{ a.zurueckgegeben_at|local_datetime }}</strong></div>
       {% endif %}
       {% if site %}
       <div style="grid-column:1/-1;">
@@ -234,7 +234,7 @@
       <div x-show="!erinnerungModalOpen">
         <button type="button" class="btn btn--ghost btn--sm" style="width:100%;" @click="erinnerungModalOpen=true">
           Erinnerung senden
-          {% if a.erinnerung_gesendet_at %}<span style="font-size:.7rem;color:var(--text-muted);"> ({{ a.erinnerung_gesendet_at.strftime('%d.%m. %H:%M') }})</span>{% endif %}
+          {% if a.erinnerung_gesendet_at %}<span style="font-size:.7rem;color:var(--text-muted);"> ({{ (a.erinnerung_gesendet_at|local).strftime('%d.%m. %H:%M') }})</span>{% endif %}
         </button>
       </div>
       <div x-show="erinnerungModalOpen" x-cloak>
@@ -274,9 +274,9 @@
     <div style="font-size:.75rem;color:var(--text-muted);">
       Auto-Erinnerung:
       {% if a.erinnerung_gesendet_at %}
-      gesendet am {{ a.erinnerung_gesendet_at.strftime('%d.%m. %H:%M') }}
+      gesendet am {{ (a.erinnerung_gesendet_at|local).strftime('%d.%m. %H:%M') }}
       {% else %}
-      geplant für {{ a.erinnerung_geplant_at.strftime('%d.%m. %H:%M') }}
+      geplant für {{ (a.erinnerung_geplant_at|local).strftime('%d.%m. %H:%M') }}
       {% endif %}
     </div>
     {% endif %}

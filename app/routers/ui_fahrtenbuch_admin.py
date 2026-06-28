@@ -61,11 +61,11 @@ async def fahrten_liste(
         except ValueError:
             pass
     if von:
-        dt = local_date_to_utc(von)
+        dt = local_date_to_utc(von, org=user.org)
         if dt:
             q = q.filter(Fahrt.zeitpunkt >= dt)
     if bis:
-        dt = local_date_to_utc(bis, end=True)
+        dt = local_date_to_utc(bis, end=True, org=user.org)
         if dt:
             q = q.filter(Fahrt.zeitpunkt <= dt)
     if fahrzeug_id:
@@ -136,11 +136,11 @@ async def fahrten_export(
         except ValueError:
             pass
     if von:
-        dt = local_date_to_utc(von)
+        dt = local_date_to_utc(von, org=user.org)
         if dt:
             q = q.filter(Fahrt.zeitpunkt >= dt)
     if bis:
-        dt = local_date_to_utc(bis, end=True)
+        dt = local_date_to_utc(bis, end=True, org=user.org)
         if dt:
             q = q.filter(Fahrt.zeitpunkt <= dt)
     if fahrzeug_id:
@@ -160,7 +160,7 @@ async def fahrten_export(
     org_name = (org.org.name if org and org.org else str(user.org_id)).replace(" ", "_")
     dateiname = f"Fahrtenbuch_{org_name}_{von or 'alle'}_{bis or 'alle'}.xlsx"
 
-    xlsx_bytes = exportiere_fahrten(fahrten)
+    xlsx_bytes = exportiere_fahrten(fahrten, org=user.org)
     return Response(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -278,7 +278,7 @@ async def fahrt_korrektur_speichern(
 
     from app.routers.ui_fahrtenbuch import _form_zu_daten
     form = await request.form()
-    daten = _form_zu_daten(form, org_id=user.org_id, user=user)
+    daten = _form_zu_daten(form, org_id=user.org_id, user=user, org=user.org)
     neue_fahrt = korrigiere_fahrt(fahrt, daten, user.id, db)
     db.commit()
     return RedirectResponse(f"/verwaltung/fahrten/{neue_fahrt.id}?korrigiert=1", status_code=303)
