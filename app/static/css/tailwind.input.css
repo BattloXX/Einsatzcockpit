@@ -1273,6 +1273,7 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
 .teiln-status-lbl:has(input:checked) { color:#fff; }
 .teiln-status-lbl--teilg:has(input:checked) { background:var(--green);border-color:var(--green); }
 .teiln-status-lbl--entsch:has(input:checked) { background:var(--yellow);border-color:var(--yellow);color:#111; }
+@media (max-width:600px) { .teiln-status-lbl { padding:5px 10px;font-size:.75rem;min-height:34px; } }
 /* Desktop-only Spalte in Teilnahme-Tabelle */
 .col-desktop { display:none; }
 @media (min-width:901px) { .col-desktop { display:table-cell; } }
