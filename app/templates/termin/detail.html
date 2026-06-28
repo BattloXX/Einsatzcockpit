@@ -85,13 +85,19 @@
   <!-- Suche + Filter -->
   <div style="padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
     <div style="display:flex;gap:8px;align-items:center;">
-      <input type="text" id="suche-input" placeholder="Name suchen…"
-             class="form-input" style="flex:1;min-width:0;"
-             hx-get="/teilnahme/{{ termin.typ }}/{{ termin.id }}/auswahl"
-             hx-trigger="keyup changed delay:300ms"
-             hx-target="#auswahl-liste"
-             hx-include="[name='nur_aktiv'],[name='gruppe_ids']"
-             name="suche">
+      <div style="position:relative;flex:1;min-width:0;">
+        <input type="text" id="suche-input" placeholder="Name suchen…"
+               class="form-input" style="width:100%;box-sizing:border-box;padding-right:2rem;"
+               hx-get="/teilnahme/{{ termin.typ }}/{{ termin.id }}/auswahl"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#auswahl-liste"
+               hx-include="[name='nur_aktiv'],[name='gruppe_ids']"
+               name="suche"
+               oninput="document.getElementById('suche-clear').style.display=this.value?'flex':'none';">
+        <button type="button" id="suche-clear"
+                style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1rem;padding:2px 4px;line-height:1;align-items:center;justify-content:center;"
+                onclick="var inp=document.getElementById('suche-input');inp.value='';this.style.display='none';htmx.trigger(inp,'keyup');">&#215;</button>
+      </div>
       <label style="display:flex;align-items:center;gap:5px;font-size:.8rem;cursor:pointer;flex-shrink:0;white-space:nowrap;">
         <input type="checkbox" name="nur_aktiv" value="1" checked
                style="width:16px;height:16px;flex-shrink:0;"
@@ -141,32 +147,69 @@ function _refreshAuswahlListe() {
 }
 function _openAuswahlDialog() {
   document.getElementById("suche-input").value = "";
+  document.getElementById("suche-clear").style.display = "none";
+  window._auswahlSel = {};
   document.getElementById("auswahl-dialog").showModal();
 }
-// Selektion beim Durchsuchen erhalten: Auswahl vor/nach HTMX-Swap sichern
+
+// Selektion beim Durchsuchen/Filtern erhalten: auch gefilterte (nicht sichtbare) Auswahl bleibt erhalten
 document.addEventListener("htmx:beforeSwap", function(e) {
   if (e.detail.target.id !== "auswahl-liste") return;
   var el = e.detail.target;
-  window._auswahlSel = new Set(
-    [...el.querySelectorAll("input[name='mitglied_id']:checked")].map(function(cb) { return cb.value; })
-  );
-  window._auswahlRadios = {};
-  el.querySelectorAll("input[type='radio']:checked").forEach(function(r) {
-    window._auswahlRadios[r.name] = r.value;
+
+  // Sichtbare, angehakte Mitglieder mit Status erfassen
+  var nextSel = {};
+  el.querySelectorAll("input[name='mitglied_id']:checked").forEach(function(cb) {
+    var mid = cb.value;
+    var radio = el.querySelector("input[type='radio'][name='s_" + mid + "']:checked");
+    nextSel[mid] = radio ? radio.value : "";
   });
+
+  // Bisher ausgewählte, aber nun durch Filter nicht mehr sichtbare Mitglieder übernehmen
+  var visibleIds = new Set([...el.querySelectorAll("input[name='mitglied_id']")].map(function(cb) { return cb.value; }));
+  Object.keys(window._auswahlSel || {}).forEach(function(mid) {
+    if (!visibleIds.has(mid)) {
+      nextSel[mid] = window._auswahlSel[mid];
+    }
+  });
+
+  window._auswahlSel = nextSel;
 });
+
 document.addEventListener("htmx:afterSwap", function(e) {
   if (e.detail.target.id !== "auswahl-liste") return;
   var el = e.detail.target;
-  (window._auswahlSel || new Set()).forEach(function(id) {
-    var cb = el.querySelector("input[name='mitglied_id'][value='" + id + "']");
-    if (cb) cb.checked = true;
-  });
-  Object.keys(window._auswahlRadios || {}).forEach(function(name) {
-    var r = el.querySelector("input[type='radio'][name='" + name + "'][value='" + (window._auswahlRadios[name]) + "']");
-    if (r) r.checked = true;
+  var form = el.querySelector("#auswahl-form");
+
+  // Vorherige versteckte Inputs entfernen
+  if (form) {
+    form.querySelectorAll("input.sel-hidden").forEach(function(h) { h.remove(); });
+  }
+
+  Object.keys(window._auswahlSel || {}).forEach(function(mid) {
+    var status = window._auswahlSel[mid];
+    var cb = el.querySelector("input[name='mitglied_id'][value='" + mid + "']");
+    if (cb) {
+      // Mitglied sichtbar: Checkbox wiederherstellen
+      cb.checked = true;
+      if (status) {
+        var radio = el.querySelector("input[type='radio'][name='s_" + mid + "'][value='" + status + "']");
+        if (radio) radio.checked = true;
+      }
+    } else if (form) {
+      // Mitglied durch Filter ausgeblendet: versteckte Inputs einfügen damit der Submit vollständig ist
+      var h = document.createElement("input");
+      h.type = "hidden"; h.name = "mitglied_id"; h.value = mid; h.className = "sel-hidden";
+      form.appendChild(h);
+      if (status) {
+        var hs = document.createElement("input");
+        hs.type = "hidden"; hs.name = "s_" + mid; hs.value = status; hs.className = "sel-hidden";
+        form.appendChild(hs);
+      }
+    }
   });
 });
+
 document.getElementById("auswahl-dialog").addEventListener("click", function(e) {
   if (e.target === this) this.close();
 });
