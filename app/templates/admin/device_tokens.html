@@ -65,6 +65,23 @@
   <div class="alert alert--danger" style="margin-bottom:20px;">Bezeichnung darf nicht leer sein.</div>
   {% endif %}
 
+  <!-- Android-App Download -->
+  <div style="display:flex;align-items:center;gap:14px;background:var(--surface-high);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:24px;">
+    <div style="font-size:2rem;flex-shrink:0;">📱</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-weight:600;font-size:.95rem;">{{ brand }}-App für Android</div>
+      <div style="font-size:.82rem;color:var(--color-text-muted);margin-top:2px;">
+        Einheit-Geräte und SMS-Gateways benötigen die native Android-App (APK Sideload).
+      </div>
+    </div>
+    <a href="https://github.com/BattloXX/Einsatzcockpit-Android/releases/latest"
+       target="_blank" rel="noopener"
+       class="btn btn--primary btn--sm"
+       style="white-space:nowrap;flex-shrink:0;">
+      ↓ APK herunterladen
+    </a>
+  </div>
+
   <!-- Einheit-Geräte-Tabelle -->
   <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 10px;">📱 Einheit-Geräte</h2>
   {% if tokens %}
