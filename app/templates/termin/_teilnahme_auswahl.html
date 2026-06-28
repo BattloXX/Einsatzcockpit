@@ -58,7 +58,7 @@
     </div>
     {% if not _is_einsatz %}
     <div style="display:flex;gap:4px;flex-shrink:0;" onclick="event.stopPropagation()"
-         onchange="this.parentElement.querySelector('input[type=checkbox]').checked=true">
+         onchange="event.stopPropagation();this.parentElement.querySelector('input[type=checkbox]').checked=true">
       <label class="teiln-status-lbl teiln-status-lbl--teilg">
         <input type="radio" name="s_{{ m.id }}" value="teilgenommen"
                style="position:absolute;opacity:0;width:0;height:0;">
