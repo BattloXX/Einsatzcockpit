@@ -1,0 +1,65 @@
+name: Version Bump nach Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  bump:
+    name: Minor-Version um 0.1.0 erhoehen
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Dateien aktualisieren
+        run: |
+          python3 - <<'EOF'
+          import re, sys
+
+          content = open("pyproject.toml").read()
+          m = re.search(r'^version = "(\d+)\.(\d+)\.(\d+)"', content, re.MULTILINE)
+          if not m:
+              sys.exit("Version nicht gefunden in pyproject.toml")
+
+          major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+          old_ver = f"{major}.{minor}.{patch}"
+          new_ver = f"{major}.{minor + 1}.{patch}"
+          print(f"Bump: {old_ver} -> {new_ver}")
+
+          def replace_first(path, pattern, repl):
+              text = open(path, encoding="utf-8").read()
+              new_text, n = re.subn(pattern, repl, text, count=1, flags=re.MULTILINE)
+              if n == 0:
+                  sys.exit(f"Pattern nicht gefunden in {path}")
+              open(path, "w", encoding="utf-8").write(new_text)
+
+          replace_first("pyproject.toml",
+              r'^version = "\d+\.\d+\.\d+"',
+              f'version = "{new_ver}"')
+          replace_first("app/config.py",
+              r'APP_VERSION: str = "\d+\.\d+\.\d+"',
+              f'APP_VERSION: str = "{new_ver}"')
+          replace_first("README.md",
+              r'!\[Version\]\(https://img\.shields\.io/badge/version-[\d.]+-orange\)',
+              f'![Version](https://img.shields.io/badge/version-{new_ver}-orange)')
+          EOF
+
+      - name: Neue Version lesen
+        id: ver
+        run: |
+          V=$(python3 -c "import re; m=re.search(r'version = \"([\d.]+)\"', open('pyproject.toml').read()); print(m.group(1))")
+          echo "new_version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Commit und Push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml app/config.py README.md
+          git commit -m "chore: Version auf ${{ steps.ver.outputs.new_version }} erhoehen (nach Release)"
+          git push origin HEAD:main
