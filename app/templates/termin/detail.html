@@ -141,6 +141,13 @@
 <script>
 window._auswahlSel = {};
 
+function _updateAuswahlCount() {
+  var btn = document.querySelector("#auswahl-liste #auswahl-form button[type='submit']");
+  if (!btn) return;
+  var n = Object.keys(window._auswahlSel).length;
+  btn.textContent = n > 0 ? "Auswahl hinzufügen (" + n + ")" : "Auswahl hinzufügen";
+}
+
 function _refreshAuswahlListe() {
   htmx.ajax("GET", "/teilnahme/{{ termin.typ }}/{{ termin.id }}/auswahl", {
     target: "#auswahl-liste",
@@ -169,6 +176,7 @@ document.getElementById("auswahl-dialog").addEventListener("change", function(e)
     } else {
       delete window._auswahlSel[inp.value];
     }
+    _updateAuswahlCount();
   } else if (inp.type === "radio" && inp.name && inp.name.startsWith("s_")) {
     // Radio-Status aktualisieren (oder Mitglied nachholen falls nur Radio geklickt)
     window._auswahlSel[inp.name.slice(2)] = inp.value;
@@ -202,6 +210,7 @@ function _syncAuswahlNachSwap(listEl) {
       }
     }
   });
+  _updateAuswahlCount();
 }
 
 document.addEventListener("htmx:afterSwap", function(e) {

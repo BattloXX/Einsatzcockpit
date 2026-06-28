@@ -155,36 +155,68 @@
 </dialog>
 
 <script>
+window._auswahlSel = new Set();
+
+function _updateAuswahlCount() {
+  var btn = document.querySelector("#auswahl-liste #auswahl-form button[type='submit']");
+  if (!btn) return;
+  var n = window._auswahlSel.size;
+  btn.textContent = n > 0 ? "Auswahl hinzufügen (" + n + ")" : "Auswahl hinzufügen";
+}
+
+function _syncNachSwap(listEl) {
+  var form = listEl.querySelector("#auswahl-form");
+  if (form) {
+    form.querySelectorAll("input.sel-hidden").forEach(function(h) { h.remove(); });
+  }
+  window._auswahlSel.forEach(function(id) {
+    var cb = listEl.querySelector("input[name='mitglied_id'][value='" + id + "']");
+    if (cb) {
+      cb.checked = true;
+    } else if (form) {
+      var h = document.createElement("input");
+      h.type = "hidden"; h.name = "mitglied_id"; h.value = id; h.className = "sel-hidden";
+      form.appendChild(h);
+    }
+  });
+  _updateAuswahlCount();
+}
+
 function _refreshAuswahlListe() {
   htmx.ajax("GET", "/teilnahme/einsatz/{{ incident.id }}/auswahl", {
     target: "#auswahl-liste",
     swap: "innerHTML"
   });
 }
+
 function _openAuswahlDialog() {
   document.getElementById("suche-input").value = "";
+  window._auswahlSel = new Set();
   _refreshAuswahlListe();
   document.getElementById("auswahl-dialog").showModal();
 }
-// Selektion beim Durchsuchen erhalten: Auswahl vor/nach HTMX-Swap sichern
-document.addEventListener("htmx:beforeSwap", function(e) {
-  if (e.detail.target.id !== "auswahl-liste") return;
-  var el = e.detail.target;
-  window._auswahlSel = new Set(
-    [...el.querySelectorAll("input[name='mitglied_id']:checked")].map(function(cb) { return cb.value; })
-  );
+
+document.getElementById("auswahl-dialog").addEventListener("change", function(e) {
+  var inp = e.target;
+  if (inp.name === "mitglied_id") {
+    if (inp.checked) {
+      window._auswahlSel.add(inp.value);
+    } else {
+      window._auswahlSel.delete(inp.value);
+    }
+    _updateAuswahlCount();
+  }
 });
+
 document.addEventListener("htmx:afterSwap", function(e) {
   if (e.detail.target.id !== "auswahl-liste") return;
-  var el = e.detail.target;
-  (window._auswahlSel || new Set()).forEach(function(id) {
-    var cb = el.querySelector("input[name='mitglied_id'][value='" + id + "']");
-    if (cb) cb.checked = true;
-  });
+  _syncNachSwap(e.detail.target);
 });
+
 document.getElementById("auswahl-dialog").addEventListener("click", function(e) {
   if (e.target === this) this.close();
 });
+
 document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("auswahl-dialog").addEventListener("close", function() {
     htmx.ajax("GET", "/teilnahme/einsatz/{{ incident.id }}/liste", {
