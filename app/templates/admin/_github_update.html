@@ -1,38 +1,107 @@
 {# HTMX-Partial: GitHub-Update-Status – wird in #github-update-box geswapped #}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    {% if github.get('error') %}
+    <span style="color:var(--color-danger,#dc2626);font-size:.88rem;">Fehler beim Abrufen</span>
+    {% elif github.has_update %}
+    <span class="badge badge-warning" style="font-size:.88rem;padding:3px 9px;">
+      Update verfügbar: v{{ github.latest_tag }}
+    </span>
+    {% if github.is_prerelease %}
+    <span class="badge" style="background:var(--color-warning-bg,#fef3c7);color:var(--color-warning,#92400e);font-size:.78rem;padding:2px 7px;">Pre-Release</span>
+    {% endif %}
+    {% else %}
+    <span style="color:var(--color-success,#16a34a);font-size:.9rem;">
+      v{{ github.current_version }} ist aktuell{% if github.latest_tag %} (GitHub: v{{ github.latest_tag }}){% endif %}
+    </span>
+    {% endif %}
+    <span style="color:var(--color-text-muted);font-size:.8rem;">
+      {% if prerelease %}Pre-Releases eingeschlossen{% else %}Nur stabile Releases{% endif %}
+    </span>
+  </div>
+  {# Toggle: Pre-Release / Stable wechseln #}
+  <a href="#"
+     hx-get="/admin/system/update/check-github{% if not prerelease %}?prerelease=1{% endif %}"
+     hx-target="#github-update-box"
+     hx-swap="innerHTML"
+     style="font-size:.82rem;color:var(--color-primary,#3b82f6);text-decoration:none;white-space:nowrap;">
+    {% if prerelease %}Nur Stable anzeigen{% else %}Pre-Releases einschliessen{% endif %}
+  </a>
+</div>
+
 {% if github.get('error') %}
 <div class="alert alert-danger" style="margin-bottom:0;">
-  GitHub nicht erreichbar: <code style="font-size:.85rem;">{{ github.error }}</code>
+  GitHub nicht erreichbar: <code style="font-size:.82rem;">{{ github.error }}</code>
 </div>
+
 {% elif github.has_update %}
-<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-  <span class="badge badge-warning" style="font-size:.9rem;padding:4px 10px;">
-    Update verfügbar: v{{ github.latest_tag }}
-  </span>
-  {% if github.release_name and github.release_name != 'v' + github.latest_tag %}
-  <span style="color:var(--color-text-muted);font-size:.88rem;">{{ github.release_name }}</span>
-  {% endif %}
-</div>
+
+{% if github.release_name and github.release_name != 'v' + github.latest_tag %}
+<div style="font-size:.87rem;color:var(--color-text-muted);margin-bottom:8px;">{{ github.release_name }}</div>
+{% endif %}
+
 {% if github.release_notes %}
 <pre style="font-size:.78rem;max-height:120px;overflow:auto;background:var(--surface-low,#f3f4f6);padding:8px 10px;border-radius:4px;white-space:pre-wrap;margin-bottom:12px;border:1px solid var(--border);">{{ github.release_notes }}</pre>
 {% endif %}
+
+{# Server-Update (ZIP) #}
 {% if github.download_url %}
-<form hx-post="/admin/system/update/github"
+<form hx-post="/admin/system/update/github{% if prerelease %}?prerelease=1{% endif %}"
       hx-target="#github-update-box"
       hx-swap="innerHTML"
-      onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Wird heruntergeladen…'">
+      onsubmit="this.querySelector('button[type=submit]').disabled=true;this.querySelector('button[type=submit]').textContent='Wird heruntergeladen…'">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  <button type="submit" class="btn btn-danger">Von GitHub herunterladen &amp; einspielen</button>
-  <span class="text-muted" style="font-size:.8rem;margin-left:8px;">Aktuell: v{{ github.current_version }}</span>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <button type="submit" class="btn btn-danger">Server-Update einspielen</button>
+    <span class="text-muted" style="font-size:.8rem;">v{{ github.current_version }} → v{{ github.latest_tag }}</span>
+  </div>
 </form>
 {% else %}
-<p class="text-muted" style="font-size:.87rem;margin:0;">
+<p class="text-muted" style="font-size:.87rem;margin:0 0 8px;">
   Kein ZIP-Asset im Release – bitte manuell herunterladen und über das Formular unten einspielen.
 </p>
 {% endif %}
+
+{# Android-APK #}
+{% if github.apk_url %}
+<div style="margin-top:14px;padding:12px 14px;background:var(--surface-low,#f3f4f6);border-radius:6px;border:1px solid var(--border);">
+  <div style="font-weight:600;font-size:.88rem;margin-bottom:8px;">Android-App (APK)</div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+    <code style="font-size:.82rem;">{{ github.apk_name }}</code>
+    {% if github.apk_size_mb %}
+    <span class="text-muted" style="font-size:.8rem;">{{ github.apk_size_mb }} MB</span>
+    {% endif %}
+    <a href="{{ github.apk_url }}"
+       class="btn btn-outline btn--sm"
+       download="{{ github.apk_name }}"
+       target="_blank">
+      APK herunterladen
+    </a>
+  </div>
+  <ul style="margin:.4rem 0 0;padding-left:1.2rem;font-size:.8rem;color:var(--color-text-muted);line-height:1.7;">
+    <li>Auf Android: Link antippen → Download startet → Benachrichtigung tippen → Installation bestätigen</li>
+    <li>Falls gesperrt: <strong>Einstellungen → Apps → Sonderrechte → Unbekannte Apps installieren</strong> → Browser zulassen</li>
+    <li>Alternativ: APK auf PC herunterladen und per ADB installieren: <code style="font-size:.78rem;">adb install {{ github.apk_name }}</code></li>
+  </ul>
+</div>
+{% endif %}
+
 {% else %}
-<p style="margin:0;color:var(--color-success,#16a34a);font-size:.93rem;">
-  v{{ github.current_version }} ist aktuell{% if github.latest_tag %} (GitHub: v{{ github.latest_tag }}){% endif %}.
-</p>
+{# Kein Update verfügbar – APK trotzdem anzeigen wenn vorhanden #}
+{% if github.get('apk_url') %}
+<div style="margin-top:10px;padding:10px 14px;background:var(--surface-low,#f3f4f6);border-radius:6px;border:1px solid var(--border);">
+  <div style="font-weight:600;font-size:.87rem;margin-bottom:6px;">Android-App (aktuelle Version)</div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <code style="font-size:.82rem;">{{ github.apk_name }}</code>
+    {% if github.apk_size_mb %}
+    <span class="text-muted" style="font-size:.8rem;">{{ github.apk_size_mb }} MB</span>
+    {% endif %}
+    <a href="{{ github.apk_url }}" class="btn btn-outline btn--sm" download="{{ github.apk_name }}" target="_blank">
+      APK herunterladen
+    </a>
+  </div>
+</div>
+{% endif %}
 {% endif %}
 
 {% if update_result is defined %}

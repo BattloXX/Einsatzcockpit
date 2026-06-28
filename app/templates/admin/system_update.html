@@ -38,25 +38,27 @@
 {% endif %}
 
 <div class="card mb-4">
-  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
     <h2>Automatisches Update von GitHub</h2>
-    <div style="display:flex;align-items:center;gap:8px;">
+    <form hx-get="/admin/system/update/check-github"
+          hx-target="#github-update-box"
+          hx-swap="innerHTML"
+          hx-indicator="#github-spinner"
+          style="display:flex;align-items:center;gap:10px;">
       <span class="htmx-indicator" id="github-spinner"
             style="font-size:.82rem;color:var(--color-text-muted);">Prüfe…</span>
-      <button class="btn btn-outline btn--sm"
-              hx-get="/admin/system/update/check-github"
-              hx-target="#github-update-box"
-              hx-swap="innerHTML"
-              hx-indicator="#github-spinner">
-        Auf Updates prüfen
-      </button>
-    </div>
+      <label style="display:flex;align-items:center;gap:5px;font-size:.87rem;cursor:pointer;user-select:none;white-space:nowrap;">
+        <input type="checkbox" name="prerelease" value="1"> Pre-Release
+      </label>
+      <button type="submit" class="btn btn-outline btn--sm">Auf Updates prüfen</button>
+    </form>
   </div>
   <div class="card-body">
     <div id="github-update-box">
       <p class="text-muted" style="margin:0;font-size:.9rem;">
         Auf „Auf Updates prüfen" klicken um GitHub auf verfügbare Releases zu prüfen.<br>
-        Das Update wird dann automatisch heruntergeladen und eingespielt.
+        „Pre-Release" einschalten um auch Vorab-Versionen anzuzeigen.<br>
+        Verfügbare APK-Assets werden ebenfalls angezeigt.
       </p>
     </div>
   </div>

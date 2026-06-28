@@ -224,31 +224,51 @@ def get_current_version() -> str:
     return "unbekannt"
 
 
-def check_github_release(repo: str = "BattloXX/Einsatzcockpit") -> dict:
-    """Prüft GitHub auf verfügbare Releases und vergleicht mit der aktuellen Version."""
+def check_github_release(repo: str = "BattloXX/Einsatzcockpit", prerelease: bool = False) -> dict:
+    """Prüft GitHub auf verfügbare Releases und vergleicht mit der aktuellen Version.
+
+    prerelease=True: berücksichtigt auch Pre-Releases (sucht in der Gesamt-Release-Liste).
+    prerelease=False (Standard): nur stabile Releases (/releases/latest).
+    """
     import json as _json
     import urllib.request as _req
 
     current = get_current_version()
     try:
-        url = f"https://api.github.com/repos/{repo}/releases/latest"
-        request = _req.Request(url, headers={"User-Agent": "Einsatzcockpit-Updater/1.0"})
-        with _req.urlopen(request, timeout=10) as resp:
-            data = _json.loads(resp.read())
+        if prerelease:
+            # Alle Releases abrufen (sortiert nach Datum absteigend) – erster Treffer ist neuester
+            url = f"https://api.github.com/repos/{repo}/releases?per_page=10"
+            request = _req.Request(url, headers={"User-Agent": "Einsatzcockpit-Updater/1.0"})
+            with _req.urlopen(request, timeout=10) as resp:
+                releases = _json.loads(resp.read())
+            data = releases[0] if releases else {}
+        else:
+            url = f"https://api.github.com/repos/{repo}/releases/latest"
+            request = _req.Request(url, headers={"User-Agent": "Einsatzcockpit-Updater/1.0"})
+            with _req.urlopen(request, timeout=10) as resp:
+                data = _json.loads(resp.read())
 
         tag = data.get("tag_name", "").lstrip("v")
         assets = data.get("assets", [])
-        # Eigenes Release-ZIP bevorzugen; Fallback: GitHub-Quellcode-ZIP (immer verfügbar)
+
+        # Server-ZIP: eigenes Release-Asset bevorzugen; Fallback: GitHub-Quellcode-ZIP
         zip_url = next((a["browser_download_url"] for a in assets if a["name"].endswith(".zip")), None)
         download_url = zip_url or data.get("zipball_url")
+
+        # Android-APK: erstes .apk-Asset im Release (falls vorhanden)
+        apk_asset = next((a for a in assets if a["name"].endswith(".apk")), None)
 
         return {
             "current_version": current,
             "latest_tag": tag,
             "download_url": download_url,
             "has_update": bool(tag) and tag != current,
+            "is_prerelease": bool(data.get("prerelease", False)),
             "release_name": data.get("name", ""),
             "release_notes": (data.get("body") or "")[:500],
+            "apk_url":     apk_asset["browser_download_url"] if apk_asset else None,
+            "apk_name":    apk_asset["name"] if apk_asset else None,
+            "apk_size_mb": round(apk_asset["size"] / 1024 / 1024, 1) if apk_asset else None,
         }
     except Exception as exc:
         return {
@@ -256,6 +276,7 @@ def check_github_release(repo: str = "BattloXX/Einsatzcockpit") -> dict:
             "latest_tag": None,
             "download_url": None,
             "has_update": False,
+            "is_prerelease": False,
             "error": str(exc)[:200],
         }
 

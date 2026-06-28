@@ -227,7 +227,7 @@
   {% endif %}
 
   <!-- Android Standort-Hinweis -->
-  <div class="alert" style="border-left:4px solid var(--color-warning,#f59e0b);background:var(--surface-high);padding:14px 16px;border-radius:6px;margin-bottom:16px;">
+  <div class="alert" style="border-left:4px solid var(--color-warning,#f59e0b);background:var(--surface-high);padding:14px 16px;border-radius:6px;margin-bottom:12px;">
     <strong>📍 Android-App: Standort im Hintergrund aktivieren</strong>
     <p style="margin:.5rem 0 0;font-size:.9rem;color:var(--color-text-muted);line-height:1.6;">
       Damit die {{ brand }}-App den Fahrzeugstandort auch bei gesperrtem Display oder im Hintergrund übermittelt (erforderlich für die Lagekarte), muss in den Android-Systemeinstellungen die Standort-Berechtigung auf <strong>„Immer zulassen"</strong> gesetzt werden:
@@ -239,6 +239,23 @@
     </ol>
     <p style="margin:.5rem 0 0;font-size:.8rem;color:var(--color-text-muted);">
       Ohne diese Einstellung wird der Standort nur übermittelt, solange die App aktiv im Vordergrund ist.
+    </p>
+  </div>
+
+  <!-- Android Akku-Optimierung Hinweis -->
+  <div class="alert" style="border-left:4px solid var(--color-danger,#dc2626);background:var(--surface-high);padding:14px 16px;border-radius:6px;margin-bottom:16px;">
+    <strong>🔋 Android-App: Akku-Optimierung deaktivieren (dauerhafter Hintergrund-Betrieb)</strong>
+    <p style="margin:.5rem 0 0;font-size:.9rem;color:var(--color-text-muted);line-height:1.6;">
+      Der Android-Energiesparmodus kann Hintergrunddienste (GPS, Verbindung) unterbrechen, auch wenn die Standort-Berechtigung auf „Immer zulassen" steht. Für zuverlässigen Dauerbetrieb im Einsatz die App von der Akku-Optimierung ausnehmen:
+    </p>
+    <ol style="margin:.5rem 0 0;padding-left:1.2rem;font-size:.875rem;color:var(--color-text-muted);line-height:1.8;">
+      <li>Android-Einstellungen → <strong>Apps</strong> → <strong>{{ brand }}</strong></li>
+      <li><strong>Akku</strong> (oder „Akkuverbrauch")</li>
+      <li>Option <strong>„Nicht eingeschränkt"</strong> oder <strong>„Keine Einschränkungen"</strong> auswählen</li>
+    </ol>
+    <p style="margin:.5rem 0 0;font-size:.8rem;color:var(--color-text-muted);">
+      Alternativ: Einstellungen → Akku → Akku-Optimierung → Alle Apps → {{ brand }} → „Nicht optimieren".<br>
+      Unser eigener Energiesparmodus (unter 20&nbsp;% Akku) reduziert nur die GPS-Häufigkeit – das GPS-Tracking selbst läuft immer weiter.
     </p>
   </div>
 

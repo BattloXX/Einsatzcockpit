@@ -1,5 +1,5 @@
 /**
- * native-bridge.js – Capacitor ↔ Web Bridge für Einsatzcockpit
+ * native-bridge.js – Capacitor <-> Web Bridge für Einsatzcockpit
  *
  * Erkennt ob die App in Capacitor läuft und stellt window.ELNative bereit.
  * In der reinen PWA sind alle Funktionen No-Ops oder fallen auf Web-APIs zurück,
@@ -12,6 +12,7 @@
  *   ELNative.scanQr(onResult, onError)  – QR-Scanner öffnen
  *   ELNative.setBatterySaver(on)        – Energiesparmodus manuell setzen
  *   ELNative.batterySaverActive         – getter: aktueller Energiesparmodus-Status
+ *   ELNative.isTracking                 – getter: GPS-Tracking läuft gerade
  *   ELNative.isNative                   – getter, jedes Mal frisch gegen window.Capacitor geprüft
  */
 (function () {
@@ -28,6 +29,9 @@
   }
 
   // ─── GPS-Intervalle & Energiesparmodus ──────────────────────────────────────
+  // Energiesparmodus reduziert nur die Frequenz – Tracking bleibt IMMER aktiv,
+  // solange der Dienst-Status es erfordert. keepAwake bleibt beim Tracking
+  // immer aktiv, damit Android den BackgroundGeolocation-Dienst nicht tötet.
   const _GPS_NORMAL_DISTANCE   = 20;              // Mindestbewegung (m) – Normalmodus
   const _GPS_BATTERY_DISTANCE  = 100;             // Mindestbewegung (m) – Energiesparmodus
   const _GPS_NORMAL_INTERVAL   = 3  * 60 * 1000; // Periodischer Fallback-Ping – Normal
@@ -36,6 +40,7 @@
   const _DUTY_BATTERY_INTERVAL = 120_000;         // Dienst-Status-Poll – Energiesparen
 
   let _batterySaver = false;
+  let _isTracking   = false;  // true sobald startLocation() aufgerufen wurde
 
   function _effectiveDistanceFilter() { return _batterySaver ? _GPS_BATTERY_DISTANCE : _GPS_NORMAL_DISTANCE; }
   function _effectiveGpsInterval()    { return _batterySaver ? _GPS_BATTERY_INTERVAL  : _GPS_NORMAL_INTERVAL; }
@@ -45,18 +50,17 @@
     _batterySaver = !!on;
     if (was === _batterySaver) return;
 
-    // GPS-Tracking mit neuen Parametern neustarten wenn aktiv
-    if (_locationWatch !== null) {
+    if (_isTracking) {
+      // GPS mit neuen Parametern neustarten – keepAwake(true) wird dabei gesetzt
       stopLocation();
       startLocation();
+    } else if (_batterySaver && _isNative()) {
+      // Kein Tracking aktiv: Bildschirmsperre im Sparmodus freigeben
+      keepAwake(false);
     }
 
-    // Dienst-Status-Poll-Intervall anpassen
+    // Duty-Poll-Intervall anpassen
     _startDutyPoll();
-
-    // Im Energiesparmodus: Bildschirm darf schlafen
-    if (_batterySaver && _isNative()) keepAwake(false);
-
     console.log('[ELNative] Energiesparmodus:', _batterySaver ? 'aktiv' : 'inaktiv');
   }
 
@@ -153,10 +157,17 @@
 
   function startLocation() {
     if (!_isNative()) return;
-    if (_locationWatch !== null) return; // Bereits aktiv – kein doppelter Watcher
+    if (_isTracking) return; // Schützt vor Doppelaufruf (auch bevor .then() resolvet)
+    _isTracking = true;
+
+    // keepAwake IMMER aktivieren während GPS-Tracking läuft – verhindert dass
+    // Android den BackgroundGeolocation-Dienst im Hintergrund beendet.
+    // Gilt auch im Energiesparmodus (GPS-Dienst hat Vorrang).
+    keepAwake(true);
+
     try {
       const { BackgroundGeolocation } = window.Capacitor.Plugins;
-      if (!BackgroundGeolocation) return;
+      if (!BackgroundGeolocation) { _isTracking = false; return; }
       BackgroundGeolocation.addWatcher(
         {
           backgroundMessage: 'Standort wird im Einsatz übermittelt.',
@@ -183,17 +194,23 @@
         }, _effectiveGpsInterval());
       }
     } catch (e) {
+      _isTracking = false;
       console.warn('[ELNative] BackgroundGeolocation Fehler:', e);
     }
   }
 
   function stopLocation() {
+    _isTracking = false;
     if (_periodicGpsInterval) {
       clearInterval(_periodicGpsInterval);
       _periodicGpsInterval = null;
     }
     _lastSentLat = null;
     _lastSentLng = null;
+
+    // Bildschirmsperre im Sparmodus freigeben – kein Tracking mehr aktiv
+    if (_isNative() && _batterySaver) keepAwake(false);
+
     if (!_isNative() || !_locationWatch) return;
     try {
       const { BackgroundGeolocation } = window.Capacitor.Plugins;
@@ -210,8 +227,6 @@
   // @capacitor-mlkit/barcode-scanning v7: scan() nutzt das Google Barcode Scanner
   // Module (Google Play Services). Vor dem ersten Aufruf muss das Modul geprüft
   // und ggf. installiert werden; ohne diese Prüfung schlägt scan() lautlos fehl.
-  // onResult(url)  – wird mit der gescannten URL aufgerufen
-  // onError(msg)   – wird bei jedem Fehler aufgerufen (optional)
   async function scanQr(onResult, onError) {
     function _err(msg) {
       console.warn('[ELNative] QR-Scanner Fehler:', msg);
@@ -267,7 +282,7 @@
       const data = await resp.json();
       if (data.should_track) startLocation();
       else stopLocation();
-    } catch (_) {} // Netzwerkfehler: kein Stopp des Trackings
+    } catch (_) {} // Netzwerkfehler: kein Stopp des aktiven Trackings
   }
 
   let _dutyPollId = null;
@@ -313,5 +328,6 @@
     scanQr,
     setBatterySaver(on) { _setBatterySaver(on); },
     get batterySaverActive() { return _batterySaver; },
+    get isTracking() { return _isTracking; },
   };
 })();

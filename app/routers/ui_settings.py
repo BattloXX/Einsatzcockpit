@@ -4,7 +4,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.config import settings as app_settings
@@ -1223,30 +1223,41 @@ async def apply_system_update(
 
 
 @router.get("/system/update/check-github", response_class=HTMLResponse)
-def check_github_update(request: Request, user: User = Depends(require_system_admin)):
+def check_github_update(
+    request: Request,
+    user: User = Depends(require_system_admin),
+    prerelease: bool = Query(False),
+):
     """HTMX-Partial: GitHub auf neuere Releases prüfen."""
-    github = check_github_release()
+    github = check_github_release(prerelease=prerelease)
     return templates.TemplateResponse(request, "admin/_github_update.html", {
         "user": user,
         "github": github,
+        "prerelease": prerelease,
     })
 
 
 @router.post("/system/update/github", response_class=HTMLResponse)
-def apply_github_update(request: Request, user: User = Depends(require_system_admin)):
+def apply_github_update(
+    request: Request,
+    user: User = Depends(require_system_admin),
+    prerelease: bool = Query(False),
+):
     """HTMX-Partial: Release von GitHub herunterladen und einspielen (def → Threadpool)."""
-    github = check_github_release()
+    github = check_github_release(prerelease=prerelease)
     if not github.get("download_url"):
         return templates.TemplateResponse(request, "admin/_github_update.html", {
             "user": user,
             "github": github,
+            "prerelease": prerelease,
             "update_result": {"success": False, "message": "Kein Download-Link im aktuellen Release gefunden."},
         })
     result = download_and_apply_github_update(github["download_url"])
-    github_after = check_github_release()
+    github_after = check_github_release(prerelease=prerelease)
     return templates.TemplateResponse(request, "admin/_github_update.html", {
         "user": user,
         "github": github_after,
+        "prerelease": prerelease,
         "update_result": result,
     })
 
