@@ -139,6 +139,8 @@
 </dialog>
 
 <script>
+window._auswahlSel = {};
+
 function _refreshAuswahlListe() {
   htmx.ajax("GET", "/teilnahme/{{ termin.typ }}/{{ termin.id }}/auswahl", {
     target: "#auswahl-liste",
@@ -152,52 +154,44 @@ function _openAuswahlDialog() {
   document.getElementById("auswahl-dialog").showModal();
 }
 
-// Selektion beim Durchsuchen/Filtern erhalten: auch gefilterte (nicht sichtbare) Auswahl bleibt erhalten
-document.addEventListener("htmx:beforeSwap", function(e) {
-  if (e.detail.target.id !== "auswahl-liste") return;
-  var el = e.detail.target;
-
-  // Sichtbare, angehakte Mitglieder mit Status erfassen
-  var nextSel = {};
-  el.querySelectorAll("input[name='mitglied_id']:checked").forEach(function(cb) {
-    var mid = cb.value;
-    var radio = el.querySelector("input[type='radio'][name='s_" + mid + "']:checked");
-    nextSel[mid] = radio ? radio.value : "";
-  });
-
-  // Bisher ausgewählte, aber nun durch Filter nicht mehr sichtbare Mitglieder übernehmen
-  var visibleIds = new Set([...el.querySelectorAll("input[name='mitglied_id']")].map(function(cb) { return cb.value; }));
-  Object.keys(window._auswahlSel || {}).forEach(function(mid) {
-    if (!visibleIds.has(mid)) {
-      nextSel[mid] = window._auswahlSel[mid];
+// Event-Delegation auf dem Dialog (wird nie durch HTMX ersetzt):
+// Checkbox- und Radio-Änderungen direkt abfangen und in _auswahlSel speichern.
+// Voraussetzung: row-onclick dispatcht new Event('change',{bubbles:true})
+//               radio-onchange hat kein event.stopPropagation()
+document.getElementById("auswahl-dialog").addEventListener("change", function(e) {
+  var inp = e.target;
+  if (inp.name === "mitglied_id") {
+    if (inp.checked) {
+      // Checkbox wurde angehakt: Status aus auto-gewähltem Radio lesen (onchange ran schon)
+      var row = inp.parentElement;
+      var checkedRadio = row ? row.querySelector("input[type='radio']:checked") : null;
+      window._auswahlSel[inp.value] = checkedRadio ? checkedRadio.value : "";
+    } else {
+      delete window._auswahlSel[inp.value];
     }
-  });
-
-  window._auswahlSel = nextSel;
+  } else if (inp.type === "radio" && inp.name && inp.name.startsWith("s_")) {
+    // Radio-Status aktualisieren (oder Mitglied nachholen falls nur Radio geklickt)
+    window._auswahlSel[inp.name.slice(2)] = inp.value;
+  }
 });
 
-document.addEventListener("htmx:afterSwap", function(e) {
-  if (e.detail.target.id !== "auswahl-liste") return;
-  var el = e.detail.target;
-  var form = el.querySelector("#auswahl-form");
-
-  // Vorherige versteckte Inputs entfernen
+// Nach HTMX-Swap der Liste: sichtbare Selektionen wiederherstellen,
+// gefilterte (nicht sichtbare) als Hidden-Inputs einfügen damit der Submit vollständig ist.
+function _syncAuswahlNachSwap(listEl) {
+  var form = listEl.querySelector("#auswahl-form");
   if (form) {
     form.querySelectorAll("input.sel-hidden").forEach(function(h) { h.remove(); });
   }
-
-  Object.keys(window._auswahlSel || {}).forEach(function(mid) {
+  Object.keys(window._auswahlSel).forEach(function(mid) {
     var status = window._auswahlSel[mid];
-    var cb = el.querySelector("input[name='mitglied_id'][value='" + mid + "']");
+    var cb = listEl.querySelector("input[name='mitglied_id'][value='" + mid + "']");
     if (cb) {
-      // Mitglied sichtbar: Checkbox wiederherstellen
       cb.checked = true;
       if (status) {
-        var radio = el.querySelector("input[type='radio'][name='s_" + mid + "'][value='" + status + "']");
+        var radio = listEl.querySelector("input[type='radio'][name='s_" + mid + "'][value='" + status + "']");
         if (radio) radio.checked = true;
       }
     } else if (form) {
-      // Mitglied durch Filter ausgeblendet: versteckte Inputs einfügen damit der Submit vollständig ist
       var h = document.createElement("input");
       h.type = "hidden"; h.name = "mitglied_id"; h.value = mid; h.className = "sel-hidden";
       form.appendChild(h);
@@ -208,6 +202,11 @@ document.addEventListener("htmx:afterSwap", function(e) {
       }
     }
   });
+}
+
+document.addEventListener("htmx:afterSwap", function(e) {
+  if (e.detail.target.id !== "auswahl-liste") return;
+  _syncAuswahlNachSwap(e.detail.target);
 });
 
 document.getElementById("auswahl-dialog").addEventListener("click", function(e) {
