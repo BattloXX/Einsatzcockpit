@@ -41,10 +41,13 @@
   <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;min-height:44px;cursor:pointer;transition:background .1s;"
        onmouseover="this.style.background='var(--surface-high)'"
        onmouseout="this.style.background=''"
-       onclick="var cb=this.querySelector('input[type=checkbox]');cb.checked=!cb.checked;">
+       onclick="var cb=this.querySelector('input[type=checkbox]');cb.checked=!cb.checked;cb.dispatchEvent(new Event('change'));">
     <input type="checkbox" name="mitglied_id" value="{{ m.id }}"
            style="width:18px;height:18px;flex-shrink:0;cursor:pointer;"
-           onclick="event.stopPropagation()">
+           onclick="event.stopPropagation()"
+           {% if not _is_einsatz %}
+           onchange="if(this.checked){var t=this.parentElement.querySelector('input[value=teilgenommen]');if(t)t.checked=true;}else{this.parentElement.querySelectorAll('input[type=radio]').forEach(function(r){r.checked=false;});}"
+           {% endif %}>
     <div style="flex:1;min-width:0;">
       <div style="font-size:.9rem;font-weight:500;">{{ m.full_name }}</div>
       {% if member_to_gruppen and m.id in member_to_gruppen %}
