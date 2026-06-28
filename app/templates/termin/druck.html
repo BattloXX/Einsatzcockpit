@@ -43,6 +43,8 @@
         {% if is_einsatz %}
         <th style="padding:7px 10px;text-align:left;">Funktion</th>
         <th style="padding:7px 10px;text-align:left;">Fahrzeug</th>
+        {% else %}
+        <th style="padding:7px 10px;text-align:left;width:110px;">Status</th>
         {% endif %}
         <th style="padding:7px 10px;text-align:left;">Notiz</th>
         <th style="padding:7px 10px;text-align:left;width:110px;">Hinzugef. von</th>
@@ -56,15 +58,16 @@
         <td style="padding:8px 10px;font-weight:500;">
           {{ t.anzeige_name }}
           {% if not t.mitglied_id %}<span style="font-size:.75rem;color:#888;">(Gast)</span>{% endif %}
-          {% if not is_einsatz %}
-            {% if t.ausgerueckt %}<div style="font-size:.75rem;font-weight:400;color:#2a6a2a;">Teilgenommen</div>
-            {% elif t.entschuldigt %}<div style="font-size:.75rem;font-weight:400;color:#888;">Entschuldigt</div>
-            {% endif %}
-          {% endif %}
         </td>
         {% if is_einsatz %}
         <td style="padding:8px 10px;">{{ t.funktion.name if t.funktion else '' }}</td>
         <td style="padding:8px 10px;">{{ t.fahrzeug.display_label if t.fahrzeug else '' }}</td>
+        {% else %}
+        <td style="padding:8px 10px;">
+          {% if t.ausgerueckt %}<span style="font-size:.78rem;font-weight:600;color:#2a6a2a;">Teilgenommen</span>
+          {% elif t.entschuldigt %}<span style="font-size:.78rem;font-weight:600;color:#7a6000;">Entschuldigt</span>
+          {% else %}<span style="font-size:.78rem;color:#aaa;">–</span>{% endif %}
+        </td>
         {% endif %}
         <td style="padding:8px 10px;color:#555;">{{ t.notiz or '' }}</td>
         <td style="padding:8px 10px;font-size:.78rem;color:#555;line-height:1.4;">

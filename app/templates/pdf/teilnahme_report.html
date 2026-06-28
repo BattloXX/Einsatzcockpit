@@ -60,6 +60,8 @@
       <th style="width:28pt;text-align:center;">Aus.</th>
       <th style="width:90pt;">Funktion</th>
       <th style="width:80pt;">Fahrzeug</th>
+      {% else %}
+      <th style="width:75pt;">Status</th>
       {% endif %}
       <th>Notiz</th>
       <th style="width:78pt;">Hinzugef. von</th>
@@ -72,16 +74,17 @@
       <td style="font-weight:{% if t.mitglied %}500{% else %}400{% endif %};">
         {{ t.anzeige_name }}
         {% if not t.mitglied_id %}<span style="font-size:8pt;color:#888;"> (Gast)</span>{% endif %}
-        {% if not is_einsatz %}
-          {% if t.ausgerueckt %}<div style="font-size:7.5pt;font-weight:400;color:#2a6a2a;">Teilgenommen</div>
-          {% elif t.entschuldigt %}<div style="font-size:7.5pt;font-weight:400;color:#888;">Entschuldigt</div>
-          {% endif %}
-        {% endif %}
       </td>
       {% if is_einsatz %}
       <td style="text-align:center;">{{ '&#10003;' if t.ausgerueckt else '' }}</td>
       <td>{{ t.funktion.name if t.funktion else '' }}</td>
       <td>{{ t.fahrzeug.display_label if t.fahrzeug else '' }}</td>
+      {% else %}
+      <td>
+        {% if t.ausgerueckt %}<span style="font-weight:700;color:#2a6a2a;">Teilgenommen</span>
+        {% elif t.entschuldigt %}<span style="font-weight:700;color:#7a6000;">Entschuldigt</span>
+        {% else %}<span style="color:#aaa;">–</span>{% endif %}
+      </td>
       {% endif %}
       <td style="color:#555;">{{ t.notiz or '' }}</td>
       <td style="font-size:7.5pt;color:#555;line-height:1.4;">
