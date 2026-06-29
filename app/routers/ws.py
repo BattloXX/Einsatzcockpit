@@ -28,8 +28,11 @@ logger = logging.getLogger("einsatzleiter.ws")
 router = APIRouter()
 
 # ── SMS-Gateway Registry ───────────────────────────────────────────────────────
-# org_id → Menge aktiver Gateway-WebSocket-Verbindungen
-_sms_gateways: dict[int, set[WebSocket]] = defaultdict(set)
+# org_id → aktive Gateway-WebSocket-Verbindungen, geordnet nach Verbindungszeit
+# (ältester zuerst, neuester zuletzt). dispatch_sms bevorzugt die neueste und
+# entfernt tote Sockets, damit doppelte/halboffene Verbindungen nicht den Versand
+# blockieren (siehe Android-Reconnect-Verhalten).
+_sms_gateways: dict[int, list[WebSocket]] = defaultdict(list)
 # job_id → asyncio.Future für sms.result-Rückmeldung
 _sms_pending: dict[str, asyncio.Future] = {}
 
@@ -205,8 +208,11 @@ async def sms_gateway_ws(websocket: WebSocket):
     _touch_sms_gateway_token(token_id)
 
     await websocket.accept()
-    _sms_gateways[org_id].add(websocket)
-    logger.info("SMS-Gateway verbunden (org_id=%s, token_id=%s)", org_id, token_id)
+    _sms_gateways[org_id].append(websocket)
+    logger.info(
+        "SMS-Gateway verbunden (org_id=%s, token_id=%s, aktive=%d)",
+        org_id, token_id, len(_sms_gateways[org_id]),
+    )
 
     try:
         while True:
@@ -232,7 +238,7 @@ async def sms_gateway_ws(websocket: WebSocket):
     except WebSocketDisconnect:
         logger.info("SMS-Gateway getrennt (org_id=%s)", org_id)
     finally:
-        _sms_gateways[org_id].discard(websocket)
+        _discard_gateway(org_id, websocket)
 
 
 def is_sms_gateway_connected(org_id: int) -> bool:
@@ -240,8 +246,23 @@ def is_sms_gateway_connected(org_id: int) -> bool:
     return bool(_sms_gateways.get(org_id))
 
 
+def _discard_gateway(org_id: int, websocket: WebSocket) -> None:
+    """Entfernt eine Gateway-Verbindung aus der Registry (idempotent)."""
+    try:
+        _sms_gateways.get(org_id, []).remove(websocket)
+    except ValueError:
+        pass
+
+
 async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: float = 15.0) -> dict:
     """Sendet einen SMS-Job an einen verbundenen Gateway und wartet auf das Ergebnis.
+
+    Bei mehreren registrierten Verbindungen (z. B. nach einem Client-Reconnect, der
+    eine halboffene Verbindung hinterlassen hat) wird die **neueste** zuerst versucht.
+    Schlägt das reine Senden fehl, gilt die Verbindung als tot: sie wird aus der
+    Registry entfernt und die nächste Verbindung versucht. Ein *Timeout* (Senden
+    erfolgreich, aber keine Antwort) wird hingegen NICHT erneut versucht, um doppelte
+    SMS zu vermeiden.
 
     Rückgabe: sms.result-Dict (ok, error, provider_response).
     Wirft RuntimeError wenn kein Gateway verbunden oder Timeout überschritten.
@@ -250,18 +271,34 @@ async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: fl
     if not gateways:
         raise RuntimeError(f"Kein SMS-Gateway für org_id={org_id} verbunden")
 
-    ws = gateways[0]
-    loop = asyncio.get_event_loop()
-    fut: asyncio.Future = loop.create_future()
-    _sms_pending[job_id] = fut
-
     payload = json.dumps({"type": "sms.send", "id": job_id, "to": to, "text": text}, ensure_ascii=False)
-    try:
-        await ws.send_text(payload)
-        return await asyncio.wait_for(fut, timeout=timeout)
-    except TimeoutError:
-        _sms_pending.pop(job_id, None)
-        raise RuntimeError(f"SMS-Gateway Timeout für Job {job_id}")
-    except Exception:
-        _sms_pending.pop(job_id, None)
-        raise
+    loop = asyncio.get_event_loop()
+    last_error: Exception | None = None
+
+    # Neueste Verbindung zuerst
+    for ws in reversed(gateways):
+        fut: asyncio.Future = loop.create_future()
+        _sms_pending[job_id] = fut
+        try:
+            await ws.send_text(payload)
+        except Exception as exc:
+            # Senden fehlgeschlagen → Verbindung tot: entfernen und nächste versuchen
+            _sms_pending.pop(job_id, None)
+            _discard_gateway(org_id, ws)
+            last_error = exc
+            logger.warning("SMS-Gateway-Verbindung tot, entferne und versuche nächste: %s", exc)
+            continue
+
+        try:
+            return await asyncio.wait_for(fut, timeout=timeout)
+        except TimeoutError:
+            # Senden gelang, aber keine Antwort – nicht erneut versuchen (Doppelversand)
+            _sms_pending.pop(job_id, None)
+            raise RuntimeError(f"SMS-Gateway Timeout für Job {job_id}")
+        except Exception:
+            _sms_pending.pop(job_id, None)
+            raise
+
+    raise RuntimeError(
+        f"Kein erreichbares SMS-Gateway für org_id={org_id} (letzter Fehler: {last_error})"
+    )
