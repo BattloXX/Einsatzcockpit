@@ -59,6 +59,19 @@ from app.models.password_reset import PasswordResetToken
 from app.models.sms import SmsEinsatzinfoRecipient, SmsGroup, SmsGroupMember, SmsLog
 from app.models.sso import OrgSsoConfig, OrgSsoGroupMap
 from app.models.teilnahme import Funktion, Teilnahme, Termin
+from app.models.uas import (
+    UASCheckliste,
+    UASDevice,
+    UASEinsatz,
+    UASEinsatzRolleEintrag,
+    UASEreignis,
+    UASFlug,
+    UASFlugbewegung,
+    UASKartenobjekt,
+    UASMedien,
+    UASPilot,
+    UASWartung,
+)
 from app.models.user import (
     ApiKey,
     AuditLog,
@@ -109,4 +122,7 @@ __all__ = [
     "Fahrtzweck", "Zielort", "Fahrt", "FahrtBenachrichtigung",
     "FahrtKategorie", "FahrtStatus", "FahrtErfassungsweg",
     "Termin", "Funktion", "Teilnahme",
+    "UASDevice", "UASPilot", "UASFlugbewegung", "UASWartung",
+    "UASEinsatz", "UASEinsatzRolleEintrag", "UASFlug", "UASCheckliste",
+    "UASEreignis", "UASKartenobjekt", "UASMedien",
 ]

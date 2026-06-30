@@ -79,6 +79,15 @@ async def lifespan(app: FastAPI):
         for err in errors:
             logger.warning("Konfigurations-Warnung (DEBUG=True): %s", err)
 
+    # Alle ORM-Modelle registrieren und Mapper sofort konfigurieren. Ohne dies
+    # werden manche Module (z. B. app.models.uas) erst lazy beim ersten Request
+    # geladen; eine spätere Re-Konfiguration kann dann mitten im Request mit
+    # "failed to locate a name" abbrechen und den Request in einen 500 reißen.
+    # Hier fällt ein solcher Fehler stattdessen deterministisch beim Boot auf.
+    import app.models  # noqa: F401 – importiert alle Modell-Module in die Registry
+    from sqlalchemy.orm import configure_mappers
+    configure_mappers()
+
     # Bootstrap admin on first start
     _bootstrap_admin()
 
