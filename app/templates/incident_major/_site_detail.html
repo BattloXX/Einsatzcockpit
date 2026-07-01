@@ -238,6 +238,7 @@
               hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/prio"
               hx-vals='{"_csrf": "{{ request.state.csrf_token }}"}'
               name="priority" hx-trigger="change" hx-swap="none"
+              hx-sync="this:replace"
               hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
         <option value="" {% if not site.priority %}selected{% endif %}>— keine —</option>
         {% for prio_key, prio_text in prio_label.items() %}
@@ -405,6 +406,8 @@
         hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/log"
         hx-target="#siteDetailContent"
         hx-swap="innerHTML"
+        hx-sync="this:drop"
+        hx-indicator="#siteLog-spin-{{ site.id }}"
         hx-vals='{"_csrf": "{{ request.state.csrf_token }}"}'>
     <div style="display:flex;gap:6px;align-items:center;">
       <select name="art" class="form-select form-select--xs" style="flex-shrink:0;">
@@ -416,7 +419,10 @@
         <input type="text" name="text" class="form-input" placeholder="Eintrag erfassen…"
                required autocomplete="off" maxlength="500">
       </div>
-      <button type="submit" class="btn btn--secondary btn--sm" style="flex-shrink:0;">Speichern</button>
+      <button type="submit" class="btn btn--secondary btn--sm" style="flex-shrink:0;">
+        Speichern
+        <span id="siteLog-spin-{{ site.id }}" class="htmx-indicator" style="font-size:.75rem;"> …</span>
+      </button>
     </div>
     <p class="form-hint" style="margin-top:4px;">Nur „Lagemeldung“ setzt den Lagemeldungs-Timer zurück.</p>
   </form>

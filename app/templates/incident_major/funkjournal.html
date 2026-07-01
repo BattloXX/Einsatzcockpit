@@ -84,6 +84,8 @@
     <div class="fj-add__title">EINTRAG HINZUFÜGEN</div>
     <form hx-post="/lage/{{ lage.id }}/funkjournal"
           hx-swap="none"
+          hx-sync="this:drop"
+          hx-indicator="#fj-add-spin"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
           hx-on::after-request="if(event.detail.successful){resetForm();htmx.ajax('GET','/lage/{{ lage.id }}/funkjournal/rows',{target:'#fj-table-section',swap:'innerHTML'});}">
 
@@ -168,7 +170,10 @@
           <input type="text" name="message" class="form-input" required maxlength="500"
                  placeholder="Nachrichteninhalt…" autocomplete="off">
         </div>
-        <button type="submit" class="btn btn--primary btn--sm">Eintragen</button>
+        <button type="submit" class="btn btn--primary btn--sm">
+          Eintragen
+          <span id="fj-add-spin" class="htmx-indicator" style="font-size:.75rem;"> …</span>
+        </button>
       </div>
     </form>
   </div>
@@ -214,6 +219,8 @@
       <button type="button" onclick="document.getElementById('fjLmDialog').close()" class="modal__close">×</button>
     </div>
     <form id="fjLmForm" hx-swap="none"
+          hx-sync="this:drop"
+          hx-indicator="#fjLm-spin"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}","art":"lagemeldung"}'
           hx-on::after-request="if(event.detail.successful){document.getElementById('fjLmDialog').close();this.reset();htmx.ajax('GET','/lage/{{ lage.id }}/funkjournal/rows',{target:'#fj-table-section',swap:'innerHTML'});}">
       <div class="modal__body">
@@ -224,7 +231,10 @@
       </div>
       <div class="modal__footer">
         <button type="button" class="btn btn--ghost" onclick="document.getElementById('fjLmDialog').close()">Abbrechen</button>
-        <button type="submit" class="btn btn--primary">Lagemeldung speichern</button>
+        <button type="submit" class="btn btn--primary">
+          Lagemeldung speichern
+          <span id="fjLm-spin" class="htmx-indicator" style="font-size:.75rem;"> …</span>
+        </button>
       </div>
     </form>
   </div>

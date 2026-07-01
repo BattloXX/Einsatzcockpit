@@ -86,6 +86,7 @@
     {% for pv, lbl, cls, fullname in prios %}
     <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/prio"
           hx-swap="none"
+          hx-sync="closest .site-card__footer:replace"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
           hx-on::after-request="if(event.detail.successful) htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'})"
           style="flex:1;margin:0;">

@@ -1,6 +1,8 @@
-"""Regressionstests PR2 (SEC-1): GSL-Modelle (MajorIncident/IncidentSite) müssen
-sowohl auf ORM- als auch auf HTTP-Ebene org-isoliert sein — Defense-in-Depth via
-_TENANT_TABLE_NAMES-Auto-Scope zusätzlich zu den manuellen _check_org_access()-Calls."""
+"""Regressionstests PR2 (SEC-1) + PR7 (STAB-9):
+- SEC-1: GSL-Modelle (MajorIncident/IncidentSite) müssen sowohl auf ORM- als auch
+  auf HTTP-Ebene org-isoliert sein — Defense-in-Depth via _TENANT_TABLE_NAMES-Auto-
+  Scope zusätzlich zu den manuellen _check_org_access()-Calls.
+- STAB-9: Board/Site-Detail/Funkjournal-Templates rendern mit hx-sync/hx-indicator."""
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -16,8 +18,8 @@ def _make_org(db, slug: str) -> FireDept:
     return org
 
 
-def _make_user(db, username: str, password: str, org_id: int) -> User:
-    role = db.query(Role).filter(Role.code == "readonly").first()
+def _make_user(db, username: str, password: str, org_id: int, role_code: str = "readonly") -> User:
+    role = db.query(Role).filter(Role.code == role_code).first()
     user = User(
         username=username,
         password_hash=hash_password(password),
@@ -115,3 +117,40 @@ def test_lage_board_returns_404_for_foreign_org(client, setup_db):
     _login(client, username, "Test1234!")
     r = client.get(f"/lage/{lage_b_id}", follow_redirects=False)
     assert r.status_code == 404
+
+
+def test_lage_board_renders_with_site_and_prio_buttons(client, setup_db):
+    """Smoke-Test PR7 (STAB-9): board.html/_site_card.html/_site_detail.html/
+    funkjournal.html müssen mit den neuen hx-sync/hx-indicator-Attributen
+    fehlerfrei rendern (kein Jinja-Fehler)."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org = _make_org(db, "gsl-tenant-org-g")
+        user = _make_user(db, "gslboarduser", "Test1234!", org.id, role_code="recorder")
+        lage = MajorIncident(org_id=org.id, name="Testlage", status=MajorIncidentStatus.active)
+        db.add(lage)
+        db.flush()
+        site = IncidentSite(major_incident_id=lage.id, org_id=org.id, bezeichnung="Teststelle")
+        db.add(site)
+        db.commit()
+        lage_id, site_id = lage.id, site.id
+        username = user.username
+    finally:
+        db.close()
+
+    _login(client, username, "Test1234!")
+
+    r = client.get(f"/lage/{lage_id}", follow_redirects=False)
+    assert r.status_code == 200
+    assert "prio-quick-btn" in r.text
+    assert 'hx-sync="closest .site-card__footer:replace"' in r.text
+
+    r = client.get(f"/lage/{lage_id}/stellen/{site_id}", follow_redirects=False)
+    assert r.status_code == 200
+    assert "siteLogForm-" in r.text
+    assert "hx-sync=\"this:drop\"" in r.text
+
+    r = client.get(f"/lage/{lage_id}/funkjournal", follow_redirects=False)
+    assert r.status_code == 200
+    assert "fj-add-spin" in r.text
