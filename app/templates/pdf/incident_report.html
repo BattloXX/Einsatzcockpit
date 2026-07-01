@@ -251,12 +251,12 @@
 <p style="font-size:9.5pt; line-height:1.6; white-space:pre-wrap; margin:4pt 0 8pt;">{{ incident.ai_report_draft }}</p>
 {% endif %}
 
-<h2>Einsatzverlauf / Journal{% if incident.log_entries %} <span style="font-size:9pt;font-weight:normal;color:#666;">({{ incident.log_entries|length }} Einträge)</span>{% endif %}</h2>
-{% if incident.log_entries %}
+<h2>Einsatzverlauf / Journal{% if journal %} <span style="font-size:9pt;font-weight:normal;color:#666;">({{ journal|length }} Einträge)</span>{% endif %}</h2>
+{% if journal %}
 <table>
   <tr><th style="width:80pt;">Zeit</th><th>Eintrag</th></tr>
   {% set ns = namespace(last_date='') %}
-  {% for e in incident.log_entries %}
+  {% for e in journal %}
   {% set entry_date = (e.ts|local).strftime('%d.%m.%Y') %}
   {% if ns.last_date != entry_date %}
   {% set ns.last_date = entry_date %}
@@ -268,8 +268,7 @@
   {% endif %}
   <tr>
     <td style="white-space:nowrap; font-variant-numeric:tabular-nums; color:#555;">{{ (e.ts|local).strftime('%H:%M:%S') }}</td>
-    <td>{{ e.text }}{% if e.entity_type == 'task' %}{% for t in incident.tasks %}{% if t.id == e.entity_id %}<br><span style="font-size:7.5pt;color:#888;">↳ Auftrag: {{ t.title }}</span>{% endif %}{% endfor %}{% elif e.entity_type == 'message' %}{% for m in incident.messages %}{% if m.id == e.entity_id %}<br><span style="font-size:7.5pt;color:#888;">↳ Meldung: {{ m.title }}</span>{% endif %}{% endfor %}{% elif e.entity_type %}
-      <br><span style="font-size:7.5pt;color:#888;">↳ {{ e.entity_type }} #{{ e.entity_id }}</span>{% endif %}</td>
+    <td>{{ e.summary }}{% if e.actor %}<br><span style="font-size:7.5pt;color:#888;">↳ {{ e.actor }}</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>

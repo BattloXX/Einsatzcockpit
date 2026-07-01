@@ -141,11 +141,15 @@ def archive_detail(incident_id: int, request: Request, db: Session = Depends(get
 
     can_edit = has_role(user, "incident_leader", "admin", "org_admin", "system_admin", "recorder")
 
+    from app.services.incident_service import combined_verlauf
+    verlauf = combined_verlauf(db, incident_id, limit=500)
+
     return templates.TemplateResponse(request, "archive/detail.html", {
         "user": user, "incident": incident,
         "ai_enabled": ai_is_enabled(),
         "uas_einsatz": uas_einsatz,
         "can_edit": can_edit,
+        "verlauf": verlauf,
     })
 
 

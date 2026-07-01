@@ -13,12 +13,13 @@ from sqlalchemy.orm import sessionmaker
 def _bigint_sqlite(element, compiler, **kw):
     return "INTEGER"
 
+from app.core.audit import write_incident_change
 from app.core.tenant import set_tenant_context
 from app.core.templating import _ordered_col_items
 from app.db import Base
-from app.models.incident import Incident, IncidentColumn, Message, RescuedPerson, Task
+from app.models.incident import Incident, IncidentColumn, IncidentLog, Message, RescuedPerson, Task
 from app.models.master import FireDept, Member, MemberQualification, Qualification
-from app.services.incident_service import list_section_leader_candidates, prepend_card
+from app.services.incident_service import combined_verlauf, list_section_leader_candidates, prepend_card
 
 TEST_DB_URL = "sqlite:///:memory:"
 
@@ -212,3 +213,64 @@ def test_rescued_person_vehicle_relationship(db, incident, org):
 
     assert person.vehicle is not None
     assert person.vehicle.vehicle_master.code == "KDOF"
+
+
+# ── combined_verlauf: Karten-Journal (IncidentChange) + Notizen (IncidentLog) ────
+# Regression für: "Das einzelne Journal der Karten wird nicht in den Verlauf des
+# Einsatzes und auf die Ausdrucke übernommen" (2026-07-01) — Board-Sidebar, /historie,
+# Archiv-Detailseite und PDF-Ausdruck zeigten bisher nur Freitext-Notizen (IncidentLog),
+# nicht die strukturierten Karten-Journal-Einträge (IncidentChange).
+
+def test_combined_verlauf_merges_changes_and_notes(db, incident):
+    col = IncidentColumn(incident_id=incident.id, code="tasks", title="Aufträge", column_kind="tasks")
+    db.add(col)
+    db.flush()
+    task = Task(incident_id=incident.id, column_id=col.id, title="Erkundung")
+    db.add(task)
+    db.flush()
+
+    write_incident_change(
+        db, incident.id, "task.created", "task", task.id,
+        before=None, after={"title": task.title},
+    )
+    db.add(IncidentLog(incident_id=incident.id, text="Meldung per Funk erhalten"))
+    db.flush()
+
+    entries = combined_verlauf(db, incident.id)
+
+    assert len(entries) == 2
+    summaries = {e["summary"] for e in entries}
+    assert 'Auftrag erstellt: "Erkundung"' in summaries
+    assert "Meldung per Funk erhalten" in summaries
+
+
+def test_combined_verlauf_sorted_descending_by_timestamp(db, incident):
+    import datetime as _dt
+
+    from app.models.incident import IncidentChange
+
+    write_incident_change(
+        db, incident.id, "task.created", "task", 1,
+        before=None, after={"title": "Alt"},
+    )
+    old_change = db.query(IncidentChange).filter_by(entity_id=1).one()
+    old_change.ts = _dt.datetime(2026, 1, 1, 8, 0)
+
+    db.add(IncidentLog(incident_id=incident.id, text="Neuere Notiz",
+                        ts=_dt.datetime(2026, 1, 1, 9, 0)))
+    db.flush()
+
+    entries = combined_verlauf(db, incident.id)
+
+    assert entries[0]["summary"] == "Neuere Notiz"
+    assert entries[-1]["summary"] == 'Auftrag erstellt: "Alt"'
+
+
+def test_combined_verlauf_respects_limit(db, incident):
+    for i in range(5):
+        db.add(IncidentLog(incident_id=incident.id, text=f"Notiz {i}"))
+    db.flush()
+
+    entries = combined_verlauf(db, incident.id, limit=3)
+
+    assert len(entries) == 3

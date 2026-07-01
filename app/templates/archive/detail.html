@@ -205,10 +205,10 @@
   <div class="detail-box detail-box--full">
     <h3>Verlauf</h3>
     <div class="log-list">
-      {% for entry in incident.log_entries %}
-      <div class="log-entry log-entry--{{ entry.level }}">
+      {% for entry in verlauf %}
+      <div class="log-entry{% if entry.level %} log-entry--{{ entry.level }}{% endif %}">
         <span class="log-entry__time">{{ (entry.ts|local).strftime('%H:%M:%S') }}</span>
-        <span class="log-entry__text">{{ entry.text }}</span>
+        <span class="log-entry__text">{{ entry.summary }}{% if entry.actor %} <span style="color:var(--text-muted);font-size:.7rem;">— {{ entry.actor }}</span>{% endif %}</span>
       </div>
       {% else %}
       <p class="text-muted">Kein Verlauf.</p>

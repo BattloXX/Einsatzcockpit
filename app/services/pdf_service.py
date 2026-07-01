@@ -102,14 +102,18 @@ _load_incident_fahrten_km = load_fahrten_km
 
 
 def _load_pdf_context(incident: Incident) -> tuple:
-    """Lädt Primary-Org, Teilnahmen und Fahrtenbuch-km in einer einzigen DB-Session.
+    """Lädt Primary-Org, Teilnahmen, Fahrtenbuch-km und Verlauf in einer einzigen DB-Session.
 
-    Gibt (primary_org, teilnahmen, fahrten_km) zurück.
+    Gibt (primary_org, teilnahmen, fahrten_km, journal) zurück. ``journal`` kombiniert das
+    strukturierte Karten-Journal (IncidentChange) mit den Freitext-Notizen (IncidentLog) in
+    chronologischer Reihenfolge, damit der Ausdruck denselben Verlauf zeigt wie Board und
+    Karten-Journal (vorher enthielt der Ausdruck nur die Freitext-Notizen).
     """
     from sqlalchemy.orm import joinedload as _jl
 
     from app.models.fahrtenbuch import Fahrt, FahrtStatus
     from app.models.teilnahme import Teilnahme
+    from app.services.incident_service import combined_verlauf
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -148,16 +152,18 @@ def _load_pdf_context(incident: Incident) -> tuple:
                 km_by[f.fahrzeug_id]["km"] += f.km_delta
         fahrten_km = [v for v in km_by.values() if v["km"] > 0]
 
-        return primary_org, teilnahmen, fahrten_km
+        journal = list(reversed(combined_verlauf(db, incident.id)))
+
+        return primary_org, teilnahmen, fahrten_km, journal
     except Exception:
-        return None, [], []
+        return None, [], [], []
     finally:
         db.close()
 
 
 def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
     template = templates.env.get_template("pdf/incident_report.html")
-    primary_org, teilnahmen, fahrten_km = _load_pdf_context(incident)
+    primary_org, teilnahmen, fahrten_km, journal = _load_pdf_context(incident)
     pseudo_user = SimpleNamespace(org=primary_org)
     teilnahmen.sort(key=lambda t: (t.funktion.sortierung if t.funktion else 9999, t.hinzugefuegt_am or 0))
 
@@ -165,6 +171,7 @@ def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
         incident=incident,
         teilnahmen=teilnahmen,
         fahrten_km=fahrten_km,
+        journal=journal,
         now=datetime.now(UTC),
         base_url=base_url,
         user=pseudo_user,

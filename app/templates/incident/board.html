@@ -382,10 +382,10 @@
     <div class="sidebar-box">
       <div class="sidebar-box__title">Verlauf <a href="/einsatz/{{ incident.id }}/historie" class="link-sm">Vollansicht</a></div>
       <div class="log-list" id="logList">
-        {% for entry in incident.log_entries[-20:]|reverse %}
-        <div class="log-entry log-entry--{{ entry.level }}">
+        {% for entry in board_verlauf %}
+        <div class="log-entry{% if entry.level %} log-entry--{{ entry.level }}{% endif %}">
           <span class="log-entry__time">{{ entry.ts|local_time }}</span>
-          <span class="log-entry__text">{{ entry.text }}</span>
+          <span class="log-entry__text">{{ entry.summary }}{% if entry.actor %} <span style="color:var(--text-muted);font-size:.7rem;">— {{ entry.actor }}</span>{% endif %}</span>
         </div>
         {% endfor %}
       </div>

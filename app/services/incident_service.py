@@ -12,7 +12,9 @@ from app.models.incident import (
     TRAFFIC_LIGHT_VALUES,
     UNIT_STATUS_VALUES,
     Incident,
+    IncidentChange,
     IncidentColumn,
+    IncidentLog,
     IncidentVehicle,
     Message,
     RescuedPerson,
@@ -28,6 +30,7 @@ from app.models.master import (
     Qualification,
     VehicleMaster,
 )
+from app.models.user import User
 
 
 def _now() -> datetime:
@@ -1123,3 +1126,264 @@ def move_card(
                 before=before, after={"vehicle_id": None},
                 user_id=user_id,
             )
+
+
+def enrich_history(changes, db, incident_id: int) -> list[dict]:
+    """Convert raw IncidentChange records to human-readable dicts for the template."""
+    import json as _json
+
+    tasks    = {t.id: t for t in db.query(Task).filter_by(incident_id=incident_id).all()}
+    msgs     = {m.id: m for m in db.query(Message).filter_by(incident_id=incident_id).all()}
+    vehicles = {v.id: v for v in db.query(IncidentVehicle).filter_by(incident_id=incident_id).all()}
+    columns  = {c.id: c for c in db.query(IncidentColumn).filter_by(incident_id=incident_id).all()}
+    persons  = {p.id: p for p in db.query(RescuedPerson).filter_by(incident_id=incident_id).all()}
+
+    user_ids = {c.user_id for c in changes if c.user_id}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+
+    member_ids: set[int] = set()
+    for c in changes:
+        if c.after_json:
+            try:
+                _after = _json.loads(c.after_json)
+                for key in ("commander_member_id", "section_leader_member_id"):
+                    mid = _after.get(key)
+                    if mid:
+                        member_ids.add(mid)
+            except Exception:
+                pass
+    members = {m.id: m for m in db.query(Member).filter(Member.id.in_(member_ids)).all()} if member_ids else {}
+
+    def vname(vid):
+        v = vehicles.get(vid)
+        return v.vehicle_master.name if v and v.vehicle_master else f"Fahrzeug #{vid}"
+
+    def cname(cid):
+        c = columns.get(cid)
+        return c.title if c else f"Spalte #{cid}"
+
+    def ttitle(tid):
+        t = tasks.get(tid)
+        return t.title if t else f"Auftrag #{tid}"
+
+    def mtitle(mid):
+        m = msgs.get(mid)
+        return m.title if m else f"Meldung #{mid}"
+
+    def pname(pid):
+        # Name führend – Fallback auf Gruppe/Ort, damit im Journal immer ein
+        # aussagekräftiger Bezeichner steht statt nur der internen ID.
+        p = persons.get(pid)
+        if p and p.name:
+            return p.name
+        if p and (p.person_group or p.location):
+            return p.person_group or p.location
+        return f"Person #{pid}"
+
+    STATUS_DE = {
+        "meldung":     "Meldung (aktiv)",
+        "achtung":     "Achtung",
+        "hinweis":     "Hinweis",
+        "information": "Information",
+        "erledigt":    "Erledigt",
+        "storniert":   "Storniert",
+        # Legacy
+        "done": "Erledigt", "cancelled": "Storniert",
+        "open": "Meldung (aktiv)", "in_progress": "Achtung",
+        "yellow": "In Bearbeitung", "red": "Dringend",
+    }
+
+    result = []
+    for change in changes:
+        before: dict = {}
+        after: dict = {}
+        try:
+            if change.before_json:
+                before = _json.loads(change.before_json)
+        except Exception:
+            pass
+        try:
+            if change.after_json:
+                after = _json.loads(change.after_json)
+        except Exception:
+            pass
+
+        action = change.action
+        eid = change.entity_id
+        summary = action
+
+        if action == "task.created":
+            summary = f'Auftrag erstellt: "{after.get("title") or ttitle(eid)}"'
+        elif action == "task.updated":
+            old_t = before.get("title", "")
+            new_t = after.get("title", "")
+            if old_t and new_t and old_t != new_t:
+                summary = f'Auftrag umbenannt: "{old_t}" -> "{new_t}"'
+            else:
+                summary = f'Auftrag bearbeitet: "{new_t or ttitle(eid)}"'
+        elif action == "task.moved":
+            to_col = cname(after.get("column_id"))
+            from_col = cname(before.get("column_id")) if before.get("column_id") else None
+            t = ttitle(eid)
+            summary = (f'Auftrag "{t}": {from_col} -> {to_col}'
+                       if from_col and from_col != to_col
+                       else f'Auftrag "{t}" verschoben nach {to_col}')
+        elif action == "task.assigned":
+            vid = after.get("vehicle_id")
+            t = ttitle(eid)
+            summary = (f'Auftrag "{t}" -> {vname(vid)}'
+                       if vid else f'Auftrag "{t}": Fahrzeugzuweisung entfernt')
+        elif action == "task.status_set":
+            st = STATUS_DE.get(after.get("status", ""), after.get("status", ""))
+            summary = f'Auftrag "{ttitle(eid)}": {st}'
+        elif action == "task.cancelled":
+            summary = f'Auftrag storniert: "{ttitle(eid)}"'
+        elif action == "task.restored":
+            summary = f'Auftrag wiederhergestellt: "{ttitle(eid)}"'
+        elif action == "vehicle.moved":
+            to_col = cname(after.get("column_id"))
+            from_col = cname(before.get("column_id")) if before.get("column_id") else None
+            v = vname(eid)
+            summary = (f'Fahrzeug {v}: {from_col} → {to_col}'
+                       if from_col and from_col != to_col
+                       else f'Fahrzeug {v} → {to_col}')
+        elif action == "vehicle.commander_set":
+            el_name = after.get("incident_leader_member")
+            mid = after.get("commander_member_id")
+            if el_name:
+                summary = f'Einsatzleiter gesetzt: {el_name}'
+            elif mid:
+                m = members.get(mid)
+                summary = f'Gruppenkommandant {vname(eid)}: {m.full_name if m else f"#{mid}"}'
+            else:
+                summary = f'Gruppenkommandant {vname(eid)} entfernt'
+        elif action == "vehicle.status_set":
+            summary = f'Fahrzeug {vname(eid)}: {after.get("unit_status", "")}'
+        elif action == "message.created":
+            summary = f'Meldung erstellt: "{after.get("title") or mtitle(eid)}"'
+        elif action == "message.updated":
+            old_t = before.get("title", "")
+            new_t = after.get("title", "")
+            if old_t and new_t and old_t != new_t:
+                summary = f'Meldung umbenannt: "{old_t}" -> "{new_t}"'
+            else:
+                summary = f'Meldung bearbeitet: "{new_t or mtitle(eid)}"'
+        elif action == "message.status_set":
+            st = STATUS_DE.get(after.get("status", ""), after.get("status", ""))
+            summary = f'Meldung "{mtitle(eid)}": {st}'
+        elif action == "message.assigned":
+            vid = after.get("vehicle_id")
+            summary = f'Meldung "{mtitle(eid)}" -> {vname(vid) if vid else "-"}'
+        elif action == "message.moved":
+            summary = f'Meldung "{mtitle(eid)}" verschoben'
+        elif action == "person.created":
+            nm = after.get("name") or pname(eid)
+            vid = after.get("vehicle_id")
+            summary = f'Person erfasst: {nm}' + (f' → {vname(vid)}' if vid else '')
+        elif action == "person.updated":
+            nm = after.get("name") or pname(eid)
+            summary = f'Person bearbeitet: {nm}'
+        elif action == "person.status_set":
+            nm = pname(eid)
+            st = after.get("status", "")
+            summary = f'{nm}: Status → {st}'
+        elif action == "person.assigned":
+            nm = pname(eid)
+            vid = after.get("vehicle_id")
+            summary = f'{nm} → {vname(vid) if vid else "—"}'
+        elif action == "person.moved":
+            summary = f'{pname(eid)}: Fahrzeugzuweisung aufgehoben'
+        elif action == "column.created":
+            summary = f'Neue Sektion erstellt: "{after.get("title", f"#{eid}")}"'
+        elif action == "column.title_set":
+            summary = f'Abschnitt umbenannt: "{before.get("title", "")}" -> "{after.get("title", "")}"'
+        elif action == "column.section_leader_set":
+            nm = after.get("section_leader_name")
+            mid = after.get("section_leader_member_id")
+            if not nm and mid:
+                m = members.get(mid)
+                nm = m.full_name if m else f"#{mid}"
+            summary = f'Abschnittsleiter "{cname(eid)}": {nm}' if nm else f'Abschnittsleiter "{cname(eid)}" entfernt'
+        elif action == "troop.meldung":
+            txt = after.get("text") or ""
+            summary = f'AS-Trupp Lagemeldung: "{txt}"' if txt else f'AS-Trupp #{eid}: Lagemeldung abgesetzt'
+        elif action == "troop.created":
+            summary = f'AS-Trupp angelegt: "{after.get("name", f"#{eid}")}"'
+        elif action == "troop.started":
+            summary = f'AS-Trupp eingesetzt: "{after.get("name", f"#{eid}")}"'
+        elif action.startswith("troop.warn_acked."):
+            kind_map = {"one_third": "1/3-Lagemeldung", "max_time": "Max-Einsatzzeit", "withdraw": "Rückzugsdruck"}
+            kind = action.split(".")[-1]
+            summary = f'AS-Warnung quittiert: {kind_map.get(kind, kind)}'
+        elif action == "troop.status":
+            status_map = {"im_einsatz": "Im Einsatz", "rueckzug": "Rückzug", "zurueck": "Zurück", "erholt": "Erholt"}
+            summary = f'AS-Trupp Status: {status_map.get(after.get("status", ""), after.get("status", ""))}'
+
+        actor = ""
+        if change.user_id:
+            u = users.get(change.user_id)
+            actor = u.display_name if u else f"Benutzer #{change.user_id}"
+        elif change.api_key_id:
+            actor = "API"
+
+        result.append({"ts": change.ts, "summary": summary, "actor": actor})
+
+    return result
+
+
+def card_journal(db: Session, incident_id: int, entity_type: str, entity_id: int, limit: int = 20) -> list[dict]:
+    """Lädt die letzten IncidentChange-Einträge einer Karte (Einheit/Auftrag/Meldung/Person)
+    und rendert sie über enrich_history zu lesbaren "Verlauf"-Zeilen — analog zur
+    Major-Incident SiteLogEntry-Anzeige, aber aus dem bereits vorhandenen Change-Log gespeist.
+    """
+    raw = (
+        db.query(IncidentChange)
+        .filter(
+            IncidentChange.incident_id == incident_id,
+            IncidentChange.entity_type == entity_type,
+            IncidentChange.entity_id == entity_id,
+        )
+        .order_by(IncidentChange.ts.desc())
+        .limit(limit)
+        .all()
+    )
+    return enrich_history(raw, db, incident_id)
+
+
+def combined_verlauf(db: Session, incident_id: int, limit: int | None = None) -> list[dict]:
+    """Kombiniert das strukturierte Karten-Journal (IncidentChange) mit manuellen
+    Freitext-Notizen (IncidentLog) zu einem einzigen chronologischen Verlauf, damit
+    Board-Sidebar, Vollansicht (/historie) und der Einsatz-Ausdruck dieselben Einträge
+    zeigen wie das Karten-Journal in den Detail-Modals – bisher blieben Statusänderungen,
+    Zuweisungen etc. dort unsichtbar, weil nur die Notizen (IncidentLog) angezeigt wurden.
+    """
+    changes_q = (
+        db.query(IncidentChange)
+        .filter(IncidentChange.incident_id == incident_id)
+        .order_by(IncidentChange.ts.desc())
+    )
+    logs_q = (
+        db.query(IncidentLog)
+        .filter(IncidentLog.incident_id == incident_id)
+        .order_by(IncidentLog.ts.desc())
+    )
+    if limit:
+        changes_q = changes_q.limit(limit)
+        logs_q = logs_q.limit(limit)
+
+    entries = enrich_history(changes_q.all(), db, incident_id)
+    for e in entries:
+        e["level"] = ""
+
+    for log in logs_q.all():
+        entries.append({
+            "ts": log.ts,
+            "summary": log.text,
+            "actor": log.author_name or "",
+            "level": log.level or "",
+        })
+
+    entries.sort(key=lambda e: e["ts"], reverse=True)
+    if limit:
+        entries = entries[:limit]
+    return entries
