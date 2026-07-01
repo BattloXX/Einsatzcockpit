@@ -160,8 +160,20 @@ async def _apply_ai_prio(site: IncidentSite, db: Session, org_id: int | None = N
         pass
 
 
-def _lage_or_404(lage_id: int, db: Session) -> MajorIncident:
-    lage = db.get(MajorIncident, lage_id)
+def _lage_or_404(lage_id: int, db: Session, *, eager_sites: bool = False) -> MajorIncident:
+    """Lädt eine Lage per PK. Mit eager_sites=True werden sites+resources+media
+    per selectinload vorgeladen (verhindert N+1 auf der dauer-offenen Board-Seite,
+    PERF-1) — für Aufrufer, die pro Einsatzstelle resources/media rendern.
+    """
+    options = (
+        [
+            selectinload(MajorIncident.sites).selectinload(IncidentSite.resources),
+            selectinload(MajorIncident.sites).selectinload(IncidentSite.media),
+        ]
+        if eager_sites
+        else []
+    )
+    lage = db.get(MajorIncident, lage_id, options=options)
     if not lage:
         raise HTTPException(status_code=404, detail="Lage nicht gefunden")
     return lage
@@ -330,7 +342,7 @@ def lage_board(
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
     user = request.state.user
-    lage = _lage_or_404(lage_id, db)
+    lage = _lage_or_404(lage_id, db, eager_sites=True)
     _check_org_access(user, lage)
 
     sites_by_phase = _sites_by_phase(lage)
