@@ -5,7 +5,15 @@
 {% block head_extra %}
 <style>
   html, body { overflow: hidden; height: 100%; }
-  .board-wrap { display: flex; gap: 0; height: calc(100vh - var(--topnav-h)); overflow: hidden; position: relative; }
+  /* .main-content wird hier zur Flex-Spalte, damit .board-wrap den Rest der
+     Hoehe bekommt, egal wie hoch Incident-Header/Wetter-Panel/Uebungs-Banner
+     gerade sind (variable Hoehe je nach Adresslaenge, Badges, Wetter-Modul).
+     Vorher war .board-wrap fix auf calc(100vh - --topnav-h) gesetzt, was die
+     Hoehe der davorstehenden Elemente ignorierte -> Board rutschte unten aus
+     dem sichtbaren Bereich, horizontale Scrollleiste war dadurch ausserhalb
+     des Viewports und mit der Maus nicht mehr erreichbar. #}
+  .main-content { display: flex; flex-direction: column; height: calc(100vh - var(--topnav-h)); overflow: hidden; }
+  .board-wrap { display: flex; gap: 0; flex: 1 1 auto; min-height: 0; overflow: hidden; position: relative; }
   .sidebar {
     width: var(--sidebar-w, 300px); min-width: 0; overflow-y: auto; overflow-x: hidden;
     border-right: 1px solid var(--border); padding: 12px; flex-shrink: 0;
