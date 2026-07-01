@@ -250,7 +250,7 @@
       flex: 1;
       min-height: 0;
       display: grid;
-      grid-template-columns: 2.2fr 1.3fr 1.5fr;
+      grid-template-columns: 1.9fr 1.55fr 1.55fr;
       gap: .67rem;
       padding: .67rem;
     }
@@ -332,8 +332,6 @@
     .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
     /* ── VEHICLES ───────────────────────────────────────────────────────────── */
-    .vehicles-col { display: flex; flex-direction: column; gap: .67rem; min-height: 0; }
-
     .section-label {
       font-family: var(--font-mono);
       font-size: .68rem;
@@ -564,49 +562,25 @@
       white-space: nowrap;
     }
 
-    /* ── LANES-STRIP: Abschnitt/Lane-Übersicht inkl. Abschnittsleiter ────────── */
-    .lanes-strip {
-      flex-shrink: 0;
-      background: var(--surface-high);
-      border-bottom: 1px solid var(--border);
+    /* ── LANE-GROUP: Fahrzeuge nach Abschnitt gruppiert (Dashboard-Fahrzeugpanel) ───── */
+    .lane-group { margin-bottom: .53rem; }
+    .lane-group:last-child { margin-bottom: 0; }
+    .lane-group__head {
       display: flex;
-      align-items: center;
-      gap: .53rem;
-      padding: .4rem .8rem;
-      overflow-x: auto;
-      overflow-y: hidden;
+      align-items: baseline;
+      gap: 8px;
+      padding: 3px 6px;
     }
-    .lanes-strip::-webkit-scrollbar { height: 3px; }
-    .lanes-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-    .lanes-strip__label {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      gap: .4rem;
+    .lane-group__title {
       font-family: var(--font-mono);
-      font-size: .68rem;
+      font-size: .72rem;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: .1em;
-      color: var(--text-muted);
-      padding-right: .67rem;
-      border-right: 1px solid var(--border);
+      letter-spacing: .08em;
+      color: var(--text);
     }
-    .lane-card {
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: .4rem;
-      padding: .3rem .67rem;
-      min-width: 8rem;
-    }
-    .lane-card__title { font-size: .78rem; font-weight: 700; color: #fff; white-space: nowrap; }
-    .lane-card__leader { font-size: .68rem; color: var(--amber); white-space: nowrap; }
-    .lane-card__leader--none { color: rgba(255,255,255,.3); font-style: italic; }
-    .lane-card__vehicles { font-size: .68rem; color: rgba(255,255,255,.55); white-space: nowrap; }
+    .lane-group__leader { font-size: .74rem; color: var(--amber); }
+    .lane-group__leader--none { color: var(--text-dim); font-style: italic; }
 
     .bs-badge {
       font-family: var(--font-mono);
@@ -868,53 +842,44 @@
   </div>
   {% endif %}
 
-  <!-- ══ LANES-STRIP: welche Lane hat welche Einheiten + welchen Abschnittsleiter ══ -->
-  {% if lanes_overview %}
-  <div class="lanes-strip">
-    <span class="lanes-strip__label">🗂 Abschnitte</span>
-    {% for lane in lanes_overview %}
-    <div class="lane-card">
-      <div class="lane-card__title">{{ lane.column.title }}</div>
-      {% if lane.column.section_leader %}
-      <div class="lane-card__leader">AL: {{ lane.column.section_leader.full_name }}</div>
-      {% elif lane.column.section_leader_name %}
-      <div class="lane-card__leader">AL: {{ lane.column.section_leader_name }}</div>
-      {% else %}
-      <div class="lane-card__leader lane-card__leader--none">kein Abschnittsleiter</div>
-      {% endif %}
-      <div class="lane-card__vehicles">
-        {% if lane.vehicles %}
-        {{ lane.vehicles|map(attribute='vehicle_master.display_label')|join(', ') }}
-        {% else %}
-        keine Einheiten
-        {% endif %}
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
   <!-- ══ MAIN ══ -->
-  <div class="main"{% if uas_einsatz or can_start_uas %} style="grid-template-columns: 2.2fr 1.3fr 1.5fr 1.3fr;"{% endif %}>
+  <div class="main"{% if uas_einsatz %} style="grid-template-columns: 1.9fr 1.35fr 1.35fr 1.3fr;"{% endif %}>
 
-    <!-- ── FAHRZEUGE ── -->
-    <div class="vehicles-col">
-
-      <!-- Am Einsatzort -->
-      <div class="panel" style="flex: 1; min-height: 0;">
-        <div class="panel-hd">
-          <div class="panel-hd__top">
-            <div class="panel-hd__title">
-              <span class="panel-hd__icon">🚒</span> Am Einsatzort
-            </div>
-            <span class="panel-badge panel-badge--green">{{ active_vehicles|length }} Fzg</span>
+    <!-- ── FAHRZEUGE nach Abschnitt gruppiert (Einheiten + Abschnitte in einer Ansicht) ── -->
+    {% set total_vehicles = lanes_overview|map(attribute='vehicles')|map('length')|sum %}
+    <div class="panel" style="min-height: 0;">
+      <div class="panel-hd">
+        <div class="panel-hd__top">
+          <div class="panel-hd__title">
+            <span class="panel-hd__icon">🚒</span> Fahrzeuge / Abschnitte
           </div>
+          <span class="panel-badge panel-badge--green">{{ active_vehicles|length }}/{{ total_vehicles }} Fzg</span>
         </div>
-        <div class="panel-body">
-          {% if active_vehicles %}
+      </div>
+      <div class="panel-body">
+        {% set any_shown = false %}
+        {% for lane in lanes_overview %}
+        {% if lane.vehicles or lane.column.section_leader or lane.column.section_leader_name or lane.column.code in ('active', 'dispatched') %}
+        {% set any_shown = true %}
+        <div class="lane-group">
+          <div class="lane-group__head">
+            <span class="lane-group__title">
+              {% if lane.column.code == 'active' %}🚒{% elif lane.column.code == 'dispatched' %}🔶{% else %}📍{% endif %}
+              {{ lane.column.title }}
+            </span>
+            {% if lane.column.section_leader %}
+            <span class="lane-group__leader">AL: {{ lane.column.section_leader.full_name }}</span>
+            {% elif lane.column.section_leader_name %}
+            <span class="lane-group__leader">AL: {{ lane.column.section_leader_name }}</span>
+            {% else %}
+            <span class="lane-group__leader lane-group__leader--none">kein Abschnittsleiter</span>
+            {% endif %}
+          </div>
+          {% if lane.vehicles %}
           <div class="vehicle-grid">
-            {% for v in active_vehicles %}
-            <div class="v-card v-card--active">
+            {% for v in lane.vehicles %}
+            {% set vstatus = 'active' if v.unit_status == 'Am Einsatzort' else ('dispatch' if v.unit_status == 'Einsatz übernommen' else 'other') %}
+            <div class="v-card v-card--{{ vstatus }}">
               <div class="v-code">{{ v.vehicle_master.display_label if v.vehicle_master else '—' }}</div>
               {% if v.vehicle_master and v.vehicle_master.name %}
               <div class="v-name">{{ v.vehicle_master.name }}</div>
@@ -930,63 +895,19 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="empty-panel">
-            <div class="empty-icon">🚒</div>
-            Keine Fahrzeuge am Einsatzort
-          </div>
+          <div class="empty-panel" style="min-height:36px; padding:4px;">keine Einheiten</div>
           {% endif %}
         </div>
-      </div>
-
-      <!-- Disponiert + Weitere -->
-      {% if dispatched_vehicles or other_vehicles %}
-      <div class="panel" style="max-height: 38vh; min-height: 0;">
-        <div class="panel-hd">
-          <div class="panel-hd__top">
-            <div class="panel-hd__title">
-              <span class="panel-hd__icon">🔶</span> Disponiert / Weitere
-            </div>
-            <span class="panel-badge panel-badge--amber">{{ dispatched_vehicles|length + other_vehicles|length }} Fzg</span>
-          </div>
+        {% endif %}
+        {% endfor %}
+        {% if not any_shown %}
+        <div class="empty-panel">
+          <div class="empty-icon">🚒</div>
+          Keine Fahrzeuge im Einsatz
         </div>
-        <div class="panel-body">
-          <div class="vehicle-grid">
-            {% for v in dispatched_vehicles %}
-            <div class="v-card v-card--dispatch">
-              <div class="v-code">{{ v.vehicle_master.display_label if v.vehicle_master else '—' }}</div>
-              {% if v.vehicle_master and v.vehicle_master.name %}
-              <div class="v-name">{{ v.vehicle_master.name }}</div>
-              {% endif %}
-              {% if v.commander %}
-              <div class="v-gk">{{ v.commander.full_name }}</div>
-              {% elif v.commander_name %}
-              <div class="v-gk">{{ v.commander_name }}</div>
-              {% else %}
-              <div class="v-nogk">kein GK</div>
-              {% endif %}
-            </div>
-            {% endfor %}
-            {% for v in other_vehicles %}
-            <div class="v-card v-card--other">
-              <div class="v-code">{{ v.vehicle_master.display_label if v.vehicle_master else '—' }}</div>
-              {% if v.vehicle_master and v.vehicle_master.name %}
-              <div class="v-name">{{ v.vehicle_master.name }}</div>
-              {% endif %}
-              {% if v.commander %}
-              <div class="v-gk">{{ v.commander.full_name }}</div>
-              {% elif v.commander_name %}
-              <div class="v-gk">{{ v.commander_name }}</div>
-              {% else %}
-              <div class="v-nogk">kein GK</div>
-              {% endif %}
-            </div>
-            {% endfor %}
-          </div>
-        </div>
+        {% endif %}
       </div>
-      {% endif %}
-
-    </div><!-- /vehicles-col -->
+    </div>
 
     <!-- ── AUFTRÄGE ── -->
     <div class="panel">
@@ -1205,25 +1126,6 @@
         {% endif %}
         <a href="/uas/einsatz/{{ uas_einsatz.id }}" class="uas-link" target="_blank" rel="noopener">
           <span>🔗</span> Drohneneinsatz öffnen
-        </a>
-      </div>
-    </div>
-    {% elif can_start_uas %}
-    <div class="panel">
-      <div class="panel-hd">
-        <div class="panel-hd__top">
-          <div class="panel-hd__title">
-            <span class="panel-hd__icon">🚁</span> Drohne
-          </div>
-        </div>
-      </div>
-      <div class="panel-body">
-        <div class="empty-panel" style="min-height:60px;">
-          <div class="empty-icon" style="font-size:1.4rem;">🚁</div>
-          Kein Drohneneinsatz verknüpft
-        </div>
-        <a href="/uas/incidents/{{ incident.id }}/einsatz/starten" class="uas-link" style="margin-top:.5rem;">
-          <span>➕</span> Drohneneinsatz starten
         </a>
       </div>
     </div>

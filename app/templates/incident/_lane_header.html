@@ -83,7 +83,9 @@
     {% endif %}
     {% endif %}
 
-    {# Abschnittsleiter: Mitglied mit EL/GK-Quali oder Freitext #}
+    {# Abschnittsleiter: nur bei Einheiten-/Nachbar-Spalten sinnvoll (echte "Abschnitte").
+       Aufträge, Meldungen und Gerettete Personen sind keine Abschnitte. #}
+    {% if col.column_kind in ('vehicles', 'neighbor') %}
     <div class="kanban-col__leader" style="display:flex; align-items:center; gap:4px; margin-top:5px; font-size:.7rem;" onclick="event.stopPropagation()">
       {% if can_edit and section_leader_candidates is defined %}
       <select class="form-select form-select--xs" style="font-size:.68rem; flex:1; min-width:0;"
@@ -107,6 +109,7 @@
       <span style="opacity:.7;">Abschnittsleiter: {{ col.section_leader_name }}</span>
       {% endif %}
     </div>
+    {% endif %}
 
   </div>
 </div>

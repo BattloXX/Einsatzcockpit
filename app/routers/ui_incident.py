@@ -761,19 +761,12 @@ def incident_dashboard(
         from fastapi import HTTPException
         raise HTTPException(404, "Einsatz nicht gefunden")
 
-    # Fahrzeuge nach dem tatsächlichen unit_status gruppieren (nicht nach Spalten-Code!),
-    # damit das Dashboard denselben Status zeigt wie die Board-Karte
-    # (unit_status und Spalte können divergieren, z. B. bei Custom-Abschnitten).
-    active_vehicles, dispatched_vehicles, other_vehicles = [], [], []
-    for v in incident.vehicles:
-        if v.removed_at:
-            continue
-        if v.unit_status == "Am Einsatzort":
-            active_vehicles.append(v)
-        elif v.unit_status == "Einsatz übernommen":
-            dispatched_vehicles.append(v)
-        else:
-            other_vehicles.append(v)
+    # Anzahl aktiver Fahrzeuge (für Kopf-Zählung) – Gruppierung selbst erfolgt weiter unten
+    # über lanes_overview (nach Abschnitt/Spalte, mit Status als Rahmenfarbe je Karte).
+    active_vehicles = [
+        v for v in incident.vehicles
+        if not v.removed_at and v.unit_status == "Am Einsatzort"
+    ]
 
     tasks_open = [t for t in incident.tasks if not t.is_done and not t.is_cancelled]
     tasks_done = [t for t in incident.tasks if t.is_done]
@@ -844,15 +837,14 @@ def incident_dashboard(
         qr_img_b64 = base64.b64encode(buf.getvalue()).decode()
 
     # Drohnen-Panel: immer anzeigen, sobald ein Drohneneinsatz mit diesem Einsatz
-    # verknüpft ist – unabhängig vom Modul-Flag oder Betrachter.
-    # "Drohneneinsatz starten" nur wenn UAS-Modul für Einsatz-Org aktiv UND Rolle >= recorder.
+    # verknüpft ist – unabhängig vom Modul-Flag oder Betrachter. Das Dashboard ist ein reines
+    # Wallboard: "Drohneneinsatz starten" gibt es hier nicht (das geschieht am Board), daher wird
+    # nur geprüft, OB ein Drohneneinsatz existiert – kein can_start_uas nötig.
     # Fail-safe gekapselt, damit fehlende UAS-Tabellen das Dashboard nie blockieren.
     uas_einsatz = None
     uas_flug_count = 0
-    can_start_uas = False
     try:
         from app.models.uas import UASEinsatz, UASFlug
-        from app.services.uas_service import uas_effective_enabled
         uas_einsatz = db.query(UASEinsatz).filter(
             UASEinsatz.incident_id == incident_id
         ).first()
@@ -864,19 +856,14 @@ def incident_dashboard(
             uas_flug_count = db.query(UASFlug).filter(
                 UASFlug.uas_einsatz_id == uas_einsatz.id
             ).count()
-        # "Starten"-Panel: UAS-Modul für Einsatz-Org aktiv + Rolle recorder oder höher
-        uas_org_enabled = uas_effective_enabled(incident.primary_org_id, db)
-        can_start_uas = uas_org_enabled and has_role(
-            user, "recorder", "breathing_supervisor", "incident_leader"
-        )
     except Exception:
         uas_einsatz = None
         uas_flug_count = 0
-        can_start_uas = False
 
-    # Lane-Übersicht: je Abschnitt/Spalte die zugeordneten Einheiten + Abschnittsleiter,
-    # damit im Dashboard auf einen Blick klar ist, welche Lane wem und welchen Fahrzeugen
-    # zugewiesen ist.
+    # Lane-Übersicht: je Einheiten-/Nachbar-Spalte (echte "Abschnitte") die zugeordneten
+    # Fahrzeuge + Abschnittsleiter – ersetzt im Dashboard die getrennte Status-Gruppierung,
+    # sodass Einheiten und Abschnitte in einer Ansicht erscheinen. Aufträge/Meldungen/Personen
+    # haben keine Abschnittsleiter und werden hier nicht gelistet.
     lanes_overview = [
         {
             "column": col,
@@ -886,6 +873,7 @@ def incident_dashboard(
             ],
         }
         for col in incident.columns
+        if col.column_kind in ("vehicles", "neighbor")
     ]
 
     return templates.TemplateResponse(
@@ -895,8 +883,6 @@ def incident_dashboard(
             "user": user,
             "incident": incident,
             "active_vehicles": active_vehicles,
-            "dispatched_vehicles": dispatched_vehicles,
-            "other_vehicles": other_vehicles,
             "lanes_overview": lanes_overview,
             "tasks_open": tasks_open,
             "tasks_done": tasks_done,
@@ -911,7 +897,6 @@ def incident_dashboard(
             "qr_url": qr_url_str,
             "uas_einsatz": uas_einsatz,
             "uas_flug_count": uas_flug_count,
-            "can_start_uas": can_start_uas,
         },
     )
 
@@ -1387,6 +1372,8 @@ async def set_section_leader_endpoint(
     column = db.get(IncidentColumn, column_id)
     if not column or column.incident_id != incident_id:
         return Response(status_code=404)
+    if column.column_kind not in ("vehicles", "neighbor"):
+        return Response("Abschnittsleiter nur bei Einheiten-Spalten", status_code=400)
     before = _section_leader_state(column)
     column.section_leader_member_id = member_id or None
     if member_id:
@@ -1413,6 +1400,8 @@ async def set_section_leader_freitext_endpoint(
     column = db.get(IncidentColumn, column_id)
     if not column or column.incident_id != incident_id:
         return Response(status_code=404)
+    if column.column_kind not in ("vehicles", "neighbor"):
+        return Response("Abschnittsleiter nur bei Einheiten-Spalten", status_code=400)
     name = full_name.strip()
     if not name:
         return Response("Name darf nicht leer sein", status_code=400)

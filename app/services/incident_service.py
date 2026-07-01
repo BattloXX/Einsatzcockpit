@@ -611,14 +611,18 @@ def set_unit_status(
         raise ValueError(f"Ungültiger Status: {status}")
     before = {"unit_status": vehicle.unit_status, "column_id": vehicle.column_id}
     vehicle.unit_status = status
-    # Sync: Status "Am Einsatzort" verschiebt das Fahrzeug in die Spalte "active"
+    # Sync: Status "Am Einsatzort" verschiebt das Fahrzeug nur dann automatisch in die Spalte
+    # "active", wenn es aktuell in "Disponiert" (oder spaltenlos) steht. Ist das Fahrzeug bereits
+    # bewusst einem benannten Abschnitt zugeordnet, bleibt es dort – nur der Status ändert sich.
     if status == "Am Einsatzort":
-        active_col = db.query(IncidentColumn).filter_by(
-            incident_id=vehicle.incident_id, code="active"
-        ).first()
-        if active_col and vehicle.column_id != active_col.id:
-            vehicle.column_id = active_col.id
-            vehicle.display_order = _next_display_order(db, vehicle.incident_id, active_col.id)
+        current_col = db.get(IncidentColumn, vehicle.column_id) if vehicle.column_id else None
+        if current_col is None or current_col.code == "dispatched":
+            active_col = db.query(IncidentColumn).filter_by(
+                incident_id=vehicle.incident_id, code="active"
+            ).first()
+            if active_col and vehicle.column_id != active_col.id:
+                vehicle.column_id = active_col.id
+                vehicle.display_order = _next_display_order(db, vehicle.incident_id, active_col.id)
     db.flush()
     write_incident_change(
         db, vehicle.incident_id, "vehicle.status_set", "incident_vehicle", vehicle.id,
