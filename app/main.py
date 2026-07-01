@@ -30,6 +30,8 @@ from app.routers import (
     ui_admin,
     ui_ai_prompts,
     ui_archive,
+    ui_atemschutz_pruefung,
+    ui_atemschutz_pruefung_admin,
     ui_backup,
     ui_breathing,
     ui_fahrtenbuch,
@@ -438,6 +440,8 @@ app.include_router(ui_uas.router)
 app.include_router(ui_verleih.router)
 app.include_router(ui_fahrtenbuch.router)
 app.include_router(ui_fahrtenbuch_admin.router)
+app.include_router(ui_atemschutz_pruefung.router)
+app.include_router(ui_atemschutz_pruefung_admin.router)
 
 
 @app.exception_handler(HTTPException)

@@ -407,6 +407,12 @@ class OrgSettings(Base):
     # True = auch bei Übungen senden (mit [ÜBUNG]-Präfix)
     einsatzinfo_sms_send_exercise: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Atemschutzgeräteprüfung-Konfiguration je Org
+    atemschutz_pruefung_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    atemschutz_pruef_token: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
+    atemschutz_wart_mail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    atemschutz_wart_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
     org: Mapped[FireDept] = relationship(back_populates="settings")
 
     @property

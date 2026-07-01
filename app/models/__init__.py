@@ -1,3 +1,8 @@
+from app.models.atemschutz_pruefung import (
+    AtemschutzGeraet,
+    AtemschutzPruefBenachrichtigung,
+    AtemschutzPruefung,
+)
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
 from app.models.fahrtenbuch import (
     Fahrt,
@@ -125,4 +130,5 @@ __all__ = [
     "UASDevice", "UASPilot", "UASFlugbewegung", "UASWartung",
     "UASEinsatz", "UASEinsatzRolleEintrag", "UASFlug", "UASCheckliste",
     "UASEreignis", "UASKartenobjekt", "UASMedien",
+    "AtemschutzGeraet", "AtemschutzPruefung", "AtemschutzPruefBenachrichtigung",
 ]

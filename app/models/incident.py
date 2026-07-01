@@ -96,6 +96,9 @@ class Incident(Base):
     breathing_troops: Mapped[list[BreathingTroop]] = relationship(
         back_populates="incident", cascade="all, delete-orphan"
     )
+    atemschutz_pruefungen: Mapped[list[AtemschutzPruefung]] = relationship(
+        back_populates="incident", passive_deletes=True
+    )
     tokens: Mapped[list[IncidentToken]] = relationship(back_populates="incident", cascade="all, delete-orphan")
     collaborating_orgs: Mapped[list[IncidentOrg]] = relationship(
         back_populates="incident", cascade="all, delete-orphan"
@@ -472,6 +475,9 @@ class IncidentCommLog(Base):
 
     incident: Mapped[Incident] = relationship(back_populates="comm_log")
 
+
+# Import AtemschutzPruefung here to avoid circular import in Incident.atemschutz_pruefungen
+from app.models.atemschutz_pruefung import AtemschutzPruefung  # noqa: E402
 
 # Import BreathingTroop here to avoid circular import in Incident.breathing_troops
 from app.models.breathing import BreathingTroop  # noqa: E402

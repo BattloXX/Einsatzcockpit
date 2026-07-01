@@ -96,6 +96,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     # Fahrtenbuch-Modul (TenantScoped via Mixin)
     "fahrtzweck",
     "zielort",
+    # Atemschutzgeräteprüfung-Modul (TenantScoped via Mixin)
+    "atemschutz_geraet",
     # SMS-Erweiterungen (TenantScoped via Mixin)
     "sms_group",
     "sms_einsatzinfo_recipient",

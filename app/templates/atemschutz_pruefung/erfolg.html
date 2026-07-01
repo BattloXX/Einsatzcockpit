@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Prüfung gespeichert{% endblock %}
+{% block content %}
+<div class="container" style="max-width:560px;margin:0 auto;padding:2rem 1rem;text-align:center;">
+  <div style="font-size:3rem;margin-bottom:1rem;">&#10003;</div>
+  <h1 style="font-size:1.5rem;font-weight:700;margin-bottom:.5rem;">Prüfung gespeichert</h1>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">
+    {{ pruefung.eingesetzt_am.strftime('%d.%m.%Y') }} &middot;
+    Gerät {{ pruefung.geraet.anzeige_label if pruefung.geraet else '' }}
+  </p>
+  {% if not pruefung.alles_ok %}
+  <div class="alert alert--warn" style="margin-bottom:1.5rem;">
+    Defekt gemeldet ({{ pruefung.defekte_punkte|join(', ') }}) — der Atemschutzgerätewart wurde verständigt.
+  </div>
+  {% endif %}
+  <div style="display:flex;flex-direction:column;gap:.75rem;align-items:center;">
+    {% if token %}
+    <a href="/ap/{{ token }}" class="btn btn--primary btn--lg" style="width:100%;max-width:320px;">
+      Weitere Prüfung erfassen
+    </a>
+    {% else %}
+    <a href="/atemschutz-pruefung/{{ pruefung.id }}" class="btn btn--primary btn--lg" style="width:100%;max-width:320px;">
+      Protokoll ansehen
+    </a>
+    <a href="/atemschutz-pruefung" class="btn btn--ghost" style="width:100%;max-width:320px;">
+      Zur Liste
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

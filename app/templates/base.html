@@ -22,6 +22,7 @@
   {% set user_roles = user.roles|map(attribute='code')|list %}
   {% set is_admin = ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles) %}
   {% set is_fahrtenbuch = request.state.fahrtenbuch_modul_aktiv and ('fahrtenbuch_admin' in user_roles or 'incident_leader' in user_roles or is_admin) %}
+  {% set is_as_pruefung = request.state.atemschutz_pruefung_modul_aktiv %}
   <nav class="topnav" id="topnav">
     <button type="button" class="topnav__burger" aria-label="Menu oeffnen"
             @click="mobileMenuOpen = !mobileMenuOpen"
@@ -51,6 +52,9 @@
       <a href="/statistik" class="nav-link {% if '/statistik' in request.url.path %}active{% endif %}">Statistik</a>
       {% if is_fahrtenbuch %}
       <a href="/verwaltung/fahrten" class="nav-link {% if '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path %}active{% endif %}">Fahrtenbuch</a>
+      {% endif %}
+      {% if is_as_pruefung %}
+      <a href="/atemschutz-pruefung" class="nav-link {% if request.url.path.startswith('/atemschutz-pruefung') %}active{% endif %}">Atemschutzprüfung</a>
       {% endif %}
       <a href="/termine" class="nav-link {% if request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') %}active{% endif %}">Termine</a>
       <a href="/medien" class="nav-link {% if request.url.path.startswith('/medien') %}active{% endif %}">Medien</a>
@@ -153,6 +157,9 @@
       <a href="/statistik" class="mobile-menu__link {% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
       {% if is_fahrtenbuch %}
       <a href="/verwaltung/fahrten" class="mobile-menu__link {% if '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path %}active{% endif %}">🚒 Fahrtenbuch</a>
+      {% endif %}
+      {% if is_as_pruefung %}
+      <a href="/atemschutz-pruefung" class="mobile-menu__link {% if request.url.path.startswith('/atemschutz-pruefung') %}active{% endif %}">🫁 Atemschutzprüfung</a>
       {% endif %}
       <a href="/termine" class="mobile-menu__link {% if request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') %}active{% endif %}">📅 Termine</a>
       <a href="/medien" class="mobile-menu__link {% if request.url.path.startswith('/medien') %}active{% endif %}">🖼️ Medien</a>

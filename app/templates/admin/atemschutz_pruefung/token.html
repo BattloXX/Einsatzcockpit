@@ -1,0 +1,53 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Atemschutz-Geräteprüfung – Token / QR{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Atemschutz-Geräteprüfung', 'url': '/atemschutz-pruefung'}, {'label': 'Token / QR'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>Öffentlicher Link &amp; QR-Code</h1>
+    <p class="page-header__sub">Login-freie Erfassung der Prüfprotokolle am Tablet</p>
+  </div>
+</div>
+
+{% if saved %}
+<div class="alert alert--success" style="margin-bottom:1rem;">Token wurde generiert/rotiert.</div>
+{% endif %}
+
+<div class="card">
+  <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
+    <strong>Prüfformular-Link</strong>
+  </div>
+  <div style="padding:1rem;">
+    {% if org and org.atemschutz_pruef_token %}
+    <div style="margin-bottom:1rem;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1;min-width:260px;">
+        <div class="form-label" style="margin-bottom:.4rem;">Aktueller Link</div>
+        <code style="word-break:break-all;font-size:.9rem;background:var(--surface-mid);padding:.4rem .6rem;border-radius:.3rem;display:block;">
+          {{ base_url }}/ap/{{ org.atemschutz_pruef_token }}
+        </code>
+        <p style="margin-top:.5rem;font-size:.85rem;color:var(--text-muted);">
+          Dieser Link ermöglicht das Erfassen der Atemschutzgeräteprüfung ohne Login — auf einem
+          Tablet im Hochformat als Lesezeichen/Startseite hinterlegen.
+        </p>
+      </div>
+      <img src="/admin/atemschutz-pruefung/token/qr.png" alt="QR-Code" style="width:140px;height:140px;background:#fff;padding:8px;border-radius:.4rem;">
+    </div>
+    {% else %}
+    <div class="alert alert--warn" style="margin-bottom:1rem;">Noch kein Token generiert.</div>
+    {% endif %}
+    <form method="post" action="/admin/atemschutz-pruefung/token">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--primary">
+        {% if org and org.atemschutz_pruef_token %}Token rotieren (neuer Link){% else %}Token generieren{% endif %}
+      </button>
+    </form>
+    {% if org and org.atemschutz_pruef_token %}
+    <p style="margin-top:.6rem;font-size:.8rem;color:var(--red-light);">
+      &#9888; Token rotieren macht den alten Link ungültig — alle ausgegebenen Links/QR-Codes müssen neu verteilt werden.
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

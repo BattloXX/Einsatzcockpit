@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Prüfprotokoll #{{ pruefung.id }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:680px;padding:1rem;">
+  <div class="page-header">
+    <div>
+      <h1>Prüfprotokoll #{{ pruefung.id }}</h1>
+      <p class="page-header__sub">Gerät {{ pruefung.geraet.anzeige_label if pruefung.geraet else '' }}</p>
+    </div>
+    <div style="display:flex;gap:.5rem;">
+      <a href="/atemschutz-pruefung/{{ pruefung.id }}/pdf" class="btn btn--primary btn--sm">PDF drucken</a>
+      <a href="/atemschutz-pruefung" class="btn btn--ghost btn--sm">Zur Liste</a>
+    </div>
+  </div>
+
+  {% if not pruefung.alles_ok %}
+  <div class="alert alert--error" style="margin-bottom:1rem;">
+    Nicht in Ordnung: {{ pruefung.defekte_punkte|join(', ') }}
+    {% if pruefung.defekt_info %}<br>{{ pruefung.defekt_info }}{% endif %}
+  </div>
+  {% endif %}
+
+  <div class="card" style="padding:1rem;display:flex;flex-direction:column;gap:.5rem;">
+    <div><strong>Atemschutzträger:</strong> {{ pruefung.traeger_name }}</div>
+    <div><strong>Datum:</strong> {{ pruefung.eingesetzt_am.strftime('%d.%m.%Y') }}</div>
+    <div><strong>Ort:</strong> {{ pruefung.ort_text or '–' }}</div>
+    <div><strong>Anlass:</strong> {{ 'Einsatz' if pruefung.einsatz_art == 'einsatz' else 'Übung' }}
+      {% if pruefung.incident %} – <a href="/einsatz/{{ pruefung.incident_id }}">Einsatz #{{ pruefung.incident_id }} öffnen</a>{% endif %}
+    </div>
+    <div><strong>Flasche gewechselt:</strong> {{ 'Ja' if pruefung.flasche_gewechselt else 'Nein' }}</div>
+    <div><strong>Flaschendruck:</strong> {{ pruefung.flaschendruck_bar if pruefung.flaschendruck_bar is not none else '–' }} bar</div>
+    <div><strong>Sichtprüfung:</strong> {{ 'In Ordnung' if pruefung.sichtpruefung_ok else 'NICHT in Ordnung' }}</div>
+    <div><strong>Druckabfall:</strong> {{ pruefung.druckabfall_bar if pruefung.druckabfall_bar is not none else '–' }} bar</div>
+    <div><strong>Hochdruckprüfung:</strong> {{ 'In Ordnung' if pruefung.hochdruckpruefung_ok else 'NICHT in Ordnung' }}</div>
+    <div><strong>Rückzugssignal:</strong> {{ pruefung.rueckzugssignal_bar if pruefung.rueckzugssignal_bar is not none else '–' }} bar</div>
+    <div><strong>Gerät einsatzbereit:</strong> {{ 'In Ordnung' if pruefung.geraet_einsatzbereit_ok else 'NICHT in Ordnung' }}</div>
+    <div><strong>Erfasst am:</strong> {{ pruefung.created_at|local_datetime }} ({{ 'öffentlicher Link' if pruefung.created_via == 'public' else 'intern' }})</div>
+  </div>
+
+  {% if pruefung.benachrichtigungen %}
+  <div class="card" style="padding:1rem;margin-top:1rem;">
+    <strong>Wart-Benachrichtigung</strong>
+    <table class="table" style="margin-top:.5rem;">
+      <thead><tr><th>Kanal</th><th>Empfänger</th><th>Status</th><th>Zeit</th></tr></thead>
+      <tbody>
+        {% for b in pruefung.benachrichtigungen %}
+        <tr>
+          <td>{{ b.kanal }}</td>
+          <td>{{ b.empfaenger }}</td>
+          <td>{% if b.status == 'gesendet' %}<span class="badge badge--success">Gesendet</span>{% else %}<span class="badge badge--red">Fehler</span>{% endif %}</td>
+          <td>{{ b.gesendet_am|local_datetime }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

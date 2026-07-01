@@ -1,0 +1,76 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Atemschutzgeräte{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Atemschutz-Geräteprüfung', 'url': '/atemschutz-pruefung'}, {'label': 'Geräte'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>Atemschutzgeräte</h1>
+    <p class="page-header__sub">Stammdaten der Pressluftatmer für die Geräteprüfung</p>
+  </div>
+</div>
+
+{% if request.query_params.get('saved') %}
+<div class="alert alert--success" style="margin-bottom:1rem;">Gespeichert.</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
+    <strong>Neues Gerät</strong>
+  </div>
+  <div style="padding:1rem;">
+    <form method="post" action="/admin/atemschutz-pruefung/geraete/neu" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label" style="font-size:.8rem;">Gerätenummer</label>
+        <input type="text" name="nummer" class="form-control form-control--sm" required placeholder="z.B. 890001">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label" style="font-size:.8rem;">Bezeichnung</label>
+        <input type="text" name="bezeichnung" class="form-control form-control--sm" placeholder="optional">
+      </div>
+      <button type="submit" class="btn btn--primary btn--sm">Hinzufügen</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Nummer</th>
+        <th>Bezeichnung</th>
+        <th>Aktiv</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in geraete %}
+      <tr>
+        <td>{{ g.nummer }}</td>
+        <td>{{ g.bezeichnung or '' }}</td>
+        <td>{% if g.aktiv %}<span class="badge badge--success">Ja</span>{% else %}<span class="badge badge--gray">Nein</span>{% endif %}</td>
+        <td>
+          <details>
+            <summary class="btn btn--ghost btn--xs">Bearbeiten</summary>
+            <form method="post" action="/admin/atemschutz-pruefung/geraete/{{ g.id }}/bearbeiten"
+                  style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:flex-end;margin-top:.5rem;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="text" name="nummer" value="{{ g.nummer }}" class="form-control form-control--sm" required>
+              <input type="text" name="bezeichnung" value="{{ g.bezeichnung or '' }}" class="form-control form-control--sm">
+              <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+                <input type="checkbox" name="aktiv" value="on" {% if g.aktiv %}checked{% endif %}> Aktiv
+              </label>
+              <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:1.5rem;">Keine Geräte angelegt</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

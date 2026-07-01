@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 20mm 15mm 18mm 15mm;
+    @bottom-left {
+      content: element(pdf-footer);
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 7.5pt;
+      color: #666;
+    }
+    @bottom-right {
+      content: "Seite " counter(page) " / " counter(pages);
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 7.5pt;
+      color: #666;
+    }
+  }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; color: #111; }
+  h1 { font-size: 16pt; color: #d42225; margin-bottom: 4pt; }
+  h2 { font-size: 12pt; border-bottom: 2px solid #d42225; padding-bottom: 3pt; margin-top: 12pt; }
+  h3 { font-size: 10pt; margin: 6pt 0 3pt; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0; }
+  th { background: #d42225; color: white; padding: 4pt 6pt; text-align: left; font-size: 9pt; }
+  td { padding: 3pt 6pt; border-bottom: 1px solid #e0e0e0; font-size: 9pt; }
+  tr:nth-child(even) td { background: #f9f9f9; }
+  .header-box { background: #d42225; color: #fff; border: 2px solid #d42225; padding: 8pt 12pt;
+                margin-bottom: 12pt;
+                display: flex; justify-content: space-between; align-items: center; gap: 12pt; }
+  .header-box__brand { flex: 0 0 auto; text-align: center; }
+  .header-box__brand img { height: 48pt; width: auto; display: block; margin: 0 auto 2pt; }
+  .header-box__brand .source-url { font-size: 7.5pt; color: #fff; font-weight: 700;
+                                   letter-spacing: .02em; }
+  .meta { font-size: 9pt; color: rgba(255,255,255,.88); }
+  .pdf-footer { position: running(pdf-footer); }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+{% if TEST_SYSTEM %}
+<div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
+{% endif %}
+
+<div class="pdf-footer">
+  Erstellt mit {{ brand }} – https://{{ brand_domain }}/
+</div>
+
+<div class="header-box">
+  <div>
+    <div style="font-size:14pt;font-weight:700;">Atemschutz-Geräteprüfung</div>
+    <div class="meta">{{ pruefungen|length }} Protokoll{{ 'e' if pruefungen|length != 1 else '' }}</div>
+  </div>
+  <div class="header-box__brand">
+    <img src="{{ (base_url or '').rstrip('/') }}/static/img/logo_einsatzcockpit.png" alt="{{ brand }}">
+    <div class="source-url">{{ brand_domain }}</div>
+  </div>
+  <div style="text-align:right">
+    <div class="meta">Erstellt: {{ now|local_datetime }}</div>
+  </div>
+</div>
+
+{% for pruefung in pruefungen %}
+{% if not loop.first %}<div class="page-break"></div>{% endif %}
+{% include "pdf/_as_pruefung_block.html" %}
+{% endfor %}
+
+</body>
+</html>

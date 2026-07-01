@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Atemschutzgeräteprüfung{% endblock %}
+
+{% block head_extra %}
+<style>
+/* Tablet-Hochformat: grosse Touch-Targets (>=44px), moeglichst einfach. */
+.as-container { max-width:560px; margin:0 auto; padding:1rem 1rem 3rem; }
+.as-section { margin-bottom:1.5rem; }
+.as-radio-row { display:flex; gap:.6rem; flex-wrap:wrap; }
+.as-radio-row input[type="radio"] { position:absolute; opacity:0; pointer-events:none; }
+.as-radio-row label {
+  flex:1; min-width:120px; min-height:48px; display:flex; align-items:center; justify-content:center;
+  border:2px solid var(--color-border,#444); border-radius:8px; font-weight:600; font-size:1rem;
+  cursor:pointer; text-align:center; padding:.4rem .6rem; user-select:none;
+}
+.as-radio-row input[type="radio"]:checked + label {
+  background:var(--color-primary,#b71921); border-color:var(--color-primary,#b71921); color:#fff;
+}
+.as-ok-row label { border-color:#48bb78; color:#48bb78; }
+.as-ok-row input[value="nicht_ok"] + label { border-color:#e53e3e; color:#e53e3e; }
+.as-ok-row input[value="ok"]:checked + label { background:#48bb78; border-color:#48bb78; color:#fff; }
+.as-ok-row input[value="nicht_ok"]:checked + label { background:#e53e3e; border-color:#e53e3e; color:#fff; }
+.press-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.press-grid input[type="radio"] { position:absolute; opacity:0; pointer-events:none; }
+.press-grid label {
+  min-height:46px; display:flex; align-items:center; justify-content:center;
+  border:1px solid var(--color-border,#555); border-radius:6px; font-weight:600; font-size:.92rem;
+  cursor:pointer; user-select:none; color:var(--color-text,#ddd);
+}
+.press-grid input[type="radio"]:checked + label {
+  background:var(--color-primary,#b71921); border-color:var(--color-primary,#b71921); color:#fff;
+}
+.as-hint {
+  padding:.75rem 1rem; border-radius:.5rem; background:rgba(220,38,38,.1);
+  color:var(--red-light,#e53e3e); font-size:.9rem; margin-top:.5rem;
+}
+.as-check-label { font-size:1rem; font-weight:600; margin-bottom:.5rem; display:block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="as-container">
+
+  <div style="display:flex;align-items:center;gap:.875rem;margin-bottom:1.25rem;">
+    {% if org and org.logo_path %}
+    <img src="{{ org.logo_path }}" alt="{{ org.name }}" style="max-height:52px;max-width:84px;object-fit:contain;" onerror="this.style.display='none'">
+    {% else %}
+    <span style="font-size:2.25rem;line-height:1;">&#x1FAA6;</span>
+    {% endif %}
+    <div>
+      {% if org %}<div style="font-size:.72rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">{{ org.name }}</div>{% endif %}
+      <h1 style="font-size:1.3rem;font-weight:700;margin:0;">Atemschutzgeräteprüfung</h1>
+    </div>
+  </div>
+
+  {% if fehler %}
+  <div class="alert alert--error" style="margin-bottom:1rem;">{{ fehler }}</div>
+  {% endif %}
+
+  <form method="post" action="/atemschutz-pruefung"
+        x-data="{
+          einsatzArt: '{{ form_daten.get('einsatz_art', 'uebung') }}',
+          traegerFreitext: {{ 'false' if form_daten.get('traeger_member_id') else 'true' }},
+          sicht: '{{ form_daten.get('sichtpruefung_ok', 'ok') }}',
+          hd: '{{ form_daten.get('hochdruckpruefung_ok', 'ok') }}',
+          bereit: '{{ form_daten.get('geraet_einsatzbereit_ok', 'ok') }}',
+          submitting: false
+        }"
+        @submit="submitting = true"
+        style="display:flex;flex-direction:column;gap:1.25rem;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="t" value="{{ token }}">
+
+    {# Atemschutzgerät #}
+    <div class="form-group as-section">
+      <label class="form-label" for="geraet_id">Atemschutzgerät *</label>
+      <select name="geraet_id" id="geraet_id" class="form-control form-control--lg" required>
+        <option value="">— Gerät wählen —</option>
+        {% for g in geraete %}
+        <option value="{{ g.id }}" {% if form_daten.get('geraet_id') == g.id|string %}selected{% endif %}>{{ g.anzeige_label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Atemschutzträger #}
+    <div class="form-group as-section">
+      <label class="form-label" for="traeger_member_id">Atemschutzträger *</label>
+      <select name="traeger_member_id" id="traeger_member_id" class="form-control form-control--lg"
+              @change="traegerFreitext = ($event.target.value === '')">
+        <option value="">— Sonstige / nicht in Liste —</option>
+        {% for m in agt_members %}
+        <option value="{{ m.id }}" {% if form_daten.get('traeger_member_id') == m.id|string %}selected{% endif %}>{{ m.full_name }}</option>
+        {% endfor %}
+      </select>
+      <input type="text" name="traeger_free_text" class="form-control" style="margin-top:.5rem;"
+             placeholder="Name eingeben" x-show="traegerFreitext" x-cloak
+             value="{{ form_daten.get('traeger_free_text', '') }}">
+    </div>
+
+    {# Datum / Ort #}
+    <div class="form-group as-section">
+      <label class="form-label" for="eingesetzt_am">Datum *</label>
+      <input type="date" name="eingesetzt_am" id="eingesetzt_am" class="form-control form-control--lg" required
+             value="{{ form_daten.get('eingesetzt_am') or now.strftime('%Y-%m-%d') }}">
+    </div>
+    <div class="form-group as-section">
+      <label class="form-label" for="ort_text">Wo wurde das Gerät eingesetzt?</label>
+      <input type="text" name="ort_text" id="ort_text" class="form-control form-control--lg"
+             value="{{ form_daten.get('ort_text', '') }}">
+    </div>
+
+    {# Übung / Einsatz #}
+    <div class="form-group as-section">
+      <label class="as-check-label">Übung oder Einsatz? *</label>
+      <div class="as-radio-row">
+        <input type="radio" id="ea-uebung" name="einsatz_art" value="uebung" x-model="einsatzArt">
+        <label for="ea-uebung">Übung</label>
+        <input type="radio" id="ea-einsatz" name="einsatz_art" value="einsatz" x-model="einsatzArt"
+               hx-get="/ap/{{ token }}/einsaetze" hx-target="#einsatz-dropdown-container" hx-trigger="change">
+        <label for="ea-einsatz">Einsatz</label>
+      </div>
+      <div id="einsatz-dropdown-container" style="margin-top:.75rem;" x-show="einsatzArt === 'einsatz'" x-cloak></div>
+    </div>
+
+    {# Flasche gewechselt #}
+    <div class="form-group as-section">
+      <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:1rem;">
+        <input type="checkbox" name="flasche_gewechselt" value="on" style="width:24px;height:24px;"
+               {% if form_daten.get('flasche_gewechselt') %}checked{% endif %}>
+        Wurde die Flasche gewechselt?
+      </label>
+    </div>
+
+    {# Flaschendruck #}
+    <div class="form-group as-section">
+      <label class="as-check-label">Flaschendruck (BAR) *</label>
+      <div class="press-grid">
+        {% for val in range(350, -1, -10) %}
+        <input type="radio" id="fd-{{ val }}" name="flaschendruck_bar" value="{{ val }}"
+               {% if form_daten.get('flaschendruck_bar') == val|string %}checked{% endif %}>
+        <label for="fd-{{ val }}">{{ val }}</label>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Sichtprüfung #}
+    <div class="form-group as-section">
+      <label class="as-check-label">Sichtprüfung *</label>
+      <div class="as-radio-row as-ok-row">
+        <input type="radio" id="sicht-ok" name="sichtpruefung_ok" value="ok" x-model="sicht">
+        <label for="sicht-ok">In Ordnung</label>
+        <input type="radio" id="sicht-nok" name="sichtpruefung_ok" value="nicht_ok" x-model="sicht">
+        <label for="sicht-nok">Nicht in Ordnung</label>
+      </div>
+    </div>
+
+    {# Druckabfall #}
+    <div class="form-group as-section">
+      <label class="as-check-label">Druckabfall während der Prüfminute (BAR)</label>
+      <div class="press-grid">
+        {% for val in range(40, -1, -2) %}
+        <input type="radio" id="da-{{ val }}" name="druckabfall_bar" value="{{ val }}"
+               {% if form_daten.get('druckabfall_bar') == val|string %}checked{% endif %}>
+        <label for="da-{{ val }}">{{ val }}</label>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Hochdruckprüfung #}
+    <div class="form-group as-section">
+      <label class="as-check-label">Hochdruckprüfung *</label>
+      <div class="as-radio-row as-ok-row">
+        <input type="radio" id="hd-ok" name="hochdruckpruefung_ok" value="ok" x-model="hd">
+        <label for="hd-ok">In Ordnung</label>
+        <input type="radio" id="hd-nok" name="hochdruckpruefung_ok" value="nicht_ok" x-model="hd">
+        <label for="hd-nok">Nicht in Ordnung</label>
+      </div>
+    </div>
+
+    {# Rückzugssignal #}
+    <div class="form-group as-section">
+      <label class="as-check-label">Rückzugssignal (Druck beim Auslösen, BAR)</label>
+      <div class="press-grid">
+        {% for val in range(350, -1, -10) %}
+        <input type="radio" id="rz-{{ val }}" name="rueckzugssignal_bar" value="{{ val }}"
+               {% if form_daten.get('rueckzugssignal_bar') == val|string %}checked{% endif %}>
+        <label for="rz-{{ val }}">{{ val }}</label>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Gerät einsatzbereit #}
+    <div class="form-group as-section">
+      <label class="as-check-label">Gerät einsatzbereit *</label>
+      <p style="font-size:.82rem;color:var(--text-muted);margin:-.3rem 0 .5rem;">
+        In der Halterung verstaut (Maske, Begurtung, Lungenautomat, Funk)
+      </p>
+      <div class="as-radio-row as-ok-row">
+        <input type="radio" id="bereit-ok" name="geraet_einsatzbereit_ok" value="ok" x-model="bereit">
+        <label for="bereit-ok">In Ordnung</label>
+        <input type="radio" id="bereit-nok" name="geraet_einsatzbereit_ok" value="nicht_ok" x-model="bereit">
+        <label for="bereit-nok">Nicht in Ordnung</label>
+      </div>
+    </div>
+
+    {# Defekt-Hinweis + Freitext #}
+    <div class="form-group as-section" x-show="sicht === 'nicht_ok' || hd === 'nicht_ok' || bereit === 'nicht_ok'" x-cloak>
+      <div class="as-hint">
+        &#9888; Mindestens ein Prüfpunkt ist nicht in Ordnung — der Atemschutzgerätewart wird automatisch
+        per Mail/Teams verständigt.
+      </div>
+      <label class="form-label" for="defekt_info" style="margin-top:.75rem;">Zusatzinfo zum Defekt *</label>
+      <textarea name="defekt_info" id="defekt_info" class="form-control" rows="3"
+                :required="sicht === 'nicht_ok' || hd === 'nicht_ok' || bereit === 'nicht_ok'"
+                placeholder="Was genau ist defekt?">{{ form_daten.get('defekt_info', '') }}</textarea>
+    </div>
+
+    <button type="submit" class="btn btn--primary btn--lg" style="min-height:52px;"
+            :disabled="submitting"
+            :style="submitting ? 'opacity:.7;cursor:not-allowed;' : ''"
+            x-text="submitting ? 'Wird gespeichert …' : 'Prüfung speichern'">
+      Prüfung speichern
+    </button>
+  </form>
+</div>
+{% endblock %}

@@ -1318,6 +1318,13 @@ def enrich_history(changes, db, incident_id: int) -> list[dict]:
         elif action == "troop.status":
             status_map = {"im_einsatz": "Im Einsatz", "rueckzug": "Rückzug", "zurueck": "Zurück", "erholt": "Erholt"}
             summary = f'AS-Trupp Status: {status_map.get(after.get("status", ""), after.get("status", ""))}'
+        elif action == "as_pruefung.created":
+            geraet_label = after.get("geraet_label", f"#{eid}")
+            if after.get("alles_ok"):
+                summary = f'Atemschutz-Geräteprüfung: Gerät {geraet_label} – i.O.'
+            else:
+                punkte = after.get("defekte_punkte", "")
+                summary = f'Atemschutz-Geräteprüfung: Gerät {geraet_label} – NICHT i.O. ({punkte})'
 
         actor = ""
         if change.user_id:

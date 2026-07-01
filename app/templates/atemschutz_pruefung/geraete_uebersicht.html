@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Atemschutzgeräte-Übersicht{% endblock %}
+
+{% block content %}
+<div class="container" style="padding:1rem;">
+  <div class="page-header">
+    <div>
+      <h1>Atemschutzgeräte-Übersicht</h1>
+      <p class="page-header__sub">Letzte Prüfung je Gerät</p>
+    </div>
+    <div style="display:flex;gap:.5rem;">
+      <a href="/atemschutz-pruefung" class="btn btn--ghost btn--sm">Alle Prüfprotokolle</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Gerät</th>
+          <th>Aktiv</th>
+          <th>Letzte Prüfung</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in geraete %}
+        {% set p = letzte_pruefung.get(g.id) %}
+        <tr>
+          <td>{{ g.anzeige_label }}</td>
+          <td>{% if g.aktiv %}<span class="badge badge--success">Ja</span>{% else %}<span class="badge badge--gray">Nein</span>{% endif %}</td>
+          <td>{{ p.eingesetzt_am.strftime('%d.%m.%Y') if p else '– keine Prüfung –' }}</td>
+          <td>
+            {% if not p %}<span class="badge badge--gray">Keine Prüfung</span>
+            {% elif p.alles_ok %}<span class="badge badge--success">In Ordnung</span>
+            {% else %}<span class="badge badge--red">{{ p.defekte_punkte|join(', ') }}</span>{% endif %}
+          </td>
+          <td>{% if p %}<a href="/atemschutz-pruefung/{{ p.id }}" class="btn btn--ghost btn--xs">Ansehen</a>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem;">Keine Geräte angelegt</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

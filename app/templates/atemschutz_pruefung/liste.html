@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Atemschutzgeräteprüfung{% endblock %}
+
+{% block content %}
+<div class="container" style="padding:1rem;">
+  <div class="page-header">
+    <div>
+      <h1>Atemschutzgeräteprüfung</h1>
+      <p class="page-header__sub">Alle erfassten Prüfprotokolle</p>
+    </div>
+    <div style="display:flex;gap:.5rem;">
+      <a href="/atemschutz-pruefung/geraete" class="btn btn--ghost btn--sm">Geräte-Übersicht</a>
+    </div>
+  </div>
+
+  <form method="get" action="/atemschutz-pruefung" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;margin-bottom:1rem;">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label" style="font-size:.8rem;">Gerät</label>
+      <select name="geraet_id" class="form-control form-control--sm">
+        <option value="0">Alle</option>
+        {% for g in geraete %}
+        <option value="{{ g.id }}" {% if filter_geraet_id == g.id %}selected{% endif %}>{{ g.anzeige_label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label" style="font-size:.8rem;">Status</label>
+      <select name="status" class="form-control form-control--sm">
+        <option value="" {% if not filter_status %}selected{% endif %}>Alle</option>
+        <option value="ok" {% if filter_status == 'ok' %}selected{% endif %}>In Ordnung</option>
+        <option value="nicht_ok" {% if filter_status == 'nicht_ok' %}selected{% endif %}>Nicht in Ordnung</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label" style="font-size:.8rem;">Von</label>
+      <input type="date" name="von" class="form-control form-control--sm" value="{{ filter_von }}">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label" style="font-size:.8rem;">Bis</label>
+      <input type="date" name="bis" class="form-control form-control--sm" value="{{ filter_bis }}">
+    </div>
+    <button type="submit" class="btn btn--primary btn--sm">Filtern</button>
+    <a href="/atemschutz-pruefung/export.xlsx?geraet_id={{ filter_geraet_id }}&von={{ filter_von }}&bis={{ filter_bis }}"
+       class="btn btn--ghost btn--sm">Excel-Export</a>
+  </form>
+
+  <form method="post" action="/atemschutz-pruefung/druck-pdf" id="sammel-form">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="card">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:2rem;"><input type="checkbox" onclick="document.querySelectorAll('.as-row-check').forEach(c=>c.checked=this.checked)"></th>
+            <th>Datum</th>
+            <th>Gerät</th>
+            <th>Atemschutzträger</th>
+            <th>Anlass</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in pruefungen %}
+          <tr>
+            <td><input type="checkbox" class="as-row-check" name="ids" value="{{ p.id }}"></td>
+            <td>{{ p.eingesetzt_am.strftime('%d.%m.%Y') }}</td>
+            <td>{{ p.geraet.anzeige_label if p.geraet else '#' ~ p.geraet_id }}</td>
+            <td>{{ p.traeger_name }}</td>
+            <td>{{ 'Einsatz' if p.einsatz_art == 'einsatz' else 'Übung' }}</td>
+            <td>
+              {% if p.alles_ok %}<span class="badge badge--success">In Ordnung</span>
+              {% else %}<span class="badge badge--red">{{ p.defekte_punkte|join(', ') }}</span>{% endif %}
+            </td>
+            <td style="white-space:nowrap;">
+              <a href="/atemschutz-pruefung/{{ p.id }}" class="btn btn--ghost btn--xs">Ansehen</a>
+              <a href="/atemschutz-pruefung/{{ p.id }}/pdf" class="btn btn--ghost btn--xs">PDF</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem;">Keine Prüfprotokolle gefunden</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if pruefungen %}
+    <button type="submit" class="btn btn--primary btn--sm" style="margin-top:.75rem;">Auswahl als PDF drucken</button>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

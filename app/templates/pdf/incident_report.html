@@ -246,6 +246,15 @@
 {% endfor %}
 {% endif %}
 
+{% if incident.atemschutz_pruefungen %}
+<div class="page-break"></div>
+<h2>Atemschutz-Geräteprüfung</h2>
+{% for pruefung in incident.atemschutz_pruefungen %}
+{% if not loop.first %}<div class="page-break"></div>{% endif %}
+{% include "pdf/_as_pruefung_block.html" %}
+{% endfor %}
+{% endif %}
+
 {% if incident.ai_report_draft %}
 <h2>Einsatzverlauf (KI-Entwurf)</h2>
 <p style="font-size:9.5pt; line-height:1.6; white-space:pre-wrap; margin:4pt 0 8pt;">{{ incident.ai_report_draft }}</p>

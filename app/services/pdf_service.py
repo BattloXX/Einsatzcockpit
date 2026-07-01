@@ -217,6 +217,32 @@ def render_troop_pdf(troop, incident: Incident, base_url: str = "") -> bytes:
         return buf.getvalue()
 
 
+def render_as_pruefung_pdf(pruefungen: list, user=None, base_url: str = "") -> bytes:
+    """Atemschutzgeräteprüfung(en) als A4-PDF – ein Protokoll oder mehrere (Sammel-PDF).
+
+    ``pruefungen`` ist immer eine Liste (auch für den Einzel-Export mit genau
+    einem Element) — vereinfacht Router und Template (kein Sonderfall nötig).
+    """
+    template = templates.env.get_template("pdf/as_pruefung_protocol.html")
+    html_str = template.render(
+        pruefungen=pruefungen,
+        now=datetime.now(UTC),
+        base_url=base_url,
+        user=user,
+    )
+    try:
+        from weasyprint import HTML  # noqa: PLC0415
+        buf = io.BytesIO()
+        HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+        return buf.getvalue()
+    except Exception as exc:
+        logger.warning("WeasyPrint fehlgeschlagen (Atemschutz-Prüf-PDF), Fallback auf xhtml2pdf: %s", exc)
+        from xhtml2pdf import pisa  # noqa: PLC0415
+        buf = io.BytesIO()
+        pisa.CreatePDF(io.StringIO(html_str), dest=buf)
+        return buf.getvalue()
+
+
 def render_teilnahme_pdf(
     teilnahmen: list,
     bezug_typ: str,

@@ -1,0 +1,57 @@
+{# Partial: vollständiges Atemschutzgeräteprüfung-Protokoll #}
+{# Erwartet Jinja-Variable: pruefung (AtemschutzPruefung). Seitenumbruch zwischen mehreren
+   Protokollen steuert der aufrufende Loop selbst (siehe as_pruefung_protocol.html /
+   incident_report.html) -- 'loop' aus einem {% for %} ist in {% include %} NICHT verfügbar. #}
+
+<div style="margin-bottom:16pt;">
+  <h3 style="margin-top:10pt;">Gerät {{ pruefung.geraet.anzeige_label if pruefung.geraet else '#' ~ pruefung.geraet_id }}</h3>
+
+  <table>
+    <tr>
+      <td style="width:50%">
+        <strong>Atemschutzträger:</strong> {{ pruefung.traeger_name }}<br>
+        <strong>Datum:</strong> {{ pruefung.eingesetzt_am.strftime('%d.%m.%Y') }}<br>
+        <strong>Ort:</strong> {{ pruefung.ort_text or '–' }}<br>
+        <strong>Anlass:</strong> {{ 'Einsatz' if pruefung.einsatz_art == 'einsatz' else 'Übung' }}<br>
+        <strong>Flasche gewechselt:</strong> {{ 'Ja' if pruefung.flasche_gewechselt else 'Nein' }}
+      </td>
+      <td>
+        <strong>Flaschendruck:</strong> {{ pruefung.flaschendruck_bar|int if pruefung.flaschendruck_bar is not none else '–' }} bar<br>
+        <strong>Druckabfall:</strong> {{ pruefung.druckabfall_bar|int if pruefung.druckabfall_bar is not none else '–' }} bar<br>
+        <strong>Rückzugssignal:</strong> {{ pruefung.rueckzugssignal_bar|int if pruefung.rueckzugssignal_bar is not none else '–' }} bar
+      </td>
+    </tr>
+  </table>
+
+  <table>
+    <tr>
+      <th>Prüfpunkt</th>
+      <th>Ergebnis</th>
+    </tr>
+    <tr>
+      <td>Sichtprüfung</td>
+      <td style="{{ 'color:#c0392b;font-weight:bold;' if not pruefung.sichtpruefung_ok else '' }}">
+        {{ 'In Ordnung' if pruefung.sichtpruefung_ok else 'NICHT in Ordnung' }}
+      </td>
+    </tr>
+    <tr>
+      <td>Hochdruckprüfung</td>
+      <td style="{{ 'color:#c0392b;font-weight:bold;' if not pruefung.hochdruckpruefung_ok else '' }}">
+        {{ 'In Ordnung' if pruefung.hochdruckpruefung_ok else 'NICHT in Ordnung' }}
+      </td>
+    </tr>
+    <tr>
+      <td>Gerät einsatzbereit</td>
+      <td style="{{ 'color:#c0392b;font-weight:bold;' if not pruefung.geraet_einsatzbereit_ok else '' }}">
+        {{ 'In Ordnung' if pruefung.geraet_einsatzbereit_ok else 'NICHT in Ordnung' }}
+      </td>
+    </tr>
+  </table>
+
+  {% if not pruefung.alles_ok %}
+  <div style="margin-top:6pt;padding:6pt 8pt;background:#fdecea;border:1pt solid #c0392b;">
+    <strong>Nicht in Ordnung:</strong> {{ pruefung.defekte_punkte|join(', ') }}<br>
+    {% if pruefung.defekt_info %}<strong>Zusatzinfo:</strong> {{ pruefung.defekt_info }}{% endif %}
+  </div>
+  {% endif %}
+</div>
