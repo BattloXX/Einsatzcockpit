@@ -63,11 +63,20 @@ async def register_fcm_token(request: Request, db: Session = Depends(get_db)):
 
 @router.delete("/fcm-token")
 async def unregister_fcm_token(request: Request, db: Session = Depends(get_db)):
-    """Entfernt den FCM Token bei Logout oder Token-Rotation."""
+    """Entfernt den FCM Token bei Logout oder Token-Rotation.
+
+    Auth erforderlich; löscht nur Token des eigenen Users (verhindert Push-DoS
+    durch fremdes Löschen erratener/bekannter Token-Werte).
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
     data = await request.json()
     token = (data.get("token") or "").strip()
     if token:
-        db.query(FcmToken).filter(FcmToken.token == token).delete()
+        db.query(FcmToken).filter(
+            FcmToken.token == token, FcmToken.user_id == user.id
+        ).delete()
         db.commit()
     return JSONResponse({"ok": True})
 

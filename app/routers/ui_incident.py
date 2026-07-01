@@ -1871,8 +1871,8 @@ async def pin_entry_page(incident_id: int, request: Request, db: Session = Depen
 from app.core.rate_limit import limiter as _limiter  # noqa: E402
 
 
-@(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
 @router.post("/einsatz/{incident_id}/pin-zugang", response_class=HTMLResponse)
+@(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
 async def pin_verify(
     incident_id: int, request: Request,
     pin: str = Form(""),

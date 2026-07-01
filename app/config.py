@@ -187,4 +187,9 @@ def validate_startup_secrets() -> list[str]:
         errors.append("SECRET_KEY ist nicht gesetzt oder enthält Default-Platzhalter")
     if len(settings.SECRET_KEY) < 32:
         errors.append("SECRET_KEY ist kürzer als 32 Zeichen")
+    if not settings.COOKIE_SECURE:
+        errors.append(
+            "COOKIE_SECURE ist False – in Produktion (HTTPS) müssen Session-/CSRF-Cookies "
+            "Secure sein. Setze COOKIE_SECURE=true in der .env (erfordert HTTPS via nginx)."
+        )
     return errors

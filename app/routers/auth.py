@@ -254,8 +254,8 @@ async def qr_pin_page(request: Request, incident_id: int, db: Session = Depends(
     })
 
 
-@(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
 @router.post("/qr-pin")
+@(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
 async def qr_pin_submit(
     request: Request,
     incident_id: int = Form(...),

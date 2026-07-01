@@ -334,22 +334,6 @@ try:
 except Exception:
     pass
 
-# Proxy-Header-Middleware: setzt request.client.host auf die echte Client-IP aus
-# X-Forwarded-For, damit Rate-Limits pro Angreifer greifen und nicht alle Clients
-# dieselbe Proxy-IP teilen. Nur aktivieren wenn ein vertrauenswürdiger Reverse-
-# Proxy vorgelagert ist (Nginx, Traefik …) — sonst ist XFF fälschbar.
-# Steuerung über Env-Variable TRUST_PROXY_HEADERS (true/false, default true).
-if _os.environ.get("TRUST_PROXY_HEADERS", "true").lower() == "true":
-    try:
-        from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: F401
-        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
-    except ImportError:
-        logger.warning(
-            "ProxyHeadersMiddleware nicht verfügbar — Rate-Limits arbeiten mit Proxy-IP. "
-            "Setze TRUST_PROXY_HEADERS=false wenn kein Reverse-Proxy vorgelagert ist."
-        )
-
 # Security headers middleware (Phase 7)
 try:
     from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -384,6 +368,25 @@ if limiter is not None:
             )
     except ImportError:
         pass
+
+# Proxy-Header-Middleware: setzt request.client.host auf die echte Client-IP aus
+# X-Forwarded-For, damit Rate-Limits pro Angreifer greifen und nicht alle Clients
+# dieselbe Proxy-IP teilen. Nur aktivieren wenn ein vertrauenswürdiger Reverse-
+# Proxy vorgelagert ist (Nginx, Traefik …) — sonst ist XFF fälschbar.
+# Steuerung über Env-Variable TRUST_PROXY_HEADERS (true/false, default true).
+# WICHTIG: Muss NACH SlowAPIMiddleware registriert werden (Starlette macht die
+# zuletzt registrierte Middleware zur äußersten) — sonst sieht SlowAPI noch die
+# Proxy-IP statt der echten Client-IP aus X-Forwarded-For (SEC-4).
+if _os.environ.get("TRUST_PROXY_HEADERS", "true").lower() == "true":
+    try:
+        from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: F401
+        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+    except ImportError:
+        logger.warning(
+            "ProxyHeadersMiddleware nicht verfügbar — Rate-Limits arbeiten mit Proxy-IP. "
+            "Setze TRUST_PROXY_HEADERS=false wenn kein Reverse-Proxy vorgelagert ist."
+        )
 
 
 # Routers
