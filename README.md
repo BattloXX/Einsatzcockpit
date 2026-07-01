@@ -182,11 +182,16 @@ source .venv/bin/activate
 pip install -e .
 
 cp .env.example .env
-nano .env   # DATABASE_URL, SECRET_KEY und ggf. SMTP konfigurieren
+nano .env   # DATABASE_URL, SECRET_KEY, COOKIE_SECURE=true, FERNET_KEY und ggf. SMTP konfigurieren
 
 alembic upgrade head
 python -m app.seed_data
 ```
+
+> **Wichtig:** `SECRET_KEY`, `COOKIE_SECURE=true` und `FERNET_KEY` müssen vor dem ersten Start
+> gesetzt sein — fehlt eines davon, bricht die App in Produktion (`DEBUG=false`) beim Start
+> sofort mit `RuntimeError: Fataler Konfigurationsfehler` ab (`systemctl status`/`journalctl`
+> zeigt dann einen Crash-Loop). Details: [Installation-Troubleshooting](https://github.com/BattloXX/Einsatzcockpit/wiki/Installation-Troubleshooting).
 
 Das CSS ist fertig gebaut im Repository enthalten (`app/static/css/app.css`). Node.js wird auf dem Server **nicht** benötigt.
 
@@ -276,7 +281,12 @@ SECRET_KEY=hier-einen-langen-zufaelligen-string-einsetzen
 # SECRET_KEY generieren:
 #   python -c "import secrets; print(secrets.token_urlsafe(48))"
 
-COOKIE_SECURE=true    # In Produktion zwingend (HTTPS)
+COOKIE_SECURE=true    # In Produktion zwingend (HTTPS) — sonst bricht der Start ab
+
+# Datenverschlüsselung (SSO-Client-Secrets, KI-API-Keys). In Produktion
+# zwingend gesetzt, sonst bricht der Start ab (Startup-Validierung).
+# Generieren: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FERNET_KEY=
 
 # ── App ────────────────────────────────────────────────────────────
 APP_HOST=0.0.0.0
@@ -528,6 +538,8 @@ tests/
 - Session-Token: signiert mit **itsdangerous** (HMAC-SHA1), Max-Age 24h + Inaktivitäts-Timeout 8h (Sliding Window)
 - Brute-Force-Schutz: konfigurierbare Anzahl Fehlversuche → Konto für konfigurierbare Dauer gesperrt (`LOGIN_MAX_FAILED`, `LOGIN_LOCKOUT_MINUTES`)
 - `COOKIE_SECURE=true` erzwingen in Produktion (HTTPS)
+- `FERNET_KEY` erzwingen in Produktion (eigener, von `SECRET_KEY` unabhängig rotierbarer Datenschlüssel)
+- `validate_startup_secrets()` (`app/config.py`) prüft `SECRET_KEY`, `COOKIE_SECURE` und `FERNET_KEY` beim App-Start und bricht in Produktion (`DEBUG=false`) hart mit `RuntimeError` ab, wenn eines fehlt — verhindert einen unsicher konfigurierten Produktivstart, erfordert aber, dass alle drei Variablen vor dem ersten Deploy in der `.env` gesetzt sind (siehe [Installation-Troubleshooting](https://github.com/BattloXX/Einsatzcockpit/wiki/Installation-Troubleshooting))
 
 ### CSRF
 
