@@ -1,32 +1,89 @@
 {% extends "base.html" %}
 {% block title %}Fahrt erfassen{% endblock %}
 
+{% block head_extra %}
+<style>
+/* Digitales Fahrtenbuch: Karten-Layout je Themenblock, Tablet-Hochformat als
+   Primaerziel (einspaltig gestapelt), ab 980px zusaetzlich Bento-Grid (2 Spalten). */
+.fab-page{max-width:720px;margin:0 auto;padding:1.25rem 1rem 6rem;}
+
+.fab-header{margin-bottom:var(--space-lg);}
+.fab-header__top{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;}
+.fab-header__brand{display:flex;align-items:center;gap:.875rem;min-width:0;}
+.fab-header__logo{max-height:52px;max-width:84px;object-fit:contain;flex-shrink:0;}
+.fab-header__emoji{font-size:2.25rem;line-height:1;flex-shrink:0;}
+.fab-header__eyebrow{font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--red-light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fab-header__title{font-size:1.5rem;font-weight:700;margin:2px 0 0;line-height:1.2;}
+.fab-header__sub{font-size:.85rem;color:var(--text-muted);margin:.625rem 0 0;}
+
+.fab-grid{display:flex;flex-direction:column;gap:var(--gutter);}
+.fab-grid__main, .fab-grid__side{display:contents;}
+
+.fab-card{--fab-accent:var(--red);background:var(--surface-mid);border:1px solid var(--border);border-left:4px solid var(--fab-accent);border-radius:var(--radius-lg);padding:1.1rem 1rem;box-shadow:var(--shadow-card);}
+.fab-card--ziel{--fab-accent:var(--org-task);}
+.fab-card--zeit{--fab-accent:var(--outline);}
+.fab-card--schaden{--fab-accent:var(--danger);background:rgba(216,48,48,.06);transition:background .15s;}
+.fab-card--schaden.is-active{background:rgba(216,48,48,.14);}
+.fab-card__head{display:flex;align-items:center;gap:.55rem;margin-bottom:1rem;}
+.fab-card__icon{font-size:1.25rem;line-height:1;}
+.fab-card__title{font-size:1rem;font-weight:700;margin:0;}
+.fab-card__body{display:flex;flex-direction:column;gap:1.1rem;}
+.fab-card__body > #fahrzeug-felder,
+.fab-card__body > #zweck-felder{display:contents;}
+
+.fab-card .form-control{padding:.8rem .85rem;font-size:1rem;min-height:48px;}
+.fab-card textarea.form-control{min-height:unset;}
+.fab-card select.form-control{cursor:pointer;}
+
+.fab-stat__top{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;flex-wrap:wrap;}
+.fab-stat__badge{background:var(--surface-highest);color:var(--on-surface);font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 9px;border-radius:999px;white-space:nowrap;}
+.fab-stat__input{background:var(--surface);border:2px solid var(--red);color:var(--red-light);font-size:1.9rem;font-weight:700;text-align:center;padding:.85rem;border-radius:var(--radius-lg);width:100%;margin-top:.5rem;min-height:unset;}
+.fab-stat__input:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(228,64,63,.25);}
+
+.fab-subcard{border:1px solid var(--border);border-radius:var(--radius-md);padding:1rem;margin-top:.25rem;background:rgba(255,255,255,.02);}
+.fab-subcard__title{font-weight:700;font-size:.9rem;margin:0 0 .85rem;}
+
+.fab-now-row{display:flex;gap:.5rem;align-items:stretch;}
+.fab-now-row .form-control{flex:1;}
+.fab-now-btn{flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700;letter-spacing:.04em;}
+
+.fab-actions{position:sticky;bottom:0;left:0;right:0;padding:1rem 0 max(.5rem, env(safe-area-inset-bottom));margin:.25rem -1rem 0;background:linear-gradient(to top, var(--bg) 60%, transparent);}
+.fab-actions .btn{width:100%;}
+
+@media (min-width:980px){
+  .fab-page{max-width:1080px;padding-bottom:2.5rem;}
+  .fab-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gutter);align-items:start;}
+  .fab-grid__main{display:flex;flex-direction:column;gap:var(--gutter);grid-column:1 / span 8;}
+  .fab-grid__side{display:flex;flex-direction:column;gap:var(--gutter);grid-column:9 / span 4;position:sticky;top:16px;}
+  .fab-actions{position:static;background:none;padding:0;margin:0;}
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container" style="max-width:680px;margin:0 auto;padding:1rem;">
+<div class="fab-page">
 
   {# ── Org-Branding Header ────────────────────────────────────────── #}
-  <div style="margin-bottom:1.5rem;">
-    <div style="display:flex;align-items:flex-start;gap:1rem;justify-content:space-between;">
-      <div style="display:flex;align-items:center;gap:.875rem;min-width:0;">
+  <div class="fab-header">
+    <div class="fab-header__top">
+      <div class="fab-header__brand">
         {% if org and org.logo_path %}
-        <img src="{{ org.logo_path }}" alt="{{ org.name }}"
-             style="max-height:52px;max-width:84px;object-fit:contain;flex-shrink:0;"
-             onerror="this.style.display='none'">
+        <img src="{{ org.logo_path }}" alt="{{ org.name }}" class="fab-header__logo" onerror="this.style.display='none'">
         {% else %}
-        <span style="font-size:2.25rem;flex-shrink:0;line-height:1;">&#x1F697;</span>
+        <span class="fab-header__emoji">&#x1F697;</span>
         {% endif %}
         <div style="min-width:0;">
           {% if org %}
-          <div style="font-size:.72rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ org.name }}</div>
+          <div class="fab-header__eyebrow">{{ org.name }}</div>
           {% endif %}
-          <h1 style="font-size:1.3rem;font-weight:700;margin:0;line-height:1.25;">Digitales Fahrtenbuch</h1>
+          <h1 class="fab-header__title">Digitales Fahrtenbuch</h1>
         </div>
       </div>
       {% if not token_org %}
       <a href="/" class="btn btn--ghost btn--sm" style="flex-shrink:0;margin-top:.2rem;">&#8592; Zurück</a>
       {% endif %}
     </div>
-    <p style="font-size:.875rem;color:var(--text-muted);margin:.625rem 0 0;">Fahrzeugbewegungen, km-Stände und Betriebsstunden lückenlos digital erfassen.</p>
+    <p class="fab-header__sub">Fahrzeugbewegungen, km-Stände und Betriebsstunden lückenlos digital erfassen.</p>
   </div>
 
   {% if fehler %}
@@ -56,125 +113,157 @@
 
   <form method="post" action="/fahrtenbuch"
         x-data="fahrtForm()"
-        @submit="onSubmit($event)"
-        style="display:flex;flex-direction:column;gap:1.25rem;">
+        @submit="onSubmit($event)">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="t" value="{{ fab_token }}">
 
-    {# 1. Fahrzeug #}
-    <div class="form-group">
-      <label class="form-label" for="fahrzeug_id">Fahrzeug *</label>
-      <select name="fahrzeug_id" id="fahrzeug_id" class="form-control form-control--lg"
-              required
-              hx-get="/fahrtenbuch/hx/fahrzeug-felder"
-              hx-target="#fahrzeug-felder"
-              hx-trigger="change"
-              hx-include="[name='fahrzeug_id']"
-              @change="fahrzeugId = $event.target.value">
-        <option value="">— Fahrzeug wählen —</option>
-        {% for fz in fahrzeuge %}
-        <option value="{{ fz.id }}"
-          {% if preset_fahrzeug and fz.id == preset_fahrzeug.id %}selected{% endif %}>
-          {{ fz.code }}{% if fz.kennzeichen %} ({{ fz.kennzeichen }}){% endif %}
-        </option>
-        {% endfor %}
-      </select>
+    <div class="fab-grid">
+    <div class="fab-grid__main">
+
+    {# 1. Fahrzeug & Maschinist #}
+    <div class="fab-card">
+      <div class="fab-card__head">
+        <span class="fab-card__icon">&#x1F692;</span>
+        <h2 class="fab-card__title">Fahrzeug &amp; Maschinist</h2>
+      </div>
+      <div class="fab-card__body">
+        <div class="form-group">
+          <label class="form-label" for="fahrzeug_id">Fahrzeug *</label>
+          <select name="fahrzeug_id" id="fahrzeug_id" class="form-control form-control--lg"
+                  required
+                  hx-get="/fahrtenbuch/hx/fahrzeug-felder"
+                  hx-target="#fahrzeug-felder"
+                  hx-trigger="change"
+                  hx-include="[name='fahrzeug_id']"
+                  @change="fahrzeugId = $event.target.value">
+            <option value="">— Fahrzeug wählen —</option>
+            {% for fz in fahrzeuge %}
+            <option value="{{ fz.id }}"
+              {% if preset_fahrzeug and fz.id == preset_fahrzeug.id %}selected{% endif %}>
+              {{ fz.code }}{% if fz.kennzeichen %} ({{ fz.kennzeichen }}){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {# Dynamische Fahrzeug-Felder (Maschinist/km/BH/2. Maschinist/Seilwinde) #}
+        <div id="fahrzeug-felder">
+          {% if preset_fahrzeug %}
+            {% include "fahrtenbuch/_fahrzeug_felder.html" with context %}
+          {% endif %}
+        </div>
+      </div>
     </div>
 
-    {# Dynamische Fahrzeug-Felder (Maschinist/km/BH/2. Maschinist/Seilwinde) #}
-    <div id="fahrzeug-felder">
-      {% if preset_fahrzeug %}
-        {% include "fahrtenbuch/_fahrzeug_felder.html" with context %}
-      {% endif %}
+    {# 2. Ziel & Zweck #}
+    <div class="fab-card fab-card--ziel">
+      <div class="fab-card__head">
+        <span class="fab-card__icon">&#x1F4CD;</span>
+        <h2 class="fab-card__title">Ziel &amp; Zweck</h2>
+      </div>
+      <div class="fab-card__body">
+        <div class="form-group">
+          <label class="form-label" for="zielort_id">Zielort</label>
+          <select name="zielort_id" id="zielort_id" class="form-control">
+            <option value="">— wählen —</option>
+            {% for zo in zielorte %}
+            <option value="{{ zo.id }}"
+              {% if form_daten.get('zielort_id') == zo.id|string %}selected{% endif %}>{{ zo.name }}</option>
+            {% endfor %}
+            <option value="">Freitext ↓</option>
+          </select>
+          <input type="text" name="zielort_freitext" class="form-control" placeholder="Sonstiger Zielort (optional)"
+                 style="margin-top:.5rem;"
+                 value="{{ form_daten.get('zielort_freitext', '') }}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="zweck_id">Zweck *</label>
+          <select name="zweck_id" id="zweck_id" class="form-control form-control--lg" required
+                  hx-get="/fahrtenbuch/hx/zweck-felder"
+                  hx-target="#zweck-felder"
+                  hx-trigger="change"
+                  hx-include="[name='zweck_id'],[name='t']"
+                  {% if form_daten.get('zweck_id') %}
+                  x-init="$nextTick(() => $el.dispatchEvent(new Event('change')))"
+                  {% endif %}>
+            <option value="">— Zweck wählen —</option>
+            {% for z in zwecke %}
+            <option value="{{ z.id }}"
+              {% if form_daten.get('zweck_id') == z.id|string %}selected{% endif %}>{{ z.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {# Dynamische Zweck-Felder (Ausbildner/GK/Einsatz) #}
+        <div id="zweck-felder"></div>
+      </div>
     </div>
 
-    {# 5. Zielort #}
-    <div class="form-group">
-      <label class="form-label" for="zielort_id">Zielort</label>
-      <select name="zielort_id" id="zielort_id" class="form-control">
-        <option value="">— wählen —</option>
-        {% for zo in zielorte %}
-        <option value="{{ zo.id }}"
-          {% if form_daten.get('zielort_id') == zo.id|string %}selected{% endif %}>{{ zo.name }}</option>
-        {% endfor %}
-        <option value="">Freitext ↓</option>
-      </select>
-      <input type="text" name="zielort_freitext" class="form-control" placeholder="Sonstiger Zielort (optional)"
-             style="margin-top:.5rem;"
-             value="{{ form_daten.get('zielort_freitext', '') }}">
-    </div>
+    </div><!-- /fab-grid__main -->
+    <div class="fab-grid__side">
 
-    {# 6. Zweck #}
-    <div class="form-group">
-      <label class="form-label" for="zweck_id">Zweck *</label>
-      <select name="zweck_id" id="zweck_id" class="form-control form-control--lg" required
-              hx-get="/fahrtenbuch/hx/zweck-felder"
-              hx-target="#zweck-felder"
-              hx-trigger="change"
-              hx-include="[name='zweck_id'],[name='t']"
-              {% if form_daten.get('zweck_id') %}
-              x-init="$nextTick(() => $el.dispatchEvent(new Event('change')))"
-              {% endif %}>
-        <option value="">— Zweck wählen —</option>
-        {% for z in zwecke %}
-        <option value="{{ z.id }}"
-          {% if form_daten.get('zweck_id') == z.id|string %}selected{% endif %}>{{ z.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    {# Dynamische Zweck-Felder (Ausbildner/GK/Einsatz) #}
-    <div id="zweck-felder"></div>
-
-    {# 7. Schaden #}
-    <div class="form-group" x-data="{schaden: {{ 'true' if form_daten.get('schaden_vorhanden') else 'false' }}}">
-      <label class="form-label">Schaden / Defekt?</label>
-      <div style="display:flex;gap:1rem;margin-top:.4rem;">
-        <label class="form-label" style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+    {# 3. Schaden #}
+    <div class="fab-card fab-card--schaden" x-data="{schaden: {{ 'true' if form_daten.get('schaden_vorhanden') else 'false' }}}" :class="{'is-active': schaden}">
+      <div class="fab-card__head">
+        <span class="fab-card__icon">&#9888;</span>
+        <h2 class="fab-card__title">Schaden / Defekt?</h2>
+      </div>
+      <div class="fab-card__body">
+        <label class="form-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
           <input type="checkbox" name="schaden_vorhanden" value="on" @change="schaden=$event.target.checked"
                  {% if form_daten.get('schaden_vorhanden') %}checked{% endif %}
-                 style="width:20px;height:20px;"> Schaden vorhanden
+                 style="width:20px;height:20px;flex-shrink:0;"> Schaden vorhanden
         </label>
-      </div>
-      <div x-show="schaden" x-cloak style="margin-top:.75rem;display:flex;flex-direction:column;gap:.75rem;">
-        <div style="padding:.75rem;background:rgba(220,38,38,.1);border-radius:.4rem;font-size:.85rem;color:var(--red-light);">
-          Wird per Mail &amp; Teams an die Gerätewarte gemeldet.
-        </div>
-        <div>
-          <label class="form-label">Betriebsfähig?</label>
-          <div style="display:flex;gap:1rem;margin-top:.3rem;">
-            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
-              <input type="radio" name="schaden_betriebsfaehig" value="on"
-                     {% if form_daten.get('schaden_betriebsfaehig') == 'on' %}checked{% endif %}> Ja
-            </label>
-            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
-              <input type="radio" name="schaden_betriebsfaehig" value=""
-                     {% if form_daten.get('schaden_vorhanden') and form_daten.get('schaden_betriebsfaehig') != 'on' %}checked{% endif %}> Nein
-            </label>
+        <div x-show="schaden" x-cloak class="fab-subcard" style="margin-top:0;">
+          <p style="margin:0 0 .75rem;font-size:.85rem;color:var(--red-light);">
+            Wird per Mail &amp; Teams an die Gerätewarte gemeldet.
+          </p>
+          <div style="margin-bottom:.85rem;">
+            <label class="form-label">Betriebsfähig?</label>
+            <div style="display:flex;gap:1rem;margin-top:.3rem;">
+              <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+                <input type="radio" name="schaden_betriebsfaehig" value="on"
+                       {% if form_daten.get('schaden_betriebsfaehig') == 'on' %}checked{% endif %}> Ja
+              </label>
+              <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+                <input type="radio" name="schaden_betriebsfaehig" value=""
+                       {% if form_daten.get('schaden_vorhanden') and form_daten.get('schaden_betriebsfaehig') != 'on' %}checked{% endif %}> Nein
+              </label>
+            </div>
+          </div>
+          <div>
+            <label class="form-label" for="schaden_beschreibung">Beschreibung *</label>
+            <textarea name="schaden_beschreibung" id="schaden_beschreibung" class="form-control"
+                      rows="3" :required="schaden" placeholder="Schadensbeschreibung…">{{ form_daten.get('schaden_beschreibung', '') }}</textarea>
           </div>
         </div>
-        <div>
-          <label class="form-label" for="schaden_beschreibung">Beschreibung *</label>
-          <textarea name="schaden_beschreibung" id="schaden_beschreibung" class="form-control"
-                    rows="3" :required="schaden" placeholder="Schadensbeschreibung…">{{ form_daten.get('schaden_beschreibung', '') }}</textarea>
+      </div>
+    </div>
+
+    {# 4. Zeitpunkt & Bemerkung #}
+    <div class="fab-card fab-card--zeit">
+      <div class="fab-card__head">
+        <span class="fab-card__icon">&#x1F550;</span>
+        <h2 class="fab-card__title">Zeitpunkt &amp; Bemerkung</h2>
+      </div>
+      <div class="fab-card__body">
+        <div class="form-group">
+          <label class="form-label" for="zeitpunkt">Zeitpunkt (Ankunftszeit)</label>
+          <div class="fab-now-row">
+            <input type="datetime-local" name="zeitpunkt" id="zeitpunkt" class="form-control"
+                   value="{{ form_daten.get('zeitpunkt') or now.strftime('%Y-%m-%dT%H:%M') }}">
+            <button type="button" class="btn btn--secondary fab-now-btn" id="zeitpunkt-jetzt-btn">JETZT</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bemerkung">Bemerkung</label>
+          <textarea name="bemerkung" id="bemerkung" class="form-control" rows="2">{{ form_daten.get('bemerkung', '') }}</textarea>
         </div>
       </div>
     </div>
 
-    {# 8. Zeitpunkt #}
-    <div class="form-group">
-      <label class="form-label" for="zeitpunkt">Zeitpunkt (Ankunftszeit)</label>
-      <input type="datetime-local" name="zeitpunkt" id="zeitpunkt" class="form-control"
-             value="{{ form_daten.get('zeitpunkt') or now.strftime('%Y-%m-%dT%H:%M') }}">
-    </div>
-
-    {# 9. Bemerkung #}
-    <div class="form-group">
-      <label class="form-label" for="bemerkung">Bemerkung</label>
-      <textarea name="bemerkung" id="bemerkung" class="form-control" rows="2">{{ form_daten.get('bemerkung', '') }}</textarea>
-    </div>
-
-    {# 9. Doppelfahrt-Bestätigung #}
+    {# Doppelfahrt-Bestätigung #}
     {% if doppelfahrt_warnung %}
     <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
       <input type="checkbox" name="doppelfahrt_bestaetigt" value="on" required style="width:20px;height:20px;">
@@ -182,12 +271,17 @@
     </label>
     {% endif %}
 
-    <button type="submit" class="btn btn--primary btn--lg" style="margin-top:.5rem;"
-            :disabled="submitting"
-            :style="submitting ? 'opacity:.7;cursor:not-allowed;' : ''"
-            x-text="submitting ? 'Wird gespeichert …' : 'Fahrt speichern'">
-      Fahrt speichern
-    </button>
+    <div class="fab-actions">
+      <button type="submit" class="btn btn--primary btn--lg"
+              :disabled="submitting"
+              :style="submitting ? 'opacity:.7;cursor:not-allowed;' : ''"
+              x-text="submitting ? 'Wird gespeichert …' : 'Fahrt speichern'">
+        Fahrt speichern
+      </button>
+    </div>
+
+    </div><!-- /fab-grid__side -->
+    </div><!-- /fab-grid -->
   </form>
 </div>
 
@@ -259,6 +353,18 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
     _fabApplyDraftTo(t);
   }
 });
+
+// "JETZT"-Button: Zeitpunkt-Feld auf aktuelle lokale Zeit setzen.
+(function() {
+  const btn = document.getElementById('zeitpunkt-jetzt-btn');
+  const input = document.getElementById('zeitpunkt');
+  if (!btn || !input) return;
+  btn.addEventListener('click', function() {
+    const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+    input.value = d.toISOString().slice(0, 16);
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+})();
 
 /* ─── Offline-Draft (STAB-2): Eingaben lokal sichern, bei Abbruch/Reload
    wiederherstellen (Verbindungsabbruch am Fahrzeug ist der schmerzhafteste

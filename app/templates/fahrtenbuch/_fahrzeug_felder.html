@@ -22,11 +22,12 @@
 
 {% if fahrzeug.erfasst_km %}
 <div class="form-group" x-data="{ km: {{ form_daten.get('km_stand_neu') or 'null' }}, aktuell: {{ fahrzeug.km_aktuell }} }">
-  <label class="form-label" for="km_stand_neu">
-    km-Stand (aktuell: {{ fahrzeug.km_aktuell }} km) *
-  </label>
+  <div class="fab-stat__top">
+    <label class="form-label" for="km_stand_neu" style="margin:0;">km-Stand *</label>
+    <span class="fab-stat__badge">Letzter: {{ fahrzeug.km_aktuell }} km</span>
+  </div>
   <input type="number" name="km_stand_neu" id="km_stand_neu"
-         class="form-control form-control--lg" inputmode="numeric"
+         class="form-control fab-stat__input" inputmode="numeric"
          x-model.number="km"
          min="{{ fahrzeug.km_aktuell }}" step="1"
          placeholder="{{ fahrzeug.km_aktuell }}"
@@ -106,8 +107,8 @@
 {% endif %}
 
 {% if fahrzeug.seilwinde_abfrage %}
-<fieldset style="border:1px solid var(--border);border-radius:.5rem;padding:1rem;margin-top:.5rem;">
-  <legend style="font-weight:600;padding:0 .5rem;">Seilwinde</legend>
+<fieldset class="fab-subcard" style="margin-top:0;">
+  <legend class="fab-subcard__title" style="padding:0;">Seilwinde</legend>
   <div class="form-group" x-data="{ sw: {{ form_daten.get('seilwinde_bh_neu') or 'null' }}, aktuell: {{ fahrzeug.seilwinde_bh_aktuell }} }">
     <label class="form-label" for="seilwinde_bh_neu">
       Seilwinde BH-Stand (aktuell: {{ fahrzeug.seilwinde_bh_aktuell }} h)
