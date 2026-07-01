@@ -246,7 +246,7 @@ body.mobile-menu-open { overflow: hidden; }
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 9px 18px; border-radius: 0.5rem; font-size: .9rem; font-weight: 600;
   cursor: pointer; border: none; transition: var(--transition); white-space: nowrap;
-  min-height: 40px; min-width: 44px;
+  min-height: 44px; min-width: 44px;
 }
 .btn--primary  { background: var(--red); color: #fff; }
 .btn--primary:hover { background: var(--red-light); }
@@ -1374,3 +1374,11 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .lage-burger-btn { display: none !important; }
   .lage-mobile-nav { display: none !important; }
 }
+
+/* -- STAB-9: globales Feedback waehrend HTMX-Request (langsames Netz) -- */
+button.htmx-request,
+.btn.htmx-request,
+.prio-quick-btn.htmx-request{opacity:.55;cursor:progress;pointer-events:none;}
+
+/* -- MOB-3: Touch-Targets >=44px fuer Prio-Schnellbuttons (Bedienung mit Handschuhen) -- */
+.prio-quick-btn{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;}

@@ -259,16 +259,21 @@
     {% block content %}{% endblock %}
   </main>
 
+  {# MOB-1: defer statt render-blocking, mit Ausnahme von native-bridge.js
+     (muss synchron vor allem anderen laufen, setzt Capacitor-Erkennung) und
+     csrf.js (bereits defer). "defer" erhaelt die Dokumentreihenfolge bei der
+     Ausfuehrung, daher bleiben Abhaengigkeiten (Alpine vor app.js vor
+     sortable-glue.js usw.) unveraendert. #}
   <script src="/static/js/native-bridge.js?v={{ ASSET_VERSION }}"></script>
   <script src="/static/js/alpine.min.js?v={{ ASSET_VERSION }}" defer></script>
-  <script src="/static/js/htmx.min.js?v={{ ASSET_VERSION }}"></script>
-  <script src="/static/js/sortable.min.js?v={{ ASSET_VERSION }}"></script>
-  <script src="/static/js/app.js?v={{ ASSET_VERSION }}"></script>
-  <script src="/static/js/sortable-glue.js?v={{ ASSET_VERSION }}"></script>
-  <script src="/static/js/media-upload.js?v={{ ASSET_VERSION }}"></script>
-  <script src="/static/js/media-viewer.js?v={{ ASSET_VERSION }}"></script>
-  <script src="/static/js/pwa-install.js?v={{ ASSET_VERSION }}"></script>
-  <script src="/static/js/tooltips.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/htmx.min.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/sortable.min.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/app.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/sortable-glue.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/media-upload.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/media-viewer.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/pwa-install.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/tooltips.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/csrf.js?v={{ ASSET_VERSION }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
