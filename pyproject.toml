@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "einsatzcockpit"
-version = "2.10.0"
+version = "3.0.0"
 description = "Einsatzcockpit – Multi-Organisations-Plattform für Feuerwehren und BOS"
 requires-python = ">=3.14"
 dependencies = [

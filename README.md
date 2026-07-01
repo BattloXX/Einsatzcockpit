@@ -8,7 +8,7 @@ Multi-User, mandantenfähig, Echtzeit. Für Feuerwehr, BOS und Gemeinden.
 [![CI](https://github.com/BattloXX/Einsatzcockpit/actions/workflows/ci.yml/badge.svg)](https://github.com/BattloXX/Einsatzcockpit/actions)
 ![Python](https://img.shields.io/badge/python-3.14-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green)
-![Version](https://img.shields.io/badge/version-2.10.0-orange)
+![Version](https://img.shields.io/badge/version-3.0.0-orange)
 
 ---
 
@@ -941,6 +941,7 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **3.0.0** | 2026-07-01 | Rebrand zu Einsatzcockpit (einsatzcockpit.com); Teilnehmerlisten-Modul (Termine/Übungen/Mannschaft, Excel-Import, PDF/Druck mit Status, Entschuldigt-Checkbox); Mannschaft als eigene Seite; SMS-Einsatzinfo je Alarm-Stichwort + manueller Gruppenversand; automatische Wetterwarnungen per Mail/Teams; Security- & Stability-Hardening (14 PRs: Tenant-Backstop, XSS-Sanitizing, FERNET_KEY-Pflicht, Device-Session-Revoke, WS-Resync, PWA-Tile-Cache, Mobile-Performance); Board: Abschnittsleiter, Karten-Journal, Meldungs-Zuweisung, Sprachdiktat bei Auftrag/Meldung; lokal gehostete Fonts statt Google Fonts; zahlreiche Timezone-, Mobile- und CI-Fixes |
 | **2.9.0** | 2026-06-24 | Digitales Fahrtenbuch: Fahrterfassung mit km/BH-Zähler, Seilwinde (BH, Züge, Wartung), Maschinist-Autocomplete, Token/QR-Zugang ohne Login, Doppelfahrt-Erkennung, Schadensmeldung (Mail + Teams-Webhook), Korrektur-/Storno-Workflow; Admin-Bereich (Fahrzeuge, Zwecke, Zielorte, Einstellungen) |
 | **2.8.0** | 2026-06-23 | Lokale Wetterstation (Davis Vantage Pro 2 Plus / Meteobridge PRO RED): HTTPS-Push-Ingest mit `wxst_`-Token-Auth, Rate-Limiting 120/min, denormalisierter Ist-Stand-Snapshot (Haupt-DB), separate Zeitreihen-DB `einsatzleiter_weather` (kein Bloat), Online/Offline-Indikator (15-min-Schwelle), 24-h-Sparkline Temp/Wind (lazy HTMX), Echtzeit-Szenario-Analyse aus lokalen Messwerten (Sturm/Waldbrand/Glatteis), nächtliche Retention (03:30, tägl.); Token-Verwaltung in Org-Einstellungen |
 | **2.7.0** | 2026-06-22 | Geräteverleih-Modul (Artikel, Stücklisten, Barcode-Scan, SMS-Erinnerungen, Foto, Druckschein); Mobil-Navigation GSL (Burger-Menü, Bottom-Tab-Bar); UAS: echter Medien-Upload (Bild/Video), Abschluss-Banner, Flugbuch-Sperre; Drohneneinsatz direkt vom Einsatz-Board startbar; SSO: login_hint, Security-Fixes; Admin-Sidebar Mobiloptimierung |
