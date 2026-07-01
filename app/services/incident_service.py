@@ -15,6 +15,7 @@ from app.models.incident import (
     IncidentColumn,
     IncidentVehicle,
     Message,
+    RescuedPerson,
     Task,
 )
 from app.models.master import (
@@ -669,6 +670,27 @@ def list_el_candidates(db: Session, org_ids: list[int]) -> list[Member]:
     )
 
 
+def list_section_leader_candidates(db: Session, org_ids: list[int]) -> list[Member]:
+    """Return active members qualified as Abschnittsleiter (Lane-Leiter).
+
+    Ein Abschnittsleiter benötigt die Qualifikation Einsatzleiter ODER
+    Gruppenkommandant (Vereinigung der beiden bestehenden Kandidaten-Listen).
+    Kein org_id-Filter, siehe Kommentar bei list_commander_candidates.
+    """
+    return (
+        db.query(Member)
+        .join(MemberQualification, MemberQualification.member_id == Member.id)
+        .join(Qualification, Qualification.id == MemberQualification.qualification_id)
+        .filter(
+            Member.active.is_(True),
+            (Qualification.is_einsatzleiter.is_(True)) | (Qualification.is_gruppenkommandant.is_(True)),
+        )
+        .order_by(Member.lastname, Member.firstname)
+        .distinct()
+        .all()
+    )
+
+
 def update_task(
     db: Session,
     task: Task,
@@ -779,6 +801,69 @@ def update_column_card_order(db: Session, column_id: int, zone_order_json: str) 
     if col:
         col.card_order = zone_order_json
         db.flush()
+
+
+def prepend_card(db: Session, column_id: int | None, kind: str, uid: int) -> None:
+    """Reiht ein neu erstelltes Item ganz oben (Position 0) in die card_order der
+    Zielspalte ein, statt es (wie beim Default-Sort) am Ende anzuhängen.
+
+    Wird von allen "neu hinzufügen"-Aktionen (Einheit/Auftrag/Meldung/Person)
+    aufgerufen, damit neue Karten immer ganz oben in der Lane erscheinen.
+    """
+    import json as _json
+    if not column_id:
+        return
+    col = db.get(IncidentColumn, column_id)
+    if not col:
+        return
+
+    if col.card_order:
+        try:
+            current: list[dict] = _json.loads(col.card_order)
+        except Exception:
+            current = []
+    else:
+        # Noch keine card_order gespeichert -> aus dem aktuellen DB-Zustand aufbauen,
+        # in derselben Default-Reihenfolge wie _ordered_col_items (vehicles, tasks,
+        # messages, persons), damit der neue Eintrag sauber vorangestellt werden kann.
+        vehicles = (
+            db.query(IncidentVehicle)
+            .filter(IncidentVehicle.column_id == column_id, IncidentVehicle.removed_at.is_(None))
+            .order_by(IncidentVehicle.display_order)
+            .all()
+        )
+        tasks = (
+            db.query(Task)
+            .filter(Task.column_id == column_id, Task.vehicle_id.is_(None))
+            .order_by(Task.display_order)
+            .all()
+        )
+        msgs = (
+            db.query(Message)
+            .filter(Message.column_id == column_id)
+            .order_by(Message.display_order)
+            .all()
+        )
+        persons = []
+        if col.column_kind == "rescued":
+            persons = (
+                db.query(RescuedPerson)
+                .filter(RescuedPerson.incident_id == col.incident_id)
+                .order_by(RescuedPerson.created_at)
+                .all()
+            )
+        current = (
+            [{"kind": "vehicle", "id": v.id} for v in vehicles]
+            + [{"kind": "task", "id": t.id} for t in tasks]
+            + [{"kind": "message", "id": m.id} for m in msgs]
+            + [{"kind": "person", "id": p.id} for p in persons]
+        )
+
+    # Falls schon (fälschlich) vorhanden, zuerst entfernen, dann ganz oben einfügen.
+    current = [item for item in current if not (item.get("kind") == kind and item.get("id") == uid)]
+    current.insert(0, {"kind": kind, "id": uid})
+    col.card_order = _json.dumps(current)
+    db.flush()
 
 
 def sink_done_cards(db: Session, column_id: int | None) -> None:

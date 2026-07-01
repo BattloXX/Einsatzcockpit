@@ -30,6 +30,7 @@ from app.models.incident import (
     PERSON_STATUS_VALUES,
     UNIT_STATUS_VALUES,
     Incident,
+    IncidentChange,
     IncidentColumn,
     IncidentCommLog,
     IncidentLog,
@@ -75,8 +76,10 @@ from app.services.incident_service import (
     delete_section_column,
     list_commander_candidates,
     list_el_candidates,
+    list_section_leader_candidates,
     move_card,
     move_vehicle_to_column,
+    prepend_card,
     reopen_incident,
     reorder_columns,
     set_commander,
@@ -730,7 +733,9 @@ def incident_board(incident_id: int, request: Request, db: Session = Depends(get
         "can_edit": can_edit, "leader_candidates": leader_candidates,
         "el_member_candidates": el_member_candidates,
         "gk_member_candidates": gk_member_candidates,
+        "section_leader_candidates": list_section_leader_candidates(db, org_ids),
         "unit_status_values": UNIT_STATUS_VALUES,
+        "person_status_values": PERSON_STATUS_VALUES,
         "ai_enabled": ai_is_enabled(),
         "breathing_enabled": breathing_enabled,
         "lage_sprueche": lage_sprueche,
@@ -756,17 +761,16 @@ def incident_dashboard(
         from fastapi import HTTPException
         raise HTTPException(404, "Einsatz nicht gefunden")
 
-    col_by_id = {c.id: c for c in incident.columns}
-
+    # Fahrzeuge nach dem tatsächlichen unit_status gruppieren (nicht nach Spalten-Code!),
+    # damit das Dashboard denselben Status zeigt wie die Board-Karte
+    # (unit_status und Spalte können divergieren, z. B. bei Custom-Abschnitten).
     active_vehicles, dispatched_vehicles, other_vehicles = [], [], []
     for v in incident.vehicles:
         if v.removed_at:
             continue
-        col = col_by_id.get(v.column_id)
-        code = col.code if col else ""
-        if code == "active":
+        if v.unit_status == "Am Einsatzort":
             active_vehicles.append(v)
-        elif code == "dispatched":
+        elif v.unit_status == "Einsatz übernommen":
             dispatched_vehicles.append(v)
         else:
             other_vehicles.append(v)
@@ -870,6 +874,20 @@ def incident_dashboard(
         uas_flug_count = 0
         can_start_uas = False
 
+    # Lane-Übersicht: je Abschnitt/Spalte die zugeordneten Einheiten + Abschnittsleiter,
+    # damit im Dashboard auf einen Blick klar ist, welche Lane wem und welchen Fahrzeugen
+    # zugewiesen ist.
+    lanes_overview = [
+        {
+            "column": col,
+            "vehicles": [
+                v for v in incident.vehicles
+                if v.column_id == col.id and v.removed_at is None
+            ],
+        }
+        for col in incident.columns
+    ]
+
     return templates.TemplateResponse(
         request,
         "incident/dashboard.html",
@@ -879,6 +897,7 @@ def incident_dashboard(
             "active_vehicles": active_vehicles,
             "dispatched_vehicles": dispatched_vehicles,
             "other_vehicles": other_vehicles,
+            "lanes_overview": lanes_overview,
             "tasks_open": tasks_open,
             "tasks_done": tasks_done,
             "msgs_open": msgs_open,
@@ -1049,6 +1068,7 @@ async def create_task(
     if note.strip():
         db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
                            user_id=request.state.user.id, author_name=get_author_name(request)))
+    prepend_card(db, task.column_id, "task", task.id)
     db.commit()
     await manager.broadcast(incident_id, {
         "type": "task_created", "task_id": task.id, "reload_board": True,
@@ -1185,6 +1205,8 @@ async def vehicle_suggestions(
             _or(VehicleMaster.code.ilike(like), VehicleMaster.name.ilike(like))
         )
     vehicles = base_q.order_by(VehicleMaster.display_order, VehicleMaster.code).all()
+    # Verfügbare Einheiten zuerst, bereits im Einsatz stehende ans Ende (dort nur ausgegraut).
+    vehicles.sort(key=lambda v: (v.id in already_master_ids, v.display_order, v.code))
     items = [
         {
             "id": v.id,
@@ -1278,6 +1300,7 @@ async def attach_vehicle_to_incident(
     if note.strip():
         db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
                            user_id=request.state.user.id, author_name=get_author_name(request)))
+    prepend_card(db, target_col.id, "vehicle", iv.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "vehicle_added", "reload_board": True})
     return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
@@ -1316,6 +1339,94 @@ async def create_section(
     add_section_column(db, incident, title, column_kind=column_kind, user_id=request.state.user.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "column_created", "reload_board": True})
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/spalten/{column_id}/titel")
+async def rename_column_endpoint(
+    incident_id: int, column_id: int, request: Request,
+    title: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Benennt eine Lane/Spalte um (auch fixe Spalten wie 'Gerettete Personen')."""
+    column = db.get(IncidentColumn, column_id)
+    if not column or column.incident_id != incident_id:
+        return Response(status_code=404)
+    new_title = title.strip()
+    if not new_title:
+        return Response("Titel darf nicht leer sein", status_code=400)
+    old_title = column.title
+    column.title = new_title[:150]
+    from app.core.audit import write_incident_change
+    write_incident_change(
+        db, incident_id, "column.title_set", "incident_column", column.id,
+        before={"title": old_title}, after={"title": column.title},
+        user_id=request.state.user.id,
+    )
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "column_renamed", "reload_board": True})
+    return Response(status_code=204)
+
+
+def _section_leader_state(column: IncidentColumn) -> dict:
+    return {
+        "section_leader_member_id": column.section_leader_member_id,
+        "section_leader_name": column.section_leader_name,
+    }
+
+
+@router.post("/einsatz/{incident_id}/spalten/{column_id}/abschnittsleiter")
+async def set_section_leader_endpoint(
+    incident_id: int, column_id: int, request: Request,
+    member_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Weist einer Lane einen Abschnittsleiter (Mitglied mit EL/GK-Qualifikation) zu."""
+    column = db.get(IncidentColumn, column_id)
+    if not column or column.incident_id != incident_id:
+        return Response(status_code=404)
+    before = _section_leader_state(column)
+    column.section_leader_member_id = member_id or None
+    if member_id:
+        column.section_leader_name = None
+    from app.core.audit import write_incident_change
+    write_incident_change(
+        db, incident_id, "column.section_leader_set", "incident_column", column.id,
+        before=before, after=_section_leader_state(column),
+        user_id=request.state.user.id,
+    )
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "column_updated", "reload_board": True})
+    return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/spalten/{column_id}/abschnittsleiter-freitext")
+async def set_section_leader_freitext_endpoint(
+    incident_id: int, column_id: int, request: Request,
+    full_name: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Weist einer Lane einen Abschnittsleiter per Freitext zu (kein Mitglied in Stammdaten)."""
+    column = db.get(IncidentColumn, column_id)
+    if not column or column.incident_id != incident_id:
+        return Response(status_code=404)
+    name = full_name.strip()
+    if not name:
+        return Response("Name darf nicht leer sein", status_code=400)
+    before = _section_leader_state(column)
+    column.section_leader_member_id = None
+    column.section_leader_name = name[:200]
+    from app.core.audit import write_incident_change
+    write_incident_change(
+        db, incident_id, "column.section_leader_set", "incident_column", column.id,
+        before=before, after=_section_leader_state(column),
+        user_id=request.state.user.id,
+    )
+    db.commit()
+    await manager.broadcast(incident_id, {"type": "column_updated", "reload_board": True})
     return Response(status_code=204)
 
 
@@ -1392,6 +1503,14 @@ async def create_message(
         author_name=get_author_name(request),
     )
     db.add(msg)
+    db.flush()
+    prepend_card(db, msg.column_id, "message", msg.id)
+    from app.core.audit import write_incident_change
+    write_incident_change(
+        db, incident_id, "message.created", "message", msg.id,
+        before=None, after={"title": msg.title, "detail": msg.detail},
+        user_id=request.state.user.id,
+    )
     db.commit()
     # Optional: Dateien direkt beim Anlegen anhängen
     if files:
@@ -1458,20 +1577,34 @@ async def create_person(
     gender: str = Form("Unbekannt"), person_group: str = Form("Erwachsen"),
     age_range: str = Form(""), name: str = Form(""), location: str = Form(""),
     vehicle_id: int | None = Form(None),
+    status: str = Form("gefunden"),
     note: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
+    if status not in PERSON_STATUS_VALUES:
+        status = "gefunden"
     person = RescuedPerson(
         incident_id=incident_id,
         gender=gender, person_group=person_group,
         age_range=age_range or None, name=name or None,
         location=location or None, vehicle_id=vehicle_id,
+        status=status,
     )
     db.add(person)
+    db.flush()
     if note.strip():
         db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
                            user_id=request.state.user.id, author_name=get_author_name(request)))
+    rescued_col = next((c for c in db.get(Incident, incident_id).columns if c.code == "rescued"), None)
+    if rescued_col:
+        prepend_card(db, rescued_col.id, "person", person.id)
+    from app.core.audit import write_incident_change
+    write_incident_change(
+        db, incident_id, "person.created", "person", person.id,
+        before=None, after={"name": person.name, "vehicle_id": vehicle_id, "status": status},
+        user_id=request.state.user.id,
+    )
     db.commit()
     await manager.broadcast(incident_id, {"type": "person_created", "reload_board": True})
     return Response(status_code=204)
@@ -1741,6 +1874,7 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
     msgs     = {m.id: m for m in db.query(Message).filter_by(incident_id=incident_id).all()}
     vehicles = {v.id: v for v in db.query(IncidentVehicle).filter_by(incident_id=incident_id).all()}
     columns  = {c.id: c for c in db.query(IncidentColumn).filter_by(incident_id=incident_id).all()}
+    persons  = {p.id: p for p in db.query(RescuedPerson).filter_by(incident_id=incident_id).all()}
 
     user_ids = {c.user_id for c in changes if c.user_id}
     users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
@@ -1749,9 +1883,11 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
     for c in changes:
         if c.after_json:
             try:
-                mid = _json.loads(c.after_json).get("commander_member_id")
-                if mid:
-                    member_ids.add(mid)
+                _after = _json.loads(c.after_json)
+                for key in ("commander_member_id", "section_leader_member_id"):
+                    mid = _after.get(key)
+                    if mid:
+                        member_ids.add(mid)
             except Exception:
                 pass
     members = {m.id: m for m in db.query(Member).filter(Member.id.in_(member_ids)).all()} if member_ids else {}
@@ -1771,6 +1907,16 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
     def mtitle(mid):
         m = msgs.get(mid)
         return m.title if m else f"Meldung #{mid}"
+
+    def pname(pid):
+        # Name führend – Fallback auf Gruppe/Ort, damit im Journal immer ein
+        # aussagekräftiger Bezeichner steht statt nur der internen ID.
+        p = persons.get(pid)
+        if p and p.name:
+            return p.name
+        if p and (p.person_group or p.location):
+            return p.person_group or p.location
+        return f"Person #{pid}"
 
     STATUS_DE = {
         "meldung":     "Meldung (aktiv)",
@@ -1853,6 +1999,13 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
             summary = f'Fahrzeug {vname(eid)}: {after.get("unit_status", "")}'
         elif action == "message.created":
             summary = f'Meldung erstellt: "{after.get("title") or mtitle(eid)}"'
+        elif action == "message.updated":
+            old_t = before.get("title", "")
+            new_t = after.get("title", "")
+            if old_t and new_t and old_t != new_t:
+                summary = f'Meldung umbenannt: "{old_t}" -> "{new_t}"'
+            else:
+                summary = f'Meldung bearbeitet: "{new_t or mtitle(eid)}"'
         elif action == "message.status_set":
             st = STATUS_DE.get(after.get("status", ""), after.get("status", ""))
             summary = f'Meldung "{mtitle(eid)}": {st}'
@@ -1861,13 +2014,34 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
             summary = f'Meldung "{mtitle(eid)}" -> {vname(vid) if vid else "-"}'
         elif action == "message.moved":
             summary = f'Meldung "{mtitle(eid)}" verschoben'
-        elif action == "person.assigned":
+        elif action == "person.created":
+            nm = after.get("name") or pname(eid)
             vid = after.get("vehicle_id")
-            summary = f'Person → {vname(vid) if vid else "—"}'
+            summary = f'Person erfasst: {nm}' + (f' → {vname(vid)}' if vid else '')
+        elif action == "person.updated":
+            nm = after.get("name") or pname(eid)
+            summary = f'Person bearbeitet: {nm}'
+        elif action == "person.status_set":
+            nm = pname(eid)
+            st = after.get("status", "")
+            summary = f'{nm}: Status → {st}'
+        elif action == "person.assigned":
+            nm = pname(eid)
+            vid = after.get("vehicle_id")
+            summary = f'{nm} → {vname(vid) if vid else "—"}'
         elif action == "person.moved":
-            summary = 'Person: Fahrzeugzuweisung aufgehoben'
+            summary = f'{pname(eid)}: Fahrzeugzuweisung aufgehoben'
         elif action == "column.created":
             summary = f'Neue Sektion erstellt: "{after.get("title", f"#{eid}")}"'
+        elif action == "column.title_set":
+            summary = f'Abschnitt umbenannt: "{before.get("title", "")}" -> "{after.get("title", "")}"'
+        elif action == "column.section_leader_set":
+            nm = after.get("section_leader_name")
+            mid = after.get("section_leader_member_id")
+            if not nm and mid:
+                m = members.get(mid)
+                nm = m.full_name if m else f"#{mid}"
+            summary = f'Abschnittsleiter "{cname(eid)}": {nm}' if nm else f'Abschnittsleiter "{cname(eid)}" entfernt'
         elif action == "troop.meldung":
             txt = after.get("text") or ""
             summary = f'AS-Trupp Lagemeldung: "{txt}"' if txt else f'AS-Trupp #{eid}: Lagemeldung abgesetzt'
@@ -1893,6 +2067,25 @@ def _enrich_history(changes, db, incident_id: int) -> list[dict]:
         result.append({"ts": change.ts, "summary": summary, "actor": actor})
 
     return result
+
+
+def _card_journal(db: Session, incident_id: int, entity_type: str, entity_id: int, limit: int = 20) -> list[dict]:
+    """Lädt die letzten IncidentChange-Einträge einer Karte (Einheit/Auftrag/Meldung/Person)
+    und rendert sie über _enrich_history zu lesbaren "Verlauf"-Zeilen — analog zur
+    Major-Incident SiteLogEntry-Anzeige, aber aus dem bereits vorhandenen Change-Log gespeist.
+    """
+    raw = (
+        db.query(IncidentChange)
+        .filter(
+            IncidentChange.incident_id == incident_id,
+            IncidentChange.entity_type == entity_type,
+            IncidentChange.entity_id == entity_id,
+        )
+        .order_by(IncidentChange.ts.desc())
+        .limit(limit)
+        .all()
+    )
+    return _enrich_history(raw, db, incident_id)
 
 
 @router.get("/einsatz/{incident_id}/historie", response_class=HTMLResponse)
@@ -1929,24 +2122,13 @@ async def vehicle_detail(
     org_ids = [oid for oid in org_ids if oid]
     commander_candidates = list_commander_candidates(db, org_ids)
 
-    from app.models.incident import IncidentChange
-    recent_changes = (
-        db.query(IncidentChange)
-        .filter(
-            IncidentChange.incident_id == incident_id,
-            IncidentChange.entity_type == "incident_vehicle",
-            IncidentChange.entity_id == vehicle_id,
-        )
-        .order_by(IncidentChange.ts.desc())
-        .limit(10)
-        .all()
-    )
+    card_journal = _card_journal(db, incident_id, "incident_vehicle", vehicle_id)
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     vehicle_logs = _entity_logs(db, incident_id, "vehicle", vehicle_id)
     return templates.TemplateResponse(request, "incident/_vehicle_modal.html", {
         "user": user, "incident": incident, "vehicle": vehicle,
-        "members": commander_candidates, "recent_changes": recent_changes,
+        "members": commander_candidates, "card_journal": card_journal,
         "can_edit": can_edit, "can_note": can_note, "unit_status_values": UNIT_STATUS_VALUES,
         "bos_values": BOS_VALUES, "entity_logs": vehicle_logs,
     })
@@ -2004,9 +2186,10 @@ async def task_detail(
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     task_logs = _entity_logs(db, incident_id, "task", task_id)
+    card_journal = _card_journal(db, incident_id, "task", task_id)
     return templates.TemplateResponse(request, "incident/_task_modal.html", {
         "user": user, "incident": incident, "task": task, "can_edit": can_edit, "can_note": can_note,
-        "entity_logs": task_logs,
+        "entity_logs": task_logs, "card_journal": card_journal,
     })
 
 
@@ -2026,9 +2209,10 @@ async def message_detail(
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
+    card_journal = _card_journal(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
         "user": user, "incident": incident, "msg": msg, "can_edit": can_edit, "can_note": can_note,
-        "entity_logs": entity_logs,
+        "entity_logs": entity_logs, "card_journal": card_journal,
     })
 
 
@@ -2042,17 +2226,25 @@ async def update_message_endpoint(
     msg = db.get(Message, message_id)
     if not msg or msg.incident_id != incident_id:
         return Response(status_code=404)
+    before = {"title": msg.title, "detail": msg.detail}
     msg.title = title.strip() or msg.title
     msg.detail = detail.strip() or None
+    from app.core.audit import write_incident_change
+    write_incident_change(
+        db, incident_id, "message.updated", "message", msg.id,
+        before=before, after={"title": msg.title, "detail": msg.detail},
+        user_id=request.state.user.id,
+    )
     db.commit()
     await manager.broadcast(incident_id, {"type": "message_updated", "reload_board": True})
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
+    card_journal = _card_journal(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
         "user": request.state.user, "incident": incident, "msg": msg, "can_edit": can_edit, "can_note": can_note,
-        "entity_logs": entity_logs,
+        "entity_logs": entity_logs, "card_journal": card_journal,
     })
 
 
@@ -2072,9 +2264,10 @@ async def person_detail(
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
+    card_journal = _card_journal(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
         "user": user, "incident": incident, "person": person, "can_edit": can_edit, "can_note": can_note,
-        "person_status_values": PERSON_STATUS_VALUES, "entity_logs": person_logs,
+        "person_status_values": PERSON_STATUS_VALUES, "entity_logs": person_logs, "card_journal": card_journal,
     })
 
 
@@ -2083,12 +2276,18 @@ async def update_person_endpoint(
     incident_id: int, person_id: int, request: Request,
     gender: str = Form(""), person_group: str = Form(""),
     age_range: str = Form(""), name: str = Form(""), location: str = Form(""),
+    vehicle_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
     person = db.get(RescuedPerson, person_id)
     if not person or person.incident_id != incident_id:
         return Response(status_code=404)
+    before = {
+        "gender": person.gender, "person_group": person.person_group,
+        "age_range": person.age_range, "name": person.name,
+        "location": person.location, "vehicle_id": person.vehicle_id,
+    }
     if gender.strip():
         person.gender = gender.strip()
     if person_group.strip():
@@ -2096,15 +2295,28 @@ async def update_person_endpoint(
     person.age_range = age_range.strip() or None
     person.name = name.strip() or None
     person.location = location.strip() or None
+    person.vehicle_id = vehicle_id or None
+    from app.core.audit import write_incident_change
+    write_incident_change(
+        db, incident_id, "person.updated", "person", person.id,
+        before=before,
+        after={
+            "gender": person.gender, "person_group": person.person_group,
+            "age_range": person.age_range, "name": person.name,
+            "location": person.location, "vehicle_id": person.vehicle_id,
+        },
+        user_id=request.state.user.id,
+    )
     db.commit()
     await manager.broadcast(incident_id, {"type": "person_updated", "reload_board": True})
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
+    card_journal = _card_journal(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
         "user": request.state.user, "incident": incident, "person": person, "can_edit": can_edit, "can_note": can_note,
-        "person_status_values": PERSON_STATUS_VALUES, "entity_logs": person_logs,
+        "person_status_values": PERSON_STATUS_VALUES, "entity_logs": person_logs, "card_journal": card_journal,
     })
 
 
@@ -2120,7 +2332,15 @@ async def set_person_status_endpoint(
     person = db.get(RescuedPerson, person_id)
     if not person or person.incident_id != incident_id:
         return Response(status_code=404)
+    old_status = person.status
     person.status = status
+    if old_status != status:
+        from app.core.audit import write_incident_change
+        write_incident_change(
+            db, incident_id, "person.status_set", "person", person.id,
+            before={"status": old_status}, after={"status": status},
+            user_id=request.state.user.id,
+        )
     db.commit()
     await manager.broadcast(incident_id, {"type": "person_updated", "reload_board": True})
     return Response(status_code=204)

@@ -564,6 +564,50 @@
       white-space: nowrap;
     }
 
+    /* ── LANES-STRIP: Abschnitt/Lane-Übersicht inkl. Abschnittsleiter ────────── */
+    .lanes-strip {
+      flex-shrink: 0;
+      background: var(--surface-high);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: .53rem;
+      padding: .4rem .8rem;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .lanes-strip::-webkit-scrollbar { height: 3px; }
+    .lanes-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .lanes-strip__label {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--text-muted);
+      padding-right: .67rem;
+      border-right: 1px solid var(--border);
+    }
+    .lane-card {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: .4rem;
+      padding: .3rem .67rem;
+      min-width: 8rem;
+    }
+    .lane-card__title { font-size: .78rem; font-weight: 700; color: #fff; white-space: nowrap; }
+    .lane-card__leader { font-size: .68rem; color: var(--amber); white-space: nowrap; }
+    .lane-card__leader--none { color: rgba(255,255,255,.3); font-style: italic; }
+    .lane-card__vehicles { font-size: .68rem; color: rgba(255,255,255,.55); white-space: nowrap; }
+
     .bs-badge {
       font-family: var(--font-mono);
       font-size: .65rem;
@@ -818,6 +862,32 @@
       </div>
       <div class="bs-badge bs-badge--{{ troop.status }}">
         {% if troop.status == 'im_einsatz' %}Im Einsatz{% elif troop.status == 'rueckzug' %}Rückzug!{% else %}{{ troop.status }}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ══ LANES-STRIP: welche Lane hat welche Einheiten + welchen Abschnittsleiter ══ -->
+  {% if lanes_overview %}
+  <div class="lanes-strip">
+    <span class="lanes-strip__label">🗂 Abschnitte</span>
+    {% for lane in lanes_overview %}
+    <div class="lane-card">
+      <div class="lane-card__title">{{ lane.column.title }}</div>
+      {% if lane.column.section_leader %}
+      <div class="lane-card__leader">AL: {{ lane.column.section_leader.full_name }}</div>
+      {% elif lane.column.section_leader_name %}
+      <div class="lane-card__leader">AL: {{ lane.column.section_leader_name }}</div>
+      {% else %}
+      <div class="lane-card__leader lane-card__leader--none">kein Abschnittsleiter</div>
+      {% endif %}
+      <div class="lane-card__vehicles">
+        {% if lane.vehicles %}
+        {{ lane.vehicles|map(attribute='vehicle_master.display_label')|join(', ') }}
+        {% else %}
+        keine Einheiten
+        {% endif %}
       </div>
     </div>
     {% endfor %}

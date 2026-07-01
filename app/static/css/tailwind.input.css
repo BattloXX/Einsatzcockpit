@@ -383,6 +383,20 @@ body.mobile-menu-open { overflow: hidden; }
 .person-status-verstorben          { background: #333 !important; }
 .form-select--person-status option { color: #111; background: #fff; }
 
+/* Person-Status Ampel — kompakt (nur Emoji) auf der Board-Karte, damit der Name
+   mehr Platz bekommt und die Karte insgesamt kürzer bleibt. */
+.form-select--person-status-compact {
+  font-weight: 700; color: #fff !important; border: none !important; border-radius: 4px;
+  width: 2.2rem; min-width: 2.2rem; padding: 2px 3px; font-size: .85rem; text-align: center;
+}
+.form-select--person-status-compact option { color: #111; background: #fff; font-size: .9rem; }
+
+/* Gerettete-Personen-Karte: Name größer/fetter, Karte insgesamt kompakter */
+.card__body--rescue { padding-top: 8px; padding-bottom: 8px; }
+.card__title--person-name { font-size: 1.05rem; font-weight: 800; }
+.card__sub--compact { font-size: .74rem; margin-top: 1px; }
+.card__meta--compact { font-size: .68rem; margin-top: 2px; }
+
 /* ── Kanban Board ────────────────────────────────────────── */
 .kanban-col {
   min-width: 280px; max-width: 280px; background: var(--surface-low);
@@ -826,6 +840,7 @@ dialog.media-viewer { max-width: 95vw; width: 95vw; max-height: 95dvh; height: 9
 }
 .suggestion-pill--block:hover:not(:disabled) { border-color: var(--red); background: rgba(183,25,33,.15); }
 .suggestion-pill--block:disabled { opacity: .5; cursor: not-allowed; }
+.suggestion-pill--selected { border-color: var(--red); background: rgba(183,25,33,.22); box-shadow: 0 0 0 1px var(--red); }
 
 /* ── Nav Dropdown ────────────────────────────────────────── */
 .nav-dropdown { position: relative; }

@@ -1,10 +1,19 @@
 {# Lane column header with title, count badge, and contextual + button.
-   Variables expected: col, col_count, can_edit, incident, col_tasks, col_messages #}
+   Variables expected: col, col_count, can_edit, incident, col_tasks, col_messages,
+   section_leader_candidates #}
 <div class="kanban-col__header">
   <span class="kanban-col__drag-handle" style="color:var(--text-muted);opacity:.4;font-size:.9rem;margin-right:4px;flex-shrink:0;cursor:grab;touch-action:none;" title="Spalte verschieben">⣿</span>
   <div style="flex:1; min-width:0;">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
-      <span class="kanban-col__title">{{ col.title }}</span>
+      <span class="kanban-col__title">
+        {{ col.title }}
+        {% if can_edit %}
+        <button type="button" class="kanban-col__rename-btn"
+                style="background:none;border:none;cursor:pointer;padding:0 2px;opacity:.4;font-size:.75rem;vertical-align:middle;color:var(--text-muted);"
+                title="Abschnitt umbenennen"
+                onclick="renameColumn({{ col.id }}, '{{ col.title|replace("'", "\\'") }}')">✎</button>
+        {% endif %}
+      </span>
       <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
         <span class="kanban-col__count">{{ col_count }}</span>
         {% if can_edit and not col.is_fixed %}
@@ -73,6 +82,31 @@
     </div>
     {% endif %}
     {% endif %}
+
+    {# Abschnittsleiter: Mitglied mit EL/GK-Quali oder Freitext #}
+    <div class="kanban-col__leader" style="display:flex; align-items:center; gap:4px; margin-top:5px; font-size:.7rem;" onclick="event.stopPropagation()">
+      {% if can_edit and section_leader_candidates is defined %}
+      <select class="form-select form-select--xs" style="font-size:.68rem; flex:1; min-width:0;"
+              onchange="setSectionLeader({{ col.id }}, this.value)">
+        <option value="">— kein Abschnittsleiter —</option>
+        {% for m in section_leader_candidates %}
+        <option value="{{ m.id }}" {% if col.section_leader_member_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>
+        {% endfor %}
+      </select>
+      <button type="button" class="btn btn--ghost btn--xs" style="padding:1px 5px; font-size:.65rem;"
+              title="Abschnittsleiter per Freitext eintragen"
+              onclick="promptSectionLeaderFreitext({{ col.id }})">✎</button>
+      {% if col.section_leader and col.section_leader_member_id not in (section_leader_candidates | map(attribute='id') | list) %}
+      <span style="opacity:.7;">AL: {{ col.section_leader.full_name }}</span>
+      {% elif not col.section_leader and col.section_leader_name %}
+      <span style="opacity:.7;">AL: {{ col.section_leader_name }}</span>
+      {% endif %}
+      {% elif col.section_leader %}
+      <span style="opacity:.7;">Abschnittsleiter: {{ col.section_leader.full_name }}</span>
+      {% elif col.section_leader_name %}
+      <span style="opacity:.7;">Abschnittsleiter: {{ col.section_leader_name }}</span>
+      {% endif %}
+    </div>
 
   </div>
 </div>

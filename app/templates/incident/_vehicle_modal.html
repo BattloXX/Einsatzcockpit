@@ -131,22 +131,7 @@
     {% endif %}
   </div>
 
-  <!-- Letzte Einträge -->
-  <div class="detail-section">
-    <div class="detail-section__title">Letzte Einträge</div>
-    {% if recent_changes %}
-    <ul class="change-list">
-      {% for ch in recent_changes %}
-      <li class="change-list__item" style="display:flex; gap:8px; align-items:baseline;">
-        <span style="color:var(--text-muted);font-size:.75rem;white-space:nowrap;">{{ ch.ts|local_datetime }}</span>
-        <span>{{ ch.action|action_label }}</span>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="text-muted">Noch keine Einträge.</p>
-    {% endif %}
-  </div>
+  {% include "incident/_card_journal.html" %}
 
   <!-- Notizen -->
   <div class="detail-section">

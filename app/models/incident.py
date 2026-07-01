@@ -137,6 +137,11 @@ class IncidentColumn(Base):
     is_fixed: Mapped[bool] = mapped_column(Boolean, default=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     card_order: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Abschnittsleiter der Lane: entweder Mitglied (Quali EL/GK) oder Freitext-Name
+    section_leader_member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    section_leader_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     incident: Mapped[Incident] = relationship(back_populates="columns")
     vehicles: Mapped[list[IncidentVehicle]] = relationship(back_populates="column")
@@ -145,6 +150,9 @@ class IncidentColumn(Base):
         primaryjoin="and_(Task.column_id==IncidentColumn.id, Task.vehicle_id==None)",
         foreign_keys="Task.column_id",
         overlaps="column"
+    )
+    section_leader: Mapped[Member | None] = relationship(
+        "Member", foreign_keys=[section_leader_member_id], lazy="joined"
     )
 
 
@@ -382,6 +390,9 @@ class RescuedPerson(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     incident: Mapped[Incident] = relationship(back_populates="rescued_persons")
+    vehicle: Mapped[IncidentVehicle | None] = relationship(
+        foreign_keys=[vehicle_id], lazy="joined",
+    )
     media: Mapped[list[PersonMedia]] = relationship(
         cascade="all, delete-orphan",
         order_by="PersonMedia.created_at.desc()",

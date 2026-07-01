@@ -1,6 +1,9 @@
 /* Service Worker – PWA Offline Cache */
-const CACHE = 'ec-v1';
-const BOARD_CACHE = 'ec-board-v1';
+// Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
+// der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
+// veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
+const CACHE = 'ec-v2';
+const BOARD_CACHE = 'ec-board-v2';
 const PRECACHE = [
   '/',
   '/static/css/app.css',

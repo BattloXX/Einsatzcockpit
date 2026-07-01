@@ -46,6 +46,9 @@ document.addEventListener('alpine:init', () => {
     _connectGlobal() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const url = `${proto}://${location.host}/ws/global`;
+      // Exponentielles Backoff + Jitter statt fix 3s, damit eine flackernde
+      // Verbindung nicht in einer engen Reconnect-Schleife hängt.
+      let reconnectAttempt = 0;
       const connect = () => {
         const ws = new WebSocket(url);
         ws.onmessage = (e) => {
@@ -56,7 +59,12 @@ document.addEventListener('alpine:init', () => {
             document.body.dispatchEvent(customEv);
           }
         };
-        ws.onclose = () => setTimeout(connect, 3000);
+        ws.onclose = () => {
+          reconnectAttempt++;
+          const backoff = Math.min(1000 * 2 ** reconnectAttempt, 15000);
+          setTimeout(connect, backoff + Math.random() * 500);
+        };
+        ws.onopen = () => { reconnectAttempt = 0; };
         this._ws = ws;
         setInterval(() => ws.readyState === 1 && ws.send('ping'), 30000);
       };
@@ -213,7 +221,13 @@ function incidentBoard(incidentId, alarm, startedAt) {
     _connectWS(id) {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const url = `${proto}://${location.host}/ws/incident/${id}`;
-      let firstConnect = true;
+      // Reconnect mit exponentiellem Backoff + Jitter (statt fix 3s) und ein
+      // Reload-Cooldown über sessionStorage: verhindert bei flackernder Verbindung
+      // einen "Reload-Sturm" (jede Sekunde neu laden), weil ein location.reload()
+      // die Seite (und damit alle JS-Variablen inkl. reconnectAttempt) zurücksetzt.
+      let disconnectedAt = null;
+      let reconnectAttempt = 0;
+      const RELOAD_COOLDOWN_MS = 10000;
       const connect = () => {
         const ws = new WebSocket(url);
         ws.onmessage = (e) => {
@@ -273,12 +287,31 @@ function incidentBoard(incidentId, alarm, startedAt) {
           }
         };
         ws.onclose = () => {
-          setTimeout(() => {
-            connect();
-            if (!firstConnect) location.reload(); // server-wins after reconnect
-          }, 3000);
+          if (disconnectedAt === null) disconnectedAt = Date.now();
+          reconnectAttempt++;
+          const backoff = Math.min(1000 * 2 ** reconnectAttempt, 15000);
+          const jitter = Math.random() * 500;
+          setTimeout(connect, backoff + jitter);
         };
-        ws.onopen = () => { firstConnect = false; };
+        ws.onopen = () => {
+          // "Server-wins"-Reload nur, wenn die Verbindung tatsächlich eine Weile weg
+          // war (kurze Blips sollen nicht neu laden) und nicht gerade erst geladen wurde.
+          if (disconnectedAt !== null) {
+            const downMs = Date.now() - disconnectedAt;
+            const lastReload = Number(sessionStorage.getItem('ec_last_ws_reload') || 0);
+            if (downMs > 2000 && Date.now() - lastReload > RELOAD_COOLDOWN_MS) {
+              sessionStorage.setItem('ec_last_ws_reload', String(Date.now()));
+              const modal = document.getElementById('cardDetailModal');
+              if (modal && modal.open) {
+                modal.addEventListener('close', () => location.reload(), { once: true });
+              } else {
+                location.reload();
+              }
+            }
+            disconnectedAt = null;
+          }
+          reconnectAttempt = 0;
+        };
         this._ws = ws;
         setInterval(() => ws.readyState === 1 && ws.send('ping'), 30000);
       };

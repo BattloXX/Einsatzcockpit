@@ -70,6 +70,9 @@ _ACTION_LABELS: dict[str, str] = {
     "message.status_set":       "Meldungs-Status geändert",
     "person.created":           "Person erfasst",
     "person.updated":           "Person bearbeitet",
+    "person.status_set":        "Personen-Status geändert",
+    "column.title_set":         "Abschnitt umbenannt",
+    "column.section_leader_set": "Abschnittsleiter zugewiesen",
     "incident.address_updated": "Adresse / Koordinaten aktualisiert",
 }
 
@@ -113,7 +116,9 @@ def _ordered_col_items(col, vehicles, tasks, messages, persons):
     """Gibt geordnete Liste von (kind, obj)-Tupeln zurück.
     Respektiert col.card_order wenn vorhanden, sonst: Fahrzeuge → Aufträge → Meldungen → Personen.
     Items, die in card_order stehen aber nicht mehr in der Spalte sind (verschoben/gelöscht),
-    werden übersprungen. Neue Items (nicht in card_order) werden am Ende angehängt.
+    werden übersprungen. Neue Items (noch nicht in card_order, z. B. weil card_order aus
+    irgendeinem Grund nicht via prepend_card() gepflegt wurde) werden ganz OBEN eingefügt,
+    damit neue Karten immer zuerst sichtbar sind.
     """
     def _default():
         result = [('vehicle', v) for v in vehicles]
@@ -154,21 +159,22 @@ def _ordered_col_items(col, vehicles, tasks, messages, persons):
             result.append(('person', p_map[uid]))
             seen_p.add(uid)
 
-    # Neue Items (noch nicht in card_order) am Ende
+    # Neue Items (noch nicht in card_order) ganz oben einfügen, neueste zuerst.
+    new_items = []
     for v in vehicles:
         if v.id not in seen_v:
-            result.append(('vehicle', v))
+            new_items.append(('vehicle', v))
     for t in tasks:
         if t.id not in seen_t:
-            result.append(('task', t))
+            new_items.append(('task', t))
     for m in messages:
         if m.id not in seen_m:
-            result.append(('message', m))
+            new_items.append(('message', m))
     for p in persons:
         if p.id not in seen_p:
-            result.append(('person', p))
+            new_items.append(('person', p))
 
-    return result
+    return list(reversed(new_items)) + result
 
 
 templates.env.globals["ordered_col_items"] = _ordered_col_items
@@ -197,3 +203,18 @@ try:
     templates.env.globals["CSS_VERSION"] = str(int(_os.path.getmtime(_css_path)))
 except OSError:
     templates.env.globals["CSS_VERSION"] = "1"
+
+# Cache-Busting für JS/Scripts: max(mtime) über alle app/static/js/*.js-Dateien.
+# Ohne Versions-Query behielt der Service Worker (stale-while-revalidate, sw.js)
+# nach einem Deploy die alte JS-Datei bis zum zweiten Seitenaufruf ("F5 nötig") –
+# mit ?v=… erzwingt ein geänderter Board-Skript-Stand sofort einen neuen Cache-Key.
+_js_dir = _os.path.join(_os.path.dirname(__file__), "..", "static", "js")
+try:
+    _js_mtimes = [
+        _os.path.getmtime(_os.path.join(_js_dir, f))
+        for f in _os.listdir(_js_dir)
+        if f.endswith(".js")
+    ]
+    templates.env.globals["ASSET_VERSION"] = str(int(max(_js_mtimes))) if _js_mtimes else "1"
+except OSError:
+    templates.env.globals["ASSET_VERSION"] = "1"

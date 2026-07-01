@@ -197,11 +197,14 @@
 {% if incident.rescued_persons %}
 <h2>Gerettete Personen</h2>
 <table>
-  <tr><th>Geschlecht</th><th>Gruppe</th><th>Alter</th><th>Name</th><th>Fundort</th></tr>
+  <tr><th>Name</th><th>Status</th><th>Einheit</th><th>Geschlecht</th><th>Gruppe</th><th>Alter</th><th>Fundort</th></tr>
   {% for p in incident.rescued_persons %}
   <tr>
+    <td>{{ p.name or '–' }}</td>
+    <td>{{ (p.status or 'gefunden')|person_status_label }}</td>
+    <td>{{ p.vehicle.vehicle_master.display_label if p.vehicle else '–' }}</td>
     <td>{{ p.gender }}</td><td>{{ p.person_group }}</td>
-    <td>{{ p.age_range or '–' }}</td><td>{{ p.name or '–' }}</td><td>{{ p.location or '–' }}</td>
+    <td>{{ p.age_range or '–' }}</td><td>{{ p.location or '–' }}</td>
   </tr>
   {% endfor %}
 </table>

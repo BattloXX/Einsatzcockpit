@@ -5,37 +5,37 @@
      hx-swap="innerHTML"
      hx-trigger="click[!event.target.closest('select,input,button,a')]"
      hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
-  <div class="card__body">
-    <div class="card__title" style="display:flex;align-items:flex-start;gap:6px;">
+  <div class="card__body card__body--rescue">
+    <div class="card__title card__title--person" style="display:flex;align-items:center;gap:6px;">
       {% if can_edit %}
       {% set ps = person.status if person.status else 'gefunden' %}
       <span onclick="event.stopPropagation()" style="flex-shrink:0;">
-        <select name="status" class="form-select form-select--xs form-select--person-status person-status-{{ ps }}"
-                style="width:auto;min-width:90px;"
+        <select name="status" class="form-select form-select--xs form-select--person-status-compact person-status-{{ ps }}"
+                title="{{ ps|person_status_label }}"
                 hx-post="/einsatz/{{ incident.id }}/person/{{ person.id }}/status"
                 hx-trigger="change"
                 hx-swap="none"
-                onchange="this.className='form-select form-select--xs form-select--person-status person-status-'+this.value">
-          <option value="gefunden" {% if ps=='gefunden' %}selected{% endif %}>🔴 Gefunden</option>
-          <option value="versorgt" {% if ps=='versorgt' %}selected{% endif %}>🟠 Versorgt</option>
-          <option value="abtransportiert" {% if ps=='abtransportiert' %}selected{% endif %}>🟢 Abtransportiert</option>
-          <option value="verstorben" {% if ps=='verstorben' %}selected{% endif %}>⚫ Verstorben</option>
+                onchange="this.className='form-select form-select--xs form-select--person-status-compact person-status-'+this.value">
+          <option value="gefunden" {% if ps=='gefunden' %}selected{% endif %}>🔴</option>
+          <option value="versorgt" {% if ps=='versorgt' %}selected{% endif %}>🟠</option>
+          <option value="abtransportiert" {% if ps=='abtransportiert' %}selected{% endif %}>🟢</option>
+          <option value="verstorben" {% if ps=='verstorben' %}selected{% endif %}>⚫</option>
         </select>
       </span>
       {% endif %}
-      <span>{{ person.name or '–' }}</span>
+      <span class="card__title--person-name">{{ person.name or '–' }}</span>
     </div>
     {% set show_gender = person.gender and person.gender not in ('Unbekannt', '') %}
     {% set show_group = person.person_group and person.person_group not in ('Erwachsen', '') %}
-    {% if show_gender or show_group or person.age_range %}
-    <div class="card__sub" style="font-size:.75rem;">
+    {% if show_gender or show_group or person.age_range or person.location %}
+    <div class="card__sub card__sub--compact">
       {% if show_gender %}{{ person.gender }}{% endif %}
       {% if show_gender and show_group %}, {% endif %}
       {% if show_group %}{{ person.person_group }}{% endif %}
       {% if person.age_range %}<span class="card__age" style="margin-left:4px;">{{ person.age_range }}</span>{% endif %}
+      {% if person.location %}<span style="margin-left:4px;">📍 {{ person.location }}</span>{% endif %}
     </div>
     {% endif %}
-    {% if person.location %}<div class="card__sub">📍 {{ person.location }}</div>{% endif %}
     {% if person.media %}
     <div class="card__media">
       {% for m in person.media[:3] %}
@@ -46,7 +46,8 @@
       {% if person.media|length > 3 %}<span class="card__media-more">+{{ person.media|length - 3 }}</span>{% endif %}
     </div>
     {% endif %}
-    <div class="card__meta">
+    <div class="card__meta card__meta--compact">
+      {% if person.vehicle %}<span style="margin-right:6px;">🚒 {{ person.vehicle.vehicle_master.display_label }}</span>{% endif %}
       <span class="card__time">{{ person.created_at|local_time }}</span>
     </div>
   </div>

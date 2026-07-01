@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#d42225">
   <title>{% block title %}{{ brand }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/app.css?v={{ CSS_VERSION }}">
-  <link rel="stylesheet" href="/static/css/tooltips.css">
+  <link rel="stylesheet" href="/static/css/tooltips.css?v={{ CSS_VERSION }}">
   <style>[x-cloak]{display:none!important}</style>
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
@@ -259,17 +259,17 @@
     {% block content %}{% endblock %}
   </main>
 
-  <script src="/static/js/native-bridge.js"></script>
-  <script src="/static/js/alpine.min.js" defer></script>
-  <script src="/static/js/htmx.min.js"></script>
-  <script src="/static/js/sortable.min.js"></script>
-  <script src="/static/js/app.js"></script>
-  <script src="/static/js/sortable-glue.js"></script>
-  <script src="/static/js/media-upload.js"></script>
-  <script src="/static/js/media-viewer.js"></script>
-  <script src="/static/js/pwa-install.js"></script>
-  <script src="/static/js/tooltips.js"></script>
-  <script src="/static/js/csrf.js" defer></script>
+  <script src="/static/js/native-bridge.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/alpine.min.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/htmx.min.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/sortable.min.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/app.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/sortable-glue.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/media-upload.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/media-viewer.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/pwa-install.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/tooltips.js?v={{ ASSET_VERSION }}"></script>
+  <script src="/static/js/csrf.js?v={{ ASSET_VERSION }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

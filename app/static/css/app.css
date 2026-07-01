@@ -154,3 +154,12 @@
 @media(max-width:600px){.teiln-status-lbl{padding:5px 10px;font-size:.75rem;min-height:34px;}}
 .col-desktop{display:none;}
 @media(min-width:901px){.col-desktop{display:table-cell;}}
+/* ── Einheit-Auswahl (Select + Button statt Sofort-Absenden) ─── */
+.suggestion-pill--selected{border-color:var(--red);background:rgba(183,25,33,.22);box-shadow:0 0 0 1px var(--red);}
+/* ── Gerettete-Personen-Karte: kompakter Statusbalken, größerer Name ─── */
+.form-select--person-status-compact{font-weight:700;color:#fff!important;border:none!important;border-radius:4px;width:2.2rem;min-width:2.2rem;padding:2px 3px;font-size:.85rem;text-align:center;}
+.form-select--person-status-compact option{color:#111;background:#fff;font-size:.9rem;}
+.card__body--rescue{padding-top:8px;padding-bottom:8px;}
+.card__title--person-name{font-size:1.05rem;font-weight:800;}
+.card__sub--compact{font-size:.74rem;margin-top:1px;}
+.card__meta--compact{font-size:.68rem;margin-top:2px;}

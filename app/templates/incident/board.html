@@ -230,8 +230,10 @@
   </summary>
   <div id="wetter-panel"
        hx-get="/einsatz/{{ incident.id }}/wetter/panel"
-       hx-trigger="intersect once, every 300s"
+       hx-trigger="intersect once, every 300s, retry-wetter"
        hx-swap="innerHTML"
+       hx-on::response-error="wetterPanelError(this)"
+       hx-on::send-error="wetterPanelError(this)"
        style="padding:8px 14px;">
     <span style="font-size:.75rem;color:var(--text-muted);">Lade…</span>
   </div>
@@ -669,20 +671,16 @@
 
       <div x-show="suggestions.length > 0" class="suggestion-list">
         <template x-for="s in suggestions" :key="s.id">
-          <form method="post" :action="`/einsatz/${incidentId}/fahrzeug-hinzufuegen`" style="display:block;">
-            <input type="hidden" name="vehicle_master_id" :value="s.id">
-            <input type="hidden" name="commander_member_id" :value="gkMemberId">
-            <input type="hidden" name="commander_free_text" :value="gkFreeText">
-            <input type="hidden" name="note" :value="noteText">
-            <button type="submit" class="suggestion-pill suggestion-pill--block"
-                    :disabled="s.in_use"
-                    :title="s.in_use ? 'Einheit ist bereits im Einsatz' : 'Diese Einheit zum Einsatz hinzufügen'">
-              <strong x-text="s.display_label"></strong>
-              <span x-show="s.is_external" style="font-size:.62rem;padding:1px 4px;border-radius:3px;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.3);margin-left:4px;vertical-align:middle;">FREMD</span>
-              <span class="text-muted" x-text="' · ' + s.dept_name + (s.type ? ' · ' + s.type : '')"></span>
-              <span x-show="s.in_use" class="text-muted">— bereits im Einsatz</span>
-            </button>
-          </form>
+          <button type="button" class="suggestion-pill suggestion-pill--block"
+                  :disabled="s.in_use"
+                  :class="{'suggestion-pill--selected': selectedId === s.id}"
+                  @click="selectedId = s.id"
+                  :title="s.in_use ? 'Einheit ist bereits im Einsatz' : 'Einheit auswählen'">
+            <strong x-text="s.display_label"></strong>
+            <span x-show="s.is_external" style="font-size:.62rem;padding:1px 4px;border-radius:3px;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.3);margin-left:4px;vertical-align:middle;">FREMD</span>
+            <span class="text-muted" x-text="' · ' + s.dept_name + (s.type ? ' · ' + s.type : '')"></span>
+            <span x-show="s.in_use" class="text-muted">— bereits im Einsatz</span>
+          </button>
         </template>
       </div>
       <p x-show="suggestions.length === 0" class="form-hint">Keine passenden Einheiten gefunden.</p>
@@ -691,6 +689,16 @@
         <label class="form-label" style="font-size:.75rem;">Notiz (optional — wird ins Journal eingetragen)</label>
         <input type="text" class="form-input form-input--sm" x-model="noteText" placeholder="z. B. Befehlsübergabe erfolgt">
       </div>
+
+      <form method="post" :action="`/einsatz/${incidentId}/fahrzeug-hinzufuegen`" x-show="selectedId">
+        <input type="hidden" name="vehicle_master_id" :value="selectedId">
+        <input type="hidden" name="commander_member_id" :value="gkMemberId">
+        <input type="hidden" name="commander_free_text" :value="gkFreeText">
+        <input type="hidden" name="note" :value="noteText">
+        <div style="text-align:right;">
+          <button type="submit" class="btn btn--primary">Einheit hinzufügen</button>
+        </div>
+      </form>
 
       <hr style="margin: 16px 0; border:0; border-top:1px solid var(--border);">
 
@@ -777,12 +785,33 @@
       <input type="hidden" name="person_group" :value="group">
       <input type="hidden" name="name" :value="quickName">
       <div class="modal__body">
-        <!-- Step 0: Quick-Erfassung (nur Name) -->
+        <!-- Step 0: Quick-Erfassung (Name, Einheit, Status) -->
         <div x-show="step === 0">
           <p class="wizard-label" style="margin-bottom:12px;">Schnellerfassung – Name erforderlich</p>
           <div class="form-group">
             <label class="form-label">Name <span style="color:#ef4444;">*</span></label>
             <input type="text" x-model="quickName" class="form-input" placeholder="z. B. Max Muster" autofocus required>
+          </div>
+          <div class="form-row" style="display:flex; gap:10px;">
+            <div class="form-group" style="flex:1; min-width:0;">
+              <label class="form-label">Einheit</label>
+              <select name="vehicle_id" class="form-select">
+                <option value="">– keine –</option>
+                {% for v in incident.vehicles %}
+                {% if v.removed_at is none %}
+                <option value="{{ v.id }}">{{ v.vehicle_master.display_label }} ({{ v.vehicle_master.dept.name }})</option>
+                {% endif %}
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group" style="flex:1; min-width:0;">
+              <label class="form-label">Status</label>
+              <select name="status" class="form-select">
+                {% for s in person_status_values %}
+                <option value="{{ s }}" {% if s == 'gefunden' %}selected{% endif %}>{{ s|person_status_label }}</option>
+                {% endfor %}
+              </select>
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">Fundort (optional)</label>
@@ -792,12 +821,12 @@
                   @click="step=1"
                   class="btn btn--ghost btn--sm"
                   style="margin-top:4px; font-size:.8rem; opacity:.7;">
-            ＋ Mehr Details (Geschlecht, Alter, Fahrzeug)
+            ＋ Mehr Details (Geschlecht, Alter)
           </button>
         </div>
         <!-- Step 1: Geschlecht -->
         <div x-show="step === 1">
-          <p class="wizard-label">Schritt 1 / 4 – Geschlecht</p>
+          <p class="wizard-label">Schritt 1 / 3 – Geschlecht</p>
           <div class="wizard-pills">
             <button type="button" @click="gender='Männlich'; step=2" class="wizard-pill">Männlich</button>
             <button type="button" @click="gender='Weiblich'; step=2" class="wizard-pill">Weiblich</button>
@@ -806,7 +835,7 @@
         </div>
         <!-- Step 2: Alterskategorie -->
         <div x-show="step === 2">
-          <p class="wizard-label">Schritt 2 / 4 – Alterskategorie</p>
+          <p class="wizard-label">Schritt 2 / 3 – Alterskategorie</p>
           <div class="wizard-pills">
             <button type="button" @click="group='Kind'; step=3" class="wizard-pill">Kind</button>
             <button type="button" @click="group='Erwachsen'; step=3" class="wizard-pill">Erwachsen</button>
@@ -815,7 +844,7 @@
         </div>
         <!-- Step 3: Name + Fundort (vollständige Erfassung) -->
         <div x-show="step === 3">
-          <p class="wizard-label">Schritt 3 / 4 – Details</p>
+          <p class="wizard-label">Schritt 3 / 3 – Details</p>
           <div class="form-group">
             <label class="form-label">Altersbereich (optional)</label>
             <select name="age_range" class="form-select">
@@ -836,29 +865,12 @@
             <input type="text" name="note" class="form-input" placeholder="z. B. bereits versorgt durch RK">
           </div>
         </div>
-        <!-- Step 4: Übergabe an Einheit -->
-        <div x-show="step === 4">
-          <p class="wizard-label">Schritt 4 / 4 – Übernahme von Einheit</p>
-          <div class="form-group">
-            <label class="form-label">Übernommen von</label>
-            <select name="vehicle_id" class="form-select">
-              <option value="">– später / keine –</option>
-              {% for v in incident.vehicles %}
-              {% if v.removed_at is none %}
-              <option value="{{ v.id }}">{{ v.vehicle_master.display_label }} ({{ v.vehicle_master.dept.name }})</option>
-              {% endif %}
-              {% endfor %}
-            </select>
-          </div>
-        </div>
       </div>
       <div class="modal__footer">
         <button type="button" @click="step > 0 ? step-- : $el.closest('dialog').close()" class="btn btn--ghost">
           <span x-text="step > 0 ? '← Zurück' : 'Abbrechen'"></span>
         </button>
-        <button x-show="step === 0" type="submit" class="btn btn--primary">Speichern</button>
-        <button x-show="step === 3" type="button" @click="step=4" class="btn btn--secondary">Weiter →</button>
-        <button x-show="step === 4" type="submit" class="btn btn--primary">Speichern</button>
+        <button x-show="step === 0 || step === 3" type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>
   </div>
@@ -984,6 +996,62 @@ function deleteColumn(colId, colTitle) {
   });
 }
 
+function _csrfToken() {
+  return document.cookie.match(/(?:^|;\s*)ec_csrf=([^;]+)/)?.[1] || '';
+}
+
+function wetterPanelError(el) {
+  // Fehler-/Retry-Handling fürs Wetter-Fragment: ohne dies blieb "Lade…" bei
+  // einem fehlgeschlagenen Request (z. B. schlechte Verbindung) dauerhaft stehen.
+  const span = document.createElement('span');
+  span.style.cssText = 'font-size:.75rem;color:var(--text-muted);cursor:pointer;';
+  span.textContent = '⚠ Wetterdaten nicht geladen — tippen zum erneuten Versuch';
+  span.onclick = () => { if (window.htmx) htmx.trigger(el, 'retry-wetter'); };
+  el.innerHTML = '';
+  el.appendChild(span);
+}
+
+function renameColumn(colId, currentTitle) {
+  const newTitle = prompt('Neuer Name für den Abschnitt:', currentTitle);
+  if (newTitle === null) return;
+  const trimmed = newTitle.trim();
+  if (!trimmed || trimmed === currentTitle) return;
+  const body = new URLSearchParams({title: trimmed});
+  fetch('/einsatz/{{ incident.id }}/spalten/' + colId + '/titel', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': _csrfToken(), 'Content-Type': 'application/x-www-form-urlencoded'},
+    body,
+  }).then(function(r) {
+    if (r.ok) { location.reload(); } else { _colToast('Umbenennen fehlgeschlagen.', 'warn'); }
+  });
+}
+
+function setSectionLeader(colId, memberId) {
+  const body = new URLSearchParams({member_id: memberId || ''});
+  fetch('/einsatz/{{ incident.id }}/spalten/' + colId + '/abschnittsleiter', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': _csrfToken(), 'Content-Type': 'application/x-www-form-urlencoded'},
+    body,
+  }).then(function(r) {
+    if (r.ok) { location.reload(); } else { _colToast('Abschnittsleiter konnte nicht gesetzt werden.', 'warn'); }
+  });
+}
+
+function promptSectionLeaderFreitext(colId) {
+  const name = prompt('Abschnittsleiter (Freitext-Name):');
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  const body = new URLSearchParams({full_name: trimmed});
+  fetch('/einsatz/{{ incident.id }}/spalten/' + colId + '/abschnittsleiter-freitext', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': _csrfToken(), 'Content-Type': 'application/x-www-form-urlencoded'},
+    body,
+  }).then(function(r) {
+    if (r.ok) { location.reload(); } else { _colToast('Abschnittsleiter konnte nicht gesetzt werden.', 'warn'); }
+  });
+}
+
 function openQuickAddTask(colId) {
   const dlg = document.getElementById('quickAddTaskDialog');
   if (!dlg) return;
@@ -1027,6 +1095,7 @@ function vehicleWizard(incidentId) {
     gkFreeText: '',
     noteText: '',
     suggestions: [],
+    selectedId: '',
     async loadSuggestions() {
       try {
         const url = `/einsatz/${this.incidentId}/fahrzeug-vorschlaege` +
@@ -1035,6 +1104,11 @@ function vehicleWizard(incidentId) {
         if (!r.ok) { this.suggestions = []; return; }
         const data = await r.json();
         this.suggestions = data.items || [];
+        // Falls die bisherige Auswahl in der neuen Vorschlagsliste nicht mehr existiert
+        // (z. B. nach Suche), Auswahl zurücksetzen.
+        if (this.selectedId && !this.suggestions.some(s => s.id === this.selectedId)) {
+          this.selectedId = '';
+        }
       } catch (e) { this.suggestions = []; }
     }
   };

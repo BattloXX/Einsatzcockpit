@@ -61,6 +61,17 @@
       <label class="form-label">FUND-/AUFFINDEORT</label>
       <input type="text" name="location" class="form-input" value="{{ person.location or '' }}" placeholder="Stockwerk, Raum, Adresse …">
     </div>
+    <div class="form-group">
+      <label class="form-label">EINHEIT</label>
+      <select name="vehicle_id" class="form-select">
+        <option value="">– keine –</option>
+        {% for v in incident.vehicles %}
+        {% if v.removed_at is none %}
+        <option value="{{ v.id }}" {% if person.vehicle_id == v.id %}selected{% endif %}>{{ v.vehicle_master.display_label }} ({{ v.vehicle_master.dept.name }})</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+    </div>
   </form>
   {% else %}
   <div class="detail-section">
@@ -69,6 +80,7 @@
     {% if person.age_range %}<div class="detail-kv"><span class="detail-kv__label">Alter</span><span>{{ person.age_range }}</span></div>{% endif %}
     {% if person.name %}<div class="detail-kv"><span class="detail-kv__label">Name</span><span>{{ person.name }}</span></div>{% endif %}
     {% if person.location %}<div class="detail-kv"><span class="detail-kv__label">Ort</span><span>{{ person.location }}</span></div>{% endif %}
+    {% if person.vehicle_id %}<div class="detail-kv"><span class="detail-kv__label">Einheit</span><span>{{ person.vehicle.vehicle_master.display_label if person.vehicle else '–' }}</span></div>{% endif %}
   </div>
   {% endif %}
 
@@ -152,6 +164,8 @@
     </form>
     {% endif %}
   </div>
+
+  {% include "incident/_card_journal.html" %}
 
   <hr style="border:none; border-top:1px solid var(--border-color,#374151); margin:16px 0 8px;">
   <div>
