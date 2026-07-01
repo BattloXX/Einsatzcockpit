@@ -553,20 +553,50 @@ window.printJournalEntry = function(entryId) {
 };
 
 // WS: staff:changed → Banner + Tafel neu laden
+// STAB-6: bisher wurde bei ws.onclose kein neues WebSocket erzeugt (Bug:
+// arguments.callee referenzierte den onclose-Handler selbst statt eine
+// connect()-Funktion, die eine neue WebSocket-Instanz anlegt) — die Verbindung
+// blieb nach dem ersten Abbruch dauerhaft tot. Jetzt: echter Reconnect mit
+// Backoff+Jitter, plus Resync (Tafel + Journal neu laden) nach echtem Abbruch.
 (function() {
   var wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(wsProto + '://' + location.host + '/ws/lage/{{ lage.id }}');
-  ws.onmessage = function(ev) {
-    try {
-      var msg = JSON.parse(ev.data);
-      if (msg.type === 'staff:changed') {
-        htmx.ajax('GET', '/lage/{{ lage.id }}/stab/tafel', {target:'#stab-tafel', swap:'innerHTML'});
-      } else if (msg.type === 'journal_updated') {
-        htmx.ajax('GET', '/lage/{{ lage.id }}/stab/einsatzjournal', {target:'#journal-list', swap:'innerHTML'});
+  var wsUrl = wsProto + '://' + location.host + '/ws/lage/{{ lage.id }}';
+  var disconnectedAt = null;
+  var reconnectAttempt = 0;
+  var RELOAD_COOLDOWN_MS = 10000;
+  function connect() {
+    var ws = new WebSocket(wsUrl);
+    ws.onopen = function() {
+      if (disconnectedAt !== null) {
+        var downMs = Date.now() - disconnectedAt;
+        var lastResync = Number(sessionStorage.getItem('ec_last_stab_ws_resync') || 0);
+        if (downMs > 2000 && Date.now() - lastResync > RELOAD_COOLDOWN_MS) {
+          sessionStorage.setItem('ec_last_stab_ws_resync', String(Date.now()));
+          htmx.ajax('GET', '/lage/{{ lage.id }}/stab/tafel', {target:'#stab-tafel', swap:'innerHTML'});
+          htmx.ajax('GET', '/lage/{{ lage.id }}/stab/einsatzjournal', {target:'#journal-list', swap:'innerHTML'});
+        }
+        disconnectedAt = null;
       }
-    } catch(e) {}
-  };
-  ws.onclose = function() { setTimeout(arguments.callee, 3000); };
+      reconnectAttempt = 0;
+    };
+    ws.onmessage = function(ev) {
+      try {
+        var msg = JSON.parse(ev.data);
+        if (msg.type === 'staff:changed') {
+          htmx.ajax('GET', '/lage/{{ lage.id }}/stab/tafel', {target:'#stab-tafel', swap:'innerHTML'});
+        } else if (msg.type === 'journal_updated') {
+          htmx.ajax('GET', '/lage/{{ lage.id }}/stab/einsatzjournal', {target:'#journal-list', swap:'innerHTML'});
+        }
+      } catch(e) {}
+    };
+    ws.onclose = function() {
+      if (disconnectedAt === null) disconnectedAt = Date.now();
+      reconnectAttempt++;
+      var backoff = Math.min(1000 * Math.pow(2, reconnectAttempt), 15000);
+      setTimeout(connect, backoff + Math.random() * 500);
+    };
+  }
+  connect();
 })();
 </script>
 {% endblock %}

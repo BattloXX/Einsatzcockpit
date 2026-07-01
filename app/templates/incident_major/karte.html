@@ -1229,8 +1229,27 @@
   // ── WS: Live-Events ─────────────────────────────────────────────────────────
   var wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
   var wsUrl = wsProto + '://' + location.host + '/ws/lage/' + lageId;
+  var wsDisconnectedAt = null;
+  var wsReconnectAttempt = 0;
+  var WS_RELOAD_COOLDOWN_MS = 10000;
   function connectWS() {
     var ws = new WebSocket(wsUrl);
+    ws.onopen = function() {
+      // STAB-6: nach echtem Verbindungsabbruch (nicht nur kurzer Blip) neu
+      // laden, damit waehrend der Downtime verpasste Marker-/Sektor-Updates
+      // nicht stillschweigend verloren gehen (die Karte ist im Feld oft die
+      // am laengsten offene Ansicht).
+      if (wsDisconnectedAt !== null) {
+        var downMs = Date.now() - wsDisconnectedAt;
+        var lastReload = Number(sessionStorage.getItem('ec_last_karte_ws_reload') || 0);
+        if (downMs > 2000 && Date.now() - lastReload > WS_RELOAD_COOLDOWN_MS) {
+          sessionStorage.setItem('ec_last_karte_ws_reload', String(Date.now()));
+          location.reload();
+        }
+        wsDisconnectedAt = null;
+      }
+      wsReconnectAttempt = 0;
+    };
     ws.onmessage = function(ev) {
       try {
         var msg = JSON.parse(ev.data);
@@ -1280,7 +1299,12 @@
         }
       } catch(e) {}
     };
-    ws.onclose = function() { setTimeout(connectWS, 3000); };
+    ws.onclose = function() {
+      if (wsDisconnectedAt === null) wsDisconnectedAt = Date.now();
+      wsReconnectAttempt++;
+      var backoff = Math.min(1000 * Math.pow(2, wsReconnectAttempt), 15000);
+      setTimeout(connectWS, backoff + Math.random() * 500);
+    };
   }
   connectWS();
 

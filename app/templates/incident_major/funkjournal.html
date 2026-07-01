@@ -322,8 +322,26 @@ function openFjLm(lageId, siteId, label) {
 // ── WebSocket: Funkjournal live aktualisieren ─────────────────────────────
 (function() {
   var wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  var disconnectedAt = null;
+  var reconnectAttempt = 0;
+  var RELOAD_COOLDOWN_MS = 10000;
   function connect() {
     var ws = new WebSocket(wsProto + '://' + location.host + '/ws/lage/{{ lage.id }}');
+    ws.onopen = function() {
+      // STAB-6: nach echtem Verbindungsabbruch (nicht nur kurzer Blip) die
+      // Tabelle neu laden, damit waehrend der Downtime verpasste
+      // funkjournal:changed-Broadcasts nicht stillschweigend verloren gehen.
+      if (disconnectedAt !== null) {
+        var downMs = Date.now() - disconnectedAt;
+        var lastResync = Number(sessionStorage.getItem('ec_last_fj_ws_resync') || 0);
+        if (downMs > 2000 && Date.now() - lastResync > RELOAD_COOLDOWN_MS) {
+          sessionStorage.setItem('ec_last_fj_ws_resync', String(Date.now()));
+          htmx.ajax('GET', '/lage/{{ lage.id }}/funkjournal/rows', {target:'#fj-table-section', swap:'innerHTML'});
+        }
+        disconnectedAt = null;
+      }
+      reconnectAttempt = 0;
+    };
     ws.onmessage = function(ev) {
       try {
         var msg = JSON.parse(ev.data);
@@ -332,7 +350,12 @@ function openFjLm(lageId, siteId, label) {
         }
       } catch(e) {}
     };
-    ws.onclose = function() { setTimeout(connect, 3000); };
+    ws.onclose = function() {
+      if (disconnectedAt === null) disconnectedAt = Date.now();
+      reconnectAttempt++;
+      var backoff = Math.min(1000 * Math.pow(2, reconnectAttempt), 15000);
+      setTimeout(connect, backoff + Math.random() * 500);
+    };
   }
   connect();
 })();

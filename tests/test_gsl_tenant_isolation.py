@@ -154,3 +154,30 @@ def test_lage_board_renders_with_site_and_prio_buttons(client, setup_db):
     r = client.get(f"/lage/{lage_id}/funkjournal", follow_redirects=False)
     assert r.status_code == 200
     assert "fj-add-spin" in r.text
+
+
+def test_lage_stab_and_karte_render_with_ws_resync(client, setup_db):
+    """Smoke-Test PR13 (STAB-6): stab.html/karte.html muessen mit dem neuen
+    WS-Reconnect+Resync-Code fehlerfrei rendern (kein Jinja-/JS-Templating-Fehler)."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org = _make_org(db, "gsl-tenant-org-h")
+        user = _make_user(db, "gslstabuser", "Test1234!", org.id, role_code="recorder")
+        lage = MajorIncident(org_id=org.id, name="Testlage", status=MajorIncidentStatus.active)
+        db.add(lage)
+        db.commit()
+        lage_id = lage.id
+        username = user.username
+    finally:
+        db.close()
+
+    _login(client, username, "Test1234!")
+
+    r = client.get(f"/lage/{lage_id}/stab", follow_redirects=False)
+    assert r.status_code == 200
+    assert "ec_last_stab_ws_resync" in r.text
+
+    r = client.get(f"/lage/{lage_id}/karte", follow_redirects=False)
+    assert r.status_code == 200
+    assert "ec_last_karte_ws_reload" in r.text

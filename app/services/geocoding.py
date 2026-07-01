@@ -6,6 +6,7 @@ User-Agent muss gesetzt sein (OSM-Pflicht).
 """
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -14,8 +15,25 @@ from app.config import settings
 
 logger = logging.getLogger("einsatzleiter.geocoding")
 
-# 1-req/sec rate-drossel für die öffentliche Nominatim-Instanz
+# 1-req/sec rate-drossel für die öffentliche Nominatim-Instanz. Der Lock wird
+# NUR für die Drossel-Wartezeit gehalten (STAB-7) — nicht mehr für die gesamte
+# HTTP-Requestdauer, sonst serialisiert ein langsamer Nominatim-Call alle
+# gleichzeitig wartenden Geocode-Anfragen unnötig hintereinander.
 _lock = asyncio.Lock()
+_MIN_INTERVAL_S = 1.1
+_last_request_ts: float = 0.0
+
+
+async def _throttle() -> None:
+    """Stellt sicher, dass zwei Request-Starts mind. _MIN_INTERVAL_S auseinanderliegen."""
+    global _last_request_ts
+    async with _lock:
+        now = time.monotonic()
+        wait = _last_request_ts + _MIN_INTERVAL_S - now
+        if wait > 0:
+            await asyncio.sleep(wait)
+            now = time.monotonic()
+        _last_request_ts = now
 
 
 @dataclass
@@ -37,29 +55,26 @@ async def geocode_address(
 
     query = " ".join(parts)
 
-    async with _lock:
-        try:
-            async with httpx.AsyncClient(
-                headers={"User-Agent": settings.NOMINATIM_USER_AGENT},
-                timeout=settings.NOMINATIM_TIMEOUT_SECONDS,
-            ) as client:
-                resp = await client.get(
-                    f"{settings.NOMINATIM_BASE_URL}/search",
-                    params={
-                        "q": query,
-                        "format": "jsonv2",
-                        "limit": "1",
-                        "addressdetails": "0",
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-        except Exception as exc:
-            logger.warning("Nominatim-Anfrage fehlgeschlagen: %s", exc)
-            return None
-        finally:
-            # Sicherstellen, dass zwischen zwei Requests mind. 1 Sek. liegt
-            await asyncio.sleep(1.1)
+    await _throttle()
+    try:
+        async with httpx.AsyncClient(
+            headers={"User-Agent": settings.NOMINATIM_USER_AGENT},
+            timeout=settings.NOMINATIM_TIMEOUT_SECONDS,
+        ) as client:
+            resp = await client.get(
+                f"{settings.NOMINATIM_BASE_URL}/search",
+                params={
+                    "q": query,
+                    "format": "jsonv2",
+                    "limit": "1",
+                    "addressdetails": "0",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("Nominatim-Anfrage fehlgeschlagen: %s", exc)
+        return None
 
     if not data:
         return None
