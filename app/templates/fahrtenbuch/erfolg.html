@@ -37,4 +37,11 @@
     {% endif %}
   </div>
 </div>
+<script>
+// Erfolgreicher Fahrtenbuch-Submit → clientseitigen Offline-Draft (STAB-2)
+// derselben Formular-Instanz löschen (Schlüsselbildung siehe fahrtenbuch/neu.html).
+try {
+  localStorage.removeItem('fahrt_draft_v1:' + ('{{ fab_token or "" }}' || 'web'));
+} catch (e) {}
+</script>
 {% endblock %}

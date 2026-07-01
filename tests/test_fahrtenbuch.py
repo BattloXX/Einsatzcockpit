@@ -257,3 +257,36 @@ def test_verwaltung_ohne_login(client: TestClient):
     response = client.get("/verwaltung/fahrten", follow_redirects=False)
     # Entweder 302 (Login-Redirect) oder 401
     assert response.status_code in (302, 401, 403)
+
+
+def test_fahrtenbuch_neu_rendert_offline_draft_markup(client: TestClient, db_session, org):
+    """PR6 (STAB-2): Formular muss ohne Jinja-/Template-Fehler rendern und den
+    Offline-Draft-Hinweis + localStorage-Key enthalten."""
+    from app.core.security import hash_password
+    user = User(
+        username="fahrtenbuchtester",
+        password_hash=hash_password("Test1234!"),
+        display_name="Fahrtenbuch Tester",
+        org_id=org.id,
+        active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    role = db_session.query(Role).filter(Role.code == "readonly").first()
+    if role:
+        db_session.add(UserRole(user_id=user.id, role_id=role.id))
+    db_session.commit()
+
+    client.get("/login")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(
+        "/login",
+        data={"username": "fahrtenbuchtester", "password": "Test1234!", "_csrf": csrf},
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+
+    r = client.get("/fahrtenbuch/neu", follow_redirects=False)
+    assert r.status_code == 200
+    assert "draft-restored-hinweis" in r.text
+    assert "fahrt_draft_v1" in r.text

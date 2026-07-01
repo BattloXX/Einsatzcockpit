@@ -49,6 +49,11 @@
   </div>
   {% endif %}
 
+  <div class="alert alert--info" style="margin-bottom:1rem;display:none;" id="draft-restored-hinweis">
+    &#8635; Entwurf wiederhergestellt (deine letzten, nicht gespeicherten Eingaben).
+    <a href="#" id="draft-discard-link" style="margin-left:.5rem;">Verwerfen</a>
+  </div>
+
   <form method="post" action="/fahrtenbuch"
         x-data="fahrtForm()"
         @submit="onSubmit($event)"
@@ -251,7 +256,90 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
   if (!t) return;
   if (t.id === 'fahrzeug-felder' || t.id === 'zweck-felder') {
     if (window.Alpine) Alpine.initTree(t);
+    _fabApplyDraftTo(t);
   }
 });
+
+/* ─── Offline-Draft (STAB-2): Eingaben lokal sichern, bei Abbruch/Reload
+   wiederherstellen (Verbindungsabbruch am Fahrzeug ist der schmerzhafteste
+   Datenverlust in diesem Formular). Kein hx-post-Umbau — nativer POST bleibt,
+   der Draft ist nur eine clientseitige Sicherheitsnetz-Kopie. ─────────────── */
+(function() {
+  const draftKey = 'fahrt_draft_v1:' + (window.FAB_TOKEN || 'web');
+  const formEl = document.querySelector('form[action="/fahrtenbuch"]');
+  if (!formEl) return;
+
+  const SKIP_FIELDS = new Set(['_csrf', 't']);
+
+  function saveDraft() {
+    const data = new FormData(formEl);
+    const obj = {};
+    for (const [k, v] of data.entries()) {
+      if (SKIP_FIELDS.has(k)) continue;
+      obj[k] = v;
+    }
+    try { localStorage.setItem(draftKey, JSON.stringify(obj)); } catch (e) {}
+  }
+
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function clearDraft() {
+    try { localStorage.removeItem(draftKey); } catch (e) {}
+  }
+
+  window._fabApplyDraftTo = function(root) {
+    const draft = loadDraft();
+    if (!draft) return;
+    let applied = false;
+    root.querySelectorAll('[name]').forEach((el) => {
+      const name = el.name;
+      if (SKIP_FIELDS.has(name) || !(name in draft)) return;
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        el.checked = (el.value === draft[name]);
+      } else {
+        el.value = draft[name];
+      }
+      // change-Event feuern, damit Alpine-@change-Handler (z. B. schaden-Detailbereich
+      // ein-/ausblenden) auf die programmatisch wiederhergestellten Werte reagieren.
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      applied = true;
+    });
+    if (applied) {
+      const hint = document.getElementById('draft-restored-hinweis');
+      if (hint) hint.style.display = '';
+    }
+  };
+
+  // Statische Felder + Fahrzeug/Zweck-Auswahl direkt beim Laden wiederherstellen.
+  // _fabApplyDraftTo feuert für jedes wiederhergestellte Feld ein 'change' —
+  // bei fahrzeug_id/zweck_id löst das den bestehenden hx-trigger="change" aus,
+  // wodurch HTMX die dynamischen Unterformulare nachlädt (dort greift dann
+  // _fabApplyDraftTo erneut via htmx:afterSwap oben).
+  document.addEventListener('DOMContentLoaded', () => {
+    _fabApplyDraftTo(formEl);
+  });
+
+  formEl.addEventListener('input', saveDraft);
+  formEl.addEventListener('change', saveDraft);
+
+  const discardLink = document.getElementById('draft-discard-link');
+  if (discardLink) {
+    discardLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      clearDraft();
+      location.reload();
+    });
+  }
+
+  // Erfolgreicher Submit → Draft nicht mehr benötigt. Da es sich um einen
+  // nativen Full-Page-POST handelt, wird der Key auf der Erfolgsseite
+  // (erfolg.html) gelöscht — hier nur best-effort vor dem Absenden merken,
+  // falls der Request tatsächlich durchkommt (siehe erfolg.html).
+})();
 </script>
 {% endblock %}
