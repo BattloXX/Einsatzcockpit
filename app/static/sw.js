@@ -4,6 +4,13 @@
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
 const CACHE = 'ec-v2';
 const BOARD_CACHE = 'ec-board-v2';
+// STAB-3: Kartenkacheln-Cache. Eigener Bucket (getrennt von CACHE/BOARD_CACHE,
+// damit ein App-Update den Tile-Cache nicht mitloescht) mit weicher Groessen-
+// Grenze (LRU-artig: aeltester Eintrag zuerst raus) — Kacheln fuer ein Gebiet
+// koennen sonst unbegrenzt wachsen. Nuetzlich nicht nur bei Totalausfall,
+// sondern v.a. bei LANGSAMEM Netz (das haeufigere Problem im Feld).
+const TILE_CACHE = 'ec-tiles-v1';
+const TILE_CACHE_MAX_ENTRIES = 800;
 const PRECACHE = [
   '/',
   '/static/css/app.css',
@@ -24,16 +31,53 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE && k !== BOARD_CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE && k !== BOARD_CACHE && k !== TILE_CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
+
+// Kartenkacheln-Anbieter (aktuell: {a,b,c}.tile.openstreetmap.org, siehe
+// karte.html L.tileLayer). Nur DIESE Cross-Origin-Requests werden gecacht —
+// alle anderen (Fonts, Drittanbieter-APIs etc.) bleiben unangetastet.
+function isMapTileRequest(url) {
+  return /(^|\.)tile\.openstreetmap\.org$/.test(url.hostname);
+}
+
+async function trimTileCache(cache) {
+  const keys = await cache.keys();
+  const excess = keys.length - TILE_CACHE_MAX_ENTRIES;
+  if (excess > 0) {
+    // Cache.keys() liefert Eintraege in Einfuegereihenfolge -> die ersten N
+    // sind die aeltesten (einfache FIFO-Naeherung an LRU).
+    await Promise.all(keys.slice(0, excess).map(req => cache.delete(req)));
+  }
+}
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   // Never intercept WebSocket or API calls
   if (url.pathname.startsWith('/ws/') || url.pathname.startsWith('/api/')) return;
-  // Cross-origin requests (OSM tiles, etc.) — let the browser handle directly
+
+  // STAB-3: Kartenkacheln cache-first bedienen (schnell bei langsamem Netz),
+  // im Hintergrund auffrischen (stale-while-revalidate), Cache weich begrenzen.
+  if (isMapTileRequest(url)) {
+    e.respondWith(
+      caches.open(TILE_CACHE).then(cache =>
+        cache.match(e.request).then(cached => {
+          const fetchPromise = fetch(e.request).then(res => {
+            if (res.ok) {
+              cache.put(e.request, res.clone()).then(() => trimTileCache(cache));
+            }
+            return res;
+          }).catch(() => cached);
+          return cached || fetchPromise;
+        })
+      )
+    );
+    return;
+  }
+
+  // Cross-origin requests (außer Kartenkacheln oben) — Browser direkt zugreifen lassen
   if (url.origin !== location.origin) return;
 
   // Block mutating requests offline — return 503 with X-Offline header
