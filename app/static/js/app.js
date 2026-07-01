@@ -456,21 +456,34 @@ document.addEventListener('htmx:afterSwap', (e) => {
 
 
 /* ─── Offline: block writes with toast, reload on reconnect ─────── */
+function _showConnToast(msg) {
+  const appEl = document.querySelector('[x-data="appState()"]');
+  if (appEl && window.Alpine) Alpine.$data(appEl).addToast(msg, 'warn');
+}
+
 document.addEventListener('htmx:responseError', (e) => {
   const xhr = e.detail.xhr;
   if (xhr && xhr.status === 403) {
     let msg = 'Diese Aktion ist nicht erlaubt.';
     try { msg = JSON.parse(xhr.responseText).detail || msg; } catch {}
-    const appEl = document.querySelector('[x-data="appState()"]');
-    if (appEl && window.Alpine) Alpine.$data(appEl).addToast(msg, 'warn');
+    _showConnToast(msg);
     e.preventDefault();
   } else if (xhr && (xhr.status === 503 || xhr.status === 0) && xhr.getResponseHeader && xhr.getResponseHeader('X-Offline') === '1') {
-    const appEl = document.querySelector('[x-data="appState()"]');
-    if (appEl && window.Alpine) {
-      Alpine.$data(appEl).addToast('Aktion erfordert Verbindung — du bist offline.', 'warn');
-    }
+    _showConnToast('Aktion erfordert Verbindung — du bist offline.');
     e.preventDefault();
   }
+});
+
+// Echter Netzabriss/Timeout während des Sendens (kein HTTP-Response, daher
+// nicht über htmx:responseError erfassbar) — sonst bleibt der Spinner hängen
+// und der Nutzer merkt nicht, dass die Eingabe (z. B. Funkjournal, Lagemeldung)
+// nicht angekommen ist (STAB-1).
+document.addEventListener('htmx:sendError', (e) => {
+  _showConnToast('Keine Verbindung — Aktion wurde nicht gesendet.');
+});
+
+document.addEventListener('htmx:timeout', (e) => {
+  _showConnToast('Zeitüberschreitung — Aktion wurde eventuell nicht gesendet.');
 });
 
 // After SW intercepts a 503 for a mutating fetch (non-HTMX), also show a toast

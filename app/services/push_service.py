@@ -138,6 +138,7 @@ def send_push(subscription: PushSubscription, title: str, body: str,
             data=data,
             vapid_private_key=cfg["private_key"],
             vapid_claims={"sub": f"mailto:{cfg['claim_email']}"},
+            timeout=10,
         )
         return True
     except Exception as exc:

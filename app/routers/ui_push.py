@@ -97,6 +97,7 @@ async def test_push(request: Request, db: Session = Depends(get_db)):
             data=payload,
             vapid_private_key=cfg["private_key"],
             vapid_claims={"sub": f"mailto:{cfg['claim_email']}"},
+            timeout=10,
         )
         return JSONResponse({"ok": True})
     except Exception as exc:
