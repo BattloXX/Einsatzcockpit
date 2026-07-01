@@ -9,9 +9,17 @@ Handler `request.form()` weiterhin nutzen können.
 - Stimmt nichts → 403.
 
 Ausnahmen: /ws/*, /api/v1/* (X-API-Key authentifiziert), /static/*, /push/*.
+
+SEC-8: /api/v1/device/* ist eine Ausnahme von der Ausnahme — dieser Unterpfad ist
+NICHT API-Key- sondern Session-Cookie-authentifiziert (native Android-App via
+Capacitor, siehe app/routers/device_api.py). Ein vollwertiger CSRF-Token wäre für
+die native App aber nicht ohne App-seitige Änderung nachrüstbar (separates Repo),
+daher hier ein leichtgewichtiger Origin-Check statt Token-Pflicht: Browser senden
+bei Cross-Origin-Requests einen Origin-Header, der bei Fremd-Origin abgelehnt wird;
+native HTTP-Clients senden i. d. R. keinen Origin-Header und bleiben unberührt.
 """
 import secrets
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 from app.config import settings
 
@@ -20,6 +28,16 @@ CSRF_HEADER = "X-CSRF-Token"
 CSRF_FORM_FIELD = "_csrf"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 EXEMPT_PREFIXES = ("/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/")
+# Cookie-authentifizierte API-Endpunkte innerhalb von /api/v1/ (SEC-8) — kein
+# Token-Exempt-Freifahrtschein, sondern Origin-Check (siehe Docstring oben).
+_ORIGIN_CHECK_PREFIXES = ("/api/v1/device/",)
+
+
+def _allowed_origin_host() -> str | None:
+    try:
+        return urlsplit(settings.effective_public_base_url).netloc or None
+    except Exception:
+        return None
 
 
 def _parse_cookie(header_value: str) -> dict[str, str]:
@@ -70,6 +88,23 @@ class CSRFMiddleware:
 
         is_exempt = any(path.startswith(prefix) for prefix in EXEMPT_PREFIXES)
         needs_check = method not in SAFE_METHODS and not is_exempt
+
+        if (
+            is_exempt
+            and method not in SAFE_METHODS
+            and any(path.startswith(p) for p in _ORIGIN_CHECK_PREFIXES)
+        ):
+            origin = headers.get("origin")
+            if origin:
+                allowed_host = _allowed_origin_host()
+                origin_host = urlsplit(origin).netloc
+                if not allowed_host or origin_host != allowed_host:
+                    from starlette.responses import JSONResponse
+                    resp = JSONResponse(
+                        {"detail": "Ungültiger Origin"}, status_code=403,
+                    )
+                    await resp(scope, receive, send)
+                    return
 
         # Body buffern, damit wir ihn ggf. parsen UND später replayen können
         body_chunks: list[bytes] = []

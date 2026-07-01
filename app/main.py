@@ -18,7 +18,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentToken
 from app.models.major_incident import LageToken, MajorIncident, MajorIncidentStatus
-from app.models.user import Role, User
+from app.models.user import DeviceToken, Role, User
 from app.routers import (
     api_v1,
     api_weather,
@@ -286,6 +286,21 @@ async def session_middleware(request: Request, call_next):
                             user = _QrUser(user, recorder)  # type: ignore[assignment]
                     else:
                         user = None  # QR session without incident_id or lage_id → force re-login
+                elif user and is_device:
+                    # SEC-5: Device-Session-Widerruf. Das Session-Cookie speichert
+                    # keine device_token_id (10 Jahre gueltig, siehe
+                    # sign_session(device=True)) -- daher pruefen wir, ob der User
+                    # ueberhaupt noch ein NICHT widerrufenes Geraet hat. Schliesst
+                    # die Luecke fuer den Hauptfall (Geraet verloren -> Token
+                    # widerrufen -> Cookie soll sofort ungueltig werden). Bei
+                    # mehreren Geraeten je User bleibt die Pruefung grobkoernig,
+                    # solange das Cookie keinen Token-Bezug hat.
+                    has_active_device = db.query(DeviceToken).filter(
+                        DeviceToken.user_id == user_id,
+                        DeviceToken.revoked_at.is_(None),
+                    ).first() is not None
+                    if not has_active_device:
+                        user = None
                 elif user and not is_device:
                     # Regular session: refresh token to slide the inactivity window.
                     _refresh_user_id = user_id
