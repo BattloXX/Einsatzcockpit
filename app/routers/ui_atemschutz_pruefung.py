@@ -309,6 +309,12 @@ async def pruefung_liste(
         .order_by(AtemschutzGeraet.nummer)
         .all()
     )
+    org_settings = (
+        db.query(OrgSettings)
+        .filter(OrgSettings.org_id == user.org_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
     return templates.TemplateResponse(request, "atemschutz_pruefung/liste.html", {
         "user": user,
         "pruefungen": pruefungen,
@@ -317,6 +323,7 @@ async def pruefung_liste(
         "filter_status": status,
         "filter_von": von,
         "filter_bis": bis,
+        "ap_token": org_settings.atemschutz_pruef_token if org_settings else None,
     })
 
 

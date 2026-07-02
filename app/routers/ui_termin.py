@@ -292,11 +292,27 @@ async def termin_loeschen(
 
 # ── Teilnehmer-Komponente ─────────────────────────────────────────────────────
 
-def _lade_teilnahmen(db: Session, bezug_typ: str, bezug_id: int) -> list[Teilnahme]:
-    return db.query(Teilnahme).filter(
+_TEILNAHME_SORT_VALUES = {"vorname", "nachname"}
+
+
+def _lade_teilnahmen(db: Session, bezug_typ: str, bezug_id: int, sort: str = "") -> list[Teilnahme]:
+    teilnahmen = db.query(Teilnahme).filter(
         Teilnahme.bezug_typ == bezug_typ,
         Teilnahme.bezug_id == bezug_id,
     ).order_by(Teilnahme.hinzugefuegt_am).all()
+
+    if sort in _TEILNAHME_SORT_VALUES:
+        def _key(t: Teilnahme) -> tuple[str, str]:
+            if t.mitglied:
+                vorname, nachname = t.mitglied.firstname, t.mitglied.lastname
+            else:
+                vorname = nachname = t.freitext_name or ""
+            primary = vorname if sort == "vorname" else nachname
+            secondary = nachname if sort == "vorname" else vorname
+            return (primary.lower(), secondary.lower())
+        teilnahmen = sorted(teilnahmen, key=_key)
+
+    return teilnahmen
 
 
 @router.get("/teilnahme/{bezug_typ}/{bezug_id}/liste", response_class=HTMLResponse)
@@ -304,13 +320,14 @@ async def teilnahme_liste(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
+    sort: str = "",
     db: Session = Depends(get_db),
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
         raise HTTPException(status_code=422, detail="Ungültiger Bezug-Typ")
-    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id)
+    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id, sort)
     funktionen = _load_funktionen(db, getattr(user, "org_id", None))
     fahrzeuge = _load_fahrzeuge(db)
     return templates.TemplateResponse(request, "termin/_teilnahme_liste.html", {
@@ -321,6 +338,7 @@ async def teilnahme_liste(
         "funktionen": funktionen,
         "fahrzeuge": fahrzeuge,
         "can_edit": _can_edit(user),
+        "sort": sort,
     })
 
 
@@ -396,6 +414,7 @@ async def teilnahme_hinzufuegen(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
+    sort: str = "",
     db: Session = Depends(get_db),
     org_id: CurrentOrgId = None,
 ):
@@ -459,7 +478,7 @@ async def teilnahme_hinzufuegen(
         ))
 
     db.commit()
-    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id)
+    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id, sort)
     funktionen = _load_funktionen(db, org_id)
     fahrzeuge = _load_fahrzeuge(db)
     return templates.TemplateResponse(request, "termin/_teilnahme_liste.html", {
@@ -470,6 +489,7 @@ async def teilnahme_hinzufuegen(
         "funktionen": funktionen,
         "fahrzeuge": fahrzeuge,
         "can_edit": _can_edit(user),
+        "sort": sort,
     })
 
 
@@ -477,6 +497,7 @@ async def teilnahme_hinzufuegen(
 async def teilnahme_bearbeiten(
     request: Request,
     teilnahme_id: int,
+    sort: str = "",
     db: Session = Depends(get_db),
     org_id: CurrentOrgId = None,
 ):
@@ -501,7 +522,7 @@ async def teilnahme_bearbeiten(
     db.commit()
 
     # Partial-Response: aktualisierte Zeile
-    teilnahmen = _lade_teilnahmen(db, teilnahme.bezug_typ, teilnahme.bezug_id)
+    teilnahmen = _lade_teilnahmen(db, teilnahme.bezug_typ, teilnahme.bezug_id, sort)
     funktionen = _load_funktionen(db, org_id)
     fahrzeuge = _load_fahrzeuge(db)
     return templates.TemplateResponse(request, "termin/_teilnahme_liste.html", {
@@ -512,6 +533,7 @@ async def teilnahme_bearbeiten(
         "funktionen": funktionen,
         "fahrzeuge": fahrzeuge,
         "can_edit": _can_edit(user),
+        "sort": sort,
     })
 
 
@@ -519,6 +541,7 @@ async def teilnahme_bearbeiten(
 async def teilnahme_entfernen(
     request: Request,
     teilnahme_id: int,
+    sort: str = "",
     db: Session = Depends(get_db),
     org_id: CurrentOrgId = None,
 ):
@@ -531,7 +554,7 @@ async def teilnahme_entfernen(
     db.delete(teilnahme)
     db.commit()
 
-    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id)
+    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id, sort)
     funktionen = _load_funktionen(db, org_id)
     fahrzeuge = _load_fahrzeuge(db)
     return templates.TemplateResponse(request, "termin/_teilnahme_liste.html", {
@@ -541,6 +564,7 @@ async def teilnahme_entfernen(
         "bezug_id": bezug_id,
         "funktionen": funktionen,
         "fahrzeuge": fahrzeuge,
+        "sort": sort,
         "can_edit": _can_edit(user),
     })
 
@@ -552,13 +576,14 @@ async def teilnahme_druck(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
+    sort: str = "",
     db: Session = Depends(get_db),
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
         raise HTTPException(status_code=422, detail="Ungültiger Bezug-Typ")
-    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id)
+    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id, sort)
     titel, beginn_dt, ort_str = _bezug_meta(db, bezug_typ, bezug_id)
     return templates.TemplateResponse(request, "termin/druck.html", {
         "user": user,
@@ -577,13 +602,14 @@ async def teilnahme_export_pdf(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
+    sort: str = "",
     db: Session = Depends(get_db),
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
         raise HTTPException(status_code=422, detail="Ungültiger Bezug-Typ")
-    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id)
+    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id, sort)
     titel, beginn_dt, ort_str = _bezug_meta(db, bezug_typ, bezug_id)
 
     from app.services.pdf_service import render_teilnahme_pdf
@@ -610,13 +636,14 @@ async def teilnahme_export_xlsx(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
+    sort: str = "",
     db: Session = Depends(get_db),
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     if bezug_typ not in _BEZUG_TYPEN:
         raise HTTPException(status_code=422, detail="Ungültiger Bezug-Typ")
-    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id)
+    teilnahmen = _lade_teilnahmen(db, bezug_typ, bezug_id, sort)
     titel, beginn_dt, ort_str = _bezug_meta(db, bezug_typ, bezug_id)
 
     xlsx_bytes = _build_xlsx(teilnahmen, bezug_typ, titel, beginn_dt, ort_str, org=user.org)

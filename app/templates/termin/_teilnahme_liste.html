@@ -1,5 +1,15 @@
 {% set is_einsatz = bezug_typ == 'einsatz' %}
+{% set sort = sort|default('') %}
 {% if teilnahmen %}
+<div style="display:flex;align-items:center;gap:6px;padding:8px 14px 0;font-size:.78rem;color:var(--text-muted);">
+  <span>Sortierung:</span>
+  <select onchange="teilnahmeSetSort('{{ bezug_typ }}', {{ bezug_id }}, this.value)"
+          style="font-size:.8rem;background:var(--surface-high);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);">
+    <option value="" {% if not sort %}selected{% endif %}>Erfassungsreihenfolge</option>
+    <option value="nachname" {% if sort == 'nachname' %}selected{% endif %}>Nachname</option>
+    <option value="vorname" {% if sort == 'vorname' %}selected{% endif %}>Vorname</option>
+  </select>
+</div>
 <table style="width:100%;border-collapse:collapse;">
   <thead>
     <tr style="border-bottom:2px solid var(--border);">
@@ -36,7 +46,7 @@
         <input type="checkbox"
                {% if t.ausgerueckt %}checked{% endif %}
                {% if can_edit %}
-               hx-patch="/teilnahme/{{ t.id }}"
+               hx-patch="/teilnahme/{{ t.id }}?sort={{ sort }}"
                hx-trigger="change"
                hx-target="#teilnahme-liste-container"
                hx-swap="innerHTML"
@@ -50,7 +60,7 @@
       <td style="padding:6px 14px;">
         {% if can_edit %}
         <select name="funktion_id"
-                hx-patch="/teilnahme/{{ t.id }}"
+                hx-patch="/teilnahme/{{ t.id }}?sort={{ sort }}"
                 hx-trigger="change"
                 hx-target="#teilnahme-liste-container"
                 hx-swap="innerHTML"
@@ -70,7 +80,7 @@
       <td style="padding:6px 14px;">
         {% if can_edit %}
         <select name="fahrzeug_id"
-                hx-patch="/teilnahme/{{ t.id }}"
+                hx-patch="/teilnahme/{{ t.id }}?sort={{ sort }}"
                 hx-trigger="change"
                 hx-target="#teilnahme-liste-container"
                 hx-swap="innerHTML"
@@ -105,7 +115,7 @@
         <input type="text" name="notiz"
                value="{{ t.notiz or '' }}"
                placeholder="Notiz…"
-               hx-patch="/teilnahme/{{ t.id }}"
+               hx-patch="/teilnahme/{{ t.id }}?sort={{ sort }}"
                hx-trigger="change"
                hx-target="#teilnahme-liste-container"
                hx-swap="innerHTML"
@@ -131,7 +141,7 @@
       {% if can_edit %}
       <td style="padding:6px 10px;text-align:right;">
         <button type="button"
-                hx-delete="/teilnahme/{{ t.id }}"
+                hx-delete="/teilnahme/{{ t.id }}?sort={{ sort }}"
                 hx-target="#teilnahme-liste-container"
                 hx-swap="innerHTML"
                 hx-confirm="Teilnehmer entfernen?"

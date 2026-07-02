@@ -54,11 +54,11 @@
           + Teilnehmer
         </button>
         {% endif %}
-        <a href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/druck" target="_blank"
+        <a id="teilnahme-druck-link" href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/druck" target="_blank"
            class="btn btn--ghost btn--sm">🖨 Drucken</a>
-        <a href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.pdf"
+        <a id="teilnahme-pdf-link" href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.pdf"
            class="btn btn--ghost btn--sm">📄 PDF</a>
-        <a href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.xlsx"
+        <a id="teilnahme-xlsx-link" href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.xlsx"
            class="btn btn--ghost btn--sm">📊 Excel</a>
       </div>
     </div>

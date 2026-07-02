@@ -9,6 +9,9 @@
       <h1>Atemschutzgeräteprüfung</h1>
       <p class="page-header__sub">Alle erfassten Prüfprotokolle</p>
     </div>
+    {% if ap_token %}
+    <a href="/ap/{{ ap_token }}" class="btn btn--primary btn--sm">+ Prüfung erfassen</a>
+    {% endif %}
   </div>
 
   <form method="get" action="/atemschutz-pruefung" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;margin-bottom:1rem;">
@@ -40,6 +43,9 @@
     <button type="submit" class="btn btn--primary btn--sm">Filtern</button>
     <a href="/atemschutz-pruefung/export.xlsx?geraet_id={{ filter_geraet_id }}&von={{ filter_von }}&bis={{ filter_bis }}"
        class="btn btn--ghost btn--sm">Excel-Export</a>
+    {% if pruefungen %}
+    <button type="submit" form="sammel-form" class="btn btn--primary btn--sm">Auswahl als PDF drucken</button>
+    {% endif %}
   </form>
 
   <form method="post" action="/atemschutz-pruefung/druck-pdf" id="sammel-form">
@@ -80,9 +86,6 @@
         </tbody>
       </table>
     </div>
-    {% if pruefungen %}
-    <button type="submit" class="btn btn--primary btn--sm" style="margin-top:.75rem;">Auswahl als PDF drucken</button>
-    {% endif %}
   </form>
 </div>
 {% endblock %}

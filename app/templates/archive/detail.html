@@ -189,9 +189,9 @@
         <button type="button" class="btn btn--primary btn--sm"
                 onclick="document.getElementById('mannschaft-dialog').showModal()">+ Teilnehmer</button>
         {% endif %}
-        <a href="/teilnahme/einsatz/{{ incident.id }}/druck" target="_blank" class="btn btn--ghost btn--sm">🖨 Drucken</a>
-        <a href="/teilnahme/einsatz/{{ incident.id }}/export.pdf" class="btn btn--ghost btn--sm">📄 PDF</a>
-        <a href="/teilnahme/einsatz/{{ incident.id }}/export.xlsx" class="btn btn--ghost btn--sm">📊 Excel</a>
+        <a id="teilnahme-druck-link" href="/teilnahme/einsatz/{{ incident.id }}/druck" target="_blank" class="btn btn--ghost btn--sm">🖨 Drucken</a>
+        <a id="teilnahme-pdf-link" href="/teilnahme/einsatz/{{ incident.id }}/export.pdf" class="btn btn--ghost btn--sm">📄 PDF</a>
+        <a id="teilnahme-xlsx-link" href="/teilnahme/einsatz/{{ incident.id }}/export.xlsx" class="btn btn--ghost btn--sm">📊 Excel</a>
       </div>
     </div>
     <div id="mannschaft-container"

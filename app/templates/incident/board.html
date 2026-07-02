@@ -95,15 +95,13 @@
     }
     .board-tabs { display: none !important; }
     .task-suggestions { display: none !important; }
-    /* Mobil: Kopfzeile auf Spaltenwechsel reduzieren, Rest ins "..."-Menü/entfernt */
+    /* Mobil: Kopfzeile auf Spaltenwechsel reduzieren, maximaler Platz fuer die Karten */
     .incident-header__timer { display: none !important; }
-    .incident-header__navlink { display: none !important; }
-    .header-dropdown--ki { display: none !important; }
-    .incident-header__actions .btn--danger { display: none !important; }
+    .incident-header__actions { display: none !important; }
     #wetter-details { display: none !important; }
-    .incident-header__weather-menu-item { display: flex !important; }
+    .bottom-nav { display: none !important; }
+    .main-content { padding-bottom: 0 !important; }
   }
-  .incident-header__weather-menu-item { display: none; }
 </style>
 {% endblock %}
 
@@ -142,6 +140,8 @@
     <span class="incident-header__address">{{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</span>
     {% endif %}
     {% endif %}
+    {# ── Mobile Lane Select (nur ≤760px) – neben dem Einsatz, spart Platz für die Karten ── #}
+    <select class="mobile-lane-select" id="mobile-lane-select" title="Ansicht wechseln"></select>
   </div>
   <div class="incident-header__timer">
     <span class="timer" x-text="timerDisplay">00:00</span>
@@ -211,21 +211,12 @@
     </div>
     {% endif %}
 
-    {# ── Mehr-Menü: selten benötigte Aktionen (mobil auch: Wetter) ───────── #}
+    {# ── Mehr-Menü: selten benötigte Aktionen (nur Desktop, mobil ausgeblendet) ── #}
     <div class="header-dropdown header-dropdown--more" x-data="{open:false}" @click.outside="open=false">
       <button class="btn btn--sm btn--ghost"
               @click="open=!open"
-              {{ tip('Weitere Aktionen: QR-Code, PDF-Export' ~ (', Wetter' if weather_enabled else '')) }}>⋯</button>
+              {{ tip('Weitere Aktionen: QR-Code, PDF-Export') }}>⋯</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms>
-        {% if weather_enabled %}
-        <button type="button" class="dropdown-item incident-header__weather-menu-item" @click="open=false"
-                hx-get="/einsatz/{{ incident.id }}/wetter/panel"
-                hx-target="#wetter-mobile-panel"
-                hx-swap="innerHTML"
-                hx-on::after-swap="document.getElementById('wetterMobileDialog').showModal()">
-          <span class="di-icon">🌦</span> Wetter
-        </button>
-        {% endif %}
         <a href="/einsatz/{{ incident.id }}/qr" class="dropdown-item">
           <span class="di-icon">🔗</span> QR-Code anzeigen
         </a>
@@ -241,9 +232,6 @@
             onclick="if(confirm('Einsatz wirklich abschließen?')) { fetch('/einsatz/{{ incident.id }}/abschliessen', {method:'POST'}); }"
             {{ tip('Einsatz abschließen und ins Archiv verschieben') }}>Abschließen</button>
     {% endif %}
-
-    {# ── Mobile Lane Select (nur ≤760px) ─────────────────────────────── #}
-    <select class="mobile-lane-select" id="mobile-lane-select" title="Ansicht wechseln"></select>
   </div>
 </div>
 
@@ -264,21 +252,6 @@
     <span style="font-size:.75rem;color:var(--text-muted);">Lade…</span>
   </div>
 </details>
-
-<!-- Wetter Dialog (mobil, erreichbar über das "..."-Menü) -->
-<dialog class="modal" id="wetterMobileDialog" x-data="{}">
-  <div class="modal__content" style="min-width:min(340px,90vw);">
-    <div class="modal__header">
-      <h3 class="modal__title">🌦 Wetter</h3>
-      <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
-    </div>
-    <div class="modal__body">
-      <div id="wetter-mobile-panel" style="padding:4px 0;">
-        <span style="font-size:.75rem;color:var(--text-muted);">Lade…</span>
-      </div>
-    </div>
-  </div>
-</dialog>
 {% endif %}
 
 <div class="board-wrap" x-data="incidentBoard({{ incident.id }}, '{{ incident.alarm_type_code }}', '{{ incident.started_at|local_iso }}')">

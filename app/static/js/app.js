@@ -6,6 +6,20 @@ window.closeSiteDetailPanel = function(el) {
   if (panel) { panel.classList.remove('open'); }
 };
 
+/* ─── Teilnahme-Liste: Sortierung wechseln (Mannschaft/Termin/Archiv-Seite) ─── */
+window.teilnahmeSetSort = function(bezugTyp, bezugId, sort) {
+  const container = document.querySelector('#teilnahme-liste-container, #mannschaft-container');
+  if (!container || typeof htmx === 'undefined') return;
+  const url = '/teilnahme/' + bezugTyp + '/' + bezugId + '/liste' + (sort ? ('?sort=' + sort) : '');
+  htmx.ajax('GET', url, { target: container, swap: 'innerHTML' });
+  ['teilnahme-druck-link', 'teilnahme-pdf-link', 'teilnahme-xlsx-link'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const base = el.getAttribute('href').split('?')[0];
+    el.setAttribute('href', sort ? (base + '?sort=' + sort) : base);
+  });
+};
+
 /* ─── Alpine.js Global App State ────────────────────────────────── */
 document.addEventListener('alpine:init', () => {
   Alpine.data('appState', () => ({
