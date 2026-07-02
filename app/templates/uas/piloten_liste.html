@@ -1,58 +1,117 @@
-﻿{% extends "uas/_layout.html" %}
+{% extends "uas/_layout.html" %}
 {% block title %}Piloten – UAS{% endblock %}
 
+{% block head_extra %}
+<style>
+.uas-header{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;}
+.uas-header h1{font-size:1.6rem;font-weight:700;margin:0;display:flex;align-items:center;gap:.5rem;}
+.uas-header__sub{font-size:.85rem;color:var(--text-muted);margin:.2rem 0 0;}
+
+.uas-card{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);overflow:hidden;}
+.uas-table{width:100%;border-collapse:collapse;}
+.uas-table th{background:var(--surface-mid);color:var(--text-muted);font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;text-align:left;font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+.uas-table td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:.85rem;}
+.uas-table tbody tr:last-child td{border-bottom:none;}
+.uas-table tbody tr:hover td{background:rgba(255,255,255,.03);}
+.uas-table tbody tr.uas-row--inactive td{opacity:.55;}
+
+.uas-badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:999px;font-weight:700;font-size:.66rem;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;border:1px solid transparent;white-space:nowrap;}
+.uas-badge--red{background:rgba(216,48,48,.18);color:var(--red-light);border-color:rgba(216,48,48,.3);}
+.uas-badge--yellow{background:rgba(242,176,46,.18);color:var(--yellow);border-color:rgba(242,176,46,.3);}
+.uas-badge--green{background:rgba(24,169,87,.18);color:var(--green);border-color:rgba(24,169,87,.3);}
+.uas-badge--gray{background:var(--surface-high);color:var(--text-muted);border-color:var(--border);}
+
+.uas-mobile-list{display:none;flex-direction:column;gap:.6rem;}
+.uas-mcard{--uas-accent:var(--red);background:var(--surface-low);border:1px solid var(--border);border-left:4px solid var(--uas-accent);border-radius:var(--radius-md);padding:.9rem;box-shadow:var(--shadow-card);}
+.uas-mcard__top{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;margin-bottom:.6rem;}
+.uas-mcard__title{font-size:.95rem;font-weight:700;}
+.uas-mcard__row{display:flex;align-items:center;gap:.4rem;font-size:.82rem;color:var(--text-muted);margin-top:.35rem;}
+.uas-mcard__footer{display:flex;align-items:center;justify-content:flex-end;border-top:1px solid var(--border);margin-top:.7rem;padding-top:.6rem;}
+
+@media (max-width:760px){
+  .uas-table-wrap{display:none;}
+  .uas-mobile-list{display:flex;}
+}
+</style>
+{% endblock %}
+
 {% block uas_content %}
-<div class="page-header">
+<div class="uas-header">
   <div>
-    <h1>&#x1F9D1;&#x200D;&#x2708;&#xFE0F; Piloten</h1>
-    <p class="page-header__sub">Piloten, Zertifikate und Currency-Status</p>
+    <h1><span>&#x1F9D1;&#x200D;&#x2708;&#xFE0F;</span> Piloten</h1>
+    <p class="uas-header__sub">Piloten, Zertifikate und Currency-Status</p>
   </div>
   <div class="page-header__actions">
-    <a href="/uas/piloten/neu" class="btn btn--primary">+ Pilot anlegen</a>
-    <a href="/uas/" class="btn btn--ghost">&#x2190; &Uuml;bersicht</a>
+    <a href="/uas/piloten/neu" class="btn btn--primary btn--sm">+ Pilot anlegen</a>
+    <a href="/uas/" class="btn btn--ghost btn--sm">&#x2190; &Uuml;bersicht</a>
   </div>
 </div>
 
 {% if rows %}
-<div class="card">
-  <div class="card-body" style="padding:0">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>A1/A3 g&uuml;ltig bis</th>
-          <th>A2 g&uuml;ltig bis</th>
-          <th>BOS-Stufe</th>
-          <th>LFV</th>
-          <th>Freigabe</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for row in rows %}
-      <tr style="{% if not row.pilot.aktiv %}opacity:.5{% endif %}">
-        <td>
-          <strong>{{ row.pilot.vorname }} {{ row.pilot.nachname }}</strong>
-          {% if not row.pilot.aktiv %}<span class="badge badge--muted" style="margin-left:.25rem">inaktiv</span>{% endif %}
-        </td>
-        <td style="font-size:.85rem">{{ row.pilot.a1a3_gueltig_bis or '–' }}</td>
-        <td style="font-size:.85rem">{{ row.pilot.a2_gueltig_bis or '–' }}</td>
-        <td>Stufe {{ row.pilot.bos_stufe }}</td>
-        <td>{% if row.pilot.lfv_zugelassen %}<span class="badge badge--success">&#x2713;</span>{% else %}<span class="badge badge--error">fehlt</span>{% endif %}</td>
-        <td>
-          {% set fs = row.freigabe.status %}
-          {% if fs == 'gruen' %}<span class="badge badge--success">&#x2713; freigegeben</span>
-          {% elif fs == 'gelb' %}<span class="badge badge--warn">&#x26A0; bald ablaufend</span>
-          {% else %}<span class="badge badge--error">&#x26D4; gesperrt</span>{% endif %}
-        </td>
-        <td><a href="/uas/piloten/{{ row.pilot.id }}" class="btn btn--ghost btn--sm">Details</a></td>
+{# Desktop-Tabelle #}
+<div class="uas-card uas-table-wrap" style="overflow-x:auto;">
+  <table class="uas-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>A1/A3 g&uuml;ltig bis</th>
+        <th>A2 g&uuml;ltig bis</th>
+        <th>BOS-Stufe</th>
+        <th>LFV</th>
+        <th>Freigabe</th>
+        <th style="text-align:right;">Aktion</th>
       </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+    <tr class="{% if not row.pilot.aktiv %}uas-row--inactive{% endif %}">
+      <td>
+        <strong>{{ row.pilot.vorname }} {{ row.pilot.nachname }}</strong>
+        {% if not row.pilot.aktiv %}<span class="uas-badge uas-badge--gray" style="margin-left:.4rem;">inaktiv</span>{% endif %}
+      </td>
+      <td style="color:var(--text-muted);">{{ row.pilot.a1a3_gueltig_bis or '–' }}</td>
+      <td style="color:var(--text-muted);">{{ row.pilot.a2_gueltig_bis or '–' }}</td>
+      <td>Stufe {{ row.pilot.bos_stufe }}</td>
+      <td>{% if row.pilot.lfv_zugelassen %}<span class="uas-badge uas-badge--green">&#x2713;</span>{% else %}<span class="uas-badge uas-badge--red">fehlt</span>{% endif %}</td>
+      <td>
+        {% set fs = row.freigabe.status %}
+        {% if fs == 'gruen' %}<span class="uas-badge uas-badge--green">&#x2713; freigegeben</span>
+        {% elif fs == 'gelb' %}<span class="uas-badge uas-badge--yellow">&#x26A0; bald ablaufend</span>
+        {% else %}<span class="uas-badge uas-badge--red">&#x26D4; gesperrt</span>{% endif %}
+      </td>
+      <td style="text-align:right;"><a href="/uas/piloten/{{ row.pilot.id }}" class="btn btn--ghost btn--sm">Details</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# Mobile-Karten #}
+<div class="uas-mobile-list">
+  {% for row in rows %}
+  {% set fs = row.freigabe.status %}
+  <div class="uas-mcard" style="--uas-accent:{% if fs == 'gruen' %}var(--green){% elif fs == 'gelb' %}var(--yellow){% else %}var(--red){% endif %};{% if not row.pilot.aktiv %}opacity:.6;{% endif %}">
+    <div class="uas-mcard__top">
+      <div class="uas-mcard__title">
+        {{ row.pilot.vorname }} {{ row.pilot.nachname }}
+        {% if not row.pilot.aktiv %}<span class="uas-badge uas-badge--gray" style="margin-left:.3rem;">inaktiv</span>{% endif %}
+      </div>
+      {% if fs == 'gruen' %}<span class="uas-badge uas-badge--green">freigegeben</span>
+      {% elif fs == 'gelb' %}<span class="uas-badge uas-badge--yellow">bald ablaufend</span>
+      {% else %}<span class="uas-badge uas-badge--red">gesperrt</span>{% endif %}
+    </div>
+    <div class="uas-mcard__row">A1/A3 bis {{ row.pilot.a1a3_gueltig_bis or '–' }} &middot; A2 bis {{ row.pilot.a2_gueltig_bis or '–' }}</div>
+    <div class="uas-mcard__row">
+      Stufe {{ row.pilot.bos_stufe }} &middot;
+      {% if row.pilot.lfv_zugelassen %}<span class="uas-badge uas-badge--green">LFV &#x2713;</span>{% else %}<span class="uas-badge uas-badge--red">LFV fehlt</span>{% endif %}
+    </div>
+    <div class="uas-mcard__footer">
+      <a href="/uas/piloten/{{ row.pilot.id }}" class="btn btn--ghost btn--sm">Details</a>
+    </div>
   </div>
+  {% endfor %}
 </div>
 {% else %}
-<div class="alert">Noch keine Piloten angelegt. <a href="/uas/piloten/neu">Ersten Piloten anlegen</a>.</div>
+<div class="alert" style="margin-top:1rem;">Noch keine Piloten angelegt. <a href="/uas/piloten/neu">Ersten Piloten anlegen</a>.</div>
 {% endif %}
 {% endblock %}

@@ -1,25 +1,46 @@
 {% extends "base.html" %}
-{% block title %}Atemschutzgeräte-Übersicht{% endblock %}
+{% block title %}Atemschutzger&auml;te-&Uuml;bersicht{% endblock %}
+
+{% block head_extra %}
+<style>
+.ap-page{max-width:1280px;margin:0 auto;padding:1rem;}
+.ap-header{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:.75rem;}
+.ap-header h1{font-size:1.6rem;font-weight:700;margin:0;}
+.ap-header__sub{font-size:.85rem;color:var(--text-muted);margin:.2rem 0 0;}
+
+.ap-card{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-card);}
+.ap-table{width:100%;border-collapse:collapse;}
+.ap-table th{background:var(--surface-mid);color:var(--text-muted);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;text-align:left;font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+.ap-table td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:.85rem;}
+.ap-table tbody tr:last-child td{border-bottom:none;}
+.ap-table tbody tr:hover td{background:rgba(255,255,255,.03);}
+
+.ap-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-weight:700;font-size:.66rem;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;border:1px solid transparent;white-space:nowrap;}
+.ap-badge--green{background:rgba(24,169,87,.18);color:var(--green);border-color:rgba(24,169,87,.3);}
+.ap-badge--red{background:rgba(216,48,48,.18);color:var(--red-light);border-color:rgba(216,48,48,.3);}
+.ap-badge--gray{background:var(--surface-high);color:var(--text-muted);border-color:var(--border);}
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container" style="padding:1rem;">
-  {% include "atemschutz_pruefung/_tabs.html" %}
-  <div class="page-header">
+<div class="ap-page">
+  <div class="ap-header">
     <div>
-      <h1>Atemschutzgeräte-Übersicht</h1>
-      <p class="page-header__sub">Letzte Prüfung je Gerät</p>
+      <h1>Atemschutzger&auml;te-&Uuml;bersicht</h1>
+      <p class="ap-header__sub">Letzte Pr&uuml;fung je Ger&auml;t</p>
     </div>
   </div>
+  {% include "atemschutz_pruefung/_tabs.html" %}
 
-  <div class="card">
-    <table class="table">
+  <div class="ap-card" style="overflow-x:auto;">
+    <table class="ap-table">
       <thead>
         <tr>
-          <th>Gerät</th>
+          <th>Ger&auml;t</th>
           <th>Aktiv</th>
-          <th>Letzte Prüfung</th>
+          <th>Letzte Pr&uuml;fung</th>
           <th>Status</th>
-          <th></th>
+          <th style="text-align:right;">Aktion</th>
         </tr>
       </thead>
       <tbody>
@@ -27,17 +48,17 @@
         {% set p = letzte_pruefung.get(g.id) %}
         <tr>
           <td>{{ g.anzeige_label }}</td>
-          <td>{% if g.aktiv %}<span class="badge badge--success">Ja</span>{% else %}<span class="badge badge--gray">Nein</span>{% endif %}</td>
+          <td>{% if g.aktiv %}<span class="ap-badge ap-badge--green">Ja</span>{% else %}<span class="ap-badge ap-badge--gray">Nein</span>{% endif %}</td>
           <td>{{ p.eingesetzt_am.strftime('%d.%m.%Y') if p else '– keine Prüfung –' }}</td>
           <td>
-            {% if not p %}<span class="badge badge--gray">Keine Prüfung</span>
-            {% elif p.alles_ok %}<span class="badge badge--success">In Ordnung</span>
-            {% else %}<span class="badge badge--red">{{ p.defekte_punkte|join(', ') }}</span>{% endif %}
+            {% if not p %}<span class="ap-badge ap-badge--gray">Keine Pr&uuml;fung</span>
+            {% elif p.alles_ok %}<span class="ap-badge ap-badge--green">In Ordnung</span>
+            {% else %}<span class="ap-badge ap-badge--red">{{ p.defekte_punkte|join(', ') }}</span>{% endif %}
           </td>
-          <td>{% if p %}<a href="/atemschutz-pruefung/{{ p.id }}" class="btn btn--ghost btn--xs">Ansehen</a>{% endif %}</td>
+          <td style="text-align:right;">{% if p %}<a href="/atemschutz-pruefung/{{ p.id }}" class="btn btn--ghost btn--sm">Ansehen</a>{% endif %}</td>
         </tr>
         {% else %}
-        <tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem;">Keine Geräte angelegt</td></tr>
+        <tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem;">Keine Ger&auml;te angelegt</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -1,62 +1,157 @@
 {% extends "base.html" %}
-{% block title %}Prüfprotokoll #{{ pruefung.id }}{% endblock %}
+{% block title %}Pr&uuml;fprotokoll #{{ pruefung.id }}{% endblock %}
+
+{% block head_extra %}
+<style>
+.apd-page{max-width:900px;margin:0 auto;padding:1rem 1rem 3rem;}
+
+.apd-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;}
+.apd-header__left{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+.apd-header__title{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;}
+.apd-header__title h1{font-size:1.5rem;font-weight:700;margin:0;}
+.apd-header__sub{font-size:.82rem;color:var(--text-muted);margin:.2rem 0 0;}
+.apd-status{display:inline-flex;align-items:center;padding:2px 12px;border-radius:999px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-family:'JetBrains Mono',monospace;}
+.apd-status--ok{background:var(--green);color:#fff;}
+.apd-status--fehler{background:var(--red);color:#fff;}
+
+.apd-grid{display:grid;grid-template-columns:1fr;gap:var(--gutter);}
+@media (min-width:820px){
+  .apd-grid{grid-template-columns:2fr 1fr;align-items:start;}
+}
+
+.apd-card{--apd-accent:var(--outline);background:var(--surface-mid);border:1px solid var(--border);border-left:4px solid var(--apd-accent);border-radius:var(--radius-lg);padding:1.1rem 1.2rem;box-shadow:var(--shadow-card);}
+.apd-card--danger{--apd-accent:var(--danger);}
+.apd-card__title{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin:0 0 .9rem;}
+.apd-row{display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.06);}
+.apd-row:last-child{border-bottom:none;}
+.apd-row__label{font-size:.82rem;color:var(--text-muted);}
+.apd-row__value{font-size:.95rem;font-weight:600;text-align:right;}
+.apd-row__value--ok{color:var(--green);}
+.apd-row__value--bad{color:var(--red-light);}
+
+.apd-sidecard{background:var(--surface-mid);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.1rem;box-shadow:var(--shadow-card);}
+.apd-sidecard__title{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin:0 0 .75rem;}
+.apd-pill{display:inline-flex;padding:2px 10px;border-radius:999px;font-size:.7rem;font-weight:700;}
+.apd-pill--green{background:rgba(24,169,87,.18);color:var(--green);}
+.apd-pill--red{background:rgba(216,48,48,.18);color:var(--red-light);}
+.apd-pill--gray{background:var(--surface-high);color:var(--text-muted);}
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container" style="max-width:680px;padding:1rem;">
-  <div class="page-header">
-    <div>
-      <h1>Prüfprotokoll #{{ pruefung.id }}</h1>
-      <p class="page-header__sub">Gerät {{ pruefung.geraet.anzeige_label if pruefung.geraet else '' }}</p>
+<div class="apd-page">
+  <div class="apd-header">
+    <div class="apd-header__left">
+      <a href="/atemschutz-pruefung" class="btn btn--ghost btn--sm">&#8592; Liste</a>
+      <div>
+        <div class="apd-header__title">
+          <h1>Pr&uuml;fprotokoll #{{ pruefung.id }}</h1>
+          <span class="apd-status {% if pruefung.alles_ok %}apd-status--ok{% else %}apd-status--fehler{% endif %}">
+            {{ 'In Ordnung' if pruefung.alles_ok else 'Nicht in Ordnung' }}
+          </span>
+        </div>
+        <p class="apd-header__sub">Ger&auml;t {{ pruefung.geraet.anzeige_label if pruefung.geraet else '' }}</p>
+      </div>
     </div>
     <div style="display:flex;gap:.5rem;">
       <a href="/atemschutz-pruefung/{{ pruefung.id }}/pdf" class="btn btn--primary btn--sm">PDF drucken</a>
-      <a href="/atemschutz-pruefung" class="btn btn--ghost btn--sm">Zur Liste</a>
     </div>
   </div>
 
   {% if not pruefung.alles_ok %}
-  <div class="alert alert--error" style="margin-bottom:1rem;">
+  <div class="alert alert--error">
     Nicht in Ordnung: {{ pruefung.defekte_punkte|join(', ') }}
     {% if pruefung.defekt_info %}<br>{{ pruefung.defekt_info }}{% endif %}
   </div>
   {% endif %}
 
-  <div class="card" style="padding:1rem;display:flex;flex-direction:column;gap:.5rem;">
-    <div><strong>Atemschutzträger:</strong> {{ pruefung.traeger_name }}</div>
-    <div><strong>Datum:</strong> {{ pruefung.eingesetzt_am.strftime('%d.%m.%Y') }}</div>
-    <div><strong>Ort:</strong> {{ pruefung.ort_text or '–' }}</div>
-    <div><strong>Anlass:</strong> {{ 'Einsatz' if pruefung.einsatz_art == 'einsatz' else 'Übung' }}
-      {% if pruefung.incident %} – <a href="/einsatz/{{ pruefung.incident_id }}">Einsatz #{{ pruefung.incident_id }} öffnen</a>{% endif %}
-    </div>
-    <div><strong>Flasche gewechselt:</strong> {{ 'Ja' if pruefung.flasche_gewechselt else 'Nein' }}</div>
-    <div><strong>Flaschendruck:</strong> {{ pruefung.flaschendruck_bar if pruefung.flaschendruck_bar is not none else '–' }} bar
-      ({{ 'In Ordnung' if pruefung.flaschendruck_ok else 'NICHT in Ordnung' }}, min. {{ pruefung.FLASCHENDRUCK_MIN_BAR }} bar)</div>
-    <div><strong>Sichtprüfung:</strong> {{ 'In Ordnung' if pruefung.sichtpruefung_ok else 'NICHT in Ordnung' }}</div>
-    <div><strong>Hochdruck-Dichtprüfung:</strong> {{ pruefung.druckabfall_bar if pruefung.druckabfall_bar is not none else '–' }} bar/min
-      ({{ 'In Ordnung' if pruefung.hochdruckpruefung_ok else 'NICHT in Ordnung' }}, max. {{ pruefung.HOCHDRUCK_DICHTPRUEFUNG_MAX_BAR_MIN }} bar/min)</div>
-    <div><strong>Warnsignal-Prüfung:</strong> {{ pruefung.rueckzugssignal_bar if pruefung.rueckzugssignal_bar is not none else '–' }} bar
-      ({{ 'In Ordnung' if pruefung.warnsignal_ok else 'NICHT in Ordnung' }}, soll {{ pruefung.WARNSIGNAL_MIN_BAR }}–{{ pruefung.WARNSIGNAL_MAX_BAR }} bar)</div>
-    <div><strong>Gerät einsatzbereit:</strong> {{ 'In Ordnung' if pruefung.geraet_einsatzbereit_ok else 'NICHT in Ordnung' }}</div>
-    <div><strong>Erfasst am:</strong> {{ pruefung.created_at|local_datetime }} ({{ 'öffentlicher Link' if pruefung.created_via == 'public' else 'intern' }})</div>
-  </div>
+  <div class="apd-grid">
+    <div style="display:flex;flex-direction:column;gap:var(--gutter);">
 
-  {% if pruefung.benachrichtigungen %}
-  <div class="card" style="padding:1rem;margin-top:1rem;">
-    <strong>Wart-Benachrichtigung</strong>
-    <table class="table" style="margin-top:.5rem;">
-      <thead><tr><th>Kanal</th><th>Empfänger</th><th>Status</th><th>Zeit</th></tr></thead>
-      <tbody>
-        {% for b in pruefung.benachrichtigungen %}
-        <tr>
-          <td>{{ b.kanal }}</td>
-          <td>{{ b.empfaenger }}</td>
-          <td>{% if b.status == 'gesendet' %}<span class="badge badge--success">Gesendet</span>{% else %}<span class="badge badge--red">Fehler</span>{% endif %}</td>
-          <td>{{ b.gesendet_am|local_datetime }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+      <div class="apd-card">
+        <h3 class="apd-card__title">Allgemein</h3>
+        <div class="apd-row"><span class="apd-row__label">Atemschutztr&auml;ger</span><span class="apd-row__value">{{ pruefung.traeger_name }}</span></div>
+        <div class="apd-row"><span class="apd-row__label">Datum</span><span class="apd-row__value">{{ pruefung.eingesetzt_am.strftime('%d.%m.%Y') }}</span></div>
+        <div class="apd-row"><span class="apd-row__label">Ort</span><span class="apd-row__value">{{ pruefung.ort_text or '–' }}</span></div>
+        <div class="apd-row"><span class="apd-row__label">Anlass</span>
+          <span class="apd-row__value">
+            {{ 'Einsatz' if pruefung.einsatz_art == 'einsatz' else 'Übung' }}
+            {% if pruefung.incident %} &middot; <a href="/einsatz/{{ pruefung.incident_id }}">Einsatz #{{ pruefung.incident_id }}</a>{% endif %}
+          </span>
+        </div>
+        <div class="apd-row"><span class="apd-row__label">Flasche gewechselt</span><span class="apd-row__value">{{ 'Ja' if pruefung.flasche_gewechselt else 'Nein' }}</span></div>
+      </div>
+
+      <div class="apd-card {% if not pruefung.alles_ok %}apd-card--danger{% endif %}">
+        <h3 class="apd-card__title">Pr&uuml;fwerte</h3>
+        <div class="apd-row">
+          <span class="apd-row__label">Flaschendruck</span>
+          <span class="apd-row__value {{ 'apd-row__value--ok' if pruefung.flaschendruck_ok else 'apd-row__value--bad' }}">
+            {{ pruefung.flaschendruck_bar if pruefung.flaschendruck_bar is not none else '–' }} bar
+            ({{ 'in Ordnung' if pruefung.flaschendruck_ok else 'NICHT in Ordnung' }}, min. {{ pruefung.FLASCHENDRUCK_MIN_BAR }} bar)
+          </span>
+        </div>
+        <div class="apd-row">
+          <span class="apd-row__label">Sichtpr&uuml;fung</span>
+          <span class="apd-row__value {{ 'apd-row__value--ok' if pruefung.sichtpruefung_ok else 'apd-row__value--bad' }}">
+            {{ 'in Ordnung' if pruefung.sichtpruefung_ok else 'NICHT in Ordnung' }}
+          </span>
+        </div>
+        <div class="apd-row">
+          <span class="apd-row__label">Hochdruck-Dichtpr&uuml;fung</span>
+          <span class="apd-row__value {{ 'apd-row__value--ok' if pruefung.hochdruckpruefung_ok else 'apd-row__value--bad' }}">
+            {{ pruefung.druckabfall_bar if pruefung.druckabfall_bar is not none else '–' }} bar/min
+            ({{ 'in Ordnung' if pruefung.hochdruckpruefung_ok else 'NICHT in Ordnung' }}, max. {{ pruefung.HOCHDRUCK_DICHTPRUEFUNG_MAX_BAR_MIN }} bar/min)
+          </span>
+        </div>
+        <div class="apd-row">
+          <span class="apd-row__label">Warnsignal-Pr&uuml;fung</span>
+          <span class="apd-row__value {{ 'apd-row__value--ok' if pruefung.warnsignal_ok else 'apd-row__value--bad' }}">
+            {{ pruefung.rueckzugssignal_bar if pruefung.rueckzugssignal_bar is not none else '–' }} bar
+            (soll {{ pruefung.WARNSIGNAL_MIN_BAR }}–{{ pruefung.WARNSIGNAL_MAX_BAR }} bar)
+          </span>
+        </div>
+        <div class="apd-row">
+          <span class="apd-row__label">Ger&auml;t einsatzbereit</span>
+          <span class="apd-row__value {{ 'apd-row__value--ok' if pruefung.geraet_einsatzbereit_ok else 'apd-row__value--bad' }}">
+            {{ 'in Ordnung' if pruefung.geraet_einsatzbereit_ok else 'NICHT in Ordnung' }}
+          </span>
+        </div>
+      </div>
+
+      {% if pruefung.benachrichtigungen %}
+      <div class="apd-card">
+        <h3 class="apd-card__title">Wart-Benachrichtigung</h3>
+        <div style="overflow-x:auto;">
+          <table class="table" style="font-size:.82rem;">
+            <thead><tr><th>Kanal</th><th>Empf&auml;nger</th><th>Status</th><th>Zeit</th></tr></thead>
+            <tbody>
+              {% for b in pruefung.benachrichtigungen %}
+              <tr>
+                <td>{{ b.kanal }}</td>
+                <td>{{ b.empfaenger }}</td>
+                <td>{% if b.status == 'gesendet' %}<span class="apd-pill apd-pill--green">Gesendet</span>{% else %}<span class="apd-pill apd-pill--red">Fehler</span>{% endif %}</td>
+                <td>{{ b.gesendet_am|local_datetime }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <div class="apd-sidecard">
+      <p class="apd-sidecard__title">Systemstatus</p>
+      <div class="apd-row"><span class="apd-row__label">Erfasst am</span><span class="apd-row__value">{{ pruefung.created_at|local_datetime }}</span></div>
+      <div class="apd-row"><span class="apd-row__label">Erfassungsweg</span>
+        <span>{% if pruefung.created_via == 'public' %}<span class="apd-pill apd-pill--gray">&ouml;ffentlicher Link</span>{% else %}<span class="apd-pill apd-pill--green">Intern</span>{% endif %}</span>
+      </div>
+      <div class="apd-row"><span class="apd-row__label">Gesamtstatus</span>
+        <span>{% if pruefung.alles_ok %}<span class="apd-pill apd-pill--green">In Ordnung</span>{% else %}<span class="apd-pill apd-pill--red">Fehler</span>{% endif %}</span>
+      </div>
+    </div>
   </div>
-  {% endif %}
 </div>
 {% endblock %}

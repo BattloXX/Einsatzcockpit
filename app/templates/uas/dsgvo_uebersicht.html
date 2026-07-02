@@ -1,57 +1,81 @@
-﻿{% extends "uas/_layout.html" %}
+{% extends "uas/_layout.html" %}
 {% block title %}DSGVO-&Uuml;bersicht – UAS{% endblock %}
 
+{% block head_extra %}
+<style>
+.uas-header{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;}
+.uas-header h1{font-size:1.6rem;font-weight:700;margin:0;display:flex;align-items:center;gap:.5rem;}
+.uas-header__sub{font-size:.85rem;color:var(--text-muted);margin:.2rem 0 0;}
+
+.uas-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1.25rem;}
+.uas-stat{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);padding:1rem;text-align:center;}
+.uas-stat--alert{border-color:var(--red);}
+.uas-stat__value{font-size:1.8rem;font-weight:700;font-family:'JetBrains Mono',monospace;}
+.uas-stat__label{font-size:.78rem;color:var(--text-muted);margin-top:.2rem;}
+
+.uas-card{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);overflow:hidden;}
+.uas-card__header{padding:14px 16px;border-bottom:1px solid var(--border);}
+.uas-card__header h2{margin:0;font-size:1.05rem;font-weight:700;}
+.uas-table{width:100%;border-collapse:collapse;}
+.uas-table th{background:var(--surface-mid);color:var(--text-muted);font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;text-align:left;font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+.uas-table td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:.85rem;}
+.uas-table tbody tr:last-child td{border-bottom:none;}
+.uas-table tbody tr:hover td{background:rgba(255,255,255,.03);}
+.uas-table tr.uas-row--overdue td{background:rgba(216,48,48,.08);}
+
+.uas-badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:999px;font-weight:700;font-size:.66rem;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;border:1px solid transparent;white-space:nowrap;}
+.uas-badge--red{background:rgba(216,48,48,.18);color:var(--red-light);border-color:rgba(216,48,48,.3);}
+.uas-badge--yellow{background:rgba(242,176,46,.18);color:var(--yellow);border-color:rgba(242,176,46,.3);}
+.uas-badge--green{background:rgba(24,169,87,.18);color:var(--green);border-color:rgba(24,169,87,.3);}
+.uas-badge--gray{background:var(--surface-high);color:var(--text-muted);border-color:var(--border);}
+</style>
+{% endblock %}
+
 {% block uas_content %}
-<div class="page-header">
+<div class="uas-header">
   <div>
-    <h1>&#x1F6E1;&#xFE0F; DSGVO-&Uuml;bersicht (RL 7.3 / 7.4)</h1>
-    <p class="page-header__sub">Alle Medien &ndash; Status und F&auml;lligkeiten</p>
+    <h1><span>&#x1F6E1;&#xFE0F;</span> DSGVO-&Uuml;bersicht (RL 7.3 / 7.4)</h1>
+    <p class="uas-header__sub">Alle Medien &ndash; Status und F&auml;lligkeiten</p>
   </div>
   <div class="page-header__actions">
-    <a href="/uas" class="btn btn--ghost">&#x2190; UAS</a>
+    <a href="/uas" class="btn btn--ghost btn--sm">&#x2190; UAS</a>
   </div>
 </div>
 
 {% if faellig %}
-<div class="alert alert--error mb-4">
+<div class="alert alert--error">
   <strong>&#x26D4; {{ faellig | length }} Medium/Medien &uuml;berschreiten die L&ouml;schfrist!</strong>
   Bitte umgehend l&ouml;schen oder Begr&uuml;ndung nachreichen (RL 7.4).
 </div>
 {% endif %}
 
 {% if offen %}
-<div class="alert alert--warning mb-4">
+<div class="alert alert--warn">
   <strong>&#x26A0; {{ offen | length }} Medien ohne Begr&uuml;ndung</strong> &ndash;
   DSGVO-Status noch nicht best&auml;tigt (RL 7.3).
 </div>
 {% endif %}
 
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1.25rem">
-  <div class="card">
-    <div class="card-body" style="text-align:center">
-      <div style="font-size:2rem;font-weight:700">{{ alle | length }}</div>
-      <div style="color:var(--text-muted);font-size:.85rem">Gesamt</div>
-    </div>
+<div class="uas-stats">
+  <div class="uas-stat">
+    <div class="uas-stat__value">{{ alle | length }}</div>
+    <div class="uas-stat__label">Gesamt</div>
   </div>
-  <div class="card" style="border-color:{% if faellig %}#e53e3e{% else %}var(--border){% endif %}">
-    <div class="card-body" style="text-align:center">
-      <div style="font-size:2rem;font-weight:700;color:{% if faellig %}#e53e3e{% endif %}">{{ faellig | length }}</div>
-      <div style="color:var(--text-muted);font-size:.85rem">L&ouml;schfrist &uuml;berschritten</div>
-    </div>
+  <div class="uas-stat {% if faellig %}uas-stat--alert{% endif %}">
+    <div class="uas-stat__value" style="{% if faellig %}color:var(--red-light);{% endif %}">{{ faellig | length }}</div>
+    <div class="uas-stat__label">L&ouml;schfrist &uuml;berschritten</div>
   </div>
-  <div class="card">
-    <div class="card-body" style="text-align:center">
-      <div style="font-size:2rem;font-weight:700">{{ offen | length }}</div>
-      <div style="color:var(--text-muted);font-size:.85rem">Ohne Begr&uuml;ndung</div>
-    </div>
+  <div class="uas-stat">
+    <div class="uas-stat__value">{{ offen | length }}</div>
+    <div class="uas-stat__label">Ohne Begr&uuml;ndung</div>
   </div>
 </div>
 
 {% if alle %}
-<div class="card">
-  <div class="card-header"><h2>Alle Medien</h2></div>
-  <div style="overflow-x:auto">
-  <table class="data-table">
+<div class="uas-card">
+  <div class="uas-card__header"><h2>Alle Medien</h2></div>
+  <div style="overflow-x:auto;">
+  <table class="uas-table">
     <thead>
       <tr>
         <th>#</th><th>Flug</th><th>Dateiname</th><th>Typ</th><th>DSGVO-Status</th>
@@ -60,22 +84,21 @@
     </thead>
     <tbody>
     {% for m in alle %}
-    <tr {% if m.loeschfrist and m.loeschfrist <= heute and m.dsgvo_status != 'geloescht' %}
-        style="background:rgba(229,62,62,.08)"{% endif %}>
-      <td>{{ m.id }}</td>
+    <tr {% if m.loeschfrist and m.loeschfrist <= heute and m.dsgvo_status != 'geloescht' %}class="uas-row--overdue"{% endif %}>
+      <td style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;">{{ m.id }}</td>
       <td>{% if m.uas_flug_id %}<a href="/uas/flug/{{ m.uas_flug_id }}/medien">Flug #{{ m.uas_flug_id }}</a>{% else %}–{% endif %}</td>
-      <td style="font-size:.85rem">{{ m.dateiname }}</td>
+      <td style="color:var(--text-muted);">{{ m.dateiname }}</td>
       <td>{{ m.medientyp | title }}</td>
       <td>
-        <span class="badge badge--{% if m.dsgvo_status == 'geloescht' %}neutral{% elif m.dsgvo_status == 'zur_loeschung' %}error{% elif m.dsgvo_status == 'begruendet' %}success{% else %}warning{% endif %}">
+        <span class="uas-badge {% if m.dsgvo_status == 'geloescht' %}uas-badge--gray{% elif m.dsgvo_status == 'zur_loeschung' %}uas-badge--red{% elif m.dsgvo_status == 'begruendet' %}uas-badge--green{% else %}uas-badge--yellow{% endif %}">
           {{ m.dsgvo_status | replace('_',' ') | title }}
         </span>
       </td>
-      <td style="{% if m.loeschfrist and m.loeschfrist <= heute and m.dsgvo_status != 'geloescht' %}color:#e53e3e;font-weight:700{% endif %}">
+      <td style="{% if m.loeschfrist and m.loeschfrist <= heute and m.dsgvo_status != 'geloescht' %}color:var(--red-light);font-weight:700;{% endif %}">
         {{ m.loeschfrist or '–' }}
       </td>
-      <td style="font-size:.8rem;max-width:200px">{{ m.begruendung or '–' }}</td>
-      <td style="font-size:.78rem;color:var(--text-muted)">{{ (m.created_at|local).strftime('%d.%m.%Y') if m.created_at else '–' }}</td>
+      <td style="color:var(--text-muted);max-width:200px;">{{ m.begruendung or '–' }}</td>
+      <td style="color:var(--text-muted);font-size:.78rem;">{{ (m.created_at|local).strftime('%d.%m.%Y') if m.created_at else '–' }}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -83,8 +106,6 @@
   </div>
 </div>
 {% else %}
-<p style="color:var(--text-muted)">Noch keine Medien erfasst.</p>
+<p style="color:var(--text-muted);">Noch keine Medien erfasst.</p>
 {% endif %}
-
-<style>.mb-4{margin-bottom:1rem}</style>
 {% endblock %}

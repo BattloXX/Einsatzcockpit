@@ -1,22 +1,60 @@
 {% extends "base.html" %}
-{% block title %}Atemschutzgeräteprüfung{% endblock %}
+{% block title %}Atemschutzger&auml;tepr&uuml;fung{% endblock %}
+
+{% block head_extra %}
+<style>
+.ap-page{max-width:1280px;margin:0 auto;padding:1rem;}
+.ap-header{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:.75rem;}
+.ap-header h1{font-size:1.6rem;font-weight:700;margin:0;}
+.ap-header__sub{font-size:.85rem;color:var(--text-muted);margin:.2rem 0 0;}
+
+.ap-filter{display:flex;flex-wrap:wrap;gap:.75rem;align-items:end;padding:1rem;background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);margin-bottom:1rem;}
+.ap-filter .form-label{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.3rem;}
+
+.ap-card{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-card);}
+.ap-table{width:100%;border-collapse:collapse;}
+.ap-table th{background:var(--surface-mid);color:var(--text-muted);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;text-align:left;font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+.ap-table td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:.85rem;}
+.ap-table tbody tr:last-child td{border-bottom:none;}
+.ap-table tbody tr:hover td{background:rgba(255,255,255,.03);}
+
+.ap-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-weight:700;font-size:.66rem;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;border:1px solid transparent;white-space:nowrap;}
+.ap-badge--green{background:rgba(24,169,87,.18);color:var(--green);border-color:rgba(24,169,87,.3);}
+.ap-badge--red{background:rgba(216,48,48,.18);color:var(--red-light);border-color:rgba(216,48,48,.3);}
+
+.ap-mobile-list{display:none;flex-direction:column;gap:.6rem;}
+.ap-mcard{--ap-accent:var(--green);background:var(--surface-low);border:1px solid var(--border);border-left:4px solid var(--ap-accent);border-radius:var(--radius-md);padding:.85rem;box-shadow:var(--shadow-card);}
+.ap-mcard__top{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.6rem;}
+.ap-mcard__title{font-weight:700;font-size:.95rem;}
+.ap-mcard__time{font-size:.72rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;}
+.ap-mcard__row{font-size:.82rem;color:var(--text-muted);margin-top:.3rem;}
+.ap-mcard__footer{display:flex;justify-content:flex-end;gap:.4rem;margin-top:.65rem;}
+
+@media (max-width:760px){
+  .ap-table-wrap{display:none;}
+  .ap-mobile-list{display:flex;}
+  .ap-filter{gap:.6rem;}
+  .ap-filter .form-group{flex:1 1 45%;}
+}
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container" style="padding:1rem;">
-  {% include "atemschutz_pruefung/_tabs.html" %}
-  <div class="page-header">
+<div class="ap-page">
+  <div class="ap-header">
     <div>
-      <h1>Atemschutzgeräteprüfung</h1>
-      <p class="page-header__sub">Alle erfassten Prüfprotokolle</p>
+      <h1>Atemschutzger&auml;tepr&uuml;fung</h1>
+      <p class="ap-header__sub">Alle erfassten Pr&uuml;fprotokolle</p>
     </div>
     {% if ap_token %}
-    <a href="/ap/{{ ap_token }}" class="btn btn--primary btn--sm">+ Prüfung erfassen</a>
+    <a href="/ap/{{ ap_token }}" class="btn btn--primary btn--sm">+ Pr&uuml;fung erfassen</a>
     {% endif %}
   </div>
+  {% include "atemschutz_pruefung/_tabs.html" %}
 
-  <form method="get" action="/atemschutz-pruefung" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;margin-bottom:1rem;">
+  <form method="get" action="/atemschutz-pruefung" class="ap-filter">
     <div class="form-group" style="margin:0;">
-      <label class="form-label" style="font-size:.8rem;">Gerät</label>
+      <label class="form-label">Ger&auml;t</label>
       <select name="geraet_id" class="form-control form-control--sm">
         <option value="0">Alle</option>
         {% for g in geraete %}
@@ -25,7 +63,7 @@
       </select>
     </div>
     <div class="form-group" style="margin:0;">
-      <label class="form-label" style="font-size:.8rem;">Status</label>
+      <label class="form-label">Status</label>
       <select name="status" class="form-control form-control--sm">
         <option value="" {% if not filter_status %}selected{% endif %}>Alle</option>
         <option value="ok" {% if filter_status == 'ok' %}selected{% endif %}>In Ordnung</option>
@@ -33,11 +71,11 @@
       </select>
     </div>
     <div class="form-group" style="margin:0;">
-      <label class="form-label" style="font-size:.8rem;">Von</label>
+      <label class="form-label">Von</label>
       <input type="date" name="von" class="form-control form-control--sm" value="{{ filter_von }}">
     </div>
     <div class="form-group" style="margin:0;">
-      <label class="form-label" style="font-size:.8rem;">Bis</label>
+      <label class="form-label">Bis</label>
       <input type="date" name="bis" class="form-control form-control--sm" value="{{ filter_bis }}">
     </div>
     <button type="submit" class="btn btn--primary btn--sm">Filtern</button>
@@ -50,41 +88,69 @@
 
   <form method="post" action="/atemschutz-pruefung/druck-pdf" id="sammel-form">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <div class="card">
-      <table class="table">
+
+    {# Desktop-Tabelle #}
+    <div class="ap-card ap-table-wrap" style="overflow-x:auto;">
+      <table class="ap-table">
         <thead>
           <tr>
             <th style="width:2rem;"><input type="checkbox" onclick="document.querySelectorAll('.as-row-check').forEach(c=>c.checked=this.checked)"></th>
             <th>Datum</th>
-            <th>Gerät</th>
-            <th>Atemschutzträger</th>
+            <th>Ger&auml;t</th>
+            <th>Atemschutztr&auml;ger</th>
             <th>Anlass</th>
             <th>Status</th>
-            <th></th>
+            <th style="text-align:right;">Aktion</th>
           </tr>
         </thead>
         <tbody>
           {% for p in pruefungen %}
           <tr>
             <td><input type="checkbox" class="as-row-check" name="ids" value="{{ p.id }}"></td>
-            <td>{{ p.eingesetzt_am.strftime('%d.%m.%Y') }}</td>
+            <td style="font-family:'JetBrains Mono',monospace;">{{ p.eingesetzt_am.strftime('%d.%m.%Y') }}</td>
             <td>{{ p.geraet.anzeige_label if p.geraet else '#' ~ p.geraet_id }}</td>
             <td>{{ p.traeger_name }}</td>
             <td>{{ 'Einsatz' if p.einsatz_art == 'einsatz' else 'Übung' }}</td>
             <td>
-              {% if p.alles_ok %}<span class="badge badge--success">In Ordnung</span>
-              {% else %}<span class="badge badge--red">{{ p.defekte_punkte|join(', ') }}</span>{% endif %}
+              {% if p.alles_ok %}<span class="ap-badge ap-badge--green">In Ordnung</span>
+              {% else %}<span class="ap-badge ap-badge--red">{{ p.defekte_punkte|join(', ') }}</span>{% endif %}
             </td>
-            <td style="white-space:nowrap;">
-              <a href="/atemschutz-pruefung/{{ p.id }}" class="btn btn--ghost btn--xs">Ansehen</a>
-              <a href="/atemschutz-pruefung/{{ p.id }}/pdf" class="btn btn--ghost btn--xs">PDF</a>
+            <td style="text-align:right;white-space:nowrap;">
+              <a href="/atemschutz-pruefung/{{ p.id }}" class="btn btn--ghost btn--sm">Ansehen</a>
+              <a href="/atemschutz-pruefung/{{ p.id }}/pdf" class="btn btn--ghost btn--sm">PDF</a>
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem;">Keine Prüfprotokolle gefunden</td></tr>
+          <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem;">Keine Pr&uuml;fprotokolle gefunden</td></tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    {# Mobile-Karten #}
+    <div class="ap-mobile-list">
+      {% for p in pruefungen %}
+      <div class="ap-mcard" style="--ap-accent:{% if p.alles_ok %}var(--green){% else %}var(--red){% endif %};">
+        <div class="ap-mcard__top">
+          <label style="display:flex;align-items:center;gap:.5rem;">
+            <input type="checkbox" class="as-row-check" name="ids" value="{{ p.id }}">
+            <span class="ap-mcard__title">{{ p.geraet.anzeige_label if p.geraet else '#' ~ p.geraet_id }}</span>
+          </label>
+          <span class="ap-mcard__time">{{ p.eingesetzt_am.strftime('%d.%m.%Y') }}</span>
+        </div>
+        <div class="ap-mcard__row">{{ p.traeger_name }} &middot; {{ 'Einsatz' if p.einsatz_art == 'einsatz' else 'Übung' }}</div>
+        <div class="ap-mcard__row">
+          {% if p.alles_ok %}<span class="ap-badge ap-badge--green">In Ordnung</span>
+          {% else %}<span class="ap-badge ap-badge--red">{{ p.defekte_punkte|join(', ') }}</span>{% endif %}
+        </div>
+        <div class="ap-mcard__footer">
+          <a href="/atemschutz-pruefung/{{ p.id }}" class="btn btn--ghost btn--sm">Ansehen</a>
+          <a href="/atemschutz-pruefung/{{ p.id }}/pdf" class="btn btn--ghost btn--sm">PDF</a>
+        </div>
+      </div>
+      {% else %}
+      <div style="text-align:center;color:var(--text-muted);padding:2rem;">Keine Pr&uuml;fprotokolle gefunden</div>
+      {% endfor %}
     </div>
   </form>
 </div>

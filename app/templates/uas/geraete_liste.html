@@ -1,74 +1,132 @@
-﻿{% extends "uas/_layout.html" %}
+{% extends "uas/_layout.html" %}
 {% block title %}Ger&auml;teregister – UAS{% endblock %}
 
+{% block head_extra %}
+<style>
+.uas-header{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;}
+.uas-header h1{font-size:1.6rem;font-weight:700;margin:0;display:flex;align-items:center;gap:.5rem;}
+.uas-header__sub{font-size:.85rem;color:var(--text-muted);margin:.2rem 0 0;}
+
+.uas-card{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);overflow:hidden;}
+.uas-table{width:100%;border-collapse:collapse;}
+.uas-table th{background:var(--surface-mid);color:var(--text-muted);font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;text-align:left;font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+.uas-table td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:.85rem;}
+.uas-table tbody tr:last-child td{border-bottom:none;}
+.uas-table tbody tr:hover td{background:rgba(255,255,255,.03);}
+
+.uas-badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:999px;font-weight:700;font-size:.66rem;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;border:1px solid transparent;white-space:nowrap;}
+.uas-badge--red{background:rgba(216,48,48,.18);color:var(--red-light);border-color:rgba(216,48,48,.3);}
+.uas-badge--blue{background:rgba(58,123,213,.18);color:#93c5fd;border-color:rgba(58,123,213,.3);}
+.uas-badge--yellow{background:rgba(242,176,46,.18);color:var(--yellow);border-color:rgba(242,176,46,.3);}
+.uas-badge--green{background:rgba(24,169,87,.18);color:var(--green);border-color:rgba(24,169,87,.3);}
+.uas-badge--gray{background:var(--surface-high);color:var(--text-muted);border-color:var(--border);}
+
+.uas-mobile-list{display:none;flex-direction:column;gap:.6rem;}
+.uas-mcard{--uas-accent:var(--red);background:var(--surface-low);border:1px solid var(--border);border-left:4px solid var(--uas-accent);border-radius:var(--radius-md);padding:.9rem;box-shadow:var(--shadow-card);}
+.uas-mcard__top{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;margin-bottom:.6rem;}
+.uas-mcard__title{font-size:.95rem;font-weight:700;}
+.uas-mcard__row{display:flex;align-items:center;gap:.4rem;font-size:.82rem;color:var(--text-muted);margin-top:.35rem;}
+.uas-mcard__footer{display:flex;align-items:center;justify-content:flex-end;border-top:1px solid var(--border);margin-top:.7rem;padding-top:.6rem;}
+
+@media (max-width:760px){
+  .uas-table-wrap{display:none;}
+  .uas-mobile-list{display:flex;}
+}
+</style>
+{% endblock %}
+
 {% block uas_content %}
-<div class="page-header">
+<div class="uas-header">
   <div>
-    <h1>&#x1F681; Ger&auml;teregister</h1>
-    <p class="page-header__sub">Alle UAS-Ger&auml;te dieser Organisation</p>
+    <h1><span>&#x1F681;</span> Ger&auml;teregister</h1>
+    <p class="uas-header__sub">Alle UAS-Ger&auml;te dieser Organisation</p>
   </div>
   <div class="page-header__actions">
-    <a href="/uas/geraete/neu" class="btn btn--primary">+ Ger&auml;t anlegen</a>
-    <a href="/uas/" class="btn btn--ghost">&#x2190; &Uuml;bersicht</a>
+    <a href="/uas/geraete/neu" class="btn btn--primary btn--sm">+ Ger&auml;t anlegen</a>
+    <a href="/uas/" class="btn btn--ghost btn--sm">&#x2190; &Uuml;bersicht</a>
   </div>
 </div>
 
 {% if rows %}
-<div class="card">
-  <div class="card-body" style="padding:0">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Bezeichnung</th>
-          <th>Typ / Hersteller</th>
-          <th>CE / Kategorie</th>
-          <th>Registrierung</th>
-          <th>Einsatzbereit</th>
-          <th>Wartung</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for row in rows %}
+{# Desktop-Tabelle #}
+<div class="uas-card uas-table-wrap" style="overflow-x:auto;">
+  <table class="uas-table">
+    <thead>
       <tr>
-        <td>
-          <strong>{{ row.device.bezeichnung }}</strong>
-          {% if row.device.hat_waermebildkamera %}<span class="badge badge--info" style="margin-left:.25rem">WBK</span>{% endif %}
-          {% if row.device.allwettertauglich %}<span class="badge badge--info" style="margin-left:.25rem">AWT</span>{% endif %}
-        </td>
-        <td style="color:var(--text-muted)">{{ row.device.hersteller }} {{ row.device.typ }}</td>
-        <td>{{ row.device.ce_klasse }} / {{ row.device.unterkategorie }}</td>
-        <td style="font-size:.85rem;color:var(--text-muted)">{{ row.device.registriernummer or '–' }}</td>
-        <td>
-          {% if row.bereit.einsatzbereit %}
-          <span class="badge badge--success">&#x2713; bereit</span>
-          {% else %}
-          <span class="badge badge--error">&#x26A0; nicht bereit</span>
-          {% endif %}
-        </td>
-        <td>
-          {% set ws = row.wartung.status %}
-          {% if ws == 'gruen' %}<span class="badge badge--success">OK</span>
-          {% elif ws == 'gelb' %}<span class="badge badge--warn">bald f&auml;llig</span>
-          {% else %}<span class="badge badge--error">f&auml;llig!</span>{% endif %}
-          {% if row.wartung.naechste_faellig %}
-          <span style="font-size:.8rem;color:var(--text-muted);margin-left:.25rem">{{ row.wartung.naechste_faellig }}</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if row.device.status == 'aktiv' %}<span class="badge badge--success">aktiv</span>
-          {% elif row.device.status == 'wartung' %}<span class="badge badge--warn">Wartung</span>
-          {% else %}<span class="badge badge--muted">ausgemustert</span>{% endif %}
-        </td>
-        <td><a href="/uas/geraete/{{ row.device.id }}" class="btn btn--ghost btn--sm">Details</a></td>
+        <th>Bezeichnung</th>
+        <th>Typ / Hersteller</th>
+        <th>CE / Kategorie</th>
+        <th>Registrierung</th>
+        <th>Einsatzbereit</th>
+        <th>Wartung</th>
+        <th>Status</th>
+        <th style="text-align:right;">Aktion</th>
       </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>
+        <strong>{{ row.device.bezeichnung }}</strong>
+        {% if row.device.hat_waermebildkamera %}<span class="uas-badge uas-badge--blue" style="margin-left:.4rem;">WBK</span>{% endif %}
+        {% if row.device.allwettertauglich %}<span class="uas-badge uas-badge--blue" style="margin-left:.25rem;">AWT</span>{% endif %}
+      </td>
+      <td style="color:var(--text-muted);">{{ row.device.hersteller }} {{ row.device.typ }}</td>
+      <td>{{ row.device.ce_klasse }} / {{ row.device.unterkategorie }}</td>
+      <td style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;">{{ row.device.registriernummer or '–' }}</td>
+      <td>
+        {% if row.bereit.einsatzbereit %}<span class="uas-badge uas-badge--green">&#x2713; bereit</span>
+        {% else %}<span class="uas-badge uas-badge--red">&#x26A0; nicht bereit</span>{% endif %}
+      </td>
+      <td>
+        {% set ws = row.wartung.status %}
+        {% if ws == 'gruen' %}<span class="uas-badge uas-badge--green">OK</span>
+        {% elif ws == 'gelb' %}<span class="uas-badge uas-badge--yellow">bald f&auml;llig</span>
+        {% else %}<span class="uas-badge uas-badge--red">f&auml;llig!</span>{% endif %}
+        {% if row.wartung.naechste_faellig %}<span style="font-size:.78rem;color:var(--text-muted);margin-left:.4rem;">{{ row.wartung.naechste_faellig }}</span>{% endif %}
+      </td>
+      <td>
+        {% if row.device.status == 'aktiv' %}<span class="uas-badge uas-badge--green">aktiv</span>
+        {% elif row.device.status == 'wartung' %}<span class="uas-badge uas-badge--yellow">Wartung</span>
+        {% else %}<span class="uas-badge uas-badge--gray">ausgemustert</span>{% endif %}
+      </td>
+      <td style="text-align:right;"><a href="/uas/geraete/{{ row.device.id }}" class="btn btn--ghost btn--sm">Details</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# Mobile-Karten #}
+<div class="uas-mobile-list">
+  {% for row in rows %}
+  <div class="uas-mcard" style="--uas-accent:{% if not row.bereit.einsatzbereit %}var(--red){% elif row.wartung.status == 'gelb' %}var(--yellow){% elif row.wartung.status == 'rot' %}var(--red){% else %}var(--green){% endif %};">
+    <div class="uas-mcard__top">
+      <div class="uas-mcard__title">
+        {{ row.device.bezeichnung }}
+        {% if row.device.hat_waermebildkamera %}<span class="uas-badge uas-badge--blue" style="margin-left:.3rem;">WBK</span>{% endif %}
+        {% if row.device.allwettertauglich %}<span class="uas-badge uas-badge--blue" style="margin-left:.25rem;">AWT</span>{% endif %}
+      </div>
+      {% if row.device.status == 'aktiv' %}<span class="uas-badge uas-badge--green">aktiv</span>
+      {% elif row.device.status == 'wartung' %}<span class="uas-badge uas-badge--yellow">Wartung</span>
+      {% else %}<span class="uas-badge uas-badge--gray">ausgemustert</span>{% endif %}
+    </div>
+    <div class="uas-mcard__row">{{ row.device.hersteller }} {{ row.device.typ }} &middot; {{ row.device.ce_klasse }} / {{ row.device.unterkategorie }}</div>
+    <div class="uas-mcard__row">
+      {% if row.bereit.einsatzbereit %}<span class="uas-badge uas-badge--green">&#x2713; bereit</span>
+      {% else %}<span class="uas-badge uas-badge--red">&#x26A0; nicht bereit</span>{% endif %}
+      {% set ws = row.wartung.status %}
+      {% if ws == 'gruen' %}<span class="uas-badge uas-badge--green">Wartung OK</span>
+      {% elif ws == 'gelb' %}<span class="uas-badge uas-badge--yellow">Wartung bald f&auml;llig</span>
+      {% else %}<span class="uas-badge uas-badge--red">Wartung f&auml;llig!</span>{% endif %}
+    </div>
+    <div class="uas-mcard__footer">
+      <a href="/uas/geraete/{{ row.device.id }}" class="btn btn--ghost btn--sm">Details</a>
+    </div>
   </div>
+  {% endfor %}
 </div>
 {% else %}
-<div class="alert">Noch keine Ger&auml;te angelegt. <a href="/uas/geraete/neu">Erstes Ger&auml;t anlegen</a>.</div>
+<div class="alert" style="margin-top:1rem;">Noch keine Ger&auml;te angelegt. <a href="/uas/geraete/neu">Erstes Ger&auml;t anlegen</a>.</div>
 {% endif %}
 {% endblock %}
