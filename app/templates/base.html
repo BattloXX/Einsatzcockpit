@@ -134,13 +134,24 @@
     </div>
     {% endif %}
     <div class="topnav__user">
-      <a href="/profil" class="user-badge {% if request.url.path.startswith('/profil') %}active{% endif %}"
-         style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
-        {% if user.avatar_path %}
-        <img src="/profil/avatar/{{ user.avatar_path }}" alt=""
-             style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;">
-        {% endif %}
-        {{ user.display_name }}</a>
+      <div class="topnav__profile" x-data="{open:false}" @click.outside="open=false" style="position:relative;">
+        <button type="button" class="nav-link nav-link--dropdown user-badge {% if request.url.path.startswith('/profil') %}active{% endif %}"
+                @click="open=!open" style="display:inline-flex;align-items:center;gap:6px;">
+          {% if user.avatar_path %}
+          <img src="/profil/avatar/{{ user.avatar_path }}" alt=""
+               style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+          {% endif %}
+          {{ user.display_name }}
+          <span style="font-size:.7rem; opacity:.7; margin-left:2px;">▾</span>
+        </button>
+        <div class="topnav__doku-panel" x-show="open" x-cloak
+             style="position:absolute; top:calc(100% + 4px); right:0; z-index:200;
+                    background:var(--surface-mid); border:1px solid var(--border); border-radius:.5rem;
+                    min-width:190px; padding:8px 0; box-shadow:0 12px 32px rgba(0,0,0,.5);">
+          <a href="/profil" class="{% if request.url.path.startswith('/profil') %}active{% endif %}">👤 Profil bearbeiten</a>
+          <a href="/logout">🚪 Abmelden</a>
+        </div>
+      </div>
       {% if is_admin %}
       <a href="/admin" class="topnav__admin-link {% if '/admin' in request.url.path %}active{% endif %}">⚙ Verwaltung</a>
       {% endif %}
@@ -148,7 +159,6 @@
               title="App auf Geraet installieren">📲 Installieren</button>
       <button type="button" class="btn btn--ghost btn--sm pwa-install-ios" style="display:none"
               title="App auf iPhone/iPad installieren">📲 Installieren</button>
-      <a href="/logout" class="btn btn--ghost btn--sm">Abmelden</a>
     </div>
   </nav>
 
