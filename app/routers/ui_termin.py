@@ -202,13 +202,16 @@ async def termin_detail(
 ):
     user = _require_login(request)
     termin = _termin_or_404(termin_id, db)
-    teilnahmen = _lade_teilnahmen(db, "uebung" if termin.typ == "uebung" else "veranstaltung", termin_id)
+    bezug_typ = "uebung" if termin.typ == "uebung" else "veranstaltung"
+    teilnahmen = _lade_teilnahmen(db, bezug_typ, termin_id)
     funktionen = _load_funktionen(db, getattr(user, "org_id", None))
     fahrzeuge = _load_fahrzeuge(db)
     return templates.TemplateResponse(request, "termin/detail.html", {
         "user": user,
         "termin": termin,
         "teilnahmen": teilnahmen,
+        "bezug_typ": bezug_typ,
+        "bezug_id": termin_id,
         "funktionen": funktionen,
         "fahrzeuge": fahrzeuge,
         "can_edit": _can_edit(user),
