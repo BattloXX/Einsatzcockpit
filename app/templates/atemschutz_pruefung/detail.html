@@ -29,11 +29,13 @@
       {% if pruefung.incident %} – <a href="/einsatz/{{ pruefung.incident_id }}">Einsatz #{{ pruefung.incident_id }} öffnen</a>{% endif %}
     </div>
     <div><strong>Flasche gewechselt:</strong> {{ 'Ja' if pruefung.flasche_gewechselt else 'Nein' }}</div>
-    <div><strong>Flaschendruck:</strong> {{ pruefung.flaschendruck_bar if pruefung.flaschendruck_bar is not none else '–' }} bar</div>
+    <div><strong>Flaschendruck:</strong> {{ pruefung.flaschendruck_bar if pruefung.flaschendruck_bar is not none else '–' }} bar
+      ({{ 'In Ordnung' if pruefung.flaschendruck_ok else 'NICHT in Ordnung' }}, min. {{ pruefung.FLASCHENDRUCK_MIN_BAR }} bar)</div>
     <div><strong>Sichtprüfung:</strong> {{ 'In Ordnung' if pruefung.sichtpruefung_ok else 'NICHT in Ordnung' }}</div>
-    <div><strong>Druckabfall:</strong> {{ pruefung.druckabfall_bar if pruefung.druckabfall_bar is not none else '–' }} bar</div>
-    <div><strong>Hochdruckprüfung:</strong> {{ 'In Ordnung' if pruefung.hochdruckpruefung_ok else 'NICHT in Ordnung' }}</div>
-    <div><strong>Rückzugssignal:</strong> {{ pruefung.rueckzugssignal_bar if pruefung.rueckzugssignal_bar is not none else '–' }} bar</div>
+    <div><strong>Hochdruck-Dichtprüfung:</strong> {{ pruefung.druckabfall_bar if pruefung.druckabfall_bar is not none else '–' }} bar/min
+      ({{ 'In Ordnung' if pruefung.hochdruckpruefung_ok else 'NICHT in Ordnung' }}, max. {{ pruefung.HOCHDRUCK_DICHTPRUEFUNG_MAX_BAR_MIN }} bar/min)</div>
+    <div><strong>Warnsignal-Prüfung:</strong> {{ pruefung.rueckzugssignal_bar if pruefung.rueckzugssignal_bar is not none else '–' }} bar
+      ({{ 'In Ordnung' if pruefung.warnsignal_ok else 'NICHT in Ordnung' }}, soll {{ pruefung.WARNSIGNAL_MIN_BAR }}–{{ pruefung.WARNSIGNAL_MAX_BAR }} bar)</div>
     <div><strong>Gerät einsatzbereit:</strong> {{ 'In Ordnung' if pruefung.geraet_einsatzbereit_ok else 'NICHT in Ordnung' }}</div>
     <div><strong>Erfasst am:</strong> {{ pruefung.created_at|local_datetime }} ({{ 'öffentlicher Link' if pruefung.created_via == 'public' else 'intern' }})</div>
   </div>

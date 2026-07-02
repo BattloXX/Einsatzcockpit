@@ -16,9 +16,9 @@
         <strong>Flasche gewechselt:</strong> {{ 'Ja' if pruefung.flasche_gewechselt else 'Nein' }}
       </td>
       <td>
-        <strong>Flaschendruck:</strong> {{ pruefung.flaschendruck_bar|int if pruefung.flaschendruck_bar is not none else '–' }} bar<br>
-        <strong>Druckabfall:</strong> {{ pruefung.druckabfall_bar|int if pruefung.druckabfall_bar is not none else '–' }} bar<br>
-        <strong>Rückzugssignal:</strong> {{ pruefung.rueckzugssignal_bar|int if pruefung.rueckzugssignal_bar is not none else '–' }} bar
+        <strong>Flaschendruck:</strong> {{ pruefung.flaschendruck_bar|int if pruefung.flaschendruck_bar is not none else '–' }} bar (min. {{ pruefung.FLASCHENDRUCK_MIN_BAR }})<br>
+        <strong>Hochdruck-Dichtprüfung:</strong> {{ pruefung.druckabfall_bar|int if pruefung.druckabfall_bar is not none else '–' }} bar/min (max. {{ pruefung.HOCHDRUCK_DICHTPRUEFUNG_MAX_BAR_MIN }})<br>
+        <strong>Warnsignal-Prüfung:</strong> {{ pruefung.rueckzugssignal_bar|int if pruefung.rueckzugssignal_bar is not none else '–' }} bar (soll {{ pruefung.WARNSIGNAL_MIN_BAR }}-{{ pruefung.WARNSIGNAL_MAX_BAR }})
       </td>
     </tr>
   </table>
@@ -29,15 +29,27 @@
       <th>Ergebnis</th>
     </tr>
     <tr>
+      <td>Flaschendruck</td>
+      <td style="{{ 'color:#c0392b;font-weight:bold;' if not pruefung.flaschendruck_ok else '' }}">
+        {{ 'In Ordnung' if pruefung.flaschendruck_ok else 'NICHT in Ordnung' }}
+      </td>
+    </tr>
+    <tr>
       <td>Sichtprüfung</td>
       <td style="{{ 'color:#c0392b;font-weight:bold;' if not pruefung.sichtpruefung_ok else '' }}">
         {{ 'In Ordnung' if pruefung.sichtpruefung_ok else 'NICHT in Ordnung' }}
       </td>
     </tr>
     <tr>
-      <td>Hochdruckprüfung</td>
+      <td>Hochdruck-Dichtprüfung</td>
       <td style="{{ 'color:#c0392b;font-weight:bold;' if not pruefung.hochdruckpruefung_ok else '' }}">
         {{ 'In Ordnung' if pruefung.hochdruckpruefung_ok else 'NICHT in Ordnung' }}
+      </td>
+    </tr>
+    <tr>
+      <td>Warnsignal-Prüfung</td>
+      <td style="{{ 'color:#c0392b;font-weight:bold;' if not pruefung.warnsignal_ok else '' }}">
+        {{ 'In Ordnung' if pruefung.warnsignal_ok else 'NICHT in Ordnung' }}
       </td>
     </tr>
     <tr>

@@ -35,8 +35,20 @@ class AtemschutzGeraet(TenantScoped, Base):
 
 
 class AtemschutzPruefung(Base):
-    """Einzelnes Prüfprotokoll (Atemschutzgeräteprüfung)."""
+    """Einzelnes Prüfprotokoll (Atemschutzgeräteprüfung).
+
+    Drucküberprüfung nach dem Gebrauch (3 Grenzwerte, automatisch ausgewertet
+    aus den erfassten BAR-Werten statt manueller i.O./n.i.O.-Angabe):
+    Flaschendruck min. FLASCHENDRUCK_MIN_BAR, Hochdruck-Dichtprüfung max.
+    HOCHDRUCK_DICHTPRUEFUNG_MAX_BAR_MIN BAR/min, Warnsignal-Prüfung zwischen
+    WARNSIGNAL_MIN_BAR und WARNSIGNAL_MAX_BAR.
+    """
     __tablename__ = "atemschutz_pruefung"
+
+    FLASCHENDRUCK_MIN_BAR = 270
+    HOCHDRUCK_DICHTPRUEFUNG_MAX_BAR_MIN = 10
+    WARNSIGNAL_MIN_BAR = 50
+    WARNSIGNAL_MAX_BAR = 60
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     org_id: Mapped[int] = mapped_column(
@@ -86,16 +98,40 @@ class AtemschutzPruefung(Base):
         return self.traeger_free_text or "Unbekannt"
 
     @property
+    def flaschendruck_ok(self) -> bool:
+        """True wenn kein Wert erfasst (Altdaten) oder Wert >= Grenzwert."""
+        if self.flaschendruck_bar is None:
+            return True
+        return self.flaschendruck_bar >= self.FLASCHENDRUCK_MIN_BAR
+
+    @property
+    def warnsignal_ok(self) -> bool:
+        """True wenn kein Wert erfasst (Altdaten) oder Wert im Sollbereich."""
+        if self.rueckzugssignal_bar is None:
+            return True
+        return self.WARNSIGNAL_MIN_BAR <= self.rueckzugssignal_bar <= self.WARNSIGNAL_MAX_BAR
+
+    @property
     def alles_ok(self) -> bool:
-        return bool(self.sichtpruefung_ok and self.hochdruckpruefung_ok and self.geraet_einsatzbereit_ok)
+        return bool(
+            self.flaschendruck_ok
+            and self.sichtpruefung_ok
+            and self.hochdruckpruefung_ok
+            and self.warnsignal_ok
+            and self.geraet_einsatzbereit_ok
+        )
 
     @property
     def defekte_punkte(self) -> list[str]:
         punkte = []
+        if not self.flaschendruck_ok:
+            punkte.append("Flaschendruck")
         if not self.sichtpruefung_ok:
             punkte.append("Sichtprüfung")
         if not self.hochdruckpruefung_ok:
-            punkte.append("Hochdruckprüfung")
+            punkte.append("Hochdruck-Dichtprüfung")
+        if not self.warnsignal_ok:
+            punkte.append("Warnsignal-Prüfung")
         if not self.geraet_einsatzbereit_ok:
             punkte.append("Gerät einsatzbereit")
         return punkte

@@ -181,7 +181,7 @@ async def pruefung_speichern(
         if inc:
             incident_id = inc.id
 
-    def _int_or_none(key: str) -> int | None:
+    def _pflicht_int(key: str) -> int | None:
         raw = form.get(key)
         if raw in (None, ""):
             return None
@@ -190,13 +190,19 @@ async def pruefung_speichern(
         except (TypeError, ValueError):
             return None
 
+    # Drucküberprüfung nach dem Gebrauch: 3 Pflichtwerte, i.O./NICHT i.O. wird
+    # automatisch aus den Grenzwerten in AtemschutzPruefung berechnet (kein
+    # manuelles Umschalten mehr fuer die Hochdruckpruefung noetig).
+    flaschendruck_bar = _pflicht_int("flaschendruck_bar")
+    druckabfall_bar = _pflicht_int("druckabfall_bar")
+    rueckzugssignal_bar = _pflicht_int("rueckzugssignal_bar")
+    if flaschendruck_bar is None or druckabfall_bar is None or rueckzugssignal_bar is None:
+        return _fehler_zurueck("Bitte Flaschendruck, Hochdruck-Dichtprüfung und Warnsignal-Prüfung eintragen.")
+
     sichtpruefung_ok = form.get("sichtpruefung_ok") == "ok"
-    hochdruckpruefung_ok = form.get("hochdruckpruefung_ok") == "ok"
     geraet_einsatzbereit_ok = form.get("geraet_einsatzbereit_ok") == "ok"
-    alles_ok = sichtpruefung_ok and hochdruckpruefung_ok and geraet_einsatzbereit_ok
+    hochdruckpruefung_ok = druckabfall_bar <= AtemschutzPruefung.HOCHDRUCK_DICHTPRUEFUNG_MAX_BAR_MIN
     defekt_info = (form.get("defekt_info") or "").strip() or None
-    if not alles_ok and not defekt_info:
-        return _fehler_zurueck("Bitte eine Zusatzinfo zum Defekt eintragen.")
 
     pruefung = AtemschutzPruefung(
         org_id=org_id,
@@ -213,16 +219,20 @@ async def pruefung_speichern(
         einsatz_art=einsatz_art,
         incident_id=incident_id,
         flasche_gewechselt=form.get("flasche_gewechselt") == "on",
-        flaschendruck_bar=_int_or_none("flaschendruck_bar"),
+        flaschendruck_bar=flaschendruck_bar,
         sichtpruefung_ok=sichtpruefung_ok,
-        druckabfall_bar=_int_or_none("druckabfall_bar"),
+        druckabfall_bar=druckabfall_bar,
         hochdruckpruefung_ok=hochdruckpruefung_ok,
-        rueckzugssignal_bar=_int_or_none("rueckzugssignal_bar"),
+        rueckzugssignal_bar=rueckzugssignal_bar,
         geraet_einsatzbereit_ok=geraet_einsatzbereit_ok,
         defekt_info=defekt_info,
         created_via="intern" if user else "public",
         created_by_user_id=user.id if user else None,
     )
+    alles_ok = pruefung.alles_ok
+    if not alles_ok and not defekt_info:
+        return _fehler_zurueck("Bitte eine Zusatzinfo zum Defekt eintragen.")
+
     db.add(pruefung)
     db.flush()
 
@@ -274,18 +284,6 @@ async def pruefung_liste(
     q = _pruefungen_query(user.org_id, db)
     if geraet_id:
         q = q.filter(AtemschutzPruefung.geraet_id == geraet_id)
-    if status == "nicht_ok":
-        q = q.filter(
-            (AtemschutzPruefung.sichtpruefung_ok.is_(False))
-            | (AtemschutzPruefung.hochdruckpruefung_ok.is_(False))
-            | (AtemschutzPruefung.geraet_einsatzbereit_ok.is_(False))
-        )
-    elif status == "ok":
-        q = q.filter(
-            AtemschutzPruefung.sichtpruefung_ok.is_(True),
-            AtemschutzPruefung.hochdruckpruefung_ok.is_(True),
-            AtemschutzPruefung.geraet_einsatzbereit_ok.is_(True),
-        )
     if von:
         try:
             q = q.filter(AtemschutzPruefung.eingesetzt_am >= date.fromisoformat(von))
@@ -297,6 +295,13 @@ async def pruefung_liste(
         except ValueError:
             pass
     pruefungen = q.order_by(AtemschutzPruefung.eingesetzt_am.desc(), AtemschutzPruefung.id.desc()).all()
+    # Status-Filter in Python statt SQL: "alles_ok" umfasst inzwischen auch die
+    # aus Flaschendruck/Warnsignal-Werten berechneten Grenzwert-Checks, die
+    # keine eigene DB-Spalte haben (siehe AtemschutzPruefung.alles_ok).
+    if status == "nicht_ok":
+        pruefungen = [p for p in pruefungen if not p.alles_ok]
+    elif status == "ok":
+        pruefungen = [p for p in pruefungen if p.alles_ok]
     geraete = (
         db.query(AtemschutzGeraet)
         .filter(AtemschutzGeraet.org_id == user.org_id)
@@ -384,8 +389,9 @@ def _build_xlsx(pruefungen: list[AtemschutzPruefung], org=None) -> bytes:
     header_fill = PatternFill("solid", fgColor="D42225")
     cols = [
         "Datum", "Gerät", "Atemschutzträger", "Ort", "Anlass", "Flasche gewechselt",
-        "Flaschendruck", "Sichtprüfung", "Druckabfall", "Hochdruckprüfung",
-        "Rückzugssignal", "Einsatzbereit", "Zusatzinfo", "Erfasst am",
+        "Flaschendruck (bar)", "Flaschendruck i.O.", "Sichtprüfung",
+        "Hochdruck-Dichtprüfung (bar/min)", "Hochdruck-Dichtprüfung i.O.",
+        "Warnsignal-Prüfung (bar)", "Warnsignal-Prüfung i.O.", "Einsatzbereit", "Zusatzinfo", "Erfasst am",
     ]
     for ci, col in enumerate(cols, start=1):
         cell = ws.cell(row=1, column=ci, value=col)
@@ -402,10 +408,12 @@ def _build_xlsx(pruefungen: list[AtemschutzPruefung], org=None) -> bytes:
             "Einsatz" if p.einsatz_art == "einsatz" else "Übung",
             "Ja" if p.flasche_gewechselt else "Nein",
             p.flaschendruck_bar if p.flaschendruck_bar is not None else "",
+            "i.O." if p.flaschendruck_ok else "NICHT i.O.",
             "i.O." if p.sichtpruefung_ok else "NICHT i.O.",
             p.druckabfall_bar if p.druckabfall_bar is not None else "",
             "i.O." if p.hochdruckpruefung_ok else "NICHT i.O.",
             p.rueckzugssignal_bar if p.rueckzugssignal_bar is not None else "",
+            "i.O." if p.warnsignal_ok else "NICHT i.O.",
             "i.O." if p.geraet_einsatzbereit_ok else "NICHT i.O.",
             p.defekt_info or "",
             format_local_datetime(p.created_at, org),
@@ -414,7 +422,7 @@ def _build_xlsx(pruefungen: list[AtemschutzPruefung], org=None) -> bytes:
             ws.cell(row=ri, column=ci, value=val)
 
     ws.auto_filter.ref = ws.dimensions
-    widths = [12, 22, 22, 20, 10, 16, 12, 12, 12, 14, 14, 14, 30, 18]
+    widths = [12, 22, 22, 20, 10, 16, 14, 14, 12, 20, 20, 16, 16, 14, 30, 18]
     for ci, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(ci)].width = w
 
