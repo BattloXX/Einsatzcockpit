@@ -23,6 +23,7 @@ from app.models.incident import Incident
 from app.models.major_incident import MajorIncident
 from app.models.user import SmsGatewayToken, User
 from app.services.broadcast import LAGE_WS_OFFSET, ORG_WS_OFFSET, manager
+from app.services.sms_inbox_service import process_inbound_sms, record_inbound_sms
 
 logger = logging.getLogger("einsatzleiter.ws")
 router = APIRouter()
@@ -191,6 +192,19 @@ def _touch_sms_gateway_token(token_id: int) -> None:
         db.close()
 
 
+def _sms_receive_enabled(org_id: int) -> bool:
+    """Liest OrgSettings.sms_receive_enabled – bestimmt ob die App RECEIVE_SMS anfordern soll."""
+    from app.models.master import OrgSettings
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        return bool(settings and settings.sms_receive_enabled)
+    finally:
+        db.close()
+
+
 @router.websocket("/ws/sms-gateway")
 async def sms_gateway_ws(websocket: WebSocket):
     """WebSocket-Kanal für den SMS-Gateway-Docker-Container.
@@ -214,6 +228,12 @@ async def sms_gateway_ws(websocket: WebSocket):
         org_id, token_id, len(_sms_gateways[org_id]),
     )
 
+    # Teilt der App mit, ob SMS-Empfang für diese Org aktiv ist – nur dann fordert
+    # die App RECEIVE_SMS an und registriert ihren Empfangs-Receiver.
+    await websocket.send_text(json.dumps({
+        "type": "config", "receive_enabled": _sms_receive_enabled(org_id),
+    }))
+
     try:
         while True:
             raw = await websocket.receive_text()
@@ -232,6 +252,15 @@ async def sms_gateway_ws(websocket: WebSocket):
                 fut = _sms_pending.pop(job_id, None)
                 if fut and not fut.done():
                     fut.set_result(msg)
+            elif msg_type == "sms.received":
+                from_number = msg.get("from", "")
+                text = msg.get("text", "")
+                if from_number:
+                    inbox_id = record_inbound_sms(org_id, token_id, from_number, text)
+                    asyncio.create_task(process_inbound_sms(inbox_id))
+                ack_id = msg.get("id")
+                if ack_id:
+                    await websocket.send_text(json.dumps({"type": "sms.received.ack", "id": ack_id}))
             else:
                 logger.debug("SMS-Gateway unbekannter Typ: %s", msg_type)
 

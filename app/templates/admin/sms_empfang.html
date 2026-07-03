@@ -1,0 +1,259 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}SMS-Empfang – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'SMS-Empfang'}]) }}{% endblock %}
+
+{% macro _rule_form_fields(groups, members, rule=None, rule_group_ids=[], rule_member_ids=[]) %}
+<div class="form-group">
+  <label class="form-label">Name <span style="color:var(--color-danger)">*</span></label>
+  <input type="text" name="name" class="form-input" required maxlength="150"
+         value="{{ rule.name if rule else '' }}" placeholder="z.B. Alarmzentrale">
+</div>
+<div style="display:flex;gap:12px;flex-wrap:wrap;">
+  <div class="form-group" style="flex:1;min-width:140px;">
+    <label class="form-label">Absender-Match</label>
+    <select name="match_type" class="form-input">
+      <option value="exact" {% if not rule or rule.match_type == 'exact' %}selected{% endif %}>Exakte Nummer</option>
+      <option value="prefix" {% if rule and rule.match_type == 'prefix' %}selected{% endif %}>Prafix (beginnt mit)</option>
+    </select>
+  </div>
+  <div class="form-group" style="flex:2;min-width:160px;">
+    <label class="form-label">Absendernummer <span style="color:var(--color-danger)">*</span></label>
+    <input type="text" name="match_number" class="form-input" required maxlength="30"
+           value="{{ rule.match_number if rule else '' }}" placeholder="+43664...">
+  </div>
+</div>
+<div class="form-group">
+  <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+    <input type="checkbox" name="enabled" value="true" {% if not rule or rule.enabled %}checked{% endif %}>
+    <span>Regel aktiv</span>
+  </label>
+</div>
+<div class="form-group">
+  <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+    <input type="checkbox" name="prepend_sender" value="true" {% if not rule or rule.prepend_sender %}checked{% endif %}>
+    <span>Absendernummer im weitergeleiteten Text voranstellen</span>
+  </label>
+</div>
+
+<div class="form-group" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+  <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+    <input type="checkbox" name="forward_teams" value="true" {% if rule and rule.forward_teams %}checked{% endif %}>
+    <span><strong>An Teams weiterleiten</strong></span>
+  </label>
+  <input type="text" name="teams_webhook_url" class="form-input" style="margin-top:8px;"
+         value="{{ rule.teams_webhook_url if rule and rule.teams_webhook_url else '' }}"
+         placeholder="Eigener Webhook (leer = Standard-Webhook aus den Einstellungen)">
+</div>
+
+<div class="form-group">
+  <div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:8px;">ALS SMS AN GRUPPEN</div>
+  {% if groups %}
+  <div style="border:1px solid var(--border);border-radius:4px;padding:8px;max-height:160px;overflow-y:auto;">
+    {% for grp in groups %}
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0;">
+      <input type="checkbox" name="group_id" value="{{ grp.id }}"
+             {% if grp.id in rule_group_ids %}checked{% endif %}>
+      <span>{{ grp.name }}</span>
+    </label>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted" style="font-size:.85rem;">Keine Gruppen. <a href="/admin/gruppen">Gruppen anlegen</a></p>
+  {% endif %}
+</div>
+
+<div class="form-group">
+  <div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:8px;">ALS SMS AN EINZELNE MITGLIEDER</div>
+  {% if members %}
+  <div style="border:1px solid var(--border);border-radius:4px;padding:8px;max-height:160px;overflow-y:auto;">
+    {% for m in members %}
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0;font-size:.88rem;">
+      <input type="checkbox" name="member_id" value="{{ m.id }}"
+             {% if m.id in rule_member_ids %}checked{% endif %}>
+      {{ m.lastname }}, {{ m.firstname }}
+      {% if not m.phone %}<span class="text-muted" style="font-size:.75rem;">(keine Tel.)</span>{% endif %}
+    </label>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted" style="font-size:.85rem;">Keine aktiven Mitglieder.</p>
+  {% endif %}
+</div>
+
+<div class="form-group">
+  <label class="form-label">Als SMS an Ad-hoc-Nummern</label>
+  <input type="text" name="forward_adhoc_numbers" class="form-input"
+         value="{{ rule.forward_adhoc_numbers if rule and rule.forward_adhoc_numbers else '' }}"
+         placeholder="Kommagetrennt, z.B. +43664111,+43664222">
+</div>
+{% endmacro %}
+
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>SMS-Empfang</h1>
+      <p class="page-header__sub">
+        Empfangene SMS werden hier protokolliert. Weiterleitungsregeln leiten SMS von
+        bestimmten Absendernummern automatisch an Teams oder als SMS weiter.
+      </p>
+    </div>
+  </div>
+
+  {% if saved %}
+  <div class="alert alert--success">Gespeichert.</div>
+  {% endif %}
+  {% if error == 'empty' %}
+  <div class="alert alert--danger">Name und Absendernummer sind Pflichtfelder.</div>
+  {% elif error %}
+  <div class="alert alert--danger">Fehler: {{ error }}</div>
+  {% endif %}
+
+  <!-- ── Allgemeine Einstellungen ─────────────────────────────────────────── -->
+  <div class="admin-section-title">Allgemeine Einstellungen</div>
+  <div class="chart-box" style="margin-bottom:24px;">
+    <form method="post" action="/admin/sms-empfang/einstellungen">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+            <input type="checkbox" name="enabled" value="true"
+                   {% if org_settings and org_settings.sms_receive_enabled %}checked{% endif %}>
+            <span><strong>SMS-Empfang aktiviert</strong><br>
+            <small class="text-muted">Das Gateway-Telefon fordert die SMS-Empfangsberechtigung nur an, wenn dieser Schalter aktiv ist.</small></span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Standard-Teams-Webhook</label>
+          <input type="text" name="teams_webhook_url" class="form-input"
+                 value="{{ org_settings.sms_receive_teams_webhook_url if org_settings else '' }}"
+                 placeholder="https://...webhook.office.com/...">
+          <div class="form-help" style="margin-top:4px;font-size:.8rem;color:var(--text-muted);">
+            Wird verwendet, wenn eine Regel „An Teams" aktiviert hat, aber keinen eigenen Webhook angibt.
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button type="submit" class="btn btn--primary">Einstellungen speichern</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Weiterleitungsregeln ─────────────────────────────────────────────── -->
+  <div class="admin-section-title">Weiterleitungsregeln</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;align-items:start;margin-bottom:32px;">
+
+    <!-- Neue Regel anlegen -->
+    <div class="chart-box">
+      <h3 style="margin-bottom:16px;">Neue Regel anlegen</h3>
+      <form method="post" action="/admin/sms-empfang/regel/neu">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        {{ _rule_form_fields(groups, members) }}
+        <div style="margin-top:16px;">
+          <button type="submit" class="btn btn--primary">Anlegen</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Regel-Liste -->
+    <div>
+      {% if not rules %}
+      <p class="text-muted">Noch keine Weiterleitungsregeln angelegt. Ohne Regel werden empfangene SMS nur geloggt.</p>
+      {% endif %}
+      {% for rule in rules %}
+      {% set rule_group_ids = rule.groups|map(attribute='group_id')|list %}
+      {% set rule_member_ids = rule.members|map(attribute='member_id')|list %}
+      <div class="chart-box" style="margin-bottom:18px;" id="regel-{{ rule.id }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <strong style="font-size:1.05rem;">{{ rule.name }}</strong>
+            {% if rule.enabled %}
+            <span class="badge-pill badge-pill--green" style="font-size:.72rem;margin-left:8px;">Aktiv</span>
+            {% else %}
+            <span class="badge-pill badge-pill--gray" style="font-size:.72rem;margin-left:8px;">Deaktiviert</span>
+            {% endif %}
+            <span class="badge-pill badge-pill--gray" style="font-size:.72rem;margin-left:6px;">
+              {{ 'Prafix' if rule.match_type == 'prefix' else 'Exakt' }}: {{ rule.match_number }}
+            </span>
+            {% if rule.forward_teams %}
+            <span class="badge-pill badge-pill--gray" style="font-size:.72rem;margin-left:6px;">Teams</span>
+            {% endif %}
+            {% if rule.has_sms_targets %}
+            <span class="badge-pill badge-pill--gray" style="font-size:.72rem;margin-left:6px;">SMS</span>
+            {% endif %}
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn btn--ghost btn--xs"
+                    onclick="toggleEdit({{ rule.id }})">Bearbeiten</button>
+            <form method="post" action="/admin/sms-empfang/regel/{{ rule.id }}/loeschen"
+                  onsubmit="return confirm('Regel \'{{ rule.name }}\' wirklich loeschen?')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Loeschen</button>
+            </form>
+          </div>
+        </div>
+
+        <div id="edit-{{ rule.id }}" style="display:none;padding:12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">
+          <form method="post" action="/admin/sms-empfang/regel/{{ rule.id }}/edit">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            {{ _rule_form_fields(groups, members, rule, rule_group_ids, rule_member_ids) }}
+            <div style="margin-top:12px;">
+              <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  <!-- ── Empfangs-Log ─────────────────────────────────────────────────────── -->
+  <div class="admin-section-title">
+    Empfangs-Log <small style="font-weight:400;color:var(--text-muted)">(letzte 50)</small>
+  </div>
+  {% if inbox %}
+  <div style="overflow-x:auto;margin-bottom:24px;">
+    <table class="table-admin" style="min-width:600px;">
+      <thead>
+        <tr>
+          <th style="width:130px;">Zeitpunkt</th>
+          <th style="width:150px;">Absender</th>
+          <th>Text</th>
+          <th style="width:200px;">Ergebnis</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in inbox %}
+        <tr>
+          <td style="white-space:nowrap;color:var(--text-muted);font-size:.83rem;">
+            {{ (entry.received_at|local).strftime('%d.%m.%Y %H:%M') if entry.received_at else '–' }}
+          </td>
+          <td style="font-family:monospace;font-size:.88rem;">{{ entry.from_number }}</td>
+          <td style="font-size:.88rem;max-width:340px;">
+            {{ entry.text[:100] }}{% if entry.text|length > 100 %}…{% endif %}
+          </td>
+          <td style="font-size:.83rem;color:var(--text-muted);">
+            {{ entry.forward_summary or ('Verarbeitung ausstehend' if not entry.processed else '–') }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Noch keine SMS empfangen.</p>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleEdit(id) {
+  var el = document.getElementById('edit-' + id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

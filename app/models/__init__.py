@@ -61,7 +61,16 @@ from app.models.master import (
     VehicleMaster,
 )
 from app.models.password_reset import PasswordResetToken
-from app.models.sms import SmsEinsatzinfoRecipient, SmsGroup, SmsGroupMember, SmsLog
+from app.models.sms import (
+    SmsEinsatzinfoRecipient,
+    SmsForwardRule,
+    SmsForwardRuleGroup,
+    SmsForwardRuleMember,
+    SmsGroup,
+    SmsGroupMember,
+    SmsInbox,
+    SmsLog,
+)
 from app.models.sso import OrgSsoConfig, OrgSsoGroupMap
 from app.models.teilnahme import Funktion, Teilnahme, Termin
 from app.models.uas import (
@@ -124,6 +133,7 @@ __all__ = [
     "WeatherStation", "WeatherReading",
     "WeatherAlertRule", "WeatherAlertState", "WeatherAlertLog",
     "SmsGroup", "SmsGroupMember", "SmsEinsatzinfoRecipient", "SmsLog",
+    "SmsInbox", "SmsForwardRule", "SmsForwardRuleGroup", "SmsForwardRuleMember",
     "Fahrtzweck", "Zielort", "Fahrt", "FahrtBenachrichtigung",
     "FahrtKategorie", "FahrtStatus", "FahrtErfassungsweg",
     "Termin", "Funktion", "Teilnahme",

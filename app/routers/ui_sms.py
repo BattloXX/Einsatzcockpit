@@ -13,7 +13,16 @@ from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import AlarmType, Member, OrgSettings
-from app.models.sms import SmsEinsatzinfoRecipient, SmsGroup, SmsGroupMember, SmsLog
+from app.models.sms import (
+    SmsEinsatzinfoRecipient,
+    SmsForwardRule,
+    SmsForwardRuleGroup,
+    SmsForwardRuleMember,
+    SmsGroup,
+    SmsGroupMember,
+    SmsInbox,
+    SmsLog,
+)
 
 router = APIRouter(prefix="/admin")
 logger = logging.getLogger("einsatzleiter.ui_sms")
@@ -643,3 +652,186 @@ async def sms_send_execute(
     db.commit()
 
     return RedirectResponse(f"/admin/sms-senden?sent={success}", status_code=303)
+
+
+# ── SMS-Empfang: Log + Weiterleitungsregeln ───────────────────────────────────
+
+def _forward_rules_for_org(db: Session, org_id: int) -> list[SmsForwardRule]:
+    return (
+        db.query(SmsForwardRule)
+        .filter(SmsForwardRule.org_id == org_id)
+        .order_by(SmsForwardRule.display_order, SmsForwardRule.id)
+        .all()
+    )
+
+
+@router.get("/sms-empfang", response_class=HTMLResponse)
+async def sms_empfang_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    user = request.state.user
+    org_id = _require_org(user)
+
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    groups = _sms_groups_for_org(db, org_id)
+    members = _active_members(db, org_id)
+    rules = _forward_rules_for_org(db, org_id)
+    inbox = (
+        db.query(SmsInbox)
+        .filter(SmsInbox.org_id == org_id)
+        .order_by(SmsInbox.received_at.desc())
+        .limit(50)
+        .all()
+    )
+    return templates.TemplateResponse(request, "admin/sms_empfang.html", {
+        "user": user,
+        "org_settings": org_settings,
+        "groups": groups,
+        "members": members,
+        "rules": rules,
+        "inbox": inbox,
+        "saved": request.query_params.get("saved"),
+        "error": request.query_params.get("error"),
+    })
+
+
+@router.post("/sms-empfang/einstellungen")
+async def sms_empfang_save_settings(
+    request: Request,
+    enabled: bool = Form(False),
+    teams_webhook_url: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    """Speichert den Org-Schalter fuer SMS-Empfang und den Default-Teams-Webhook."""
+    user = request.state.user
+    org_id = _require_org(user)
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    if not org_settings:
+        raise HTTPException(status_code=404)
+    org_settings.sms_receive_enabled = enabled
+    org_settings.sms_receive_teams_webhook_url = teams_webhook_url.strip() or None
+    write_audit(db, "admin.sms_empfang.settings_saved", org_id=org_id, user_id=user.id,
+                payload={"enabled": enabled})
+    db.commit()
+    return RedirectResponse("/admin/sms-empfang?saved=1", status_code=303)
+
+
+def _apply_rule_targets(db: Session, rule: SmsForwardRule, form) -> None:
+    """Ersetzt Gruppen-/Mitglieder-Ziele einer Regel (vollstaendiger Ersatz)."""
+    group_ids = {int(v) for k, v in form.multi_items() if k == "group_id"}  # type: ignore[arg-type]
+    member_ids = {int(v) for k, v in form.multi_items() if k == "member_id"}  # type: ignore[arg-type]
+
+    db.query(SmsForwardRuleGroup).filter(SmsForwardRuleGroup.rule_id == rule.id).delete()
+    db.query(SmsForwardRuleMember).filter(SmsForwardRuleMember.rule_id == rule.id).delete()
+    for gid in group_ids:
+        db.add(SmsForwardRuleGroup(rule_id=rule.id, group_id=gid))
+    for mid in member_ids:
+        db.add(SmsForwardRuleMember(rule_id=rule.id, member_id=mid))
+
+
+@router.post("/sms-empfang/regel/neu")
+async def sms_forward_rule_create(
+    request: Request,
+    name: str = Form(...),
+    match_type: str = Form("exact"),
+    match_number: str = Form(...),
+    enabled: bool = Form(False),
+    forward_teams: bool = Form(False),
+    teams_webhook_url: str = Form(""),
+    forward_adhoc_numbers: str = Form(""),
+    prepend_sender: bool = Form(True),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    user = request.state.user
+    org_id = _require_org(user)
+    name = name.strip()
+    match_number = match_number.strip()
+    if not name or not match_number:
+        return RedirectResponse("/admin/sms-empfang?error=empty", status_code=303)
+    if match_type not in ("exact", "prefix"):
+        match_type = "exact"
+
+    rule = SmsForwardRule(
+        org_id=org_id,
+        name=name,
+        enabled=enabled,
+        match_type=match_type,
+        match_number=match_number,
+        forward_teams=forward_teams,
+        teams_webhook_url=teams_webhook_url.strip() or None,
+        forward_adhoc_numbers=forward_adhoc_numbers.strip() or None,
+        prepend_sender=prepend_sender,
+        created_at=datetime.now(UTC),
+    )
+    db.add(rule)
+    db.flush()
+
+    form = await request.form()
+    _apply_rule_targets(db, rule, form)
+
+    write_audit(db, "admin.sms_forward_rule.created", org_id=org_id, user_id=user.id,
+                entity_type="sms_forward_rule", entity_id=rule.id, payload={"name": name})
+    db.commit()
+    return RedirectResponse(f"/admin/sms-empfang?saved=1#regel-{rule.id}", status_code=303)
+
+
+@router.post("/sms-empfang/regel/{rule_id}/edit")
+async def sms_forward_rule_edit(
+    rule_id: int,
+    request: Request,
+    name: str = Form(...),
+    match_type: str = Form("exact"),
+    match_number: str = Form(...),
+    enabled: bool = Form(False),
+    forward_teams: bool = Form(False),
+    teams_webhook_url: str = Form(""),
+    forward_adhoc_numbers: str = Form(""),
+    prepend_sender: bool = Form(True),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    user = request.state.user
+    org_id = _require_org(user)
+    rule = db.get(SmsForwardRule, rule_id)
+    if not rule or rule.org_id != org_id:
+        raise HTTPException(status_code=404)
+
+    rule.name = name.strip() or rule.name
+    rule.match_type = match_type if match_type in ("exact", "prefix") else rule.match_type
+    rule.match_number = match_number.strip() or rule.match_number
+    rule.enabled = enabled
+    rule.forward_teams = forward_teams
+    rule.teams_webhook_url = teams_webhook_url.strip() or None
+    rule.forward_adhoc_numbers = forward_adhoc_numbers.strip() or None
+    rule.prepend_sender = prepend_sender
+
+    form = await request.form()
+    _apply_rule_targets(db, rule, form)
+
+    write_audit(db, "admin.sms_forward_rule.edited", org_id=org_id, user_id=user.id,
+                entity_type="sms_forward_rule", entity_id=rule_id)
+    db.commit()
+    return RedirectResponse(f"/admin/sms-empfang?saved=1#regel-{rule_id}", status_code=303)
+
+
+@router.post("/sms-empfang/regel/{rule_id}/loeschen")
+async def sms_forward_rule_delete(
+    rule_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    user = request.state.user
+    org_id = _require_org(user)
+    rule = db.get(SmsForwardRule, rule_id)
+    if not rule or rule.org_id != org_id:
+        raise HTTPException(status_code=404)
+    db.delete(rule)
+    write_audit(db, "admin.sms_forward_rule.deleted", org_id=org_id, user_id=user.id,
+                entity_type="sms_forward_rule", entity_id=rule_id)
+    db.commit()
+    return RedirectResponse("/admin/sms-empfang?saved=1", status_code=303)

@@ -291,6 +291,11 @@
                {{ tip('SMS manuell an Gruppen oder Mitglieder senden') }}>
               <span class="admin-nav__icon">✉️</span>SMS senden
             </a>
+            <a href="/admin/sms-empfang"
+               class="admin-nav__item {% if '/admin/sms-empfang' in request.url.path %}is-active{% endif %}"
+               {{ tip('Empfangene SMS protokollieren und automatisch an Teams/SMS weiterleiten') }}>
+              <span class="admin-nav__icon">📥</span>SMS-Empfang
+            </a>
           </div>
         </div>
 

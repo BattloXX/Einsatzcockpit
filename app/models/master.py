@@ -407,6 +407,11 @@ class OrgSettings(Base):
     # True = auch bei Übungen senden (mit [ÜBUNG]-Präfix)
     einsatzinfo_sms_send_exercise: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # SMS-Empfang: Org-Schalter (App fordert RECEIVE_SMS nur an, wenn aktiv)
+    sms_receive_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Org-Default-Webhook fuer Weiterleitungsregeln ohne eigenen teams_webhook_url
+    sms_receive_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
     # Atemschutzgeräteprüfung-Konfiguration je Org
     atemschutz_pruefung_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     atemschutz_pruef_token: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
