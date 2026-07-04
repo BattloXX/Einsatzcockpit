@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Historie – Einsatz {{ incident.alarm_type_code }} #{{ incident.id }}{% endblock %}
+{% block title %}Historie – Einsatz {{ incident.alarm_type_code }} #{{ incident.lis_operation_number or incident.nummer or incident.id }}{% endblock %}
 
 {% block content %}
 <style>
@@ -58,7 +58,7 @@
 <div class="history-page">
   <div class="page-header">
     <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">← Board</a>
-    <h2>Verlauf – Einsatz {{ incident.alarm_type_code }}</h2>
+    <h2>Verlauf – Einsatz {{ incident.alarm_type_code }} #{{ incident.lis_operation_number or incident.nummer or incident.id }}</h2>
   </div>
 
   {% if changes %}

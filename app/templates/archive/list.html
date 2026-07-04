@@ -30,7 +30,7 @@
             data-search="{{ inc.alarm_type_code }} {{ inc.address_street or '' }} {{ inc.address_no or '' }} {{ inc.address_city or '' }}"
             x-show="(showExercise || !{{ 'true' if inc.is_exercise else 'false' }}) &&
                     (search === '' || $el.getAttribute('data-search').toLowerCase().includes(search.toLowerCase()))">
-          <td>{{ inc.nummer or inc.id }}</td>
+          <td>{{ inc.lis_operation_number or inc.nummer or inc.id }}</td>
           <td>
             <span class="alarm-badge alarm-badge--sm alarm-badge--{{ inc.alarm_type_code[:1]|lower }}">{{ inc.alarm_type_code }}</span>
             {% if uas_incident_ids is defined and inc.id in uas_incident_ids %}

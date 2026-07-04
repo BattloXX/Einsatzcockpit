@@ -69,7 +69,7 @@
     <div class="source-url">{{ brand_domain }}</div>
   </div>
   <div style="text-align:right">
-    <div><strong>Einsatz #{{ incident.nummer or incident.id }}</strong></div>
+    <div><strong>Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</strong></div>
     <div>{{ incident.started_at|local_datetime }} Uhr</div>
     <div class="meta">Erstellt: {{ now|local_datetime }}</div>
   </div>

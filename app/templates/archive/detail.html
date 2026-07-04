@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Einsatz #{{ incident.id }} – Archiv{% endblock %}
+{% block title %}Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }} – Archiv{% endblock %}
 {% block head_extra %}
 <style>
 @media (max-width: 700px) {
@@ -20,7 +20,7 @@
 {% block content %}
 <div class="page-header archive-detail-header">
   <a href="/archiv" class="btn btn--ghost">← Archiv</a>
-  <h2>Einsatz {{ incident.alarm_type_code }} #{{ incident.id }}</h2>
+  <h2>Einsatz {{ incident.alarm_type_code }} #{{ incident.lis_operation_number or incident.nummer or incident.id }}</h2>
   <div class="page-header__actions">
     <a href="/archiv/{{ incident.id }}/pdf" class="btn btn--primary">PDF</a>
     <a href="/einsatz/{{ incident.id }}/historie" class="btn btn--ghost">Verlauf</a>
