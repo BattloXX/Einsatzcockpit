@@ -75,6 +75,20 @@ def map_unit_status(label: str | None) -> str | None:
     return None
 
 
+# Umkehrung von map_unit_status() — welches LIS-Status-Präfix (aus dem Katalog
+# GetOperationUnitStatusTypes) entspricht einem intern gesetzten unit_status. Nur für
+# SetOperationUnitStatus (Fahrzeugstatus vom Einsatzcockpit zurück ins LIS schreiben).
+_UNIT_STATUS_TO_LIS_PREFIX: dict[str, str] = {
+    "Einsatzbereit": "S1",
+    "Einsatz übernommen": "S4",
+    "Am Einsatzort": "S5",
+}
+
+
+def unit_status_to_lis_prefix(status: str) -> str | None:
+    return _UNIT_STATUS_TO_LIS_PREFIX.get(status)
+
+
 # ── Meldung vs. Auftrag (Task.Type.Type) ──────────────────────────────────────
 def is_lis_auftrag(task_type: str | None) -> bool:
     """True für echte LIS-Aufträge ("an eine Stabsfunktion zuteilen", Type.Type

@@ -62,8 +62,10 @@ from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.broadcast import broadcast_org, manager
 from app.services.incident_service import (
+    _lis_enabled_for_org,
     add_section_column,
     add_task,
+    append_card,
     assign_task_to_vehicle,
     cancel_task,
     close_incident,
@@ -549,9 +551,11 @@ async def alarm_dispatch_vehicles(
         .all()
     ) if _at_for_dispatch else []
 
-    dispatched_col = next((c for c in incident.columns if c.code == "dispatched"), None)
+    active_col = next((c for c in incident.columns if c.code == "active"), None)
     added = 0
-    if dispatched_col and dispatch_entries:
+    # Mit aktiver LIS-Anbindung übernimmt LIS die Ankunftsmeldung (Status S4) — hier werden
+    # dann keine Fahrzeuge automatisch angelegt, siehe _lis_enabled_for_org()/_populate_vehicles().
+    if active_col and dispatch_entries and not _lis_enabled_for_org(db, incident.primary_org_id):
         already_master_ids = {
             v.vehicle_master_id for v in incident.vehicles if v.removed_at is None
         }
@@ -559,12 +563,15 @@ async def alarm_dispatch_vehicles(
             if entry.vehicle_master_id not in already_master_ids:
                 vm = db.get(VehicleMaster, entry.vehicle_master_id)
                 if vm and vm.active:
-                    db.add(IncidentVehicle(
+                    iv = IncidentVehicle(
                         incident_id=incident.id,
-                        column_id=dispatched_col.id,
+                        column_id=active_col.id,
                         vehicle_master_id=vm.id,
                         display_order=999,
-                    ))
+                    )
+                    db.add(iv)
+                    db.flush()
+                    append_card(db, active_col.id, "vehicle", iv.id)
                     already_master_ids.add(entry.vehicle_master_id)
                     added += 1
         if added:
@@ -1329,7 +1336,7 @@ async def attach_vehicle_to_incident(
         return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
 
     # Wurde die Einheit über den "+ Einheit"-Button einer konkreten Spalte (Abschnitt) angelegt,
-    # landet sie direkt dort statt immer in "Disponiert".
+    # landet sie direkt dort statt immer in "Tatsächlich im Einsatz".
     target_col = None
     if column_id:
         target_col = next(
@@ -1338,7 +1345,7 @@ async def attach_vehicle_to_incident(
             None,
         )
     if target_col is None:
-        target_col = next((c for c in incident.columns if c.code == "dispatched"), None)
+        target_col = next((c for c in incident.columns if c.code == "active"), None)
     if target_col is None and incident.columns:
         target_col = incident.columns[0]
     if target_col is None:
@@ -1358,7 +1365,12 @@ async def attach_vehicle_to_incident(
     if note.strip():
         db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
                            user_id=request.state.user.id, author_name=get_author_name(request)))
-    prepend_card(db, target_col.id, "vehicle", iv.id)
+    # In "Tatsächlich im Einsatz" chronologisch ans Ende (wie S4-Ankünfte), sonst wie
+    # gewohnt ganz oben in der Lane.
+    if target_col.code == "active":
+        append_card(db, target_col.id, "vehicle", iv.id)
+    else:
+        prepend_card(db, target_col.id, "vehicle", iv.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "vehicle_added", "reload_board": True})
     return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
@@ -2028,6 +2040,7 @@ async def set_vehicle_commander(
 @router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/status")
 async def set_vehicle_unit_status(
     incident_id: int, vehicle_id: int, request: Request,
+    background_tasks: BackgroundTasks,
     unit_status: str = Form(...),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
@@ -2040,6 +2053,8 @@ async def set_vehicle_unit_status(
     except ValueError:
         return Response(status_code=422)
     db.commit()
+    from app.services.lis.lis_sync import push_vehicle_status_to_lis
+    background_tasks.add_task(push_vehicle_status_to_lis, vehicle.id, unit_status)
     await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
     return Response(status_code=204)
 
@@ -2631,6 +2646,7 @@ async def delete_person_media(
 @router.post("/einsatz/{incident_id}/karte/verschieben")
 async def move_card_endpoint(
     incident_id: int, request: Request,
+    background_tasks: BackgroundTasks,
     kind: str = Form(...),
     uid: int = Form(...),
     column_id: int | None = Form(None),
@@ -2646,6 +2662,11 @@ async def move_card_endpoint(
         vehicle_id=vehicle_id,
         user_id=request.state.user.id,
     )
+    if kind == "vehicle":
+        moved_vehicle = db.get(IncidentVehicle, uid)
+        if moved_vehicle:
+            from app.services.lis.lis_sync import push_vehicle_status_to_lis
+            background_tasks.add_task(push_vehicle_status_to_lis, moved_vehicle.id, moved_vehicle.unit_status)
     if zone_order and column_id:
         import json as _json
         try:

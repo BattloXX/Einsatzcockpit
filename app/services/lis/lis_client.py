@@ -39,6 +39,8 @@ _ACTION_GET_TASKS = f"{_NS_BASE}/OperationService/GetTasks"
 _ACTION_GET_OPERATION_UNITS = f"{_NS_BASE}/OperationService/GetOperationUnits"
 _ACTION_GET_DOCUMENTS = f"{_NS_BASE}/OperationService/GetDocumentsByOperationId"
 _ACTION_DOWNLOAD_ATTACHMENT = f"{_NS_BASE}/OperationService/DownloadDocument"
+_ACTION_GET_UNIT_STATUS_TYPES = f"{_NS_BASE}/OperationService/GetOperationUnitStatusTypes"
+_ACTION_SET_UNIT_STATUS = f"{_NS_BASE}/OperationService/SetOperationUnitStatus"
 
 
 class LisClientError(Exception):
@@ -382,6 +384,44 @@ class LisClient:
             body,
         )
         return _result_list(root, "GetOperationUnitsResult")
+
+    async def get_operation_unit_status_types(self) -> list[dict]:
+        """Statuskatalog (S1/S4/S5/... -> GUID), installationsweit (kein operationId/
+        organizationId nötig). Verifiziert gegen einen echten Referenz-Mitschnitt
+        (2026-07-04) — nur siteSession im Request.
+        """
+        await self._ensure_login()
+        body = (
+            f'<GetOperationUnitStatusTypes xmlns="{_NS_OPERATION}">'
+            f"{self._site_session_xml()}"
+            f"</GetOperationUnitStatusTypes>"
+        )
+        root = await self._post(
+            f"{self.base_url}/OperationService.svc",
+            _ACTION_GET_UNIT_STATUS_TYPES,
+            body,
+        )
+        return _result_list(root, "GetOperationUnitStatusTypesResult")
+
+    async def set_operation_unit_status(self, operation_unit_id: str, status_type_id: str) -> None:
+        """Schreibt den Status EINER Einheit ins LIS zurück (verifiziert gegen einen echten
+        Referenz-Mitschnitt, 2026-07-04: operationUnitId + operationUnitStatusTypeId,
+        leere Erfolgsantwort). operationUnitId ist NICHT die VehicleMaster.lis_reference_id,
+        sondern OperationUnit.Id aus GetOperationUnits.
+        """
+        await self._ensure_login()
+        body = (
+            f'<SetOperationUnitStatus xmlns="{_NS_OPERATION}">'
+            f"{self._site_session_xml()}"
+            f"<operationUnitId>{_xml_escape(operation_unit_id)}</operationUnitId>"
+            f"<operationUnitStatusTypeId>{_xml_escape(status_type_id)}</operationUnitStatusTypeId>"
+            f"</SetOperationUnitStatus>"
+        )
+        await self._post(
+            f"{self.base_url}/OperationService.svc",
+            _ACTION_SET_UNIT_STATUS,
+            body,
+        )
 
     async def get_documents_by_operation_id(
         self, operation_id: str, maximum_distance: int = 100,

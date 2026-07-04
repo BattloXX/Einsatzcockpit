@@ -32,6 +32,10 @@ class OrgLisConfig(Base):
     # ist server-/installationsweit konstant, nicht pro Operation.
     project_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    # Schreibt lokale Fahrzeugstatus-Änderungen (set_unit_status) zurück ins LIS
+    # (SetOperationUnitStatus) — abschaltbar, weil dies aktiv in das echte
+    # Leitstellensystem schreibt statt nur zu lesen. Default aus, opt-in je Org.
+    push_vehicle_status: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Zugangsdaten
     username: Mapped[str | None] = mapped_column(String(150), nullable=True)

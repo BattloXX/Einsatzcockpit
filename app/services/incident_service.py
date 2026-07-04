@@ -303,7 +303,6 @@ def create_incident(
 
 
 _CODE_KINDS: dict[str, str] = {
-    "dispatched": "vehicles",
     "active":     "vehicles",
     "tasks":      "tasks",
     "messages":   "messages",
@@ -333,13 +332,30 @@ def _get_column(incident: Incident, code: str) -> IncidentColumn | None:
     return None
 
 
+def _lis_enabled_for_org(db: Session, org_id: int | None) -> bool:
+    """True, wenn die Org eine aktive LIS-Anbindung hat.
+
+    Steuert, ob Fahrzeuge aus der Ausrückordnung sofort in "Tatsächlich im Einsatz"
+    landen (kein LIS: klassischer Ablauf) oder erst mit Status S4/manuell dort
+    erscheinen (mit LIS: das LIS meldet den Status, siehe lis_sync.py).
+    """
+    if not org_id:
+        return False
+    from app.models.lis import OrgLisConfig
+    return bool(
+        db.query(OrgLisConfig.id)
+        .filter(OrgLisConfig.org_id == org_id, OrgLisConfig.enabled == True)  # noqa: E712
+        .first()
+    )
+
+
 def _populate_vehicles(db: Session, incident: Incident, alarm: AlarmType | None) -> None:
     if alarm is None:
         return
 
     db.refresh(incident, ["columns"])
-    dispatched_col = _get_column(incident, "dispatched")
-    if not dispatched_col:
+    active_col = _get_column(incident, "active")
+    if not active_col:
         return
 
     from app.models.master import FireDept
@@ -352,37 +368,42 @@ def _populate_vehicles(db: Session, incident: Incident, alarm: AlarmType | None)
         .all()
     )
 
-    if dispatch_entries:
-        # Use explicit dispatch order
-        for i, entry in enumerate(dispatch_entries):
-            vm = db.get(VehicleMaster, entry.vehicle_master_id)
-            if vm and vm.active:
+    # Mit aktiver LIS-Anbindung übernimmt das LIS die Ankunftsmeldung (Status S4) —
+    # die Ausrückordnung legt dann KEINE eigenen Fahrzeuge automatisch an, sie
+    # erscheinen erst mit S4 (lis_sync.py) oder durch manuelles Hinzufügen im Board.
+    # Die Nachbar-Wehren-Liste (unten) ist davon unabhängig und wird immer befüllt.
+    if not _lis_enabled_for_org(db, incident.primary_org_id):
+        if dispatch_entries:
+            # Use explicit dispatch order
+            for i, entry in enumerate(dispatch_entries):
+                vm = db.get(VehicleMaster, entry.vehicle_master_id)
+                if vm and vm.active:
+                    db.add(IncidentVehicle(
+                        incident_id=incident.id,
+                        column_id=active_col.id,
+                        vehicle_master_id=vm.id,
+                        display_order=i,
+                    ))
+        else:
+            # Fallback: use is_first_train flag (original logic)
+            wolfurt_q = (
+                db.query(VehicleMaster)
+                .join(VehicleMaster.dept)
+                .filter(VehicleMaster.active == True)  # noqa: E712
+                .order_by(VehicleMaster.display_order)
+            )
+            wolfurt_q = wolfurt_q.filter(FireDept.slug == "wolfurt")
+
+            if alarm and alarm.default_first_train_only:
+                wolfurt_q = wolfurt_q.filter(VehicleMaster.is_first_train == True)  # noqa: E712
+
+            for i, vm in enumerate(wolfurt_q.all()):
                 db.add(IncidentVehicle(
                     incident_id=incident.id,
-                    column_id=dispatched_col.id,
+                    column_id=active_col.id,
                     vehicle_master_id=vm.id,
                     display_order=i,
                 ))
-    else:
-        # Fallback: use is_first_train flag (original logic)
-        wolfurt_q = (
-            db.query(VehicleMaster)
-            .join(VehicleMaster.dept)
-            .filter(VehicleMaster.active == True)  # noqa: E712
-            .order_by(VehicleMaster.display_order)
-        )
-        wolfurt_q = wolfurt_q.filter(FireDept.slug == "wolfurt")
-
-        if alarm and alarm.default_first_train_only:
-            wolfurt_q = wolfurt_q.filter(VehicleMaster.is_first_train == True)  # noqa: E712
-
-        for i, vm in enumerate(wolfurt_q.all()):
-            db.add(IncidentVehicle(
-                incident_id=incident.id,
-                column_id=dispatched_col.id,
-                vehicle_master_id=vm.id,
-                display_order=i,
-            ))
 
     # Neighbor column: only create when alarm uses notify_neighbors (and no explicit dispatch)
     if alarm and alarm.notify_neighbors and not dispatch_entries:
@@ -513,9 +534,12 @@ def move_vehicle_to_column(
     return vehicle
 
 
-def close_incident(db: Session, incident: Incident, user_id: int | None = None) -> Incident:
+def close_incident(
+    db: Session, incident: Incident, user_id: int | None = None, auto_closed_by_lis: bool = False,
+) -> Incident:
     incident.status = "closed"
     incident.closed_at = _now()
+    incident.closed_via_lis_auto = auto_closed_by_lis
     now = _now()
     # Revoke all QR (IncidentToken) tokens
     for token in incident.tokens:
@@ -548,6 +572,7 @@ def reopen_incident(db: Session, incident: Incident, user_id: int | None = None)
     """
     incident.status = "active"
     incident.closed_at = None
+    incident.closed_via_lis_auto = False
     # Ursprüngliche started_at bleibt erhalten (Datenintegrität). Eine evtl. anstehende
     # Autoclose-Warnung wird zurückgesetzt; bei >48h alten Einsätzen erscheint erneut das
     # "Offen halten?"-Banner, über das der Zähler bei Bedarf neu gestartet wird.
@@ -636,18 +661,23 @@ def set_unit_status(
         raise ValueError(f"Ungültiger Status: {status}")
     before = {"unit_status": vehicle.unit_status, "column_id": vehicle.column_id}
     vehicle.unit_status = status
-    # Sync: Status "Am Einsatzort" verschiebt das Fahrzeug nur dann automatisch in die Spalte
-    # "active", wenn es aktuell in "Disponiert" (oder spaltenlos) steht. Ist das Fahrzeug bereits
-    # bewusst einem benannten Abschnitt zugeordnet, bleibt es dort – nur der Status ändert sich.
-    if status == "Am Einsatzort":
+    # Sync: Status "Einsatz übernommen" (S4) verschiebt das Fahrzeug nur dann automatisch in
+    # die Spalte "active", wenn es noch spaltenlos ist. Ist das Fahrzeug bereits bewusst einem
+    # benannten Abschnitt zugeordnet, bleibt es dort – nur der Status ändert sich. (Neu
+    # angelegte Fahrzeuge sind seit Entfernen der "Disponiert"-Spalte entweder direkt in
+    # "active" (ohne LIS) oder werden erst mit S4/manuell angelegt (mit LIS, siehe
+    # lis_sync.py) — dieser Zweig greift daher praktisch nur noch bei Altdaten.)
+    if status == "Einsatz übernommen":
         current_col = db.get(IncidentColumn, vehicle.column_id) if vehicle.column_id else None
-        if current_col is None or current_col.code == "dispatched":
+        if current_col is None:
             active_col = db.query(IncidentColumn).filter_by(
                 incident_id=vehicle.incident_id, code="active"
             ).first()
             if active_col and vehicle.column_id != active_col.id:
                 vehicle.column_id = active_col.id
                 vehicle.display_order = _next_display_order(db, vehicle.incident_id, active_col.id)
+                db.flush()
+                append_card(db, active_col.id, "vehicle", vehicle.id)
     db.flush()
     write_incident_change(
         db, vehicle.incident_id, "vehicle.status_set", "incident_vehicle", vehicle.id,
@@ -832,12 +862,57 @@ def update_column_card_order(db: Session, column_id: int, zone_order_json: str) 
         db.flush()
 
 
+def _card_order_or_default(db: Session, col: IncidentColumn) -> list[dict]:
+    """Liefert die gespeicherte card_order, oder baut sie aus dem aktuellen DB-Zustand
+    auf (vehicles, tasks, messages, persons), wenn noch keine gespeichert ist."""
+    import json as _json
+    if col.card_order:
+        try:
+            return _json.loads(col.card_order)
+        except Exception:
+            return []
+
+    vehicles = (
+        db.query(IncidentVehicle)
+        .filter(IncidentVehicle.column_id == col.id, IncidentVehicle.removed_at.is_(None))
+        .order_by(IncidentVehicle.display_order)
+        .all()
+    )
+    tasks = (
+        db.query(Task)
+        .filter(Task.column_id == col.id, Task.vehicle_id.is_(None))
+        .order_by(Task.display_order)
+        .all()
+    )
+    msgs = (
+        db.query(Message)
+        .filter(Message.column_id == col.id)
+        .order_by(Message.display_order)
+        .all()
+    )
+    persons = []
+    if col.column_kind == "rescued":
+        persons = (
+            db.query(RescuedPerson)
+            .filter(RescuedPerson.incident_id == col.incident_id)
+            .order_by(RescuedPerson.created_at)
+            .all()
+        )
+    return (
+        [{"kind": "vehicle", "id": v.id} for v in vehicles]
+        + [{"kind": "task", "id": t.id} for t in tasks]
+        + [{"kind": "message", "id": m.id} for m in msgs]
+        + [{"kind": "person", "id": p.id} for p in persons]
+    )
+
+
 def prepend_card(db: Session, column_id: int | None, kind: str, uid: int) -> None:
     """Reiht ein neu erstelltes Item ganz oben (Position 0) in die card_order der
     Zielspalte ein, statt es (wie beim Default-Sort) am Ende anzuhängen.
 
-    Wird von allen "neu hinzufügen"-Aktionen (Einheit/Auftrag/Meldung/Person)
-    aufgerufen, damit neue Karten immer ganz oben in der Lane erscheinen.
+    Wird von allen "neu hinzufügen"-Aktionen (Auftrag/Meldung/Person, manuell
+    hinzugefügte Einheit in einen benannten Abschnitt) aufgerufen, damit neue
+    Karten immer ganz oben in der Lane erscheinen.
     """
     import json as _json
     if not column_id:
@@ -846,51 +921,32 @@ def prepend_card(db: Session, column_id: int | None, kind: str, uid: int) -> Non
     if not col:
         return
 
-    if col.card_order:
-        try:
-            current: list[dict] = _json.loads(col.card_order)
-        except Exception:
-            current = []
-    else:
-        # Noch keine card_order gespeichert -> aus dem aktuellen DB-Zustand aufbauen,
-        # in derselben Default-Reihenfolge wie _ordered_col_items (vehicles, tasks,
-        # messages, persons), damit der neue Eintrag sauber vorangestellt werden kann.
-        vehicles = (
-            db.query(IncidentVehicle)
-            .filter(IncidentVehicle.column_id == column_id, IncidentVehicle.removed_at.is_(None))
-            .order_by(IncidentVehicle.display_order)
-            .all()
-        )
-        tasks = (
-            db.query(Task)
-            .filter(Task.column_id == column_id, Task.vehicle_id.is_(None))
-            .order_by(Task.display_order)
-            .all()
-        )
-        msgs = (
-            db.query(Message)
-            .filter(Message.column_id == column_id)
-            .order_by(Message.display_order)
-            .all()
-        )
-        persons = []
-        if col.column_kind == "rescued":
-            persons = (
-                db.query(RescuedPerson)
-                .filter(RescuedPerson.incident_id == col.incident_id)
-                .order_by(RescuedPerson.created_at)
-                .all()
-            )
-        current = (
-            [{"kind": "vehicle", "id": v.id} for v in vehicles]
-            + [{"kind": "task", "id": t.id} for t in tasks]
-            + [{"kind": "message", "id": m.id} for m in msgs]
-            + [{"kind": "person", "id": p.id} for p in persons]
-        )
-
+    current = _card_order_or_default(db, col)
     # Falls schon (fälschlich) vorhanden, zuerst entfernen, dann ganz oben einfügen.
     current = [item for item in current if not (item.get("kind") == kind and item.get("id") == uid)]
     current.insert(0, {"kind": kind, "id": uid})
+    col.card_order = _json.dumps(current)
+    db.flush()
+
+
+def append_card(db: Session, column_id: int | None, kind: str, uid: int) -> None:
+    """Reiht ein Item ganz UNTEN in die card_order der Zielspalte ein.
+
+    Wird für Fahrzeuge verwendet, die in "Tatsächlich im Einsatz" ankommen
+    (Status S4 per LIS oder manuell) — dort soll die Reihenfolge chronologisch
+    bleiben (wer zuerst S4 meldet, steht oben), nicht wie bei anderen neuen
+    Karten ganz oben.
+    """
+    import json as _json
+    if not column_id:
+        return
+    col = db.get(IncidentColumn, column_id)
+    if not col:
+        return
+
+    current = _card_order_or_default(db, col)
+    current = [item for item in current if not (item.get("kind") == kind and item.get("id") == uid)]
+    current.append({"kind": kind, "id": uid})
     col.card_order = _json.dumps(current)
     db.flush()
 
@@ -1019,11 +1075,9 @@ def move_card(
             sib.display_order = i if i < position else i + 1
         vehicle.column_id = column_id  # type: ignore[assignment]
         vehicle.display_order = position
-        # Bidirektionaler Sync Spalte ↔ Unit-Status
+        # Sync Spalte → Unit-Status: manuelles Verschieben in "active" setzt den Status.
         if col.code == "active" and vehicle.unit_status != "Am Einsatzort":
             vehicle.unit_status = "Am Einsatzort"
-        elif col.code == "dispatched" and vehicle.unit_status == "Am Einsatzort":
-            vehicle.unit_status = "Einsatz übernommen"
         db.flush()
         write_incident_change(
             db, incident_id, "vehicle.moved", "incident_vehicle", uid,

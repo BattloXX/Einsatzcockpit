@@ -16,7 +16,7 @@ from app.models.incident import IncidentColumn, IncidentLog, IncidentVehicle, Me
 from app.models.lis import LisSyncedObject, OrgLisConfig
 from app.models.major_incident import IncidentSite, VehiclePosition
 from app.models.master import FireDept, VehicleMaster
-from app.services.incident_service import create_incident, set_unit_status
+from app.services.incident_service import _next_display_order, append_card, create_incident, set_unit_status
 from app.services.lis.lis_client import LisClient, LisClientError
 from app.services.lis.lis_geo import lis_unit_coords_to_wgs84
 from app.services.lis.lis_mapping import (
@@ -25,6 +25,7 @@ from app.services.lis.lis_mapping import (
     map_stichwort,
     map_unit_status,
     parse_person_response,
+    unit_status_to_lis_prefix,
 )
 from app.services.lis.lis_matching import find_matching_incident
 
@@ -135,6 +136,20 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         .first()
     )
     if existing:
+        # Die Operation ist wieder aktiv (sonst würde sync_operation() für sie nicht laufen) —
+        # war der Einsatz nur durch unseren eigenen Auto-Close geschlossen (nicht manuell),
+        # wiedereröffnen. lis_auto_close_locked verhindert danach jeden weiteren automatischen
+        # Abschluss dieses Einsatzes — nur noch ein manueller Abschluss im Einsatzcockpit zählt.
+        if existing.status == "closed" and existing.closed_via_lis_auto and not existing.lis_auto_close_locked:
+            from app.services.incident_service import reopen_incident
+            reopen_incident(db, existing, user_id=None)
+            existing.lis_auto_close_locked = True
+            db.flush()
+            logger.info(
+                "Einsatz %s automatisch wiedereröffnet (LIS-Operation %s wieder aktiv, Org %s) — "
+                "künftig nur noch manueller Abschluss möglich",
+                existing.id, parsed["lis_operation_id"], org.id,
+            )
         return existing, False
 
     match = find_matching_incident(
@@ -198,6 +213,10 @@ def _sync_vehicle_status(db: Session, org: FireDept, incident, units: list[dict]
             )
             continue
 
+        operation_unit_id = unit.get("Id")
+        status_label = _op_field(unit, "OperationUnitStatusType", "Label")
+        mapped_status = map_unit_status(status_label) if isinstance(status_label, str) else None
+
         incident_vehicle = (
             db.query(IncidentVehicle)
             .filter(
@@ -208,11 +227,37 @@ def _sync_vehicle_status(db: Session, org: FireDept, incident, units: list[dict]
             .first()
         )
         if not incident_vehicle:
-            continue
-
-        status_label = _op_field(unit, "OperationUnitStatusType", "Label")
-        if isinstance(status_label, str):
-            mapped_status = map_unit_status(status_label)
+            # Ohne "Disponiert"-Spalte legt die Ausrückordnung mit aktiver LIS-Anbindung
+            # keine Fahrzeuge mehr vor (siehe _populate_vehicles()) — das Fahrzeug erscheint
+            # im Board erst hier, sobald LIS erstmals S4/S5 meldet (sonst bleibt es unsichtbar,
+            # bis es manuell hinzugefügt wird).
+            if not mapped_status:
+                continue
+            active_col = (
+                db.query(IncidentColumn)
+                .filter_by(incident_id=incident.id, code="active")
+                .first()
+            )
+            if not active_col:
+                continue
+            incident_vehicle = IncidentVehicle(
+                incident_id=incident.id,
+                column_id=active_col.id,
+                vehicle_master_id=vehicle_master.id,
+                display_order=_next_display_order(db, incident.id, active_col.id),
+                unit_status=mapped_status,
+                lis_operation_unit_id=operation_unit_id,
+            )
+            db.add(incident_vehicle)
+            db.flush()
+            append_card(db, active_col.id, "vehicle", incident_vehicle.id)
+            logger.info(
+                "Fahrzeug %s durch LIS-Status %s neu auf Einsatz %s aufgenommen",
+                vehicle_master.id, mapped_status, incident.id,
+            )
+        else:
+            if operation_unit_id and incident_vehicle.lis_operation_unit_id != operation_unit_id:
+                incident_vehicle.lis_operation_unit_id = operation_unit_id
             if mapped_status and incident_vehicle.unit_status != mapped_status:
                 try:
                     set_unit_status(db, incident_vehicle, mapped_status)
@@ -477,11 +522,12 @@ async def _close_incidents_missing_from_lis(
             Incident.status == "active",
             Incident.lis_operation_id.isnot(None),
             Incident.lis_operation_id.notin_(active_operation_ids),
+            Incident.lis_auto_close_locked.is_(False),
         )
         .all()
     )
     for incident in stale:
-        close_incident(db, incident, user_id=None)
+        close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
         db.commit()
         logger.info(
             "Einsatz %s automatisch geschlossen (LIS-Operation %s nicht mehr aktiv, Org %s)",
@@ -642,3 +688,68 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
     await _close_incidents_missing_from_lis(db, org, active_operation_ids)
 
     await _maybe_backfill(db, org, config, client)
+
+
+# ── Fahrzeugstatus vom Einsatzcockpit zurück ins LIS schreiben (opt-in) ──────
+async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> None:
+    """Best-effort: schreibt einen lokal gesetzten Fahrzeugstatus per SetOperationUnitStatus
+    zurück ins LIS, wenn die Org LIS aktiviert UND den Schalter push_vehicle_status gesetzt hat.
+
+    Als BackgroundTask NACH dem lokalen Commit aufgerufen (siehe ui_incident.py) — Fehler hier
+    dürfen den lokalen Statuswechsel nie beeinflussen, er ist zu diesem Zeitpunkt bereits
+    gespeichert. Öffnet eine eigene DB-Session (Background-Task-Kontext, kein Request).
+    """
+    from app.core.crypto import decrypt_secret
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.incident import Incident, IncidentVehicle
+
+    prefix = unit_status_to_lis_prefix(status)
+    if not prefix:
+        return
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        vehicle = db.get(IncidentVehicle, incident_vehicle_id)
+        if not vehicle or not vehicle.lis_operation_unit_id:
+            return
+        incident = db.get(Incident, vehicle.incident_id)
+        if not incident or not incident.primary_org_id:
+            return
+        config = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == incident.primary_org_id).first()
+        if not config or not config.enabled or not config.push_vehicle_status or not config.is_fully_configured:
+            return
+        try:
+            password = decrypt_secret(config.password_enc)
+        except Exception:
+            logger.exception(
+                "LIS-Passwort für Org %s konnte nicht entschlüsselt werden (Status-Push)", incident.primary_org_id,
+            )
+            return
+
+        client = LisClient(config.base_url, config.site, config.username, password, project_id=config.project_id)
+        try:
+            status_types = await client.get_operation_unit_status_types()
+            target = next(
+                (s for s in status_types if (s.get("Label") or "").strip().upper().startswith(prefix)),
+                None,
+            )
+            if not target or not target.get("Id"):
+                logger.warning(
+                    "LIS-Status-Typ %s nicht im Katalog gefunden (Org %s) — Status-Push übersprungen",
+                    prefix, incident.primary_org_id,
+                )
+                return
+            await client.set_operation_unit_status(vehicle.lis_operation_unit_id, target["Id"])
+            logger.info(
+                "Fahrzeugstatus %s (IncidentVehicle %s) zurück ins LIS geschrieben (Org %s)",
+                status, incident_vehicle_id, incident.primary_org_id,
+            )
+        except LisClientError:
+            logger.exception(
+                "SetOperationUnitStatus für IncidentVehicle %s fehlgeschlagen (Org %s)",
+                incident_vehicle_id, incident.primary_org_id,
+            )
+    finally:
+        db.close()

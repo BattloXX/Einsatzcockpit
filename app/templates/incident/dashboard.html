@@ -873,12 +873,12 @@
       <div class="panel-body">
         {% set any_shown = false %}
         {% for lane in lanes_overview %}
-        {% if lane.vehicles or lane.column.section_leader or lane.column.section_leader_name or lane.column.code in ('active', 'dispatched') %}
+        {% if lane.vehicles or lane.column.section_leader or lane.column.section_leader_name or lane.column.code == 'active' %}
         {% set any_shown = true %}
         <div class="lane-group">
           <div class="lane-group__head">
             <span class="lane-group__title">
-              {% if lane.column.code == 'active' %}🚒{% elif lane.column.code == 'dispatched' %}🔶{% else %}📍{% endif %}
+              {% if lane.column.code == 'active' %}🚒{% else %}📍{% endif %}
               {{ lane.column.title }}
             </span>
             {% if lane.column.section_leader %}

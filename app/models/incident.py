@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 # Fixed column codes (always present)
-FIXED_COLUMNS = ["dispatched", "active", "tasks", "messages", "rescued"]
+FIXED_COLUMNS = ["active", "tasks", "messages", "rescued"]
 UNIT_STATUS_VALUES = [
     "Einsatz übernommen",
     "Am Einsatzort",
@@ -25,7 +25,6 @@ TASK_STATUS_VALUES = ["open", "in_progress", "done", "cancelled"]
 _TRAFFIC_LIGHT_LEGACY = {"open": "meldung", "in_progress": "achtung", "done": "erledigt", "cancelled": "storniert"}
 PERSON_STATUS_VALUES = ["gefunden", "versorgt", "abtransportiert", "verstorben"]
 FIXED_COLUMN_TITLES = {
-    "dispatched": "Disponierte Fahrzeuge",
     "active":     "Tatsächlich im Einsatz",
     "tasks":      "Aufträge",
     "messages":   "Meldungen",
@@ -84,6 +83,13 @@ class Incident(Base):
     # Wird gesetzt, sobald ein Einsatz mit dem LIS verbunden oder von dort angelegt wurde.
     lis_operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     lis_operation_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # War der letzte Abschluss ein automatischer LIS-Abschluss (Operation nicht mehr in
+    # ActiveParticipation)? Wird beim manuellen Schließen NICHT gesetzt. Siehe lis_sync.py.
+    closed_via_lis_auto: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Einmal gesetzt (weil ein automatisch geschlossener Einsatz in LIS wieder aktiv wurde
+    # und wir ihn deshalb wiedereröffnet haben), darf der LIS-Auto-Close diesen Einsatz nie
+    # wieder automatisch schließen — nur noch ein manueller Abschluss im Einsatzcockpit.
+    lis_auto_close_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Anrufer/Melder aus dem Alarm-Webhook (Name/Telefon) — nur Anzeige, keine LIS-Quelle.
     caller_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     caller_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -189,6 +195,10 @@ class IncidentVehicle(Base):
     org_color_override: Mapped[str | None] = mapped_column(String(7), nullable=True)
     unit_status: Mapped[str] = mapped_column(String(40), nullable=False, default="Einsatz übernommen")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    # LIS/IPR: OperationUnit.Id des zugehörigen LIS-Objekts (NICHT VehicleMaster.lis_reference_id!)
+    # — nötig für SetOperationUnitStatus, wenn der Status vom Einsatzcockpit aus zurück ins LIS
+    # geschrieben wird. Wird von lis_sync.py::_sync_vehicle_status() gepflegt.
+    lis_operation_unit_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     incident: Mapped[Incident] = relationship(back_populates="vehicles")
     column: Mapped[IncidentColumn] = relationship(back_populates="vehicles")
