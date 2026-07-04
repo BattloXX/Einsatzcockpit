@@ -2,7 +2,7 @@
 
 ← [Zurück zur Startseite](Home)
 
-Voraussetzung für alle Funktionen auf dieser Seite: eine funktionierende [SMS-Gateway-Anbindung](Installation-SMS-Gateway) (Docker-Container oder Android-App). Ohne verbundenes Gateway wird kein SMS-Versand ausgelöst.
+Voraussetzung für alle Funktionen auf dieser Seite: eine verbundene [SMS-Gateway-Android-App](Installation-SMS-Gateway). Ohne verbundenes Gateway wird kein SMS-Versand ausgelöst.
 
 ---
 
@@ -63,12 +63,9 @@ Unter **Admin → SMS-Empfang** (`/admin/sms-empfang`):
 
 ---
 
-## SMS-Gateway: Docker-Container oder Android-App
+## SMS-Gateway: native Android-App
 
-Beide Wege verbinden sich über denselben Token-authentifizierten WebSocket (`/ws/sms-gateway`) mit Einsatzcockpit — Einsatzinfo-SMS, manueller Versand und SMS-Empfang funktionieren mit beiden identisch:
-
-- **Docker-Container** (CoNiuGo-Modem im lokalen Netz) — siehe [SMS-Gateway einrichten](Installation-SMS-Gateway)
-- **Native Android-App** (eigenes Repo `Einsatzcockpit-Android`) — nutzt die SIM-Karte eines Android-Geräts zum Senden/Empfangen, läuft als Foreground-Service im Hintergrund
+Der SMS-Versand/-Empfang läuft über die native Einsatzcockpit-Android-App (eigenes Repo `Einsatzcockpit-Android`), die sich über einen Token-authentifizierten WebSocket (`/ws/sms-gateway`) mit Einsatzcockpit verbindet und die SIM-Karte des Android-Geräts zum Senden/Empfangen nutzt (Foreground-Service, dauerhaft im Hintergrund) — siehe [SMS-Gateway einrichten](Installation-SMS-Gateway).
 
 Ist mehr als eine Gateway-Verbindung gleichzeitig aktiv, wählt der Versand automatisch die zuletzt verbundene/lebende Verbindung; getrennte Verbindungen werden bereinigt, ohne SMS doppelt zu versenden.
 

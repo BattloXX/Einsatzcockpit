@@ -42,7 +42,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Erst-Setup](Installation-Erst-Setup) | Admin-User, API-Key, Stammdaten prüfen |
 | [Backups](Installation-Backups) | Datenbank-Dumps, Audit-Log-Sicherung |
 | [Updates](Installation-Updates) | git pull / In-App ZIP-Update, Migrationen, Neustart |
-| [SMS-Gateway](Installation-SMS-Gateway) | CoNiuGo-Modem-Container oder Android-App einrichten, Token anlegen |
+| [SMS-Gateway](Installation-SMS-Gateway) | Android-Gateway-App einrichten: APK, Geräte-Login-QR, Akku-Optimierung |
 | [Troubleshooting](Installation-Troubleshooting) | Häufige Fehler und Lösungen |
 
 ### Anwender

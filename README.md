@@ -55,7 +55,7 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **SKKM-Lagemeldungs-Regelkreis** | Lage → Auftrag → Kontrolle: Fälligkeits-Timer je Einsatzstelle, automatischer Auftrag im Funkjournal bei Überfälligkeit, Live-Chip |
 | **Übergreifende Meldungen** | Cross-Marker mit Status-Workflow, Notizen & Medien, Kamera-/Galerie-Upload, OSM-Karte (Org-Standort), Bearbeiten & Drucken |
 | **Einsatzkarte (Detail-Panel)** | Live-Updates ohne Reload, Kräfteübersicht, Foto-Upload (Kamera/Galerie) mit Lightbox, Karten-Pin, Druck |
-| **SMS-Gateway-Anbindung** | Docker-Container (CoNiuGo-Modem) oder native Android-App verbinden sich ausgehend über WebSocket (Token-Auth) mit der App und versenden/empfangen SMS; SMS-Verifikation der Telefonnummer im Bürgerportal |
+| **SMS-Gateway-Anbindung** | Native Android-App verbindet sich ausgehend über WebSocket (Token-Auth, QR-Code-Setup) und versendet/empfängt SMS über die eingebaute SIM-Karte; SMS-Verifikation der Telefonnummer im Bürgerportal |
 | **SMS-Einsatzinfo** | Konfigurierbarer automatischer SMS-Versand bei Alarm an Gruppen/Mitglieder — Basis-Verteiler (alle Stichworte) + Stichwort-Override, Vorlage mit Platzhaltern (`{stichwort}`, `{adresse}`, `{meldung}`, ...); zusätzlich manueller Versand an Gruppen/Mitglieder/Ad-hoc-Nummer |
 | **SMS-Empfang & Weiterleitung** | Eingehende SMS werden protokolliert und per Regeln (Nummer exakt/Präfix) an Teams-Webhook, SMS-Gruppen, Mitglieder oder Ad-hoc-Nummern weitergeleitet |
 | **KI-Assistent (✨)** | Auftragsvorschläge, Lage-Ticker-Hinweise, Lagebild und automatische Priorisierung via Anthropic Claude; opt-in pro Org |
@@ -485,8 +485,9 @@ python -m app.cli create-admin --username admin --password geheimpasswort
 # API-Key für Alarmierungssystem erstellen (mit Org-Zuordnung)
 python -m app.cli create-api-key --label "Alarmierungssystem Leitstelle" --org-id 1
 
-# Connection-Token für SMS-Gateway-Container erstellen
-python -m app.cli create-sms-gateway-token --label "Modem Wolfurt" --org-id 1
+# SMS-Gateway-Token für die Android-Gateway-App (ohne QR-Code, für Skripte/Automatisierung;
+# der reguläre Weg mit QR-Code ist Admin → Geräte-Login → SMS-Gateway, siehe Wiki)
+python -m app.cli create-sms-gateway-token --label "Gateway Wolfurt" --org-id 1
 
 # VAPID-Schlüsselpaar für Web-Push generieren
 python -m app.cli generate-vapid
@@ -686,7 +687,7 @@ tests/
 │    task_reminder         – Auftrags-/Meldungs-Reminder   │
 │    ai_service            – Anthropic Claude              │
 │    alarm_service         – Alarmtyp-Lookup               │
-│    sms_service           – SMS-Gateway-Versand           │
+│    sms_service           – SMS-Versand via Android-Gateway│
 │    sms_dispatch_service  – Einsatzinfo-SMS bei Alarm     │
 │    sms_inbox_service     – SMS-Empfang + Weiterleitung   │
 │    lis/lis_sync          – LIS/IPR-Poll-Loop, Einsatz-,  │
@@ -934,7 +935,7 @@ app/
 │   ├── ai_service.py            Anthropic Claude Integration
 │   ├── alarm_service.py         Alarmtyp-Lookup + org-aware
 │   ├── seed_service.py          Seed-Template-Anwendung bei Org-Anlage
-│   ├── sms_service.py           SMS-Versand via Gateway (Docker-Container oder Android-App)
+│   ├── sms_service.py           SMS-Versand via Android-Gateway-App
 │   ├── sms_dispatch_service.py  Einsatzinfo-SMS bei Alarm (Vorlage + Platzhalter)
 │   ├── sms_inbox_service.py     SMS-Empfang: Log + Weiterleitungsregeln
 │   ├── lis/                     LIS/IPR-SOAP-Client, Sync-Orchestrierung (Poll-Loop), Mapping,
@@ -980,7 +981,7 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
-| **3.1.0** | 2026-07-04 | LIS/IPR-Anbindung an das Leitstellensystem der Landeswarnzentrale (SOAP/WCF): automatischer Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus/-position, Meldungen, Zu-/Absagen, Dokumente, automatisches Schließen bei Abschluss in LIS, Leitstellen-Nr. als führende Kennung (Board, Archiv, Verlauf, PDF), Anrufer/Melder-Anzeige mit Klick-zum-Anrufen, Diagnose-Aufzeichnungstool; SMS-Empfang & Weiterleitung (Teams/Gruppen/Mitglieder/Ad-hoc) über Docker-Container oder native Android-Gateway-App |
+| **3.1.0** | 2026-07-04 | LIS/IPR-Anbindung an das Leitstellensystem der Landeswarnzentrale (SOAP/WCF): automatischer Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus/-position, Meldungen, Zu-/Absagen, Dokumente, automatisches Schließen bei Abschluss in LIS, Leitstellen-Nr. als führende Kennung (Board, Archiv, Verlauf, PDF), Anrufer/Melder-Anzeige mit Klick-zum-Anrufen, Diagnose-Aufzeichnungstool; SMS-Empfang & Weiterleitung (Teams/Gruppen/Mitglieder/Ad-hoc) über native Android-Gateway-App |
 | **3.0.0** | 2026-07-01 | Rebrand zu Einsatzcockpit (einsatzcockpit.com); Teilnehmerlisten-Modul (Termine/Übungen/Mannschaft, Excel-Import, PDF/Druck mit Status, Entschuldigt-Checkbox); Mannschaft als eigene Seite; SMS-Einsatzinfo je Alarm-Stichwort + manueller Gruppenversand; automatische Wetterwarnungen per Mail/Teams; Security- & Stability-Hardening (14 PRs: Tenant-Backstop, XSS-Sanitizing, FERNET_KEY-Pflicht, Device-Session-Revoke, WS-Resync, PWA-Tile-Cache, Mobile-Performance); Board: Abschnittsleiter, Karten-Journal, Meldungs-Zuweisung, Sprachdiktat bei Auftrag/Meldung; lokal gehostete Fonts statt Google Fonts; zahlreiche Timezone-, Mobile- und CI-Fixes |
 | **2.9.0** | 2026-06-24 | Digitales Fahrtenbuch: Fahrterfassung mit km/BH-Zähler, Seilwinde (BH, Züge, Wartung), Maschinist-Autocomplete, Token/QR-Zugang ohne Login, Doppelfahrt-Erkennung, Schadensmeldung (Mail + Teams-Webhook), Korrektur-/Storno-Workflow; Admin-Bereich (Fahrzeuge, Zwecke, Zielorte, Einstellungen) |
 | **2.8.0** | 2026-06-23 | Lokale Wetterstation (Davis Vantage Pro 2 Plus / Meteobridge PRO RED): HTTPS-Push-Ingest mit `wxst_`-Token-Auth, Rate-Limiting 120/min, denormalisierter Ist-Stand-Snapshot (Haupt-DB), separate Zeitreihen-DB `einsatzleiter_weather` (kein Bloat), Online/Offline-Indikator (15-min-Schwelle), 24-h-Sparkline Temp/Wind (lazy HTMX), Echtzeit-Szenario-Analyse aus lokalen Messwerten (Sturm/Waldbrand/Glatteis), nächtliche Retention (03:30, tägl.); Token-Verwaltung in Org-Einstellungen |
