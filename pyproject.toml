@@ -58,6 +58,8 @@ dependencies = [
     "anthropic>=0.50",
     # Geodienste: Point-in-Polygon (GSL Abschnittszuweisung)
     "shapely>=2.0",
+    # Koordinatentransformation (LIS-Fahrzeugpositionen EPSG:31254 -> WGS84)
+    "pyproj>=3.6",
     # HTML-Sanitisierung (Quill-Output für Einsatzjournal)
     "nh3>=0.2",
 ]

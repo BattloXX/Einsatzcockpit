@@ -1,0 +1,189 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}LIS / Leitstellenanbindung{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'LIS / Leitstellenanbindung'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>LIS / Leitstellenanbindung</h1>
+    <p class="page-header__sub">Verbindung zum Leitstelleninformationssystem (LIS/IPR) konfigurieren &mdash; Einsätze werden automatisch mit der Leitstelle abgeglichen</p>
+  </div>
+</div>
+
+{% if flash == 'saved' %}
+<div class="alert alert--success mb-4">Einstellungen gespeichert.</div>
+{% elif flash and flash.startswith('error') %}
+<div class="alert alert--error mb-4">Fehler beim Speichern.</div>
+{% endif %}
+
+{% if not lis_globally_enabled %}
+<div class="alert alert--warn mb-4">
+  <strong>LIS ist global deaktiviert</strong> (<code>LIS_ENABLED=false</code> in der Server-Konfiguration).
+  Diese Einstellungen werden ignoriert, bis der Plattform-Admin das Modul wieder aktiviert.
+</div>
+{% endif %}
+
+{% if is_sysadmin and all_orgs %}
+<section class="card mb-4">
+  <div class="card-body" style="padding:16px 20px">
+    <label style="font-weight:600;margin-bottom:6px;display:block">Organisation:</label>
+    <select class="form-control" style="max-width:320px"
+            onchange="location.href='/admin/lis?org_id='+this.value">
+      <option value="">-- bitte wählen --</option>
+      {% for o in all_orgs %}
+      <option value="{{ o.id }}" {% if org and org.id == o.id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</section>
+{% endif %}
+
+{% if not org %}
+<div class="alert alert--info">Bitte eine Organisation auswählen.</div>
+{% else %}
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Hinweis</h2></div>
+  <div class="card-body" style="padding:16px 20px">
+    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+      Die API liefert aktuell keine Leitstellennummer. Einsätze aus dem LIS werden daher über
+      Einsatzgrund, Adresse und Alarmstichwort innerhalb eines 3-Stunden-Fensters mit bereits über die
+      API angelegten Einsätzen verbunden. Kommt ein Einsatz zuerst über das LIS, wird er selbst angelegt.
+      Fahrzeugstatus (S4/S5) wird nur für Fahrzeuge übernommen, die unter
+      <a href="/admin/fahrzeuge">Ressourcen</a> eine LIS-ReferenceId hinterlegt haben.
+      Liefert das LIS zu einem Fahrzeug Koordinaten (i.d.R. ab Status "am Einsatzort"),
+      werden diese in dieselbe Positionshistorie wie die App-GPS-Positionen geschrieben —
+      auf der Lagekarte gewinnt je Fahrzeug automatisch die zuletzt empfangene Position.
+    </p>
+  </div>
+</section>
+
+<form method="post" action="/admin/lis/save">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin and org %}
+  <input type="hidden" name="target_org_id" value="{{ org.id }}">
+  {% endif %}
+
+  <section class="card mb-4">
+    <div class="card-header"><h2>Verbindung</h2></div>
+    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+
+      <div class="form-group" style="margin:0">
+        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" name="enabled" value="1"
+                 {% if config and config.enabled %}checked{% endif %}
+                 class="toggle-checkbox">
+          <span class="toggle-switch"></span>
+          LIS-Anbindung aktiviert
+        </label>
+        <p class="form-hint" style="margin:4px 0 0 0">Schaltet den Hintergrund-Abgleich mit dem LIS für diese Organisation ein</p>
+      </div>
+
+      <div class="form-group" style="margin:0">
+        <label for="base_url">Basis-URL</label>
+        <input type="text" id="base_url" name="base_url"
+               value="{{ config.base_url or '' if config else '' }}"
+               placeholder="https://lis.example.at/ipr"
+               class="form-input" autocomplete="off">
+        <p class="form-hint">Ohne abschließenden Schrägstrich, z.B. https://lis.lwz-vorarlberg.at/ipr</p>
+      </div>
+
+      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
+        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+          <label for="organization_id">Organisation-ID (LIS-GUID)</label>
+          <input type="text" id="organization_id" name="organization_id"
+                 value="{{ config.organization_id or '' if config else '' }}"
+                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                 class="form-input" autocomplete="off">
+          <p class="form-hint">Eigene Organisation im LIS (z.B. Feuerwehr Wolfurt)</p>
+        </div>
+        <div class="form-group" style="margin:0;width:140px">
+          <label for="site">Site</label>
+          <input type="text" id="site" name="site"
+                 value="{{ config.site or 'LIS' if config else 'LIS' }}"
+                 class="form-input">
+        </div>
+        <div class="form-group" style="margin:0;width:160px">
+          <label for="poll_interval_seconds">Poll-Intervall (Sek.)</label>
+          <input type="number" id="poll_interval_seconds" name="poll_interval_seconds" min="10" max="3600"
+                 value="{{ config.poll_interval_seconds if config else 30 }}"
+                 class="form-input">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin:0">
+        <label for="username">Benutzername</label>
+        <input type="text" id="username" name="username"
+               value="{{ config.username or '' if config else '' }}"
+               class="form-input" autocomplete="off">
+      </div>
+
+      <div class="form-group" style="margin:0">
+        <label for="password">Passwort</label>
+        {% if config and config.password_enc %}
+        <div id="secret-status" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="color:var(--color-success);font-size:.85rem">&#10003; Passwort gesetzt</span>
+          <button type="button" class="btn btn--ghost btn--sm"
+                  onclick="document.getElementById('secret-status').style.display='none';document.getElementById('secret-replace').style.display='';document.getElementById('secret_changed').value='1'">
+            Ersetzen
+          </button>
+        </div>
+        <div id="secret-replace" style="display:none">
+          <input type="password" id="password" name="password"
+                 class="form-input" autocomplete="new-password" placeholder="Neues Passwort eingeben">
+        </div>
+        {% else %}
+        <input type="password" id="password" name="password"
+               class="form-input" autocomplete="new-password" placeholder="Passwort eingeben"
+               oninput="document.getElementById('secret_changed').value='1'">
+        {% endif %}
+        <input type="hidden" id="secret_changed" name="secret_changed" value="{{ '0' if config and config.password_enc else '1' }}">
+        <p class="form-hint">Wird Fernet-verschlüsselt in der Datenbank gespeichert &mdash; nie im Klartext angezeigt</p>
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn btn--primary">Speichern</button>
+        <button type="button" class="btn btn--ghost"
+                hx-post="/admin/lis/test"
+                hx-vals='{"_csrf": "{{ request.state.csrf_token }}"{% if is_sysadmin and org %}, "target_org_id": "{{ org.id }}"{% endif %}}'
+                hx-target="#lis-test-result"
+                hx-swap="innerHTML">
+          Verbindung testen
+        </button>
+      </div>
+      <div id="lis-test-result" style="font-size:.85rem"></div>
+    </div>
+  </section>
+</form>
+
+{% if is_sysadmin %}
+<section class="card mb-4">
+  <div class="card-header"><h2>Diagnose: echte Rohdaten aufzeichnen</h2></div>
+  <div class="card-body" style="padding:16px 20px">
+    <p style="font-size:.85rem;color:var(--color-text-muted);margin-bottom:12px;line-height:1.6">
+      Zeichnet für eine begrenzte Zeit echte SOAP-Antworten des LIS auf (Operations,
+      Tasks, Fahrzeugstatus, Dokumente) — nützlich um die Feldstruktur gegen echte
+      Daten zu verifizieren. <strong>Enthält Personenbezug</strong> (Anrufer,
+      Mannschafts-Zu-/Absagen): nur für system_admin sichtbar, Dateien liegen
+      ausschließlich auf dem Server und werden automatisch nach
+      {{ capture_retention_days }} Tagen gelöscht.
+    </p>
+    <form hx-post="/admin/lis/capture/start"
+          hx-vals='{"_csrf": "{{ request.state.csrf_token }}", "target_org_id": "{{ org.id }}"}'
+          hx-target="#lis-captures" hx-swap="outerHTML"
+          style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
+      <div class="form-group" style="margin:0;width:160px">
+        <label for="duration_minutes" style="font-size:.8rem">Dauer (Minuten)</label>
+        <input type="number" id="duration_minutes" name="duration_minutes" min="5" max="480" value="120" class="form-input">
+      </div>
+      <button type="submit" class="btn btn--primary btn--sm">Aufzeichnung starten</button>
+    </form>
+
+    {% include "admin/_lis_captures.html" %}
+  </div>
+</section>
+{% endif %}
+
+{% endif %}
+{% endblock %}

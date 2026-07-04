@@ -511,6 +511,44 @@ async def create_incident_api(
         except (ValueError, ZoneInfoNotFoundError):
             started_at = None
 
+    # LIS/IPR-Verknüpfung: falls dieser Einsatz bereits zuvor über LIS geliefert und
+    # angelegt wurde (kein external_key vorhanden), wird ihm hier der external_key
+    # nachgetragen statt einen doppelten Einsatz anzulegen. Matching über Einsatzgrund
+    # + Adresse + Alarmstichwort innerhalb eines Zeitfensters (keine Leitstellennummer
+    # in der Push-API verfügbar) — siehe app.services.lis.lis_matching.
+    linked_from_lis: Incident | None = None
+    if api_key.org_id:
+        from app.services.lis.lis_matching import find_matching_incident
+        candidate = find_matching_incident(
+            db, api_key.org_id,
+            alarm_type_code=alarm_type_code,
+            reason=payload.Einsatzgrund,
+            street=payload.Strasse,
+            city=payload.Ort,
+            started_at=started_at,
+        )
+        if candidate and candidate.lis_operation_id and not candidate.external_key:
+            linked_from_lis = candidate
+
+    if linked_from_lis:
+        linked_from_lis.external_key = payload.Key
+        if payload.Nummer is not None:
+            linked_from_lis.nummer = payload.Nummer
+        write_audit(db, "api.incident.linked_lis", api_key_id=api_key.id,
+                    incident_id=linked_from_lis.id, ip=request.client.host if request.client else None)
+        board_token, board_url = _get_or_create_board_token(
+            db, linked_from_lis.id, api_key.created_by_user_id, str(request.base_url)
+        )
+        db.commit()
+        return {
+            "id": linked_from_lis.id,
+            "external_key": linked_from_lis.external_key,
+            "url": f"/einsatz/{linked_from_lis.id}",
+            "created": False,
+            "board_token": board_token,
+            "board_url": board_url,
+        }
+
     incident = create_incident(
         db,
         alarm_type_code=alarm_type_code,

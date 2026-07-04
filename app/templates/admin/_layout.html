@@ -14,6 +14,7 @@
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
+       or '/admin/lis' in _p
        or _p == '/admin/settings/wetter' or _p.startswith('/admin/settings/wetter?') %}
   {% set active_group = 'einstellungen' %}
 {% elif _p == '/admin/hilfe' %}
@@ -325,6 +326,11 @@
                class="admin-nav__item {% if '/admin/sso' in request.url.path %}is-active{% endif %}"
                {{ tip('Microsoft 365 / Entra ID Single Sign-On konfigurieren') }}>
               <span class="admin-nav__icon">🔑</span>SSO / Microsoft 365
+            </a>
+            <a href="/admin/lis"
+               class="admin-nav__item {% if '/admin/lis' in request.url.path %}is-active{% endif %}"
+               {{ tip('Leitstellenanbindung (LIS/IPR): Verbindung ein-/ausschalten, Zugangsdaten hinterlegen') }}>
+              <span class="admin-nav__icon">📡</span>LIS-Anbindung
             </a>
             {% if is_sysadmin %}
             <a href="/admin/ki-prompts"

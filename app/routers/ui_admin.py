@@ -936,6 +936,7 @@ async def create_vehicle(
     is_first_train: str = Form(""),
     bos_override: str = Form(""),
     dept_id: int | None = Form(None),
+    lis_reference_id: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     from app.core.permissions import has_role
@@ -950,6 +951,7 @@ async def create_vehicle(
         dept_id=target_dept_id, code=code, name=name, type=type,
         is_first_train=bool(is_first_train),
         bos_override=bos_override or None,
+        lis_reference_id=lis_reference_id.strip()[:60] or None,
         display_order=max_order,
     )
     db.add(v)
@@ -999,6 +1001,7 @@ async def edit_vehicle(
     code: str = Form(...), name: str = Form(...), type: str = Form(""),
     is_first_train: str = Form(""),
     bos_override: str = Form(""),
+    lis_reference_id: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     v = db.get(VehicleMaster, vehicle_id)
@@ -1008,6 +1011,7 @@ async def edit_vehicle(
         v.type = type
         v.is_first_train = bool(is_first_train)
         v.bos_override = bos_override or None
+        v.lis_reference_id = lis_reference_id.strip()[:60] or None
         write_audit(db, "admin.vehicle.edited", user_id=request.state.user.id,
                     entity_type="vehicle_master", entity_id=vehicle_id)
         db.commit()

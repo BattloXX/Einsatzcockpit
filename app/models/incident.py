@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -36,7 +36,10 @@ FIXED_COLUMN_TITLES = {
 
 class Incident(Base):
     __tablename__ = "incident"
-    __table_args__ = (UniqueConstraint("primary_org_id", "external_key", name="uq_incident_org_ext_key"),)
+    __table_args__ = (
+        UniqueConstraint("primary_org_id", "external_key", name="uq_incident_org_ext_key"),
+        Index("ix_incident_org_lis_op", "primary_org_id", "lis_operation_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     external_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -73,6 +76,10 @@ class Incident(Base):
     ai_lage_hints: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Bcrypt-Hash eines optionalen Gäste-PINs für QR-Zugang ohne Account
     access_pin_hash: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # LIS/IPR: verknüpfte LIS-Operation (GUID) + externe Einsatznummer (z.B. "f26005863").
+    # Wird gesetzt, sobald ein Einsatz mit dem LIS verbunden oder von dort angelegt wurde.
+    lis_operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    lis_operation_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     columns: Mapped[list[IncidentColumn]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"
@@ -366,6 +373,8 @@ class Message(Base):
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    # LIS/IPR: Task.Id der Ursprungsmeldung, für Dedup/Update bei erneutem Sync
+    lis_task_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     incident: Mapped[Incident] = relationship(back_populates="messages")
     column: Mapped[IncidentColumn | None] = relationship(foreign_keys=[column_id])

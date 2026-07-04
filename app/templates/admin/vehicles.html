@@ -102,7 +102,7 @@
           </button>
           {% else %}
           <button class="btn btn--ghost btn--xs"
-                  onclick="openEditVehicle({{ v.id }}, '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', {{ v.is_first_train|lower }}, '{{ v.bos_override or "" }}')">
+                  onclick="openEditVehicle({{ v.id }}, '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', {{ v.is_first_train|lower }}, '{{ v.bos_override or "" }}', '{{ v.lis_reference_id or "" }}')">
             Bearbeiten
           </button>
           {% endif %}
@@ -168,6 +168,11 @@
         <div class="form-group">
           <label><input type="checkbox" name="is_first_train" value="true"> Erstausrückung</label>
         </div>
+        <div class="form-group">
+          <label class="form-label">LIS-ReferenceId (optional)</label>
+          <input type="text" name="lis_reference_id" class="form-input" maxlength="60" placeholder="z.B. rlf_wolfu">
+          <p class="form-hint">Stabile Kennung aus dem Leitstellensystem — für automatische Statusübernahme (S4/S5)</p>
+        </div>
       </div>
       <div class="modal__footer">
         <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -209,6 +214,11 @@
         </div>
         <div class="form-group">
           <label><input type="checkbox" name="is_first_train" id="ev_first_train" value="true"> Erstausrückung</label>
+        </div>
+        <div class="form-group">
+          <label class="form-label">LIS-ReferenceId (optional)</label>
+          <input type="text" name="lis_reference_id" id="ev_lis_reference_id" class="form-input" maxlength="60" placeholder="z.B. rlf_wolfu">
+          <p class="form-hint">Stabile Kennung aus dem Leitstellensystem — für automatische Statusübernahme (S4/S5)</p>
         </div>
       </div>
       <div class="modal__footer">
@@ -328,12 +338,13 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function openEditVehicle(id, code, name, type, firstTrain, bosOverride) {
+function openEditVehicle(id, code, name, type, firstTrain, bosOverride, lisReferenceId) {
   document.getElementById('ev_code').value = code;
   document.getElementById('ev_name').value = name;
   document.getElementById('ev_type').value = type;
   document.getElementById('ev_first_train').checked = firstTrain;
   document.getElementById('ev_bos_override').value = bosOverride || '';
+  document.getElementById('ev_lis_reference_id').value = lisReferenceId || '';
   document.getElementById('editVehicleForm').action = `/admin/fahrzeuge/${id}/edit`;
   document.getElementById('editVehicleModal').showModal();
 }

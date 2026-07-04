@@ -40,6 +40,7 @@ from app.routers import (
     ui_hilfe,
     ui_incident,
     ui_invitation,
+    ui_lis,
     ui_major_incident,
     ui_media,
     ui_password_reset,
@@ -132,6 +133,15 @@ async def lifespan(app: FastAPI):
     from app.services.weather_alert_loop import weather_alert_loop
     weather_alert_task = asyncio.create_task(weather_alert_loop())
 
+    # Background-Loop für die LIS/IPR-Anbindung (Poll-Intervall je Org konfigurierbar)
+    from app.services.lis.lis_loop import lis_poll_loop
+    lis_task = asyncio.create_task(lis_poll_loop())
+
+    # Background-Loop für die Löschfrist von LIS-Rohdaten-Aufzeichnungen (täglich 04:00,
+    # DSGVO — enthalten Personenbezug, siehe lis_capture.py)
+    from app.services.lis.lis_capture import lis_capture_retention_loop
+    lis_capture_retention_task = asyncio.create_task(lis_capture_retention_loop())
+
     try:
         yield
     finally:
@@ -143,8 +153,11 @@ async def lifespan(app: FastAPI):
         weather_retention_task.cancel()
         vehicle_position_retention_task.cancel()
         weather_alert_task.cancel()
+        lis_task.cancel()
+        lis_capture_retention_task.cancel()
         for t in (autoclose_task, watchdog_task, reminder_task, lagemeldung_task, verleih_task,
-                  weather_retention_task, vehicle_position_retention_task, weather_alert_task):
+                  weather_retention_task, vehicle_position_retention_task, weather_alert_task,
+                  lis_task, lis_capture_retention_task):
             try:
                 await t
             except (asyncio.CancelledError, Exception):
@@ -431,6 +444,7 @@ app.include_router(ui_stats.router)
 app.include_router(ui_push.router)
 app.include_router(ui_settings.router)
 app.include_router(ui_sso.router)
+app.include_router(ui_lis.router)
 app.include_router(ui_sysadmin.router)
 app.include_router(ui_ai_prompts.router)
 app.include_router(ui_profile.router)

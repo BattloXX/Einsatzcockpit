@@ -158,6 +158,10 @@ class Settings(BaseSettings):
     # Leer → Fallback auf SHA256("fernet-v1:" + SECRET_KEY) [abwärtskompatibel].
     FERNET_KEY: str = ""
 
+    # LIS/IPR-Anbindung (Intergraph Leitstelleninformationssystem)
+    LIS_ENABLED: bool = True         # globaler Kill-Switch
+    LIS_POLL_INTERVAL_S: int = 30    # Loop-Intervall
+
     # SSO / Microsoft Entra ID
     SSO_ENABLED: bool = True
     MS_LOGIN_BASE_URL: str = "https://login.microsoftonline.com"

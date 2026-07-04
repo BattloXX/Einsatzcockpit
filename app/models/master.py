@@ -105,6 +105,10 @@ class VehicleMaster(Base):
     schaden_mail_override: Mapped[str | None] = mapped_column(String(255), nullable=True)
     schaden_teams_webhook_override: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
+    # LIS/IPR: stabile ReferenceId des Fahrzeugs im Leitstellensystem, manuell gepflegt
+    # (siehe LIS_IPR_Schnittstellen_Dokumentation.md Abschnitt 7.3)
+    lis_reference_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+
     dept: Mapped[FireDept] = relationship(back_populates="vehicles")
 
     @property
