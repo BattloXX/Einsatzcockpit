@@ -106,8 +106,8 @@
           </span>
           {% else %}<span class="text-muted">–</span>{% endfor %}
         </td>
-        <td data-label="Telefon">{{ m.phone or '–' }}</td>
-        <td data-label="E-Mail">{{ m.email or '–' }}</td>
+        <td data-label="Telefon">{% if m.phone %}<a href="tel:{{ m.phone }}">{{ m.phone }}</a>{% else %}–{% endif %}</td>
+        <td data-label="E-Mail">{% if m.email %}<a href="mailto:{{ m.email }}">{{ m.email }}</a>{% else %}–{% endif %}</td>
         <td data-label="Status">
           {% if m.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
           {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}

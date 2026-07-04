@@ -37,8 +37,15 @@
   </div>
 </div>
 
+<div x-data="{ tab: 'stammdaten' }">
+<nav class="detail-tabs">
+  <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'stammdaten'}" @click="tab = 'stammdaten'">Stammdaten</button>
+  <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'fahrzeuge'}" @click="tab = 'fahrzeuge'">Fahrzeuge ({{ incident.vehicles|length }})</button>
+  <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'mannschaft'}" @click="tab = 'mannschaft'">Mannschaft</button>
+  <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'bericht'}" @click="tab = 'bericht'">Bericht</button>
+</nav>
 <div class="detail-grid" style="margin-top:16px;">
-  <div class="detail-box">
+  <div class="detail-box" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
     <h3>🧾 Stammdaten</h3>
     <dl class="detail-list">
       <dt>Stichwort</dt><dd>{{ incident.alarm_type_code }}</dd>
@@ -50,7 +57,7 @@
     </dl>
   </div>
 
-  <div class="detail-box">
+  <div class="detail-box" data-tabgroup="fahrzeuge" :class="{'is-active': tab === 'fahrzeuge'}">
     <h3>🚒 Fahrzeuge ({{ incident.vehicles|length }})</h3>
     {% for v in incident.vehicles %}
     <div class="vehicle-row">
@@ -60,7 +67,7 @@
     {% endfor %}
   </div>
 
-  <div class="detail-box">
+  <div class="detail-box" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
     <h3>📋 Aufträge ({{ incident.tasks|length }})</h3>
     {% for t in incident.tasks %}
     <div class="task-row {% if t.is_done %}task-row--done{% endif %}">
@@ -71,7 +78,7 @@
   </div>
 
   {% if incident.rescued_persons %}
-  <div class="detail-box">
+  <div class="detail-box" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
     <h3>🧍 Gerettete Personen ({{ incident.rescued_persons|length }})</h3>
     {% for p in incident.rescued_persons %}
     <div class="person-row">{{ p.gender }}, {{ p.person_group }}{% if p.name %}, {{ p.name }}{% endif %}{% if p.location %} – {{ p.location }}{% endif %}</div>
@@ -80,7 +87,7 @@
   {% endif %}
 
   {% if incident.breathing_troops %}
-  <div class="detail-box detail-box--full">
+  <div class="detail-box detail-box--full" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
     <h3>🫁 Atemschutz</h3>
     <table class="table">
       <thead><tr><th>Trupp</th><th>Auftrag</th><th>Standort</th><th>Status</th><th>Einsatzbeginn</th><th>Rückzug</th><th>Zurück</th><th>PDF</th></tr></thead>
@@ -103,7 +110,7 @@
   {% endif %}
 
   {% if uas_einsatz %}
-  <div class="detail-box detail-box--full">
+  <div class="detail-box detail-box--full" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
     <h3>&#x1F681; Drohneneinsatz</h3>
     <dl class="detail-list">
       <dt>Status</dt>
@@ -142,7 +149,7 @@
   {% endif %}
 
   {% if ai_enabled or incident.ai_report_draft %}
-  <div class="detail-box detail-box--full">
+  <div class="detail-box detail-box--full" data-tabgroup="bericht" :class="{'is-active': tab === 'bericht'}">
     <h3>✨ KI-Verlaufsbericht</h3>
     {% if incident.ai_report_draft %}
     <div id="ki-bericht-bereich">
@@ -175,7 +182,7 @@
   {% endif %}
 
   <!-- Mannschaft -->
-  <div class="detail-box detail-box--full">
+  <div class="detail-box detail-box--full" data-tabgroup="mannschaft" :class="{'is-active': tab === 'mannschaft'}">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
       <h3 style="margin:0;">👥 Mannschaft</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -196,7 +203,7 @@
     </div>
   </div>
 
-  <div class="detail-box detail-box--full">
+  <div class="detail-box detail-box--full" data-tabgroup="bericht" :class="{'is-active': tab === 'bericht'}">
     <h3>🕐 Verlauf</h3>
     <div class="log-list">
       {% for entry in verlauf %}
@@ -209,6 +216,7 @@
       {% endfor %}
     </div>
   </div>
+</div>
 </div>
 
 {% if can_edit %}

@@ -1468,3 +1468,33 @@ button.htmx-request,
   }
   .table-admin--cards input, .table-admin--cards select { max-width: 100% !important; }
 }
+
+/* ── Archiv-Liste: Kartenrand nach Alarmtyp einfaerben (wie alarm-badge) ── */
+.card--alarm-f { --org-color: var(--danger); }
+.card--alarm-t { --org-color: var(--blue); }
+@media (max-width: 600px) {
+  .archive-card { flex-direction: column; align-items: stretch; }
+  .archive-card__actions { width: 100%; }
+  .archive-card__actions .btn { flex: 1; }
+}
+
+/* ── Einsatzverlauf (Archiv-Detail): Tab-Navigation nur auf Mobil ──────────
+   Desktop zeigt weiterhin alle .detail-box im 2-Spalten-Grid; auf Mobil
+   wird ueber data-tabgroup gefiltert, damit der lange Einsatzverlauf nicht
+   in einem endlosen Scroll landet. */
+.detail-tabs { display: none; }
+@media (max-width: 760px) {
+  .detail-tabs {
+    display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding: 10px 12px; margin: -4px -12px 12px; border-bottom: 1px solid var(--border);
+    background: var(--surface-low); position: sticky; top: var(--topnav-h); z-index: 40;
+  }
+  .detail-tabs__btn {
+    flex-shrink: 0; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--surface-high); color: var(--text-muted); font-size: .82rem; font-weight: 600;
+    cursor: pointer; white-space: nowrap; transition: background .15s, color .15s;
+  }
+  .detail-tabs__btn.is-active { background: var(--red); border-color: var(--red); color: #fff; }
+  .detail-box[data-tabgroup] { display: none; }
+  .detail-box[data-tabgroup].is-active { display: block; }
+}
