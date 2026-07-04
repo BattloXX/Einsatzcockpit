@@ -32,6 +32,7 @@ _NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
 # SOAPAction-Header sind IMMER {_NS_BASE}/{Service}/{Operation} — unabhängig vom
 # Body-Namespace des jeweiligen Elements (siehe Doku Abschnitt 4, Fußnote 1).
 _ACTION_LOGIN = f"{_NS_BASE}/CoreService/Login"
+_ACTION_ADD_SESSION_ENTRIES = f"{_NS_BASE}/CoreService/AddSessionEntries"
 _ACTION_SELECT_OPERATION = f"{_NS_BASE}/CoreService/SelectOperation"
 _ACTION_GET_OPERATIONS = f"{_NS_BASE}/OperationService/GetOperationsInRange"
 _ACTION_GET_TASKS = f"{_NS_BASE}/OperationService/GetTasks"
@@ -143,6 +144,8 @@ class LisClient:
         self.timeout = timeout
         self.session_id: str = str(uuid.uuid4())
         self._logged_in = False
+        # Aus LoginResult.User.Id — wird für add_session_entries() gebraucht.
+        self.user_id: str | None = None
         # Diagnose-Hook: wird nach jedem SOAP-Austausch mit (url, soap_action,
         # request_bytes, response_bytes) aufgerufen — siehe lis_capture.py.
         # Rein lesend/beobachtend, hat keinen Einfluss auf den normalen Ablauf.
@@ -161,7 +164,7 @@ class LisClient:
             f"</Login>"
         )
         try:
-            await self._post(
+            root = await self._post(
                 f"{self.base_url}/CoreService.svc",
                 _ACTION_LOGIN,
                 body,
@@ -171,6 +174,49 @@ class LisClient:
             self._logged_in = False
             raise LisAuthError(f"LIS-Login fehlgeschlagen: {exc}") from exc
         self._logged_in = True
+
+        login_result = _result_dict(root, "LoginResult") or {}
+        user = login_result.get("User") or {}
+        self.user_id = user.get("Id")
+        if self.user_id:
+            # SelectOperation allein reicht NICHT gegen die NullReferenceException bei
+            # GetTasks (verifiziert: SelectOperation liefert 200 OK, GetTasks faultet
+            # trotzdem weiterhin). Ein echter Mitschnitt zeigt zusätzlich einen
+            # AddSessionEntries-Aufruf mit UserId/UserName früh in der Session — die
+            # fehlschlagende Methode heißt server-seitig "SetRelatedOrganizations",
+            # was auf eine User-basierte Organisations-Auflösung hindeutet. Best-effort:
+            # Fehler hier loggen statt die Anmeldung selbst scheitern zu lassen.
+            try:
+                await self.add_session_entries({"UserId": self.user_id, "UserName": self.username})
+            except LisClientError:
+                logger.exception("LIS: AddSessionEntries nach Login fehlgeschlagen")
+
+    async def add_session_entries(self, entries: dict[str, str]) -> None:
+        """Schreibt Key/Value-Paare in die Server-Session (CoreService.svc/AddSessionEntries).
+
+        Siehe Docstring von login() — wird automatisch mit UserId/UserName nach jedem
+        Login aufgerufen, als (noch unbestätigter, aber am ehesten passender) Kandidat
+        für die Ursache der GetTasks-NullReferenceException.
+        """
+        entries_xml = "".join(
+            f"<a:SessionEntry><a:Key>{_xml_escape(k)}</a:Key>"
+            f'<a:Value i:type="b:string" xmlns:b="http://www.w3.org/2001/XMLSchema">{_xml_escape(v)}</a:Value>'
+            f"</a:SessionEntry>"
+            for k, v in entries.items()
+        )
+        body = (
+            f'<AddSessionEntries xmlns="{_NS_CORE}">'
+            f"{self._site_session_xml()}"
+            f'<sessionEntries xmlns:a="{_NS_TYPES}" xmlns:i="{_NS_XSI}">'
+            f"{entries_xml}"
+            f"</sessionEntries>"
+            f"</AddSessionEntries>"
+        )
+        await self._post(
+            f"{self.base_url}/CoreService.svc",
+            _ACTION_ADD_SESSION_ENTRIES,
+            body,
+        )
 
     async def select_operation(self, organization_id: str, operation_id: str | None = None) -> None:
         """Setzt den Organisations-/Einsatzkontext der Session (CoreService.svc/SelectOperation).
@@ -183,6 +229,10 @@ class LisClient:
         explizit als Parameter mitschicken, GetTasks aber nicht. Der Referenz-Client ruft
         SelectOperation immer mit operationId/operationUnitId=nil und nur organizationId
         gesetzt auf — genau dieses Muster wird hier übernommen.
+
+        WICHTIG: In der Praxis (Capture 2026-07-04, zweiter Testlauf) reichte
+        SelectOperation allein NICHT — GetTasks faultete trotzdem weiter. Siehe
+        add_session_entries() für den zusätzlichen, noch unbestätigten Fix-Kandidaten.
         """
         await self._ensure_login()
         op_id_xml = (

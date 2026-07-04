@@ -1,10 +1,13 @@
 """Tests für den LIS-SOAP-Client: MTOM/XOP-Parsing (kein Netzwerkzugriff nötig)."""
+import asyncio
 import gzip
 
 from app.services.lis.lis_client import (
+    LisClient,
     LisClientError,
     _find_fault,
     _parse_mtom_binary,
+    _result_dict,
     _result_list,
 )
 import xml.etree.ElementTree as ET
@@ -116,3 +119,68 @@ def test_result_list_falls_back_to_flat_array_without_tuple_wrapper():
     items = _result_list(root, "GetTasksResult")
     assert len(items) == 1
     assert items[0]["Id"] == "task-1"
+
+
+# ── Login: LoginResult.User.Id + automatischer AddSessionEntries-Aufruf ──────
+# (Capture 2026-07-04: SelectOperation allein reichte NICHT gegen die GetTasks-
+# NullReferenceException — Kandidat ist eine User-Identität in der Session.)
+
+_LOGIN_RESPONSE_XML = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body><LoginResponse xmlns="http://services.intergraph.com/Emea/Pr/2011/03/Core">
+    <LoginResult xmlns:a="http://services.intergraph.com/Emea/Pr/2011/03/Types"
+                 xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <a:Organization i:nil="true"/>
+      <a:User>
+        <a:Id>da8bfb94-304a-46aa-92c7-805b0c30da70</a:Id>
+        <a:Language>de-DE</a:Language>
+        <a:Name>johannes.battlogg</a:Name>
+      </a:User>
+    </LoginResult>
+  </LoginResponse></s:Body></s:Envelope>"""
+
+_EMPTY_ENVELOPE_XML = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body></s:Body></s:Envelope>"""
+
+
+def test_result_dict_parses_login_result_user_id():
+    root = ET.fromstring(_LOGIN_RESPONSE_XML)
+    result = _result_dict(root, "LoginResult")
+    assert result["User"]["Id"] == "da8bfb94-304a-46aa-92c7-805b0c30da70"
+
+
+def test_login_captures_user_id_and_sends_add_session_entries(monkeypatch):
+    calls: list[tuple[str, str]] = []
+    client = LisClient("https://x.example/ipr", "LIS", "johannes.battlogg", "pw")
+
+    async def fake_post(url, action, body, retry_on_auth=True):
+        calls.append((action, body))
+        if action.endswith("/Login"):
+            return ET.fromstring(_LOGIN_RESPONSE_XML)
+        return ET.fromstring(_EMPTY_ENVELOPE_XML)
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    asyncio.run(client.login())
+
+    assert client.user_id == "da8bfb94-304a-46aa-92c7-805b0c30da70"
+    assert len(calls) == 2
+    assert calls[0][0].endswith("/Login")
+    assert calls[1][0].endswith("/AddSessionEntries")
+    assert "da8bfb94-304a-46aa-92c7-805b0c30da70" in calls[1][1]
+    assert "johannes.battlogg" in calls[1][1]
+
+
+def test_login_skips_add_session_entries_when_user_id_missing(monkeypatch):
+    """Falls LoginResult keinen User liefert, darf AddSessionEntries nicht mit
+    leerem/None-UserId aufgerufen werden."""
+    calls: list[str] = []
+    client = LisClient("https://x.example/ipr", "LIS", "u", "pw")
+
+    async def fake_post(url, action, body, retry_on_auth=True):
+        calls.append(action)
+        return ET.fromstring(_EMPTY_ENVELOPE_XML)
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    asyncio.run(client.login())
+
+    assert client.user_id is None
+    assert len(calls) == 1
