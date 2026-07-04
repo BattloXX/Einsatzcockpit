@@ -162,11 +162,38 @@ def test_login_captures_user_id_and_sends_add_session_entries(monkeypatch):
     asyncio.run(client.login())
 
     assert client.user_id == "da8bfb94-304a-46aa-92c7-805b0c30da70"
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert calls[0][0].endswith("/Login")
     assert calls[1][0].endswith("/AddSessionEntries")
     assert "da8bfb94-304a-46aa-92c7-805b0c30da70" in calls[1][1]
     assert "johannes.battlogg" in calls[1][1]
+    assert calls[2][0].endswith("/Authorize")
+    assert client.session_id in calls[2][1]
+
+
+def test_authorize_posts_to_authorization_service_with_session_id(monkeypatch):
+    """Der eigentliche Fix für die GetTasks-NullReferenceException (Live-Capture
+    2026-07-04): AddSessionEntries mit ProjectId allein reichte nachweislich NICHT —
+    ein Authorize-Aufruf gegen den separaten AuthorizationService (GMSC/Authorization.svc,
+    eigener Namespace-Stamm ohne "/Pr/") lief im funktionierenden Referenz-Mitschnitt
+    zwischen SelectOperation und GetTasks."""
+    captured = {}
+    client = LisClient("https://lis.example.at/ipr", "LIS", "u", "pw")
+    client.session_id = "11111111-2222-3333-4444-555555555555"
+
+    async def fake_post(url, action, body, retry_on_auth=True):
+        captured["url"] = url
+        captured["action"] = action
+        captured["body"] = body
+        return ET.fromstring(_EMPTY_ENVELOPE_XML)
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    asyncio.run(client.authorize())
+
+    assert captured["url"] == "http://lis.example.at/GMSC/Authorization.svc"
+    assert captured["action"] == "http://services.intergraph.com/Emea/2011/03/AuthorizationService/Authorize"
+    assert "11111111-2222-3333-4444-555555555555" in captured["body"]
+    assert "<a:Site>LIS</a:Site>" in captured["body"]
 
 
 def test_login_hashes_plaintext_password_by_default(monkeypatch):

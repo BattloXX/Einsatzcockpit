@@ -17,6 +17,7 @@ import logging
 import uuid
 import xml.etree.ElementTree as ET
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -28,6 +29,13 @@ _NS_OPERATION = f"{_NS_BASE}/Operation"
 _NS_TYPES = f"{_NS_BASE}/Types"
 _NS_SOAP = "http://schemas.xmlsoap.org/soap/envelope/"
 _NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
+
+# Authorization.svc liegt auf einem GANZ ANDEREN Namespace-Stamm (kein "/Pr/"-Segment)
+# UND einem anderen Pfad/Schema als CoreService/OperationService — siehe authorize().
+_NS_AUTH_BASE = "http://services.intergraph.com/Emea/2011/03"
+_NS_AUTH = f"{_NS_AUTH_BASE}/Authorization"
+_NS_AUTH_TYPES = f"{_NS_AUTH_BASE}/Types"
+_ACTION_AUTHORIZE = f"{_NS_AUTH_BASE}/AuthorizationService/Authorize"
 
 # SOAPAction-Header sind IMMER {_NS_BASE}/{Service}/{Operation} — unabhängig vom
 # Body-Namespace des jeweiligen Elements (siehe Doku Abschnitt 4, Fußnote 1).
@@ -192,15 +200,13 @@ class LisClient:
         user = login_result.get("User") or {}
         self.user_id = user.get("Id")
         if self.user_id:
-            # UserId/UserName allein reichten NICHT gegen die NullReferenceException bei
-            # GetTasks (verifiziert über mehrere Testläufe). Ein echter HTTP-Mitschnitt
-            # eines funktionierenden Referenz-Clients (Java-Client, 2026-07-04) zeigt den
-            # entscheidenden Unterschied: dessen AddSessionEntries enthält zusätzlich
-            # einen dritten Eintrag "ProjectId" — ohne den bleibt SessionData.OrganizationId
-            # serverseitig null (Fault in SetRelatedOrganizations), mit ihm liefert GetTasks
-            # für exakt dieselbe Operation echte Task-Daten. ProjectId ist KEIN Login-
-            # Response-Feld (kommt in keiner Antwort vor), sondern eine installationsweite
-            # Konstante (OrgLisConfig.project_id) — daher nur mitschicken, wenn konfiguriert.
+            # UserId/UserName/ProjectId in AddSessionEntries allein reichten NICHT gegen die
+            # NullReferenceException bei GetTasks — verifiziert per Live-Capture 2026-07-04
+            # (org_lis_config.project_id war gesetzt, AddSessionEntries faultete nicht, GetTasks
+            # trotzdem identischer Fault). Siehe authorize() für den tatsächlich fehlenden
+            # Schritt, der per Bytevergleich gegen einen funktionierenden Referenz-Mitschnitt
+            # gefunden wurde. AddSessionEntries bleibt trotzdem bestehen (der Referenz-Client
+            # ruft es genauso auf, vermutlich für andere/spätere Zwecke als GetTasks selbst).
             # Best-effort: Fehler hier loggen statt die Anmeldung selbst scheitern zu lassen.
             entries = {"UserId": self.user_id, "UserName": self.username}
             if self.project_id:
@@ -209,6 +215,43 @@ class LisClient:
                 await self.add_session_entries(entries)
             except LisClientError:
                 logger.exception("LIS: AddSessionEntries nach Login fehlgeschlagen")
+            try:
+                await self.authorize()
+            except LisClientError:
+                logger.exception("LIS: Authorize nach Login fehlgeschlagen")
+
+    async def authorize(self) -> None:
+        """Registriert die Session beim AuthorizationService (GMSC/Authorization.svc) —
+        ein ANDERER Dienst als CoreService/OperationService, mit eigenem Namespace-Stamm
+        (kein "/Pr/"-Segment) und eigenem Pfad/Schema (`/GMSC/` statt `/ipr/`, `http://`
+        statt `https://` im Referenz-Mitschnitt).
+
+        Per Live-Capture 2026-07-04 gefunden: die eigentliche Ursache der GetTasks-
+        NullReferenceException war NICHT die fehlende ProjectId in AddSessionEntries
+        (die änderte live nachweislich nichts), sondern dieser fehlende Aufruf. Im
+        funktionierenden Referenz-Mitschnitt läuft die Reihenfolge Login →
+        AddSessionEntries → SelectOperation → **Authorize** → ... → GetTasks (Erfolg,
+        echte Task-Daten), mit durchgehend derselben SessionId über alle vier Aufrufe.
+        Best-effort: wird in login() abgefangen und nur geloggt, damit ein falsch
+        geratener Endpoint (Host-Ableitung aus base_url ist nicht 100% sicher) nicht den
+        gesamten Login-Fluss blockiert.
+        """
+        host = urlsplit(self.base_url).netloc
+        url = f"http://{host}/GMSC/Authorization.svc"
+        body = (
+            f'<Authorize xmlns="{_NS_AUTH}">'
+            f'<request xmlns:a="{_NS_AUTH_TYPES}" xmlns:i="{_NS_XSI}">'
+            f"<a:SessionId>{self.session_id}</a:SessionId>"
+            f"<a:Site>{_xml_escape(self.site)}</a:Site>"
+            f"</request>"
+            f"</Authorize>"
+        )
+        root = await self._post(url, _ACTION_AUTHORIZE, body)
+        result = _result_dict(root, "AuthorizeResult") or {}
+        logger.info(
+            "LIS: Authorize erfolgreich (LoggedOnUser=%s, LoggedOnProject=%s)",
+            result.get("LoggedOnUser"), result.get("LoggedOnProject"),
+        )
 
     async def add_session_entries(self, entries: dict[str, str]) -> None:
         """Schreibt Key/Value-Paare in die Server-Session (CoreService.svc/AddSessionEntries).
@@ -249,11 +292,9 @@ class LisClient:
         gesetzt auf — genau dieses Muster wird hier übernommen.
 
         WICHTIG: SelectOperation allein reicht NICHT — GetTasks faultete in mehreren
-        Testläufen trotzdem weiter. Der tatsächliche Fix ist die zusätzliche ProjectId
-        in AddSessionEntries, siehe login()-Docstring — durch Diff gegen einen echten
-        Referenz-Client-Mitschnitt (selbe Operation, selbe Anfrage bis auf SessionId)
-        gefunden und dort verifiziert (GetTasks lieferte dort echte Task-Daten statt
-        Fault).
+        Testläufen trotzdem weiter, auch mit zusätzlicher ProjectId in AddSessionEntries.
+        Der tatsächliche Fix ist ein separater Aufruf gegen den AuthorizationService,
+        siehe authorize().
         """
         await self._ensure_login()
         op_id_xml = (
