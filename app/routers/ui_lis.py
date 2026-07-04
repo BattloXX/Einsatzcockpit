@@ -97,6 +97,7 @@ async def lis_settings_save(
     base_url: str = Form(""),
     site: str = Form("LIS"),
     organization_id: str = Form(""),
+    project_id: str = Form(""),
     poll_interval_seconds: int = Form(30),
     username: str = Form(""),
     password: str = Form(""),
@@ -112,6 +113,7 @@ async def lis_settings_save(
     cfg.base_url = base_url.strip().rstrip("/") or None
     cfg.site = site.strip() or "LIS"
     cfg.organization_id = organization_id.strip() or None
+    cfg.project_id = project_id.strip() or None
     cfg.poll_interval_seconds = max(10, poll_interval_seconds or 30)
     cfg.username = username.strip() or None
     cfg.updated_at = datetime.now(UTC)
@@ -153,7 +155,7 @@ async def lis_test_connection(
 
     try:
         password = decrypt_secret(cfg.password_enc)
-        client = LisClient(cfg.base_url, cfg.site, cfg.username, password)
+        client = LisClient(cfg.base_url, cfg.site, cfg.username, password, project_id=cfg.project_id)
         await client.login()
         operations = await client.get_operations_in_range(cfg.organization_id, operation_filter="ActiveParticipation")
         write_audit(db, "lis.config.test", org_id=effective_org_id, user_id=user.id,

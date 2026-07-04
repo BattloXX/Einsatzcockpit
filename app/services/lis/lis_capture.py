@@ -252,8 +252,8 @@ async def start_capture_for_org(
         config = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == org_id).first()
         if not config or not config.is_fully_configured:
             raise ValueError("LIS-Konfiguration unvollständig (URL, Organisation, Zugangsdaten).")
-        base_url, site, organization_id, username = (
-            config.base_url, config.site, config.organization_id, config.username,
+        base_url, site, organization_id, username, project_id = (
+            config.base_url, config.site, config.organization_id, config.username, config.project_id,
         )
         poll_interval_seconds = config.poll_interval_seconds
         password = decrypt_secret(config.password_enc)
@@ -263,7 +263,7 @@ async def start_capture_for_org(
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out_dir = capture_run_dir(org_id, run_id)
     recorder = ExchangeRecorder(out_dir, org_id, run_id)
-    client = LisClient(base_url, site, username, password, on_exchange=recorder.record)
+    client = LisClient(base_url, site, username, password, on_exchange=recorder.record, project_id=project_id)
 
     # Muss vor GetTasks einmal aufgerufen werden, sonst NullReferenceException auf dem
     # LIS-Server (siehe select_operation()-Docstring in lis_client.py). Fehler hier

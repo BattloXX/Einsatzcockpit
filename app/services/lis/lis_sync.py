@@ -541,7 +541,7 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
         logger.exception("LIS-Passwort für Org %s konnte nicht entschlüsselt werden", org.id)
         return
 
-    client = LisClient(config.base_url, config.site, config.username, password)
+    client = LisClient(config.base_url, config.site, config.username, password, project_id=config.project_id)
     try:
         # Muss vor jedem GetTasks einmal aufgerufen werden, sonst NullReferenceException
         # auf dem LIS-Server (siehe select_operation()-Docstring in lis_client.py).

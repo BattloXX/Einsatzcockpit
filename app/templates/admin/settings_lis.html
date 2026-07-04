@@ -98,6 +98,14 @@
                  class="form-input" autocomplete="off">
           <p class="form-hint">Eigene Organisation im LIS (z.B. Feuerwehr Wolfurt)</p>
         </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+          <label for="project_id">Projekt-ID (LIS-GUID)</label>
+          <input type="text" id="project_id" name="project_id"
+                 value="{{ config.project_id or '' if config else '' }}"
+                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                 class="form-input" autocomplete="off">
+          <p class="form-hint">Installationsweite Konstante, nötig damit GetTasks funktioniert (sonst Server-Fehler). Beim Betreiber/LWZ erfragen oder aus einem Referenz-Client-Mitschnitt (AddSessionEntries-Key "ProjectId") entnehmen.</p>
+        </div>
         <div class="form-group" style="margin:0;width:140px">
           <label for="site">Site</label>
           <input type="text" id="site" name="site"

@@ -136,6 +136,7 @@ class LisClient:
     def __init__(
         self, base_url: str, site: str, username: str, password: str, timeout: float = 20.0,
         on_exchange: Callable[[str, str, bytes, bytes], None] | None = None,
+        project_id: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.site = site or "LIS"
@@ -146,6 +147,9 @@ class LisClient:
         self._logged_in = False
         # Aus LoginResult.User.Id — wird für add_session_entries() gebraucht.
         self.user_id: str | None = None
+        # AddSessionEntries-Key "ProjectId", siehe login(). Installationsweite Konstante
+        # (OrgLisConfig.project_id), keine LoginResult-Ableitung möglich.
+        self.project_id = project_id
         # Diagnose-Hook: wird nach jedem SOAP-Austausch mit (url, soap_action,
         # request_bytes, response_bytes) aufgerufen — siehe lis_capture.py.
         # Rein lesend/beobachtend, hat keinen Einfluss auf den normalen Ablauf.
@@ -179,24 +183,29 @@ class LisClient:
         user = login_result.get("User") or {}
         self.user_id = user.get("Id")
         if self.user_id:
-            # SelectOperation allein reicht NICHT gegen die NullReferenceException bei
-            # GetTasks (verifiziert: SelectOperation liefert 200 OK, GetTasks faultet
-            # trotzdem weiterhin). Ein echter Mitschnitt zeigt zusätzlich einen
-            # AddSessionEntries-Aufruf mit UserId/UserName früh in der Session — die
-            # fehlschlagende Methode heißt server-seitig "SetRelatedOrganizations",
-            # was auf eine User-basierte Organisations-Auflösung hindeutet. Best-effort:
-            # Fehler hier loggen statt die Anmeldung selbst scheitern zu lassen.
+            # UserId/UserName allein reichten NICHT gegen die NullReferenceException bei
+            # GetTasks (verifiziert über mehrere Testläufe). Ein echter HTTP-Mitschnitt
+            # eines funktionierenden Referenz-Clients (Java-Client, 2026-07-04) zeigt den
+            # entscheidenden Unterschied: dessen AddSessionEntries enthält zusätzlich
+            # einen dritten Eintrag "ProjectId" — ohne den bleibt SessionData.OrganizationId
+            # serverseitig null (Fault in SetRelatedOrganizations), mit ihm liefert GetTasks
+            # für exakt dieselbe Operation echte Task-Daten. ProjectId ist KEIN Login-
+            # Response-Feld (kommt in keiner Antwort vor), sondern eine installationsweite
+            # Konstante (OrgLisConfig.project_id) — daher nur mitschicken, wenn konfiguriert.
+            # Best-effort: Fehler hier loggen statt die Anmeldung selbst scheitern zu lassen.
+            entries = {"UserId": self.user_id, "UserName": self.username}
+            if self.project_id:
+                entries["ProjectId"] = self.project_id
             try:
-                await self.add_session_entries({"UserId": self.user_id, "UserName": self.username})
+                await self.add_session_entries(entries)
             except LisClientError:
                 logger.exception("LIS: AddSessionEntries nach Login fehlgeschlagen")
 
     async def add_session_entries(self, entries: dict[str, str]) -> None:
         """Schreibt Key/Value-Paare in die Server-Session (CoreService.svc/AddSessionEntries).
 
-        Siehe Docstring von login() — wird automatisch mit UserId/UserName nach jedem
-        Login aufgerufen, als (noch unbestätigter, aber am ehesten passender) Kandidat
-        für die Ursache der GetTasks-NullReferenceException.
+        Siehe Docstring von login() — wird automatisch mit UserId/UserName (und ProjectId,
+        falls konfiguriert) nach jedem Login aufgerufen.
         """
         entries_xml = "".join(
             f"<a:SessionEntry><a:Key>{_xml_escape(k)}</a:Key>"
@@ -230,9 +239,12 @@ class LisClient:
         SelectOperation immer mit operationId/operationUnitId=nil und nur organizationId
         gesetzt auf — genau dieses Muster wird hier übernommen.
 
-        WICHTIG: In der Praxis (Capture 2026-07-04, zweiter Testlauf) reichte
-        SelectOperation allein NICHT — GetTasks faultete trotzdem weiter. Siehe
-        add_session_entries() für den zusätzlichen, noch unbestätigten Fix-Kandidaten.
+        WICHTIG: SelectOperation allein reicht NICHT — GetTasks faultete in mehreren
+        Testläufen trotzdem weiter. Der tatsächliche Fix ist die zusätzliche ProjectId
+        in AddSessionEntries, siehe login()-Docstring — durch Diff gegen einen echten
+        Referenz-Client-Mitschnitt (selbe Operation, selbe Anfrage bis auf SessionId)
+        gefunden und dort verifiziert (GetTasks lieferte dort echte Task-Daten statt
+        Fault).
         """
         await self._ensure_login()
         op_id_xml = (

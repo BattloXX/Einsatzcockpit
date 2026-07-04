@@ -26,6 +26,11 @@ class OrgLisConfig(Base):
     base_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     site: Mapped[str] = mapped_column(String(50), nullable=False, default="LIS")
     organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # LIS-GUID
+    # AddSessionEntries-Key "ProjectId" — ohne diesen wirft GetTasks serverseitig eine
+    # NullReferenceException (SessionData.get_OrganizationId() bleibt null), siehe
+    # lis_client.py::login(). Aus einem echten Referenz-Client-Mitschnitt entnommen,
+    # ist server-/installationsweit konstant, nicht pro Operation.
+    project_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
 
     # Zugangsdaten
