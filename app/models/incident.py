@@ -245,6 +245,9 @@ class Task(Base):
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    # LIS/IPR: Task.Id des Ursprungs-Auftrags (Type.Type == "TASK"), für Dedup/Update
+    # bei erneutem Sync — analog Message.lis_task_id für Meldungen (Type.Type == "JOURNAL").
+    lis_task_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     incident: Mapped[Incident] = relationship(back_populates="tasks")
     column: Mapped[IncidentColumn | None] = relationship(

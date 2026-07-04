@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.timezones import org_tz
-from app.models.incident import IncidentColumn, IncidentLog, IncidentVehicle, Message
+from app.models.incident import IncidentColumn, IncidentLog, IncidentVehicle, Message, Task
 from app.models.lis import LisSyncedObject, OrgLisConfig
 from app.models.major_incident import IncidentSite, VehiclePosition
 from app.models.master import FireDept, VehicleMaster
@@ -21,6 +21,7 @@ from app.services.lis.lis_client import LisClient, LisClientError
 from app.services.lis.lis_geo import lis_unit_coords_to_wgs84
 from app.services.lis.lis_mapping import (
     is_exercise_operation,
+    is_lis_auftrag,
     map_stichwort,
     map_unit_status,
     parse_person_response,
@@ -257,7 +258,7 @@ def _sync_vehicle_location(
     )
 
 
-# ── Meldungen (Tasks → Message-Cards, nur normaler Incident) ────────────────
+# ── Meldungen (Type.Type=="JOURNAL" → Message-Cards, nur normaler Incident) ──
 def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> None:
     if _incident_belongs_to_major_incident(db, incident.id):
         return
@@ -269,8 +270,11 @@ def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> N
     )
 
     for task in tasks:
-        if _op_field(task, "Type", "Type") == "UNITSTATUSHISTORY":
+        task_type = _op_field(task, "Type", "Type")
+        if task_type == "UNITSTATUSHISTORY":
             continue  # separat behandelt (Fahrzeugstatus / Zu-Absagen)
+        if is_lis_auftrag(task_type):
+            continue  # separat behandelt (siehe _sync_tasks) — echter LIS-Auftrag, keine Meldung
         lis_task_id = task.get("Id")
         if not lis_task_id:
             continue
@@ -297,6 +301,60 @@ def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> N
         ))
         db.flush()
         logger.info("Meldung aus LIS-Task %s auf Einsatz %s übernommen", lis_task_id, incident.id)
+
+
+# ── Aufträge (Type.Type=="TASK" → Task-Cards, nur normaler Incident) ────────
+def _sync_tasks(db: Session, org: FireDept, incident, tasks: list[dict]) -> None:
+    """Echte LIS-Aufträge ("an eine Stabsfunktion zuteilen") landen im eigenen
+    Aufträge-Board (Task-Modell), NICHT als Message — analog zur manuellen
+    Trennung Meldungen/Aufträge im UI (IncidentColumn "messages" vs. "tasks").
+    """
+    if _incident_belongs_to_major_incident(db, incident.id):
+        return
+
+    tasks_col = (
+        db.query(IncidentColumn)
+        .filter(IncidentColumn.incident_id == incident.id, IncidentColumn.code == "tasks")
+        .first()
+    )
+
+    for task in tasks:
+        if not is_lis_auftrag(_op_field(task, "Type", "Type")):
+            continue
+        lis_task_id = task.get("Id")
+        if not lis_task_id:
+            continue
+        description = task.get("Description") or ""
+        due_at = _parse_operation_datetime(task.get("DeadlineTime"), org)
+
+        existing = (
+            db.query(Task)
+            .filter(Task.incident_id == incident.id, Task.lis_task_id == lis_task_id)
+            .first()
+        )
+        if existing:
+            changed = False
+            if description and existing.detail != description:
+                existing.detail = description
+                changed = True
+            if due_at != existing.due_at:
+                existing.due_at = due_at
+                changed = True
+            if changed:
+                db.flush()
+            continue
+
+        db.add(Task(
+            incident_id=incident.id,
+            column_id=tasks_col.id if tasks_col else None,
+            title=task.get("Number") or "LIS-Auftrag",
+            detail=description or None,
+            due_at=due_at,
+            source="lis",
+            lis_task_id=lis_task_id,
+        ))
+        db.flush()
+        logger.info("Auftrag aus LIS-Task %s auf Einsatz %s übernommen", lis_task_id, incident.id)
 
 
 # ── Zu-/Absagen (Mannschaft) → Einsatz-Verlauf ───────────────────────────────
@@ -452,6 +510,7 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
         tasks = []
 
     _sync_messages(db, org, incident, tasks)
+    _sync_tasks(db, org, incident, tasks)
     _sync_person_responses(db, org, incident, tasks)
 
     try:

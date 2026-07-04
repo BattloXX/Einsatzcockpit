@@ -7,7 +7,7 @@ import asyncio
 from datetime import UTC, datetime
 
 from app.core.tenant import set_tenant_context
-from app.models.incident import Incident, IncidentColumn, IncidentVehicle
+from app.models.incident import Incident, IncidentColumn, IncidentVehicle, Message, Task
 from app.models.major_incident import IncidentSite, MajorIncident, VehiclePosition
 from app.models.master import FireDept, VehicleMaster
 from app.services.lis import lis_sync
@@ -157,6 +157,104 @@ def test_repeated_lis_sync_is_idempotent_no_duplicate():
         assert created2 is False
         assert incident1.id == incident2.id
         assert after_first == after_second
+    finally:
+        db.rollback()
+        db.close()
+
+
+# ── Meldungen (JOURNAL) vs. Aufträge (TASK) ─────────────────────────────────
+
+def _journal_task(task_id="lis-task-journal", description="Info an alle") -> dict:
+    return {
+        "Id": task_id, "Number": "M0001", "Description": description, "CreatedBy": "LIS",
+        "Type": {"Type": "JOURNAL", "Label": "Meldung"},
+    }
+
+
+def _auftrag_task(task_id="lis-task-auftrag", description="An Stab zuteilen",
+                   deadline="2026-07-04T18:00:00") -> dict:
+    return {
+        "Id": task_id, "Number": "A0001", "Description": description, "CreatedBy": "LIS",
+        "DeadlineTime": deadline,
+        "Type": {"Type": "TASK", "Label": "Auftrag"},
+    }
+
+
+def test_sync_messages_only_imports_journal_not_task():
+    """Ein echter LIS-Auftrag (Type.Type=='TASK') darf NICHT als Message landen —
+    das war vor der Trennung Meldungen/Aufträge der Fall (siehe _sync_tasks)."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _ = lis_sync._get_or_link_incident(
+            db, org, _parsed(lis_operation_id="lis-op-split-1", reason="Split-Test 1", street="Split-Straße 1"),
+        )
+
+        lis_sync._sync_messages(db, org, incident, [_journal_task(), _auftrag_task()])
+
+        # Filter auf lis_task_id != None: create_incident() kann zusätzlich
+        # org-eigene Standard-Meldungsvorlagen seeden (seed_service.py) — hier
+        # interessieren nur die aus LIS-Tasks synchronisierten Meldungen.
+        messages = (
+            db.query(Message)
+            .filter(Message.incident_id == incident.id, Message.lis_task_id.isnot(None))
+            .all()
+        )
+        assert len(messages) == 1
+        assert messages[0].lis_task_id == "lis-task-journal"
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_tasks_only_imports_task_not_journal_and_sets_deadline():
+    """Ein Auftrag (Type.Type=='TASK') landet im Task-Modell (Aufträge-Board), mit
+    DeadlineTime als due_at — eine Meldung (JOURNAL) wird hier nicht importiert."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _ = lis_sync._get_or_link_incident(
+            db, org, _parsed(lis_operation_id="lis-op-split-2", reason="Split-Test 2", street="Split-Straße 2"),
+        )
+
+        lis_sync._sync_tasks(db, org, incident, [_journal_task(), _auftrag_task()])
+
+        tasks = (
+            db.query(Task)
+            .filter(Task.incident_id == incident.id, Task.lis_task_id.isnot(None))
+            .all()
+        )
+        assert len(tasks) == 1
+        task = tasks[0]
+        assert task.lis_task_id == "lis-task-auftrag"
+        assert task.source == "lis"
+        assert task.due_at is not None
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_tasks_is_idempotent_and_updates_deadline():
+    """Wiederholtes Polling desselben Auftrags darf keinen zweiten Task anlegen,
+    aktualisiert aber eine geänderte Frist."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _ = lis_sync._get_or_link_incident(
+            db, org, _parsed(lis_operation_id="lis-op-split-3", reason="Split-Test 3", street="Split-Straße 3"),
+        )
+
+        lis_sync._sync_tasks(db, org, incident, [_auftrag_task(deadline="2026-07-04T18:00:00")])
+        lis_sync._sync_tasks(db, org, incident, [_auftrag_task(deadline="2026-07-04T19:30:00")])
+
+        tasks = (
+            db.query(Task)
+            .filter(Task.incident_id == incident.id, Task.lis_task_id.isnot(None))
+            .all()
+        )
+        assert len(tasks) == 1
+        expected = lis_sync._parse_operation_datetime("2026-07-04T19:30:00", org)
+        assert tasks[0].due_at == expected
     finally:
         db.rollback()
         db.close()

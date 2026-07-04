@@ -75,6 +75,18 @@ def map_unit_status(label: str | None) -> str | None:
     return None
 
 
+# ── Meldung vs. Auftrag (Task.Type.Type) ──────────────────────────────────────
+def is_lis_auftrag(task_type: str | None) -> bool:
+    """True für echte LIS-Aufträge ("an eine Stabsfunktion zuteilen", Type.Type
+    == "TASK"), False für Meldungen (Type.Type == "JOURNAL") und alles andere.
+
+    Beide Werte + das dazugehörige Label ("Auftrag"/"Meldung") stammen aus einem
+    echten GetTaskTypes/GetLegendMetadata-Mitschnitt (2026-07-04) — bisher hatte
+    _sync_messages() beide Typen ununterschieden als Message ("Meldung") importiert.
+    """
+    return (task_type or "").strip().upper() == "TASK"
+
+
 # ── Personen-Zu-/Absagen (aus UNITSTATUSHISTORY-Task-Freitext) ────────────────
 PERSON_RESPONSE_RE = re.compile(
     r"^(?P<person>[\w.\-]+)"
