@@ -317,7 +317,7 @@ def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> N
     for task in tasks:
         task_type = _op_field(task, "Type", "Type")
         if task_type == "UNITSTATUSHISTORY":
-            continue  # separat behandelt (Fahrzeugstatus / Zu-Absagen)
+            continue  # Fahrzeug-Statusverlauf, siehe _sync_vehicle_status() — keine Meldung
         if is_lis_auftrag(task_type):
             continue  # separat behandelt (siehe _sync_tasks) — echter LIS-Auftrag, keine Meldung
         lis_task_id = task.get("Id")
@@ -336,10 +336,11 @@ def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> N
                 db.flush()
             continue
 
+        number = task.get("Number")
         db.add(Message(
             incident_id=incident.id,
             column_id=messages_col.id if messages_col else None,
-            title=task.get("Number") or "LIS-Meldung",
+            title=f"LIS: {number}" if number else "LIS: Meldung",
             detail=description or None,
             author_name=task.get("CreatedBy") or "LIS",
             lis_task_id=lis_task_id,
@@ -389,10 +390,11 @@ def _sync_tasks(db: Session, org: FireDept, incident, tasks: list[dict]) -> None
                 db.flush()
             continue
 
+        number = task.get("Number")
         db.add(Task(
             incident_id=incident.id,
             column_id=tasks_col.id if tasks_col else None,
-            title=task.get("Number") or "LIS-Auftrag",
+            title=f"LIS: {number}" if number else "LIS: Auftrag",
             detail=description or None,
             due_at=due_at,
             source="lis",

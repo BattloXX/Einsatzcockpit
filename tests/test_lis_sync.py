@@ -219,6 +219,7 @@ def test_sync_messages_only_imports_journal_not_task():
         )
         assert len(messages) == 1
         assert messages[0].lis_task_id == "lis-task-journal"
+        assert messages[0].title == "LIS: M0001"
     finally:
         db.rollback()
         db.close()
@@ -246,6 +247,7 @@ def test_sync_tasks_only_imports_task_not_journal_and_sets_deadline():
         assert task.lis_task_id == "lis-task-auftrag"
         assert task.source == "lis"
         assert task.due_at is not None
+        assert task.title == "LIS: A0001"
     finally:
         db.rollback()
         db.close()
