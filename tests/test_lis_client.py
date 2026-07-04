@@ -236,6 +236,33 @@ def test_login_sends_preconfigured_hash_unmodified_when_password_is_hash(monkeyp
     assert f"<password>{precomputed_hash}</password>" in captured["body"]
 
 
+def test_login_sends_organization_id_session_entry_when_configured(monkeypatch):
+    """Zweiter Live-Capture-Vergleich (2026-07-04): weder Konto noch Request-Form sind die
+    Ursache der GetTasks-NullReferenceException — der funktionierende Referenz-Mitschnitt
+    ist der Intergraph-IPR-Smartclient, der vor GetTasks eine Priming-Sequenz durchläuft,
+    die unserer schlanken Poll-Client fehlt. Fix-Versuch: OrganizationId zusätzlich per
+    AddSessionEntries injizieren (Session-Entries schreiben nachweislich SessionData —
+    UserId/ProjectId kommen 1:1 in AuthorizeResult zurück)."""
+    captured = {}
+    client = LisClient(
+        "https://x.example/ipr", "LIS", "u", "pw",
+        organization_id="31ef7d2c-0b24-4057-8a5c-05a5662fd722",
+    )
+
+    async def fake_post(url, action, body, retry_on_auth=True):
+        if action.endswith("/Login"):
+            return ET.fromstring(_LOGIN_RESPONSE_XML)
+        if action.endswith("/AddSessionEntries"):
+            captured["body"] = body
+        return ET.fromstring(_EMPTY_ENVELOPE_XML)
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    asyncio.run(client.login())
+
+    assert "<a:Key>OrganizationId</a:Key>" in captured["body"]
+    assert "31ef7d2c-0b24-4057-8a5c-05a5662fd722" in captured["body"]
+
+
 def test_login_skips_add_session_entries_when_user_id_missing(monkeypatch):
     """Falls LoginResult keinen User liefert, darf AddSessionEntries nicht mit
     leerem/None-UserId aufgerufen werden."""

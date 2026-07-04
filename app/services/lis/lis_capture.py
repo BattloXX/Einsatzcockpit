@@ -267,6 +267,7 @@ async def start_capture_for_org(
     client = LisClient(
         base_url, site, username, password, on_exchange=recorder.record,
         project_id=project_id, password_is_hash=password_is_hash,
+        organization_id=organization_id,
     )
 
     # Muss vor GetTasks einmal aufgerufen werden, sonst NullReferenceException auf dem

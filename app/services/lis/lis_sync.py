@@ -683,6 +683,7 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
     client = LisClient(
         config.base_url, config.site, config.username, password,
         project_id=config.project_id, password_is_hash=config.password_is_hash,
+        organization_id=config.organization_id,
     )
     try:
         # Muss vor jedem GetTasks einmal aufgerufen werden, sonst NullReferenceException
@@ -768,6 +769,7 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
         client = LisClient(
             config.base_url, config.site, config.username, password,
             project_id=config.project_id, password_is_hash=config.password_is_hash,
+            organization_id=config.organization_id,
         )
         try:
             status_types = await client.get_operation_unit_status_types()

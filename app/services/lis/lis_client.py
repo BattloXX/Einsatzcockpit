@@ -148,6 +148,7 @@ class LisClient:
         on_exchange: Callable[[str, str, bytes, bytes], None] | None = None,
         project_id: str | None = None,
         password_is_hash: bool = False,
+        organization_id: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.site = site or "LIS"
@@ -164,6 +165,9 @@ class LisClient:
         # AddSessionEntries-Key "ProjectId", siehe login(). Installationsweite Konstante
         # (OrgLisConfig.project_id), keine LoginResult-Ableitung möglich.
         self.project_id = project_id
+        # AddSessionEntries-Key "OrganizationId" (OrgLisConfig.organization_id) — siehe
+        # login()-Docstring: das ist der eigentliche Kandidat gegen die GetTasks-NRE.
+        self.organization_id = organization_id
         # Diagnose-Hook: wird nach jedem SOAP-Austausch mit (url, soap_action,
         # request_bytes, response_bytes) aufgerufen — siehe lis_capture.py.
         # Rein lesend/beobachtend, hat keinen Einfluss auf den normalen Ablauf.
@@ -200,17 +204,30 @@ class LisClient:
         user = login_result.get("User") or {}
         self.user_id = user.get("Id")
         if self.user_id:
-            # UserId/UserName/ProjectId in AddSessionEntries allein reichten NICHT gegen die
-            # NullReferenceException bei GetTasks — verifiziert per Live-Capture 2026-07-04
-            # (org_lis_config.project_id war gesetzt, AddSessionEntries faultete nicht, GetTasks
-            # trotzdem identischer Fault). Siehe authorize() für den tatsächlich fehlenden
-            # Schritt, der per Bytevergleich gegen einen funktionierenden Referenz-Mitschnitt
-            # gefunden wurde. AddSessionEntries bleibt trotzdem bestehen (der Referenz-Client
-            # ruft es genauso auf, vermutlich für andere/spätere Zwecke als GetTasks selbst).
-            # Best-effort: Fehler hier loggen statt die Anmeldung selbst scheitern zu lassen.
+            # WICHTIG (Stand 2026-07-04, zweiter Live-Capture-Vergleich): weder das Konto
+            # noch die Request-Form sind die Ursache der GetTasks-NullReferenceException.
+            # Ein Referenz-Mitschnitt (fedac9c2), der GetTasks erfolgreich zeigt, stammt
+            # NICHT von unserem eigenen Client, sondern vom Intergraph-IPR-Smartclient (der
+            # echten Dispatcher-Anwendung, erkennbar an GetPlugins/AddOperation/AssignUnit/
+            # GetMapEntity etc.). Der Smartclient durchläuft vor GetTasks eine große
+            # Priming-Sequenz (u.a. eine zweite SelectOperation, GetOrganizations,
+            # GetOperations, Authorize), wodurch seine Server-Session eine gültige
+            # SessionData.OrganizationId erhält. Unser schlanker Poll-Client lässt dieses
+            # Priming aus — beim ersten Zugriff auf den OperationService-Session-Cache
+            # (durch GetTasks ausgelöst) ist SessionData.OrganizationId dann null -> NRE.
+            # GetOperationUnits/GetDocuments/GetOperationsInRange funktionieren trotzdem,
+            # weil sie organizationId als expliziten Parameter mitschicken und damit diesen
+            # Session-Cache-Pfad umgehen.
+            #
+            # Fix-Versuch: Session-Entries schreiben nachweislich SessionData-Felder (unsere
+            # injizierten UserId/ProjectId kommen 1:1 in AuthorizeResult zurück) — also wird
+            # hier zusätzlich OrganizationId injiziert, in der Annahme, dass das exakt das
+            # Feld befüllt, das GetTasks dereferenziert. Noch NICHT live verifiziert.
             entries = {"UserId": self.user_id, "UserName": self.username}
             if self.project_id:
                 entries["ProjectId"] = self.project_id
+            if self.organization_id:
+                entries["OrganizationId"] = self.organization_id
             try:
                 await self.add_session_entries(entries)
             except LisClientError:
@@ -226,15 +243,14 @@ class LisClient:
         (kein "/Pr/"-Segment) und eigenem Pfad/Schema (`/GMSC/` statt `/ipr/`, `http://`
         statt `https://` im Referenz-Mitschnitt).
 
-        Per Live-Capture 2026-07-04 gefunden: die eigentliche Ursache der GetTasks-
-        NullReferenceException war NICHT die fehlende ProjectId in AddSessionEntries
-        (die änderte live nachweislich nichts), sondern dieser fehlende Aufruf. Im
-        funktionierenden Referenz-Mitschnitt läuft die Reihenfolge Login →
-        AddSessionEntries → SelectOperation → **Authorize** → ... → GetTasks (Erfolg,
-        echte Task-Daten), mit durchgehend derselben SessionId über alle vier Aufrufe.
-        Best-effort: wird in login() abgefangen und nur geloggt, damit ein falsch
-        geratener Endpoint (Host-Ableitung aus base_url ist nicht 100% sicher) nicht den
-        gesamten Login-Fluss blockiert.
+        HINWEIS (widerlegte Hypothese, Stand 2026-07-04): ursprünglich als "der" Fix gegen
+        die GetTasks-NullReferenceException eingebaut, weil der Smartclient-Mitschnitt
+        diesen Aufruf ebenfalls enthält. Ein zweiter Live-Test hat gezeigt, dass Authorize
+        allein NICHT reicht (GetTasks faultete live weiterhin identisch) — AuthorizeResult
+        trägt zudem keine OrganizationId. Die eigentliche Ursache ist die fehlende
+        SessionData.OrganizationId mangels Smartclient-Priming, siehe login()-Docstring.
+        Bleibt trotzdem bestehen: harmlos (best-effort, wird geloggt statt zu blockieren),
+        und der Smartclient ruft ihn ebenfalls auf.
         """
         host = urlsplit(self.base_url).netloc
         url = f"http://{host}/GMSC/Authorization.svc"
@@ -282,19 +298,20 @@ class LisClient:
     async def select_operation(self, organization_id: str, operation_id: str | None = None) -> None:
         """Setzt den Organisations-/Einsatzkontext der Session (CoreService.svc/SelectOperation).
 
-        Ein echter Mitschnitt eines funktionierenden Referenz-Clients zeigt: ohne diesen
-        Aufruf (einmalig direkt nach dem Login, bevor irgendein GetTasks erfolgt) wirft der
-        Server bei GetTasks eine NullReferenceException
-        (SessionData.get_OrganizationId() ist dann null) — GetOperationsInRange/
-        GetOperationUnits funktionieren auch ohne SelectOperation, weil sie organizationId
-        explizit als Parameter mitschicken, GetTasks aber nicht. Der Referenz-Client ruft
-        SelectOperation immer mit operationId/operationUnitId=nil und nur organizationId
-        gesetzt auf — genau dieses Muster wird hier übernommen.
+        Byte-identisch zum Aufruf des Intergraph-IPR-Smartclients (operationId/
+        operationUnitId=nil, nur organizationId gesetzt) — trotzdem faultet GetTasks bei
+        uns weiterhin mit SessionData.get_OrganizationId() == null. GetOperationsInRange/
+        GetOperationUnits funktionieren auch ohne diesen Effekt, weil sie organizationId
+        explizit als Parameter mitschicken, GetTasks aber nicht.
 
-        WICHTIG: SelectOperation allein reicht NICHT — GetTasks faultete in mehreren
-        Testläufen trotzdem weiter, auch mit zusätzlicher ProjectId in AddSessionEntries.
-        Der tatsächliche Fix ist ein separater Aufruf gegen den AuthorizationService,
-        siehe authorize().
+        WICHTIG (Stand 2026-07-04, zweiter Live-Test): weder SelectOperation allein noch
+        + ProjectId in AddSessionEntries noch + Authorize gegen den AuthorizationService
+        haben die GetTasks-NRE behoben — und zwar für ZWEI verschiedene Konten
+        (johannes.battlogg UND das Servicekonto), das Konto ist also nicht die Ursache.
+        Der Unterschied zum funktionierenden Referenz-Mitschnitt ist eine große
+        Priming-Sequenz, die der echte Smartclient vor GetTasks durchläuft (siehe
+        login()-Docstring) — aktueller Fix-Versuch: OrganizationId zusätzlich per
+        AddSessionEntries injizieren (siehe login()).
         """
         await self._ensure_login()
         op_id_xml = (
