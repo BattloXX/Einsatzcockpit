@@ -38,7 +38,7 @@ _ACTION_GET_OPERATIONS = f"{_NS_BASE}/OperationService/GetOperationsInRange"
 _ACTION_GET_TASKS = f"{_NS_BASE}/OperationService/GetTasks"
 _ACTION_GET_OPERATION_UNITS = f"{_NS_BASE}/OperationService/GetOperationUnits"
 _ACTION_GET_DOCUMENTS = f"{_NS_BASE}/OperationService/GetDocumentsByOperationId"
-_ACTION_DOWNLOAD_DOCUMENT = f"{_NS_BASE}/OperationService/DownloadDocument"
+_ACTION_DOWNLOAD_ATTACHMENT = f"{_NS_BASE}/CoreService/DownloadAttachment"
 
 
 class LisClientError(Exception):
@@ -392,8 +392,14 @@ class LisClient:
     async def download_document(self, document_id: str, entity: str = "PR_OPERATION") -> bytes:
         """Lädt den Binärinhalt eines Dokuments (MTOM/XOP, siehe Doku Abschnitt 4.5).
 
-        Das Body-Element heißt (laut Doku) DownloadAttachment im Core-Namespace,
-        obwohl es logisch zu OperationService/DownloadDocument gehört.
+        Live-Fehler (2026-07-04): Die Doku behauptet, das Body-Element heiße
+        DownloadAttachment (Core-Namespace), während SOAPAction/URL auf
+        OperationService/DownloadDocument zeigen — das führt live zu einem
+        WCF-ContractFilter-Mismatch ("mismatched Actions between sender and
+        receiver"). Alle anderen bestätigten Core-Namespace-Operationen (Login,
+        SelectOperation, AddSessionEntries) laufen konsistent über CoreService.svc
+        mit SOAPAction = Body-Elementname — nach demselben Muster gehört
+        DownloadAttachment ebenfalls zu CoreService.svc, nicht OperationService.svc.
         """
         await self._ensure_login()
         body = (
@@ -410,10 +416,10 @@ class LisClient:
         )
         headers = {
             "Content-Type": "text/xml; charset=utf-8",
-            "SOAPAction": f'"{_ACTION_DOWNLOAD_DOCUMENT}"',
+            "SOAPAction": f'"{_ACTION_DOWNLOAD_ATTACHMENT}"',
             "Accept-Encoding": "gzip, deflate",
         }
-        url = f"{self.base_url}/OperationService.svc"
+        url = f"{self.base_url}/CoreService.svc"
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(url, content=envelope.encode("utf-8"), headers=headers)
@@ -423,7 +429,7 @@ class LisClient:
         if self._on_exchange:
             try:
                 self._on_exchange(
-                    url, _ACTION_DOWNLOAD_DOCUMENT, envelope.encode("utf-8"), resp.content,
+                    url, _ACTION_DOWNLOAD_ATTACHMENT, envelope.encode("utf-8"), resp.content,
                 )
             except Exception:
                 logger.exception("on_exchange-Hook fehlgeschlagen (wird ignoriert)")
