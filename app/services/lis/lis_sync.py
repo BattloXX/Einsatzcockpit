@@ -193,8 +193,9 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
 
 
 # ── Fahrzeugstatus (S4/S5) ───────────────────────────────────────────────────
-def _sync_vehicle_status(db: Session, org: FireDept, incident, units: list[dict]) -> None:
+def _sync_vehicle_status(db: Session, org: FireDept, incident, units: list[dict]) -> bool:
     lage_id = _incident_major_incident_id(db, incident.id)
+    changed = False
 
     for unit in units:
         ref_id = unit.get("ReferenceId")
@@ -251,6 +252,7 @@ def _sync_vehicle_status(db: Session, org: FireDept, incident, units: list[dict]
             db.add(incident_vehicle)
             db.flush()
             append_card(db, active_col.id, "vehicle", incident_vehicle.id)
+            changed = True
             logger.info(
                 "Fahrzeug %s durch LIS-Status %s neu auf Einsatz %s aufgenommen",
                 vehicle_master.id, mapped_status, incident.id,
@@ -261,10 +263,13 @@ def _sync_vehicle_status(db: Session, org: FireDept, incident, units: list[dict]
             if mapped_status and incident_vehicle.unit_status != mapped_status:
                 try:
                     set_unit_status(db, incident_vehicle, mapped_status)
+                    changed = True
                 except ValueError:
                     logger.warning("Ungültiger gemappter Status %r für Fahrzeug %s", mapped_status, vehicle_master.id)
 
         _sync_vehicle_location(db, org, incident, vehicle_master, unit, lage_id)
+
+    return changed
 
 
 # ── Fahrzeugposition (nur wenn LIS Koordinaten liefert, i.d.R. Status S5) ────
@@ -304,9 +309,9 @@ def _sync_vehicle_location(
 
 
 # ── Meldungen (Type.Type=="JOURNAL" → Message-Cards, nur normaler Incident) ──
-def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> None:
+def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> bool:
     if _incident_belongs_to_major_incident(db, incident.id):
-        return
+        return False
 
     messages_col = (
         db.query(IncidentColumn)
@@ -314,6 +319,7 @@ def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> N
         .first()
     )
 
+    changed = False
     for task in tasks:
         task_type = _op_field(task, "Type", "Type")
         if task_type == "UNITSTATUSHISTORY":
@@ -334,6 +340,7 @@ def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> N
             if description and existing.detail != description:
                 existing.detail = description
                 db.flush()
+                changed = True
             continue
 
         number = task.get("Number")
@@ -346,17 +353,20 @@ def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> N
             lis_task_id=lis_task_id,
         ))
         db.flush()
+        changed = True
         logger.info("Meldung aus LIS-Task %s auf Einsatz %s übernommen", lis_task_id, incident.id)
+
+    return changed
 
 
 # ── Aufträge (Type.Type=="TASK" → Task-Cards, nur normaler Incident) ────────
-def _sync_tasks(db: Session, org: FireDept, incident, tasks: list[dict]) -> None:
+def _sync_tasks(db: Session, org: FireDept, incident, tasks: list[dict]) -> bool:
     """Echte LIS-Aufträge ("an eine Stabsfunktion zuteilen") landen im eigenen
     Aufträge-Board (Task-Modell), NICHT als Message — analog zur manuellen
     Trennung Meldungen/Aufträge im UI (IncidentColumn "messages" vs. "tasks").
     """
     if _incident_belongs_to_major_incident(db, incident.id):
-        return
+        return False
 
     tasks_col = (
         db.query(IncidentColumn)
@@ -364,6 +374,7 @@ def _sync_tasks(db: Session, org: FireDept, incident, tasks: list[dict]) -> None
         .first()
     )
 
+    changed = False
     for task in tasks:
         if not is_lis_auftrag(_op_field(task, "Type", "Type")):
             continue
@@ -379,15 +390,16 @@ def _sync_tasks(db: Session, org: FireDept, incident, tasks: list[dict]) -> None
             .first()
         )
         if existing:
-            changed = False
+            row_changed = False
             if description and existing.detail != description:
                 existing.detail = description
-                changed = True
+                row_changed = True
             if due_at != existing.due_at:
                 existing.due_at = due_at
-                changed = True
-            if changed:
+                row_changed = True
+            if row_changed:
                 db.flush()
+                changed = True
             continue
 
         number = task.get("Number")
@@ -401,11 +413,15 @@ def _sync_tasks(db: Session, org: FireDept, incident, tasks: list[dict]) -> None
             lis_task_id=lis_task_id,
         ))
         db.flush()
+        changed = True
         logger.info("Auftrag aus LIS-Task %s auf Einsatz %s übernommen", lis_task_id, incident.id)
+
+    return changed
 
 
 # ── Zu-/Absagen (Mannschaft) → Einsatz-Verlauf ───────────────────────────────
-def _sync_person_responses(db: Session, org: FireDept, incident, tasks: list[dict]) -> None:
+def _sync_person_responses(db: Session, org: FireDept, incident, tasks: list[dict]) -> bool:
+    changed = False
     for task in tasks:
         task_type = _op_field(task, "Type", "Type")
         lis_task_id = task.get("Id")
@@ -435,10 +451,13 @@ def _sync_person_responses(db: Session, org: FireDept, incident, tasks: list[dic
             org_id=org.id, obj_type="task_response", lis_id=lis_task_id, incident_id=incident.id,
         ))
         db.flush()
+        changed = True
         logger.info(
             "Zu-/Absage aus LIS-Task %s auf Einsatz %s protokolliert (%s: %s)",
             lis_task_id, incident.id, person, parsed["status"],
         )
+
+    return changed
 
 
 # ── Dokumente (MTOM-Download) ────────────────────────────────────────────────
@@ -469,15 +488,16 @@ async def _store_lis_document(db: Session, incident, raw: bytes, filename: str, 
     await media_service.store_upload_for_message(upload, doc_message, system_user, db, org_id=org_id)  # type: ignore[arg-type]
 
 
-async def _sync_documents(db: Session, org: FireDept, incident, client: LisClient, operation_id: str) -> None:
+async def _sync_documents(db: Session, org: FireDept, incident, client: LisClient, operation_id: str) -> bool:
     try:
         documents = await client.get_documents_by_operation_id(operation_id)
     except LisClientError:
         logger.exception(
             "LIS-Dokumente für Operation %s (Org %s) konnten nicht geladen werden", operation_id, org.id,
         )
-        return
+        return False
 
+    changed = False
     for doc in documents:
         doc_id = doc.get("Id")
         if not doc_id or _already_synced(db, org.id, "document", doc_id):
@@ -500,7 +520,10 @@ async def _sync_documents(db: Session, org: FireDept, incident, client: LisClien
 
         db.add(LisSyncedObject(org_id=org.id, obj_type="document", lis_id=doc_id, incident_id=incident.id))
         db.flush()
+        changed = True
         logger.info("Dokument %s aus LIS auf Einsatz %s übernommen", filename, incident.id)
+
+    return changed
 
 
 # ── Einsätze schließen, deren Operation in LIS nicht mehr aktiv ist ─────────
@@ -557,9 +580,9 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
         )
         tasks = []
 
-    _sync_messages(db, org, incident, tasks)
-    _sync_tasks(db, org, incident, tasks)
-    _sync_person_responses(db, org, incident, tasks)
+    messages_changed = _sync_messages(db, org, incident, tasks)
+    tasks_changed = _sync_tasks(db, org, incident, tasks)
+    responses_changed = _sync_person_responses(db, org, incident, tasks)
 
     try:
         units = await client.get_operation_units(config.organization_id, parsed["lis_operation_id"])
@@ -568,9 +591,18 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
             "LIS-Einheiten für Operation %s (Org %s) fehlgeschlagen", parsed["lis_operation_id"], org.id,
         )
         units = []
-    _sync_vehicle_status(db, org, incident, units)
+    vehicles_changed = _sync_vehicle_status(db, org, incident, units)
 
-    await _sync_documents(db, org, incident, client, parsed["lis_operation_id"])
+    documents_changed = await _sync_documents(db, org, incident, client, parsed["lis_operation_id"])
+
+    # Board live aktualisieren, sobald LIS neue Meldungen/Aufträge/Fahrzeugstatus/Zu-Absagen
+    # liefert — sonst sieht man neue LIS-Daten erst nach manuellem F5 (Board hat sonst keinen
+    # Trigger, weil der Sync außerhalb jedes Requests im Hintergrund-Poll läuft).
+    if not created and (
+        messages_changed or tasks_changed or responses_changed or vehicles_changed or documents_changed
+    ):
+        from app.services.broadcast import manager
+        await manager.broadcast(incident.id, {"type": "lis_sync", "reload_board": True})
 
     if created:
         from app.services.broadcast import broadcast_org

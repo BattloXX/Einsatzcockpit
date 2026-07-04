@@ -44,21 +44,38 @@ def _cfg(**overrides) -> TeamsAlarmConfig:
 
 
 # ── build_incident_message_card ──────────────────────────────────────────────
+# Adaptive Card (in "attachments" gewrappt) — siehe teams_card.py-Docstring: der
+# Workflows-Webhook (Nachfolger der alten Office-365-Connectors) verwirft Bild/Buttons
+# im alten MessageCard-Schema, daher Umstieg auf Adaptive Card.
+
+def _adaptive_content(card: dict) -> dict:
+    return card["attachments"][0]["content"]
+
+
+def _body_texts(card: dict) -> str:
+    return "\n".join(b.get("text", "") for b in _adaptive_content(card)["body"])
+
+
+def _images(card: dict) -> list[dict]:
+    return [b for b in _adaptive_content(card)["body"] if b.get("type") == "Image"]
+
 
 def test_build_incident_message_card_includes_all_bausteine_by_default():
     incident = _incident()
     cfg = _cfg()
     card = build_incident_message_card(incident, cfg, base_url="https://example.com")
 
-    assert card["@type"] == "MessageCard"
-    section = card["sections"][0]
-    assert "Bundesstraße 1" in section["activityText"]
-    assert "Verkehrsunfall" in section["activityText"]
-    assert section["activityImage"] == "https://example.com/api/v1/teams/map/tok_abc123.png"
+    assert card["type"] == "message"
+    assert card["attachments"][0]["contentType"] == "application/vnd.microsoft.card.adaptive"
+    text = _body_texts(card)
+    assert "Bundesstraße 1" in text
+    assert "Verkehrsunfall" in text
+    images = _images(card)
+    assert images[0]["url"] == "https://example.com/api/v1/teams/map/tok_abc123.png"
 
-    action_names = [a["name"] for a in card["potentialAction"]]
-    assert any("Google Maps" in n for n in action_names)
-    assert any("Alarmübersicht" in n for n in action_names)
+    action_titles = [a["title"] for a in _adaptive_content(card)["actions"]]
+    assert any("Google Maps" in t for t in action_titles)
+    assert any("Alarmübersicht" in t for t in action_titles)
 
 
 def test_build_incident_message_card_respects_include_toggles():
@@ -66,25 +83,25 @@ def test_build_incident_message_card_respects_include_toggles():
     cfg = _cfg(include_map=False, include_gmaps_link=False, include_qr_link=False)
     card = build_incident_message_card(incident, cfg, base_url="https://example.com")
 
-    assert "activityImage" not in card["sections"][0]
-    assert "potentialAction" not in card
+    assert not _images(card)
+    assert "actions" not in _adaptive_content(card)
 
 
 def test_build_incident_message_card_marks_exercise():
     incident = _incident(is_exercise=True)
     cfg = _cfg()
     card = build_incident_message_card(incident, cfg, base_url="https://example.com")
-    assert "[ÜBUNG]" in card["summary"]
+    assert "[ÜBUNG]" in _body_texts(card)
 
 
 def test_build_incident_message_card_no_map_without_coords():
     incident = _incident(lat=None, lng=None)
     cfg = _cfg()
     card = build_incident_message_card(incident, cfg, base_url="https://example.com")
-    assert "activityImage" not in card["sections"][0]
+    assert not _images(card)
     # Google-Maps-Button darf ohne Koordinaten nicht auftauchen
-    action_names = [a["name"] for a in card.get("potentialAction", [])]
-    assert not any("Google Maps" in n for n in action_names)
+    action_titles = [a["title"] for a in _adaptive_content(card).get("actions", [])]
+    assert not any("Google Maps" in t for t in action_titles)
 
 
 # ── post_incident_card: Dispatch-Entscheidung ────────────────────────────────
@@ -247,7 +264,8 @@ def test_post_via_webhook_posts_message_card(monkeypatch):
     ))
     assert ok is True
     assert captured["url"] == "https://outlook.office.com/webhook/x"
-    assert captured["json"]["@type"] == "MessageCard"
+    assert captured["json"]["type"] == "message"
+    assert captured["json"]["attachments"][0]["contentType"] == "application/vnd.microsoft.card.adaptive"
 
 
 def test_post_via_webhook_rejects_non_https_url():
