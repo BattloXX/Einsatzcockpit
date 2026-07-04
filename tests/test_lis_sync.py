@@ -180,6 +180,23 @@ def _auftrag_task(task_id="lis-task-auftrag", description="An Stab zuteilen",
     }
 
 
+def test_is_lis_auftrag_covers_all_auftrag_subtypes():
+    """Der vollständige Task.Type-Katalog dieser LIS-Installation (GetTaskTypes,
+    2026-07-04) hat drei Auftrags-Untertypen (TASK/DEFAULTTASK/SIMPLETASK) — alle
+    drei müssen als Auftrag erkannt werden, alles andere nicht."""
+    from app.services.lis.lis_mapping import is_lis_auftrag
+
+    assert is_lis_auftrag("TASK") is True
+    assert is_lis_auftrag("DEFAULTTASK") is True
+    assert is_lis_auftrag("SIMPLETASK") is True
+    assert is_lis_auftrag("JOURNAL") is False
+    assert is_lis_auftrag("UNITSTATUSHISTORY") is False
+    assert is_lis_auftrag("DISPATCHSYSTEM") is False
+    assert is_lis_auftrag("PROTOCOL") is False
+    assert is_lis_auftrag("INFORMATION") is False
+    assert is_lis_auftrag(None) is False
+
+
 def test_sync_messages_only_imports_journal_not_task():
     """Ein echter LIS-Auftrag (Type.Type=='TASK') darf NICHT als Message landen —
     das war vor der Trennung Meldungen/Aufträge der Fall (siehe _sync_tasks)."""

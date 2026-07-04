@@ -90,15 +90,22 @@ def unit_status_to_lis_prefix(status: str) -> str | None:
 
 
 # ── Meldung vs. Auftrag (Task.Type.Type) ──────────────────────────────────────
-def is_lis_auftrag(task_type: str | None) -> bool:
-    """True für echte LIS-Aufträge ("an eine Stabsfunktion zuteilen", Type.Type
-    == "TASK"), False für Meldungen (Type.Type == "JOURNAL") und alles andere.
+_LIS_AUFTRAG_TYPES = {"TASK", "DEFAULTTASK", "SIMPLETASK"}
 
-    Beide Werte + das dazugehörige Label ("Auftrag"/"Meldung") stammen aus einem
-    echten GetTaskTypes/GetLegendMetadata-Mitschnitt (2026-07-04) — bisher hatte
-    _sync_messages() beide Typen ununterschieden als Message ("Meldung") importiert.
+
+def is_lis_auftrag(task_type: str | None) -> bool:
+    """True für echte LIS-Aufträge, False für Meldungen (Type.Type == "JOURNAL") und
+    alles andere.
+
+    Der vollständige Task.Type-Katalog dieser Installation (GetTaskTypes-Mitschnitt,
+    2026-07-04) hat drei Auftrags-Untertypen: "TASK" (Auftrag, "an eine Stabsfunktion
+    zuteilen"), "DEFAULTTASK" (Standardauftrag/Einsatzbefehl), "SIMPLETASK" (LIS-Auftrag,
+    "an einen Lis Einsatz zuteilen") — alle drei gehören ins Aufträge-Board, nicht nur
+    "TASK". Die übrigen Typen (JOURNAL/Meldung, UNITSTATUSHISTORY/Fahrzeugstatus-Verlauf,
+    DISPATCHSYSTEM/Einsatzleitsystem, PROTOCOL/Verlaufseintrag, INFORMATION/Stabsmeldung)
+    sind keine Aufträge.
     """
-    return (task_type or "").strip().upper() == "TASK"
+    return (task_type or "").strip().upper() in _LIS_AUFTRAG_TYPES
 
 
 # ── Personen-Zu-/Absagen (aus UNITSTATUSHISTORY-Task-Freitext) ────────────────
