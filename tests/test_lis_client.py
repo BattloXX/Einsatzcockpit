@@ -169,6 +169,46 @@ def test_login_captures_user_id_and_sends_add_session_entries(monkeypatch):
     assert "johannes.battlogg" in calls[1][1]
 
 
+def test_login_hashes_plaintext_password_by_default(monkeypatch):
+    import hashlib
+
+    captured = {}
+    client = LisClient("https://x.example/ipr", "LIS", "u", "geheim123")
+
+    async def fake_post(url, action, body, retry_on_auth=True):
+        if action.endswith("/Login"):
+            captured["body"] = body
+            return ET.fromstring(_LOGIN_RESPONSE_XML)
+        return ET.fromstring(_EMPTY_ENVELOPE_XML)
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    asyncio.run(client.login())
+
+    expected_hash = hashlib.sha1(b"geheim123").hexdigest()
+    assert f"<password>{expected_hash}</password>" in captured["body"]
+
+
+def test_login_sends_preconfigured_hash_unmodified_when_password_is_hash(monkeypatch):
+    """OrgLisConfig.password_is_hash: Betreiber gibt nur den fertigen SHA1-Hash heraus,
+    kein Klartext-Passwort — login() darf diesen Wert dann nicht nochmal hashen."""
+    captured = {}
+    precomputed_hash = "a" * 40
+    client = LisClient(
+        "https://x.example/ipr", "LIS", "u", precomputed_hash, password_is_hash=True,
+    )
+
+    async def fake_post(url, action, body, retry_on_auth=True):
+        if action.endswith("/Login"):
+            captured["body"] = body
+            return ET.fromstring(_LOGIN_RESPONSE_XML)
+        return ET.fromstring(_EMPTY_ENVELOPE_XML)
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    asyncio.run(client.login())
+
+    assert f"<password>{precomputed_hash}</password>" in captured["body"]
+
+
 def test_login_skips_add_session_entries_when_user_id_missing(monkeypatch):
     """Falls LoginResult keinen User liefert, darf AddSessionEntries nicht mit
     leerem/None-UserId aufgerufen werden."""

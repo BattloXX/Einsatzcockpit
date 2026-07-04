@@ -257,13 +257,17 @@ async def start_capture_for_org(
         )
         poll_interval_seconds = config.poll_interval_seconds
         password = decrypt_secret(config.password_enc)
+        password_is_hash = config.password_is_hash
     finally:
         db.close()
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out_dir = capture_run_dir(org_id, run_id)
     recorder = ExchangeRecorder(out_dir, org_id, run_id)
-    client = LisClient(base_url, site, username, password, on_exchange=recorder.record, project_id=project_id)
+    client = LisClient(
+        base_url, site, username, password, on_exchange=recorder.record,
+        project_id=project_id, password_is_hash=password_is_hash,
+    )
 
     # Muss vor GetTasks einmal aufgerufen werden, sonst NullReferenceException auf dem
     # LIS-Server (siehe select_operation()-Docstring in lis_client.py). Fehler hier

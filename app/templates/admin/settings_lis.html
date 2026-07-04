@@ -159,6 +159,12 @@
         {% endif %}
         <input type="hidden" id="secret_changed" name="secret_changed" value="{{ '0' if config and config.password_enc else '1' }}">
         <p class="form-hint">Wird Fernet-verschlüsselt in der Datenbank gespeichert &mdash; nie im Klartext angezeigt</p>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-weight:400;font-size:.85rem;cursor:pointer">
+          <input type="checkbox" id="password_is_hash" name="password_is_hash" value="1"
+                 {% if config and config.password_is_hash %}checked{% endif %}>
+          Eingabe oben ist bereits ein SHA1-Hash (nicht das Klartext-Passwort)
+        </label>
+        <p class="form-hint">Nur aktivieren, wenn der Betreiber/LWZ nur den Passwort-Hash herausgegeben hat, nicht das Klartext-Passwort selbst.</p>
       </div>
 
       <div style="display:flex;gap:10px">

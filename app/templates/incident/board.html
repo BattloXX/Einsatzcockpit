@@ -188,10 +188,10 @@
     <a href="/einsatz/{{ incident.id }}/mannschaft" class="btn btn--sm btn--secondary incident-header__navlink"
        {{ tip('Mannschaft – Teilnehmerliste und Einsatzkräfte') }}>👥 Mannschaft</a>
 
-    {# ── Zu-/Absage-Zähler (Teams-Alarmierung) — Desktop only ────────────── #}
+    {# ── Zu-/Absage-Zähler (Teams-Einsatzinfo) — Desktop only ────────────── #}
     <div class="header-dropdown header-dropdown--rsvp" x-data="rsvpWidget({{ incident.id }})"
          @click.outside="open=false"
-         {{ tip('Zu-/Absagen aus der Teams-Alarmierung') }}>
+         {{ tip('Zu-/Absagen aus der Teams-Einsatzinfo') }}>
       <button class="btn btn--sm btn--secondary" @click="open=!open; if(open) load()">
         <span class="badge-pill badge-pill--green" x-text="zusagen">0</span>
         <span class="badge-pill badge-pill--red" x-text="absagen">0</span>

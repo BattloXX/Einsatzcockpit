@@ -172,7 +172,7 @@ async def teams_alarm_test_send(
         if effective_org_id else None
     )
     if not cfg or not cfg.enabled:
-        return JSONResponse({"ok": False, "message": "Teams-Alarmierung ist deaktiviert."})
+        return JSONResponse({"ok": False, "message": "Teams-Einsatzinfo ist deaktiviert."})
 
     webhook_url = cfg.webhook_url_uebung if target == "uebung" else cfg.webhook_url_alarm
     if not webhook_url:
@@ -182,7 +182,7 @@ async def teams_alarm_test_send(
     ok = await post_teams_karte(
         webhook_url,
         "🚒 Test-Alarm – Einsatzcockpit",
-        "Dies ist eine Testkarte der Teams-Alarmierung. Wenn du das hier siehst, "
+        "Dies ist eine Testkarte der Teams-Einsatzinfo. Wenn du das hier siehst, "
         "funktioniert der Webhook für dieses Ziel.",
     )
     write_audit(db, "teams_alarm.config.test", org_id=effective_org_id, user_id=user.id,

@@ -680,7 +680,10 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
         logger.exception("LIS-Passwort für Org %s konnte nicht entschlüsselt werden", org.id)
         return
 
-    client = LisClient(config.base_url, config.site, config.username, password, project_id=config.project_id)
+    client = LisClient(
+        config.base_url, config.site, config.username, password,
+        project_id=config.project_id, password_is_hash=config.password_is_hash,
+    )
     try:
         # Muss vor jedem GetTasks einmal aufgerufen werden, sonst NullReferenceException
         # auf dem LIS-Server (siehe select_operation()-Docstring in lis_client.py).
@@ -762,7 +765,10 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
             )
             return
 
-        client = LisClient(config.base_url, config.site, config.username, password, project_id=config.project_id)
+        client = LisClient(
+            config.base_url, config.site, config.username, password,
+            project_id=config.project_id, password_is_hash=config.password_is_hash,
+        )
         try:
             status_types = await client.get_operation_unit_status_types()
             target = next(

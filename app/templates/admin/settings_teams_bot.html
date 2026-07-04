@@ -1,12 +1,12 @@
 {% extends "admin/_layout.html" %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
-{% block title %}Teams-Alarmierung{% endblock %}
-{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Teams-Alarmierung'}]) }}{% endblock %}
+{% block title %}Teams-Einsatzinfo{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Teams-Einsatzinfo'}]) }}{% endblock %}
 
 {% block admin_content %}
 <div class="page-header">
   <div>
-    <h1>Teams-Alarmierung</h1>
+    <h1>Teams-Einsatzinfo</h1>
     <p class="page-header__sub">Vollständige Alarmierung als Karte in Microsoft Teams — Basis-Modus (Webhook) und optionale Bot-Erweiterung mit Zusage/Absage</p>
   </div>
 </div>
@@ -52,7 +52,7 @@
                  {% if config and config.enabled %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
-          Teams-Alarmierung aktiviert
+          Teams-Einsatzinfo aktiviert
         </label>
         <p class="form-hint" style="margin:4px 0 0 0">Master-Schalter — ist dieser aus, wird für diese Organisation weder per Webhook noch per Bot gepostet.</p>
       </div>

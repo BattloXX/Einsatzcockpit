@@ -9,12 +9,13 @@
      or '/admin/api-keys' in _p or '/admin/lagekarte-tokens' in _p or '/admin/audit' in _p
      or '/admin/sms-test' in _p or '/admin/sms-senden' in _p %}
   {% set active_group = 'verwaltung' %}
-{% elif '/admin/gruppen' in _p or '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p %}
+{% elif '/admin/gruppen' in _p or '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p
+       or '/admin/teams-alarmierung' in _p %}
   {% set active_group = 'stammdaten' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
-       or '/admin/lis' in _p or '/admin/teams-alarmierung' in _p
+       or '/admin/lis' in _p
        or _p == '/admin/settings/wetter' or _p.startswith('/admin/settings/wetter?') %}
   {% set active_group = 'einstellungen' %}
 {% elif _p == '/admin/hilfe' %}
@@ -239,8 +240,13 @@
             </a>
             <a href="/admin/einsatzinfo-sms"
                class="admin-nav__item {% if '/admin/einsatzinfo-sms' in request.url.path %}is-active{% endif %}"
-               {{ tip('Einsatzinfo-SMS: automatischer Versand bei Alarm, Verteiler je Stichwort') }}>
-              <span class="admin-nav__icon">📨</span>Einsatzinfo-SMS
+               {{ tip('SMS-Einsatzinfo: automatischer Versand bei Alarm, Verteiler je Stichwort') }}>
+              <span class="admin-nav__icon">📨</span>SMS-Einsatzinfo
+            </a>
+            <a href="/admin/teams-alarmierung"
+               class="admin-nav__item {% if '/admin/teams-alarmierung' in request.url.path %}is-active{% endif %}"
+               {{ tip('Vollständige Alarmierung als Teams-Karte: Webhook-Basis-Modus + optionale Bot-Erweiterung mit Zusage/Absage') }}>
+              <span class="admin-nav__icon">💬</span>Teams-Einsatzinfo
             </a>
           </div>
         </div>
@@ -331,11 +337,6 @@
                class="admin-nav__item {% if '/admin/lis' in request.url.path %}is-active{% endif %}"
                {{ tip('Leitstellenanbindung (LIS/IPR): Verbindung ein-/ausschalten, Zugangsdaten hinterlegen') }}>
               <span class="admin-nav__icon">📡</span>LIS-Anbindung
-            </a>
-            <a href="/admin/teams-alarmierung"
-               class="admin-nav__item {% if '/admin/teams-alarmierung' in request.url.path %}is-active{% endif %}"
-               {{ tip('Vollständige Alarmierung als Teams-Karte: Webhook-Basis-Modus + optionale Bot-Erweiterung mit Zusage/Absage') }}>
-              <span class="admin-nav__icon">💬</span>Teams-Alarmierung
             </a>
             {% if is_sysadmin %}
             <a href="/admin/ki-prompts"

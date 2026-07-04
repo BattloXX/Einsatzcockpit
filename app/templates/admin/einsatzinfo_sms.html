@@ -1,13 +1,13 @@
 {% extends "admin/_layout.html" %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
-{% block title %}Einsatzinfo-SMS – Admin{% endblock %}
-{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Einsatzinfo-SMS'}]) }}{% endblock %}
+{% block title %}SMS-Einsatzinfo – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'SMS-Einsatzinfo'}]) }}{% endblock %}
 
 {% block admin_content %}
 <div class="page-content">
   <div class="page-header">
     <div>
-      <h1>Einsatzinfo-SMS</h1>
+      <h1>SMS-Einsatzinfo</h1>
       <p class="page-header__sub">
         Konfiguriere, wer bei einem Alarm automatisch eine SMS erhaelt, und welchen Text sie enthaelt.
       </p>
@@ -29,7 +29,7 @@
             <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
               <input type="checkbox" name="enabled" value="true"
                      {% if org_settings and org_settings.einsatzinfo_sms_enabled %}checked{% endif %}>
-              <span><strong>Einsatzinfo-SMS aktiviert</strong><br>
+              <span><strong>SMS-Einsatzinfo aktiviert</strong><br>
               <small class="text-muted">Bei jedem Alarm automatisch SMS versenden (falls Gateway verbunden).</small></span>
             </label>
           </div>

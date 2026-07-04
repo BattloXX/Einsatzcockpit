@@ -139,11 +139,15 @@ class LisClient:
         self, base_url: str, site: str, username: str, password: str, timeout: float = 20.0,
         on_exchange: Callable[[str, str, bytes, bytes], None] | None = None,
         project_id: str | None = None,
+        password_is_hash: bool = False,
     ):
         self.base_url = base_url.rstrip("/")
         self.site = site or "LIS"
         self.username = username
         self.password = password
+        # Wenn True: `password` ist bereits der fertige SHA1-Hash (OrgLisConfig.
+        # password_is_hash) — login() hasht dann nicht nochmal, sondern schickt ihn 1:1.
+        self.password_is_hash = password_is_hash
         self.timeout = timeout
         self.session_id: str = str(uuid.uuid4())
         self._logged_in = False
@@ -159,7 +163,7 @@ class LisClient:
 
     # ── Login / Session ────────────────────────────────────────────────────
     async def login(self) -> None:
-        password_hash = hashlib.sha1(self.password.encode("utf-8")).hexdigest()
+        password_hash = self.password if self.password_is_hash else hashlib.sha1(self.password.encode("utf-8")).hexdigest()
         body = (
             f'<Login xmlns="{_NS_CORE}">'
             f"<site>{_xml_escape(self.site)}</site>"

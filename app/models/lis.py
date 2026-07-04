@@ -40,6 +40,11 @@ class OrgLisConfig(Base):
     # Zugangsdaten
     username: Mapped[str | None] = mapped_column(String(150), nullable=True)
     password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # Fernet-verschlüsselt
+    # Wenn gesetzt: password_enc enthält bereits den fertigen SHA1-Hash (nicht das
+    # Klartext-Passwort) — manche Betreiber geben nur den Hash heraus. Steuert, ob
+    # lis_client.py::login() den gespeicherten Wert noch selbst hasht oder unverändert
+    # verwendet. Entweder-oder zum Klartext-Passwort, kein zusätzliches Feld nötig.
+    password_is_hash: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Backfill-Steuerung
     last_backfill_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

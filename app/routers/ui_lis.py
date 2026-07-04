@@ -102,6 +102,7 @@ async def lis_settings_save(
     poll_interval_seconds: int = Form(30),
     username: str = Form(""),
     password: str = Form(""),
+    password_is_hash: str = Form(""),
     secret_changed: str = Form(""),   # "1" = neues Passwort vorhanden
 ):
     effective_org_id = _get_org_id(user, target_org_id)
@@ -118,6 +119,7 @@ async def lis_settings_save(
     cfg.project_id = project_id.strip() or None
     cfg.poll_interval_seconds = max(10, poll_interval_seconds or 30)
     cfg.username = username.strip() or None
+    cfg.password_is_hash = password_is_hash == "1"
     cfg.updated_at = datetime.now(UTC)
 
     # Passwort nur ersetzen, wenn secret_changed=1 explizit gesetzt ist (analog SSO F-02)
@@ -157,7 +159,10 @@ async def lis_test_connection(
 
     try:
         password = decrypt_secret(cfg.password_enc)
-        client = LisClient(cfg.base_url, cfg.site, cfg.username, password, project_id=cfg.project_id)
+        client = LisClient(
+            cfg.base_url, cfg.site, cfg.username, password,
+            project_id=cfg.project_id, password_is_hash=cfg.password_is_hash,
+        )
         await client.login()
         operations = await client.get_operations_in_range(cfg.organization_id, operation_filter="ActiveParticipation")
         write_audit(db, "lis.config.test", org_id=effective_org_id, user_id=user.id,
