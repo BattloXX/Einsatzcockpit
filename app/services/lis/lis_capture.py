@@ -265,6 +265,15 @@ async def start_capture_for_org(
     recorder = ExchangeRecorder(out_dir, org_id, run_id)
     client = LisClient(base_url, site, username, password, on_exchange=recorder.record)
 
+    # Muss vor GetTasks einmal aufgerufen werden, sonst NullReferenceException auf dem
+    # LIS-Server (siehe select_operation()-Docstring in lis_client.py). Fehler hier
+    # sollen die Aufzeichnung nicht verhindern — sie ist ein Diagnose-Werkzeug und
+    # soll auch dann noch GetOperationsInRange/GetOperationUnits aufzeichnen können.
+    try:
+        await client.select_operation(organization_id)
+    except LisClientError:
+        logger.exception("LIS-Capture: SelectOperation für Org %s fehlgeschlagen", org_id)
+
     task = asyncio.create_task(
         capture_traffic(client, recorder, organization_id, duration_minutes, poll_interval_seconds)
     )

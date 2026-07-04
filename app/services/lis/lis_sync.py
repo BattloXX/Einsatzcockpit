@@ -494,6 +494,14 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
 
     client = LisClient(config.base_url, config.site, config.username, password)
     try:
+        # Muss vor jedem GetTasks einmal aufgerufen werden, sonst NullReferenceException
+        # auf dem LIS-Server (siehe select_operation()-Docstring in lis_client.py).
+        await client.select_operation(config.organization_id)
+    except LisClientError:
+        logger.exception("LIS SelectOperation für Org %s fehlgeschlagen", org.id)
+        return
+
+    try:
         operations = await client.get_operations_in_range(
             config.organization_id, operation_filter="ActiveParticipation",
         )

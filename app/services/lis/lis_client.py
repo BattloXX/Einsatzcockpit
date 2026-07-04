@@ -32,6 +32,7 @@ _NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
 # SOAPAction-Header sind IMMER {_NS_BASE}/{Service}/{Operation} — unabhängig vom
 # Body-Namespace des jeweiligen Elements (siehe Doku Abschnitt 4, Fußnote 1).
 _ACTION_LOGIN = f"{_NS_BASE}/CoreService/Login"
+_ACTION_SELECT_OPERATION = f"{_NS_BASE}/CoreService/SelectOperation"
 _ACTION_GET_OPERATIONS = f"{_NS_BASE}/OperationService/GetOperationsInRange"
 _ACTION_GET_TASKS = f"{_NS_BASE}/OperationService/GetTasks"
 _ACTION_GET_OPERATION_UNITS = f"{_NS_BASE}/OperationService/GetOperationUnits"
@@ -170,6 +171,38 @@ class LisClient:
             self._logged_in = False
             raise LisAuthError(f"LIS-Login fehlgeschlagen: {exc}") from exc
         self._logged_in = True
+
+    async def select_operation(self, organization_id: str, operation_id: str | None = None) -> None:
+        """Setzt den Organisations-/Einsatzkontext der Session (CoreService.svc/SelectOperation).
+
+        Ein echter Mitschnitt eines funktionierenden Referenz-Clients zeigt: ohne diesen
+        Aufruf (einmalig direkt nach dem Login, bevor irgendein GetTasks erfolgt) wirft der
+        Server bei GetTasks eine NullReferenceException
+        (SessionData.get_OrganizationId() ist dann null) — GetOperationsInRange/
+        GetOperationUnits funktionieren auch ohne SelectOperation, weil sie organizationId
+        explizit als Parameter mitschicken, GetTasks aber nicht. Der Referenz-Client ruft
+        SelectOperation immer mit operationId/operationUnitId=nil und nur organizationId
+        gesetzt auf — genau dieses Muster wird hier übernommen.
+        """
+        await self._ensure_login()
+        op_id_xml = (
+            f"<operationId>{_xml_escape(operation_id)}</operationId>"
+            if operation_id else
+            f'<operationId i:nil="true" xmlns:i="{_NS_XSI}"/>'
+        )
+        body = (
+            f'<SelectOperation xmlns="{_NS_CORE}">'
+            f"{self._site_session_xml()}"
+            f"{op_id_xml}"
+            f'<operationUnitId i:nil="true" xmlns:i="{_NS_XSI}"/>'
+            f"<organizationId>{_xml_escape(organization_id)}</organizationId>"
+            f"</SelectOperation>"
+        )
+        await self._post(
+            f"{self.base_url}/CoreService.svc",
+            _ACTION_SELECT_OPERATION,
+            body,
+        )
 
     def _site_session_xml(self) -> str:
         return (
