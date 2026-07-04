@@ -1405,3 +1405,16 @@ button.htmx-request,
 
 /* -- MOB-3: Touch-Targets >=44px fuer Prio-Schnellbuttons (Bedienung mit Handschuhen) -- */
 .prio-quick-btn{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;}
+
+/* ── Archiv-Detail: Karten-Look wie im Rest der App (Kanban-/GSL-Karten) ── */
+.detail-box {
+  border-radius: var(--radius-lg, .75rem);
+  border-left: 4px solid var(--red, #d42225);
+  box-shadow: var(--shadow-card, var(--shadow));
+}
+.detail-box h3 { display: flex; align-items: center; gap: 6px; }
+@media (max-width: 700px) {
+  .detail-grid { padding: 12px; gap: 12px; }
+  .detail-box { padding: 12px; }
+  .detail-box h3 { font-size: .88rem; }
+}

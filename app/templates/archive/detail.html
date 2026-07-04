@@ -39,7 +39,7 @@
 
 <div class="detail-grid" style="margin-top:16px;">
   <div class="detail-box">
-    <h3>Stammdaten</h3>
+    <h3>🧾 Stammdaten</h3>
     <dl class="detail-list">
       <dt>Stichwort</dt><dd>{{ incident.alarm_type_code }}</dd>
       <dt>Start</dt><dd>{{ incident.started_at|local_datetime }} Uhr</dd>
@@ -51,7 +51,7 @@
   </div>
 
   <div class="detail-box">
-    <h3>Fahrzeuge ({{ incident.vehicles|length }})</h3>
+    <h3>🚒 Fahrzeuge ({{ incident.vehicles|length }})</h3>
     {% for v in incident.vehicles %}
     <div class="vehicle-row">
       <span class="vehicle-code">{{ v.vehicle_master.display_label }}</span>
@@ -61,7 +61,7 @@
   </div>
 
   <div class="detail-box">
-    <h3>Aufträge ({{ incident.tasks|length }})</h3>
+    <h3>📋 Aufträge ({{ incident.tasks|length }})</h3>
     {% for t in incident.tasks %}
     <div class="task-row {% if t.is_done %}task-row--done{% endif %}">
       <span>{{ t.title }}</span>
@@ -72,7 +72,7 @@
 
   {% if incident.rescued_persons %}
   <div class="detail-box">
-    <h3>Gerettete Personen ({{ incident.rescued_persons|length }})</h3>
+    <h3>🧍 Gerettete Personen ({{ incident.rescued_persons|length }})</h3>
     {% for p in incident.rescued_persons %}
     <div class="person-row">{{ p.gender }}, {{ p.person_group }}{% if p.name %}, {{ p.name }}{% endif %}{% if p.location %} – {{ p.location }}{% endif %}</div>
     {% endfor %}
@@ -81,7 +81,7 @@
 
   {% if incident.breathing_troops %}
   <div class="detail-box detail-box--full">
-    <h3>Atemschutz</h3>
+    <h3>🫁 Atemschutz</h3>
     <table class="table">
       <thead><tr><th>Trupp</th><th>Auftrag</th><th>Standort</th><th>Status</th><th>Einsatzbeginn</th><th>Rückzug</th><th>Zurück</th><th>PDF</th></tr></thead>
       <tbody>
@@ -143,7 +143,7 @@
 
   {% if ai_enabled or incident.ai_report_draft %}
   <div class="detail-box detail-box--full">
-    <h3>KI-Verlaufsbericht</h3>
+    <h3>✨ KI-Verlaufsbericht</h3>
     {% if incident.ai_report_draft %}
     <div id="ki-bericht-bereich">
       <form hx-post="/archiv/{{ incident.id }}/ki-bericht/speichern"
@@ -177,7 +177,7 @@
   <!-- Mannschaft -->
   <div class="detail-box detail-box--full">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-      <h3 style="margin:0;">Mannschaft</h3>
+      <h3 style="margin:0;">👥 Mannschaft</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         {% if can_edit %}
         <button type="button" class="btn btn--primary btn--sm"
@@ -197,7 +197,7 @@
   </div>
 
   <div class="detail-box detail-box--full">
-    <h3>Verlauf</h3>
+    <h3>🕐 Verlauf</h3>
     <div class="log-list">
       {% for entry in verlauf %}
       <div class="log-entry{% if entry.level %} log-entry--{{ entry.level }}{% endif %}">

@@ -184,3 +184,6 @@ button.htmx-request,
 .subtabnav__item{display:inline-flex;align-items:center;min-height:44px;padding:.4rem .9rem;font-size:.82rem;font-weight:600;white-space:nowrap;color:var(--text-muted);background:var(--surface-mid);border:1px solid var(--border);border-radius:var(--radius-full,999px);text-decoration:none;transition:background .15s,color .15s;flex-shrink:0;}
 .subtabnav__item:hover{color:var(--text);background:var(--surface-high);}
 .subtabnav__item--active{color:#fff;background:var(--red);border-color:var(--red);}
+.detail-box{border-radius:var(--radius-lg, .75rem);border-left:4px solid var(--red, #d42225);box-shadow:var(--shadow-card, var(--shadow));}
+.detail-box h3{display:flex;align-items:center;gap:6px;}
+@media (max-width: 700px){.detail-grid{padding:12px;gap:12px;}.detail-box{padding:12px;}.detail-box h3{font-size:.88rem;}}
