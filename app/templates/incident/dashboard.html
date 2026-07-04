@@ -97,7 +97,36 @@
       font-weight: 700;
       color: #fff;
       letter-spacing: .04em;
+      cursor: pointer;
     }
+
+    /* ── Übersicht-Dialog (Alarmstufe-Icon anklicken → Adresse/Anrufer/Telefon) ── */
+    #alarmOverviewDialog {
+      border: 1px solid var(--border);
+      border-radius: .6rem;
+      background: var(--surface-high);
+      color: var(--text);
+      padding: 0;
+      min-width: 20rem;
+      max-width: 90vw;
+    }
+    #alarmOverviewDialog::backdrop { background: rgba(0,0,0,.6); }
+    .aov-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.2rem; border-bottom: 1px solid var(--border-soft);
+      font-weight: 700; font-size: 1.05rem;
+    }
+    .aov-close {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 1.3rem; cursor: pointer; line-height: 1; padding: .2rem .4rem;
+    }
+    .aov-close:hover { color: var(--text); }
+    .aov-body { padding: 1.1rem 1.2rem 1.3rem; display: flex; flex-direction: column; gap: .9rem; }
+    .aov-row { display: flex; align-items: center; gap: .6rem; font-size: 1rem; }
+    .aov-row__icon { flex-shrink: 0; font-size: 1.1rem; }
+    .aov-row a { color: #60a5fa; text-decoration: none; }
+    .aov-row a:hover { text-decoration: underline; }
+    .aov-empty { color: var(--text-muted); font-size: .9rem; }
 
     .hdr-vsep {
       width: 1px;
@@ -720,7 +749,8 @@
       <div class="hdr-vsep"></div>
 
       <!-- Alarm badge -->
-      <div class="alarm-badge">{{ incident.alarm_type_code or '?' }}</div>
+      <div class="alarm-badge" onclick="document.getElementById('alarmOverviewDialog').showModal()"
+           title="Übersicht: Adresse &amp; Anrufer">{{ incident.alarm_type_code or '?' }}</div>
 
       <div class="hdr-vsep"></div>
 
@@ -797,6 +827,40 @@
 
     </div>
   </header>
+
+  <!-- Übersicht-Dialog: Adresse & Anrufer, per Klick auf die Alarmstufe -->
+  <dialog id="alarmOverviewDialog">
+    <div class="aov-header">
+      <span>{{ incident.alarm_type_code or '?' }} &middot; Übersicht</span>
+      <button class="aov-close" onclick="document.getElementById('alarmOverviewDialog').close()">✕</button>
+    </div>
+    <div class="aov-body">
+      {% if incident.address_street %}
+      <div class="aov-row">
+        <span class="aov-row__icon">📍</span>
+        {% if incident.lat is not none and incident.lng is not none %}
+        <a href="https://maps.google.com/?q={{ incident.lat }},{{ incident.lng }}" target="_blank" rel="noopener">
+          {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}
+        </a>
+        {% else %}
+        <span>{{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</span>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% if incident.caller_name %}
+      <div class="aov-row"><span class="aov-row__icon">👤</span><span>{{ incident.caller_name }}</span></div>
+      {% endif %}
+      {% if incident.caller_phone %}
+      <div class="aov-row">
+        <span class="aov-row__icon">📞</span>
+        <a href="tel:{{ incident.caller_phone }}">{{ incident.caller_phone }}</a>
+      </div>
+      {% endif %}
+      {% if not incident.address_street and not incident.caller_name and not incident.caller_phone %}
+      <div class="aov-empty">Keine Adress- oder Anruferdaten hinterlegt.</div>
+      {% endif %}
+    </div>
+  </dialog>
 
   <!-- ══ LAGE-BAR ══ -->
   {% if lage_hints %}
@@ -1238,9 +1302,13 @@
   tickClock();
 
   // ── Auto-refresh countdown ────────────────────────────────────────────
+  // Pausiert, während der Übersicht-Dialog offen ist (sonst verschwindet er dem
+  // Betrachter alle 30s durch den location.reload() weg).
   let countdown = 30;
   const cdEl = document.getElementById('refreshCountdown');
+  const overviewDialog = document.getElementById('alarmOverviewDialog');
   setInterval(() => {
+    if (overviewDialog.open) return;
     if (--countdown <= 0) { location.reload(); }
     else { cdEl.textContent = countdown; }
   }, 1000);
