@@ -38,7 +38,7 @@ _ACTION_GET_OPERATIONS = f"{_NS_BASE}/OperationService/GetOperationsInRange"
 _ACTION_GET_TASKS = f"{_NS_BASE}/OperationService/GetTasks"
 _ACTION_GET_OPERATION_UNITS = f"{_NS_BASE}/OperationService/GetOperationUnits"
 _ACTION_GET_DOCUMENTS = f"{_NS_BASE}/OperationService/GetDocumentsByOperationId"
-_ACTION_DOWNLOAD_ATTACHMENT = f"{_NS_BASE}/CoreService/DownloadAttachment"
+_ACTION_DOWNLOAD_ATTACHMENT = f"{_NS_BASE}/OperationService/DownloadDocument"
 
 
 class LisClientError(Exception):
@@ -404,14 +404,13 @@ class LisClient:
     async def download_document(self, document_id: str, entity: str = "PR_OPERATION") -> bytes:
         """Lädt den Binärinhalt eines Dokuments (MTOM/XOP, siehe Doku Abschnitt 4.5).
 
-        Live-Fehler (2026-07-04): Die Doku behauptet, das Body-Element heiße
-        DownloadAttachment (Core-Namespace), während SOAPAction/URL auf
-        OperationService/DownloadDocument zeigen — das führt live zu einem
-        WCF-ContractFilter-Mismatch ("mismatched Actions between sender and
-        receiver"). Alle anderen bestätigten Core-Namespace-Operationen (Login,
-        SelectOperation, AddSessionEntries) laufen konsistent über CoreService.svc
-        mit SOAPAction = Body-Elementname — nach demselben Muster gehört
-        DownloadAttachment ebenfalls zu CoreService.svc, nicht OperationService.svc.
+        Verifiziert gegen einen echten Referenz-Client-Mitschnitt (2026-07-04): Body-
+        Element ist zwar `DownloadAttachment` im Core-Namespace, aber URL und SOAPAction
+        zeigen (trotz des CoreService-Namespace im Body!) auf einen eigenen Streaming-
+        Endpoint: `{base_url}/CoreService.svc/streamExtension` mit SOAPAction
+        `OperationService/DownloadDocument` — genau das Muster, das eine frühere Version
+        dieses Codes fälschlich für einen Bug hielt und "korrigierte". `zipCompressed`
+        steht beim Referenz-Client auf `false` (nicht `true`).
         """
         await self._ensure_login()
         body = (
@@ -419,7 +418,7 @@ class LisClient:
             f"{self._site_session_xml()}"
             f"<id>{_xml_escape(document_id)}</id>"
             f"<entity>{_xml_escape(entity)}</entity>"
-            f"<zipCompressed>true</zipCompressed>"
+            f"<zipCompressed>false</zipCompressed>"
             f"</DownloadAttachment>"
         )
         envelope = (
@@ -431,7 +430,7 @@ class LisClient:
             "SOAPAction": f'"{_ACTION_DOWNLOAD_ATTACHMENT}"',
             "Accept-Encoding": "gzip, deflate",
         }
-        url = f"{self.base_url}/CoreService.svc"
+        url = f"{self.base_url}/CoreService.svc/streamExtension"
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(url, content=envelope.encode("utf-8"), headers=headers)
