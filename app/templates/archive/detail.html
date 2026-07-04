@@ -1,49 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }} – Archiv{% endblock %}
-{% block head_extra %}
-<style>
-@media (max-width: 700px) {
-  .archive-detail-header { flex-wrap: wrap; row-gap: 6px; }
-  .archive-detail-header h2 { flex: 1 1 100%; order: -1; font-size: 1.05rem; margin: 0; }
-  .archive-detail-header > .btn--ghost:first-child { order: -2; }
-  .archive-detail-header .page-header__actions {
-    width: 100%; flex-wrap: wrap; gap: 6px;
-  }
-  .archive-detail-header .page-header__actions .btn,
-  .archive-detail-header .page-header__actions form { flex: 1 1 auto; }
-  .archive-detail-header .page-header__actions .btn {
-    font-size: .8rem; padding: 6px 8px; text-align: center; white-space: nowrap;
-  }
-}
-</style>
-{% endblock %}
 {% block content %}
-<div class="page-header archive-detail-header">
-  <a href="/archiv" class="btn btn--ghost">← Archiv</a>
-  <h2>Einsatz {{ incident.alarm_type_code }} #{{ incident.lis_operation_number or incident.nummer or incident.id }}</h2>
-  <div class="page-header__actions">
-    <a href="/archiv/{{ incident.id }}/pdf" class="btn btn--primary">PDF</a>
-    <a href="/einsatz/{{ incident.id }}/historie" class="btn btn--ghost">Verlauf</a>
-    {% if incident.status == 'closed' and (user.is_system_admin or user.is_org_admin) %}
-    <form method="post" action="/einsatz/{{ incident.id }}/wiedereroeffnen" style="display:contents"
-          onsubmit="return confirm('Diesen Einsatz wieder eröffnen? Er wird erneut als aktiver Einsatz geführt.');">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--ghost">↻ Öffnen</button>
-    </form>
-    {% endif %}
-    {% if user.is_system_admin %}
-    <form method="post" action="/archiv/{{ incident.id }}/loeschen" style="display:contents"
-          onsubmit="return confirm('Einsatz #{{ incident.id }} ({{ incident.alarm_type_code }}) ENDGÜLTIG löschen?\n\nAlle Daten, Aufträge, Meldungen und Medien werden unwiderruflich gelöscht.\nDiese Aktion kann nicht rückgängig gemacht werden!');">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--danger">🗑</button>
-    </form>
-    {% endif %}
+<div class="lage-ctx-bar" style="position:static;">
+  {% if incident.is_exercise %}
+  <div class="exercise-topbar">&#x26A0; ÜBUNG / SIMULATION &#x26A0;</div>
+  {% endif %}
+  <div class="lage-ctx-bar__head">
+    <a href="/archiv" class="btn btn--ghost btn--sm">← Archiv</a>
+    <div class="lage-ctx-bar__title">
+      <span class="alarm-badge alarm-badge--sm alarm-badge--{{ incident.alarm_type_code[:1]|lower }}" style="margin-right:8px;">{{ incident.alarm_type_code }}</span>
+      Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}
+    </div>
+    {% if incident.is_exercise %}<span class="badge badge--exercise">ÜBUNG</span>
+    {% elif incident.status == 'active' %}<span class="badge badge--active">Aktiv</span>
+    {% else %}<span class="badge badge--closed">Abgeschlossen</span>{% endif %}
+  </div>
+  <div class="lage-ctx-bar__tabs-row" style="flex-wrap:wrap;">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
+      <a href="/archiv/{{ incident.id }}/pdf" class="btn btn--primary btn--sm">📄 PDF</a>
+      <a href="/einsatz/{{ incident.id }}/historie" class="btn btn--ghost btn--sm">🕐 Verlauf</a>
+      {% if incident.status == 'closed' and (user.is_system_admin or user.is_org_admin) %}
+      <form method="post" action="/einsatz/{{ incident.id }}/wiedereroeffnen" style="display:contents"
+            onsubmit="return confirm('Diesen Einsatz wieder eröffnen? Er wird erneut als aktiver Einsatz geführt.');">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn btn--ghost btn--sm">↻ Öffnen</button>
+      </form>
+      {% endif %}
+      {% if user.is_system_admin %}
+      <form method="post" action="/archiv/{{ incident.id }}/loeschen" style="display:contents"
+            onsubmit="return confirm('Einsatz #{{ incident.id }} ({{ incident.alarm_type_code }}) ENDGÜLTIG löschen?\n\nAlle Daten, Aufträge, Meldungen und Medien werden unwiderruflich gelöscht.\nDiese Aktion kann nicht rückgängig gemacht werden!');">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn btn--danger btn--sm">🗑</button>
+      </form>
+      {% endif %}
+    </div>
   </div>
 </div>
 
-{% if incident.is_exercise %}<div class="exercise-topbar">⚠ ÜBUNG / SIMULATION ⚠</div>{% endif %}
-
-<div class="detail-grid">
+<div class="detail-grid" style="margin-top:16px;">
   <div class="detail-box">
     <h3>Stammdaten</h3>
     <dl class="detail-list">

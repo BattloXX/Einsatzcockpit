@@ -4,67 +4,61 @@
 <div class="page-header">
   <h2>Einsatz-Archiv</h2>
 </div>
-<div x-data="{showExercise: false, search: ''}">
+<div x-data="{showExercise: false, search: ''}" style="padding:0 0 24px;">
   <div class="filter-bar">
     <input type="text" x-model="search" placeholder="Suche…" class="form-input form-input--search">
     <label class="toggle-label">
       <input type="checkbox" x-model="showExercise"> &Uuml;bungen anzeigen
     </label>
   </div>
-  <div class="archive-table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Stichwort</th>
-          <th>Datum</th>
-          <th>Adresse</th>
-          <th>Status</th>
-          <th>Dauer</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for inc in incidents %}
-        <tr class="{% if inc.is_exercise %}row--exercise{% endif %}"
-            data-search="{{ inc.alarm_type_code }} {{ inc.address_street or '' }} {{ inc.address_no or '' }} {{ inc.address_city or '' }}"
-            x-show="(showExercise || !{{ 'true' if inc.is_exercise else 'false' }}) &&
-                    (search === '' || $el.getAttribute('data-search').toLowerCase().includes(search.toLowerCase()))">
-          <td>{{ inc.lis_operation_number or inc.nummer or inc.id }}</td>
-          <td>
-            <span class="alarm-badge alarm-badge--sm alarm-badge--{{ inc.alarm_type_code[:1]|lower }}">{{ inc.alarm_type_code }}</span>
-            {% if uas_incident_ids is defined and inc.id in uas_incident_ids %}
-            <span class="badge badge--info" style="margin-left:.25rem" title="Drohneneinsatz">&#x1F681;</span>
-            {% endif %}
-          </td>
-          <td>{{ inc.started_at|local_datetime }}</td>
-          <td>{{ inc.address_street or '' }} {{ inc.address_no or '' }}{% if inc.address_city %}, {{ inc.address_city }}{% endif %}</td>
-          <td>
-            {% if inc.is_exercise %}<span class="badge badge--exercise">ÜBUNG</span>
-            {% elif inc.status == 'active' %}<span class="badge badge--active">Aktiv</span>
-            {% else %}<span class="badge badge--closed">Abgeschlossen</span>{% endif %}
-          </td>
-          <td>
+
+  <div style="max-width:1100px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:10px;">
+    {% for inc in incidents %}
+    <div class="card {% if inc.is_exercise %}row--exercise{% endif %}"
+         style="padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;"
+         data-search="{{ inc.alarm_type_code }} {{ inc.address_street or '' }} {{ inc.address_no or '' }} {{ inc.address_city or '' }}"
+         x-show="(showExercise || !{{ 'true' if inc.is_exercise else 'false' }}) &&
+                 (search === '' || $el.getAttribute('data-search').toLowerCase().includes(search.toLowerCase()))">
+      <span class="alarm-badge alarm-badge--sm alarm-badge--{{ inc.alarm_type_code[:1]|lower }}">{{ inc.alarm_type_code }}</span>
+
+      <div style="flex:1;min-width:200px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px;">
+          <span style="font-weight:600;font-size:.95rem;">#{{ inc.lis_operation_number or inc.nummer or inc.id }}</span>
+          {% if uas_incident_ids is defined and inc.id in uas_incident_ids %}
+          <span class="badge badge--info" title="Drohneneinsatz">&#x1F681;</span>
+          {% endif %}
+          {% if inc.is_exercise %}<span class="badge badge--exercise">ÜBUNG</span>
+          {% elif inc.status == 'active' %}<span class="badge badge--active">Aktiv</span>
+          {% else %}<span class="badge badge--closed">Abgeschlossen</span>{% endif %}
+        </div>
+        <div style="font-size:.82rem;color:var(--text-muted);">
+          {{ inc.address_street or '' }} {{ inc.address_no or '' }}{% if inc.address_city %}, {{ inc.address_city }}{% endif %}
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);display:flex;gap:14px;flex-wrap:wrap;margin-top:2px;">
+          <span>{{ inc.started_at|local_datetime }}</span>
+          <span>
             {% if inc.closed_at %}
             {% set dur = (inc.closed_at - inc.started_at).seconds %}
-            {{ (dur // 3600)|string + 'h ' if dur >= 3600 else '' }}{{ ((dur % 3600) // 60) }}min
-            {% elif inc.status == 'active' %}
-            laufend
+            Dauer: {{ (dur // 3600)|string + 'h ' if dur >= 3600 else '' }}{{ ((dur % 3600) // 60) }}min
+            {% elif inc.status == 'active' %}laufend
             {% else %}–{% endif %}
-          </td>
-          <td>
-            <a href="/archiv/{{ inc.id }}" class="btn btn--xs btn--ghost">Details</a>
-            <a href="/archiv/{{ inc.id }}/pdf" class="btn btn--xs btn--ghost">PDF</a>
-            {% if inc.status == 'active' %}
-            <a href="/einsatz/{{ inc.id }}" class="btn btn--xs btn--primary">Board</a>
-            {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" class="text-center text-muted">Keine Eins&auml;tze vorhanden.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+          </span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <a href="/archiv/{{ inc.id }}" class="btn btn--xs btn--ghost">Details</a>
+        <a href="/archiv/{{ inc.id }}/pdf" class="btn btn--xs btn--ghost">PDF</a>
+        {% if inc.status == 'active' %}
+        <a href="/einsatz/{{ inc.id }}" class="btn btn--xs btn--primary">Board</a>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="card" style="padding:32px;text-align:center;color:var(--text-muted);">
+      Keine Eins&auml;tze vorhanden.
+    </div>
+    {% endfor %}
   </div>
 </div>
 {% endblock %}
