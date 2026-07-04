@@ -10,6 +10,7 @@
     <option value="vorname" {% if sort == 'vorname' %}selected{% endif %}>Vorname</option>
   </select>
 </div>
+<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
 <table style="width:100%;border-collapse:collapse;">
   <thead>
     <tr style="border-bottom:2px solid var(--border);">
@@ -155,6 +156,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 <div style="padding:10px 16px;font-size:.8rem;color:var(--text-muted);">
   Gesamt: <strong>{{ teilnahmen|length }}</strong> Teilnehmer
   {% if not is_einsatz %}

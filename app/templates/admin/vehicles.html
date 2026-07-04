@@ -56,7 +56,7 @@
   </div>
   {% endif %}
 
-  <table class="table-admin" id="vehiclesTable">
+  <table class="table-admin table-admin--cards" id="vehiclesTable">
     <thead>
       <tr>
         <th style="width:32px;"></th>
@@ -72,15 +72,15 @@
     <tbody id="vehiclesTbody">
       {% for v in vehicles %}
       <tr data-vehicle-id="{{ v.id }}">
-        <td class="drag-handle" title="Ziehen zum Sortieren" style="cursor:grab;color:var(--text-muted);user-select:none;text-align:center;font-size:1.1rem;">⠿</td>
-        <td>
+        <td data-label="" class="drag-handle" title="Ziehen zum Sortieren" style="cursor:grab;color:var(--text-muted);user-select:none;text-align:center;font-size:1.1rem;">⠿</td>
+        <td data-label="Code">
           <strong>{{ v.code }}</strong>
           {% if v.is_external %}
           <span class="badge-pill badge-pill--orange" style="font-size:.6rem;margin-left:4px;vertical-align:middle;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.4);">FREMD</span>
           {% endif %}
         </td>
-        <td>{{ v.name }}<br><small class="text-muted">{{ v.type }}</small></td>
-        <td>
+        <td data-label="Name / Typ">{{ v.name }}<br><small class="text-muted">{{ v.type }}</small></td>
+        <td data-label="Organisation">
           {% if v.is_external %}
           <span style="color:#fbbf24;">{{ v.adhoc_org_name or '–' }}</span>
           {% if v.adhoc_org_short %}<small class="text-muted"> ({{ v.adhoc_org_short }})</small>{% endif %}
@@ -88,13 +88,13 @@
           {{ v.dept.name if v.dept else '–' }}
           {% endif %}
         </td>
-        <td>{{ v.bos_override or (v.dept.bos if v.dept else '–') }}</td>
-        <td>{% if v.is_first_train %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
-        <td>
+        <td data-label="BOS">{{ v.bos_override or (v.dept.bos if v.dept else '–') }}</td>
+        <td data-label="Erstausr.">{% if v.is_first_train %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
+        <td data-label="Status">
           {% if v.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
           {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}
         </td>
-        <td style="white-space:nowrap;">
+        <td data-label="Aktionen" style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap;">
           {% if v.is_external %}
           <button class="btn btn--ghost btn--xs"
                   onclick="openEditExternal({{ v.id }}, '{{ v.adhoc_org_name|replace("'","\\'")|e }}', '{{ v.adhoc_org_short or "" }}', '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', '{{ v.bos_override or "" }}')">

@@ -46,54 +46,54 @@
           Konfiguration für Passwort-Reset-Mails und andere Benachrichtigungen.
           Leer lassen = Wert aus Umgebungsvariable (<code>SMTP_*</code>) verwenden.
         </p>
-        <table class="table-admin">
+        <table class="table-admin table-admin--cards">
           <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>smtp_host</code></td>
-              <td><input type="text" name="k_smtp_host" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>smtp_host</code></td>
+              <td data-label="Wert"><input type="text" name="k_smtp_host" class="form-input form-input--sm"
                          value="{{ settings.get('smtp_host', '') }}" placeholder="mail.example.com" style="width:260px"></td>
-              <td><small class="text-muted">Hostname des Mailservers (z.&nbsp;B. <em>smtp.gmail.com</em>)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Hostname des Mailservers (z.&nbsp;B. <em>smtp.gmail.com</em>)</small></td>
             </tr>
             <tr>
-              <td><code>smtp_port</code></td>
-              <td><input type="number" name="k_smtp_port" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>smtp_port</code></td>
+              <td data-label="Wert"><input type="number" name="k_smtp_port" class="form-input form-input--sm"
                          value="{{ settings.get('smtp_port', '') }}" placeholder="587" style="width:100px"></td>
-              <td><small class="text-muted">TCP-Port — 587 (STARTTLS) oder 465 (SSL/TLS)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">TCP-Port — 587 (STARTTLS) oder 465 (SSL/TLS)</small></td>
             </tr>
             <tr>
-              <td><code>smtp_user</code></td>
-              <td><input type="text" name="k_smtp_user" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>smtp_user</code></td>
+              <td data-label="Wert"><input type="text" name="k_smtp_user" class="form-input form-input--sm"
                          value="{{ settings.get('smtp_user', '') }}" placeholder="absender@example.com" style="width:260px"></td>
-              <td><small class="text-muted">Benutzername für die SMTP-Authentifizierung</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Benutzername für die SMTP-Authentifizierung</small></td>
             </tr>
             <tr>
-              <td><code>smtp_password</code></td>
-              <td><input type="password" name="k_smtp_password" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>smtp_password</code></td>
+              <td data-label="Wert"><input type="password" name="k_smtp_password" class="form-input form-input--sm"
                          value="{{ settings.get('smtp_password', '') }}" placeholder="••••••••" style="width:260px" autocomplete="new-password"></td>
-              <td><small class="text-muted">Passwort für die SMTP-Authentifizierung</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Passwort für die SMTP-Authentifizierung</small></td>
             </tr>
             <tr>
-              <td><code>smtp_from</code></td>
-              <td><input type="email" name="k_smtp_from" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>smtp_from</code></td>
+              <td data-label="Wert"><input type="email" name="k_smtp_from" class="form-input form-input--sm"
                          value="{{ settings.get('smtp_from', '') }}" placeholder="noreply@example.com" style="width:260px"></td>
-              <td><small class="text-muted">Absenderadresse (From-Header). Leer = <code>smtp_user</code> verwenden.</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Absenderadresse (From-Header). Leer = <code>smtp_user</code> verwenden.</small></td>
             </tr>
             <tr>
-              <td><code>smtp_starttls</code></td>
-              <td>
+              <td data-label="Einstellung"><code>smtp_starttls</code></td>
+              <td data-label="Wert">
                 <select name="k_smtp_starttls" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('smtp_starttls','') in ('','true') %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('smtp_starttls','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">STARTTLS-Verschlüsselung aktivieren (empfohlen für Port 587)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">STARTTLS-Verschlüsselung aktivieren (empfohlen für Port 587)</small></td>
             </tr>
             <tr>
-              <td><code>smtp_timeout</code></td>
-              <td><input type="number" name="k_smtp_timeout" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>smtp_timeout</code></td>
+              <td data-label="Wert"><input type="number" name="k_smtp_timeout" class="form-input form-input--sm"
                          value="{{ settings.get('smtp_timeout', '') }}" placeholder="15" style="width:100px"></td>
-              <td><small class="text-muted">Verbindungs-Timeout in Sekunden (Standard: 15)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Verbindungs-Timeout in Sekunden (Standard: 15)</small></td>
             </tr>
           </tbody>
         </table>
@@ -111,36 +111,36 @@
           (<code>web-push generate-vapid-keys</code>).
           Leer lassen = Wert aus Umgebungsvariable (<code>VAPID_*</code>) verwenden.
         </p>
-        <table class="table-admin">
+        <table class="table-admin table-admin--cards">
           <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>enable_push</code></td>
-              <td>
+              <td data-label="Einstellung"><code>enable_push</code></td>
+              <td data-label="Wert">
                 <select name="k_enable_push" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('enable_push','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('enable_push','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">Push-Benachrichtigungen systemweit ein- oder ausschalten</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Push-Benachrichtigungen systemweit ein- oder ausschalten</small></td>
             </tr>
             <tr>
-              <td><code>vapid_public_key</code></td>
-              <td><input type="text" name="k_vapid_public_key" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>vapid_public_key</code></td>
+              <td data-label="Wert"><input type="text" name="k_vapid_public_key" class="form-input form-input--sm"
                          value="{{ settings.get('vapid_public_key', '') }}" placeholder="BN…" style="width:260px"></td>
-              <td><small class="text-muted">Öffentlicher VAPID-Schlüssel — wird an Browser-Clients übermittelt</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Öffentlicher VAPID-Schlüssel — wird an Browser-Clients übermittelt</small></td>
             </tr>
             <tr>
-              <td><code>vapid_private_key</code></td>
-              <td><input type="password" name="k_vapid_private_key" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>vapid_private_key</code></td>
+              <td data-label="Wert"><input type="password" name="k_vapid_private_key" class="form-input form-input--sm"
                          value="{{ settings.get('vapid_private_key', '') }}" placeholder="••••••••" style="width:260px" autocomplete="new-password"></td>
-              <td><small class="text-muted">Privater VAPID-Schlüssel — niemals öffentlich teilen</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Privater VAPID-Schlüssel — niemals öffentlich teilen</small></td>
             </tr>
             <tr>
-              <td><code>vapid_email</code></td>
-              <td><input type="email" name="k_vapid_email" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>vapid_email</code></td>
+              <td data-label="Wert"><input type="email" name="k_vapid_email" class="form-input form-input--sm"
                          value="{{ settings.get('vapid_email', '') }}" placeholder="admin@feuerwehr.at" style="width:260px"></td>
-              <td><small class="text-muted">Kontakt-E-Mail für Push-Dienst (VAPID-Claim, ohne <em>mailto:</em>)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Kontakt-E-Mail für Push-Dienst (VAPID-Claim, ohne <em>mailto:</em>)</small></td>
             </tr>
           </tbody>
         </table>
@@ -159,30 +159,30 @@
           Erfordert ein Firebase-Projekt und ein Service-Account-JSON auf dem Server.
           Änderungen sind erst nach einem App-Neustart wirksam.
         </p>
-        <table class="table-admin">
+        <table class="table-admin table-admin--cards">
           <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>fcm_enabled</code></td>
-              <td>
+              <td data-label="Einstellung"><code>fcm_enabled</code></td>
+              <td data-label="Wert">
                 <select name="k_fcm_enabled" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('fcm_enabled','false') == 'true' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('fcm_enabled','false') != 'true' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">FCM-Sendepfad für Android-App aktivieren</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">FCM-Sendepfad für Android-App aktivieren</small></td>
             </tr>
             <tr>
-              <td><code>fcm_project_id</code></td>
-              <td><input type="text" name="k_fcm_project_id" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>fcm_project_id</code></td>
+              <td data-label="Wert"><input type="text" name="k_fcm_project_id" class="form-input form-input--sm"
                          value="{{ settings.get('fcm_project_id', '') }}" placeholder="mein-firebase-projekt-id" style="width:260px"></td>
-              <td><small class="text-muted">Firebase-Projekt-ID (aus Firebase-Konsole → Projekteinstellungen)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Firebase-Projekt-ID (aus Firebase-Konsole → Projekteinstellungen)</small></td>
             </tr>
             <tr>
-              <td><code>fcm_credentials_path</code></td>
-              <td><input type="text" name="k_fcm_credentials_path" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>fcm_credentials_path</code></td>
+              <td data-label="Wert"><input type="text" name="k_fcm_credentials_path" class="form-input form-input--sm"
                          value="{{ settings.get('fcm_credentials_path', '') }}" placeholder="/etc/einsatzleiter/fcm-service-account.json" style="width:340px"></td>
-              <td><small class="text-muted">Absoluter Pfad zum Service-Account-JSON auf dem Server</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Absoluter Pfad zum Service-Account-JSON auf dem Server</small></td>
             </tr>
           </tbody>
         </table>
@@ -200,30 +200,30 @@
           Benutzer können das über die „Offen halten"-Schaltfläche im Einsatz verzögern
           (setzt den Timer zurück).
         </p>
-        <table class="table-admin">
+        <table class="table-admin table-admin--cards">
           <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>incident_autoclose_enabled</code></td>
-              <td>
+              <td data-label="Einstellung"><code>incident_autoclose_enabled</code></td>
+              <td data-label="Wert">
                 <select name="k_incident_autoclose_enabled" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('incident_autoclose_enabled','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('incident_autoclose_enabled','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">Auto-Schließen aktivieren oder deaktivieren (Standard: aktiv)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Auto-Schließen aktivieren oder deaktivieren (Standard: aktiv)</small></td>
             </tr>
             <tr>
-              <td><code>incident_autoclose_after_hours</code></td>
-              <td><input type="number" min="1" name="k_incident_autoclose_after_hours" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>incident_autoclose_after_hours</code></td>
+              <td data-label="Wert"><input type="number" min="1" name="k_incident_autoclose_after_hours" class="form-input form-input--sm"
                          value="{{ settings.get('incident_autoclose_after_hours', '') }}" placeholder="48" style="width:100px"></td>
-              <td><small class="text-muted">Stunden nach Einsatzbeginn bis zur „Noch offen?"-Warnung (Standard: 48&nbsp;h)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Stunden nach Einsatzbeginn bis zur „Noch offen?"-Warnung (Standard: 48&nbsp;h)</small></td>
             </tr>
             <tr>
-              <td><code>incident_autoclose_grace_minutes</code></td>
-              <td><input type="number" min="1" name="k_incident_autoclose_grace_minutes" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>incident_autoclose_grace_minutes</code></td>
+              <td data-label="Wert"><input type="number" min="1" name="k_incident_autoclose_grace_minutes" class="form-input form-input--sm"
                          value="{{ settings.get('incident_autoclose_grace_minutes', '') }}" placeholder="60" style="width:100px"></td>
-              <td><small class="text-muted">Minuten zwischen der Warnung und dem tatsächlichen Schließen (Standard: 60&nbsp;min)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Minuten zwischen der Warnung und dem tatsächlichen Schließen (Standard: 60&nbsp;min)</small></td>
             </tr>
           </tbody>
         </table>
@@ -236,24 +236,24 @@
         <h2>Allgemein</h2>
       </div>
       <div class="card-body">
-        <table class="table-admin">
+        <table class="table-admin table-admin--cards">
           <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>enable_speech_input</code></td>
-              <td>
+              <td data-label="Einstellung"><code>enable_speech_input</code></td>
+              <td data-label="Wert">
                 <select name="k_enable_speech_input" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('enable_speech_input','') == 'true' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('enable_speech_input','') != 'true' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">Sprachdiktat-Schaltfläche in Eingabefeldern einblenden</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Sprachdiktat-Schaltfläche in Eingabefeldern einblenden</small></td>
             </tr>
             <tr>
-              <td><code>default_session_max_age</code></td>
-              <td><input type="number" min="300" name="k_default_session_max_age" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>default_session_max_age</code></td>
+              <td data-label="Wert"><input type="number" min="300" name="k_default_session_max_age" class="form-input form-input--sm"
                          value="{{ settings.get('default_session_max_age', '') }}" placeholder="86400" style="width:140px"></td>
-              <td><small class="text-muted">Session-Lebensdauer in Sekunden (Standard: 86400 = 24&nbsp;h). Wirksam ab dem nächsten Login.</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Session-Lebensdauer in Sekunden (Standard: 86400 = 24&nbsp;h). Wirksam ab dem nächsten Login.</small></td>
             </tr>
           </tbody>
         </table>
@@ -271,51 +271,51 @@
           Der API-Key wird sicher in der Datenbank gespeichert und überschreibt die Umgebungsvariable
           <code>ANTHROPIC_API_KEY</code>. Prompts leer lassen = Standardprompt verwenden.
         </p>
-        <table class="table-admin">
+        <table class="table-admin table-admin--cards">
           <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>ai_enabled</code></td>
-              <td>
+              <td data-label="Einstellung"><code>ai_enabled</code></td>
+              <td data-label="Wert">
                 <select name="k_ai_enabled" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('ai_enabled','false') == 'true' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('ai_enabled','false') != 'true' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">KI-Funktionen systemweit ein- oder ausschalten</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">KI-Funktionen systemweit ein- oder ausschalten</small></td>
             </tr>
             <tr>
-              <td><code>ai_api_key</code></td>
-              <td><input type="password" name="k_ai_api_key" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>ai_api_key</code></td>
+              <td data-label="Wert"><input type="password" name="k_ai_api_key" class="form-input form-input--sm"
                          value="{{ settings.get('ai_api_key', '') }}" placeholder="sk-ant-…"
                          style="width:320px" autocomplete="new-password"></td>
-              <td><small class="text-muted">Anthropic API-Key (überschreibt Umgebungsvariable <code>ANTHROPIC_API_KEY</code>)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Anthropic API-Key (überschreibt Umgebungsvariable <code>ANTHROPIC_API_KEY</code>)</small></td>
             </tr>
             <tr>
-              <td><code>ai_model_default</code></td>
-              <td><input type="text" name="k_ai_model_default" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>ai_model_default</code></td>
+              <td data-label="Wert"><input type="text" name="k_ai_model_default" class="form-input form-input--sm"
                          value="{{ settings.get('ai_model_default', '') }}"
                          placeholder="claude-sonnet-4-6" style="width:260px"></td>
-              <td><small class="text-muted">Standardmodell für Berichte (Standard: <code>claude-sonnet-4-6</code>)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Standardmodell für Berichte (Standard: <code>claude-sonnet-4-6</code>)</small></td>
             </tr>
             <tr>
-              <td><code>ai_model_fast</code></td>
-              <td><input type="text" name="k_ai_model_fast" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>ai_model_fast</code></td>
+              <td data-label="Wert"><input type="text" name="k_ai_model_fast" class="form-input form-input--sm"
                          value="{{ settings.get('ai_model_fast', '') }}"
                          placeholder="claude-haiku-4-5-20251001" style="width:260px"></td>
-              <td><small class="text-muted">Schnelles Modell für Auftragsvorschläge &amp; Lagebild (Standard: <code>claude-haiku-4-5-20251001</code>)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Schnelles Modell für Auftragsvorschläge &amp; Lagebild (Standard: <code>claude-haiku-4-5-20251001</code>)</small></td>
             </tr>
             <tr>
-              <td><code>ai_max_tokens</code></td>
-              <td><input type="number" min="100" max="8000" name="k_ai_max_tokens" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>ai_max_tokens</code></td>
+              <td data-label="Wert"><input type="number" min="100" max="8000" name="k_ai_max_tokens" class="form-input form-input--sm"
                          value="{{ settings.get('ai_max_tokens', '') }}" placeholder="1500" style="width:100px"></td>
-              <td><small class="text-muted">Max. Token-Anzahl pro Antwort (Standard: 1500)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">Max. Token-Anzahl pro Antwort (Standard: 1500)</small></td>
             </tr>
             <tr>
-              <td><code>ai_timeout</code></td>
-              <td><input type="number" min="5" max="120" name="k_ai_timeout" class="form-input form-input--sm"
+              <td data-label="Einstellung"><code>ai_timeout</code></td>
+              <td data-label="Wert"><input type="number" min="5" max="120" name="k_ai_timeout" class="form-input form-input--sm"
                          value="{{ settings.get('ai_timeout', '') }}" placeholder="20" style="width:100px"></td>
-              <td><small class="text-muted">API-Timeout in Sekunden (Standard: 20)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">API-Timeout in Sekunden (Standard: 20)</small></td>
             </tr>
           </tbody>
         </table>
@@ -333,18 +333,18 @@
         <h2>Einsatz – Funktionen</h2>
       </div>
       <div class="card-body">
-        <table class="table-admin">
+        <table class="table-admin table-admin--cards">
           <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>breathing_enabled</code></td>
-              <td>
+              <td data-label="Einstellung"><code>breathing_enabled</code></td>
+              <td data-label="Wert">
                 <select name="k_breathing_enabled" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('breathing_enabled','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('breathing_enabled','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">🫁 Atemschutzüberwachung (BETA) – Pressluft-Trupp-Steuerung im Einsatz-Board ein- oder ausblenden</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">🫁 Atemschutzüberwachung (BETA) – Pressluft-Trupp-Steuerung im Einsatz-Board ein- oder ausblenden</small></td>
             </tr>
           </tbody>
         </table>
@@ -362,78 +362,78 @@
           Deaktivierte Module werden in der Navigation ausgeblendet.
           Standard: alle aktiv.
         </p>
-        <table class="table-admin">
+        <table class="table-admin table-admin--cards">
           <thead><tr><th style="width:230px">Einstellung</th><th>Wert</th><th>Beschreibung</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>mi_feature_stab</code></td>
-              <td>
+              <td data-label="Einstellung"><code>mi_feature_stab</code></td>
+              <td data-label="Wert">
                 <select name="k_mi_feature_stab" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('mi_feature_stab','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('mi_feature_stab','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">👥 Stab – Stabsführung (S1–S6, Lageleitung)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">👥 Stab – Stabsführung (S1–S6, Lageleitung)</small></td>
             </tr>
             <tr>
-              <td><code>mi_feature_funkjournal</code></td>
-              <td>
+              <td data-label="Einstellung"><code>mi_feature_funkjournal</code></td>
+              <td data-label="Wert">
                 <select name="k_mi_feature_funkjournal" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('mi_feature_funkjournal','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('mi_feature_funkjournal','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">📻 Funkjournal – Eingehende, ausgehende und interne Funkmeldungen</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">📻 Funkjournal – Eingehende, ausgehende und interne Funkmeldungen</small></td>
             </tr>
             <tr>
-              <td><code>mi_feature_meldungen</code></td>
-              <td>
+              <td data-label="Einstellung"><code>mi_feature_meldungen</code></td>
+              <td data-label="Wert">
                 <select name="k_mi_feature_meldungen" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('mi_feature_meldungen','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('mi_feature_meldungen','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">📥 Meldungen – Bürger-Meldungsportal und eingehende Schadensmeldungen</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">📥 Meldungen – Bürger-Meldungsportal und eingehende Schadensmeldungen</small></td>
             </tr>
             <tr>
-              <td><code>mi_feature_sektoren</code></td>
-              <td>
+              <td data-label="Einstellung"><code>mi_feature_sektoren</code></td>
+              <td data-label="Wert">
                 <select name="k_mi_feature_sektoren" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('mi_feature_sektoren','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('mi_feature_sektoren','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">🗂 Abschnitte – Einsatzstellen in Abschnitte/Sektoren gliedern</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">🗂 Abschnitte – Einsatzstellen in Abschnitte/Sektoren gliedern</small></td>
             </tr>
             <tr>
-              <td><code>mi_feature_karte</code></td>
-              <td>
+              <td data-label="Einstellung"><code>mi_feature_karte</code></td>
+              <td data-label="Wert">
                 <select name="k_mi_feature_karte" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('mi_feature_karte','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('mi_feature_karte','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">🗺 Karte – Geografische Übersichtskarte aller Einsatzstellen</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">🗺 Karte – Geografische Übersichtskarte aller Einsatzstellen</small></td>
             </tr>
             <tr>
-              <td><code>mi_feature_zeitreise</code></td>
-              <td>
+              <td data-label="Einstellung"><code>mi_feature_zeitreise</code></td>
+              <td data-label="Wert">
                 <select name="k_mi_feature_zeitreise" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('mi_feature_zeitreise','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('mi_feature_zeitreise','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">🕐 Zeitreise – Chronologischer Ereignisverlauf der gesamten Lage</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">🕐 Zeitreise – Chronologischer Ereignisverlauf der gesamten Lage</small></td>
             </tr>
             <tr>
-              <td><code>mi_feature_ressourcen</code></td>
-              <td>
+              <td data-label="Einstellung"><code>mi_feature_ressourcen</code></td>
+              <td data-label="Wert">
                 <select name="k_mi_feature_ressourcen" class="form-input form-input--sm" style="width:130px">
                   <option value="true" {% if settings.get('mi_feature_ressourcen','true') != 'false' %}selected{% endif %}>Aktiv (true)</option>
                   <option value="false" {% if settings.get('mi_feature_ressourcen','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td><small class="text-muted">🚒 Ressourcen – Übersicht aller zugewiesenen Einheiten und Kräfte</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">🚒 Ressourcen – Übersicht aller zugewiesenen Einheiten und Kräfte</small></td>
             </tr>
           </tbody>
         </table>
@@ -462,15 +462,15 @@
         <h2>Benutzerdefinierte Einstellungen</h2>
       </div>
       <div class="card-body">
-        <table class="table-admin">
+        <table class="table-admin table-admin--cards">
           <thead><tr><th style="width:230px">Schlüssel</th><th>Wert</th><th>Typ</th></tr></thead>
           <tbody>
             {% for k, v in settings.items() %}
             {% if k not in known_keys_list %}
             <tr>
-              <td><code>{{ k }}</code></td>
-              <td><input type="text" name="k_{{ k }}" class="form-input form-input--sm" value="{{ v or '' }}" style="width:260px"></td>
-              <td><small class="text-muted">Benutzerdefiniert</small></td>
+              <td data-label="Schlüssel"><code>{{ k }}</code></td>
+              <td data-label="Wert"><input type="text" name="k_{{ k }}" class="form-input form-input--sm" value="{{ v or '' }}" style="width:260px"></td>
+              <td data-label="Typ"><small class="text-muted">Benutzerdefiniert</small></td>
             </tr>
             {% endif %}
             {% endfor %}

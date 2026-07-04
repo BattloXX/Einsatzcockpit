@@ -75,7 +75,7 @@
 
   <form id="bulkDeleteForm" method="post" action="/admin/mitglieder/bulk-delete" style="display:none"></form>
 
-  <table class="table-admin" id="membersTable">
+  <table class="table-admin table-admin--cards" id="membersTable">
     <thead>
       <tr>
         <th style="width:32px"><input type="checkbox" id="selectAllMembers" onchange="toggleSelectAllMembers(this)"></th>
@@ -96,9 +96,9 @@
           data-email="{{ (m.email or '')|e }}"
           data-quals="{{ _quals|e }}"
           data-status="{{ 'active' if m.active else 'inactive' }}">
-        <td><input type="checkbox" class="member-select" value="{{ m.id }}" onchange="updateBulkBar()"></td>
-        <td><strong>{{ m.full_name }}</strong></td>
-        <td>
+        <td data-label=""><input type="checkbox" class="member-select" value="{{ m.id }}" onchange="updateBulkBar()"></td>
+        <td data-label="Name"><strong>{{ m.full_name }}</strong></td>
+        <td data-label="Qualifikationen">
           {% for mq in m.qualifications %}
           <span class="badge-pill badge-pill--green" title="{{ mq.qualification.label if mq.qualification else '' }}">
             {{ mq.qualification.code if mq.qualification else '?' }}
@@ -106,13 +106,13 @@
           </span>
           {% else %}<span class="text-muted">–</span>{% endfor %}
         </td>
-        <td>{{ m.phone or '–' }}</td>
-        <td>{{ m.email or '–' }}</td>
-        <td>
+        <td data-label="Telefon">{{ m.phone or '–' }}</td>
+        <td data-label="E-Mail">{{ m.email or '–' }}</td>
+        <td data-label="Status">
           {% if m.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
           {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}
         </td>
-        <td>
+        <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn--ghost btn--xs"
                   onclick="openEditMember({{ m.id }}, '{{ m.lastname|replace("'","\\'")|e }}', '{{ m.firstname|replace("'","\\'")|e }}', '{{ m.phone or "" }}', '{{ m.email or "" }}')">
             Bearbeiten

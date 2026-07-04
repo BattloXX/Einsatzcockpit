@@ -13,20 +13,20 @@
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
   {% if error %}<div class="alert alert--danger">{{ error }}</div>{% endif %}
 
-  <table class="table-admin">
+  <table class="table-admin table-admin--cards">
     <thead>
       <tr><th>Code</th><th>Kategorie</th><th>Bezeichnung</th><th>Nur Erstausr.</th><th>Nachalarm.</th><th>Großschadenslage</th><th>Aktionen</th></tr>
     </thead>
     <tbody>
       {% for at in alarm_types %}
       <tr>
-        <td><strong>{{ at.code }}</strong></td>
-        <td>{{ at.category }}</td>
-        <td>{{ at.label }}</td>
-        <td>{% if at.default_first_train_only %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
-        <td>{% if at.notify_neighbors %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
-        <td>{% if at.triggers_major_incident %}<span class="badge-pill badge-pill--orange">Ja</span>{% else %}–{% endif %}</td>
-        <td>
+        <td data-label="Code"><strong>{{ at.code }}</strong></td>
+        <td data-label="Kategorie">{{ at.category }}</td>
+        <td data-label="Bezeichnung">{{ at.label }}</td>
+        <td data-label="Nur Erstausr.">{% if at.default_first_train_only %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
+        <td data-label="Nachalarm.">{% if at.notify_neighbors %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
+        <td data-label="Großschadenslage">{% if at.triggers_major_incident %}<span class="badge-pill badge-pill--orange">Ja</span>{% else %}–{% endif %}</td>
+        <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn--ghost btn--xs"
                   onclick="openEditAt('{{ at.code }}', '{{ at.category }}', '{{ at.label|replace("'","\\'")|e }}', {{ at.default_first_train_only|lower }}, {{ at.notify_neighbors|lower }}, {{ at.triggers_major_incident|lower }})">
             Bearbeiten

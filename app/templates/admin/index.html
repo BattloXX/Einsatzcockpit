@@ -81,21 +81,21 @@
   </div>
 </div>
 
-<div class="charts-grid" style="padding:0; grid-template-columns: 1fr 1fr;">
+<div class="charts-grid" style="padding:0;">
   <div class="chart-box">
     <h3>Letzte Einsätze</h3>
     {% if recent_incidents %}
-    <table class="table-admin">
+    <table class="table-admin table-admin--cards">
       <thead>
         <tr><th>Datum</th><th>Stichwort</th><th>Adresse</th><th>Status</th></tr>
       </thead>
       <tbody>
         {% for i in recent_incidents %}
         <tr>
-          <td>{{ (i.started_at|local).strftime('%d.%m. %H:%M') if i.started_at else '—' }}</td>
-          <td><a href="/archiv/{{ i.id }}" {{ tip('Einsatz-Detail öffnen') }}>{{ i.alarm_type_code }}</a></td>
-          <td>{{ i.address_street or '' }} {{ i.address_no or '' }}, {{ i.address_city or '' }}</td>
-          <td>
+          <td data-label="Datum">{{ (i.started_at|local).strftime('%d.%m. %H:%M') if i.started_at else '—' }}</td>
+          <td data-label="Stichwort"><a href="/archiv/{{ i.id }}" {{ tip('Einsatz-Detail öffnen') }}>{{ i.alarm_type_code }}</a></td>
+          <td data-label="Adresse">{{ i.address_street or '' }} {{ i.address_no or '' }}, {{ i.address_city or '' }}</td>
+          <td data-label="Status">
             {% if i.status == 'active' %}
               <span class="badge-pill badge-pill--red">aktiv</span>
             {% else %}

@@ -40,7 +40,7 @@
   <small class="text-muted">Endgültig — kann nicht rückgängig gemacht werden.</small>
 </div>
 
-<table class="table-admin">
+<table class="table-admin table-admin--cards">
   <thead>
     <tr>
       <th style="width:32px;"></th>
@@ -58,24 +58,24 @@
   <tbody>
     {% for u in users %}
     <tr>
-      <td>
+      <td data-label="">
         {% if u.id != user.id %}
         <input type="checkbox" name="user_ids" value="{{ u.id }}" class="user-bulk-cb">
         {% endif %}
       </td>
-      <td><strong>{{ u.username }}</strong><br><small class="text-muted">{{ u.display_name }}</small></td>
-      <td>{{ u.full_name or '—' }}</td>
-      <td>{{ u.email or '—' }}</td>
-      <td>{{ u.phone or '—' }}</td>
-      {% if is_sysadmin %}<td>{{ u.org.name if u.org else '—' }}</td>{% endif %}
-      <td>{{ u.roles|map(attribute='label')|join(', ') or '–' }}</td>
-      <td>{{ u.last_login_at|local_datetime if u.last_login_at else '–' }}</td>
-      <td>
+      <td data-label="Benutzername"><strong>{{ u.username }}</strong><br><small class="text-muted">{{ u.display_name }}</small></td>
+      <td data-label="Echter Name">{{ u.full_name or '—' }}</td>
+      <td data-label="E-Mail">{{ u.email or '—' }}</td>
+      <td data-label="Telefon">{{ u.phone or '—' }}</td>
+      {% if is_sysadmin %}<td data-label="Organisation">{{ u.org.name if u.org else '—' }}</td>{% endif %}
+      <td data-label="Rollen">{{ u.roles|map(attribute='label')|join(', ') or '–' }}</td>
+      <td data-label="Letzter Login">{{ u.last_login_at|local_datetime if u.last_login_at else '–' }}</td>
+      <td data-label="Status">
         {% if u.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
         {% else %}<span class="badge-pill badge-pill--gray">Deaktiviert</span>{% endif %}
         {% if u.locked_until %}<br><span class="badge-pill badge-pill--red" {{ tip('Account ist temporär gesperrt') }}>Gesperrt</span>{% endif %}
       </td>
-      <td style="display:flex; gap:4px; flex-wrap:wrap;">
+      <td data-label="Aktionen" style="display:flex; gap:4px; flex-wrap:wrap;">
         <button type="button" class="btn btn--ghost btn--xs"
                 data-user-id="{{ u.id }}"
                 data-user='{{ {
