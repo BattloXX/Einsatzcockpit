@@ -30,6 +30,7 @@ def _parsed(**overrides) -> dict:
         report_text="Verkehrsunfall",
         alarm_type_code="T4",
         started_at=datetime(2026, 7, 3, 20, 0, tzinfo=UTC),
+        is_exercise=False,
     )
     defaults.update(overrides)
     return defaults
@@ -83,6 +84,54 @@ def test_lis_first_creates_incident_without_external_key():
         assert incident.lis_operation_id == "lis-op-neu"
         assert incident.external_key is None
         assert _count_incidents(db) == before_count + 1
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_lis_first_creates_incident_as_exercise_when_flagged():
+    """LIS-first-Neuanlage mit is_exercise=True (Testeinsatz-Fall) muss den Einsatz
+    auch als Übungseinsatz in Einsatzcockpit anlegen, nicht als echten Einsatz."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+
+        incident, created = lis_sync._get_or_link_incident(
+            db, org, _parsed(lis_operation_id="lis-op-uebung", is_exercise=True),
+        )
+
+        assert created is True
+        assert incident.is_exercise is True
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_parse_operation_extracts_real_schema_including_exercise_flag(setup_db):
+    """End-to-End mit dem echten Schema aus Capture 2026-07-04 (Testeinsatz LIS,
+    Type.Code='t_t3' mit Präfix, Type.Type='Schulungseinsatz...') — nach dem Fix von
+    _result_list() liegen diese Felder direkt (flach) im op-dict, nicht mehr unter
+    einem verschachtelten 'Operation'-Key."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        raw_op = {
+            "Id": "f93e6e1c-cded-4aa7-aa52-3ab66da8d40e",
+            "Number": "t_t30007",
+            "Name": "Testeinsatz LIS",
+            "Description": "Testeinsatz LIS",
+            "BeginTime": "2026-07-04T07:44:30",
+            "Address": {"Street": "Flotzbachstraße", "Housenumber": "27a", "Community": "Wolfurt"},
+            "Type": {"Code": "t_t3", "Type": "Schulungseinsatz (ohne RFL) - Feuerwehr"},
+        }
+
+        parsed = lis_sync._parse_operation(raw_op, org)
+        incident, created = lis_sync._get_or_link_incident(db, org, parsed)
+
+        assert created is True
+        assert incident.alarm_type_code == "T3"
+        assert incident.is_exercise is True
+        assert incident.address_street == "Flotzbachstraße"
     finally:
         db.rollback()
         db.close()

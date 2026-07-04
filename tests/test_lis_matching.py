@@ -62,6 +62,29 @@ def test_map_stichwort_known_and_fallback():
     assert lis_mapping.map_stichwort(None) == "T1"
 
 
+def test_map_stichwort_handles_real_prefixed_code():
+    """Echter Mitschnitt (Capture 2026-07-04, Testeinsatz LIS): Type.Code kommt als
+    't_t3' (mit Präfix), nicht als 't3' — muss trotzdem auf T3 gemappt werden."""
+    assert lis_mapping.map_stichwort("t_t3") == "T3"
+    assert lis_mapping.map_stichwort("f_f1") == "F1"
+
+
+# ── lis_mapping: Übungserkennung (Doku hat keinen Boolean/Enum dafür) ────────
+
+def test_is_exercise_operation_detects_real_schulungseinsatz():
+    """Echter Mitschnitt: Type.Type = 'Schulungseinsatz (ohne RFL) - Feuerwehr'."""
+    assert lis_mapping.is_exercise_operation({"Type": "Schulungseinsatz (ohne RFL) - Feuerwehr"}) is True
+
+
+def test_is_exercise_operation_false_for_normal_type():
+    assert lis_mapping.is_exercise_operation({"Type": "t3 - mittlerer technischer Einsatz"}) is False
+
+
+def test_is_exercise_operation_false_when_missing():
+    assert lis_mapping.is_exercise_operation(None) is False
+    assert lis_mapping.is_exercise_operation({}) is False
+
+
 # ── lis_mapping: Personen-Zu-/Absagen (Doku Abschnitt 8.2 Beispiele) ─────────
 
 def test_parse_person_response_zusage_mit_rolle_und_ankunft():

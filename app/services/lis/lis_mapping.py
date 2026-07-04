@@ -19,12 +19,42 @@ _STUFE_MAP: dict[str, str] = {
 }
 
 
+_CODE_TAIL_RE = re.compile(r"([tf]\d{1,2})$")
+
+
 def map_stichwort(lis_type_code: str | None) -> str:
     """Mappt ein LIS-Type.Code (z.B. 'f1', 'T4') auf einen internen AlarmType-Code.
-    Fallback ist immer 'T1' (unbekannt/leer)."""
+    Fallback ist immer 'T1' (unbekannt/leer).
+
+    Echter Mitschnitt (Capture 2026-07-04, Testeinsatz LIS) zeigt: der reale Code hat
+    ein Präfix ('t_t3' statt 't3') — daher wird zuerst das trailing '[tf]\\d{1,2}'
+    extrahiert, bevor gegen _STUFE_MAP nachgeschlagen wird.
+    """
     if not lis_type_code:
         return "T1"
-    return _STUFE_MAP.get(lis_type_code.strip().lower(), "T1")
+    normalized = lis_type_code.strip().lower()
+    match = _CODE_TAIL_RE.search(normalized)
+    key = match.group(1) if match else normalized
+    return _STUFE_MAP.get(key, "T1")
+
+
+# ── Übungserkennung (Operation.Type.Type Freitext) ────────────────────────────
+_EXERCISE_KEYWORDS = ("schulung", "übung", "uebung", "training", "probe")
+
+
+def is_exercise_operation(type_obj: dict | None) -> bool:
+    """Erkennt einen Übungs-/Schulungseinsatz anhand von Operation.Type.Type.
+
+    Es gibt kein boolesches Feld/Enum dafür in den bekannten LIS-Feldern — das
+    einzige Signal im echten Mitschnitt (Capture 2026-07-04) ist der Freitext
+    'Schulungseinsatz (ohne RFL) - Feuerwehr'. Diese Erkennung beruht auf genau
+    diesem einen echten Beispiel und ist entsprechend keyword-basiert statt
+    strukturell — bei Bedarf mit weiteren echten Beispielen nachschärfen.
+    """
+    if not type_obj:
+        return False
+    label = (type_obj.get("Type") or "").strip().lower()
+    return any(keyword in label for keyword in _EXERCISE_KEYWORDS)
 
 
 # ── Fahrzeugstatus (S4/S5 → interne UNIT_STATUS_VALUES) ───────────────────────

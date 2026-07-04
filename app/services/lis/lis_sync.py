@@ -19,7 +19,12 @@ from app.models.master import FireDept, VehicleMaster
 from app.services.incident_service import create_incident, set_unit_status
 from app.services.lis.lis_client import LisClient, LisClientError
 from app.services.lis.lis_geo import lis_unit_coords_to_wgs84
-from app.services.lis.lis_mapping import map_stichwort, map_unit_status, parse_person_response
+from app.services.lis.lis_mapping import (
+    is_exercise_operation,
+    map_stichwort,
+    map_unit_status,
+    parse_person_response,
+)
 from app.services.lis.lis_matching import find_matching_incident
 
 logger = logging.getLogger("einsatzleiter.lis.sync")
@@ -113,6 +118,7 @@ def _parse_operation(op: dict, org: FireDept | None) -> dict:
         "report_text": reason,
         "alarm_type_code": map_stichwort(type_obj.get("Code") or type_obj.get("Type")),
         "started_at": _parse_operation_datetime(started_raw, org),
+        "is_exercise": is_exercise_operation(type_obj),
     }
 
 
@@ -152,6 +158,7 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         db,
         alarm_type_code=parsed["alarm_type_code"],
         started_at=parsed["started_at"],
+        is_exercise=parsed["is_exercise"],
         address_street=parsed["street"],
         address_no=parsed["house_no"],
         address_city=parsed["city"],

@@ -68,12 +68,18 @@ def test_find_fault_none_on_normal_response():
     assert _find_fault(root) is None
 
 
-def test_result_list_parses_repeated_elements():
+def test_result_list_unwraps_real_tuple_shape():
+    """Echter Mitschnitt (Capture 2026-07-04, Testeinsatz LIS): GetOperationsResult ist
+    Tuple<List<Operation>, int>, serialisiert als genau zwei Kinder m_Item1 (Liste) +
+    m_Item2 (Gesamtanzahl) — kein flaches Array direkt unter GetOperationsResult."""
     xml = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
       <s:Body><GetOperationsResponse xmlns="http://x">
-        <GetOperationsResult>
-          <Operation><Id>op-1</Id><Number>f26005863</Number></Operation>
-          <Operation><Id>op-2</Id><Number>f26005864</Number></Operation>
+        <GetOperationsResult xmlns:a="http://schemas.datacontract.org/2004/07/System">
+          <a:m_Item1 xmlns:b="http://x/Types">
+            <b:Operation><b:Id>op-1</b:Id><b:Number>f26005863</b:Number></b:Operation>
+            <b:Operation><b:Id>op-2</b:Id><b:Number>f26005864</b:Number></b:Operation>
+          </a:m_Item1>
+          <a:m_Item2>2</a:m_Item2>
         </GetOperationsResult>
       </GetOperationsResponse></s:Body></s:Envelope>"""
     root = ET.fromstring(xml)
@@ -81,3 +87,32 @@ def test_result_list_parses_repeated_elements():
     assert len(items) == 2
     assert items[0]["Id"] == "op-1"
     assert items[1]["Number"] == "f26005864"
+
+
+def test_result_list_unwraps_empty_tuple_shape():
+    """Echte leere Antwort: m_Item1 ohne Kinder, m_Item2 = '0'."""
+    xml = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+      <s:Body><GetOperationsResponse xmlns="http://x">
+        <GetOperationsResult xmlns:a="http://schemas.datacontract.org/2004/07/System">
+          <a:m_Item1 xmlns:b="http://x/Types"/>
+          <a:m_Item2>0</a:m_Item2>
+        </GetOperationsResult>
+      </GetOperationsResponse></s:Body></s:Envelope>"""
+    root = ET.fromstring(xml)
+    assert _result_list(root, "GetOperationsResult") == []
+
+
+def test_result_list_falls_back_to_flat_array_without_tuple_wrapper():
+    """GetTasks/GetOperationUnits/GetDocumentsByOperationId haben keine range/count/
+    startIndex-Parameter und liefern vermutlich (unbestätigt) ein flaches Array ohne
+    m_Item1/m_Item2-Wrapper — dafür muss der bisherige direkte-Kinder-Fallback bleiben."""
+    xml = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+      <s:Body><GetTasksResponse xmlns="http://x">
+        <GetTasksResult>
+          <Task><Id>task-1</Id><Description>Testmeldung</Description></Task>
+        </GetTasksResult>
+      </GetTasksResponse></s:Body></s:Envelope>"""
+    root = ET.fromstring(xml)
+    items = _result_list(root, "GetTasksResult")
+    assert len(items) == 1
+    assert items[0]["Id"] == "task-1"

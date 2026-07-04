@@ -93,11 +93,27 @@ def _find_fault(root: ET.Element) -> str | None:
 
 
 def _result_list(root: ET.Element, result_tag: str) -> list[dict]:
+    """Extrahiert die Item-Liste aus einem `<...Result>`-Element.
+
+    Echter Mitschnitt (Capture 2026-07-04, Testeinsatz LIS) zeigt: `GetOperationsResult`
+    ist als `Tuple<List<Operation>, int>` serialisiert — genau zwei Kinder `m_Item1`
+    (die eigentliche Liste) und `m_Item2` (Gesamtanzahl, für Pagination), NICHT ein
+    flaches Array direkt unter `<Result>`. Ohne Entpacken von `m_Item1` würde jedes
+    Ergebnis fälschlich als `{"Operation": {...}}` statt der Operation direkt geliefert
+    — `op.get("Id")` liefert dann immer None und der komplette Sync bricht lautlos ab.
+    GetTasks/GetOperationUnits/GetDocumentsByOperationId haben keine range/count/
+    startIndex-Parameter und liefern vermutlich (unbestätigt) ein flaches Array ohne
+    Tupel-Wrapper — daher bleibt der direkte-Kinder-Fallback erhalten.
+    """
     result = _find_by_local(root, result_tag)
     if result is None:
         return []
+    children = list(result)
+    container = next((c for c in children if _local(c.tag) == "m_Item1"), None)
+    if container is not None:
+        children = list(container)
     items = []
-    for child in list(result):
+    for child in children:
         val = _elem_to_value(child)
         if isinstance(val, dict):
             items.append(val)
