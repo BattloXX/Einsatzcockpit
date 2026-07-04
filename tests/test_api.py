@@ -62,6 +62,25 @@ def test_create_incident_success(client, api_key):
     assert r2.json()["id"] == incident_id
 
 
+def test_create_incident_stores_caller_info(client, api_key):
+    """Name/Telefon aus dem Alarm-Webhook landen auf caller_name/caller_phone —
+    Anzeige mit Wählfunktion im Alarm-Modal (Klick auf Alarmstichwort im Board)."""
+    payload = dict(PAYLOAD, Key="test-key-caller", Name="Max Mustermann", Telefon="+43 664 1234567")
+    r = client.post("/api/v1/einsatz", json=payload, headers={"X-API-Key": api_key})
+    assert r.status_code == 200
+    incident_id = r.json()["id"]
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        from app.models.incident import Incident
+        incident = db.get(Incident, incident_id)
+        assert incident.caller_name == "Max Mustermann"
+        assert incident.caller_phone == "+43 664 1234567"
+    finally:
+        db.close()
+
+
 def test_list_active(client, api_key):
     r = client.get("/api/v1/einsatz/active", headers={"X-API-Key": api_key})
     assert r.status_code == 200

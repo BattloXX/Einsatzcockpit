@@ -6,6 +6,7 @@ aufruft (spiegelt das Verhalten von LisClient._post).
 """
 import asyncio
 import json
+import zipfile
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -13,9 +14,11 @@ import pytest
 from app.services.lis.lis_capture import (
     CAPTURE_RETENTION_DAYS,
     ExchangeRecorder,
+    _bundle_capture_into_zip,
     _capture_once,
     _current_run_id,
     capture_run_dir,
+    capture_traffic,
     purge_old_captures,
 )
 
@@ -188,3 +191,87 @@ def test_capture_run_dir_path_structure(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "CAPTURE_ROOT", tmp_path)
     d = capture_run_dir(7, "run-xyz")
     assert d == tmp_path / "7" / "run-xyz"
+
+
+# ── ZIP-Bündelung beim Beenden (Zeit abgelaufen ODER "Abbrechen" geklickt) ───
+
+def test_bundle_capture_into_zip_creates_single_zip_and_removes_raw_files(tmp_path):
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-bundle")
+    recorder.record("http://x/svc", ".../GetTasks", b"<req/>", b"<resp/>")
+    recorder.write_summary(duration_minutes=5, finished=True)
+
+    zip_path = _bundle_capture_into_zip(tmp_path, "run-bundle")
+
+    assert zip_path == tmp_path / "run-bundle.zip"
+    assert zip_path.is_file()
+    assert (tmp_path / "summary.json").is_file()  # bleibt lose liegen (Admin-UI-Liste)
+    remaining_raw = [
+        p for p in tmp_path.iterdir() if p.is_file() and p.suffix != ".zip" and p.name != "summary.json"
+    ]
+    assert remaining_raw == []
+    with zipfile.ZipFile(zip_path) as zf:
+        names = set(zf.namelist())
+    assert any(n.endswith("_request.xml") for n in names)
+    assert any(n.endswith("_response.bin") for n in names)
+    assert "summary.json" in names
+
+
+def test_bundle_capture_into_zip_noop_when_nothing_recorded(tmp_path):
+    assert _bundle_capture_into_zip(tmp_path, "run-empty") is None
+    assert not (tmp_path / "run-empty.zip").exists()
+
+
+def test_capture_traffic_bundles_into_zip_when_time_runs_out(tmp_path):
+    """Läuft die volle Dauer natürlich ab (duration_minutes=0 → sofort fertig):
+    die Rohdateien müssen trotzdem zu einem ZIP zusammengefasst werden."""
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-finish")
+    client = _FakeLisClient([{"Id": "op-1"}], on_exchange=recorder.record)
+
+    out_dir = asyncio.run(
+        capture_traffic(client, recorder, "org-guid", duration_minutes=0, poll_interval_seconds=1)
+    )
+
+    zip_path = out_dir / "run-finish.zip"
+    assert zip_path.is_file()
+    data = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
+    assert data["finished"] is True
+    remaining_raw = [
+        p for p in out_dir.iterdir() if p.is_file() and p.suffix != ".zip" and p.name != "summary.json"
+    ]
+    assert remaining_raw == []
+
+
+def test_capture_traffic_bundles_into_zip_on_cancel(tmp_path):
+    """Wird die Aufzeichnung mittendrin per "Abbrechen" abgebrochen (task.cancel(),
+    wie im /admin/lis/capture/{run_id}/cancel-Endpoint), müssen die bis dahin
+    aufgezeichneten Rohdateien trotzdem zu einem ZIP zusammengefasst werden."""
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-cancel")
+    cycle_done = asyncio.Event()
+
+    class _SignallingClient(_FakeLisClient):
+        async def get_documents_by_operation_id(self, operation_id, maximum_distance=100):
+            result = await super().get_documents_by_operation_id(operation_id, maximum_distance)
+            cycle_done.set()
+            return result
+
+    client = _SignallingClient([{"Id": "op-1"}], on_exchange=recorder.record)
+
+    async def _run():
+        task = asyncio.create_task(
+            capture_traffic(client, recorder, "org-guid", duration_minutes=120, poll_interval_seconds=60)
+        )
+        await cycle_done.wait()  # erster Poll-Zyklus ist durch, Task hängt im Sleep bis zum nächsten
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(_run())
+
+    zip_path = tmp_path / "run-cancel.zip"
+    assert zip_path.is_file()
+    data = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert data["finished"] is False
+    remaining_raw = [
+        p for p in tmp_path.iterdir() if p.is_file() and p.suffix != ".zip" and p.name != "summary.json"
+    ]
+    assert remaining_raw == []

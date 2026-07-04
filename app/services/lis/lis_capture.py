@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -104,6 +105,28 @@ def capture_run_dir(org_id: int, run_id: str) -> Path:
     return CAPTURE_ROOT / str(org_id) / run_id
 
 
+def _bundle_capture_into_zip(out_dir: Path, run_id: str) -> Path | None:
+    """Fasst alle Rohdateien eines Laufs (request.xml/response.bin je Exchange +
+    summary.json) in ein einzelnes ZIP im selben Verzeichnis zusammen und löscht
+    danach die entpackten Einzeldateien (außer summary.json, das die Admin-UI
+    weiterhin direkt liest, ohne das ZIP zu öffnen). Ein system_admin muss so nur
+    noch eine Datei statt vieler kleiner xml/bin-Dateien sichern.
+
+    Gibt None zurück, wenn es nichts zu bündeln gibt (z.B. sofortiger Abbruch
+    vor dem ersten Exchange)."""
+    raw_files = sorted(p for p in out_dir.iterdir() if p.is_file() and p.suffix != ".zip")
+    if not raw_files:
+        return None
+    zip_path = out_dir / f"{run_id}.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in raw_files:
+            zf.write(f, arcname=f.name)
+    for f in raw_files:
+        if f.name != "summary.json":
+            f.unlink()
+    return zip_path
+
+
 async def _capture_once(client: LisClient, recorder: ExchangeRecorder, organization_id: str) -> None:
     """Ein einzelner Poll-Zyklus: aktive Operationen + je Operation Tasks/Units/
     Dokumente. Deckt dieselben Endpunkte ab wie der reguläre Sync (lis_sync.py)
@@ -168,6 +191,12 @@ async def capture_traffic(
         raise
     finally:
         recorder.write_summary(duration_minutes=duration_minutes, finished=finished)
+        try:
+            _bundle_capture_into_zip(recorder.out_dir, recorder.run_id)
+        except OSError:
+            logger.exception(
+                "LIS-Capture (Org %s): Zusammenfassen in ZIP fehlgeschlagen", recorder.org_id,
+            )
         logger.info(
             "LIS-Capture (Org %s) beendet: %d Exchanges in %s",
             recorder.org_id, len(recorder.exchanges), recorder.out_dir,

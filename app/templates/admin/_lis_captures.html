@@ -54,8 +54,10 @@
   <p class="form-hint" style="margin-top:10px">
     Rohdateien liegen ausschließlich auf dem Server unter
     <code>app_storage/lis_capture/{{ org.id }}/&lt;Lauf&gt;/</code> —
-    kein Browser-Download (Personenbezug). Werden nach
-    {{ capture_retention_days }} Tagen automatisch gelöscht.
+    kein Browser-Download (Personenbezug). Sobald ein Lauf endet (Zeit abgelaufen
+    oder "Abbrechen" geklickt), werden alle Rohdateien dort automatisch zu einem
+    einzigen ZIP zusammengefasst. Werden nach {{ capture_retention_days }} Tagen
+    automatisch gelöscht.
   </p>
 </div>
 {% else %}

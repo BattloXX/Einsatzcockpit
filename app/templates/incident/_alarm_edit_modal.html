@@ -2,11 +2,31 @@
 <div class="modal__header">
   <div>
     <div class="modal__title">Alarmstufe &amp; Einsatzgrund</div>
-    <div class="modal__subtitle">Einsatz #{{ incident.id }}</div>
+    <div class="modal__subtitle">
+      {% if incident.lis_operation_number %}
+      Leitstellen-Nr. {{ incident.lis_operation_number }}
+      {% else %}
+      Einsatz #{{ incident.id }}
+      {% endif %}
+    </div>
   </div>
   <button class="modal__close" onclick="document.getElementById('cardDetailModal').close()">✕</button>
 </div>
 <div class="modal__body">
+  {% if incident.caller_name or incident.caller_phone %}
+  <div class="form-group" style="margin-bottom:1rem;padding:10px 12px;background:var(--surface-elevated,#1e2130);border-radius:6px">
+    <label class="form-label" style="margin-bottom:.35rem;display:block">Anrufer / Melder</label>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:.9rem">
+      {% if incident.caller_name %}<span>👤 {{ incident.caller_name }}</span>{% endif %}
+      {% if incident.caller_phone %}
+      <a href="tel:{{ incident.caller_phone }}" style="color:var(--color-primary,#3b82f6);text-decoration:none">
+        📞 {{ incident.caller_phone }}
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   <form hx-post="/einsatz/{{ incident.id }}/alarm"
         hx-target="#cardDetailBody"
         hx-swap="innerHTML">

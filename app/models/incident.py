@@ -80,6 +80,9 @@ class Incident(Base):
     # Wird gesetzt, sobald ein Einsatz mit dem LIS verbunden oder von dort angelegt wurde.
     lis_operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     lis_operation_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Anrufer/Melder aus dem Alarm-Webhook (Name/Telefon) — nur Anzeige, keine LIS-Quelle.
+    caller_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    caller_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     columns: Mapped[list[IncidentColumn]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"

@@ -534,6 +534,10 @@ async def create_incident_api(
         linked_from_lis.external_key = payload.Key
         if payload.Nummer is not None:
             linked_from_lis.nummer = payload.Nummer
+        if payload.Name:
+            linked_from_lis.caller_name = payload.Name
+        if payload.Telefon:
+            linked_from_lis.caller_phone = payload.Telefon
         write_audit(db, "api.incident.linked_lis", api_key_id=api_key.id,
                     incident_id=linked_from_lis.id, ip=request.client.host if request.client else None)
         board_token, board_url = _get_or_create_board_token(
@@ -561,6 +565,8 @@ async def create_incident_api(
         address_city=payload.Ort,
         report_text=payload.Meldung,
         reason=payload.Einsatzgrund,
+        caller_name=payload.Name,
+        caller_phone=payload.Telefon,
         primary_org_id=api_key.org_id,
         api_key_id=api_key.id,
         ip=request.client.host if request.client else None,
