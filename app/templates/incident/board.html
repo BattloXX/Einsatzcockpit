@@ -188,6 +188,28 @@
     <a href="/einsatz/{{ incident.id }}/mannschaft" class="btn btn--sm btn--secondary incident-header__navlink"
        {{ tip('Mannschaft – Teilnehmerliste und Einsatzkräfte') }}>👥 Mannschaft</a>
 
+    {# ── Zu-/Absage-Zähler (Teams-Alarmierung) — Desktop only ────────────── #}
+    <div class="header-dropdown header-dropdown--rsvp" x-data="rsvpWidget({{ incident.id }})"
+         @click.outside="open=false"
+         {{ tip('Zu-/Absagen aus der Teams-Alarmierung') }}>
+      <button class="btn btn--sm btn--secondary" @click="open=!open; if(open) load()">
+        <span class="badge-pill badge-pill--green" x-text="zusagen">0</span>
+        <span class="badge-pill badge-pill--red" x-text="absagen">0</span>
+        <span class="dropdown-arrow" :class="open && 'open'">▾</span>
+      </button>
+      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms style="min-width:220px;">
+        <template x-if="namen.length === 0">
+          <div class="dropdown-item" style="cursor:default;color:var(--text-muted);">Noch keine Antworten</div>
+        </template>
+        <template x-for="n in namen" :key="n.name + n.status">
+          <div class="dropdown-item" style="cursor:default;">
+            <span class="di-icon" x-text="n.status === 'zugesagt' ? '✅' : '❌'"></span>
+            <span x-text="n.name"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
     {# ── KI-Dropdown (nur wenn KI aktiv) ─────────────────────────────────── #}
     {% if can_edit and ai_enabled %}
     <div class="header-dropdown header-dropdown--ki" x-data="{open:false}" @click.outside="open=false">

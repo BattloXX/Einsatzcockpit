@@ -58,6 +58,7 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **SMS-Gateway-Anbindung** | Native Android-App verbindet sich ausgehend über WebSocket (Token-Auth, QR-Code-Setup) und versendet/empfängt SMS über die eingebaute SIM-Karte; SMS-Verifikation der Telefonnummer im Bürgerportal |
 | **SMS-Einsatzinfo** | Konfigurierbarer automatischer SMS-Versand bei Alarm an Gruppen/Mitglieder — Basis-Verteiler (alle Stichworte) + Stichwort-Override, Vorlage mit Platzhaltern (`{stichwort}`, `{adresse}`, `{meldung}`, ...); zusätzlich manueller Versand an Gruppen/Mitglieder/Ad-hoc-Nummer |
 | **SMS-Empfang & Weiterleitung** | Eingehende SMS werden protokolliert und per Regeln (Nummer exakt/Präfix) an Teams-Webhook, SMS-Gruppen, Mitglieder oder Ad-hoc-Nummern weitergeleitet |
+| **Teams-Alarmierung** | Vollständige Alarm-Karte (Stichwort, Adresse, OSM-Kartenbild, Google-Maps-Link, No-Login-Alarmübersicht) bei jeder Einsatzanlage (API/LIS/manuell), getrennte Ziele für Echtalarm/Übung; einfacher Webhook-Modus (kein Azure nötig) + separat schaltbare Bot-Erweiterung mit Zusage/Absage direkt in Teams (Abgleich per Mannschaftsregister-E-Mail); Zu-/Absage-Zähler am Einsatz-Board (Desktop) |
 | **KI-Assistent (✨)** | Auftragsvorschläge, Lage-Ticker-Hinweise, Lagebild und automatische Priorisierung via Anthropic Claude; opt-in pro Org |
 | **Org-Konfig-Backup** | JSON-Export/Import der Org-Konfiguration inkl. Dry-Run-Diff |
 | **System-Admin-Konsole** | Per-Org KPI-Übersicht mit Schnellzugriff für Systemadministratoren |
@@ -455,6 +456,7 @@ alembic downgrade -1
 | `0113_sms_inbox_forward.py` | SMS-Empfang: `SmsInbox`, `SmsForwardRule` (+Ziele), OrgSettings-Schalter |
 | `0114_lis_integration.py` | LIS/IPR-Anbindung: `OrgLisConfig`, `LisSyncedObject`, Fahrzeug-/Einsatz-/Meldungs-Verknüpfung |
 | `0115_incident_caller_info.py` | Einsatz: Anrufer-Name/-Telefonnummer (Alarm-Webhook, Anzeige only) |
+| `0116_teams_bot.py` | Teams-Alarmierung: `TeamsAlarmConfig`, `TeamsChannelBinding`, `TeamsCardPost`, `AlarmToken`, `Teilnahme.rsvp_*` |
 
 Vollständiger Migrationsleitfaden: [`docs/MIGRATION_RUNBOOK.md`](docs/MIGRATION_RUNBOOK.md)
 
@@ -648,6 +650,8 @@ tests/
 │    ui_fahrtenbuch   – Fahrtenbuch Erfassung + Verwaltung │
 │    ui_lis           – LIS/IPR-Admin (Konfig, Diagnose)   │
 │    ui_sms           – SMS-Gruppen, Einsatzinfo, Versand │
+│    ui_teams_bot     – Teams-Alarmierung-Admin (Webhook/Bot) │
+│    teams_bot        – Öffentl. Alarmübersicht + Kartenbild │
 │    auth             – Login/Logout/QR-Login             │
 │                                                         │
 │  Core:                                                  │
@@ -693,6 +697,11 @@ tests/
 │    lis/lis_sync          – LIS/IPR-Poll-Loop, Einsatz-,  │
 │                            Fahrzeug-, Meldungs-Abgleich  │
 │    lis/lis_client        – LIS/IPR SOAP-Client (WCF)     │
+│    incident_notify       – SMS+Push+Teams-Orchestrator   │
+│    staticmap_service     – OSM-Kartenbild-Rendering       │
+│    teams_card            – Teams-Kartenaufbau            │
+│    teams_alarm_service   – Teams-Dispatch (Webhook/Bot)  │
+│    teams_bot_service     – Teams-Bot-Versand (Ausgang)   │
 │    seed_service          – Seed-Template-Anwendung       │
 └────────────────────────────┬────────────────────────────┘
               ┌──────────────┼──────────────┐
@@ -902,6 +911,8 @@ app/
 │   ├── ui_password_reset.py
 │   ├── ui_lis.py              LIS/IPR-Admin-UI (/admin/lis: Org-Konfig, Verbindungstest, Diagnose-Aufzeichnung)
 │   ├── ui_sms.py              SMS-Gruppen, Einsatzinfo-Vorlagen, manueller Versand, Weiterleitungsregeln
+│   ├── ui_teams_bot.py        Teams-Alarmierung-Admin-UI (/admin/teams-alarmierung: Webhook + Bot-Konfig, Kanalbindungen, Testkarte)
+│   ├── teams_bot.py           Öffentliche Alarmübersicht (/alarm/{token}) + Kartenbild-Endpoint
 │   ├── public.py             Öffentliches Bürger-Meldeportal (+ SMS-Verifikation)
 │   ├── api_v1.py             REST-API (Alarmierung, Lage-Alarm)
 │   ├── device_api.py         SMS-Gateway-/Geräte-WebSocket-Anbindung
@@ -940,6 +951,11 @@ app/
 │   ├── sms_inbox_service.py     SMS-Empfang: Log + Weiterleitungsregeln
 │   ├── lis/                     LIS/IPR-SOAP-Client, Sync-Orchestrierung (Poll-Loop), Mapping,
 │   │                            Matching, Geo-Umrechnung, Diagnose-Aufzeichnung
+│   ├── incident_notify.py       Zentraler Orchestrator: SMS + Push + Teams bei jeder Einsatzanlage
+│   ├── staticmap_service.py     OSM-Kartenbild rendern (staticmap, kein API-Key)
+│   ├── teams_card.py            Teams-Kartenaufbau (MessageCard, Inhalts-Schalter)
+│   ├── teams_alarm_service.py   Teams-Alarm-Dispatch: Webhook-Basis-Modus + Bot-Fallback-Logik
+│   ├── teams_bot_service.py     Teams-Bot-Versand (Ausgang) — Grundgerüst, Live-Verifikation ausständig
 │   ├── mail_service.py          SMTP (Passwort-Reset, Einladungen)
 │   └── update_service.py        ZIP-Update + Alembic-Migration
 ├── static/

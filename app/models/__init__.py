@@ -73,6 +73,7 @@ from app.models.sms import (
     SmsLog,
 )
 from app.models.sso import OrgSsoConfig, OrgSsoGroupMap
+from app.models.teams_bot import AlarmToken, TeamsAlarmConfig, TeamsCardPost, TeamsChannelBinding
 from app.models.teilnahme import Funktion, Teilnahme, Termin
 from app.models.uas import (
     UASCheckliste,
@@ -114,6 +115,7 @@ from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherA
 __all__ = [
     "OrgSsoConfig", "OrgSsoGroupMap",
     "OrgLisConfig", "LisSyncedObject",
+    "TeamsAlarmConfig", "TeamsChannelBinding", "TeamsCardPost", "AlarmToken",
     "User", "Role", "UserRole", "ApiKey", "AuditLog", "PushSubscription",
     "DeviceToken", "FcmToken", "PushLog", "SmsGatewayToken",
     "FireDept", "VehicleMaster", "Member", "Qualification", "MemberQualification",

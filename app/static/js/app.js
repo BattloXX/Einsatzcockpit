@@ -163,6 +163,33 @@ document.addEventListener('alpine:init', () => {
 });
 
 
+/* ─── Zu-/Absage-Widget (Teams-Alarmierung) im Board-Header (Desktop only —
+   .incident-header__actions ist auf Mobil bereits per CSS ausgeblendet) ─── */
+function rsvpWidget(incidentId) {
+  return {
+    open: false,
+    zusagen: 0,
+    absagen: 0,
+    namen: [],
+
+    init() {
+      this.load();
+      window.addEventListener('rsvp-refresh', () => this.load());
+    },
+
+    async load() {
+      try {
+        const res = await fetch(`/einsatz/${incidentId}/rsvp.json`);
+        if (!res.ok) return;
+        const data = await res.json();
+        this.zusagen = data.zusagen || 0;
+        this.absagen = data.absagen || 0;
+        this.namen = data.namen || [];
+      } catch (_) { /* still — Widget zeigt einfach den letzten bekannten Stand */ }
+    },
+  };
+}
+
 /* ─── Incident Header (timer + last-update only, no WS) ─────────── */
 function headerState(startedAt) {
   return {
@@ -298,6 +325,9 @@ function incidentBoard(incidentId, alarm, startedAt) {
           if (ev.type === 'autoclose_dismissed') {
             const banner = document.getElementById('autocloseBanner');
             if (banner) banner.remove();
+          }
+          if (ev.type === 'rsvp:changed') {
+            window.dispatchEvent(new CustomEvent('rsvp-refresh'));
           }
         };
         ws.onclose = () => {

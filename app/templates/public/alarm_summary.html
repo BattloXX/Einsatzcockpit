@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#d42225">
+  <title>Einsatz {{ incident.alarm_type_code }} – {{ brand }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <div class="login-card" style="max-width:480px;">
+      <div class="login-logo">
+        <img src="/static/img/logo_einsatzcockpit.png" alt="{{ brand }}"
+             onerror="this.style.display='none'" class="login-logo__img">
+        <p class="login-logo__sub">{{ brand_tagline }}</p>
+      </div>
+
+      {% if incident.is_exercise %}
+      <div class="exercise-topbar" style="margin:0 0 14px;">&#x26A0; ÜBUNG / SIMULATION &#x26A0;</div>
+      {% endif %}
+
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
+        <div>
+          <div style="font-weight:700;">Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</div>
+          <div style="font-size:.82rem;color:var(--text-muted);">
+            {{ incident.started_at|local_datetime if incident.started_at else '' }} Uhr
+          </div>
+        </div>
+      </div>
+
+      <dl class="detail-list" style="margin-bottom:14px;">
+        <dt>Adresse</dt>
+        <dd>{{ incident.address_street or '–' }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</dd>
+        {% if incident.report_text %}
+        <dt>Meldung</dt><dd>{{ incident.report_text }}</dd>
+        {% endif %}
+        {% if incident.reason %}
+        <dt>Einsatzgrund</dt><dd>{{ incident.reason }}</dd>
+        {% endif %}
+      </dl>
+
+      {% if has_coords %}
+      <img src="{{ map_png_url }}" alt="Kartenausschnitt" loading="lazy"
+           style="width:100%;border-radius:8px;margin-bottom:14px;display:block;">
+      {% endif %}
+
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        {% if gmaps_url %}
+        <a href="{{ gmaps_url }}" target="_blank" rel="noopener" class="btn btn--primary btn--full">
+          &#x1F5FA; In Google Maps öffnen
+        </a>
+        {% endif %}
+      </div>
+
+      <p style="text-align:center;margin-top:18px;font-size:.78rem;color:var(--text-muted);">
+        Diese Übersicht enthält keine Mannschafts- oder Personendaten.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

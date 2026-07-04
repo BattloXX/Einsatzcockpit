@@ -29,7 +29,7 @@ from app.models.user import ApiKey
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.broadcast import broadcast_org
 from app.services.incident_service import create_incident
-from app.services.push_service import notify_all, notify_org
+from app.services.push_service import notify_org
 
 router = APIRouter(prefix="/api/v1", tags=["Einsätze"])
 
@@ -644,35 +644,22 @@ async def create_incident_api(
         _create_neighbor_invitations_api, db, incident, alarm_type_code, api_key.org_id,
     )
 
-    # Einsatzinfo-SMS in Background – nach Gateway-Status und Org-Einstellungen gated
-    if api_key.org_id:
-        from app.services.sms_dispatch_service import dispatch_einsatzinfo
-        background_tasks.add_task(
-            dispatch_einsatzinfo,
-            api_key.org_id,
-            alarm_type_code,
-            address,
-            payload.Ort,
-            payload.Meldung,
-            payload.Einsatzgrund,
-            payload.Uebung,
-        )
-
-    # Web Push in Background – blockierende Netzwerk-Calls (pywebpush/FCM) nicht im Event-Loop
-    push_title = f"{exercise_prefix}🚒 Einsatz: {alarm_type_code}"
-    push_body = address or payload.Meldung or "Kein Ort angegeben"
+    # Einsatzinfo-SMS + Web-Push (+ Teams) – zentral gebuendelt, damit alle Erzeugungspfade
+    # (API/manuell/LIS) konsistent alarmieren (siehe incident_notify.py). Der Aufruf selbst
+    # ist synchron/billig – er meldet SMS+Push nur als BackgroundTasks an, wie bisher.
     if _mi_site:
         push_url = f"/lage/{_mi_site.major_incident_id}?open_site={_mi_site.id}"
     else:
         push_url = f"/einsatz/{incident.id}"
-    if api_key.org_id:
-        background_tasks.add_task(
-            notify_org, db, api_key.org_id, push_title, push_body, push_url,
-        )
-    else:
-        background_tasks.add_task(
-            notify_all, db, push_title, push_body, push_url,
-        )
+    from app.services.incident_notify import notify_incident_created
+    await notify_incident_created(
+        db, incident,
+        org_id=api_key.org_id,
+        triggered_by_user_id=api_key.created_by_user_id,
+        push_url=push_url,
+        base_url=str(request.base_url),
+        background_tasks=background_tasks,
+    )
 
     board_token, board_url = run_side_effect(
         "board_token",

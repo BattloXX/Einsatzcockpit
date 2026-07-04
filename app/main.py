@@ -27,6 +27,7 @@ from app.routers import (
     lagekarte_api,
     public,
     sso,
+    teams_bot,
     ui_admin,
     ui_ai_prompts,
     ui_archive,
@@ -51,6 +52,7 @@ from app.routers import (
     ui_sso,
     ui_stats,
     ui_sysadmin,
+    ui_teams_bot,
     ui_termin,
     ui_uas,
     ui_verleih,
@@ -428,6 +430,7 @@ app.include_router(api_v1.router)
 app.include_router(api_weather.router)
 app.include_router(device_api.router)
 app.include_router(lagekarte_api.router)
+app.include_router(teams_bot.router)
 app.include_router(ws.router)
 app.include_router(ui_incident.router)
 app.include_router(ui_invitation.router)
@@ -445,6 +448,7 @@ app.include_router(ui_push.router)
 app.include_router(ui_settings.router)
 app.include_router(ui_sso.router)
 app.include_router(ui_lis.router)
+app.include_router(ui_teams_bot.router)
 app.include_router(ui_sysadmin.router)
 app.include_router(ui_ai_prompts.router)
 app.include_router(ui_profile.router)

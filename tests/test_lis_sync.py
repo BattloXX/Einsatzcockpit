@@ -346,6 +346,112 @@ def test_close_incidents_missing_from_lis_ignores_incidents_without_lis_link():
         db.close()
 
 
+# ── sync_operation: SMS+Push muessen bei neu angelegtem Einsatz feuern ──────
+
+class _FakeLisClientNoTasks:
+    """Minimaler Fake fuer sync_operation() – keine Aufgaben/Einheiten/Dokumente,
+    nur der Neuanlage-Pfad interessiert hier."""
+
+    async def get_tasks(self, operation_id):
+        return []
+
+    async def get_operation_units(self, organization_id, operation_id):
+        return []
+
+    async def get_documents_by_operation_id(self, operation_id):
+        return []
+
+
+def test_sync_operation_new_incident_triggers_notify(monkeypatch):
+    """Bisher loeste der LIS-Sync bei automatischer Neuanlage weder SMS noch Push
+    aus (kein Request-Kontext -> kein BackgroundTasks). sync_operation() muss jetzt
+    fuer einen neu angelegten Einsatz notify_incident_created() aufrufen."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        from app.models.lis import OrgLisConfig
+        config = OrgLisConfig(org_id=ORG_ID, organization_id="org-guid")
+
+        calls = []
+
+        async def fake_notify(db_arg, incident, *, org_id, background_tasks=None, **kw):
+            calls.append((incident.id, org_id, background_tasks))
+
+        monkeypatch.setattr(
+            "app.services.incident_notify.notify_incident_created", fake_notify,
+        )
+
+        raw_op = {
+            "Id": "lis-op-notify-test",
+            "Number": "f900001",
+            "Name": "Verkehrsunfall",
+            "Description": "Verkehrsunfall",
+            "BeginTime": "2026-07-04T10:00:00",
+            "Address": {"Street": "Teststrasse", "Housenumber": "1", "Community": "Wolfurt"},
+            "Type": {"Code": "t4", "Type": "Verkehrsunfall"},
+        }
+
+        asyncio.run(
+            lis_sync.sync_operation(db, org, config, _FakeLisClientNoTasks(), raw_op)
+        )
+
+        assert len(calls) == 1
+        incident_id, org_id, background_tasks = calls[0]
+        assert org_id == ORG_ID
+        assert background_tasks is None
+        incident = db.get(Incident, incident_id)
+        assert incident.lis_operation_id == "lis-op-notify-test"
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_operation_linked_incident_does_not_trigger_notify(monkeypatch):
+    """Wird eine LIS-Operation nur mit einem bereits bestehenden Einsatz verknuepft
+    (nicht neu angelegt), darf keine erneute Benachrichtigung ausgeloest werden."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        from app.models.lis import OrgLisConfig
+        config = OrgLisConfig(org_id=ORG_ID, organization_id="org-guid")
+
+        calls = []
+
+        async def fake_notify(*a, **kw):
+            calls.append(1)
+
+        monkeypatch.setattr(
+            "app.services.incident_notify.notify_incident_created", fake_notify,
+        )
+
+        existing = Incident(
+            primary_org_id=ORG_ID, alarm_type_code="T4", status="active",
+            reason="Verkehrsunfall", address_street="Bundesstraße", address_no="1",
+            address_city="Wolfurt", started_at=datetime(2026, 7, 4, 10, 0, tzinfo=UTC),
+            lis_operation_id="lis-op-already-linked",
+        )
+        db.add(existing)
+        db.flush()
+
+        raw_op = {
+            "Id": "lis-op-already-linked",
+            "Number": "f900002",
+            "Name": "Verkehrsunfall",
+            "BeginTime": "2026-07-04T10:00:00",
+            "Address": {"Street": "Bundesstraße", "Housenumber": "1", "Community": "Wolfurt"},
+            "Type": {"Code": "t4", "Type": "Verkehrsunfall"},
+        }
+
+        asyncio.run(
+            lis_sync.sync_operation(db, org, config, _FakeLisClientNoTasks(), raw_op)
+        )
+
+        assert calls == []
+    finally:
+        db.rollback()
+        db.close()
+
+
 def test_sync_vehicle_location_ignores_unmapped_reference_id():
     """Einheiten ohne passende lis_reference_id (z.B. Personen wie
     'markus.bereiter') dürfen keine Fahrzeugposition erzeugen — Personen- und

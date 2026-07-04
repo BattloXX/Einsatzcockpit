@@ -474,6 +474,18 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
             "title": f"Neuer Einsatz aus LIS: {parsed['alarm_type_code']}",
         })
 
+        # SMS-Einsatzinfo + Web-Push (+ Teams) – bisher loeste der LIS-Sync ueberhaupt
+        # keine Benachrichtigung aus (kein Request-Kontext -> kein BackgroundTasks).
+        # Gleiche zentrale Funktion wie API/manuelle Anlage (incident_notify.py),
+        # hier ohne background_tasks direkt ausgefuehrt.
+        from app.config import settings
+        from app.services.incident_notify import notify_incident_created
+        await notify_incident_created(
+            db, incident, org_id=org.id,
+            base_url=settings.effective_public_base_url,
+            background_tasks=None,
+        )
+
 
 # ── Backfill (historische Einsätze) ──────────────────────────────────────────
 async def backfill_organization(

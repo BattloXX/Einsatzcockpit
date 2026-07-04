@@ -70,6 +70,10 @@ class Incident(Base):
     lagekarte_shash_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Auto-generierter GeoJSON-Feed-Token (Plain-Text für Anzeige im Adress-Modal)
     auto_geojson_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Auto-generierter Token für die öffentliche No-Login-Alarmübersicht/Kartenbild
+    # (Teams-Alarmkarte, QR-Link) — Plain-Text hier für Wiederverwendung beim Kartenaufbau,
+    # Hash liegt zusätzlich in AlarmToken (app/models/teams_bot.py) für den Auth-Lookup.
+    alarm_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # KI-generierter Verlaufsberichtsentwurf (Phase 1)
     ai_report_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
     # KI-generierte Lage-Hinweise als JSON-Array von Strings

@@ -96,6 +96,11 @@ class Teilnahme(TenantScoped, Base):
     notiz: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ausgerueckt: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     entschuldigt: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # RSVP (Zu-/Absage) über die Teams-Alarmierung — unabhängig von ausgerueckt/entschuldigt,
+    # die erst nachträglich (tatsächliche Teilnahme) gepflegt werden. NULL = keine Antwort.
+    rsvp_status: Mapped[str | None] = mapped_column(Enum("zugesagt", "abgesagt"), nullable=True)
+    rsvp_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rsvp_source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # z.B. "teams"
     hinzugefuegt_von: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )

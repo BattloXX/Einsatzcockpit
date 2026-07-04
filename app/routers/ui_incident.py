@@ -390,21 +390,16 @@ async def new_incident(
         _create_neighbor_invitations, db, incident, alarm_type_code, user.org_id, user.id,
     )
 
-    # Einsatzinfo-SMS in Background – nach Gateway-Status und Org-Einstellungen gated
-    if user.org_id:
-        from app.services.sms_dispatch_service import dispatch_einsatzinfo
-        address_str = " ".join(filter(None, [address_street, address_no, address_city]))
-        background_tasks.add_task(
-            dispatch_einsatzinfo,
-            user.org_id,
-            alarm_type_code,
-            address_str,
-            address_city or None,
-            report_text or None,
-            None,  # einsatzgrund: nur ueber API verfuegbar
-            is_exercise,
-            user.id,
-        )
+    # Einsatzinfo-SMS + Web-Push (+ Teams) – zentral gebuendelt, damit auch der manuelle
+    # Pfad wie API/LIS konsistent alarmiert (bisher fehlte hier Push, siehe incident_notify.py)
+    from app.services.incident_notify import notify_incident_created
+    await notify_incident_created(
+        db, incident,
+        org_id=user.org_id,
+        triggered_by_user_id=user.id,
+        base_url=str(request.base_url),
+        background_tasks=background_tasks,
+    )
 
     if ai_is_enabled() and not is_exercise:
         background_tasks.add_task(
@@ -1942,6 +1937,44 @@ def incident_history(incident_id: int, request: Request, db: Session = Depends(g
     changes = combined_verlauf(db, incident_id, limit=500)
     return templates.TemplateResponse(request, "incident/history.html", {
         "user": user, "incident": incident, "changes": changes,
+    })
+
+
+# ── Zu-/Absage-Widget im Board-Header (Desktop) ──────────────────────────────
+# Zeigt die per Teams-Alarmierung eingegangenen Zusagen/Absagen (Teilnahme.rsvp_status).
+# Solange die Bot-Erweiterung nicht produktiv ist, kommen hier schlicht noch keine Zeilen
+# an (0/0) — das Widget selbst funktioniert unabhängig davon schon jetzt.
+
+@router.get("/einsatz/{incident_id}/rsvp.json")
+def incident_rsvp_summary(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    incident = _incident_or_404(incident_id, db)
+
+    from fastapi.responses import JSONResponse
+
+    from app.models.teilnahme import Teilnahme
+    rows = (
+        db.query(Teilnahme)
+        .filter(
+            Teilnahme.org_id == incident.primary_org_id,
+            Teilnahme.bezug_typ == "einsatz",
+            Teilnahme.bezug_id == incident.id,
+            Teilnahme.rsvp_status.isnot(None),
+        )
+        .execution_options(include_all_tenants=True)
+        .all()
+    )
+    zusagen = [r for r in rows if r.rsvp_status == "zugesagt"]
+    absagen = [r for r in rows if r.rsvp_status == "abgesagt"]
+    return JSONResponse({
+        "zusagen": len(zusagen),
+        "absagen": len(absagen),
+        "namen": [
+            {"name": r.anzeige_name, "status": r.rsvp_status}
+            for r in sorted(rows, key=lambda r: (r.rsvp_status or "", r.anzeige_name))
+        ],
     })
 
 

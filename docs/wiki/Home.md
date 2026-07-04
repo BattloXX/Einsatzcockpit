@@ -13,6 +13,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Automatische Einsatzanlage aus dem Alarmierungssystem (REST-API, idempotent)
 - LIS/IPR-Anbindung an das Leitstellensystem: Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus, Meldungen, automatisches Schließen
 - SMS-Einsatzinfo bei Alarm sowie SMS-Empfang mit Weiterleitungsregeln (Teams, Gruppen, Mitglieder, Ad-hoc)
+- Teams-Alarmierung: vollständige Alarm-Karte (Kartenbild, Google-Maps-Link, No-Login-Alarmübersicht) bei jeder Einsatzanlage, optional mit Bot-Zusage/-Absage
 - Gesetzeskonforme Atemschutzüberwachung mit Rückzugsdruckberechnung
 - Mannschaftsregister mit Qualifikationen und Ablaufdaten
 - Archiv mit vollständigem Audit-Log und PDF-Export
@@ -88,6 +89,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Fahrtenbuch](Administration-Fahrtenbuch) | Fahrzeuge konfigurieren, Zwecke/Zielorte, Token/QR, Schadensmeldung, Fahrten-Verwaltung |
 | [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
 | [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
+| [Teams-Alarmierung](Administration-Teams-Alarmierung) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
 
 ### Entwickler
 | Seite | Beschreibung |

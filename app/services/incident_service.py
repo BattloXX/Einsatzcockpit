@@ -263,6 +263,17 @@ def create_incident(
     db.add(incident)
     db.flush()  # get id
 
+    # Token für die öffentliche No-Login-Alarmübersicht (Teams-Karte, QR-Link) — Plain-Text
+    # auf dem Incident selbst (analog auto_geojson_token) für spätere Wiederverwendung.
+    from app.models.teams_bot import AlarmToken as _AlarmToken
+    _alarm_raw_token = "alm_" + _secrets.token_urlsafe(32)
+    incident.alarm_token = _alarm_raw_token
+    db.add(_AlarmToken(
+        incident_id=incident.id,
+        token_hash=hashlib.sha256(_alarm_raw_token.encode()).hexdigest(),
+        created_at=_now(),
+    ))
+
     if resolved_org_id:
         lk_token = LagekarteToken(
             token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
@@ -515,6 +526,13 @@ def close_incident(db: Session, incident: Incident, user_id: int | None = None) 
     db.query(LagekarteToken).filter(
         LagekarteToken.einsatz_id == incident.id,
         LagekarteToken.revoked_at.is_(None),
+    ).update({"revoked_at": now}, synchronize_session=False)
+    # Revoke den öffentlichen Alarm-Token (Teams-Karte, QR-Link) — nach Abschluss nicht
+    # mehr sinnvoll erreichbar
+    from app.models.teams_bot import AlarmToken
+    db.query(AlarmToken).filter(
+        AlarmToken.incident_id == incident.id,
+        AlarmToken.revoked_at.is_(None),
     ).update({"revoked_at": now}, synchronize_session=False)
     db.flush()
     write_audit(db, "incident.closed", incident_id=incident.id, user_id=user_id)

@@ -62,6 +62,9 @@ dependencies = [
     "pyproj>=3.6",
     # HTML-Sanitisierung (Quill-Output für Einsatzjournal)
     "nh3>=0.2",
+    # Statisches OSM-Kartenbild für die Teams-Alarmkarte (rendert direkt aus OSM-Tiles,
+    # kein API-Key nötig)
+    "staticmap>=0.5.7",
 ]
 
 [project.optional-dependencies]
