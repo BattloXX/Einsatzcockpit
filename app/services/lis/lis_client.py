@@ -163,7 +163,10 @@ class LisClient:
 
     # ── Login / Session ────────────────────────────────────────────────────
     async def login(self) -> None:
-        password_hash = self.password if self.password_is_hash else hashlib.sha1(self.password.encode("utf-8")).hexdigest()
+        if self.password_is_hash:
+            password_hash = self.password
+        else:
+            password_hash = hashlib.sha1(self.password.encode("utf-8")).hexdigest()
         body = (
             f'<Login xmlns="{_NS_CORE}">'
             f"<site>{_xml_escape(self.site)}</site>"
