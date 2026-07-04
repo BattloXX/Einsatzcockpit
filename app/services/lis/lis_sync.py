@@ -398,6 +398,43 @@ async def _sync_documents(db: Session, org: FireDept, incident, client: LisClien
         logger.info("Dokument %s aus LIS auf Einsatz %s übernommen", filename, incident.id)
 
 
+# ── Einsätze schließen, deren Operation in LIS nicht mehr aktiv ist ─────────
+async def _close_incidents_missing_from_lis(
+    db: Session, org: FireDept, active_operation_ids: set[str],
+) -> None:
+    """GetOperationsInRange liefert keinen eigenen Status-/Closed-Flag pro
+    Operation — das einzige verfügbare Signal für "in LIS abgeschlossen" ist,
+    dass die Operation nicht mehr im ActiveParticipation-Ergebnis auftaucht.
+    Schließt daher alle noch aktiven, über LIS angelegten/verknüpften Einsätze
+    dieser Org, deren lis_operation_id nicht mehr in der aktuellen aktiven Menge
+    ist (siehe sync_organization())."""
+    from app.models.incident import Incident
+    from app.services.broadcast import manager
+    from app.services.incident_service import close_incident
+
+    stale = (
+        db.query(Incident)
+        .filter(
+            Incident.primary_org_id == org.id,
+            Incident.status == "active",
+            Incident.lis_operation_id.isnot(None),
+            Incident.lis_operation_id.notin_(active_operation_ids),
+        )
+        .all()
+    )
+    for incident in stale:
+        close_incident(db, incident, user_id=None)
+        db.commit()
+        logger.info(
+            "Einsatz %s automatisch geschlossen (LIS-Operation %s nicht mehr aktiv, Org %s)",
+            incident.id, incident.lis_operation_id, org.id,
+        )
+        try:
+            await manager.broadcast(incident.id, {"type": "incident_closed"})
+        except Exception:
+            logger.exception("LIS-Auto-Close: Broadcast für Einsatz %s fehlgeschlagen", incident.id)
+
+
 # ── Ein Operation-Objekt vollständig verarbeiten ─────────────────────────────
 async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, client: LisClient, op: dict) -> None:
     parsed = _parse_operation(op, org)
@@ -501,10 +538,21 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
         logger.exception("LIS SelectOperation für Org %s fehlgeschlagen", org.id)
         return
 
+    operations: list[dict] = []
+    start_index = 0
+    count = 50
     try:
-        operations = await client.get_operations_in_range(
-            config.organization_id, operation_filter="ActiveParticipation",
-        )
+        while True:
+            batch = await client.get_operations_in_range(
+                config.organization_id, operation_filter="ActiveParticipation",
+                count=count, start_index=start_index,
+            )
+            if not batch:
+                break
+            operations.extend(batch)
+            if len(batch) < count:
+                break
+            start_index += count
     except LisClientError:
         logger.exception("LIS-Abfrage (ActiveParticipation) für Org %s fehlgeschlagen", org.id)
         return
@@ -518,5 +566,8 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
             logger.exception(
                 "LIS-Operation %s (Org %s) konnte nicht synchronisiert werden", op.get("Id"), org.id,
             )
+
+    active_operation_ids = {op.get("Id") for op in operations if op.get("Id")}
+    await _close_incidents_missing_from_lis(db, org, active_operation_ids)
 
     await _maybe_backfill(db, org, config, client)

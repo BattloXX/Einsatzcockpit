@@ -1,6 +1,9 @@
 """Tests für lis_sync._get_or_link_incident: verbinden statt duplizieren, in
 beiden Reihenfolgen (LIS zuerst / API zuerst) — sowie _sync_vehicle_status für
-Fahrzeugstatus (S4/S5) und Fahrzeugposition (LocationX/LocationY)."""
+Fahrzeugstatus (S4/S5), Fahrzeugposition (LocationX/LocationY) und
+_close_incidents_missing_from_lis (Auto-Close, wenn eine Operation in LIS
+nicht mehr aktiv ist)."""
+import asyncio
 from datetime import UTC, datetime
 
 from app.core.tenant import set_tenant_context
@@ -268,6 +271,76 @@ def test_sync_vehicle_location_skipped_when_coordinates_missing():
 
         assert db.query(VehiclePosition).filter(VehiclePosition.vehicle_id == vehicle_master.id).count() == 0
         assert incident_vehicle.unit_status == "Einsatz übernommen"
+    finally:
+        db.rollback()
+        db.close()
+
+
+# ── Auto-Close: LIS-Operation nicht mehr aktiv → Einsatz schließen ─────────
+
+def test_close_incidents_missing_from_lis_closes_stale_incident():
+    """Ein über LIS verknüpfter, noch aktiver Einsatz wird geschlossen, sobald
+    seine Operation nicht mehr im aktuellen ActiveParticipation-Ergebnis ist."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _ = lis_sync._get_or_link_incident(
+            db, org, _parsed(lis_operation_id="lis-op-wird-geschlossen"),
+        )
+        db.commit()
+
+        asyncio.run(lis_sync._close_incidents_missing_from_lis(db, org, set()))
+        db.commit()
+
+        db.refresh(incident)
+        assert incident.status == "closed"
+        assert incident.closed_at is not None
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_close_incidents_missing_from_lis_keeps_still_active_incident():
+    """Taucht die Operation weiterhin im aktiven Ergebnis auf, bleibt der
+    Einsatz unangetastet."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _ = lis_sync._get_or_link_incident(
+            db, org, _parsed(lis_operation_id="lis-op-bleibt-aktiv"),
+        )
+        db.commit()
+
+        asyncio.run(
+            lis_sync._close_incidents_missing_from_lis(db, org, {"lis-op-bleibt-aktiv"}),
+        )
+        db.commit()
+
+        db.refresh(incident)
+        assert incident.status == "active"
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_close_incidents_missing_from_lis_ignores_incidents_without_lis_link():
+    """Einsätze ohne lis_operation_id (rein manuell/API angelegt) dürfen durch
+    den LIS-Auto-Close niemals geschlossen werden."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        manual_incident = Incident(
+            primary_org_id=ORG_ID, alarm_type_code="T4", status="active",
+            reason="Verkehrsunfall", started_at=datetime(2026, 7, 4, 10, 0, tzinfo=UTC),
+        )
+        db.add(manual_incident)
+        db.commit()
+
+        asyncio.run(lis_sync._close_incidents_missing_from_lis(db, org, set()))
+        db.commit()
+
+        db.refresh(manual_incident)
+        assert manual_incident.status == "active"
     finally:
         db.rollback()
         db.close()
