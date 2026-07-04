@@ -39,6 +39,7 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **Media-Galerie** | Bilder, PDFs und Videos direkt an Aufträge anhängen; sichere Auslieferung über Auth-Route |
 | **Multi-Org-Support** | Mehrere Feuerwehren, gemeinsame Einsätze, eigene Stammdaten je Org; row-level isoliert via SQLAlchemy Event-Handler |
 | **REST-API** | Automatische Einsatzanlage aus dem Alarmierungssystem (idempotent); Rate-Limiting per API-Key |
+| **LIS/IPR-Anbindung** | Automatischer Einsatzabgleich mit dem Leitstellensystem (SOAP/WCF) der Landeswarnzentrale: Einsätze/Übungseinsätze werden angelegt bzw. mit bestehenden verknüpft, Fahrzeugstatus (S1–S6) und -position, Meldungen, Zu-/Absagen und Dokumente werden übernommen; Einsatz wird automatisch geschlossen, sobald die Operation in LIS endet; Leitstellen-Nr. als führende Kennung, Anrufer/Melder-Anzeige mit Klick-zum-Anrufen; Diagnose-Aufzeichnungstool (ZIP-Export) für Support |
 | **PDF-Export** | Einsatzbericht mit Zeitstempeln, Audit-Log, Geretteten als WeasyPrint-PDF |
 | **Archiv & Zeitreise** | Vollständiges Änderungsprotokoll; jeden Zustand in der Vergangenheit anzeigen |
 | **Web-Push-Benachrichtigungen** | PWA Push bei neuem Einsatz (VAPID) |
@@ -54,7 +55,9 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **SKKM-Lagemeldungs-Regelkreis** | Lage → Auftrag → Kontrolle: Fälligkeits-Timer je Einsatzstelle, automatischer Auftrag im Funkjournal bei Überfälligkeit, Live-Chip |
 | **Übergreifende Meldungen** | Cross-Marker mit Status-Workflow, Notizen & Medien, Kamera-/Galerie-Upload, OSM-Karte (Org-Standort), Bearbeiten & Drucken |
 | **Einsatzkarte (Detail-Panel)** | Live-Updates ohne Reload, Kräfteübersicht, Foto-Upload (Kamera/Galerie) mit Lightbox, Karten-Pin, Druck |
-| **SMS-Gateway-Anbindung** | Docker-Container verbindet sich ausgehend über WebSocket und versendet SMS via CoNiuGo-Modem; SMS-Verifikation der Telefonnummer im Bürgerportal |
+| **SMS-Gateway-Anbindung** | Docker-Container (CoNiuGo-Modem) oder native Android-App verbinden sich ausgehend über WebSocket (Token-Auth) mit der App und versenden/empfangen SMS; SMS-Verifikation der Telefonnummer im Bürgerportal |
+| **SMS-Einsatzinfo** | Konfigurierbarer automatischer SMS-Versand bei Alarm an Gruppen/Mitglieder — Basis-Verteiler (alle Stichworte) + Stichwort-Override, Vorlage mit Platzhaltern (`{stichwort}`, `{adresse}`, `{meldung}`, ...); zusätzlich manueller Versand an Gruppen/Mitglieder/Ad-hoc-Nummer |
+| **SMS-Empfang & Weiterleitung** | Eingehende SMS werden protokolliert und per Regeln (Nummer exakt/Präfix) an Teams-Webhook, SMS-Gruppen, Mitglieder oder Ad-hoc-Nummern weitergeleitet |
 | **KI-Assistent (✨)** | Auftragsvorschläge, Lage-Ticker-Hinweise, Lagebild und automatische Priorisierung via Anthropic Claude; opt-in pro Org |
 | **Org-Konfig-Backup** | JSON-Export/Import der Org-Konfiguration inkl. Dry-Run-Diff |
 | **System-Admin-Konsole** | Per-Org KPI-Übersicht mit Schnellzugriff für Systemadministratoren |
@@ -376,6 +379,12 @@ SSO_HTTP_TIMEOUT=10
 SSO_FLOW_MAX_AGE=600      # Sekunden: Gültigkeit des PKCE-Flow-Cookies
 SSO_JWKS_CACHE_TTL=3600   # Sekunden: JWKS-Public-Key-Cache
 SSO_SCOPES=openid profile email User.Read
+
+# ── LIS/IPR-Anbindung (Landeswarnzentrale) ─────────────────────────
+# Verbindungsdaten (URL, Org-/Site-Kennung, Zugangsdaten) werden pro Org unter
+# /admin/lis gepflegt (Fernet-verschlüsseltes Passwort) — hier nur der globale Loop.
+LIS_ENABLED=true          # Globaler Kill-Switch für den Hintergrund-Poll-Loop
+LIS_POLL_INTERVAL_S=30    # Poll-Intervall in Sekunden (gilt global, für alle Orgs)
 ```
 
 ---
@@ -434,6 +443,18 @@ alembic downgrade -1
 | `0097_weather_station.py` | Lokale Wetterstation: `weather_station`-Tabelle (Haupt-DB); `weather_reading` via `create_all` in separater Wetter-DB |
 | `0098–0100_fahrtenbuch_*.py` | Digitales Fahrtenbuch: Modelle, Stammdaten (Zweck, Zielort), Erfassungsformular, Token/QR, Admin-Verwaltung |
 | `0101_fahrtenbuch_seilwinde_felder.py` | Fahrtenbuch: `seilwinde_zuege` (INT) und `seilwinde_wartung` (TINYINT) in Tabelle `fahrt` |
+| `0102_infoscreen_history_hours.py` | Infoscreen: konfigurierbarer Verlauf-Zeitraum |
+| `0103_weather_alert_tables.py` | Unwetterwarnungen: Tabellen für Warnregionen/-events |
+| `0104_orgsettings_weather_alert.py` | OrgSettings: Unwetterwarnungs-Konfiguration je Org |
+| `0105_sms_einsatzinfo.py` | SMS-Einsatzinfo: Empfänger (Gruppen/Mitglieder), Vorlagen je Alarmtyp |
+| `0106–0108_teilnahme_*.py` | Teilnehmerlisten-Modul: Grunddaten, „ausgerückt"-Flag, „entschuldigt"-Flag |
+| `0109_vehicle_position_index_retention.py` | Fahrzeug-GPS-Positionshistorie: Index + Retention |
+| `0110_orgsettings_kachelmann.py` | OrgSettings: Kachelmann Plus-API-Konfiguration |
+| `0111_incident_column_section_leader.py` | Board: Abschnittsleiter-Feld |
+| `0112_atemschutz_pruefung.py` | Atemschutzüberwachung: Prüf-Feld |
+| `0113_sms_inbox_forward.py` | SMS-Empfang: `SmsInbox`, `SmsForwardRule` (+Ziele), OrgSettings-Schalter |
+| `0114_lis_integration.py` | LIS/IPR-Anbindung: `OrgLisConfig`, `LisSyncedObject`, Fahrzeug-/Einsatz-/Meldungs-Verknüpfung |
+| `0115_incident_caller_info.py` | Einsatz: Anrufer-Name/-Telefonnummer (Alarm-Webhook, Anzeige only) |
 
 Vollständiger Migrationsleitfaden: [`docs/MIGRATION_RUNBOOK.md`](docs/MIGRATION_RUNBOOK.md)
 
@@ -624,6 +645,8 @@ tests/
 │    device_api       – SMS-Gateway-/Geräte-Anbindung     │
 │    ws               – WebSocket Pub/Sub                 │
 │    ui_fahrtenbuch   – Fahrtenbuch Erfassung + Verwaltung │
+│    ui_lis           – LIS/IPR-Admin (Konfig, Diagnose)   │
+│    ui_sms           – SMS-Gruppen, Einsatzinfo, Versand │
 │    auth             – Login/Logout/QR-Login             │
 │                                                         │
 │  Core:                                                  │
@@ -664,13 +687,18 @@ tests/
 │    ai_service            – Anthropic Claude              │
 │    alarm_service         – Alarmtyp-Lookup               │
 │    sms_service           – SMS-Gateway-Versand           │
+│    sms_dispatch_service  – Einsatzinfo-SMS bei Alarm     │
+│    sms_inbox_service     – SMS-Empfang + Weiterleitung   │
+│    lis/lis_sync          – LIS/IPR-Poll-Loop, Einsatz-,  │
+│                            Fahrzeug-, Meldungs-Abgleich  │
+│    lis/lis_client        – LIS/IPR SOAP-Client (WCF)     │
 │    seed_service          – Seed-Template-Anwendung       │
 └────────────────────────────┬────────────────────────────┘
               ┌──────────────┼──────────────┐
 ┌─────────────▼──┐  ┌───────▼──────┐  ┌───▼──────────────┐
 │  MariaDB 10.11 │  │ MariaDB      │  │ app_storage/ │  │ app/static/      │
 │  (utf8mb4)     │  │ _weather     │  │ incident_    │  │ css, js, img     │
-│  97 Migrationen│  │ (Zeitreihe)  │  │ media/       │  │ (kein Auth nötig)│
+│ 115 Migrationen│  │ (Zeitreihe)  │  │ media/       │  │ (kein Auth nötig)│
 └────────────────┘  └─────────────┘  └─────────────┘  └──────────────────┘
 ```
 
@@ -698,7 +726,9 @@ Content-Type: application/json
   "Ort": "Wolfurt",
   "Strasse": "Senderstraße",
   "HausNr": "34",
-  "Uebung": false
+  "Uebung": false,
+  "Name": "Max Mustermann",
+  "Telefon": "+43 664 1234567"
 }
 ```
 
@@ -707,6 +737,7 @@ Content-Type: application/json
 - `Stufe`: wird normalisiert (z.B. `f3` → `F3`), max. 10 Zeichen
 - `Meldung`: max. 5000 Zeichen
 - `Nummer`: ≥ 0
+- `Name`/`Telefon`: optional, Anrufer/Melder — nur Anzeige (Alarm-Modal, Klick-zum-Anrufen), keine LIS-Quelle
 
 **Idempotenz:** Doppelter `Key` → `created: false`, vorhandene `incident_id` wird zurückgegeben.
 
@@ -845,6 +876,8 @@ app/
 │   ├── invitation.py    OrgInvitation
 │   ├── breathing.py     BreathingTroop, TroopMember, PressureLog
 │   ├── weather.py       WeatherStation (TenantScoped, Haupt-DB), WeatherReading (Wetter-DB)
+│   ├── lis.py           OrgLisConfig, LisSyncedObject
+│   ├── sms.py           SmsGroup, SmsEinsatzinfoRecipient, SmsLog, SmsForwardRule, SmsInbox (SmsGatewayToken in user.py)
 │   └── password_reset.py
 ├── routers/
 │   ├── ui_incident.py        Board, Aufgaben, Fahrzeuge, Media-Upload
@@ -866,10 +899,12 @@ app/
 │   ├── ui_stats.py           Statistik-Dashboard
 │   ├── ui_push.py            Web-Push-Verwaltung
 │   ├── ui_password_reset.py
+│   ├── ui_lis.py              LIS/IPR-Admin-UI (/admin/lis: Org-Konfig, Verbindungstest, Diagnose-Aufzeichnung)
+│   ├── ui_sms.py              SMS-Gruppen, Einsatzinfo-Vorlagen, manueller Versand, Weiterleitungsregeln
 │   ├── public.py             Öffentliches Bürger-Meldeportal (+ SMS-Verifikation)
 │   ├── api_v1.py             REST-API (Alarmierung, Lage-Alarm)
 │   ├── device_api.py         SMS-Gateway-/Geräte-WebSocket-Anbindung
-│   ├── ws.py                 WebSocket Pub/Sub
+│   ├── ws.py                 WebSocket Pub/Sub (inkl. /ws/sms-gateway)
 │   └── auth.py               Login / Logout / QR-Login / Geräte-Login
 ├── services/
 │   ├── incident_service.py      Einsatz-Logik, Spalten, Tasks
@@ -899,7 +934,11 @@ app/
 │   ├── ai_service.py            Anthropic Claude Integration
 │   ├── alarm_service.py         Alarmtyp-Lookup + org-aware
 │   ├── seed_service.py          Seed-Template-Anwendung bei Org-Anlage
-│   ├── sms_service.py           SMS-Versand via Gateway-Container
+│   ├── sms_service.py           SMS-Versand via Gateway (Docker-Container oder Android-App)
+│   ├── sms_dispatch_service.py  Einsatzinfo-SMS bei Alarm (Vorlage + Platzhalter)
+│   ├── sms_inbox_service.py     SMS-Empfang: Log + Weiterleitungsregeln
+│   ├── lis/                     LIS/IPR-SOAP-Client, Sync-Orchestrierung (Poll-Loop), Mapping,
+│   │                            Matching, Geo-Umrechnung, Diagnose-Aufzeichnung
 │   ├── mail_service.py          SMTP (Passwort-Reset, Einladungen)
 │   └── update_service.py        ZIP-Update + Alembic-Migration
 ├── static/
@@ -917,12 +956,12 @@ app/
     ├── media/               gallery.html
     ├── admin/               sysadmin_orgs.html, konfig.html, ...
     └── ...
-alembic/versions/            Migrationen 0001–0097
+alembic/versions/            Migrationen 0001–0115
 docs/
 ├── MIGRATION_RUNBOOK.md     Vollständiger Migrationsleitfaden
 ├── multi-tenancy-konzept.md Technisches Konzeptdokument
 └── wiki/                    GitHub-Wiki-Quelldateien (Home, Anwender, Admin, Entwickler)
-tests/                       pytest-Suite (35+ Testmodule, 458+ Tests)
+tests/                       pytest-Suite (59+ Testmodule, 660+ Tests)
 app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 ```
 
@@ -941,6 +980,7 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **3.1.0** | 2026-07-04 | LIS/IPR-Anbindung an das Leitstellensystem der Landeswarnzentrale (SOAP/WCF): automatischer Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus/-position, Meldungen, Zu-/Absagen, Dokumente, automatisches Schließen bei Abschluss in LIS, Leitstellen-Nr. als führende Kennung (Board, Archiv, Verlauf, PDF), Anrufer/Melder-Anzeige mit Klick-zum-Anrufen, Diagnose-Aufzeichnungstool; SMS-Empfang & Weiterleitung (Teams/Gruppen/Mitglieder/Ad-hoc) über Docker-Container oder native Android-Gateway-App |
 | **3.0.0** | 2026-07-01 | Rebrand zu Einsatzcockpit (einsatzcockpit.com); Teilnehmerlisten-Modul (Termine/Übungen/Mannschaft, Excel-Import, PDF/Druck mit Status, Entschuldigt-Checkbox); Mannschaft als eigene Seite; SMS-Einsatzinfo je Alarm-Stichwort + manueller Gruppenversand; automatische Wetterwarnungen per Mail/Teams; Security- & Stability-Hardening (14 PRs: Tenant-Backstop, XSS-Sanitizing, FERNET_KEY-Pflicht, Device-Session-Revoke, WS-Resync, PWA-Tile-Cache, Mobile-Performance); Board: Abschnittsleiter, Karten-Journal, Meldungs-Zuweisung, Sprachdiktat bei Auftrag/Meldung; lokal gehostete Fonts statt Google Fonts; zahlreiche Timezone-, Mobile- und CI-Fixes |
 | **2.9.0** | 2026-06-24 | Digitales Fahrtenbuch: Fahrterfassung mit km/BH-Zähler, Seilwinde (BH, Züge, Wartung), Maschinist-Autocomplete, Token/QR-Zugang ohne Login, Doppelfahrt-Erkennung, Schadensmeldung (Mail + Teams-Webhook), Korrektur-/Storno-Workflow; Admin-Bereich (Fahrzeuge, Zwecke, Zielorte, Einstellungen) |
 | **2.8.0** | 2026-06-23 | Lokale Wetterstation (Davis Vantage Pro 2 Plus / Meteobridge PRO RED): HTTPS-Push-Ingest mit `wxst_`-Token-Auth, Rate-Limiting 120/min, denormalisierter Ist-Stand-Snapshot (Haupt-DB), separate Zeitreihen-DB `einsatzleiter_weather` (kein Bloat), Online/Offline-Indikator (15-min-Schwelle), 24-h-Sparkline Temp/Wind (lazy HTMX), Echtzeit-Szenario-Analyse aus lokalen Messwerten (Sturm/Waldbrand/Glatteis), nächtliche Retention (03:30, tägl.); Token-Verwaltung in Org-Einstellungen |

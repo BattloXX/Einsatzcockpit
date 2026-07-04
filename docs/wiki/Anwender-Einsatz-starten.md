@@ -14,6 +14,16 @@ Das Alarmierungssystem sendet bei jedem Alarm automatisch eine Anfrage an die AP
 5. Alle verbundenen Geräte erhalten eine Toast-Benachrichtigung
 6. Push-Benachrichtigung an alle abonnierten Geräte
 
+## Automatisch über die Leitstelle (LIS/IPR)
+
+Ist die LIS-Anbindung für deine Organisation eingerichtet (siehe [LIS/IPR-Anbindung](Administration-LIS-Anbindung)), gleicht Einsatzcockpit im Hintergrund laufend mit dem Leitstellensystem ab:
+
+- Neue Einsätze **und Übungseinsätze** aus LIS werden automatisch angelegt bzw. mit einem bereits über die API angelegten Einsatz verknüpft (kein doppelter Einsatz)
+- Die **Leitstellen-Nummer** wird als führende Kennung angezeigt (Alarm-Kopfzeile, Archiv, Verlauf, PDF-Export) — statt der internen Einsatz-ID
+- **Anrufer/Melder** (Name + Telefonnummer) werden angezeigt, sofern von der Leitstelle mitgeliefert; die Telefonnummer ist direkt anklickbar (Klick-zum-Anrufen)
+- Fahrzeugstatus (S1–S6) und -position, Meldungen sowie Zu-/Absagen der Mannschaft werden laufend übernommen
+- Wird der Einsatz in LIS abgeschlossen, schließt Einsatzcockpit den Einsatz automatisch mit (Archivierung, kein manuelles Abschließen nötig)
+
 ## Manuell starten
 
 Auf der Startseite: **Neuer Einsatz** (oder `Strg + B`)

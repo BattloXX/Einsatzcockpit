@@ -4,7 +4,9 @@
 
 Das **Einsatzleiter SMS-Gateway** ist ein separater Docker-Container, der im lokalen Netzwerk des CoNiuGo-Modems läuft und sich **ausgehend** per WebSocket mit der Haupt-App verbindet. Eingehende Ports am Modem-Standort sind nicht erforderlich.
 
-**Zweck:** SMS-Versand für spätere Funktionen (Telefonnummern-Verifizierung, 2-Faktor-Authentifizierung, Info-SMS).
+> **Alternative: native Android-App.** Statt eines Docker-Containers mit CoNiuGo-Modem kann auch die native Android-App aus dem Repo `Einsatzcockpit-Android` als Gateway verwendet werden — sie verbindet sich über denselben Token-authentifizierten WebSocket und versendet/empfängt SMS über die SIM-Karte eines Android-Geräts (Foreground-Service, läuft dauerhaft im Hintergrund). Diese Anleitung beschreibt den Docker-Weg; Setup der Android-App ist im dortigen Repo (`SETUP.md`) dokumentiert.
+
+**Zweck:** SMS-Versand/-Empfang für die Telefonnummern-Verifizierung im Bürgerportal, [Einsatzinfo-SMS bei Alarm](Administration-SMS-Einsatzinfo), manuellen Versand an Gruppen/Mitglieder und die Weiterleitung eingehender SMS (Teams-Webhook, Gruppen, Mitglieder, Ad-hoc-Nummern).
 
 ---
 
@@ -24,7 +26,7 @@ Das **Einsatzleiter SMS-Gateway** ist ein separater Docker-Container, der im lok
 Auf dem Server der Haupt-App:
 
 ```bash
-cd /home/fwwo-elhw/htdocs/elhw.fwwo.at
+cd /home/clp-einsatz/htdocs/einsatzleiter
 source .venv/bin/activate
 alembic upgrade head
 ```
@@ -66,7 +68,7 @@ Mindest-Konfiguration in `.env`:
 
 ```env
 # Domain der Haupt-App (ohne Protokoll)
-GATEWAY_DOMAIN=elhw.fwwo.at
+GATEWAY_DOMAIN=einsatz.example.com
 
 # Token aus Schritt 2
 GATEWAY_TOKEN=smsgw_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -102,7 +104,7 @@ Erwartete Ausgabe bei erfolgreicher Verbindung:
 
 ```
 sms-gateway  | 2026-06-07T12:00:00 [INFO] sms-gateway: Einsatzleiter SMS-Gateway gestartet
-sms-gateway  | 2026-06-07T12:00:00 [INFO] sms-gateway.client: Verbinde mit wss://elhw.fwwo.at/ws/sms-gateway
+sms-gateway  | 2026-06-07T12:00:00 [INFO] sms-gateway.client: Verbinde mit wss://einsatz.example.com/ws/sms-gateway
 sms-gateway  | 2026-06-07T12:00:01 [INFO] sms-gateway.client: Verbunden — warte auf SMS-Jobs
 ```
 
@@ -155,5 +157,7 @@ Das vollständige WebSocket-Protokoll zwischen Container und Haupt-App ist im Co
 [`PROTOCOL.md` im Einsatzleiter-SMS-Gateway-Repo](https://github.com/BattloXX/Einsatzleiter-SMS-Gateway/blob/main/PROTOCOL.md)
 
 ---
+
+**Verwandt:** [SMS-Einsatzinfo, manueller Versand & SMS-Empfang](Administration-SMS-Einsatzinfo) — Einrichtung der eigentlichen SMS-Funktionen, sobald das Gateway verbunden ist.
 
 **Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup)

@@ -2,7 +2,7 @@
 
 Digitales Einsatzleiter-Werkzeug für österreichische Feuerwehren — Multi-User, Multi-Organisations-fähig, Echtzeit.
 
-**Version:** 2.7.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
+**Version:** 3.1.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
 
 ## Was ist das?
 
@@ -11,6 +11,8 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 **Kernfunktionen:**
 - Echtzeit-Kanban-Board für mehrere Geräte gleichzeitig (WebSockets)
 - Automatische Einsatzanlage aus dem Alarmierungssystem (REST-API, idempotent)
+- LIS/IPR-Anbindung an das Leitstellensystem: Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus, Meldungen, automatisches Schließen
+- SMS-Einsatzinfo bei Alarm sowie SMS-Empfang mit Weiterleitungsregeln (Teams, Gruppen, Mitglieder, Ad-hoc)
 - Gesetzeskonforme Atemschutzüberwachung mit Rückzugsdruckberechnung
 - Mannschaftsregister mit Qualifikationen und Ablaufdaten
 - Archiv mit vollständigem Audit-Log und PDF-Export
@@ -40,14 +42,14 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Erst-Setup](Installation-Erst-Setup) | Admin-User, API-Key, Stammdaten prüfen |
 | [Backups](Installation-Backups) | Datenbank-Dumps, Audit-Log-Sicherung |
 | [Updates](Installation-Updates) | git pull / In-App ZIP-Update, Migrationen, Neustart |
-| [SMS-Gateway](Installation-SMS-Gateway) | CoNiuGo-Modem-Container einrichten, Token anlegen |
+| [SMS-Gateway](Installation-SMS-Gateway) | CoNiuGo-Modem-Container oder Android-App einrichten, Token anlegen |
 | [Troubleshooting](Installation-Troubleshooting) | Häufige Fehler und Lösungen |
 
 ### Anwender
 | Seite | Beschreibung |
 |-------|-------------|
 | [Erste Schritte](Anwender-Erste-Schritte) | Login, Übersicht, Tastatur-Shortcuts |
-| [Einsatz starten](Anwender-Einsatz-starten) | Manuell vs. Automatik über Alarmierungssystem |
+| [Einsatz starten](Anwender-Einsatz-starten) | Manuell vs. Automatik über Alarmierungssystem oder LIS/Leitstelle |
 | [Kanban-Board bedienen](Anwender-Kanban-Board-bedienen) | Spalten, Karten, Drag&Drop, Status-Ampel |
 | [Aufträge und Meldungen](Anwender-Auftraege-und-Meldungen) | Anlegen, Zuteilen, Erledigen, Sprachdiktat |
 | [Personen erfassen](Anwender-Personen-erfassen) | 4-Stufen-Wizard |
@@ -84,6 +86,8 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Single Sign-On (Entra ID)](Administration-Single-Sign-On) | Microsoft-365-Login einrichten, Gruppen-Mapping, JIT-Provisioning |
 | [Lokale Wetterstation](Administration-Wetterstation) | Davis/Meteobridge-Anbindung: Station anlegen, Push-Token, Meteobridge-URL, Datenbankarchitektur |
 | [Fahrtenbuch](Administration-Fahrtenbuch) | Fahrzeuge konfigurieren, Zwecke/Zielorte, Token/QR, Schadensmeldung, Fahrten-Verwaltung |
+| [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
+| [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
 
 ### Entwickler
 | Seite | Beschreibung |
