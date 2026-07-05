@@ -61,6 +61,18 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
     if incident.is_exercise and not cfg.send_exercise:
         return
 
+    from app.services.alarm_service import get_alarm_type_by_code
+    alarm_type = get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)
+    if alarm_type and not alarm_type.teams_alarm_enabled:
+        return
+
+    # Koordinaten werden ggf. von einem parallel laufenden Background-Task (Geocoding,
+    # eigene DB-Session) NACH dem Laden dieses `incident`-Objekts gesetzt — ohne Refresh
+    # sieht build_incident_message_card() hier noch lat=lng=None (stale Identity-Map) und
+    # Kartenbild/Google-Maps-Button fehlen in der Karte, obwohl die Koordinaten längst in
+    # der DB stehen (beobachtet 2026-07-05, Testeinsatz F3 "Flotzbachstraße 18").
+    db.refresh(incident, attribute_names=["lat", "lng"])
+
     target = "uebung" if incident.is_exercise else "alarm"
     org = db.get(FireDept, incident.primary_org_id)
 

@@ -8,7 +8,7 @@ import pytest
 
 from app.core.tenant import set_tenant_context
 from app.models.incident import Incident
-from app.models.master import FireDept
+from app.models.master import AlarmType, FireDept
 from app.models.teams_bot import TeamsAlarmConfig, TeamsChannelBinding
 from app.services import teams_alarm_service
 from app.services.teams_card import build_incident_message_card
@@ -38,6 +38,7 @@ def _cfg(**overrides) -> TeamsAlarmConfig:
     defaults = dict(
         org_id=ORG_ID, enabled=True, send_exercise=False,
         include_map=True, include_gmaps_link=True, include_qr_link=True,
+        include_board_link=True,
     )
     defaults.update(overrides)
     return TeamsAlarmConfig(**defaults)
@@ -80,11 +81,35 @@ def test_build_incident_message_card_includes_all_bausteine_by_default():
 
 def test_build_incident_message_card_respects_include_toggles():
     incident = _incident()
-    cfg = _cfg(include_map=False, include_gmaps_link=False, include_qr_link=False)
+    cfg = _cfg(include_map=False, include_gmaps_link=False, include_qr_link=False,
+               include_board_link=False)
     card = build_incident_message_card(incident, cfg, base_url="https://example.com")
 
     assert not _images(card)
     assert "actions" not in _adaptive_content(card)
+
+
+def test_build_incident_message_card_includes_board_link():
+    incident = _incident(id=185)
+    cfg = _cfg()
+    card = build_incident_message_card(incident, cfg, base_url="https://example.com")
+
+    actions = _adaptive_content(card)["actions"]
+    board_actions = [a for a in actions if "Einsatz-Board" in a["title"]]
+    assert board_actions == [{
+        "type": "Action.OpenUrl",
+        "title": "🖥 Einsatz-Board öffnen",
+        "url": "https://example.com/einsatz/185",
+    }]
+
+
+def test_build_incident_message_card_omits_board_link_when_disabled():
+    incident = _incident(id=185)
+    cfg = _cfg(include_board_link=False)
+    card = build_incident_message_card(incident, cfg, base_url="https://example.com")
+
+    action_titles = [a["title"] for a in _adaptive_content(card).get("actions", [])]
+    assert not any("Einsatz-Board" in t for t in action_titles)
 
 
 def test_build_incident_message_card_marks_exercise():
@@ -208,6 +233,82 @@ def test_post_incident_card_prefers_bot_when_binding_exists(monkeypatch):
         assert webhook_calls == []  # Bot bevorzugt, Webhook nicht zusaetzlich aufgerufen
     finally:
         db.rollback()
+        db.close()
+
+
+def test_post_incident_card_skips_alarm_type_with_teams_alarm_disabled(monkeypatch):
+    calls = []
+
+    async def fake_webhook(*a, **kw):
+        calls.append(1)
+        return True
+    monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
+
+    db = _session()
+    try:
+        cfg = _cfg(enabled=True, webhook_url_alarm="https://outlook.office.com/webhook/x")
+        db.add(cfg)
+        # T4 ist bereits durch seed_data.py fuer ORG_ID angelegt — hier nur den Flag umschalten
+        # statt eine zweite Zeile (org_id, code) anzulegen (UNIQUE-Constraint).
+        alarm_type = db.query(AlarmType).filter(
+            AlarmType.org_id == ORG_ID, AlarmType.code == "T4",
+        ).first()
+        alarm_type.teams_alarm_enabled = False
+        incident = _incident()
+        db.add(incident)
+        db.flush()
+
+        import asyncio
+        asyncio.run(teams_alarm_service.post_incident_card(db, incident, base_url="https://example.com"))
+        assert calls == []
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_post_incident_card_refreshes_stale_coords_before_building_card(monkeypatch):
+    """Regression (2026-07-05): ein paralleler Background-Task (eigene DB-Session, z.B.
+    Geocoding) kann lat/lng NACH dem Laden dieses `incident`-Objekts persistieren. Ohne
+    db.refresh() sieht build_incident_message_card() hier noch die alten (None-)Werte aus
+    der Identity-Map — Kartenbild/Google-Maps-Button würden fälschlich fehlen."""
+    captured = {}
+
+    async def fake_webhook(webhook_url, incident, cfg, *, base_url, org):
+        captured["lat"] = incident.lat
+        captured["lng"] = incident.lng
+        return True
+    monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
+
+    db = _session()
+    try:
+        cfg = _cfg(enabled=True, webhook_url_alarm="https://outlook.office.com/webhook/x")
+        db.add(cfg)
+        incident = _incident(lat=None, lng=None)
+        db.add(incident)
+        # Ein zweiter, parallel laufender Prozess (eigene Session, eigene DB-Verbindung)
+        # muss die Zeile erst SEHEN können — dafuer braucht es einen echten Commit statt
+        # nur flush(); darum wird unten explizit statt per rollback() aufgeraeumt.
+        db.commit()
+
+        # Simuliert einen zweiten, parallel laufenden Prozess (eigene Session), der
+        # zwischenzeitlich die Koordinaten setzt — wie _geocode_incident() in api_v1.py.
+        other = TestingSession()
+        set_tenant_context(other, ORG_ID)
+        other_incident = other.get(Incident, incident.id)
+        other_incident.lat = 47.488847
+        other_incident.lng = 9.741011
+        other.commit()
+        other.close()
+
+        import asyncio
+        asyncio.run(teams_alarm_service.post_incident_card(db, incident, base_url="https://example.com"))
+        assert captured["lat"] == 47.488847
+        assert captured["lng"] == 9.741011
+    finally:
+        db.rollback()
+        db.query(Incident).filter(Incident.id == incident.id).delete()
+        db.query(TeamsAlarmConfig).filter(TeamsAlarmConfig.org_id == ORG_ID).delete()
+        db.commit()
         db.close()
 
 

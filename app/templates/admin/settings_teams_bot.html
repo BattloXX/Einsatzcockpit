@@ -81,7 +81,15 @@
           <input type="checkbox" name="include_qr_link" value="1" {% if not config or config.include_qr_link %}checked{% endif %}>
           Alarmübersicht-Link (QR)
         </label>
+        <label class="toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;">
+          <input type="checkbox" name="include_board_link" value="1" {% if not config or config.include_board_link %}checked{% endif %}>
+          Einsatz-Board-Link
+        </label>
       </div>
+      <p class="form-hint" style="margin:4px 0 0 0">
+        Der Einsatz-Board-Link führt direkt in den Einsatz (login-pflichtig, wie der
+        Web-Push). Die Alarmübersicht bleibt bewusst der Link ohne Login.
+      </p>
     </div>
   </section>
 

@@ -75,6 +75,15 @@ def build_incident_message_card(
             "title": "📋 Alarmübersicht",
             "url": f"{base_url}/alarm/{incident.alarm_token}",
         })
+    if cfg.include_board_link:
+        # Login-pflichtig (kein QR-Auto-Login wie die Alarmübersicht) — bewusst dieselbe
+        # URL wie der Web-Push (siehe incident_notify.py), damit kein zusätzliches
+        # Auth-Token in der Teams-Kanalhistorie landet.
+        actions.append({
+            "type": "Action.OpenUrl",
+            "title": "🖥 Einsatz-Board öffnen",
+            "url": f"{base_url}/einsatz/{incident.id}",
+        })
 
     adaptive_card: dict = {
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",

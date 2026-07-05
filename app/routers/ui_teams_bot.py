@@ -88,6 +88,7 @@ async def teams_alarm_settings_save(
     include_map: str = Form(""),
     include_gmaps_link: str = Form(""),
     include_qr_link: str = Form(""),
+    include_board_link: str = Form(""),
     webhook_url_alarm: str = Form(""),
     webhook_url_uebung: str = Form(""),
     bot_enabled: str = Form(""),
@@ -107,6 +108,7 @@ async def teams_alarm_settings_save(
     cfg.include_map = include_map == "1"
     cfg.include_gmaps_link = include_gmaps_link == "1"
     cfg.include_qr_link = include_qr_link == "1"
+    cfg.include_board_link = include_board_link == "1"
     cfg.webhook_url_alarm = webhook_url_alarm.strip() or None
     cfg.webhook_url_uebung = webhook_url_uebung.strip() or None
     cfg.bot_enabled = bot_enabled == "1"

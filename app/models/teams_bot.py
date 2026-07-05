@@ -43,6 +43,8 @@ class TeamsAlarmConfig(Base):
     include_map: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     include_gmaps_link: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     include_qr_link: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Direktlink zum (login-pflichtigen) Einsatz-Board, analog Web-Push-URL (`/einsatz/{id}`)
+    include_board_link: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Basis-Modus: normaler Teams-Kanal-Webhook je Ziel, kein Azure/Bot nötig
     webhook_url_alarm: Mapped[str | None] = mapped_column(String(1000), nullable=True)

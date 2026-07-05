@@ -196,6 +196,8 @@ class AlarmType(TenantScoped, Base):
     triggers_major_incident: Mapped[bool] = mapped_column(Boolean, default=False)
     # Stichwort-spezifische SMS-Vorlage; überschreibt den Org-Standard wenn gesetzt
     einsatzinfo_sms_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Löst dieses Stichwort eine Teams-Alarmkarte aus? (siehe teams_alarm_service.post_incident_card())
+    teams_alarm_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class TaskSuggestion(TenantScoped, Base):
