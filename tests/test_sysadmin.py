@@ -248,3 +248,196 @@ def test_org_stats_deleted_org_included():
     result = _org_stats(db)
     assert len(result) == 1
     assert result[0]["org"].deleted_at is not None
+
+
+# ---------------------------------------------------------------------------
+# Quota-Verwaltung
+# ---------------------------------------------------------------------------
+
+_GIB = 1024 ** 3
+
+
+def test_pct_unlimited_is_none():
+    from app.routers.ui_sysadmin import _pct
+    assert _pct(1234, None) is None
+
+
+def test_pct_zero_quota():
+    from app.routers.ui_sysadmin import _pct
+    assert _pct(0, 0) == 0
+    assert _pct(5, 0) == 100
+
+
+def test_pct_normal_rounding():
+    from app.routers.ui_sysadmin import _pct
+    assert _pct(50, 100) == 50
+    assert _pct(1, 3) == 33  # 33.33 → 33
+    assert _pct(150, 100) == 150  # Überschreitung wird nicht gekappt
+
+
+def test_quota_rows_maps_storage_and_ai():
+    from datetime import UTC, datetime
+
+    from app.models.master import FireDept, OrgSettings, OrgStorageUsage
+    from app.routers.ui_sysadmin import _quota_rows
+
+    cur_month = datetime.now(UTC).strftime("%Y-%m")
+    org = _org(3, "FF Test")
+    org.storage_quota_bytes = 10 * _GIB
+
+    usage = SimpleNamespace(org_id=3, used_bytes=5 * _GIB)
+    os_row = SimpleNamespace(
+        org_id=3,
+        ai_monthly_token_quota=1000,
+        ai_tokens_used_month=250,
+        ai_tokens_month_key=cur_month,
+    )
+
+    db = MagicMock()
+
+    def _query(model, *a, **k):
+        m = MagicMock()
+        if model is FireDept:
+            m.filter.return_value = m
+            m.order_by.return_value = m
+            m.all.return_value = [org]
+        elif model is OrgStorageUsage:
+            m.all.return_value = [usage]
+        elif model is OrgSettings:
+            m.all.return_value = [os_row]
+        else:
+            m.all.return_value = []
+        return m
+
+    db.query.side_effect = _query
+
+    rows = _quota_rows(db)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["storage_used"] == 5 * _GIB
+    assert r["storage_quota"] == 10 * _GIB
+    assert r["storage_pct"] == 50
+    assert r["storage_quota_gb"] == 10.0
+    assert r["ai_quota"] == 1000
+    assert r["ai_used"] == 250
+    assert r["ai_pct"] == 25
+
+
+def test_quota_rows_ai_used_zero_for_stale_month():
+    """Verbrauch aus einem alten Monat wird als 0 gewertet."""
+    from app.models.master import FireDept, OrgSettings, OrgStorageUsage
+    from app.routers.ui_sysadmin import _quota_rows
+
+    org = _org(4, "FF Alt")
+    org.storage_quota_bytes = None
+    os_row = SimpleNamespace(
+        org_id=4,
+        ai_monthly_token_quota=500,
+        ai_tokens_used_month=999,
+        ai_tokens_month_key="2020-01",  # veraltet
+    )
+
+    db = MagicMock()
+
+    def _query(model, *a, **k):
+        m = MagicMock()
+        if model is FireDept:
+            m.filter.return_value = m
+            m.order_by.return_value = m
+            m.all.return_value = [org]
+        elif model is OrgStorageUsage:
+            m.all.return_value = []
+        elif model is OrgSettings:
+            m.all.return_value = [os_row]
+        else:
+            m.all.return_value = []
+        return m
+
+    db.query.side_effect = _query
+
+    rows = _quota_rows(db)
+    assert rows[0]["ai_used"] == 0
+    assert rows[0]["storage_used"] == 0
+    assert rows[0]["storage_pct"] is None  # keine Quota gesetzt
+
+
+def _run(coro):
+    import asyncio
+    return asyncio.run(coro)
+
+
+def _save_db(org, os_row):
+    db = MagicMock()
+    db.get.return_value = org
+    q = MagicMock()
+    q.filter_by.return_value.first.return_value = os_row
+    db.query.return_value = q
+    return db
+
+
+def test_quota_save_converts_gb_and_tokens():
+    from app.routers.ui_sysadmin import sysadmin_quota_save
+
+    org = _org(1)
+    org.storage_quota_bytes = None
+    os_row = SimpleNamespace(org_id=1, ai_monthly_token_quota=None)
+    db = _save_db(org, os_row)
+    request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)))
+
+    resp = _run(sysadmin_quota_save(
+        1, request, storage_quota_gb="5", ai_monthly_token_quota="1.000.000", db=db,
+    ))
+
+    assert org.storage_quota_bytes == 5 * _GIB
+    assert os_row.ai_monthly_token_quota == 1_000_000
+    assert resp.status_code == 303
+    db.commit.assert_called_once()
+
+
+def test_quota_save_empty_means_unlimited():
+    from app.routers.ui_sysadmin import sysadmin_quota_save
+
+    org = _org(1)
+    org.storage_quota_bytes = 999
+    os_row = SimpleNamespace(org_id=1, ai_monthly_token_quota=999)
+    db = _save_db(org, os_row)
+    request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)))
+
+    _run(sysadmin_quota_save(
+        1, request, storage_quota_gb="  ", ai_monthly_token_quota="", db=db,
+    ))
+
+    assert org.storage_quota_bytes is None
+    assert os_row.ai_monthly_token_quota is None
+
+
+def test_quota_save_comma_decimal():
+    from app.routers.ui_sysadmin import sysadmin_quota_save
+
+    org = _org(1)
+    os_row = SimpleNamespace(org_id=1, ai_monthly_token_quota=None)
+    db = _save_db(org, os_row)
+    request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)))
+
+    _run(sysadmin_quota_save(
+        1, request, storage_quota_gb="1,5", ai_monthly_token_quota="", db=db,
+    ))
+
+    assert org.storage_quota_bytes == int(round(1.5 * _GIB))
+
+
+def test_quota_save_invalid_storage_raises():
+    from fastapi import HTTPException
+
+    from app.routers.ui_sysadmin import sysadmin_quota_save
+
+    org = _org(1)
+    os_row = SimpleNamespace(org_id=1, ai_monthly_token_quota=None)
+    db = _save_db(org, os_row)
+    request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)))
+
+    with pytest.raises(HTTPException) as exc:
+        _run(sysadmin_quota_save(
+            1, request, storage_quota_gb="abc", ai_monthly_token_quota="", db=db,
+        ))
+    assert exc.value.status_code == 400
