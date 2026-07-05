@@ -48,7 +48,7 @@
 
       <div class="archive-card__actions" style="display:flex;gap:6px;flex-wrap:wrap;">
         <a href="/archiv/{{ inc.id }}" class="btn btn--xs btn--ghost">Details</a>
-        <a href="/archiv/{{ inc.id }}/pdf" class="btn btn--xs btn--ghost">PDF</a>
+        <a href="/archiv/{{ inc.id }}/pdf" target="_blank" class="btn btn--xs btn--ghost">PDF</a>
         {% if inc.status == 'active' %}
         <a href="/einsatz/{{ inc.id }}" class="btn btn--xs btn--primary">Board</a>
         {% endif %}

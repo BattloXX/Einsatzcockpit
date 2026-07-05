@@ -1786,10 +1786,11 @@ def objektblatt_pdf(
         objekt, _org_fuer_user(db, user), db, str(request.base_url),
         mit_anhang=bool(anhang), mit_hinweisen=bool(hinweise),
     )
+    # inline: Browser-PDF-Viewer zeigt direkt an (Speichern dort weiterhin moeglich)
     name = f"{objekt.anzeige_nummer}_Objektblatt.pdf"
     return Response(
         content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        headers={"Content-Disposition": f'inline; filename="{name}"'},
     )
 
 
@@ -1820,5 +1821,5 @@ def objekte_mappe_drucken(
     )
     return Response(
         content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="Objektmappe.pdf"'},
+        headers={"Content-Disposition": 'inline; filename="Objektmappe.pdf"'},
     )

@@ -461,7 +461,7 @@ async def pruefung_export_pdf(request: Request, pruefung_id: int, db: Session = 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="Atemschutzpruefung_{pruefung.id}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="Atemschutzpruefung_{pruefung.id}.pdf"'},
     )
 
 
@@ -487,5 +487,5 @@ async def pruefung_export_pdf_sammel(
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="Atemschutzgeraetepruefung_Sammel.pdf"'},
+        headers={"Content-Disposition": 'inline; filename="Atemschutzgeraetepruefung_Sammel.pdf"'},
     )

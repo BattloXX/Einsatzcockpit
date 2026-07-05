@@ -24,7 +24,7 @@
     <div style="display:flex;gap:6px;">
       <button type="button" class="btn btn--ghost btn--xs" @click="zoom = Math.max(1, zoom - 0.5)">−</button>
       <button type="button" class="btn btn--ghost btn--xs" @click="zoom = Math.min(4, zoom + 0.5)">+ Zoom</button>
-      <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'" class="btn btn--ghost btn--xs">⬇ PDF</a>
+      <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'" target="_blank" class="btn btn--ghost btn--xs">📄 PDF</a>
     </div>
   </div>
   <div class="objekt-viewer__stage"

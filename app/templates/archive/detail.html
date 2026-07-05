@@ -17,7 +17,7 @@
   </div>
   <div class="lage-ctx-bar__tabs-row" style="flex-wrap:wrap;">
     <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
-      <a href="/archiv/{{ incident.id }}/pdf" class="btn btn--primary btn--sm">📄 PDF</a>
+      <a href="/archiv/{{ incident.id }}/pdf" target="_blank" class="btn btn--primary btn--sm">📄 PDF</a>
       <a href="/einsatz/{{ incident.id }}/historie" class="btn btn--ghost btn--sm">🕐 Verlauf</a>
       {% if incident.status == 'closed' and (user.is_system_admin or user.is_org_admin) %}
       <form method="post" action="/einsatz/{{ incident.id }}/wiedereroeffnen" style="display:contents"
@@ -142,8 +142,8 @@
     </dl>
     <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap">
       <a href="/uas/einsatz/{{ uas_einsatz.id }}" class="btn btn--ghost btn--sm">&#x2192; Drohneneinsatz-Detail</a>
-      <a href="/uas/einsatz/{{ uas_einsatz.id }}/pdf/eintreffmeldung" class="btn btn--ghost btn--sm">&#x1F4C4; Eintreffmeldung</a>
-      <a href="/uas/einsatz/{{ uas_einsatz.id }}/pdf/gesamt" class="btn btn--ghost btn--sm">&#x1F4CB; Gesamtbericht</a>
+      <a href="/uas/einsatz/{{ uas_einsatz.id }}/pdf/eintreffmeldung" target="_blank" class="btn btn--ghost btn--sm">&#x1F4C4; Eintreffmeldung</a>
+      <a href="/uas/einsatz/{{ uas_einsatz.id }}/pdf/gesamt" target="_blank" class="btn btn--ghost btn--sm">&#x1F4CB; Gesamtbericht</a>
     </div>
   </div>
   {% endif %}
@@ -191,7 +191,7 @@
                 onclick="document.getElementById('mannschaft-dialog').showModal()">+ Teilnehmer</button>
         {% endif %}
         <a id="teilnahme-druck-link" href="/teilnahme/einsatz/{{ incident.id }}/druck" target="_blank" class="btn btn--ghost btn--sm">🖨 Drucken</a>
-        <a id="teilnahme-pdf-link" href="/teilnahme/einsatz/{{ incident.id }}/export.pdf" class="btn btn--ghost btn--sm">📄 PDF</a>
+        <a id="teilnahme-pdf-link" href="/teilnahme/einsatz/{{ incident.id }}/export.pdf" target="_blank" class="btn btn--ghost btn--sm">📄 PDF</a>
         <a id="teilnahme-xlsx-link" href="/teilnahme/einsatz/{{ incident.id }}/export.xlsx" class="btn btn--ghost btn--sm">📊 Excel</a>
       </div>
     </div>

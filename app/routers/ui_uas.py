@@ -1914,7 +1914,7 @@ def flug_pdf_flugbuch(
     device = db.query(UASDevice).filter(UASDevice.id == flug.device_id).first() if flug.device_id else None
     pdf = flugbuch_pdf(flug, pilot, device)
     return _Response(content=pdf, media_type="application/pdf",
-                     headers={"Content-Disposition": f"attachment; filename=flugbuch_flug{flug_id}.pdf"})
+                     headers={"Content-Disposition": f"inline; filename=flugbuch_flug{flug_id}.pdf"})
 
 
 @router.get("/flug/{flug_id}/pdf/checkliste/{checkliste_id}")
@@ -1937,7 +1937,7 @@ def flug_pdf_checkliste(
         raise HTTPException(404)
     pdf = checkliste_pdf(cl, flug_id=flug_id, org=user.org)
     return _Response(content=pdf, media_type="application/pdf",
-                     headers={"Content-Disposition": f"attachment; filename=checkliste_{cl.typ}_flug{flug_id}.pdf"})
+                     headers={"Content-Disposition": f"inline; filename=checkliste_{cl.typ}_flug{flug_id}.pdf"})
 
 
 @router.get("/ereignis/{ereignis_id}/pdf/protokoll")
@@ -1955,7 +1955,7 @@ def ereignis_pdf_protokoll(
         raise HTTPException(404)
     pdf = ereignis_pdf(e)
     return _Response(content=pdf, media_type="application/pdf",
-                     headers={"Content-Disposition": f"attachment; filename=ereignis_{ereignis_id}_protokoll.pdf"})
+                     headers={"Content-Disposition": f"inline; filename=ereignis_{ereignis_id}_protokoll.pdf"})
 
 
 @router.get("/ereignis/{ereignis_id}/pdf/acg")
@@ -1973,7 +1973,7 @@ def ereignis_pdf_acg(
         raise HTTPException(404)
     pdf = acg_unfall_pdf(e)
     return _Response(content=pdf, media_type="application/pdf",
-                     headers={"Content-Disposition": f"attachment; filename=acg_unfall_{ereignis_id}.pdf"})
+                     headers={"Content-Disposition": f"inline; filename=acg_unfall_{ereignis_id}.pdf"})
 
 
 @router.get("/geraet/{geraet_id}/pdf/wartungsbuch")
@@ -1994,7 +1994,7 @@ def geraet_pdf_wartungsbuch(
     ).order_by(UASWartung.faellig_am).all()  # type: ignore[attr-defined]
     pdf = wartungsbuch_pdf(wartungen, device)
     return _Response(content=pdf, media_type="application/pdf",
-                     headers={"Content-Disposition": f"attachment; filename=wartungsbuch_geraet{geraet_id}.pdf"})
+                     headers={"Content-Disposition": f"inline; filename=wartungsbuch_geraet{geraet_id}.pdf"})
 
 
 @router.get("/einsatz/{einsatz_id}/pdf/eintreffmeldung")
@@ -2019,7 +2019,7 @@ def einsatz_pdf_eintreffmeldung(
     piloten = db.query(UASPilot).filter(UASPilot.id.in_(pilot_ids)).all() if pilot_ids else []
     pdf = eintreffmeldung_pdf(einsatz, piloten)
     return _Response(content=pdf, media_type="application/pdf",
-                     headers={"Content-Disposition": f"attachment; filename=eintreffmeldung_einsatz{einsatz_id}.pdf"})
+                     headers={"Content-Disposition": f"inline; filename=eintreffmeldung_einsatz{einsatz_id}.pdf"})
 
 
 @router.get("/einsatz/{einsatz_id}/pdf/gesamt")
@@ -2068,7 +2068,7 @@ def einsatz_pdf_gesamt(
 
     pdf = einsatz_gesamt_pdf(einsatz, incident=incident, rollen=einsatz.rollen, fluege_daten=fluege_daten, org=user.org)
     return _Response(content=pdf, media_type="application/pdf",
-                     headers={"Content-Disposition": f"attachment; filename=drohneneinsatz_{einsatz_id}_gesamt.pdf"})
+                     headers={"Content-Disposition": f"inline; filename=drohneneinsatz_{einsatz_id}_gesamt.pdf"})
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -168,7 +168,7 @@ def download_pdf(incident_id: int, request: Request, db: Session = Depends(get_d
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
 
 

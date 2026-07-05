@@ -11,7 +11,7 @@
       </form>
       {% endif %}
       {% if gesamt > 0 %}
-      <a href="/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1" class="btn btn--ghost btn--xs">⬇ „Bei Einsatz drucken"-Mappe</a>
+      <a href="/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1" target="_blank" class="btn btn--ghost btn--xs">📄 „Bei Einsatz drucken"-Mappe</a>
       {% endif %}
     </div>
   </div>
@@ -146,7 +146,7 @@
         <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:2px;">
           {% if s.bei_einsatz_drucken %}<span class="badge-pill badge-pill--red" style="font-size:0.7em;">Einsatzdruck</span>{% endif %}
           {% if s.stand %}<span class="text-muted" style="font-size:0.75em;">{{ s.stand.strftime('%d.%m.%Y') }}</span>{% endif %}
-          <a href="/objekt-medien/seite/{{ s.id }}/pdf" class="text-muted" style="font-size:0.75em;margin-left:auto;" title="Einzelseite als PDF">⬇ PDF</a>
+          <a href="/objekt-medien/seite/{{ s.id }}/pdf" target="_blank" class="text-muted" style="font-size:0.75em;margin-left:auto;" title="Einzelseite als PDF öffnen">📄 PDF</a>
         </div>
       </div>
     </div>
@@ -202,7 +202,7 @@
       <tbody>
         {% for d in dokumente %}
         <tr>
-          <td><a href="/objekt-medien/dokument/{{ d.id }}/original">{{ d.dateiname_original }}</a></td>
+          <td><a href="/objekt-medien/dokument/{{ d.id }}/original" target="_blank">{{ d.dateiname_original }}</a></td>
           <td>{{ d.seitenzahl }}</td>
           <td>
             {% if d.status == 'fertig' %}<span class="badge-pill badge-pill--green">fertig</span>

@@ -296,11 +296,12 @@ def dokumente_sammel_pdf(
         raise HTTPException(status_code=404, detail="Keine Seiten fuer Sammel-PDF")
 
     pdf = sammel_pdf(seiten)
+    # inline: Browser-PDF-Viewer zeigt direkt an (Speichern dort weiterhin moeglich)
     name = f"{objekt.anzeige_nummer}_{DOKUMENTARTEN.get(art, 'dokumente')}.pdf".replace(" ", "_")
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        headers={"Content-Disposition": f'inline; filename="{name}"'},
     )
 
 
@@ -395,9 +396,11 @@ def seite_pdf(
     pfad = absolute_pfad(seite.einzel_pdf_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
+    # content_disposition_type="inline": direkt im Browser-PDF-Viewer anzeigen
     return FileResponse(
         pfad, media_type="application/pdf",
         filename=f"seite_{seite.seiten_nr:04d}.pdf",
+        content_disposition_type="inline",
     )
 
 
@@ -424,6 +427,7 @@ def dokument_original(
     return FileResponse(
         pfad, media_type="application/pdf",
         filename=dokument.dateiname_original,
+        content_disposition_type="inline",
     )
 
 
