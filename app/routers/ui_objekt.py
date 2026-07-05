@@ -763,7 +763,48 @@ def status_wechseln(
     return RedirectResponse(url=f"/objekte/{objekt.id}", status_code=303)
 
 
-# ── Objekt loeschen (nur org_admin) ────────────────────────────────────────────
+# ── Objekt loeschen (org_admin/system_admin) ───────────────────────────────────
+
+def _loesche_objekt(db: Session, objekt: Objekt, user: User) -> None:
+    """Loescht ein Objekt vollstaendig: erst alle Dokumente ueber den Service
+    (Dateien auf Platte + Storage-Quota-Freigabe, siehe delete_dokument), dann
+    das Objekt selbst (Kind-Zeilen via DB-Kaskade). Commit macht der Aufrufer."""
+    from app.models.objekt import ObjektDokument
+    from app.services.objekt_dokument_service import delete_dokument
+
+    dokumente = (
+        db.query(ObjektDokument)
+        .filter(ObjektDokument.objekt_id == objekt.id)
+        .all()
+    )
+    for dokument in dokumente:
+        delete_dokument(dokument, db)
+
+    write_audit(db, "objekt.deleted", org_id=objekt.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=objekt.id,
+                payload={"name": objekt.name, "nummer": objekt.nummer,
+                         "dokumente_geloescht": len(dokumente)})
+    db.delete(objekt)
+
+
+@router.post("/bulk-loeschen")
+def objekte_bulk_loeschen(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_objekt_enabled),
+    objekt_ids: str = Form(""),
+):
+    """Loescht mehrere Objekte aus der Listen-Auswahl (nur org_admin/system_admin)."""
+    ids = [int(t) for t in objekt_ids.split(",") if t.strip().isdigit()]
+    for objekt_id in ids:
+        objekt = db.query(Objekt).filter(Objekt.id == objekt_id).first()
+        if objekt is None:
+            continue  # fremde Org (Tenant-Filter) oder bereits geloescht
+        _loesche_objekt(db, objekt, user)
+    db.commit()
+    return RedirectResponse(url="/objekte/", status_code=303)
+
 
 @router.post("/{objekt_id}/loeschen")
 def objekt_loeschen(
@@ -774,10 +815,7 @@ def objekt_loeschen(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    write_audit(db, "objekt.deleted", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=objekt.id,
-                payload={"name": objekt.name, "nummer": objekt.nummer})
-    db.delete(objekt)
+    _loesche_objekt(db, objekt, user)
     db.commit()
     return RedirectResponse(url="/objekte/", status_code=303)
 

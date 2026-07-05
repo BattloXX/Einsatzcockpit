@@ -247,3 +247,63 @@ def test_pr3_registrierung():
     assert "/objekte/{objekt_id}/dokumente" in pfade
     assert "/objekte/{objekt_id}/dokumente/upload" in pfade
     assert "/objekt-medien/seite/{seite_id}/thumb" in pfade
+
+
+# ── Objekt-Loeschung (Router-Helfer, org_admin/system_admin) ──────────────────
+
+def test_objekt_loeschen_raeumt_dateien_und_quota(pr3_env):
+    """_loesche_objekt loescht Dokument-Verzeichnisse, gibt Quota frei und
+    entfernt Objekt + Dokument-Zeilen (Kinder via Kaskade)."""
+    from types import SimpleNamespace
+
+    from app.models.master import OrgStorageUsage
+    from app.routers.ui_objekt import _loesche_objekt
+    from app.services.objekt_dokument_service import (
+        absolute_pfad,
+        store_dokument_upload,
+        verarbeite_dokument,
+    )
+    db, org_id, _, objekt = pr3_env
+
+    dokument = asyncio.run(store_dokument_upload(_FakeUpload(_test_pdf(2)), objekt, None, db))
+    db.commit()
+    verarbeite_dokument(dokument.id, render_func=lambda p, n, dpi: _fake_png())
+    db.expire_all()
+    dokument = db.get(ObjektDokument, dokument.id)
+    verzeichnis = absolute_pfad(dokument.pfad).parent
+    assert verzeichnis.exists()
+    usage = db.query(OrgStorageUsage).filter(OrgStorageUsage.org_id == org_id).first()
+    assert usage is not None and usage.used_bytes > 0
+
+    objekt_id = objekt.id
+    _loesche_objekt(db, objekt, SimpleNamespace(id=None))
+    db.commit()
+
+    assert not verzeichnis.exists()
+    db.expire_all()
+    usage = db.query(OrgStorageUsage).filter(OrgStorageUsage.org_id == org_id).first()
+    assert usage is not None and usage.used_bytes == 0
+    assert db.query(Objekt).filter(Objekt.id == objekt_id).first() is None
+    assert db.query(ObjektDokument).count() == 0
+
+
+def test_objekt_loeschen_ohne_dokumente(pr3_env):
+    from types import SimpleNamespace
+
+    from app.routers.ui_objekt import _loesche_objekt
+    db, org_id, _, _objekt = pr3_env
+
+    leer = Objekt(org_id=org_id, nummer=99, name="Ohne Dokumente",
+                  status=OBJEKT_STATUS_FREIGEGEBEN)
+    db.add(leer)
+    db.commit()
+    _loesche_objekt(db, leer, SimpleNamespace(id=None))
+    db.commit()
+    assert db.query(Objekt).filter(Objekt.nummer == 99).first() is None
+
+
+def test_bulk_loeschen_route_registriert():
+    from app.routers.ui_objekt import router
+    pfade = {r.path for r in router.routes}
+    assert "/objekte/bulk-loeschen" in pfade
+    assert "/objekte/{objekt_id}/loeschen" in pfade

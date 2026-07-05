@@ -112,14 +112,24 @@
     </tbody>
   </table>
 
-  <div x-show="auswahl.length > 0" x-cloak class="card objekt-bulk-leiste" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+  <div x-show="auswahl.length > 0" x-cloak class="card objekt-bulk-leiste" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
     <span><strong x-text="auswahl.length"></strong> Objekt(e) ausgewählt</span>
-    <form method="post" action="/objekte/druck" style="display:flex;gap:10px;align-items:center;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="hidden" name="objekt_ids" :value="auswahl.join(',')">
-      <label class="checkbox-label"><input type="checkbox" name="mit_anhang" value="1"> inkl. „Bei Einsatz drucken"-Anhänge</label>
-      <button type="submit" class="btn btn--primary">🖨 Mappe drucken</button>
-    </form>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <form method="post" action="/objekte/druck" style="display:flex;gap:10px;align-items:center;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="objekt_ids" :value="auswahl.join(',')">
+        <label class="checkbox-label"><input type="checkbox" name="mit_anhang" value="1"> inkl. „Bei Einsatz drucken"-Anhänge</label>
+        <button type="submit" class="btn btn--primary">🖨 Mappe drucken</button>
+      </form>
+      {% if is_admin %}
+      <form method="post" action="/objekte/bulk-loeschen"
+            @submit="if (!confirm('Ausgewählte Objekte (' + auswahl.length + ') unwiderruflich löschen? Alle Daten inkl. Dokumente gehen verloren.')) $event.preventDefault()">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="objekt_ids" :value="auswahl.join(',')">
+        <button type="submit" class="btn btn--danger">🗑 Löschen</button>
+      </form>
+      {% endif %}
+    </div>
   </div>
   </div>
   {% else %}
