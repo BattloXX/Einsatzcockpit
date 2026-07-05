@@ -219,10 +219,13 @@ class LisClient:
             # weil sie organizationId als expliziten Parameter mitschicken und damit diesen
             # Session-Cache-Pfad umgehen.
             #
-            # Fix-Versuch: Session-Entries schreiben nachweislich SessionData-Felder (unsere
-            # injizierten UserId/ProjectId kommen 1:1 in AuthorizeResult zurück) — also wird
-            # hier zusätzlich OrganizationId injiziert, in der Annahme, dass das exakt das
-            # Feld befüllt, das GetTasks dereferenziert. Noch NICHT live verifiziert.
+            # Fix-Versuch 1 (WIDERLEGT, 2026-07-05): Session-Entries schreiben nachweislich
+            # SessionData-Felder (unsere injizierten UserId/ProjectId kommen 1:1 in
+            # AuthorizeResult zurück) — die Annahme war, dass eine zusätzliche
+            # OrganizationId-Entry genau das Feld befüllt, das GetTasks dereferenziert. Live
+            # getestet: GetTasks faultet weiterhin identisch. Aktueller Versuch (Experiment 2):
+            # select_operation() zusätzlich mit der konkreten operationId unmittelbar vor jedem
+            # GetTasks aufrufen, siehe lis_sync.py::sync_operation().
             entries = {"UserId": self.user_id, "UserName": self.username}
             if self.project_id:
                 entries["ProjectId"] = self.project_id
@@ -304,14 +307,17 @@ class LisClient:
         GetOperationUnits funktionieren auch ohne diesen Effekt, weil sie organizationId
         explizit als Parameter mitschicken, GetTasks aber nicht.
 
-        WICHTIG (Stand 2026-07-04, zweiter Live-Test): weder SelectOperation allein noch
+        WICHTIG (Stand 2026-07-05, dritter Live-Test): weder SelectOperation allein noch
         + ProjectId in AddSessionEntries noch + Authorize gegen den AuthorizationService
-        haben die GetTasks-NRE behoben — und zwar für ZWEI verschiedene Konten
-        (johannes.battlogg UND das Servicekonto), das Konto ist also nicht die Ursache.
-        Der Unterschied zum funktionierenden Referenz-Mitschnitt ist eine große
-        Priming-Sequenz, die der echte Smartclient vor GetTasks durchläuft (siehe
-        login()-Docstring) — aktueller Fix-Versuch: OrganizationId zusätzlich per
-        AddSessionEntries injizieren (siehe login()).
+        noch + OrganizationId per AddSessionEntries (Experiment 1) haben die GetTasks-NRE
+        behoben — und zwar für ZWEI verschiedene Konten (johannes.battlogg UND das
+        Servicekonto), das Konto ist also nicht die Ursache. Der Unterschied zum
+        funktionierenden Referenz-Mitschnitt ist eine große Priming-Sequenz, die der echte
+        Smartclient vor GetTasks durchläuft (siehe login()-Docstring), darunter eine ZWEITE
+        SelectOperation mit der konkreten operationId (nicht nur einmal pro Sitzung mit
+        operationId=nil wie bisher bei uns in sync_organization()). Experiment 2 (aktuell):
+        lis_sync.py::sync_operation() ruft select_operation() jetzt zusätzlich mit der
+        konkreten operationId unmittelbar vor jedem GetTasks auf. Noch NICHT live verifiziert.
         """
         await self._ensure_login()
         op_id_xml = (

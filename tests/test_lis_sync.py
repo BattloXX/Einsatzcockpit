@@ -469,6 +469,9 @@ class _FakeLisClientNoTasks:
     """Minimaler Fake fuer sync_operation() – keine Aufgaben/Einheiten/Dokumente,
     nur der Neuanlage-Pfad interessiert hier."""
 
+    async def select_operation(self, organization_id, operation_id=None):
+        pass
+
     async def get_tasks(self, operation_id):
         return []
 
@@ -518,6 +521,57 @@ def test_sync_operation_new_incident_triggers_notify(monkeypatch):
         assert background_tasks is None
         incident = db.get(Incident, incident_id)
         assert incident.lis_operation_id == "lis-op-notify-test"
+    finally:
+        db.rollback()
+        db.close()
+
+
+class _FakeLisClientRecordingSelectOperation(_FakeLisClientNoTasks):
+    """Zeichnet select_operation()-Aufrufe auf (Experiment 2, 2026-07-05): sync_operation()
+    muss select_operation() mit der konkreten operationId aufrufen, BEVOR get_tasks()
+    aufgerufen wird — siehe select_operation()-Docstring in lis_client.py."""
+
+    def __init__(self):
+        self.calls = []
+
+    async def select_operation(self, organization_id, operation_id=None):
+        self.calls.append(("select_operation", organization_id, operation_id))
+
+    async def get_tasks(self, operation_id):
+        self.calls.append(("get_tasks", operation_id))
+        return []
+
+
+def test_sync_operation_selects_operation_before_get_tasks(monkeypatch):
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        from app.models.lis import OrgLisConfig
+        config = OrgLisConfig(org_id=ORG_ID, organization_id="org-guid")
+
+        async def fake_notify(*a, **kw):
+            pass
+
+        monkeypatch.setattr(
+            "app.services.incident_notify.notify_incident_created", fake_notify,
+        )
+
+        raw_op = {
+            "Id": "lis-op-select-test",
+            "Number": "f900003",
+            "Name": "Verkehrsunfall",
+            "BeginTime": "2026-07-04T10:00:00",
+            "Address": {"Street": "Bundesstraße", "Housenumber": "1", "Community": "Wolfurt"},
+            "Type": {"Code": "t4", "Type": "Verkehrsunfall"},
+        }
+
+        client = _FakeLisClientRecordingSelectOperation()
+        asyncio.run(lis_sync.sync_operation(db, org, config, client, raw_op))
+
+        assert client.calls == [
+            ("select_operation", "org-guid", "lis-op-select-test"),
+            ("get_tasks", "lis-op-select-test"),
+        ]
     finally:
         db.rollback()
         db.close()

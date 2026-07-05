@@ -573,6 +573,11 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
     incident, created = _get_or_link_incident(db, org, parsed)
 
     try:
+        # Experiment 2 (2026-07-05, nach Fehlschlag von Experiment 1 im Live-Test):
+        # SelectOperation zusätzlich mit der KONKRETEN operationId unmittelbar vor
+        # GetTasks aufrufen (bisher nur einmal pro Sync-Zyklus mit operationId=nil in
+        # sync_organization()). Siehe select_operation()-Docstring in lis_client.py.
+        await client.select_operation(config.organization_id, operation_id=parsed["lis_operation_id"])
         tasks = await client.get_tasks(parsed["lis_operation_id"])
     except LisClientError:
         logger.exception(
