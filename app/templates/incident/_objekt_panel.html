@@ -49,16 +49,24 @@
   {% endif %}
 
   {% if darf_verknuepfen and kandidaten %}
-  <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/verknuepfen"
-        hx-target="#objekt-panel" hx-swap="outerHTML"
-        style="display:flex;gap:6px;margin-top:8px;">
-    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <select name="objekt_id" class="form-input" style="flex:1;min-width:0;padding:4px 8px;">
-      {% for o in kandidaten %}
-      <option value="{{ o.id }}">{{ o.anzeige_nummer }} {{ o.name }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="btn btn--ghost btn--xs">+ Verknüpfen</button>
-  </form>
+  <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;"
+       x-data="{ q: '', kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, t: {{ (o.anzeige_nummer ~ ' ' ~ o.name)|tojson }} }{{ ',' if not loop.last }}{% endfor %}] }">
+    <div class="text-muted" style="font-size:0.78em;margin-bottom:4px;">
+      {% if verknuepfungen %}Anderes Objekt verknüpfen{% else %}Objekt manuell verknüpfen{% endif %}
+    </div>
+    <input type="text" x-model="q" class="form-input" placeholder="Objekt suchen …"
+           style="padding:4px 8px;width:100%;">
+    <div style="max-height:170px;overflow:auto;margin-top:4px;display:flex;flex-direction:column;gap:3px;">
+      <template x-for="k in kandidaten.filter(function (x) { return x.t.toLowerCase().indexOf(q.toLowerCase()) !== -1; })" :key="k.id">
+        <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/verknuepfen"
+              hx-target="#objekt-panel" hx-swap="outerHTML" style="margin:0;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="objekt_id" :value="k.id">
+          <button type="submit" class="btn btn--ghost btn--xs"
+                  style="width:100%;text-align:left;" x-text="'+ ' + k.t"></button>
+        </form>
+      </template>
+    </div>
+  </div>
   {% endif %}
 </div>

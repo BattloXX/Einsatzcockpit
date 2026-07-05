@@ -39,6 +39,17 @@ BMA_REGEX = re.compile(r"(?:bmz|bma|rfl)(?:[\s\-]?(?:nr|nummer))?[\s:.\-/]*(\d{2
 _MATCHBARE_STATUS = (OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_UEBERARBEITUNG)
 
 
+def _norm_bma(nummer: str | None) -> str | None:
+    """Normalisiert eine BMA-/RFL-Nummer fuer den Vergleich: nur Ziffern, ohne
+    fuehrende Nullen (Alarm 'BMA 1044' matcht Objekt-Nr. '01044' und umgekehrt)."""
+    if not nummer:
+        return None
+    ziffern = re.sub(r"\D", "", nummer)
+    if not ziffern:
+        return None
+    return ziffern.lstrip("0") or "0"
+
+
 def finde_bma_nummern(text: str | None) -> list[str]:
     """Extrahiert alle BMA-/RFL-Nummern aus dem Alarmtext (dedupliziert, Reihenfolge stabil)."""
     if not text:
@@ -135,10 +146,11 @@ def match_incident(db: Session, incident: Incident, *, nur_geo: bool = False) ->
                 if bma is None:
                     continue
                 for wert in (bma.bma_nummer, bma.rfl_nummer):
-                    if wert and wert.strip():
-                        bma_index.setdefault(wert.strip(), o)
+                    norm = _norm_bma(wert)
+                    if norm:
+                        bma_index.setdefault(norm, o)
             for nummer in nummern:
-                objekt = bma_index.get(nummer)
+                objekt = bma_index.get(_norm_bma(nummer) or "")
                 if objekt is not None:
                     _anlegen(objekt, "bma", OBJEKT_EINSATZ_BESTAETIGT)
         if neu:

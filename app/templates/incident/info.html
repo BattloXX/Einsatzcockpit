@@ -2,94 +2,112 @@
 {% block title %}Einsatzinformation {{ incident.alarm_type_code }} – {{ brand }}{% endblock %}
 {% block content %}
 {% set bestaetigte_ids = objekt_verknuepfungen|selectattr('status','equalto','bestaetigt')|map(attribute='objekt_id')|join(',') %}
-<div class="page-content einsatz-info" style="max-width:960px;">
+<style>
+.einsatz-info { max-width: 1600px; margin: 0 auto; padding: 12px 16px 24px; }
+.ei-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
+.ei-map-wrap { position: sticky; top: 12px; }
+#einsatz-info-karte { height: calc(100vh - 190px); min-height: 440px; width: 100%; background: var(--surface); }
+.ei-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ei-side .card { margin-bottom: 0; }
+@media (max-width: 900px) {
+  .ei-grid { grid-template-columns: 1fr; }
+  .ei-map-wrap { position: static; }
+  #einsatz-info-karte { height: 52vh; min-height: 320px; }
+}
+</style>
+<div class="page-content einsatz-info">
 
   {% if incident.is_exercise %}
   <div class="exercise-topbar" style="margin:0 0 12px;">⚠ ÜBUNG / SIMULATION ⚠</div>
   {% endif %}
 
-  <!-- Kopf -->
-  <div class="card einsatz-info__kopf" style="padding:14px;margin-bottom:12px;">
+  <!-- Kopf (volle Breite) -->
+  <div class="card einsatz-info__kopf" style="padding:14px;margin-bottom:16px;">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
-      <div style="min-width:0;">
+      <div style="min-width:0;flex:1;">
         {% set _grund = incident.reason or incident.report_text or '' %}
-        {% if _grund %}<div style="font-weight:700;font-size:1.05rem;">{{ _grund }}</div>{% endif %}
+        {% if _grund %}<div style="font-weight:700;font-size:1.15rem;">{{ _grund }}</div>{% endif %}
         <div class="text-muted" style="font-size:.9rem;">
           {% if incident.address_street %}{{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}{% else %}<span>Ohne Adresse</span>{% endif %}
           {% if incident.started_at %} · seit {{ incident.started_at|local_time }} Uhr{% endif %}
         </div>
       </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="/einsatz/{{ incident.id }}" class="btn btn--primary">🖥 Zum Einsatz-Board</a>
+        {% set lk_url = lagekarte_url(incident) %}
+        {% if lk_url %}
+        <a href="{{ lk_url }}" target="_blank" rel="noopener" class="btn btn--secondary">🗺️ lagekarte.info</a>
+        {% endif %}
+      </div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-      <a href="/einsatz/{{ incident.id }}" class="btn btn--primary">🖥 Zum Einsatz-Board</a>
-      {% set lk_url = lagekarte_url(incident) %}
-      {% if lk_url %}
-      <a href="{{ lk_url }}" target="_blank" rel="noopener" class="btn btn--secondary">🗺️ lagekarte.info</a>
+  </div>
+
+  <div class="ei-grid">
+    <!-- Linke Spalte: große Lagekarte -->
+    <div class="ei-map-wrap">
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div id="einsatz-info-karte"
+             data-incident-id="{{ incident.id }}"
+             data-lat="{% if incident.lat is not none %}{{ incident.lat }}{% endif %}"
+             data-lng="{% if incident.lng is not none %}{{ incident.lng }}{% endif %}"
+             data-objekt-ids="{{ bestaetigte_ids }}"></div>
+      </div>
+    </div>
+
+    <!-- Rechte Spalte: Infos -->
+    <div class="ei-side">
+
+      <!-- Nächste Hydranten -->
+      <div class="card" id="hydranten-card" style="padding:14px;">
+        <h3 style="margin:0 0 10px;">🚰 Nächste Hydranten</h3>
+        <div id="hydranten-liste"><span class="text-muted">Lade Löschwasser …</span></div>
+      </div>
+
+      <!-- Ausrückordnung -->
+      {% if dispatch_vehicles %}
+      <div class="card" style="padding:14px;">
+        <h3 style="margin:0 0 10px;">🚒 Ausrückordnung</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          {% for v in dispatch_vehicles %}
+          <span class="badge-pill badge-pill--gray" title="{{ v.name }}">{{ v.code }}</span>
+          {% endfor %}
+        </div>
+      </div>
       {% endif %}
-    </div>
-  </div>
 
-  <!-- Lagekarte: Einsatzort + Objekt-Symbole + Hydranten -->
-  <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px;">
-    <div id="einsatz-info-karte"
-         data-incident-id="{{ incident.id }}"
-         data-lat="{% if incident.lat is not none %}{{ incident.lat }}{% endif %}"
-         data-lng="{% if incident.lng is not none %}{{ incident.lng }}{% endif %}"
-         data-objekt-ids="{{ bestaetigte_ids }}"
-         style="height:340px;width:100%;background:var(--surface);"></div>
-  </div>
-
-  <!-- Nächste Hydranten (per JS aus /einsatz/{id}/hydranten.json) -->
-  <div class="card" id="hydranten-card" style="padding:14px;margin-bottom:12px;">
-    <h3 style="margin:0 0 10px;">🚰 Nächste Hydranten</h3>
-    <div id="hydranten-liste"><span class="text-muted">Lade Löschwasser …</span></div>
-  </div>
-
-  <!-- Ausrückordnung -->
-  {% if dispatch_vehicles %}
-  <div class="card" style="padding:14px;margin-bottom:12px;">
-    <h3 style="margin:0 0 10px;">🚒 Ausrückordnung</h3>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;">
-      {% for v in dispatch_vehicles %}
-      <span class="badge-pill badge-pill--gray" title="{{ v.name }}">{{ v.code }}</span>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Objektinformationen inkl. Dokumenten -->
-  {% if objekt_enabled %}
-    {% if objekt_verknuepfungen %}
-      {% for v in objekt_verknuepfungen %}
-      {% set o = v.objekt %}
-      <div class="card" style="padding:14px;margin-bottom:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
-          <div style="min-width:0;">
-            <strong>🏢 {{ o.name }}</strong>
-            <span class="text-muted" style="font-size:.85rem;"> {{ o.anzeige_nummer }}{% if o.adresse_zeile %} · {{ o.adresse_zeile }}{% endif %}</span>
+      <!-- Objektinformationen inkl. Dokumenten -->
+      {% if objekt_enabled %}
+        {% if objekt_verknuepfungen %}
+          {% for v in objekt_verknuepfungen %}
+          {% set o = v.objekt %}
+          <div class="card" style="padding:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
+              <div style="min-width:0;">
+                <strong>🏢 {{ o.name }}</strong>
+                <span class="text-muted" style="font-size:.85rem;"> {{ o.anzeige_nummer }}{% if o.adresse_zeile %} · {{ o.adresse_zeile }}{% endif %}</span>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;">
+                {% if v.status == 'vorschlag' %}<span class="badge-pill badge-pill--amber">Vorschlag{% if v.distanz_m %} · {{ v.distanz_m }} m{% endif %}</span>{% endif %}
+                <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary">Objektinfo öffnen</a>
+              </div>
+            </div>
+            <div hx-get="/objekte/{{ o.id }}/einsatz-fragment" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px;">
+              <span class="text-muted">Lade Objektdaten …</span>
+            </div>
           </div>
-          <div style="display:flex;gap:6px;align-items:center;">
-            {% if v.status == 'vorschlag' %}<span class="badge-pill badge-pill--amber">Vorschlag{% if v.distanz_m %} · {{ v.distanz_m }} m{% endif %}</span>{% endif %}
-            <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary">Objektinfo öffnen</a>
+          {% endfor %}
+        {% else %}
+          <div class="card" style="padding:14px;">
+            <p class="text-muted" style="margin:0 0 8px;">Kein Objekt zugeordnet.</p>
+            <a href="/einsatz/{{ incident.id }}" class="btn btn--sm btn--secondary">Im Board manuell verknüpfen</a>
           </div>
-        </div>
-        <div hx-get="/objekte/{{ o.id }}/einsatz-fragment" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px;">
-          <span class="text-muted">Lade Objektdaten …</span>
-        </div>
-      </div>
-      {% endfor %}
-    {% else %}
-      <div class="card" style="padding:14px;margin-bottom:12px;">
-        <p class="text-muted" style="margin:0 0 8px;">Kein Objekt zugeordnet.</p>
-        <a href="/einsatz/{{ incident.id }}" class="btn btn--sm btn--secondary">Im Board manuell verknüpfen</a>
-      </div>
-    {% endif %}
-  {% endif %}
+        {% endif %}
+      {% endif %}
 
-  <!-- Absprung ins Board -->
-  <div style="margin:16px 0 24px;">
-    <a href="/einsatz/{{ incident.id }}" class="btn btn--primary btn--full">🖥 Zum Einsatz-Board</a>
+      <!-- Absprung ins Board -->
+      <a href="/einsatz/{{ incident.id }}" class="btn btn--primary btn--full">🖥 Zum Einsatz-Board</a>
+    </div>
   </div>
 </div>
 {% endblock %}

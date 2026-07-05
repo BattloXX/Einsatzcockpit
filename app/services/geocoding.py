@@ -89,3 +89,59 @@ async def geocode_address(
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("Nominatim-Antwort konnte nicht geparst werden: %s", exc)
         return None
+
+
+async def search_addresses(query: str, limit: int = 5) -> list[dict]:
+    """Interaktive Adresssuche (Objekt-Anlage): mehrere OSM-Kandidaten mit
+    strukturierten Feldern (strasse/hausnummer/ort/plz + lat/lng).
+
+    Gibt [] zurueck bei Fehler oder leerer Eingabe.
+    """
+    query = (query or "").strip()
+    if len(query) < 3:
+        return []
+
+    await _throttle()
+    try:
+        async with httpx.AsyncClient(
+            headers={"User-Agent": settings.NOMINATIM_USER_AGENT},
+            timeout=settings.NOMINATIM_TIMEOUT_SECONDS,
+        ) as client:
+            resp = await client.get(
+                f"{settings.NOMINATIM_BASE_URL}/search",
+                params={
+                    "q": query,
+                    "format": "jsonv2",
+                    "limit": str(max(1, min(limit, 10))),
+                    "addressdetails": "1",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("Nominatim-Adresssuche fehlgeschlagen: %s", exc)
+        return []
+
+    ergebnisse: list[dict] = []
+    for eintrag in data:
+        adr = eintrag.get("address", {}) or {}
+        strasse = adr.get("road") or adr.get("pedestrian") or adr.get("footway")
+        ort = (
+            adr.get("city") or adr.get("town") or adr.get("village")
+            or adr.get("municipality") or adr.get("suburb")
+        )
+        try:
+            lat = float(eintrag["lat"])
+            lng = float(eintrag["lon"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        ergebnisse.append({
+            "display_name": eintrag.get("display_name", ""),
+            "strasse": strasse,
+            "hausnummer": adr.get("house_number"),
+            "plz": adr.get("postcode"),
+            "ort": ort,
+            "lat": lat,
+            "lng": lng,
+        })
+    return ergebnisse
