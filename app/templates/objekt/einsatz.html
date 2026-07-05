@@ -1,39 +1,66 @@
 {% extends "base.html" %}
 {% block title %}{{ objekt.anzeige_nummer }} {{ objekt.name }} – Einsatzansicht{% endblock %}
 {% block content %}
-<div class="page-content objekt-einsatz" style="max-width:760px;">
-  <div style="margin-bottom:14px;">
-    <h1 style="margin:0;">{{ objekt.name }}</h1>
-    <p class="text-muted" style="margin:4px 0 0;">
-      {{ objekt.anzeige_nummer }}{% if objekt.vulgoname %} · {{ objekt.vulgoname }}{% endif %}
-      {% if objekt.adresse_zeile %} · {{ objekt.adresse_zeile }}{% endif %}
-    </p>
-  </div>
-
-  {% include "objekt/_einsatz_inhalt.html" %}
-
-  <!-- 8) Einsatzhistorie -->
-  {% if verknuepfungen %}
-  <div class="card" style="padding:14px;margin-bottom:12px;">
-    <h3 style="margin:0 0 10px;">🚨 Letzte Einsätze</h3>
-    <div style="display:flex;flex-direction:column;gap:6px;">
-      {% for v in verknuepfungen %}
-      {% set inc = incidents.get(v.incident_id) %}
-      {% if inc %}
-      <a href="/einsatz/{{ inc.id }}" style="display:flex;gap:8px;align-items:baseline;">
-        <span class="badge-pill badge-pill--gray">{{ inc.alarm_type_code }}</span>
-        <span class="text-muted" style="font-size:0.85em;">{{ inc.started_at|local_datetime }}</span>
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">{{ inc.report_text or inc.reason or '' }}</span>
-      </a>
-      {% endif %}
-      {% endfor %}
+<style>
+.objekt-einsatz { max-width: 1600px; margin: 0 auto; padding: 12px 16px 24px; }
+.oe-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
+.oe-map-wrap { position: sticky; top: 12px; }
+.oe-grid .objekt-karte-canvas { height: calc(100vh - 210px) !important; min-height: 440px; }
+.oe-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.oe-side .card { margin-bottom: 0 !important; }
+@media (max-width: 900px) {
+  .oe-grid { grid-template-columns: 1fr; }
+  .oe-map-wrap { position: static; }
+  .oe-grid .objekt-karte-canvas { height: 52vh !important; min-height: 320px; }
+}
+</style>
+<div class="page-content objekt-einsatz">
+  <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;">
+    <div style="min-width:0;">
+      <h1 style="margin:0;">{{ objekt.name }}</h1>
+      <p class="text-muted" style="margin:4px 0 0;">
+        {{ objekt.anzeige_nummer }}{% if objekt.vulgoname %} · {{ objekt.vulgoname }}{% endif %}
+        {% if objekt.adresse_zeile %} · {{ objekt.adresse_zeile }}{% endif %}
+      </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="/objekte/{{ objekt.id }}/objektblatt.pdf?anhang=1" target="_blank" class="btn btn--ghost">🖨 Objektblatt (PDF)</a>
+      <a href="/objekte/{{ objekt.id }}" class="btn btn--ghost">Zur Objektpflege</a>
     </div>
   </div>
-  {% endif %}
 
-  <div style="margin-bottom:24px;display:flex;gap:8px;flex-wrap:wrap;">
-    <a href="/objekte/{{ objekt.id }}/objektblatt.pdf?anhang=1" target="_blank" class="btn btn--ghost">🖨 Objektblatt (PDF)</a>
-    <a href="/objekte/{{ objekt.id }}" class="btn btn--ghost">Zur Objektpflege</a>
+  <div class="oe-grid">
+    <!-- Linke Spalte: große Lagekarte (readonly, inkl. Hydranten aus objekt_karte.js) -->
+    <div class="oe-map-wrap">
+      <div hx-get="/objekte/{{ objekt.id }}/karte/einbettung" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:14px;"><span class="text-muted">Lade Lagekarte …</span></div>
+      </div>
+    </div>
+
+    <!-- Rechte Spalte: Objektinfos (kompakt = ohne eigene Inline-Karte) -->
+    <div class="oe-side">
+      {% set kompakt = True %}
+      {% include "objekt/_einsatz_inhalt.html" %}
+
+      <!-- Einsatzhistorie -->
+      {% if verknuepfungen %}
+      <div class="card" style="padding:14px;">
+        <h3 style="margin:0 0 10px;">🚨 Letzte Einsätze</h3>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          {% for v in verknuepfungen %}
+          {% set inc = incidents.get(v.incident_id) %}
+          {% if inc %}
+          <a href="/einsatz/{{ inc.id }}" style="display:flex;gap:8px;align-items:baseline;">
+            <span class="badge-pill badge-pill--gray">{{ inc.alarm_type_code }}</span>
+            <span class="text-muted" style="font-size:0.85em;">{{ inc.started_at|local_datetime }}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">{{ inc.report_text or inc.reason or '' }}</span>
+          </a>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
   </div>
 </div>
 {% endblock %}

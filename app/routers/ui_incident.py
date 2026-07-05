@@ -864,14 +864,29 @@ async def incident_hydranten(incident_id: int, request: Request, db: Session = D
     if getattr(request.state, "objekt_enabled", False):
         from app.models.objekt import (
             OBJEKT_EINSATZ_BESTAETIGT,
+            Objekt,
             ObjektEinsatz,
             ObjektKartenObjekt,
         )
+        # Alle verknüpften Objekte (für Koordinaten-Fallback), bestätigte zuerst.
+        verknuepfungen = db.query(ObjektEinsatz).filter(
+            ObjektEinsatz.incident_id == incident_id,
+        ).all()
+        # Fallback-Zentrum: hat der Einsatz (noch) keine Koordinaten, nutze ein
+        # verknüpftes Objekt (bestätigt bevorzugt), damit Hydranten trotzdem laden.
+        if lat is None or lng is None:
+            sortiert = sorted(
+                verknuepfungen,
+                key=lambda oe: 0 if oe.status == OBJEKT_EINSATZ_BESTAETIGT else 1,
+            )
+            for oe in sortiert:
+                obj = db.get(Objekt, oe.objekt_id)
+                if obj and obj.lat is not None and obj.lng is not None:
+                    lat, lng = obj.lat, obj.lng
+                    break
         objekt_ids = [
-            oe.objekt_id for oe in db.query(ObjektEinsatz).filter(
-                ObjektEinsatz.incident_id == incident_id,
-                ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
-            ).all()
+            oe.objekt_id for oe in verknuepfungen
+            if oe.status == OBJEKT_EINSATZ_BESTAETIGT
         ]
         if objekt_ids:
             karten = db.query(ObjektKartenObjekt).filter(
@@ -904,6 +919,8 @@ async def incident_hydranten(incident_id: int, request: Request, db: Session = D
     return {
         "hydranten": merge_hydranten(osm, manuell),
         "stand": format_local_datetime(stand, org) if stand else None,
+        "zentrum": ({"lat": lat, "lng": lng} if lat is not None and lng is not None else None),
+        "aktiv": enabled,
     }
 
 

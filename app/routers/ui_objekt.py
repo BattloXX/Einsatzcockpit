@@ -247,9 +247,16 @@ def objekt_neu(
     hausnummer: str = Form(""),
     plz: str = Form(""),
     ort: str = Form(""),
+    lat: str = Form(""),
+    lng: str = Form(""),
 ):
     if not name.strip():
         raise HTTPException(status_code=400, detail="Name ist erforderlich")
+
+    # Koordinaten aus der OSM-Adressvalidierung (falls der Nutzer einen Treffer
+    # uebernommen hat) — dann kein Hintergrund-Geocoding noetig.
+    validiert_lat = float(lat) if lat.strip() else None
+    validiert_lng = float(lng) if lng.strip() else None
 
     objekt = Objekt(
         org_id=user.org_id,
@@ -261,6 +268,8 @@ def objekt_neu(
         hausnummer=hausnummer.strip() or None,
         plz=plz.strip() or None,
         ort=ort.strip() or None,
+        lat=validiert_lat,
+        lng=validiert_lng,
         status=OBJEKT_STATUS_ENTWURF,
         erstellt_von_id=user.id,
         aktualisiert_von_id=user.id,
@@ -274,12 +283,29 @@ def objekt_neu(
                 payload={"name": objekt.name, "nummer": objekt.nummer})
     db.commit()
 
+    # Nur geocoden, wenn keine validierten Koordinaten uebernommen wurden.
     if (strasse.strip() or ort.strip()) and objekt.lat is None:
         background_tasks.add_task(
             _geocode_objekt, objekt.id, objekt.strasse, objekt.hausnummer, objekt.ort
         )
 
     return RedirectResponse(url=f"/objekte/{objekt.id}", status_code=303)
+
+
+# ── OSM-Adresssuche (interaktive Validierung bei der Objekt-Anlage) ─────────────
+# WICHTIG: vor den /{objekt_id}-Routen registriert (statischer Pfad).
+
+@router.get("/adress-suche")
+async def objekt_adress_suche(
+    request: Request,
+    q: str = "",
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Liefert OSM/Nominatim-Adresskandidaten als JSON fuer die Objekt-Anlage."""
+    from app.services.geocoding import search_addresses
+
+    return {"treffer": await search_addresses(q, limit=6)}
 
 
 # ── Katalog-Admin: Kategorien (org_admin) ──────────────────────────────────────

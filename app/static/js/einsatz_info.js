@@ -4,7 +4,9 @@
  *   - Objekt-Symbole: /objekte/{id}/karte/objekte.json (window.objektSymbolHtml aus objekt_karte.js)
  *   - Hydranten/Löschwasser: /einsatz/{id}/hydranten.json (OSM/OSMHydrant + manuelle Objekt-Symbole)
  *
- * Rendert Karte, Marker-Popups und die "Nächste Hydranten"-Liste (#hydranten-liste).
+ * Zoom-Logik: Die Karte zoomt auf Einsatzort + gematchte Objekte ("objektBounds"),
+ * damit das Objekt erkennbar ist. Hydranten (bis 300 m entfernt) erweitern den
+ * Ausschnitt NICHT, sonst zoomt die Karte zu weit heraus.
  */
 (function () {
   "use strict";
@@ -23,13 +25,25 @@
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap"
   }).addTo(karte);
+  // Karte liegt in einem Grid/Sticky-Container → nach dem Layout neu vermessen.
+  setTimeout(function () { karte.invalidateSize(); }, 200);
+  window.addEventListener("resize", function () { karte.invalidateSize(); });
 
-  var bounds = [];
+  // objektBounds treibt den Zoom (Einsatzort + Objekte). hydrantBounds nur
+  // als sanfter Fallback, wenn es sonst nichts zum Zentrieren gibt.
+  var objektBounds = [];
+  var hydrantBounds = [];
+  var zentrumFallback = null;
+
   function fit() {
-    if (bounds.length > 1) {
-      karte.fitBounds(bounds, { padding: [30, 30], maxZoom: 18 });
-    } else if (bounds.length === 1) {
-      karte.setView(bounds[0], 17);
+    if (objektBounds.length > 1) {
+      karte.fitBounds(objektBounds, { padding: [45, 45], maxZoom: 18 });
+    } else if (objektBounds.length === 1) {
+      karte.setView(objektBounds[0], 18);
+    } else if (zentrumFallback) {
+      karte.setView(zentrumFallback, 17);
+    } else if (hydrantBounds.length) {
+      karte.fitBounds(hydrantBounds, { padding: [45, 45], maxZoom: 17 });
     } else {
       karte.setView([47.4652, 9.7503], 14); /* Fallback Wolfurt */
     }
@@ -46,7 +60,7 @@
       }),
       zIndexOffset: 1000
     }).addTo(karte).bindPopup("<strong>Einsatzort</strong>");
-    bounds.push([incLat, incLng]);
+    objektBounds.push([incLat, incLng]);
   }
   fit();
 
@@ -71,7 +85,7 @@
           L.marker([lat, lng], {
             icon: L.divIcon({ html: html, className: "oks-divicon", iconSize: null, iconAnchor: [16, 16] })
           }).addTo(karte).bindPopup("<strong>" + (e.label || e.typ) + "</strong>");
-          bounds.push([lat, lng]);
+          objektBounds.push([lat, lng]);
         });
         fit();
       })
@@ -99,11 +113,13 @@
     });
   }
 
-  function renderHydrantenListe(hydranten, stand) {
+  function renderHydrantenListe(hydranten, stand, aktiv) {
     var box = document.getElementById("hydranten-liste");
     if (!box) { return; }
     if (!hydranten || !hydranten.length) {
-      box.innerHTML = '<span class="text-muted">Keine Hydranten im Umkreis gefunden.</span>';
+      box.innerHTML = aktiv === false
+        ? '<span class="text-muted">Hydranten-Layer für diese Organisation deaktiviert.</span>'
+        : '<span class="text-muted">Keine Hydranten im Umkreis gefunden.</span>';
       return;
     }
     var html = '<div class="hydrant-liste">';
@@ -137,9 +153,13 @@
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
       if (!d) {
-        var card = document.getElementById("hydranten-card");
-        if (card) { card.style.display = "none"; }
+        renderHydrantenListe([], null, true);
         return;
+      }
+      // Zentrum-Fallback: hat der Einsatz keine Koordinaten, aber der Server
+      // ein verknüpftes Objekt als Bezug geliefert → Karte darauf zentrieren.
+      if (!objektBounds.length && d.zentrum && d.zentrum.lat != null) {
+        zentrumFallback = [d.zentrum.lat, d.zentrum.lng];
       }
       (d.hydranten || []).forEach(function (h) {
         if (h.lat == null || h.lng == null) { return; }
@@ -152,9 +172,9 @@
           + (h.ref ? "<br>" + h.ref : "")
           + (h.entfernung_m != null ? "<br>" + h.entfernung_m + " m" : ""));
         hydrantById[h.id] = m;
-        bounds.push([h.lat, h.lng]);
+        hydrantBounds.push([h.lat, h.lng]);
       });
-      renderHydrantenListe(d.hydranten, d.stand);
+      renderHydrantenListe(d.hydranten, d.stand, d.aktiv);
       fit();
     })
     .catch(function () {

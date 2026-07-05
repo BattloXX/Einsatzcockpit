@@ -7,7 +7,7 @@
     <a href="/objekte/" class="btn btn--ghost">Zurück zur Liste</a>
   </div>
 
-  <form method="post" action="/objekte/neu" class="card" style="padding:20px;">
+  <form method="post" action="/objekte/neu" class="card" style="padding:20px;" x-data="objektAdresse()">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="form-group">
       <label class="form-label">Name *</label>
@@ -26,31 +26,106 @@
         {% endfor %}
       </select>
     </div>
+
+    <!-- OSM-Adresssuche zur Validierung -->
+    <div class="form-group">
+      <label class="form-label">Adresse suchen &amp; validieren (OpenStreetMap)</label>
+      <div style="display:flex;gap:6px;">
+        <input type="text" class="form-input" style="flex:1;min-width:0;"
+               x-model="suchtext" @keydown.enter.prevent="suchen()"
+               placeholder="z. B. Hofsteigstraße 30 Wolfurt">
+        <button type="button" class="btn btn--secondary" @click="suchen()" :disabled="laden"
+                x-text="laden ? 'Suche …' : '🔍 Suchen'"></button>
+      </div>
+      <template x-if="fehler">
+        <p class="form-hint" style="color:var(--red-light,#f87171);" x-text="fehler"></p>
+      </template>
+      <ul x-show="treffer.length" x-cloak
+          style="list-style:none;margin:6px 0 0;padding:0;border:1px solid var(--border);border-radius:.4rem;overflow:hidden;">
+        <template x-for="(t, i) in treffer" :key="i">
+          <li>
+            <button type="button" @click="uebernehmen(t)"
+                    style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--on-surface);font-size:.85rem;"
+                    x-text="t.display_name"></button>
+          </li>
+        </template>
+      </ul>
+      <p class="form-hint">Treffer übernehmen füllt die Felder unten und speichert die geprüften Koordinaten – dadurch greift die automatische Objekt↔Einsatz-Verknüpfung über die Adresse zuverlässig.</p>
+    </div>
+
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">
       <div class="form-group">
         <label class="form-label">Straße</label>
-        <input type="text" name="strasse" class="form-input" maxlength="200">
+        <input type="text" name="strasse" class="form-input" maxlength="200" x-model="strasse" @input="invalidiere()">
       </div>
       <div class="form-group">
         <label class="form-label">Hausnummer</label>
-        <input type="text" name="hausnummer" class="form-input" maxlength="20">
+        <input type="text" name="hausnummer" class="form-input" maxlength="20" x-model="hausnummer" @input="invalidiere()">
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;">
       <div class="form-group">
         <label class="form-label">PLZ</label>
-        <input type="text" name="plz" class="form-input" maxlength="10">
+        <input type="text" name="plz" class="form-input" maxlength="10" x-model="plz" @input="invalidiere()">
       </div>
       <div class="form-group">
         <label class="form-label">Ort</label>
-        <input type="text" name="ort" class="form-input" maxlength="100">
+        <input type="text" name="ort" class="form-input" maxlength="100" x-model="ort" @input="invalidiere()">
       </div>
     </div>
-    <p class="form-hint">Koordinaten werden nach dem Anlegen automatisch aus der Adresse ermittelt (Geocoding).</p>
+
+    <input type="hidden" name="lat" x-model="lat">
+    <input type="hidden" name="lng" x-model="lng">
+    <template x-if="lat && lng">
+      <p class="form-hint" style="color:#16a34a;">
+        ✓ Koordinaten validiert (<span x-text="parseFloat(lat).toFixed(5)"></span>, <span x-text="parseFloat(lng).toFixed(5)"></span>)
+      </p>
+    </template>
+    <template x-if="!(lat && lng)">
+      <p class="form-hint">Ohne validierten Treffer werden die Koordinaten nach dem Anlegen automatisch aus der Adresse ermittelt.</p>
+    </template>
+
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
       <a href="/objekte/" class="btn btn--ghost">Abbrechen</a>
       <button type="submit" class="btn btn--primary">Objekt anlegen</button>
     </div>
   </form>
 </div>
+
+<script>
+function objektAdresse() {
+  return {
+    suchtext: "", treffer: [], laden: false, fehler: "",
+    strasse: "", hausnummer: "", plz: "", ort: "", lat: "", lng: "",
+    async suchen() {
+      this.fehler = ""; this.treffer = [];
+      var q = (this.suchtext || "").trim();
+      if (q.length < 3) { this.fehler = "Bitte mind. 3 Zeichen eingeben."; return; }
+      this.laden = true;
+      try {
+        var r = await fetch("/objekte/adress-suche?q=" + encodeURIComponent(q));
+        if (!r.ok) { throw new Error("http " + r.status); }
+        var d = await r.json();
+        this.treffer = d.treffer || [];
+        if (!this.treffer.length) { this.fehler = "Keine Treffer – Adresse bitte manuell eingeben."; }
+      } catch (e) {
+        this.fehler = "Adresssuche nicht erreichbar – Adresse manuell eingeben.";
+      } finally {
+        this.laden = false;
+      }
+    },
+    uebernehmen(t) {
+      this.strasse = t.strasse || "";
+      this.hausnummer = t.hausnummer || "";
+      this.plz = t.plz || "";
+      this.ort = t.ort || "";
+      this.lat = (t.lat != null) ? String(t.lat) : "";
+      this.lng = (t.lng != null) ? String(t.lng) : "";
+      this.treffer = [];
+      this.suchtext = t.display_name || this.suchtext;
+    },
+    invalidiere() { this.lat = ""; this.lng = ""; }
+  };
+}
+</script>
 {% endblock %}
