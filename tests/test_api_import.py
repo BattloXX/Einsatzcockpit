@@ -147,7 +147,13 @@ def test_upload_split_und_klassifizierung(import_env):
     resp = client.post(
         f"/api/import/dokument/{objekt_id}",
         files={"file": ("Melderplan.pdf", _test_pdf(2), "application/pdf")},
-        data={"dok_typ_label": "BMA Melderplan", "favorit": "true", "melderlinie": "12"},
+        params={
+            "dok_typ": 5,  # EUS "Laufkarte" -> bma_melderplan
+            "favorit": "true",
+            "melderlinie": "12",
+            "stand": "2024-03-15 00:00:00",
+            "bemerkung": "Laufkarten EG",
+        },
         headers={"X-Import-Key": "test-key-123"},
     )
     assert resp.status_code == 200, resp.text
@@ -169,6 +175,73 @@ def test_upload_split_und_klassifizierung(import_env):
         assert s.dokumentart == "bma_melderplan"
         assert s.bei_einsatz_drucken is True
         assert s.melderlinien == "12"
+        assert s.stand is not None and s.stand.isoformat() == "2024-03-15"
+        assert s.titel == "Laufkarten EG"
+    db.close()
+
+
+def test_upload_label_fallback_wenn_dok_typ_unbekannt(import_env):
+    """dok_typ ohne Mapping (0/Sonstiges) -> Fuzzy-Match auf dok_typ_label."""
+    client, _Session, objekt_id = import_env
+    resp = client.post(
+        f"/api/import/dokument/{objekt_id}",
+        files={"file": ("BSP.pdf", _test_pdf(1), "application/pdf")},
+        params={"dok_typ": 0, "dok_typ_label": "Brandschutzplan EG"},
+        headers={"X-Import-Key": "test-key-123"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["dokumentart"] == "brandschutzplan"
+
+
+def test_upload_einsatzdruck_oder_logik(import_env):
+    """bei_einsatz_drucken = favorit ODER dl ODER bmzfbf ODER sammelplatz."""
+    client, Session, objekt_id = import_env
+    resp = client.post(
+        f"/api/import/dokument/{objekt_id}",
+        files={"file": ("BMZ.pdf", _test_pdf(1), "application/pdf")},
+        params={"bmzfbf": "true"},
+        headers={"X-Import-Key": "test-key-123"},
+    )
+    assert resp.status_code == 200
+    db = Session()
+    set_tenant_context(db, None)
+    seite = (
+        db.query(ObjektDokumentSeite)
+        .filter(ObjektDokumentSeite.dokument_id == resp.json()["id"])
+        .first()
+    )
+    assert seite is not None and seite.bei_einsatz_drucken is True
+    db.close()
+
+
+def test_upload_idempotent_gleicher_dateiname(import_env):
+    """Zweiter Upload mit gleichem Dateinamen legt kein Duplikat an."""
+    client, Session, objekt_id = import_env
+    pdf = _test_pdf(1)
+    erste = client.post(
+        f"/api/import/dokument/{objekt_id}",
+        files={"file": ("Doppelt.pdf", pdf, "application/pdf")},
+        headers={"X-Import-Key": "test-key-123"},
+    )
+    assert erste.status_code == 200
+    zweite = client.post(
+        f"/api/import/dokument/{objekt_id}",
+        files={"file": ("Doppelt.pdf", pdf, "application/pdf")},
+        headers={"X-Import-Key": "test-key-123"},
+    )
+    assert zweite.status_code == 200
+    assert zweite.json()["id"] == erste.json()["id"]
+    assert zweite.json().get("duplikat") is True
+
+    db = Session()
+    set_tenant_context(db, None)
+    from app.models.objekt import ObjektDokument
+    anzahl = (
+        db.query(ObjektDokument)
+        .filter(ObjektDokument.dateiname_original == "Doppelt.pdf")
+        .count()
+    )
+    assert anzahl == 1
     db.close()
 
 

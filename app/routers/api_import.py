@@ -21,8 +21,9 @@ WICHTIG: Nur fuer die Dauer der Migration aktiv. Danach:
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -60,26 +61,89 @@ def _get_db_ohne_tenant():
         db.close()
 
 
+# EUS DokumentTyp (Integer) -> feste EC-Dokumentart-Codes (DOKUMENTARTEN).
+# EC kennt keine Arten "Grundriss"/"Feuerwehrplan"/"Foto"/"Sonstiges":
+#   Grundriss -> lageplan (gleiche Heuristik wie _DOKUMENTART_STICHWORTE),
+#   Feuerwehrplan -> brandschutzplan (naechste EC-Art),
+#   Laufkarte -> bma_melderplan, Foto/Sonstiges -> None (unklassifiziert).
+_DOK_TYP_MAPPING: dict[int, str] = {
+    1: "lageplan",
+    2: "lageplan",
+    3: "brandschutzplan",
+    4: "brandschutzplan",
+    5: "bma_melderplan",
+    200: "lageplan",
+}
+
+
+def _parse_stand(wert: str) -> date | None:
+    """EUS-Stand ("YYYY-MM-DD HH:MM:SS" oder ISO) -> date; None bei leer/ungueltig."""
+    if not wert or not wert.strip():
+        return None
+    try:
+        return datetime.fromisoformat(wert.strip()).date()
+    except ValueError:
+        return None
+
+
 @router.post("/dokument/{objekt_id}")
 async def upload_import_dokument(
     objekt_id: int,
     file: UploadFile = File(...),
-    dok_typ_label: str = Form(""),
-    favorit: bool = Form(False),
-    melderlinie: str = Form(""),
+    laufende_nr: int = 0,
+    dok_typ: int = 0,
+    dok_unter_typ: str = "",
+    dok_typ_label: str = "",
+    favorit: bool = False,
+    melderlinie: str = "",
+    stand: str = "",
+    bemerkung: str = "",
+    schluessel_safe: bool = False,
+    schluessel_box: bool = False,
+    dl: bool = False,
+    bmzfbf: bool = False,
+    sammelplatz: bool = False,
+    druck_format: int = 0,
     db: Session = Depends(_get_db_ohne_tenant),
     _: None = Depends(verify_import_key),
 ):
     """Laedt ein Dokument hoch, zerlegt es (Poppler) und klassifiziert alle Seiten.
 
-    dok_typ_label: Freitext-Label aus dem EUS-Dokumenttyp-Katalog (z. B.
-    "Brandschutzplan"); wird per Fuzzy-Match auf DOKUMENTARTEN abgebildet.
+    Alle Klassifizierungshinweise kommen als Query-Parameter (das Migrations-
+    script sendet params=, nicht form data). Dokumentart: zuerst der EUS-
+    DokumentTyp-Integer (_DOK_TYP_MAPPING), sonst Fuzzy-Match auf dok_typ_label.
     Kein Treffer → Seiten bleiben unklassifiziert (gelb in der Galerie, manuell
     oder per KI-Review nachtragbar) statt eine falsche Art zu raten.
+
+    bei_einsatz_drucken = favorit ODER dl ODER bmzfbf ODER sammelplatz.
+    bemerkung -> Seitentitel. Ohne EC-Gegenstueck (bewusst ignoriert):
+    laufende_nr (Sortierung ergibt sich aus Upload-Reihenfolge), dok_unter_typ
+    (GUID ohne Mapping-Tabelle), schluessel_safe/schluessel_box (liegen in EC am
+    Objekt/BMA-Block, nicht am Dokument), druck_format (EC rendert selbst).
+
+    Idempotent: gleicher dateiname_original am selben Objekt → bestehendes
+    Dokument zurueckgeben statt Duplikat anzulegen.
     """
     objekt = db.query(Objekt).filter(Objekt.id == objekt_id).first()
     if objekt is None:
         raise HTTPException(status_code=404, detail="Objekt nicht gefunden")
+
+    vorhanden = (
+        db.query(ObjektDokument)
+        .filter(
+            ObjektDokument.objekt_id == objekt.id,
+            ObjektDokument.dateiname_original == (file.filename or ""),
+        )
+        .first()
+    )
+    if vorhanden is not None:
+        return {
+            "id": vorhanden.id,
+            "objekt_id": objekt_id,
+            "status": vorhanden.status,
+            "seitenzahl": vorhanden.seitenzahl,
+            "duplikat": True,
+        }
 
     try:
         dokument = await store_dokument_upload(file, objekt, user=None, db=db)
@@ -92,9 +156,11 @@ async def upload_import_dokument(
         raise HTTPException(status_code=500, detail=f"Upload fehlgeschlagen: {exc}") from exc
 
     # Synchron verarbeiten (nicht als BackgroundTask), damit die HTTP-Antwort
-    # dem Migrationsscript einen verlaesslichen Endzustand liefert. Poppler-
-    # Aufrufe sind blockierend -> in den Threadpool auslagern, damit der
-    # Event-Loop waehrenddessen andere Requests bedienen kann.
+    # dem Migrationsscript einen verlaesslichen Endzustand liefert. Es gibt
+    # KEINEN Hintergrund-Job, der auf status='neu' lauscht — ohne diesen Aufruf
+    # bliebe das Dokument unverarbeitet. Poppler-Aufrufe sind blockierend ->
+    # in den Threadpool auslagern, damit der Event-Loop waehrenddessen andere
+    # Requests bedienen kann.
     await run_in_threadpool(verarbeite_dokument, dokument.id)
 
     db.expire_all()
@@ -107,15 +173,22 @@ async def upload_import_dokument(
         .all()
     )
 
-    dokumentart = _match_dokumentart(dok_typ_label)
-    if dokumentart or favorit or melderlinie.strip():
+    dokumentart = _DOK_TYP_MAPPING.get(dok_typ) or _match_dokumentart(dok_typ_label)
+    einsatzdruck = favorit or dl or bmzfbf or sammelplatz
+    stand_datum = _parse_stand(stand)
+    titel = bemerkung.strip()[:200] or None
+    if dokumentart or einsatzdruck or melderlinie.strip() or stand_datum or titel:
         for seite in seiten:
             if dokumentart:
                 seite.dokumentart = dokumentart
-            if favorit:
+            if einsatzdruck:
                 seite.bei_einsatz_drucken = True
             if melderlinie.strip():
                 seite.melderlinien = melderlinie.strip()[:100]
+            if stand_datum:
+                seite.stand = stand_datum
+            if titel:
+                seite.titel = titel
         db.commit()
 
     return {
