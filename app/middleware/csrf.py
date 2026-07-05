@@ -8,7 +8,8 @@ Handler `request.form()` weiterhin nutzen können.
   als `X-CSRF-Token`-Header ODER als `_csrf`-Form-Feld vorhanden sein.
 - Stimmt nichts → 403.
 
-Ausnahmen: /ws/*, /api/v1/* (X-API-Key authentifiziert), /static/*, /push/*.
+Ausnahmen: /ws/*, /api/v1/* (X-API-Key authentifiziert), /static/*, /push/*,
+/api/import/* (TEMPORAER, X-Import-Key authentifiziert, siehe app/routers/api_import.py).
 
 SEC-8: /api/v1/device/* ist eine Ausnahme von der Ausnahme — dieser Unterpfad ist
 NICHT API-Key- sondern Session-Cookie-authentifiziert (native Android-App via
@@ -27,7 +28,7 @@ CSRF_COOKIE = "ec_csrf"
 CSRF_HEADER = "X-CSRF-Token"
 CSRF_FORM_FIELD = "_csrf"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
-EXEMPT_PREFIXES = ("/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/")
+EXEMPT_PREFIXES = ("/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/", "/api/import/")
 # Cookie-authentifizierte API-Endpunkte innerhalb von /api/v1/ (SEC-8) — kein
 # Token-Exempt-Freifahrtschein, sondern Origin-Check (siehe Docstring oben).
 _ORIGIN_CHECK_PREFIXES = ("/api/v1/device/",)
