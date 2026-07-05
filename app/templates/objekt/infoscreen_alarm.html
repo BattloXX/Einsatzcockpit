@@ -183,10 +183,16 @@
     }
     if (o && o.karten_objekte) {
       o.karten_objekte.forEach(function (k) {
-        if (k.geometry) {
+        // GeoJSON-Punkte (z. B. aus EUS-Import) wie lat/lng-Eintraege als
+        // Symbol-Marker rendern — L.geoJSON wuerde sonst Leaflets fehlendes
+        // Default-Icon nutzen (kaputtes-Bild-Symbol).
+        var punkt = k.geometry && k.geometry.type === "Point";
+        var mlat = punkt ? k.geometry.coordinates[1] : k.lat;
+        var mlng = punkt ? k.geometry.coordinates[0] : k.lng;
+        if (k.geometry && !punkt) {
           L.geoJSON(k.geometry, { style: { color: "#d42225", weight: 3, fillOpacity: .12 } }).addTo(karte);
-        } else if (k.lat != null && k.lng != null) {
-          L.marker([k.lat, k.lng], {
+        } else if (mlat != null && mlng != null) {
+          L.marker([mlat, mlng], {
             icon: L.divIcon({
               html: window.objektSymbolHtml(k.typ, k.label),
               className: "oks-divicon", iconSize: null, iconAnchor: [16, 16]

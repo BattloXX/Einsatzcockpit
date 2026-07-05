@@ -33,7 +33,8 @@
   };
 
   function objektSymbolHtml(typ, label) {
-    var s = SYMBOLE[typ] || { text: "?", stil: "box" };
+    // Unbekannte Typen (z. B. aus EUS-Import): Typ-Kuerzel statt "?" anzeigen
+    var s = SYMBOLE[typ] || { text: String(typ || "?").substring(0, 4).toUpperCase(), stil: "box" };
     var inner;
     if (s.stil === "dreieck") {
       inner = '<div class="oks oks--dreieck"><span>' + s.text + "</span></div>";
@@ -114,7 +115,8 @@
 
     function eintragAnzeigen(e) {
       var layer;
-      if (e.geometry) {
+      var punktGeometrie = e.geometry && e.geometry.type === "Point";
+      if (e.geometry && !punktGeometrie) {
         layer = L.geoJSON(e.geometry, {
           style: { color: "#d42225", weight: 3, fillOpacity: 0.12 }
         });
@@ -125,14 +127,23 @@
           });
         }
       } else {
-        layer = L.marker([e.lat, e.lng], {
+        // Punkte immer als Symbol-Marker rendern — auch wenn sie (z. B. aus dem
+        // EUS-Import) als GeoJSON-Point statt lat/lng gespeichert sind. L.geoJSON
+        // wuerde sonst Leaflets Default-Icon nutzen, dessen marker-icon.png es
+        // unter /static nicht gibt (kaputtes-Bild-Symbol).
+        var lat = punktGeometrie ? e.geometry.coordinates[1] : e.lat;
+        var lng = punktGeometrie ? e.geometry.coordinates[0] : e.lng;
+        layer = L.marker([lat, lng], {
           icon: symbolIcon(e.typ, e.label),
           draggable: !!opts.editierbar
         });
         if (opts.editierbar) {
           layer.on("dragend", function (ev) {
             var pos = ev.target.getLatLng();
-            apiPost("/objekte/" + e.id, { lat: pos.lat, lng: pos.lng }).catch(function () {});
+            var daten = punktGeometrie
+              ? { geometry: { type: "Point", coordinates: [pos.lng, pos.lat] } }
+              : { lat: pos.lat, lng: pos.lng };
+            apiPost("/objekte/" + e.id, daten).catch(function () {});
           });
         }
       }

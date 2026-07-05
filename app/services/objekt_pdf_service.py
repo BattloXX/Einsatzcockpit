@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
 from datetime import UTC, datetime
 
@@ -51,7 +52,16 @@ def render_objekt_map_png(objekt: Objekt, *, size: tuple[int, int] = (640, 400))
         )
         karte.add_marker(CircleMarker((objekt.lng, objekt.lat), "#d42225", 16))
         for k in objekt.karten_objekte:
-            if k.lat is None or k.lng is None:
+            lat, lng = k.lat, k.lng
+            if (lat is None or lng is None) and k.geometry_json:
+                # Punkte koennen (z. B. aus EUS-Import) als GeoJSON-Point liegen
+                try:
+                    geo = json.loads(k.geometry_json)
+                    if geo.get("type") == "Point":
+                        lng, lat = geo["coordinates"][0], geo["coordinates"][1]
+                except (ValueError, KeyError, IndexError, TypeError):
+                    pass
+            if lat is None or lng is None:
                 continue
             if k.typ.startswith("gefahr_"):
                 farbe = "#facc15"
@@ -61,7 +71,7 @@ def render_objekt_map_png(objekt: Objekt, *, size: tuple[int, int] = (640, 400))
                 farbe = "#2563eb"
             else:
                 farbe = "#ffffff"
-            karte.add_marker(CircleMarker((k.lng, k.lat), farbe, 10))
+            karte.add_marker(CircleMarker((lng, lat), farbe, 10))
         bild = karte.render(zoom=17)
         buf = io.BytesIO()
         bild.save(buf, format="PNG")
