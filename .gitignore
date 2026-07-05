@@ -16,6 +16,14 @@ node_modules/
 *.swo
 # alembic migrations are tracked
 
+# EUS-Datenmigration (einmalig, lokal ausgefuehrt): enthaelt Zugangsdaten zum
+# Altsystem/SSH-Tunnel bzw. Legacy-Schema-Details, gehoert nicht in ein
+# oeffentliches Repo. Bleiben nur lokal auf der Maschine, die die Migration faehrt.
+scripts/eus_import.py
+scripts/eus_migration.py
+eus_import_log.json
+migration_log.json
+
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
