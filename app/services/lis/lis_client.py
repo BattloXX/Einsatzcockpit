@@ -44,6 +44,7 @@ _ACTION_ADD_SESSION_ENTRIES = f"{_NS_BASE}/CoreService/AddSessionEntries"
 _ACTION_SELECT_OPERATION = f"{_NS_BASE}/CoreService/SelectOperation"
 _ACTION_GET_OPERATIONS = f"{_NS_BASE}/OperationService/GetOperationsInRange"
 _ACTION_GET_TASKS = f"{_NS_BASE}/OperationService/GetTasks"
+_ACTION_GET_ROOT_ORGANIZATIONS = f"{_NS_BASE}/OperationService/GetRootOrganizations"
 _ACTION_GET_OPERATION_UNITS = f"{_NS_BASE}/OperationService/GetOperationUnits"
 _ACTION_GET_DOCUMENTS = f"{_NS_BASE}/OperationService/GetDocumentsByOperationId"
 _ACTION_DOWNLOAD_ATTACHMENT = f"{_NS_BASE}/OperationService/DownloadDocument"
@@ -432,6 +433,35 @@ class LisClient:
             body,
         )
         return _result_list(root, "GetTasksResult")
+
+    async def get_root_organizations(self) -> list[dict]:
+        """Experiment 3 (2026-07-05), byte-genau aus dem Smartclient-Referenz-Mitschnitt
+        übernommen: `OperationService.svc/GetRootOrganizations`, nur `siteSession`, keine
+        weiteren Parameter. Anders als SelectOperation/AddSessionEntries/Authorize (alle
+        CoreService.svc bzw. AuthorizationService.svc) läuft dieser Aufruf über
+        **OperationService.svc** — derselbe Dienst, in dem `GetTasks` mit
+        `SessionData.get_OrganizationId()` faultet (`DatabaseOperationProvider.GetTasks` →
+        `MemorySessionCache.For` → `DatabaseSessionCache.For` → `SetRelatedOrganizations`).
+        Vermutung: CoreService und OperationService führen getrennte Session-Caches; unsere
+        bisherigen Fix-Versuche (OrganizationId-Session-Entry, zusätzliches SelectOperation)
+        wirken nur auf den CoreService-seitigen Zustand. GetRootOrganizations ist der einzige
+        im Mitschnitt beobachtete OperationService-Aufruf VOR GetTasks, der ohne
+        operationId/organizationId auskommt und daher plausibel den
+        OperationService-Session-Cache für die Session erst anlegt/befüllt. Noch NICHT live
+        verifiziert.
+        """
+        await self._ensure_login()
+        body = (
+            f'<GetRootOrganizations xmlns="{_NS_OPERATION}">'
+            f"{self._site_session_xml()}"
+            f"</GetRootOrganizations>"
+        )
+        root = await self._post(
+            f"{self.base_url}/OperationService.svc",
+            _ACTION_GET_ROOT_ORGANIZATIONS,
+            body,
+        )
+        return _result_list(root, "GetRootOrganizationsResult")
 
     async def get_operation_units(self, organization_id: str, operation_id: str) -> list[dict]:
         """Fahrzeuge/Einheiten EINES Einsatzes mit Live-Status (siehe Doku Abschnitt 7.1).

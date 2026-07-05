@@ -196,6 +196,32 @@ def test_authorize_posts_to_authorization_service_with_session_id(monkeypatch):
     assert "<a:Site>LIS</a:Site>" in captured["body"]
 
 
+def test_get_root_organizations_posts_to_operation_service(monkeypatch):
+    """Experiment 3 (2026-07-05): byte-genau aus dem Smartclient-Referenz-Mitschnitt
+    übernommen — GetRootOrganizations läuft über OperationService.svc (nicht CoreService.svc
+    wie SelectOperation/AddSessionEntries), nur mit siteSession, ohne weitere Parameter."""
+    captured = {}
+    client = LisClient("https://lis.example.at/ipr", "LIS", "u", "pw")
+    client.session_id = "11111111-2222-3333-4444-555555555555"
+    client._logged_in = True
+
+    async def fake_post(url, action, body, retry_on_auth=True):
+        captured["url"] = url
+        captured["action"] = action
+        captured["body"] = body
+        return ET.fromstring(_EMPTY_ENVELOPE_XML)
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    asyncio.run(client.get_root_organizations())
+
+    assert captured["url"] == "https://lis.example.at/ipr/OperationService.svc"
+    assert captured["action"] == (
+        "http://services.intergraph.com/Emea/Pr/2011/03/OperationService/GetRootOrganizations"
+    )
+    assert "<GetRootOrganizations xmlns=" in captured["body"]
+    assert "11111111-2222-3333-4444-555555555555" in captured["body"]
+
+
 def test_login_hashes_plaintext_password_by_default(monkeypatch):
     import hashlib
 

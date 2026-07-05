@@ -698,6 +698,15 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
         logger.exception("LIS SelectOperation für Org %s fehlgeschlagen", org.id)
         return
 
+    try:
+        # Experiment 3 (2026-07-05, nach Fehlschlag von Experiment 1+2 im Live-Test):
+        # GetRootOrganizations primt vermutlich den OperationService-seitigen Session-Cache,
+        # den GetTasks braucht (siehe get_root_organizations()-Docstring in lis_client.py).
+        # Best-effort: ein Fehlschlag hier darf den restlichen Sync nicht blockieren.
+        await client.get_root_organizations()
+    except LisClientError:
+        logger.exception("LIS GetRootOrganizations für Org %s fehlgeschlagen", org.id)
+
     operations: list[dict] = []
     start_index = 0
     count = 50
