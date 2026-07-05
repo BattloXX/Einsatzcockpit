@@ -34,6 +34,25 @@ def test_parse_overpass_elements_sortiert_und_dedupliziert():
     assert res[0]["richtung"] in ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
 
 
+def test_parse_overpass_elements_respektiert_max_results():
+    """Einsatzinfo (2-km-Radius) darf mehr als den Standard-Cap liefern; parse_overpass
+    deckelt auf das übergebene max_results (None → Standard HYDRANT_MAX)."""
+    lat, lng = 47.465, 9.750
+    elements = [
+        {"id": i, "lat": 47.465 + i * 0.001, "lon": 9.750, "tags": {"emergency": "fire_hydrant"}}
+        for i in range(1, 11)
+    ]
+    assert len(hs.parse_overpass_elements(elements, lat, lng, max_results=3)) == 3
+    assert len(hs.parse_overpass_elements(elements, lat, lng, max_results=50)) == 10
+
+
+def test_overpass_query_nutzt_radius_und_max():
+    """Der 2-km-Radius und das erhöhte Limit landen im Overpass-Query."""
+    q = hs._overpass_query(47.465, 9.750, 2000, 120)
+    assert "around:2000" in q
+    assert "out body 240;" in q  # max_results * 2
+
+
 def test_manuelle_objekt_hydranten_mapping_und_distanz():
     karten = [
         SimpleNamespace(id=10, typ="hydrant_ueberflur", lat=47.4655, lng=9.7505, label="H1"),

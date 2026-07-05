@@ -70,7 +70,7 @@ def _ref_aus_tags(tags: dict) -> str | None:
     return None
 
 
-def _overpass_query(lat: float, lng: float, radius_m: int) -> str:
+def _overpass_query(lat: float, lng: float, radius_m: int, max_results: int) -> str:
     r = int(radius_m)
     return (
         "[out:json][timeout:25];("
@@ -79,16 +79,21 @@ def _overpass_query(lat: float, lng: float, radius_m: int) -> str:
         f'node["emergency"="fire_water_pond"](around:{r},{lat},{lng});'
         f'node["emergency"="water_tank"](around:{r},{lat},{lng});'
         f'node["fire_hydrant:type"](around:{r},{lat},{lng});'
-        ");out body {};".format(settings.HYDRANT_MAX * 2)
+        ");out body {};".format(int(max_results) * 2)
     )
 
 
-async def fetch_osm_hydranten(lat: float, lng: float, radius_m: int | None = None) -> list[dict]:
+async def fetch_osm_hydranten(
+    lat: float, lng: float, radius_m: int | None = None, max_results: int | None = None,
+) -> list[dict]:
     """Holt OSM-Hydranten im Umkreis (mit TTL-Cache). Gibt [] bei Fehler zurück.
 
-    Rückgabe je Eintrag: {id, lat, lng, typ, ref, entfernung_m, richtung, quelle}.
+    `radius_m`/`max_results` überschreiben die Standardwerte (z.B. 2-km-Radius für die
+    Einsatzinfo-Karte). Rückgabe je Eintrag:
+    {id, lat, lng, typ, ref, entfernung_m, richtung, quelle}.
     """
     radius = int(radius_m or settings.HYDRANT_RADIUS_M)
+    limit = int(max_results or settings.HYDRANT_MAX)
     ckey = (round(lat, 4), round(lng, 4), radius)
     now = time.time()
     cached = _cache.get(ckey)
@@ -102,7 +107,7 @@ async def fetch_osm_hydranten(lat: float, lng: float, radius_m: int | None = Non
         ) as client:
             resp = await client.post(
                 settings.HYDRANT_OVERPASS_URL,
-                data={"data": _overpass_query(lat, lng, radius)},
+                data={"data": _overpass_query(lat, lng, radius, limit)},
             )
             resp.raise_for_status()
             daten = resp.json()
@@ -110,16 +115,19 @@ async def fetch_osm_hydranten(lat: float, lng: float, radius_m: int | None = Non
         logger.warning("Overpass-Hydrantenabfrage fehlgeschlagen: %s", exc)
         return []
 
-    ergebnisse = parse_overpass_elements(daten.get("elements", []), lat, lng)
+    ergebnisse = parse_overpass_elements(daten.get("elements", []), lat, lng, max_results=limit)
     _cache[ckey] = (now, ergebnisse)
     return ergebnisse
 
 
-def parse_overpass_elements(elements: list[dict], lat: float, lng: float) -> list[dict]:
+def parse_overpass_elements(
+    elements: list[dict], lat: float, lng: float, max_results: int | None = None,
+) -> list[dict]:
     """Overpass-Elemente → normalisierte Hydranten-Liste (sortiert, gedeckelt).
 
     Dedupliziert nach OSM-ID (Union-Queries können ein Element mehrfach liefern).
     """
+    limit = int(max_results or settings.HYDRANT_MAX)
     ergebnisse: list[dict] = []
     gesehen: set = set()
     for el in elements:
@@ -140,7 +148,7 @@ def parse_overpass_elements(elements: list[dict], lat: float, lng: float) -> lis
             "quelle": "osm",
         })
     ergebnisse.sort(key=lambda h: h["entfernung_m"])
-    return ergebnisse[: settings.HYDRANT_MAX]
+    return ergebnisse[:limit]
 
 
 def manuelle_objekt_hydranten(karten_objekte, ref_lat: float | None, ref_lng: float | None) -> list[dict]:

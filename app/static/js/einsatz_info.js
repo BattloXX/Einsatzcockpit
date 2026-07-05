@@ -5,8 +5,11 @@
  *   - Hydranten/Löschwasser: /einsatz/{id}/hydranten.json (OSM/OSMHydrant + manuelle Objekt-Symbole)
  *
  * Zoom-Logik: Die Karte zoomt auf Einsatzort + gematchte Objekte ("objektBounds"),
- * damit das Objekt erkennbar ist. Hydranten (bis 300 m entfernt) erweitern den
+ * damit das Objekt erkennbar ist. Hydranten (bis 2 km entfernt) erweitern den
  * Ausschnitt NICHT, sonst zoomt die Karte zu weit heraus.
+ *
+ * Liste: zeigt max. 5 Entnahmestellen gleichzeitig, die restlichen erscheinen beim
+ * Scrollen im inneren Scrollbereich.
  */
 (function () {
   "use strict";
@@ -113,6 +116,32 @@
     });
   }
 
+  // Liste zeigt max. 5 Einträge gleichzeitig (CSS-Höhendeckel); die restlichen
+  // Entnahmestellen erscheinen beim Scrollen im inneren Scrollbereich. Die Marker
+  // liegen ohnehin alle auf der Karte.
+  var LISTE_SICHTBAR = 5;
+
+  function hydrantRowHtml(h) {
+    var label = HYDRANT_LABEL[h.typ] || "Hydrant";
+    var dist = (h.entfernung_m != null) ? (h.entfernung_m + " m" + (h.richtung ? " " + h.richtung : "")) : "";
+    var quelle = h.quelle === "objekt" ? " · Objekt" : "";
+    return '<button type="button" class="hydrant-liste__row" data-hid="' + h.id + '">'
+      + '<span class="hydrant-icon hydrant-icon--' + (h.typ || "hydrant") + '">'
+      + (HYDRANT_ICON_TEXT[h.typ] || "H") + "</span>"
+      + '<span class="hydrant-liste__text"><strong>' + label + "</strong>"
+      + (h.ref ? ' <span class="text-muted">' + h.ref + "</span>" : "")
+      + quelle + "</span>"
+      + '<span class="hydrant-liste__dist">' + dist + "</span>"
+      + "</button>";
+  }
+
+  function bindHydrantRow(row) {
+    row.addEventListener("click", function () {
+      var m = hydrantById[row.dataset.hid];
+      if (m) { karte.setView(m.getLatLng(), 18); m.openPopup(); }
+    });
+  }
+
   function renderHydrantenListe(hydranten, stand, aktiv) {
     var box = document.getElementById("hydranten-liste");
     if (!box) { return; }
@@ -122,31 +151,16 @@
         : '<span class="text-muted">Keine Hydranten im Umkreis gefunden.</span>';
       return;
     }
-    var html = '<div class="hydrant-liste">';
-    hydranten.slice(0, 8).forEach(function (h) {
-      var label = HYDRANT_LABEL[h.typ] || "Hydrant";
-      var dist = (h.entfernung_m != null) ? (h.entfernung_m + " m" + (h.richtung ? " " + h.richtung : "")) : "";
-      var quelle = h.quelle === "objekt" ? " · Objekt" : "";
-      html += '<button type="button" class="hydrant-liste__row" data-hid="' + h.id + '">'
-        + '<span class="hydrant-icon hydrant-icon--' + (h.typ || "hydrant") + '">'
-        + (HYDRANT_ICON_TEXT[h.typ] || "H") + "</span>"
-        + '<span class="hydrant-liste__text"><strong>' + label + "</strong>"
-        + (h.ref ? ' <span class="text-muted">' + h.ref + "</span>" : "")
-        + quelle + "</span>"
-        + '<span class="hydrant-liste__dist">' + dist + "</span>"
-        + "</button>";
-    });
-    html += "</div>";
-    if (stand) {
-      html += '<div class="text-muted" style="font-size:.72rem;margin-top:8px;">Stand: ' + stand + " · Quelle: OpenStreetMap</div>";
-    }
-    box.innerHTML = html;
-    box.querySelectorAll(".hydrant-liste__row").forEach(function (row) {
-      row.addEventListener("click", function () {
-        var m = hydrantById[row.dataset.hid];
-        if (m) { karte.setView(m.getLatLng(), 18); m.openPopup(); }
-      });
-    });
+    var html = "";
+    hydranten.forEach(function (h) { html += hydrantRowHtml(h); });
+    var mehr = hydranten.length > LISTE_SICHTBAR
+      ? '<div class="hydrant-liste__mehr text-muted">' + hydranten.length
+        + " Entnahmestellen · scrollen für mehr</div>"
+      : "";
+    box.innerHTML = '<div class="hydrant-liste" id="hydrant-liste-scroll">' + html + "</div>"
+      + mehr
+      + (stand ? '<div class="text-muted" style="font-size:.72rem;margin-top:8px;">Stand: ' + stand + " · Quelle: OpenStreetMap</div>" : "");
+    document.querySelectorAll("#hydrant-liste-scroll .hydrant-liste__row").forEach(bindHydrantRow);
   }
 
   fetch("/einsatz/" + incidentId + "/hydranten.json")

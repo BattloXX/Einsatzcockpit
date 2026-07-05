@@ -131,6 +131,23 @@ def test_build_incident_message_card_no_map_without_coords():
     assert not any("Google Maps" in t for t in action_titles)
 
 
+# ── Karten-Base-URL: öffentlich erreichbares Kartenbild für Teams ────────────
+
+def test_card_base_url_prefers_public_base_url(monkeypatch):
+    """Teams lädt das Kartenbild aus der Cloud → interne request.base_url wird durch die
+    konfigurierte PUBLIC_BASE_URL ersetzt, damit das Bild erreichbar ist."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://einsatz.example.org")
+    assert teams_alarm_service._card_base_url("http://192.168.1.5:8092") == "https://einsatz.example.org"
+
+
+def test_card_base_url_falls_back_to_request_base(monkeypatch):
+    """Ohne PUBLIC_BASE_URL bleibt es beim übergebenen base_url (Verhalten wie bisher)."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "")
+    assert teams_alarm_service._card_base_url("https://example.com") == "https://example.com"
+
+
 # ── post_incident_card: Dispatch-Entscheidung ────────────────────────────────
 
 def test_post_incident_card_noop_when_disabled(monkeypatch):
