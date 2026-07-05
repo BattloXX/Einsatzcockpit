@@ -639,3 +639,58 @@ def test_sync_vehicle_location_ignores_unmapped_reference_id():
     finally:
         db.rollback()
         db.close()
+
+
+# ── Dokumenten-Sync: keine rohe GUID im sichtbaren Titel ─────────────────────
+
+class _FakeDocClient:
+    def __init__(self, docs):
+        self._docs = docs
+
+    async def get_documents_by_operation_id(self, operation_id):
+        return self._docs
+
+    async def download_document(self, doc_id, entity=None):
+        return b"%PDF-1.4 fake bytes"
+
+
+def test_sync_documents_never_uses_guid_as_title(monkeypatch):
+    """Ein LIS-Dokument OHNE Name (z. B. ein Bild) darf NICHT die rohe Dokument-GUID
+    als Kartentitel bekommen ('Dokument: <guid>.pdf'), sondern einen lesbaren Namen."""
+    async def _fake_store(upload, message, user, db, org_id=None):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.media_service.store_upload_for_message", _fake_store,
+    )
+
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _ = lis_sync._get_or_link_incident(
+            db, org, _parsed(lis_operation_id="lis-op-doc-1", reason="Doc-Test", street="Doc-Straße 1"),
+        )
+        guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        docs = [
+            {"Id": "c9cbd9be-ba21-4c51-a314-6791f8fb5680",
+             "Name": "BMA_Datenblatt_1384", "FileExtension": ".pdf"},
+            {"Id": guid, "Name": None, "DocumentType": None, "FileExtension": ".jpg"},
+        ]
+        client = _FakeDocClient(docs)
+        changed = asyncio.run(lis_sync._sync_documents(db, org, incident, client, "lis-op-doc-1"))
+        assert changed is True
+
+        titles = [
+            m.title for m in db.query(Message)
+            .filter(Message.incident_id == incident.id, Message.title.like("Dokument:%"))
+            .all()
+        ]
+        assert len(titles) == 2
+        # Keine rohe GUID in irgendeinem Titel
+        assert all(guid not in t for t in titles)
+        assert "Dokument: BMA_Datenblatt_1384" in titles
+        # Der namenlose Treffer bekommt einen lesbaren Fallback
+        assert any(t.startswith("Dokument: LIS-Dokument") for t in titles)
+    finally:
+        db.rollback()
+        db.close()

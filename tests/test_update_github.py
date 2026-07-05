@@ -183,3 +183,90 @@ def test_deployed_ref_helpers():
 
     db.query.return_value.filter.return_value.first.return_value = None
     assert _deployed_ref(db) is None
+
+
+# ── Git-basierter Branch-Deploy (Web-Update == Konsole) ──────────────────────
+
+def test_deploy_github_branch_prefers_git(monkeypatch):
+    """Auf einem Git-Checkout läuft der Branch-Deploy über git (nicht Zip-Overlay)."""
+    from app.services import update_service as us
+
+    monkeypatch.setattr(us, "is_git_checkout", lambda: True)
+    called = {}
+
+    def fake_git_update(branch, token=None, install_deps=False):
+        called["git"] = (branch, token, install_deps)
+        return {"success": True, "via": "git"}
+
+    monkeypatch.setattr(us, "git_update", fake_git_update)
+    monkeypatch.setattr(us, "download_and_apply_github_update",
+                        lambda *a, **k: {"success": True, "via": "zip"})
+
+    res = us.deploy_github_branch("main", "http://zipball", token="tok", install_deps=True)
+    assert res["via"] == "git"
+    assert called["git"] == ("main", "tok", True)
+
+
+def test_deploy_github_branch_falls_back_to_zip_without_git(monkeypatch):
+    from app.services import update_service as us
+    monkeypatch.setattr(us, "is_git_checkout", lambda: False)
+    monkeypatch.setattr(us, "download_and_apply_github_update",
+                        lambda *a, **k: {"success": True, "via": "zip"})
+    res = us.deploy_github_branch("main", "http://zipball")
+    assert res["via"] == "zip"
+
+
+def test_git_update_runs_fetch_and_hard_reset(monkeypatch):
+    """git_update fetcht und setzt hart auf FETCH_HEAD zurück → sauberer Baum,
+    identisch zu `git fetch && git reset --hard` auf der Konsole."""
+    from app.services import update_service as us
+
+    monkeypatch.setattr(us, "is_git_checkout", lambda: True)
+    cmds = []
+
+    def fake_git(args, timeout=300):
+        cmds.append(args)
+        if args[:1] == ["rev-parse"]:
+            return 0, "aaaaaaa" if len(cmds) < 3 else "bbbbbbb", ""
+        if args[:1] == ["diff"]:
+            return 0, "app/main.py\napp/routers/x.py", ""
+        return 0, "", ""
+
+    monkeypatch.setattr(us, "_run_git", fake_git)
+    monkeypatch.setattr(us, "_run_pip_install", lambda: "OK")
+    monkeypatch.setattr(us, "_run_migrations", lambda: "OK")
+    monkeypatch.setattr(us, "_reload_server", lambda: True)
+
+    res = us.git_update("main", token="secrettoken", install_deps=True)
+    assert res["success"] is True
+    assert res["via"] == "git"
+    assert res["files_updated"] == 2
+    # Kernablauf: fetch dann reset --hard FETCH_HEAD
+    assert ["fetch", "--force", "https://x-access-token:secrettoken@github.com/BattloXX/Einsatzcockpit.git", "main"] in cmds
+    assert ["reset", "--hard", "FETCH_HEAD"] in cmds
+    assert ["checkout", "-B", "main"] in cmds
+
+
+def test_git_update_fetch_failure_scrubs_token(monkeypatch):
+    from app.services import update_service as us
+    monkeypatch.setattr(us, "is_git_checkout", lambda: True)
+
+    def fake_git(args, timeout=300):
+        if args[:1] == ["rev-parse"]:
+            return 0, "aaaaaaa", ""
+        if args[:1] == ["fetch"]:
+            return 128, "", "fatal: could not read from https://x-access-token:secrettoken@github.com/..."
+        return 0, "", ""
+
+    monkeypatch.setattr(us, "_run_git", fake_git)
+    res = us.git_update("main", token="secrettoken")
+    assert res["success"] is False
+    assert "secrettoken" not in res["message"]
+    assert "***" in res["message"]
+
+
+def test_git_update_no_git_checkout(monkeypatch):
+    from app.services import update_service as us
+    monkeypatch.setattr(us, "is_git_checkout", lambda: False)
+    res = us.git_update("main")
+    assert res["success"] is False
