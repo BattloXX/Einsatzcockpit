@@ -461,7 +461,9 @@ def _sync_person_responses(db: Session, org: FireDept, incident, tasks: list[dic
 
 
 # ── Dokumente (MTOM-Download) ────────────────────────────────────────────────
-async def _store_lis_document(db: Session, incident, raw: bytes, filename: str, org_id: int) -> None:
+async def _store_lis_document(
+    db: Session, incident, raw: bytes, filename: str, org_id: int, title: str,
+) -> None:
     import io
     from types import SimpleNamespace
 
@@ -477,7 +479,7 @@ async def _store_lis_document(db: Session, incident, raw: bytes, filename: str, 
     doc_message = Message(
         incident_id=incident.id,
         column_id=msgs_col.id if msgs_col else None,
-        title=f"Dokument: {filename}",
+        title=title,
         author_name="LIS",
     )
     db.add(doc_message)
@@ -508,12 +510,21 @@ async def _sync_documents(db: Session, org: FireDept, incident, client: LisClien
             logger.exception("LIS-Dokument %s (Einsatz %s) konnte nicht geladen werden", doc_id, incident.id)
             continue
 
-        name = doc.get("Name") or doc_id
+        # Anzeigename: NIEMALS die rohe Dokument-GUID (die landete früher als
+        # "Dokument: <guid>.pdf" im Kartentitel). Fallback-Kette: Name → DokTyp →
+        # generisch. Die GUID wird nur intern (Dedup/Ablage) verwendet.
+        name = (doc.get("Name") or "").strip()
+        doc_type = (doc.get("DocumentType") or "").strip()
         ext = (doc.get("FileExtension") or "").lstrip(".")
-        filename = f"{name}.{ext}" if ext else name
+        display = name or doc_type or "LIS-Dokument"
+        # Dateiname für die Ablage – lesbar, ohne GUID; nur wenn gar nichts da ist,
+        # ein kurzer Kürzel-Suffix zur Eindeutigkeit (nicht im sichtbaren Titel).
+        basis = name or doc_type or f"LIS-Dokument-{str(doc_id)[:8]}"
+        filename = f"{basis}.{ext}" if ext else basis
+        title = f"Dokument: {display}" + (f" ({ext.upper()})" if ext and not name else "")
 
         try:
-            await _store_lis_document(db, incident, raw, filename, org.id)
+            await _store_lis_document(db, incident, raw, filename, org.id, title)
         except Exception:
             logger.exception("LIS-Dokument %s (Einsatz %s) konnte nicht gespeichert werden", doc_id, incident.id)
             continue

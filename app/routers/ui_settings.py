@@ -21,6 +21,7 @@ from app.services.update_service import (
     apply_update,
     check_github_branch,
     check_github_release,
+    deploy_github_branch,
     download_and_apply_github_update,
     get_current_version,
     get_github_token,
@@ -1517,8 +1518,8 @@ def apply_github_branch_update(
                 ip=request.client.host if request.client else None)
     db.commit()
 
-    result = download_and_apply_github_update(
-        branch_info["download_url"], token=token,
+    result = deploy_github_branch(
+        branch, branch_info["download_url"], token=token,
         install_deps=install_deps_raw in ("1", "true", "on"),
     )
     if result.get("success"):

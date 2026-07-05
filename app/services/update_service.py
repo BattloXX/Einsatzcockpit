@@ -393,6 +393,101 @@ def check_github_branch(
         return {"branch": branch, "sha": None, "error": str(exc)[:200]}
 
 
+def is_git_checkout() -> bool:
+    """True, wenn die Installation ein echtes Git-Arbeitsverzeichnis ist."""
+    return (APP_ROOT / ".git").exists()
+
+
+def _scrub(text: str, token: str | None) -> str:
+    """Entfernt ein evtl. in Git-Fehlermeldungen enthaltenes Token."""
+    if token and token in text:
+        text = text.replace(token, "***")
+    return text
+
+
+def _run_git(args: list[str], timeout: int = 300) -> tuple[int, str, str]:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=str(APP_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return result.returncode, result.stdout.strip(), result.stderr.strip()
+    except Exception as exc:  # git fehlt / Timeout
+        return 1, "", str(exc)
+
+
+def git_update(branch: str, token: str | None = None, install_deps: bool = False) -> dict:
+    """Aktualisiert eine Git-Installation exakt auf origin/<branch>.
+
+    Nutzt `git fetch` + `git reset --hard` → der Arbeitsbaum entspricht danach
+    BYTE-genau dem Remote-Stand (inkl. gelöschter/umbenannter Dateien, die das
+    ZIP-Overlay liegen ließ) und ist SAUBER: ein anschließendes `git pull` /
+    `git status` auf der Konsole läuft konfliktfrei weiter (kein "local changes
+    would be overwritten" mehr). Git-ignorierte bzw. nicht getrackte Dateien
+    (.env, DBs, Uploads, app_storage) bleiben unberührt — reset --hard fasst nur
+    getrackte Dateien an, `git clean` wird bewusst NICHT ausgeführt.
+    """
+    if not is_git_checkout():
+        return {"success": False, "message": "Kein Git-Arbeitsverzeichnis – bitte ZIP-Update verwenden."}
+
+    remote = f"https://github.com/{GITHUB_REPO}.git"
+    if token:
+        remote = f"https://x-access-token:{token}@github.com/{GITHUB_REPO}.git"
+
+    before = _run_git(["rev-parse", "HEAD"])[1]
+
+    rc, _out, err = _run_git(["fetch", "--force", remote, branch])
+    if rc != 0:
+        return {"success": False, "message": f"git fetch fehlgeschlagen: {_scrub(err, token)[:300]}"}
+
+    rc, _out, err = _run_git(["reset", "--hard", "FETCH_HEAD"])
+    if rc != 0:
+        return {"success": False, "message": f"git reset fehlgeschlagen: {_scrub(err, token)[:300]}"}
+
+    # Lokalen Branch-Namen auf den Zielbranch setzen (kein detached HEAD), damit
+    # die Konsole danach denselben Branch trackt.
+    _run_git(["checkout", "-B", branch])
+
+    after = _run_git(["rev-parse", "HEAD"])[1]
+    changed = 0
+    if before and after and before != after:
+        rc2, out2, _ = _run_git(["diff", "--name-only", before, after])
+        if rc2 == 0:
+            changed = len([ln for ln in out2.splitlines() if ln.strip()])
+
+    deps_installed = _run_pip_install() if install_deps else "übersprungen"
+    migrations_applied = _run_migrations()
+    reloaded = _reload_server()
+
+    return {
+        "success": True,
+        "message": f"Git-Update auf {branch} @ {after[:7]} eingespielt" if after else "Git-Update eingespielt",
+        "files_updated": changed,
+        "files_skipped": 0,
+        "deps_installed": deps_installed,
+        "migrations_applied": migrations_applied,
+        "server_reloaded": reloaded,
+        "via": "git",
+    }
+
+
+def deploy_github_branch(
+    branch: str, download_url: str, token: str | None = None, install_deps: bool = False,
+) -> dict:
+    """Einheitlicher Branch-Deploy: bevorzugt Git (sauberer, konsistent zur
+    Konsole); nur ohne Git-Checkout Fallback auf das Zipball-Overlay.
+
+    Damit machen Web-Update und `git pull` auf der Konsole DASSELBE und stören
+    sich nicht mehr gegenseitig.
+    """
+    if is_git_checkout():
+        return git_update(branch, token=token, install_deps=install_deps)
+    return download_and_apply_github_update(download_url, token=token, install_deps=install_deps)
+
+
 def download_and_apply_github_update(
     download_url: str, token: str | None = None, install_deps: bool = False,
 ) -> dict:
