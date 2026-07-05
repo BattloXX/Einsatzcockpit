@@ -199,6 +199,7 @@ async def upload_import_dokument(
         "seiten_erzeugt": len(seiten),
         "dokumentart": dokumentart,
         "fehler_text": dokument.fehler_text,
+        "duplikat": False,
     }
 
 
