@@ -24,6 +24,7 @@ from app.core.security import hash_api_key, sign_qr_token
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentToken
 from app.models.major_incident import IncidentSite as _IncidentSiteType
+from app.models.major_incident import MajorIncident
 from app.models.master import AlarmType, FireDept, OrgSettings
 from app.models.user import ApiKey
 from app.services.alarm_service import get_alarm_type_by_code
@@ -403,8 +404,13 @@ def _handle_major_incident_trigger(
     einsatzgrund: str | None,
     lat: float | None = None,
     lng: float | None = None,
-) -> _IncidentSiteType | None:
-    """Prüft ob der Alarm eine Großschadenslage auslöst oder in eine laufende übernommen wird."""
+) -> tuple[_IncidentSiteType | None, MajorIncident | None, bool]:
+    """Prüft ob der Alarm eine Großschadenslage auslöst oder in eine laufende übernommen wird.
+
+    Gibt (site, lage, lage_created) zurück — lage_created zeigt an, ob durch diesen Alarm
+    ERSTMALS eine neue Lage entstanden ist (Trigger für den GSL-Sonderalarm, siehe
+    gsl_notify.py), im Unterschied zum bloßen Spiegeln in eine bereits laufende Lage.
+    """
     from app.services.major_incident_service import (
         adopt_incident_as_site,
         get_active_lage,
@@ -418,13 +424,13 @@ def _handle_major_incident_trigger(
 
     if triggers:
         # Alarm löst Lage aus oder wird in bestehende Lage eingefügt
-        _, site, _ = handle_alarm_trigger(
+        lage, site, lage_created = handle_alarm_trigger(
             db, org_id, alarm_type_code, incident_id, external_key,
             is_exercise=is_exercise,
             ort=ort, strasse=strasse, hausnr=hausnr, einsatzgrund=einsatzgrund,
             lat=lat, lng=lng,
         )
-        return site
+        return site, lage, lage_created
     elif active_lage:
         # Laufende Lage + mi_auto_adopt → normalen Einsatz spiegeln
         org_settings = (
@@ -432,7 +438,7 @@ def _handle_major_incident_trigger(
         )
         auto_adopt = org_settings.mi_auto_adopt if org_settings else True
         if auto_adopt:
-            return adopt_incident_as_site(
+            site = adopt_incident_as_site(
                 db, active_lage,
                 incident_id=incident_id,
                 external_key=external_key,
@@ -441,7 +447,8 @@ def _handle_major_incident_trigger(
                 ort=ort, strasse=strasse, hausnr=hausnr, einsatzgrund=einsatzgrund,
                 lat=lat, lng=lng,
             )
-    return None
+            return site, None, False
+    return None, None, False
 
 
 @router.post(
@@ -604,7 +611,7 @@ async def create_incident_api(
     _mi_site = None
     if api_key.org_id:
         def _mi_trigger():
-            site = _handle_major_incident_trigger(
+            result = _handle_major_incident_trigger(
                 db=db,
                 org_id=api_key.org_id,
                 alarm_type_code=alarm_type_code,
@@ -619,8 +626,16 @@ async def create_incident_api(
                 lng=None,
             )
             db.commit()
-            return site
-        _mi_site = run_side_effect("gsl_trigger", _mi_trigger)
+            return result
+        _mi_site, _mi_lage, _mi_lage_created = (
+            run_side_effect("gsl_trigger", _mi_trigger) or (None, None, False)
+        )
+        if _mi_lage_created:
+            from app.services.gsl_notify import notify_gsl_created
+            await notify_gsl_created(
+                _mi_lage, triggered_by_user_id=api_key.created_by_user_id,
+                base_url=str(request.base_url), background_tasks=background_tasks,
+            )
 
     # WebSocket broadcast – org-spezifisch
     if api_key.org_id:

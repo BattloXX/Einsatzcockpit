@@ -1352,7 +1352,7 @@ async def create_alarm_type(
     request: Request,
     code: str = Form(...), category: str = Form("T"), label: str = Form(""),
     default_first_train_only: str = Form(""), notify_neighbors: str = Form(""),
-    triggers_major_incident: str = Form(""), teams_alarm_enabled: str = Form(""),
+    triggers_major_incident: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     user = request.state.user
@@ -1366,7 +1366,6 @@ async def create_alarm_type(
         default_first_train_only=bool(default_first_train_only),
         notify_neighbors=bool(notify_neighbors),
         triggers_major_incident=bool(triggers_major_incident),
-        teams_alarm_enabled=bool(teams_alarm_enabled),
     )
     db.add(at)
     db.commit()
@@ -1378,7 +1377,7 @@ async def edit_alarm_type(
     code: str, request: Request,
     category: str = Form("T"), label: str = Form(""),
     default_first_train_only: str = Form(""), notify_neighbors: str = Form(""),
-    triggers_major_incident: str = Form(""), teams_alarm_enabled: str = Form(""),
+    triggers_major_incident: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     user = request.state.user
@@ -1389,7 +1388,6 @@ async def edit_alarm_type(
         at.default_first_train_only = bool(default_first_train_only)
         at.notify_neighbors = bool(notify_neighbors)
         at.triggers_major_incident = bool(triggers_major_incident)
-        at.teams_alarm_enabled = bool(teams_alarm_enabled)
         db.commit()
     return RedirectResponse("/admin/alarmtypen?saved=1", status_code=303)
 

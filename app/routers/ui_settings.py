@@ -1398,6 +1398,10 @@ async def gsl_einstellungen_save(
     org_settings.gsl_lagemeldung_interval_sofort_minutes = lm_sofort
     org_settings.gsl_lagemeldung_auto_auftrag = _bool("gsl_lagemeldung_auto_auftrag")
 
+    # Sonderalarm bei Ausrufung (SMS + Teams)
+    org_settings.gsl_alarm_enabled = _bool("gsl_alarm_enabled")
+    org_settings.gsl_alarm_text = str(form.get("gsl_alarm_text", "")).strip() or None
+
     # Geräteverleih-Konfiguration
     erinnerung_h = _int_or_none("gsl_verleih_erinnerung_stunden")
     org_settings.gsl_verleih_erinnerung_stunden = erinnerung_h

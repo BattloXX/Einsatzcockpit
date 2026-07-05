@@ -27,6 +27,10 @@ logger = logging.getLogger("einsatzleiter.sms_dispatch")
 # Standardvorlage fuer Einsatzinfo-SMS (Platzhalter in geschweiften Klammern)
 _DEFAULT_TEMPLATE = "Einsatz {stichwort}: {adresse}. {meldung}"
 
+# Standardtext fuer den Grossschadenslage-Sonderalarm (siehe dispatch_gsl_alarm()).
+# Bewusst ohne Umlaute (SMS-Zeichensatz, wie gsl_verleih_sms_*_text in verleih_service.py).
+_DEFAULT_GSL_ALARM_TEXT = "Grossschadenslage! Alle Mitglieder ruecken sofort ins Geraetehaus ein."
+
 _PHONE_STRIP_RE = re.compile(r"[\s\-\(\)]")
 
 
@@ -268,6 +272,77 @@ async def dispatch_einsatzinfo(
             "Fehler beim Einsatzinfo-SMS-Versand (org_id=%d, stichwort=%s)",
             org_id, alarm_type_code,
         )
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+async def dispatch_gsl_alarm(
+    org_id: int,
+    lage_name: str,
+    is_exercise: bool,
+    triggered_by_user_id: int | None = None,
+) -> None:
+    """Versendet den einmaligen Grossschadenslage-Sonderalarm per SMS bei Ausrufung einer
+    neuen Lage — unabhaengig von der stichwortbezogenen Einsatzinfo-SMS (anderer Text,
+    andere Gates: OrgSettings.gsl_alarm_enabled statt einsatzinfo_sms_enabled).
+
+    Empfaenger: derselbe Basis-Verteiler wie bei der Einsatzinfo-SMS (alarm_type_id=None) —
+    bewusst kein eigener Verteiler, da der Sonderalarm alle erreichen soll.
+    """
+    from app.routers.ws import is_sms_gateway_connected  # lazy: Kreisabhaengigkeit
+
+    if not is_sms_gateway_connected(org_id):
+        logger.debug("Kein SMS-Gateway verbunden (org_id=%d) — GSL-Alarm-SMS uebersprungen", org_id)
+        return
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        if not org_settings or not org_settings.gsl_alarm_enabled:
+            logger.debug("GSL-Alarm-SMS deaktiviert (org_id=%d) — uebersprungen", org_id)
+            return
+
+        if is_exercise and not org_settings.einsatzinfo_sms_send_exercise:
+            logger.debug("GSL-Alarm-SMS bei Uebung unterdrueckt (org_id=%d) — uebersprungen", org_id)
+            return
+
+        exercise_prefix = "[UEBUNG] " if is_exercise else ""
+        text_ = exercise_prefix + (org_settings.gsl_alarm_text or _DEFAULT_GSL_ALARM_TEXT).replace(
+            "{lage}", lage_name,
+        )
+
+        recipients = collect_einsatzinfo_recipients(db, org_id, alarm_type_id=None)
+        if not recipients:
+            logger.debug("Keine SMS-Empfaenger konfiguriert (org_id=%d, GSL-Alarm)", org_id)
+            return
+
+        jobs = [(phone, text_) for phone in recipients]
+        total, success = await send_bulk(org_id, jobs)
+
+        now = datetime.now(UTC)
+        db.add(SmsLog(
+            org_id=org_id, sent_at=now, source="gsl_alarm", alarm_type_code=None,
+            text=text_, recipient_count=total, success_count=success,
+            triggered_by_user_id=triggered_by_user_id,
+        ))
+        write_audit(
+            db, "sms.gsl_alarm_sent", org_id=org_id, user_id=triggered_by_user_id,
+            payload={"lage_name": lage_name, "recipient_count": total, "success_count": success,
+                     "is_exercise": is_exercise},
+        )
+        db.commit()
+
+        logger.info(
+            "GSL-Alarm-SMS gesendet (org_id=%d, gesamt=%d, erfolgreich=%d)",
+            org_id, total, success,
+        )
+    except Exception:
+        logger.exception("Fehler beim GSL-Alarm-SMS-Versand (org_id=%d)", org_id)
         try:
             db.rollback()
         except Exception:

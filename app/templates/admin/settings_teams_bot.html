@@ -213,6 +213,35 @@
   </div>
 </form>
 
+{# ── Stichworte: welche Alarmtypen lösen die Teams-Karte aus? ────────────── #}
+<section class="card mb-4">
+  <div class="card-header"><h2>Stichworte</h2></div>
+  <div class="card-body" style="padding:16px 20px">
+    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0 0 12px;line-height:1.6">
+      Welche Einsatzstichwörter lösen die Teams-Karte aus? Standardmäßig alle aktiv.
+    </p>
+    {% if alarm_types %}
+    <form method="post" action="/admin/teams-alarmierung/stichworte">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if is_sysadmin and org %}
+      <input type="hidden" name="target_org_id" value="{{ org.id }}">
+      {% endif %}
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+        {% for at in alarm_types %}
+        <label class="toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;">
+          <input type="checkbox" name="alarm_type_id" value="{{ at.id }}" {% if at.teams_alarm_enabled %}checked{% endif %}>
+          {{ at.code }}{% if at.label %} – {{ at.label }}{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </form>
+    {% else %}
+    <p class="text-muted" style="font-size:.85rem;">Noch keine Alarmtypen angelegt.</p>
+    {% endif %}
+  </div>
+</section>
+
 <section class="card mb-4">
   <div class="card-header"><h2>Testkarte senden</h2></div>
   <div class="card-body" style="padding:16px 20px">

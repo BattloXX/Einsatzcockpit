@@ -444,6 +444,12 @@ async def new_incident(
                 )
                 db.commit()
                 _lage_redirect = f"/lage/{lage.id}"
+                if _created:
+                    from app.services.gsl_notify import notify_gsl_created
+                    await notify_gsl_created(
+                        lage, triggered_by_user_id=user.id, base_url=str(request.base_url),
+                        background_tasks=background_tasks,
+                    )
             else:
                 active_lage = _get_active_lage(db, user.org_id)
                 if active_lage:

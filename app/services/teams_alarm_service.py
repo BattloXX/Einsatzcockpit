@@ -17,31 +17,37 @@ import logging
 
 from sqlalchemy.orm import Session
 
+from app.db import SessionLocal
 from app.models.incident import Incident
-from app.models.master import FireDept
+from app.models.master import FireDept, OrgSettings
 from app.models.teams_bot import TeamsAlarmConfig, TeamsChannelBinding
-from app.services.teams_card import build_incident_message_card
+from app.services.sms_dispatch_service import _DEFAULT_GSL_ALARM_TEXT
+from app.services.teams_card import build_gsl_alarm_card, build_incident_message_card
 
 logger = logging.getLogger("einsatzleiter.teams_alarm")
 
 
-async def _post_via_webhook(webhook_url: str, incident: Incident, cfg: TeamsAlarmConfig,
-                             *, base_url: str, org: FireDept | None) -> bool:
+async def _post_payload(webhook_url: str, payload: dict, *, log_label: str) -> bool:
     import httpx
 
     if not webhook_url or not webhook_url.startswith("https://"):
-        logger.warning("Teams-Alarmierung: Webhook-URL ungültig oder leer (Einsatz %s)", incident.id)
+        logger.warning("Teams-Alarmierung: Webhook-URL ungültig oder leer (%s)", log_label)
         return False
 
-    payload = build_incident_message_card(incident, cfg, base_url=base_url, org=org)
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(webhook_url, json=payload)
         resp.raise_for_status()
         return True
     except Exception as exc:
-        logger.error("Teams-Alarmierung: Webhook-Fehler (Einsatz %s): %s", incident.id, exc)
+        logger.error("Teams-Alarmierung: Webhook-Fehler (%s): %s", log_label, exc)
         return False
+
+
+async def _post_via_webhook(webhook_url: str, incident: Incident, cfg: TeamsAlarmConfig,
+                             *, base_url: str, org: FireDept | None) -> bool:
+    payload = build_incident_message_card(incident, cfg, base_url=base_url, org=org)
+    return await _post_payload(webhook_url, payload, log_label=f"Einsatz {incident.id}")
 
 
 async def post_incident_card(db: Session, incident: Incident, *, base_url: str) -> None:
@@ -103,3 +109,48 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
         )
         return
     await _post_via_webhook(webhook_url, incident, cfg, base_url=base_url, org=org)
+
+
+async def post_gsl_alarm_card(
+    org_id: int, lage_id: int, lage_name: str, is_exercise: bool, *, base_url: str,
+) -> None:
+    """Postet den Großschadenslage-Sonderalarm bei Ausrufung einer neuen Lage — unabhängig
+    von der stichwortbezogenen Einsatzkarte (post_incident_card()): eigener, schlanker
+    Kartentyp (build_gsl_alarm_card()), nicht durch den Stichwort-Filter
+    (AlarmType.teams_alarm_enabled) einschränkbar, da eine Großschadenslage per Definition
+    immer relevant ist. Läuft, wie dispatch_gsl_alarm() für die SMS-Seite, mit einer eigenen
+    DB-Session, um unabhängig vom aufrufenden Request-Lifecycle zu funktionieren.
+
+    Immer über den einfachen Webhook (kein Bot-Versand) — der Sonderalarm braucht keine
+    Zusage/Absage-Buttons.
+    """
+    db = SessionLocal()
+    try:
+        cfg = db.query(TeamsAlarmConfig).filter(TeamsAlarmConfig.org_id == org_id).first()
+        if not cfg or not cfg.enabled:
+            return
+        if is_exercise and not cfg.send_exercise:
+            return
+
+        org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        if org_settings and not org_settings.gsl_alarm_enabled:
+            return
+
+        webhook_url = cfg.webhook_url_uebung if is_exercise else cfg.webhook_url_alarm
+        if not webhook_url:
+            logger.debug(
+                "GSL-Alarm: kein Webhook konfiguriert (Org %s) — übersprungen", org_id,
+            )
+            return
+
+        exercise_prefix = "[UEBUNG] " if is_exercise else ""
+        text = exercise_prefix + (
+            (org_settings.gsl_alarm_text if org_settings else None) or _DEFAULT_GSL_ALARM_TEXT
+        ).replace("{lage}", lage_name)
+
+        payload = build_gsl_alarm_card(
+            lage_id, lage_name, text, is_exercise=is_exercise, base_url=base_url,
+        )
+        await _post_payload(webhook_url, payload, log_label=f"Lage {lage_id}")
+    finally:
+        db.close()

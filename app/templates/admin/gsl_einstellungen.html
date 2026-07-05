@@ -72,6 +72,27 @@
       </div>
     </div>
 
+    <!-- ── Sonderalarm bei Ausrufung ──────────────────────────────────── -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
+        <strong>Sonderalarm bei Ausrufung</strong>
+        <span style="font-size:.78rem;color:var(--text-muted);margin-left:8px;">Einmaliger SMS- + Teams-Hinweis, wenn eine neue Großschadenslage ausgerufen wird — unabhängig von der stichwortbezogenen Einsatzinfo</span>
+      </div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" name="gsl_alarm_enabled" value="1"
+                 {% if not org_settings or org_settings.gsl_alarm_enabled %}checked{% endif %}
+                 style="width:18px;height:18px;">
+          <span>Sonderalarm senden (SMS + Teams, sofern jeweils aktiviert)</span>
+        </label>
+        <div class="form-group">
+          <label class="form-label">Text <span style="font-size:.72rem;color:var(--text-muted);">Platzhalter: {lage}</span></label>
+          <textarea name="gsl_alarm_text" class="form-input" rows="2"
+                    placeholder="Grossschadenslage! Alle Mitglieder ruecken sofort ins Geraetehaus ein.">{{ org_settings.gsl_alarm_text if org_settings and org_settings.gsl_alarm_text else '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Geräteverleih ──────────────────────────────────────────────── -->
     <div class="card" style="margin-bottom:20px;">
       <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">

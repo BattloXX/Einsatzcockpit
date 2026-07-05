@@ -384,6 +384,11 @@ class OrgSettings(Base):
     gsl_verleih_sms_ausleih_text:    Mapped[str | None] = mapped_column(Text, nullable=True)
     gsl_verleih_sms_erinnerung_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Großschadenslage-Alarm: einmaliger SMS+Teams-Sonderhinweis bei Ausrufung einer neuen
+    # Lage — unabhängig von der stichwortbezogenen Einsatzinfo (siehe gsl_notify.py)
+    gsl_alarm_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    gsl_alarm_text:    Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Pegel-/Abflusskonfiguration: JSON-Array [{hzbnr, name, beschreibung}]
     abfluss_stationen: Mapped[str | None] = mapped_column(Text, nullable=True)
 

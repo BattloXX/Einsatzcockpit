@@ -15,7 +15,7 @@
 
   <table class="table-admin table-admin--cards">
     <thead>
-      <tr><th>Code</th><th>Kategorie</th><th>Bezeichnung</th><th>Nur Erstausr.</th><th>Nachalarm.</th><th>Großschadenslage</th><th>Teams-Alarm</th><th>Aktionen</th></tr>
+      <tr><th>Code</th><th>Kategorie</th><th>Bezeichnung</th><th>Nur Erstausr.</th><th>Nachalarm.</th><th>Großschadenslage</th><th>Aktionen</th></tr>
     </thead>
     <tbody>
       {% for at in alarm_types %}
@@ -26,10 +26,9 @@
         <td data-label="Nur Erstausr.">{% if at.default_first_train_only %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
         <td data-label="Nachalarm.">{% if at.notify_neighbors %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
         <td data-label="Großschadenslage">{% if at.triggers_major_incident %}<span class="badge-pill badge-pill--orange">Ja</span>{% else %}–{% endif %}</td>
-        <td data-label="Teams-Alarm">{% if at.teams_alarm_enabled %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
         <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn--ghost btn--xs"
-                  onclick="openEditAt('{{ at.code }}', '{{ at.category }}', '{{ at.label|replace("'","\\'")|e }}', {{ at.default_first_train_only|lower }}, {{ at.notify_neighbors|lower }}, {{ at.triggers_major_incident|lower }}, {{ at.teams_alarm_enabled|lower }})">
+                  onclick="openEditAt('{{ at.code }}', '{{ at.category }}', '{{ at.label|replace("'","\\'")|e }}', {{ at.default_first_train_only|lower }}, {{ at.notify_neighbors|lower }}, {{ at.triggers_major_incident|lower }})">
             Bearbeiten
           </button>
           <form method="post" action="/admin/alarmtypen/{{ at.code }}/loeschen" style="display:inline"
@@ -75,9 +74,6 @@
         <div class="form-group">
           <label><input type="checkbox" name="triggers_major_incident" value="true"> Löst Großschadenslage aus</label>
         </div>
-        <div class="form-group">
-          <label><input type="checkbox" name="teams_alarm_enabled" value="true" checked> Löst Teams-Alarm aus</label>
-        </div>
       </div>
       <div class="modal__footer">
         <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -115,9 +111,6 @@
         <div class="form-group">
           <label><input type="checkbox" name="triggers_major_incident" id="at_major_incident" value="true"> Löst Großschadenslage aus</label>
         </div>
-        <div class="form-group">
-          <label><input type="checkbox" name="teams_alarm_enabled" id="at_teams_alarm" value="true"> Löst Teams-Alarm aus</label>
-        </div>
       </div>
       <div class="modal__footer">
         <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -130,13 +123,12 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function openEditAt(code, category, label, firstTrain, neighbors, majorIncident, teamsAlarm) {
+function openEditAt(code, category, label, firstTrain, neighbors, majorIncident) {
   document.getElementById('at_category').value = category;
   document.getElementById('at_label').value = label;
   document.getElementById('at_first_train').checked = firstTrain;
   document.getElementById('at_neighbors').checked = neighbors;
   document.getElementById('at_major_incident').checked = majorIncident;
-  document.getElementById('at_teams_alarm').checked = teamsAlarm;
   document.getElementById('editAtForm').action = `/admin/alarmtypen/${code}/edit`;
   document.getElementById('editAtModal').showModal();
 }

@@ -16,7 +16,7 @@ from app.core.crypto import encrypt_secret
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
-from app.models.master import FireDept
+from app.models.master import AlarmType, FireDept
 from app.models.teams_bot import TeamsAlarmConfig, TeamsChannelBinding
 from app.models.user import User
 
@@ -64,12 +64,18 @@ def teams_alarm_settings_page(
         db.query(TeamsChannelBinding).filter(TeamsChannelBinding.org_id == effective_org_id).all()
         if effective_org_id else []
     )
+    alarm_types = (
+        db.query(AlarmType).filter(AlarmType.org_id == effective_org_id)
+        .order_by(AlarmType.category, AlarmType.code).all()
+        if effective_org_id else []
+    )
 
     return templates.TemplateResponse(request, "admin/settings_teams_bot.html", {
         "user": user,
         "org": org,
         "config": config,
         "bindings": bindings,
+        "alarm_types": alarm_types,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
         "flash": request.query_params.get("flash"),
@@ -125,6 +131,39 @@ async def teams_alarm_settings_save(
                         user_id=user.id, ip=request.client.host if request.client else None)
 
     write_audit(db, "teams_alarm.config.updated", org_id=effective_org_id, user_id=user.id,
+                ip=request.client.host if request.client else None)
+    db.commit()
+
+    if effective_org_id != user.org_id:
+        redirect_url = f"/admin/teams-alarmierung?org_id={effective_org_id}&flash=saved"
+    else:
+        redirect_url = "/admin/teams-alarmierung?flash=saved"
+    return RedirectResponse(redirect_url, status_code=302)
+
+
+# ── POST /admin/teams-alarmierung/stichworte ─────────────────────────────────
+# Einfacher als bei SMS-Einsatzinfo: kein Verteiler/Vorlagen-Override je Stichwort,
+# nur ein An/Aus je Alarmtyp — alle Zeilen der Org werden in einem Formular gesammelt
+# gespeichert (angehakt = aktiv, sonst deaktiviert).
+@router.post("/teams-alarmierung/stichworte")
+async def teams_alarm_settings_save_stichworte(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
+    effective_org_id = _get_org_id(user, target_org_id)
+    if not effective_org_id:
+        return RedirectResponse("/admin/teams-alarmierung?flash=error_no_org", status_code=302)
+
+    form = await request.form()
+    enabled_ids = {int(v) for k, v in form.multi_items() if k == "alarm_type_id"}
+
+    alarm_types = db.query(AlarmType).filter(AlarmType.org_id == effective_org_id).all()
+    for at in alarm_types:
+        at.teams_alarm_enabled = at.id in enabled_ids
+
+    write_audit(db, "teams_alarm.stichworte_updated", org_id=effective_org_id, user_id=user.id,
                 ip=request.client.host if request.client else None)
     db.commit()
 

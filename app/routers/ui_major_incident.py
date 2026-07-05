@@ -8,7 +8,18 @@ import random
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
@@ -294,6 +305,7 @@ async def lage_neu_form(
 @router.post("/lage/neu")
 async def lage_neu_create(
     request: Request,
+    background_tasks: BackgroundTasks,
     name: str = Form(...),
     description: str = Form(""),
     is_exercise: bool = Form(False),
@@ -328,6 +340,13 @@ async def lage_neu_create(
             status=resource_service.STATUS_BEREITGESTELLT,
         ))
     db.commit()
+
+    from app.services.gsl_notify import notify_gsl_created
+    await notify_gsl_created(
+        lage, triggered_by_user_id=user.id, base_url=str(request.base_url),
+        background_tasks=background_tasks,
+    )
+
     return RedirectResponse(f"/lage/{lage.id}", status_code=303)
 
 

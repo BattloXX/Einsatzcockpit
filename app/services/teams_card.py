@@ -100,3 +100,32 @@ def build_incident_message_card(
             {"contentType": "application/vnd.microsoft.card.adaptive", "content": adaptive_card},
         ],
     }
+
+
+def build_gsl_alarm_card(
+    lage_id: int, lage_name: str, text: str, *, is_exercise: bool, base_url: str,
+) -> dict:
+    """Baut die Adaptive Card für den Großschadenslage-Sonderalarm — bewusst schlank
+    (kein Kartenbild/Google-Maps, keine Stichwort-Toggles): einmaliger Sonderhinweis bei
+    Ausrufung einer neuen Lage, siehe gsl_notify.py."""
+    base_url = base_url.rstrip("/")
+    exercise_prefix = "[ÜBUNG] " if is_exercise else ""
+    adaptive_card: dict = {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+            {"type": "TextBlock", "text": f"{exercise_prefix}🚨 Großschadenslage",
+             "weight": "Bolder", "size": "Large", "wrap": True},
+            {"type": "TextBlock", "text": text, "wrap": True},
+        ],
+        "actions": [
+            {"type": "Action.OpenUrl", "title": "🖥 Lage öffnen", "url": f"{base_url}/lage/{lage_id}"},
+        ],
+    }
+    return {
+        "type": "message",
+        "attachments": [
+            {"contentType": "application/vnd.microsoft.card.adaptive", "content": adaptive_card},
+        ],
+    }
