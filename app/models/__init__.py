@@ -61,6 +61,25 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
+from app.models.objekt import (
+    AlarmInfoscreenToken,
+    GefahrenKatalog,
+    MerkmalKatalog,
+    Objekt,
+    ObjektBMA,
+    ObjektChange,
+    ObjektDokument,
+    ObjektDokumentSeite,
+    ObjektEinsatz,
+    ObjektGefahr,
+    ObjektKartenObjekt,
+    ObjektKategorie,
+    ObjektKontakt,
+    ObjektMerkmal,
+    ObjektSeiteKiVorschlag,
+    ObjektWohnanlage,
+    ObjektZusatzadresse,
+)
 from app.models.password_reset import PasswordResetToken
 from app.models.sms import (
     SmsEinsatzinfoRecipient,
@@ -141,6 +160,11 @@ __all__ = [
     "Fahrtzweck", "Zielort", "Fahrt", "FahrtBenachrichtigung",
     "FahrtKategorie", "FahrtStatus", "FahrtErfassungsweg",
     "Termin", "Funktion", "Teilnahme",
+    "Objekt", "ObjektKategorie", "ObjektZusatzadresse", "ObjektBMA", "ObjektChange",
+    "GefahrenKatalog", "ObjektGefahr", "MerkmalKatalog", "ObjektMerkmal",
+    "ObjektKontakt", "ObjektWohnanlage",
+    "ObjektDokument", "ObjektDokumentSeite", "ObjektKartenObjekt", "ObjektEinsatz",
+    "AlarmInfoscreenToken", "ObjektSeiteKiVorschlag",
     "UASDevice", "UASPilot", "UASFlugbewegung", "UASWartung",
     "UASEinsatz", "UASEinsatzRolleEintrag", "UASFlug", "UASCheckliste",
     "UASEreignis", "UASKartenobjekt", "UASMedien",

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ org.name }} – Alarm-Infoscreen</title>
+  <link rel="stylesheet" href="/static/css/leaflet.min.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #05080f; color: #f4f6fb;
+                 font-family: "Hanken Grotesk", system-ui, sans-serif; overflow: hidden; }
+    .is-wrap { height: 100vh; display: flex; flex-direction: column; }
+    .is-kopf { display: flex; justify-content: space-between; align-items: center;
+               padding: 14px 28px; border-bottom: 1px solid rgba(255,255,255,.12); }
+    .is-kopf__org { font-size: 1.4rem; font-weight: 700; letter-spacing: .04em; }
+    .is-kopf__zeit { font-size: 1.4rem; font-variant-numeric: tabular-nums; color: #9aa3b2; }
+
+    /* Idle */
+    .is-idle { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+    .is-idle__uhr { font-size: 15vw; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+    .is-idle__datum { font-size: 3vw; color: #9aa3b2; }
+    .is-idle__liste { width: min(900px, 90vw); display: flex; flex-direction: column; gap: 10px; }
+    .is-idle__eintrag { display: flex; gap: 16px; align-items: baseline; font-size: 1.6rem;
+                        padding: 12px 18px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; }
+    .is-idle iframe { border: 0; width: 100vw; flex: 1; }
+
+    /* Alarm */
+    .is-alarm { flex: 1; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+    .is-alarm__kopf { background: #b71921; padding: 18px 28px; }
+    .is-alarm__stichwort { font-size: 4.2rem; font-weight: 800; line-height: 1.05; }
+    .is-alarm__adresse { font-size: 2.6rem; font-weight: 600; margin-top: 2px; }
+    .is-alarm__meldung { font-size: 1.3rem; opacity: .92; margin-top: 6px;
+                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .is-alarm__body { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 16px;
+                      padding: 16px 24px; min-height: 0; }
+    .is-panel { border: 1px solid rgba(255,255,255,.14); border-radius: 12px;
+                padding: 16px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+    .is-panel h2 { margin: 0 0 10px; font-size: 1.2rem; color: #9aa3b2;
+                   text-transform: uppercase; letter-spacing: .08em; }
+    .is-objektname { font-size: 1.9rem; font-weight: 700; margin-bottom: 10px; }
+    .is-gefahr { display: flex; align-items: center; gap: 12px; font-size: 1.5rem;
+                 padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .is-gefahr__pikto { font-size: 2.2rem; }
+    .is-bma-zeile { padding: 8px 0; font-size: 1.35rem; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .is-bma-zeile b { color: #fbbf24; display: block; font-size: .95rem;
+                      text-transform: uppercase; letter-spacing: .05em; }
+    #is-karte { flex: 1; border-radius: 10px; min-height: 200px; background: #111; }
+    .is-hinweis { color: #9aa3b2; font-size: 1.2rem; }
+    .leaflet-container { background: #1a2233; }
+  </style>
+</head>
+<body>
+<div class="is-wrap">
+  <div class="is-kopf">
+    <div class="is-kopf__org">🚒 {{ org.name }}</div>
+    <div class="is-kopf__zeit" id="is-zeit">–:–</div>
+  </div>
+  <div id="is-inhalt" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+    <div class="is-idle"><div class="is-idle__uhr" id="is-idle-uhr">–:–</div></div>
+  </div>
+</div>
+
+<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/objekt_karte.js"></script>
+<script>
+(function () {
+  "use strict";
+  var TOKEN = {{ token | tojson }};
+  var karte = null;
+  var letzterModus = null;
+  var letzteIncidentId = null;
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function uhrzeit() {
+    var d = new Date();
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  setInterval(function () {
+    document.getElementById("is-zeit").textContent = uhrzeit();
+    var idleUhr = document.getElementById("is-idle-uhr");
+    if (idleUhr) { idleUhr.textContent = uhrzeit(); }
+  }, 1000);
+
+  function renderIdle(daten) {
+    var html = "";
+    if (daten.idle_modus === "wetter" && daten.wetter_url) {
+      html = '<div class="is-idle" style="padding:0;"><iframe src="' + esc(daten.wetter_url) + '"></iframe></div>';
+    } else if (daten.idle_modus === "einsatzliste" && daten.einsaetze && daten.einsaetze.length) {
+      html = '<div class="is-idle"><div class="is-idle__liste">' +
+        '<h2 style="color:#9aa3b2;text-transform:uppercase;letter-spacing:.08em;">Letzte Einsätze</h2>' +
+        daten.einsaetze.map(function (e) {
+          var zeit = e.beginn ? new Date(e.beginn).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+          return '<div class="is-idle__eintrag"><strong>' + esc(e.stichwort || "") + "</strong>" +
+                 "<span>" + esc(e.adresse || "") + '</span><span style="margin-left:auto;color:#9aa3b2;">' + zeit + "</span></div>";
+        }).join("") + "</div></div>";
+    } else {
+      var d = new Date();
+      var datum = d.toLocaleDateString("de-AT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      html = '<div class="is-idle"><div class="is-idle__uhr" id="is-idle-uhr">' + uhrzeit() +
+             '</div><div class="is-idle__datum">' + esc(datum) + "</div></div>";
+    }
+    document.getElementById("is-inhalt").innerHTML = html;
+    karte = null;
+  }
+
+  function renderAlarm(daten) {
+    var inc = daten.incident;
+    var o = daten.objekt;
+    var html =
+      '<div class="is-alarm">' +
+      '<div class="is-alarm__kopf">' +
+      '<div class="is-alarm__stichwort">' + esc(inc.stichwort || "ALARM") + "</div>" +
+      '<div class="is-alarm__adresse">' + esc(inc.adresse || "") + "</div>" +
+      (inc.meldung ? '<div class="is-alarm__meldung">' + esc(inc.meldung) + "</div>" : "") +
+      "</div>" +
+      '<div class="is-alarm__body">';
+
+    // Links: Objekt + Gefahren
+    html += '<div class="is-panel"><h2>Objekt & Gefahren</h2>';
+    if (o) {
+      html += '<div class="is-objektname">' + esc(o.nummer + " " + o.name) +
+        (o.bestaetigt ? "" : ' <span style="color:#fbbf24;font-size:1rem;">(Vorschlag)</span>') + "</div>";
+      if (o.gefahren && o.gefahren.length) {
+        html += o.gefahren.map(function (g) {
+          return '<div class="is-gefahr"><span class="is-gefahr__pikto">' + esc(g.piktogramm || "⚠️") +
+                 "</span><span>" + esc(g.name) + (g.un_nummer ? " · UN " + esc(g.un_nummer) : "") + "</span></div>";
+        }).join("");
+      } else {
+        html += '<div class="is-hinweis">Keine Gefahren erfasst.</div>';
+      }
+    } else {
+      html += '<div class="is-hinweis">Kein Objekt verknüpft.</div>';
+    }
+    html += "</div>";
+
+    // Mitte: Karte
+    html += '<div class="is-panel"><h2>Lage</h2><div id="is-karte"></div></div>';
+
+    // Rechts: BMA/FSD
+    html += '<div class="is-panel"><h2>BMA & Schlüssel</h2>';
+    if (o && o.bma) {
+      var b = o.bma;
+      var zeilen = [
+        ["BMA-Nr.", b.bma_nummer],
+        ["BMZ-Standort", b.bmz_standort],
+        ["FBF-Standort", b.fbf_standort],
+        ["Laufkarten", b.laufkarten_ablageort],
+        ["FSD-Standort", b.fsd_standort],
+        ["FSD-Inhalt", b.fsd_inhalt]
+      ].filter(function (z) { return z[1]; });
+      if (zeilen.length) {
+        html += zeilen.map(function (z) {
+          return '<div class="is-bma-zeile"><b>' + esc(z[0]) + "</b>" + esc(z[1]) + "</div>";
+        }).join("");
+      } else {
+        html += '<div class="is-hinweis">Keine BMA-Details erfasst.</div>';
+      }
+    } else {
+      html += '<div class="is-hinweis">Keine BMA erfasst.</div>';
+    }
+    html += "</div></div></div>";
+
+    document.getElementById("is-inhalt").innerHTML = html;
+
+    // Karte aufbauen (non-interactive)
+    var lat = (o && o.lat != null) ? o.lat : inc.lat;
+    var lng = (o && o.lng != null) ? o.lng : inc.lng;
+    karte = L.map("is-karte", {
+      zoomControl: false, dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false
+    });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(karte);
+    if (lat != null && lng != null) {
+      karte.setView([lat, lng], 18);
+      L.circleMarker([lat, lng], { radius: 10, color: "#d42225", fillOpacity: .6 }).addTo(karte);
+    } else {
+      karte.setView([47.4652, 9.7503], 14);
+    }
+    if (o && o.karten_objekte) {
+      o.karten_objekte.forEach(function (k) {
+        if (k.geometry) {
+          L.geoJSON(k.geometry, { style: { color: "#d42225", weight: 3, fillOpacity: .12 } }).addTo(karte);
+        } else if (k.lat != null && k.lng != null) {
+          L.marker([k.lat, k.lng], {
+            icon: L.divIcon({
+              html: window.objektSymbolHtml(k.typ, k.label),
+              className: "oks-divicon", iconSize: null, iconAnchor: [16, 16]
+            }),
+            interactive: false
+          }).addTo(karte);
+        }
+      });
+    }
+  }
+
+  function aktualisieren() {
+    fetch("/infoscreen/alarm/" + encodeURIComponent(TOKEN) + "/daten")
+      .then(function (r) { return r.json(); })
+      .then(function (daten) {
+        var incId = daten.incident ? daten.incident.id : null;
+        if (daten.modus === letzterModus && incId === letzteIncidentId && daten.modus === "alarm") {
+          return; // Alarmansicht steht schon — Karte nicht neu aufbauen
+        }
+        letzterModus = daten.modus;
+        letzteIncidentId = incId;
+        if (daten.modus === "alarm") { renderAlarm(daten); } else { renderIdle(daten); }
+      })
+      .catch(function () { /* naechster Poll versucht es erneut */ });
+  }
+
+  // WebSocket: sofortiger Wechsel bei Alarm/Match, Polling als Fallback
+  function verbindeWs() {
+    var proto = location.protocol === "https:" ? "wss" : "ws";
+    var ws = new WebSocket(proto + "://" + location.host + "/ws/infoscreen/" + encodeURIComponent(TOKEN));
+    ws.onmessage = function (e) {
+      if (e.data === "pong") { return; }
+      try {
+        var ev = JSON.parse(e.data);
+        if (ev.type === "incident_created" || ev.type === "objekt_match" || ev.type === "incident_closed") {
+          letzterModus = null; // Neuaufbau erzwingen
+          aktualisieren();
+        }
+      } catch (err) { /* ignorieren */ }
+    };
+    ws.onclose = function () { setTimeout(verbindeWs, 5000); };
+    setInterval(function () { ws.readyState === 1 && ws.send("ping"); }, 30000);
+  }
+
+  aktualisieren();
+  setInterval(aktualisieren, 15000);
+  verbindeWs();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Objekte – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>🏢 Objekte</h1>
+      <p class="text-muted">Einsatzrelevante Objekte mit BMA-Daten, Gefahren und Unterlagen</p>
+    </div>
+    <div style="display:flex;gap:8px;">
+      {% if is_admin %}
+      <a href="/objekte/kataloge" class="btn btn--ghost">Kataloge</a>
+      <a href="/infoscreen-alarm/verwaltung" class="btn btn--ghost">📺 Infoscreen</a>
+      {% endif %}
+      {% if ist_verwalter %}
+      <a href="/objekte/neu" class="btn btn--primary">+ Neues Objekt</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="get" action="/objekte/" class="card" style="padding:12px;margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+    <div class="form-group" style="margin:0;flex:1 1 220px;">
+      <label class="form-label">Suche</label>
+      <input type="text" name="q" value="{{ filter_q }}" class="form-input" placeholder="Name, Vulgo, Adresse, Nummer">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Status</label>
+      <select name="status" class="form-input">
+        <option value="">Alle</option>
+        {% for code, label in status_labels.items() %}
+        <option value="{{ code }}" {% if filter_status == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Kategorie</label>
+      <select name="kategorie" class="form-input">
+        <option value="">Alle</option>
+        {% for k in kategorien %}
+        <option value="{{ k.id }}" {% if filter_kategorie == k.id %}selected{% endif %}>{{ k.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Merkmal</label>
+      <select name="merkmal" class="form-input">
+        <option value="">Alle</option>
+        {% for m in merkmal_katalog %}
+        <option value="{{ m.id }}" {% if filter_merkmal == m.id %}selected{% endif %}>{{ m.icon or '' }} {{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="checkbox-label"><input type="checkbox" name="revision" value="faellig" {% if filter_revision == 'faellig' %}checked{% endif %}> Revision fällig</label>
+    </div>
+    <button type="submit" class="btn btn--ghost">Filtern</button>
+  </form>
+
+  {% if rows %}
+  <div x-data="{ auswahl: [], toggle(id) { this.auswahl.includes(id) ? this.auswahl = this.auswahl.filter(x => x !== id) : this.auswahl.push(id) } }">
+  <table class="table-admin">
+    <thead>
+      <tr>
+        <th style="width:28px;"></th>
+        <th>Nummer</th><th>Name</th><th>Kategorie</th><th>Adresse</th>
+        <th>Merkmale</th><th>Vollständigkeit</th><th>Status</th><th>Revision</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      {% set o = row.objekt %}
+      <tr>
+        <td><input type="checkbox" @change="toggle({{ o.id }})" :checked="auswahl.includes({{ o.id }})" title="Für Druckmappe auswählen"></td>
+        <td><a href="/objekte/{{ o.id }}"><strong>{{ o.anzeige_nummer }}</strong></a></td>
+        <td>
+          <a href="/objekte/{{ o.id }}">{{ o.name }}</a>
+          {% if o.vulgoname %}<div class="text-muted" style="font-size:0.85em;">{{ o.vulgoname }}</div>{% endif %}
+        </td>
+        <td>{{ o.kategorie.name if o.kategorie else '–' }}</td>
+        <td>{{ o.adresse_zeile or '–' }}</td>
+        <td>
+          {% if o.bma %}<span class="badge-pill badge-pill--amber" title="Brandmeldeanlage vorhanden">BMA</span>{% endif %}
+          {% if o.bma and o.bma.schluesselsafe_vorhanden %}<span class="badge-pill badge-pill--green" title="Schlüsselsafe/FSD vorhanden">FSD</span>{% endif %}
+          {% if o.hat_merkmal('schluesselbox') %}<span class="badge-pill badge-pill--green" title="Schlüsselbox vorhanden">🔑</span>{% endif %}
+          {% if o.hat_merkmal('brandschutzplan') %}<span class="badge-pill badge-pill--red" title="Brandschutzplan vorhanden">BSP</span>{% endif %}
+          {% if o.gefahren %}<span class="badge-pill badge-pill--red" title="{{ o.gefahren|length }} Gefahr(en) erfasst">⚠ {{ o.gefahren|length }}</span>{% endif %}
+          {% if not o.bma and not o.merkmale and not o.gefahren %}<span class="text-muted">–</span>{% endif %}
+        </td>
+        <td>
+          <div class="vollst-bar" title="Fehlend: {{ row.vollstaendigkeit.fehlend|join(', ') if row.vollstaendigkeit.fehlend else 'nichts' }}">
+            <div class="vollst-bar__fill {% if row.vollstaendigkeit.prozent >= 80 %}vollst-bar__fill--ok{% elif row.vollstaendigkeit.prozent >= 50 %}vollst-bar__fill--mid{% endif %}" style="width:{{ row.vollstaendigkeit.prozent }}%"></div>
+          </div>
+          <span class="text-muted" style="font-size:0.8em;">{{ row.vollstaendigkeit.prozent }} %</span>
+        </td>
+        <td>
+          {% if o.status == 'freigegeben' %}<span class="badge-pill badge-pill--green">{{ status_labels[o.status] }}</span>
+          {% elif o.status == 'entwurf' %}<span class="badge-pill badge-pill--gray">{{ status_labels[o.status] }}</span>
+          {% elif o.status == 'archiviert' %}<span class="badge-pill badge-pill--gray">{{ status_labels[o.status] }}</span>
+          {% else %}<span class="badge-pill badge-pill--amber">{{ status_labels[o.status] }}</span>{% endif %}
+        </td>
+        <td>
+          {% if o.revision_datum %}
+            {% if o.revision_datum <= heute %}
+            <span class="badge-pill badge-pill--red">{{ o.revision_datum.strftime('%d.%m.%Y') }}</span>
+            {% else %}
+            {{ o.revision_datum.strftime('%d.%m.%Y') }}
+            {% endif %}
+          {% else %}<span class="text-muted">–</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div x-show="auswahl.length > 0" x-cloak class="card objekt-bulk-leiste" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+    <span><strong x-text="auswahl.length"></strong> Objekt(e) ausgewählt</span>
+    <form method="post" action="/objekte/druck" style="display:flex;gap:10px;align-items:center;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="objekt_ids" :value="auswahl.join(',')">
+      <label class="checkbox-label"><input type="checkbox" name="mit_anhang" value="1"> inkl. „Bei Einsatz drucken"-Anhänge</label>
+      <button type="submit" class="btn btn--primary">🖨 Mappe drucken</button>
+    </form>
+  </div>
+  </div>
+  {% else %}
+  <div class="card" style="padding:32px;text-align:center;">
+    <p class="text-muted">Keine Objekte gefunden.</p>
+    {% if ist_verwalter %}
+    <a href="/objekte/neu" class="btn btn--primary" style="margin-top:12px;">+ Erstes Objekt anlegen</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

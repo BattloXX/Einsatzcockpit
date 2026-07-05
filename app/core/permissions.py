@@ -9,6 +9,7 @@ ROLES = {
     "org_admin": 100,           # full access within their organisation
     "fahrtenbuch_admin": 80,    # Fahrtenbuch-Verwaltung der eigenen Org (ohne Benutzerverwaltung)
     "incident_leader": 70,
+    "objekt_verwalter": 60,     # Objektverwaltung: Objekte pflegen/freigeben, Dokumente, Lagekarte
     "breathing_supervisor": 50,
     "recorder": 30,
     "readonly": 10,
@@ -22,6 +23,9 @@ ORG_ADMIN_ROLES = {"system_admin", "admin", "org_admin"}
 
 # Roles that can manage Fahrtenbuch (Verwaltung, Storno, Korrektur, Stammdaten)
 FAHRTENBUCH_ADMIN_ROLES = {"system_admin", "admin", "org_admin", "fahrtenbuch_admin"}
+
+# Roles that can manage Objekte (anlegen, bearbeiten, freigeben, Dokumente, Lagekarte)
+OBJEKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalter"}
 
 
 def require_role(*roles: str) -> Callable:
@@ -94,3 +98,8 @@ def same_org_or_system_admin(user, target_org_id: int) -> bool:
 def is_fahrtenbuch_admin(user) -> bool:
     """True if user can manage Fahrtenbuch (org_admin, fahrtenbuch_admin, or system_admin)."""
     return has_role(user, "fahrtenbuch_admin")
+
+
+def is_objekt_verwalter(user) -> bool:
+    """True if user can manage Objekte (org_admin, objekt_verwalter, or system_admin)."""
+    return has_role(user, "objekt_verwalter")

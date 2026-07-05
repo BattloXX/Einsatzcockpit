@@ -128,6 +128,10 @@ def apply_seed_profile(db: Session, org_id: int, profile: str) -> None:
                     due_after_sec=d.get("due_after_sec", 300),
                 ))
 
+    # 6. Objektverwaltungs-Kataloge (Kategorien/Gefahren/Merkmale, idempotent)
+    from app.services.objekt_service import seed_objekt_kataloge
+    seed_objekt_kataloge(db, org_id)
+
     db.flush()
 
 

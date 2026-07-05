@@ -27,9 +27,11 @@ sudo add-apt-repository ppa:deadsnakes/ppa
 sudo apt-get install -y python3.14 python3.14-venv python3.14-dev
 ```
 
-## Systempakete für WeasyPrint und MariaDB
+## Systempakete für WeasyPrint, MariaDB und PDF-Rendering
 
 WeasyPrint (PDF-Generierung) benötigt Pango/Cairo. Der MariaDB-Connector braucht die Dev-Header.
+`poppler-utils` rendert die PDF-Seiten der **Objektverwaltung** (pdf2image) — ohne Poppler werden
+hochgeladene PDFs zwar zerlegt, aber ohne Vorschaubilder abgelegt.
 
 ```bash
 sudo apt-get install -y \
@@ -40,6 +42,7 @@ sudo apt-get install -y \
     libgdk-pixbuf2.0-0 \
     libffi-dev \
     build-essential \
+    poppler-utils \
     git
 ```
 

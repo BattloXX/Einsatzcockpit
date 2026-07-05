@@ -1,0 +1,52 @@
+<div class="card objekt-gefahr-card" style="padding:16px;">
+  <h3 style="margin-top:0;">⚠️ Gefahren</h3>
+  {% if objekt.gefahren %}
+  <div class="objekt-gefahr-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+    {% for g in objekt.gefahren %}
+    <div class="objekt-gefahr-chip">
+      <span class="objekt-gefahr-chip__label">
+        {{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠️')[:2] if g.gefahr else '⚠️' }}
+        {{ g.gefahr.name if g.gefahr else '?' }}
+        {% if g.un_nummer %}<span class="badge-pill badge-pill--red">UN {{ g.un_nummer }}</span>{% endif %}
+      </span>
+      {% if g.detail %}<span class="text-muted" style="font-size:0.85em;">{{ g.detail }}</span>{% endif %}
+      {% if ist_verwalter %}
+      <form hx-post="/objekte/{{ objekt.id }}/gefahren/{{ g.id }}/loeschen"
+            hx-target="#abschnitt-gefahren" hx-swap="innerHTML"
+            hx-confirm="Gefahr entfernen?" style="display:inline;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="objekt-gefahr-chip__del" title="Entfernen">×</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted">Keine Gefahren erfasst.</p>
+  {% endif %}
+
+  {% if ist_verwalter %}
+  <form hx-post="/objekte/{{ objekt.id }}/gefahren/neu"
+        hx-target="#abschnitt-gefahren" hx-swap="innerHTML"
+        style="display:grid;grid-template-columns:1.5fr 0.7fr 2fr auto;gap:8px;align-items:end;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Gefahr *</label>
+      <select name="gefahr_id" class="form-input" required>
+        {% for gk in gefahren_katalog %}
+        <option value="{{ gk.id }}">{{ gefahr_piktogramme.get(gk.piktogramm_typ, '⚠️')[:2] }} {{ gk.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">UN-Nr.</label>
+      <input type="text" name="un_nummer" class="form-input" maxlength="10" placeholder="1173">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Detail</label>
+      <input type="text" name="detail" class="form-input" placeholder="z. B. Ethylacetat, Info bei Dokumenten">
+    </div>
+    <button type="submit" class="btn btn--primary">+ Hinzufügen</button>
+  </form>
+  {% endif %}
+</div>

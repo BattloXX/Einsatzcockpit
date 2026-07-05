@@ -1,0 +1,26 @@
+<div class="card" style="padding:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">🗺️ Lagekarte</h3>
+    {% if ist_verwalter %}
+    <a href="/objekte/{{ objekt.id }}/karte" class="btn btn--ghost btn--xs">✎ Karte bearbeiten</a>
+    {% endif %}
+  </div>
+  <link rel="stylesheet" href="/static/css/leaflet.min.css">
+  <div id="objekt-karte-ro" class="objekt-karte-canvas objekt-karte-canvas--klein"></div>
+  <script src="/static/js/leaflet.min.js"></script>
+  <script src="/static/js/objekt_karte.js"></script>
+  <script>
+    (function () {
+      var el = document.getElementById("objekt-karte-ro");
+      if (el && !el.dataset.initialisiert) {
+        el.dataset.initialisiert = "1";
+        initObjektKarte({
+          elementId: "objekt-karte-ro",
+          objektId: {{ objekt.id }},
+          csrfToken: "{{ request.state.csrf_token }}",
+          editierbar: false
+        });
+      }
+    })();
+  </script>
+</div>

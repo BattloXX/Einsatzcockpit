@@ -1,0 +1,57 @@
+<div class="card" style="padding:16px;">
+  <h3 style="margin-top:0;">Wohnanlage bearbeiten</h3>
+  {% set wa = objekt.wohnanlage %}
+  <form hx-post="/objekte/{{ objekt.id }}/wohnanlage" hx-target="#abschnitt-wohnanlage" hx-swap="innerHTML"
+        x-data="{ vorhanden: {{ 'true' if wa else 'false' }} }">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group">
+      <label class="checkbox-label">
+        <input type="checkbox" name="wohnanlage_vorhanden" value="1" x-model="vorhanden"
+               {% if wa %}checked{% endif %}> Wohnanlagen-Daten erfassen
+      </label>
+    </div>
+    <div x-show="vorhanden">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Wohneinheiten</label>
+          <input type="number" name="wohneinheiten" class="form-input" min="0"
+                 value="{{ wa.wohneinheiten if wa and wa.wohneinheiten is not none else '' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Geschosse</label>
+          <input type="number" name="geschosse" class="form-input" min="0"
+                 value="{{ wa.geschosse if wa and wa.geschosse is not none else '' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Stiegen</label>
+          <input type="number" name="stiegen" class="form-input" min="0"
+                 value="{{ wa.stiegen if wa and wa.stiegen is not none else '' }}">
+        </div>
+      </div>
+      <p class="form-hint">Jede Stiege mit eigener Adresse zusätzlich unter „Zugänge / Stiegen" anlegen.</p>
+      <div class="form-group">
+        <label class="form-label">Hausverwaltung (aus Kontakten)</label>
+        <select name="hausverwaltung_kontakt_id" class="form-input">
+          <option value="">– keine –</option>
+          {% for k in objekt.kontakte %}
+          <option value="{{ k.id }}" {% if wa and wa.hausverwaltung_kontakt_id == k.id %}selected{% endif %}>{{ k.name }} ({{ kontakt_arten.get(k.art, k.art) }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hinweise</label>
+        <textarea name="hinweise" class="form-input" rows="3">{{ wa.hinweise or '' if wa else '' }}</textarea>
+        <p class="form-hint" style="color:#fbbf24;">
+          ⚠️ DSGVO: Nur einsatztaktische Hinweise — sparsam und sachlich formulieren.
+          Keine Gesundheitsdaten oder Personenlisten (z. B. „3. OG: Bewohner mit Gehhilfe" statt Namen/Diagnosen).
+        </p>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button type="button" class="btn btn--ghost"
+              hx-get="/objekte/{{ objekt.id }}/wohnanlage"
+              hx-target="#abschnitt-wohnanlage" hx-swap="innerHTML">Abbrechen</button>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </div>
+  </form>
+</div>

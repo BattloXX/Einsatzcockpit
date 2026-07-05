@@ -8,7 +8,7 @@ auf dem Board ist.
 """
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -16,6 +16,9 @@ from app.models.incident import Incident, Message, Task
 from app.services.broadcast import manager
 
 logger = logging.getLogger("einsatzleiter.task_reminder")
+
+# Datum des letzten Objekt-Revisions-Checks (einmal taeglich, im 30s-Loop)
+_letzter_revision_check: date | None = None
 
 
 def _check_due_messages_sync(db) -> list[dict]:
@@ -115,6 +118,41 @@ async def _notify_due(item: dict) -> None:
             logger.exception("task_reminder: Push-Fallback fehlgeschlagen")
 
 
+async def _check_objekt_revisionen() -> None:
+    """Einmal taeglich: faellige Objekt-Revisionen erinnern (WS an Org-Kanal)."""
+    global _letzter_revision_check
+    heute = datetime.now(UTC).date()
+    if _letzter_revision_check == heute:
+        return
+    _letzter_revision_check = heute
+
+    from app.services.broadcast import broadcast_org
+    from app.services.objekt_service import pruefe_revision_erinnerungen
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        faellig = pruefe_revision_erinnerungen(db)
+        if faellig:
+            db.commit()
+    finally:
+        db.close()
+
+    for item in faellig:
+        if not item.get("org_id"):
+            continue
+        try:
+            await broadcast_org(item["org_id"], {
+                "type": "objekt_revision_faellig",
+                "objekt_id": item["objekt_id"],
+                "nummer": item["nummer"],
+                "name": item["name"],
+                "revision_datum": item["revision_datum"],
+            })
+        except Exception:
+            logger.exception("task_reminder: Objekt-Revisions-Broadcast fehlgeschlagen")
+
+
 async def task_reminder_loop() -> None:
     logger.info("task_reminder_loop gestartet")
     while True:
@@ -128,6 +166,7 @@ async def task_reminder_loop() -> None:
                 db.close()
             for item in due:
                 await _notify_due(item)
+            await _check_objekt_revisionen()
         except asyncio.CancelledError:
             logger.info("task_reminder_loop beendet")
             break

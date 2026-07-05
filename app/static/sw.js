@@ -2,8 +2,11 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v2';
+const CACHE = 'ec-v3';
 const BOARD_CACHE = 'ec-board-v2';
+// Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
+// befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
+const OBJEKT_CACHE = 'ec-objekt-v1';
 // STAB-3: Kartenkacheln-Cache. Eigener Bucket (getrennt von CACHE/BOARD_CACHE,
 // damit ein App-Update den Tile-Cache nicht mitloescht) mit weicher Groessen-
 // Grenze (LRU-artig: aeltester Eintrag zuerst raus) — Kacheln fuer ein Gebiet
@@ -31,7 +34,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE && k !== BOARD_CACHE && k !== TILE_CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE && k !== BOARD_CACHE && k !== TILE_CACHE && k !== OBJEKT_CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -93,8 +96,9 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Board pages (/einsatz/<id>) — network-first, cache last successful response
-  if (/^\/einsatz\/\d+$/.test(url.pathname)) {
+  // Board pages (/einsatz/<id>) und Objekt-Einsatzansichten (/objekte/<id>/einsatz)
+  // — network-first, cache last successful response (Objektinfo im Fahrzeug bei Funkloch)
+  if (/^\/einsatz\/\d+$/.test(url.pathname) || /^\/objekte\/\d+\/einsatz$/.test(url.pathname)) {
     e.respondWith(
       fetch(e.request)
         .then(res => {
@@ -105,7 +109,9 @@ self.addEventListener('fetch', e => {
           return res;
         })
         .catch(async () => {
-          const cached = await caches.match(e.request, { cacheName: BOARD_CACHE });
+          // Erst besuchte Seiten (BOARD_CACHE), dann Objekt-Precache (Android-Sync)
+          const cached = await caches.match(e.request, { cacheName: BOARD_CACHE })
+            || await caches.match(e.request, { cacheName: OBJEKT_CACHE });
           if (cached) {
             // Inject offline banner into the cached HTML response
             const html = await cached.text();
@@ -120,6 +126,24 @@ self.addEventListener('fetch', e => {
           }
           return caches.match('/') || new Response('Offline', { status: 503 });
         })
+    );
+    return;
+  }
+
+  // Objekt-Medien (Thumbs/Seitenbilder/Einzel-PDFs) — cache-first aus dem
+  // Offline-Precache (objekt_offline_sync.js, Android-App), Netz als Fallback.
+  // Dateien sind unveraenderlich (UUID-Pfade) → cache-first ist sicher.
+  if (url.pathname.startsWith('/objekt-medien/')) {
+    e.respondWith(
+      caches.open(OBJEKT_CACHE).then(cache =>
+        cache.match(e.request).then(cached => {
+          if (cached) return cached;
+          return fetch(e.request).then(res => {
+            if (res.ok) cache.put(e.request, res.clone());
+            return res;
+          });
+        })
+      )
     );
     return;
   }

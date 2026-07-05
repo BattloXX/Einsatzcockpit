@@ -249,6 +249,107 @@ async def complete(
     return response.content[0].text  # type: ignore[union-attr]
 
 
+async def complete_vision(
+    system: str,
+    user: str,
+    images: list[bytes],
+    *,
+    media_type: str = "image/png",
+    fast: bool = True,
+    max_tokens: int | None = None,
+    org_id: int | None = None,
+) -> str:
+    """Wie complete(), aber mit Bild-Bloecken (Vision) im User-Content.
+
+    Erste Vision-Nutzung im Projekt (Objektverwaltung PR8: Dokumentseiten-
+    Klassifizierung). BYOK-/Quota-/Fehlerlogik identisch zu complete().
+    Bilder werden als base64 uebergeben; Caller sollte sie auf ~1024 px
+    begrenzen (Tokenkosten).
+    """
+    import base64 as _base64
+
+    platform_cfg = _get_ai_cfg()
+    if not platform_cfg["enabled"]:
+        raise AIServiceError("KI-Dienst ist nicht aktiviert.")
+
+    api_key = platform_cfg["api_key"]
+    quota_exceeded = False
+
+    if org_id is not None:
+        org_cfg = _get_org_ai_cfg(org_id)
+        if org_cfg:
+            if org_cfg["ai_mode"] == "byok" and org_cfg["ai_api_key_enc"]:
+                try:
+                    api_key = decrypt_api_key(org_cfg["ai_api_key_enc"])
+                except Exception:
+                    raise AIServiceError("KI-Konfiguration: BYOK-Key konnte nicht entschlüsselt werden.")
+            elif org_cfg["ai_mode"] == "central":
+                quota = org_cfg.get("ai_monthly_token_quota")
+                used = org_cfg.get("ai_tokens_used_month", 0)
+                if quota is not None and used >= quota:
+                    quota_exceeded = True
+
+    if quota_exceeded:
+        raise AIServiceError(
+            "KI-Monatskontingent aufgebraucht. "
+            "Bitte wenden Sie sich an Ihren Administrator."
+        )
+
+    if not api_key:
+        raise AIServiceError("KI-Dienst: kein API-Key konfiguriert.")
+
+    content: list[dict] = []
+    for bild in images:
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": _base64.b64encode(bild).decode("ascii"),
+            },
+        })
+    content.append({"type": "text", "text": user})
+
+    model = platform_cfg["model_fast"] if fast else platform_cfg["model_default"]
+    tokens = max_tokens or platform_cfg["max_tokens"]
+    client = AsyncAnthropic(api_key=api_key)
+
+    try:
+        response = await asyncio.wait_for(
+            client.messages.create(
+                model=model,
+                max_tokens=tokens,
+                system=system,
+                messages=[{"role": "user", "content": content}],  # type: ignore[typeddict-item]
+            ),
+            timeout=float(platform_cfg["timeout"]),
+        )
+    except TimeoutError:
+        logger.warning("AI provider timeout after %ss (vision, model=%s)", settings.AI_TIMEOUT, model)
+        raise AIServiceError("KI-Dienst hat nicht rechtzeitig geantwortet (Timeout).")
+    except AuthenticationError:
+        logger.error("AI provider authentication failed (vision)")
+        raise AIServiceError("KI-Dienst: Authentifizierungsfehler – API-Key prüfen.")
+    except RateLimitError:
+        logger.warning("AI provider rate limit exceeded (vision, model=%s)", model)
+        raise AIServiceError("KI-Dienst: Rate-Limit überschritten, bitte kurz warten.")
+    except APIError as exc:
+        logger.error("AI provider error (vision): %s", exc)
+        raise AIServiceError("KI-Dienst temporär nicht verfügbar.") from exc
+
+    if not response.content:
+        raise AIServiceError("KI-Dienst hat eine leere Antwort geliefert.")
+
+    if org_id is not None:
+        try:
+            total_tokens = response.usage.input_tokens + response.usage.output_tokens
+            asyncio.ensure_future(_record_token_usage(org_id, total_tokens, model))
+        except Exception:
+            pass
+
+    return response.content[0].text  # type: ignore[union-attr]
+
+
 # ── Prompt-Bausteine ─────────────────────────────────────────────────────────
 
 _REPORT_FIXED_PREFIX = (

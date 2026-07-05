@@ -262,6 +262,12 @@ async def _geocode_incident(incident_id: int, street: str | None, no: str | None
                 })
             except Exception:
                 pass
+            # Objekt-Matching Geo-Stufe: erst jetzt sind Koordinaten vorhanden
+            try:
+                from app.services.objekt_matching_service import match_incident_background
+                await match_incident_background(incident_id, nur_geo=True)
+            except Exception:
+                pass
     except Exception:
         import logging as _logging
         _logging.getLogger("einsatzleiter.geocoding").exception(
@@ -606,6 +612,11 @@ async def create_incident_api(
             payload.HausNr,
             payload.Ort,
         )
+
+    # Objekt-Matching (BMA-Nr./Adresse) im Hintergrund; die Geo-Stufe wird nach
+    # dem Background-Geocoding erneut angestossen (siehe _geocode_incident)
+    from app.services.objekt_matching_service import match_incident_background
+    background_tasks.add_task(match_incident_background, incident.id)
 
     # GSL-Trigger (nutzt vorerst keine Geocoding-Koords, da diese im Background kommen)
     _mi_site = None

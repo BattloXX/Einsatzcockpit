@@ -26,6 +26,7 @@ ROLES = [
     {"code": "org_admin",            "label": "Organisations-Administrator"},
     {"code": "fahrtenbuch_admin",    "label": "Fahrtenbuch-Administrator"},
     {"code": "incident_leader",      "label": "Einsatzleiter"},
+    {"code": "objekt_verwalter",     "label": "Objektverwalter"},
     {"code": "breathing_supervisor", "label": "AS-Überwacher"},
     {"code": "recorder",             "label": "Bearbeiter"},
     {"code": "readonly",             "label": "Nur Lesen"},

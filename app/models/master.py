@@ -367,6 +367,21 @@ class OrgSettings(Base):
     # "uas_module_enabled") ebenfalls "true" ist → effektiv = System AND Org.
     uas_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Objektverwaltung: je Org aktivierbar, effektiv = SystemSettings-Key
+    # "objekt_module_enabled" == "true" AND dieser Wert (Muster UAS).
+    objekt_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Geo-Fallback des Alarm-Matchings: max. Distanz Einsatz↔Objekt in Metern
+    objekt_geo_match_radius_m: Mapped[int] = mapped_column(Integer, nullable=False, default=75)
+    # Alarm-Infoscreen (Wandmonitor): Ruhezustand + Dauer der Alarmansicht
+    # idle_modus: uhr / wetter / einsatzliste
+    alarm_infoscreen_idle_modus: Mapped[str] = mapped_column(String(20), nullable=False, default="uhr")
+    alarm_infoscreen_alarm_dauer_min: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    # Idle-Modus "wetter": URL des bestehenden Wetter-Infoscreens (Token nur als
+    # Hash gespeichert → URL kann nicht abgeleitet werden, daher manuell hinterlegen)
+    alarm_infoscreen_wetter_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # KI-Dokumentklassifizierung (Objektverwaltung): Opt-in je Org, zusaetzlich zum AI-Setup
+    objekt_ki_klassifikation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     # GSL-Feature-Flags je Org (effektiv = SystemSettings-Globalschalter AND dieser Wert).
     # Default True = Modul aktiv sofern global nicht deaktiviert.
     mi_feature_stab:           Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

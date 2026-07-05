@@ -75,6 +75,35 @@
       </div>
       {% endif %}
     </form>
+
+    {% set _objekt_sys_on = sys_settings.get('objekt_module_enabled') == 'true' %}
+    <form method="post" action="/admin/settings/system/objekt-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+          <label style="font-weight:600">&#x1F3E2; Objektverwaltung</label>
+          <p class="form-hint" style="margin-top:.25rem">
+            Einsatzrelevante Objekte (BMA, Wohnanlagen) mit Dokumenten, Lagekarte, Alarm-Matching und Infoscreen.<br>
+            Zweistufig schaltbar: erst systemweit an, dann je Organisation.
+            Ausschalten versteckt alle Ansichten &ndash; <strong>keine Daten werden gelöscht</strong>.
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" name="enabled_raw" value="1"
+                   {% if _objekt_sys_on %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <span>Systemweit aktivieren</span>
+          </label>
+          {% if _objekt_sys_on %}
+          <span class="badge badge--success">AN</span>
+          {% else %}
+          <span class="badge badge--muted">AUS</span>
+          {% endif %}
+        </div>
+      </div>
+    </form>
   </div>
 </section>
 {% endif %}
@@ -287,6 +316,53 @@
           {% endif %}
         </small>
       </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F3E2; Objektverwaltung</h3>
+      {% set _objekt_org_on = (org_settings.objekt_module_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not objekt_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="objekt_module_enabled_raw" value="1"
+                 {% if _objekt_org_on %}checked{% endif %}
+                 {% if not objekt_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Objektverwaltung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet das Objektmodul (BMA-Daten, Gefahren, Kontakte, Dokumente mit PDF-Zerlegung,
+          Objekt-Lagekarte, Alarm-Matching, Einsatzansicht, Alarm-Infoscreen, Objektblatt-Druck)
+          für diese Org ein. Pflege über die Rolle „Objektverwalter" oder Org-Admin.
+          {% if not objekt_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+      {% if objekt_sys_enabled %}
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Geo-Matching-Radius (Meter)</label>
+          <input type="number" name="objekt_geo_match_radius_raw" min="10" max="500"
+                 value="{{ org_settings.objekt_geo_match_radius_m if org_settings else 75 }}"
+                 class="form-control" style="max-width:140px">
+          <small class="form-hint">
+            Fallback des Alarm-Matchings: Einsätze ohne BMA-/Adress-Treffer werden dem nächstgelegenen
+            Objekt innerhalb dieses Radius als <em>Vorschlag</em> zugeordnet. Ortskern: eher 40 m; Standard 75 m.
+          </small>
+        </div>
+        <div class="form-group">
+          <label>KI-Dokumentklassifizierung</label>
+          <label style="display:flex;align-items:center;gap:.5rem;font-weight:400;">
+            <input type="checkbox" name="objekt_ki_klassifikation_raw" value="1"
+                   {% if org_settings and org_settings.objekt_ki_klassifikation_enabled %}checked{% endif %}>
+            KI-Vorschläge für hochgeladene Dokumentseiten aktivieren
+          </label>
+          <small class="form-hint">
+            Vision-Analyse (Anthropic Claude) schlägt Dokumentart/Titel/Melderlinien vor —
+            Vorschläge landen in einer Review-Liste und werden <strong>nie automatisch übernommen</strong>.
+            Setzt aktivierten KI-Assistenten voraus (zentral oder BYOK).
+          </small>
+        </div>
+      </div>
+      {% endif %}
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F697; Fahrtenbuch</h3>
       {% set _fb_on = (org_settings.fahrtenbuch_modul_aktiv) if org_settings else false %}

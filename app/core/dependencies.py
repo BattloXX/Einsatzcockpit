@@ -26,6 +26,15 @@ def _set_uas_state(request: HTTPConnection, org_id: int | None, db: Session) -> 
         request.state.uas_module_enabled = False
 
 
+def _set_objekt_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
+    """Setzt request.state.objekt_enabled fail-safe (nie crashen)."""
+    try:
+        from app.services.objekt_service import objekt_effective_enabled
+        request.state.objekt_enabled = objekt_effective_enabled(org_id, db)
+    except Exception:
+        request.state.objekt_enabled = False
+
+
 def _set_fahrtenbuch_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
     """Setzt request.state.fahrtenbuch_modul_aktiv fail-safe (nie crashen)."""
     try:
@@ -72,6 +81,7 @@ def _resolve_current_org(
     """
     # Modul-Defaults: aus (wird unten ggf. überschrieben)
     request.state.uas_module_enabled = False
+    request.state.objekt_enabled = False
     request.state.fahrtenbuch_modul_aktiv = False
     request.state.atemschutz_pruefung_modul_aktiv = False
 
@@ -106,6 +116,7 @@ def _resolve_current_org(
             )
             set_tenant_context(db, org_id)
             _set_uas_state(request, org_id, db)
+            _set_objekt_state(request, org_id, db)
             _set_fahrtenbuch_state(request, org_id, db)
             _set_atemschutz_pruefung_state(request, org_id, db)
             return org_id
@@ -115,6 +126,7 @@ def _resolve_current_org(
     org_id = user.org_id
     set_tenant_context(db, org_id)
     _set_uas_state(request, org_id, db)
+    _set_objekt_state(request, org_id, db)
     _set_fahrtenbuch_state(request, org_id, db)
     _set_atemschutz_pruefung_state(request, org_id, db)
     return org_id

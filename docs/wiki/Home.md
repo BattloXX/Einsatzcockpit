@@ -2,7 +2,7 @@
 
 Digitales Einsatzleiter-Werkzeug für österreichische Feuerwehren — Multi-User, Multi-Organisations-fähig, Echtzeit.
 
-**Version:** 3.1.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
+**Version:** 3.2.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
 
 ## Was ist das?
 
@@ -23,6 +23,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Taktische Lagekarte nach ÖBFV-Richtlinie E-27 (genormte Symbole, Magnetfarben)
 - Wetterdaten-Integration: Nowcast, Vorhersage, Unwetterwarnungen, Radar-Overlay
 - UAS/Drohnen-Modul gemäß RL-UAS LFV Vorarlberg 2024 (Flugbuch, Checklisten, PDF, DSGVO)
+- Objektverwaltung: Einsatzunterlagen zu BMA-Objekten und Wohnanlagen — Gefahren, Schlüsselsafe, Melderpläne mit PDF-Zerlegung, Objekt-Lagekarte, Alarm-Matching, Alarm-Infoscreen, Objektblatt-Druck
 - SSO via Microsoft Entra ID (JIT-Provisioning, Gruppen-Mapping, PKCE/OIDC)
 - Geräteverleih für Großschadenslagen (Artikel, Stücklisten, Barcode-Scan, SMS)
 - PWA für Offline-Betrieb, Web-Push-Benachrichtigungen
@@ -71,6 +72,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Geräteverleih](Anwender-Geraeteverleih) | Ausgabe & Rücknahme von Material in der GSL, Barcode-Scan |
 | [Drohne / UAS](Anwender-Drohne-UAS) | BOS-Drohneneinsatz: starten, Flugbuch, Checklisten, Notfall, Medien, PDF |
 | [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
+| [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
 
 ### Administration
 | Seite | Beschreibung |
@@ -90,6 +92,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
 | [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
 | [Teams-Alarmierung](Administration-Teams-Alarmierung) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
+| [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
 
 ### Entwickler
 | Seite | Beschreibung |

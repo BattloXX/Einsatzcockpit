@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Dokumente – {{ objekt.anzeige_nummer }} {{ objekt.name }}{% endblock %}
+{% block content %}
+<script>
+  window.objektViewerDaten = function () {
+    return {
+      seiten: {{ seiten | map(attribute="id") | list | tojson }},
+      infos: {{ seiten | map(attribute="titel") | list | tojson }},
+      nummern: {{ seiten | map(attribute="seiten_nr") | list | tojson }},
+      idx: {{ start_index }},
+      zoom: 1,
+      startX: 0,
+      weiter() { if (this.idx < this.seiten.length - 1) { this.idx++; this.zoom = 1; } },
+      zurueck() { if (this.idx > 0) { this.idx--; this.zoom = 1; } }
+    };
+  };
+</script>
+<div class="objekt-viewer" x-data="objektViewerDaten()"
+     @keydown.window.arrow-right="weiter()" @keydown.window.arrow-left="zurueck()"
+     tabindex="0">
+  <div class="objekt-viewer__top">
+    <a href="/objekte/{{ objekt.id }}" class="btn btn--ghost btn--xs">← {{ objekt.anzeige_nummer }} {{ objekt.name }}</a>
+    <span class="text-muted" x-text="(idx + 1) + ' / ' + seiten.length"></span>
+    <div style="display:flex;gap:6px;">
+      <button type="button" class="btn btn--ghost btn--xs" @click="zoom = Math.max(1, zoom - 0.5)">−</button>
+      <button type="button" class="btn btn--ghost btn--xs" @click="zoom = Math.min(4, zoom + 0.5)">+ Zoom</button>
+      <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'" class="btn btn--ghost btn--xs">⬇ PDF</a>
+    </div>
+  </div>
+  <div class="objekt-viewer__stage"
+       @touchstart="startX = $event.touches[0].clientX"
+       @touchend="const dx = $event.changedTouches[0].clientX - startX; if (dx < -50) weiter(); if (dx > 50) zurueck()">
+    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--links" @click="zurueck()" x-show="idx > 0">‹</button>
+    <div class="objekt-viewer__bildwrap">
+      <template x-for="(sid, i) in seiten" :key="sid">
+        <img x-show="i === idx"
+             :src="'/objekt-medien/seite/' + sid + '/bild'"
+             :style="'transform: scale(' + zoom + ');'"
+             @dblclick="zoom = zoom > 1 ? 1 : 2"
+             loading="lazy" alt="Dokumentseite">
+      </template>
+    </div>
+    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--rechts" @click="weiter()" x-show="idx < seiten.length - 1">›</button>
+  </div>
+  <div class="objekt-viewer__caption text-muted"
+       x-text="(infos[idx] || 'Seite ' + nummern[idx])"></div>
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+<div class="card" style="padding:16px;">
+  <h3 style="margin-top:0;">Stammdaten bearbeiten</h3>
+  <form hx-post="/objekte/{{ objekt.id }}/stammdaten" hx-target="#abschnitt-stammdaten" hx-swap="innerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group">
+      <label class="form-label">Name *</label>
+      <input type="text" name="name" class="form-input" required maxlength="200" value="{{ objekt.name }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Vulgoname / Alias</label>
+      <input type="text" name="vulgoname" class="form-input" maxlength="200" value="{{ objekt.vulgoname or '' }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Kategorie</label>
+      <select name="kategorie_id" class="form-input">
+        <option value="">– keine –</option>
+        {% for k in kategorien %}
+        <option value="{{ k.id }}" {% if objekt.kategorie_id == k.id %}selected{% endif %}>{{ k.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Straße</label>
+        <input type="text" name="strasse" class="form-input" maxlength="200" value="{{ objekt.strasse or '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hausnummer</label>
+        <input type="text" name="hausnummer" class="form-input" maxlength="20" value="{{ objekt.hausnummer or '' }}">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;">
+      <div class="form-group">
+        <label class="form-label">PLZ</label>
+        <input type="text" name="plz" class="form-input" maxlength="10" value="{{ objekt.plz or '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ort</label>
+        <input type="text" name="ort" class="form-input" maxlength="100" value="{{ objekt.ort or '' }}">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Breitengrad (lat)</label>
+        <input type="text" name="lat" class="form-input" inputmode="decimal"
+               value="{{ objekt.lat if objekt.lat is not none else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Längengrad (lng)</label>
+        <input type="text" name="lng" class="form-input" inputmode="decimal"
+               value="{{ objekt.lng if objekt.lng is not none else '' }}">
+      </div>
+    </div>
+    <p class="form-hint">Koordinaten leer lassen → automatisches Geocoding aus der Adresse.</p>
+    <div class="form-group">
+      <label class="form-label">Informationen</label>
+      <textarea name="informationen" class="form-input" rows="4">{{ objekt.informationen or '' }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Anfahrtsweg</label>
+      <textarea name="anfahrtsweg" class="form-input" rows="3">{{ objekt.anfahrtsweg or '' }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Revisionsdatum (Nachfassung)</label>
+      <input type="date" name="revision_datum" class="form-input"
+             value="{{ objekt.revision_datum.strftime('%Y-%m-%d') if objekt.revision_datum else '' }}">
+      <p class="form-hint">Bei Fälligkeit erscheint das Objekt im Filter „Revision fällig".</p>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button type="button" class="btn btn--ghost"
+              hx-get="/objekte/{{ objekt.id }}/stammdaten"
+              hx-target="#abschnitt-stammdaten" hx-swap="innerHTML">Abbrechen</button>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </div>
+  </form>
+</div>

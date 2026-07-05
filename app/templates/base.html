@@ -51,7 +51,7 @@
       <span class="test-system-badge">TEST SYSTEM</span>
       {% endif %}
     </div>
-    {% set _doku_active = '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path or request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') or request.url.path.startswith('/atemschutz-pruefung') or request.url.path.startswith('/uas') or '/statistik' in request.url.path %}
+    {% set _doku_active = '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path or request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') or request.url.path.startswith('/atemschutz-pruefung') or request.url.path.startswith('/uas') or request.url.path.startswith('/objekte') or '/statistik' in request.url.path %}
     <div class="topnav__links">
       <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">🎛 Konsole</a>
       <a href="/lage" class="nav-link {% if request.url.path.startswith('/lage') %}active{% endif %}">🚨 Lage</a>
@@ -73,6 +73,9 @@
           {% endif %}
           {% if request.state.uas_module_enabled %}
           <a href="/uas/einsaetze" class="{% if request.url.path.startswith('/uas') %}active{% endif %}">🚁 Drohne / UAS</a>
+          {% endif %}
+          {% if request.state.objekt_enabled %}
+          <a href="/objekte/" class="{% if request.url.path.startswith('/objekte') %}active{% endif %}">🏢 Objekte</a>
           {% endif %}
           <a href="/statistik" class="{% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
         </div>
@@ -197,6 +200,9 @@
       {% if request.state.uas_module_enabled %}
       <a href="/uas/einsaetze" class="mobile-menu__link {% if request.url.path.startswith('/uas') %}active{% endif %}">🚁 Drohne / UAS</a>
       {% endif %}
+      {% if request.state.objekt_enabled %}
+      <a href="/objekte/" class="mobile-menu__link {% if request.url.path.startswith('/objekte') %}active{% endif %}">🏢 Objekte</a>
+      {% endif %}
       <a href="/statistik" class="mobile-menu__link {% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
     </nav>
     <footer class="mobile-menu__footer">
@@ -309,6 +315,10 @@
   <script src="/static/js/alpine.min.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/sortable-glue.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/media-upload.js?v={{ ASSET_VERSION }}" defer></script>
+  {% if request.state.objekt_enabled %}
+  {# Objektverwaltung PR9: Offline-Precaching (laeuft nur in der Android-App) #}
+  <script src="/static/js/objekt_offline_sync.js?v={{ ASSET_VERSION }}" defer></script>
+  {% endif %}
   <script src="/static/js/media-viewer.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/pwa-install.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/tooltips.js?v={{ ASSET_VERSION }}" defer></script>

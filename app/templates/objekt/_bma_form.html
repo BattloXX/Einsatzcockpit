@@ -1,0 +1,78 @@
+<div class="card objekt-bma-card" style="padding:16px;">
+  <h3 style="margin-top:0;">BMA &amp; Schlüssel bearbeiten</h3>
+  {% set bma = objekt.bma %}
+  <form hx-post="/objekte/{{ objekt.id }}/bma" hx-target="#abschnitt-bma" hx-swap="innerHTML"
+        x-data="{ bmaVorhanden: {{ 'true' if bma else 'false' }}, fsd: {{ 'true' if bma and bma.schluesselsafe_vorhanden else 'false' }} }">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group">
+      <label class="checkbox-label">
+        <input type="checkbox" name="bma_vorhanden" value="1" x-model="bmaVorhanden"
+               {% if bma %}checked{% endif %}> Brandmeldeanlage (BMA) vorhanden
+      </label>
+    </div>
+    <div x-show="bmaVorhanden">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label class="form-label">BMA-Nr. / Zusatz</label>
+          <input type="text" name="bma_nummer" class="form-input" maxlength="50" value="{{ bma.bma_nummer or '' if bma else '' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">RFL-Nummer</label>
+          <input type="text" name="rfl_nummer" class="form-input" maxlength="50" value="{{ bma.rfl_nummer or '' if bma else '' }}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">BMZ-Standort (Brandmelderzentrale)</label>
+        <input type="text" name="bmz_standort" class="form-input" maxlength="300" value="{{ bma.bmz_standort or '' if bma else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">FBF-Standort (Feuerwehr-Bedienfeld)</label>
+        <input type="text" name="fbf_standort" class="form-input" maxlength="300" value="{{ bma.fbf_standort or '' if bma else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Laufkarten-Ablageort</label>
+        <input type="text" name="laufkarten_ablageort" class="form-input" maxlength="300" value="{{ bma.laufkarten_ablageort or '' if bma else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Übertragungseinrichtung</label>
+        <input type="text" name="uebertragungseinrichtung" class="form-input" maxlength="200" value="{{ bma.uebertragungseinrichtung or '' if bma else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="schluesselsafe_vorhanden" value="1" x-model="fsd"
+                 {% if bma and bma.schluesselsafe_vorhanden %}checked{% endif %}> Schlüsselsafe / FSD vorhanden
+        </label>
+      </div>
+      <div x-show="fsd">
+        <div class="form-group">
+          <label class="form-label">FSD-Standort</label>
+          <input type="text" name="schluesselsafe_standort" class="form-input" maxlength="300"
+                 placeholder="z. B. beim Haupteingang und bei Schranke westseitig"
+                 value="{{ bma.schluesselsafe_standort or '' if bma else '' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">FSD-Inhalt</label>
+          <input type="text" name="schluesselsafe_inhalt" class="form-input" maxlength="300"
+                 placeholder="z. B. 2 Generalschlüssel"
+                 value="{{ bma.schluesselsafe_inhalt or '' if bma else '' }}">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Benachrichtigung SMS (Betreiber)</label>
+          <input type="text" name="benachrichtigung_sms" class="form-input" maxlength="100" value="{{ bma.benachrichtigung_sms or '' if bma else '' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Benachrichtigung E-Mail (Betreiber)</label>
+          <input type="text" name="benachrichtigung_email" class="form-input" maxlength="200" value="{{ bma.benachrichtigung_email or '' if bma else '' }}">
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button type="button" class="btn btn--ghost"
+              hx-get="/objekte/{{ objekt.id }}/bma"
+              hx-target="#abschnitt-bma" hx-swap="innerHTML">Abbrechen</button>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </div>
+  </form>
+</div>

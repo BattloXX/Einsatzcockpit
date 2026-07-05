@@ -610,6 +610,12 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
         await manager.broadcast(incident.id, {"type": "lis_sync", "reload_board": True})
 
     if created:
+        # Objekt-Matching fuer den frisch aus LIS angelegten Einsatz
+        try:
+            from app.services.objekt_matching_service import match_incident_background
+            await match_incident_background(incident.id)
+        except Exception:
+            logger.exception("Objekt-Matching nach LIS-Anlage fehlgeschlagen (Einsatz %s)", incident.id)
         from app.services.broadcast import broadcast_org
         await broadcast_org(org.id, {
             "type": "incident_created",

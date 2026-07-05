@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}{{ objekt.anzeige_nummer }} {{ objekt.name }} – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <h1 style="margin:0;">{{ objekt.anzeige_nummer }} · {{ objekt.name }}</h1>
+        {% if objekt.status == 'freigegeben' %}<span class="badge-pill badge-pill--green">{{ status_labels[objekt.status] }}</span>
+        {% elif objekt.status == 'entwurf' %}<span class="badge-pill badge-pill--gray">{{ status_labels[objekt.status] }}</span>
+        {% elif objekt.status == 'archiviert' %}<span class="badge-pill badge-pill--gray">{{ status_labels[objekt.status] }}</span>
+        {% else %}<span class="badge-pill badge-pill--amber">{{ status_labels[objekt.status] }}</span>{% endif %}
+      </div>
+      {% if objekt.vulgoname %}<p class="text-muted" style="margin:4px 0 0;">{{ objekt.vulgoname }}</p>{% endif %}
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+        <div class="vollst-bar" style="width:140px;" title="Fehlend: {{ vollstaendigkeit.fehlend|join(', ') if vollstaendigkeit.fehlend else 'nichts' }}">
+          <div class="vollst-bar__fill {% if vollstaendigkeit.prozent >= 80 %}vollst-bar__fill--ok{% elif vollstaendigkeit.prozent >= 50 %}vollst-bar__fill--mid{% endif %}" style="width:{{ vollstaendigkeit.prozent }}%"></div>
+        </div>
+        <span class="text-muted" style="font-size:0.85em;">{{ vollstaendigkeit.prozent }} % vollständig</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      {% if ist_verwalter %}
+        {% if objekt.status == 'entwurf' or objekt.status == 'in_ueberarbeitung' %}
+        <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="neuer_status" value="freigegeben">
+          <button type="submit" class="btn btn--primary">✓ Freigeben</button>
+        </form>
+        {% elif objekt.status == 'freigegeben' %}
+        <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="neuer_status" value="in_ueberarbeitung">
+          <button type="submit" class="btn btn--ghost">✎ In Überarbeitung</button>
+        </form>
+        {% endif %}
+        {% if objekt.status != 'archiviert' %}
+        <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;"
+              onsubmit="return confirm('Objekt archivieren?')">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="neuer_status" value="archiviert">
+          <button type="submit" class="btn btn--ghost">Archivieren</button>
+        </form>
+        {% else %}
+        <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="neuer_status" value="in_ueberarbeitung">
+          <button type="submit" class="btn btn--ghost">Reaktivieren</button>
+        </form>
+        {% endif %}
+      {% endif %}
+      <a href="/objekte/{{ objekt.id }}/objektblatt.pdf?anhang=1" class="btn btn--ghost">🖨 Objektblatt (PDF)</a>
+      <a href="/objekte/{{ objekt.id }}/einsatz" class="btn btn--ghost">📱 Einsatzansicht</a>
+      <a href="/objekte/" class="btn btn--ghost">Zurück</a>
+    </div>
+  </div>
+
+  <div class="objekt-detail-grid">
+    <nav class="objekt-abschnitt-nav card" style="padding:10px;">
+      <a href="#abschnitt-stammdaten">Stammdaten</a>
+      <a href="#abschnitt-gefahren">Gefahren</a>
+      <a href="#abschnitt-bma">BMA &amp; Schlüssel</a>
+      <a href="#abschnitt-merkmale">Merkmale</a>
+      <a href="#abschnitt-kontakte">Kontakte</a>
+      <a href="#abschnitt-wohnanlage">Wohnanlage</a>
+      <a href="#abschnitt-zusatzadressen">Zugänge / Stiegen</a>
+      <a href="#abschnitt-karte">Lagekarte</a>
+      <a href="#abschnitt-dokumente">Dokumente</a>
+      <a href="#abschnitt-einsaetze">Einsätze</a>
+      <a href="#abschnitt-protokoll">Protokoll</a>
+    </nav>
+
+    <div style="display:flex;flex-direction:column;gap:16px;min-width:0;">
+      <section id="abschnitt-stammdaten" hx-get="/objekte/{{ objekt.id }}/stammdaten" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Stammdaten …</span></div>
+      </section>
+
+      <section id="abschnitt-gefahren" hx-get="/objekte/{{ objekt.id }}/gefahren" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Gefahren …</span></div>
+      </section>
+
+      <section id="abschnitt-bma" hx-get="/objekte/{{ objekt.id }}/bma" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade BMA-Daten …</span></div>
+      </section>
+
+      <section id="abschnitt-merkmale" hx-get="/objekte/{{ objekt.id }}/merkmale" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Merkmale …</span></div>
+      </section>
+
+      <section id="abschnitt-kontakte" hx-get="/objekte/{{ objekt.id }}/kontakte" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Kontakte …</span></div>
+      </section>
+
+      <section id="abschnitt-wohnanlage" hx-get="/objekte/{{ objekt.id }}/wohnanlage" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Wohnanlage …</span></div>
+      </section>
+
+      <section id="abschnitt-zusatzadressen" hx-get="/objekte/{{ objekt.id }}/zusatzadressen" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Zugänge …</span></div>
+      </section>
+
+      <section id="abschnitt-karte" hx-get="/objekte/{{ objekt.id }}/karte/einbettung" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Lagekarte …</span></div>
+      </section>
+
+      <section id="abschnitt-dokumente" hx-get="/objekte/{{ objekt.id }}/dokumente" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Dokumente …</span></div>
+      </section>
+
+      <section id="abschnitt-einsaetze" hx-get="/objekte/{{ objekt.id }}/einsaetze" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Einsätze …</span></div>
+      </section>
+
+      <section id="abschnitt-protokoll" hx-get="/objekte/{{ objekt.id }}/protokoll" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card" style="padding:16px;"><span class="text-muted">Lade Protokoll …</span></div>
+      </section>
+
+      {% if is_admin %}
+      <div class="card" style="padding:16px;border-color:var(--red,#b71921);">
+        <h3 style="margin-top:0;">Gefahrenzone</h3>
+        <form method="post" action="/objekte/{{ objekt.id }}/loeschen"
+              onsubmit="return confirm('Objekt {{ objekt.anzeige_nummer }} unwiderruflich löschen? Alle Daten (BMA, Adressen, Protokoll) gehen verloren.')">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn--danger">Objekt löschen</button>
+        </form>
+        <p class="form-hint" style="margin-top:8px;">Empfehlung: Objekte archivieren statt löschen — das Protokoll bleibt erhalten.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

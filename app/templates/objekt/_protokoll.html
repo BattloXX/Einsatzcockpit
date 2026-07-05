@@ -1,0 +1,26 @@
+<div class="card" style="padding:16px;">
+  <h3 style="margin-top:0;">📜 Änderungsprotokoll</h3>
+  {% if changes %}
+  <div class="objekt-protokoll">
+    {% for c in changes %}
+    <div class="objekt-protokoll__row">
+      <div class="objekt-protokoll__meta">
+        <span>{{ c.erstellt_am|local_datetime }}</span>
+        <span class="text-muted">
+          {% set u = benutzer.get(c.user_id) if c.user_id else none %}
+          {{ u.username if u else 'System' }}
+        </span>
+        <span class="badge-pill badge-pill--gray">{{ c.bereich }}</span>
+      </div>
+      <div class="objekt-protokoll__change">
+        <strong>{{ c.feld }}</strong>:
+        {% if c.before_json %}<span class="objekt-protokoll__old">{{ c.before_json|replace('"','') }}</span> →{% endif %}
+        <span class="objekt-protokoll__new">{{ c.after_json|replace('"','') if c.after_json else '–' }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted" style="margin:0;">Noch keine Änderungen protokolliert.</p>
+  {% endif %}
+</div>

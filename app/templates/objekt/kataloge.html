@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}Objekt-Kataloge – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content" style="max-width:960px;" x-data="{ tab: '{{ aktiver_tab }}' }">
+  <div class="page-header">
+    <div>
+      <h1>Objekt-Kataloge</h1>
+      <p class="text-muted">Kategorien, Gefahren und Merkmale für die Objektverwaltung (je Organisation)</p>
+    </div>
+    <a href="/objekte/" class="btn btn--ghost">Zurück zu Objekten</a>
+  </div>
+
+  {% if request.query_params.get('saved') %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+  {% if request.query_params.get('error') == 'exists' %}
+  <div class="alert alert--danger">Ein Eintrag mit diesem Namen existiert bereits.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'in_use' %}
+  <div class="alert alert--danger">Eintrag wird noch verwendet und kann nicht gelöscht werden. Alternativ deaktivieren.</div>
+  {% endif %}
+
+  <div style="display:flex;gap:8px;margin-bottom:16px;">
+    <button type="button" class="btn" :class="tab === 'kategorien' ? 'btn--primary' : 'btn--ghost'" @click="tab = 'kategorien'">Kategorien</button>
+    <button type="button" class="btn" :class="tab === 'gefahren' ? 'btn--primary' : 'btn--ghost'" @click="tab = 'gefahren'">Gefahren</button>
+    <button type="button" class="btn" :class="tab === 'merkmale' ? 'btn--primary' : 'btn--ghost'" @click="tab = 'merkmale'">Merkmale</button>
+  </div>
+
+  <!-- ── Kategorien ── -->
+  <div x-show="tab === 'kategorien'">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn--primary" onclick="document.getElementById('newKatModal').showModal()">+ Kategorie</button>
+    </div>
+    <table class="table-admin">
+      <thead><tr><th>Sortierung</th><th>Name</th><th>Status</th><th>Verwendet</th><th>Aktionen</th></tr></thead>
+      <tbody>
+        {% for k in kategorien %}
+        {% set count = verwendung.get(k.id, 0) %}
+        <tr>
+          <td>{{ k.sort }}</td>
+          <td><strong>{{ k.name }}</strong></td>
+          <td>{% if k.aktiv %}<span class="badge-pill badge-pill--green">aktiv</span>{% else %}<span class="badge-pill badge-pill--gray">inaktiv</span>{% endif %}</td>
+          <td>{% if count > 0 %}<span class="badge-pill badge-pill--green">{{ count }}</span>{% else %}<span class="text-muted">–</span>{% endif %}</td>
+          <td>
+            <button class="btn btn--ghost btn--xs"
+                    onclick="openEditKat({{ k.id }}, '{{ k.name|replace("'","\\'")|e }}', {{ k.sort }}, {{ k.aktiv|lower }})">Bearbeiten</button>
+            <form method="post" action="/objekte/kataloge/kategorien/{{ k.id }}/loeschen" style="display:inline"
+                  onsubmit="return confirm('Kategorie {{ k.name }} löschen?')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Gefahren ── -->
+  <div x-show="tab === 'gefahren'" x-cloak>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn--primary" onclick="document.getElementById('newGefModal').showModal()">+ Gefahr</button>
+    </div>
+    <table class="table-admin">
+      <thead><tr><th>Sortierung</th><th>Name</th><th>Piktogramm</th><th>Status</th><th>Verwendet</th><th>Aktionen</th></tr></thead>
+      <tbody>
+        {% for g in gefahren %}
+        {% set count = gefahren_verwendung.get(g.id, 0) %}
+        <tr>
+          <td>{{ g.sort }}</td>
+          <td><strong>{{ g.name }}</strong></td>
+          <td>{{ gefahr_piktogramme.get(g.piktogramm_typ, g.piktogramm_typ) }}</td>
+          <td>{% if g.aktiv %}<span class="badge-pill badge-pill--green">aktiv</span>{% else %}<span class="badge-pill badge-pill--gray">inaktiv</span>{% endif %}</td>
+          <td>{% if count > 0 %}<span class="badge-pill badge-pill--green">{{ count }}</span>{% else %}<span class="text-muted">–</span>{% endif %}</td>
+          <td>
+            <button class="btn btn--ghost btn--xs"
+                    onclick="openEditGef({{ g.id }}, '{{ g.name|replace("'","\\'")|e }}', '{{ g.piktogramm_typ }}', {{ g.sort }}, {{ g.aktiv|lower }})">Bearbeiten</button>
+            <form method="post" action="/objekte/kataloge/gefahren/{{ g.id }}/loeschen" style="display:inline"
+                  onsubmit="return confirm('Gefahr {{ g.name }} löschen?')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Merkmale ── -->
+  <div x-show="tab === 'merkmale'" x-cloak>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn--primary" onclick="document.getElementById('newMerkModal').showModal()">+ Merkmal</button>
+    </div>
+    <table class="table-admin">
+      <thead><tr><th>Sortierung</th><th>Icon</th><th>Name</th><th>Code</th><th>Status</th><th>Verwendet</th><th>Aktionen</th></tr></thead>
+      <tbody>
+        {% for m in merkmale %}
+        {% set count = merkmal_verwendung.get(m.id, 0) %}
+        <tr>
+          <td>{{ m.sort }}</td>
+          <td>{{ m.icon or '–' }}</td>
+          <td><strong>{{ m.name }}</strong></td>
+          <td>{% if m.code %}<code>{{ m.code }}</code>{% else %}<span class="text-muted">–</span>{% endif %}</td>
+          <td>{% if m.aktiv %}<span class="badge-pill badge-pill--green">aktiv</span>{% else %}<span class="badge-pill badge-pill--gray">inaktiv</span>{% endif %}</td>
+          <td>{% if count > 0 %}<span class="badge-pill badge-pill--green">{{ count }}</span>{% else %}<span class="text-muted">–</span>{% endif %}</td>
+          <td>
+            <button class="btn btn--ghost btn--xs"
+                    onclick="openEditMerk({{ m.id }}, '{{ m.name|replace("'","\\'")|e }}', '{{ m.icon or '' }}', {{ m.sort }}, {{ m.aktiv|lower }})">Bearbeiten</button>
+            <form method="post" action="/objekte/kataloge/merkmale/{{ m.id }}/loeschen" style="display:inline"
+                  onsubmit="return confirm('Merkmal {{ m.name }} löschen?')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modale: Kategorie -->
+<dialog class="modal" id="newKatModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Neue Kategorie</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" action="/objekte/kataloge/kategorien/neu">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Name</label>
+          <input type="text" name="name" class="form-input" required maxlength="100"></div>
+        <div class="form-group"><label class="form-label">Sortierung</label>
+          <input type="number" name="sort" class="form-input" value="0"></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog class="modal" id="editKatModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Kategorie bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" id="editKatForm">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Name</label>
+          <input type="text" name="name" id="ek_name" class="form-input" required maxlength="100"></div>
+        <div class="form-group"><label class="form-label">Sortierung</label>
+          <input type="number" name="sort" id="ek_sort" class="form-input" value="0"></div>
+        <div class="form-group">
+          <label class="checkbox-label"><input type="checkbox" name="aktiv" value="1" id="ek_aktiv"> Aktiv</label>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- Modale: Gefahr -->
+<dialog class="modal" id="newGefModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Neue Gefahr</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" action="/objekte/kataloge/gefahren/neu">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Name</label>
+          <input type="text" name="name" class="form-input" required maxlength="100"></div>
+        <div class="form-group"><label class="form-label">Piktogramm</label>
+          <select name="piktogramm_typ" class="form-input">
+            {% for code, label in gefahr_piktogramme.items() %}
+            <option value="{{ code }}">{{ label }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="form-group"><label class="form-label">Sortierung</label>
+          <input type="number" name="sort" class="form-input" value="0"></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog class="modal" id="editGefModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Gefahr bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" id="editGefForm">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Name</label>
+          <input type="text" name="name" id="eg_name" class="form-input" required maxlength="100"></div>
+        <div class="form-group"><label class="form-label">Piktogramm</label>
+          <select name="piktogramm_typ" id="eg_typ" class="form-input">
+            {% for code, label in gefahr_piktogramme.items() %}
+            <option value="{{ code }}">{{ label }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="form-group"><label class="form-label">Sortierung</label>
+          <input type="number" name="sort" id="eg_sort" class="form-input" value="0"></div>
+        <div class="form-group">
+          <label class="checkbox-label"><input type="checkbox" name="aktiv" value="1" id="eg_aktiv"> Aktiv</label>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- Modale: Merkmal -->
+<dialog class="modal" id="newMerkModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Neues Merkmal</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" action="/objekte/kataloge/merkmale/neu">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Name</label>
+          <input type="text" name="name" class="form-input" required maxlength="100"></div>
+        <div class="form-group"><label class="form-label">Icon (Emoji)</label>
+          <input type="text" name="icon" class="form-input" maxlength="40" placeholder="🔑"></div>
+        <div class="form-group"><label class="form-label">Sortierung</label>
+          <input type="number" name="sort" class="form-input" value="0"></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog class="modal" id="editMerkModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Merkmal bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" id="editMerkForm">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Name</label>
+          <input type="text" name="name" id="em_name" class="form-input" required maxlength="100"></div>
+        <div class="form-group"><label class="form-label">Icon (Emoji)</label>
+          <input type="text" name="icon" id="em_icon" class="form-input" maxlength="40"></div>
+        <div class="form-group"><label class="form-label">Sortierung</label>
+          <input type="number" name="sort" id="em_sort" class="form-input" value="0"></div>
+        <div class="form-group">
+          <label class="checkbox-label"><input type="checkbox" name="aktiv" value="1" id="em_aktiv"> Aktiv</label>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script>
+function openEditKat(id, name, sort, aktiv) {
+  document.getElementById('ek_name').value = name;
+  document.getElementById('ek_sort').value = sort;
+  document.getElementById('ek_aktiv').checked = aktiv === true || aktiv === 'true';
+  document.getElementById('editKatForm').action = `/objekte/kataloge/kategorien/${id}/edit`;
+  document.getElementById('editKatModal').showModal();
+}
+function openEditGef(id, name, typ, sort, aktiv) {
+  document.getElementById('eg_name').value = name;
+  document.getElementById('eg_typ').value = typ;
+  document.getElementById('eg_sort').value = sort;
+  document.getElementById('eg_aktiv').checked = aktiv === true || aktiv === 'true';
+  document.getElementById('editGefForm').action = `/objekte/kataloge/gefahren/${id}/edit`;
+  document.getElementById('editGefModal').showModal();
+}
+function openEditMerk(id, name, icon, sort, aktiv) {
+  document.getElementById('em_name').value = name;
+  document.getElementById('em_icon').value = icon;
+  document.getElementById('em_sort').value = sort;
+  document.getElementById('em_aktiv').checked = aktiv === true || aktiv === 'true';
+  document.getElementById('editMerkForm').action = `/objekte/kataloge/merkmale/${id}/edit`;
+  document.getElementById('editMerkModal').showModal();
+}
+</script>
+{% endblock %}

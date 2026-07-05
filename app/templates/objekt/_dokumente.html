@@ -1,0 +1,229 @@
+<div class="card" style="padding:16px;"
+     x-data="{ auswahl: [], toggle(id) { this.auswahl.includes(id) ? this.auswahl = this.auswahl.filter(x => x !== id) : this.auswahl.push(id) } }">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+    <h3 style="margin:0;">📄 Dokumente</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      {% if ist_verwalter and ki_enabled and unklassifiziert > 0 %}
+      <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-analyse"
+            hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn btn--ghost btn--xs">✨ KI-Vorschläge für {{ unklassifiziert }} Seite(n)</button>
+      </form>
+      {% endif %}
+      {% if gesamt > 0 %}
+      <a href="/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1" class="btn btn--ghost btn--xs">⬇ „Bei Einsatz drucken"-Mappe</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if ki_analyse_laeuft %}
+  <div class="alert alert--success"
+       hx-get="/objekte/{{ objekt.id }}/dokumente" hx-trigger="load delay:6s"
+       hx-target="#abschnitt-dokumente" hx-swap="innerHTML">
+    ✨ KI analysiert die unklassifizierten Seiten … die Vorschläge erscheinen gleich hier.
+  </div>
+  {% endif %}
+
+  {% if ist_verwalter and ki_vorschlaege %}
+  <div class="card" style="padding:12px;margin-bottom:14px;border-left:4px solid #a78bfa;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <strong>✨ KI-Vorschläge ({{ ki_vorschlaege|length }})</strong>
+      <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review/alle-uebernehmen"
+            hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
+            hx-confirm="Alle {{ ki_vorschlaege|length }} Vorschläge übernehmen?" style="display:inline;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn btn--primary btn--xs">Alle übernehmen</button>
+      </form>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      {% for v in ki_vorschlaege %}
+      <div style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:8px;">
+        {% if v.seite and v.seite.thumb_pfad %}
+        <img src="/objekt-medien/seite/{{ v.seite_id }}/thumb" alt="" style="width:56px;border-radius:4px;background:#fff;">
+        {% endif %}
+        <div style="flex:1;min-width:0;">
+          <div>
+            <strong>{{ dokumentarten.get(v.dokumentart, 'unklar') }}</strong>
+            {% if v.titel %} · {{ v.titel }}{% endif %}
+            {% if v.melderlinien %} · Linie {{ v.melderlinien }}{% endif %}
+            {% if v.stand %} · Stand {{ v.stand.strftime('%d.%m.%Y') }}{% endif %}
+          </div>
+          {% if v.begruendung %}<div class="text-muted" style="font-size:0.8em;">{{ v.begruendung }}</div>{% endif %}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review/{{ v.id }}/uebernehmen"
+                hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--primary btn--xs">✓ Übernehmen</button>
+          </form>
+          <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review/{{ v.id }}/verwerfen"
+                hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--ghost btn--xs">Verwerfen</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="form-hint" style="margin:8px 0 0;">Vorschläge werden nie automatisch übernommen — zum Korrigieren: verwerfen und manuell klassifizieren.</p>
+  </div>
+  {% endif %}
+
+  {% if in_verarbeitung %}
+  <div class="alert alert--success" style="display:flex;align-items:center;gap:8px;"
+       hx-get="/objekte/{{ objekt.id }}/dokumente" hx-trigger="every 3s"
+       hx-target="#abschnitt-dokumente" hx-swap="innerHTML">
+    ⏳ Dokumente werden zerlegt und gerendert … die Ansicht aktualisiert sich automatisch.
+  </div>
+  {% endif %}
+
+  {% if upload_fehler %}
+  <div class="alert alert--danger">
+    {% for f in upload_fehler %}<div>{{ f }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if ist_verwalter %}
+  <form hx-post="/objekte/{{ objekt.id }}/dokumente/upload" hx-encoding="multipart/form-data"
+        hx-target="#abschnitt-dokumente" hx-swap="innerHTML" class="objekt-dropzone"
+        x-data="{ dragging: false }"
+        @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false"
+        @drop.prevent="dragging = false; $refs.dateien.files = $event.dataTransfer.files; $el.requestSubmit()"
+        :class="dragging ? 'objekt-dropzone--active' : ''">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <p style="margin:0 0 8px;">PDF-Dateien hierher ziehen oder auswählen (mehrere möglich, max. 100 MB / 300 Seiten je Datei)</p>
+    <input type="file" name="dateien" x-ref="dateien" accept="application/pdf" multiple
+           class="form-input" style="max-width:420px;display:inline-block;"
+           @change="$el.form.requestSubmit()">
+  </form>
+  {% endif %}
+
+  {% if gesamt > 0 %}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin:14px 0;">
+    <a href="#" hx-get="/objekte/{{ objekt.id }}/dokumente" hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
+       class="badge-pill {% if not filter_art %}badge-pill--green{% else %}badge-pill--gray{% endif %}">Alle ({{ gesamt }})</a>
+    {% if unklassifiziert > 0 %}
+    <a href="#" hx-get="/objekte/{{ objekt.id }}/dokumente?art=unklassifiziert" hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
+       class="badge-pill {% if filter_art == 'unklassifiziert' %}badge-pill--amber{% else %}badge-pill--gray{% endif %}">Unklassifiziert ({{ unklassifiziert }})</a>
+    {% endif %}
+    {% for code, label in dokumentarten.items() %}
+    {% if zaehler.get(code, 0) > 0 %}
+    <a href="#" hx-get="/objekte/{{ objekt.id }}/dokumente?art={{ code }}" hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
+       class="badge-pill {% if filter_art == code %}badge-pill--green{% else %}badge-pill--gray{% endif %}">{{ label }} ({{ zaehler.get(code, 0) }})</a>
+    {% endif %}
+    {% endfor %}
+    <form hx-get="/objekte/{{ objekt.id }}/dokumente" hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
+          style="display:inline-flex;gap:4px;margin-left:auto;">
+      <input type="hidden" name="art" value="{{ filter_art }}">
+      <input type="text" name="suche" value="{{ filter_suche }}" class="form-input" style="max-width:180px;padding:4px 8px;"
+             placeholder="Titel / Melderlinie">
+      <button type="submit" class="btn btn--ghost btn--xs">Suchen</button>
+    </form>
+  </div>
+
+  <div class="objekt-seiten-grid">
+    {% for s in seiten %}
+    <div class="objekt-seite-kachel {% if not s.dokumentart %}objekt-seite-kachel--unklassifiziert{% endif %}"
+         :class="auswahl.includes({{ s.id }}) ? 'objekt-seite-kachel--gewaehlt' : ''">
+      {% if ist_verwalter %}
+      <label class="objekt-seite-kachel__check">
+        <input type="checkbox" @change="toggle({{ s.id }})" :checked="auswahl.includes({{ s.id }})">
+      </label>
+      {% endif %}
+      <a href="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ s.id }}&art={{ filter_art }}&suche={{ filter_suche }}">
+        {% if s.thumb_pfad %}
+        <img src="/objekt-medien/seite/{{ s.id }}/thumb" alt="Seite {{ s.seiten_nr }}" loading="lazy">
+        {% else %}
+        <div class="objekt-seite-kachel__platzhalter">📄<br>S. {{ s.seiten_nr }}</div>
+        {% endif %}
+      </a>
+      <div class="objekt-seite-kachel__info">
+        <div style="font-weight:600;font-size:0.85em;">
+          {{ dokumentarten.get(s.dokumentart, 'Unklassifiziert') }}
+        </div>
+        {% if s.titel %}<div class="text-muted" style="font-size:0.8em;">{{ s.titel }}</div>{% endif %}
+        {% if s.melderlinien %}<div style="font-size:0.8em;">Linie {{ s.melderlinien }}</div>{% endif %}
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:2px;">
+          {% if s.bei_einsatz_drucken %}<span class="badge-pill badge-pill--red" style="font-size:0.7em;">Einsatzdruck</span>{% endif %}
+          {% if s.stand %}<span class="text-muted" style="font-size:0.75em;">{{ s.stand.strftime('%d.%m.%Y') }}</span>{% endif %}
+          <a href="/objekt-medien/seite/{{ s.id }}/pdf" class="text-muted" style="font-size:0.75em;margin-left:auto;" title="Einzelseite als PDF">⬇ PDF</a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if ist_verwalter %}
+  <div x-show="auswahl.length > 0" x-cloak class="card objekt-bulk-leiste">
+    <form hx-post="/objekte/{{ objekt.id }}/dokumente/seiten/bulk"
+          hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
+          style="display:grid;grid-template-columns:1.2fr 1.5fr 0.8fr 0.8fr auto auto;gap:8px;align-items:end;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="seiten_ids" :value="auswahl.join(',')">
+      <input type="hidden" name="art" value="{{ filter_art }}">
+      <input type="hidden" name="suche" value="{{ filter_suche }}">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label"><span x-text="auswahl.length"></span> Seite(n) → Dokumentart</label>
+        <select name="dokumentart" class="form-input">
+          <option value="">– unverändert –</option>
+          {% for code, label in dokumentarten.items() %}
+          <option value="{{ code }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Titel</label>
+        <input type="text" name="titel" class="form-input" maxlength="200" placeholder="z. B. Melderplan EG Nord">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Melderlinie(n)</label>
+        <input type="text" name="melderlinien" class="form-input" maxlength="100" placeholder="12, 13">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Stand</label>
+        <input type="date" name="stand" class="form-input">
+      </div>
+      <label class="checkbox-label" style="margin-bottom:6px;">
+        <input type="checkbox" name="bei_einsatz_drucken" value="1"> Bei Einsatz drucken
+      </label>
+      <button type="submit" class="btn btn--primary">Zuweisen</button>
+    </form>
+  </div>
+  {% endif %}
+  {% elif not in_verarbeitung %}
+  <p class="text-muted" style="margin-top:12px;">Noch keine Dokumente hochgeladen.</p>
+  {% endif %}
+
+  {% if dokumente %}
+  <details style="margin-top:16px;">
+    <summary class="text-muted" style="cursor:pointer;">Original-Dateien ({{ dokumente|length }})</summary>
+    <table class="table-admin" style="margin-top:8px;">
+      <thead><tr><th>Datei</th><th>Seiten</th><th>Status</th><th>Hochgeladen</th><th></th></tr></thead>
+      <tbody>
+        {% for d in dokumente %}
+        <tr>
+          <td><a href="/objekt-medien/dokument/{{ d.id }}/original">{{ d.dateiname_original }}</a></td>
+          <td>{{ d.seitenzahl }}</td>
+          <td>
+            {% if d.status == 'fertig' %}<span class="badge-pill badge-pill--green">fertig</span>
+            {% elif d.status == 'fehler' %}<span class="badge-pill badge-pill--red" title="{{ d.fehler_text or '' }}">Fehler</span>
+            {% else %}<span class="badge-pill badge-pill--amber">{{ d.status }}</span>{% endif %}
+          </td>
+          <td>{{ d.hochgeladen_am|local_datetime }}</td>
+          <td>
+            {% if ist_verwalter %}
+            <form hx-post="/objekte/{{ objekt.id }}/dokumente/{{ d.id }}/loeschen"
+                  hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
+                  hx-confirm="Dokument '{{ d.dateiname_original }}' samt allen Seiten löschen?" style="display:inline;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+</div>

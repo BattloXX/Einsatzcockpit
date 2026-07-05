@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Lagekarte – {{ objekt.anzeige_nummer }} {{ objekt.name }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
+{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>🗺️ Objekt-Lagekarte</h1>
+      <p class="text-muted">{{ objekt.anzeige_nummer }} · {{ objekt.name }} — Symbol in der Palette wählen, dann auf die Karte klicken. Marker sind verschiebbar.</p>
+    </div>
+    <a href="/objekte/{{ objekt.id }}" class="btn btn--ghost">← Zurück zum Objekt</a>
+  </div>
+
+  <div class="objekt-karte-layout">
+    <aside class="card" style="padding:12px;">
+      <div class="form-group">
+        <label class="form-label">Beschriftung (optional, für nächstes Symbol)</label>
+        <input type="text" id="oks-label" class="form-input" maxlength="100" placeholder="z. B. Zufahrt Nord">
+      </div>
+      <div id="oks-palette" class="oks-palette">
+        {% for code, label in symbol_typen.items() %}
+        <button type="button" class="oks-palette__eintrag" data-typ="{{ code }}" title="{{ label }}">
+          <span class="oks-palette__code">{{ code|upper|replace('_', ' ') }}</span>
+          <span class="oks-palette__name">{{ label }}</span>
+        </button>
+        {% endfor %}
+      </div>
+      <p class="form-hint" style="margin-top:10px;">
+        Linien/Flächen über die Zeichenwerkzeuge links oben in der Karte.
+        Löschen: Symbol anklicken → „Entfernen".
+      </p>
+    </aside>
+    <div id="objekt-karte" class="objekt-karte-canvas card"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/leaflet-geoman.min.js"></script>
+<script src="/static/js/objekt_karte.js"></script>
+<script>
+  initObjektKarte({
+    elementId: "objekt-karte",
+    objektId: {{ objekt.id }},
+    csrfToken: "{{ request.state.csrf_token }}",
+    editierbar: true
+  });
+</script>
+{% endblock %}

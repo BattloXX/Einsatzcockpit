@@ -72,6 +72,11 @@ document.addEventListener('alpine:init', () => {
             const customEv = new CustomEvent('incident-created', { detail: ev, bubbles: true });
             document.body.dispatchEvent(customEv);
           }
+          if (ev.type === 'objekt_match') {
+            // Objektverwaltung: Board-Panel neu laden (hx-trigger="objekt-match from:body")
+            const matchEv = new CustomEvent('objekt-match', { detail: ev, bubbles: true });
+            document.body.dispatchEvent(matchEv);
+          }
         };
         ws.onclose = () => {
           reconnectAttempt++;

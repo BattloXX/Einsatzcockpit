@@ -1,0 +1,64 @@
+<div class="sidebar-box" id="objekt-panel">
+  <h3>🏢 Objekt</h3>
+  {% if verknuepfungen %}
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    {% for v in verknuepfungen %}
+    {% set o = v.objekt %}
+    <div class="objekt-panel-eintrag {% if v.status == 'vorschlag' %}objekt-panel-eintrag--vorschlag{% endif %}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
+        <div style="min-width:0;">
+          <a href="/objekte/{{ o.id }}/einsatz" style="font-weight:600;">{{ o.anzeige_nummer }} {{ o.name }}</a>
+          <div class="text-muted" style="font-size:0.78em;">
+            {{ quellen_labels.get(v.quelle, v.quelle) }}{% if v.distanz_m is not none %} ({{ v.distanz_m }} m){% endif %}
+            {% if v.status == 'vorschlag' %} · <span style="color:#fbbf24;">Vorschlag</span>{% endif %}
+          </div>
+          {% if o.gefahren %}
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
+            {% for g in o.gefahren[:4] %}
+            <span class="badge-pill badge-pill--red" style="font-size:0.7em;"
+                  title="{{ g.gefahr.name if g.gefahr else '' }}">{{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠️')[:2] if g.gefahr else '⚠️' }}</span>
+            {% endfor %}
+            {% if o.gefahren|length > 4 %}<span class="text-muted" style="font-size:0.7em;">+{{ o.gefahren|length - 4 }}</span>{% endif %}
+          </div>
+          {% endif %}
+        </div>
+        <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--primary btn--xs" style="flex-shrink:0;">Objektinfo</a>
+      </div>
+      {% if darf_verknuepfen %}
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        {% if v.status == 'vorschlag' %}
+        <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/bestaetigen"
+              hx-target="#objekt-panel" hx-swap="outerHTML" style="display:inline;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn--primary btn--xs">✓ Bestätigen</button>
+        </form>
+        {% endif %}
+        <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/loesen"
+              hx-target="#objekt-panel" hx-swap="outerHTML"
+              hx-confirm="Verknüpfung zu {{ o.name }} lösen?" style="display:inline;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn--ghost btn--xs">Lösen</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted" style="font-size:0.85em;margin:0 0 8px;">Kein Objekt verknüpft.</p>
+  {% endif %}
+
+  {% if darf_verknuepfen and kandidaten %}
+  <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/verknuepfen"
+        hx-target="#objekt-panel" hx-swap="outerHTML"
+        style="display:flex;gap:6px;margin-top:8px;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <select name="objekt_id" class="form-input" style="flex:1;min-width:0;padding:4px 8px;">
+      {% for o in kandidaten %}
+      <option value="{{ o.id }}">{{ o.anzeige_nummer }} {{ o.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn--ghost btn--xs">+ Verknüpfen</button>
+  </form>
+  {% endif %}
+</div>

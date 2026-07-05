@@ -40,10 +40,13 @@ from app.routers import (
     ui_gsl_staff,
     ui_hilfe,
     ui_incident,
+    ui_infoscreen_alarm,
     ui_invitation,
     ui_lis,
     ui_major_incident,
     ui_media,
+    ui_objekt,
+    ui_objekt_dokumente,
     ui_password_reset,
     ui_profile,
     ui_push,
@@ -455,6 +458,9 @@ app.include_router(ui_profile.router)
 app.include_router(ui_weather.router)
 app.include_router(ui_termin.router)
 app.include_router(ui_uas.router)
+app.include_router(ui_objekt.router)
+app.include_router(ui_objekt_dokumente.router)
+app.include_router(ui_infoscreen_alarm.router)
 app.include_router(ui_verleih.router)
 app.include_router(ui_fahrtenbuch.router)
 app.include_router(ui_fahrtenbuch_admin.router)

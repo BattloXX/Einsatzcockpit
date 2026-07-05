@@ -1,0 +1,30 @@
+<div class="card" style="padding:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">Stammdaten</h3>
+    {% if ist_verwalter %}
+    <button class="btn btn--ghost btn--xs"
+            hx-get="/objekte/{{ objekt.id }}/stammdaten/bearbeiten"
+            hx-target="#abschnitt-stammdaten" hx-swap="innerHTML">✎ Bearbeiten</button>
+    {% endif %}
+  </div>
+  <dl class="objekt-dl">
+    <dt>Name</dt><dd>{{ objekt.name }}</dd>
+    <dt>Vulgoname</dt><dd>{{ objekt.vulgoname or '–' }}</dd>
+    <dt>Kategorie</dt><dd>{{ objekt.kategorie.name if objekt.kategorie else '–' }}</dd>
+    <dt>Adresse</dt><dd>{{ objekt.adresse_zeile or '–' }}</dd>
+    <dt>Koordinaten</dt>
+    <dd>
+      {% if objekt.lat is not none and objekt.lng is not none %}
+      {{ '%.5f'|format(objekt.lat) }}, {{ '%.5f'|format(objekt.lng) }}
+      {% else %}<span class="text-muted">nicht gesetzt</span>{% endif %}
+    </dd>
+    <dt>Informationen</dt><dd style="white-space:pre-wrap;">{{ objekt.informationen or '–' }}</dd>
+    <dt>Anfahrtsweg</dt><dd style="white-space:pre-wrap;">{{ objekt.anfahrtsweg or '–' }}</dd>
+    <dt>Revision</dt>
+    <dd>
+      {% if objekt.revision_datum %}{{ objekt.revision_datum.strftime('%d.%m.%Y') }}{% else %}<span class="text-muted">–</span>{% endif %}
+    </dd>
+    <dt>Angelegt</dt><dd>{{ objekt.erstellt_am|local_datetime }}</dd>
+    <dt>Geändert</dt><dd>{{ objekt.aktualisiert_am|local_datetime }}</dd>
+  </dl>
+</div>

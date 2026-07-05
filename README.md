@@ -70,6 +70,11 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **Geräteverleih** | Artikel- und Stücklisten-Stammdaten; Ausgabe & Rücknahme von Material im GSL-Kontext; Barcode/QR-Scan im Browser; SMS-Erinnerungen; Foto-Dokumentation; Druckschein |
 | **Benutzer-Profil** | Eigener Name, E-Mail, Passwort und Avatar; Profilbild erscheint in Log-Einträgen und Stab |
 | **Digitales Fahrtenbuch** | Fahrterfassung mit km/BH-Zählerstand, Seilwinde (BH, Züge, Wartung), Maschinist-Autocomplete, Fahrtzweck, Zielort, Schadensangabe (Mail+Teams); Token/QR-Zugang ohne Login; Doppelfahrt-Erkennung; Korrektur-/Storno-Workflow; Zählerstand-Berechnung; Benachrichtigungs-Audit |
+| **Objektverwaltung** | Einsatzunterlagen zu wichtigen Objekten (BMA-Betriebe, Wohnanlagen, öffentliche Gebäude): strukturierte Gefahren mit Piktogrammen, BMA/FSD-Block (BMZ, FBF, Schlüsselsafe), Kontakte mit Klick-zum-Anrufen, Zusatzadressen (Stiegen), Objektmerkmale, Wohnanlagen-Daten; PDF-Pipeline mit automatischer Seiten-Zerlegung (pypdf + Poppler-Rendering), Galerie mit Bulk-Klassifikation (Dokumentart, Melderlinie, „Bei Einsatz drucken"), Fullscreen-Viewer; Objekt-Lagekarte mit Symbol-Editor (FSD, BMZ, Gefahren-Dreiecke, Hydranten, …); Status-Workflow mit Revisions-Erinnerung, feldgenaues Änderungsprotokoll; zweistufiger Feature-Flag |
+| **Alarm-Matching (Objekte)** | Einsätze werden automatisch mit Objekten verknüpft: BMA-Nr. im Alarmtext → Adresse (inkl. Stiegen) → Geo-Nähe (Vorschlag); Objekt-Panel am Board mit Bestätigen/Lösen, mobile Einsatzansicht (Gefahren → BMA/FSD → Laufkarten → tel:-Kontakte → Karte → Dokumente), Objektblatt-PDF mit QR-Code und „Bei Einsatz drucken"-Anhang, Mappen-Druck |
+| **Alarm-Infoscreen** | Wandmonitor im Gerätehaus (Token-Zugang, kein Login): bei Alarm Stichwort + Adresse groß, verknüpftes Objekt mit Gefahren-Piktogrammen, Karte mit Objektsymbolen, FSD/BMZ/FBF-Standorte; sofortiger Wechsel per WebSocket; konfigurierbarer Ruhezustand (Uhr / Wetter / letzte Einsätze) |
+| **KI-Dokumentklassifizierung** | Vision-Analyse hochgeladener Objektunterlagen (Anthropic Claude, opt-in je Org): Vorschläge für Dokumentart/Titel/Melderlinien in einer Review-Liste — nie automatische Übernahme |
+| **Offline-Objektdaten (Android)** | Die Android-App precacht Einsatzansichten, Seitenbilder und PDFs aller freigegebenen Objekte (Sync alle 6 h) — Objektinfo auch im Funkloch verfügbar |
 
 ---
 
@@ -169,10 +174,11 @@ sudo apt-get update
 sudo apt-get install -y \
     python3.14 python3.14-venv python3.14-dev \
     libmariadb-dev libpango-1.0-0 libpangoft2-1.0-0 \
-    build-essential ffmpeg
+    build-essential ffmpeg poppler-utils
 ```
 
 `ffmpeg` ist für Video-Uploads erforderlich. Ohne ffmpeg werden nur Bilder und PDFs akzeptiert.
+`poppler-utils` rendert die PDF-Seiten der Objektverwaltung (pdf2image). Ohne Poppler werden PDFs zwar zerlegt, aber ohne Vorschaubilder abgelegt.
 
 ### App installieren
 
@@ -457,6 +463,17 @@ alembic downgrade -1
 | `0114_lis_integration.py` | LIS/IPR-Anbindung: `OrgLisConfig`, `LisSyncedObject`, Fahrzeug-/Einsatz-/Meldungs-Verknüpfung |
 | `0115_incident_caller_info.py` | Einsatz: Anrufer-Name/-Telefonnummer (Alarm-Webhook, Anzeige only) |
 | `0116_teams_bot.py` | Teams-Alarmierung: `TeamsAlarmConfig`, `TeamsChannelBinding`, `TeamsCardPost`, `AlarmToken`, `Teilnahme.rsvp_*` |
+| `0117–0119, 0121_lis_*.py` | LIS/IPR: Projekt-ID, Task-ID, Fahrzeugstatus-Rückschreiben, Passwort als Hash |
+| `0120_remove_dispatched_column.py` | Fahrzeug-Board: Spalte „Disponierte Fahrzeuge" entfernt |
+| `0122_teams_board_link_and_alarm_filter.py` | Teams-Karte: Board-Link + Stichwort-Filter |
+| `0123_gsl_alarm.py` | GSL-Sonderalarm (SMS+Teams) bei Lage-Ausrufung |
+| `0124_objekt_grunddaten.py` | Objektverwaltung: `objekt`, Kategorien, Zusatzadressen, BMA-Block, Änderungsprotokoll; OrgSettings-Flag |
+| `0125_objekt_kataloge_kontakte.py` | Objektverwaltung: Gefahren-/Merkmal-Katalog (+Seeds), Kontakte, Wohnanlagen-Block |
+| `0126_objekt_dokumente.py` | Objektverwaltung: Dokumente + zerlegte Seiten (Klassifikation, „Bei Einsatz drucken") |
+| `0127_objekt_lagekarte.py` | Objektverwaltung: Kartenobjekte (Symbole + GeoJSON-Geometrien) |
+| `0128_objekt_einsatz_matching.py` | Objektverwaltung: Einsatz-Verknüpfung (Alarm-Matching), Geo-Radius je Org |
+| `0129_infoscreen_alarm.py` | Alarm-Infoscreen: Zugangs-Tokens, Idle-Modus, Anzeigedauer |
+| `0130_objekt_ki_vorschlag.py` | Objektverwaltung: KI-Klassifizierungsvorschläge (Review-Queue), Org-Opt-in |
 
 Vollständiger Migrationsleitfaden: [`docs/MIGRATION_RUNBOOK.md`](docs/MIGRATION_RUNBOOK.md)
 
@@ -776,7 +793,9 @@ Erstellt eine Einsatzstelle in einer laufenden Großschadenslage. Gleiche Validi
 |-------|------|---------|----------------|
 | **Systemadmin** | `system_admin` | Systemweit | Alles, alle Orgs; kann Einsätze endgültig löschen |
 | **Org-Admin** | `org_admin` / `admin` | Eigene Org | Vollzugriff innerhalb der Org |
-| **Einsatzleiter** | `incident_leader` | Einsatz | Board bearbeiten, Atemschutz steuern |
+| **Fahrtenbuch-Admin** | `fahrtenbuch_admin` | Fahrtenbuch | Fahrten-Verwaltung, Storno, Korrektur, Stammdaten (ohne Benutzerverwaltung) |
+| **Einsatzleiter** | `incident_leader` | Einsatz | Board bearbeiten, Atemschutz steuern; Objekt-Verknüpfungen bestätigen/lösen |
+| **Objektverwalter** | `objekt_verwalter` | Objektverwaltung | Objekte anlegen/bearbeiten/freigeben, Dokumente, Lagekarte |
 | **AS-Überwacher** | `breathing_supervisor` | Atemschutz | Nur Atemschutzüberwachung |
 | **Schriftführer** | `recorder` | Einsatz | Journal, Meldungen, Media-Upload |
 | **Beobachter** | `readonly` | Einsatz | Nur Lesen |
@@ -973,7 +992,7 @@ app/
     ├── media/               gallery.html
     ├── admin/               sysadmin_orgs.html, konfig.html, ...
     └── ...
-alembic/versions/            Migrationen 0001–0115
+alembic/versions/            Migrationen 0001–0130
 docs/
 ├── MIGRATION_RUNBOOK.md     Vollständiger Migrationsleitfaden
 ├── multi-tenancy-konzept.md Technisches Konzeptdokument
@@ -997,6 +1016,7 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **3.2.0** | 2026-07-05 | Objektverwaltung (PR 1–9): Objekte mit BMA/FSD-Block, strukturierten Gefahren, Kontakten, Merkmalen, Wohnanlagen-Daten und Stiegen-Adressen; PDF-Pipeline mit Seiten-Zerlegung (pypdf + pdf2image/Poppler), Galerie mit Bulk-Klassifikation und Fullscreen-Viewer; Objekt-Lagekarte mit Symbol-Editor; Alarm-Matching (BMA-Nr. → Adresse → Geo) mit Board-Panel und mobiler Einsatzansicht; Alarm-Infoscreen für Wandmonitore (Token, WebSocket, Idle-Modi); Objektblatt-Druck mit QR und Einsatzdruck-Anhang; KI-Dokumentklassifizierung (Vision, Review-Queue, opt-in); Offline-Precaching in der Android-App; neue Rolle „Objektverwalter"; zweistufiger Feature-Flag (System + Org) |
 | **3.1.0** | 2026-07-04 | LIS/IPR-Anbindung an das Leitstellensystem der Landeswarnzentrale (SOAP/WCF): automatischer Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus/-position, Meldungen, Zu-/Absagen, Dokumente, automatisches Schließen bei Abschluss in LIS, Leitstellen-Nr. als führende Kennung (Board, Archiv, Verlauf, PDF), Anrufer/Melder-Anzeige mit Klick-zum-Anrufen, Diagnose-Aufzeichnungstool; SMS-Empfang & Weiterleitung (Teams/Gruppen/Mitglieder/Ad-hoc) über native Android-Gateway-App |
 | **3.0.0** | 2026-07-01 | Rebrand zu Einsatzcockpit (einsatzcockpit.com); Teilnehmerlisten-Modul (Termine/Übungen/Mannschaft, Excel-Import, PDF/Druck mit Status, Entschuldigt-Checkbox); Mannschaft als eigene Seite; SMS-Einsatzinfo je Alarm-Stichwort + manueller Gruppenversand; automatische Wetterwarnungen per Mail/Teams; Security- & Stability-Hardening (14 PRs: Tenant-Backstop, XSS-Sanitizing, FERNET_KEY-Pflicht, Device-Session-Revoke, WS-Resync, PWA-Tile-Cache, Mobile-Performance); Board: Abschnittsleiter, Karten-Journal, Meldungs-Zuweisung, Sprachdiktat bei Auftrag/Meldung; lokal gehostete Fonts statt Google Fonts; zahlreiche Timezone-, Mobile- und CI-Fixes |
 | **2.9.0** | 2026-06-24 | Digitales Fahrtenbuch: Fahrterfassung mit km/BH-Zähler, Seilwinde (BH, Züge, Wartung), Maschinist-Autocomplete, Token/QR-Zugang ohne Login, Doppelfahrt-Erkennung, Schadensmeldung (Mail + Teams-Webhook), Korrektur-/Storno-Workflow; Admin-Bereich (Fahrzeuge, Zwecke, Zielorte, Einstellungen) |

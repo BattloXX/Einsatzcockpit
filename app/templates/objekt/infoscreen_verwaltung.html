@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Alarm-Infoscreen – Verwaltung{% endblock %}
+{% block content %}
+<div class="page-content" style="max-width:860px;">
+  <div class="page-header">
+    <div>
+      <h1>📺 Alarm-Infoscreen</h1>
+      <p class="text-muted">Wandmonitor im Gerätehaus: zeigt bei Alarm Stichwort, Objekt, Gefahren und Karte</p>
+    </div>
+    <a href="/objekte/" class="btn btn--ghost">Zurück zu Objekten</a>
+  </div>
+
+  {% if request.query_params.get('saved') %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+
+  {% if neuer_token %}
+  <div class="alert alert--success">
+    <strong>Neuer Token angelegt — jetzt notieren, er wird nur einmal angezeigt:</strong><br>
+    <code style="word-break:break-all;">{{ basis_url }}/infoscreen/alarm/{{ neuer_token }}</code>
+  </div>
+  {% endif %}
+
+  <div class="card" style="padding:16px;margin-bottom:16px;">
+    <h3 style="margin-top:0;">Einstellungen</h3>
+    <form method="post" action="/infoscreen-alarm/verwaltung/einstellungen"
+          style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Ruhezustand (ohne Alarm)</label>
+        <select name="idle_modus" class="form-input">
+          {% for code, label in idle_modi.items() %}
+          <option value="{{ code }}" {% if einstellungen and einstellungen.alarm_infoscreen_idle_modus == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Alarmansicht anzeigen für (Minuten)</label>
+        <input type="number" name="alarm_dauer_min" class="form-input" min="5" max="720"
+               value="{{ einstellungen.alarm_infoscreen_alarm_dauer_min if einstellungen else 60 }}">
+      </div>
+      <div class="form-group" style="margin:0;grid-column:1 / -1;">
+        <label class="form-label">Wetter-Infoscreen-URL (nur für Ruhezustand „Wetter")</label>
+        <input type="text" name="wetter_url" class="form-input" maxlength="500"
+               placeholder="{{ basis_url }}/wetter/infoscreen/…"
+               value="{{ einstellungen.alarm_infoscreen_wetter_url or '' if einstellungen else '' }}">
+        <p class="form-hint">Der Wetter-Token ist nur als Hash gespeichert — URL daher hier manuell hinterlegen.</p>
+      </div>
+      <div style="grid-column:1 / -1;display:flex;justify-content:flex-end;">
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="margin:0;">Zugangs-Tokens</h3>
+      <form method="post" action="/infoscreen-alarm/verwaltung/token/neu" style="display:flex;gap:8px;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="text" name="name" class="form-input" required maxlength="100"
+               placeholder="z. B. Monitor Fahrzeughalle" style="min-width:220px;">
+        <button type="submit" class="btn btn--primary">+ Token</button>
+      </form>
+    </div>
+    {% if tokens %}
+    <table class="table-admin">
+      <thead><tr><th>Name</th><th>Angelegt</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for t in tokens %}
+        <tr>
+          <td><strong>{{ t.name }}</strong></td>
+          <td>{{ t.erstellt_am|local_datetime }}</td>
+          <td>
+            {% if t.aktiv %}<span class="badge-pill badge-pill--green">aktiv</span>
+            {% else %}<span class="badge-pill badge-pill--gray">deaktiviert</span>{% endif %}
+          </td>
+          <td>
+            {% if t.aktiv %}
+            <form method="post" action="/infoscreen-alarm/verwaltung/token/{{ t.id }}/deaktivieren" style="display:inline"
+                  onsubmit="return confirm('Token {{ t.name }} deaktivieren? Der Monitor verliert den Zugriff.')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Deaktivieren</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted">Noch keine Tokens angelegt.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

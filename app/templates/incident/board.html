@@ -294,6 +294,13 @@
       <span class="lage-ticker__text" x-text="currentHint"></span>
     </div>
 
+    <!-- Objekt-Panel (Objektverwaltung, laedt lazy; aktualisiert sich bei objekt_match-WS-Event) -->
+    {% if request.state.objekt_enabled %}
+    <div id="objekt-panel-wrap"
+         hx-get="/objekte/einsatz-panel/{{ incident.id }}" hx-trigger="load, objekt-match from:body"
+         hx-swap="innerHTML"></div>
+    {% endif %}
+
     <!-- Aufgabe hinzufügen -->
     {% if can_edit %}
     <div class="sidebar-box">

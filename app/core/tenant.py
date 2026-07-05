@@ -108,6 +108,24 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "termin",
     "funktion",
     "teilnahme",
+    # Objektverwaltung (TenantScoped via Mixin)
+    "objekt",
+    "objekt_kategorie",
+    "objekt_zusatzadresse",
+    "objekt_bma",
+    "objekt_change",
+    "gefahren_katalog",
+    "objekt_gefahr",
+    "merkmal_katalog",
+    "objekt_merkmal",
+    "objekt_kontakt",
+    "objekt_wohnanlage",
+    "objekt_dokument",
+    "objekt_dokument_seite",
+    "objekt_karten_objekt",
+    "objekt_einsatz",
+    "alarm_infoscreen_token",
+    "objekt_seite_ki_vorschlag",
     # GSL/Großschadenslage (SEC-1 Defense-in-Depth-Backstop) — bisher nur durch
     # ~95 manuelle _check_org_access()-Aufrufe in ui_major_incident.py geschützt;
     # ein vergessener Aufruf wäre ein Cross-Tenant-IDOR ohne DB-seitigen Schutz.

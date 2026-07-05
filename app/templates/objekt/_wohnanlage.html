@@ -1,0 +1,25 @@
+<div class="card" style="padding:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">🏘️ Wohnanlage</h3>
+    {% if ist_verwalter %}
+    <button class="btn btn--ghost btn--xs"
+            hx-get="/objekte/{{ objekt.id }}/wohnanlage/bearbeiten"
+            hx-target="#abschnitt-wohnanlage" hx-swap="innerHTML">✎ Bearbeiten</button>
+    {% endif %}
+  </div>
+  {% if objekt.wohnanlage %}
+  {% set wa = objekt.wohnanlage %}
+  <dl class="objekt-dl">
+    <dt>Wohneinheiten</dt><dd>{{ wa.wohneinheiten if wa.wohneinheiten is not none else '–' }}</dd>
+    <dt>Geschosse</dt><dd>{{ wa.geschosse if wa.geschosse is not none else '–' }}</dd>
+    <dt>Stiegen</dt><dd>{{ wa.stiegen if wa.stiegen is not none else '–' }}</dd>
+    <dt>Hausverwaltung</dt>
+    <dd>
+      {% if wa.hausverwaltung_kontakt %}{{ wa.hausverwaltung_kontakt.name }}{% else %}<span class="text-muted">–</span>{% endif %}
+    </dd>
+    <dt>Hinweise</dt><dd style="white-space:pre-wrap;">{{ wa.hinweise or '–' }}</dd>
+  </dl>
+  {% else %}
+  <p class="text-muted" style="margin:0;">Kein Wohnanlagen-Block erfasst.</p>
+  {% endif %}
+</div>

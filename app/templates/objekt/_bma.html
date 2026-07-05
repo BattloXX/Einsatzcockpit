@@ -1,0 +1,35 @@
+<div class="card objekt-bma-card" style="padding:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">🔥 BMA &amp; Schlüssel</h3>
+    {% if ist_verwalter %}
+    <button class="btn btn--ghost btn--xs"
+            hx-get="/objekte/{{ objekt.id }}/bma/bearbeiten"
+            hx-target="#abschnitt-bma" hx-swap="innerHTML">✎ Bearbeiten</button>
+    {% endif %}
+  </div>
+  {% if objekt.bma %}
+  {% set bma = objekt.bma %}
+  <dl class="objekt-dl">
+    <dt>BMA-Nr. / Zusatz</dt><dd>{{ bma.bma_nummer or '–' }}</dd>
+    <dt>RFL-Nummer</dt><dd>{{ bma.rfl_nummer or '–' }}</dd>
+    <dt>BMZ-Standort</dt><dd>{{ bma.bmz_standort or '–' }}</dd>
+    <dt>FBF-Standort</dt><dd>{{ bma.fbf_standort or '–' }}</dd>
+    <dt>Laufkarten-Ablageort</dt><dd>{{ bma.laufkarten_ablageort or '–' }}</dd>
+    <dt>Übertragungseinrichtung</dt><dd>{{ bma.uebertragungseinrichtung or '–' }}</dd>
+    <dt>Schlüsselsafe / FSD</dt>
+    <dd>
+      {% if bma.schluesselsafe_vorhanden %}
+      <span class="badge-pill badge-pill--green">vorhanden</span>
+      {% else %}<span class="text-muted">nicht vorhanden</span>{% endif %}
+    </dd>
+    {% if bma.schluesselsafe_vorhanden %}
+    <dt>FSD-Standort</dt><dd>{{ bma.schluesselsafe_standort or '–' }}</dd>
+    <dt>FSD-Inhalt</dt><dd>{{ bma.schluesselsafe_inhalt or '–' }}</dd>
+    {% endif %}
+    <dt>Benachrichtigung SMS</dt><dd>{{ bma.benachrichtigung_sms or '–' }}</dd>
+    <dt>Benachrichtigung E-Mail</dt><dd>{{ bma.benachrichtigung_email or '–' }}</dd>
+  </dl>
+  {% else %}
+  <p class="text-muted" style="margin:0;">Keine Brandmeldeanlage erfasst.</p>
+  {% endif %}
+</div>

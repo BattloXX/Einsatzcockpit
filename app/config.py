@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     MEDIA_VIDEO_MAX_HEIGHT: int = 720
     FFMPEG_BIN: str = "ffmpeg"   # ggf. absoluter Pfad ueber ENV
 
+    # Objektverwaltung: Dokumenten-Pipeline (PDF-Zerlegung + Rasterung)
+    OBJEKT_MEDIA_DIR: str = "app_storage/objekt_media"
+    OBJEKT_PDF_MAX_BYTES: int = 100 * 1024 * 1024  # 100 MB je Datei
+    OBJEKT_PDF_MAX_SEITEN: int = 300               # Seiten je Datei
+    OBJEKT_SEITE_RENDER_DPI: int = 150             # Hi-Res-Rasterung (pdf2image/Poppler)
+
     # KI-Integration (Anthropic Claude)
     ANTHROPIC_API_KEY: str = ""
     AI_ENABLED: bool = False

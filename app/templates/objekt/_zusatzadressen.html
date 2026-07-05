@@ -1,0 +1,62 @@
+<div class="card" style="padding:16px;">
+  <h3 style="margin-top:0;">🚪 Zugänge / Stiegen</h3>
+  {% if objekt.zusatzadressen %}
+  <table class="table-admin" style="margin-bottom:12px;">
+    <thead><tr><th>Bezeichnung</th><th>Adresse</th>{% if ist_verwalter %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+      {% for z in objekt.zusatzadressen %}
+      <tr>
+        <td><strong>{{ z.bezeichnung }}</strong></td>
+        <td>
+          {% set teile = [] %}
+          {% if z.strasse %}{% set _ = teile.append((z.strasse ~ ' ' ~ (z.hausnummer or '')).strip()) %}{% endif %}
+          {% if z.plz or z.ort %}{% set _ = teile.append(((z.plz or '') ~ ' ' ~ (z.ort or '')).strip()) %}{% endif %}
+          {{ teile|join(', ') or '–' }}
+        </td>
+        {% if ist_verwalter %}
+        <td style="text-align:right;">
+          <form hx-post="/objekte/{{ objekt.id }}/zusatzadressen/{{ z.id }}/loeschen"
+                hx-target="#abschnitt-zusatzadressen" hx-swap="innerHTML"
+                hx-confirm="Zugang '{{ z.bezeichnung }}' löschen?" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-muted">Keine Zusatzadressen erfasst. Bei Wohnanlagen: jede Stiege mit eigener Adresse anlegen!</p>
+  {% endif %}
+
+  {% if ist_verwalter %}
+  <form hx-post="/objekte/{{ objekt.id }}/zusatzadressen/neu"
+        hx-target="#abschnitt-zusatzadressen" hx-swap="innerHTML"
+        style="display:grid;grid-template-columns:1.2fr 1.5fr 0.6fr 0.5fr 1fr auto;gap:8px;align-items:end;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Bezeichnung *</label>
+      <input type="text" name="bezeichnung" class="form-input" required maxlength="100" placeholder="Stiege 2">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Straße</label>
+      <input type="text" name="strasse" class="form-input" maxlength="200">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Nr.</label>
+      <input type="text" name="hausnummer" class="form-input" maxlength="20">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">PLZ</label>
+      <input type="text" name="plz" class="form-input" maxlength="10">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Ort</label>
+      <input type="text" name="ort" class="form-input" maxlength="100">
+    </div>
+    <button type="submit" class="btn btn--primary">+ Hinzufügen</button>
+  </form>
+  {% endif %}
+</div>

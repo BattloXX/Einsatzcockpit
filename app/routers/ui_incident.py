@@ -374,6 +374,10 @@ async def new_incident(
             address_city or None,
         )
 
+    # Objekt-Matching (BMA-Nr./Adresse; Geo-Stufe folgt nach Geocoding)
+    from app.services.objekt_matching_service import match_incident_background
+    background_tasks.add_task(match_incident_background, incident.id)
+
     # Broadcast – Fehler darf den Redirect nicht verhindern
     if user.org_id:
         background_tasks.add_task(

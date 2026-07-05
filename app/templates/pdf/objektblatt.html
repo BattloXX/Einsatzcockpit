@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4 portrait; margin: 14mm 12mm; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #111; }
+  .kopf { border-bottom: 3px solid #b71921; padding-bottom: 6px; margin-bottom: 10px; }
+  .kopf-tabelle { width: 100%; }
+  .kopf-tabelle td { vertical-align: top; }
+  h1 { font-size: 17pt; margin: 0; color: #b71921; }
+  .untertitel { font-size: 11pt; color: #444; margin-top: 2px; }
+  .meta { font-size: 8pt; color: #666; text-align: right; }
+  h2 { font-size: 11pt; margin: 10px 0 4px; padding: 2px 6px; background: #eee;
+       border-left: 4px solid #b71921; }
+  table.daten { width: 100%; border-collapse: collapse; }
+  table.daten td { padding: 2px 4px; vertical-align: top; border-bottom: 0.5pt solid #ddd; }
+  table.daten td.k { width: 34%; color: #555; font-size: 9pt; }
+  .gefahr-leiste { margin: 4px 0; }
+  .gefahr { display: inline-block; border: 1.5pt solid #b71921; border-radius: 4px;
+            padding: 3px 8px; margin: 2px 4px 2px 0; font-weight: bold; font-size: 10pt; }
+  .bma-block { background: #fff8dc; border: 1.5pt solid #e0a800; padding: 6px; }
+  .bma-block table.daten td { border-bottom: 0.5pt solid #e8d9a0; }
+  .karte { text-align: center; margin-top: 4px; }
+  .karte img { max-width: 100%; height: auto; border: 0.5pt solid #999; }
+  .legende { font-size: 8pt; color: #555; margin-top: 2px; }
+  .qr { text-align: center; }
+  .qr img { width: 26mm; height: 26mm; }
+  .qr .hinweis { font-size: 7pt; color: #666; }
+  .fuss { margin-top: 12px; border-top: 0.5pt solid #999; padding-top: 4px;
+          font-size: 8pt; color: #666; }
+  .merkmal { display: inline-block; border: 0.5pt solid #999; border-radius: 3px;
+             padding: 1px 6px; margin: 1px 3px 1px 0; font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<div class="kopf">
+  <table class="kopf-tabelle">
+    <tr>
+      <td>
+        <h1>{{ objekt.anzeige_nummer }} · {{ objekt.name }}</h1>
+        <div class="untertitel">
+          {% if objekt.vulgoname %}{{ objekt.vulgoname }} · {% endif %}
+          {{ objekt.adresse_zeile or 'keine Adresse erfasst' }}
+          {% if objekt.kategorie %} · {{ objekt.kategorie.name }}{% endif %}
+        </div>
+      </td>
+      <td class="meta">
+        {{ org.name if org else '' }}<br>
+        Objektblatt · Stand {{ now.strftime('%d.%m.%Y') }}<br>
+        Status: {{ objekt.status }}
+      </td>
+    </tr>
+  </table>
+</div>
+
+{% if objekt.gefahren %}
+<h2>⚠ Gefahren</h2>
+<div class="gefahr-leiste">
+  {% for g in objekt.gefahren %}
+  <span class="gefahr">{{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠')[:2] if g.gefahr else '⚠' }}
+    {{ g.gefahr.name if g.gefahr else '?' }}{% if g.un_nummer %} · UN {{ g.un_nummer }}{% endif %}</span>
+  {% endfor %}
+</div>
+{% for g in objekt.gefahren if g.detail %}
+<div style="font-size:9pt;color:#333;">– {{ g.gefahr.name if g.gefahr else '' }}: {{ g.detail }}</div>
+{% endfor %}
+{% endif %}
+
+{% if objekt.bma %}
+{% set bma = objekt.bma %}
+<h2>🔥 BMA &amp; Schlüssel</h2>
+<div class="bma-block">
+  <table class="daten">
+    {% if bma.bma_nummer %}<tr><td class="k">BMA-Nr. / Zusatz</td><td><b>{{ bma.bma_nummer }}</b>{% if bma.rfl_nummer %} · RFL {{ bma.rfl_nummer }}{% endif %}</td></tr>{% endif %}
+    {% if bma.bmz_standort %}<tr><td class="k">BMZ-Standort</td><td>{{ bma.bmz_standort }}</td></tr>{% endif %}
+    {% if bma.fbf_standort %}<tr><td class="k">FBF-Standort</td><td>{{ bma.fbf_standort }}</td></tr>{% endif %}
+    {% if bma.laufkarten_ablageort %}<tr><td class="k">Laufkarten-Ablageort</td><td>{{ bma.laufkarten_ablageort }}</td></tr>{% endif %}
+    {% if bma.uebertragungseinrichtung %}<tr><td class="k">Übertragungseinrichtung</td><td>{{ bma.uebertragungseinrichtung }}</td></tr>{% endif %}
+    {% if bma.schluesselsafe_vorhanden %}
+    <tr><td class="k">Schlüsselsafe / FSD</td><td><b>{{ bma.schluesselsafe_standort or 'vorhanden' }}</b>
+      {% if bma.schluesselsafe_inhalt %}<br>{{ bma.schluesselsafe_inhalt }}{% endif %}</td></tr>
+    {% endif %}
+  </table>
+</div>
+{% endif %}
+
+{% if objekt.kontakte %}
+<h2>📞 Kontakte</h2>
+<table class="daten">
+  {% for k in objekt.kontakte %}
+  <tr>
+    <td class="k">{{ kontakt_arten.get(k.art, k.art) }}</td>
+    <td><b>{{ k.name }}</b>
+      {% if k.telefone %} · {{ k.telefone|join(' · ') }}{% endif %}
+      {% if k.email %} · {{ k.email }}{% endif %}
+      {% if k.erreichbarkeit %}<br><span style="font-size:8pt;color:#555;">{{ k.erreichbarkeit }}</span>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if objekt.merkmale %}
+<h2>🏷 Merkmale</h2>
+<div>
+  {% for m in objekt.merkmale %}
+  <span class="merkmal">{{ m.merkmal.icon or '' if m.merkmal else '' }} {{ m.merkmal.name if m.merkmal else '?' }}{% if m.hinweis %} ({{ m.hinweis }}){% endif %}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if objekt.wohnanlage %}
+{% set wa = objekt.wohnanlage %}
+<h2>🏘 Wohnanlage</h2>
+<table class="daten">
+  {% if wa.wohneinheiten is not none %}<tr><td class="k">Wohneinheiten</td><td>{{ wa.wohneinheiten }}</td></tr>{% endif %}
+  {% if wa.geschosse is not none %}<tr><td class="k">Geschosse</td><td>{{ wa.geschosse }}</td></tr>{% endif %}
+  {% if wa.stiegen is not none %}<tr><td class="k">Stiegen</td><td>{{ wa.stiegen }}</td></tr>{% endif %}
+  {% if wa.hausverwaltung_kontakt %}<tr><td class="k">Hausverwaltung</td><td>{{ wa.hausverwaltung_kontakt.name }}</td></tr>{% endif %}
+  {% if mit_hinweisen and wa.hinweise %}<tr><td class="k">Hinweise</td><td>{{ wa.hinweise }}</td></tr>{% endif %}
+</table>
+{% endif %}
+
+{% if objekt.zusatzadressen %}
+<h2>🚪 Zugänge / Stiegen</h2>
+<table class="daten">
+  {% for z in objekt.zusatzadressen %}
+  <tr><td class="k">{{ z.bezeichnung }}</td>
+      <td>{{ z.strasse or '' }} {{ z.hausnummer or '' }}{% if z.ort %}, {{ z.plz or '' }} {{ z.ort }}{% endif %}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if objekt.anfahrtsweg %}
+<h2>🚒 Anfahrtsweg</h2>
+<div style="white-space:pre-wrap;">{{ objekt.anfahrtsweg }}</div>
+{% endif %}
+
+{% if objekt.informationen %}
+<h2>ℹ Informationen</h2>
+<div style="white-space:pre-wrap;">{{ objekt.informationen }}</div>
+{% endif %}
+
+<table style="width:100%;margin-top:6px;">
+  <tr>
+    <td style="width:75%;vertical-align:top;">
+      {% if karte_datauri %}
+      <h2>🗺 Lagekarte</h2>
+      <div class="karte"><img src="{{ karte_datauri }}" alt="Objektkarte"></div>
+      {% if symbol_legende %}
+      <div class="legende">
+        Symbole: {% for name, label in symbol_legende %}{{ name }}{% if label %} ({{ label }}){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
+      </div>
+      {% endif %}
+      {% endif %}
+    </td>
+    <td style="width:25%;vertical-align:top;">
+      {% if qr_datauri %}
+      <div class="qr">
+        <img src="{{ qr_datauri }}" alt="QR-Code">
+        <div class="hinweis">Einsatzansicht am Tablet/Handy</div>
+      </div>
+      {% endif %}
+    </td>
+  </tr>
+</table>
+
+<div class="fuss">
+  Erstellt {{ erstellt_str }} · Geändert {{ geaendert_str }}
+  {% if objekt.revision_datum %} · Nächste Revision: {{ objekt.revision_datum.strftime('%d.%m.%Y') }}{% endif %}
+  · Gedruckt {{ gedruckt_str }} · Einsatzcockpit
+</div>
+
+</body>
+</html>

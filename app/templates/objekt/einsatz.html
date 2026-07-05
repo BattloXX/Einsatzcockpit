@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}{{ objekt.anzeige_nummer }} {{ objekt.name }} – Einsatzansicht{% endblock %}
+{% block content %}
+<div class="page-content objekt-einsatz" style="max-width:760px;">
+  <div style="margin-bottom:14px;">
+    <h1 style="margin:0;">{{ objekt.name }}</h1>
+    <p class="text-muted" style="margin:4px 0 0;">
+      {{ objekt.anzeige_nummer }}{% if objekt.vulgoname %} · {{ objekt.vulgoname }}{% endif %}
+      {% if objekt.adresse_zeile %} · {{ objekt.adresse_zeile }}{% endif %}
+    </p>
+  </div>
+
+  <!-- 1) Gefahren -->
+  {% if objekt.gefahren %}
+  <div class="card objekt-gefahr-card" style="padding:14px;margin-bottom:12px;">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      {% for g in objekt.gefahren %}
+      <div class="objekt-gefahr-chip" style="font-size:1em;">
+        <span class="objekt-gefahr-chip__label">
+          {{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠️')[:2] if g.gefahr else '⚠️' }}
+          {{ g.gefahr.name if g.gefahr else '?' }}
+          {% if g.un_nummer %}<span class="badge-pill badge-pill--red">UN {{ g.un_nummer }}</span>{% endif %}
+        </span>
+        {% if g.detail %}<span class="text-muted" style="font-size:0.85em;">{{ g.detail }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 2) BMA/FSD-Block (gelb) -->
+  {% if objekt.bma %}
+  {% set bma = objekt.bma %}
+  <div class="card objekt-einsatz-bma" style="padding:14px;margin-bottom:12px;">
+    <h3 style="margin:0 0 10px;">🔥 BMA &amp; Schlüssel</h3>
+    <dl class="objekt-dl">
+      {% if bma.bma_nummer %}<dt>BMA-Nr.</dt><dd><strong>{{ bma.bma_nummer }}</strong>{% if bma.rfl_nummer %} · RFL {{ bma.rfl_nummer }}{% endif %}</dd>{% endif %}
+      {% if bma.bmz_standort %}<dt>BMZ</dt><dd>{{ bma.bmz_standort }}</dd>{% endif %}
+      {% if bma.fbf_standort %}<dt>FBF</dt><dd>{{ bma.fbf_standort }}</dd>{% endif %}
+      {% if bma.laufkarten_ablageort %}<dt>Laufkarten</dt><dd>{{ bma.laufkarten_ablageort }}</dd>{% endif %}
+      {% if bma.schluesselsafe_vorhanden %}
+      <dt>FSD</dt>
+      <dd><strong>{{ bma.schluesselsafe_standort or 'vorhanden' }}</strong>
+        {% if bma.schluesselsafe_inhalt %}<br><span class="text-muted">{{ bma.schluesselsafe_inhalt }}</span>{% endif %}
+      </dd>
+      {% endif %}
+    </dl>
+  </div>
+  {% endif %}
+
+  <!-- 3) Melderplaene / Laufkarten prominent -->
+  {% if dok_zaehler.get('bma_melderplan', 0) > 0 %}
+  <a href="/objekte/{{ objekt.id }}/dokumente/viewer?art=bma_melderplan"
+     class="card objekt-einsatz-kachel objekt-einsatz-kachel--melderplan">
+    <span style="font-size:1.6em;">🗂️</span>
+    <div>
+      <strong>Melderpläne / Laufkarten öffnen</strong>
+      <div class="text-muted" style="font-size:0.85em;">{{ dok_zaehler.get('bma_melderplan') }} Seiten — im Viewer nach Melderlinie suchen</div>
+    </div>
+  </a>
+  {% endif %}
+
+  <!-- 4) Kontakte -->
+  {% if objekt.kontakte %}
+  <div class="card" style="padding:14px;margin-bottom:12px;">
+    <h3 style="margin:0 0 10px;">📞 Kontakte</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      {% for k in objekt.kontakte %}
+      <div>
+        <div><span class="badge-pill badge-pill--gray">{{ kontakt_arten.get(k.art, k.art) }}</span> <strong>{{ k.name }}</strong>
+          {% if k.erreichbarkeit %}<span class="text-muted" style="font-size:0.85em;"> · {{ k.erreichbarkeit }}</span>{% endif %}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+          {% for tel in k.telefone %}
+          <a href="tel:{{ tel|replace(' ', '') }}" class="btn btn--primary objekt-einsatz-telbtn">📞 {{ tel }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 5) Lagekarte -->
+  <div id="abschnitt-karte-einsatz" style="margin-bottom:12px;"
+       hx-get="/objekte/{{ objekt.id }}/karte/einbettung" hx-trigger="load" hx-swap="innerHTML">
+    <div class="card" style="padding:14px;"><span class="text-muted">Lade Lagekarte …</span></div>
+  </div>
+
+  <!-- 6) Dokumente nach Art -->
+  {% if dok_zaehler %}
+  <div class="card" style="padding:14px;margin-bottom:12px;">
+    <h3 style="margin:0 0 10px;">📄 Dokumente</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
+      {% for code, label in dokumentarten.items() %}
+      {% if dok_zaehler.get(code, 0) > 0 %}
+      <a href="/objekte/{{ objekt.id }}/dokumente/viewer?art={{ code }}" class="objekt-einsatz-kachel card" style="margin:0;">
+        <span style="font-size:1.3em;">📄</span>
+        <div>
+          <strong>{{ label }}</strong>
+          <div class="text-muted" style="font-size:0.8em;">{{ dok_zaehler.get(code) }} Seiten</div>
+        </div>
+      </a>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 7) Anfahrt / Infos -->
+  {% if objekt.anfahrtsweg or objekt.informationen %}
+  <div class="card" style="padding:14px;margin-bottom:12px;">
+    {% if objekt.anfahrtsweg %}
+    <h3 style="margin:0 0 6px;">🚒 Anfahrtsweg</h3>
+    <p style="white-space:pre-wrap;margin:0 0 12px;">{{ objekt.anfahrtsweg }}</p>
+    {% endif %}
+    {% if objekt.informationen %}
+    <h3 style="margin:0 0 6px;">ℹ️ Informationen</h3>
+    <p style="white-space:pre-wrap;margin:0;">{{ objekt.informationen }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- 8) Einsatzhistorie -->
+  {% if verknuepfungen %}
+  <div class="card" style="padding:14px;margin-bottom:12px;">
+    <h3 style="margin:0 0 10px;">🚨 Letzte Einsätze</h3>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      {% for v in verknuepfungen %}
+      {% set inc = incidents.get(v.incident_id) %}
+      {% if inc %}
+      <a href="/einsatz/{{ inc.id }}" style="display:flex;gap:8px;align-items:baseline;">
+        <span class="badge-pill badge-pill--gray">{{ inc.alarm_type_code }}</span>
+        <span class="text-muted" style="font-size:0.85em;">{{ inc.started_at|local_datetime }}</span>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">{{ inc.report_text or inc.reason or '' }}</span>
+      </a>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div style="margin-bottom:24px;display:flex;gap:8px;flex-wrap:wrap;">
+    <a href="/objekte/{{ objekt.id }}/objektblatt.pdf?anhang=1" class="btn btn--ghost">🖨 Objektblatt (PDF)</a>
+    <a href="/objekte/{{ objekt.id }}" class="btn btn--ghost">Zur Objektpflege</a>
+  </div>
+</div>
+{% endblock %}

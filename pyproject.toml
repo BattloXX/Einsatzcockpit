@@ -52,6 +52,8 @@ dependencies = [
     "pillow-heif>=0.18",
     # PDF-Metadaten (Seitenzahl, optionale Thumb-Quelle)
     "pypdf>=4.0",
+    # Objektverwaltung: PDF-Seiten-Rasterung (braucht Poppler: apt install poppler-utils)
+    "pdf2image>=1.17",
     # Excel-Import (Mannschaftsliste)
     "openpyxl>=3.1",
     # KI-Integration (Anthropic Claude)

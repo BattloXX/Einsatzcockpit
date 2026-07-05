@@ -70,6 +70,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     sys_settings = {s.key: s.value for s in db.query(SystemSettings).all()} if is_sysadmin else {}
     from app.models.weather import WeatherStation
+    from app.services.objekt_service import objekt_system_enabled
     from app.services.uas_service import uas_system_enabled
     weather_stations = (
         db.query(WeatherStation)
@@ -87,6 +88,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "all_orgs": all_orgs,
         "sys_settings": sys_settings,
         "uas_sys_enabled": uas_system_enabled(db),
+        "objekt_sys_enabled": objekt_system_enabled(db),
         "timezones": common_timezones(),
         "default_timezone": app_settings.DEFAULT_TIMEZONE,
         "weather_stations": weather_stations,
@@ -134,6 +136,9 @@ async def save_org_settings(
     gsl_lagemeldung_sofort_raw: str = Form(""),
     gsl_lagemeldung_auto_auftrag_raw: str = Form(""),
     uas_module_enabled_raw: str = Form(""),
+    objekt_module_enabled_raw: str = Form(""),
+    objekt_geo_match_radius_raw: str = Form(""),
+    objekt_ki_klassifikation_raw: str = Form(""),
     fahrtenbuch_modul_aktiv_raw: str = Form(""),
     atemschutz_pruefung_modul_aktiv_raw: str = Form(""),
     einsatzinfo_sms_enabled_raw: str = Form(""),
@@ -284,6 +289,34 @@ async def save_org_settings(
                 payload={"alt": old_uas, "neu": new_uas},
                 ip=request.client.host if request.client else None,
             )
+
+    # Objektverwaltung: Org-Toggle — nur änderbar wenn System-Flag aktiv
+    # (gleiches Muster wie UAS: disabled-Checkbox darf den Wert nicht kippen).
+    from app.services.objekt_service import objekt_system_enabled
+    if objekt_system_enabled(db):
+        old_objekt = org_s.objekt_module_enabled
+        new_objekt = objekt_module_enabled_raw in ("1", "true", "on")
+        org_s.objekt_module_enabled = new_objekt
+        if old_objekt != new_objekt:
+            from app.core.audit import write_audit
+            write_audit(
+                db,
+                "objekt.org_toggle",
+                org_id=effective_org_id,
+                user_id=user.id,
+                payload={"alt": old_objekt, "neu": new_objekt},
+                ip=request.client.host if request.client else None,
+            )
+        # Geo-Match-Radius (Meter, 10–500; leer = unveraendert)
+        if objekt_geo_match_radius_raw.strip():
+            try:
+                radius = int(objekt_geo_match_radius_raw)
+                if 10 <= radius <= 500:
+                    org_s.objekt_geo_match_radius_m = radius
+            except ValueError:
+                pass
+        # KI-Dokumentklassifizierung (Opt-in, zusaetzlich zum AI-Setup)
+        org_s.objekt_ki_klassifikation_enabled = objekt_ki_klassifikation_raw in ("1", "true", "on")
 
     # Fahrtenbuch-Modul: Org-Toggle
     old_fb = org_s.fahrtenbuch_modul_aktiv
@@ -1240,6 +1273,53 @@ def toggle_uas_system(
     write_audit(
         db,
         "uas.system_toggle",
+        user_id=user.id,
+        payload={"alt": old_value, "neu": new_value},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+
+    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
+    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
+@router.post("/settings/system/objekt-toggle")
+def toggle_objekt_system(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    enabled_raw: str = Form(""),
+):
+    """Systemweiten Objektverwaltungs-Flag umschalten (nur system_admin).
+
+    Setzt SystemSettings key "objekt_module_enabled" auf "true" oder "false".
+    Beim Ausschalten bleiben alle Org-Daten und Org-Toggles erhalten;
+    Re-Aktivierung stellt die Sichtbarkeit sofort wieder her (Muster UAS).
+    """
+    new_enabled = enabled_raw in ("1", "true", "on")
+    new_value = "true" if new_enabled else "false"
+
+    row = db.query(SystemSettings).filter(SystemSettings.key == "objekt_module_enabled").first()
+    old_value = row.value if row else "false"
+
+    from datetime import UTC, datetime
+    if row is None:
+        row = SystemSettings(
+            key="objekt_module_enabled",
+            value=new_value,
+            updated_at=datetime.now(UTC),
+            updated_by_user_id=user.id,
+        )
+        db.add(row)
+    else:
+        row.value = new_value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user.id
+
+    from app.core.audit import write_audit
+    write_audit(
+        db,
+        "objekt.system_toggle",
         user_id=user.id,
         payload={"alt": old_value, "neu": new_value},
         ip=request.client.host if request.client else None,

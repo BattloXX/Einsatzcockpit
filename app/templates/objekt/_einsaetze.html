@@ -1,0 +1,24 @@
+<div class="card" style="padding:16px;">
+  <h3 style="margin-top:0;">🚨 Einsatzhistorie</h3>
+  {% if verknuepfungen %}
+  <table class="table-admin">
+    <thead><tr><th>Datum</th><th>Stichwort</th><th>Meldung</th><th>Quelle</th><th></th></tr></thead>
+    <tbody>
+      {% for v in verknuepfungen %}
+      {% set inc = incidents.get(v.incident_id) %}
+      <tr>
+        <td>{% if inc %}{{ inc.started_at|local_datetime }}{% else %}–{% endif %}</td>
+        <td>{% if inc %}<span class="badge-pill badge-pill--gray">{{ inc.alarm_type_code }}</span>{% endif %}</td>
+        <td style="max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          {{ inc.report_text or inc.reason or '–' if inc else '–' }}
+        </td>
+        <td><span class="text-muted" style="font-size:0.85em;">{{ quellen_labels.get(v.quelle, v.quelle) }}</span></td>
+        <td>{% if inc %}<a href="/einsatz/{{ inc.id }}" class="btn btn--ghost btn--xs">Board</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-muted" style="margin:0;">Noch keine Einsätze mit diesem Objekt verknüpft.</p>
+  {% endif %}
+</div>

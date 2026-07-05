@@ -1,0 +1,107 @@
+<div class="card" style="padding:16px;">
+  <h3 style="margin-top:0;">📞 Kontakte</h3>
+  {% if objekt.kontakte %}
+  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+    {% for k in objekt.kontakte %}
+    <div class="objekt-kontakt" x-data="{ edit: false }">
+      <div x-show="!edit" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div>
+          <div>
+            <span class="badge-pill badge-pill--gray">{{ kontakt_arten.get(k.art, k.art) }}</span>
+            <strong>{{ k.name }}</strong>
+          </div>
+          {% if k.erreichbarkeit %}<div class="text-muted" style="font-size:0.85em;">{{ k.erreichbarkeit }}</div>{% endif %}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+            {% for tel in k.telefone %}
+            <a href="tel:{{ tel|replace(' ', '') }}" class="btn btn--ghost btn--xs">📞 {{ tel }}</a>
+            {% endfor %}
+            {% if k.email %}<a href="mailto:{{ k.email }}" class="btn btn--ghost btn--xs">✉️ {{ k.email }}</a>{% endif %}
+          </div>
+        </div>
+        {% if ist_verwalter %}
+        <div style="display:flex;gap:6px;align-items:flex-start;">
+          <button type="button" class="btn btn--ghost btn--xs" @click="edit = true">Bearbeiten</button>
+          <form hx-post="/objekte/{{ objekt.id }}/kontakte/{{ k.id }}/loeschen"
+                hx-target="#abschnitt-kontakte" hx-swap="innerHTML"
+                hx-confirm="Kontakt '{{ k.name }}' löschen?" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+      {% if ist_verwalter %}
+      <form x-show="edit" x-cloak hx-post="/objekte/{{ objekt.id }}/kontakte/{{ k.id }}"
+            hx-target="#abschnitt-kontakte" hx-swap="innerHTML"
+            style="display:grid;grid-template-columns:1fr 1.2fr 1.2fr 1fr 1fr auto;gap:8px;align-items:end;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Art</label>
+          <select name="art" class="form-input">
+            {% for code, label in kontakt_arten.items() %}
+            <option value="{{ code }}" {% if k.art == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Name *</label>
+          <input type="text" name="name" class="form-input" required maxlength="150" value="{{ k.name }}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Telefon(e), kommagetrennt</label>
+          <input type="text" name="telefone" class="form-input" value="{{ k.telefone|join(', ') }}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">E-Mail</label>
+          <input type="text" name="email" class="form-input" maxlength="200" value="{{ k.email or '' }}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Erreichbarkeit</label>
+          <input type="text" name="erreichbarkeit" class="form-input" maxlength="200" value="{{ k.erreichbarkeit or '' }}">
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button type="button" class="btn btn--ghost btn--xs" @click="edit = false">Abbr.</button>
+          <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-muted">Keine Kontakte erfasst.</p>
+  {% endif %}
+
+  {% if ist_verwalter %}
+  <form hx-post="/objekte/{{ objekt.id }}/kontakte/neu"
+        hx-target="#abschnitt-kontakte" hx-swap="innerHTML"
+        style="display:grid;grid-template-columns:1fr 1.2fr 1.2fr 1fr 1fr auto;gap:8px;align-items:end;border-top:1px solid var(--border);padding-top:12px;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Art</label>
+      <select name="art" class="form-input">
+        {% for code, label in kontakt_arten.items() %}
+        <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Name *</label>
+      <input type="text" name="name" class="form-input" required maxlength="150">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Telefon(e), kommagetrennt</label>
+      <input type="text" name="telefone" class="form-input" placeholder="+43 5574 ..., +43 664 ...">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">E-Mail</label>
+      <input type="text" name="email" class="form-input" maxlength="200">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Erreichbarkeit</label>
+      <input type="text" name="erreichbarkeit" class="form-input" maxlength="200" placeholder="Mo–Fr 8–17 Uhr">
+    </div>
+    <button type="submit" class="btn btn--primary">+ Kontakt</button>
+  </form>
+  {% endif %}
+</div>
