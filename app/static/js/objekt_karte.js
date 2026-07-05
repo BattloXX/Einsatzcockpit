@@ -60,6 +60,18 @@
   // Auch global verfuegbar (Alarm-Infoscreen rendert Symbole ohne initObjektKarte)
   window.objektSymbolHtml = objektSymbolHtml;
 
+  var HYDRANT_TEXT = { ueberflur: "H", unterflur: "UH", loeschwasser: "≈" };
+  var HYDRANT_LABEL = {
+    ueberflur: "Überflurhydrant", unterflur: "Unterflurhydrant", loeschwasser: "Löschwasserstelle"
+  };
+  function hydrantIcon(typ) {
+    return L.divIcon({
+      html: '<div class="hydrant-icon hydrant-icon--' + (typ || "hydrant") + '">' +
+        (HYDRANT_TEXT[typ] || "H") + "</div>",
+      className: "hydrant-divicon", iconSize: null, iconAnchor: [11, 11]
+    });
+  }
+
   function symbolIcon(typ, label) {
     return L.divIcon({
       html: objektSymbolHtml(typ, label),
@@ -167,6 +179,22 @@
           karte.setView([punkte[0].lat, punkte[0].lng], 18);
         }
       });
+
+    /* ── Hydranten-/Löschwasser-Layer (OSM/OSMHydrant) ── */
+    fetch("/objekte/" + opts.objektId + "/hydranten.json")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) { return; }
+        (d.hydranten || []).forEach(function (h) {
+          // Manuelle Objekt-Hydranten sind bereits Symbole auf der Karte — nur OSM zeichnen.
+          if (h.quelle === "objekt" || h.lat == null || h.lng == null) { return; }
+          L.marker([h.lat, h.lng], { icon: hydrantIcon(h.typ) }).addTo(karte)
+            .bindPopup("<strong>" + (HYDRANT_LABEL[h.typ] || "Hydrant") + "</strong>" +
+              (h.ref ? "<br>" + h.ref : "") +
+              (h.entfernung_m != null ? "<br>" + h.entfernung_m + " m" : ""));
+        });
+      })
+      .catch(function () {});
 
     if (!opts.editierbar) { return karte; }
 

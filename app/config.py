@@ -114,6 +114,15 @@ class Settings(BaseSettings):
     PHOTON_SUGGEST_LIMIT: int = 8
     DEFAULT_INCIDENT_CITY: str = "Wolfurt"   # Fallback wenn Home-Org kein city hat
 
+    # Hydranten / Löschwasser (OpenStreetMap / OSMHydrant, via Overpass server-seitig geproxyt)
+    HYDRANT_ENABLED: bool = True
+    HYDRANT_OVERPASS_URL: str = "https://overpass-api.de/api/interpreter"
+    HYDRANT_RADIUS_M: int = 300               # Suchradius um den Einsatzort
+    HYDRANT_TIMEOUT_SECONDS: float = 8.0
+    HYDRANT_CACHE_TTL_SECONDS: int = 3600     # In-Memory-Cache je gerundeter Koordinate
+    HYDRANT_MAX: int = 40                     # max. zurückgegebene Entnahmestellen
+    HYDRANT_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
+
     # Wetter (GeoSphere Austria / ZAMG — CC BY 4.0, Standardquelle / Fallback ohne API-Key)
     WEATHER_ENABLED: bool = True
     GEOSPHERE_BASE_URL: str = "https://dataset.api.hub.geosphere.at/v1"

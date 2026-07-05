@@ -161,6 +161,9 @@
   {% endif %}
   <div class="incident-header__actions">
     {# ── Primäre Aktionen ────────────────────────────────────────────────── #}
+    <a href="/einsatz/{{ incident.id }}/info"
+       class="btn btn--sm btn--primary incident-header__navlink"
+       {{ tip('Einsatzinformation: Karte, Objektdaten, Ausrückordnung, Hydranten') }}>ℹ️ Einsatzinfo</a>
     {% set lk_url = lagekarte_url(incident) %}
     {% if lk_url %}
     <a href="{{ lk_url }}" target="_blank" rel="noopener"

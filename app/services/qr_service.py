@@ -12,15 +12,16 @@ import logging
 logger = logging.getLogger("einsatzleiter.qr")
 
 
-def generate_qr_datauri(url: str, *, druck: bool = False) -> str | None:
+def generate_qr_datauri(url: str, *, druck: bool = False, box_size: int = 5) -> str | None:
     """Erzeugt einen QR-Code als data:image/png-URI. None bei Fehlern.
 
     druck=True: schwarz auf weiss (PDF/Objektblatt); sonst Dark-Theme-Farben.
+    box_size: Pixel je Modul (groesser = schaerfer im Druck).
     """
     try:
         import qrcode  # noqa: PLC0415
         qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M,
-                           box_size=5, border=2)
+                           box_size=box_size, border=2)
         qr.add_data(url)
         qr.make(fit=True)
         if druck:

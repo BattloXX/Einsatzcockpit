@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v3';
+const CACHE = 'ec-v4';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
@@ -96,9 +96,26 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Board pages (/einsatz/<id>) und Objekt-Einsatzansichten (/objekte/<id>/einsatz)
+  // Hydranten-/Löschwasser-JSON — network-first, letzte Antwort cachen (Funkloch)
+  if (/^\/einsatz\/\d+\/hydranten\.json$/.test(url.pathname)) {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(BOARD_CACHE).then(c => c.put(e.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request, { cacheName: BOARD_CACHE })
+          || new Response('{"hydranten":[],"stand":null}', { headers: { 'Content-Type': 'application/json' } }))
+    );
+    return;
+  }
+
+  // Board pages (/einsatz/<id>[/info]) und Objekt-Einsatzansichten (/objekte/<id>/einsatz)
   // — network-first, cache last successful response (Objektinfo im Fahrzeug bei Funkloch)
-  if (/^\/einsatz\/\d+$/.test(url.pathname) || /^\/objekte\/\d+\/einsatz$/.test(url.pathname)) {
+  if (/^\/einsatz\/\d+(\/info)?$/.test(url.pathname) || /^\/objekte\/\d+\/einsatz$/.test(url.pathname)) {
     e.respondWith(
       fetch(e.request)
         .then(res => {

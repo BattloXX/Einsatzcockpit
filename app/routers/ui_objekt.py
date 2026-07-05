@@ -1420,6 +1420,43 @@ def karten_objekte_json(
     }
 
 
+@router.get("/{objekt_id}/hydranten.json")
+async def objekt_hydranten(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Löschwasser-Entnahmestellen (OSM/OSMHydrant) um die Objektkoordinaten."""
+    from app.config import settings
+    from app.models.master import OrgSettings
+    from app.services.hydrant_service import (
+        fetch_osm_hydranten,
+        manuelle_objekt_hydranten,
+        merge_hydranten,
+    )
+
+    objekt = _objekt_or_404(db, objekt_id, user)
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == objekt.org_id).first()
+    enabled = settings.HYDRANT_ENABLED and (
+        org_settings is None or org_settings.hydrant_layer_enabled
+    )
+    osm: list = []
+    if enabled and objekt.lat is not None and objekt.lng is not None:
+        osm = await fetch_osm_hydranten(objekt.lat, objekt.lng)
+    karten = (
+        db.query(ObjektKartenObjekt)
+        .filter(
+            ObjektKartenObjekt.objekt_id == objekt.id,
+            ObjektKartenObjekt.typ.in_(("hydrant_ueberflur", "hydrant_unterflur")),
+        )
+        .all()
+    )
+    manuell = manuelle_objekt_hydranten(karten, objekt.lat, objekt.lng)
+    return {"hydranten": merge_hydranten(osm, manuell), "stand": None}
+
+
 @router.post("/{objekt_id}/karte/objekte")
 async def karten_objekt_neu(
     objekt_id: int,
@@ -1708,6 +1745,44 @@ def einsaetze_partial(
 
 # ── PR5: Mobile Einsatzansicht ─────────────────────────────────────────────────
 
+def _dok_zaehler(db: Session, objekt_id: int) -> dict[str, int]:
+    """Seitenzahl je Dokumentart (fuer die Dokument-Kacheln der Einsatzansicht)."""
+    from sqlalchemy import func as _func
+
+    from app.models.objekt import ObjektDokumentSeite
+    return {
+        code: cnt
+        for code, cnt in (
+            db.query(ObjektDokumentSeite.dokumentart, _func.count(ObjektDokumentSeite.id))
+            .filter(ObjektDokumentSeite.objekt_id == objekt_id,
+                    ObjektDokumentSeite.dokumentart.isnot(None))
+            .group_by(ObjektDokumentSeite.dokumentart)
+            .all()
+        )
+        if code is not None
+    }
+
+
+@router.get("/{objekt_id}/einsatz-fragment", response_class=HTMLResponse)
+def einsatz_fragment(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Kompakter Objekt-Einsatzinhalt (ohne eigene Lagekarte) fuer die HTMX-Einbettung
+    in die Einsatzinformation (incident/info.html)."""
+    from app.models.objekt import DOKUMENTARTEN
+
+    objekt = _objekt_or_404(db, objekt_id, user)
+    ctx = _detail_context(request, db, user, objekt)
+    ctx["dokumentarten"] = DOKUMENTARTEN
+    ctx["dok_zaehler"] = _dok_zaehler(db, objekt.id)
+    ctx["kompakt"] = True
+    return templates.TemplateResponse(request, "objekt/_einsatz_inhalt.html", ctx)
+
+
 @router.get("/{objekt_id}/einsatz", response_class=HTMLResponse)
 def einsatzansicht(
     objekt_id: int,
@@ -1716,25 +1791,13 @@ def einsatzansicht(
     user: User = Depends(require_role(*_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
-    from sqlalchemy import func as _func
-
     from app.models.incident import Incident
-    from app.models.objekt import DOKUMENTARTEN, ObjektDokumentSeite, ObjektEinsatz
+    from app.models.objekt import DOKUMENTARTEN, ObjektEinsatz
 
     objekt = _objekt_or_404(db, objekt_id, user)
 
     # Dokumentarten-Kacheln mit Seitenzahl
-    dok_zaehler: dict[str, int] = {
-        code: cnt
-        for code, cnt in (
-            db.query(ObjektDokumentSeite.dokumentart, _func.count(ObjektDokumentSeite.id))
-            .filter(ObjektDokumentSeite.objekt_id == objekt.id,
-                    ObjektDokumentSeite.dokumentart.isnot(None))
-            .group_by(ObjektDokumentSeite.dokumentart)
-            .all()
-        )
-        if code is not None
-    }
+    dok_zaehler = _dok_zaehler(db, objekt.id)
 
     # Einsatzhistorie (letzte 10)
     verknuepfungen = (

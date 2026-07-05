@@ -93,6 +93,10 @@ class Incident(Base):
     # Anrufer/Melder aus dem Alarm-Webhook (Name/Telefon) — nur Anzeige, keine LIS-Quelle.
     caller_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     caller_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Hydranten-/Löschwasser-Momentaufnahme (OSM/OSMHydrant) als JSON-Liste + Abrufzeit.
+    # Dient als Offline-Fallback, wenn Overpass am Einsatzort nicht erreichbar ist.
+    hydranten_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hydranten_stand: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     columns: Mapped[list[IncidentColumn]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"

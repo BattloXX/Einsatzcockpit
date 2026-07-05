@@ -32,7 +32,7 @@
   <h3 class="section-title">Aktive Einsätze ({{ active_incidents|length }})</h3>
   <div class="incident-cards">
     {% for inc in active_incidents %}
-    <a href="/einsatz/{{ inc.id }}" class="incident-card {% if inc.is_exercise %}incident-card--exercise{% endif %}">
+    <a href="/einsatz/{{ inc.id }}/info" class="incident-card {% if inc.is_exercise %}incident-card--exercise{% endif %}">
       {% if inc.is_exercise %}<div class="exercise-banner">ÜBUNG</div>{% endif %}
       <div class="incident-card__alarm">{{ inc.alarm_type_code }}</div>
       <div class="incident-card__address">

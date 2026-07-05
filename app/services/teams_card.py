@@ -63,17 +63,19 @@ def build_incident_message_card(
         })
 
     actions = []
+    # Primäraktion: öffentliche Einsatzinformation (No-Login, Karte + Hydranten).
+    # Der extern weitergeleitete Link geht immer hierher.
+    if cfg.include_qr_link and incident.alarm_token:
+        actions.append({
+            "type": "Action.OpenUrl",
+            "title": "ℹ️ Einsatzinformation",
+            "url": f"{base_url}/alarm/{incident.alarm_token}",
+        })
     if cfg.include_gmaps_link and has_coords:
         actions.append({
             "type": "Action.OpenUrl",
             "title": "🗺 Google Maps",
             "url": f"https://maps.google.com/?q={incident.lat},{incident.lng}",
-        })
-    if cfg.include_qr_link and incident.alarm_token:
-        actions.append({
-            "type": "Action.OpenUrl",
-            "title": "📋 Alarmübersicht",
-            "url": f"{base_url}/alarm/{incident.alarm_token}",
         })
     if cfg.include_board_link:
         # Login-pflichtig (kein QR-Auto-Login wie die Alarmübersicht) — bewusst dieselbe

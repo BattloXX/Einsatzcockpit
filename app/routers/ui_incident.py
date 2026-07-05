@@ -782,6 +782,131 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     })
 
 
+@router.get("/einsatz/{incident_id}/info", response_class=HTMLResponse)
+async def incident_info(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    """Einsatzinformation: vorgeschaltete Übersicht mit Karte, Objektinfo (inkl.
+    Dokumenten), Ausrückordnung und nächsten Hydranten. Prominenter Absprung ins Board."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    incident = _incident_or_404(incident_id, db)
+    if not can_access_incident(user, incident):
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+
+    # Ausrückordnung: Fahrzeuge des Alarmstichworts (nur Anzeige)
+    alarm = (
+        get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)  # type: ignore[arg-type]
+        if incident.alarm_type_code else None
+    )
+    dispatch_vehicles = []
+    if alarm:
+        dispatch_vehicles = (
+            db.query(VehicleMaster)
+            .join(AlarmDispatchVehicle, AlarmDispatchVehicle.vehicle_master_id == VehicleMaster.id)
+            .filter(AlarmDispatchVehicle.alarm_type_id == alarm.id)
+            .order_by(AlarmDispatchVehicle.display_order)
+            .all()
+        )
+
+    # Gematchte Objekte (bestaetigt + Vorschlaege) – nur wenn Objekt-Modul aktiv
+    objekt_verknuepfungen: list = []
+    objekt_enabled = bool(getattr(request.state, "objekt_enabled", False))
+    if objekt_enabled:
+        from app.models.objekt import ObjektEinsatz
+        objekt_verknuepfungen = (
+            db.query(ObjektEinsatz)
+            .options(selectinload(ObjektEinsatz.objekt))
+            .filter(ObjektEinsatz.incident_id == incident_id)
+            .order_by(ObjektEinsatz.status, ObjektEinsatz.erstellt_am)
+            .all()
+        )
+
+    return templates.TemplateResponse(request, "incident/info.html", {
+        "user": user,
+        "incident": incident,
+        "dispatch_vehicles": dispatch_vehicles,
+        "objekt_verknuepfungen": objekt_verknuepfungen,
+        "objekt_enabled": objekt_enabled,
+    })
+
+
+@router.get("/einsatz/{incident_id}/hydranten.json")
+async def incident_hydranten(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    """Löschwasser-Entnahmestellen (OSM/OSMHydrant + manuelle Objekt-Symbole) für die
+    Einsatzinfo-Karte. Persistiert die OSM-Momentaufnahme am Einsatz als Offline-Fallback."""
+    import json as _json
+
+    from app.core.timezones import format_local_datetime
+    from app.services.hydrant_service import (
+        fetch_osm_hydranten,
+        manuelle_objekt_hydranten,
+        merge_hydranten,
+    )
+
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(401, "Nicht angemeldet")
+    incident = _incident_or_404(incident_id, db)
+    if not can_access_incident(user, incident):
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+
+    org_settings = db.query(OrgSettings).filter(
+        OrgSettings.org_id == incident.primary_org_id
+    ).first() if incident.primary_org_id else None
+    enabled = settings.HYDRANT_ENABLED and (
+        org_settings is None or org_settings.hydrant_layer_enabled
+    )
+
+    lat, lng = incident.lat, incident.lng
+
+    # Manuell in Objekten gesetzte Hydranten der bestätigten Objekte (immer live aus DB)
+    manuell: list = []
+    if getattr(request.state, "objekt_enabled", False):
+        from app.models.objekt import (
+            OBJEKT_EINSATZ_BESTAETIGT,
+            ObjektEinsatz,
+            ObjektKartenObjekt,
+        )
+        objekt_ids = [
+            oe.objekt_id for oe in db.query(ObjektEinsatz).filter(
+                ObjektEinsatz.incident_id == incident_id,
+                ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
+            ).all()
+        ]
+        if objekt_ids:
+            karten = db.query(ObjektKartenObjekt).filter(
+                ObjektKartenObjekt.objekt_id.in_(objekt_ids),
+                ObjektKartenObjekt.typ.in_(("hydrant_ueberflur", "hydrant_unterflur")),
+            ).all()
+            manuell = manuelle_objekt_hydranten(karten, lat, lng)
+
+    osm: list = []
+    stand = incident.hydranten_stand
+    if enabled and lat is not None and lng is not None:
+        osm = await fetch_osm_hydranten(lat, lng)
+        if osm:
+            incident.hydranten_json = _json.dumps(osm)
+            incident.hydranten_stand = datetime.now(UTC)
+            stand = incident.hydranten_stand
+            db.commit()
+        elif incident.hydranten_json:  # Overpass-Ausfall → letzte Momentaufnahme
+            try:
+                osm = _json.loads(incident.hydranten_json)
+            except Exception:
+                osm = []
+    elif incident.hydranten_json:
+        try:
+            osm = _json.loads(incident.hydranten_json)
+        except Exception:
+            osm = []
+
+    org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
+    return {
+        "hydranten": merge_hydranten(osm, manuell),
+        "stand": format_local_datetime(stand, org) if stand else None,
+    }
+
+
 @router.get("/einsatz/{incident_id}/dashboard", response_class=HTMLResponse)
 async def incident_dashboard(
     incident_id: int,
@@ -1775,73 +1900,65 @@ async def add_log(
 
 # ── QR-Code ───────────────────────────────────────────────────────────────────
 
+def _einsatzinfo_qr_url(request: Request, incident, user, db: Session) -> str:
+    """Ziel-URL des Einsatz-QR-Codes.
+
+    Der extern weitergeleitete Link geht immer auf die öffentliche (No-Login)
+    Einsatzinformation `/alarm/{token}`. Nur für Altdaten ohne AlarmToken bleibt
+    der bisherige Auto-Login-QR ins Board erhalten.
+    """
+    if incident.alarm_token:
+        return f"{request.base_url}alarm/{incident.alarm_token}"
+    token = sign_qr_token(incident.id, user.id)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    existing = db.query(IncidentToken).filter(
+        IncidentToken.incident_id == incident.id,
+        IncidentToken.issued_by_user_id == user.id,
+        IncidentToken.revoked_at.is_(None),
+    ).first()
+    if not existing:
+        db.add(IncidentToken(incident_id=incident.id, token_hash=token_hash,
+                             issued_by_user_id=user.id))
+        db.commit()
+    return f"{request.base_url}qr-login?incident_id={incident.id}&token={token}"
+
+
 @router.get("/einsatz/{incident_id}/qr", response_class=HTMLResponse)
 async def get_qr_code(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    from app.services.qr_service import generate_qr_datauri
+
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
     incident = _incident_or_404(incident_id, db)
 
-    token = sign_qr_token(incident_id, user.id)
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-
-    # Store token in DB once per user+incident – never overwrite so distributed QR codes
-    # remain valid for all devices that have already printed/displayed them.
-    existing = db.query(IncidentToken).filter(
-        IncidentToken.incident_id == incident_id,
-        IncidentToken.issued_by_user_id == user.id,
-        IncidentToken.revoked_at.is_(None),
-    ).first()
-    if not existing:
-        from app.models.incident import IncidentToken as IT
-        db.add(IT(incident_id=incident_id, token_hash=token_hash, issued_by_user_id=user.id))
-        db.commit()
-
-    url = f"{request.base_url}qr-login?incident_id={incident_id}&token={token}"
-    img = qrcode.make(url)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    img_b64 = base64.b64encode(buf.getvalue()).decode()
-
+    url = _einsatzinfo_qr_url(request, incident, user, db)
     return templates.TemplateResponse(request, "incident/qr_modal.html", {
         "incident": incident,
-        "qr_img": img_b64, "qr_url": url,
+        "qr_img": generate_qr_datauri(url), "qr_url": url,
     })
 
 
 @router.get("/einsatz/{incident_id}/qr/print", response_class=HTMLResponse)
 async def qr_print(incident_id: int, request: Request, db: Session = Depends(get_db)):
     """Druckoptimierte Seite mit großem QR-Code + Einsatz-Eckdaten.
-    Wiederverwendung der Token-Logik von /qr."""
+    QR verweist auf die öffentliche Einsatzinformation (/alarm/{token})."""
+    from app.services.qr_service import generate_qr_datauri
+
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
     incident = _incident_or_404(incident_id, db)
 
-    token = sign_qr_token(incident_id, user.id)
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    existing = db.query(IncidentToken).filter(
-        IncidentToken.incident_id == incident_id,
-        IncidentToken.issued_by_user_id == user.id,
-        IncidentToken.revoked_at.is_(None),
-    ).first()
-    if not existing:
-        from app.models.incident import IncidentToken as IT
-        db.add(IT(incident_id=incident_id, token_hash=token_hash, issued_by_user_id=user.id))
-        db.commit()
-
-    url = f"{request.base_url}qr-login?incident_id={incident_id}&token={token}"
-    # Größerer QR-Code für den Druck (box_size erhöht)
-    img = qrcode.make(url, box_size=14, border=2)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    img_b64 = base64.b64encode(buf.getvalue()).decode()
+    url = _einsatzinfo_qr_url(request, incident, user, db)
+    # Größerer QR-Code für den Druck (schwarz auf weiß, box_size erhöht)
+    img_datauri = generate_qr_datauri(url, druck=True, box_size=14)
 
     org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
     logo_url = (org.logo_path if org and org.logo_path else None) or "/static/img/Logo-rot.png"
     return templates.TemplateResponse(request, "incident/qr_print.html", {
         "incident": incident,
-        "qr_img": img_b64, "qr_url": url,
+        "qr_img": img_datauri, "qr_url": url,
         "logo_url": logo_url,
         "base_url": str(request.base_url).rstrip("/"),
     })

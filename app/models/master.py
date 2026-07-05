@@ -382,6 +382,10 @@ class OrgSettings(Base):
     # KI-Dokumentklassifizierung (Objektverwaltung): Opt-in je Org, zusaetzlich zum AI-Setup
     objekt_ki_klassifikation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Hydranten-/Löschwasser-Layer (OSM/OSMHydrant) auf Einsatz- und Objekt-Lagekarten.
+    # Effektiv = Settings.HYDRANT_ENABLED AND dieser Wert.
+    hydrant_layer_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
     # GSL-Feature-Flags je Org (effektiv = SystemSettings-Globalschalter AND dieser Wert).
     # Default True = Modul aktiv sofern global nicht deaktiviert.
     mi_feature_stab:           Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

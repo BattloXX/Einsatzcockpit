@@ -407,6 +407,21 @@
         </small>
       </div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F6B0; Hydranten / L&ouml;schwasser</h3>
+      {% set _hyd_on = (org_settings.hydrant_layer_enabled) if org_settings else true %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;">
+          <input type="hidden" name="hydrant_layer_enabled_raw" value="">
+          <input type="checkbox" name="hydrant_layer_enabled_raw" value="1"
+                 {% if _hyd_on %}checked{% endif %}>
+          Hydranten-Layer auf den Lagekarten anzeigen
+        </label>
+        <small class="form-hint">
+          L&ouml;schwasser-Entnahmestellen aus OpenStreetMap/OSMHydrant auf Einsatz- und
+          Objekt-Lagekarten sowie in der Einsatzinformation.
+        </small>
+      </div>
+
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>

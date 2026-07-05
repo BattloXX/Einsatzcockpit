@@ -69,10 +69,17 @@ async def notify_incident_created(
     resolved_push_url = push_url or f"/einsatz/{incident.id}"
 
     if org_id:
+        # Öffentlicher Einsatzinfo-Link (No-Login) für die SMS; request-loser Kontext →
+        # settings.effective_public_base_url statt request.base_url.
+        from app.config import settings
+        info_link = (
+            f"{settings.effective_public_base_url.rstrip('/')}/alarm/{incident.alarm_token}"
+            if incident.alarm_token else ""
+        )
         sms_args = (
             org_id, incident.alarm_type_code, address, incident.address_city,
             incident.report_text, incident.reason, incident.is_exercise,
-            triggered_by_user_id,
+            triggered_by_user_id, info_link,
         )
         push_args = (db, org_id, push_title, push_body, resolved_push_url)
         push_func = notify_org

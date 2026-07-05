@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("einsatzleiter.sms_dispatch")
 
 # Standardvorlage fuer Einsatzinfo-SMS (Platzhalter in geschweiften Klammern)
-_DEFAULT_TEMPLATE = "Einsatz {stichwort}: {adresse}. {meldung}"
+_DEFAULT_TEMPLATE = "Einsatz {stichwort}: {adresse}. {meldung} {link}"
 
 # Standardtext fuer den Grossschadenslage-Sonderalarm (siehe dispatch_gsl_alarm()).
 # Bewusst ohne Umlaute (SMS-Zeichensatz, wie gsl_verleih_sms_*_text in verleih_service.py).
@@ -53,6 +53,7 @@ def render_template(template: str, ctx: dict) -> str:
       {einsatzgrund} Einsatzgrund
       {datum}       Datum der Alarmierung (TT.MM.JJJJ)
       {zeit}        Uhrzeit der Alarmierung (HH:MM)
+      {link}        Öffentliche Einsatzinformation (No-Login-Link /alarm/{token})
     """
     class _Safe(dict):
         def __missing__(self, key):
@@ -151,6 +152,7 @@ async def dispatch_einsatzinfo(
     einsatzgrund: str | None,
     is_exercise: bool,
     triggered_by_user_id: int | None = None,
+    link: str = "",
 ) -> None:
     """Versendet automatische Einsatzinfo-SMS nach Alarmeingang.
 
@@ -222,8 +224,10 @@ async def dispatch_einsatzinfo(
             "einsatzgrund": einsatzgrund or "",
             "datum": local_now.strftime("%d.%m.%Y"),
             "zeit": local_now.strftime("%H:%M"),
+            "link": link or "",
         }
-        text = exercise_prefix + render_template(template, ctx)
+        # .strip(): entfernt trailing Space, falls {link} leer ist (Altdaten ohne AlarmToken)
+        text = (exercise_prefix + render_template(template, ctx)).strip()
 
         # Empfaenger sammeln (inkl. Gruppen-Expansion, Dedup, Telefonnummer-Filter)
         recipients = collect_einsatzinfo_recipients(db, org_id, alarm_type_id)

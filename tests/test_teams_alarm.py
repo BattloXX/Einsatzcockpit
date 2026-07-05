@@ -76,7 +76,9 @@ def test_build_incident_message_card_includes_all_bausteine_by_default():
 
     action_titles = [a["title"] for a in _adaptive_content(card)["actions"]]
     assert any("Google Maps" in t for t in action_titles)
-    assert any("Alarmübersicht" in t for t in action_titles)
+    # Primäraktion: öffentliche Einsatzinformation (vormals "Alarmübersicht")
+    assert any("Einsatzinformation" in t for t in action_titles)
+    assert action_titles[0].endswith("Einsatzinformation")
 
 
 def test_build_incident_message_card_respects_include_toggles():

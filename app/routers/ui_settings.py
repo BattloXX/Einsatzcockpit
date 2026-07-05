@@ -147,6 +147,7 @@ async def save_org_settings(
     fahrtenbuch_modul_aktiv_raw: str = Form(""),
     atemschutz_pruefung_modul_aktiv_raw: str = Form(""),
     einsatzinfo_sms_enabled_raw: str = Form(""),
+    hydrant_layer_enabled_raw: str | None = Form(None),
 ):
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = target_org_id if is_sysadmin and target_org_id else user.org_id
@@ -322,6 +323,10 @@ async def save_org_settings(
                 pass
         # KI-Dokumentklassifizierung (Opt-in, zusaetzlich zum AI-Setup)
         org_s.objekt_ki_klassifikation_enabled = objekt_ki_klassifikation_raw in ("1", "true", "on")
+
+    # Hydranten-/Löschwasser-Layer (Hidden+Checkbox: None = Feld nicht im Formular → unveraendert)
+    if hydrant_layer_enabled_raw is not None:
+        org_s.hydrant_layer_enabled = hydrant_layer_enabled_raw in ("1", "true", "on")
 
     # Fahrtenbuch-Modul: Org-Toggle
     old_fb = org_s.fahrtenbuch_modul_aktiv
