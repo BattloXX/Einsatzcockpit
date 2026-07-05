@@ -57,11 +57,20 @@
   </form>
 
   {% if rows %}
-  <div x-data="{ auswahl: [], toggle(id) { this.auswahl.includes(id) ? this.auswahl = this.auswahl.filter(x => x !== id) : this.auswahl.push(id) } }">
+  <div x-data="{
+    auswahl: [],
+    alle: [{{ rows|map(attribute='objekt.id')|join(',') }}],
+    toggle(id) { this.auswahl.includes(id) ? this.auswahl = this.auswahl.filter(x => x !== id) : this.auswahl.push(id) },
+    toggleAlle() { this.auswahl = this.auswahl.length === this.alle.length ? [] : this.alle.slice() }
+  }">
   <table class="table-admin">
     <thead>
       <tr>
-        <th style="width:28px;"></th>
+        <th style="width:28px;">
+          <input type="checkbox" @change="toggleAlle()"
+                 :checked="auswahl.length === alle.length && alle.length > 0"
+                 title="Alle markieren">
+        </th>
         <th>Nummer</th><th>Name</th><th>Kategorie</th><th>Adresse</th>
         <th>Merkmale</th><th>Vollständigkeit</th><th>Status</th><th>Revision</th>
       </tr>
