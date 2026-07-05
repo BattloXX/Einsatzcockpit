@@ -78,12 +78,10 @@
   {% endfor %}
 
   <!-- Submit-Button unten -->
-  <div style="position:sticky;bottom:0;padding:10px 16px;background:var(--surface);border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+  <div style="position:sticky;bottom:0;padding:10px 16px;background:var(--surface);border-top:1px solid var(--border);">
     <button type="submit" class="btn btn--primary" style="width:100%;">
       Auswahl hinzufügen
     </button>
-    <button type="button" onclick="this.closest('dialog').close()"
-            class="btn btn--ghost" style="width:100%;font-size:.85rem;">Schliessen</button>
   </div>
 </form>
 {% else %}

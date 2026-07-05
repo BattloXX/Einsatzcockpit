@@ -983,6 +983,7 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .topnav__leader { display: none; }
   .topnav__user .user-badge { display: none; }
   .topnav__user .btn { display: none; }
+  .topnav__admin-link { display: none; }
   .topnav__burger { display: inline-flex; }
   .topnav { padding: 0 12px; gap: 10px; }
   .topnav__title {
