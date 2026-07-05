@@ -5,14 +5,23 @@
     <a href="/objekte/{{ objekt.id }}/karte" class="btn btn--ghost btn--xs">✎ Karte bearbeiten</a>
     {% endif %}
   </div>
-  <link rel="stylesheet" href="/static/css/leaflet.min.css">
   <div id="objekt-karte-ro" class="objekt-karte-canvas objekt-karte-canvas--klein"></div>
-  <script src="/static/js/leaflet.min.js"></script>
-  <script src="/static/js/objekt_karte.js"></script>
   <script>
     (function () {
-      var el = document.getElementById("objekt-karte-ro");
-      if (el && !el.dataset.initialisiert) {
+      // Partial wird per HTMX (innerHTML-Swap) geladen: <script src> wuerde dabei
+      // asynchron nachgeladen, initObjektKarte waere beim Inline-Aufruf noch nicht
+      // definiert. Daher Skripte dynamisch mit onload-Kette laden (Muster
+      // incident_major/_site_pin.html).
+      function ladeScript(src, dann) {
+        var s = document.createElement("script");
+        s.src = src;
+        s.onload = dann;
+        document.head.appendChild(s);
+      }
+
+      function init() {
+        var el = document.getElementById("objekt-karte-ro");
+        if (!el || el.dataset.initialisiert) { return; }
         el.dataset.initialisiert = "1";
         initObjektKarte({
           elementId: "objekt-karte-ro",
@@ -20,6 +29,24 @@
           csrfToken: "{{ request.state.csrf_token }}",
           editierbar: false
         });
+      }
+
+      function mitObjektKarte() {
+        if (typeof window.initObjektKarte === "function") {
+          init();
+        } else {
+          ladeScript("/static/js/objekt_karte.js", init);
+        }
+      }
+
+      if (typeof L !== "undefined") {
+        mitObjektKarte();
+      } else {
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "/static/css/leaflet.min.css";
+        document.head.appendChild(link);
+        ladeScript("/static/js/leaflet.min.js", mitObjektKarte);
       }
     })();
   </script>
