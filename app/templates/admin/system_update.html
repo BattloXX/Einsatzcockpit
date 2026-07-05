@@ -12,9 +12,18 @@
     <dl class="info-list">
       <dt>Aktuelle Version</dt>
       <dd><strong>{{ version }}</strong></dd>
+      {% if deployed_ref %}
+      <dt>Letztes Branch-Update</dt>
+      <dd><code>{{ deployed_ref.branch }}@{{ deployed_ref.sha[:7] }}</code>
+          <span class="text-muted" style="font-size:.82rem;">({{ deployed_ref.datum[:10] }})</span></dd>
+      {% endif %}
     </dl>
   </div>
 </div>
+
+{% if token_saved %}
+<div class="alert alert-success">GitHub-Token gespeichert.</div>
+{% endif %}
 
 {% if error %}
 <div class="alert alert-danger">{{ error }}</div>
@@ -61,6 +70,50 @@
         Verfügbare APK-Assets werden ebenfalls angezeigt.
       </p>
     </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <h2>Direkt vom Repository (Branch)</h2>
+    <button class="btn btn-outline btn--sm"
+            hx-get="/admin/system/update/check-branch"
+            hx-target="#github-branch-box" hx-swap="innerHTML"
+            hx-indicator="#branch-spinner">Branch laden</button>
+  </div>
+  <div class="card-body">
+    <span class="htmx-indicator" id="branch-spinner"
+          style="font-size:.82rem;color:var(--color-text-muted);">Prüfe…</span>
+    <div id="github-branch-box">
+      <p class="text-muted" style="margin:0;font-size:.9rem;">
+        Spielt den aktuellen Stand eines Branches (Standard <code>main</code>) direkt vom
+        GitHub-Repository ein — ohne Release. Gedacht für Hotfixes und Testsysteme;
+        „Branch laden" zeigt Branch-Auswahl und letzten Commit.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><h2>GitHub-Zugriffstoken (private Repositories)</h2></div>
+  <div class="card-body">
+    <p class="text-muted" style="font-size:.9rem;">
+      {% if token_configured %}
+      <span class="badge badge-warning" style="padding:2px 8px;">Token hinterlegt</span>
+      Zum Ersetzen neuen Token eingeben, zum Löschen leer speichern.
+      {% else %}
+      Ohne Token funktionieren Release- und Branch-Update nur bei öffentlichen Repositories.
+      Für private Repos einen Fine-grained PAT mit <em>Contents: Read</em> auf das Repo hinterlegen —
+      wird Fernet-verschlüsselt gespeichert.
+      {% endif %}
+    </p>
+    <form method="post" action="/admin/system/update/github-token"
+          style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="password" name="github_token" class="form-control" autocomplete="off"
+             placeholder="github_pat_… oder ghp_…" style="max-width:380px;">
+      <button type="submit" class="btn btn-outline">Speichern</button>
+    </form>
   </div>
 </div>
 

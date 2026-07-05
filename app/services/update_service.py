@@ -43,8 +43,12 @@ def validate_zip(zip_path: Path) -> tuple[bool, str]:
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = zf.namelist()
-            # Strukturprüfung
-            has_app = any(n.startswith("app/") or n.startswith("app\\") for n in names)
+            # Strukturprüfung — auch GitHub-Zipballs akzeptieren, die alles unter
+            # einem Root-Ordner (z. B. BattloXX-Einsatzcockpit-<sha>/) verpacken
+            has_app = any(
+                n.startswith(("app/", "app\\")) or "/app/" in n.replace("\\", "/")
+                for n in names
+            )
             has_pyproject = any(n == "pyproject.toml" or n.endswith("/pyproject.toml") for n in names)
             if not has_app:
                 return False, "ZIP enthält kein app/-Verzeichnis"
@@ -74,7 +78,7 @@ def compute_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def apply_update(zip_path: Path, expected_sha256: str | None = None) -> dict:
+def apply_update(zip_path: Path, expected_sha256: str | None = None, install_deps: bool = False) -> dict:
     """
     Extrahiert das ZIP und kopiert Dateien über die bestehende Installation.
 
@@ -154,6 +158,9 @@ def apply_update(zip_path: Path, expected_sha256: str | None = None) -> dict:
             shutil.copy2(src_file, dst)
             files_updated.append(rel)
 
+    # Optional: Python-Abhängigkeiten nachziehen (z. B. neue pyproject-Dependencies)
+    deps_installed = _run_pip_install() if install_deps else "übersprungen"
+
     # Migrationen ausführen
     migrations_applied = _run_migrations()
 
@@ -165,9 +172,34 @@ def apply_update(zip_path: Path, expected_sha256: str | None = None) -> dict:
         "message": "Update erfolgreich eingespielt",
         "files_updated": len(files_updated),
         "files_skipped": len(skipped),
+        "deps_installed": deps_installed,
         "migrations_applied": migrations_applied,
         "server_reloaded": reloaded,
     }
+
+
+def _run_pip_install() -> str:
+    """Installiert die pyproject-Abhängigkeiten ins venv (pip install -e .).
+
+    Nötig, wenn ein Update neue Dependencies mitbringt (z. B. pdf2image).
+    Gibt "OK" oder eine gekürzte Fehlermeldung zurück.
+    """
+    python = APP_ROOT / ".venv" / "bin" / "python"
+    if not python.exists():
+        python = Path("python")  # Fallback: System-Python (Dev)
+    try:
+        result = subprocess.run(
+            [str(python), "-m", "pip", "install", "-e", ".", "--no-input", "--quiet"],
+            cwd=str(APP_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        if result.returncode == 0:
+            return "OK"
+        return f"Fehler: {result.stderr[-500:]}"
+    except Exception as e:
+        return f"Fehler: {e}"
 
 
 def _run_migrations() -> str:
@@ -224,29 +256,66 @@ def get_current_version() -> str:
     return "unbekannt"
 
 
-def check_github_release(repo: str = "BattloXX/Einsatzcockpit", prerelease: bool = False) -> dict:
+GITHUB_REPO = "BattloXX/Einsatzcockpit"
+# SystemSettings-Keys fuer das GitHub-Update
+GITHUB_TOKEN_KEY = "github_update_token_enc"   # Fernet-verschlüsselter PAT (private Repos)
+DEPLOYED_REF_KEY = "update_deployed_ref"       # JSON {branch, sha, datum} des letzten Branch-Updates
+
+
+def _github_headers(token: str | None = None) -> dict:
+    headers = {
+        "User-Agent": "Einsatzcockpit-Updater/1.0",
+        "Accept": "application/vnd.github+json",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _github_json(url: str, token: str | None = None, timeout: int = 10):
+    """GET auf die GitHub-API, JSON-Antwort. Wirft bei HTTP-/Netzfehlern."""
+    import json as _json
+    import urllib.request as _req
+
+    request = _req.Request(url, headers=_github_headers(token))
+    with _req.urlopen(request, timeout=timeout) as resp:
+        return _json.loads(resp.read())
+
+
+def get_github_token(db) -> str | None:
+    """Liest den (Fernet-verschlüsselten) GitHub-PAT aus SystemSettings. None wenn keiner gesetzt."""
+    from app.models.master import SystemSettings
+    row = db.query(SystemSettings).filter(SystemSettings.key == GITHUB_TOKEN_KEY).first()
+    if not row or not row.value:
+        return None
+    try:
+        from app.services.ai_service import decrypt_api_key
+        return decrypt_api_key(row.value)
+    except Exception:
+        return None
+
+
+def check_github_release(
+    repo: str = GITHUB_REPO, prerelease: bool = False, token: str | None = None,
+) -> dict:
     """Prüft GitHub auf verfügbare Releases und vergleicht mit der aktuellen Version.
 
     prerelease=True: berücksichtigt auch Pre-Releases (sucht in der Gesamt-Release-Liste).
     prerelease=False (Standard): nur stabile Releases (/releases/latest).
+    token: optionaler PAT für private Repos.
     """
-    import json as _json
-    import urllib.request as _req
-
     current = get_current_version()
     try:
         if prerelease:
             # Alle Releases abrufen (sortiert nach Datum absteigend) – erster Treffer ist neuester
-            url = f"https://api.github.com/repos/{repo}/releases?per_page=10"
-            request = _req.Request(url, headers={"User-Agent": "Einsatzcockpit-Updater/1.0"})
-            with _req.urlopen(request, timeout=10) as resp:
-                releases = _json.loads(resp.read())
+            releases = _github_json(
+                f"https://api.github.com/repos/{repo}/releases?per_page=10", token
+            )
             data = releases[0] if releases else {}
         else:
-            url = f"https://api.github.com/repos/{repo}/releases/latest"
-            request = _req.Request(url, headers={"User-Agent": "Einsatzcockpit-Updater/1.0"})
-            with _req.urlopen(request, timeout=10) as resp:
-                data = _json.loads(resp.read())
+            data = _github_json(
+                f"https://api.github.com/repos/{repo}/releases/latest", token
+            )
 
         tag = data.get("tag_name", "").lstrip("v")
         assets = data.get("assets", [])
@@ -281,8 +350,53 @@ def check_github_release(repo: str = "BattloXX/Einsatzcockpit", prerelease: bool
         }
 
 
-def download_and_apply_github_update(download_url: str) -> dict:
-    """Lädt das Release-ZIP von GitHub herunter und spielt es ein.
+def list_github_branches(repo: str = GITHUB_REPO, token: str | None = None) -> list[dict]:
+    """Listet Branches des Repos (Name + Commit-SHA). Leere Liste bei Fehlern."""
+    try:
+        branches = _github_json(
+            f"https://api.github.com/repos/{repo}/branches?per_page=50", token
+        )
+        return [
+            {"name": b.get("name", ""), "sha": (b.get("commit") or {}).get("sha", "")[:7]}
+            for b in branches
+            if b.get("name")
+        ]
+    except Exception:
+        return []
+
+
+def check_github_branch(
+    branch: str, repo: str = GITHUB_REPO, token: str | None = None,
+) -> dict:
+    """Holt den letzten Commit eines Branches (für das direkte Repo-Update).
+
+    download_url zeigt auf den API-Zipball-Endpunkt (funktioniert mit PAT auch
+    für private Repos und folgt der CDN-Weiterleitung).
+    """
+    try:
+        data = _github_json(
+            f"https://api.github.com/repos/{repo}/commits/{branch}", token
+        )
+        commit = data.get("commit") or {}
+        author = commit.get("author") or {}
+        message = (commit.get("message") or "").split("\n")[0]
+        return {
+            "branch": branch,
+            "sha": data.get("sha", ""),
+            "sha_short": (data.get("sha") or "")[:7],
+            "commit_message": message[:120],
+            "commit_date": author.get("date", ""),
+            "commit_author": author.get("name", ""),
+            "download_url": f"https://api.github.com/repos/{repo}/zipball/{branch}",
+        }
+    except Exception as exc:
+        return {"branch": branch, "sha": None, "error": str(exc)[:200]}
+
+
+def download_and_apply_github_update(
+    download_url: str, token: str | None = None, install_deps: bool = False,
+) -> dict:
+    """Lädt das Release-/Branch-ZIP von GitHub herunter und spielt es ein.
 
     Folgt Weiterleitungen (zipball_url leitet auf CDN um). Schreibt in eine temporäre
     Datei, ruft apply_update() auf und löscht die Datei anschließend.
@@ -291,15 +405,15 @@ def download_and_apply_github_update(download_url: str) -> dict:
 
     tmp_path: Path | None = None
     try:
-        request = _req.Request(download_url, headers={"User-Agent": "Einsatzcockpit-Updater/1.0"})
-        with _req.urlopen(request, timeout=120) as resp:
+        request = _req.Request(download_url, headers=_github_headers(token))
+        with _req.urlopen(request, timeout=300) as resp:
             data = resp.read()
 
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
             tmp.write(data)
             tmp_path = Path(tmp.name)
 
-        return apply_update(tmp_path)
+        return apply_update(tmp_path, install_deps=install_deps)
     except Exception as exc:
         return {"success": False, "message": f"Download fehlgeschlagen: {exc}"}
     finally:

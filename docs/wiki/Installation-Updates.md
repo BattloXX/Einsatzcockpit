@@ -2,7 +2,49 @@
 
 ← [Zurück zur Startseite](Home)
 
-## Standard-Update-Prozess
+## Auto-Update über das Webinterface (empfohlen)
+
+Unter **`/admin/system/update`** (nur `system_admin`) gibt es drei Wege, ganz ohne SSH:
+
+### 1. GitHub-Release (Produktion)
+
+„Auf Updates prüfen" vergleicht die installierte Version mit dem neuesten GitHub-Release
+(optional inklusive Pre-Releases) und zeigt Release-Notes an. „Server-Update einspielen"
+lädt das Release-ZIP herunter und spielt es ein.
+
+### 2. Direkt vom Repository (Branch — Hotfixes & Testsysteme)
+
+Der Abschnitt **„Direkt vom Repository"** lädt den aktuellen Stand eines beliebigen
+Branches (Standard `main`) als Zipball von GitHub und spielt ihn ein — ohne Release.
+Die Branch-Auswahl zeigt den letzten Commit (SHA, Nachricht, Autor); ein bereits
+eingespielter Stand wird erkannt und der Button deaktiviert. Der zuletzt eingespielte
+Branch-Stand (`branch@sha`) wird gespeichert und oben auf der Seite angezeigt.
+
+> Gedacht für Hotfixes und Testsysteme — für Produktion sind Releases der sauberere Weg.
+
+### 3. ZIP-Upload (manuell, Fallback)
+
+Wie bisher: Release-ZIP herunterladen und über das Formular hochladen
+(optional mit SHA256-Prüfung).
+
+### Ablauf bei allen drei Wegen
+
+1. ZIP strukturell validieren (Zip-Slip-/Symlink-Schutz; GitHub-Zipballs mit Root-Ordner werden erkannt)
+2. Geschützte Dateien bleiben unangetastet (`.env`, `alembic/versions/`, Uploads)
+3. Optional **Abhängigkeiten installieren** (`pip install -e .`) — bei GitHub-Updates
+   standardmäßig aktiv, damit neue Dependencies (z. B. `pdf2image`) automatisch nachgezogen werden
+4. `alembic upgrade head`
+5. Gunicorn-Reload (SIGHUP) bzw. `systemctl restart`
+
+### Privates Repository: GitHub-Token
+
+Ist das Repository privat, auf der Update-Seite einen **Fine-grained Personal Access Token**
+mit Berechtigung *Contents: Read* auf das Repo hinterlegen (Feld „GitHub-Zugriffstoken").
+Der Token wird Fernet-verschlüsselt in den SystemSettings gespeichert und für Release-Check,
+Branch-Check und Downloads verwendet. Leer speichern löscht ihn. Alle Update-Aktionen und
+Token-Änderungen landen im Audit-Log.
+
+## Standard-Update-Prozess (SSH, Alternative)
 
 ```bash
 cd /home/clp-einsatz/htdocs/einsatzleiter

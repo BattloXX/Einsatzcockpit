@@ -16,10 +16,15 @@ from app.models.master import BOS_VALUES, FireDept, OrgSettings, SeedTemplate, S
 from app.models.user import User
 from app.services.seed_service import apply_seed_profile, copy_default_prompts, list_profiles
 from app.services.update_service import (
+    DEPLOYED_REF_KEY,
+    GITHUB_TOKEN_KEY,
     apply_update,
+    check_github_branch,
     check_github_release,
     download_and_apply_github_update,
     get_current_version,
+    get_github_token,
+    list_github_branches,
 )
 
 router = APIRouter(prefix="/admin")
@@ -1332,12 +1337,46 @@ def toggle_objekt_system(
 
 # ── System-Update (system_admin only) ────────────────────────────────────────
 
+def _deployed_ref(db) -> dict | None:
+    """Letzter per Branch-Update eingespielter Stand (SystemSettings, JSON)."""
+    import json as _json
+    row = db.query(SystemSettings).filter(SystemSettings.key == DEPLOYED_REF_KEY).first()
+    if not row or not row.value:
+        return None
+    try:
+        return _json.loads(row.value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _save_deployed_ref(db, user_id: int, branch: str, sha: str) -> None:
+    import json as _json
+    from datetime import UTC, datetime
+    value = _json.dumps({
+        "branch": branch,
+        "sha": sha,
+        "datum": datetime.now(UTC).isoformat(),
+    }, ensure_ascii=False)
+    row = db.query(SystemSettings).filter(SystemSettings.key == DEPLOYED_REF_KEY).first()
+    if row is None:
+        row = SystemSettings(key=DEPLOYED_REF_KEY, value=value,
+                             updated_at=datetime.now(UTC), updated_by_user_id=user_id)
+        db.add(row)
+    else:
+        row.value = value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user_id
+
+
 @router.get("/system/update", response_class=HTMLResponse)
-def update_page(request: Request, user: User = Depends(require_system_admin)):
+def update_page(request: Request, db=Depends(get_db), user: User = Depends(require_system_admin)):
     version = get_current_version()
     return templates.TemplateResponse(request, "admin/system_update.html", {
         "user": user,
         "version": version,
+        "token_configured": get_github_token(db) is not None,
+        "deployed_ref": _deployed_ref(db),
+        "token_saved": request.query_params.get("token_saved"),
     })
 
 
@@ -1372,11 +1411,12 @@ async def apply_system_update(
 @router.get("/system/update/check-github", response_class=HTMLResponse)
 def check_github_update(
     request: Request,
+    db=Depends(get_db),
     user: User = Depends(require_system_admin),
     prerelease: bool = Query(False),
 ):
     """HTMX-Partial: GitHub auf neuere Releases prüfen."""
-    github = check_github_release(prerelease=prerelease)
+    github = check_github_release(prerelease=prerelease, token=get_github_token(db))
     return templates.TemplateResponse(request, "admin/_github_update.html", {
         "user": user,
         "github": github,
@@ -1387,11 +1427,14 @@ def check_github_update(
 @router.post("/system/update/github", response_class=HTMLResponse)
 def apply_github_update(
     request: Request,
+    db=Depends(get_db),
     user: User = Depends(require_system_admin),
     prerelease: bool = Query(False),
+    install_deps_raw: str = Form(""),
 ):
     """HTMX-Partial: Release von GitHub herunterladen und einspielen (def → Threadpool)."""
-    github = check_github_release(prerelease=prerelease)
+    token = get_github_token(db)
+    github = check_github_release(prerelease=prerelease, token=token)
     if not github.get("download_url"):
         return templates.TemplateResponse(request, "admin/_github_update.html", {
             "user": user,
@@ -1399,14 +1442,129 @@ def apply_github_update(
             "prerelease": prerelease,
             "update_result": {"success": False, "message": "Kein Download-Link im aktuellen Release gefunden."},
         })
-    result = download_and_apply_github_update(github["download_url"])
-    github_after = check_github_release(prerelease=prerelease)
+    from app.core.audit import write_audit
+    write_audit(db, "system.update_github_release", user_id=user.id,
+                payload={"tag": github.get("latest_tag"), "prerelease": prerelease},
+                ip=request.client.host if request.client else None)
+    db.commit()
+    result = download_and_apply_github_update(
+        github["download_url"], token=token,
+        install_deps=install_deps_raw in ("1", "true", "on"),
+    )
+    github_after = check_github_release(prerelease=prerelease, token=token)
     return templates.TemplateResponse(request, "admin/_github_update.html", {
         "user": user,
         "github": github_after,
         "prerelease": prerelease,
         "update_result": result,
     })
+
+
+# ── Direktes Repo-Update (Branch-Zipball, system_admin) ──────────────────────
+
+@router.get("/system/update/check-branch", response_class=HTMLResponse)
+def check_branch_update(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    branch: str = Query("main"),
+):
+    """HTMX-Partial: letzten Commit eines Branches anzeigen (direktes Repo-Update)."""
+    token = get_github_token(db)
+    return templates.TemplateResponse(request, "admin/_github_branch_update.html", {
+        "user": user,
+        "branch_info": check_github_branch(branch, token=token),
+        "branches": list_github_branches(token=token),
+        "branch": branch,
+        "deployed_ref": _deployed_ref(db),
+    })
+
+
+@router.post("/system/update/github-branch", response_class=HTMLResponse)
+def apply_github_branch_update(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    branch: str = Form("main"),
+    install_deps_raw: str = Form(""),
+):
+    """HTMX-Partial: Branch-Zipball direkt vom Repo herunterladen und einspielen.
+
+    Für Sysadmins, die Fixes ohne Release-Zeremonie ausrollen wollen
+    (z. B. feature-Branch am Testsystem, main als Hotfix-Kanal).
+    """
+    token = get_github_token(db)
+    branch_info = check_github_branch(branch, token=token)
+    if branch_info.get("error") or not branch_info.get("sha"):
+        return templates.TemplateResponse(request, "admin/_github_branch_update.html", {
+            "user": user,
+            "branch_info": branch_info,
+            "branches": list_github_branches(token=token),
+            "branch": branch,
+            "deployed_ref": _deployed_ref(db),
+            "update_result": {"success": False,
+                              "message": f"Branch nicht abrufbar: {branch_info.get('error', 'unbekannt')}"},
+        })
+
+    from app.core.audit import write_audit
+    write_audit(db, "system.update_github_branch", user_id=user.id,
+                payload={"branch": branch, "sha": branch_info["sha_short"]},
+                ip=request.client.host if request.client else None)
+    db.commit()
+
+    result = download_and_apply_github_update(
+        branch_info["download_url"], token=token,
+        install_deps=install_deps_raw in ("1", "true", "on"),
+    )
+    if result.get("success"):
+        _save_deployed_ref(db, user.id, branch, branch_info["sha"])
+        db.commit()
+
+    return templates.TemplateResponse(request, "admin/_github_branch_update.html", {
+        "user": user,
+        "branch_info": check_github_branch(branch, token=token),
+        "branches": list_github_branches(token=token),
+        "branch": branch,
+        "deployed_ref": _deployed_ref(db),
+        "update_result": result,
+    })
+
+
+@router.post("/system/update/github-token")
+def save_github_token(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    github_token: str = Form(""),
+):
+    """GitHub-PAT für private Repos speichern (Fernet-verschlüsselt) oder löschen (leer)."""
+    from datetime import UTC, datetime
+
+    from app.core.audit import write_audit
+
+    row = db.query(SystemSettings).filter(SystemSettings.key == GITHUB_TOKEN_KEY).first()
+    token = github_token.strip()
+    if token:
+        from app.services.ai_service import encrypt_api_key
+        value = encrypt_api_key(token)
+        if row is None:
+            row = SystemSettings(key=GITHUB_TOKEN_KEY, value=value,
+                                 updated_at=datetime.now(UTC), updated_by_user_id=user.id)
+            db.add(row)
+        else:
+            row.value = value
+            row.updated_at = datetime.now(UTC)
+            row.updated_by_user_id = user.id
+        aktion = "gesetzt"
+    else:
+        if row is not None:
+            db.delete(row)
+        aktion = "geloescht"
+    write_audit(db, "system.update_github_token", user_id=user.id,
+                payload={"aktion": aktion},
+                ip=request.client.host if request.client else None)
+    db.commit()
+    return RedirectResponse(url="/admin/system/update?token_saved=1", status_code=303)
 
 
 def _org_flags_dict(org_settings) -> dict:

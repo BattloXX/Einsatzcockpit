@@ -1,0 +1,87 @@
+{# HTMX-Partial: direktes Repo-Update (Branch) – wird in #github-branch-box geswapped #}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+  <form hx-get="/admin/system/update/check-branch"
+        hx-target="#github-branch-box" hx-swap="innerHTML"
+        style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <label style="font-size:.87rem;">Branch</label>
+    {% if branches %}
+    <select name="branch" class="form-control" style="max-width:280px;padding:4px 8px;"
+            onchange="this.form.requestSubmit()">
+      {% for b in branches %}
+      <option value="{{ b.name }}" {% if b.name == branch %}selected{% endif %}>{{ b.name }} ({{ b.sha }})</option>
+      {% endfor %}
+    </select>
+    {% else %}
+    <input type="text" name="branch" value="{{ branch }}" class="form-control"
+           style="max-width:220px;padding:4px 8px;" placeholder="main">
+    {% endif %}
+    <button type="submit" class="btn btn-outline btn--sm">Prüfen</button>
+  </form>
+  {% if deployed_ref %}
+  <span class="text-muted" style="font-size:.8rem;">
+    Zuletzt eingespielt: <code>{{ deployed_ref.branch }}@{{ deployed_ref.sha[:7] }}</code>
+  </span>
+  {% endif %}
+</div>
+
+{% if branch_info.get('error') %}
+<div class="alert alert-danger" style="margin-bottom:0;">
+  Branch <code>{{ branch }}</code> nicht abrufbar: <code style="font-size:.82rem;">{{ branch_info.error }}</code><br>
+  <span style="font-size:.82rem;">Bei privatem Repository unten einen GitHub-Token hinterlegen.</span>
+</div>
+{% else %}
+
+{% set ist_eingespielt = deployed_ref and deployed_ref.sha == branch_info.sha %}
+<div style="padding:10px 14px;background:var(--surface-low,#f3f4f6);border-radius:6px;border:1px solid var(--border);margin-bottom:12px;">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <code style="font-size:.85rem;">{{ branch }}@{{ branch_info.sha_short }}</code>
+    {% if ist_eingespielt %}
+    <span class="badge" style="background:var(--color-success-bg,#dcfce7);color:var(--color-success,#16a34a);font-size:.78rem;padding:2px 7px;">bereits eingespielt</span>
+    {% endif %}
+  </div>
+  <div style="font-size:.85rem;margin-top:6px;">{{ branch_info.commit_message }}</div>
+  <div class="text-muted" style="font-size:.78rem;margin-top:2px;">
+    {{ branch_info.commit_author }}{% if branch_info.commit_date %} · {{ branch_info.commit_date }}{% endif %}
+  </div>
+</div>
+
+<form hx-post="/admin/system/update/github-branch"
+      hx-target="#github-branch-box" hx-swap="innerHTML"
+      onsubmit="return confirm('Branch {{ branch }}@{{ branch_info.sha_short }} direkt einspielen? Empfehlung: vorher DB-Backup.') &&
+                (this.querySelector('button[type=submit]').disabled=true,
+                 this.querySelector('button[type=submit]').textContent='Wird eingespielt…', true)">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <input type="hidden" name="branch" value="{{ branch }}">
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+    <button type="submit" class="btn btn-danger" {% if ist_eingespielt %}disabled title="Dieser Stand ist bereits eingespielt"{% endif %}>
+      Branch-Stand einspielen
+    </button>
+    <label style="display:flex;align-items:center;gap:5px;font-size:.85rem;cursor:pointer;">
+      <input type="checkbox" name="install_deps_raw" value="1" checked>
+      Abhängigkeiten installieren (<code>pip install -e .</code>)
+    </label>
+  </div>
+</form>
+<p class="text-muted" style="font-size:.78rem;margin:8px 0 0;">
+  Lädt den GitHub-Zipball des Branches und spielt ihn über den regulären Update-Mechanismus ein
+  (geschützte Dateien bleiben erhalten, danach Migrationen + Server-Reload). Gedacht für Hotfixes
+  und Testsysteme — für Produktion sind Releases der sauberere Weg.
+</p>
+{% endif %}
+
+{% if update_result is defined %}
+{% if update_result.success %}
+<div class="alert alert-success" style="margin-top:12px;margin-bottom:0;">
+  <strong>Update erfolgreich!</strong><br>
+  Dateien aktualisiert: {{ update_result.files_updated }},
+  geschützt übersprungen: {{ update_result.files_skipped }},
+  Abhängigkeiten: {{ update_result.deps_installed }},
+  Migrationen: {{ update_result.migrations_applied }},
+  Server-Reload: {{ 'Ja' if update_result.server_reloaded else 'Manuell erforderlich' }}
+</div>
+{% else %}
+<div class="alert alert-danger" style="margin-top:12px;margin-bottom:0;">
+  <strong>Fehler:</strong> {{ update_result.message }}
+</div>
+{% endif %}
+{% endif %}

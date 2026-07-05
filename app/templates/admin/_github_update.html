@@ -54,6 +54,10 @@
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <button type="submit" class="btn btn-danger">Server-Update einspielen</button>
     <span class="text-muted" style="font-size:.8rem;">v{{ github.current_version }} → v{{ github.latest_tag }}</span>
+    <label style="display:flex;align-items:center;gap:5px;font-size:.82rem;cursor:pointer;">
+      <input type="checkbox" name="install_deps_raw" value="1" checked>
+      Abhängigkeiten installieren
+    </label>
   </div>
 </form>
 {% else %}
@@ -110,6 +114,7 @@
   <strong>Update erfolgreich!</strong><br>
   Dateien aktualisiert: {{ update_result.files_updated }},
   geschützt übersprungen: {{ update_result.files_skipped }},
+  Abhängigkeiten: {{ update_result.deps_installed | default('übersprungen') }},
   Migrationen: {{ update_result.migrations_applied }},
   Server-Reload: {{ 'Ja' if update_result.server_reloaded else 'Manuell erforderlich' }}
 </div>
