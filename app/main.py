@@ -10,6 +10,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as _StarletteHTTPException
 
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
@@ -471,7 +472,40 @@ app.include_router(ui_atemschutz_pruefung.router)
 app.include_router(ui_atemschutz_pruefung_admin.router)
 
 
+# Emoji + Titel je Status fuer die HTML-Fehlerseite (errors/fehler.html)
+_ERROR_META = {
+    400: ("⚠️", "Ungültige Anfrage"),
+    401: ("\U0001F510", "Anmeldung erforderlich"),
+    403: ("⛔", "Kein Zugriff"),
+    404: ("\U0001F50D", "Nicht gefunden"),
+    410: ("⌛", "Nicht mehr verfügbar"),
+    429: ("⏳", "Zu viele Anfragen"),
+    500: ("⚠️", "Interner Fehler"),
+}
+
+
+def _login_redirect(request: Request) -> RedirectResponse:
+    """Leitet nicht angemeldete Browser-Nutzer zum Login (mit Rücksprung-Ziel)."""
+    from urllib.parse import quote
+    path = request.url.path
+    if request.url.query:
+        path += "?" + request.url.query
+    return RedirectResponse(f"/login?next={quote(path, safe='')}", status_code=302)
+
+
+def _render_error_page(request: Request, status: int, detail, *, authenticated: bool):
+    from app.core.templating import templates
+    emoji, title = _ERROR_META.get(status, ("⚠️", "Fehler"))
+    return templates.TemplateResponse(
+        request, "errors/fehler.html",
+        {"status": status, "title": title, "emoji": emoji,
+         "detail": detail or title, "authenticated": authenticated},
+        status_code=status,
+    )
+
+
 @app.exception_handler(HTTPException)
+@app.exception_handler(_StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     # HTMX requests: JSON detail for toast handler; for 401 also trigger full-page redirect
     if request.headers.get("HX-Request"):
@@ -482,7 +516,21 @@ async def http_exception_handler(request: Request, exc: HTTPException):
                 headers={"HX-Redirect": "/login"},
             )
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
-    if exc.status_code == 401 and not request.url.path.startswith("/api/"):
+
+    path = request.url.path
+    is_api = path.startswith("/api/") or path.endswith(".json")
+    wants_html = "text/html" in request.headers.get("accept", "") and not is_api
+    user = getattr(request.state, "user", None)
+
+    # Browser-Navigation: nicht angemeldet + geschützt → Login; sonst schöne Fehlerseite
+    if wants_html:
+        if exc.status_code in (401, 403) and user is None:
+            return _login_redirect(request)
+        return _render_error_page(request, exc.status_code, exc.detail,
+                                  authenticated=user is not None)
+
+    # Nicht-HTML (API/Fetch/Tests): bisheriges Verhalten; .json/API bleiben JSON
+    if exc.status_code == 401 and not is_api:
         return RedirectResponse("/login", status_code=302)
     if exc.status_code == 403:
         _body_style = (

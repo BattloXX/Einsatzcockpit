@@ -51,11 +51,18 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
+def _safe_next(next_url: str | None) -> str:
+    """Nur interne Ziele als Rücksprung zulassen (Open-Redirect-Schutz)."""
+    if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+        return next_url
+    return "/"
+
+
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
+async def login_page(request: Request, next: str = ""):
     if getattr(request.state, "user", None):
-        return RedirectResponse("/", status_code=302)
-    return templates.TemplateResponse(request, "login.html", {"error": None})
+        return RedirectResponse(_safe_next(next), status_code=302)
+    return templates.TemplateResponse(request, "login.html", {"error": None, "next": next})
 
 
 @router.post("/login")
@@ -65,6 +72,7 @@ async def login(
     response: Response,
     username: str = Form(...),
     password: str = Form(...),
+    next: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """Login mit Account-Lockout (Phase 7).
@@ -83,7 +91,7 @@ async def login(
         # (verhindert Username-Enumeration über Timing).
         verify_password(password, _get_dummy_password_hash())
         return templates.TemplateResponse(
-            request, "login.html", {"error": generic_error},
+            request, "login.html", {"error": generic_error, "next": next},
             status_code=401,
         )
 
@@ -111,7 +119,8 @@ async def login(
             db.commit()
             return templates.TemplateResponse(
                 request, "login.html",
-                {"error": "Account ist aktuell gesperrt. Bitte später erneut versuchen."},
+                {"error": "Account ist aktuell gesperrt. Bitte später erneut versuchen.",
+                 "next": next},
                 status_code=401,
             )
         # Lockout abgelaufen – zurücksetzen
@@ -131,7 +140,7 @@ async def login(
                         payload={"failed_count": user.failed_login_count})
         db.commit()
         return templates.TemplateResponse(
-            request, "login.html", {"error": generic_error},
+            request, "login.html", {"error": generic_error, "next": next},
             status_code=401,
         )
 
@@ -144,7 +153,7 @@ async def login(
     db.commit()
 
     token = sign_session(user.id)
-    redirect = RedirectResponse("/", status_code=302)
+    redirect = RedirectResponse(_safe_next(next), status_code=302)
     _set_session_cookie(redirect, token)
     return redirect
 

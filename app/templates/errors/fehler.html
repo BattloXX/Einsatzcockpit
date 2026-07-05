@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#d42225">
+  <title>{{ title }} – {{ brand }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <div class="login-card" style="max-width:440px;text-align:center;">
+      <div class="login-logo">
+        <img src="/static/img/logo_einsatzcockpit.png" alt="{{ brand }}"
+             onerror="this.style.display='none'" class="login-logo__img">
+      </div>
+
+      <div style="font-size:3rem;line-height:1;margin:8px 0 4px;">{{ emoji }}</div>
+      <div style="font-size:.8rem;letter-spacing:.12em;color:var(--text-muted);text-transform:uppercase;">
+        Fehler {{ status }}
+      </div>
+      <h1 style="margin:6px 0 10px;font-size:1.3rem;">{{ title }}</h1>
+      <p style="color:var(--text-muted);margin:0 0 20px;">{{ detail }}</p>
+
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        {% if not authenticated %}
+        <a href="/login" class="btn btn--primary btn--full">&#x1F510; Zum Login</a>
+        {% endif %}
+        <a href="/" class="btn btn--secondary btn--full">&#x1F3E0; Zur Startseite</a>
+        <a href="javascript:history.back()" class="btn btn--ghost btn--full">&#8592; Zurück</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
