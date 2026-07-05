@@ -379,6 +379,11 @@
                {{ tip('KPI-Übersicht aller Orgs mit Schnellzugriff') }}>
               <span class="admin-nav__icon">📊</span>System-Konsole
             </a>
+            <a href="/admin/system/quotas"
+               class="admin-nav__item {% if '/admin/system/quotas' in request.url.path %}is-active{% endif %}"
+               {{ tip('Speicher- und KI-Token-Quota je Organisation festlegen') }}>
+              <span class="admin-nav__icon">📦</span>Quota-Verwaltung
+            </a>
             {% endif %}
           </div>
         </div>
