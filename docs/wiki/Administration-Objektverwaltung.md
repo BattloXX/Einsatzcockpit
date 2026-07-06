@@ -82,26 +82,33 @@ Lösen der Verknüpfung werden diese Meldungen wieder entfernt.
 
 ## Alarm-Infoscreen
 
+> Der Alarm-Infoscreen ist ein **eigener Verwaltungspunkt**: **Administration → Verwaltung →
+> 📺 Alarm-Infoscreen**. Er ist **unabhängig vom Objektmodul** (funktioniert auch ohne aktivierte
+> Objektverwaltung — Objekt-/Gefahren-/Hydranten-Anreicherung greift dann nur, wenn ein Objekt verknüpft ist).
+
 Vollbild-Ansicht für Wandmonitore: `/infoscreen/alarm/{token}` — **öffentlich per Token, kein Login**
 (wie der Wetter-Infoscreen). Die Alarmansicht ist als taktisches Lage-Dashboard aufgebaut:
 
-- **Roter Alarmkopf** mit Stichwort-Kürzel + Klartext (z. B. `F3` · „Brand Gebäude"), Adresse,
-  Meldungstext, den **Zu-/Absagen (RSVP)** und einer mitlaufenden **Einsatzzeit-Uhr**.
+- **Kopfzeile** mit dem **Org-Logo** (aus den Organisations-Einstellungen), Datum/Uhrzeit und einem
+  kleinen **Wetter-Badge** (Temperatur + Wind, Open-Meteo, aus den Org-Fallback-Koordinaten).
+- **Roter Alarmkopf**: Stichwort-Kürzel-Badge (z. B. `F3`) + die **Einsatzmeldung** als große Kopfzeile,
+  Adresse und eine mitlaufende **Einsatzzeit-Uhr**; die **Zu-/Absagen** erscheinen als Zähler.
 - **Links** das verknüpfte Objekt mit Gefahren-Piktogrammen (inkl. UN-Nummer) und der
   FSD/BMZ/FBF/Laufkarten-Block.
 - **Mitte** die Lagekarte mit den Objektsymbolen **und den Löschwasser-Entnahmestellen (Hydranten,
   OSM + manuell im Objekt gesetzte)** rund um den Einsatz-/Objektstandort.
 - **Rechts** die Spalte **„Kräfte im Einsatz"**: alle Fahrzeuge **nach der Ausrückordnung** (und
   jede spätere Nachalarmierung) mit ihrem **aktuellen Einheitenstatus** als Farbpille
-  (Ausgerückt/Übernommen · Am Einsatzort · Einsatzbereit). Statuswechsel und neu ausrückende
-  Fahrzeuge erscheinen automatisch (Poll alle 15 s), darunter der Hinweistext der Leitstelle.
+  (Ausgerückt/Übernommen · Am Einsatzort · Einsatzbereit), darunter — sobald vorhanden — die
+  **Rückmeldungen mit Namen** (Zusage/Absage je Mitglied). Statuswechsel, neu ausrückende Fahrzeuge
+  und Rückmeldungen erscheinen automatisch (Poll alle 15 s).
 
 Der Wechsel in die Alarmansicht passiert sofort per WebSocket. Ein aktiver Einsatz bleibt sichtbar,
 **solange er aktiv ist** (kein Zeitfenster mehr). Läuft eine **Großschadenslage**, zeigt der Monitor
 eine eigene Sonderansicht, die bleibt, solange die Lage aktiv ist (Reihenfolge: Großschadenslage →
 Einsatz → Ruhe).
 
-Verwaltung unter **`/infoscreen-alarm/verwaltung`** (Org-Admin, Link auch in der Objektliste):
+Verwaltung unter **`/infoscreen-alarm/verwaltung`** (Org-Admin, eigener Menüpunkt unter Verwaltung):
 
 - **Monitore/Tokens** anlegen (Name je Monitor, z. B. „Fahrzeughalle"). Die vollständige **Monitor-URL
   bleibt dauerhaft sichtbar und kopierbar** (Token verschlüsselt gespeichert; benötigt einen gesetzten

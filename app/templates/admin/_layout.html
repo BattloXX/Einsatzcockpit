@@ -7,7 +7,7 @@
 {% set _p = request.url.path %}
 {% if '/admin/geraete-login' in _p or '/admin/push' in _p or '/admin/benutzer' in _p
      or '/admin/api-keys' in _p or '/admin/lagekarte-tokens' in _p or '/admin/audit' in _p
-     or '/admin/sms-test' in _p or '/admin/sms-senden' in _p %}
+     or '/admin/sms-test' in _p or '/admin/sms-senden' in _p or '/infoscreen-alarm' in _p %}
   {% set active_group = 'verwaltung' %}
 {% elif '/admin/gruppen' in _p or '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p
        or '/admin/teams-alarmierung' in _p %}
@@ -302,6 +302,11 @@
                class="admin-nav__item {% if '/admin/sms-empfang' in request.url.path %}is-active{% endif %}"
                {{ tip('Empfangene SMS protokollieren und automatisch an Teams/SMS weiterleiten') }}>
               <span class="admin-nav__icon">📥</span>SMS-Empfang
+            </a>
+            <a href="/infoscreen-alarm/verwaltung"
+               class="admin-nav__item {% if '/infoscreen-alarm' in request.url.path %}is-active{% endif %}"
+               {{ tip('Wandmonitor im Gerätehaus: Alarm-Infoscreen, Rotations-URLs, Monitor-Tokens') }}>
+              <span class="admin-nav__icon">📺</span>Alarm-Infoscreen
             </a>
           </div>
         </div>

@@ -1,13 +1,12 @@
-{% extends "base.html" %}
+{% extends "admin/_layout.html" %}
 {% block title %}Alarm-Infoscreen – Verwaltung{% endblock %}
-{% block content %}
-<div class="page-content" style="max-width:860px;">
+{% block admin_content %}
+<div style="max-width:900px;">
   <div class="page-header">
     <div>
       <h1>📺 Alarm-Infoscreen</h1>
-      <p class="text-muted">Wandmonitor im Gerätehaus: zeigt bei Alarm Stichwort, Objekt, Gefahren und Karte</p>
+      <p class="text-muted">Wandmonitor im Gerätehaus: zeigt bei Alarm die Einsatzmeldung, Fahrzeuge, Objekt, Gefahren und Karte</p>
     </div>
-    <a href="/objekte/" class="btn btn--ghost">Zurück zu Objekten</a>
   </div>
 
   {% if request.query_params.get('saved') %}<div class="alert alert--success">Gespeichert.</div>{% endif %}

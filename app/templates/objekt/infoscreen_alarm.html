@@ -18,8 +18,15 @@
     .is-wrap { height: 100vh; display: flex; flex-direction: column; }
     .is-kopf { display: flex; justify-content: space-between; align-items: center;
                padding: 10px 28px; background: var(--is-surface); border-bottom: 1px solid var(--is-line); }
-    .is-kopf__org { font-size: 1.4rem; font-weight: 700; letter-spacing: .04em; }
-    .is-kopf__uhr { display: flex; gap: 26px; align-items: center; }
+    .is-kopf__org { font-size: 1.4rem; font-weight: 700; letter-spacing: .04em;
+                    display: flex; align-items: center; gap: 12px; }
+    .is-kopf__logo { height: 38px; width: auto; max-width: 180px; display: block; object-fit: contain; }
+    .is-kopf__uhr { display: flex; gap: 22px; align-items: center; }
+    .is-kopf__wetter { display: flex; align-items: center; gap: 8px; font-size: 1.15rem; font-weight: 600;
+                       background: var(--is-surface-high); border: 1px solid var(--is-line);
+                       border-radius: 999px; padding: 5px 14px; font-variant-numeric: tabular-nums; }
+    .is-kopf__wetter .ico { font-size: 1.35rem; line-height: 1; }
+    .is-kopf__wetter .wind { color: var(--is-muted); font-size: .95rem; }
     .is-kopf__block { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
     .is-kopf__cap { font-size: .7rem; letter-spacing: .12em; color: var(--is-muted); text-transform: uppercase; }
     .is-kopf__val { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -40,7 +47,7 @@
     .is-alarm__stichzeile { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
     .is-alarm__badge { background: #fff; color: var(--is-red); font-size: 2.4rem; font-weight: 800;
                        line-height: 1; padding: 6px 16px; border-radius: 10px; }
-    .is-alarm__stichwort { font-size: 3.4rem; font-weight: 800; line-height: 1.02; text-transform: uppercase; }
+    .is-alarm__stichwort { font-size: 2.7rem; font-weight: 800; line-height: 1.06; text-transform: uppercase; }
     .is-alarm__adresse { font-size: 2rem; font-weight: 600; margin-top: 6px; display: flex; align-items: center; gap: 8px; }
     .is-alarm__meldung { font-size: 1.25rem; opacity: .92; margin-top: 4px;
                          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
@@ -103,6 +110,16 @@
                        color: var(--is-blue); margin-bottom: 4px; }
     .is-leitstelle p { margin: 0; font-style: italic; font-size: 1.1rem; }
 
+    /* Rückmeldungen (Zu-/Absagen mit Namen) */
+    .is-rsvp-row { display: flex; align-items: center; gap: 10px; padding: 7px 4px; font-size: 1.15rem;
+                   border-bottom: 1px solid rgba(255,255,255,.06); }
+    .is-rsvp-row:last-child { border-bottom: 0; }
+    .is-rsvp-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .is-rsvp-tag { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+                   padding: 2px 9px; border-radius: 5px; flex: none; }
+    .is-rsvp-tag--zu { background: #14532d; color: var(--is-green); }
+    .is-rsvp-tag--ab { background: #7f1d1d; color: #fecaca; }
+
     @media (max-width: 1200px) {
       .is-alarm__body { grid-template-columns: 1fr 1.3fr; }
       .is-col--rechts { grid-column: 1 / -1; }
@@ -112,8 +129,12 @@
 <body>
 <div class="is-wrap">
   <div class="is-kopf">
-    <div class="is-kopf__org">🚒 {{ org.name }}</div>
+    <div class="is-kopf__org">
+      {% if org.logo_path %}<img src="{{ org.logo_path }}" alt="" class="is-kopf__logo">{% endif %}
+      <span>{{ org.name }}</span>
+    </div>
     <div class="is-kopf__uhr">
+      <div class="is-kopf__wetter" id="is-wetter" style="display:none;"></div>
       <div class="is-kopf__block"><span class="is-kopf__cap">Datum</span><span class="is-kopf__val" id="is-datum">–</span></div>
       <div class="is-kopf__block"><span class="is-kopf__cap">Uhrzeit</span><span class="is-kopf__val" id="is-zeit">–:–</span></div>
     </div>
@@ -262,6 +283,34 @@
     if (cnt) { cnt.textContent = fahrzeuge.length ? "(" + fahrzeuge.length + ")" : ""; }
   }
 
+  function rsvpHeaderHtml(rsvp) {
+    if (!rsvp || (rsvp.zusagen + rsvp.absagen) <= 0) { return ""; }
+    return '<span style="color:#dcfce7;">✅ ' + rsvp.zusagen + "</span>" +
+           '<span style="color:#fee2e2;margin-left:22px;">❌ ' + rsvp.absagen + "</span>";
+  }
+
+  function rsvpPanelHtml(rsvp) {
+    var namen = (rsvp && rsvp.namen) || [];
+    if (!namen.length) { return ""; }
+    var rows = namen.map(function (r) {
+      var zu = r.status === "zugesagt";
+      return '<div class="is-rsvp-row"><span>' + (zu ? "✅" : "❌") + "</span>" +
+        '<span class="is-rsvp-name">' + esc(r.name) + "</span>" +
+        '<span class="is-rsvp-tag ' + (zu ? "is-rsvp-tag--zu" : "is-rsvp-tag--ab") + '">' +
+        (zu ? "Zusage" : "Absage") + "</span></div>";
+    }).join("");
+    return '<div class="is-panel is-panel--scroll" style="max-height:40%;">' +
+      '<h2>🙋 Rückmeldungen</h2><div id="is-rsvp-liste">' + rows + "</div></div>";
+  }
+
+  // Rückmeldungen (Kopfzähler + Namensliste) live nachziehen
+  function aktualisiereRsvp(rsvp) {
+    var kopf = document.getElementById("is-header-rsvp");
+    if (kopf) { kopf.innerHTML = rsvpHeaderHtml(rsvp); }
+    var panel = document.getElementById("is-rsvp-panel");
+    if (panel) { panel.innerHTML = rsvpPanelHtml(rsvp); }
+  }
+
   function renderAlarm(daten) {
     stopRotation();
     var inc = daten.incident;
@@ -269,22 +318,16 @@
     var fahrzeuge = daten.fahrzeuge || [];
     alarmBeginn = inc.beginn ? new Date(inc.beginn).getTime() : null;
 
-    // ── Alarm-Kopf (rot) mit Stichwort-Badge, Adresse, Meldung, Einsatzzeit ──
-    var rsvp = "";
-    if (inc.rsvp && (inc.rsvp.zusagen + inc.rsvp.absagen) > 0) {
-      rsvp = '<div class="is-alarm__rsvp">' +
-        '<span style="color:#dcfce7;">✅ ' + inc.rsvp.zusagen + '</span>' +
-        '<span style="color:#fee2e2;margin-left:22px;">❌ ' + inc.rsvp.absagen + '</span></div>';
-    }
+    // ── Alarm-Kopf (rot): Badge + Einsatzmeldung als Kopfzeile, Adresse, RSVP, Einsatzzeit ──
+    var kopfzeile = inc.meldung || inc.stichwort_label || inc.stichwort || "Alarm";
     var html =
       '<div class="is-alarm">' +
       '<div class="is-alarm__kopf"><div>' +
       '<div class="is-alarm__stichzeile">' +
       '<span class="is-alarm__badge">' + esc(inc.stichwort || "ALARM") + "</span>" +
-      '<span class="is-alarm__stichwort">' + esc(inc.stichwort_label || inc.stichwort || "Alarm") + "</span></div>" +
+      '<span class="is-alarm__stichwort">' + esc(kopfzeile) + "</span></div>" +
       '<div class="is-alarm__adresse">📍 ' + esc(inc.adresse || "") + "</div>" +
-      (inc.meldung ? '<div class="is-alarm__meldung">' + esc(inc.meldung) + "</div>" : "") +
-      rsvp + "</div>" +
+      '<div class="is-alarm__rsvp" id="is-header-rsvp">' + rsvpHeaderHtml(inc.rsvp) + "</div></div>" +
       '<div class="is-alarm__timer"><div class="cap">Einsatzzeit</div>' +
       '<div class="val" id="is-einsatzzeit">00:00</div></div>' +
       "</div>" +
@@ -339,14 +382,12 @@
       '<span><span class="is-punkt" style="background:#0d9488;"></span>Löschwasser</span>' +
       "</div></div></div>";
 
-    // ── Rechts: Kräfte im Einsatz + Hinweis Leitstelle ──
+    // ── Rechts: Kräfte im Einsatz + Rückmeldungen ──
     html += '<div class="is-col is-col--rechts"><div class="is-panel is-panel--grow is-panel--scroll">' +
       '<h2>🚒 Kräfte im Einsatz <span id="is-fahrzeuge-count">' + (fahrzeuge.length ? "(" + fahrzeuge.length + ")" : "") + "</span></h2>" +
-      '<div id="is-fahrzeuge-liste">' + fahrzeugListeHtml(fahrzeuge) + "</div>";
-    if (inc.meldung) {
-      html += '<div class="is-leitstelle"><b>ℹ️ Hinweis Leitstelle</b><p>' + esc(inc.meldung) + "</p></div>";
-    }
-    html += "</div></div>";
+      '<div id="is-fahrzeuge-liste">' + fahrzeugListeHtml(fahrzeuge) + "</div></div>" +
+      '<div id="is-rsvp-panel">' + rsvpPanelHtml(inc.rsvp) + "</div>";
+    html += "</div>";
 
     html += "</div></div>";  // /body /alarm
     document.getElementById("is-inhalt").innerHTML = html;
@@ -426,7 +467,10 @@
         // laufen weiter). So setzt der 15-s-Poll die URL-Rotation nicht zurueck. Bei laufendem
         // Alarm nur die Fahrzeugliste (Status/Nachalarmierung) live nachziehen — die Karte bleibt.
         if (daten.modus === letzterModus && (daten.modus !== "alarm" || incId === letzteIncidentId)) {
-          if (daten.modus === "alarm") { aktualisiereFahrzeuge(daten.fahrzeuge); }
+          if (daten.modus === "alarm") {
+            aktualisiereFahrzeuge(daten.fahrzeuge);
+            aktualisiereRsvp(daten.incident && daten.incident.rsvp);
+          }
           return;
         }
         letzterModus = daten.modus;
@@ -458,8 +502,38 @@
     setInterval(function () { ws.readyState === 1 && ws.send("ping"); }, 30000);
   }
 
+  // ── Wetter-Badge im Kopf (Open-Meteo, alle 10 min) ──
+  var WMO_ICON = {
+    0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️",
+    45: "🌫️", 48: "🌫️",
+    51: "🌦️", 53: "🌦️", 55: "🌧️", 56: "🌧️", 57: "🌧️",
+    61: "🌧️", 63: "🌧️", 65: "🌧️", 66: "🌧️", 67: "🌧️",
+    71: "🌨️", 73: "🌨️", 75: "❄️", 77: "❄️",
+    80: "🌦️", 81: "🌧️", 82: "⛈️",
+    85: "🌨️", 86: "❄️", 95: "⛈️", 96: "⛈️", 99: "⛈️"
+  };
+  function wetterLaden() {
+    fetch("/infoscreen/alarm/" + encodeURIComponent(TOKEN) + "/wetter.json")
+      .then(function (r) { return r.json(); })
+      .then(function (w) {
+        var box = document.getElementById("is-wetter");
+        if (!box) { return; }
+        if (w && w.temp != null) {
+          var ico = WMO_ICON[w.code] || "🌡️";
+          box.innerHTML = '<span class="ico">' + ico + "</span><span>" + w.temp + "°C</span>" +
+            (w.wind != null ? '<span class="wind">' + w.wind + " km/h</span>" : "");
+          box.style.display = "flex";
+        } else {
+          box.style.display = "none";
+        }
+      })
+      .catch(function () { /* Badge optional */ });
+  }
+
   aktualisieren();
   setInterval(aktualisieren, 15000);
+  wetterLaden();
+  setInterval(wetterLaden, 600000);
   verbindeWs();
 })();
 </script>

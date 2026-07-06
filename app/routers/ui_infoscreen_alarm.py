@@ -180,10 +180,12 @@ def infoscreen_daten(
         )
         if incident.address_city:
             adresse = f"{adresse}, {incident.address_city}".strip(", ")
-        # Rückmeldungen (Zu-/Absagen) — nur zählen, keine Namen am öffentlichen Screen
+        # Rückmeldungen (Zu-/Absagen) inkl. Namen — das ist der eigene Wandmonitor
+        # im Gerätehaus (Token nur intern bekannt). Wohnanlagen-Hinweise bleiben
+        # weiterhin tabu (DSGVO), aber wer zu-/absagt, wird namentlich angezeigt.
         from app.models.teilnahme import Teilnahme
         rsvp_rows = (
-            db.query(Teilnahme.rsvp_status)
+            db.query(Teilnahme)
             .filter(
                 Teilnahme.org_id == org.id,
                 Teilnahme.bezug_typ == "einsatz",
@@ -193,8 +195,12 @@ def infoscreen_daten(
             .execution_options(include_all_tenants=True)
             .all()
         )
-        zusagen = sum(1 for (s,) in rsvp_rows if s == "zugesagt")
-        absagen = sum(1 for (s,) in rsvp_rows if s == "abgesagt")
+        zusagen = sum(1 for t in rsvp_rows if t.rsvp_status == "zugesagt")
+        absagen = sum(1 for t in rsvp_rows if t.rsvp_status == "abgesagt")
+        rsvp_namen = [
+            {"name": t.anzeige_name, "status": t.rsvp_status}
+            for t in sorted(rsvp_rows, key=lambda x: (x.rsvp_status != "zugesagt", x.anzeige_name))
+        ]
 
         # Stichwort-Klartext (z. B. F3 → "Brand Gebäude") aus dem Alarmtypen-Katalog
         from app.models.master import AlarmType
@@ -241,7 +247,7 @@ def infoscreen_daten(
                 "beginn": incident.started_at.isoformat() + "Z" if incident.started_at else None,
                 "lat": incident.lat,
                 "lng": incident.lng,
-                "rsvp": {"zusagen": zusagen, "absagen": absagen},
+                "rsvp": {"zusagen": zusagen, "absagen": absagen, "namen": rsvp_namen},
             },
         })
 
@@ -387,6 +393,61 @@ async def infoscreen_hydranten(
     return {"hydranten": merge_hydranten(osm, manuell)}
 
 
+# In-Memory-Cache für den Wetter-Badge (org_id → (timestamp, daten)); TTL 10 min.
+_wetter_cache: dict[int, tuple[float, dict]] = {}
+
+
+@router.get("/infoscreen/alarm/{token}/wetter.json", include_in_schema=False)
+async def infoscreen_wetter(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Kleiner Wetter-Badge für den Kopf (Open-Meteo, frei/kostenlos, kein Key).
+
+    Bezugspunkt sind die Org-Fallback-Koordinaten (Gerätehaus). Ohne Koordinaten
+    oder bei Fehler → leeres Objekt, der Badge bleibt dann ausgeblendet.
+    """
+    import time
+
+    import httpx
+
+    _, org = _token_org(db, token)
+    lat, lng = org.fallback_lat, org.fallback_lng
+    if lat is None or lng is None:
+        return {}
+
+    now = time.time()
+    cached = _wetter_cache.get(org.id)
+    if cached and (now - cached[0]) < 600:
+        return cached[1]
+
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": lat, "longitude": lng,
+                    "current": "temperature_2m,wind_speed_10m,weather_code",
+                    "timezone": "auto",
+                },
+            )
+            resp.raise_for_status()
+            cur = resp.json().get("current", {})
+    except Exception:
+        return {}
+
+    def _r(v):  # type: ignore[no-untyped-def]
+        return round(v) if isinstance(v, (int, float)) else None
+
+    daten = {
+        "temp": _r(cur.get("temperature_2m")),
+        "wind": _r(cur.get("wind_speed_10m")),
+        "code": cur.get("weather_code"),
+    }
+    _wetter_cache[org.id] = (now, daten)
+    return daten
+
+
 # ── WebSocket: Org-Kanal nach Token-Pruefung ──────────────────────────────────
 
 @router.websocket("/ws/infoscreen/{token}")
@@ -426,9 +487,6 @@ def verwaltung(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
 ):
-    from app.routers.ui_objekt import require_objekt_enabled
-    require_objekt_enabled(request)
-
     from app.core.crypto import decrypt_secret
     from app.models.objekt import InfoscreenUrl
 
@@ -471,9 +529,6 @@ def token_neu(
     user: User = Depends(require_role("org_admin")),
     name: str = Form(...),
 ):
-    from app.routers.ui_objekt import require_objekt_enabled
-    require_objekt_enabled(request)
-
     from app.core.crypto import encrypt_secret
     token = secrets.token_urlsafe(32)
     db.add(AlarmInfoscreenToken(
@@ -499,9 +554,6 @@ def token_deaktivieren(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
 ):
-    from app.routers.ui_objekt import require_objekt_enabled
-    require_objekt_enabled(request)
-
     eintrag = db.query(AlarmInfoscreenToken).filter(AlarmInfoscreenToken.id == token_id).first()
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Token nicht gefunden")
@@ -522,9 +574,6 @@ def einstellungen_speichern(
     wetter_url: str = Form(""),
     gsl_enabled: str = Form(""),
 ):
-    from app.routers.ui_objekt import require_objekt_enabled
-    require_objekt_enabled(request)
-
     if idle_modus not in IDLE_MODI:
         idle_modus = "uhr"
     settings_row = _org_settings(db, user.org_id) if user.org_id else None
@@ -551,8 +600,6 @@ def url_neu(
     sort: int = Form(0),
 ):
     from app.models.objekt import InfoscreenUrl
-    from app.routers.ui_objekt import require_objekt_enabled
-    require_objekt_enabled(request)
 
     ziel = url.strip()
     if not ziel:
@@ -575,8 +622,6 @@ def url_loeschen(
     user: User = Depends(require_role("org_admin")),
 ):
     from app.models.objekt import InfoscreenUrl
-    from app.routers.ui_objekt import require_objekt_enabled
-    require_objekt_enabled(request)
 
     eintrag = db.query(InfoscreenUrl).filter(InfoscreenUrl.id == url_id).first()
     if eintrag is None:
@@ -605,8 +650,6 @@ def token_monitor_speichern(
     import json as _json
 
     from app.models.objekt import InfoscreenUrl
-    from app.routers.ui_objekt import require_objekt_enabled
-    require_objekt_enabled(request)
 
     token = db.query(AlarmInfoscreenToken).filter(AlarmInfoscreenToken.id == token_id).first()
     if token is None:

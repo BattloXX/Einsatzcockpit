@@ -53,4 +53,12 @@ def test_infoscreen_payload_enthaelt_rsvp(is_db):
     db, org, inc = is_db
     daten = infoscreen_daten("rsvp-token", request=None, db=db)  # type: ignore[arg-type]
     assert daten["modus"] == "alarm"
-    assert daten["incident"]["rsvp"] == {"zusagen": 2, "absagen": 1}
+    rsvp = daten["incident"]["rsvp"]
+    assert rsvp["zusagen"] == 2
+    assert rsvp["absagen"] == 1
+    # Namen mit Zu-/Absage — Zusagen zuerst, dann alphabetisch
+    assert rsvp["namen"] == [
+        {"name": "A", "status": "zugesagt"},
+        {"name": "B", "status": "zugesagt"},
+        {"name": "C", "status": "abgesagt"},
+    ]
