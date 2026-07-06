@@ -963,7 +963,7 @@ def _gefahren_katalog(db: Session) -> list[GefahrenKatalog]:
     )
 
 
-@router.get("/{objekt_id}/gefahren", response_class=HTMLResponse)
+@router.get("/{objekt_id:int}/gefahren", response_class=HTMLResponse)
 def gefahren_partial(
     objekt_id: int,
     request: Request,
@@ -977,7 +977,7 @@ def gefahren_partial(
     return templates.TemplateResponse(request, "objekt/_gefahren.html", ctx)
 
 
-@router.post("/{objekt_id}/gefahren/neu", response_class=HTMLResponse)
+@router.post("/{objekt_id:int}/gefahren/neu", response_class=HTMLResponse)
 def gefahr_neu(
     objekt_id: int,
     request: Request,
@@ -1021,7 +1021,7 @@ def gefahr_neu(
     return templates.TemplateResponse(request, "objekt/_gefahren.html", ctx)
 
 
-@router.post("/{objekt_id}/gefahren/{gefahr_eintrag_id}/edit", response_class=HTMLResponse)
+@router.post("/{objekt_id:int}/gefahren/{gefahr_eintrag_id}/edit", response_class=HTMLResponse)
 def gefahr_edit(
     objekt_id: int,
     gefahr_eintrag_id: int,
@@ -1062,7 +1062,7 @@ def gefahr_edit(
     return templates.TemplateResponse(request, "objekt/_gefahren.html", ctx)
 
 
-@router.post("/{objekt_id}/gefahren/{gefahr_eintrag_id}/loeschen", response_class=HTMLResponse)
+@router.post("/{objekt_id:int}/gefahren/{gefahr_eintrag_id}/loeschen", response_class=HTMLResponse)
 def gefahr_loeschen(
     objekt_id: int,
     gefahr_eintrag_id: int,
@@ -1101,7 +1101,7 @@ def _merkmal_katalog(db: Session) -> list[MerkmalKatalog]:
     )
 
 
-@router.get("/{objekt_id}/merkmale", response_class=HTMLResponse)
+@router.get("/{objekt_id:int}/merkmale", response_class=HTMLResponse)
 def merkmale_partial(
     objekt_id: int,
     request: Request,
@@ -1116,7 +1116,7 @@ def merkmale_partial(
     return templates.TemplateResponse(request, "objekt/_merkmale.html", ctx)
 
 
-@router.post("/{objekt_id}/merkmale/neu", response_class=HTMLResponse)
+@router.post("/{objekt_id:int}/merkmale/neu", response_class=HTMLResponse)
 def merkmal_zuordnen(
     objekt_id: int,
     request: Request,
@@ -1148,7 +1148,7 @@ def merkmal_zuordnen(
     return templates.TemplateResponse(request, "objekt/_merkmale.html", ctx)
 
 
-@router.post("/{objekt_id}/merkmale/{zuordnung_id}/loeschen", response_class=HTMLResponse)
+@router.post("/{objekt_id:int}/merkmale/{zuordnung_id}/loeschen", response_class=HTMLResponse)
 def merkmal_entfernen(
     objekt_id: int,
     zuordnung_id: int,
