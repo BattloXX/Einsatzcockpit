@@ -145,11 +145,23 @@
       {% endif %}
       <a href="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ s.id }}&art={{ filter_art }}&suche={{ filter_suche }}">
         {% if s.thumb_pfad %}
-        <img src="/objekt-medien/seite/{{ s.id }}/thumb" alt="Seite {{ s.seiten_nr }}" loading="lazy">
+        {# ?r={{ s.rotation }} = Cache-Buster: nach dem Drehen laedt das (serverseitig gedrehte) Thumb neu #}
+        <img src="/objekt-medien/seite/{{ s.id }}/thumb?r={{ s.rotation }}" alt="Seite {{ s.seiten_nr }}" loading="lazy">
         {% else %}
         <div class="objekt-seite-kachel__platzhalter">📄<br>S. {{ s.seiten_nr }}</div>
         {% endif %}
       </a>
+      {% if ist_verwalter %}
+      <form hx-post="/objekte/{{ objekt.id }}/dokumente/seite/{{ s.id }}/drehen"
+            hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
+            style="display:flex;gap:4px;justify-content:center;padding:4px 0 0;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="art" value="{{ filter_art }}">
+        <input type="hidden" name="suche" value="{{ filter_suche }}">
+        <button type="submit" name="richtung" value="links" class="btn btn--ghost btn--xs" title="90° nach links drehen">↺</button>
+        <button type="submit" name="richtung" value="rechts" class="btn btn--ghost btn--xs" title="90° nach rechts drehen">↻</button>
+      </form>
+      {% endif %}
       <div class="objekt-seite-kachel__info">
         <div style="font-weight:600;font-size:0.85em;">
           {{ dokumentarten.get(s.dokumentart, 'Unklassifiziert') }}

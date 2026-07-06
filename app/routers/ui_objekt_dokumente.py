@@ -330,6 +330,39 @@ def seiten_bulk_klassifizieren(
     )
 
 
+@router.post("/objekte/{objekt_id}/dokumente/seite/{seite_id}/drehen", response_class=HTMLResponse)
+def seite_drehen(
+    objekt_id: int,
+    seite_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    richtung: str = Form(...),   # "links" | "rechts"
+    art: str = Form(""),
+    suche: str = Form(""),
+):
+    """Persistente 90°-Drehung einer Seite (Bearbeitungsmodus)."""
+    objekt = _objekt_or_404(db, objekt_id, user)
+    seite = (
+        db.query(ObjektDokumentSeite)
+        .filter(ObjektDokumentSeite.id == seite_id, ObjektDokumentSeite.objekt_id == objekt.id)
+        .first()
+    )
+    if seite is None:
+        raise HTTPException(status_code=404, detail="Seite nicht gefunden")
+    delta = 90 if richtung == "rechts" else -90
+    seite.rotation = ((seite.rotation or 0) + delta) % 360
+    seite.klassifiziert_von_id = user.id
+    seite.klassifiziert_am = datetime.now(UTC)
+    db.commit()
+
+    return templates.TemplateResponse(
+        request, "objekt/_dokumente.html",
+        _galerie_context(request, db, user, objekt, art=art, suche=suche),
+    )
+
+
 @router.post("/objekte/{objekt_id}/dokumente/{dokument_id}/loeschen", response_class=HTMLResponse)
 def dokument_loeschen(
     objekt_id: int,
@@ -432,6 +465,28 @@ def dokumente_viewer(
 
 # ── Geschuetzte Datei-Auslieferung (Org-Check) ────────────────────────────────
 
+def _bild_response(pfad, media_type: str, rotation: int) -> Response:
+    """Liefert die Bilddatei aus; bei rotation != 0 (Uhrzeigersinn) gedreht.
+
+    rotation == 0 (Regelfall) → unveraendert per FileResponse (kein PIL-Overhead).
+    """
+    rot = rotation % 360
+    if rot == 0:
+        return FileResponse(pfad, media_type=media_type)
+    import io
+
+    from PIL import Image
+    with Image.open(pfad) as img:
+        # PIL.rotate dreht gegen den Uhrzeigersinn → negativ fuer Uhrzeigersinn.
+        gedreht = img.rotate(-rot, expand=True)
+        buf = io.BytesIO()
+        fmt = "JPEG" if media_type == "image/jpeg" else "PNG"
+        if fmt == "JPEG" and gedreht.mode not in ("RGB", "L"):
+            gedreht = gedreht.convert("RGB")
+        gedreht.save(buf, fmt)
+    return Response(content=buf.getvalue(), media_type=media_type)
+
+
 def _seite_fuer_user(db: Session, seite_id: int, user: User) -> ObjektDokumentSeite:
     seite = (
         db.query(ObjektDokumentSeite)
@@ -459,7 +514,7 @@ def seite_thumb(
     pfad = absolute_pfad(seite.thumb_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
-    return FileResponse(pfad, media_type="image/jpeg")
+    return _bild_response(pfad, "image/jpeg", seite.rotation)
 
 
 @router.get("/objekt-medien/seite/{seite_id}/bild")
@@ -476,7 +531,7 @@ def seite_bild(
     pfad = absolute_pfad(seite.bild_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
-    return FileResponse(pfad, media_type="image/png")
+    return _bild_response(pfad, "image/png", seite.rotation)
 
 
 @router.get("/objekt-medien/seite/{seite_id}/pdf")

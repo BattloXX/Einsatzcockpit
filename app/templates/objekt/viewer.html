@@ -22,9 +22,30 @@
       dragStartPanX: 0,
       dragStartPanY: 0,
       lastTapTime: 0,
-      weiter() { if (this.idx < this.seiten.length - 1) { this.idx++; this.resetZoom(); } },
-      zurueck() { if (this.idx > 0) { this.idx--; this.resetZoom(); } },
+      // Persistente Seiten-Drehung (Bearbeitungsmodus, ist bereits ins Server-Bild
+      // gerechnet) + temporaere Ansicht-Drehung (nur Session, nicht gespeichert).
+      rotationen: {{ seiten | map(attribute="rotation") | list | tojson }},
+      tempRot: 0,
+      rotFit: 1,
+      weiter() { if (this.idx < this.seiten.length - 1) { this.idx++; this.resetZoom(); this.resetRot(); } },
+      zurueck() { if (this.idx > 0) { this.idx--; this.resetZoom(); this.resetRot(); } },
       resetZoom() { this.zoom = 1; this.panX = 0; this.panY = 0; },
+      resetRot() { this.tempRot = 0; this.rotFit = 1; },
+      dreheLinks()  { this.tempRot = (this.tempRot + 270) % 360; this.rotFitAktualisieren(); },
+      dreheRechts() { this.tempRot = (this.tempRot + 90)  % 360; this.rotFitAktualisieren(); },
+      // Bei 90/270 passt das gedrehte Bild sonst nicht in die Buehne -> Skalierung
+      // aus den (ungedrehten) Layoutmassen von Bild und Wrap berechnen.
+      rotFitAktualisieren() {
+        var self = this;
+        this.$nextTick(function () {
+          if (self.tempRot % 180 === 0) { self.rotFit = 1; return; }
+          var stage = self.$refs.stage;
+          var wrap = stage && stage.querySelector(".objekt-viewer__bildwrap");
+          var img = stage && stage.querySelector('img[data-akt="1"]');
+          if (!wrap || !img || !img.clientWidth || !img.clientHeight) { self.rotFit = 1; return; }
+          self.rotFit = Math.min(wrap.clientWidth / img.clientHeight, wrap.clientHeight / img.clientWidth);
+        });
+      },
       zoomOut() { this.zoom = Math.max(1, this.zoom - 0.5); if (this.zoom <= 1) { this.panX = 0; this.panY = 0; } else { this.panBegrenzen(); } },
       zoomIn() { this.zoom = Math.min(5, this.zoom + 0.5); },
       toggleZoom() {
@@ -121,6 +142,8 @@
       <button type="submit" class="btn btn--ghost btn--xs">🔎</button>
     </form>
     <div class="objekt-viewer__zoomctrls" x-show="seiten.length > 0">
+      <button type="button" class="btn btn--ghost btn--xs" @click="dreheLinks()" title="90° nach links drehen">↺</button>
+      <button type="button" class="btn btn--ghost btn--xs" @click="dreheRechts()" title="90° nach rechts drehen">↻</button>
       <button type="button" class="btn btn--ghost btn--xs" @click="zoomOut()">−</button>
       <button type="button" class="btn btn--ghost btn--xs" @click="zoomIn()">+ Zoom</button>
       <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'" target="_blank" class="btn btn--ghost btn--xs">📄 PDF</a>
@@ -143,9 +166,11 @@
     <div class="objekt-viewer__bildwrap">
       <template x-for="(sid, i) in seiten" :key="sid">
         <img x-show="i === idx"
-             :src="'/objekt-medien/seite/' + sid + '/bild'"
-             :style="'transform: translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + '); transition: ' + ((isDragging || isPinching) ? 'none' : 'transform 0.15s ease') + ';'"
+             :data-akt="i === idx ? '1' : '0'"
+             :src="'/objekt-medien/seite/' + sid + '/bild?r=' + (rotationen[i] || 0)"
+             :style="'transform: translate(' + panX + 'px,' + panY + 'px) scale(' + (zoom * rotFit) + ') rotate(' + tempRot + 'deg); transition: ' + ((isDragging || isPinching) ? 'none' : 'transform 0.15s ease') + ';'"
              @dblclick="toggleZoom()"
+             @load="if (i === idx && tempRot % 180 !== 0) rotFitAktualisieren()"
              loading="lazy" alt="Dokumentseite">
       </template>
     </div>

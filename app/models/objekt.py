@@ -559,6 +559,9 @@ class ObjektDokumentSeite(TenantScoped, Base):
     # Hi-Res-Rendering (~150 dpi PNG); NULL wenn Poppler nicht verfuegbar
     bild_pfad: Mapped[str | None] = mapped_column(String(500), nullable=True)
     thumb_pfad: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Persistente Anzeige-Drehung im Uhrzeigersinn (0/90/180/270), im
+    # Bearbeitungsmodus gesetzt; wird beim Ausliefern in Bild/Thumb gerechnet.
+    rotation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Klassifizierung (Dokumentart aus DOKUMENTARTEN)
     dokumentart: Mapped[str | None] = mapped_column(String(30), nullable=True)
     titel: Mapped[str | None] = mapped_column(String(200), nullable=True)
