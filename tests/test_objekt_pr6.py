@@ -80,7 +80,7 @@ def test_daten_idle_einsatzliste(is_db):
     assert "einsaetze" in daten
 
 
-def test_daten_alarm_mit_objekt_ohne_wohnanlagen_hinweise(is_db):
+def test_daten_alarm_mit_objekt_und_wohnanlagen_hinweise(is_db):
     db, org = is_db
     objekt = Objekt(org_id=org.id, nummer=1, name="Rattpack Werk 2",
                     status=OBJEKT_STATUS_FREIGEGEBEN, lat=47.4652, lng=9.7503)
@@ -90,7 +90,7 @@ def test_daten_alarm_mit_objekt_ohne_wohnanlagen_hinweise(is_db):
                      bmz_standort="EG Büro", fbf_standort="Haupteingang",
                      schluesselsafe_vorhanden=True,
                      schluesselsafe_standort="beim Haupteingang"))
-    # DSGVO-Testfall: Wohnanlagen-Hinweise duerfen NIE im Payload landen
+    # Wohnanlagen-Hinweise werden am Wandmonitor angezeigt (auf Wunsch)
     db.add(ObjektWohnanlage(org_id=org.id, objekt_id=objekt.id,
                             hinweise="3. OG: Bewohner mit Gehhilfe"))
     incident = Incident(
@@ -113,20 +113,18 @@ def test_daten_alarm_mit_objekt_ohne_wohnanlagen_hinweise(is_db):
     assert daten["objekt"]["bestaetigt"] is True
     assert daten["objekt"]["bma"]["bmz_standort"] == "EG Büro"
     assert daten["objekt"]["bma"]["fsd_standort"] == "beim Haupteingang"
-
-    import json
-    payload_text = json.dumps(daten, ensure_ascii=False, default=str)
-    assert "Gehhilfe" not in payload_text  # DSGVO: nie am Wandmonitor
-    assert "hinweise" not in daten["objekt"]
+    assert daten["objekt"]["wohnanlage_hinweise"] == "3. OG: Bewohner mit Gehhilfe"
 
 
-def test_daten_alarm_fahrzeuge_und_stichwort_label(is_db):
-    """Fahrzeuge nach Ausrückordnung (+ Status) und Stichwort-Klartext im Payload."""
+def test_daten_alarm_fahrzeuge_aao_und_status(is_db):
+    """Kräfte im Einsatz = Ausrückordnung; nicht ausgerückte Einheiten S2, sonst
+    Live-Status aus dem Einsatz (S4/S5); Nachalarmierte werden angehängt."""
     from app.models.incident import IncidentColumn, IncidentVehicle
-    from app.models.master import AlarmType, VehicleMaster
+    from app.models.master import AlarmDispatchVehicle, AlarmType, VehicleMaster
 
     db, org = is_db
-    db.add(AlarmType(org_id=org.id, code="F3", category="F", label="Brand Gebäude"))
+    at = AlarmType(org_id=org.id, code="F3", category="F", label="Brand Gebäude")
+    db.add(at)
     incident = Incident(
         primary_org_id=org.id, alarm_type_code="F3", status="active",
         started_at=datetime.now(UTC).replace(tzinfo=None),
@@ -136,31 +134,40 @@ def test_daten_alarm_fahrzeuge_und_stichwort_label(is_db):
     spalte = IncidentColumn(incident_id=incident.id, code="active",
                             title="Im Einsatz", column_kind="vehicles")
     db.add(spalte)
-    tlf = VehicleMaster(dept_id=org.id, code="TLF", name="TLF 2000",
-                        type="Tanklöschfahrzeug", display_order=1)
-    kdo = VehicleMaster(dept_id=org.id, code="KDO", name="KDO", type="Kommando", display_order=0)
-    weg = VehicleMaster(dept_id=org.id, code="ALT", name="Alt", type="Weg")
-    db.add_all([tlf, kdo, weg])
+    kdo = VehicleMaster(dept_id=org.id, code="KDO", name="KDO", type="Kommando")
+    tlf = VehicleMaster(dept_id=org.id, code="TLF", name="TLF 2000", type="Tanklöschfahrzeug")
+    rlf = VehicleMaster(dept_id=org.id, code="RLF", name="RLF", type="Rüstlösch")
+    ext = VehicleMaster(dept_id=org.id, code="RTW", name="RTW", type="Rettung", is_external=True)
+    db.add_all([kdo, tlf, rlf, ext])
     db.flush()
-    # Reihenfolge nach display_order: KDO (0) vor TLF (1); entfernte Einheit fällt raus
+    # Ausrückordnung F3: KDO, TLF, RLF (in dieser Reihenfolge)
+    for i, vm in enumerate([kdo, tlf, rlf]):
+        db.add(AlarmDispatchVehicle(alarm_type_id=at.id, vehicle_master_id=vm.id, display_order=i))
+    # KDO am Einsatzort (S5), TLF Einsatz übernommen (S4), RLF noch nicht ausgerückt (→ S2)
     db.add(IncidentVehicle(incident_id=incident.id, column_id=spalte.id,
-                           vehicle_master_id=tlf.id, unit_status="Am Einsatzort", display_order=1))
+                           vehicle_master_id=kdo.id, unit_status="Am Einsatzort"))
     db.add(IncidentVehicle(incident_id=incident.id, column_id=spalte.id,
-                           vehicle_master_id=kdo.id, unit_status="Einsatz übernommen", display_order=0))
+                           vehicle_master_id=tlf.id, unit_status="Einsatz übernommen"))
+    # Nachalarmiert (nicht in der AAO): externer RTW
     db.add(IncidentVehicle(incident_id=incident.id, column_id=spalte.id,
-                           vehicle_master_id=weg.id, unit_status="Einsatzbereit",
-                           removed_at=datetime.now(UTC).replace(tzinfo=None)))
+                           vehicle_master_id=ext.id, unit_status="Einsatz übernommen"))
     db.commit()
 
     daten = infoscreen_daten("test-token-123", request=None, db=db)  # type: ignore[arg-type]
     assert daten["modus"] == "alarm"
     assert daten["incident"]["stichwort_label"] == "Brand Gebäude"
     fahrzeuge = daten["fahrzeuge"]
-    assert [f["rufname"].split(" ")[0] for f in fahrzeuge] == ["KDO", "TLF"]  # display_order
-    assert fahrzeuge[0]["status"] == "Einsatz übernommen"
-    assert fahrzeuge[1]["status"] == "Am Einsatzort"
-    assert fahrzeuge[1]["typ"] == "Tanklöschfahrzeug"
-    assert all("Alt" not in f["rufname"] for f in fahrzeuge)  # entfernte Einheit nicht dabei
+    # AAO-Reihenfolge KDO, TLF, RLF, dann Nachalarmierung RTW
+    assert [f["rufname"].split(" ")[0] for f in fahrzeuge] == ["KDO", "TLF", "RLF", "RTW"]
+    codes = {f["rufname"].split(" ")[0]: f["status_code"] for f in fahrzeuge}
+    assert codes["KDO"] == "S5"          # Am Einsatzort
+    assert codes["TLF"] == "S4"          # Einsatz übernommen
+    assert codes["RLF"] == "S2"          # laut AAO, noch auf der Wache
+    assert codes["RTW"] == "S4"          # nachalarmiert, übernommen
+    per_name = {f["rufname"].split(" ")[0]: f for f in fahrzeuge}
+    assert per_name["RLF"]["geplant"] is True
+    assert per_name["KDO"]["geplant"] is False
+    assert per_name["RTW"]["extern"] is True
 
 
 def test_aktiver_einsatz_bleibt_geschlossener_faellt_auf_idle(is_db):

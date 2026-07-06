@@ -8,7 +8,8 @@
   (incident_created/objekt_match → sofortiger Wechsel in die Alarmansicht).
 - Verwaltung unter /infoscreen-alarm/verwaltung (org_admin): Tokens + Idle-Konfig.
 
-DSGVO: Wohnanlagen-Hinweise werden NIE an den Infoscreen ausgeliefert (fest).
+Hinweis: Wohnanlagen-Hinweise (einsatztaktisch) werden auf Wunsch am Wandmonitor
+angezeigt — der Token ist nur intern (Gerätehaus) bekannt.
 """
 from __future__ import annotations
 
@@ -181,8 +182,7 @@ def infoscreen_daten(
         if incident.address_city:
             adresse = f"{adresse}, {incident.address_city}".strip(", ")
         # Rückmeldungen (Zu-/Absagen) inkl. Namen — das ist der eigene Wandmonitor
-        # im Gerätehaus (Token nur intern bekannt). Wohnanlagen-Hinweise bleiben
-        # weiterhin tabu (DSGVO), aber wer zu-/absagt, wird namentlich angezeigt.
+        # im Gerätehaus (Token nur intern bekannt), daher werden Namen angezeigt.
         from app.models.teilnahme import Teilnahme
         rsvp_rows = (
             db.query(Teilnahme)
@@ -212,28 +212,79 @@ def infoscreen_daten(
         )
         stichwort_label = at_row.label.strip() if at_row and at_row.label else ""
 
-        # Fahrzeuge nach Ausrückordnung (+ nachalarmierte) mit aktuellem Status.
-        # Die Ausrückordnung befüllt incident.vehicles beim Alarm; weitere
-        # ausrückende Fahrzeuge kommen live dazu → hier einfach alle nicht
-        # entfernten Einheiten in Dispositionsreihenfolge ausliefern.
+        # ── Kräfte im Einsatz: Ausrückordnung als Grundgerüst + Live-Status ──
+        # Angezeigt wird die vollständige Ausrückordnung (AAO) des Stichworts.
+        # Fahrzeuge, die noch nicht ausgerückt sind (kein IncidentVehicle), stehen
+        # laut AAO auf der Wache → Status S2. Sobald das LIS einen Status meldet
+        # (bzw. das Fahrzeug im Einsatz geführt wird), wird der reale Status gezogen
+        # (unit_status → S-Code: S4 zum Einsatzort, S5 am Einsatzort, S1 einsatzbereit).
+        # Nachalarmierte Fahrzeuge außerhalb der AAO werden zusätzlich angehängt.
         from app.models.incident import IncidentVehicle
-        fahrzeug_rows = (
+        from app.models.master import AlarmDispatchVehicle, VehicleMaster
+        from app.services.lis.lis_mapping import unit_status_to_lis_prefix
+
+        iv_rows = (
             db.query(IncidentVehicle)
             .filter(IncidentVehicle.incident_id == incident.id,
                     IncidentVehicle.removed_at.is_(None))
             .order_by(IncidentVehicle.display_order, IncidentVehicle.created_at)
             .all()
         )
-        fahrzeuge = []
-        for v in fahrzeug_rows:
-            vm = v.vehicle_master
-            fahrzeuge.append({
+        iv_by_vm: dict[int, IncidentVehicle] = {}
+        for v in iv_rows:
+            iv_by_vm.setdefault(v.vehicle_master_id, v)
+
+        # AAO des Stichworts (explizit gepflegt), sonst Erstausrückung (is_first_train)
+        roster: list[VehicleMaster] = []
+        if at_row is not None:
+            dispatch = (
+                db.query(AlarmDispatchVehicle)
+                .options(selectinload(AlarmDispatchVehicle.vehicle))
+                .filter(AlarmDispatchVehicle.alarm_type_id == at_row.id)
+                .order_by(AlarmDispatchVehicle.display_order)
+                .execution_options(include_all_tenants=True)
+                .all()
+            )
+            roster = [d.vehicle for d in dispatch if d.vehicle and d.vehicle.active]
+            if not roster:
+                q = (
+                    db.query(VehicleMaster)
+                    .filter(VehicleMaster.dept_id == org.id,
+                            VehicleMaster.active.is_(True))
+                    .order_by(VehicleMaster.display_order)
+                    .execution_options(include_all_tenants=True)
+                )
+                if at_row.default_first_train_only:
+                    q = q.filter(VehicleMaster.is_first_train.is_(True))
+                roster = q.all()
+
+        def _scode(iv: IncidentVehicle | None) -> str:
+            if iv is None:
+                return "S2"  # laut Ausrückordnung disponiert, noch auf der Wache
+            return unit_status_to_lis_prefix(iv.unit_status) or "S2"
+
+        def _eintrag(vm: VehicleMaster | None, iv: IncidentVehicle | None) -> dict:
+            return {
                 "rufname": vm.display_label if vm else "–",
                 "typ": (vm.type or vm.name) if vm else "",
                 "org": vm.org_display_name if vm else "",
-                "status": v.unit_status,
+                "status_code": _scode(iv),
                 "extern": bool(vm and (vm.is_external or vm.is_adhoc)),
-            })
+                "geplant": iv is None,
+            }
+
+        fahrzeuge = []
+        gesehen: set[int] = set()
+        for vm in roster:
+            if vm.id in gesehen:
+                continue
+            gesehen.add(vm.id)
+            fahrzeuge.append(_eintrag(vm, iv_by_vm.get(vm.id)))
+        for v in iv_rows:  # Nachalarmierte / nicht in der AAO
+            if v.vehicle_master_id in gesehen:
+                continue
+            gesehen.add(v.vehicle_master_id)
+            fahrzeuge.append(_eintrag(v.vehicle_master, v))
 
         daten.update({
             "modus": "alarm",
@@ -258,6 +309,7 @@ def infoscreen_daten(
                 selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren),
                 selectinload(ObjektEinsatz.objekt).selectinload(Objekt.bma),
                 selectinload(ObjektEinsatz.objekt).selectinload(Objekt.karten_objekte),
+                selectinload(ObjektEinsatz.objekt).selectinload(Objekt.wohnanlage),
             )
             .execution_options(include_all_tenants=True)
             .filter(ObjektEinsatz.incident_id == incident.id,
@@ -307,7 +359,11 @@ def infoscreen_daten(
                     "fsd_inhalt": bma.schluesselsafe_inhalt if bma.schluesselsafe_vorhanden else None,
                 } if bma else None,
                 "karten_objekte": karten,
-                # DSGVO: bewusst KEINE Wohnanlagen-Hinweise am Wandmonitor
+                # Wohnanlagen-Hinweise (einsatztaktisch) — auf Wunsch am Wandmonitor sichtbar
+                "wohnanlage_hinweise": (
+                    o.wohnanlage.hinweise.strip()
+                    if o.wohnanlage and o.wohnanlage.hinweise else None
+                ),
             }
 
     # Idle: letzte Einsaetze (reduziert: Stichwort/Adresse/Zeit)

@@ -97,11 +97,13 @@ Vollbild-Ansicht für Wandmonitore: `/infoscreen/alarm/{token}` — **öffentlic
   FSD/BMZ/FBF/Laufkarten-Block.
 - **Mitte** die Lagekarte mit den Objektsymbolen **und den Löschwasser-Entnahmestellen (Hydranten,
   OSM + manuell im Objekt gesetzte)** rund um den Einsatz-/Objektstandort.
-- **Rechts** die Spalte **„Kräfte im Einsatz"**: alle Fahrzeuge **nach der Ausrückordnung** (und
-  jede spätere Nachalarmierung) mit ihrem **aktuellen Einheitenstatus** als Farbpille
-  (Ausgerückt/Übernommen · Am Einsatzort · Einsatzbereit), darunter — sobald vorhanden — die
-  **Rückmeldungen mit Namen** (Zusage/Absage je Mitglied). Statuswechsel, neu ausrückende Fahrzeuge
-  und Rückmeldungen erscheinen automatisch (Poll alle 15 s).
+- **Rechts** die Spalte **„Kräfte im Einsatz"**: die **komplette Ausrückordnung (AAO)** des Stichworts
+  als Grundgerüst. Jede Einheit trägt ihren **BOS-Funkstatus** als Farbpille: noch nicht ausgerückte
+  Fahrzeuge stehen laut AAO auf der Wache (**S2**); sobald das **LIS** einen Status meldet bzw. das
+  Fahrzeug im Einsatz geführt wird, wird der reale Status gezogen (**S4** zum Einsatzort, **S5** am
+  Einsatzort, **S1** einsatzbereit). **Nachalarmierte** Einheiten außerhalb der AAO werden angehängt.
+  Darunter — sobald vorhanden — die **Rückmeldungen mit Namen** (Zusage/Absage je Mitglied).
+  Statuswechsel, neue Fahrzeuge und Rückmeldungen erscheinen automatisch (Poll alle 15 s).
 
 Der Wechsel in die Alarmansicht passiert sofort per WebSocket. Ein aktiver Einsatz bleibt sichtbar,
 **solange er aktiv ist** (kein Zeitfenster mehr). Läuft eine **Großschadenslage**, zeigt der Monitor
@@ -122,9 +124,12 @@ Verwaltung unter **`/infoscreen-alarm/verwaltung`** (Org-Admin, eigener Menüpun
   da der Wetter-Token nur als Hash gespeichert ist)
 - **Großschadenslage-Sonderansicht** an/aus (Standard: an)
 
-**DSGVO:** Wohnanlagen-Hinweise (z. B. zu hilfsbedürftigen Personen) werden **nie** an den
-Infoscreen ausgeliefert — fest im Code, nicht konfigurierbar. Am Objektblatt-Druck sind sie nur
-über einen expliziten Parameter enthalten.
+**Wohnanlagen-Hinweise am Monitor:** Die einsatztaktischen Wohnanlagen-Hinweise (z. B. „3. OG:
+Bewohner mit Gehhilfe") werden bei verknüpftem Objekt in der linken Spalte hervorgehoben angezeigt.
+Da der Monitor-Token nur intern (Gerätehaus) bekannt ist, ist das gewollt. **Datenschutz beachten:**
+in den Hinweisen sparsam und sachlich bleiben — keine Namen, Diagnosen oder Personenlisten
+(wie beim Erfassen in der Objektverwaltung vorgegeben). Am Objektblatt-Druck sind die Hinweise nach
+wie vor nur über einen expliziten Parameter enthalten.
 
 ## KI-Dokumentklassifizierung
 

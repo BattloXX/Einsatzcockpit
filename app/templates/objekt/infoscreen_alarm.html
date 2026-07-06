@@ -80,6 +80,9 @@
     .is-bma-zeile b { color: var(--is-amber); display: block; font-size: .8rem;
                       text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
     .is-hinweis { color: var(--is-muted); font-size: 1.1rem; }
+    .is-wohnhinweis { border-color: var(--is-amber); background: rgba(251,191,36,.1); flex: none; }
+    .is-wohnhinweis h2 { color: var(--is-amber); border-bottom-color: rgba(251,191,36,.3); }
+    .is-wohnhinweis__text { font-size: 1.3rem; line-height: 1.35; white-space: pre-wrap; }
 
     #is-karte { flex: 1; border-radius: 10px; min-height: 240px; background: #111; }
     .leaflet-container { background: #1a2233; }
@@ -105,6 +108,8 @@
     .is-vs--einsatzort { background: var(--is-red); color: #fff; }
     .is-vs--anfahrt { background: var(--is-blue); color: #00344c; }
     .is-vs--bereit { background: #14532d; color: var(--is-green); }
+    .is-vs--wache { background: var(--is-surface-high); color: var(--is-muted); border: 1px solid var(--is-line); }
+    .is-vs--nichtbereit { background: #3f3f46; color: #d4d4d8; }
     .is-leitstelle { background: var(--is-blue-deep); border-radius: 10px; padding: 14px; margin-top: auto; }
     .is-leitstelle b { display: block; font-size: .8rem; letter-spacing: .06em; text-transform: uppercase;
                        color: var(--is-blue); margin-bottom: 4px; }
@@ -249,15 +254,22 @@
     document.getElementById("is-inhalt").innerHTML = html;
   }
 
-  // ── Vehicle status → Farbe/Label (App kennt 3 Einheitenstatus) ──
-  function statusPille(s) {
-    if (s === "Am Einsatzort") { return { cls: "is-vs--einsatzort", txt: "Am Einsatzort" }; }
-    if (s === "Einsatzbereit") { return { cls: "is-vs--bereit", txt: "Einsatzbereit" }; }
-    return { cls: "is-vs--anfahrt", txt: s || "Ausgerückt" };   // "Einsatz übernommen"
+  // ── Einheiten-Status (BOS-Funkstatus S1–S6, aus LIS bzw. AAO-Default S2) ──
+  var SCODE = {
+    S1: { cls: "is-vs--bereit",      txt: "einsatzbereit (Funk)" },
+    S2: { cls: "is-vs--wache",       txt: "auf Wache" },
+    S3: { cls: "is-vs--anfahrt",     txt: "Anfahrt" },
+    S4: { cls: "is-vs--anfahrt",     txt: "zum Einsatzort" },
+    S5: { cls: "is-vs--einsatzort",  txt: "am Einsatzort" },
+    S6: { cls: "is-vs--nichtbereit", txt: "nicht einsatzbereit" }
+  };
+  function statusPille(code) {
+    var c = SCODE[code] || SCODE.S2;
+    return { cls: c.cls, txt: code + " · " + c.txt };
   }
 
   function fahrzeugKarte(f) {
-    var p = statusPille(f.status);
+    var p = statusPille(f.status_code);
     var sub = [f.typ, f.org].filter(Boolean).join(" · ");
     return '<div class="is-fzg' + (f.extern ? " is-fzg--extern" : "") + '">' +
       '<div class="is-fzg__ident">' +
@@ -367,6 +379,11 @@
         html += '<div class="is-hinweis">Keine BMA erfasst.</div>';
       }
       html += "</div>";
+      // Wohnanlagen-Hinweise (einsatztaktisch) — hervorgehoben
+      if (o.wohnanlage_hinweise) {
+        html += '<div class="is-panel is-wohnhinweis"><h2>🏠 Wohnanlage – Hinweise</h2>' +
+          '<div class="is-wohnhinweis__text">' + esc(o.wohnanlage_hinweise) + "</div></div>";
+      }
     } else {
       html += '<div class="is-hinweis">Kein Objekt verknüpft.</div></div>';
     }
