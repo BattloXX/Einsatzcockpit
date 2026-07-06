@@ -488,6 +488,7 @@ body.mobile-menu-open { overflow: hidden; }
 .alarm-badge--f { background: var(--danger); color: #fff; }
 .alarm-badge--t { background: var(--blue); color: #fff; }
 .alarm-badge--sm { font-size: .78rem; padding: 2px 8px; border-radius: 0.25rem; }
+.incident-header__grundwrap { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .incident-header__grund {
   font-size: .9rem; font-weight: 600; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;

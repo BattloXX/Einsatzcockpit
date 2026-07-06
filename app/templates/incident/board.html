@@ -139,6 +139,7 @@
     <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
     {% endif %}
     {% set _grund = (incident.reason or incident.report_text or '') %}
+    <div class="incident-header__grundwrap">
     {% if _grund %}
     <span class="incident-header__grund">{{ _grund[:80] }}</span>
     {% endif %}
@@ -155,6 +156,7 @@
     <span class="incident-header__address">{{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</span>
     {% endif %}
     {% endif %}
+    </div>
     {# ── Mobile Lane Select (nur ≤760px) – neben dem Einsatz, spart Platz für die Karten ── #}
     <select class="mobile-lane-select" id="mobile-lane-select" title="Ansicht wechseln"></select>
     {# ── Einsatzinfo (nur ≤760px, da .incident-header__actions mobil ausgeblendet ist) ── #}
@@ -192,17 +194,6 @@
     <a href="/einsatz/{{ incident.id }}/atemschutz" class="btn btn--sm btn--secondary incident-header__navlink"
        {{ tip('Atemschutzüberwachung — Pressluft-Trupp-Steuerung') }}>🫁 AS</a>
     {% endif %}
-    {% if uas_einsatz_id %}
-    <a href="/uas/einsatz/{{ uas_einsatz_id }}" class="btn btn--sm btn--secondary incident-header__navlink"
-       {{ tip('Drohneneinsatz öffnen') }}>🚁 Drohne</a>
-    {% elif can_start_uas %}
-    <a href="/uas/incidents/{{ incident.id }}/einsatz/starten" class="btn btn--sm btn--secondary incident-header__navlink"
-       {{ tip('Drohneneinsatz zu diesem Einsatz starten') }}>🚁 Drohne starten</a>
-    {% endif %}
-    <a href="/einsatz/{{ incident.id }}/dashboard" target="_blank" rel="noopener noreferrer"
-       class="btn btn--sm btn--secondary incident-header__navlink"
-       {{ tip('Übersichts-Dashboard in neuem Fenster öffnen') }}>📊 Dashboard</a>
-
     <a href="/einsatz/{{ incident.id }}/funkjournal" class="btn btn--sm btn--secondary incident-header__navlink"
        {{ tip('Funkjournal – Sprüche und lagerelevante Einträge') }}>📻 Funk</a>
 
@@ -232,35 +223,37 @@
       </div>
     </div>
 
-    {# ── KI-Dropdown (nur wenn KI aktiv) ─────────────────────────────────── #}
-    {% if can_edit and ai_enabled %}
-    <div class="header-dropdown header-dropdown--ki" x-data="{open:false}" @click.outside="open=false">
-      <button class="btn btn--sm btn--secondary header-btn--ki"
-              id="ki-dropdown-btn"
-              @click="open=!open"
-              {{ tip('KI-Assistenz: Lagebild zusammenfassen oder Lage-Hinweise neu generieren') }}>
-        ✨ KI <span class="dropdown-arrow" :class="open && 'open'">▾</span>
-      </button>
-      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms>
-        <button class="dropdown-item" @click="open=false; openLagebild()">
-          <span class="di-icon">✨</span> Lagebild erzeugen
-        </button>
-        <button class="dropdown-item" id="ki-hints-btn" @click="open=false; regenerateLageHinweise({{ incident.id }})">
-          <span class="di-icon">📋</span> Hinweise neu laden
-        </button>
-        <button class="dropdown-item" id="ki-tasks-btn" @click="open=false; requestAiTaskSuggestions({{ incident.id }})">
-          <span class="di-icon">✅</span> Auftragsvorschläge
-        </button>
-      </div>
-    </div>
-    {% endif %}
-
-    {# ── Mehr-Menü: selten benötigte Aktionen (nur Desktop, mobil ausgeblendet) ── #}
+    {# ── Mehr-Menü: KI, Dashboard, Drohne + seltene Aktionen (nur Desktop, mobil ausgeblendet) ── #}
     <div class="header-dropdown header-dropdown--more" x-data="{open:false}" @click.outside="open=false">
       <button class="btn btn--sm btn--ghost"
               @click="open=!open"
-              {{ tip('Weitere Aktionen: QR-Code, PDF-Export') }}>⋯</button>
+              {{ tip('Weitere Aktionen: KI, Dashboard, Drohne, QR-Code, PDF-Export') }}>⋯</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms>
+        {% if uas_einsatz_id %}
+        <a href="/uas/einsatz/{{ uas_einsatz_id }}" class="dropdown-item">
+          <span class="di-icon">🚁</span> Drohneneinsatz öffnen
+        </a>
+        {% elif can_start_uas %}
+        <a href="/uas/incidents/{{ incident.id }}/einsatz/starten" class="dropdown-item">
+          <span class="di-icon">🚁</span> Drohne starten
+        </a>
+        {% endif %}
+        <a href="/einsatz/{{ incident.id }}/dashboard" target="_blank" rel="noopener noreferrer" class="dropdown-item">
+          <span class="di-icon">📊</span> Dashboard öffnen
+        </a>
+        {% if can_edit and ai_enabled %}
+        <hr class="dropdown-divider">
+        <button class="dropdown-item" id="ki-dropdown-btn" @click="open=false; openLagebild()">
+          <span class="di-icon">✨</span> KI-Lagebild erzeugen
+        </button>
+        <button class="dropdown-item" id="ki-hints-btn" @click="open=false; regenerateLageHinweise({{ incident.id }})">
+          <span class="di-icon">📋</span> KI-Hinweise neu laden
+        </button>
+        <button class="dropdown-item" id="ki-tasks-btn" @click="open=false; requestAiTaskSuggestions({{ incident.id }})">
+          <span class="di-icon">✅</span> KI-Auftragsvorschläge
+        </button>
+        {% endif %}
+        <hr class="dropdown-divider">
         <a href="/einsatz/{{ incident.id }}/qr" class="dropdown-item">
           <span class="di-icon">🔗</span> QR-Code anzeigen
         </a>
@@ -974,13 +967,13 @@ async function requestAiTaskSuggestions(incidentId) {
   } catch (e) {
     alert(e.message || 'Unbekannter Fehler');
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<span class="di-icon">✅</span> Auftragsvorschläge'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<span class="di-icon">✅</span> KI-Auftragsvorschläge'; }
   }
 }
 
 async function regenerateLageHinweise(incidentId) {
-  const triggerBtn = document.getElementById('ki-dropdown-btn');
-  if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.textContent = '✨ …'; }
+  const triggerBtn = document.getElementById('ki-hints-btn');
+  if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.innerHTML = '<span class="di-icon">…</span> Hinweise werden geladen …'; }
   try {
     const r = await fetch(`/einsatz/${incidentId}/ki-lagehinweise`, {method: 'POST'});
     if (!r.ok) {
@@ -991,7 +984,7 @@ async function regenerateLageHinweise(incidentId) {
   } catch (e) {
     alert(e.message || 'Unbekannter Fehler');
   } finally {
-    if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = '✨ KI ▾'; }
+    if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.innerHTML = '<span class="di-icon">📋</span> KI-Hinweise neu laden'; }
   }
 }
 
