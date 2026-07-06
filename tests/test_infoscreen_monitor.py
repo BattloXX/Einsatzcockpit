@@ -80,6 +80,56 @@ def test_gsl_hat_vorrang_vor_einsatz(db_org):
     assert daten["gsl"]["name"] == "Hochwasser Nord"
 
 
+def test_gsl_infoscreen_payload_reich(db_org):
+    """GSL-Wandmonitor: KPIs, Kanban-Gruppierung, überfällige Lagemeldung, Ticker."""
+    from datetime import timedelta
+
+    from app.models.major_incident import (
+        CrossSiteMarker,
+        IncidentSite,
+        SitePhase,
+        SitePriority,
+        SiteResourceAssignment,
+    )
+
+    db, org = db_org
+    _token(db, org)
+    gsl = MajorIncident(org_id=org.id, name="Hochwasser", status=MajorIncidentStatus.active,
+                        started_at=datetime.now(UTC))
+    db.add(gsl)
+    db.flush()
+
+    # 1) eingegangen, ohne Priorität
+    db.add(IncidentSite(major_incident_id=gsl.id, org_id=org.id, bezeichnung="Neu",
+                        phase=SitePhase.eingegangen))
+    # 2) in Arbeit, Priorität sofort, überfällige Lagemeldung + aktive Ressource
+    s2 = IncidentSite(major_incident_id=gsl.id, org_id=org.id, bezeichnung="Keller",
+                      phase=SitePhase.in_arbeit, priority=SitePriority.sofort, lat=47.4, lng=9.7,
+                      naechste_lagemeldung_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=30))
+    db.add(s2)
+    db.flush()
+    db.add(SiteResourceAssignment(incident_site_id=s2.id, resource_type="free_text", label="LF 1"))
+    # 3) erledigt
+    db.add(IncidentSite(major_incident_id=gsl.id, org_id=org.id, bezeichnung="Fertig",
+                        phase=SitePhase.erledigt))
+    # übergreifende Meldung → Ticker
+    db.add(CrossSiteMarker(major_incident_id=gsl.id, org_id=org.id, title="Straße gesperrt",
+                           marker_type="strasse_gesperrt", status="aktiv"))
+    db.commit()
+
+    daten = infoscreen_daten("mon-token", request=None, db=db)  # type: ignore[arg-type]
+    assert daten["modus"] == "gsl"
+    g = daten["gsl"]
+    assert g["kpi"] == {"total": 3, "eingegangen": 1, "in_arbeit": 1, "erledigt": 1, "ressourcen": 1}
+    gruppen = {s["bezeichnung"]: s["gruppe"] for s in g["sites"]}
+    assert gruppen == {"Neu": "eingegangen", "Keller": "in_arbeit", "Fertig": "erledigt"}
+    keller = next(s for s in g["sites"] if s["bezeichnung"] == "Keller")
+    assert keller["prio_letter"] == "S"
+    assert keller["ueberfaellig_min"] is not None and keller["ueberfaellig_min"] >= 29
+    assert keller["res_labels"] == ["LF 1"]
+    assert any("Straße gesperrt" in t for t in g["ticker"])
+
+
 def test_einsatz_ohne_zeitfenster_solange_aktiv(db_org):
     db, org = db_org
     _token(db, org)

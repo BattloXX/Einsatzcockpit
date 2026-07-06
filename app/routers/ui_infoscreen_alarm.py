@@ -107,6 +107,135 @@ def _aktive_gsl(db: Session, org_id: int):  # type: ignore[no-untyped-def]
     )
 
 
+def _iso_z(dt):  # type: ignore[no-untyped-def]
+    """Naive-UTC oder aware Datetime → ISO-String mit Z-Suffix (JS rechnet lokal um)."""
+    if dt is None:
+        return None
+    from datetime import UTC
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(UTC).replace(tzinfo=None)
+    return dt.isoformat() + "Z"
+
+
+# Phase → 3 Kanban-Gruppen (Wandmonitor: kompakter als die 6 Board-Spalten)
+_GSL_PHASE_GRUPPE = {
+    "eingegangen": "eingegangen",
+    "erkundung":   "in_arbeit",
+    "bewertet":    "in_arbeit",
+    "disponiert":  "in_arbeit",
+    "in_arbeit":   "in_arbeit",
+    "erledigt":    "erledigt",
+}
+_GSL_PRIO_LETTER = {1: "S", 2: "D", 3: "N", 4: "A"}
+# Prioritätsfarbe (Kartenmarker + Kartenkante), analog Lagekarte
+_GSL_PRIO_COLOR = {1: "#ef4444", 2: "#f97316", 3: "#eab308", 4: "#6b7280"}
+
+
+def _gsl_infoscreen_daten(db: Session, gsl) -> dict:  # type: ignore[no-untyped-def]
+    """Reicher GSL-Datensatz für den Wandmonitor: KPIs, Einsatzstellen (Kanban +
+    Kartenmarker), Abschnitte, übergreifende Meldungen (Ticker)."""
+    from datetime import UTC, datetime
+
+    from app.models.major_incident import (
+        SITE_PRIORITY_LABEL,
+        SitePhase,
+        SitePriority,
+    )
+
+    now = datetime.now(UTC)
+    sektor_namen = {s.id: s.name for s in gsl.sectors}
+
+    sites = [s for s in gsl.sites if s.phase != SitePhase.abgebrochen]
+    site_dicts: list[dict] = []
+    ressourcen_aktiv = 0
+
+    for s in sites:
+        aktiv = sum(1 for r in s.resources if not r.released_at)
+        ressourcen_aktiv += aktiv
+
+        teile = []
+        if s.strasse:
+            teile.append(s.strasse + (f" {s.hausnr}" if s.hausnr else ""))
+        if s.ort:
+            teile.append(s.ort)
+        adresse = ", ".join(teile)
+
+        # Lagemeldung überfällig (SKKM-Regelkreis: naechste_lagemeldung_at in Vergangenheit)
+        ueberfaellig_min = None
+        if s.naechste_lagemeldung_at is not None and s.phase not in (
+            SitePhase.erledigt, SitePhase.abgebrochen
+        ):
+            faellig = s.naechste_lagemeldung_at
+            if faellig.tzinfo is None:
+                faellig = faellig.replace(tzinfo=UTC)
+            delta_min = int((now - faellig).total_seconds() // 60)
+            if delta_min > 0:
+                ueberfaellig_min = delta_min
+
+        prio = int(s.priority) if s.priority is not None else None
+        site_dicts.append({
+            "id": s.id,
+            "bezeichnung": s.bezeichnung,
+            "einsatzgrund": s.einsatzgrund or "",
+            "adresse": adresse,
+            "phase": s.phase.value,
+            "gruppe": _GSL_PHASE_GRUPPE.get(s.phase.value, "in_arbeit"),
+            "prio": prio,
+            "prio_letter": _GSL_PRIO_LETTER.get(prio, "") if prio else "",
+            "prio_label": SITE_PRIORITY_LABEL.get(SitePriority(prio), "") if prio else "",
+            "prio_color": _GSL_PRIO_COLOR.get(prio, "#6b7280") if prio else "#6b7280",
+            "sektor": sektor_namen.get(s.sector_id) if s.sector_id else None,
+            "aktive_res": aktiv,
+            "res_labels": [r.label for r in s.resources if not r.released_at and r.label][:3],
+            "lat": s.lat,
+            "lng": s.lng,
+            "zeit": _iso_z(s.created_at),
+            "ueberfaellig_min": ueberfaellig_min,
+        })
+
+    # Sortierung: Priorität (S<D<N<A, ohne Prio zuletzt), dann neueste zuerst
+    site_dicts.sort(key=lambda d: (d["prio"] or 9, d["zeit"] or ""), reverse=False)
+
+    def _zaehle(gruppe: str) -> int:
+        return sum(1 for d in site_dicts if d["gruppe"] == gruppe)
+
+    kpi = {
+        "total": len(site_dicts),
+        "eingegangen": _zaehle("eingegangen"),
+        "in_arbeit": _zaehle("in_arbeit"),
+        "erledigt": _zaehle("erledigt"),
+        "ressourcen": ressourcen_aktiv,
+    }
+
+    # Ticker: übergreifende Meldungen (Cross-Marker), offene zuerst
+    ticker: list[str] = []
+    for m in gsl.cross_site_markers:
+        if m.status == "behoben":
+            continue
+        teil = m.title or m.type_label or "Meldung"
+        if m.type_label and m.type_label != teil:
+            teil += " · " + m.type_label
+        if m.status_label:
+            teil += " · " + m.status_label
+        if m.address_line:
+            teil += " · " + m.address_line
+        ticker.append(teil)
+
+    # Abschnitts-Legende
+    sektoren = [{"name": s.name, "color": s.color or "#6b7280"} for s in gsl.sectors]
+
+    return {
+        "name": gsl.name,
+        "beschreibung": gsl.description or "",
+        "beginn": _iso_z(gsl.started_at),
+        "uebung": bool(gsl.is_exercise),
+        "kpi": kpi,
+        "sites": site_dicts,
+        "sektoren": sektoren,
+        "ticker": ticker,
+    }
+
+
 # ── Oeffentliche Infoscreen-Seite ──────────────────────────────────────────────
 
 @router.get("/infoscreen/alarm/{token}", response_class=HTMLResponse, include_in_schema=False)
@@ -156,12 +285,7 @@ def infoscreen_daten(
         gsl = _aktive_gsl(db, org.id)
         if gsl is not None:
             daten["modus"] = "gsl"
-            daten["gsl"] = {
-                "name": gsl.name,
-                "beschreibung": gsl.description or "",
-                "beginn": gsl.started_at.isoformat() + "Z" if gsl.started_at else None,
-                "uebung": bool(gsl.is_exercise),
-            }
+            daten["gsl"] = _gsl_infoscreen_daten(db, gsl)
             return daten
 
     # ── Vorrang 2: aktiver Einsatz (bleibt, solange status == active) ──

@@ -129,6 +129,101 @@
       .is-alarm__body { grid-template-columns: 1fr 1.3fr; }
       .is-col--rechts { grid-column: 1 / -1; }
     }
+
+    /* ── GSL-Dashboard (Großschadenslage-Wandmonitor) ── */
+    .gsl { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .gsl-titel { display: flex; align-items: center; justify-content: space-between; gap: 20px;
+                 padding: 12px 24px; background: linear-gradient(90deg, rgba(183,25,33,.28), rgba(183,25,33,.05));
+                 border-bottom: 1px solid var(--is-line); }
+    .gsl-titel__ident { display: flex; align-items: center; gap: 16px; min-width: 0; }
+    .gsl-titel__icon { width: 52px; height: 52px; flex: none; border-radius: 12px; background: var(--is-red);
+                       display: flex; align-items: center; justify-content: center; font-size: 1.9rem; }
+    .gsl-titel h1 { margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: .01em;
+                    text-transform: uppercase; color: #ff8f8f; line-height: 1.05; }
+    .gsl-titel__name { font-size: 1.05rem; font-weight: 600; color: var(--is-text); margin-top: 2px;
+                       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gsl-titel__ubung { display: inline-block; background: var(--is-amber); color: #3a2c00; font-weight: 800;
+                        font-size: .8rem; padding: 1px 8px; border-radius: 5px; margin-right: 8px;
+                        vertical-align: middle; letter-spacing: .04em; }
+    .gsl-titel__zeiten { display: flex; gap: 22px; flex: none; }
+    .gsl-titel__zblock { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+    .gsl-titel__zcap { font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--is-muted); }
+    .gsl-titel__zval { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    .gsl-kpi { display: flex; justify-content: space-around; align-items: center; height: 54px; flex: none;
+               background: var(--is-surface); border-bottom: 1px solid var(--is-line); padding: 0 20px; }
+    .gsl-kpi__item { display: flex; align-items: center; gap: 9px; }
+    .gsl-kpi__cap { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--is-muted); }
+    .gsl-kpi__val { font-size: 1.55rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .gsl-kpi__val--total { color: #ff8f8f; }
+    .gsl-kpi__val--offen { color: var(--is-amber); }
+    .gsl-kpi__val--arbeit { color: var(--is-blue); }
+    .gsl-kpi__val--erledigt { color: var(--is-green); }
+    .gsl-kpi__val--res { color: #b0c7f1; }
+    .gsl-kpi__sep { width: 1px; height: 22px; background: var(--is-line); }
+
+    .gsl-body { flex: 1; display: grid; grid-template-columns: 36% 1fr; min-height: 0; }
+    .gsl-kanban { background: var(--is-surface); border-right: 1px solid var(--is-line);
+                  display: flex; flex-direction: column; gap: 12px; padding: 16px; min-height: 0; overflow: hidden; }
+    .gsl-kanban__head { display: flex; align-items: center; justify-content: space-between; flex: none; }
+    .gsl-kanban__head h2 { margin: 0; font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .gsl-live { display: inline-flex; align-items: center; gap: 7px; background: rgba(183,25,33,.12);
+                border: 1px solid rgba(183,25,33,.3); border-radius: 6px; padding: 4px 10px; }
+    .gsl-live__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--is-red); animation: gsl-pulse 2.4s infinite; }
+    .gsl-live__txt { font-size: .72rem; letter-spacing: .08em; color: #ff8f8f; font-weight: 700; }
+    @keyframes gsl-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+    .gsl-spalten { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; overflow-y: auto; }
+    .gsl-spalte { display: flex; flex-direction: column; gap: 8px; }
+    .gsl-spalte__titel { font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; color: var(--is-muted);
+                         font-weight: 700; border-bottom: 1px solid var(--is-line); padding-bottom: 5px; }
+    .gsl-card { background: var(--is-surface-high); border: 1px solid var(--is-line); border-left: 4px solid var(--is-red);
+                border-radius: 8px; padding: 10px 12px; }
+    .gsl-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .gsl-card__name { font-size: 1.05rem; font-weight: 700; line-height: 1.15; }
+    .gsl-card__zeit { font-size: .72rem; color: var(--is-muted); font-variant-numeric: tabular-nums; flex: none; }
+    .gsl-card__adresse { font-size: .85rem; color: var(--is-muted); margin-top: 3px; }
+    .gsl-card__meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+    .gsl-chip { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 5px;
+                background: var(--is-surface); border: 1px solid var(--is-line); color: var(--is-text); }
+    .gsl-chip--prio { border: none; color: #fff; }
+    .gsl-chip--sektor { background: rgba(152,205,242,.14); border-color: rgba(152,205,242,.3); color: var(--is-blue); }
+    .gsl-chip--res { background: rgba(176,199,241,.12); border-color: rgba(176,199,241,.3); color: #b0c7f1; }
+    .gsl-card__warn { display: flex; align-items: center; gap: 5px; margin-top: 7px;
+                      font-size: .8rem; font-weight: 700; color: #ffb4ab; }
+    .gsl-card--erledigt { opacity: .55; border-left-color: var(--is-green); }
+    .gsl-card--erledigt .gsl-card__name { text-decoration: line-through; color: var(--is-muted); }
+    .gsl-leer { color: var(--is-muted); font-size: .9rem; padding: 4px 2px; }
+
+    .gsl-map { position: relative; min-height: 0; }
+    #gsl-karte { position: absolute; inset: 0; background: #111; }
+    .gsl-ov { position: absolute; z-index: 500; }
+    .gsl-glass { background: rgba(13,21,15,.82); backdrop-filter: blur(8px);
+                 border: 1px solid var(--is-line); border-radius: 12px; }
+    .gsl-ov-tr { top: 16px; right: 16px; display: flex; flex-direction: column; gap: 12px; width: 214px; }
+    .gsl-legende { padding: 12px 14px; }
+    .gsl-legende h4 { margin: 0 0 9px; font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--is-muted); }
+    .gsl-legende__row { display: flex; align-items: center; gap: 10px; font-size: .82rem; padding: 3px 0; }
+    .gsl-legende__dot { width: 13px; height: 13px; border-radius: 50%; flex: none; }
+    .gsl-wetter2 { padding: 12px 14px; }
+    .gsl-wetter2 h4 { margin: 0 0 6px; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--is-muted); }
+    .gsl-wetter2__row { display: flex; align-items: center; justify-content: space-between; }
+    .gsl-wetter2__temp { display: flex; align-items: center; gap: 8px; font-size: 1.35rem; font-weight: 700; }
+    .gsl-wetter2__wind { text-align: right; font-size: .8rem; color: var(--is-muted); }
+    .gsl-ticker { bottom: 16px; left: 16px; right: 16px; height: 46px; display: flex; align-items: center;
+                  padding: 0 14px; overflow: hidden; }
+    .gsl-ticker__tag { position: relative; z-index: 1; flex: none; background: var(--is-red); color: #fff;
+                       font-weight: 800; font-size: .72rem; letter-spacing: .06em; padding: 4px 9px;
+                       border-radius: 5px; margin-right: 16px; }
+    .gsl-ticker__view { flex: 1; overflow: hidden; }
+    .gsl-ticker__track { display: inline-flex; gap: 42px; padding-right: 42px; white-space: nowrap;
+                         animation: gsl-marquee 45s linear infinite; }
+    .gsl-ticker__item { font-size: .95rem; font-weight: 600; }
+    @keyframes gsl-marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+    @media (max-width: 1200px) {
+      .gsl-body { grid-template-columns: 42% 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -195,19 +290,167 @@
     }
   }, 1000);
 
+  // ── GSL-Dashboard (Großschadenslage-Wandmonitor) ──
+  var gslMap = null;
+  var gslMarkerLayer = null;
+
+  function gslZeit(iso) {
+    return iso ? new Date(iso).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" }) : "";
+  }
+
+  function gslCardHtml(s) {
+    var erledigt = s.gruppe === "erledigt";
+    var meta = [];
+    if (s.prio_letter) {
+      meta.push('<span class="gsl-chip gsl-chip--prio" style="background:' + s.prio_color + ';">' +
+                s.prio_letter + " · " + esc(s.prio_label) + "</span>");
+    }
+    if (s.sektor) { meta.push('<span class="gsl-chip gsl-chip--sektor">' + esc(s.sektor) + "</span>"); }
+    (s.res_labels || []).forEach(function (l) {
+      meta.push('<span class="gsl-chip gsl-chip--res">' + esc(l) + "</span>");
+    });
+    if ((!s.res_labels || !s.res_labels.length) && s.aktive_res > 0) {
+      meta.push('<span class="gsl-chip gsl-chip--res">' + s.aktive_res + " Ressource" + (s.aktive_res > 1 ? "n" : "") + "</span>");
+    }
+    var warn = (s.ueberfaellig_min != null)
+      ? '<div class="gsl-card__warn">⚠️ Lagemeldung überfällig – seit ' + s.ueberfaellig_min + " min</div>"
+      : "";
+    return '<div class="gsl-card' + (erledigt ? " gsl-card--erledigt" : "") + '"' +
+      (erledigt ? "" : ' style="border-left-color:' + s.prio_color + ';"') + ">" +
+      '<div class="gsl-card__top"><div class="gsl-card__name">' + esc(s.bezeichnung) +
+      (erledigt ? " ✓" : "") + "</div>" +
+      '<div class="gsl-card__zeit">' + gslZeit(s.zeit) + "</div></div>" +
+      (s.adresse ? '<div class="gsl-card__adresse">📍 ' + esc(s.adresse) + "</div>" : "") +
+      (meta.length ? '<div class="gsl-card__meta">' + meta.join("") + "</div>" : "") +
+      warn + "</div>";
+  }
+
+  function gslSpalteHtml(titel, sites) {
+    var cards = sites.length ? sites.map(gslCardHtml).join("") : '<div class="gsl-leer">–</div>';
+    return '<div class="gsl-spalte"><div class="gsl-spalte__titel">' + titel + " (" + sites.length + ")</div>" + cards + "</div>";
+  }
+
+  function gslSpaltenHtml(sites) {
+    var g = { eingegangen: [], in_arbeit: [], erledigt: [] };
+    (sites || []).forEach(function (s) { (g[s.gruppe] || g.in_arbeit).push(s); });
+    return gslSpalteHtml("Eingegangen", g.eingegangen) +
+           gslSpalteHtml("In Bearbeitung", g.in_arbeit) +
+           gslSpalteHtml("Erledigt", g.erledigt);
+  }
+
+  function gslKpiHtml(kpi) {
+    kpi = kpi || {};
+    function item(cap, val, cls) {
+      return '<div class="gsl-kpi__item"><span class="gsl-kpi__cap">' + cap +
+             '</span><span class="gsl-kpi__val ' + cls + '">' + (val || 0) + "</span></div>";
+    }
+    var sep = '<div class="gsl-kpi__sep"></div>';
+    return item("Total", kpi.total, "gsl-kpi__val--total") + sep +
+           item("Offen", kpi.eingegangen, "gsl-kpi__val--offen") + sep +
+           item("In Arbeit", kpi.in_arbeit, "gsl-kpi__val--arbeit") + sep +
+           item("Erledigt", kpi.erledigt, "gsl-kpi__val--erledigt") + sep +
+           item("Ressourcen", kpi.ressourcen, "gsl-kpi__val--res");
+  }
+
+  function gslLegendeHtml(sektoren) {
+    var rows =
+      '<div class="gsl-legende__row"><span class="gsl-legende__dot" style="background:#ef4444;"></span>Sofort</div>' +
+      '<div class="gsl-legende__row"><span class="gsl-legende__dot" style="background:#f97316;"></span>Dringend</div>' +
+      '<div class="gsl-legende__row"><span class="gsl-legende__dot" style="background:#eab308;"></span>Normal</div>' +
+      '<div class="gsl-legende__row"><span class="gsl-legende__dot" style="background:#4ade80;"></span>Erledigt</div>';
+    (sektoren || []).forEach(function (s) {
+      rows += '<div class="gsl-legende__row"><span class="gsl-legende__dot" style="background:' +
+              esc(s.color) + ';"></span>' + esc(s.name) + "</div>";
+    });
+    return '<div class="gsl-glass gsl-legende"><h4>Legende</h4>' + rows + "</div>";
+  }
+
+  function gslTickerHtml(ticker) {
+    if (!ticker || !ticker.length) { return ""; }
+    var items = ticker.map(function (t) {
+      return '<span class="gsl-ticker__item">+++ ' + esc(t) + " +++</span>";
+    }).join("");
+    // Track doppelt (in eigenem Clip-Container) fuer nahtlose -50%-Endlosschleife
+    return '<div class="gsl-ov gsl-glass gsl-ticker"><span class="gsl-ticker__tag">MELDUNGEN</span>' +
+      '<div class="gsl-ticker__view"><div class="gsl-ticker__track">' + items + items + "</div></div></div>";
+  }
+
+  function gslMarkerRefresh(sites, fit) {
+    if (!gslMap) { return; }
+    if (gslMarkerLayer) { gslMap.removeLayer(gslMarkerLayer); }
+    gslMarkerLayer = L.layerGroup();
+    var bounds = [];
+    (sites || []).forEach(function (s) {
+      if (s.lat == null || s.lng == null) { return; }
+      var col = s.gruppe === "erledigt" ? "#4ade80" : s.prio_color;
+      L.marker([s.lat, s.lng], {
+        interactive: false,
+        icon: L.divIcon({
+          className: "",
+          html: '<div style="background:' + col + ';width:26px;height:26px;border-radius:50%;display:flex;' +
+                'align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:12px;' +
+                'border:2px solid rgba(255,255,255,.6);box-shadow:0 1px 5px rgba(0,0,0,.5);">' +
+                (s.prio_letter || "") + "</div>",
+          iconSize: [26, 26], iconAnchor: [13, 13]
+        })
+      }).addTo(gslMarkerLayer);
+      bounds.push([s.lat, s.lng]);
+    });
+    gslMarkerLayer.addTo(gslMap);
+    if (fit && bounds.length) { gslMap.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 }); }
+  }
+
   function renderGsl(daten) {
     stopRotation();
-    karte = null; alarmBeginn = null;
+    karte = null; gslMap = null; gslMarkerLayer = null;
     var g = daten.gsl || {};
-    var beginn = g.beginn ? new Date(g.beginn).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-    var html = '<div class="is-alarm" style="background:' + '#7f1d1d;">' +
-      '<div class="is-alarm__kopf">' +
-      '<div><div class="is-alarm__stichwort">' + (g.uebung ? "ÜBUNG · " : "") + "GROSSSCHADENSLAGE</div>" +
-      '<div class="is-alarm__adresse">' + esc(g.name || "") + "</div>" +
-      (g.beschreibung ? '<div class="is-alarm__meldung">' + esc(g.beschreibung) + "</div>" : "") +
-      (beginn ? '<div style="margin-top:8px;color:#fecaca;">seit ' + beginn + " Uhr</div>" : "") +
+    alarmBeginn = g.beginn ? new Date(g.beginn).getTime() : null;
+
+    var html =
+      '<div class="gsl">' +
+      '<div class="gsl-titel"><div class="gsl-titel__ident">' +
+      '<div class="gsl-titel__icon">⚠️</div><div>' +
+      "<h1>" + (g.uebung ? '<span class="gsl-titel__ubung">ÜBUNG</span>' : "") + "Großschadenslage</h1>" +
+      '<div class="gsl-titel__name">' + esc(g.name || "") + "</div></div></div>" +
+      '<div class="gsl-titel__zeiten"><div class="gsl-titel__zblock">' +
+      '<span class="gsl-titel__zcap">Einsatzdauer</span>' +
+      '<span class="gsl-titel__zval" id="is-einsatzzeit">00:00</span></div></div></div>' +
+      '<div class="gsl-kpi" id="gsl-kpi">' + gslKpiHtml(g.kpi) + "</div>" +
+      '<div class="gsl-body">' +
+      '<div class="gsl-kanban"><div class="gsl-kanban__head">' +
+      "<h2>📋 Ereignis-Übersicht</h2>" +
+      '<span class="gsl-live"><span class="gsl-live__dot"></span><span class="gsl-live__txt">LIVE</span></span></div>' +
+      '<div class="gsl-spalten" id="gsl-spalten">' + gslSpaltenHtml(g.sites) + "</div></div>" +
+      '<div class="gsl-map"><div id="gsl-karte"></div>' +
+      '<div class="gsl-ov gsl-ov-tr">' + gslLegendeHtml(g.sektoren) +
+      '<div class="gsl-glass gsl-wetter2" id="gsl-wetter" style="display:none;"></div></div>' +
+      '<div id="gsl-ticker-wrap">' + gslTickerHtml(g.ticker) + "</div>" +
       "</div></div></div>";
     document.getElementById("is-inhalt").innerHTML = html;
+
+    gslMap = L.map("gsl-karte", {
+      zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
+      boxZoom: false, keyboard: false, touchZoom: false, attributionControl: false
+    });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(gslMap);
+    gslMap.setView([47.4652, 9.7503], 13);
+    gslMarkerRefresh(g.sites, true);
+    setTimeout(function () { if (gslMap) { gslMap.invalidateSize(); } }, 200);
+    gslWetterUebernehmen();
+  }
+
+  // Live-Update im gleichen GSL-Modus (Poll/WS): KPIs, Kanban, Ticker, Marker
+  // ohne die Karte neu aufzubauen (kein Neuladen der Kacheln, kein Zoom-Sprung).
+  function aktualisiereGsl(daten) {
+    var g = daten.gsl || {};
+    alarmBeginn = g.beginn ? new Date(g.beginn).getTime() : alarmBeginn;
+    var kpi = document.getElementById("gsl-kpi");
+    if (kpi) { kpi.innerHTML = gslKpiHtml(g.kpi); }
+    var sp = document.getElementById("gsl-spalten");
+    if (sp) { sp.innerHTML = gslSpaltenHtml(g.sites); }
+    var tk = document.getElementById("gsl-ticker-wrap");
+    if (tk) { tk.innerHTML = gslTickerHtml(g.ticker); }
+    gslMarkerRefresh(g.sites, false);
   }
 
   function renderRotation(urls) {
@@ -487,6 +730,8 @@
           if (daten.modus === "alarm") {
             aktualisiereFahrzeuge(daten.fahrzeuge);
             aktualisiereRsvp(daten.incident && daten.incident.rsvp);
+          } else if (daten.modus === "gsl") {
+            aktualisiereGsl(daten);
           }
           return;
         }
@@ -529,22 +774,41 @@
     80: "🌦️", 81: "🌧️", 82: "⛈️",
     85: "🌨️", 86: "❄️", 95: "⛈️", 96: "⛈️", 99: "⛈️"
   };
+  var letztesWetter = null;
   function wetterLaden() {
     fetch("/infoscreen/alarm/" + encodeURIComponent(TOKEN) + "/wetter.json")
       .then(function (r) { return r.json(); })
       .then(function (w) {
+        letztesWetter = (w && w.temp != null) ? w : null;
         var box = document.getElementById("is-wetter");
-        if (!box) { return; }
-        if (w && w.temp != null) {
-          var ico = WMO_ICON[w.code] || "🌡️";
-          box.innerHTML = '<span class="ico">' + ico + "</span><span>" + w.temp + "°C</span>" +
-            (w.wind != null ? '<span class="wind">' + w.wind + " km/h</span>" : "");
-          box.style.display = "flex";
-        } else {
-          box.style.display = "none";
+        if (box) {
+          if (letztesWetter) {
+            var ico = WMO_ICON[w.code] || "🌡️";
+            box.innerHTML = '<span class="ico">' + ico + "</span><span>" + w.temp + "°C</span>" +
+              (w.wind != null ? '<span class="wind">' + w.wind + " km/h</span>" : "");
+            box.style.display = "flex";
+          } else {
+            box.style.display = "none";
+          }
         }
+        gslWetterUebernehmen();
       })
       .catch(function () { /* Badge optional */ });
+  }
+
+  // Wetter-Overlay auf der GSL-Karte aus dem zuletzt geladenen Wetter fuellen
+  function gslWetterUebernehmen() {
+    var box = document.getElementById("gsl-wetter");
+    if (!box) { return; }
+    if (letztesWetter) {
+      var ico = WMO_ICON[letztesWetter.code] || "🌡️";
+      box.innerHTML = "<h4>Umweltbedingungen</h4>" +
+        '<div class="gsl-wetter2__row"><span class="gsl-wetter2__temp">' + ico + " " + letztesWetter.temp + "°C</span>" +
+        '<span class="gsl-wetter2__wind">' + (letztesWetter.wind != null ? "Wind<br>" + letztesWetter.wind + " km/h" : "") + "</span></div>";
+      box.style.display = "block";
+    } else {
+      box.style.display = "none";
+    }
   }
 
   aktualisieren();
