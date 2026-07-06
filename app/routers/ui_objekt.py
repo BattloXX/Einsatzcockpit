@@ -2242,6 +2242,18 @@ def _dok_zaehler(db: Session, objekt_id: int) -> dict[str, int]:
     }
 
 
+def _dok_gesamt(db: Session, objekt_id: int) -> int:
+    """Gesamtzahl der Dokumentseiten (auch unklassifizierte) fuer die Einsatzansicht."""
+    from sqlalchemy import func as _func
+
+    from app.models.objekt import ObjektDokumentSeite
+    return (
+        db.query(_func.count(ObjektDokumentSeite.id))
+        .filter(ObjektDokumentSeite.objekt_id == objekt_id)
+        .scalar()
+    ) or 0
+
+
 @router.get("/{objekt_id}/einsatz-fragment", response_class=HTMLResponse)
 def einsatz_fragment(
     objekt_id: int,
@@ -2256,6 +2268,7 @@ def einsatz_fragment(
     ctx = _detail_context(request, db, user, objekt)
     ctx["dokumentarten"] = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
     ctx["dok_zaehler"] = _dok_zaehler(db, objekt.id)
+    ctx["dok_gesamt"] = _dok_gesamt(db, objekt.id)
     ctx["kompakt"] = True
     return templates.TemplateResponse(request, "objekt/_einsatz_inhalt.html", ctx)
 
@@ -2293,6 +2306,7 @@ def einsatzansicht(
     ctx = _detail_context(request, db, user, objekt)
     ctx["dokumentarten"] = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
     ctx["dok_zaehler"] = dok_zaehler
+    ctx["dok_gesamt"] = _dok_gesamt(db, objekt.id)
     ctx["verknuepfungen"] = verknuepfungen
     ctx["incidents"] = incidents
     return templates.TemplateResponse(request, "objekt/einsatz.html", ctx)

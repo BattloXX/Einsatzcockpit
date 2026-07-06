@@ -93,7 +93,7 @@
 {% endif %}
 
 <!-- 6) Dokumente nach Art -->
-{% if dok_zaehler %}
+{% if dok_gesamt %}
 <div class="card" style="padding:14px;margin-bottom:12px;"
      x-data="{ q: '', treffer: [], geladen: false, laeuft: false,
                suchen() {
@@ -130,6 +130,13 @@
     </div>
   </template>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
+    <a href="/objekte/{{ objekt.id }}/dokumente/viewer" class="objekt-einsatz-kachel card" style="margin:0;">
+      <span style="font-size:1.3em;">📂</span>
+      <div>
+        <strong>Alle Dokumente ansehen</strong>
+        <div class="text-muted" style="font-size:0.8em;">{{ dok_gesamt }} Seiten im Viewer öffnen</div>
+      </div>
+    </a>
     {% for code, label in dokumentarten.items() %}
     {% if dok_zaehler.get(code, 0) > 0 %}
     <a href="/objekte/{{ objekt.id }}/dokumente/viewer?art={{ code }}" class="objekt-einsatz-kachel card" style="margin:0;">
