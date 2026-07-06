@@ -18,9 +18,9 @@
 
   {% if ki_analyse_laeuft %}
   <div class="alert alert--success"
-       hx-get="/objekte/{{ objekt.id }}/dokumente" hx-trigger="load delay:6s"
+       hx-get="/objekte/{{ objekt.id }}/dokumente?ki_warte={{ ki_warte or 1 }}" hx-trigger="load delay:4s"
        hx-target="#abschnitt-dokumente" hx-swap="innerHTML">
-    ✨ KI analysiert die unklassifizierten Seiten … die Vorschläge erscheinen gleich hier.
+    ✨ KI analysiert die unklassifizierten Seiten … die Vorschläge erscheinen automatisch hier (kein Neuladen nötig).
   </div>
   {% endif %}
 

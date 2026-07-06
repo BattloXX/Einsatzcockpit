@@ -44,6 +44,21 @@ def test_generierte_links():
     urls = [x["url"] for x in links]
     assert any("dgg.bam.de" in u and "UN1203" in u for u in urls)
     assert any("gestis" in u for u in urls)
+    assert any("ericards.net" in u and "unnumber=1203" in u for u in urls)
+
+
+def test_ericard_url_mit_hin_und_vierstellig():
+    from app.services.gefahrgut_service import ericard_url
+
+    # Gefahrnummer (Kemler = HIN) praezisiert die Karte
+    url = ericard_url("1203", "33")
+    assert url is not None
+    assert "unnumber=1203" in url and "hin=33" in url and "p_lang=3" in url
+    # UN < 1000 wird 4-stellig aufgefuellt (offizielles Format, z. B. Klasse 1)
+    assert "unnumber=0335" in (ericard_url("335") or "")
+    # X-Praefix der Gefahrnummer (reagiert gefaehrlich mit Wasser) bleibt erhalten
+    assert "hin=X423" in (ericard_url("1402", "X423") or "")
+    assert ericard_url("") is None
 
 
 def test_links_aus_form_und_validierung():

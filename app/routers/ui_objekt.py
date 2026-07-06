@@ -350,7 +350,9 @@ def gefahrgut_lookup(
         "gefahrnummer": (treffer or {}).get("gefahrnummer"),
         "klassifizierungscode": (treffer or {}).get("klassifizierungscode"),
         "verpackungsgruppe": (treffer or {}).get("verpackungsgruppe"),
-        "links": generierte_links(un, (treffer or {}).get("stoffname")),
+        "links": generierte_links(
+            un, (treffer or {}).get("stoffname"), (treffer or {}).get("gefahrnummer")
+        ),
     }
 
 

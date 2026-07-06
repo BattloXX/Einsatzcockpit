@@ -134,7 +134,9 @@ alembic upgrade head
 Für die **Gefahrgut-Anreicherung** (UN-Nummer → Stoffname/Klasse/Kemler) die vollständige offene
 BAM-CSV („Datenbank GEFAHRGUT", Lizenz dl-de/by-2.0) von OffeneDaten.de beziehen und nach
 `app/data/bam_gefahrgut.csv` legen (mitgeliefert ist nur ein kleiner Auszug). Ohne Datei bleibt die
-manuelle Link-Pflege aktiv. Für die dauerhaft kopierbaren Monitor-URLs muss `FERNET_KEY` gesetzt sein.
+manuelle Link-Pflege aktiv. Der **🚒 ERICard-Absprung** (CEFIC-Notfall-Interventionskarte) wird rein
+aus UN-Nummer + Gefahrnummer als Deep-Link erzeugt (`ericards.net`, deutsche Ansicht) und braucht
+keine lokale Datei — er funktioniert auch ohne die BAM-CSV, sobald eine UN-Nummer gepflegt ist. Für die dauerhaft kopierbaren Monitor-URLs muss `FERNET_KEY` gesetzt sein.
 
 Optionale `.env`-/SystemSettings-Parameter:
 

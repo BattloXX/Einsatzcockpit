@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ objekt.anzeige_nummer }} {{ objekt.name }} – {{ brand }}{% endblock %}
 {% block content %}
-<div class="page-content" x-data="{ tab: 'uebersicht' }">
+<div class="page-content"
+     x-data="{ tab: (new URLSearchParams(window.location.search).get('tab')) || 'uebersicht' }"
+     x-init="$nextTick(() => { if (tab === 'dokumente') $dispatch('objekt-tab-dokumente'); if (tab === 'karte') $dispatch('objekt-tab-karte'); })">
   <div class="page-header">
     <div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">

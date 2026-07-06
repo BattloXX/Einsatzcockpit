@@ -155,12 +155,23 @@ def dokumente_partial(
     _guard: None = Depends(require_objekt_enabled),
     art: str = "",
     suche: str = "",
+    ki_warte: int = 0,
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    return templates.TemplateResponse(
-        request, "objekt/_dokumente.html",
-        _galerie_context(request, db, user, objekt, art=art, suche=suche),
-    )
+    ctx = _galerie_context(request, db, user, objekt, art=art, suche=suche)
+    # KI-Analyse laeuft im Hintergrund: solange noch keine Vorschlaege da sind,
+    # weiter automatisch nachladen (kein F5). Nach ~3 min (45 x 4 s) aufgeben —
+    # ein Vision-Lauf ueber bis zu 20 Seiten kann laenger als eine Minute dauern.
+    if (
+        ki_warte
+        and ki_warte < 45
+        and ctx["ki_enabled"]
+        and not ctx["ki_vorschlaege"]
+        and ctx["unklassifiziert"] > 0
+    ):
+        ctx["ki_analyse_laeuft"] = True
+        ctx["ki_warte"] = ki_warte + 1
+    return templates.TemplateResponse(request, "objekt/_dokumente.html", ctx)
 
 
 @router.post("/objekte/{objekt_id}/dokumente/upload", response_class=HTMLResponse)
@@ -403,6 +414,11 @@ def dokumente_viewer(
     ctx = _galerie_context(request, db, user, objekt, art=art, suche=suche)
     seiten = ctx["seiten"]
     if not seiten:
+        # Filter/Suche ohne Treffer: Viewer mit Leer-Hinweis statt 404,
+        # damit Suchfeld und "Alle Dokumente" erreichbar bleiben.
+        if suche or art:
+            ctx["start_index"] = 0
+            return templates.TemplateResponse(request, "objekt/viewer.html", ctx)
         raise HTTPException(status_code=404, detail="Keine Seiten vorhanden")
     start_index = 0
     if seite:
@@ -570,6 +586,7 @@ def ki_analyse_starten(
                 entity_type="objekt", entity_id=objekt.id)
     db.commit()
     ctx["ki_analyse_laeuft"] = True
+    ctx["ki_warte"] = 1
     return templates.TemplateResponse(request, "objekt/_dokumente.html", ctx)
 
 
@@ -608,6 +625,19 @@ def _vorschlag_uebernehmen(db: Session, vorschlag, user: User) -> None:
     vorschlag.entschieden_von_id = user.id
     vorschlag.entschieden_am = datetime.now(UTC)
     dokumentarten = lade_auswahl(db, seite.org_id, AUSWAHL_DOKUMENTART)
+    # Uebernommene Klassifikation in den Volltext einfliessen lassen, damit sie
+    # in der Dokument- und Einsatzinfo-Suche gefunden wird (auch die Dokumentart-
+    # Bezeichnung, nicht nur Titel/Melderlinie).
+    klass_teile = [
+        dokumentarten.get(vorschlag.dokumentart or "", ""),
+        vorschlag.titel or "",
+        (f"Melderlinie {vorschlag.melderlinien}" if vorschlag.melderlinien else ""),
+    ]
+    klass_text = " ".join(teil for teil in klass_teile if teil).strip()
+    if klass_text:
+        bestehend = seite.volltext or ""
+        if klass_text not in bestehend:
+            seite.volltext = (klass_text + "\n" + bestehend).strip()[:100000]
     write_objekt_change(
         db, seite.objekt_id, seite.org_id, "dokumente", "ki_vorschlag_uebernommen",
         before=None,

@@ -125,10 +125,20 @@ async def analysiere_seite(seite: ObjektDokumentSeite, db: Session) -> ObjektSei
     from app.services.objekt_service import lade_auswahl
     dokumentarten = lade_auswahl(db, seite.org_id, "dokumentart")
 
+    # Neben dem Bild auch den je Seite extrahierten Volltext (PDF-Textlayer/OCR)
+    # mitgeben — verbessert die Klassifikation deutlich (Titel, Melderlinien, Stand).
+    user_prompt = "Klassifiziere diese Dokumentseite."
+    seiten_text = (seite.volltext or "").strip()
+    if seiten_text:
+        user_prompt += (
+            "\n\nExtrahierter Text dieser Seite (PDF-Textlayer/OCR, kann Fehler enthalten):\n"
+            + seiten_text[:4000]
+        )
+
     try:
         antwort = await complete_vision(
             _system_prompt(list(dokumentarten)),
-            "Klassifiziere diese Dokumentseite.",
+            user_prompt,
             [bild],
             org_id=seite.org_id,
         )

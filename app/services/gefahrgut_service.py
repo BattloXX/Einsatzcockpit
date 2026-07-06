@@ -96,10 +96,55 @@ def lookup_un(un: str | None) -> dict | None:
     return _lade_daten().get(key)
 
 
-def generierte_links(un: str | None, stoffname: str | None = None) -> list[dict]:
+def _un_vierstellig(un: str | None) -> str:
+    """UN-Nummer als 4-stellige Ziffernfolge (offizielles Format, z. B. UN 0335)."""
+    ziffern = re.sub(r"\D", "", str(un or ""))
+    if not ziffern:
+        return ""
+    return ziffern.zfill(4) if len(ziffern) < 4 else ziffern
+
+
+def _hin_norm(gefahrnummer: str | None) -> str:
+    """Gefahrnummer/Kemler als Hazard Identification Number (Ziffern, optional führendes X)."""
+    roh = re.sub(r"[^0-9Xx]", "", str(gefahrnummer or "")).upper()
+    # X darf nur am Anfang stehen (z. B. X423 = reagiert gefährlich mit Wasser)
+    if roh.startswith("X"):
+        return "X" + roh[1:].replace("X", "")
+    return roh.replace("X", "")
+
+
+def ericard_url(un: str | None, gefahrnummer: str | None = None) -> str | None:
+    """Deep-Link in die CEFIC-ERICards-Datenbank (deutsche Notfall-Interventionskarte).
+
+    Sprung direkt auf das Suchergebnis per UN-Nummer; die Gefahrnummer (Kemler = HIN)
+    präzisiert die Karte, falls eine UN-Nummer mehrere HIN besitzt. ERICards geben
+    Einsatzkräften die Sofortmaßnahmen beim Eintreffen (CEFIC, frei zugänglich).
+    """
+    un4 = _un_vierstellig(un)
+    if not un4:
+        return None
+    url = (
+        "https://www.ericards.net/psp/ericards.psp_search_result"
+        f"?p_lang=3&lang=3&unnumber={un4}&operators=AND"
+    )
+    hin = _hin_norm(gefahrnummer)
+    if hin:
+        url += f"&hin={hin}"
+    return url
+
+
+def generierte_links(
+    un: str | None,
+    stoffname: str | None = None,
+    gefahrnummer: str | None = None,
+) -> list[dict]:
     """Deep-Links auf öffentliche Nachschlagewerke (nicht gespeichert, immer erzeugbar)."""
     links: list[dict] = []
     key = _norm_un(un)
+    eri = ericard_url(un, gefahrnummer)
+    if eri:
+        # Zuerst: die einsatztaktisch wichtigste Karte (Sofortmaßnahmen für Einsatzkräfte)
+        links.append({"label": f"🚒 ERICard UN {_un_vierstellig(un)}", "url": eri})
     if key:
         links.append({
             "label": f"BAM Gefahrgut UN {key}",

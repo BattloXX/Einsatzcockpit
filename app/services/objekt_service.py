@@ -324,7 +324,11 @@ def gefahr_links(objekt_gefahr) -> list[dict]:  # type: ignore[no-untyped-def]
     stoff = objekt_gefahr.stoffname or (
         objekt_gefahr.gefahr.name if getattr(objekt_gefahr, "gefahr", None) else None
     )
-    _add(generierte_links(objekt_gefahr.un_nummer, stoff))
+    _add(generierte_links(
+        objekt_gefahr.un_nummer,
+        stoff,
+        getattr(objekt_gefahr, "gefahrnummer", None),
+    ))
     return out
 
 
