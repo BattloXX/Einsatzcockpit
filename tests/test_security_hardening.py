@@ -127,3 +127,47 @@ def test_fcm_token_delete_only_deletes_own_token(client, setup_db):
         assert still_there is not None, "Fremder User durfte Token eines anderen Users löschen"
     finally:
         db.close()
+
+
+# ── CSP: Alarm-/GSL-Wandmonitor darf Idle-URL-Rotation per <iframe> einbetten ──
+# Regression 2026-07-06: /infoscreen/alarm/ bekam die Default-CSP
+# (frame-src 'self' https://embed.windy.com) -> der konfigurierte Rotations-
+# Iframe (fremde HTTPS-Origin) wurde vom Browser blockiert. Middleware direkt
+# geprueft (deterministisch, unabhaengig vom Statuscode/Fehlerpfad).
+
+def _security_headers_for(path: str):
+    import asyncio
+
+    from starlette.requests import Request
+    from starlette.responses import PlainTextResponse
+
+    from app.middleware.security_headers import SecurityHeadersMiddleware
+
+    mw = SecurityHeadersMiddleware(app=lambda *a: None)
+    scope = {"type": "http", "method": "GET", "path": path, "headers": [],
+             "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+             "client": ("test", 1)}
+
+    async def _call_next(_req):
+        return PlainTextResponse("ok")
+
+    return asyncio.run(mw.dispatch(Request(scope), _call_next)).headers
+
+
+def test_alarm_infoscreen_csp_erlaubt_https_iframes():
+    h = _security_headers_for("/infoscreen/alarm/tok")
+    csp = h["content-security-policy"]
+    # ';' entscheidend: die Default-CSP 'https://embed.windy.com' enthaelt sonst
+    # 'https:' als Teilstring und wuerde faelschlich matchen.
+    assert "frame-src 'self' https:;" in csp
+    assert "frame-ancestors 'self'" in csp
+    assert h["x-frame-options"] == "SAMEORIGIN"
+
+
+def test_default_route_csp_bleibt_streng():
+    h = _security_headers_for("/login")
+    csp = h["content-security-policy"]
+    assert "frame-src 'self' https://embed.windy.com" in csp
+    assert "frame-src 'self' https:;" not in csp  # nicht global geoeffnet
+    assert "frame-ancestors 'none'" in csp
+    assert h["x-frame-options"] == "DENY"

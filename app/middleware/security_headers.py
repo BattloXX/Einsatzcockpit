@@ -34,6 +34,19 @@ _CSP_BASE = (
 _CSP_DEFAULT = _CSP_BASE + "; frame-ancestors 'none'"
 # Fuer Routen, die per <iframe>/<video> im eigenen UI eingebettet werden:
 _CSP_SAMEORIGIN_FRAME = _CSP_BASE + "; frame-ancestors 'self'"
+# Alarm-/GSL-Wandmonitor (/infoscreen/alarm/…): bettet die admin-konfigurierte
+# Idle-URL-Rotation (fremde HTTPS-Seiten) per <iframe> ein. Die Default-CSP
+# erlaubt in frame-src nur 'self' + windy → der Rotations-Iframe wurde vom
+# Browser blockiert (Vorfall 2026-07-06). Da der Monitor ein interner, vertrauens-
+# wuerdiger Wandbildschirm ist, wird frame-src auf beliebige HTTPS-Origins
+# geoeffnet. frame-ancestors 'self' erlaubt zugleich die Monitor-Matrix-Einbettung.
+_CSP_ALARM_INFOSCREEN = (
+    _CSP_BASE.replace(
+        "frame-src 'self' https://embed.windy.com",
+        "frame-src 'self' https:",
+    )
+    + "; frame-ancestors 'self'"
+)
 # Wetter-Infoscreen: standalone FullHD-Seite mit Tailwind CDN (Fonts sind lokal, siehe fonts.css)
 _CSP_INFOSCREEN = (
     "default-src 'self'; "
@@ -67,9 +80,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         embeddable = _is_embeddable_route(path)
         infoscreen = path.startswith("/wetter/infoscreen/")
+        alarm_infoscreen = path.startswith("/infoscreen/alarm/")
 
         if infoscreen:
             csp = _CSP_INFOSCREEN
+        elif alarm_infoscreen:
+            csp = _CSP_ALARM_INFOSCREEN
         elif embeddable:
             csp = _CSP_SAMEORIGIN_FRAME
         else:
@@ -84,7 +100,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "geolocation=(), microphone=(self), camera=(self), payment=()",
         )
 
-        if embeddable:
+        # Wandmonitor darf same-origin eingebettet werden (Monitor-Matrix) und
+        # setzt darum SAMEORIGIN — konsistent mit frame-ancestors 'self', statt
+        # eines widerspruechlichen DENY (das mit einem evtl. vom Reverse-Proxy
+        # gesetzten SAMEORIGIN zu "DENY, SAMEORIGIN" kombiniert wuerde).
+        if embeddable or alarm_infoscreen:
             response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         else:
             response.headers.setdefault("X-Frame-Options", "DENY")
