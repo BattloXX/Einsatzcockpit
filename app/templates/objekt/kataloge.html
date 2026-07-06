@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Objekt-Kataloge – {{ brand }}{% endblock %}
+{% block title %}Objekt-Katalogverwaltung – {{ brand }}{% endblock %}
 {% block content %}
 <div class="page-content" style="max-width:960px;" x-data="{ tab: '{{ aktiver_tab }}' }">
   <div class="page-header">
     <div>
-      <h1>Objekt-Kataloge</h1>
-      <p class="text-muted">Kategorien, Gefahren und Merkmale für die Objektverwaltung (je Organisation)</p>
+      <h1>Objektverwaltung – Katalogverwaltung</h1>
+      <p class="text-muted">Auswahllisten und Symbole der Objektverwaltung pflegen (je Organisation)</p>
     </div>
     <a href="/objekte/" class="btn btn--ghost">Zurück zu Objekten</a>
   </div>
@@ -17,11 +17,24 @@
   {% if request.query_params.get('error') == 'in_use' %}
   <div class="alert alert--danger">Eintrag wird noch verwendet und kann nicht gelöscht werden. Alternativ deaktivieren.</div>
   {% endif %}
+  {% if request.query_params.get('error') == 'system' %}
+  <div class="alert alert--danger">Standardeinträge können nicht gelöscht werden (nur umbenennen oder deaktivieren).</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'bild' %}
+  <div class="alert alert--danger">Symbolbild abgelehnt – nur SVG/PNG bis 512 KB sind erlaubt.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'bild_fehlt' %}
+  <div class="alert alert--danger">Für den Stil „Bild" muss eine SVG-/PNG-Datei hochgeladen werden.</div>
+  {% endif %}
 
-  <div style="display:flex;gap:8px;margin-bottom:16px;">
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
     <button type="button" class="btn" :class="tab === 'kategorien' ? 'btn--primary' : 'btn--ghost'" @click="tab = 'kategorien'">Kategorien</button>
     <button type="button" class="btn" :class="tab === 'gefahren' ? 'btn--primary' : 'btn--ghost'" @click="tab = 'gefahren'">Gefahren</button>
     <button type="button" class="btn" :class="tab === 'merkmale' ? 'btn--primary' : 'btn--ghost'" @click="tab = 'merkmale'">Merkmale</button>
+    {% for typ in auswahl_typen %}
+    <button type="button" class="btn" :class="tab === '{{ typ }}' ? 'btn--primary' : 'btn--ghost'" @click="tab = '{{ typ }}'">{{ auswahl_labels[typ] }}</button>
+    {% endfor %}
+    <button type="button" class="btn" :class="tab === 'symbole' ? 'btn--primary' : 'btn--ghost'" @click="tab = 'symbole'">Karten-Symbole</button>
   </div>
 
   <!-- ── Kategorien ── -->
@@ -116,7 +129,193 @@
       </tbody>
     </table>
   </div>
+
+  <!-- ── Auswahllisten: Kontaktarten / Dokumentarten / Piktogramme ── -->
+  {% for typ in auswahl_typen %}
+  <div x-show="tab === '{{ typ }}'" x-cloak>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap;">
+      <p class="text-muted" style="margin:0;">
+        {% if typ == 'kontaktart' %}Rollen für Objekt-Ansprechpartner.
+        {% elif typ == 'dokumentart' %}Kategorien für hochgeladene Dokumentseiten (auch von der KI-Klassifikation genutzt).
+        {% else %}Piktogramme für den Gefahren-Katalog.{% endif %}
+      </p>
+      <button class="btn btn--primary"
+              onclick="openNewAuswahl('{{ typ }}', '{{ auswahl_labels[typ] }}', {{ 'true' if typ == 'piktogramm' else 'false' }})">+ Eintrag</button>
+    </div>
+    <table class="table-admin">
+      <thead><tr><th>Sort.</th>{% if typ == 'piktogramm' %}<th>Icon</th>{% endif %}<th>Name</th><th>Code</th><th>Status</th><th>Verwendet</th><th>Aktionen</th></tr></thead>
+      <tbody>
+        {% for e in auswahl[typ] %}
+        {% set count = auswahl_verwendung[typ].get(e.code, 0) %}
+        <tr>
+          <td>{{ e.sort }}</td>
+          {% if typ == 'piktogramm' %}<td style="font-size:1.2em;">{{ e.icon or '–' }}</td>{% endif %}
+          <td><strong>{{ e.name }}</strong>{% if e.system %} <span class="badge-pill badge-pill--gray" title="Standardeintrag – Code fix, nicht löschbar">🔒</span>{% endif %}</td>
+          <td><code>{{ e.code }}</code></td>
+          <td>{% if e.aktiv %}<span class="badge-pill badge-pill--green">aktiv</span>{% else %}<span class="badge-pill badge-pill--gray">inaktiv</span>{% endif %}</td>
+          <td>{% if count > 0 %}<span class="badge-pill badge-pill--green">{{ count }}</span>{% else %}<span class="text-muted">–</span>{% endif %}</td>
+          <td>
+            <button class="btn btn--ghost btn--xs"
+                    onclick="openEditAuswahl('{{ typ }}', {{ e.id }}, '{{ e.name|replace("'","\\'")|e }}', '{{ e.icon or '' }}', {{ e.sort }}, {{ e.aktiv|lower }}, {{ e.system|lower }}, {{ 'true' if typ == 'piktogramm' else 'false' }})">Bearbeiten</button>
+            {% if not e.system %}
+            <form method="post" action="/objekte/kataloge/auswahl/{{ typ }}/{{ e.id }}/loeschen" style="display:inline"
+                  onsubmit="return confirm('Eintrag {{ e.name }} löschen?')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+
+  {# Server-seitige Symbolvorschau (gleiche .oks-Klassen wie auf der Karte) #}
+  {% macro symbolpreview(stil, text, bild_url) %}
+    <span class="oks-wrap" style="display:inline-flex;">
+    {%- if stil == 'bild' and bild_url -%}<span class="oks oks--bild"><img src="{{ bild_url }}" alt=""></span>
+    {%- elif stil == 'dreieck' -%}<span class="oks oks--dreieck"><span>{{ text }}</span></span>
+    {%- elif stil == 'hydrant' -%}<span class="oks oks--hydrant">{{ text }}</span>
+    {%- elif stil == 'pfeil-voll' -%}<span class="oks oks--pfeil oks--pfeil-voll">{{ text }}</span>
+    {%- elif stil == 'pfeil-leer' -%}<span class="oks oks--pfeil oks--pfeil-leer">{{ text }}</span>
+    {%- elif stil == 'gruen' -%}<span class="oks oks--box oks--gruen">{{ text }}</span>
+    {%- elif stil == 'rot' -%}<span class="oks oks--box oks--rot">{{ text }}</span>
+    {%- else -%}<span class="oks oks--box">{{ text }}</span>
+    {%- endif -%}
+    </span>
+  {% endmacro %}
+
+  <!-- ── Karten-Symbole (mit Bild-Upload) ── -->
+  <div x-show="tab === 'symbole'" x-cloak>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap;">
+      <p class="text-muted" style="margin:0;">Symbole der Objekt-Lagekarte. Stil „Bild" erlaubt eigene SVG-/PNG-Symbole (bis 512 KB).</p>
+      <button class="btn btn--primary" onclick="openNewSymbol()">+ Symbol</button>
+    </div>
+    <table class="table-admin">
+      <thead><tr><th>Sort.</th><th>Vorschau</th><th>Name</th><th>Code</th><th>Stil</th><th>Status</th><th>Verwendet</th><th>Aktionen</th></tr></thead>
+      <tbody>
+        {% for s in symbole %}
+        {% set count = symbol_verwendung.get(s.code, 0) %}
+        <tr>
+          <td>{{ s.sort }}</td>
+          <td>{{ symbolpreview(s.stil, s.text or '', '/objekt-medien/symbol/' ~ s.id if s.bild_pfad else '') }}</td>
+          <td><strong>{{ s.name }}</strong>{% if s.system %} <span class="badge-pill badge-pill--gray" title="Standardsymbol – Code fix, nicht löschbar">🔒</span>{% endif %}</td>
+          <td><code>{{ s.code }}</code></td>
+          <td>{{ s.stil }}</td>
+          <td>{% if s.aktiv %}<span class="badge-pill badge-pill--green">aktiv</span>{% else %}<span class="badge-pill badge-pill--gray">inaktiv</span>{% endif %}</td>
+          <td>{% if count > 0 %}<span class="badge-pill badge-pill--green">{{ count }}</span>{% else %}<span class="text-muted">–</span>{% endif %}</td>
+          <td>
+            <button class="btn btn--ghost btn--xs"
+                    onclick="openEditSymbol({{ s.id }}, '{{ s.name|replace("'","\\'")|e }}', '{{ s.stil }}', '{{ (s.text or '')|replace("'","\\'")|e }}', {{ s.sort }}, {{ s.aktiv|lower }}, {{ s.system|lower }})">Bearbeiten</button>
+            {% if not s.system %}
+            <form method="post" action="/objekte/kataloge/symbole/{{ s.id }}/loeschen" style="display:inline"
+                  onsubmit="return confirm('Symbol {{ s.name }} löschen?')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+
+<!-- Modale: Symbol (neu/bearbeiten) -->
+<dialog class="modal" id="symbolModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3 id="sy_titel">Neues Symbol</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" id="symbolForm" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div style="display:flex;gap:14px;align-items:flex-start;">
+          <div style="flex:1;min-width:0;">
+            <div class="form-group"><label class="form-label">Name</label>
+              <input type="text" name="name" id="sy_name" class="form-input" required maxlength="120"></div>
+            <div class="form-group"><label class="form-label">Stil</label>
+              <select name="stil" id="sy_stil" class="form-input" onchange="symbolStilChanged()">
+                {% for st in symbol_stile %}<option value="{{ st }}">{{ st }}</option>{% endfor %}
+              </select></div>
+            <div class="form-group" id="sy_text_group"><label class="form-label">Text / Kürzel (max. 12)</label>
+              <input type="text" name="text" id="sy_text" class="form-input" maxlength="12" placeholder="z. B. FSD"
+                     oninput="updateSymbolPreview()"></div>
+            <div class="form-group" id="sy_bild_group"><label class="form-label">Symbolbild (SVG/PNG, max. 512 KB)</label>
+              <input type="file" name="bild" id="sy_bild" class="form-input" accept=".svg,.png,image/svg+xml,image/png"
+                     onchange="symbolBildChanged(this)">
+              <p class="form-hint" id="sy_bild_hint" style="display:none;">Vorhandenes Bild bleibt erhalten, wenn keine neue Datei gewählt wird.</p></div>
+            <div class="form-group"><label class="form-label">Sortierung</label>
+              <input type="number" name="sort" id="sy_sort" class="form-input" value="0"></div>
+            <div class="form-group" id="sy_aktiv_group">
+              <label class="checkbox-label"><input type="checkbox" name="aktiv" value="1" id="sy_aktiv"> Aktiv</label>
+            </div>
+            <p class="form-hint" id="sy_system_hint" style="display:none;">Standardsymbol: der Code bleibt fix und das Symbol ist immer aktiv.</p>
+          </div>
+          <div style="width:96px;text-align:center;">
+            <label class="form-label">Vorschau</label>
+            <div id="sy_preview" style="display:flex;align-items:center;justify-content:center;min-height:60px;background:var(--surface-low);border:1px solid var(--border);border-radius:8px;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- Modale: generische Auswahlliste (Kontaktart/Dokumentart/Piktogramm) -->
+<dialog class="modal" id="newAuswahlModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3 id="na_titel">Neuer Eintrag</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" id="newAuswahlForm">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Name</label>
+          <input type="text" name="name" id="na_name" class="form-input" required maxlength="120"></div>
+        <div class="form-group" id="na_icon_group"><label class="form-label">Icon (Emoji)</label>
+          <input type="text" name="icon" id="na_icon" class="form-input" maxlength="40" placeholder="💥"></div>
+        <div class="form-group"><label class="form-label">Sortierung</label>
+          <input type="number" name="sort" class="form-input" value="0"></div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog class="modal" id="editAuswahlModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Eintrag bearbeiten</h3>
+      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+    <form method="post" id="editAuswahlForm">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="modal__body">
+        <div class="form-group"><label class="form-label">Name</label>
+          <input type="text" name="name" id="ea_name" class="form-input" required maxlength="120"></div>
+        <div class="form-group" id="ea_icon_group"><label class="form-label">Icon (Emoji)</label>
+          <input type="text" name="icon" id="ea_icon" class="form-input" maxlength="40"></div>
+        <div class="form-group"><label class="form-label">Sortierung</label>
+          <input type="number" name="sort" id="ea_sort" class="form-input" value="0"></div>
+        <div class="form-group" id="ea_aktiv_group">
+          <label class="checkbox-label"><input type="checkbox" name="aktiv" value="1" id="ea_aktiv"> Aktiv</label>
+        </div>
+        <p class="form-hint" id="ea_system_hint" style="display:none;">Standardeintrag: der Code bleibt fix und der Eintrag ist immer aktiv.</p>
+      </div>
+      <div class="modal__footer">
+        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </form>
+  </div>
+</dialog>
 
 <!-- Modale: Kategorie -->
 <dialog class="modal" id="newKatModal">
@@ -290,6 +489,94 @@ function openEditMerk(id, name, icon, sort, aktiv) {
   document.getElementById('em_aktiv').checked = aktiv === true || aktiv === 'true';
   document.getElementById('editMerkForm').action = `/objekte/kataloge/merkmale/${id}/edit`;
   document.getElementById('editMerkModal').showModal();
+}
+function openNewAuswahl(typ, label, mitIcon) {
+  document.getElementById('na_titel').textContent = 'Neu: ' + label.replace(/n$/, '');
+  document.getElementById('na_name').value = '';
+  document.getElementById('na_icon').value = '';
+  document.getElementById('na_icon_group').style.display = mitIcon ? '' : 'none';
+  document.getElementById('newAuswahlForm').action = `/objekte/kataloge/auswahl/${typ}/neu`;
+  document.getElementById('newAuswahlModal').showModal();
+}
+function openEditAuswahl(typ, id, name, icon, sort, aktiv, system, mitIcon) {
+  document.getElementById('ea_name').value = name;
+  document.getElementById('ea_icon').value = icon;
+  document.getElementById('ea_sort').value = sort;
+  document.getElementById('ea_aktiv').checked = aktiv === true || aktiv === 'true';
+  document.getElementById('ea_icon_group').style.display = mitIcon ? '' : 'none';
+  var ist_system = system === true || system === 'true';
+  // Standardeintraege bleiben immer aktiv (Server erzwingt das ebenfalls)
+  document.getElementById('ea_aktiv_group').style.display = ist_system ? 'none' : '';
+  document.getElementById('ea_system_hint').style.display = ist_system ? '' : 'none';
+  document.getElementById('editAuswahlForm').action = `/objekte/kataloge/auswahl/${typ}/${id}/edit`;
+  document.getElementById('editAuswahlModal').showModal();
+}
+
+// ── Karten-Symbole ──
+function renderSymbolMarkup(stil, text, bildUrl) {
+  var t = (text || '').replace(/</g, '&lt;');
+  if (stil === 'bild') {
+    return bildUrl
+      ? '<span class="oks oks--bild"><img src="' + bildUrl + '" alt="" style="max-width:44px;max-height:44px;"></span>'
+      : '<span class="text-muted" style="font-size:.8em;">kein Bild</span>';
+  }
+  if (stil === 'dreieck') { return '<span class="oks oks--dreieck"><span>' + t + '</span></span>'; }
+  if (stil === 'hydrant') { return '<span class="oks oks--hydrant">' + t + '</span>'; }
+  if (stil === 'pfeil-voll') { return '<span class="oks oks--pfeil oks--pfeil-voll">' + t + '</span>'; }
+  if (stil === 'pfeil-leer') { return '<span class="oks oks--pfeil oks--pfeil-leer">' + t + '</span>'; }
+  if (stil === 'gruen') { return '<span class="oks oks--box oks--gruen">' + t + '</span>'; }
+  if (stil === 'rot') { return '<span class="oks oks--box oks--rot">' + t + '</span>'; }
+  return '<span class="oks oks--box">' + t + '</span>';
+}
+var _symBildUrl = null;
+function updateSymbolPreview() {
+  var stil = document.getElementById('sy_stil').value;
+  var text = document.getElementById('sy_text').value;
+  document.getElementById('sy_preview').innerHTML =
+    '<span class="oks-wrap" style="display:inline-flex;">' + renderSymbolMarkup(stil, text, _symBildUrl) + '</span>';
+}
+function symbolStilChanged() {
+  var stil = document.getElementById('sy_stil').value;
+  document.getElementById('sy_text_group').style.display = stil === 'bild' ? 'none' : '';
+  document.getElementById('sy_bild_group').style.display = stil === 'bild' ? '' : 'none';
+  updateSymbolPreview();
+}
+function symbolBildChanged(input) {
+  if (input.files && input.files[0]) { _symBildUrl = URL.createObjectURL(input.files[0]); }
+  updateSymbolPreview();
+}
+function openNewSymbol() {
+  document.getElementById('sy_titel').textContent = 'Neues Symbol';
+  document.getElementById('symbolForm').action = '/objekte/kataloge/symbole/neu';
+  document.getElementById('sy_name').value = '';
+  document.getElementById('sy_stil').value = 'box';
+  document.getElementById('sy_text').value = '';
+  document.getElementById('sy_bild').value = '';
+  document.getElementById('sy_sort').value = 0;
+  document.getElementById('sy_aktiv').checked = true;
+  document.getElementById('sy_aktiv_group').style.display = '';
+  document.getElementById('sy_system_hint').style.display = 'none';
+  document.getElementById('sy_bild_hint').style.display = 'none';
+  _symBildUrl = null;
+  symbolStilChanged();
+  document.getElementById('symbolModal').showModal();
+}
+function openEditSymbol(id, name, stil, text, sort, aktiv, system) {
+  document.getElementById('sy_titel').textContent = 'Symbol bearbeiten';
+  document.getElementById('symbolForm').action = '/objekte/kataloge/symbole/' + id + '/edit';
+  document.getElementById('sy_name').value = name;
+  document.getElementById('sy_stil').value = stil;
+  document.getElementById('sy_text').value = text;
+  document.getElementById('sy_bild').value = '';
+  document.getElementById('sy_sort').value = sort;
+  var ist_system = system === true || system === 'true';
+  document.getElementById('sy_aktiv').checked = aktiv === true || aktiv === 'true';
+  document.getElementById('sy_aktiv_group').style.display = ist_system ? 'none' : '';
+  document.getElementById('sy_system_hint').style.display = ist_system ? '' : 'none';
+  document.getElementById('sy_bild_hint').style.display = stil === 'bild' ? '' : 'none';
+  _symBildUrl = (stil === 'bild') ? ('/objekt-medien/symbol/' + id) : null;
+  symbolStilChanged();
+  document.getElementById('symbolModal').showModal();
 }
 </script>
 {% endblock %}

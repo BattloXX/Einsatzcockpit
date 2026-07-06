@@ -1523,6 +1523,12 @@ button.htmx-request,
 .objekt-abschnitt-nav { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 80px; }
 .objekt-abschnitt-nav a { padding: 6px 8px; border-radius: 6px; text-decoration: none; color: inherit; font-size: .9em; }
 .objekt-abschnitt-nav a:hover { background: rgba(255, 255, 255, .06); }
+/* Detail-Tabs (Übersicht / Lagekarte / Dokumente) — auf allen Viewports */
+.objekt-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.objekt-tabs__btn { padding: 10px 16px; border: none; background: transparent; color: var(--text-muted); font-size: .92rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s; }
+.objekt-tabs__btn:hover { color: var(--text); }
+.objekt-tabs__btn.is-active { color: var(--red); border-bottom-color: var(--red); }
+.objekt-tabs__badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #fff; font-size: .7rem; font-weight: 700; }
 .objekt-bma-card { border-left: 4px solid #f59e0b; }
 .objekt-protokoll { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
 .objekt-protokoll__row { border-left: 2px solid var(--border); padding-left: 10px; }
@@ -1670,6 +1676,8 @@ button.htmx-request,
 .oks--pfeil { font-size: 20px; line-height: 1; }
 .oks--pfeil-voll { color: #b71921; }
 .oks--pfeil-leer { color: #f87171; opacity: .75; }
+.oks--bild { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; }
+.oks--bild img { max-width: 28px; max-height: 28px; display: block; }
 .oks__label {
   margin-top: 1px; background: rgba(0, 0, 0, .65); color: #fff; font-size: 9px;
   padding: 0 4px; border-radius: 3px; white-space: nowrap; max-width: 140px;

@@ -15,7 +15,6 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.models.objekt import (
-    DOKUMENTARTEN,
     KI_VORSCHLAG_OFFEN,
     ObjektDokumentSeite,
     ObjektSeiteKiVorschlag,
@@ -23,19 +22,22 @@ from app.models.objekt import (
 
 logger = logging.getLogger("einsatzleiter.objekt_ki")
 
-_SYSTEM_PROMPT = (
-    "Du bist ein Dokumenten-Klassifizierer der Feuerwehr. Du siehst eine Seite "
-    "aus den Einsatzunterlagen eines Objekts (Betrieb/Wohnanlage). "
-    "Klassifiziere die Seite und antworte AUSSCHLIESSLICH mit einem JSON-Objekt "
-    "ohne Markdown: {\"dokumentart\": <code>, \"titel\": <string|null>, "
-    "\"melderlinien\": <string|null>, \"stand\": <YYYY-MM-DD|null>, "
-    "\"begruendung\": <string>}. "
-    "Erlaubte dokumentart-Codes: " + ", ".join(DOKUMENTARTEN) + ". "
-    "melderlinien: nur wenn eindeutig BMA-Melderlinien-Nummern erkennbar sind "
-    "(kommagetrennt, z. B. '12, 13'). titel: kurzer sprechender Titel "
-    "(z. B. 'Melderplan EG Nord'). stand: Datum auf der Seite, falls vorhanden. "
-    "Wenn unsicher: dokumentart null lassen und das in der begruendung sagen."
-)
+
+def _system_prompt(erlaubte_codes: list[str]) -> str:
+    """Baut den System-Prompt mit den org-spezifischen Dokumentart-Codes."""
+    return (
+        "Du bist ein Dokumenten-Klassifizierer der Feuerwehr. Du siehst eine Seite "
+        "aus den Einsatzunterlagen eines Objekts (Betrieb/Wohnanlage). "
+        "Klassifiziere die Seite und antworte AUSSCHLIESSLICH mit einem JSON-Objekt "
+        "ohne Markdown: {\"dokumentart\": <code>, \"titel\": <string|null>, "
+        "\"melderlinien\": <string|null>, \"stand\": <YYYY-MM-DD|null>, "
+        "\"begruendung\": <string>}. "
+        "Erlaubte dokumentart-Codes: " + ", ".join(erlaubte_codes) + ". "
+        "melderlinien: nur wenn eindeutig BMA-Melderlinien-Nummern erkennbar sind "
+        "(kommagetrennt, z. B. '12, 13'). titel: kurzer sprechender Titel "
+        "(z. B. 'Melderplan EG Nord'). stand: Datum auf der Seite, falls vorhanden. "
+        "Wenn unsicher: dokumentart null lassen und das in der begruendung sagen."
+    )
 
 
 def ki_klassifikation_enabled(org_id: int | None, db: Session) -> bool:
@@ -55,8 +57,8 @@ def ki_klassifikation_enabled(org_id: int | None, db: Session) -> bool:
     return bool(org_s and org_s.objekt_ki_klassifikation_enabled)
 
 
-def _parse_antwort(text: str) -> dict | None:
-    """Parst die JSON-Antwort; None bei ungueltigem JSON/Codes."""
+def _parse_antwort(text: str, erlaubte_codes: set[str]) -> dict | None:
+    """Parst die JSON-Antwort; None bei ungueltigem JSON. Unbekannte Codes → None."""
     try:
         roh = text.strip()
         if roh.startswith("```"):
@@ -69,7 +71,7 @@ def _parse_antwort(text: str) -> dict | None:
     if not isinstance(daten, dict):
         return None
     dokumentart = daten.get("dokumentart")
-    if dokumentart is not None and dokumentart not in DOKUMENTARTEN:
+    if dokumentart is not None and dokumentart not in erlaubte_codes:
         dokumentart = None
     stand = None
     if daten.get("stand"):
@@ -120,9 +122,12 @@ async def analysiere_seite(seite: ObjektDokumentSeite, db: Session) -> ObjektSei
     except Exception:
         pass
 
+    from app.services.objekt_service import lade_auswahl
+    dokumentarten = lade_auswahl(db, seite.org_id, "dokumentart")
+
     try:
         antwort = await complete_vision(
-            _SYSTEM_PROMPT,
+            _system_prompt(list(dokumentarten)),
             "Klassifiziere diese Dokumentseite.",
             [bild],
             org_id=seite.org_id,
@@ -131,7 +136,7 @@ async def analysiere_seite(seite: ObjektDokumentSeite, db: Session) -> ObjektSei
         logger.warning("KI-Klassifizierung fehlgeschlagen (Seite %d): %s", seite.id, exc)
         return None
 
-    geparst = _parse_antwort(antwort)
+    geparst = _parse_antwort(antwort, set(dokumentarten))
     if geparst is None:
         logger.warning("KI-Antwort unparsebar (Seite %d): %.200s", seite.id, antwort)
         return None

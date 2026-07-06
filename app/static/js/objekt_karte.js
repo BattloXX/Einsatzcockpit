@@ -32,11 +32,34 @@
     hydrant_unterflur: { text: "UH",   stil: "hydrant" }
   };
 
+  // Org-Symbolkatalog (aus /objekte/karten-symbole.json) in die SYMBOLE-Map mergen.
+  // Eingebaute Defaults bleiben als Fallback erhalten.
+  function setObjektSymbole(liste) {
+    (liste || []).forEach(function (s) {
+      if (!s || !s.code) { return; }
+      SYMBOLE[s.code] = { text: s.text || "", stil: s.stil || "box", bild: s.bild || null };
+    });
+  }
+  window.setObjektSymbole = setObjektSymbole;
+
+  var _katalogGeladen = null;
+  function ladeObjektSymbole(url) {
+    if (_katalogGeladen) { return _katalogGeladen; }
+    _katalogGeladen = fetch(url || "/objekte/karten-symbole.json")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && d.symbole) { setObjektSymbole(d.symbole); } })
+      .catch(function () { /* Fallback: eingebaute SYMBOLE */ });
+    return _katalogGeladen;
+  }
+  window.ladeObjektSymbole = ladeObjektSymbole;
+
   function objektSymbolHtml(typ, label) {
     // Unbekannte Typen (z. B. aus EUS-Import): Typ-Kuerzel statt "?" anzeigen
     var s = SYMBOLE[typ] || { text: String(typ || "?").substring(0, 4).toUpperCase(), stil: "box" };
     var inner;
-    if (s.stil === "dreieck") {
+    if (s.stil === "bild" && s.bild) {
+      inner = '<div class="oks oks--bild"><img src="' + s.bild + '" alt="" draggable="false"></div>';
+    } else if (s.stil === "dreieck") {
       inner = '<div class="oks oks--dreieck"><span>' + s.text + "</span></div>";
     } else if (s.stil === "hydrant") {
       inner = '<div class="oks oks--hydrant">' + s.text + "</div>";
@@ -164,7 +187,9 @@
       layerById[e.id] = layer;
     }
 
-    fetch(apiUrl("/objekte.json"))
+    // Erst den Org-Symbolkatalog laden (auch Bildsymbole), dann Marker rendern.
+    ladeObjektSymbole(opts.symbolKatalogUrl)
+      .then(function () { return fetch(apiUrl("/objekte.json")); })
       .then(function (r) { return r.json(); })
       .then(function (daten) {
         var o = daten.objekt;

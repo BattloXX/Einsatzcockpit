@@ -22,13 +22,11 @@ from sqlalchemy.orm import Session
 from app.core.templating import templates
 from app.models.master import FireDept
 from app.models.objekt import (
-    DOKUMENTARTEN,
-    GEFAHR_PIKTOGRAMME,
-    KONTAKT_ARTEN,
     OBJEKT_SYMBOL_TYPEN,
     Objekt,
     ObjektDokumentSeite,
 )
+from app.services.objekt_service import lade_auswahl
 
 logger = logging.getLogger("einsatzleiter.objekt_pdf")
 
@@ -105,8 +103,21 @@ def render_objektblatt_pdf(
         f"{base_url.rstrip('/')}/objekte/{objekt.id}/einsatz", druck=True
     ) if base_url else None
 
+    # Org-spezifische Auswahllisten/Symbole fuer die Label-Ausgabe (Fallback = Konstante)
+    from sqlalchemy.orm import object_session
+    _db = object_session(objekt)
+    if _db is not None:
+        from app.services.objekt_symbol_service import lade_symbol_labels
+        gefahr_piktogramme = lade_auswahl(_db, objekt.org_id, "piktogramm")
+        kontakt_arten = lade_auswahl(_db, objekt.org_id, "kontaktart")
+        symbol_labels = lade_symbol_labels(_db, objekt.org_id)
+    else:
+        from app.models.objekt import GEFAHR_PIKTOGRAMME, KONTAKT_ARTEN
+        gefahr_piktogramme, kontakt_arten = GEFAHR_PIKTOGRAMME, KONTAKT_ARTEN
+        symbol_labels = OBJEKT_SYMBOL_TYPEN
+
     symbol_legende = [
-        (OBJEKT_SYMBOL_TYPEN.get(k.typ, k.typ), k.label)
+        (symbol_labels.get(k.typ, k.typ), k.label)
         for k in objekt.karten_objekte
         if k.lat is not None or k.geometry_json
     ]
@@ -119,8 +130,8 @@ def render_objektblatt_pdf(
         now=datetime.now(UTC),
         karte_datauri=karte_datauri,
         qr_datauri=qr_datauri,
-        gefahr_piktogramme=GEFAHR_PIKTOGRAMME,
-        kontakt_arten=KONTAKT_ARTEN,
+        gefahr_piktogramme=gefahr_piktogramme,
+        kontakt_arten=kontakt_arten,
         symbol_legende=symbol_legende,
         mit_hinweisen=mit_hinweisen,
         erstellt_str=format_local_datetime(objekt.erstellt_am, org),
@@ -209,7 +220,6 @@ def sammelmappe(
 
 
 __all__ = [
-    "DOKUMENTARTEN",
     "objektblatt_mit_anhang",
     "render_objekt_map_png",
     "render_objektblatt_pdf",

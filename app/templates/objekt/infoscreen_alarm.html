@@ -208,6 +208,8 @@
     fetch("/infoscreen/alarm/" + encodeURIComponent(TOKEN) + "/daten")
       .then(function (r) { return r.json(); })
       .then(function (daten) {
+        // Org-Symbolkatalog (inkl. eigener Bildsymbole) in die Renderer-Map spielen
+        if (daten.symbole && window.setObjektSymbole) { window.setObjektSymbole(daten.symbole); }
         var incId = daten.incident ? daten.incident.id : null;
         if (daten.modus === letzterModus && incId === letzteIncidentId && daten.modus === "alarm") {
           return; // Alarmansicht steht schon — Karte nicht neu aufbauen

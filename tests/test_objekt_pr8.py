@@ -24,7 +24,10 @@ from app.models.objekt import (
     ObjektDokumentSeite,
     ObjektSeiteKiVorschlag,
 )
+from app.models.objekt import DOKUMENTARTEN
 from app.services.objekt_ki_service import _parse_antwort, ki_klassifikation_enabled
+
+_CODES = set(DOKUMENTARTEN)
 
 
 # ── Antwort-Parser ────────────────────────────────────────────────────────────
@@ -32,7 +35,7 @@ from app.services.objekt_ki_service import _parse_antwort, ki_klassifikation_ena
 def test_parse_gueltiges_json():
     antwort = ('{"dokumentart": "bma_melderplan", "titel": "Melderplan EG Nord", '
                '"melderlinien": "12, 13", "stand": "2025-09-01", "begruendung": "Grundriss mit Meldern"}')
-    p = _parse_antwort(antwort)
+    p = _parse_antwort(antwort, _CODES)
     assert p["dokumentart"] == "bma_melderplan"
     assert p["titel"] == "Melderplan EG Nord"
     assert p["melderlinien"] == "12, 13"
@@ -41,14 +44,14 @@ def test_parse_gueltiges_json():
 
 def test_parse_markdown_fence_und_unbekannter_code():
     antwort = '```json\n{"dokumentart": "phantasie_art", "titel": null, "begruendung": "unsicher"}\n```'
-    p = _parse_antwort(antwort)
+    p = _parse_antwort(antwort, _CODES)
     assert p is not None
     assert p["dokumentart"] is None  # unbekannter Code → verworfen
 
 
 def test_parse_ungueltiges_json():
-    assert _parse_antwort("Das ist kein JSON") is None
-    assert _parse_antwort('["liste", "statt", "objekt"]') is None
+    assert _parse_antwort("Das ist kein JSON", _CODES) is None
+    assert _parse_antwort('["liste", "statt", "objekt"]', _CODES) is None
 
 
 # ── complete_vision: Quota/BYOK-Verhalten (gemockt) ───────────────────────────

@@ -312,6 +312,88 @@ class MerkmalKatalog(TenantScoped, Base):
     aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+# Auswahllisten-Typen (Diskriminator fuer ObjektAuswahl — pflegbar in der Verwaltung)
+AUSWAHL_KONTAKTART = "kontaktart"
+AUSWAHL_DOKUMENTART = "dokumentart"
+AUSWAHL_PIKTOGRAMM = "piktogramm"
+
+# Fallback-Defaults je Auswahl-Typ (identisch zu den geseedeten Codes). lade_auswahl()
+# nutzt sie, solange die org-spezifische Tabelle leer ist (z. B. frische Testumgebung).
+_AUSWAHL_FALLBACK = {
+    AUSWAHL_KONTAKTART: KONTAKT_ARTEN,
+    AUSWAHL_DOKUMENTART: DOKUMENTARTEN,
+    AUSWAHL_PIKTOGRAMM: GEFAHR_PIKTOGRAMME,
+}
+
+
+class ObjektAuswahl(TenantScoped, Base):
+    """Pflegbare Auswahllisten je Org: Kontaktarten, Dokumentarten, Gefahren-Piktogramme.
+
+    Generische Lookup-Tabelle (ein Diskriminator `typ` statt drei Einzelmodellen).
+    `code` ist stabil und wird als String an anderen Datensaetzen referenziert
+    (ObjektKontakt.art, ObjektDokumentSeite.dokumentart, GefahrenKatalog.piktogramm_typ) —
+    ein Umbenennen des Labels bricht Bestandsdaten daher nicht.
+    Geseedete Eintraege sind `system=True` (Code fix, nicht loeschbar).
+    """
+    __tablename__ = "objekt_auswahl"
+    __table_args__ = (
+        UniqueConstraint("org_id", "typ", "code", name="uq_objekt_auswahl_org_typ_code"),
+        Index("ix_objekt_auswahl_org_typ", "org_id", "typ"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    typ: Mapped[str] = mapped_column(String(30), nullable=False)
+    code: Mapped[str] = mapped_column(String(40), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # Emoji/Icon (v. a. fuer Piktogramme); wird dem Label vorangestellt
+    icon: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Geseedeter Standardeintrag: Code gesperrt, nicht loeschbar
+    system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    @property
+    def label(self) -> str:
+        """Anzeige-Label (Icon + Name), reproduziert die alten Konstanten-Werte."""
+        if self.icon:
+            return f"{self.icon} {self.name}".strip()
+        return self.name
+
+
+# Darstellungsstile eines Karten-Symbols (steuern das CSS-Rendering in objekt_karte.js).
+# "bild" = hochgeladenes Symbolbild (SVG/PNG) statt CSS-Textkaestchen.
+SYMBOL_STILE = [
+    "box", "gruen", "rot", "dreieck", "pfeil-voll", "pfeil-leer", "hydrant", "bild",
+]
+
+
+class ObjektSymbol(TenantScoped, Base):
+    """Pflegbarer Katalog der Karten-Symbole je Org (FSD, EX, Hydrant, eigene Bilder).
+
+    Ersetzt die frueher dreifach hartcodierte Liste (OBJEKT_SYMBOL_TYPEN + JS-SYMBOLE +
+    CSS). `code` wird von ObjektKartenObjekt.typ referenziert (String, kein FK).
+    Das Rendering lebt weiterhin client-seitig in objekt_karte.js, wird aber aus
+    /objekte/karten-symbole.json gespeist. `stil='bild'` nutzt ein hochgeladenes
+    Symbolbild (bild_pfad, ausgeliefert ueber /objekt-medien/symbol/{id}).
+    """
+    __tablename__ = "objekt_symbol"
+    __table_args__ = (UniqueConstraint("org_id", "code", name="uq_objekt_symbol_org_code"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    code: Mapped[str] = mapped_column(String(40), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    stil: Mapped[str] = mapped_column(String(20), nullable=False, default="box")
+    # Kurztext/Emoji fuer die CSS-Stile (nicht bei stil='bild')
+    text: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    # Relativer Pfad des hochgeladenen Symbolbilds (nur bei stil='bild')
+    bild_pfad: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
 class ObjektMerkmal(TenantScoped, Base):
     """Zuordnung Merkmal ↔ Objekt mit optionalem Hinweis (z. B. Standort Schluesselbox)."""
     __tablename__ = "objekt_merkmal"

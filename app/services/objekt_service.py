@@ -12,6 +12,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.objekt import (
+    AUSWAHL_DOKUMENTART,
+    AUSWAHL_KONTAKTART,
+    AUSWAHL_PIKTOGRAMM,
     OBJEKT_STATUS_UEBERGAENGE,
     Objekt,
     ObjektChange,
@@ -177,6 +180,85 @@ STANDARD_MERKMALE = [
     ("rwa", "RWA (Rauch-/Wärmeabzug)", "🌀"),
 ]
 
+# Pflegbare Auswahllisten je Org: typ -> [(code, icon|None, name)].
+# label = f"{icon} {name}" reproduziert die alten Modul-Konstanten exakt.
+STANDARD_AUSWAHL: dict[str, list[tuple[str, str | None, str]]] = {
+    AUSWAHL_KONTAKTART: [
+        ("brandschutzbeauftragter", None, "Brandschutzbeauftragter"),
+        ("betreiber", None, "Betreiber"),
+        ("hausverwaltung", None, "Hausverwaltung"),
+        ("schluesseltraeger", None, "Schlüsselträger"),
+        ("sonstig", None, "Sonstiger Kontakt"),
+    ],
+    AUSWAHL_DOKUMENTART: [
+        ("bma_datenblatt", None, "BMA Datenblatt"),
+        ("bma_melderplan", None, "BMA Melderplan"),
+        ("brandschutzplan", None, "Brandschutzplan"),
+        ("gefahrgutdatenblatt", None, "Gefahrgutdatenblatt"),
+        ("lageplan", None, "Lageplan"),
+        ("objektinformation", None, "Objektinformation"),
+    ],
+    AUSWAHL_PIKTOGRAMM: [
+        ("ex", "💥", "EX-Bereich"),
+        ("gas", "🔥", "Gas"),
+        ("chemie", "🧪", "Chemie / Gefahrstoff"),
+        ("hochspannung", "⚡", "Hochspannung"),
+        ("pv", "☀️", "Photovoltaik"),
+        ("nh3", "❄️", "Ammoniak (NH3)"),
+        ("brandlast", "🔥", "Hohe Brandlast"),
+        ("sonstig", "⚠️", "Sonstige Gefahr"),
+    ],
+}
+
+
+def lade_auswahl(db: Session, org_id: int | None, typ: str) -> dict[str, str]:
+    """Aktive Auswahleintraege einer Org als {code: label}, sort-geordnet.
+
+    Fallback auf die Modul-Konstante, solange die Tabelle (fuer diese Org/diesen Typ)
+    leer ist — z. B. in einer frischen Testumgebung ohne Seeds. `label` enthaelt das
+    Icon-Prefix (Piktogramme), reproduziert also die alten Konstanten-Werte.
+    """
+    from app.models.objekt import _AUSWAHL_FALLBACK, ObjektAuswahl
+
+    rows = (
+        db.query(ObjektAuswahl)
+        .filter(
+            ObjektAuswahl.org_id == org_id,
+            ObjektAuswahl.typ == typ,
+            ObjektAuswahl.aktiv.is_(True),
+        )
+        .order_by(ObjektAuswahl.sort, ObjektAuswahl.name)
+        .execution_options(include_all_tenants=True)
+        .all()
+    )
+    if rows:
+        return {r.code: r.label for r in rows}
+    return dict(_AUSWAHL_FALLBACK.get(typ, {}))
+
+
+def seed_objekt_auswahl(db: Session, org_id: int) -> None:
+    """Legt die Standard-Auswahllisten (Kontaktarten/Dokumentarten/Piktogramme) an (idempotent)."""
+    from app.models.objekt import ObjektAuswahl
+
+    for typ, eintraege in STANDARD_AUSWAHL.items():
+        for i, (code, icon, name) in enumerate(eintraege, start=1):
+            exists = (
+                db.query(ObjektAuswahl)
+                .filter(
+                    ObjektAuswahl.org_id == org_id,
+                    ObjektAuswahl.typ == typ,
+                    ObjektAuswahl.code == code,
+                )
+                .execution_options(include_all_tenants=True)
+                .first()
+            )
+            if not exists:
+                db.add(ObjektAuswahl(
+                    org_id=org_id, typ=typ, code=code, icon=icon, name=name,
+                    sort=i, aktiv=True, system=True,
+                ))
+    db.flush()
+
 
 def seed_objekt_kataloge(db: Session, org_id: int) -> None:
     """Legt Standard-Kataloge (Kategorien/Gefahren/Merkmale) fuer eine Org an (idempotent).
@@ -214,6 +296,9 @@ def seed_objekt_kataloge(db: Session, org_id: int) -> None:
         if not merkmal_exists:
             db.add(MerkmalKatalog(org_id=org_id, code=code, name=name, icon=icon, sort=i, aktiv=True))
     db.flush()
+    seed_objekt_auswahl(db, org_id)
+    from app.services.objekt_symbol_service import seed_objekt_symbole
+    seed_objekt_symbole(db, org_id)
 
 
 def pruefe_revision_erinnerungen(db: Session) -> list[dict]:

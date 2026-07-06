@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ objekt.anzeige_nummer }} {{ objekt.name }} – {{ brand }}{% endblock %}
 {% block content %}
-<div class="page-content">
+<div class="page-content" x-data="{ tab: 'uebersicht' }">
   <div class="page-header">
     <div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -55,7 +55,18 @@
     </div>
   </div>
 
-  <div class="objekt-detail-grid">
+  <nav class="objekt-tabs">
+    <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'uebersicht' }"
+            @click="tab = 'uebersicht'">Übersicht</button>
+    <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'karte' }"
+            @click="tab = 'karte'; $dispatch('objekt-tab-karte')">🗺️ Lagekarte</button>
+    <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'dokumente' }"
+            @click="tab = 'dokumente'; $dispatch('objekt-tab-dokumente')">📄 Dokumente{% if dokument_count %}
+      <span class="objekt-tabs__badge">{{ dokument_count }}</span>{% endif %}</button>
+  </nav>
+
+  <!-- Tab: Übersicht (bisheriger Abschnitts-Stack ohne Lagekarte/Dokumente) -->
+  <div x-show="tab === 'uebersicht'" class="objekt-detail-grid">
     <nav class="objekt-abschnitt-nav card" style="padding:10px;">
       <a href="#abschnitt-stammdaten">Stammdaten</a>
       <a href="#abschnitt-gefahren">Gefahren</a>
@@ -64,8 +75,6 @@
       <a href="#abschnitt-kontakte">Kontakte</a>
       <a href="#abschnitt-wohnanlage">Wohnanlage</a>
       <a href="#abschnitt-zusatzadressen">Zugänge / Stiegen</a>
-      <a href="#abschnitt-karte">Lagekarte</a>
-      <a href="#abschnitt-dokumente">Dokumente</a>
       <a href="#abschnitt-einsaetze">Einsätze</a>
       <a href="#abschnitt-protokoll">Protokoll</a>
     </nav>
@@ -99,14 +108,6 @@
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Zugänge …</span></div>
       </section>
 
-      <section id="abschnitt-karte" hx-get="/objekte/{{ objekt.id }}/karte/einbettung" hx-trigger="load" hx-swap="innerHTML">
-        <div class="card" style="padding:16px;"><span class="text-muted">Lade Lagekarte …</span></div>
-      </section>
-
-      <section id="abschnitt-dokumente" hx-get="/objekte/{{ objekt.id }}/dokumente" hx-trigger="load" hx-swap="innerHTML">
-        <div class="card" style="padding:16px;"><span class="text-muted">Lade Dokumente …</span></div>
-      </section>
-
       <section id="abschnitt-einsaetze" hx-get="/objekte/{{ objekt.id }}/einsaetze" hx-trigger="load" hx-swap="innerHTML">
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Einsätze …</span></div>
       </section>
@@ -127,6 +128,22 @@
       </div>
       {% endif %}
     </div>
+  </div>
+
+  <!-- Tab: Lagekarte (editierbar, lazy bei erster Aktivierung geladen) -->
+  <div x-show="tab === 'karte'" x-cloak>
+    <section id="abschnitt-karte" hx-get="/objekte/{{ objekt.id }}/karte/tab"
+             hx-trigger="objekt-tab-karte from:body once" hx-swap="innerHTML">
+      <div class="card" style="padding:16px;"><span class="text-muted">Lade Lagekarte …</span></div>
+    </section>
+  </div>
+
+  <!-- Tab: Dokumente (lazy bei erster Aktivierung geladen) -->
+  <div x-show="tab === 'dokumente'" x-cloak>
+    <section id="abschnitt-dokumente" hx-get="/objekte/{{ objekt.id }}/dokumente"
+             hx-trigger="objekt-tab-dokumente from:body once" hx-swap="innerHTML">
+      <div class="card" style="padding:16px;"><span class="text-muted">Lade Dokumente …</span></div>
+    </section>
   </div>
 </div>
 {% endblock %}

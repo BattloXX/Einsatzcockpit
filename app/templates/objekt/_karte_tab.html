@@ -1,0 +1,96 @@
+<div class="card" style="padding:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <h3 style="margin:0;">🗺️ Lagekarte</h3>
+    {% if ist_verwalter %}
+    <a href="/objekte/{{ objekt.id }}/karte" class="btn btn--ghost btn--xs" target="_blank" rel="noopener">↗ Vollbild-Editor</a>
+    {% endif %}
+  </div>
+
+  {% if ist_verwalter %}
+  <div class="objekt-karte-layout">
+    <aside class="card" style="padding:12px;">
+      <div class="form-group">
+        <label class="form-label">Beschriftung (optional, für nächstes Symbol)</label>
+        <input type="text" id="oks-label" class="form-input" maxlength="100" placeholder="z. B. Zufahrt Nord">
+      </div>
+      <div id="oks-palette" class="oks-palette">
+        {% for code, label in symbol_typen.items() %}
+        <button type="button" class="oks-palette__eintrag" data-typ="{{ code }}" title="{{ label }}">
+          <span class="oks-palette__code">{{ code|upper|replace('_', ' ') }}</span>
+          <span class="oks-palette__name">{{ label }}</span>
+        </button>
+        {% endfor %}
+      </div>
+      <p class="form-hint" style="margin-top:10px;">
+        Symbol wählen, dann auf die Karte klicken. Marker sind verschiebbar.
+        Linien/Flächen über die Zeichenwerkzeuge links oben. Löschen: Symbol anklicken → „Entfernen".
+      </p>
+    </aside>
+    <div id="objekt-karte-tab" class="objekt-karte-canvas card"></div>
+  </div>
+  {% else %}
+  <div id="objekt-karte-tab" class="objekt-karte-canvas objekt-karte-canvas--klein"></div>
+  {% endif %}
+
+  <script>
+    (function () {
+      // Wird per HTMX (innerHTML-Swap) geladen -> Skripte dynamisch mit onload-Kette
+      // nachladen (Muster objekt/_karte_readonly.html). Editierbar zusaetzlich Geoman.
+      var EDITIERBAR = {{ 'true' if ist_verwalter else 'false' }};
+
+      function ladeScript(src, dann) {
+        var s = document.createElement("script");
+        s.src = src;
+        s.onload = dann;
+        document.head.appendChild(s);
+      }
+      function ladeCss(href) {
+        if (document.querySelector('link[href="' + href + '"]')) { return; }
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = href;
+        document.head.appendChild(link);
+      }
+
+      var karte = null;
+      function init() {
+        var el = document.getElementById("objekt-karte-tab");
+        if (!el || el.dataset.initialisiert) { return; }
+        el.dataset.initialisiert = "1";
+        karte = initObjektKarte({
+          elementId: "objekt-karte-tab",
+          objektId: {{ objekt.id }},
+          csrfToken: "{{ request.state.csrf_token }}",
+          editierbar: EDITIERBAR
+        });
+        // Karte ggf. in unsichtbarem Tab initialisiert -> Groesse nachziehen.
+        setTimeout(function () { if (karte) { karte.invalidateSize(); } }, 60);
+        // Bei erneutem Wechsel auf den Karten-Tab erneut korrigieren.
+        document.body.addEventListener("objekt-tab-karte", function () {
+          if (karte) { setTimeout(function () { karte.invalidateSize(); }, 60); }
+        });
+      }
+
+      function mitObjektKarte() {
+        if (typeof window.initObjektKarte === "function") { init(); }
+        else { ladeScript("/static/js/objekt_karte.js", init); }
+      }
+
+      function mitGeoman() {
+        if (EDITIERBAR && typeof L !== "undefined" && !L.PM) {
+          ladeScript("/static/js/leaflet-geoman.min.js", mitObjektKarte);
+        } else {
+          mitObjektKarte();
+        }
+      }
+
+      if (typeof L !== "undefined") {
+        mitGeoman();
+      } else {
+        ladeCss("/static/css/leaflet.min.css");
+        if (EDITIERBAR) { ladeCss("/static/css/leaflet-geoman.min.css"); }
+        ladeScript("/static/js/leaflet.min.js", mitGeoman);
+      }
+    })();
+  </script>
+</div>

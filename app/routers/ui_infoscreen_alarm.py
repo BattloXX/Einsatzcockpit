@@ -26,13 +26,14 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.master import FireDept, OrgSettings
 from app.models.objekt import (
-    GEFAHR_PIKTOGRAMME,
+    AUSWAHL_PIKTOGRAMM,
     OBJEKT_EINSATZ_BESTAETIGT,
     AlarmInfoscreenToken,
     Objekt,
     ObjektEinsatz,
 )
 from app.models.user import User
+from app.services.objekt_service import lade_auswahl
 
 router = APIRouter(tags=["infoscreen-alarm"])
 
@@ -114,11 +115,14 @@ def infoscreen_daten(
         .first()
     )
 
+    from app.services.objekt_symbol_service import symbol_katalog_json
     daten: dict = {
         "org_name": org.name,
         "modus": "idle",
         "idle_modus": idle_modus,
         "wetter_url": wetter_url if idle_modus == "wetter" else None,
+        # Org-Symbolkatalog fuer das clientseitige Rendering (auch eigene Bildsymbole)
+        "symbole": symbol_katalog_json(db, org.id),
     }
 
     if incident is not None:
@@ -156,6 +160,7 @@ def infoscreen_daten(
         )
         if verknuepfung is not None and verknuepfung.objekt is not None:
             o = verknuepfung.objekt
+            piktogramme = lade_auswahl(db, org.id, AUSWAHL_PIKTOGRAMM)
             bma = o.bma
             karten = []
             for k in o.karten_objekte:
@@ -179,7 +184,7 @@ def infoscreen_daten(
                 "gefahren": [
                     {
                         "name": g.gefahr.name if g.gefahr else "",
-                        "piktogramm": GEFAHR_PIKTOGRAMME.get(
+                        "piktogramm": piktogramme.get(
                             g.gefahr.piktogramm_typ if g.gefahr else "sonstig", "⚠️"
                         )[:2].strip(),
                         "un_nummer": g.un_nummer,

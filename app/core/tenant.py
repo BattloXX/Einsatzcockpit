@@ -111,6 +111,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     # Objektverwaltung (TenantScoped via Mixin)
     "objekt",
     "objekt_kategorie",
+    "objekt_auswahl",
+    "objekt_symbol",
     "objekt_zusatzadresse",
     "objekt_bma",
     "objekt_change",

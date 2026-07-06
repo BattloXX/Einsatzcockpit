@@ -12,7 +12,16 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
@@ -21,20 +30,25 @@ from app.core.permissions import is_objekt_verwalter, require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.objekt import (
-    GEFAHR_PIKTOGRAMME,
-    KONTAKT_ARTEN,
+    AUSWAHL_DOKUMENTART,
+    AUSWAHL_KONTAKTART,
+    AUSWAHL_PIKTOGRAMM,
     OBJEKT_STATUS_ENTWURF,
     OBJEKT_STATUS_LABELS,
+    SYMBOL_STILE,
     GefahrenKatalog,
     MerkmalKatalog,
     Objekt,
+    ObjektAuswahl,
     ObjektBMA,
     ObjektChange,
+    ObjektDokumentSeite,
     ObjektGefahr,
     ObjektKartenObjekt,
     ObjektKategorie,
     ObjektKontakt,
     ObjektMerkmal,
+    ObjektSymbol,
     ObjektWohnanlage,
     ObjektZusatzadresse,
 )
@@ -42,10 +56,19 @@ from app.models.user import User
 from app.services.objekt_service import (
     aktualisiere_felder,
     berechne_vollstaendigkeit,
+    lade_auswahl,
     naechste_nummer,
     status_uebergang_erlaubt,
     write_objekt_change,
 )
+
+# Auswahl-Typen, die in der Verwaltung pflegbar sind (Reihenfolge = Tab-Reihenfolge)
+_AUSWAHL_TYPEN = (AUSWAHL_KONTAKTART, AUSWAHL_DOKUMENTART, AUSWAHL_PIKTOGRAMM)
+_AUSWAHL_LABELS = {
+    AUSWAHL_KONTAKTART: "Kontaktarten",
+    AUSWAHL_DOKUMENTART: "Dokumentarten",
+    AUSWAHL_PIKTOGRAMM: "Gefahren-Piktogramme",
+}
 
 router = APIRouter(prefix="/objekte", tags=["objekt"])
 
@@ -342,6 +365,35 @@ def kataloge(
         .group_by(ObjektMerkmal.merkmal_id)
         .all()
     }
+
+    # Pflegbare Auswahllisten (Kontaktarten/Dokumentarten/Piktogramme) je Typ,
+    # inkl. Verwendungszaehlern (Referenz per String-Code, nicht FK).
+    auswahl: dict[str, list[ObjektAuswahl]] = {typ: [] for typ in _AUSWAHL_TYPEN}
+    for eintrag in (
+        db.query(ObjektAuswahl)
+        .order_by(ObjektAuswahl.typ, ObjektAuswahl.sort, ObjektAuswahl.name)
+        .all()
+    ):
+        auswahl.setdefault(eintrag.typ, []).append(eintrag)
+    auswahl_verwendung: dict[str, dict[str, int]] = {
+        AUSWAHL_KONTAKTART: {
+            code: cnt for code, cnt in
+            db.query(ObjektKontakt.art, func.count(ObjektKontakt.id))
+            .group_by(ObjektKontakt.art).all()
+        },
+        AUSWAHL_DOKUMENTART: {
+            code: cnt for code, cnt in
+            db.query(ObjektDokumentSeite.dokumentart, func.count(ObjektDokumentSeite.id))
+            .filter(ObjektDokumentSeite.dokumentart.isnot(None))
+            .group_by(ObjektDokumentSeite.dokumentart).all()
+        },
+        AUSWAHL_PIKTOGRAMM: {
+            code: cnt for code, cnt in
+            db.query(GefahrenKatalog.piktogramm_typ, func.count(GefahrenKatalog.id))
+            .group_by(GefahrenKatalog.piktogramm_typ).all()
+        },
+    }
+
     return templates.TemplateResponse(request, "objekt/kataloge.html", {
         "user": user,
         "kategorien": _kategorien(db, nur_aktive=False),
@@ -352,15 +404,42 @@ def kataloge(
             .all()
         ),
         "gefahren_verwendung": gefahren_verwendung,
-        "gefahr_piktogramme": GEFAHR_PIKTOGRAMME,
+        "gefahr_piktogramme": lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM),
         "merkmale": (
             db.query(MerkmalKatalog)
             .order_by(MerkmalKatalog.sort, MerkmalKatalog.name)
             .all()
         ),
         "merkmal_verwendung": merkmal_verwendung,
+        "auswahl": auswahl,
+        "auswahl_verwendung": auswahl_verwendung,
+        "auswahl_typen": _AUSWAHL_TYPEN,
+        "auswahl_labels": _AUSWAHL_LABELS,
+        "symbole": (
+            db.query(ObjektSymbol)
+            .order_by(ObjektSymbol.sort, ObjektSymbol.name)
+            .all()
+        ),
+        "symbol_verwendung": {
+            typ: cnt for typ, cnt in
+            db.query(ObjektKartenObjekt.typ, func.count(ObjektKartenObjekt.id))
+            .group_by(ObjektKartenObjekt.typ).all()
+        },
+        "symbol_stile": SYMBOL_STILE,
         "aktiver_tab": request.query_params.get("tab", "kategorien"),
     })
+
+
+@router.get("/karten-symbole.json")
+def karten_symbole_json(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Org-Symbolkatalog fuer das client-seitige Rendering (objekt_karte.js)."""
+    from app.services.objekt_symbol_service import symbol_katalog_json
+    return {"symbole": symbol_katalog_json(db, user.org_id)}
 
 
 @router.post("/kataloge/kategorien/neu")
@@ -438,8 +517,9 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
         "objekt": objekt,
         "kategorien": _kategorien(db),
         "status_labels": OBJEKT_STATUS_LABELS,
-        "gefahr_piktogramme": GEFAHR_PIKTOGRAMME,
-        "kontakt_arten": KONTAKT_ARTEN,
+        "gefahr_piktogramme": lade_auswahl(db, objekt.org_id, AUSWAHL_PIKTOGRAMM),
+        "kontakt_arten": lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART),
+        "dokument_count": dokument_count,
         "vollstaendigkeit": berechne_vollstaendigkeit(
             objekt,
             kontakt_count=len(objekt.kontakte),
@@ -1058,7 +1138,7 @@ def kontakt_neu(
     objekt = _objekt_or_404(db, objekt_id, user)
     if not name.strip():
         raise HTTPException(status_code=400, detail="Name ist erforderlich")
-    if art not in KONTAKT_ARTEN:
+    if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
         art = "sonstig"
     max_sort = max([k.sort for k in objekt.kontakte], default=0)
     kontakt = ObjektKontakt(
@@ -1103,7 +1183,7 @@ def kontakt_speichern(
     )
     if kontakt is None:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
-    if art not in KONTAKT_ARTEN:
+    if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
         art = "sonstig"
     daten = {
         "art": art,
@@ -1257,7 +1337,7 @@ def katalog_gefahr_neu(
 ):
     if not name.strip():
         raise HTTPException(status_code=400, detail="Name ist erforderlich")
-    if piktogramm_typ not in GEFAHR_PIKTOGRAMME:
+    if piktogramm_typ not in lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM):
         piktogramm_typ = "sonstig"
     existiert = db.query(GefahrenKatalog).filter(GefahrenKatalog.name == name.strip()).first()
     if existiert:
@@ -1283,7 +1363,7 @@ def katalog_gefahr_edit(
     eintrag = db.query(GefahrenKatalog).filter(GefahrenKatalog.id == gefahr_id).first()
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Gefahr nicht gefunden")
-    if piktogramm_typ not in GEFAHR_PIKTOGRAMME:
+    if piktogramm_typ not in lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM):
         piktogramm_typ = "sonstig"
     eintrag.name = name.strip()
     eintrag.piktogramm_typ = piktogramm_typ
@@ -1375,6 +1455,253 @@ def katalog_merkmal_loeschen(
     return RedirectResponse(url="/objekte/kataloge?saved=1&tab=merkmale", status_code=303)
 
 
+# ── Kataloge: pflegbare Auswahllisten (Kontaktarten/Dokumentarten/Piktogramme) ──
+
+def _slug_code(name: str) -> str:
+    """Erzeugt einen stabilen Code aus einem Anzeigenamen (a-z0-9_)."""
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+    return slug[:40] or "eintrag"
+
+
+def _auswahl_in_use(db: Session, typ: str, code: str) -> bool:
+    """True, wenn der Code irgendwo referenziert wird (Loeschsperre)."""
+    if typ == AUSWAHL_KONTAKTART:
+        return db.query(ObjektKontakt).filter(ObjektKontakt.art == code).first() is not None
+    if typ == AUSWAHL_DOKUMENTART:
+        return db.query(ObjektDokumentSeite).filter(
+            ObjektDokumentSeite.dokumentart == code).first() is not None
+    if typ == AUSWAHL_PIKTOGRAMM:
+        return db.query(GefahrenKatalog).filter(
+            GefahrenKatalog.piktogramm_typ == code).first() is not None
+    return False
+
+
+def _auswahl_redirect(typ: str, status: str) -> RedirectResponse:
+    return RedirectResponse(url=f"/objekte/kataloge?{status}&tab={typ}", status_code=303)
+
+
+@router.post("/kataloge/auswahl/{typ}/neu")
+def auswahl_neu(
+    typ: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_objekt_enabled),
+    name: str = Form(...),
+    icon: str = Form(""),
+    sort: int = Form(0),
+):
+    if typ not in _AUSWAHL_TYPEN:
+        raise HTTPException(status_code=404, detail="Unbekannte Auswahlliste")
+    if not name.strip():
+        raise HTTPException(status_code=400, detail="Name ist erforderlich")
+    # Stabilen, eindeutigen Code aus dem Namen ableiten (wird nie mehr geaendert)
+    basis = _slug_code(name)
+    code = basis
+    n = 2
+    while (
+        db.query(ObjektAuswahl)
+        .filter(ObjektAuswahl.typ == typ, ObjektAuswahl.code == code)
+        .first()
+    ):
+        code = f"{basis[:37]}_{n}"
+        n += 1
+    db.add(ObjektAuswahl(
+        org_id=user.org_id, typ=typ, code=code, name=name.strip(),
+        icon=icon.strip() or None, sort=sort, aktiv=True, system=False,
+    ))
+    db.commit()
+    return _auswahl_redirect(typ, "saved=1")
+
+
+@router.post("/kataloge/auswahl/{typ}/{eintrag_id}/edit")
+def auswahl_edit(
+    typ: str,
+    eintrag_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_objekt_enabled),
+    name: str = Form(...),
+    icon: str = Form(""),
+    sort: int = Form(0),
+    aktiv: str = Form(""),
+):
+    if typ not in _AUSWAHL_TYPEN:
+        raise HTTPException(status_code=404, detail="Unbekannte Auswahlliste")
+    eintrag = (
+        db.query(ObjektAuswahl)
+        .filter(ObjektAuswahl.id == eintrag_id, ObjektAuswahl.typ == typ)
+        .first()
+    )
+    if eintrag is None:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+    # Code bleibt stabil (Referenz); nur Label/Icon/Sortierung/Status aenderbar.
+    eintrag.name = name.strip()
+    eintrag.icon = icon.strip() or None
+    eintrag.sort = sort
+    # System-Eintraege duerfen nicht deaktiviert werden (immer verfuegbar halten)
+    eintrag.aktiv = True if eintrag.system else bool(aktiv)
+    db.commit()
+    return _auswahl_redirect(typ, "saved=1")
+
+
+@router.post("/kataloge/auswahl/{typ}/{eintrag_id}/loeschen")
+def auswahl_loeschen(
+    typ: str,
+    eintrag_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    if typ not in _AUSWAHL_TYPEN:
+        raise HTTPException(status_code=404, detail="Unbekannte Auswahlliste")
+    eintrag = (
+        db.query(ObjektAuswahl)
+        .filter(ObjektAuswahl.id == eintrag_id, ObjektAuswahl.typ == typ)
+        .first()
+    )
+    if eintrag is None:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+    if eintrag.system:
+        return _auswahl_redirect(typ, "error=system")
+    if _auswahl_in_use(db, typ, eintrag.code):
+        return _auswahl_redirect(typ, "error=in_use")
+    db.delete(eintrag)
+    db.commit()
+    return _auswahl_redirect(typ, "saved=1")
+
+
+# ── Kataloge: Karten-Symbole (mit Bild-Upload) ─────────────────────────────────
+
+def _symbol_redirect(status: str) -> RedirectResponse:
+    return RedirectResponse(url=f"/objekte/kataloge?{status}&tab=symbole", status_code=303)
+
+
+async def _symbol_bild_speichern(
+    db: Session, symbol: ObjektSymbol, bild: UploadFile | None,
+) -> str | None:
+    """Speichert ein hochgeladenes Symbolbild und setzt bild_pfad. Gibt eine Fehlermeldung
+    zurueck (oder None bei Erfolg / kein Upload)."""
+    from app.services.objekt_symbol_service import store_symbol_bild
+    if bild is None or not bild.filename or symbol.org_id is None:
+        return None
+    daten = await bild.read()
+    if not daten:
+        return None
+    try:
+        rel = store_symbol_bild(symbol.org_id, symbol.id, bild.filename, daten)
+    except ValueError as exc:
+        return str(exc)
+    symbol.bild_pfad = rel
+    return None
+
+
+@router.post("/kataloge/symbole/neu")
+async def symbol_neu(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_objekt_enabled),
+    name: str = Form(...),
+    stil: str = Form("box"),
+    text: str = Form(""),
+    sort: int = Form(0),
+    bild: UploadFile | None = File(None),
+):
+    from app.services.objekt_symbol_service import stil_gueltig
+    if not name.strip():
+        raise HTTPException(status_code=400, detail="Name ist erforderlich")
+    if not stil_gueltig(stil):
+        stil = "box"
+    basis = _slug_code(name)
+    code = basis
+    n = 2
+    while db.query(ObjektSymbol).filter(ObjektSymbol.code == code).first():
+        code = f"{basis[:37]}_{n}"
+        n += 1
+    symbol = ObjektSymbol(
+        org_id=user.org_id, code=code, name=name.strip(), stil=stil,
+        text=(text.strip()[:12] or None), sort=sort, aktiv=True, system=False,
+    )
+    db.add(symbol)
+    db.flush()  # ID fuer den Bild-Dateinamen
+    fehler = await _symbol_bild_speichern(db, symbol, bild)
+    if fehler:
+        db.rollback()
+        return _symbol_redirect("error=bild")
+    if stil == "bild" and not symbol.bild_pfad:
+        db.rollback()
+        return _symbol_redirect("error=bild_fehlt")
+    db.commit()
+    return _symbol_redirect("saved=1")
+
+
+@router.post("/kataloge/symbole/{symbol_id}/edit")
+async def symbol_edit(
+    symbol_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_objekt_enabled),
+    name: str = Form(...),
+    stil: str = Form("box"),
+    text: str = Form(""),
+    sort: int = Form(0),
+    aktiv: str = Form(""),
+    bild: UploadFile | None = File(None),
+):
+    from app.services.objekt_symbol_service import delete_symbol_bild, stil_gueltig
+    symbol = db.query(ObjektSymbol).filter(ObjektSymbol.id == symbol_id).first()
+    if symbol is None:
+        raise HTTPException(status_code=404, detail="Symbol nicht gefunden")
+    if not stil_gueltig(stil):
+        stil = symbol.stil
+    symbol.name = name.strip()
+    symbol.stil = stil
+    symbol.text = text.strip()[:12] or None
+    symbol.sort = sort
+    symbol.aktiv = True if symbol.system else bool(aktiv)
+    fehler = await _symbol_bild_speichern(db, symbol, bild)
+    if fehler:
+        db.rollback()
+        return _symbol_redirect("error=bild")
+    if stil == "bild" and not symbol.bild_pfad:
+        db.rollback()
+        return _symbol_redirect("error=bild_fehlt")
+    # Bild verwerfen, wenn der Stil weg von 'bild' gewechselt wurde
+    if stil != "bild" and symbol.bild_pfad:
+        delete_symbol_bild(symbol.bild_pfad)
+        symbol.bild_pfad = None
+    db.commit()
+    return _symbol_redirect("saved=1")
+
+
+@router.post("/kataloge/symbole/{symbol_id}/loeschen")
+def symbol_loeschen(
+    symbol_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    from app.services.objekt_symbol_service import delete_symbol_bild
+    symbol = db.query(ObjektSymbol).filter(ObjektSymbol.id == symbol_id).first()
+    if symbol is None:
+        raise HTTPException(status_code=404, detail="Symbol nicht gefunden")
+    if symbol.system:
+        return _symbol_redirect("error=system")
+    in_use = db.query(ObjektKartenObjekt).filter(ObjektKartenObjekt.typ == symbol.code).first()
+    if in_use:
+        return _symbol_redirect("error=in_use")
+    delete_symbol_bild(symbol.bild_pfad)
+    db.delete(symbol)
+    db.commit()
+    return _symbol_redirect("saved=1")
+
+
 # ── Abschnitt: Lagekarte (PR4) ─────────────────────────────────────────────────
 
 def _karten_objekt_dict(k: ObjektKartenObjekt) -> dict:
@@ -1403,10 +1730,10 @@ def karte_editor(
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
 ):
+    from app.services.objekt_symbol_service import lade_symbol_labels
     objekt = _objekt_or_404(db, objekt_id, user)
-    from app.models.objekt import OBJEKT_SYMBOL_TYPEN
     ctx = _detail_context(request, db, user, objekt)
-    ctx["symbol_typen"] = OBJEKT_SYMBOL_TYPEN
+    ctx["symbol_typen"] = lade_symbol_labels(db, objekt.org_id)
     return templates.TemplateResponse(request, "objekt/karte.html", ctx)
 
 
@@ -1422,6 +1749,26 @@ def karte_readonly_partial(
     return templates.TemplateResponse(
         request, "objekt/_karte_readonly.html", _detail_context(request, db, user, objekt)
     )
+
+
+@router.get("/{objekt_id}/karte/tab", response_class=HTMLResponse)
+def karte_tab_partial(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Lagekarte als editierbarer Detail-Tab (Palette + Editor inline).
+
+    Verwalter bearbeiten direkt im Tab (editierbar), Leserollen sehen sie schreibgeschützt.
+    Wird lazy bei Tab-Aktivierung geladen (siehe detail.html).
+    """
+    from app.services.objekt_symbol_service import lade_symbol_labels
+    objekt = _objekt_or_404(db, objekt_id, user)
+    ctx = _detail_context(request, db, user, objekt)
+    ctx["symbol_typen"] = lade_symbol_labels(db, objekt.org_id)
+    return templates.TemplateResponse(request, "objekt/_karte_tab.html", ctx)
 
 
 @router.get("/{objekt_id}/karte/objekte.json")
@@ -1621,7 +1968,7 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
         "darf_verknuepfen": is_objekt_verwalter(user) or any(
             r.code in ("incident_leader",) for r in user.roles
         ),
-        "gefahr_piktogramme": GEFAHR_PIKTOGRAMME,
+        "gefahr_piktogramme": lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM),
     }
 
 
@@ -1799,11 +2146,9 @@ def einsatz_fragment(
 ):
     """Kompakter Objekt-Einsatzinhalt (ohne eigene Lagekarte) fuer die HTMX-Einbettung
     in die Einsatzinformation (incident/info.html)."""
-    from app.models.objekt import DOKUMENTARTEN
-
     objekt = _objekt_or_404(db, objekt_id, user)
     ctx = _detail_context(request, db, user, objekt)
-    ctx["dokumentarten"] = DOKUMENTARTEN
+    ctx["dokumentarten"] = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
     ctx["dok_zaehler"] = _dok_zaehler(db, objekt.id)
     ctx["kompakt"] = True
     return templates.TemplateResponse(request, "objekt/_einsatz_inhalt.html", ctx)
@@ -1818,7 +2163,7 @@ def einsatzansicht(
     _guard: None = Depends(require_objekt_enabled),
 ):
     from app.models.incident import Incident
-    from app.models.objekt import DOKUMENTARTEN, ObjektEinsatz
+    from app.models.objekt import ObjektEinsatz
 
     objekt = _objekt_or_404(db, objekt_id, user)
 
@@ -1840,7 +2185,7 @@ def einsatzansicht(
             incidents[inc.id] = inc
 
     ctx = _detail_context(request, db, user, objekt)
-    ctx["dokumentarten"] = DOKUMENTARTEN
+    ctx["dokumentarten"] = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
     ctx["dok_zaehler"] = dok_zaehler
     ctx["verknuepfungen"] = verknuepfungen
     ctx["incidents"] = incidents

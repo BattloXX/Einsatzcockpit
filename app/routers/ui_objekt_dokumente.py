@@ -17,7 +17,7 @@ from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.objekt import (
-    DOKUMENTARTEN,
+    AUSWAHL_DOKUMENTART,
     Objekt,
     ObjektDokument,
     ObjektDokumentSeite,
@@ -31,7 +31,7 @@ from app.services.objekt_dokument_service import (
     store_dokument_upload,
     verarbeite_dokument,
 )
-from app.services.objekt_service import write_objekt_change
+from app.services.objekt_service import lade_auswahl, write_objekt_change
 
 router = APIRouter(tags=["objekt-dokumente"])
 
@@ -120,7 +120,7 @@ def _galerie_context(
         "objekt": objekt,
         "seiten": seiten,
         "dokumente": dokumente,
-        "dokumentarten": DOKUMENTARTEN,
+        "dokumentarten": lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART),
         "zaehler": zaehler,
         "gesamt": gesamt,
         "unklassifiziert": unklassifiziert,
@@ -205,7 +205,8 @@ def seiten_bulk_klassifizieren(
         raise HTTPException(status_code=400, detail="Ungueltige Seiten-Auswahl") from None
     if not ids:
         raise HTTPException(status_code=400, detail="Keine Seiten ausgewaehlt")
-    if dokumentart and dokumentart not in DOKUMENTARTEN:
+    dokumentarten = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
+    if dokumentart and dokumentart not in dokumentarten:
         raise HTTPException(status_code=400, detail="Unbekannte Dokumentart")
 
     seiten = (
@@ -227,7 +228,7 @@ def seiten_bulk_klassifizieren(
         seite.bei_einsatz_drucken = bool(bei_einsatz_drucken)
         seite.klassifiziert_von_id = user.id
         seite.klassifiziert_am = jetzt
-    art_label = DOKUMENTARTEN.get(dokumentart, dokumentart or "unveraendert")
+    art_label = dokumentarten.get(dokumentart, dokumentart or "unveraendert")
     write_objekt_change(db, objekt.id, objekt.org_id, "dokumente", "seiten_klassifiziert",
                         before=None, after=f"{len(seiten)} Seite(n) → {art_label}",
                         user_id=user.id)
@@ -297,7 +298,8 @@ def dokumente_sammel_pdf(
 
     pdf = sammel_pdf(seiten)
     # inline: Browser-PDF-Viewer zeigt direkt an (Speichern dort weiterhin moeglich)
-    name = f"{objekt.anzeige_nummer}_{DOKUMENTARTEN.get(art, 'dokumente')}.pdf".replace(" ", "_")
+    dokumentarten = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
+    name = f"{objekt.anzeige_nummer}_{dokumentarten.get(art, 'dokumente')}.pdf".replace(" ", "_")
     return Response(
         content=pdf,
         media_type="application/pdf",
@@ -431,6 +433,37 @@ def dokument_original(
     )
 
 
+@router.get("/objekt-medien/symbol/{symbol_id}")
+def symbol_bild(
+    symbol_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Liefert ein hochgeladenes Karten-Symbolbild (org-scoped).
+
+    Restriktiver CSP-Header + Auslieferung als <img>-Quelle: hochgeladene SVGs
+    koennen kein Skript ausfuehren (zusaetzlich zur Server-Sanitisierung).
+    """
+    from app.models.objekt import ObjektSymbol
+    from app.services.objekt_symbol_service import bild_media_type, symbol_bild_absolut
+
+    symbol = db.query(ObjektSymbol).filter(ObjektSymbol.id == symbol_id).first()
+    if symbol is None or not symbol.bild_pfad:
+        raise HTTPException(status_code=404, detail="Symbolbild nicht gefunden")
+    if not user.is_system_admin and symbol.org_id != user.org_id:
+        raise HTTPException(status_code=404, detail="Symbolbild nicht gefunden")
+    pfad = symbol_bild_absolut(symbol.bild_pfad)
+    if not pfad.exists():
+        raise HTTPException(status_code=404, detail="Datei fehlt")
+    return FileResponse(
+        pfad,
+        media_type=bild_media_type(symbol.bild_pfad),
+        headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"},
+    )
+
+
 # ── KI-Klassifizierung (PR8): Analyse + Review-Queue ──────────────────────────
 
 @router.post("/objekte/{objekt_id}/dokumente/ki-analyse", response_class=HTMLResponse)
@@ -495,10 +528,11 @@ def _vorschlag_uebernehmen(db: Session, vorschlag, user: User) -> None:
     vorschlag.status = KI_VORSCHLAG_UEBERNOMMEN
     vorschlag.entschieden_von_id = user.id
     vorschlag.entschieden_am = datetime.now(UTC)
+    dokumentarten = lade_auswahl(db, seite.org_id, AUSWAHL_DOKUMENTART)
     write_objekt_change(
         db, seite.objekt_id, seite.org_id, "dokumente", "ki_vorschlag_uebernommen",
         before=None,
-        after=f"Seite {seite.seiten_nr}: {DOKUMENTARTEN.get(vorschlag.dokumentart or '', vorschlag.dokumentart)}",
+        after=f"Seite {seite.seiten_nr}: {dokumentarten.get(vorschlag.dokumentart or '', vorschlag.dokumentart)}",
         user_id=user.id,
     )
 
