@@ -2,6 +2,7 @@
 import base64
 import io
 import logging
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +15,17 @@ from app.models.incident import Incident
 from app.models.master import FireDept
 
 logger = logging.getLogger("einsatzleiter.pdf")
+
+_FONT_FACE_RE = re.compile(r"@font-face\s*\{.*?\}", re.DOTALL)
+
+
+def strip_font_face_for_xhtml2pdf(html_str: str) -> str:
+    """xhtml2pdf/reportlab kann @font-face mit data:-URIs nicht laden (versucht
+    das Base64 als Dateipfad zu oeffnen -> TTFError, siehe Vorfall 2026-07-06,
+    Emoji-Icons in Objektblatt/Einsatz-PDF). xhtml2pdf ist ohnehin nur der
+    Fallback fuer den seltenen Fall, dass WeasyPrint/GTK fehlt -- dann lieber
+    ohne Emoji-Icons (wie zuvor) statt PDF-Generierung komplett abbrechen."""
+    return _FONT_FACE_RE.sub("", html_str)
 
 
 def _media_b64_uri(media) -> str:
@@ -187,7 +199,7 @@ def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
         logger.warning("WeasyPrint fehlgeschlagen (Einsatz-PDF), Fallback auf xhtml2pdf: %s", exc)
         from xhtml2pdf import pisa  # noqa: PLC0415
         buf = io.BytesIO()
-        pisa.CreatePDF(io.StringIO(html_str), dest=buf)
+        pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
         return buf.getvalue()
 
 
@@ -213,7 +225,7 @@ def render_troop_pdf(troop, incident: Incident, base_url: str = "") -> bytes:
         logger.warning("WeasyPrint fehlgeschlagen (Trupp-PDF), Fallback auf xhtml2pdf: %s", exc)
         from xhtml2pdf import pisa  # noqa: PLC0415
         buf = io.BytesIO()
-        pisa.CreatePDF(io.StringIO(html_str), dest=buf)
+        pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
         return buf.getvalue()
 
 

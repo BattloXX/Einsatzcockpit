@@ -146,8 +146,10 @@ def render_objektblatt_pdf(
     except Exception as exc:
         logger.warning("WeasyPrint fehlgeschlagen (Objektblatt), Fallback auf xhtml2pdf: %s", exc)
         from xhtml2pdf import pisa  # noqa: PLC0415
+
+        from app.services.pdf_service import strip_font_face_for_xhtml2pdf
         buf = io.BytesIO()
-        pisa.CreatePDF(io.StringIO(html_str), dest=buf)
+        pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
         return buf.getvalue()
 
 
