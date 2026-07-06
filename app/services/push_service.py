@@ -21,13 +21,20 @@ log = logging.getLogger(__name__)
 
 # Gecachter FCM-App-Zustand – wird beim ersten Aufruf initialisiert
 _fcm_app: Any = None
+# firebase_admin ist eine optionale Abhaengigkeit (nicht in pyproject). Fehlt das
+# Paket, ist das ein prozess-permanenter Zustand: einmal merken statt bei JEDEM
+# Push erneut zu importieren und den vollen Traceback zu loggen (Log-Flut auf
+# Prod beobachtet 2026-07-06). Web-Push/VAPID laeuft davon unberuehrt weiter.
+_fcm_unavailable: bool = False
 
 
 def _get_fcm_app(cfg: dict | None = None):
     """Gibt eine initialisierte firebase_admin.App zurück oder None wenn FCM nicht konfiguriert."""
-    global _fcm_app
+    global _fcm_app, _fcm_unavailable
     if _fcm_app is not None:
         return _fcm_app
+    if _fcm_unavailable:
+        return None
     fcm_enabled = cfg.get("fcm_enabled", settings.FCM_ENABLED) if cfg else settings.FCM_ENABLED
     fcm_project_id = cfg.get("fcm_project_id", settings.FCM_PROJECT_ID) if cfg else settings.FCM_PROJECT_ID
     fcm_creds = cfg.get("fcm_credentials_path", settings.FCM_CREDENTIALS_PATH) if cfg else settings.FCM_CREDENTIALS_PATH
@@ -36,6 +43,17 @@ def _get_fcm_app(cfg: dict | None = None):
     try:
         import firebase_admin  # type: ignore
         from firebase_admin import credentials  # type: ignore
+    except ImportError:
+        # Paket nicht installiert -> permanent (kein Runtime-pip). Einmal warnen,
+        # danach still bleiben, damit die Logs nicht bei jedem Push volllaufen.
+        _fcm_unavailable = True
+        log.warning(
+            "FCM ist aktiviert, aber das Paket 'firebase_admin' ist nicht installiert "
+            "-> FCM-Push deaktiviert. Web-Push/VAPID bleibt aktiv. "
+            "Zum Aktivieren: 'pip install firebase-admin' im Server-venv."
+        )
+        return None
+    try:
         if not firebase_admin._apps:
             cred = credentials.Certificate(fcm_creds)
             _fcm_app = firebase_admin.initialize_app(cred, {"projectId": fcm_project_id})

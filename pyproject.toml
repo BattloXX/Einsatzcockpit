@@ -32,6 +32,8 @@ dependencies = [
     "xhtml2pdf>=0.2.17",
     # Web Push
     "pywebpush>=2.0",
+    # Native Android Push (FCM) – optional aktivierbar via Admin > System-Einstellungen
+    "firebase-admin>=6.5",
     # QR Code
     "qrcode[pil]>=7.4",
     # Structured logging
