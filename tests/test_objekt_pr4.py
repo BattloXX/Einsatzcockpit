@@ -103,6 +103,58 @@ def test_geometry_roundtrip(pr4_db):
     assert d["lat"] is None
 
 
+def test_eus_feature_wrapper_wird_ausgepackt():
+    """EUS-Import speicherte GeoJSON als Feature-Wrapper -> geometry.type war
+    'Feature' statt 'Point', wodurch Punkt-Symbole nicht als Icon rendern
+    (Vorfall 2026-07-06). parse_karten_geometry muss das Feature auspacken."""
+    from app.models.objekt import parse_karten_geometry
+
+    feature_point = json.dumps({
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [9.7478, 47.4618]},
+        "properties": {"icon": "1", "featureType": "icon"},
+    })
+    geo = parse_karten_geometry(feature_point)
+    assert geo == {"type": "Point", "coordinates": [9.7478, 47.4618]}
+
+    feature_poly = json.dumps({
+        "type": "Feature",
+        "geometry": {"type": "Polygon", "coordinates": [[[9, 47], [9.1, 47], [9.1, 47.1], [9, 47]]]},
+        "properties": {},
+    })
+    assert parse_karten_geometry(feature_poly)["type"] == "Polygon"
+
+    # Bereits bare Geometry bleibt unveraendert; Fehlerfaelle -> None
+    assert parse_karten_geometry(json.dumps({"type": "Point", "coordinates": [1, 2]})) \
+        == {"type": "Point", "coordinates": [1, 2]}
+    assert parse_karten_geometry(None) is None
+    assert parse_karten_geometry("{kaputt") is None
+
+
+def test_eus_feature_punkt_dict_wird_als_punkt_erkannt(pr4_db):
+    """Ein migrierter Punkt (Feature-gewrappt) muss im Frontend-Dict als Punkt
+    (geometry.type == 'Point') ankommen, damit er als Symbol-Icon rendert."""
+    db, org_a_id, _, objekt = pr4_db
+    set_tenant_context(db, org_a_id)
+    feature = {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [9.7478, 47.4618]},
+        "properties": {"icon": "6"},
+    }
+    eintrag = ObjektKartenObjekt(
+        org_id=org_a_id, objekt_id=objekt.id, typ="bmz",
+        lat=47.4618, lng=9.7478, geometry_json=json.dumps(feature), label="BMZ",
+    )
+    db.add(eintrag)
+    db.commit()
+
+    from app.routers.ui_objekt import _karten_objekt_dict
+    d = _karten_objekt_dict(eintrag)
+    assert d["geometry"]["type"] == "Point"  # nicht "Feature"
+    assert d["typ"] == "bmz"
+    set_tenant_context(db, None)
+
+
 def test_karten_isolation(pr4_db):
     db, org_a_id, org_b_id, _ = pr4_db
     set_tenant_context(db, org_b_id)

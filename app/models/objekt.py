@@ -10,6 +10,7 @@ Alle Tabellen sind TenantScoped (org-isoliert) und in _TENANT_TABLE_NAMES
 """
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 
 from sqlalchemy import (
@@ -635,6 +636,28 @@ class ObjektKartenObjekt(TenantScoped, Base):
     geometry_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+def parse_karten_geometry(geometry_json: str | None) -> dict | None:
+    """Parst geometry_json zur *bare* GeoJSON-Geometry (Point/Polygon/LineString).
+
+    Das Frontend (objekt_karte.js, Infoscreen, Board) erkennt Punkte an
+    ``geometry.type === "Point"`` und rendert sie als Symbol-Icon; alles andere
+    zeichnet es via ``L.geoJSON``. Der EUS-Import speicherte die Geometrie jedoch
+    als GeoJSON-*Feature*-Wrapper (``{type:"Feature", geometry:…, properties:…}``)
+    -> ``type`` war "Feature", nie "Point", wodurch migrierte Punkt-Symbole als
+    kaputter Leaflet-Default-Marker statt als Symbol erschienen (Vorfall
+    2026-07-06). Ein Feature wird hier auf seine innere Geometry ausgepackt.
+    """
+    if not geometry_json:
+        return None
+    try:
+        geo = json.loads(geometry_json)
+    except (ValueError, TypeError):
+        return None
+    if isinstance(geo, dict) and geo.get("type") == "Feature":
+        geo = geo.get("geometry")
+    return geo if isinstance(geo, dict) else None
 
 
 KI_VORSCHLAG_OFFEN = "offen"

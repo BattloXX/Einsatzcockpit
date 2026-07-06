@@ -1791,19 +1791,13 @@ def symbol_loeschen(
 # ── Abschnitt: Lagekarte (PR4) ─────────────────────────────────────────────────
 
 def _karten_objekt_dict(k: ObjektKartenObjekt) -> dict:
-    import json as _json
-    geometry = None
-    if k.geometry_json:
-        try:
-            geometry = _json.loads(k.geometry_json)
-        except (ValueError, TypeError):
-            geometry = None
+    from app.models.objekt import parse_karten_geometry
     return {
         "id": k.id,
         "typ": k.typ,
         "lat": k.lat,
         "lng": k.lng,
-        "geometry": geometry,
+        "geometry": parse_karten_geometry(k.geometry_json),
         "label": k.label,
     }
 

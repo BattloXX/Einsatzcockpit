@@ -458,18 +458,14 @@ def infoscreen_daten(
             o = verknuepfung.objekt
             piktogramme = lade_auswahl(db, org.id, AUSWAHL_PIKTOGRAMM)
             bma = o.bma
-            karten = []
-            for k in o.karten_objekte:
-                geometry = None
-                if k.geometry_json:
-                    try:
-                        geometry = _json.loads(k.geometry_json)
-                    except (ValueError, TypeError):
-                        geometry = None
-                karten.append({
+            from app.models.objekt import parse_karten_geometry
+            karten = [
+                {
                     "typ": k.typ, "lat": k.lat, "lng": k.lng,
-                    "geometry": geometry, "label": k.label,
-                })
+                    "geometry": parse_karten_geometry(k.geometry_json), "label": k.label,
+                }
+                for k in o.karten_objekte
+            ]
             daten["objekt"] = {
                 "nummer": o.anzeige_nummer,
                 "name": o.name,
