@@ -1688,7 +1688,8 @@ button.htmx-request,
 .hydrant-icon--ueberflur, .hydrant-icon--hydrant { background: #dc2626; }
 .hydrant-icon--unterflur { background: #2563eb; border-radius: 4px; }
 .hydrant-icon--loeschwasser { background: #0d9488; }
-.hydrant-liste { display: flex; flex-direction: column; gap: 4px; }
+.hydrant-liste { display: flex; flex-direction: column; gap: 4px; max-height: 236px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.hydrant-liste__mehr { font-size: .72rem; margin-top: 6px; text-align: center; }
 .hydrant-liste__row {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
   padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px;

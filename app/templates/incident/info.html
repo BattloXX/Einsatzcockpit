@@ -87,8 +87,9 @@
                 <strong>🏢 {{ o.name }}</strong>
                 <span class="text-muted" style="font-size:.85rem;"> {{ o.anzeige_nummer }}{% if o.adresse_zeile %} · {{ o.adresse_zeile }}{% endif %}</span>
               </div>
-              <div style="display:flex;gap:6px;align-items:center;">
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                 {% if v.status == 'vorschlag' %}<span class="badge-pill badge-pill--amber">Vorschlag{% if v.distanz_m %} · {{ v.distanz_m }} m{% endif %}</span>{% endif %}
+                <a href="/objekte/{{ o.id }}/objektblatt.pdf?anhang=1" target="_blank" rel="noopener" class="btn btn--sm btn--ghost" title="Objektblatt inkl. Dokumente drucken">🖨 Drucken</a>
                 <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary">Objektinfo öffnen</a>
               </div>
             </div>

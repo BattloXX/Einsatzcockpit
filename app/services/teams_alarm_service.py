@@ -27,6 +27,26 @@ from app.services.teams_card import build_gsl_alarm_card, build_incident_message
 logger = logging.getLogger("einsatzleiter.teams_alarm")
 
 
+def _card_base_url(base_url: str) -> str:
+    """Öffentlich erreichbare Base-URL für die Teams-Karte.
+
+    Teams rendert das Kartenbild server-seitig aus der Microsoft-Cloud und ruft dazu die
+    Bild-URL selbst ab. `request.base_url` ist bei API-/LIS-Erzeugung aber oft eine interne
+    Adresse (LAN/localhost, http), die Teams nicht laden kann → das Kartenbild fehlte
+    (beobachtet 2026-07-05). Ist PUBLIC_BASE_URL konfiguriert, wird sie bevorzugt; sonst
+    bleibt es beim übergebenen `base_url` (Verhalten wie bisher)."""
+    from app.config import settings
+    public = (settings.PUBLIC_BASE_URL or "").strip()
+    resolved = public or base_url
+    if resolved and not resolved.startswith("https://"):
+        logger.warning(
+            "Teams-Alarmierung: Karten-Base-URL '%s' ist nicht https/öffentlich — Teams kann "
+            "das Kartenbild evtl. nicht laden. PUBLIC_BASE_URL auf die öffentliche https-Domain setzen.",
+            resolved,
+        )
+    return resolved
+
+
 async def _post_payload(webhook_url: str, payload: dict, *, log_label: str) -> bool:
     import httpx
 
@@ -78,6 +98,9 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
     # Kartenbild/Google-Maps-Button fehlen in der Karte, obwohl die Koordinaten längst in
     # der DB stehen (beobachtet 2026-07-05, Testeinsatz F3 "Flotzbachstraße 18").
     db.refresh(incident, attribute_names=["lat", "lng"])
+
+    # Kartenbild/Links müssen für Teams öffentlich erreichbar sein → ggf. PUBLIC_BASE_URL.
+    base_url = _card_base_url(base_url)
 
     target = "uebung" if incident.is_exercise else "alarm"
     org = db.get(FireDept, incident.primary_org_id)

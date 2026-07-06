@@ -117,10 +117,12 @@ class Settings(BaseSettings):
     # Hydranten / Löschwasser (OpenStreetMap / OSMHydrant, via Overpass server-seitig geproxyt)
     HYDRANT_ENABLED: bool = True
     HYDRANT_OVERPASS_URL: str = "https://overpass-api.de/api/interpreter"
-    HYDRANT_RADIUS_M: int = 300               # Suchradius um den Einsatzort
+    HYDRANT_RADIUS_M: int = 300               # Suchradius um den Einsatzort (Standard)
+    HYDRANT_RADIUS_EINSATZINFO_M: int = 2000  # Erweiterter Radius für die Einsatzinfo-Karte
     HYDRANT_TIMEOUT_SECONDS: float = 8.0
     HYDRANT_CACHE_TTL_SECONDS: int = 3600     # In-Memory-Cache je gerundeter Koordinate
-    HYDRANT_MAX: int = 40                     # max. zurückgegebene Entnahmestellen
+    HYDRANT_MAX: int = 40                     # max. zurückgegebene Entnahmestellen (Standard)
+    HYDRANT_MAX_EINSATZINFO: int = 120        # max. Entnahmestellen im 2-km-Radius (Liste lädt nach)
     HYDRANT_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
 
     # Wetter (GeoSphere Austria / ZAMG — CC BY 4.0, Standardquelle / Fallback ohne API-Key)

@@ -81,6 +81,8 @@
   .dropdown-arrow.open { transform: rotate(180deg); }
   /* Mobile lane select */
   .mobile-lane-select { display: none; }
+  /* Einsatzinfo-Link nur mobil (Desktop nutzt .incident-header__actions) */
+  .incident-header__info-mobile { display: none; }
   @media (max-width: 760px) {
     .mobile-lane-select {
       display: block;
@@ -92,6 +94,19 @@
       font-size: .85rem;
       cursor: pointer;
       max-width: 160px;
+    }
+    .incident-header__info-mobile {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--red, #b71921);
+      color: #fff;
+      border-radius: 5px;
+      padding: 3px 9px;
+      font-size: .85rem;
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
     }
     .board-tabs { display: none !important; }
     .task-suggestions { display: none !important; }
@@ -142,6 +157,9 @@
     {% endif %}
     {# ── Mobile Lane Select (nur ≤760px) – neben dem Einsatz, spart Platz für die Karten ── #}
     <select class="mobile-lane-select" id="mobile-lane-select" title="Ansicht wechseln"></select>
+    {# ── Einsatzinfo (nur ≤760px, da .incident-header__actions mobil ausgeblendet ist) ── #}
+    <a href="/einsatz/{{ incident.id }}/info" class="incident-header__info-mobile"
+       title="Einsatzinformation: Karte, Objektdaten, Hydranten">ℹ️ Info</a>
   </div>
   <div class="incident-header__timer">
     <span class="timer" x-text="timerDisplay">00:00</span>
@@ -191,8 +209,9 @@
     <a href="/einsatz/{{ incident.id }}/mannschaft" class="btn btn--sm btn--secondary incident-header__navlink"
        {{ tip('Mannschaft – Teilnehmerliste und Einsatzkräfte') }}>👥 Mannschaft</a>
 
-    {# ── Zu-/Absage-Zähler (Teams-Einsatzinfo) — Desktop only ────────────── #}
+    {# ── Zu-/Absage-Zähler (Teams-Einsatzinfo) — Desktop only, erst ab erster Antwort ─ #}
     <div class="header-dropdown header-dropdown--rsvp" x-data="rsvpWidget({{ incident.id }})"
+         x-show="(zusagen + absagen) > 0" x-cloak
          @click.outside="open=false"
          {{ tip('Zu-/Absagen aus der Teams-Einsatzinfo') }}>
       <button class="btn btn--sm btn--secondary" @click="open=!open; if(open) load()">

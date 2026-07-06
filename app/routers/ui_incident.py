@@ -898,7 +898,11 @@ async def incident_hydranten(incident_id: int, request: Request, db: Session = D
     osm: list = []
     stand = incident.hydranten_stand
     if enabled and lat is not None and lng is not None:
-        osm = await fetch_osm_hydranten(lat, lng)
+        osm = await fetch_osm_hydranten(
+            lat, lng,
+            radius_m=settings.HYDRANT_RADIUS_EINSATZINFO_M,
+            max_results=settings.HYDRANT_MAX_EINSATZINFO,
+        )
         if osm:
             incident.hydranten_json = _json.dumps(osm)
             incident.hydranten_stand = datetime.now(UTC)
