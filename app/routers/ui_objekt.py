@@ -56,6 +56,7 @@ from app.models.user import User
 from app.services.objekt_service import (
     aktualisiere_felder,
     berechne_vollstaendigkeit,
+    gefahr_links,
     lade_auswahl,
     naechste_nummer,
     status_uebergang_erlaubt,
@@ -331,6 +332,28 @@ async def objekt_adress_suche(
     return {"treffer": await search_addresses(q, limit=6)}
 
 
+@router.get("/gefahrgut/lookup")
+def gefahrgut_lookup(
+    request: Request,
+    un: str = "",
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Anreicherung einer Gefahr per UN-Nummer aus der offenen Gefahrgut-DB (BAM)."""
+    from app.services.gefahrgut_service import generierte_links, lookup_un
+
+    treffer = lookup_un(un)
+    return {
+        "gefunden": treffer is not None,
+        "stoffname": (treffer or {}).get("stoffname"),
+        "gefahrklasse": (treffer or {}).get("klasse"),
+        "gefahrnummer": (treffer or {}).get("gefahrnummer"),
+        "klassifizierungscode": (treffer or {}).get("klassifizierungscode"),
+        "verpackungsgruppe": (treffer or {}).get("verpackungsgruppe"),
+        "links": generierte_links(un, (treffer or {}).get("stoffname")),
+    }
+
+
 # ── Katalog-Admin: Kategorien (org_admin) ──────────────────────────────────────
 # WICHTIG: vor den /{objekt_id}-Routen registriert, sonst faengt der
 # int-Pfadparameter "kataloge" ab (422 statt Katalogseite).
@@ -519,6 +542,7 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
         "status_labels": OBJEKT_STATUS_LABELS,
         "gefahr_piktogramme": lade_auswahl(db, objekt.org_id, AUSWAHL_PIKTOGRAMM),
         "kontakt_arten": lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART),
+        "gefahr_links": gefahr_links,
         "dokument_count": dokument_count,
         "vollstaendigkeit": berechne_vollstaendigkeit(
             objekt,
@@ -961,7 +985,13 @@ def gefahr_neu(
     gefahr_id: int = Form(...),
     un_nummer: str = Form(""),
     detail: str = Form(""),
+    stoffname: str = Form(""),
+    gefahrklasse: str = Form(""),
+    gefahrnummer: str = Form(""),
+    link_label: list[str] = Form(default=[]),
+    link_url: list[str] = Form(default=[]),
 ):
+    from app.services.objekt_service import links_aus_form
     objekt = _objekt_or_404(db, objekt_id, user)
     katalog = db.query(GefahrenKatalog).filter(GefahrenKatalog.id == gefahr_id).first()
     if katalog is None:
@@ -973,11 +1003,56 @@ def gefahr_neu(
         gefahr_id=gefahr_id,
         un_nummer=un_nummer.strip() or None,
         detail=detail.strip() or None,
+        stoffname=stoffname.strip() or None,
+        gefahrklasse=gefahrklasse.strip() or None,
+        gefahrnummer=gefahrnummer.strip() or None,
+        links_json=links_aus_form(link_label, link_url),
         sort=max_sort + 1,
     )
     db.add(eintrag)
     write_objekt_change(db, objekt.id, objekt.org_id, "gefahren", "gefahr_neu",
                         before=None, after=katalog.name, user_id=user.id)
+    db.commit()
+    db.refresh(objekt)
+    ctx = _detail_context(request, db, user, objekt)
+    ctx["gefahren_katalog"] = _gefahren_katalog(db)
+    return templates.TemplateResponse(request, "objekt/_gefahren.html", ctx)
+
+
+@router.post("/{objekt_id}/gefahren/{gefahr_eintrag_id}/edit", response_class=HTMLResponse)
+def gefahr_edit(
+    objekt_id: int,
+    gefahr_eintrag_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    un_nummer: str = Form(""),
+    detail: str = Form(""),
+    stoffname: str = Form(""),
+    gefahrklasse: str = Form(""),
+    gefahrnummer: str = Form(""),
+    link_label: list[str] = Form(default=[]),
+    link_url: list[str] = Form(default=[]),
+):
+    from app.services.objekt_service import links_aus_form
+    objekt = _objekt_or_404(db, objekt_id, user)
+    eintrag = (
+        db.query(ObjektGefahr)
+        .filter(ObjektGefahr.id == gefahr_eintrag_id, ObjektGefahr.objekt_id == objekt.id)
+        .first()
+    )
+    if eintrag is None:
+        raise HTTPException(status_code=404, detail="Gefahren-Eintrag nicht gefunden")
+    eintrag.un_nummer = un_nummer.strip() or None
+    eintrag.detail = detail.strip() or None
+    eintrag.stoffname = stoffname.strip() or None
+    eintrag.gefahrklasse = gefahrklasse.strip() or None
+    eintrag.gefahrnummer = gefahrnummer.strip() or None
+    eintrag.links_json = links_aus_form(link_label, link_url)
+    write_objekt_change(db, objekt.id, objekt.org_id, "gefahren", "gefahr_bearbeitet",
+                        before=None, after=eintrag.gefahr.name if eintrag.gefahr else None,
+                        user_id=user.id)
     db.commit()
     db.refresh(objekt)
     ctx = _detail_context(request, db, user, objekt)
@@ -1334,7 +1409,10 @@ def katalog_gefahr_neu(
     name: str = Form(...),
     piktogramm_typ: str = Form("sonstig"),
     sort: int = Form(0),
+    link_label: list[str] = Form(default=[]),
+    link_url: list[str] = Form(default=[]),
 ):
+    from app.services.objekt_service import links_aus_form
     if not name.strip():
         raise HTTPException(status_code=400, detail="Name ist erforderlich")
     if piktogramm_typ not in lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM):
@@ -1343,7 +1421,9 @@ def katalog_gefahr_neu(
     if existiert:
         return RedirectResponse(url="/objekte/kataloge?error=exists&tab=gefahren", status_code=303)
     db.add(GefahrenKatalog(org_id=user.org_id, name=name.strip(),
-                           piktogramm_typ=piktogramm_typ, sort=sort, aktiv=True))
+                           piktogramm_typ=piktogramm_typ,
+                           links_json=links_aus_form(link_label, link_url),
+                           sort=sort, aktiv=True))
     db.commit()
     return RedirectResponse(url="/objekte/kataloge?saved=1&tab=gefahren", status_code=303)
 
@@ -1359,7 +1439,10 @@ def katalog_gefahr_edit(
     piktogramm_typ: str = Form("sonstig"),
     sort: int = Form(0),
     aktiv: str = Form(""),
+    link_label: list[str] = Form(default=[]),
+    link_url: list[str] = Form(default=[]),
 ):
+    from app.services.objekt_service import links_aus_form
     eintrag = db.query(GefahrenKatalog).filter(GefahrenKatalog.id == gefahr_id).first()
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Gefahr nicht gefunden")
@@ -1367,6 +1450,7 @@ def katalog_gefahr_edit(
         piktogramm_typ = "sonstig"
     eintrag.name = name.strip()
     eintrag.piktogramm_typ = piktogramm_typ
+    eintrag.links_json = links_aus_form(link_label, link_url)
     eintrag.sort = sort
     eintrag.aktiv = bool(aktiv)
     db.commit()
@@ -1969,6 +2053,7 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
             r.code in ("incident_leader",) for r in user.roles
         ),
         "gefahr_piktogramme": lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM),
+        "gefahr_links": gefahr_links,
     }
 
 
@@ -1987,7 +2072,7 @@ def einsatz_panel(
 
 
 @router.post("/einsatz-panel/{incident_id}/verknuepfen", response_class=HTMLResponse)
-def einsatz_manuell_verknuepfen(
+async def einsatz_manuell_verknuepfen(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1995,7 +2080,9 @@ def einsatz_manuell_verknuepfen(
     _guard: None = Depends(require_objekt_enabled),
     objekt_id: int = Form(...),
 ):
+    from app.models.incident import Incident
     from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
+    from app.services.objekt_matching_service import erzeuge_gefahren_meldungen
 
     objekt = _objekt_or_404(db, objekt_id, user)
     existiert = (
@@ -2015,7 +2102,16 @@ def einsatz_manuell_verknuepfen(
         write_audit(db, "objekt.einsatz_verknuepft", org_id=user.org_id, user_id=user.id,
                     entity_type="objekt", entity_id=objekt.id,
                     incident_id=incident_id, payload={"quelle": "manuell"})
+        # Objektgefahren als Board-Meldungen (idempotent) + Board neu laden
+        incident = db.get(Incident, incident_id)
+        if incident is not None:
+            erzeuge_gefahren_meldungen(db, incident, objekt)
         db.commit()
+        try:
+            from app.services.broadcast import manager
+            await manager.broadcast(incident_id, {"type": "objektgefahren", "reload_board": True})
+        except Exception:
+            pass
     return templates.TemplateResponse(
         request, "incident/_objekt_panel.html",
         _panel_context(request, db, user, incident_id),
@@ -2053,7 +2149,7 @@ def einsatz_match_bestaetigen(
 
 
 @router.post("/einsatz-panel/{incident_id}/{verknuepfung_id}/loesen", response_class=HTMLResponse)
-def einsatz_match_loesen(
+async def einsatz_match_loesen(
     incident_id: int,
     verknuepfung_id: int,
     request: Request,
@@ -2062,6 +2158,7 @@ def einsatz_match_loesen(
     _guard: None = Depends(require_objekt_enabled),
 ):
     from app.models.objekt import ObjektEinsatz
+    from app.services.objekt_matching_service import entferne_gefahren_meldungen
 
     verknuepfung = (
         db.query(ObjektEinsatz)
@@ -2073,8 +2170,17 @@ def einsatz_match_loesen(
     write_audit(db, "objekt.einsatz_geloest", org_id=user.org_id, user_id=user.id,
                 entity_type="objekt", entity_id=verknuepfung.objekt_id,
                 incident_id=incident_id, payload={"quelle": verknuepfung.quelle})
+    # Zugehoerige Objektgefahren-Meldungen mit entfernen
+    objekt = db.get(Objekt, verknuepfung.objekt_id)
+    entfernt = entferne_gefahren_meldungen(db, incident_id, objekt) if objekt else 0
     db.delete(verknuepfung)
     db.commit()
+    if entfernt:
+        try:
+            from app.services.broadcast import manager
+            await manager.broadcast(incident_id, {"type": "objektgefahren", "reload_board": True})
+        except Exception:
+            pass
     return templates.TemplateResponse(
         request, "incident/_objekt_panel.html",
         _panel_context(request, db, user, incident_id),

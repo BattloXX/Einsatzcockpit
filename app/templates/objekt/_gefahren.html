@@ -1,21 +1,79 @@
 <div class="card objekt-gefahr-card" style="padding:16px;">
   <h3 style="margin-top:0;">⚠️ Gefahren</h3>
   {% if objekt.gefahren %}
-  <div class="objekt-gefahr-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
     {% for g in objekt.gefahren %}
-    <div class="objekt-gefahr-chip">
-      <span class="objekt-gefahr-chip__label">
-        {{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠️')[:2] if g.gefahr else '⚠️' }}
-        {{ g.gefahr.name if g.gefahr else '?' }}
+    <div class="objekt-gefahr-zeile" x-data="{ edit: false, links: {{ g.links|tojson }} }">
+      <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <span class="objekt-gefahr-chip__label">
+          {{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠️')[:2] if g.gefahr else '⚠️' }}
+          {{ g.gefahr.name if g.gefahr else '?' }}
+        </span>
         {% if g.un_nummer %}<span class="badge-pill badge-pill--red">UN {{ g.un_nummer }}</span>{% endif %}
-      </span>
-      {% if g.detail %}<span class="text-muted" style="font-size:0.85em;">{{ g.detail }}</span>{% endif %}
+        {% if g.gefahrnummer %}<span class="badge-pill badge-pill--amber" title="Gefahrnummer (Kemler)">GN {{ g.gefahrnummer }}</span>{% endif %}
+        {% if g.gefahrklasse %}<span class="badge-pill badge-pill--gray">Kl. {{ g.gefahrklasse }}</span>{% endif %}
+        {% if ist_verwalter %}
+        <span style="margin-left:auto;display:flex;gap:6px;">
+          <button type="button" class="btn btn--ghost btn--xs" @click="edit = !edit">✎</button>
+          <form hx-post="/objekte/{{ objekt.id }}/gefahren/{{ g.id }}/loeschen"
+                hx-target="#abschnitt-gefahren" hx-swap="innerHTML"
+                hx-confirm="Gefahr entfernen?" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--danger btn--xs" title="Entfernen">×</button>
+          </form>
+        </span>
+        {% endif %}
+      </div>
+      {% if g.stoffname %}<div style="font-size:0.9em;"><strong>{{ g.stoffname }}</strong></div>{% endif %}
+      {% if g.detail %}<div class="text-muted" style="font-size:0.85em;">{{ g.detail }}</div>{% endif %}
+      {% set links = gefahr_links(g) %}
+      {% if links %}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
+        {% for l in links %}
+        <a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--xs">🔗 {{ l.label }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       {% if ist_verwalter %}
-      <form hx-post="/objekte/{{ objekt.id }}/gefahren/{{ g.id }}/loeschen"
+      <form x-show="edit" x-cloak hx-post="/objekte/{{ objekt.id }}/gefahren/{{ g.id }}/edit"
             hx-target="#abschnitt-gefahren" hx-swap="innerHTML"
-            hx-confirm="Gefahr entfernen?" style="display:inline;">
+            style="margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px;"
+            x-data="{
+              un: '{{ g.un_nummer or '' }}', stoffname: {{ (g.stoffname or '')|tojson }},
+              klasse: '{{ g.gefahrklasse or '' }}', gefahrnummer: '{{ g.gefahrnummer or '' }}',
+              laeuft: false, anreichern() { gefahrgutAnreichern(this); } }">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button type="submit" class="objekt-gefahr-chip__del" title="Entfernen">×</button>
+        <div style="display:grid;grid-template-columns:0.7fr auto 2fr;gap:8px;align-items:end;">
+          <div class="form-group" style="margin:0;"><label class="form-label">UN-Nr.</label>
+            <input type="text" name="un_nummer" class="form-input" maxlength="10" x-model="un"></div>
+          <button type="button" class="btn btn--ghost btn--xs" @click="anreichern()" :disabled="laeuft">🔎 Anreichern</button>
+          <div class="form-group" style="margin:0;"><label class="form-label">Stoffname</label>
+            <input type="text" name="stoffname" class="form-input" maxlength="200" x-model="stoffname"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-top:8px;">
+          <div class="form-group" style="margin:0;"><label class="form-label">Gefahrklasse</label>
+            <input type="text" name="gefahrklasse" class="form-input" maxlength="40" x-model="klasse"></div>
+          <div class="form-group" style="margin:0;"><label class="form-label">Gefahrnr. (Kemler)</label>
+            <input type="text" name="gefahrnummer" class="form-input" maxlength="20" x-model="gefahrnummer"></div>
+          <div class="form-group" style="margin:0;"><label class="form-label">Detail</label>
+            <input type="text" name="detail" class="form-input" value="{{ g.detail or '' }}"></div>
+        </div>
+        <div style="margin-top:8px;">
+          <label class="form-label">Weiterführende Links</label>
+          <template x-for="(l, i) in links" :key="i">
+            <div style="display:flex;gap:6px;margin-bottom:4px;">
+              <input type="text" name="link_label" class="form-input" style="flex:1;" placeholder="Bezeichnung" x-model="l.label">
+              <input type="text" name="link_url" class="form-input" style="flex:2;" placeholder="https://…" x-model="l.url">
+              <button type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">×</button>
+            </div>
+          </template>
+          <button type="button" class="btn btn--ghost btn--xs" @click="links.push({label:'',url:''})">+ Link</button>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:6px;">
+          <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
+          <button type="button" class="btn btn--ghost btn--xs" @click="edit=false">Abbrechen</button>
+        </div>
       </form>
       {% endif %}
     </div>
@@ -28,25 +86,70 @@
   {% if ist_verwalter %}
   <form hx-post="/objekte/{{ objekt.id }}/gefahren/neu"
         hx-target="#abschnitt-gefahren" hx-swap="innerHTML"
-        style="display:grid;grid-template-columns:1.5fr 0.7fr 2fr auto;gap:8px;align-items:end;">
+        x-data="{ un: '', stoffname: '', klasse: '', gefahrnummer: '', links: [], laeuft: false,
+                  anreichern() { gefahrgutAnreichern(this); } }"
+        style="border-top:1px solid var(--border);padding-top:12px;">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <div class="form-group" style="margin:0;">
-      <label class="form-label">Gefahr *</label>
-      <select name="gefahr_id" class="form-input" required>
-        {% for gk in gefahren_katalog %}
-        <option value="{{ gk.id }}">{{ gefahr_piktogramme.get(gk.piktogramm_typ, '⚠️')[:2] }} {{ gk.name }}</option>
-        {% endfor %}
-      </select>
+    <div style="display:grid;grid-template-columns:1.5fr 0.7fr auto;gap:8px;align-items:end;">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Gefahr *</label>
+        <select name="gefahr_id" class="form-input" required>
+          {% for gk in gefahren_katalog %}
+          <option value="{{ gk.id }}">{{ gefahr_piktogramme.get(gk.piktogramm_typ, '⚠️')[:2] }} {{ gk.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">UN-Nr.</label>
+        <input type="text" name="un_nummer" class="form-input" maxlength="10" placeholder="1203" x-model="un">
+      </div>
+      <button type="button" class="btn btn--ghost btn--xs" @click="anreichern()" :disabled="laeuft">🔎 Anreichern</button>
     </div>
-    <div class="form-group" style="margin:0;">
-      <label class="form-label">UN-Nr.</label>
-      <input type="text" name="un_nummer" class="form-input" maxlength="10" placeholder="1173">
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-top:8px;">
+      <div class="form-group" style="margin:0;"><label class="form-label">Stoffname</label>
+        <input type="text" name="stoffname" class="form-input" maxlength="200" x-model="stoffname"></div>
+      <div class="form-group" style="margin:0;"><label class="form-label">Gefahrklasse</label>
+        <input type="text" name="gefahrklasse" class="form-input" maxlength="40" x-model="klasse"></div>
+      <div class="form-group" style="margin:0;"><label class="form-label">Gefahrnr. (Kemler)</label>
+        <input type="text" name="gefahrnummer" class="form-input" maxlength="20" x-model="gefahrnummer"></div>
     </div>
-    <div class="form-group" style="margin:0;">
-      <label class="form-label">Detail</label>
-      <input type="text" name="detail" class="form-input" placeholder="z. B. Ethylacetat, Info bei Dokumenten">
+    <div class="form-group" style="margin:8px 0 0;"><label class="form-label">Detail</label>
+      <input type="text" name="detail" class="form-input" placeholder="z. B. Standort im Objekt, Menge"></div>
+    <div style="margin-top:8px;">
+      <label class="form-label">Weiterführende Links</label>
+      <template x-for="(l, i) in links" :key="i">
+        <div style="display:flex;gap:6px;margin-bottom:4px;">
+          <input type="text" name="link_label" class="form-input" style="flex:1;" placeholder="Bezeichnung" x-model="l.label">
+          <input type="text" name="link_url" class="form-input" style="flex:2;" placeholder="https://…" x-model="l.url">
+          <button type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">×</button>
+        </div>
+      </template>
+      <button type="button" class="btn btn--ghost btn--xs" @click="links.push({label:'',url:''})">+ Link</button>
     </div>
-    <button type="submit" class="btn btn--primary">+ Hinzufügen</button>
+    <div style="margin-top:10px;"><button type="submit" class="btn btn--primary">+ Hinzufügen</button></div>
   </form>
   {% endif %}
 </div>
+
+<script>
+  // Global (HTMX-swap-sicher): UN-Nummer → Gefahrgut-DB-Anreicherung in eine Alpine-Komponente.
+  window.gefahrgutAnreichern = window.gefahrgutAnreichern || function (comp) {
+    var u = (comp.un || "").trim();
+    if (!u) { return; }
+    comp.laeuft = true;
+    fetch("/objekte/gefahrgut/lookup?un=" + encodeURIComponent(u))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        comp.laeuft = false;
+        if (d.gefunden) {
+          if (d.stoffname) { comp.stoffname = d.stoffname; }
+          if (d.gefahrklasse) { comp.klasse = d.gefahrklasse; }
+          if (d.gefahrnummer) { comp.gefahrnummer = d.gefahrnummer; }
+        }
+        (d.links || []).forEach(function (l) {
+          if (!comp.links.some(function (x) { return x.url === l.url; })) { comp.links.push(l); }
+        });
+      })
+      .catch(function () { comp.laeuft = false; });
+  };
+</script>

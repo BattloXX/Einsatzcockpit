@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     OBJEKT_PDF_MAX_SEITEN: int = 300               # Seiten je Datei
     OBJEKT_SEITE_RENDER_DPI: int = 150             # Hi-Res-Rasterung (pdf2image/Poppler)
     OBJEKT_SYMBOL_MAX_BYTES: int = 512 * 1024      # 512 KB je hochgeladenem Symbolbild (SVG/PNG)
+    # Volltext-Indexierung der Dokumentseiten (Suche nach Raum/Melderlinie/…)
+    OBJEKT_OCR_ENABLED: bool = True                # OCR-Fallback fuer Scan-PDFs (Tesseract)
+    OBJEKT_OCR_MIN_CHARS: int = 20                 # unter dieser Textlaenge → OCR versuchen
+    OBJEKT_OCR_LANG: str = "deu+eng"               # Tesseract-Sprachpakete
+    OBJEKT_VOLLTEXT_MAX_CHARS: int = 100_000        # Kappung je Seite
 
     # KI-Integration (Anthropic Claude)
     ANTHROPIC_API_KEY: str = ""

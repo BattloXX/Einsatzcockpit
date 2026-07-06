@@ -27,6 +27,7 @@ from app.routers.ui_objekt import _LESE_ROLLEN, _objekt_or_404, require_objekt_e
 from app.services.objekt_dokument_service import (
     absolute_pfad,
     delete_dokument,
+    reindex_objekt,
     sammel_pdf,
     store_dokument_upload,
     verarbeite_dokument,
@@ -37,6 +38,19 @@ router = APIRouter(tags=["objekt-dokumente"])
 
 
 # ── Galerie-Kontext ────────────────────────────────────────────────────────────
+
+def _snippet(text: str, term: str, umfeld: int = 60) -> str:
+    """Kontext-Ausschnitt um den ersten Treffer (fuer die Trefferliste)."""
+    if not text:
+        return ""
+    pos = text.lower().find(term.lower())
+    if pos < 0:
+        return text[: umfeld * 2] + ("…" if len(text) > umfeld * 2 else "")
+    start = max(0, pos - umfeld)
+    ende = min(len(text), pos + len(term) + umfeld)
+    ausschnitt = text[start:ende]
+    return ("…" if start > 0 else "") + ausschnitt + ("…" if ende < len(text) else "")
+
 
 def _galerie_context(
     request: Request,
@@ -63,6 +77,7 @@ def _galerie_context(
         seiten_query = seiten_query.filter(or_(
             ObjektDokumentSeite.titel.like(term),
             ObjektDokumentSeite.melderlinien.like(term),
+            ObjektDokumentSeite.volltext.like(term),
         ))
     seiten = seiten_query.all()
 
@@ -180,6 +195,70 @@ async def dokumente_upload(
     ctx = _galerie_context(request, db, user, objekt)
     ctx["upload_fehler"] = fehler
     return templates.TemplateResponse(request, "objekt/_dokumente.html", ctx)
+
+
+@router.post("/objekte/{objekt_id}/dokumente/reindex", response_class=HTMLResponse)
+def dokumente_reindex(
+    objekt_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Volltext bestehender Dokumentseiten dieses Objekts neu aufbauen (Hintergrund)."""
+    objekt = _objekt_or_404(db, objekt_id, user)
+    background_tasks.add_task(reindex_objekt, objekt.id)
+    ctx = _galerie_context(request, db, user, objekt)
+    ctx["reindex_gestartet"] = True
+    return templates.TemplateResponse(request, "objekt/_dokumente.html", ctx)
+
+
+@router.get("/objekte/{objekt_id}/dokumente/suche.json")
+def dokumente_suche_json(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+    q: str = "",
+):
+    """Volltextsuche in den Dokumentseiten eines Objekts (fuer die Einsatzinfo).
+
+    Liefert Treffer-Seiten mit Kontext-Snippet und Viewer-Deep-Link.
+    """
+    from sqlalchemy import or_
+
+    from app.models.objekt import DOKUMENTARTEN
+    objekt = _objekt_or_404(db, objekt_id, user)
+    term = q.strip()
+    if len(term) < 2:
+        return {"treffer": []}
+    like = f"%{term}%"
+    seiten = (
+        db.query(ObjektDokumentSeite)
+        .filter(
+            ObjektDokumentSeite.objekt_id == objekt.id,
+            or_(
+                ObjektDokumentSeite.titel.like(like),
+                ObjektDokumentSeite.melderlinien.like(like),
+                ObjektDokumentSeite.volltext.like(like),
+            ),
+        )
+        .order_by(ObjektDokumentSeite.dokument_id, ObjektDokumentSeite.seiten_nr)
+        .limit(30)
+        .all()
+    )
+    treffer = []
+    for s in seiten:
+        treffer.append({
+            "seiten_nr": s.seiten_nr,
+            "dokumentart": DOKUMENTARTEN.get(s.dokumentart or "", s.dokumentart or ""),
+            "titel": s.titel or "",
+            "snippet": _snippet(s.volltext or s.melderlinien or s.titel or "", term),
+            "viewer_url": f"/objekte/{objekt.id}/dokumente/viewer?seite={s.id}&suche={term}",
+        })
+    return {"treffer": treffer}
 
 
 @router.post("/objekte/{objekt_id}/dokumente/seiten/bulk", response_class=HTMLResponse)

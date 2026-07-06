@@ -1,0 +1,21 @@
+un_nummer;stoffname;klasse;klassifizierungscode;gefahrnummer;verpackungsgruppe
+1202;Dieselkraftstoff / Heizöl (leicht);3;F1;30;III
+1203;Benzin (Ottokraftstoff);3;F1;33;II
+1863;Düsenkraftstoff;3;F1;30;II
+1170;Ethanol / Ethanol-Lösung;3;F1;33;II
+1223;Kerosin;3;F1;30;III
+1017;Chlor;2;2TC;268;
+1005;Ammoniak, wasserfrei;2;2TC;268;
+1978;Propan;2;2F;23;
+1011;Butan;2;2F;23;
+1965;Kohlenwasserstoffgas, Gemisch, verflüssigt (LPG/Flüssiggas);2;2F;23;
+1972;Erdgas, tiefgekühlt, flüssig (LNG);2;3F;223;
+1013;Kohlendioxid;2;2A;20;
+1072;Sauerstoff, verdichtet;2;1O;25;
+1789;Chlorwasserstoffsäure (Salzsäure);8;C1;80;II
+1830;Schwefelsäure;8;C1;80;II
+1824;Natriumhydroxidlösung (Natronlauge);8;C5;80;II
+1791;Hypochloritlösung;8;C9;80;III
+1428;Natrium;4.3;W2;X423;I
+1090;Aceton;3;F1;33;II
+1219;Isopropanol;3;F1;33;II

@@ -7,15 +7,24 @@
 <!-- 1) Gefahren -->
 {% if objekt.gefahren %}
 <div class="card objekt-gefahr-card" style="padding:14px;margin-bottom:12px;">
-  <div style="display:flex;flex-wrap:wrap;gap:8px;">
+  <div style="display:flex;flex-direction:column;gap:8px;">
     {% for g in objekt.gefahren %}
-    <div class="objekt-gefahr-chip" style="font-size:1em;">
-      <span class="objekt-gefahr-chip__label">
+    <div class="objekt-gefahr-chip" style="font-size:1em;flex-direction:column;align-items:flex-start;">
+      <span class="objekt-gefahr-chip__label" style="flex-wrap:wrap;">
         {{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠️')[:2] if g.gefahr else '⚠️' }}
         {{ g.gefahr.name if g.gefahr else '?' }}
         {% if g.un_nummer %}<span class="badge-pill badge-pill--red">UN {{ g.un_nummer }}</span>{% endif %}
+        {% if g.gefahrnummer %}<span class="badge-pill badge-pill--amber">GN {{ g.gefahrnummer }}</span>{% endif %}
+        {% if g.gefahrklasse %}<span class="badge-pill badge-pill--gray">Kl. {{ g.gefahrklasse }}</span>{% endif %}
       </span>
+      {% if g.stoffname %}<span style="font-size:0.9em;"><strong>{{ g.stoffname }}</strong></span>{% endif %}
       {% if g.detail %}<span class="text-muted" style="font-size:0.85em;">{{ g.detail }}</span>{% endif %}
+      {% if gefahr_links %}{% set links = gefahr_links(g) %}
+      {% if links %}
+      <span style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
+        {% for l in links %}<a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--xs">🔗 {{ l.label }}</a>{% endfor %}
+      </span>
+      {% endif %}{% endif %}
     </div>
     {% endfor %}
   </div>
@@ -85,8 +94,41 @@
 
 <!-- 6) Dokumente nach Art -->
 {% if dok_zaehler %}
-<div class="card" style="padding:14px;margin-bottom:12px;">
+<div class="card" style="padding:14px;margin-bottom:12px;"
+     x-data="{ q: '', treffer: [], geladen: false, laeuft: false,
+               suchen() {
+                 var s = this.q.trim();
+                 if (s.length < 2) { this.treffer = []; this.geladen = false; return; }
+                 this.laeuft = true;
+                 fetch('/objekte/{{ objekt.id }}/dokumente/suche.json?q=' + encodeURIComponent(s))
+                   .then(function (r) { return r.json(); })
+                   .then((d) => { this.treffer = d.treffer || []; this.geladen = true; this.laeuft = false; })
+                   .catch(() => { this.laeuft = false; });
+               } }">
   <h3 style="margin:0 0 10px;">📄 Dokumente</h3>
+  <div style="display:flex;gap:6px;margin-bottom:10px;">
+    <input type="text" x-model="q" @keydown.enter.prevent="suchen()" class="form-input" style="flex:1;padding:6px 10px;"
+           placeholder="In Dokumenten suchen (Raum, Melderlinie, Text …)">
+    <button type="button" class="btn btn--ghost btn--xs" @click="suchen()">Suchen</button>
+  </div>
+  <template x-if="geladen">
+    <div style="margin-bottom:10px;">
+      <template x-if="treffer.length === 0">
+        <p class="text-muted" style="font-size:0.85em;margin:0;">Keine Treffer.</p>
+      </template>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <template x-for="t in treffer" :key="t.viewer_url">
+          <a :href="t.viewer_url" class="card" style="margin:0;padding:8px 10px;text-decoration:none;color:inherit;">
+            <div style="font-size:0.8em;" class="text-muted">
+              <span x-text="t.dokumentart || 'Dokument'"></span> · Seite <span x-text="t.seiten_nr"></span>
+              <template x-if="t.titel"><span> · <span x-text="t.titel"></span></span></template>
+            </div>
+            <div style="font-size:0.85em;" x-text="t.snippet"></div>
+          </a>
+        </template>
+      </div>
+    </div>
+  </template>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
     {% for code, label in dokumentarten.items() %}
     {% if dok_zaehler.get(code, 0) > 0 %}

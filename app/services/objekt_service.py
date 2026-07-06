@@ -301,6 +301,48 @@ def seed_objekt_kataloge(db: Session, org_id: int) -> None:
     seed_objekt_symbole(db, org_id)
 
 
+def gefahr_links(objekt_gefahr) -> list[dict]:  # type: ignore[no-untyped-def]
+    """Merged Link-Liste einer Objekt-Gefahr: Katalog-Standard + objektspezifisch + generierte DB-Links.
+
+    Dedupliziert nach URL (erste Beschriftung gewinnt).
+    """
+    from app.services.gefahrgut_service import generierte_links
+
+    gesehen: set[str] = set()
+    out: list[dict] = []
+
+    def _add(items: list[dict]) -> None:
+        for eintrag in items:
+            url = (eintrag.get("url") or "").strip()
+            if url and url not in gesehen:
+                gesehen.add(url)
+                out.append({"label": eintrag.get("label") or url, "url": url})
+
+    if getattr(objekt_gefahr, "gefahr", None) is not None:
+        _add(objekt_gefahr.gefahr.links)
+    _add(objekt_gefahr.links)
+    stoff = objekt_gefahr.stoffname or (
+        objekt_gefahr.gefahr.name if getattr(objekt_gefahr, "gefahr", None) else None
+    )
+    _add(generierte_links(objekt_gefahr.un_nummer, stoff))
+    return out
+
+
+def links_aus_form(labels: list[str], urls: list[str]) -> str | None:
+    """Serialisiert Label/URL-Paare aus einem Formular zu JSON. Nur http(s)-URLs."""
+    import json as _json
+
+    paare: list[dict] = []
+    for label, url in zip(labels, urls, strict=False):
+        u = (url or "").strip()
+        if not u:
+            continue
+        if not (u.startswith("http://") or u.startswith("https://")):
+            u = "https://" + u
+        paare.append({"label": (label or "").strip() or u, "url": u})
+    return _json.dumps(paare, ensure_ascii=False) if paare else None
+
+
 def pruefe_revision_erinnerungen(db: Session) -> list[dict]:
     """Findet Objekte mit faelligem Revisionsdatum ohne gesendete Erinnerung.
 

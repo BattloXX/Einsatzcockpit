@@ -115,11 +115,24 @@
     <form hx-get="/objekte/{{ objekt.id }}/dokumente" hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
           style="display:inline-flex;gap:4px;margin-left:auto;">
       <input type="hidden" name="art" value="{{ filter_art }}">
-      <input type="text" name="suche" value="{{ filter_suche }}" class="form-input" style="max-width:180px;padding:4px 8px;"
-             placeholder="Titel / Melderlinie">
+      <input type="text" name="suche" value="{{ filter_suche }}" class="form-input" style="max-width:200px;padding:4px 8px;"
+             placeholder="Text / Raum / Melderlinie">
       <button type="submit" class="btn btn--ghost btn--xs">Suchen</button>
     </form>
   </div>
+
+  {% if reindex_gestartet %}
+  <div class="alert alert--success">Volltext-Index wird im Hintergrund neu aufgebaut … Suche gleich verfügbar.</div>
+  {% endif %}
+  {% if ist_verwalter and gesamt > 0 %}
+  <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+    <form hx-post="/objekte/{{ objekt.id }}/dokumente/reindex" hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
+          hx-confirm="Volltext-Suche für alle Seiten dieses Objekts neu aufbauen?" style="display:inline;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--ghost btn--xs" title="Bestehende Dokumente für die Volltextsuche neu indexieren">🔎 Volltext neu indexieren</button>
+    </form>
+  </div>
+  {% endif %}
 
   <div class="objekt-seiten-grid">
     {% for s in seiten %}

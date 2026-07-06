@@ -29,6 +29,12 @@
       {% endif %}
     </div>
     {% if msg.detail %}<div class="card__sub">{{ msg.detail }}</div>{% endif %}
+    {% if msg.objekt_gefahr %}{% set glinks = gefahr_links(msg.objekt_gefahr) %}
+    {% if glinks %}
+    <div class="card__links" onclick="event.stopPropagation()" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">
+      {% for l in glinks %}<a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--xs">🔗 {{ l.label }}</a>{% endfor %}
+    </div>
+    {% endif %}{% endif %}
     {% if msg.due_at %}
     <div class="card__due">⏰ Fällig: {{ msg.due_at|local_time }}</div>
     {% endif %}

@@ -70,7 +70,7 @@
   <!-- ── Gefahren ── -->
   <div x-show="tab === 'gefahren'" x-cloak>
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
-      <button class="btn btn--primary" onclick="document.getElementById('newGefModal').showModal()">+ Gefahr</button>
+      <button class="btn btn--primary" onclick="openNewGef()">+ Gefahr</button>
     </div>
     <table class="table-admin">
       <thead><tr><th>Sortierung</th><th>Name</th><th>Piktogramm</th><th>Status</th><th>Verwendet</th><th>Aktionen</th></tr></thead>
@@ -379,6 +379,10 @@
           </select></div>
         <div class="form-group"><label class="form-label">Sortierung</label>
           <input type="number" name="sort" class="form-input" value="0"></div>
+        <div class="form-group"><label class="form-label">Standard-Links (je Gefahrenart)</label>
+          <div id="ng_links"></div>
+          <button type="button" class="btn btn--ghost btn--xs" onclick="gefLinkAddRow('ng_links')">+ Link</button>
+        </div>
       </div>
       <div class="modal__footer">
         <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -407,6 +411,10 @@
           <input type="number" name="sort" id="eg_sort" class="form-input" value="0"></div>
         <div class="form-group">
           <label class="checkbox-label"><input type="checkbox" name="aktiv" value="1" id="eg_aktiv"> Aktiv</label>
+        </div>
+        <div class="form-group"><label class="form-label">Standard-Links (je Gefahrenart)</label>
+          <div id="eg_links"></div>
+          <button type="button" class="btn btn--ghost btn--xs" onclick="gefLinkAddRow('eg_links')">+ Link</button>
         </div>
       </div>
       <div class="modal__footer">
@@ -474,11 +482,33 @@ function openEditKat(id, name, sort, aktiv) {
   document.getElementById('editKatForm').action = `/objekte/kataloge/kategorien/${id}/edit`;
   document.getElementById('editKatModal').showModal();
 }
+// Standard-Links je Gefahrenart (Kataloge-Seite)
+window._gefLinks = { {% for g in gefahren %}{{ g.id }}: {{ g.links|tojson }}{% if not loop.last %}, {% endif %}{% endfor %} };
+function gefLinkAddRow(containerId, label, url) {
+  var row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;margin-bottom:4px;';
+  row.innerHTML = '<input type="text" name="link_label" class="form-input" style="flex:1;" placeholder="Bezeichnung">' +
+    '<input type="text" name="link_url" class="form-input" style="flex:2;" placeholder="https://…">' +
+    '<button type="button" class="btn btn--ghost btn--xs">×</button>';
+  row.querySelector('button').onclick = function () { row.remove(); };
+  row.children[0].value = label || '';
+  row.children[1].value = url || '';
+  document.getElementById(containerId).appendChild(row);
+}
+function openNewGef() {
+  var f = document.getElementById('newGefModal').querySelector('form');
+  f.reset();
+  document.getElementById('ng_links').innerHTML = '';
+  document.getElementById('newGefModal').showModal();
+}
 function openEditGef(id, name, typ, sort, aktiv) {
   document.getElementById('eg_name').value = name;
   document.getElementById('eg_typ').value = typ;
   document.getElementById('eg_sort').value = sort;
   document.getElementById('eg_aktiv').checked = aktiv === true || aktiv === 'true';
+  var box = document.getElementById('eg_links');
+  box.innerHTML = '';
+  (window._gefLinks[id] || []).forEach(function (l) { gefLinkAddRow('eg_links', l.label, l.url); });
   document.getElementById('editGefForm').action = `/objekte/kataloge/gefahren/${id}/edit`;
   document.getElementById('editGefModal').showModal();
 }

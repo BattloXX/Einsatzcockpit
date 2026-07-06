@@ -69,6 +69,11 @@
   var karte = null;
   var letzterModus = null;
   var letzteIncidentId = null;
+  var rotTimer = null;
+
+  function stopRotation() {
+    if (rotTimer) { clearTimeout(rotTimer); rotTimer = null; }
+  }
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
@@ -86,7 +91,43 @@
     if (idleUhr) { idleUhr.textContent = uhrzeit(); }
   }, 1000);
 
+  function renderGsl(daten) {
+    stopRotation();
+    karte = null;
+    var g = daten.gsl || {};
+    var beginn = g.beginn ? new Date(g.beginn).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+    var html = '<div class="is-alarm" style="background:#7f1d1d;">' +
+      '<div class="is-alarm__kopf">' +
+      '<div class="is-alarm__stichwort">' + (g.uebung ? "ÜBUNG · " : "") + "GROSSSCHADENSLAGE</div>" +
+      '<div class="is-alarm__adresse">' + esc(g.name || "") + "</div>" +
+      (g.beschreibung ? '<div class="is-alarm__meldung">' + esc(g.beschreibung) + "</div>" : "") +
+      (beginn ? '<div style="margin-top:8px;color:#fecaca;">seit ' + beginn + " Uhr</div>" : "") +
+      "</div></div>";
+    document.getElementById("is-inhalt").innerHTML = html;
+  }
+
+  function renderRotation(urls) {
+    stopRotation();
+    karte = null;
+    var i = 0;
+    function zeige() {
+      var eintrag = urls[i % urls.length];
+      document.getElementById("is-inhalt").innerHTML =
+        '<div class="is-idle" style="padding:0;"><iframe src="' + esc(eintrag.url) + '"></iframe></div>';
+      var dwell = (eintrag.dwell_sec || 30) * 1000;
+      i += 1;
+      if (urls.length > 1) { rotTimer = setTimeout(zeige, dwell); }
+    }
+    zeige();
+  }
+
   function renderIdle(daten) {
+    stopRotation();
+    // Frei konfigurierte URL-Rotation hat Vorrang vor den festen Ruhemodi
+    if (daten.idle_urls && daten.idle_urls.length) {
+      renderRotation(daten.idle_urls);
+      return;
+    }
     var html = "";
     if (daten.idle_modus === "wetter" && daten.wetter_url) {
       html = '<div class="is-idle" style="padding:0;"><iframe src="' + esc(daten.wetter_url) + '"></iframe></div>';
@@ -109,6 +150,7 @@
   }
 
   function renderAlarm(daten) {
+    stopRotation();
     var inc = daten.incident;
     var o = daten.objekt;
     var html =
@@ -117,6 +159,11 @@
       '<div class="is-alarm__stichwort">' + esc(inc.stichwort || "ALARM") + "</div>" +
       '<div class="is-alarm__adresse">' + esc(inc.adresse || "") + "</div>" +
       (inc.meldung ? '<div class="is-alarm__meldung">' + esc(inc.meldung) + "</div>" : "") +
+      (inc.rsvp && (inc.rsvp.zusagen + inc.rsvp.absagen) > 0
+        ? '<div style="margin-top:8px;font-size:1.6rem;font-weight:700;">' +
+          '<span style="color:#4ade80;">✅ ' + inc.rsvp.zusagen + '</span>' +
+          '<span style="color:#f87171;margin-left:18px;">❌ ' + inc.rsvp.absagen + '</span></div>'
+        : "") +
       "</div>" +
       '<div class="is-alarm__body">';
 
@@ -211,12 +258,16 @@
         // Org-Symbolkatalog (inkl. eigener Bildsymbole) in die Renderer-Map spielen
         if (daten.symbole && window.setObjektSymbole) { window.setObjektSymbole(daten.symbole); }
         var incId = daten.incident ? daten.incident.id : null;
-        if (daten.modus === letzterModus && incId === letzteIncidentId && daten.modus === "alarm") {
-          return; // Alarmansicht steht schon — Karte nicht neu aufbauen
+        // Gleicher Modus → nicht neu aufbauen (Alarm: gleicher Einsatz; idle/gsl: Rotation/Ansicht
+        // laufen weiter). So setzt der 15-s-Poll die URL-Rotation nicht zurueck.
+        if (daten.modus === letzterModus && (daten.modus !== "alarm" || incId === letzteIncidentId)) {
+          return;
         }
         letzterModus = daten.modus;
         letzteIncidentId = incId;
-        if (daten.modus === "alarm") { renderAlarm(daten); } else { renderIdle(daten); }
+        if (daten.modus === "gsl") { renderGsl(daten); }
+        else if (daten.modus === "alarm") { renderAlarm(daten); }
+        else { renderIdle(daten); }
       })
       .catch(function () { /* naechster Poll versucht es erneut */ });
   }
@@ -229,7 +280,8 @@
       if (e.data === "pong") { return; }
       try {
         var ev = JSON.parse(e.data);
-        if (ev.type === "incident_created" || ev.type === "objekt_match" || ev.type === "incident_closed") {
+        if (ev.type === "incident_created" || ev.type === "objekt_match" ||
+            ev.type === "incident_closed" || ev.type === "gsl_changed") {
           letzterModus = null; // Neuaufbau erzwingen
           aktualisieren();
         }

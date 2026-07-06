@@ -54,6 +54,8 @@ dependencies = [
     "pypdf>=4.0",
     # Objektverwaltung: PDF-Seiten-Rasterung (braucht Poppler: apt install poppler-utils)
     "pdf2image>=1.17",
+    # Objektverwaltung: OCR-Fallback fuer Scan-PDFs (braucht Tesseract: apt install tesseract-ocr tesseract-ocr-deu)
+    "pytesseract>=0.3.10",
     # Excel-Import (Mannschaftsliste)
     "openpyxl>=3.1",
     # KI-Integration (Anthropic Claude)

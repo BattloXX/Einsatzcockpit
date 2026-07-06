@@ -64,6 +64,7 @@ from app.models.master import (
 from app.models.objekt import (
     AlarmInfoscreenToken,
     GefahrenKatalog,
+    InfoscreenUrl,
     MerkmalKatalog,
     Objekt,
     ObjektAuswahl,
@@ -166,7 +167,7 @@ __all__ = [
     "GefahrenKatalog", "ObjektGefahr", "MerkmalKatalog", "ObjektMerkmal",
     "ObjektAuswahl", "ObjektKontakt", "ObjektWohnanlage",
     "ObjektDokument", "ObjektDokumentSeite", "ObjektKartenObjekt", "ObjektEinsatz",
-    "ObjektSymbol", "AlarmInfoscreenToken", "ObjektSeiteKiVorschlag",
+    "ObjektSymbol", "AlarmInfoscreenToken", "InfoscreenUrl", "ObjektSeiteKiVorschlag",
     "UASDevice", "UASPilot", "UASFlugbewegung", "UASWartung",
     "UASEinsatz", "UASEinsatzRolleEintrag", "UASFlug", "UASCheckliste",
     "UASEreignis", "UASKartenobjekt", "UASMedien",

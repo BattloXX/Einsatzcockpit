@@ -13,7 +13,6 @@ DSGVO: Wohnanlagen-Hinweise werden NIE an den Infoscreen ausgeliefert (fest).
 from __future__ import annotations
 
 import secrets
-from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -71,6 +70,42 @@ def _org_settings(db: Session, org_id: int) -> OrgSettings | None:
     )
 
 
+def _baue_idle_urls(db: Session, token_row: AlarmInfoscreenToken, wetter_url: str | None) -> list[dict]:
+    """Rotations-URLs dieses Monitors (konfigurierte Reihenfolge) + optional Wetter."""
+    from app.models.objekt import InfoscreenUrl
+
+    urls: list[dict] = []
+    ids = token_row.url_ids
+    if ids:
+        rows = (
+            db.query(InfoscreenUrl)
+            .filter(InfoscreenUrl.id.in_(ids), InfoscreenUrl.aktiv.is_(True))
+            .execution_options(include_all_tenants=True)
+            .all()
+        )
+        by_id = {r.id: r for r in rows}
+        for i in ids:  # konfigurierte Reihenfolge erhalten
+            r = by_id.get(i)
+            if r is not None:
+                urls.append({"label": r.label, "url": r.url, "dwell_sec": r.dwell_sec})
+    if token_row.zeigt_wetter and wetter_url:
+        urls.append({"label": "Wetter", "url": wetter_url, "dwell_sec": 30})
+    return urls
+
+
+def _aktive_gsl(db: Session, org_id: int):  # type: ignore[no-untyped-def]
+    """Aktive Großschadenslage der Org (bleibt, solange aktiv) oder None."""
+    from app.models.major_incident import MajorIncident, MajorIncidentStatus
+
+    return (
+        db.query(MajorIncident)
+        .filter(MajorIncident.org_id == org_id,
+                MajorIncident.status == MajorIncidentStatus.active)
+        .order_by(MajorIncident.started_at.desc())
+        .first()
+    )
+
+
 # ── Oeffentliche Infoscreen-Seite ──────────────────────────────────────────────
 
 @router.get("/infoscreen/alarm/{token}", response_class=HTMLResponse, include_in_schema=False)
@@ -97,23 +132,11 @@ def infoscreen_daten(
 
     from app.models.incident import Incident
 
-    _, org = _token_org(db, token)
+    token_row, org = _token_org(db, token)
     settings_row = _org_settings(db, org.id)
-    dauer_min = settings_row.alarm_infoscreen_alarm_dauer_min if settings_row else 60
     idle_modus = settings_row.alarm_infoscreen_idle_modus if settings_row else "uhr"
     wetter_url = settings_row.alarm_infoscreen_wetter_url if settings_row else None
-
-    grenze = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=dauer_min)
-    incident = (
-        db.query(Incident)
-        .filter(
-            Incident.primary_org_id == org.id,
-            Incident.status == "active",
-            Incident.started_at >= grenze,
-        )
-        .order_by(Incident.started_at.desc())
-        .first()
-    )
+    gsl_enabled = settings_row.alarm_infoscreen_gsl_enabled if settings_row else True
 
     from app.services.objekt_symbol_service import symbol_katalog_json
     daten: dict = {
@@ -121,9 +144,35 @@ def infoscreen_daten(
         "modus": "idle",
         "idle_modus": idle_modus,
         "wetter_url": wetter_url if idle_modus == "wetter" else None,
+        # Frei konfigurierte Rotations-URLs dieses Monitors (Ruhezustand)
+        "idle_urls": _baue_idle_urls(db, token_row, wetter_url),
         # Org-Symbolkatalog fuer das clientseitige Rendering (auch eigene Bildsymbole)
         "symbole": symbol_katalog_json(db, org.id),
     }
+
+    # ── Vorrang 1: Großschadenslage (bleibt, solange aktiv) ──
+    if gsl_enabled:
+        gsl = _aktive_gsl(db, org.id)
+        if gsl is not None:
+            daten["modus"] = "gsl"
+            daten["gsl"] = {
+                "name": gsl.name,
+                "beschreibung": gsl.description or "",
+                "beginn": gsl.started_at.isoformat() + "Z" if gsl.started_at else None,
+                "uebung": bool(gsl.is_exercise),
+            }
+            return daten
+
+    # ── Vorrang 2: aktiver Einsatz (bleibt, solange status == active) ──
+    incident = (
+        db.query(Incident)
+        .filter(
+            Incident.primary_org_id == org.id,
+            Incident.status == "active",
+        )
+        .order_by(Incident.started_at.desc())
+        .first()
+    )
 
     if incident is not None:
         adresse = " ".join(
@@ -131,6 +180,21 @@ def infoscreen_daten(
         )
         if incident.address_city:
             adresse = f"{adresse}, {incident.address_city}".strip(", ")
+        # Rückmeldungen (Zu-/Absagen) — nur zählen, keine Namen am öffentlichen Screen
+        from app.models.teilnahme import Teilnahme
+        rsvp_rows = (
+            db.query(Teilnahme.rsvp_status)
+            .filter(
+                Teilnahme.org_id == org.id,
+                Teilnahme.bezug_typ == "einsatz",
+                Teilnahme.bezug_id == incident.id,
+                Teilnahme.rsvp_status.isnot(None),
+            )
+            .execution_options(include_all_tenants=True)
+            .all()
+        )
+        zusagen = sum(1 for (s,) in rsvp_rows if s == "zugesagt")
+        absagen = sum(1 for (s,) in rsvp_rows if s == "abgesagt")
         daten.update({
             "modus": "alarm",
             "incident": {
@@ -141,6 +205,7 @@ def infoscreen_daten(
                 "beginn": incident.started_at.isoformat() + "Z" if incident.started_at else None,
                 "lat": incident.lat,
                 "lng": incident.lng,
+                "rsvp": {"zusagen": zusagen, "absagen": absagen},
             },
         })
 
@@ -266,19 +331,38 @@ def verwaltung(
     from app.routers.ui_objekt import require_objekt_enabled
     require_objekt_enabled(request)
 
+    from app.core.crypto import decrypt_secret
+    from app.models.objekt import InfoscreenUrl
+
     tokens = (
         db.query(AlarmInfoscreenToken)
         .order_by(AlarmInfoscreenToken.erstellt_am.desc())
         .all()
     )
+    urls = (
+        db.query(InfoscreenUrl)
+        .order_by(InfoscreenUrl.sort, InfoscreenUrl.label)
+        .all()
+    )
+    basis_url = str(request.base_url).rstrip("/")
+    # Dauerhaft anzeigbare Monitor-URL aus dem verschluesselten Token (nur org_admin)
+    token_urls: dict[int, str] = {}
+    for t in tokens:
+        if t.token_enc:
+            try:
+                token_urls[t.id] = f"{basis_url}/infoscreen/alarm/{decrypt_secret(t.token_enc)}"
+            except Exception:
+                pass
     settings_row = _org_settings(db, user.org_id) if user.org_id else None
     return templates.TemplateResponse(request, "objekt/infoscreen_verwaltung.html", {
         "user": user,
         "tokens": tokens,
+        "urls": urls,
+        "token_urls": token_urls,
         "einstellungen": settings_row,
         "idle_modi": IDLE_MODI,
         "neuer_token": request.query_params.get("neuer_token"),
-        "basis_url": str(request.base_url).rstrip("/"),
+        "basis_url": basis_url,
     })
 
 
@@ -292,10 +376,12 @@ def token_neu(
     from app.routers.ui_objekt import require_objekt_enabled
     require_objekt_enabled(request)
 
+    from app.core.crypto import encrypt_secret
     token = secrets.token_urlsafe(32)
     db.add(AlarmInfoscreenToken(
         org_id=user.org_id,
         token_hash=hash_api_key(token),
+        token_enc=encrypt_secret(token),  # dauerhaft anzeigbare Monitor-URL
         name=name.strip() or "Infoscreen",
         aktiv=True,
     ))
@@ -336,6 +422,7 @@ def einstellungen_speichern(
     idle_modus: str = Form("uhr"),
     alarm_dauer_min: int = Form(60),
     wetter_url: str = Form(""),
+    gsl_enabled: str = Form(""),
 ):
     from app.routers.ui_objekt import require_objekt_enabled
     require_objekt_enabled(request)
@@ -348,5 +435,87 @@ def einstellungen_speichern(
     settings_row.alarm_infoscreen_idle_modus = idle_modus
     settings_row.alarm_infoscreen_alarm_dauer_min = max(5, min(alarm_dauer_min, 720))
     settings_row.alarm_infoscreen_wetter_url = wetter_url.strip() or None
+    settings_row.alarm_infoscreen_gsl_enabled = bool(gsl_enabled)
+    db.commit()
+    return RedirectResponse(url="/infoscreen-alarm/verwaltung?saved=1", status_code=303)
+
+
+# ── Rotations-URLs (InfoscreenUrl) + Monitor-Matrix ────────────────────────────
+
+@router.post("/infoscreen-alarm/verwaltung/url/neu")
+def url_neu(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    label: str = Form(...),
+    url: str = Form(...),
+    dwell_sec: int = Form(30),
+    sort: int = Form(0),
+):
+    from app.models.objekt import InfoscreenUrl
+    from app.routers.ui_objekt import require_objekt_enabled
+    require_objekt_enabled(request)
+
+    ziel = url.strip()
+    if not ziel:
+        raise HTTPException(status_code=400, detail="URL ist erforderlich")
+    if not (ziel.startswith("http://") or ziel.startswith("https://")):
+        ziel = "https://" + ziel
+    db.add(InfoscreenUrl(
+        org_id=user.org_id, label=label.strip() or ziel, url=ziel,
+        dwell_sec=max(3, min(dwell_sec, 3600)), sort=sort, aktiv=True,
+    ))
+    db.commit()
+    return RedirectResponse(url="/infoscreen-alarm/verwaltung?saved=1", status_code=303)
+
+
+@router.post("/infoscreen-alarm/verwaltung/url/{url_id}/loeschen")
+def url_loeschen(
+    url_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+):
+    from app.models.objekt import InfoscreenUrl
+    from app.routers.ui_objekt import require_objekt_enabled
+    require_objekt_enabled(request)
+
+    eintrag = db.query(InfoscreenUrl).filter(InfoscreenUrl.id == url_id).first()
+    if eintrag is None:
+        raise HTTPException(status_code=404, detail="URL nicht gefunden")
+    db.delete(eintrag)
+    # Verweise in den Monitor-Zuordnungen mit entfernen
+    for t in db.query(AlarmInfoscreenToken).all():
+        ids = t.url_ids
+        if url_id in ids:
+            import json as _json
+            t.url_ids_json = _json.dumps([i for i in ids if i != url_id])
+    db.commit()
+    return RedirectResponse(url="/infoscreen-alarm/verwaltung?saved=1", status_code=303)
+
+
+@router.post("/infoscreen-alarm/verwaltung/token/{token_id}/monitor")
+def token_monitor_speichern(
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    url_id: list[int] = Form(default=[]),
+    zeigt_wetter: str = Form(""),
+):
+    """Speichert die Matrix-Auswahl (welche URLs + Wetter) eines Monitors."""
+    import json as _json
+
+    from app.models.objekt import InfoscreenUrl
+    from app.routers.ui_objekt import require_objekt_enabled
+    require_objekt_enabled(request)
+
+    token = db.query(AlarmInfoscreenToken).filter(AlarmInfoscreenToken.id == token_id).first()
+    if token is None:
+        raise HTTPException(status_code=404, detail="Monitor nicht gefunden")
+    gueltige = {r.id for r in db.query(InfoscreenUrl).all()}
+    gewaehlt = [i for i in url_id if i in gueltige]
+    token.url_ids_json = _json.dumps(gewaehlt)
+    token.zeigt_wetter = bool(zeigt_wetter)
     db.commit()
     return RedirectResponse(url="/infoscreen-alarm/verwaltung?saved=1", status_code=303)

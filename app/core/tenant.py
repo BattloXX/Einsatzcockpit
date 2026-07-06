@@ -127,6 +127,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "objekt_karten_objekt",
     "objekt_einsatz",
     "alarm_infoscreen_token",
+    "infoscreen_url",
     "objekt_seite_ki_vorschlag",
     # GSL/Großschadenslage (SEC-1 Defense-in-Depth-Backstop) — bisher nur durch
     # ~95 manuelle _check_org_access()-Aufrufe in ui_major_incident.py geschützt;

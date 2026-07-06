@@ -185,6 +185,11 @@ from app.services.lagekarte import resolve_lagekarte_url  # noqa: E402
 
 templates.env.globals["lagekarte_url"] = resolve_lagekarte_url
 
+# Gefahren-Links (Katalog + objektspezifisch + generierte DB-Links) für Board-Meldungen etc.
+from app.services.objekt_service import gefahr_links as _gefahr_links  # noqa: E402
+
+templates.env.globals["gefahr_links"] = _gefahr_links
+
 # Globale Konfigurationswerte für Templates
 import os as _os  # noqa: E402
 

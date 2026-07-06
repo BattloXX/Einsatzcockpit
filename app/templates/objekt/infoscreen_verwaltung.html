@@ -42,12 +42,59 @@
         <input type="text" name="wetter_url" class="form-input" maxlength="500"
                placeholder="{{ basis_url }}/wetter/infoscreen/…"
                value="{{ einstellungen.alarm_infoscreen_wetter_url or '' if einstellungen else '' }}">
-        <p class="form-hint">Der Wetter-Token ist nur als Hash gespeichert — URL daher hier manuell hinterlegen.</p>
+        <p class="form-hint">Der Wetter-Token ist nur als Hash gespeichert — URL daher hier manuell hinterlegen. Monitore können „Wetter" als Rotationseintrag nutzen, ohne die URL erneut einzugeben.</p>
+      </div>
+      <div class="form-group" style="margin:0;grid-column:1 / -1;">
+        <label class="checkbox-label">
+          <input type="checkbox" name="gsl_enabled" value="1"
+                 {% if not einstellungen or einstellungen.alarm_infoscreen_gsl_enabled %}checked{% endif %}>
+          Bei aktiver Großschadenslage eine Sonderansicht zeigen (bleibt, solange die Lage aktiv ist)
+        </label>
       </div>
       <div style="grid-column:1 / -1;display:flex;justify-content:flex-end;">
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>
+  </div>
+
+  <!-- Rotations-URLs (Ruhezustand) -->
+  <div class="card" style="padding:16px;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="margin:0;">Rotations-URLs (Ruhezustand)</h3>
+    </div>
+    <p class="text-muted" style="margin-top:0;">Beliebige Webseiten, die im Ruhezustand rotierend angezeigt werden. Zuordnung zu einzelnen Monitoren unten in der Matrix.</p>
+    <form method="post" action="/infoscreen-alarm/verwaltung/url/neu"
+          style="display:grid;grid-template-columns:1fr 2fr auto auto;gap:8px;align-items:end;margin-bottom:12px;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group" style="margin:0;"><label class="form-label">Bezeichnung</label>
+        <input type="text" name="label" class="form-input" required maxlength="120" placeholder="z. B. Wetter ORF"></div>
+      <div class="form-group" style="margin:0;"><label class="form-label">URL</label>
+        <input type="text" name="url" class="form-input" required maxlength="500" placeholder="https://…"></div>
+      <div class="form-group" style="margin:0;"><label class="form-label">Verweildauer (s)</label>
+        <input type="number" name="dwell_sec" class="form-input" min="3" max="3600" value="30" style="width:90px;"></div>
+      <button type="submit" class="btn btn--primary">+ URL</button>
+    </form>
+    {% if urls %}
+    <table class="table-admin">
+      <thead><tr><th>Bezeichnung</th><th>URL</th><th>Dauer</th><th></th></tr></thead>
+      <tbody>
+        {% for u in urls %}
+        <tr>
+          <td><strong>{{ u.label }}</strong></td>
+          <td style="word-break:break-all;"><a href="{{ u.url }}" target="_blank" rel="noopener">{{ u.url }}</a></td>
+          <td>{{ u.dwell_sec }} s</td>
+          <td>
+            <form method="post" action="/infoscreen-alarm/verwaltung/url/{{ u.id }}/loeschen" style="display:inline"
+                  onsubmit="return confirm('URL {{ u.label }} löschen?')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="text-muted">Noch keine URLs angelegt.</p>{% endif %}
   </div>
 
   <div class="card" style="padding:16px;">
@@ -62,12 +109,19 @@
     </div>
     {% if tokens %}
     <table class="table-admin">
-      <thead><tr><th>Name</th><th>Angelegt</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Monitor-URL (dauerhaft)</th><th>Status</th><th></th></tr></thead>
       <tbody>
         {% for t in tokens %}
         <tr>
-          <td><strong>{{ t.name }}</strong></td>
-          <td>{{ t.erstellt_am|local_datetime }}</td>
+          <td><strong>{{ t.name }}</strong><div class="text-muted" style="font-size:.8em;">{{ t.erstellt_am|local_datetime }}</div></td>
+          <td style="word-break:break-all;">
+            {% if token_urls.get(t.id) %}
+            <code style="font-size:.8em;">{{ token_urls[t.id] }}</code>
+            <button type="button" class="btn btn--ghost btn--xs" onclick="navigator.clipboard.writeText('{{ token_urls[t.id] }}')">Kopieren</button>
+            {% else %}
+            <span class="text-muted">nur einmalig bei Erstellung sichtbar — bei Verlust neu ausstellen</span>
+            {% endif %}
+          </td>
           <td>
             {% if t.aktiv %}<span class="badge-pill badge-pill--green">aktiv</span>
             {% else %}<span class="badge-pill badge-pill--gray">deaktiviert</span>{% endif %}
@@ -89,5 +143,36 @@
     <p class="text-muted">Noch keine Tokens angelegt.</p>
     {% endif %}
   </div>
+
+  <!-- Monitor-Matrix: welche URLs zeigt welcher Monitor im Ruhezustand -->
+  {% set aktive_tokens = tokens|selectattr('aktiv')|list %}
+  {% if aktive_tokens and (urls or true) %}
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h3 style="margin-top:0;">Monitor-Konfiguration (Ruhezustand)</h3>
+    <p class="text-muted" style="margin-top:0;">Je Monitor auswählen, welche Rotations-URLs (und ob Wetter) im Ruhezustand angezeigt werden. Ohne Auswahl gilt der oben eingestellte Standard-Ruhezustand.</p>
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      {% for t in aktive_tokens %}
+      <form method="post" action="/infoscreen-alarm/verwaltung/token/{{ t.id }}/monitor"
+            style="border:1px solid var(--border);border-radius:8px;padding:12px;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <strong>{{ t.name }}</strong>
+          <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;">
+          {% for u in urls %}
+          <label class="checkbox-label">
+            <input type="checkbox" name="url_id" value="{{ u.id }}" {% if u.id in t.url_ids %}checked{% endif %}> {{ u.label }}
+          </label>
+          {% endfor %}
+          <label class="checkbox-label">
+            <input type="checkbox" name="zeigt_wetter" value="1" {% if t.zeigt_wetter %}checked{% endif %}> 🌦 Wetter
+          </label>
+        </div>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

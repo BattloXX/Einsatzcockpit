@@ -36,6 +36,84 @@ logger = logging.getLogger("einsatzleiter.objekt_matching")
 # Robust gegen Varianten: "bmz 1044", "BMA-Nr.: 1044", "rfl/1044", "BMZ:1044"
 BMA_REGEX = re.compile(r"(?:bmz|bma|rfl)(?:[\s\-]?(?:nr|nummer))?[\s:.\-/]*(\d{2,6})", re.IGNORECASE)
 
+
+def erzeuge_gefahren_meldungen(db: Session, incident: Incident, objekt: Objekt) -> int:
+    """Legt je Objektgefahr eine Meldung in der Board-Spalte „Objektgefahren" an (idempotent).
+
+    Dedup ueber Message.objekt_gefahr_id. Links werden NICHT eingefroren — die
+    Board-Meldung rendert die Gefahr-Links live (siehe _message_card.html). Gibt die
+    Anzahl neu erzeugter Meldungen zurueck. Caller committet.
+    """
+    from app.models.incident import IncidentColumn, Message
+    from app.services.incident_service import _get_column, prepend_card
+    from app.services.objekt_service import lade_auswahl
+
+    gefahren = list(objekt.gefahren)
+    if not gefahren:
+        return 0
+    col = _get_column(incident, "objektgefahren")
+    if col is None:
+        from app.models.incident import FIXED_COLUMN_TITLES
+        max_order = max((c.display_order for c in incident.columns), default=0)
+        col = IncidentColumn(
+            incident_id=incident.id, code="objektgefahren",
+            title=FIXED_COLUMN_TITLES["objektgefahren"], column_kind="messages",
+            is_fixed=False, display_order=max_order + 1,
+        )
+        db.add(col)
+        db.flush()
+    pikto = lade_auswahl(db, objekt.org_id, "piktogramm")
+    erzeugt = 0
+    for og in gefahren:
+        vorhanden = (
+            db.query(Message)
+            .filter(Message.incident_id == incident.id, Message.objekt_gefahr_id == og.id)
+            .first()
+        )
+        if vorhanden:
+            continue
+        icon = ""
+        if og.gefahr:
+            icon = (pikto.get(og.gefahr.piktogramm_typ, "") or "")[:2].strip()
+        name = og.gefahr.name if og.gefahr else "Gefahr"
+        title = f"OBJ {objekt.anzeige_nummer}: {icon} {name}".replace("  ", " ").strip()
+        teile = []
+        if og.un_nummer:
+            teile.append(f"UN {og.un_nummer}")
+        if og.gefahrnummer:
+            teile.append(f"GN {og.gefahrnummer}")
+        if og.stoffname:
+            teile.append(og.stoffname)
+        if og.detail:
+            teile.append(og.detail)
+        msg = Message(
+            incident_id=incident.id, column_id=col.id, title=title[:500],
+            detail=" · ".join(teile) or None, status="achtung",
+            author_name="Objektabgleich", objekt_gefahr_id=og.id,
+        )
+        db.add(msg)
+        db.flush()
+        prepend_card(db, col.id, "message", msg.id)
+        erzeugt += 1
+    return erzeugt
+
+
+def entferne_gefahren_meldungen(db: Session, incident_id: int, objekt: Objekt) -> int:
+    """Entfernt die Objektgefahren-Meldungen eines Objekts aus einem Einsatz (beim Lösen)."""
+    from app.models.incident import Message
+
+    gefahr_ids = [og.id for og in objekt.gefahren]
+    if not gefahr_ids:
+        return 0
+    treffer = (
+        db.query(Message)
+        .filter(Message.incident_id == incident_id, Message.objekt_gefahr_id.in_(gefahr_ids))
+        .all()
+    )
+    for msg in treffer:
+        db.delete(msg)
+    return len(treffer)
+
 _MATCHBARE_STATUS = (OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_UEBERARBEITUNG)
 
 
@@ -133,8 +211,14 @@ def match_incident(db: Session, incident: Incident, *, nur_geo: bool = False) ->
             distanz_m=distanz_m,
         )
         db.add(eintrag)
+        db.flush()
         vorhandene.add(objekt.id)
         neu.append(eintrag)
+        # Objektgefahren als Board-Meldungen (automatisch beim Match, idempotent)
+        try:
+            erzeuge_gefahren_meldungen(db, incident, objekt)
+        except Exception:
+            logger.exception("Gefahren-Meldungen fehlgeschlagen (Objekt %d)", objekt.id)
 
     if not nur_geo:
         # ── Stufe 1: BMA-/RFL-Nummer im Alarmtext ──
@@ -244,6 +328,12 @@ async def match_incident_background(incident_id: int, *, nur_geo: bool = False) 
         if neu:
             db.commit()
             await _broadcast_matches(incident, neu, db)
+            # Board neu laden (neue Spalte/Meldungen "Objektgefahren")
+            try:
+                from app.services.broadcast import manager
+                await manager.broadcast(incident_id, {"type": "objektgefahren", "reload_board": True})
+            except Exception:
+                logger.exception("Board-Reload-Broadcast fehlgeschlagen (Einsatz %d)", incident_id)
     except Exception:
         logger.exception("Objekt-Matching fehlgeschlagen (Einsatz %d)", incident_id)
         try:

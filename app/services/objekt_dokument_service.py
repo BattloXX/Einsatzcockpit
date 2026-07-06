@@ -44,6 +44,8 @@ logger = logging.getLogger("einsatzleiter.objekt_dokument")
 
 # Signatur der injizierbaren Rasterfunktion: (pdf_path, seiten_nr, dpi) -> PNG-Bytes | None
 RenderFunc = Callable[[Path, int, int], bytes | None]
+# Signatur der injizierbaren OCR-Funktion: (png_bytes) -> erkannter Text ("" wenn nicht verfuegbar)
+OcrFunc = Callable[[bytes], str]
 
 
 def _storage_root() -> Path:
@@ -184,15 +186,68 @@ def _render_page_png_poppler(pdf_path: Path, seiten_nr: int, dpi: int) -> bytes 
     return buf.getvalue()
 
 
+def _ocr_tesseract(png: bytes) -> str:
+    """OCR eines Seitenbilds via Tesseract. "" wenn pytesseract/Binary fehlt (CI/Tests)."""
+    try:
+        import pytesseract  # type: ignore
+        from PIL import Image
+    except ImportError:
+        logger.warning("pytesseract nicht installiert — OCR uebersprungen")
+        return ""
+    try:
+        img = Image.open(io.BytesIO(png))
+        return pytesseract.image_to_string(img, lang=settings.OBJEKT_OCR_LANG)
+    except Exception:
+        logger.exception("Tesseract-OCR fehlgeschlagen")
+        return ""
+
+
+def _normalisiere_text(text: str) -> str:
+    """Whitespace normalisieren + auf die konfigurierte Maximallaenge kappen."""
+    zusammen = " ".join((text or "").split())
+    return zusammen[: settings.OBJEKT_VOLLTEXT_MAX_CHARS]
+
+
+def extrahiere_seitentext(
+    page: object | None,
+    png: bytes | None,
+    ocr_func: OcrFunc | None = None,
+) -> tuple[str | None, str]:
+    """Ermittelt den Volltext einer Seite: erst PDF-Textlayer (pypdf), sonst OCR.
+
+    Gibt (volltext, quelle) zurueck — quelle ∈ pdf/ocr/none. Injizierbare ocr_func
+    fuer Tests/CI ohne Tesseract (Default _ocr_tesseract).
+    """
+    ocr = ocr_func or _ocr_tesseract
+    text = ""
+    if page is not None:
+        try:
+            text = _normalisiere_text(page.extract_text() or "")  # type: ignore[attr-defined]
+        except Exception:
+            text = ""
+    if text and len(text) >= settings.OBJEKT_OCR_MIN_CHARS:
+        return text, "pdf"
+    # Textlayer fehlt/zu kurz → OCR auf dem gerenderten Seitenbild versuchen
+    if settings.OBJEKT_OCR_ENABLED and png:
+        ocr_text = _normalisiere_text(ocr(png))
+        if len(ocr_text) >= settings.OBJEKT_OCR_MIN_CHARS:
+            return ocr_text, "ocr"
+    if text:
+        return text, "pdf"
+    return None, "none"
+
+
 def verarbeite_dokument(
     dokument_id: int,
     render_func: RenderFunc | None = None,
+    ocr_func: OcrFunc | None = None,
 ) -> None:
-    """Hintergrund-Verarbeitung: Split (pypdf) + Rasterung (pdf2image) + Thumbs.
+    """Hintergrund-Verarbeitung: Split (pypdf) + Rasterung (pdf2image) + Thumbs + Volltext.
 
     Laeuft mit eigener Session (Muster _geocode_incident). Idempotent genug:
     bei Fehlern wird status=fehler gesetzt; vorhandene Seiten-Zeilen des
-    Dokuments werden vorab entfernt.
+    Dokuments werden vorab entfernt. Je Seite wird der Volltext (PDF-Textlayer,
+    sonst OCR) fuer die Suche indexiert.
     """
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -256,6 +311,9 @@ def verarbeite_dokument(
                     logger.exception("Thumb-Erzeugung fehlgeschlagen (Dokument %d Seite %d)",
                                      dokument.id, i)
 
+            # 3) Volltext fuer die Suche (PDF-Textlayer, sonst OCR auf dem Rendering)
+            volltext, text_quelle = extrahiere_seitentext(page, png, ocr_func)
+
             db.add(ObjektDokumentSeite(
                 org_id=org_id,
                 objekt_id=dokument.objekt_id,
@@ -264,6 +322,8 @@ def verarbeite_dokument(
                 einzel_pdf_pfad=f"{dokument.pfad.rsplit('/', 1)[0]}/seite_{i:04d}.pdf",
                 bild_pfad=bild_pfad_rel,
                 thumb_pfad=thumb_pfad_rel,
+                volltext=volltext,
+                text_quelle=text_quelle,
             ))
 
         # Quota fuer abgeleitete Dateien reservieren (Entscheidung: zaehlt zur Org-Quota)
@@ -304,6 +364,56 @@ def verarbeite_dokument(
                 db.commit()
         except Exception:
             pass
+    finally:
+        db.close()
+
+
+def reindex_objekt(objekt_id: int, ocr_func: OcrFunc | None = None) -> int:
+    """Fuellt den Volltext bestehender Seiten eines Objekts neu (ohne Neu-Rendering).
+
+    Liest je Seite die verlustfreie Einzelseite (pypdf-Textlayer) und – falls vorhanden –
+    das gerenderte PNG (OCR-Fallback). Eigene Session. Gibt die Anzahl aktualisierter
+    Seiten zurueck.
+    """
+    from pypdf import PdfReader
+
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    n = 0
+    try:
+        seiten = (
+            db.query(ObjektDokumentSeite)
+            .filter(ObjektDokumentSeite.objekt_id == objekt_id)
+            .execution_options(include_all_tenants=True)
+            .all()
+        )
+        for seite in seiten:
+            page = None
+            if seite.einzel_pdf_pfad:
+                try:
+                    pfad = absolute_pfad(seite.einzel_pdf_pfad)
+                    if pfad.exists():
+                        page = PdfReader(str(pfad)).pages[0]
+                except Exception:
+                    page = None
+            png = None
+            if seite.bild_pfad:
+                bpfad = absolute_pfad(seite.bild_pfad)
+                if bpfad.exists():
+                    png = bpfad.read_bytes()
+            volltext, quelle = extrahiere_seitentext(page, png, ocr_func)
+            seite.volltext = volltext
+            seite.text_quelle = quelle
+            n += 1
+        db.commit()
+        return n
+    except Exception:
+        logger.exception("Reindex fehlgeschlagen (Objekt %d)", objekt_id)
+        db.rollback()
+        return n
     finally:
         db.close()
 

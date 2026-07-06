@@ -120,14 +120,21 @@ def test_daten_alarm_mit_objekt_ohne_wohnanlagen_hinweise(is_db):
     assert "hinweise" not in daten["objekt"]
 
 
-def test_alter_alarm_faellt_auf_idle_zurueck(is_db):
+def test_aktiver_einsatz_bleibt_geschlossener_faellt_auf_idle(is_db):
     db, org = is_db
     from datetime import timedelta
-    incident = Incident(
+    # Alter, aber noch AKTIVER Einsatz bleibt am Infoscreen stehen (kein Zeitfenster mehr)
+    aktiv = Incident(
         primary_org_id=org.id, alarm_type_code="T1", status="active",
         started_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=3),
     )
-    db.add(incident)
+    db.add(aktiv)
+    db.commit()
+    daten = infoscreen_daten("test-token-123", request=None, db=db)  # type: ignore[arg-type]
+    assert daten["modus"] == "alarm"
+
+    # Nach Abschluss (status != active) fällt der Screen auf Idle zurück
+    aktiv.status = "closed"
     db.commit()
     daten = infoscreen_daten("test-token-123", request=None, db=db)  # type: ignore[arg-type]
     assert daten["modus"] == "idle"

@@ -10,6 +10,7 @@ from app.db import Base
 
 if TYPE_CHECKING:
     from app.models.master import Member, VehicleMaster
+    from app.models.objekt import ObjektGefahr
     from app.models.user import User
 
 # Fixed column codes (always present)
@@ -30,6 +31,7 @@ FIXED_COLUMN_TITLES = {
     "messages":   "Meldungen",
     "neighbor":   "Nachalarmierung",
     "rescued":    "Gerettete Personen",
+    "objektgefahren": "Objektgefahren",
 }
 
 
@@ -399,10 +401,17 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     # LIS/IPR: Task.Id der Ursprungsmeldung, für Dedup/Update bei erneutem Sync
     lis_task_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Objektgefahren-Spalte: Herkunfts-Gefahr (Idempotenz + Live-Links); NULL bei normalen Meldungen
+    objekt_gefahr_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_gefahr.id", ondelete="SET NULL"), nullable=True
+    )
 
     incident: Mapped[Incident] = relationship(back_populates="messages")
     column: Mapped[IncidentColumn | None] = relationship(foreign_keys=[column_id])
     vehicle: Mapped[IncidentVehicle | None] = relationship(foreign_keys=[vehicle_id])
+    objekt_gefahr: Mapped[ObjektGefahr | None] = relationship(
+        "ObjektGefahr", foreign_keys=[objekt_gefahr_id], viewonly=True, lazy="joined"
+    )
     media: Mapped[list[MessageMedia]] = relationship(
         cascade="all, delete-orphan",
         order_by="MessageMedia.created_at.desc()",

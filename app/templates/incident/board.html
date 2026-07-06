@@ -504,7 +504,7 @@
           {% endif %}
         {% endfor %}
 
-        {% if col.column_kind == 'messages' and lage_sprueche %}
+        {% if col.code == 'messages' and lage_sprueche %}
         {% for spruch in lage_sprueche %}
         <div class="card card--message {% if spruch.handled %}card--done{% endif %}"
              style="cursor:pointer; border-left:2px solid rgba(245,158,11,.5);"

@@ -262,6 +262,22 @@ class ObjektBMA(TenantScoped, Base):
     objekt: Mapped[Objekt] = relationship(back_populates="bma")
 
 
+def _parse_links_json(roh: str | None) -> list[dict]:
+    """Parst eine JSON-Liste [{label,url}]; robust gegen Muell (leere Liste)."""
+    if not roh:
+        return []
+    import json as _json
+    try:
+        werte = _json.loads(roh)
+    except (ValueError, TypeError):
+        return []
+    ergebnis: list[dict] = []
+    for w in werte if isinstance(werte, list) else []:
+        if isinstance(w, dict) and w.get("url"):
+            ergebnis.append({"label": str(w.get("label") or w["url"]), "url": str(w["url"])})
+    return ergebnis
+
+
 class GefahrenKatalog(TenantScoped, Base):
     """Gefahren-Katalog je Org (EX, Gas, Chemie, PV, ...) mit Piktogramm-Typ."""
     __tablename__ = "gefahren_katalog"
@@ -272,8 +288,14 @@ class GefahrenKatalog(TenantScoped, Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     # Piktogramm-Typ: ex / gas / chemie / hochspannung / pv / nh3 / brandlast / sonstig
     piktogramm_typ: Mapped[str] = mapped_column(String(30), nullable=False, default="sonstig")
+    # Standard-Links je Gefahrenart (JSON-Liste [{label,url}]) — gelten fuer alle Objekte
+    links_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    @property
+    def links(self) -> list[dict]:
+        return _parse_links_json(self.links_json)
 
 
 class ObjektGefahr(TenantScoped, Base):
@@ -291,10 +313,20 @@ class ObjektGefahr(TenantScoped, Base):
     )
     un_nummer: Mapped[str | None] = mapped_column(String(10), nullable=True)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Anreicherung aus der Gefahrgut-DB (per UN-Nummer, editierbar)
+    stoffname: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    gefahrklasse: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    gefahrnummer: Mapped[str | None] = mapped_column(String(20), nullable=True)  # Kemler-Zahl
+    # Objektspezifische Zusatzlinks (JSON-Liste [{label,url}])
+    links_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     objekt: Mapped[Objekt] = relationship(back_populates="gefahren")
     gefahr: Mapped[GefahrenKatalog] = relationship(lazy="joined")
+
+    @property
+    def links(self) -> list[dict]:
+        return _parse_links_json(self.links_json)
 
 
 class MerkmalKatalog(TenantScoped, Base):
@@ -533,6 +565,10 @@ class ObjektDokumentSeite(TenantScoped, Base):
     melderlinien: Mapped[str | None] = mapped_column(String(100), nullable=True)
     stand: Mapped[date | None] = mapped_column(Date, nullable=True)
     bei_einsatz_drucken: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Volltext der Seite (PDF-Textlayer oder OCR) fuer die Suche
+    volltext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Herkunft des Volltexts: pdf (Textlayer) / ocr (Tesseract) / none (kein Text)
+    text_quelle: Mapped[str | None] = mapped_column(String(10), nullable=True)
     klassifiziert_von_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
@@ -643,9 +679,40 @@ class AlarmInfoscreenToken(TenantScoped, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # org_id via TenantScoped
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # Fernet-verschluesselter Klartext-Token → Verwaltung kann die URL dauerhaft anzeigen
+    token_enc: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Ruhezustand dieses Monitors: welche InfoscreenUrls rotieren (JSON-Liste von IDs)
+    url_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Wetter als zusaetzlicher Rotationseintrag (nutzt OrgSettings.alarm_infoscreen_wetter_url)
+    zeigt_wetter: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    @property
+    def url_ids(self) -> list[int]:
+        import json as _json
+        if not self.url_ids_json:
+            return []
+        try:
+            werte = _json.loads(self.url_ids_json)
+            return [int(x) for x in werte] if isinstance(werte, list) else []
+        except (ValueError, TypeError):
+            return []
+
+
+class InfoscreenUrl(TenantScoped, Base):
+    """Frei konfigurierbare URL fuer die Infoscreen-Rotation (Ruhezustand)."""
+    __tablename__ = "infoscreen_url"
+    __table_args__ = (Index("ix_infoscreen_url_org", "org_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    dwell_sec: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class ObjektChange(TenantScoped, Base):

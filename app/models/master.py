@@ -379,6 +379,8 @@ class OrgSettings(Base):
     # Idle-Modus "wetter": URL des bestehenden Wetter-Infoscreens (Token nur als
     # Hash gespeichert → URL kann nicht abgeleitet werden, daher manuell hinterlegen)
     alarm_infoscreen_wetter_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Großschadenslage-Sonderansicht am Infoscreen (bleibt, solange die GSL aktiv ist)
+    alarm_infoscreen_gsl_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # KI-Dokumentklassifizierung (Objektverwaltung): Opt-in je Org, zusaetzlich zum AI-Setup
     objekt_ki_klassifikation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

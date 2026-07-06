@@ -346,6 +346,12 @@ async def lage_neu_create(
         lage, triggered_by_user_id=user.id, base_url=str(request.base_url),
         background_tasks=background_tasks,
     )
+    # Alarm-Infoscreen: GSL-Sonderansicht sofort einblenden
+    try:
+        from app.services.broadcast import broadcast_org
+        await broadcast_org(org_id, {"type": "gsl_changed"})
+    except Exception:
+        pass
 
     return RedirectResponse(f"/lage/{lage.id}", status_code=303)
 
@@ -1517,6 +1523,13 @@ async def lage_beenden(
     await broadcast_lage(lage_id, {"type": "lage_closed", "reload_board": True})
     for iid in closed_incident_ids:
         await manager.broadcast(iid, {"type": "incident_closed"})
+    # Alarm-Infoscreen: GSL-Sonderansicht ausblenden
+    try:
+        from app.services.broadcast import broadcast_org
+        if lage.org_id is not None:
+            await broadcast_org(lage.org_id, {"type": "gsl_changed"})
+    except Exception:
+        pass
     return RedirectResponse(f"/lage/{lage_id}", status_code=303)
 
 

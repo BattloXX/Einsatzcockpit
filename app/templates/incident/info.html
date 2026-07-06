@@ -33,6 +33,11 @@
           {% if incident.started_at %} · seit {{ incident.started_at|local_time }} Uhr{% endif %}
         </div>
       </div>
+      <div x-data="rsvpWidget({{ incident.id }})" x-init="init()" x-show="(zusagen + absagen) > 0" x-cloak
+           style="display:flex;gap:6px;align-items:center;" title="Rückmeldungen (Zu-/Absagen)">
+        <span class="badge-pill badge-pill--green" x-text="'✅ ' + zusagen"></span>
+        <span class="badge-pill badge-pill--red" x-text="'❌ ' + absagen"></span>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <a href="/einsatz/{{ incident.id }}" class="btn btn--primary">🖥 Zum Einsatz-Board</a>
         {% set lk_url = lagekarte_url(incident) %}
