@@ -1613,10 +1613,18 @@ button.htmx-request,
 .objekt-seite-kachel__info { padding: 8px; }
 .objekt-bulk-leiste { position: sticky; bottom: 8px; padding: 12px; margin-top: 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
 .objekt-viewer { display: flex; flex-direction: column; height: calc(100vh - 90px); }
-.objekt-viewer__top { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; }
-.objekt-viewer__stage { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.objekt-viewer__bildwrap { max-width: 100%; max-height: 100%; overflow: auto; display: flex; align-items: center; justify-content: center; }
-.objekt-viewer__bildwrap img { max-width: 100%; max-height: calc(100vh - 170px); transform-origin: center top; transition: transform .15s; background: #fff; }
+.objekt-viewer__top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 10px; padding: 8px 12px; }
+.objekt-viewer__back { flex-shrink: 0; }
+.objekt-viewer__filter { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8em; flex-wrap: wrap; }
+.objekt-viewer__pagecount { flex-shrink: 0; }
+.objekt-viewer__search { display: inline-flex; gap: 4px; align-items: center; }
+.objekt-viewer__search .form-input { max-width: 170px; padding: 4px 8px; }
+.objekt-viewer__zoomctrls { display: flex; gap: 6px; flex-shrink: 0; }
+.objekt-viewer__stage { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: pan-y; }
+.objekt-viewer__stage--gezoomt { touch-action: none; }
+.objekt-viewer__bildwrap { max-width: 100%; max-height: 100%; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.objekt-viewer__bildwrap img { max-width: 100%; max-height: calc(100vh - 170px); transform-origin: center center; background: #fff; touch-action: pan-y; }
+.objekt-viewer__stage--gezoomt .objekt-viewer__bildwrap img { touch-action: none; }
 .objekt-viewer__nav {
   position: absolute;
   top: 50%;
@@ -1635,6 +1643,19 @@ button.htmx-request,
 .objekt-viewer__nav--rechts { right: 8px; }
 .objekt-viewer__caption { text-align: center; padding: 6px; }
 .objekt-viewer__fallback { padding: 40px; text-align: center; }
+@media (max-width: 760px) {
+  .objekt-viewer { height: calc(100vh - 56px); }
+  .objekt-viewer__top { padding: 6px 8px; gap: 6px; }
+  .objekt-viewer__back { font-size: 0; padding: 6px 10px; }
+  .objekt-viewer__back::before { content: "←"; font-size: 1rem; }
+  .objekt-viewer__filter-label { display: none; }
+  .objekt-viewer__filter { order: 3; flex: 1 1 100%; font-size: 0.75em; }
+  .objekt-viewer__search { order: 4; flex: 1 1 100%; }
+  .objekt-viewer__search .form-input { max-width: none; flex: 1; }
+  .objekt-viewer__zoomctrls { order: 2; margin-left: auto; }
+  .objekt-viewer__bildwrap img { max-height: calc(100vh - 130px); }
+  .objekt-viewer__nav { width: 40px; height: 52px; font-size: 1.6em; }
+}
 
 /* ── Objektverwaltung (PR4): Lagekarte + Symbole ────────────────────────── */
 .objekt-karte-layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }

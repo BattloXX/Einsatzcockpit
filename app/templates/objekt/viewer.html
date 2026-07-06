@@ -9,16 +9,85 @@
       nummern: {{ seiten | map(attribute="seiten_nr") | list | tojson }},
       idx: {{ start_index }},
       zoom: 1,
+      panX: 0,
+      panY: 0,
       startX: 0,
       startY: 0,
-      weiter() { if (this.idx < this.seiten.length - 1) { this.idx++; this.zoom = 1; } },
-      zurueck() { if (this.idx > 0) { this.idx--; this.zoom = 1; } },
+      pinchDist: 0,
+      pinchStartZoom: 1,
+      isPinching: false,
+      isDragging: false,
+      dragStartX: 0,
+      dragStartY: 0,
+      dragStartPanX: 0,
+      dragStartPanY: 0,
+      lastTapTime: 0,
+      weiter() { if (this.idx < this.seiten.length - 1) { this.idx++; this.resetZoom(); } },
+      zurueck() { if (this.idx > 0) { this.idx--; this.resetZoom(); } },
+      resetZoom() { this.zoom = 1; this.panX = 0; this.panY = 0; },
+      zoomOut() { this.zoom = Math.max(1, this.zoom - 0.5); if (this.zoom <= 1) { this.panX = 0; this.panY = 0; } else { this.panBegrenzen(); } },
+      zoomIn() { this.zoom = Math.min(5, this.zoom + 0.5); },
+      toggleZoom() {
+        if (this.zoom > 1) { this.resetZoom(); } else { this.zoom = 2; }
+      },
+      pinchDistanz(touches) {
+        var dx = touches[0].clientX - touches[1].clientX;
+        var dy = touches[0].clientY - touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+      },
+      panBegrenzen() {
+        var rect = this.$refs.stage.getBoundingClientRect();
+        var maxX = (this.zoom - 1) * rect.width / 2;
+        var maxY = (this.zoom - 1) * rect.height / 2;
+        this.panX = Math.max(-maxX, Math.min(maxX, this.panX));
+        this.panY = Math.max(-maxY, Math.min(maxY, this.panY));
+      },
       touchStart(e) {
+        if (e.touches.length === 2) {
+          this.isPinching = true;
+          this.pinchDist = this.pinchDistanz(e.touches);
+          this.pinchStartZoom = this.zoom;
+          return;
+        }
         var t = e.touches[0];
         this.startX = t.clientX;
         this.startY = t.clientY;
+        var now = Date.now();
+        if (now - this.lastTapTime < 300) {
+          this.toggleZoom();
+          this.lastTapTime = 0;
+        } else {
+          this.lastTapTime = now;
+        }
+        if (this.zoom > 1) {
+          this.isDragging = true;
+          this.dragStartX = t.clientX;
+          this.dragStartY = t.clientY;
+          this.dragStartPanX = this.panX;
+          this.dragStartPanY = this.panY;
+        }
+      },
+      touchMove(e) {
+        if (this.isPinching && e.touches.length === 2) {
+          e.preventDefault();
+          var dist = this.pinchDistanz(e.touches);
+          var neu = this.pinchStartZoom * (dist / this.pinchDist);
+          this.zoom = Math.min(5, Math.max(1, neu));
+          if (this.zoom <= 1) { this.panX = 0; this.panY = 0; } else { this.panBegrenzen(); }
+        } else if (this.isDragging && e.touches.length === 1) {
+          e.preventDefault();
+          var t = e.touches[0];
+          this.panX = this.dragStartPanX + (t.clientX - this.dragStartX);
+          this.panY = this.dragStartPanY + (t.clientY - this.dragStartY);
+          this.panBegrenzen();
+        }
       },
       touchEnd(e) {
+        if (e.touches.length > 0) return;
+        var wasGesteAktiv = this.isPinching || this.isDragging;
+        this.isPinching = false;
+        this.isDragging = false;
+        if (wasGesteAktiv) return;
         // Bei Zoom nicht blaettern (dann wird gepannt/gescrollt)
         if (this.zoom > 1) return;
         var t = e.changedTouches[0];
@@ -35,26 +104,25 @@
      @keydown.window.arrow-right="weiter()" @keydown.window.arrow-left="zurueck()"
      tabindex="0">
   <div class="objekt-viewer__top">
-    <a href="/objekte/{{ objekt.id }}?tab=dokumente" class="btn btn--ghost btn--xs">← Alle Dokumente</a>
+    <a href="/objekte/{{ objekt.id }}?tab=dokumente" class="btn btn--ghost btn--xs objekt-viewer__back">← Alle Dokumente</a>
     {% if filter_art or filter_suche %}
-    <span class="objekt-viewer__filter text-muted" style="display:inline-flex;align-items:center;gap:6px;font-size:0.8em;">
-      Filter:
+    <span class="objekt-viewer__filter text-muted">
+      <span class="objekt-viewer__filter-label">Filter:</span>
       {% if filter_art %}<span class="badge-pill badge-pill--green">{{ dokumentarten.get(filter_art, filter_art) }}</span>{% endif %}
       {% if filter_suche %}<span class="badge-pill badge-pill--amber">„{{ filter_suche }}"</span>{% endif %}
       <a href="/objekte/{{ objekt.id }}/dokumente/viewer" class="text-muted" title="Filter zurücksetzen" style="text-decoration:none;">✕</a>
     </span>
     {% endif %}
-    <span class="text-muted" x-show="seiten.length > 0" x-text="(idx + 1) + ' / ' + seiten.length"></span>
-    <form method="get" action="/objekte/{{ objekt.id }}/dokumente/viewer"
-          style="display:inline-flex;gap:4px;align-items:center;">
+    <span class="text-muted objekt-viewer__pagecount" x-show="seiten.length > 0" x-text="(idx + 1) + ' / ' + seiten.length"></span>
+    <form method="get" action="/objekte/{{ objekt.id }}/dokumente/viewer" class="objekt-viewer__search">
       <input type="hidden" name="art" value="{{ filter_art }}">
       <input type="text" name="suche" value="{{ filter_suche }}" class="form-input"
-             style="max-width:170px;padding:4px 8px;" placeholder="In Dokumenten suchen …">
+             placeholder="In Dokumenten suchen …">
       <button type="submit" class="btn btn--ghost btn--xs">🔎</button>
     </form>
-    <div style="display:flex;gap:6px;" x-show="seiten.length > 0">
-      <button type="button" class="btn btn--ghost btn--xs" @click="zoom = Math.max(1, zoom - 0.5)">−</button>
-      <button type="button" class="btn btn--ghost btn--xs" @click="zoom = Math.min(4, zoom + 0.5)">+ Zoom</button>
+    <div class="objekt-viewer__zoomctrls" x-show="seiten.length > 0">
+      <button type="button" class="btn btn--ghost btn--xs" @click="zoomOut()">−</button>
+      <button type="button" class="btn btn--ghost btn--xs" @click="zoomIn()">+ Zoom</button>
       <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'" target="_blank" class="btn btn--ghost btn--xs">📄 PDF</a>
     </div>
   </div>
@@ -66,21 +134,22 @@
     </div>
   </template>
 
-  <div class="objekt-viewer__stage" x-show="seiten.length > 0"
+  <div class="objekt-viewer__stage" x-ref="stage" x-show="seiten.length > 0"
        @touchstart="touchStart($event)"
+       @touchmove="touchMove($event)"
        @touchend="touchEnd($event)"
-       style="touch-action:pan-y;">
-    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--links" @click="zurueck()" x-show="idx > 0">‹</button>
+       :class="{ 'objekt-viewer__stage--gezoomt': zoom > 1 }">
+    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--links" @click="zurueck()" x-show="idx > 0 && zoom <= 1">‹</button>
     <div class="objekt-viewer__bildwrap">
       <template x-for="(sid, i) in seiten" :key="sid">
         <img x-show="i === idx"
              :src="'/objekt-medien/seite/' + sid + '/bild'"
-             :style="'transform: scale(' + zoom + '); transition: transform 0.15s ease;'"
-             @dblclick="zoom = zoom > 1 ? 1 : 2"
+             :style="'transform: translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + '); transition: ' + ((isDragging || isPinching) ? 'none' : 'transform 0.15s ease') + ';'"
+             @dblclick="toggleZoom()"
              loading="lazy" alt="Dokumentseite">
       </template>
     </div>
-    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--rechts" @click="weiter()" x-show="idx < seiten.length - 1">›</button>
+    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--rechts" @click="weiter()" x-show="idx < seiten.length - 1 && zoom <= 1">›</button>
   </div>
   <div class="objekt-viewer__caption text-muted" x-show="seiten.length > 0"
        x-text="(infos[idx] || 'Seite ' + nummern[idx])"></div>
