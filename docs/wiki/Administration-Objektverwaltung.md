@@ -83,11 +83,23 @@ Lösen der Verknüpfung werden diese Meldungen wieder entfernt.
 ## Alarm-Infoscreen
 
 Vollbild-Ansicht für Wandmonitore: `/infoscreen/alarm/{token}` — **öffentlich per Token, kein Login**
-(wie der Wetter-Infoscreen). Bei Alarm zeigt sie Stichwort + Adresse groß, das verknüpfte Objekt mit
-Gefahren-Piktogrammen, die Karte mit Objektsymbolen, die FSD/BMZ/FBF-Standorte und die **Zu-/Absagen
-(RSVP)**; der Wechsel passiert sofort per WebSocket. Ein aktiver Einsatz bleibt sichtbar, **solange er
-aktiv ist** (kein Zeitfenster mehr). Läuft eine **Großschadenslage**, zeigt der Monitor eine eigene
-Sonderansicht, die bleibt, solange die Lage aktiv ist (Reihenfolge: Großschadenslage → Einsatz → Ruhe).
+(wie der Wetter-Infoscreen). Die Alarmansicht ist als taktisches Lage-Dashboard aufgebaut:
+
+- **Roter Alarmkopf** mit Stichwort-Kürzel + Klartext (z. B. `F3` · „Brand Gebäude"), Adresse,
+  Meldungstext, den **Zu-/Absagen (RSVP)** und einer mitlaufenden **Einsatzzeit-Uhr**.
+- **Links** das verknüpfte Objekt mit Gefahren-Piktogrammen (inkl. UN-Nummer) und der
+  FSD/BMZ/FBF/Laufkarten-Block.
+- **Mitte** die Lagekarte mit den Objektsymbolen **und den Löschwasser-Entnahmestellen (Hydranten,
+  OSM + manuell im Objekt gesetzte)** rund um den Einsatz-/Objektstandort.
+- **Rechts** die Spalte **„Kräfte im Einsatz"**: alle Fahrzeuge **nach der Ausrückordnung** (und
+  jede spätere Nachalarmierung) mit ihrem **aktuellen Einheitenstatus** als Farbpille
+  (Ausgerückt/Übernommen · Am Einsatzort · Einsatzbereit). Statuswechsel und neu ausrückende
+  Fahrzeuge erscheinen automatisch (Poll alle 15 s), darunter der Hinweistext der Leitstelle.
+
+Der Wechsel in die Alarmansicht passiert sofort per WebSocket. Ein aktiver Einsatz bleibt sichtbar,
+**solange er aktiv ist** (kein Zeitfenster mehr). Läuft eine **Großschadenslage**, zeigt der Monitor
+eine eigene Sonderansicht, die bleibt, solange die Lage aktiv ist (Reihenfolge: Großschadenslage →
+Einsatz → Ruhe).
 
 Verwaltung unter **`/infoscreen-alarm/verwaltung`** (Org-Admin, Link auch in der Objektliste):
 

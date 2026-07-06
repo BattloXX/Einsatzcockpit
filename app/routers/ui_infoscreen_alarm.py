@@ -195,11 +195,47 @@ def infoscreen_daten(
         )
         zusagen = sum(1 for (s,) in rsvp_rows if s == "zugesagt")
         absagen = sum(1 for (s,) in rsvp_rows if s == "abgesagt")
+
+        # Stichwort-Klartext (z. B. F3 → "Brand Gebäude") aus dem Alarmtypen-Katalog
+        from app.models.master import AlarmType
+        at_row = (
+            db.query(AlarmType)
+            .filter(AlarmType.org_id == org.id, AlarmType.code == incident.alarm_type_code)
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
+        stichwort_label = at_row.label.strip() if at_row and at_row.label else ""
+
+        # Fahrzeuge nach Ausrückordnung (+ nachalarmierte) mit aktuellem Status.
+        # Die Ausrückordnung befüllt incident.vehicles beim Alarm; weitere
+        # ausrückende Fahrzeuge kommen live dazu → hier einfach alle nicht
+        # entfernten Einheiten in Dispositionsreihenfolge ausliefern.
+        from app.models.incident import IncidentVehicle
+        fahrzeug_rows = (
+            db.query(IncidentVehicle)
+            .filter(IncidentVehicle.incident_id == incident.id,
+                    IncidentVehicle.removed_at.is_(None))
+            .order_by(IncidentVehicle.display_order, IncidentVehicle.created_at)
+            .all()
+        )
+        fahrzeuge = []
+        for v in fahrzeug_rows:
+            vm = v.vehicle_master
+            fahrzeuge.append({
+                "rufname": vm.display_label if vm else "–",
+                "typ": (vm.type or vm.name) if vm else "",
+                "org": vm.org_display_name if vm else "",
+                "status": v.unit_status,
+                "extern": bool(vm and (vm.is_external or vm.is_adhoc)),
+            })
+
         daten.update({
             "modus": "alarm",
+            "fahrzeuge": fahrzeuge,
             "incident": {
                 "id": incident.id,
                 "stichwort": incident.alarm_type_code,
+                "stichwort_label": stichwort_label,
                 "adresse": adresse,
                 "meldung": incident.report_text or incident.reason or "",
                 "beginn": incident.started_at.isoformat() + "Z" if incident.started_at else None,
@@ -287,6 +323,68 @@ def infoscreen_daten(
         ]
 
     return daten
+
+
+@router.get("/infoscreen/alarm/{token}/hydranten.json", include_in_schema=False)
+async def infoscreen_hydranten(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Löschwasser-Entnahmestellen um den aktiven Einsatz (OSM + manuelle Objekt-Symbole).
+
+    Separater async-Endpunkt, damit die (netzgebundene) Overpass-Abfrage nicht den
+    synchronen /daten-Poll blockiert. Bezugspunkt ist bevorzugt das verknüpfte
+    Objekt, sonst die Einsatzkoordinate.
+    """
+    from app.config import settings
+    from app.models.incident import Incident
+    from app.models.objekt import ObjektKartenObjekt
+    from app.services.hydrant_service import (
+        fetch_osm_hydranten,
+        manuelle_objekt_hydranten,
+        merge_hydranten,
+    )
+
+    _, org = _token_org(db, token)
+    settings_row = _org_settings(db, org.id)
+    if not settings.HYDRANT_ENABLED or (settings_row and not settings_row.hydrant_layer_enabled):
+        return {"hydranten": []}
+
+    incident = (
+        db.query(Incident)
+        .filter(Incident.primary_org_id == org.id, Incident.status == "active")
+        .order_by(Incident.started_at.desc())
+        .first()
+    )
+    if incident is None:
+        return {"hydranten": []}
+
+    verknuepfung = (
+        db.query(ObjektEinsatz)
+        .options(selectinload(ObjektEinsatz.objekt))
+        .execution_options(include_all_tenants=True)
+        .filter(ObjektEinsatz.incident_id == incident.id, ObjektEinsatz.org_id == org.id)
+        .order_by(ObjektEinsatz.status)  # "bestaetigt" < "vorschlag"
+        .first()
+    )
+    objekt = verknuepfung.objekt if verknuepfung else None
+    ref_lat = objekt.lat if objekt and objekt.lat is not None else incident.lat
+    ref_lng = objekt.lng if objekt and objekt.lng is not None else incident.lng
+    if ref_lat is None or ref_lng is None:
+        return {"hydranten": []}
+
+    osm = await fetch_osm_hydranten(ref_lat, ref_lng)
+    manuell: list = []
+    if objekt is not None:
+        karten = (
+            db.query(ObjektKartenObjekt)
+            .execution_options(include_all_tenants=True)
+            .filter(ObjektKartenObjekt.objekt_id == objekt.id,
+                    ObjektKartenObjekt.typ.in_(("hydrant_ueberflur", "hydrant_unterflur")))
+            .all()
+        )
+        manuell = manuelle_objekt_hydranten(karten, ref_lat, ref_lng)
+    return {"hydranten": merge_hydranten(osm, manuell)}
 
 
 # ── WebSocket: Org-Kanal nach Token-Pruefung ──────────────────────────────────

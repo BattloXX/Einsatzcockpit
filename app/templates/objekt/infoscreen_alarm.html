@@ -7,53 +7,116 @@
   <link rel="stylesheet" href="/static/css/leaflet.min.css">
   <link rel="stylesheet" href="/static/css/app.css">
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #05080f; color: #f4f6fb;
+    :root {
+      --is-bg: #0d150f; --is-surface: #1a221a; --is-surface-high: #242c24;
+      --is-line: rgba(255,255,255,.14); --is-text: #dce5d9; --is-muted: #9aa3b2;
+      --is-red: #b71921; --is-red-deep: #7f1d1d; --is-amber: #fbbf24;
+      --is-blue: #98cdf2; --is-blue-deep: #0b4e6e; --is-green: #4ade80;
+    }
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--is-bg); color: var(--is-text);
                  font-family: "Hanken Grotesk", system-ui, sans-serif; overflow: hidden; }
     .is-wrap { height: 100vh; display: flex; flex-direction: column; }
     .is-kopf { display: flex; justify-content: space-between; align-items: center;
-               padding: 14px 28px; border-bottom: 1px solid rgba(255,255,255,.12); }
+               padding: 10px 28px; background: var(--is-surface); border-bottom: 1px solid var(--is-line); }
     .is-kopf__org { font-size: 1.4rem; font-weight: 700; letter-spacing: .04em; }
-    .is-kopf__zeit { font-size: 1.4rem; font-variant-numeric: tabular-nums; color: #9aa3b2; }
+    .is-kopf__uhr { display: flex; gap: 26px; align-items: center; }
+    .is-kopf__block { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+    .is-kopf__cap { font-size: .7rem; letter-spacing: .12em; color: var(--is-muted); text-transform: uppercase; }
+    .is-kopf__val { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
     /* Idle */
     .is-idle { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
     .is-idle__uhr { font-size: 15vw; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
-    .is-idle__datum { font-size: 3vw; color: #9aa3b2; }
+    .is-idle__datum { font-size: 3vw; color: var(--is-muted); }
     .is-idle__liste { width: min(900px, 90vw); display: flex; flex-direction: column; gap: 10px; }
     .is-idle__eintrag { display: flex; gap: 16px; align-items: baseline; font-size: 1.6rem;
-                        padding: 12px 18px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; }
+                        padding: 12px 18px; border: 1px solid var(--is-line); border-radius: 10px; }
     .is-idle iframe { border: 0; width: 100vw; flex: 1; }
 
     /* Alarm */
     .is-alarm { flex: 1; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
-    .is-alarm__kopf { background: #b71921; padding: 18px 28px; }
-    .is-alarm__stichwort { font-size: 4.2rem; font-weight: 800; line-height: 1.05; }
-    .is-alarm__adresse { font-size: 2.6rem; font-weight: 600; margin-top: 2px; }
-    .is-alarm__meldung { font-size: 1.3rem; opacity: .92; margin-top: 6px;
-                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .is-alarm__body { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 16px;
-                      padding: 16px 24px; min-height: 0; }
-    .is-panel { border: 1px solid rgba(255,255,255,.14); border-radius: 12px;
+    .is-alarm__kopf { background: var(--is-red); display: flex; justify-content: space-between;
+                      align-items: center; gap: 24px; padding: 14px 28px; }
+    .is-alarm__stichzeile { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+    .is-alarm__badge { background: #fff; color: var(--is-red); font-size: 2.4rem; font-weight: 800;
+                       line-height: 1; padding: 6px 16px; border-radius: 10px; }
+    .is-alarm__stichwort { font-size: 3.4rem; font-weight: 800; line-height: 1.02; text-transform: uppercase; }
+    .is-alarm__adresse { font-size: 2rem; font-weight: 600; margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+    .is-alarm__meldung { font-size: 1.25rem; opacity: .92; margin-top: 4px;
+                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
+    .is-alarm__rsvp { margin-top: 8px; font-size: 1.5rem; font-weight: 700; }
+    .is-alarm__timer { background: #fff; color: var(--is-red); border-radius: 14px; padding: 12px 22px;
+                       text-align: center; min-width: 240px; }
+    .is-alarm__timer .cap { font-size: .8rem; letter-spacing: .16em; text-transform: uppercase; opacity: .8; }
+    .is-alarm__timer .val { font-size: 3.4rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+
+    .is-alarm__body { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 14px;
+                      padding: 14px 20px; min-height: 0; }
+    .is-col { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+    .is-panel { border: 1px solid var(--is-line); border-radius: 12px; background: var(--is-surface);
                 padding: 16px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
-    .is-panel h2 { margin: 0 0 10px; font-size: 1.2rem; color: #9aa3b2;
-                   text-transform: uppercase; letter-spacing: .08em; }
-    .is-objektname { font-size: 1.9rem; font-weight: 700; margin-bottom: 10px; }
-    .is-gefahr { display: flex; align-items: center; gap: 12px; font-size: 1.5rem;
-                 padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
-    .is-gefahr__pikto { font-size: 2.2rem; }
-    .is-bma-zeile { padding: 8px 0; font-size: 1.35rem; border-bottom: 1px solid rgba(255,255,255,.08); }
-    .is-bma-zeile b { color: #fbbf24; display: block; font-size: .95rem;
-                      text-transform: uppercase; letter-spacing: .05em; }
-    #is-karte { flex: 1; border-radius: 10px; min-height: 200px; background: #111; }
-    .is-hinweis { color: #9aa3b2; font-size: 1.2rem; }
+    .is-panel--scroll { overflow-y: auto; }
+    .is-panel--grow { flex: 1; }
+    .is-panel h2 { margin: 0 0 12px; font-size: 1rem; color: var(--is-muted); font-weight: 700;
+                   text-transform: uppercase; letter-spacing: .08em; display: flex; align-items: center;
+                   gap: 8px; border-bottom: 1px solid var(--is-line); padding-bottom: 8px; }
+
+    .is-objektname { font-size: 1.7rem; font-weight: 700; margin-bottom: 12px; }
+    .is-objektname small { display: block; font-size: .9rem; color: var(--is-amber); font-weight: 600; }
+    .is-gefahr { display: flex; align-items: center; gap: 12px; font-size: 1.35rem;
+                 padding: 8px 10px; margin-bottom: 8px; border-left: 4px solid var(--is-red);
+                 background: rgba(183,25,33,.14); border-radius: 0 8px 8px 0; }
+    .is-gefahr__pikto { font-size: 2rem; }
+    .is-gefahr__un { display: block; font-size: .95rem; color: var(--is-muted); }
+    .is-bma-zeile { padding: 8px 0; font-size: 1.3rem; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .is-bma-zeile:last-child { border-bottom: 0; }
+    .is-bma-zeile b { color: var(--is-amber); display: block; font-size: .8rem;
+                      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+    .is-hinweis { color: var(--is-muted); font-size: 1.1rem; }
+
+    #is-karte { flex: 1; border-radius: 10px; min-height: 240px; background: #111; }
     .leaflet-container { background: #1a2233; }
+    .is-karte-legende { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-size: .85rem; color: var(--is-muted); }
+    .is-karte-legende span { display: inline-flex; align-items: center; gap: 6px; }
+    .is-punkt { width: 13px; height: 13px; border-radius: 50%; display: inline-block; }
+
+    /* Fahrzeuge / Kräfte */
+    .is-fzg { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+              padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--is-line);
+              border-radius: 10px; background: var(--is-surface-high); }
+    .is-fzg--extern { opacity: .82; }
+    .is-fzg__ident { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .is-fzg__icon { width: 46px; height: 46px; border-radius: 10px; flex: none; display: flex;
+                    align-items: center; justify-content: center; font-size: 1.7rem;
+                    background: var(--is-blue-deep); }
+    .is-fzg__txt { min-width: 0; }
+    .is-fzg__name { font-size: 1.25rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .is-fzg__sub { font-size: .9rem; color: var(--is-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .is-fzg__status { text-align: right; flex: none; }
+    .is-vs { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: .82rem;
+             font-weight: 700; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+    .is-vs--einsatzort { background: var(--is-red); color: #fff; }
+    .is-vs--anfahrt { background: var(--is-blue); color: #00344c; }
+    .is-vs--bereit { background: #14532d; color: var(--is-green); }
+    .is-leitstelle { background: var(--is-blue-deep); border-radius: 10px; padding: 14px; margin-top: auto; }
+    .is-leitstelle b { display: block; font-size: .8rem; letter-spacing: .06em; text-transform: uppercase;
+                       color: var(--is-blue); margin-bottom: 4px; }
+    .is-leitstelle p { margin: 0; font-style: italic; font-size: 1.1rem; }
+
+    @media (max-width: 1200px) {
+      .is-alarm__body { grid-template-columns: 1fr 1.3fr; }
+      .is-col--rechts { grid-column: 1 / -1; }
+    }
   </style>
 </head>
 <body>
 <div class="is-wrap">
   <div class="is-kopf">
     <div class="is-kopf__org">🚒 {{ org.name }}</div>
-    <div class="is-kopf__zeit" id="is-zeit">–:–</div>
+    <div class="is-kopf__uhr">
+      <div class="is-kopf__block"><span class="is-kopf__cap">Datum</span><span class="is-kopf__val" id="is-datum">–</span></div>
+      <div class="is-kopf__block"><span class="is-kopf__cap">Uhrzeit</span><span class="is-kopf__val" id="is-zeit">–:–</span></div>
+    </div>
   </div>
   <div id="is-inhalt" style="flex:1;display:flex;flex-direction:column;min-height:0;">
     <div class="is-idle"><div class="is-idle__uhr" id="is-idle-uhr">–:–</div></div>
@@ -70,6 +133,7 @@
   var letzterModus = null;
   var letzteIncidentId = null;
   var rotTimer = null;
+  var alarmBeginn = null;   // ms-Zeitstempel des Alarmbeginns (Einsatzzeit-Timer)
 
   function stopRotation() {
     if (rotTimer) { clearTimeout(rotTimer); rotTimer = null; }
@@ -83,32 +147,46 @@
 
   function uhrzeit() {
     var d = new Date();
-    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") +
+           ":" + String(d.getSeconds()).padStart(2, "0");
   }
+
+  // Kopf-Uhr + Einsatzzeit-Timer im Sekundentakt
   setInterval(function () {
-    document.getElementById("is-zeit").textContent = uhrzeit();
+    var d = new Date();
+    var z = document.getElementById("is-zeit");
+    if (z) { z.textContent = uhrzeit(); }
+    var dat = document.getElementById("is-datum");
+    if (dat) { dat.textContent = d.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }); }
     var idleUhr = document.getElementById("is-idle-uhr");
-    if (idleUhr) { idleUhr.textContent = uhrzeit(); }
+    if (idleUhr) { idleUhr.textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+    var timer = document.getElementById("is-einsatzzeit");
+    if (timer && alarmBeginn) {
+      var sek = Math.max(0, Math.floor((Date.now() - alarmBeginn) / 1000));
+      var h = Math.floor(sek / 3600), m = Math.floor((sek % 3600) / 60), s = sek % 60;
+      timer.textContent = (h > 0 ? String(h).padStart(2, "0") + ":" : "") +
+        String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    }
   }, 1000);
 
   function renderGsl(daten) {
     stopRotation();
-    karte = null;
+    karte = null; alarmBeginn = null;
     var g = daten.gsl || {};
     var beginn = g.beginn ? new Date(g.beginn).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-    var html = '<div class="is-alarm" style="background:#7f1d1d;">' +
+    var html = '<div class="is-alarm" style="background:' + '#7f1d1d;">' +
       '<div class="is-alarm__kopf">' +
-      '<div class="is-alarm__stichwort">' + (g.uebung ? "ÜBUNG · " : "") + "GROSSSCHADENSLAGE</div>" +
+      '<div><div class="is-alarm__stichwort">' + (g.uebung ? "ÜBUNG · " : "") + "GROSSSCHADENSLAGE</div>" +
       '<div class="is-alarm__adresse">' + esc(g.name || "") + "</div>" +
       (g.beschreibung ? '<div class="is-alarm__meldung">' + esc(g.beschreibung) + "</div>" : "") +
       (beginn ? '<div style="margin-top:8px;color:#fecaca;">seit ' + beginn + " Uhr</div>" : "") +
-      "</div></div>";
+      "</div></div></div>";
     document.getElementById("is-inhalt").innerHTML = html;
   }
 
   function renderRotation(urls) {
     stopRotation();
-    karte = null;
+    karte = null; alarmBeginn = null;
     var i = 0;
     function zeige() {
       var eintrag = urls[i % urls.length];
@@ -123,6 +201,7 @@
 
   function renderIdle(daten) {
     stopRotation();
+    karte = null; alarmBeginn = null;
     // Frei konfigurierte URL-Rotation hat Vorrang vor den festen Ruhemodi
     if (daten.idle_urls && daten.idle_urls.length) {
       renderRotation(daten.idle_urls);
@@ -142,97 +221,162 @@
     } else {
       var d = new Date();
       var datum = d.toLocaleDateString("de-AT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-      html = '<div class="is-idle"><div class="is-idle__uhr" id="is-idle-uhr">' + uhrzeit() +
+      html = '<div class="is-idle"><div class="is-idle__uhr" id="is-idle-uhr">' +
+             (String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0")) +
              '</div><div class="is-idle__datum">' + esc(datum) + "</div></div>";
     }
     document.getElementById("is-inhalt").innerHTML = html;
-    karte = null;
+  }
+
+  // ── Vehicle status → Farbe/Label (App kennt 3 Einheitenstatus) ──
+  function statusPille(s) {
+    if (s === "Am Einsatzort") { return { cls: "is-vs--einsatzort", txt: "Am Einsatzort" }; }
+    if (s === "Einsatzbereit") { return { cls: "is-vs--bereit", txt: "Einsatzbereit" }; }
+    return { cls: "is-vs--anfahrt", txt: s || "Ausgerückt" };   // "Einsatz übernommen"
+  }
+
+  function fahrzeugKarte(f) {
+    var p = statusPille(f.status);
+    var sub = [f.typ, f.org].filter(Boolean).join(" · ");
+    return '<div class="is-fzg' + (f.extern ? " is-fzg--extern" : "") + '">' +
+      '<div class="is-fzg__ident">' +
+      '<div class="is-fzg__icon">' + (f.extern ? "🚑" : "🚒") + "</div>" +
+      '<div class="is-fzg__txt"><div class="is-fzg__name">' + esc(f.rufname) + "</div>" +
+      (sub ? '<div class="is-fzg__sub">' + esc(sub) + "</div>" : "") + "</div></div>" +
+      '<div class="is-fzg__status"><span class="is-vs ' + p.cls + '">' + esc(p.txt) + "</span></div></div>";
+  }
+
+  function fahrzeugListeHtml(fahrzeuge) {
+    return fahrzeuge.length
+      ? fahrzeuge.map(fahrzeugKarte).join("")
+      : '<div class="is-hinweis">Noch keine Fahrzeuge disponiert.</div>';
+  }
+
+  // Fahrzeugliste live nachziehen, ohne die Karte (Leaflet) neu aufzubauen —
+  // Statuswechsel/Nachalarmierungen erscheinen so ohne Flackern beim 15-s-Poll.
+  function aktualisiereFahrzeuge(fahrzeuge) {
+    fahrzeuge = fahrzeuge || [];
+    var liste = document.getElementById("is-fahrzeuge-liste");
+    if (liste) { liste.innerHTML = fahrzeugListeHtml(fahrzeuge); }
+    var cnt = document.getElementById("is-fahrzeuge-count");
+    if (cnt) { cnt.textContent = fahrzeuge.length ? "(" + fahrzeuge.length + ")" : ""; }
   }
 
   function renderAlarm(daten) {
     stopRotation();
     var inc = daten.incident;
     var o = daten.objekt;
+    var fahrzeuge = daten.fahrzeuge || [];
+    alarmBeginn = inc.beginn ? new Date(inc.beginn).getTime() : null;
+
+    // ── Alarm-Kopf (rot) mit Stichwort-Badge, Adresse, Meldung, Einsatzzeit ──
+    var rsvp = "";
+    if (inc.rsvp && (inc.rsvp.zusagen + inc.rsvp.absagen) > 0) {
+      rsvp = '<div class="is-alarm__rsvp">' +
+        '<span style="color:#dcfce7;">✅ ' + inc.rsvp.zusagen + '</span>' +
+        '<span style="color:#fee2e2;margin-left:22px;">❌ ' + inc.rsvp.absagen + '</span></div>';
+    }
     var html =
       '<div class="is-alarm">' +
-      '<div class="is-alarm__kopf">' +
-      '<div class="is-alarm__stichwort">' + esc(inc.stichwort || "ALARM") + "</div>" +
-      '<div class="is-alarm__adresse">' + esc(inc.adresse || "") + "</div>" +
+      '<div class="is-alarm__kopf"><div>' +
+      '<div class="is-alarm__stichzeile">' +
+      '<span class="is-alarm__badge">' + esc(inc.stichwort || "ALARM") + "</span>" +
+      '<span class="is-alarm__stichwort">' + esc(inc.stichwort_label || inc.stichwort || "Alarm") + "</span></div>" +
+      '<div class="is-alarm__adresse">📍 ' + esc(inc.adresse || "") + "</div>" +
       (inc.meldung ? '<div class="is-alarm__meldung">' + esc(inc.meldung) + "</div>" : "") +
-      (inc.rsvp && (inc.rsvp.zusagen + inc.rsvp.absagen) > 0
-        ? '<div style="margin-top:8px;font-size:1.6rem;font-weight:700;">' +
-          '<span style="color:#4ade80;">✅ ' + inc.rsvp.zusagen + '</span>' +
-          '<span style="color:#f87171;margin-left:18px;">❌ ' + inc.rsvp.absagen + '</span></div>'
-        : "") +
+      rsvp + "</div>" +
+      '<div class="is-alarm__timer"><div class="cap">Einsatzzeit</div>' +
+      '<div class="val" id="is-einsatzzeit">00:00</div></div>' +
       "</div>" +
       '<div class="is-alarm__body">';
 
-    // Links: Objekt + Gefahren
-    html += '<div class="is-panel"><h2>Objekt & Gefahren</h2>';
+    // ── Links: Objekt & Gefahren + BMA/Schlüssel ──
+    html += '<div class="is-col">';
+    html += '<div class="is-panel is-panel--grow is-panel--scroll"><h2>🏢 Objekt &amp; Gefahren</h2>';
     if (o) {
-      html += '<div class="is-objektname">' + esc(o.nummer + " " + o.name) +
-        (o.bestaetigt ? "" : ' <span style="color:#fbbf24;font-size:1rem;">(Vorschlag)</span>') + "</div>";
+      html += '<div class="is-objektname">' + esc((o.nummer ? o.nummer + " " : "") + o.name) +
+        (o.vulgoname ? " <small>vlg. " + esc(o.vulgoname) + "</small>" : "") +
+        (o.bestaetigt ? "" : ' <small>(Vorschlag)</small>') + "</div>";
       if (o.gefahren && o.gefahren.length) {
         html += o.gefahren.map(function (g) {
           return '<div class="is-gefahr"><span class="is-gefahr__pikto">' + esc(g.piktogramm || "⚠️") +
-                 "</span><span>" + esc(g.name) + (g.un_nummer ? " · UN " + esc(g.un_nummer) : "") + "</span></div>";
+                 '</span><span>' + esc(g.name) +
+                 (g.un_nummer ? '<span class="is-gefahr__un">UN ' + esc(g.un_nummer) + "</span>" : "") +
+                 "</span></div>";
         }).join("");
       } else {
         html += '<div class="is-hinweis">Keine Gefahren erfasst.</div>';
       }
-    } else {
-      html += '<div class="is-hinweis">Kein Objekt verknüpft.</div>';
-    }
-    html += "</div>";
-
-    // Mitte: Karte
-    html += '<div class="is-panel"><h2>Lage</h2><div id="is-karte"></div></div>';
-
-    // Rechts: BMA/FSD
-    html += '<div class="is-panel"><h2>BMA & Schlüssel</h2>';
-    if (o && o.bma) {
-      var b = o.bma;
-      var zeilen = [
-        ["BMA-Nr.", b.bma_nummer],
-        ["BMZ-Standort", b.bmz_standort],
-        ["FBF-Standort", b.fbf_standort],
-        ["Laufkarten", b.laufkarten_ablageort],
-        ["FSD-Standort", b.fsd_standort],
-        ["FSD-Inhalt", b.fsd_inhalt]
-      ].filter(function (z) { return z[1]; });
-      if (zeilen.length) {
-        html += zeilen.map(function (z) {
-          return '<div class="is-bma-zeile"><b>' + esc(z[0]) + "</b>" + esc(z[1]) + "</div>";
-        }).join("");
+      html += "</div>";
+      // BMA/Schlüssel
+      html += '<div class="is-panel"><h2>🔑 BMA &amp; Schlüssel</h2>';
+      if (o.bma) {
+        var b = o.bma;
+        var zeilen = [
+          ["BMA-Nr.", b.bma_nummer], ["BMZ-Standort", b.bmz_standort],
+          ["FBF-Standort", b.fbf_standort], ["Laufkarten", b.laufkarten_ablageort],
+          ["FSD-Standort", b.fsd_standort], ["FSD-Inhalt", b.fsd_inhalt]
+        ].filter(function (z) { return z[1]; });
+        html += zeilen.length
+          ? zeilen.map(function (z) { return '<div class="is-bma-zeile"><b>' + esc(z[0]) + "</b>" + esc(z[1]) + "</div>"; }).join("")
+          : '<div class="is-hinweis">Keine BMA-Details erfasst.</div>';
       } else {
-        html += '<div class="is-hinweis">Keine BMA-Details erfasst.</div>';
+        html += '<div class="is-hinweis">Keine BMA erfasst.</div>';
       }
+      html += "</div>";
     } else {
-      html += '<div class="is-hinweis">Keine BMA erfasst.</div>';
+      html += '<div class="is-hinweis">Kein Objekt verknüpft.</div></div>';
     }
-    html += "</div></div></div>";
+    html += "</div>";  // /is-col links
 
+    // ── Mitte: Lagekarte ──
+    html += '<div class="is-col"><div class="is-panel is-panel--grow"><h2>🗺️ Lage &amp; Löschwasser</h2>' +
+      '<div id="is-karte"></div>' +
+      '<div class="is-karte-legende">' +
+      '<span><span class="is-punkt" style="background:#d42225;"></span>Einsatzort</span>' +
+      '<span><span class="is-punkt" style="background:#dc2626;"></span>Überflurhydrant</span>' +
+      '<span><span class="is-punkt" style="background:#2563eb;"></span>Unterflur</span>' +
+      '<span><span class="is-punkt" style="background:#0d9488;"></span>Löschwasser</span>' +
+      "</div></div></div>";
+
+    // ── Rechts: Kräfte im Einsatz + Hinweis Leitstelle ──
+    html += '<div class="is-col is-col--rechts"><div class="is-panel is-panel--grow is-panel--scroll">' +
+      '<h2>🚒 Kräfte im Einsatz <span id="is-fahrzeuge-count">' + (fahrzeuge.length ? "(" + fahrzeuge.length + ")" : "") + "</span></h2>" +
+      '<div id="is-fahrzeuge-liste">' + fahrzeugListeHtml(fahrzeuge) + "</div>";
+    if (inc.meldung) {
+      html += '<div class="is-leitstelle"><b>ℹ️ Hinweis Leitstelle</b><p>' + esc(inc.meldung) + "</p></div>";
+    }
+    html += "</div></div>";
+
+    html += "</div></div>";  // /body /alarm
     document.getElementById("is-inhalt").innerHTML = html;
 
-    // Karte aufbauen (non-interactive)
+    baueKarte(daten);
+  }
+
+  function baueKarte(daten) {
+    var o = daten.objekt;
+    var inc = daten.incident;
     var lat = (o && o.lat != null) ? o.lat : inc.lat;
     var lng = (o && o.lng != null) ? o.lng : inc.lng;
     karte = L.map("is-karte", {
       zoomControl: false, dragging: false, scrollWheelZoom: false,
-      doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false
+      doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, attributionControl: false
     });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(karte);
+
+    var bounds = [];
     if (lat != null && lng != null) {
       karte.setView([lat, lng], 18);
-      L.circleMarker([lat, lng], { radius: 10, color: "#d42225", fillOpacity: .6 }).addTo(karte);
+      L.circleMarker([lat, lng], { radius: 11, color: "#fff", weight: 2, fillColor: "#d42225", fillOpacity: .85 }).addTo(karte);
+      bounds.push([lat, lng]);
     } else {
       karte.setView([47.4652, 9.7503], 14);
     }
+
+    // Objekt-Symbole (FSD, BMZ, Zugänge, Gefahren-Dreiecke, …)
     if (o && o.karten_objekte) {
       o.karten_objekte.forEach(function (k) {
-        // GeoJSON-Punkte (z. B. aus EUS-Import) wie lat/lng-Eintraege als
-        // Symbol-Marker rendern — L.geoJSON wuerde sonst Leaflets fehlendes
-        // Default-Icon nutzen (kaputtes-Bild-Symbol).
         var punkt = k.geometry && k.geometry.type === "Point";
         var mlat = punkt ? k.geometry.coordinates[1] : k.lat;
         var mlng = punkt ? k.geometry.coordinates[0] : k.lng;
@@ -240,15 +384,35 @@
           L.geoJSON(k.geometry, { style: { color: "#d42225", weight: 3, fillOpacity: .12 } }).addTo(karte);
         } else if (mlat != null && mlng != null) {
           L.marker([mlat, mlng], {
-            icon: L.divIcon({
-              html: window.objektSymbolHtml(k.typ, k.label),
-              className: "oks-divicon", iconSize: null, iconAnchor: [16, 16]
-            }),
+            icon: L.divIcon({ html: window.objektSymbolHtml(k.typ, k.label), className: "oks-divicon", iconSize: null, iconAnchor: [16, 16] }),
             interactive: false
           }).addTo(karte);
+          bounds.push([mlat, mlng]);
         }
       });
     }
+
+    // Hydranten / Löschwasser separat nachladen (async Overpass-Proxy)
+    var HYD_TEXT = { ueberflur: "H", unterflur: "UH", loeschwasser: "≈" };
+    fetch("/infoscreen/alarm/" + encodeURIComponent(TOKEN) + "/hydranten.json")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!karte) { return; }
+        (d.hydranten || []).forEach(function (h) {
+          if (h.lat == null || h.lng == null) { return; }
+          var cls = "hydrant-icon hydrant-icon--" + (h.typ || "hydrant");
+          L.marker([h.lat, h.lng], {
+            icon: L.divIcon({
+              html: '<div class="' + cls + '">' + (HYD_TEXT[h.typ] || "H") + "</div>",
+              className: "hydrant-divicon", iconSize: null, iconAnchor: [11, 11]
+            }),
+            interactive: false
+          }).addTo(karte);
+          bounds.push([h.lat, h.lng]);
+        });
+        if (bounds.length > 1) { karte.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 }); }
+      })
+      .catch(function () { /* Hydranten optional */ });
   }
 
   function aktualisieren() {
@@ -259,8 +423,10 @@
         if (daten.symbole && window.setObjektSymbole) { window.setObjektSymbole(daten.symbole); }
         var incId = daten.incident ? daten.incident.id : null;
         // Gleicher Modus → nicht neu aufbauen (Alarm: gleicher Einsatz; idle/gsl: Rotation/Ansicht
-        // laufen weiter). So setzt der 15-s-Poll die URL-Rotation nicht zurueck.
+        // laufen weiter). So setzt der 15-s-Poll die URL-Rotation nicht zurueck. Bei laufendem
+        // Alarm nur die Fahrzeugliste (Status/Nachalarmierung) live nachziehen — die Karte bleibt.
         if (daten.modus === letzterModus && (daten.modus !== "alarm" || incId === letzteIncidentId)) {
+          if (daten.modus === "alarm") { aktualisiereFahrzeuge(daten.fahrzeuge); }
           return;
         }
         letzterModus = daten.modus;
@@ -281,7 +447,8 @@
       try {
         var ev = JSON.parse(e.data);
         if (ev.type === "incident_created" || ev.type === "objekt_match" ||
-            ev.type === "incident_closed" || ev.type === "gsl_changed") {
+            ev.type === "incident_closed" || ev.type === "gsl_changed" ||
+            ev.type === "vehicle_status" || ev.type === "vehicles_changed") {
           letzterModus = null; // Neuaufbau erzwingen
           aktualisieren();
         }

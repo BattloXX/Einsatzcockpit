@@ -120,6 +120,49 @@ def test_daten_alarm_mit_objekt_ohne_wohnanlagen_hinweise(is_db):
     assert "hinweise" not in daten["objekt"]
 
 
+def test_daten_alarm_fahrzeuge_und_stichwort_label(is_db):
+    """Fahrzeuge nach Ausrückordnung (+ Status) und Stichwort-Klartext im Payload."""
+    from app.models.incident import IncidentColumn, IncidentVehicle
+    from app.models.master import AlarmType, VehicleMaster
+
+    db, org = is_db
+    db.add(AlarmType(org_id=org.id, code="F3", category="F", label="Brand Gebäude"))
+    incident = Incident(
+        primary_org_id=org.id, alarm_type_code="F3", status="active",
+        started_at=datetime.now(UTC).replace(tzinfo=None),
+    )
+    db.add(incident)
+    db.flush()
+    spalte = IncidentColumn(incident_id=incident.id, code="active",
+                            title="Im Einsatz", column_kind="vehicles")
+    db.add(spalte)
+    tlf = VehicleMaster(dept_id=org.id, code="TLF", name="TLF 2000",
+                        type="Tanklöschfahrzeug", display_order=1)
+    kdo = VehicleMaster(dept_id=org.id, code="KDO", name="KDO", type="Kommando", display_order=0)
+    weg = VehicleMaster(dept_id=org.id, code="ALT", name="Alt", type="Weg")
+    db.add_all([tlf, kdo, weg])
+    db.flush()
+    # Reihenfolge nach display_order: KDO (0) vor TLF (1); entfernte Einheit fällt raus
+    db.add(IncidentVehicle(incident_id=incident.id, column_id=spalte.id,
+                           vehicle_master_id=tlf.id, unit_status="Am Einsatzort", display_order=1))
+    db.add(IncidentVehicle(incident_id=incident.id, column_id=spalte.id,
+                           vehicle_master_id=kdo.id, unit_status="Einsatz übernommen", display_order=0))
+    db.add(IncidentVehicle(incident_id=incident.id, column_id=spalte.id,
+                           vehicle_master_id=weg.id, unit_status="Einsatzbereit",
+                           removed_at=datetime.now(UTC).replace(tzinfo=None)))
+    db.commit()
+
+    daten = infoscreen_daten("test-token-123", request=None, db=db)  # type: ignore[arg-type]
+    assert daten["modus"] == "alarm"
+    assert daten["incident"]["stichwort_label"] == "Brand Gebäude"
+    fahrzeuge = daten["fahrzeuge"]
+    assert [f["rufname"].split(" ")[0] for f in fahrzeuge] == ["KDO", "TLF"]  # display_order
+    assert fahrzeuge[0]["status"] == "Einsatz übernommen"
+    assert fahrzeuge[1]["status"] == "Am Einsatzort"
+    assert fahrzeuge[1]["typ"] == "Tanklöschfahrzeug"
+    assert all("Alt" not in f["rufname"] for f in fahrzeuge)  # entfernte Einheit nicht dabei
+
+
 def test_aktiver_einsatz_bleibt_geschlossener_faellt_auf_idle(is_db):
     db, org = is_db
     from datetime import timedelta
