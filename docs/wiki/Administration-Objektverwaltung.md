@@ -45,16 +45,21 @@ Die Rolle **Objektverwalter** wird beim Seed automatisch angelegt und unter
 [Benutzer und Rollen](Administration-Benutzer-und-Rollen) zugewiesen — gedacht für
 Brandschutz-/Objektbeauftragte, die pflegen dürfen, ohne Org-Admin zu sein.
 
-## Kataloge
+## Kataloge, Auswahllisten & Symbole
 
-Unter **`/objekte/kataloge`** (Org-Admin) pflegst du drei Kataloge in Tabs; Standardeinträge
-werden bei der Migration bzw. beim Anlegen neuer Organisationen automatisch angelegt:
+Unter **`/objekte/kataloge`** (Org-Admin) pflegst du alle Auswahllisten der Objektverwaltung in Tabs;
+Standardeinträge werden bei der Migration bzw. beim Anlegen neuer Organisationen automatisch angelegt.
+Standardeinträge (🔒) lassen sich umbenennen/deaktivieren, aber nicht löschen; Einträge mit Objektbezug
+sind ebenfalls löschgeschützt (nur deaktivieren).
 
 - **Kategorien**: Gewerbe/Industrie, Wohnanlage, Öffentliches Gebäude, Landwirtschaft, Sonderobjekt, …
-- **Gefahren**: Name + Piktogramm-Typ (EX, Gas, Chemie, Hochspannung, PV, NH3, hohe Brandlast, sonstig) —
-  der Piktogramm-Typ steuert die Chip-Darstellung in Einsatzansicht, Infoscreen und Druck
-- **Merkmale**: Name + Icon (Schlüsselbox, Brandschutzplan, Drehleiterstellplatz, Tiefgarage, Sprinkler, RWA, …);
-  eigene Merkmale können ergänzt werden. Einträge mit Objektbezug lassen sich nicht löschen, nur deaktivieren.
+- **Gefahren**: Name + Piktogramm-Typ (steuert die Chip-Darstellung in Einsatzansicht, Infoscreen und
+  Druck) + optionale **Standard-Links je Gefahrenart** (gelten für alle Objekte mit dieser Gefahr)
+- **Merkmale**: Name + Icon (Schlüsselbox, Brandschutzplan, Drehleiterstellplatz, Tiefgarage, Sprinkler, RWA, …)
+- **Kontaktarten**, **Dokumentarten** und **Gefahren-Piktogramme**: die früher fest verdrahteten
+  Auswahllisten sind jetzt pflegbar (die Dokumentarten steuern u. a. die KI-Klassifikation)
+- **Karten-Symbole**: der Symbolkatalog der Objekt-Lagekarte — Kurztext/Emoji + Stil (Kasten, Dreieck,
+  Pfeil, Hydrant, …) oder **eigenes Symbolbild hochladen** (SVG/PNG, bis 512 KB) mit Live-Vorschau
 
 ## Alarm-Matching
 
@@ -71,21 +76,32 @@ nur gegen **freigegebene** Objekte, in dieser Reihenfolge:
 Treffer erscheinen sofort im Objekt-Panel am Board (WebSocket) und lösen die
 Infoscreen-Alarmansicht aus. Verknüpfen/Lösen wird im Audit-Log dokumentiert.
 
+Zusätzlich legt das System für jede Gefahr eines verknüpften Objekts automatisch eine Meldung in der
+Board-Spalte **„Objektgefahren"** an (idempotent, inkl. der gepflegten weiterführenden Links) — beim
+Lösen der Verknüpfung werden diese Meldungen wieder entfernt.
+
 ## Alarm-Infoscreen
 
 Vollbild-Ansicht für Wandmonitore: `/infoscreen/alarm/{token}` — **öffentlich per Token, kein Login**
 (wie der Wetter-Infoscreen). Bei Alarm zeigt sie Stichwort + Adresse groß, das verknüpfte Objekt mit
-Gefahren-Piktogrammen, die Karte mit Objektsymbolen und die FSD/BMZ/FBF-Standorte; der Wechsel
-passiert sofort per WebSocket.
+Gefahren-Piktogrammen, die Karte mit Objektsymbolen, die FSD/BMZ/FBF-Standorte und die **Zu-/Absagen
+(RSVP)**; der Wechsel passiert sofort per WebSocket. Ein aktiver Einsatz bleibt sichtbar, **solange er
+aktiv ist** (kein Zeitfenster mehr). Läuft eine **Großschadenslage**, zeigt der Monitor eine eigene
+Sonderansicht, die bleibt, solange die Lage aktiv ist (Reihenfolge: Großschadenslage → Einsatz → Ruhe).
 
 Verwaltung unter **`/infoscreen-alarm/verwaltung`** (Org-Admin, Link auch in der Objektliste):
 
-- **Tokens** anlegen (Name je Monitor, z. B. „Fahrzeughalle") — die URL wird **einmalig** im
-  Klartext angezeigt, gespeichert wird nur ein Hash. Kompromittierte Tokens deaktivieren.
-- **Ruhezustand** ohne Alarm: **Uhr** (Standard), **letzte Einsätze** oder **Wetter**
-  (bettet den bestehenden Wetter-Infoscreen ein — dessen URL hier manuell hinterlegen,
+- **Monitore/Tokens** anlegen (Name je Monitor, z. B. „Fahrzeughalle"). Die vollständige **Monitor-URL
+  bleibt dauerhaft sichtbar und kopierbar** (Token verschlüsselt gespeichert; benötigt einen gesetzten
+  `FERNET_KEY`). Kompromittierte Tokens deaktivieren.
+- **Rotations-URLs** anlegen: beliebige Webseiten mit Verweildauer, die im Ruhezustand rotieren.
+- **Monitor-Matrix**: je Monitor auswählen, welche URLs (und ob **Wetter**) im Ruhezustand angezeigt
+  werden — verschiedene Monitore können also unterschiedliche Inhalte zeigen. Der Wetter-Eintrag nutzt
+  die zentral hinterlegte Wetter-URL, ohne sie je Monitor erneut einzugeben.
+- **Ruhezustand** (Fallback ohne konfigurierte URLs): **Uhr** (Standard), **letzte Einsätze** oder
+  **Wetter** (bettet den bestehenden Wetter-Infoscreen ein — dessen URL hier manuell hinterlegen,
   da der Wetter-Token nur als Hash gespeichert ist)
-- **Anzeigedauer** der Alarmansicht (Standard 60 min), danach zurück in den Ruhezustand
+- **Großschadenslage-Sonderansicht** an/aus (Standard: an)
 
 **DSGVO:** Wohnanlagen-Hinweise (z. B. zu hilfsbedürftigen Personen) werden **nie** an den
 Infoscreen ausgeliefert — fest im Code, nicht konfigurierbar. Am Objektblatt-Druck sind sie nur
@@ -108,11 +124,17 @@ KI-Monatskontingent der Org; Seitenbilder werden vor dem Versand auf ~1024 px ve
 
 ```bash
 # Debian: Poppler für die PDF-Seiten-Rasterung (pdf2image)
-sudo apt-get install -y poppler-utils
+# + Tesseract für die OCR-Volltextsuche gescannter Dokumente
+sudo apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-deu
 
-# Migrationen 0124–0130 anwenden
+# Migrationen 0124–0137 anwenden
 alembic upgrade head
 ```
+
+Für die **Gefahrgut-Anreicherung** (UN-Nummer → Stoffname/Klasse/Kemler) die vollständige offene
+BAM-CSV („Datenbank GEFAHRGUT", Lizenz dl-de/by-2.0) von OffeneDaten.de beziehen und nach
+`app/data/bam_gefahrgut.csv` legen (mitgeliefert ist nur ein kleiner Auszug). Ohne Datei bleibt die
+manuelle Link-Pflege aktiv. Für die dauerhaft kopierbaren Monitor-URLs muss `FERNET_KEY` gesetzt sein.
 
 Optionale `.env`-/SystemSettings-Parameter:
 
@@ -122,6 +144,9 @@ Optionale `.env`-/SystemSettings-Parameter:
 | `OBJEKT_PDF_MAX_BYTES` | 100 MB | Maximale Dateigröße je Upload (SystemSettings-Override: `objekt_pdf_max_bytes`) |
 | `OBJEKT_PDF_MAX_SEITEN` | 300 | Maximale Seitenzahl je PDF (Override: `objekt_pdf_max_seiten`) |
 | `OBJEKT_SEITE_RENDER_DPI` | 150 | Auflösung der Hi-Res-Renderings |
+| `OBJEKT_OCR_ENABLED` | `true` | OCR-Fallback (Tesseract) für Scan-PDFs ohne Textlayer |
+| `OBJEKT_OCR_LANG` | `deu+eng` | Tesseract-Sprachpakete für die OCR |
+| `OBJEKT_SYMBOL_MAX_BYTES` | 512 KB | Maximale Größe je hochgeladenem Karten-Symbolbild (SVG/PNG) |
 
 **Speicher-Quota:** Original + Einzelseiten + Renderings zählen auf die Org-Quota
 (≈ Faktor 1,5–2 der Originalgröße). Beim Löschen eines Dokuments wird der belegte Speicher

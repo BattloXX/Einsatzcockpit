@@ -2,7 +2,7 @@
 
 Digitales Einsatzleiter-Werkzeug für österreichische Feuerwehren — Multi-User, Multi-Organisations-fähig, Echtzeit.
 
-**Version:** 3.2.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
+**Version:** 3.3.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
 
 ## Was ist das?
 
@@ -23,7 +23,8 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Taktische Lagekarte nach ÖBFV-Richtlinie E-27 (genormte Symbole, Magnetfarben)
 - Wetterdaten-Integration: Nowcast, Vorhersage, Unwetterwarnungen, Radar-Overlay
 - UAS/Drohnen-Modul gemäß RL-UAS LFV Vorarlberg 2024 (Flugbuch, Checklisten, PDF, DSGVO)
-- Objektverwaltung: Einsatzunterlagen zu BMA-Objekten und Wohnanlagen — Gefahren, Schlüsselsafe, Melderpläne mit PDF-Zerlegung, Objekt-Lagekarte, Alarm-Matching, Alarm-Infoscreen, Objektblatt-Druck
+- Objektverwaltung: Einsatzunterlagen zu BMA-Objekten und Wohnanlagen — Gefahren (mit Links + Gefahrgut-DB-Anreicherung per UN-Nummer), Schlüsselsafe, Melderpläne mit PDF-Zerlegung und **Volltextsuche (OCR)**, Objekt-Lagekarte, Alarm-Matching mit **Objektgefahren-Board-Spalte**, Objektblatt-Druck; pflegbare Kataloge/Auswahllisten und Karten-Symbole (Bild-Upload)
+- Alarm-Infoscreen für Wandmonitore: URL-Rotation je Monitor (Matrix), Wetter, Großschadenslage-Sonderansicht, RSVP-Anzeige, dauerhaft kopierbare Monitor-URLs
 - SSO via Microsoft Entra ID (JIT-Provisioning, Gruppen-Mapping, PKCE/OIDC)
 - Geräteverleih für Großschadenslagen (Artikel, Stücklisten, Barcode-Scan, SMS)
 - PWA für Offline-Betrieb, Web-Push-Benachrichtigungen

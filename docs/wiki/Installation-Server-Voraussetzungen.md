@@ -32,6 +32,9 @@ sudo apt-get install -y python3.14 python3.14-venv python3.14-dev
 WeasyPrint (PDF-Generierung) benötigt Pango/Cairo. Der MariaDB-Connector braucht die Dev-Header.
 `poppler-utils` rendert die PDF-Seiten der **Objektverwaltung** (pdf2image) — ohne Poppler werden
 hochgeladene PDFs zwar zerlegt, aber ohne Vorschaubilder abgelegt.
+`tesseract-ocr` (+ Sprachpaket `tesseract-ocr-deu`) liefert die **OCR-Volltextsuche** für gescannte
+Objektdokumente. Ohne Tesseract wird nur der eingebettete PDF-Textlayer indexiert — reine Scan-PDFs
+sind dann nicht durchsuchbar (die App startet trotzdem).
 
 ```bash
 sudo apt-get install -y \
@@ -43,6 +46,7 @@ sudo apt-get install -y \
     libffi-dev \
     build-essential \
     poppler-utils \
+    tesseract-ocr tesseract-ocr-deu \
     git
 ```
 

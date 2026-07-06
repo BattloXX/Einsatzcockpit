@@ -54,17 +54,30 @@ Der Ablauf:
 
 1. **Hochladen** per Drag & Drop (mehrere PDFs, je max. 100 MB / 300 Seiten)
 2. Das System **zerlegt jede Seite automatisch** in ein durchsuchbares Einzelblatt mit Vorschaubild
+   und **indexiert den Volltext** je Seite — aus dem eingebetteten PDF-Text, bei gescannten Seiten
+   per OCR (Tesseract). So werden die Dokumente durchsuchbar.
 3. **Klassifizieren** in der Galerie: Seiten per Checkbox mehrfach auswählen → Bulk-Zuweisung von
    *Dokumentart* (BMA Datenblatt, BMA Melderplan, Brandschutzplan, Gefahrgutdatenblatt, Lageplan,
    Objektinformation), *Titel* („Melderplan EG Nord"), *Melderlinie(n)*, *Stand-Datum* und dem Flag
    **„Bei Einsatz drucken"**
 4. **Nutzen**: Filter-Chips mit Zählern („Alle (150) / Brandschutzplan (23) / BMA Melderplan (121)"),
-   Suche über Titel/Melderlinie, Fullscreen-**Viewer** mit Wischen/Pfeiltasten und Zoom (Tablet!),
+   **Volltextsuche** über Titel, Melderlinie und Seiteninhalt (z. B. „Raum 12", Anlagen- oder
+   Raumbezeichnung), Fullscreen-**Viewer** mit Wischen/Pfeiltasten und Zoom (Tablet!),
    Einzelseiten-Download oder zusammengestelltes Sammel-PDF
 
-Unklassifizierte Seiten sind gelb umrandet. Optional schlägt die
+Unklassifizierte Seiten sind gelb umrandet. Ältere Dokumente (vor Einführung der Volltextsuche
+hochgeladen) lassen sich mit dem Knopf **„🔎 Volltext neu indexieren"** nachträglich durchsuchbar
+machen. Optional schlägt die
 [KI-Klassifizierung](Administration-Objektverwaltung#ki-dokumentklassifizierung) Dokumentart, Titel
 und Melderlinien vor — Vorschläge müssen immer manuell bestätigt werden.
+
+### Gefahren mit Links und Gefahrgut-Anreicherung
+
+Beim Erfassen einer Gefahr kannst du **weiterführende Links** hinterlegen (z. B. auf ein
+Sicherheitsdatenblatt). Ist eine **UN-Nummer** angegeben, füllt der Knopf **„🔎 Anreichern"** aus
+einer offenen Gefahrgut-Datenbank automatisch Stoffname, Gefahrklasse und Gefahrnummer (Kemler) und
+ergänzt Deep-Links (BAM, GESTIS). Standard-Links je Gefahrenart lassen sich zentral im Katalog
+pflegen (siehe Administration) und gelten dann für alle Objekte mit dieser Gefahr.
 
 ## Objekt-Lagekarte
 
@@ -83,12 +96,19 @@ das System das passende Objekt — zuerst über die **BMA-Nummer im Alarmtext** 
 als Vorschlag). Am Einsatz-Board erscheint das **Objekt-Panel** in der Sidebar: Vorschläge
 bestätigen oder lösen dürfen Einsatzleiter und Objektverwalter; manuell verknüpfen geht dort auch.
 
+**Objektgefahren am Board:** Sobald ein Objekt verknüpft ist, legt das System für jede seiner
+Gefahren automatisch eine Meldung in der eigenen Board-Spalte **„Objektgefahren"** an — übersichtlich
+je Gefahr, mit den gepflegten weiterführenden Links direkt in der Meldung. Beim Lösen der
+Verknüpfung verschwinden diese Meldungen wieder.
+
 **Einsatzansicht** (`Objektinfo`-Button am Board, für Tablet/Handy im Fahrzeug optimiert),
 Priorität von oben nach unten:
 
 1. **Gefahren-Chips** mit Piktogramm und UN-Nummer
 2. **Gelber BMA/FSD-Block**: BMZ, FBF, Schlüsselsafe-Standort + Inhalt, Laufkarten-Ablageort
-3. **Melderpläne/Laufkarten** — ein Tipp öffnet den Viewer, dort nach Melderlinie suchen
+3. **Melderpläne/Laufkarten** — ein Tipp öffnet den Viewer; das Dokumentfeld erlaubt zusätzlich eine
+   **Volltextsuche** über alle Objektunterlagen (z. B. Raum oder Melderlinie), Treffer springen direkt
+   auf die passende Seite
 4. **Kontakte** mit großen Anruf-Buttons
 5. Lagekarte, Dokumente, Anfahrtsweg, letzte Einsätze
 

@@ -8,7 +8,7 @@ Multi-User, mandantenfähig, Echtzeit. Für Feuerwehr, BOS und Gemeinden.
 [![CI](https://github.com/BattloXX/Einsatzcockpit/actions/workflows/ci.yml/badge.svg)](https://github.com/BattloXX/Einsatzcockpit/actions)
 ![Python](https://img.shields.io/badge/python-3.14-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green)
-![Version](https://img.shields.io/badge/version-3.2.0-orange)
+![Version](https://img.shields.io/badge/version-3.3.0-orange)
 
 ---
 
@@ -70,9 +70,9 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **Geräteverleih** | Artikel- und Stücklisten-Stammdaten; Ausgabe & Rücknahme von Material im GSL-Kontext; Barcode/QR-Scan im Browser; SMS-Erinnerungen; Foto-Dokumentation; Druckschein |
 | **Benutzer-Profil** | Eigener Name, E-Mail, Passwort und Avatar; Profilbild erscheint in Log-Einträgen und Stab |
 | **Digitales Fahrtenbuch** | Fahrterfassung mit km/BH-Zählerstand, Seilwinde (BH, Züge, Wartung), Maschinist-Autocomplete, Fahrtzweck, Zielort, Schadensangabe (Mail+Teams); Token/QR-Zugang ohne Login; Doppelfahrt-Erkennung; Korrektur-/Storno-Workflow; Zählerstand-Berechnung; Benachrichtigungs-Audit |
-| **Objektverwaltung** | Einsatzunterlagen zu wichtigen Objekten (BMA-Betriebe, Wohnanlagen, öffentliche Gebäude): strukturierte Gefahren mit Piktogrammen, BMA/FSD-Block (BMZ, FBF, Schlüsselsafe), Kontakte mit Klick-zum-Anrufen, Zusatzadressen (Stiegen), Objektmerkmale, Wohnanlagen-Daten; PDF-Pipeline mit automatischer Seiten-Zerlegung (pypdf + Poppler-Rendering), Galerie mit Bulk-Klassifikation (Dokumentart, Melderlinie, „Bei Einsatz drucken"), Fullscreen-Viewer; Objekt-Lagekarte mit Symbol-Editor (FSD, BMZ, Gefahren-Dreiecke, Hydranten, …); Status-Workflow mit Revisions-Erinnerung, feldgenaues Änderungsprotokoll; zweistufiger Feature-Flag |
-| **Alarm-Matching (Objekte)** | Einsätze werden automatisch mit Objekten verknüpft: BMA-Nr. im Alarmtext → Adresse (inkl. Stiegen) → Geo-Nähe (Vorschlag); Objekt-Panel am Board mit Bestätigen/Lösen, mobile Einsatzansicht (Gefahren → BMA/FSD → Laufkarten → tel:-Kontakte → Karte → Dokumente), Objektblatt-PDF mit QR-Code und „Bei Einsatz drucken"-Anhang, Mappen-Druck |
-| **Alarm-Infoscreen** | Wandmonitor im Gerätehaus (Token-Zugang, kein Login): bei Alarm Stichwort + Adresse groß, verknüpftes Objekt mit Gefahren-Piktogrammen, Karte mit Objektsymbolen, FSD/BMZ/FBF-Standorte; sofortiger Wechsel per WebSocket; konfigurierbarer Ruhezustand (Uhr / Wetter / letzte Einsätze) |
+| **Objektverwaltung** | Einsatzunterlagen zu wichtigen Objekten (BMA-Betriebe, Wohnanlagen, öffentliche Gebäude): strukturierte Gefahren mit Piktogrammen, BMA/FSD-Block (BMZ, FBF, Schlüsselsafe), Kontakte mit Klick-zum-Anrufen, Zusatzadressen (Stiegen), Objektmerkmale, Wohnanlagen-Daten; PDF-Pipeline mit automatischer Seiten-Zerlegung (pypdf + Poppler-Rendering) und **Volltext-Indexierung** (PDF-Textlayer + Tesseract-OCR) für die Dokumentsuche (z. B. Raum/Melderlinie), Galerie mit Bulk-Klassifikation (Dokumentart, Melderlinie, „Bei Einsatz drucken"), Fullscreen-Viewer; Objekt-Lagekarte mit Symbol-Editor; zentrale **Katalog-, Auswahllisten- und Karten-Symbol-Verwaltung** (inkl. Symbolbild-Upload); Gefahren mit **weiterführenden Links** (Katalog + objektspezifisch) und **UN-Nummer-Anreicherung** aus offener Gefahrgut-Datenbank (BAM, dl-de/by-2.0) + Deep-Links (BAM/GESTIS); Status-Workflow mit Revisions-Erinnerung, feldgenaues Änderungsprotokoll; zweistufiger Feature-Flag |
+| **Alarm-Matching (Objekte)** | Einsätze werden automatisch mit Objekten verknüpft: BMA-Nr. im Alarmtext → Adresse (inkl. Stiegen) → Geo-Nähe (Vorschlag); Objekt-Panel am Board mit Bestätigen/Lösen; Objektgefahren erscheinen automatisch als Meldungen in einer eigenen Board-Spalte „Objektgefahren" (inkl. weiterführender Links); mobile Einsatzansicht (Gefahren → BMA/FSD → Laufkarten → tel:-Kontakte → Karte → Dokumente inkl. Volltextsuche), Objektblatt-PDF mit QR-Code und „Bei Einsatz drucken"-Anhang, Mappen-Druck |
+| **Alarm-Infoscreen** | Wandmonitor im Gerätehaus (Token-Zugang, kein Login): bei Alarm Stichwort + Adresse groß, verknüpftes Objekt mit Gefahren-Piktogrammen, Karte mit Objektsymbolen, FSD/BMZ/FBF-Standorte und Zu-/Absagen (RSVP); Einsätze bleiben sichtbar, solange sie aktiv sind; eigene **Großschadenslage-Sonderansicht**; sofortiger Wechsel per WebSocket; Ruhezustand mit **frei rotierenden URLs je Monitor** (Monitor-Matrix), Wetter (vererbt), Uhr oder letzte Einsätze; **dauerhaft kopierbare Monitor-URLs** (Fernet-verschlüsselt) |
 | **KI-Dokumentklassifizierung** | Vision-Analyse hochgeladener Objektunterlagen (Anthropic Claude, opt-in je Org): Vorschläge für Dokumentart/Titel/Melderlinien in einer Review-Liste — nie automatische Übernahme |
 | **Offline-Objektdaten (Android)** | Die Android-App precacht Einsatzansichten, Seitenbilder und PDFs aller freigegebenen Objekte (Sync alle 6 h) — Objektinfo auch im Funkloch verfügbar |
 
@@ -174,11 +174,13 @@ sudo apt-get update
 sudo apt-get install -y \
     python3.14 python3.14-venv python3.14-dev \
     libmariadb-dev libpango-1.0-0 libpangoft2-1.0-0 \
-    build-essential ffmpeg poppler-utils
+    build-essential ffmpeg poppler-utils \
+    tesseract-ocr tesseract-ocr-deu
 ```
 
 `ffmpeg` ist für Video-Uploads erforderlich. Ohne ffmpeg werden nur Bilder und PDFs akzeptiert.
 `poppler-utils` rendert die PDF-Seiten der Objektverwaltung (pdf2image). Ohne Poppler werden PDFs zwar zerlegt, aber ohne Vorschaubilder abgelegt.
+`tesseract-ocr` (+ Sprachpaket `tesseract-ocr-deu`) liefert die OCR-Volltextsuche für gescannte Objektdokumente. Ohne Tesseract wird nur der eingebettete PDF-Textlayer indexiert (reine Scan-PDFs sind dann nicht durchsuchbar) — die App startet trotzdem.
 
 ### App installieren
 
@@ -474,6 +476,13 @@ alembic downgrade -1
 | `0128_objekt_einsatz_matching.py` | Objektverwaltung: Einsatz-Verknüpfung (Alarm-Matching), Geo-Radius je Org |
 | `0129_infoscreen_alarm.py` | Alarm-Infoscreen: Zugangs-Tokens, Idle-Modus, Anzeigedauer |
 | `0130_objekt_ki_vorschlag.py` | Objektverwaltung: KI-Klassifizierungsvorschläge (Review-Queue), Org-Opt-in |
+| `0131_hydranten_layer.py` | Einsatzinfo: Hydranten-Layer (OSM-Snapshot), Org-Toggle |
+| `0132_objekt_auswahl.py` | Objektverwaltung: pflegbare Auswahllisten (Kontaktarten, Dokumentarten, Piktogramme) |
+| `0133_objekt_symbol.py` | Objektverwaltung: pflegbarer Karten-Symbol-Katalog (inkl. Bild-Upload) |
+| `0134_objekt_seite_volltext.py` | Objektdokumente: Volltext-Indexierung je Seite (PDF-Textlayer/OCR) |
+| `0135_gefahren_links_anreicherung.py` | Gefahren: weiterführende Links + Gefahrgut-DB-Anreicherung (Stoffname/Klasse/Kemler) |
+| `0136_message_objekt_gefahr.py` | Board: Objektgefahren-Meldungen (Message ↔ Objektgefahr) |
+| `0137_infoscreen_urls_monitore.py` | Infoscreen: URL-Rotation, Monitor-Matrix, GSL-Ansicht, persistente Monitor-URL |
 
 Vollständiger Migrationsleitfaden: [`docs/MIGRATION_RUNBOOK.md`](docs/MIGRATION_RUNBOOK.md)
 
@@ -725,7 +734,7 @@ tests/
 ┌─────────────▼──┐  ┌───────▼──────┐  ┌───▼──────────────┐
 │  MariaDB 10.11 │  │ MariaDB      │  │ app_storage/ │  │ app/static/      │
 │  (utf8mb4)     │  │ _weather     │  │ incident_    │  │ css, js, img     │
-│ 115 Migrationen│  │ (Zeitreihe)  │  │ media/       │  │ (kein Auth nötig)│
+│ 137 Migrationen│  │ (Zeitreihe)  │  │ media/       │  │ (kein Auth nötig)│
 └────────────────┘  └─────────────┘  └─────────────┘  └──────────────────┘
 ```
 
@@ -992,7 +1001,7 @@ app/
     ├── media/               gallery.html
     ├── admin/               sysadmin_orgs.html, konfig.html, ...
     └── ...
-alembic/versions/            Migrationen 0001–0130
+alembic/versions/            Migrationen 0001–0137
 docs/
 ├── MIGRATION_RUNBOOK.md     Vollständiger Migrationsleitfaden
 ├── multi-tenancy-konzept.md Technisches Konzeptdokument
@@ -1016,6 +1025,7 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **3.3.0** | 2026-07-06 | Dokument-**Volltextsuche** (PDF-Textlayer + Tesseract-OCR) in Objektverwaltung und Einsatzinfo; zentrale **Katalog-/Auswahllisten- und Karten-Symbol-Verwaltung** (Symbolbild-Upload); Gefahren mit **weiterführenden Links** (Katalog + objektspezifisch) und **UN-Nummer-Anreicherung** aus der offenen BAM-Gefahrgut-DB (dl-de/by-2.0) + Deep-Links (BAM/GESTIS); neue Board-Spalte **„Objektgefahren"** (Meldungen je Gefahr automatisch beim Match, inkl. Links); **Infoscreen-Ausbau**: frei rotierende URLs je Monitor (Matrix), vererbtes Wetter, Großschadenslage-Sonderansicht, Einsatz sichtbar solange aktiv, dauerhaft kopierbare (Fernet-verschlüsselte) Monitor-URLs; **RSVP** (Zu-/Absagen) in Einsatzinfo und Infoscreen |
 | **3.2.0** | 2026-07-05 | Objektverwaltung (PR 1–9): Objekte mit BMA/FSD-Block, strukturierten Gefahren, Kontakten, Merkmalen, Wohnanlagen-Daten und Stiegen-Adressen; PDF-Pipeline mit Seiten-Zerlegung (pypdf + pdf2image/Poppler), Galerie mit Bulk-Klassifikation und Fullscreen-Viewer; Objekt-Lagekarte mit Symbol-Editor; Alarm-Matching (BMA-Nr. → Adresse → Geo) mit Board-Panel und mobiler Einsatzansicht; Alarm-Infoscreen für Wandmonitore (Token, WebSocket, Idle-Modi); Objektblatt-Druck mit QR und Einsatzdruck-Anhang; KI-Dokumentklassifizierung (Vision, Review-Queue, opt-in); Offline-Precaching in der Android-App; neue Rolle „Objektverwalter"; zweistufiger Feature-Flag (System + Org) |
 | **3.1.0** | 2026-07-04 | LIS/IPR-Anbindung an das Leitstellensystem der Landeswarnzentrale (SOAP/WCF): automatischer Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus/-position, Meldungen, Zu-/Absagen, Dokumente, automatisches Schließen bei Abschluss in LIS, Leitstellen-Nr. als führende Kennung (Board, Archiv, Verlauf, PDF), Anrufer/Melder-Anzeige mit Klick-zum-Anrufen, Diagnose-Aufzeichnungstool; SMS-Empfang & Weiterleitung (Teams/Gruppen/Mitglieder/Ad-hoc) über native Android-Gateway-App |
 | **3.0.0** | 2026-07-01 | Rebrand zu Einsatzcockpit (einsatzcockpit.com); Teilnehmerlisten-Modul (Termine/Übungen/Mannschaft, Excel-Import, PDF/Druck mit Status, Entschuldigt-Checkbox); Mannschaft als eigene Seite; SMS-Einsatzinfo je Alarm-Stichwort + manueller Gruppenversand; automatische Wetterwarnungen per Mail/Teams; Security- & Stability-Hardening (14 PRs: Tenant-Backstop, XSS-Sanitizing, FERNET_KEY-Pflicht, Device-Session-Revoke, WS-Resync, PWA-Tile-Cache, Mobile-Performance); Board: Abschnittsleiter, Karten-Journal, Meldungs-Zuweisung, Sprachdiktat bei Auftrag/Meldung; lokal gehostete Fonts statt Google Fonts; zahlreiche Timezone-, Mobile- und CI-Fixes |
