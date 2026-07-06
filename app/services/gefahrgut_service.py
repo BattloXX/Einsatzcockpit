@@ -2,10 +2,9 @@
 
 Offline-Lookup: die gebündelte CSV (`app/data/bam_gefahrgut.csv`) wird einmal lazy in ein
 dict geladen. Kein Runtime-Fremddienst (Prod erreicht externe Dienste nicht immer). Zusätzlich
-werden Deep-Links auf öffentliche Nachschlagewerke generiert (BAM DGG-Info, GESTIS).
+werden Deep-Links auf öffentliche Nachschlagewerke generiert (ERICard, BAM DGG-Info).
 
 Quelle der Daten: „Datenbank GEFAHRGUT, BAM" (dl-de/by-2.0). Siehe app/data/LIZENZ.md.
-GESTIS erlaubt nur Verlinkung (keine Massenübernahme) → nur als generierter Link.
 """
 from __future__ import annotations
 
@@ -13,7 +12,6 @@ import csv
 import logging
 import re
 from pathlib import Path
-from urllib.parse import quote
 
 logger = logging.getLogger("einsatzleiter.gefahrgut")
 
@@ -149,10 +147,5 @@ def generierte_links(
         links.append({
             "label": f"BAM Gefahrgut UN {key}",
             "url": f"https://www.dgg.bam.de/dgginfo/search/query?value=UN{key}&partialWord=false",
-        })
-    if stoffname:
-        links.append({
-            "label": f"GESTIS: {stoffname}",
-            "url": f"https://gestis.dguv.de/search?query={quote(stoffname)}",
         })
     return links

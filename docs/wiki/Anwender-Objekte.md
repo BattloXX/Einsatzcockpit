@@ -77,8 +77,8 @@ Beim Erfassen einer Gefahr kannst du **weiterführende Links** hinterlegen (z. B
 Sicherheitsdatenblatt). Ist eine **UN-Nummer** angegeben, füllt der Knopf **„🔎 Anreichern"** aus
 einer offenen Gefahrgut-Datenbank automatisch Stoffname, Gefahrklasse und Gefahrnummer (Kemler) und
 ergänzt Deep-Links: **🚒 ERICard** (CEFIC-Notfall-Interventionskarte mit den Sofortmaßnahmen für
-Einsatzkräfte — springt per UN-Nummer, bei bekannter Gefahrnummer/HIN direkt auf die passende Karte),
-BAM Gefahrgut und GESTIS. Der ERICard-Absprung erscheint überall, wo die Gefahr angezeigt wird
+Einsatzkräfte — springt per UN-Nummer, bei bekannter Gefahrnummer/HIN direkt auf die passende Karte)
+und BAM Gefahrgut. Der ERICard-Absprung erscheint überall, wo die Gefahr angezeigt wird
 (Objektdetail, Einsatzansicht, Board-Spalte „Objektgefahren", Infoscreen). Standard-Links je
 Gefahrenart lassen sich zentral im Katalog pflegen (siehe Administration) und gelten dann für alle
 Objekte mit dieser Gefahr.

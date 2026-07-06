@@ -43,7 +43,7 @@ def test_generierte_links():
     links = generierte_links("1203", "Benzin")
     urls = [x["url"] for x in links]
     assert any("dgg.bam.de" in u and "UN1203" in u for u in urls)
-    assert any("gestis" in u for u in urls)
+    assert not any("gestis" in u for u in urls)
     assert any("ericards.net" in u and "unnumber=1203" in u for u in urls)
 
 
