@@ -197,6 +197,11 @@
 
     .gsl-map { position: relative; min-height: 0; }
     #gsl-karte { position: absolute; inset: 0; background: #111; }
+    /* Abschnitts-Namen als dezenter, permanenter Tooltip mittig im Polygon */
+    .leaflet-tooltip.gsl-sektor-tip { background: rgba(13,21,15,.78); color: var(--is-text);
+      border: 1px solid var(--is-line); border-radius: 6px; padding: 3px 9px; font-size: .82rem;
+      font-weight: 700; box-shadow: none; white-space: nowrap; }
+    .leaflet-tooltip.gsl-sektor-tip::before { display: none; }
     .gsl-ov { position: absolute; z-index: 500; }
     .gsl-glass { background: rgba(13,21,15,.82); backdrop-filter: blur(8px);
                  border: 1px solid var(--is-line); border-radius: 12px; }
@@ -293,6 +298,7 @@
   // ── GSL-Dashboard (Großschadenslage-Wandmonitor) ──
   var gslMap = null;
   var gslMarkerLayer = null;
+  var gslSektorLayer = null;
 
   function gslZeit(iso) {
     return iso ? new Date(iso).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -375,8 +381,39 @@
       '<div class="gsl-ticker__view"><div class="gsl-ticker__track">' + items + items + "</div></div></div>";
   }
 
-  function gslMarkerRefresh(sites, fit) {
-    if (!gslMap) { return; }
+  // Abschnitts-Polygone (GeoJSON) unter die Marker legen. Liefert Bounds-Punkte.
+  function gslSektorenRefresh(sektoren) {
+    if (!gslMap) { return []; }
+    if (gslSektorLayer) { gslMap.removeLayer(gslSektorLayer); }
+    gslSektorLayer = L.layerGroup();
+    var bounds = [];
+    (sektoren || []).forEach(function (s) {
+      if (!s.geometry) { return; }
+      try {
+        var col = s.color || "#6b7280";
+        var poly = L.geoJSON(s.geometry, {
+          interactive: false,
+          style: { color: col, fillColor: col, fillOpacity: 0.12, weight: 2, opacity: 0.75 }
+        });
+        poly.bindTooltip(esc(s.name), {
+          permanent: true, direction: "center", className: "gsl-sektor-tip", opacity: 0.95
+        });
+        poly.eachLayer(function (l) {
+          if (l.getBounds) {
+            var b = l.getBounds();
+            bounds.push([b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]);
+          }
+        });
+        gslSektorLayer.addLayer(poly);
+      } catch (e) { /* fehlerhafte Geometrie ueberspringen */ }
+    });
+    gslSektorLayer.addTo(gslMap);
+    return bounds;
+  }
+
+  // Einsatzstellen-Marker (ueber den Abschnitten). Liefert Bounds-Punkte.
+  function gslMarkerRefresh(sites) {
+    if (!gslMap) { return []; }
     if (gslMarkerLayer) { gslMap.removeLayer(gslMarkerLayer); }
     gslMarkerLayer = L.layerGroup();
     var bounds = [];
@@ -397,7 +434,7 @@
       bounds.push([s.lat, s.lng]);
     });
     gslMarkerLayer.addTo(gslMap);
-    if (fit && bounds.length) { gslMap.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 }); }
+    return bounds;
   }
 
   function renderGsl(daten) {
@@ -434,7 +471,8 @@
     });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(gslMap);
     gslMap.setView([47.4652, 9.7503], 13);
-    gslMarkerRefresh(g.sites, true);
+    var bounds = gslSektorenRefresh(g.sektoren).concat(gslMarkerRefresh(g.sites));
+    if (bounds.length) { gslMap.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 }); }
     setTimeout(function () { if (gslMap) { gslMap.invalidateSize(); } }, 200);
     gslWetterUebernehmen();
   }
@@ -450,7 +488,9 @@
     if (sp) { sp.innerHTML = gslSpaltenHtml(g.sites); }
     var tk = document.getElementById("gsl-ticker-wrap");
     if (tk) { tk.innerHTML = gslTickerHtml(g.ticker); }
-    gslMarkerRefresh(g.sites, false);
+    // Abschnitte + Marker aktualisieren, aber Kartenausschnitt beibehalten (kein Fit)
+    gslSektorenRefresh(g.sektoren);
+    gslMarkerRefresh(g.sites);
   }
 
   function renderRotation(urls) {

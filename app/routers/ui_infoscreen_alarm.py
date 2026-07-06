@@ -221,8 +221,21 @@ def _gsl_infoscreen_daten(db: Session, gsl) -> dict:  # type: ignore[no-untyped-
             teil += " · " + m.address_line
         ticker.append(teil)
 
-    # Abschnitts-Legende
-    sektoren = [{"name": s.name, "color": s.color or "#6b7280"} for s in gsl.sectors]
+    # Abschnitte: Legende + Polygon-Geometrie (GeoJSON) fuer die Karte
+    import json as _json
+    sektoren = []
+    for s in gsl.sectors:
+        geo = None
+        if s.geometry:
+            try:
+                geo = _json.loads(s.geometry)
+            except (ValueError, TypeError):
+                geo = None
+        sektoren.append({
+            "name": s.name,
+            "color": s.color or "#6b7280",
+            "geometry": geo,
+        })
 
     return {
         "name": gsl.name,
