@@ -201,3 +201,71 @@ def test_reconcile_storage_includes_journal_and_cross_marker_media(db, orgs):
 
     total = reconcile_storage(db, org_a.id)
     assert total == 600, "reconcile_storage zaehlt journal_media/cross_marker_media nicht mit (KONS-1-Regression)"
+
+
+# ── Retry bei transienten MariaDB-Sperrkonflikten (Vorfall 2026-07-06) ─────────
+# INSERT/UPDATE auf das gemeinsame org_storage_usage-Row warf unter paralleler
+# Dokumentverarbeitung MySQL-Error 1020 ("Record has changed since last read;
+# try restarting transaction") -> Dokument-Verarbeitung schlug fehl. _execute
+# muss genau diese transienten Sperrfehler ein paar Mal wiederholen.
+
+def _fake_operational_error(errno: int):
+    from sqlalchemy.exc import OperationalError
+
+    class _Orig(Exception):
+        pass
+
+    orig = _Orig("boom")
+    orig.args = (errno, "transient")
+    return OperationalError("UPDATE ...", {}, orig)
+
+
+def test_execute_retries_transient_lock_error_then_succeeds():
+    from sqlalchemy import text
+
+    from app.services import storage_service
+
+    calls = {"n": 0}
+
+    class _FakeDB:
+        def execute(self, stmt, params):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise _fake_operational_error(1020)
+            return "ok"
+
+    result = storage_service._execute(_FakeDB(), text("UPDATE x"), {})
+    assert result == "ok"
+    assert calls["n"] == 3  # zweimal 1020, dritter Versuch erfolgreich
+
+
+def test_execute_gives_up_after_max_retries():
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+
+    from app.services import storage_service
+
+    class _FakeDB:
+        def execute(self, stmt, params):
+            raise _fake_operational_error(1020)
+
+    with pytest.raises(OperationalError):
+        storage_service._execute(_FakeDB(), text("UPDATE x"), {})
+
+
+def test_execute_does_not_retry_non_lock_errors():
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+
+    from app.services import storage_service
+
+    calls = {"n": 0}
+
+    class _FakeDB:
+        def execute(self, stmt, params):
+            calls["n"] += 1
+            raise _fake_operational_error(1064)  # Syntax error – nicht retrybar
+
+    with pytest.raises(OperationalError):
+        storage_service._execute(_FakeDB(), text("UPDATE x"), {})
+    assert calls["n"] == 1  # genau ein Versuch, kein Retry
