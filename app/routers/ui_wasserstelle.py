@@ -97,6 +97,8 @@ def wasserstellen_seite(
         "counts": counts,
         "gesamt": len(rows),
         "aktiv_count": sum(1 for w in rows if w.aktiv),
+        # Verfügbare Löschwasser-Kapazität (nur aktive Stellen mit hinterlegter Ergiebigkeit)
+        "kapazitaet_l_min": sum(w.ergiebigkeit_l_min or 0 for w in rows if w.aktiv),
     })
 
 

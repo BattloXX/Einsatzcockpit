@@ -1,232 +1,643 @@
 {% extends "base.html" %}
 {% block title %}{{ gw.name }} – Gateway – {{ brand }}{% endblock %}
 {% block content %}
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>&#x1F5A8; {{ gw.name }}</h1>
-      <p class="page-header__sub">{{ gw.standort or 'Gateway' }} ·
-        {% if gw.status == 'online' and connected %}<span class="badge badge--green">Online</span>
-        {% elif not gw.is_paired %}<span class="badge badge--gray">Nicht gekoppelt</span>
-        {% else %}<span class="badge badge--red">Offline</span>{% endif %}
-        {% if gw.is_paired %}
-          · Alarmleitung:
-          {% if gw.serial_connected %}<span class="badge badge--green">verbunden</span>
-          {% else %}<span class="badge badge--gray">getrennt</span>{% endif %}
-        {% endif %}
-      </p>
-    </div>
-    <div class="page-header__actions">
-      <a href="/gateway" class="btn btn--ghost">&larr; Übersicht</a>
-    </div>
-  </div>
+<style>
+/* ── Print-Gateway · taktisches Dark-Layout (scoped auf .gwx) ───────────────────
+   Bewusst dieselbe Palette/Formsprache wie die Wasserstellen-Verwaltung (.wsx),
+   damit die Betriebs-Admin-Werkzeuge als ein Satz wirken. Keine externen Icon-/
+   Font-Bibliotheken – nur App-Mittel + Emoji. */
+.gwx {
+  --g-bg: #081425; --g-s1: #111c2d; --g-s2: #152031; --g-s3: #1f2a3c;
+  --g-high: #2a3548; --g-line: #424754; --g-line2: #55606f;
+  --g-text: #d8e3fb; --g-muted: #c2c6d6; --g-dim: #8c909f;
+  --g-primary: #adc6ff; --g-primary-c: #4d8eff; --g-on-primary: #002e6a;
+  --g-amber: #ffb95f; --g-teal: #5ad1c0; --g-red: #ffb4ab; --g-green: #6ee7a0;
+  --g-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  color: var(--g-text); background: var(--g-bg);
+  margin: -24px -28px -40px; min-height: calc(100vh - var(--topnav-h));
+  display: flex; flex-direction: column;
+}
+@media (max-width: 1100px) { .gwx { margin: -16px; min-height: 0; } }
+.gwx a { color: var(--g-primary); }
 
-  {% if request.query_params.get('pairing_code') %}
-  <div class="alert alert--info">
-    <strong>Pairing-Code (10 min gültig):</strong>
-    <code style="font-size:1.4em; letter-spacing:2px;">{{ request.query_params.get('pairing_code') }}</code>
-    – am Gateway als <code>ECPG_PAIRING_CODE</code> hinterlegen oder auf der Statusseite eingeben.
-  </div>
-  {% endif %}
-  {% if request.query_params.get('device_token') %}
-  <div class="alert alert--info">
-    <strong>Neues Device-Token (nur jetzt sichtbar):</strong>
-    <code style="word-break:break-all;">{{ request.query_params.get('device_token') }}</code>
-  </div>
-  {% endif %}
-  {% if request.query_params.get('saved') %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
-  {% if request.query_params.get('discover') %}<div class="alert alert--info">Netzwerksuche angestoßen – Vorschläge erscheinen nach kurzer Zeit.</div>{% endif %}
+/* Toolbar */
+.gwx-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 20px; background: var(--g-s1); border-bottom: 1px solid var(--g-line); }
+.gwx-brand { display: flex; align-items: center; gap: 11px; }
+.gwx-brand__icon { width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0;
+  background: var(--g-primary-c); color: #fff; display: flex; align-items: center;
+  justify-content: center; font-size: 1.3rem; }
+.gwx-brand__t { font-size: 1.15rem; font-weight: 700; line-height: 1.15; }
+.gwx-brand__s { font-size: .7rem; color: var(--g-dim); font-family: var(--g-mono); letter-spacing: .05em; }
+.gwx-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.gwx-pill { display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--g-mono); font-size: .66rem; letter-spacing: .05em; text-transform: uppercase;
+  padding: 4px 9px; border-radius: 5px; border: 1px solid var(--g-line);
+  background: var(--g-s2); color: var(--g-muted); white-space: nowrap; }
+.gwx-pill__d { width: 7px; height: 7px; border-radius: 50%; background: var(--g-dim); }
+.gwx-pill--ok { color: var(--g-green); border-color: rgba(110,231,160,.35); background: rgba(110,231,160,.10); }
+.gwx-pill--ok .gwx-pill__d { background: var(--g-green); }
+.gwx-pill--warn { color: var(--g-amber); border-color: rgba(255,185,95,.35); background: rgba(255,185,95,.10); }
+.gwx-pill--warn .gwx-pill__d { background: var(--g-amber); }
+.gwx-pill--err { color: var(--g-red); border-color: rgba(255,180,171,.35); background: rgba(255,180,171,.10); }
+.gwx-pill--err .gwx-pill__d { background: var(--g-red); }
+.gwx-spacer { flex: 1 1 auto; }
 
-  <!-- Pairing / Token -->
-  <div class="card">
-    <h2>Kopplung</h2>
-    <div class="btn-row">
-      <form method="post" action="/gateway/{{ gw.id }}/pair-code" style="display:inline">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="btn btn--primary" type="submit">Pairing-Code erzeugen</button>
-      </form>
-      {% if gw.is_paired %}
-      <form method="post" action="/gateway/{{ gw.id }}/rotate-token" style="display:inline">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="btn btn--ghost" type="submit">Token rotieren</button>
-      </form>
-      <form method="post" action="/gateway/{{ gw.id }}/revoke" style="display:inline"
-            onsubmit="return confirm('Token widerrufen? Das Gateway muss neu gekoppelt werden.')">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="btn btn--danger" type="submit">Token widerrufen</button>
-      </form>
+/* Buttons */
+.gwx-btn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: .82rem; font-weight: 600; padding: 7px 13px; border-radius: 6px;
+  border: 1px solid var(--g-line); background: var(--g-s2); color: var(--g-text);
+  transition: background .12s, border-color .12s, transform .06s; }
+.gwx-btn:hover { background: var(--g-high); border-color: var(--g-line2); }
+.gwx-btn:active { transform: scale(.97); }
+.gwx-btn--primary { background: var(--g-primary-c); border-color: var(--g-primary-c); color: #fff; }
+.gwx-btn--primary:hover { background: #3f7ef0; }
+.gwx-btn--danger { border-color: rgba(255,180,171,.5); color: var(--g-red); background: transparent; }
+.gwx-btn--danger:hover { background: rgba(255,180,171,.12); }
+.gwx-btn--sm { padding: 4px 9px; font-size: .74rem; }
+.gwx-btn[disabled] { opacity: .4; cursor: not-allowed; }
+
+/* Body / grid */
+.gwx-body { padding: 16px 20px 40px; display: flex; flex-direction: column; gap: 16px; }
+.gwx-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+.gwx-col-4 { grid-column: span 4; } .gwx-col-5 { grid-column: span 5; }
+.gwx-col-7 { grid-column: span 7; } .gwx-col-8 { grid-column: span 8; } .gwx-col-12 { grid-column: span 12; }
+@media (max-width: 1000px) { .gwx-col-4,.gwx-col-5,.gwx-col-7,.gwx-col-8 { grid-column: span 12; } }
+
+/* Status-Kacheln */
+.gwx-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.gwx-tile { background: var(--g-s1); border: 1px solid var(--g-line); border-radius: 12px;
+  padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
+.gwx-tile__ic { width: 42px; height: 42px; border-radius: 9px; flex-shrink: 0; font-size: 1.35rem;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(77,142,255,.14); color: var(--g-primary); }
+.gwx-tile__v { font-size: 1.4rem; font-weight: 700; line-height: 1; }
+.gwx-tile__l { font-family: var(--g-mono); font-size: .64rem; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--g-dim); margin-top: 4px; }
+
+/* Panels */
+.gwx-panel { background: var(--g-s1); border: 1px solid var(--g-line); border-radius: 12px; overflow: hidden; }
+.gwx-panel__hd { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 13px 16px; border-bottom: 1px solid var(--g-line); }
+.gwx-panel__t { display: flex; align-items: center; gap: 9px; font-size: 1rem; font-weight: 700; }
+.gwx-panel__sub { font-size: .74rem; color: var(--g-dim); margin-top: 2px; font-weight: 400; }
+.gwx-panel__bd { padding: 16px; }
+
+/* Alerts */
+.gwx-alert { margin: 0; padding: 11px 15px; border-radius: 9px; font-size: .88rem;
+  border: 1px solid var(--g-line); background: var(--g-s2); }
+.gwx-alert--ok { border-left: 3px solid var(--g-green); }
+.gwx-alert--info { border-left: 3px solid var(--g-primary-c); }
+.gwx-alert--err { border-left: 3px solid var(--g-red); }
+.gwx-alert code { font-family: var(--g-mono); }
+
+/* Forms */
+.gwx-label { display: block; font-family: var(--g-mono); font-size: .64rem; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--g-dim); margin: 0 0 5px; }
+.gwx-input, .gwx select, .gwx textarea { width: 100%; background: var(--g-bg);
+  border: 1px solid var(--g-line); border-radius: 6px; padding: 8px 10px;
+  color: var(--g-text); font-size: .86rem; font-family: inherit; }
+.gwx-input:focus, .gwx select:focus { outline: none; border-color: var(--g-primary-c); }
+.gwx-input--mono { font-family: var(--g-mono); color: var(--g-primary); }
+.gwx-formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+.gwx-field { display: flex; flex-direction: column; }
+.gwx-btnrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.gwx-inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Drucker-Cards */
+.gwx-printers { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.gwx-pcard { background: var(--g-s2); border: 1px solid var(--g-line); border-radius: 10px;
+  padding: 13px; display: flex; flex-direction: column; gap: 9px; }
+.gwx-pcard__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.gwx-pcard__name { font-weight: 700; font-size: .95rem; }
+.gwx-pcard__uri { font-family: var(--g-mono); font-size: .68rem; color: var(--g-dim); word-break: break-all; }
+.gwx-pcard__meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  border-top: 1px solid var(--g-line); padding-top: 9px; font-size: .74rem; color: var(--g-muted); }
+.gwx-pcard__acts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Chips / badges */
+.gwx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
+  font-family: var(--g-mono); font-size: .62rem; letter-spacing: .04em; text-transform: uppercase; font-weight: 600;
+  border: 1px solid var(--g-line); color: var(--g-muted); }
+.gwx-chip__d { width: 6px; height: 6px; border-radius: 50%; background: var(--g-dim); }
+.gwx-chip--ok { color: var(--g-green); background: rgba(110,231,160,.10); border-color: rgba(110,231,160,.35); }
+.gwx-chip--ok .gwx-chip__d { background: var(--g-green); }
+.gwx-chip--warn { color: var(--g-amber); background: rgba(255,185,95,.10); border-color: rgba(255,185,95,.35); }
+.gwx-chip--warn .gwx-chip__d { background: var(--g-amber); }
+.gwx-chip--err { color: var(--g-red); background: rgba(255,180,171,.10); border-color: rgba(255,180,171,.35); }
+.gwx-chip--err .gwx-chip__d { background: var(--g-red); }
+.gwx-role { font-family: var(--g-mono); font-size: .6rem; letter-spacing: .06em; text-transform: uppercase;
+  padding: 2px 7px; border: 1px solid var(--g-line); border-radius: 4px; color: var(--g-dim); }
+
+/* Regeln */
+.gwx-rule { border: 1px solid var(--g-line); border-radius: 10px; background: var(--g-s2); overflow: hidden; }
+.gwx-rule + .gwx-rule { margin-top: 10px; }
+.gwx-rule__hd { display: flex; align-items: center; gap: 12px; padding: 11px 13px; cursor: pointer; }
+.gwx-rule__hd:hover { background: var(--g-s3); }
+.gwx-rule__name { font-weight: 700; }
+.gwx-rule__sum { font-size: .74rem; color: var(--g-dim); }
+.gwx-rule__body { padding: 4px 14px 14px; border-top: 1px solid var(--g-line); }
+.gwx-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px 12px; }
+.gwx-check { display: flex; align-items: center; gap: 8px; font-size: .84rem; cursor: pointer;
+  padding: 5px 8px; border: 1px solid var(--g-line); border-radius: 6px; background: var(--g-bg); }
+.gwx-check input { accent-color: var(--g-primary-c); }
+.gwx-sechd { font-family: var(--g-mono); font-size: .64rem; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--g-dim); margin: 14px 0 7px; }
+
+/* Tabelle (Historie) */
+.gwx-table { width: 100%; border-collapse: collapse; }
+.gwx-table thead th { font-family: var(--g-mono); font-size: .62rem; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--g-dim); text-align: left; font-weight: 500; padding: 8px 12px; border-bottom: 1px solid var(--g-line); }
+.gwx-table td { padding: 8px 12px; border-bottom: 1px solid rgba(66,71,84,.4); font-size: .84rem; }
+.gwx-table tbody tr:hover { background: rgba(42,53,72,.35); }
+.gwx-empty { padding: 26px 6px; color: var(--g-dim); font-size: .9rem; text-align: center; }
+.gwx-mono { font-family: var(--g-mono); }
+</style>
+
+<div class="gwx">
+  {# ── Toolbar ── #}
+  <div class="gwx-bar">
+    <div class="gwx-brand">
+      <div class="gwx-brand__icon">🖨️</div>
+      <div>
+        <div class="gwx-brand__t">{{ gw.name }}</div>
+        <div class="gwx-brand__s">{{ (gw.standort or 'PRINT & ALARM GATEWAY')|upper }}</div>
+      </div>
+    </div>
+    <div class="gwx-pills">
+      {% if gw.status == 'online' and connected %}
+      <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
+      {% elif not gw.is_paired %}
+      <span class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
+      {% else %}
+      <span class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
       {% endif %}
+      {% if gw.is_paired %}
+        {% if gw.serial_connected %}
+        <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Alarmleitung</span>
+        {% else %}
+        <span class="gwx-pill gwx-pill--warn"><span class="gwx-pill__d"></span>Alarmleitung getrennt</span>
+        {% endif %}
+      {% endif %}
+      {% if gw.version %}<span class="gwx-pill">v{{ gw.version }}</span>{% endif %}
     </div>
+    <div class="gwx-spacer"></div>
+    <a href="/gateway" class="gwx-btn">&larr; Übersicht</a>
   </div>
 
-  <!-- W&T Com-Server -->
-  <div class="card" id="wut">
-    <h2>Alarmleitung (W&amp;T Com-Server)</h2>
-    <form method="post" action="/gateway/{{ gw.id }}/wut" class="form-grid">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      {% set w = gw.wut_config or {} %}
-      <label>Host / IP <input type="text" name="host" value="{{ w.get('host','') }}" placeholder="192.168.1.50"></label>
-      <label>Port <input type="number" name="port" value="{{ w.get('port', 8000) }}"></label>
-      <label>Zeichensatz
-        <select name="charset">
-          <option value="cp850" {{ 'selected' if w.get('charset','cp850')=='cp850' }}>CP850</option>
-          <option value="latin-1" {{ 'selected' if w.get('charset')=='latin-1' }}>Latin-1</option>
-          <option value="utf-8" {{ 'selected' if w.get('charset')=='utf-8' }}>UTF-8</option>
-        </select>
-      </label>
-      <label>Datagramm-Ende
-        <select name="datagram_strategy">
-          <option value="idle" {{ 'selected' if w.get('datagram_strategy','idle')=='idle' }}>Idle-Timeout</option>
-          <option value="formfeed" {{ 'selected' if w.get('datagram_strategy')=='formfeed' }}>Form Feed (0x0C)</option>
-        </select>
-      </label>
-      <label>Idle-Timeout (ms) <input type="number" name="idle_ms" value="{{ w.get('idle_ms', 2000) }}"></label>
-      <label>Notfalldrucker
-        <select name="notfalldruck_printer_id">
-          <option value="">– keiner –</option>
-          {% for p in printers %}
-          <option value="{{ p.id }}" {{ 'selected' if w.get('notfalldruck_printer_id')==p.id }}>{{ p.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <div><button class="btn btn--primary" type="submit">Speichern</button></div>
-    </form>
-  </div>
-
-  <!-- Drucker -->
-  <div class="card" id="drucker">
-    <h2>Drucker</h2>
-    <div class="btn-row">
-      <form method="post" action="/gateway/{{ gw.id }}/discover" style="display:inline">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="btn btn--ghost" type="submit">Netzwerk durchsuchen</button>
-      </form>
+  <div class="gwx-body">
+    {# ── Flash-Meldungen ── #}
+    {% set q = request.query_params %}
+    {% if q.get('pairing_code') %}
+    <div class="gwx-alert gwx-alert--info">
+      <strong>Pairing-Code (10 min gültig):</strong>
+      <code style="font-size:1.3em; letter-spacing:2px;">{{ q.get('pairing_code') }}</code>
+      – am Gateway als <code>ECPG_PAIRING_CODE</code> hinterlegen oder auf der Statusseite eingeben.
     </div>
-    <form method="post" action="/gateway/{{ gw.id }}/printers/add-ip" class="form-inline" style="margin:8px 0">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="text" name="name" placeholder="Name (z. B. Florianstation)" required>
-      <input type="text" name="ip" placeholder="IP-Adresse" required>
-      <button class="btn btn--primary" type="submit">+ Per IP hinzufügen</button>
-    </form>
-    {% if not printers %}
-    <p class="muted">Noch kein Drucker.</p>
-    {% else %}
-    <table class="data-table">
-      <thead><tr><th>Name</th><th>Modell</th><th>URI</th><th>Status</th><th>Aktiv</th><th></th></tr></thead>
-      <tbody>
-        {% for p in printers %}
-        <tr>
-          <td>{{ p.name }}</td>
-          <td>{{ p.modell or '–' }}</td>
-          <td><code>{{ p.uri }}</code></td>
-          <td>
-            {% if p.status and p.status.get('reachable') %}<span class="badge badge--green">erreichbar</span>
-            {% elif p.aktiv %}<span class="badge badge--gray">unbekannt</span>
-            {% else %}<span class="badge badge--gray">Vorschlag</span>{% endif %}
-          </td>
-          <td>
-            <form method="post" action="/gateway/printers/{{ p.id }}/toggle" style="display:inline">
+    {% endif %}
+    {% if q.get('device_token') %}
+    <div class="gwx-alert gwx-alert--info">
+      <strong>Neues Device-Token (nur jetzt sichtbar):</strong>
+      <code style="word-break:break-all;">{{ q.get('device_token') }}</code>
+    </div>
+    {% endif %}
+    {% if q.get('saved') or q.get('rule_saved') %}<div class="gwx-alert gwx-alert--ok">Gespeichert.</div>{% endif %}
+    {% if q.get('rule_created') %}<div class="gwx-alert gwx-alert--ok">Regel angelegt – jetzt konfigurieren.</div>{% endif %}
+    {% if q.get('discover') %}<div class="gwx-alert gwx-alert--info">Netzwerksuche angestoßen – Vorschläge erscheinen nach kurzer Zeit.</div>{% endif %}
+    {% if q.get('test') %}<div class="gwx-alert gwx-alert--info">Testseite gesendet.</div>{% endif %}
+    {% if q.get('error') == 'rule_dup' %}<div class="gwx-alert gwx-alert--err">Regelname bereits vergeben.</div>{% endif %}
+    {% if q.get('error') == 'printer' %}<div class="gwx-alert gwx-alert--err">Bitte Name und IP angeben.</div>{% endif %}
+
+    {# ── Status-Kacheln ── #}
+    {% set aktive_drucker = printers | selectattr('aktiv') | list %}
+    {% set aktive_regeln = rules | selectattr('aktiv') | list %}
+    <div class="gwx-tiles">
+      <div class="gwx-tile">
+        <div class="gwx-tile__ic">🔌</div>
+        <div><div class="gwx-tile__v">{{ 'Online' if (gw.status=='online' and connected) else ('—' if not gw.is_paired else 'Offline') }}</div>
+          <div class="gwx-tile__l">Verbindung</div></div>
+      </div>
+      <div class="gwx-tile">
+        <div class="gwx-tile__ic">📟</div>
+        <div><div class="gwx-tile__v">{{ 'Aktiv' if gw.serial_connected else '—' }}</div>
+          <div class="gwx-tile__l">Alarmleitung</div></div>
+      </div>
+      <div class="gwx-tile">
+        <div class="gwx-tile__ic">🖨️</div>
+        <div><div class="gwx-tile__v">{{ aktive_drucker|length }}<span style="font-size:.9rem;color:var(--g-dim);"> / {{ printers|length }}</span></div>
+          <div class="gwx-tile__l">Drucker aktiv</div></div>
+      </div>
+      <div class="gwx-tile">
+        <div class="gwx-tile__ic">⚙️</div>
+        <div><div class="gwx-tile__v">{{ aktive_regeln|length }}<span style="font-size:.9rem;color:var(--g-dim);"> / {{ rules|length }}</span></div>
+          <div class="gwx-tile__l">Regeln aktiv</div></div>
+      </div>
+    </div>
+
+    <div class="gwx-grid">
+      {# ── Kopplung ── #}
+      <div class="gwx-col-4">
+        <div class="gwx-panel" id="kopplung" style="height:100%;">
+          <div class="gwx-panel__hd">
+            <div class="gwx-panel__t">🔗 Kopplung</div>
+          </div>
+          <div class="gwx-panel__bd">
+            <p style="font-size:.82rem;color:var(--g-muted);margin:0 0 12px;">
+              Gateway per Einmal-Code sicher verbinden. Token bei Verdacht rotieren oder widerrufen.</p>
+            <form method="post" action="/gateway/{{ gw.id }}/pair-code" style="margin-bottom:8px;">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <button class="btn btn--sm {{ 'btn--danger' if p.aktiv else 'btn--primary' }}" type="submit">
-                {{ 'Deaktivieren' if p.aktiv else 'Übernehmen' }}
-              </button>
+              <button class="gwx-btn gwx-btn--primary" type="submit" style="width:100%; justify-content:center;">🔑 Pairing-Code erzeugen</button>
             </form>
-          </td>
-          <td>
-            <div class="btn-row">
-              <form method="post" action="/gateway/printers/{{ p.id }}/test" style="display:inline">
+            {% if gw.is_paired %}
+            <div class="gwx-btnrow" style="margin-top:8px;">
+              <form method="post" action="/gateway/{{ gw.id }}/rotate-token" style="flex:1;">
                 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                <button class="btn btn--ghost btn--sm" type="submit" {{ 'disabled' if not p.aktiv }}>Testseite</button>
+                <button class="gwx-btn" type="submit" style="width:100%; justify-content:center;">Token rotieren</button>
               </form>
-              <form method="post" action="/gateway/printers/{{ p.id }}/delete" style="display:inline"
-                    onsubmit="return confirm('Drucker entfernen?')">
+              <form method="post" action="/gateway/{{ gw.id }}/revoke" style="flex:1;"
+                    onsubmit="return confirm('Token widerrufen? Das Gateway muss neu gekoppelt werden.')">
                 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                <button class="btn btn--danger btn--sm" type="submit">Löschen</button>
+                <button class="gwx-btn gwx-btn--danger" type="submit" style="width:100%; justify-content:center;">Widerrufen</button>
               </form>
             </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-  </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
 
-  <!-- Druckregeln -->
-  <div class="card" id="regeln">
-    <h2>Druckregeln</h2>
-    <form method="post" action="/gateway/rules/create" class="form-inline" style="margin-bottom:8px">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="text" name="name" placeholder="Regelname" required>
-      <select name="trigger">
-        {% for key, label in trigger_labels.items() %}
-        <option value="{{ key }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-      <button class="btn btn--primary" type="submit">+ Regel</button>
-    </form>
-    {% if not rules %}
-    <p class="muted">Noch keine Druckregel.</p>
-    {% else %}
-    <table class="data-table">
-      <thead><tr><th>Name</th><th>Auslöser</th><th>Dokumente</th><th>Aktiv</th><th></th></tr></thead>
-      <tbody>
-        {% for r in rules %}
-        <tr>
-          <td>{{ r.name }}</td>
-          <td>{{ r.trigger_label }}</td>
-          <td>{{ (r.documents or []) | join(', ') or '–' }}</td>
-          <td>
-            <form method="post" action="/gateway/rules/{{ r.id }}/toggle" style="display:inline">
+      {# ── Alarmleitung (W&T) ── #}
+      <div class="gwx-col-8">
+        <div class="gwx-panel" id="wut" style="height:100%;">
+          <div class="gwx-panel__hd">
+            <div>
+              <div class="gwx-panel__t">📟 Alarmleitung</div>
+              <div class="gwx-panel__sub">W&amp;T Com-Server: serieller Alarm → Einsatz</div>
+            </div>
+          </div>
+          <div class="gwx-panel__bd">
+            {% set w = gw.wut_config or {} %}
+            <form method="post" action="/gateway/{{ gw.id }}/wut">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <button class="btn btn--sm {{ 'btn--green' if r.aktiv else 'btn--ghost' }}" type="submit">
-                {{ 'An' if r.aktiv else 'Aus' }}
-              </button>
+              <div class="gwx-formgrid">
+                <div class="gwx-field"><label class="gwx-label">Host / IP</label>
+                  <input class="gwx-input gwx-input--mono" type="text" name="host" value="{{ w.get('host','') }}" placeholder="192.168.1.50"></div>
+                <div class="gwx-field"><label class="gwx-label">Port</label>
+                  <input class="gwx-input gwx-input--mono" type="number" name="port" value="{{ w.get('port', 8000) }}"></div>
+                <div class="gwx-field"><label class="gwx-label">Zeichensatz</label>
+                  <select name="charset">
+                    <option value="cp850" {{ 'selected' if w.get('charset','cp850')=='cp850' }}>CP850</option>
+                    <option value="latin-1" {{ 'selected' if w.get('charset')=='latin-1' }}>Latin-1</option>
+                    <option value="utf-8" {{ 'selected' if w.get('charset')=='utf-8' }}>UTF-8</option>
+                  </select></div>
+                <div class="gwx-field"><label class="gwx-label">Datagramm-Ende</label>
+                  <select name="datagram_strategy">
+                    <option value="idle" {{ 'selected' if w.get('datagram_strategy','idle')=='idle' }}>Idle-Timeout</option>
+                    <option value="formfeed" {{ 'selected' if w.get('datagram_strategy')=='formfeed' }}>Form Feed (0x0C)</option>
+                  </select></div>
+                <div class="gwx-field"><label class="gwx-label">Idle-Timeout (ms)</label>
+                  <input class="gwx-input gwx-input--mono" type="number" name="idle_ms" value="{{ w.get('idle_ms', 2000) }}"></div>
+                <div class="gwx-field"><label class="gwx-label">Notfalldrucker</label>
+                  <select name="notfalldruck_printer_id">
+                    <option value="">– keiner –</option>
+                    {% for p in printers %}
+                    <option value="{{ p.id }}" {{ 'selected' if w.get('notfalldruck_printer_id')==p.id }}>{{ p.name }}</option>
+                    {% endfor %}
+                  </select></div>
+              </div>
+              <div class="gwx-btnrow" style="margin-top:14px;">
+                <button class="gwx-btn gwx-btn--primary" type="submit">Speichern</button>
+              </div>
             </form>
-          </td>
-          <td>
-            <form method="post" action="/gateway/rules/{{ r.id }}/delete" style="display:inline"
-                  onsubmit="return confirm('Regel löschen?')">
+          </div>
+        </div>
+      </div>
+
+      {# ── Drucker ── #}
+      <div class="gwx-col-12">
+        <div class="gwx-panel" id="drucker">
+          <div class="gwx-panel__hd">
+            <div>
+              <div class="gwx-panel__t">🖨️ Drucker</div>
+              <div class="gwx-panel__sub">Netzwerkdrucker am Standort · Name & Rolle frei wählbar</div>
+            </div>
+            <div class="gwx-inline">
+              <form method="post" action="/gateway/{{ gw.id }}/discover">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                <button class="gwx-btn gwx-btn--sm" type="submit">🔎 Netzwerk durchsuchen</button>
+              </form>
+            </div>
+          </div>
+          <div class="gwx-panel__bd">
+            <form method="post" action="/gateway/{{ gw.id }}/printers/add-ip" class="gwx-inline" style="margin-bottom:14px;">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <button class="btn btn--danger btn--sm" type="submit">Löschen</button>
+              <input class="gwx-input" style="width:auto;" type="text" name="name" placeholder="Name (z. B. Florianstation)" required>
+              <input class="gwx-input gwx-input--mono" style="width:auto;" type="text" name="ip" placeholder="IP-Adresse" required>
+              <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">+ Per IP hinzufügen</button>
             </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-  </div>
 
-  <!-- Druckhistorie -->
-  <div class="card" id="historie">
-    <h2>Druckhistorie</h2>
-    {% if not jobs %}
-    <p class="muted">Noch keine Druckaufträge.</p>
-    {% else %}
-    <table class="data-table">
-      <thead><tr><th>Zeit</th><th>Dokument</th><th>Drucker</th><th>Quelle</th><th>Status</th></tr></thead>
-      <tbody>
-        {% for j in jobs %}
-        <tr>
-          <td>{{ j.erstellt_am | local_datetime }}</td>
-          <td>{{ j.document_label }}</td>
-          <td>{{ j.printer_id or '–' }}</td>
-          <td>{{ j.source }}</td>
-          <td>{{ j.status_label }}{% if j.error %} <span class="muted">({{ j.error }})</span>{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-  </div>
+            {% if not printers %}
+            <div class="gwx-empty">Noch kein Drucker. Netzwerk durchsuchen oder per IP hinzufügen.</div>
+            {% else %}
+            <div class="gwx-printers">
+              {% for p in printers %}
+              {% set d = p.defaults or {} %}
+              <div class="gwx-pcard" x-data="{ ren:false, cfg:false }">
+                <div class="gwx-pcard__top">
+                  <div style="min-width:0;">
+                    <template x-if="!ren">
+                      <div>
+                        <div class="gwx-pcard__name">{{ p.name }}
+                          <button type="button" class="gwx-btn gwx-btn--sm" style="padding:1px 6px;" @click="ren=true" title="Umbenennen">✎</button>
+                        </div>
+                        <div class="gwx-pcard__uri">{{ p.uri }}</div>
+                      </div>
+                    </template>
+                    <template x-if="ren">
+                      <form method="post" action="/gateway/printers/{{ p.id }}/rename" class="gwx-inline">
+                        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                        <input class="gwx-input" style="width:auto; padding:4px 8px;" type="text" name="name"
+                               value="{{ p.name }}" required autofocus>
+                        <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">✓</button>
+                        <button class="gwx-btn gwx-btn--sm" type="button" @click="ren=false">✕</button>
+                      </form>
+                    </template>
+                  </div>
+                  {% if p.status and p.status.get('reachable') %}
+                  <span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>erreichbar</span>
+                  {% elif p.aktiv %}
+                  <span class="gwx-chip"><span class="gwx-chip__d"></span>unbekannt</span>
+                  {% else %}
+                  <span class="gwx-chip gwx-chip--warn"><span class="gwx-chip__d"></span>Vorschlag</span>
+                  {% endif %}
+                </div>
 
-  <div class="card">
-    <form method="post" action="/gateway/{{ gw.id }}/delete"
-          onsubmit="return confirm('Dieses Gateway endgültig löschen?')">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button class="btn btn--danger" type="submit">Gateway löschen</button>
-    </form>
+                <div class="gwx-pcard__meta">
+                  <span>{{ p.modell or 'Modell unbekannt' }}</span>
+                  <span class="gwx-role">{{ 'Backup' if d.get('role')=='backup' else 'Standard' }}</span>
+                  {% if d.get('duplex') and d.get('duplex') != 'off' %}<span class="gwx-role">Duplex</span>{% endif %}
+                  {% if d.get('color') == 'monochrome' %}<span class="gwx-role">S/W</span>{% endif %}
+                  {% if p.status and p.status.get('toner_pct') is not none %}<span>🩸 {{ p.status.get('toner_pct') }} %</span>{% endif %}
+                </div>
+
+                <template x-if="cfg">
+                  <form method="post" action="/gateway/printers/{{ p.id }}/defaults" style="border-top:1px solid var(--g-line); padding-top:10px;">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <div class="gwx-formgrid">
+                      <div class="gwx-field"><label class="gwx-label">Rolle</label>
+                        <select name="role">
+                          <option value="standard" {{ 'selected' if d.get('role','standard')=='standard' }}>Standard</option>
+                          <option value="backup" {{ 'selected' if d.get('role')=='backup' }}>Backup</option>
+                        </select></div>
+                      <div class="gwx-field"><label class="gwx-label">Duplex</label>
+                        <select name="duplex">
+                          <option value="off" {{ 'selected' if d.get('duplex','off')=='off' }}>Einseitig</option>
+                          <option value="long" {{ 'selected' if d.get('duplex')=='long' }}>Duplex (lang)</option>
+                          <option value="short" {{ 'selected' if d.get('duplex')=='short' }}>Duplex (kurz)</option>
+                        </select></div>
+                      <div class="gwx-field"><label class="gwx-label">Farbe</label>
+                        <select name="color">
+                          <option value="color" {{ 'selected' if d.get('color','color')=='color' }}>Farbe</option>
+                          <option value="monochrome" {{ 'selected' if d.get('color')=='monochrome' }}>S/W</option>
+                        </select></div>
+                      <div class="gwx-field"><label class="gwx-label">Medium</label>
+                        <select name="media">
+                          <option value="A4" {{ 'selected' if d.get('media','A4')=='A4' }}>A4</option>
+                          <option value="A3" {{ 'selected' if d.get('media')=='A3' }}>A3</option>
+                          <option value="A5" {{ 'selected' if d.get('media')=='A5' }}>A5</option>
+                        </select></div>
+                    </div>
+                    <div class="gwx-btnrow" style="margin-top:10px;">
+                      <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">Speichern</button>
+                      <button class="gwx-btn gwx-btn--sm" type="button" @click="cfg=false">Schließen</button>
+                    </div>
+                  </form>
+                </template>
+
+                <div class="gwx-pcard__acts">
+                  <form method="post" action="/gateway/printers/{{ p.id }}/toggle">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <button class="gwx-btn gwx-btn--sm {{ 'gwx-btn--danger' if p.aktiv else 'gwx-btn--primary' }}" type="submit">
+                      {{ 'Deaktivieren' if p.aktiv else 'Übernehmen' }}</button>
+                  </form>
+                  <button class="gwx-btn gwx-btn--sm" type="button" @click="cfg=!cfg">⚙️ Optionen</button>
+                  <form method="post" action="/gateway/printers/{{ p.id }}/test">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <button class="gwx-btn gwx-btn--sm" type="submit" {{ 'disabled' if not p.aktiv }}>Testseite</button>
+                  </form>
+                  <form method="post" action="/gateway/printers/{{ p.id }}/delete"
+                        onsubmit="return confirm('Drucker entfernen?')">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <button class="gwx-btn gwx-btn--danger gwx-btn--sm" type="submit">Löschen</button>
+                  </form>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# ── Druckregeln ── #}
+      <div class="gwx-col-12">
+        <div class="gwx-panel" id="regeln">
+          <div class="gwx-panel__hd">
+            <div>
+              <div class="gwx-panel__t">⚙️ Druckregeln</div>
+              <div class="gwx-panel__sub">Was wird bei welchem Auslöser auf welchem Drucker automatisch gedruckt?</div>
+            </div>
+          </div>
+          <div class="gwx-panel__bd">
+            <form method="post" action="/gateway/rules/create" class="gwx-inline" style="margin-bottom:14px;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="hidden" name="gw" value="{{ gw.id }}">
+              <input class="gwx-input" style="width:auto;" type="text" name="name" placeholder="Regelname" required>
+              <select name="trigger" style="width:auto;">
+                {% for key, label in trigger_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+              </select>
+              <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">+ Regel</button>
+            </form>
+
+            {% if not rules %}
+            <div class="gwx-empty">Noch keine Druckregel. Lege eine an, um bei Alarm automatisch zu drucken.</div>
+            {% else %}
+            {% for r in rules %}
+            {% set f = r.filters or {} %}{% set o = r.options or {} %}{% set fenster = f.get('zeitfenster') or {} %}
+            <div class="gwx-rule" id="regel-{{ r.id }}" x-data="{ open: {{ 'true' if q.get('rule_created')|string == r.id|string else 'false' }} }">
+              <div class="gwx-rule__hd" @click="open=!open">
+                <span x-text="open ? '▾' : '▸'" class="gwx-mono" style="color:var(--g-dim);"></span>
+                <div style="flex:1;min-width:0;">
+                  <div class="gwx-rule__name">{{ r.name }}
+                    {% if r.aktiv %}<span class="gwx-chip gwx-chip--ok" style="margin-left:6px;"><span class="gwx-chip__d"></span>aktiv</span>
+                    {% else %}<span class="gwx-chip" style="margin-left:6px;"><span class="gwx-chip__d"></span>aus</span>{% endif %}
+                  </div>
+                  <div class="gwx-rule__sum">
+                    {{ r.trigger_label }} ·
+                    {{ (r.documents or [])|length }} Dokument(e) ·
+                    {{ (r.printer_ids or [])|length }} Drucker ·
+                    {{ o.get('copies', 1) }}×
+                    {% if f.get('stichwort') %} · Stichwort: {{ f.get('stichwort')|join(', ') }}{% endif %}
+                    {% if fenster.get('von') %} · {{ fenster.get('von') }}–{{ fenster.get('bis') }}{% endif %}
+                  </div>
+                </div>
+                <div class="gwx-inline" @click.stop>
+                  <form method="post" action="/gateway/rules/{{ r.id }}/toggle">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <input type="hidden" name="gw" value="{{ gw.id }}">
+                    <button class="gwx-btn gwx-btn--sm" type="submit">{{ 'Deaktivieren' if r.aktiv else 'Aktivieren' }}</button>
+                  </form>
+                </div>
+              </div>
+
+              <div class="gwx-rule__body" x-show="open" x-cloak>
+                <form method="post" action="/gateway/rules/{{ r.id }}/save">
+                  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                  <input type="hidden" name="gw" value="{{ gw.id }}">
+
+                  <div class="gwx-formgrid">
+                    <div class="gwx-field"><label class="gwx-label">Regelname</label>
+                      <input class="gwx-input" type="text" name="name" value="{{ r.name }}"></div>
+                    <div class="gwx-field"><label class="gwx-label">Auslöser</label>
+                      <select name="trigger">
+                        {% for key, label in trigger_labels.items() %}
+                        <option value="{{ key }}" {{ 'selected' if r.trigger==key }}>{{ label }}</option>{% endfor %}
+                      </select></div>
+                    <div class="gwx-field"><label class="gwx-label">Priorität (0 = zuerst)</label>
+                      <input class="gwx-input gwx-input--mono" type="number" name="sort_order" value="{{ r.sort_order }}"></div>
+                  </div>
+
+                  <div class="gwx-sechd">📄 Inhalte (Dokumente)</div>
+                  <div class="gwx-checks">
+                    {% for key, label in doc_labels.items() %}
+                    <label class="gwx-check"><input type="checkbox" name="documents" value="{{ key }}"
+                      {{ 'checked' if key in (r.documents or []) }}> {{ label }}</label>
+                    {% endfor %}
+                  </div>
+
+                  <div class="gwx-sechd">🏢 Objekt-Elemente (bei zugeordnetem Objekt)</div>
+                  <div class="gwx-checks">
+                    {% for key, label in objekt_element_labels.items() %}
+                    <label class="gwx-check"><input type="checkbox" name="objekt_elements" value="{{ key }}"
+                      {{ 'checked' if key in (r.objekt_elements or []) }}> {{ label }}</label>
+                    {% endfor %}
+                  </div>
+
+                  <div class="gwx-sechd">🖨️ Zieldrucker</div>
+                  {% if not printers %}
+                  <p style="font-size:.82rem;color:var(--g-dim);">Erst Drucker hinzufügen.</p>
+                  {% else %}
+                  <div class="gwx-checks">
+                    {% for p in printers %}
+                    <label class="gwx-check"><input type="checkbox" name="printer_ids" value="{{ p.id }}"
+                      {{ 'checked' if p.id in (r.printer_ids or []) }}> {{ p.name }}</label>
+                    {% endfor %}
+                  </div>
+                  <div class="gwx-formgrid" style="margin-top:10px;">
+                    <div class="gwx-field"><label class="gwx-label">Fallback-Drucker (wenn Ziel offline)</label>
+                      <select name="fallback_printer_id">
+                        <option value="">– keiner –</option>
+                        {% for p in printers %}
+                        <option value="{{ p.id }}" {{ 'selected' if r.fallback_printer_id==p.id }}>{{ p.name }}</option>{% endfor %}
+                      </select></div>
+                  </div>
+                  {% endif %}
+
+                  <div class="gwx-sechd">🖨️ Druckoptionen</div>
+                  <div class="gwx-formgrid">
+                    <div class="gwx-field"><label class="gwx-label">Exemplare</label>
+                      <input class="gwx-input gwx-input--mono" type="number" min="1" name="copies" value="{{ o.get('copies', 1) }}"></div>
+                    <div class="gwx-field"><label class="gwx-label">Seiten (z. B. 1-2, leer = alle)</label>
+                      <input class="gwx-input gwx-input--mono" type="text" name="page_range" value="{{ o.get('page_range','') }}" placeholder="alle"></div>
+                    <div class="gwx-field"><label class="gwx-label">Duplex</label>
+                      <select name="duplex">
+                        <option value="off" {{ 'selected' if o.get('duplex','off')=='off' }}>Einseitig</option>
+                        <option value="long" {{ 'selected' if o.get('duplex')=='long' }}>Duplex (lang)</option>
+                        <option value="short" {{ 'selected' if o.get('duplex')=='short' }}>Duplex (kurz)</option>
+                      </select></div>
+                    <div class="gwx-field"><label class="gwx-label">Farbe</label>
+                      <select name="color">
+                        <option value="color" {{ 'selected' if o.get('color','color')=='color' }}>Farbe</option>
+                        <option value="monochrome" {{ 'selected' if o.get('color')=='monochrome' }}>S/W</option>
+                      </select></div>
+                  </div>
+
+                  <div class="gwx-sechd">🎯 Filter (optional – wann greift die Regel?)</div>
+                  <div class="gwx-formgrid">
+                    <div class="gwx-field"><label class="gwx-label">Min. Alarmstufe</label>
+                      <input class="gwx-input gwx-input--mono" type="number" name="min_alarmstufe" value="{{ f.get('min_alarmstufe','') }}" placeholder="egal"></div>
+                    <div class="gwx-field"><label class="gwx-label">Stichwort enthält (Komma-getrennt)</label>
+                      <input class="gwx-input" type="text" name="stichwort" value="{{ (f.get('stichwort') or [])|join(', ') }}" placeholder="z. B. B, T, BMA"></div>
+                    <div class="gwx-field"><label class="gwx-label">Nur ab</label>
+                      <input class="gwx-input gwx-input--mono" type="time" name="zeit_von" value="{{ fenster.get('von','') }}"></div>
+                    <div class="gwx-field"><label class="gwx-label">bis</label>
+                      <input class="gwx-input gwx-input--mono" type="time" name="zeit_bis" value="{{ fenster.get('bis','') }}"></div>
+                    <div class="gwx-field" style="justify-content:end;">
+                      <label class="gwx-check" style="border:none;background:none;padding:0;">
+                        <input type="checkbox" name="nur_bma" value="1" {{ 'checked' if f.get('nur_bma') }}> Nur BMA-Alarme</label></div>
+                  </div>
+
+                  <div class="gwx-btnrow" style="margin-top:16px;">
+                    <button class="gwx-btn gwx-btn--primary" type="submit">Regel speichern</button>
+                    <span class="gwx-spacer"></span>
+                    <button class="gwx-btn gwx-btn--danger gwx-btn--sm" type="submit"
+                            formaction="/gateway/rules/{{ r.id }}/delete"
+                            onclick="return confirm('Diese Regel loeschen?')">Löschen</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# ── Druckhistorie ── #}
+      <div class="gwx-col-12">
+        <div class="gwx-panel" id="historie">
+          <div class="gwx-panel__hd">
+            <div class="gwx-panel__t">🧾 Druckhistorie</div>
+          </div>
+          <div class="gwx-panel__bd" style="padding:0;">
+            {% if not jobs %}
+            <div class="gwx-empty">Noch keine Druckaufträge.</div>
+            {% else %}
+            {% set printer_names = {} %}{% for p in printers %}{% set _ = printer_names.update({p.id: p.name}) %}{% endfor %}
+            <div style="overflow:auto;">
+              <table class="gwx-table">
+                <thead><tr><th>Zeit</th><th>Dokument</th><th>Drucker</th><th>Quelle</th><th>Status</th></tr></thead>
+                <tbody>
+                  {% for j in jobs %}
+                  <tr>
+                    <td class="gwx-mono" style="white-space:nowrap;">{{ j.erstellt_am | local_datetime }}</td>
+                    <td>{{ j.document_label }}</td>
+                    <td>{{ printer_names.get(j.printer_id, '–') }}</td>
+                    <td>{{ 'Regel' if j.source == 'rule' else 'Manuell' }}</td>
+                    <td>
+                      {% if j.status in ('done',) %}<span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>
+                      {% elif j.status in ('failed','canceled') %}<span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>
+                      {% else %}<span class="gwx-chip gwx-chip--warn"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>{% endif %}
+                      {% if j.error %}<span style="color:var(--g-dim);font-size:.76rem;"> {{ j.error }}</span>{% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Danger Zone ── #}
+    <div style="display:flex; justify-content:center; padding:8px 0 4px;">
+      <form method="post" action="/gateway/{{ gw.id }}/delete"
+            onsubmit="return confirm('Dieses Gateway endgültig löschen?')">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="gwx-btn gwx-btn--danger" type="submit">🗑 Gateway löschen</button>
+      </form>
+    </div>
   </div>
 </div>
 {% endblock %}

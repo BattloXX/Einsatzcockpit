@@ -18,11 +18,12 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.gateway import (
     DOCUMENT_TYPE_LABELS,
+    OBJEKT_ELEMENT_LABELS,
     TRIGGER_LABELS,
     Gateway,
+    Printer,
     PrintJob,
     PrintRule,
-    Printer,
 )
 from app.models.user import User
 
@@ -98,6 +99,7 @@ def gateway_detail(
         "jobs": jobs,
         "connected": _is_connected(user.org_id),
         "doc_labels": DOCUMENT_TYPE_LABELS,
+        "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
         "trigger_labels": TRIGGER_LABELS,
     })
 
@@ -240,6 +242,60 @@ async def printer_add_ip(
     return RedirectResponse(f"/gateway/{gw.id}?saved=1#drucker", status_code=303)
 
 
+@router.post("/printers/{printer_id}/rename")
+async def printer_rename(
+    printer_id: int,
+    request: Request,
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    p = db.get(Printer, printer_id)
+    if p is None or p.org_id != user.org_id:
+        raise HTTPException(status_code=404, detail="Drucker nicht gefunden")
+    name = name.strip()[:150]
+    if not name:
+        return RedirectResponse(f"/gateway/{p.gateway_id}?error=printer#drucker", status_code=303)
+    p.name = name
+    db.commit()
+    # Gateway kennt Drucker per Identität/URI, der Anzeigename ist rein Cloud-seitig —
+    # trotzdem Config-Sync, damit CUPS-Queue-Beschriftung ggf. mitzieht.
+    from app.routers.ws import push_config_sync
+    await push_config_sync(user.org_id, p.gateway_id)
+    return RedirectResponse(f"/gateway/{p.gateway_id}?saved=1#drucker", status_code=303)
+
+
+@router.post("/printers/{printer_id}/defaults")
+async def printer_defaults(
+    printer_id: int,
+    request: Request,
+    role: str = Form("standard"),
+    duplex: str = Form("off"),
+    color: str = Form("color"),
+    media: str = Form("A4"),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    """Rolle (standard/backup) + Standard-Druckoptionen je Drucker."""
+    p = db.get(Printer, printer_id)
+    if p is None or p.org_id != user.org_id:
+        raise HTTPException(status_code=404, detail="Drucker nicht gefunden")
+    defaults = dict(p.defaults or {})
+    defaults.update({
+        "role": role if role in ("standard", "backup") else "standard",
+        "duplex": duplex,
+        "color": color,
+        "media": media.strip()[:20] or "A4",
+    })
+    p.defaults = defaults
+    db.commit()
+    from app.routers.ws import push_config_sync
+    await push_config_sync(user.org_id, p.gateway_id)
+    return RedirectResponse(f"/gateway/{p.gateway_id}?saved=1#drucker", status_code=303)
+
+
 @router.post("/printers/{printer_id}/toggle")
 async def printer_toggle(
     printer_id: int,
@@ -312,42 +368,59 @@ async def printer_test(
 
 # ── Druckregeln (Phase 4) ──────────────────────────────────────────────────────
 
+def _rule_return(gw: int | None, suffix: str) -> str:
+    """Regeln liegen org-weit, werden aber auf der Gateway-Detailseite bearbeitet →
+    nach jeder Regel-Aktion zurück auf die Detailseite (Kontext erhalten)."""
+    base = f"/gateway/{gw}" if gw else "/gateway"
+    return f"{base}?{suffix}"
+
+
 @router.post("/rules/create")
 def rule_create(
     request: Request,
     name: str = Form(...),
     trigger: str = Form(...),
+    gw: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
 ):
     name = name.strip()[:150]
     if not name or trigger not in TRIGGER_LABELS:
-        return RedirectResponse("/gateway?error=rule", status_code=303)
+        return RedirectResponse(_rule_return(gw, "error=rule#regeln"), status_code=303)
     existing = (
         db.query(PrintRule)
         .filter(PrintRule.org_id == user.org_id, PrintRule.name == name).first()
     )
     if existing:
-        return RedirectResponse("/gateway?error=rule_dup", status_code=303)
+        return RedirectResponse(_rule_return(gw, "error=rule_dup#regeln"), status_code=303)
     rule = PrintRule(org_id=user.org_id, name=name, trigger=trigger, aktiv=True)
     db.add(rule)
     db.commit()
-    return RedirectResponse(f"/gateway?rule_created={rule.id}", status_code=303)
+    return RedirectResponse(_rule_return(gw, f"rule_created={rule.id}#regel-{rule.id}"), status_code=303)
 
 
 @router.post("/rules/{rule_id}/save")
 def rule_save(
     rule_id: int,
     request: Request,
+    name: str = Form(""),
+    trigger: str = Form(""),
     documents: list[str] = Form(default=[]),
     objekt_elements: list[str] = Form(default=[]),
     printer_ids: list[int] = Form(default=[]),
     fallback_printer_id: int | None = Form(None),
     min_alarmstufe: int | None = Form(None),
+    stichwort: str = Form(""),
+    nur_bma: str = Form(""),
+    zeit_von: str = Form(""),
+    zeit_bis: str = Form(""),
     copies: int = Form(1),
+    page_range: str = Form(""),
     duplex: str = Form("off"),
     color: str = Form("color"),
+    sort_order: int = Form(0),
+    gw: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
@@ -355,20 +428,53 @@ def rule_save(
     rule = db.get(PrintRule, rule_id)
     if rule is None or rule.org_id != user.org_id:
         raise HTTPException(status_code=404, detail="Regel nicht gefunden")
+
+    # Name/Auslöser optional änderbar (Editor). Name-Kollision mit anderer Regel abfangen.
+    name = name.strip()[:150]
+    if name and name != rule.name:
+        dup = (
+            db.query(PrintRule.id)
+            .filter(PrintRule.org_id == user.org_id, PrintRule.name == name, PrintRule.id != rule.id)
+            .first()
+        )
+        if dup:
+            return RedirectResponse(_rule_return(gw, f"error=rule_dup#regel-{rule.id}"), status_code=303)
+        rule.name = name
+    if trigger in TRIGGER_LABELS:
+        rule.trigger = trigger
+
     rule.documents = [d for d in documents if d in DOCUMENT_TYPE_LABELS]
-    rule.objekt_elements = objekt_elements
+    rule.objekt_elements = [e for e in objekt_elements if e in OBJEKT_ELEMENT_LABELS]
     rule.printer_ids = [int(p) for p in printer_ids]
     rule.fallback_printer_id = fallback_printer_id
-    rule.filters = {"min_alarmstufe": min_alarmstufe} if min_alarmstufe else {}
-    rule.options = {"copies": int(copies), "duplex": duplex, "color": color}
+
+    # Filter: nur gesetzte Schlüssel speichern (leere = kein Filter)
+    filters: dict = {}
+    if min_alarmstufe:
+        filters["min_alarmstufe"] = int(min_alarmstufe)
+    stichworte = [s.strip() for s in stichwort.replace(";", ",").split(",") if s.strip()]
+    if stichworte:
+        filters["stichwort"] = stichworte
+    if nur_bma in ("1", "true", "on"):
+        filters["nur_bma"] = True
+    if zeit_von.strip() and zeit_bis.strip():
+        filters["zeitfenster"] = {"von": zeit_von.strip()[:5], "bis": zeit_bis.strip()[:5]}
+    rule.filters = filters
+
+    options: dict = {"copies": max(1, int(copies)), "duplex": duplex, "color": color}
+    if page_range.strip():
+        options["page_range"] = page_range.strip()[:40]
+    rule.options = options
+    rule.sort_order = int(sort_order)
     db.commit()
-    return RedirectResponse("/gateway?rule_saved=1", status_code=303)
+    return RedirectResponse(_rule_return(gw, f"rule_saved=1#regel-{rule.id}"), status_code=303)
 
 
 @router.post("/rules/{rule_id}/toggle")
 def rule_toggle(
     rule_id: int,
     request: Request,
+    gw: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
@@ -378,13 +484,14 @@ def rule_toggle(
         raise HTTPException(status_code=404, detail="Regel nicht gefunden")
     rule.aktiv = not rule.aktiv
     db.commit()
-    return RedirectResponse("/gateway?rule_toggled=1", status_code=303)
+    return RedirectResponse(_rule_return(gw, f"rule_toggled=1#regel-{rule.id}"), status_code=303)
 
 
 @router.post("/rules/{rule_id}/delete")
 def rule_delete(
     rule_id: int,
     request: Request,
+    gw: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
@@ -394,7 +501,7 @@ def rule_delete(
         raise HTTPException(status_code=404, detail="Regel nicht gefunden")
     db.delete(rule)
     db.commit()
-    return RedirectResponse("/gateway?rule_deleted=1", status_code=303)
+    return RedirectResponse(_rule_return(gw, "rule_deleted=1#regeln"), status_code=303)
 
 
 @router.get("/printers.json")
