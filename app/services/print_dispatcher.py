@@ -175,6 +175,18 @@ def on_event(db: Session, org_id: int, trigger: str, context: dict) -> list[Prin
     if gateway is None:
         return []
 
+    # Aktuelle Org-Lokalzeit für das optionale Zeitfenster-Filter (rule.filters.zeitfenster).
+    if "now_hhmm" not in context:
+        try:
+            from datetime import UTC, datetime
+
+            from app.core.timezones import org_tz
+            from app.models.master import FireDept
+            org = db.get(FireDept, org_id)
+            context["now_hhmm"] = datetime.now(UTC).astimezone(org_tz(org)).strftime("%H:%M")
+        except Exception:
+            context["now_hhmm"] = None
+
     rules = (
         db.query(PrintRule)
         .filter(PrintRule.org_id == org_id, PrintRule.trigger == trigger, PrintRule.aktiv == True)  # noqa: E712
@@ -206,6 +218,16 @@ def _filter_matches(rule, context: dict) -> bool:
             return False
     if f.get("nur_bma") and not context.get("nur_bma"):
         return False
+    fenster = f.get("zeitfenster") or {}
+    von, bis = fenster.get("von"), fenster.get("bis")
+    now = context.get("now_hhmm")
+    if von and bis and now:
+        # Fenster innerhalb eines Tages (von<=bis) oder über Mitternacht (von>bis).
+        if von <= bis:
+            if not (von <= now <= bis):
+                return False
+        elif not (now >= von or now <= bis):
+            return False
     return True
 
 

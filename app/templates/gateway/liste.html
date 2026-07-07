@@ -1,59 +1,110 @@
 {% extends "base.html" %}
 {% block title %}Gateway / Druck – {{ brand }}{% endblock %}
 {% block content %}
-<div class="page-content">
-  <div class="page-header">
-    <div>
-      <h1>&#x1F5A8; Gateway / Druck</h1>
-      <p class="page-header__sub">Lokale Print- & Alarm-Gateways verwalten</p>
+<style>
+.gwl { --g-bg:#081425; --g-s1:#111c2d; --g-s2:#152031; --g-high:#2a3548; --g-line:#424754;
+  --g-line2:#55606f; --g-text:#d8e3fb; --g-muted:#c2c6d6; --g-dim:#8c909f;
+  --g-primary:#adc6ff; --g-primary-c:#4d8eff; --g-red:#ffb4ab; --g-green:#6ee7a0; --g-amber:#ffb95f;
+  --g-mono:"JetBrains Mono",ui-monospace,monospace;
+  color:var(--g-text); background:var(--g-bg); margin:-24px -28px -40px; min-height:calc(100vh - var(--topnav-h)); }
+@media (max-width:1100px){ .gwl{ margin:-16px; min-height:0; } }
+.gwl-bar{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 20px;
+  background:var(--g-s1); border-bottom:1px solid var(--g-line); }
+.gwl-brand{ display:flex; align-items:center; gap:11px; }
+.gwl-brand__icon{ width:40px; height:40px; border-radius:8px; background:var(--g-primary-c); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-size:1.3rem; }
+.gwl-brand__t{ font-size:1.15rem; font-weight:700; line-height:1.1; }
+.gwl-brand__s{ font-size:.7rem; color:var(--g-dim); font-family:var(--g-mono); letter-spacing:.05em; }
+.gwl-spacer{ flex:1 1 auto; }
+.gwl-body{ padding:18px 20px 40px; display:flex; flex-direction:column; gap:16px; }
+.gwl-input{ background:var(--g-bg); border:1px solid var(--g-line); border-radius:6px; padding:8px 10px;
+  color:var(--g-text); font-size:.86rem; }
+.gwl-btn{ display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-size:.82rem; font-weight:600;
+  padding:8px 13px; border-radius:6px; border:1px solid var(--g-primary-c); background:var(--g-primary-c);
+  color:#fff; }
+.gwl-btn:hover{ background:#3f7ef0; }
+.gwl-alert{ padding:11px 15px; border-radius:9px; font-size:.88rem; border:1px solid var(--g-line);
+  background:var(--g-s2); border-left:3px solid var(--g-green); }
+.gwl-panel{ background:var(--g-s1); border:1px solid var(--g-line); border-radius:12px; padding:16px; }
+.gwl-panel h2{ font-size:1rem; margin:0 0 12px; }
+.gwl-cards{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+.gwl-card{ display:block; text-decoration:none; color:inherit; background:var(--g-s2);
+  border:1px solid var(--g-line); border-radius:11px; padding:15px; transition:border-color .12s, transform .06s; }
+.gwl-card:hover{ border-color:var(--g-line2); transform:translateY(-1px); }
+.gwl-card__top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.gwl-card__name{ font-size:1.05rem; font-weight:700; }
+.gwl-card__loc{ font-size:.8rem; color:var(--g-dim); margin-top:2px; }
+.gwl-card__meta{ display:flex; gap:14px; flex-wrap:wrap; margin-top:12px; padding-top:11px;
+  border-top:1px solid var(--g-line); font-size:.74rem; color:var(--g-muted); font-family:var(--g-mono); }
+.gwl-chip{ display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:999px;
+  font-family:var(--g-mono); font-size:.62rem; letter-spacing:.04em; text-transform:uppercase; font-weight:600;
+  border:1px solid var(--g-line); color:var(--g-muted); white-space:nowrap; }
+.gwl-chip__d{ width:6px; height:6px; border-radius:50%; background:var(--g-dim); }
+.gwl-chip--ok{ color:var(--g-green); background:rgba(110,231,160,.10); border-color:rgba(110,231,160,.35); }
+.gwl-chip--ok .gwl-chip__d{ background:var(--g-green); }
+.gwl-chip--err{ color:var(--g-red); background:rgba(255,180,171,.10); border-color:rgba(255,180,171,.35); }
+.gwl-chip--err .gwl-chip__d{ background:var(--g-red); }
+.gwl-empty{ color:var(--g-dim); font-size:.9rem; padding:8px 2px; }
+.gwl-newform{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+</style>
+
+<div class="gwl">
+  <div class="gwl-bar">
+    <div class="gwl-brand">
+      <div class="gwl-brand__icon">🖨️</div>
+      <div>
+        <div class="gwl-brand__t">Gateway / Druck</div>
+        <div class="gwl-brand__s">PRINT &amp; ALARM GATEWAYS</div>
+      </div>
     </div>
+    <div class="gwl-spacer"></div>
   </div>
 
-  {% if request.query_params.get('deleted') %}
-  <div class="alert alert--success">Gateway gelöscht.</div>
-  {% endif %}
-
-  <div class="card">
-    <h2>Neues Gateway</h2>
-    <form method="post" action="/gateway/create" class="form-inline">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="text" name="name" placeholder="Name (z. B. Gerätehaus)" required maxlength="150">
-      <input type="text" name="standort" placeholder="Standort (optional)" maxlength="200">
-      <button type="submit" class="btn btn--primary">+ Gateway anlegen</button>
-    </form>
-  </div>
-
-  <div class="card">
-    <h2>Gateways</h2>
-    {% if not gateways %}
-    <p class="muted">Noch kein Gateway angelegt.</p>
-    {% else %}
-    <table class="data-table">
-      <thead>
-        <tr><th>Name</th><th>Standort</th><th>Status</th><th>Version</th><th>Zuletzt gesehen</th><th></th></tr>
-      </thead>
-      <tbody>
-        {% for gw in gateways %}
-        <tr>
-          <td><a href="/gateway/{{ gw.id }}">{{ gw.name }}</a></td>
-          <td>{{ gw.standort or '–' }}</td>
-          <td>
-            {% if gw.status == 'online' and connected %}
-              <span class="badge badge--green">Online</span>
-            {% elif not gw.is_paired %}
-              <span class="badge badge--gray">Nicht gekoppelt</span>
-            {% else %}
-              <span class="badge badge--red">Offline</span>
-            {% endif %}
-          </td>
-          <td>{{ gw.version or '–' }}</td>
-          <td>{{ (gw.last_seen_at | local_datetime) if gw.last_seen_at else '–' }}</td>
-          <td><a href="/gateway/{{ gw.id }}" class="btn btn--ghost btn--sm">Verwalten</a></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="gwl-body">
+    {% if request.query_params.get('deleted') %}
+    <div class="gwl-alert">Gateway gelöscht.</div>
     {% endif %}
+
+    <div class="gwl-panel">
+      <h2>Neues Gateway</h2>
+      <form method="post" action="/gateway/create" class="gwl-newform">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input class="gwl-input" type="text" name="name" placeholder="Name (z. B. Gerätehaus)" required maxlength="150">
+        <input class="gwl-input" type="text" name="standort" placeholder="Standort (optional)" maxlength="200">
+        <button type="submit" class="gwl-btn">+ Gateway anlegen</button>
+      </form>
+    </div>
+
+    <div class="gwl-panel">
+      <h2>Gateways</h2>
+      {% if not gateways %}
+      <p class="gwl-empty">Noch kein Gateway angelegt.</p>
+      {% else %}
+      <div class="gwl-cards">
+        {% for gw in gateways %}
+        <a class="gwl-card" href="/gateway/{{ gw.id }}">
+          <div class="gwl-card__top">
+            <div>
+              <div class="gwl-card__name">🖨️ {{ gw.name }}</div>
+              <div class="gwl-card__loc">{{ gw.standort or 'Kein Standort' }}</div>
+            </div>
+            {% if gw.status == 'online' and connected %}
+            <span class="gwl-chip gwl-chip--ok"><span class="gwl-chip__d"></span>Online</span>
+            {% elif not gw.is_paired %}
+            <span class="gwl-chip"><span class="gwl-chip__d"></span>Nicht gekoppelt</span>
+            {% else %}
+            <span class="gwl-chip gwl-chip--err"><span class="gwl-chip__d"></span>Offline</span>
+            {% endif %}
+          </div>
+          <div class="gwl-card__meta">
+            <span>{{ 'v' ~ gw.version if gw.version else 'Version —' }}</span>
+            <span>{{ ('Zuletzt ' ~ (gw.last_seen_at | local_datetime)) if gw.last_seen_at else 'Nie gesehen' }}</span>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
   </div>
 </div>
 {% endblock %}

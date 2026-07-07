@@ -225,6 +225,25 @@ def test_filter_stichwort():
     assert disp._filter_matches(rule, {"stichwort": "T1 technisch"}) is False
 
 
+def test_filter_zeitfenster_tag():
+    """Fenster innerhalb eines Tages (08:00–18:00)."""
+    rule = MagicMock()
+    rule.filters = {"zeitfenster": {"von": "08:00", "bis": "18:00"}}
+    assert disp._filter_matches(rule, {"now_hhmm": "12:00"}) is True
+    assert disp._filter_matches(rule, {"now_hhmm": "06:00"}) is False
+    # Ohne bekannte Uhrzeit greift das Fenster nicht (kein Ausschluss)
+    assert disp._filter_matches(rule, {"now_hhmm": None}) is True
+
+
+def test_filter_zeitfenster_ueber_mitternacht():
+    """Fenster über Mitternacht (22:00–06:00)."""
+    rule = MagicMock()
+    rule.filters = {"zeitfenster": {"von": "22:00", "bis": "06:00"}}
+    assert disp._filter_matches(rule, {"now_hhmm": "23:30"}) is True
+    assert disp._filter_matches(rule, {"now_hhmm": "05:00"}) is True
+    assert disp._filter_matches(rule, {"now_hhmm": "12:00"}) is False
+
+
 def test_on_event_creates_jobs_and_dedups(db):
     """einsatz_created mit aktiver Regel → Job je Dokument×Drucker, idempotent."""
     from app.models.gateway import PrintRule
