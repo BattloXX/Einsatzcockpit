@@ -630,7 +630,14 @@
       box.appendChild(grid);
       return box;
     }
-    el.appendChild(section("Symbole", "symbole", m.symbole || []));
+    // Symbole nach Kategorie gruppieren (Reihenfolge des ersten Auftretens)
+    var syms = m.symbole || [], gruppen = [], byKat = {};
+    syms.forEach(function (s) {
+      var k = s.kat || "Symbole";
+      if (!byKat[k]) { byKat[k] = []; gruppen.push(k); }
+      byKat[k].push(s);
+    });
+    gruppen.forEach(function (k) { el.appendChild(section(k, "symbole", byKat[k])); });
     el.appendChild(section("Flächen", "flaechen", m.flaechen || []));
     var such = el.querySelector(".anno-tz__search");
     such.addEventListener("input", function () {

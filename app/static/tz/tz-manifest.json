@@ -1,21 +1,385 @@
 {
   "symbole": [
-    { "id": "gefahr_allgemein",    "name": "Gefahr allgemein",       "such": "gefahr warnung achtung allgemein", "datei": "/static/tz/symbole/gefahr_allgemein.svg" },
-    { "id": "gefahr_ueberflutung", "name": "Gefahr Überflutung",     "such": "wasser hochwasser flut ueberflutung 9.8", "datei": "/static/tz/symbole/gefahr_ueberflutung.svg" },
-    { "id": "gefahr_explosion",    "name": "Gefahr Explosion",       "such": "ex explosion 9.9", "datei": "/static/tz/symbole/gefahr_explosion.svg" },
-    { "id": "schaden_allgemein",   "name": "Schaden allgemein",      "such": "schaden allgemein 10.1", "datei": "/static/tz/symbole/schaden_allgemein.svg" },
-    { "id": "feuerwehrfahrzeug",   "name": "Feuerwehrfahrzeug",      "such": "fahrzeug feuerwehr lf tlf kdo einheit", "datei": "/static/tz/symbole/feuerwehrfahrzeug.svg" }
+    {
+      "id": "einheit_trupp",
+      "name": "Trupp",
+      "such": "trupp 0.1 einheit staerke",
+      "kat": "Einheiten",
+      "datei": "/static/tz/symbole/einheit_trupp.svg"
+    },
+    {
+      "id": "einheit_gruppe",
+      "name": "Gruppe",
+      "such": "gruppe 0.2 einheit staerke",
+      "kat": "Einheiten",
+      "datei": "/static/tz/symbole/einheit_gruppe.svg"
+    },
+    {
+      "id": "einheit_zug",
+      "name": "Zug",
+      "such": "zug 0.3 einheit staerke",
+      "kat": "Einheiten",
+      "datei": "/static/tz/symbole/einheit_zug.svg"
+    },
+    {
+      "id": "einheit_kompanie",
+      "name": "Kompanie",
+      "such": "kompanie 0.4 einheit",
+      "kat": "Einheiten",
+      "datei": "/static/tz/symbole/einheit_kompanie.svg"
+    },
+    {
+      "id": "person_grund",
+      "name": "Person",
+      "such": "person 1.1 grundzeichen",
+      "kat": "Person",
+      "datei": "/static/tz/symbole/person_grund.svg"
+    },
+    {
+      "id": "person_verletzt",
+      "name": "Person verletzt",
+      "such": "person verletzt 1.2",
+      "kat": "Person",
+      "datei": "/static/tz/symbole/person_verletzt.svg"
+    },
+    {
+      "id": "person_tot",
+      "name": "Person tot",
+      "such": "person tot 1.3",
+      "kat": "Person",
+      "datei": "/static/tz/symbole/person_tot.svg"
+    },
+    {
+      "id": "person_zwangslage",
+      "name": "Person in Zwangslage",
+      "such": "person zwangslage eingeklemmt 1.4",
+      "kat": "Person",
+      "datei": "/static/tz/symbole/person_zwangslage.svg"
+    },
+    {
+      "id": "person_vermisst",
+      "name": "Person vermisst",
+      "such": "person vermisst 1.5",
+      "kat": "Person",
+      "datei": "/static/tz/symbole/person_vermisst.svg"
+    },
+    {
+      "id": "formation_grund",
+      "name": "Formation",
+      "such": "formation 2.1 grundzeichen",
+      "kat": "Formation",
+      "datei": "/static/tz/symbole/formation_grund.svg"
+    },
+    {
+      "id": "formation_trupp",
+      "name": "Formation Trupp",
+      "such": "formation trupp 2.1.1",
+      "kat": "Formation",
+      "datei": "/static/tz/symbole/formation_trupp.svg"
+    },
+    {
+      "id": "formation_gruppe",
+      "name": "Formation Gruppe",
+      "such": "formation gruppe 2.1.2",
+      "kat": "Formation",
+      "datei": "/static/tz/symbole/formation_gruppe.svg"
+    },
+    {
+      "id": "formation_zug",
+      "name": "Formation Zug",
+      "such": "formation zug 2.1.3",
+      "kat": "Formation",
+      "datei": "/static/tz/symbole/formation_zug.svg"
+    },
+    {
+      "id": "formation_kompanie",
+      "name": "Formation Kompanie",
+      "such": "formation kompanie 2.1.4",
+      "kat": "Formation",
+      "datei": "/static/tz/symbole/formation_kompanie.svg"
+    },
+    {
+      "id": "befehlsstelle",
+      "name": "Befehls-/Fuehrungsstelle",
+      "such": "befehlsstelle fuehrungsstelle leitstelle 3.1",
+      "kat": "Formation",
+      "datei": "/static/tz/symbole/befehlsstelle.svg"
+    },
+    {
+      "id": "ortsfeste_einrichtung",
+      "name": "Ortsfeste Einrichtung",
+      "such": "ortsfeste einrichtung staendig 4.1",
+      "kat": "Einrichtungen",
+      "datei": "/static/tz/symbole/ortsfeste_einrichtung.svg"
+    },
+    {
+      "id": "atemschutzsammelplatz",
+      "name": "Atemschutzsammelplatz",
+      "such": "atemschutz sammelplatz assp 4.2.1",
+      "kat": "Einrichtungen",
+      "datei": "/static/tz/symbole/atemschutzsammelplatz.svg"
+    },
+    {
+      "id": "feuerwehrfahrzeug",
+      "name": "Feuerwehrfahrzeug",
+      "such": "fahrzeug feuerwehr lf tlf kdo einheit",
+      "kat": "Fahrzeuge",
+      "datei": "/static/tz/symbole/feuerwehrfahrzeug.svg"
+    },
+    {
+      "id": "fahrzeug_grund",
+      "name": "Fahrzeug",
+      "such": "fahrzeug 8.1 grundzeichen",
+      "kat": "Fahrzeuge",
+      "datei": "/static/tz/symbole/fahrzeug_grund.svg"
+    },
+    {
+      "id": "anhaenger",
+      "name": "Anhaenger",
+      "such": "anhaenger 5.2",
+      "kat": "Fahrzeuge",
+      "datei": "/static/tz/symbole/anhaenger.svg"
+    },
+    {
+      "id": "hubschrauber",
+      "name": "Hubschrauber",
+      "such": "hubschrauber heli 8.2",
+      "kat": "Fahrzeuge",
+      "datei": "/static/tz/symbole/hubschrauber.svg"
+    },
+    {
+      "id": "wasserfahrzeug",
+      "name": "Wasserfahrzeug",
+      "such": "boot schiff wasserfahrzeug 7.1",
+      "kat": "Fahrzeuge",
+      "datei": "/static/tz/symbole/wasserfahrzeug.svg"
+    },
+    {
+      "id": "gefahr_allgemein",
+      "name": "Gefahr allgemein",
+      "such": "gefahr warnung achtung allgemein 9.1",
+      "kat": "Gefahren",
+      "datei": "/static/tz/symbole/gefahr_allgemein.svg"
+    },
+    {
+      "id": "gefahr_ueberflutung",
+      "name": "Gefahr Ueberflutung",
+      "such": "wasser hochwasser flut ueberflutung 9.8",
+      "kat": "Gefahren",
+      "datei": "/static/tz/symbole/gefahr_ueberflutung.svg"
+    },
+    {
+      "id": "gefahr_explosion",
+      "name": "Gefahr Explosion",
+      "such": "ex explosion 9.9",
+      "kat": "Gefahren",
+      "datei": "/static/tz/symbole/gefahr_explosion.svg"
+    },
+    {
+      "id": "gefahr_ansteckung",
+      "name": "Gefahr Ansteckung",
+      "such": "gefahr ansteckung seuche bio 9.2",
+      "kat": "Gefahren",
+      "datei": "/static/tz/symbole/gefahr_ansteckung.svg"
+    },
+    {
+      "id": "gefahr_brand",
+      "name": "Gefahr Brand",
+      "such": "gefahr brand feuer 9.3",
+      "kat": "Gefahren",
+      "datei": "/static/tz/symbole/gefahr_brand.svg"
+    },
+    {
+      "id": "gefahr_chemie",
+      "name": "Gefahr Chemie",
+      "such": "gefahr chemie stoff 9.4",
+      "kat": "Gefahren",
+      "datei": "/static/tz/symbole/gefahr_chemie.svg"
+    },
+    {
+      "id": "gefahr_gas",
+      "name": "Gefahr Gas",
+      "such": "gefahr gas 9.5",
+      "kat": "Gefahren",
+      "datei": "/static/tz/symbole/gefahr_gas.svg"
+    },
+    {
+      "id": "gefahr_lawine",
+      "name": "Gefahr Lawine/Mure",
+      "such": "gefahr lawine mure felssturz 9.6",
+      "kat": "Gefahren",
+      "datei": "/static/tz/symbole/gefahr_lawine.svg"
+    },
+    {
+      "id": "gefahr_strahlung",
+      "name": "Gefahr Strahlung",
+      "such": "gefahr strahlung radioaktiv 9.7",
+      "kat": "Gefahren",
+      "datei": "/static/tz/symbole/gefahr_strahlung.svg"
+    },
+    {
+      "id": "schaden_allgemein",
+      "name": "Schaden allgemein",
+      "such": "schaden allgemein 10.1",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_allgemein.svg"
+    },
+    {
+      "id": "schaden_verseuchung",
+      "name": "Verseuchung",
+      "such": "schaden verseuchung kontamination 10.2",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_verseuchung.svg"
+    },
+    {
+      "id": "schaden_entstehungsbrand",
+      "name": "Entstehungsbrand",
+      "such": "schaden entstehungsbrand schwelbrand 10.3.1",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_entstehungsbrand.svg"
+    },
+    {
+      "id": "schaden_entwickelter_brand",
+      "name": "Entwickelter Brand",
+      "such": "schaden entwickelter brand 10.3.2",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_entwickelter_brand.svg"
+    },
+    {
+      "id": "schaden_vollbrand",
+      "name": "Vollbrand",
+      "such": "schaden vollbrand 10.3.3",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_vollbrand.svg"
+    },
+    {
+      "id": "schaden_chemieaustritt",
+      "name": "Chemieaustritt",
+      "such": "schaden chemie austritt 10.4",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_chemieaustritt.svg"
+    },
+    {
+      "id": "schaden_gasaustritt",
+      "name": "Gasaustritt",
+      "such": "schaden gas austritt 10.5",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_gasaustritt.svg"
+    },
+    {
+      "id": "schaden_ueberflutung",
+      "name": "Ueberflutung",
+      "such": "schaden ueberflutung wasser 10.8",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_ueberflutung.svg"
+    },
+    {
+      "id": "schaden_beschaedigt",
+      "name": "Beschaedigt",
+      "such": "schaden beschaedigt eingeschraenkt 10.9.1",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_beschaedigt.svg"
+    },
+    {
+      "id": "schaden_teilzerstoert",
+      "name": "Teilzerstoert",
+      "such": "schaden teilzerstoert ausser funktion 10.9.2",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_teilzerstoert.svg"
+    },
+    {
+      "id": "schaden_zerstoert",
+      "name": "Zerstoert",
+      "such": "schaden zerstoert voellig 10.9.3",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_zerstoert.svg"
+    },
+    {
+      "id": "schaden_unterbrochen",
+      "name": "Unterbrochen/Gesperrt",
+      "such": "schaden unterbrochen blockiert gesperrt 10.9.4",
+      "kat": "Schaeden",
+      "datei": "/static/tz/symbole/schaden_unterbrochen.svg"
+    }
   ],
   "flaechen": [
-    { "id": "einsatzgebiet",   "name": "Einsatzgebiet",           "such": "einsatz gebiet",              "stroke": "#1f4ed8", "dash": true },
-    { "id": "mure",            "name": "Mure, Lawine, Erdrutsch", "such": "mure lawine erdrutsch hang",  "stroke": "#c81e1e", "hatch": "horiz", "hatchColor": "#c81e1e" },
-    { "id": "schadensgebiet",  "name": "Schadensgebiet",          "such": "schaden gebiet",              "stroke": "#c81e1e" },
-    { "id": "stellflaeche",    "name": "Stellfläche",             "such": "stellflaeche stellplatz bereitstellung", "stroke": "#333333", "hatch": "diag", "hatchColor": "#111111", "bg": "rgba(150,150,150,0.35)" },
-    { "id": "suchgebiet",      "name": "Suchgebiet",              "such": "suche suchgebiet",            "stroke": "#7c3aed", "hatch": "diag", "hatchColor": "#7c3aed" },
-    { "id": "suchgebiet_ab",   "name": "Suchgebiet abgesucht",    "such": "suche abgesucht",             "stroke": "#f0796b", "hatch": "diag", "hatchColor": "#f0796b" },
-    { "id": "ueberflutung",    "name": "Überflutungsgebiet",      "such": "wasser hochwasser flut ueberflutung", "stroke": "#2563eb", "hatch": "diag", "hatchColor": "#2563eb" },
-    { "id": "verseucht",       "name": "Verseuchtes Gebiet",      "such": "verseucht gefahrstoff kontamination abc", "stroke": "#16a34a", "hatch": "diag", "hatchColor": "#16a34a" },
-    { "id": "zerstoert",       "name": "Zerstörtes Gebiet",       "such": "zerstoert zerstoerung",       "stroke": "#7f1d1d", "hatch": "diag", "hatchColor": "#7f1d1d" },
-    { "id": "brand",           "name": "Brandbereich",            "such": "brand feuer brandbereich",    "stroke": "#dc2626", "hatch": "diag", "hatchColor": "#dc2626" }
+    {
+      "id": "einsatzgebiet",
+      "name": "Einsatzgebiet",
+      "such": "einsatz gebiet",
+      "stroke": "#1f4ed8",
+      "dash": true
+    },
+    {
+      "id": "mure",
+      "name": "Mure, Lawine, Erdrutsch",
+      "such": "mure lawine erdrutsch hang",
+      "stroke": "#c81e1e",
+      "hatch": "horiz",
+      "hatchColor": "#c81e1e"
+    },
+    {
+      "id": "schadensgebiet",
+      "name": "Schadensgebiet",
+      "such": "schaden gebiet",
+      "stroke": "#c81e1e"
+    },
+    {
+      "id": "stellflaeche",
+      "name": "Stellfläche",
+      "such": "stellflaeche stellplatz bereitstellung",
+      "stroke": "#333333",
+      "hatch": "diag",
+      "hatchColor": "#111111",
+      "bg": "rgba(150,150,150,0.35)"
+    },
+    {
+      "id": "suchgebiet",
+      "name": "Suchgebiet",
+      "such": "suche suchgebiet",
+      "stroke": "#7c3aed",
+      "hatch": "diag",
+      "hatchColor": "#7c3aed"
+    },
+    {
+      "id": "suchgebiet_ab",
+      "name": "Suchgebiet abgesucht",
+      "such": "suche abgesucht",
+      "stroke": "#f0796b",
+      "hatch": "diag",
+      "hatchColor": "#f0796b"
+    },
+    {
+      "id": "ueberflutung",
+      "name": "Überflutungsgebiet",
+      "such": "wasser hochwasser flut ueberflutung",
+      "stroke": "#2563eb",
+      "hatch": "diag",
+      "hatchColor": "#2563eb"
+    },
+    {
+      "id": "verseucht",
+      "name": "Verseuchtes Gebiet",
+      "such": "verseucht gefahrstoff kontamination abc",
+      "stroke": "#16a34a",
+      "hatch": "diag",
+      "hatchColor": "#16a34a"
+    },
+    {
+      "id": "zerstoert",
+      "name": "Zerstörtes Gebiet",
+      "such": "zerstoert zerstoerung",
+      "stroke": "#7f1d1d",
+      "hatch": "diag",
+      "hatchColor": "#7f1d1d"
+    },
+    {
+      "id": "brand",
+      "name": "Brandbereich",
+      "such": "brand feuer brandbereich",
+      "stroke": "#dc2626",
+      "hatch": "diag",
+      "hatchColor": "#dc2626"
+    }
   ]
 }
