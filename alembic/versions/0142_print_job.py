@@ -24,7 +24,9 @@ def upgrade() -> None:
             `source`          VARCHAR(20) NOT NULL DEFAULT 'manual',
             `rule_id`         BIGINT NULL,
             `incident_id`     BIGINT NULL,
-            `gsl_id`          BIGINT NULL,
+            -- major_incident.id ist INT (nicht BIGINT) — gsl_id muss exakt den Typ der
+            -- referenzierten Spalte haben, sonst MySQL/MariaDB errno 150 (FK incorrectly formed).
+            `gsl_id`          INT NULL,
             `objekt_id`       BIGINT NULL,
             `document_type`   VARCHAR(40) NOT NULL,
             `artifact_ref`    VARCHAR(120) NULL,
