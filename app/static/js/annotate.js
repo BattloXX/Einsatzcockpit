@@ -21,6 +21,12 @@
   var imgCache = {};
   var aktSymbol = null, aktFlaeche = null;
 
+  // Pointer/Palm/Pinch/Pan (PR4)
+  var pointers = {};          // pointerId -> {x, y, type}
+  var penActive = false, penTimer = null;
+  var panning = false, lastPan = null, pinch = null, spaceDown = false;
+  var baseScale = 1;          // Fit-Skalierung; User-Zoom liegt darueber
+
   function byId(id) { return document.getElementById(id); }
   function pos() { return annLayer.getRelativePointerPosition(); }
 
@@ -34,6 +40,8 @@
     stage.width(natW * scale);
     stage.height(natH * scale);
     stage.scale({ x: scale, y: scale });
+    stage.position({ x: 0, y: 0 });   // Zoom/Pan beim Resize zuruecksetzen
+    baseScale = scale;
     stage.batchDraw();
   }
 
@@ -124,28 +132,26 @@
     markPickerAktiv();
   }
 
-  // ── Auswahl / Radierer ─────────────────────────────────────────────────────
-  function zielNode(e) {
-    var t = e.target;
-    if (!t || t === stage) { return null; }
-    if (t.getLayer && t.getLayer() === imageLayer) { return null; }
-    var p = t.getParent && t.getParent();
-    // Klick auf Transformer-Anker ignorieren
-    if (p && p.className === "Transformer") { return "handle"; }
-    // Gruppen/Label als Ganzes waehlen
-    while (p && p.getLayer && p.getLayer() === annLayer && p !== annLayer &&
-           (p.className === "Group" || p.className === "Label")) {
-      t = p; p = t.getParent();
+  // ── Auswahl / Radierer (Knoten aus der Pointer-Position ermitteln) ──────────
+  function getNodeAtPointer() {
+    var p = stage.getPointerPosition(); if (!p) { return null; }
+    var s = stage.getIntersection(p); if (!s) { return null; }
+    if (s.getLayer && s.getLayer() === imageLayer) { return null; }
+    var n = s, par = n.getParent();
+    if (par && par.className === "Transformer") { return "handle"; }
+    while (par && par.getLayer && par.getLayer() === annLayer && par !== annLayer &&
+           (par.className === "Group" || par.className === "Label")) {
+      n = par; par = n.getParent();
     }
-    return (t.getLayer && t.getLayer() === annLayer && t !== tr) ? t : null;
+    return (n.getLayer && n.getLayer() === annLayer && n !== tr) ? n : null;
   }
-  function onSelectDown(e) {
-    var n = zielNode(e);
+  function selectAt() {
+    var n = getNodeAtPointer();
     if (n === "handle") { return; }
     if (n) { n.draggable(true); attachTr(n); } else { detachTr(); }
   }
-  function onErase(e) {
-    var n = zielNode(e);
+  function eraseAt() {
+    var n = getNodeAtPointer();
     if (!n || n === "handle") { return; }
     pushUndo(); n.destroy(); detachTr(); markDirty(); annLayer.batchDraw();
   }
@@ -157,14 +163,13 @@
     var r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16);
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   }
-  function onTextPlace(e) {
+  function onTextPlace(ev) {
     var p = pos();
-    var ev = e.evt;
-    // Verhindert, dass der mousedown-Default den Fokus auf den Canvas legt und die
-    // gerade erzeugte Textarea sofort wieder blurrt (Commit-leer -> weg).
-    if (ev && ev.preventDefault) { ev.preventDefault(); }
-    var cx = ev && ev.clientX != null ? ev.clientX : (ev.touches && ev.touches[0].clientX) || 100;
-    var cy = ev && ev.clientY != null ? ev.clientY : (ev.touches && ev.touches[0].clientY) || 100;
+    // Verhindert, dass der Default den Fokus auf den Canvas legt und die gerade
+    // erzeugte Textarea sofort wieder blurrt (Commit-leer -> weg).
+    if (ev && ev.cancelable && ev.preventDefault) { ev.preventDefault(); }
+    var cx = ev && ev.clientX != null ? ev.clientX : 100;
+    var cy = ev && ev.clientY != null ? ev.clientY : 100;
     var ta = document.createElement("textarea");
     ta.rows = 1;
     ta.style.cssText = "position:fixed;z-index:5000;left:" + cx + "px;top:" + cy +
@@ -255,14 +260,12 @@
   }
 
   // ── Zeichnen (Freihand + Formen) ────────────────────────────────────────────
-  function onDown(e) {
+  function drawDown(ev) {
     if (!cfg.canWrite) { return; }
-    var ev = e.evt;
-    if (ev && ev.touches && ev.touches.length > 1) { return; }
-    if (tool === "select") { onSelectDown(e); return; }
-    if (tool === "eraser") { onErase(e); return; }
-    if (tool === "text") { onTextPlace(e); return; }
-    if (ev && ev.preventDefault) { ev.preventDefault(); }
+    if (tool === "select") { selectAt(); return; }
+    if (tool === "eraser") { eraseAt(); return; }
+    if (tool === "text") { onTextPlace(ev); return; }
+    if (ev && ev.cancelable && ev.preventDefault) { ev.preventDefault(); }
     if (tool === "x") { placeX(); return; }
     if (tool === "symbol") { if (aktSymbol) { placeSymbol(aktSymbol); } return; }
 
@@ -285,11 +288,8 @@
     if (shape) { annLayer.add(shape); }
   }
 
-  function onMove(e) {
+  function drawMove() {
     if (!drawing || !shape) { return; }
-    var ev = e.evt;
-    if (ev && ev.touches && ev.touches.length > 1) { onUp(); return; }
-    if (ev && ev.preventDefault) { ev.preventDefault(); }
     var p = pos();
     if (tool === "pen") {
       var pts = shape.points(); pts.push(p.x, p.y); shape.points(pts);
@@ -305,7 +305,7 @@
     annLayer.batchDraw();
   }
 
-  function onUp() {
+  function drawUp() {
     if (!drawing) { return; }
     drawing = false;
     if (shape) {
@@ -320,6 +320,97 @@
       else { wireShape(shape); markDirty(); }
     }
     shape = null; annLayer.batchDraw();
+  }
+
+  function cancelDraw() {
+    if (drawing && shape) { shape.destroy(); if (undoStack.length) { undoStack.pop(); } aktualisiereButtons(); }
+    drawing = false; shape = null; annLayer.batchDraw();
+  }
+
+  // ── Pointer Events (Maus/Stift/Touch) + Palm-Rejection + Pinch/Pan ──────────
+  function countType(t) {
+    var n = 0; for (var id in pointers) { if (pointers[id].type === t) { n++; } } return n;
+  }
+  function touchPts() {
+    var a = []; for (var id in pointers) { if (pointers[id].type === "touch") { a.push(pointers[id]); } } return a;
+  }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function zoomAt(clientX, clientY, factor) {
+    var rect = stage.container().getBoundingClientRect();
+    var px = clientX - rect.left, py = clientY - rect.top;
+    var old = stage.scaleX();
+    var neu = clamp(old * factor, baseScale * 0.6, baseScale * 8);
+    var ref = { x: (px - stage.x()) / old, y: (py - stage.y()) / old };
+    stage.scale({ x: neu, y: neu });
+    stage.position({ x: px - ref.x * neu, y: py - ref.y * neu });
+    stage.batchDraw();
+  }
+  function panBy(dx, dy) {
+    stage.position({ x: stage.x() + dx, y: stage.y() + dy });
+    stage.batchDraw();
+  }
+
+  function onPointerDown(ev) {
+    pointers[ev.pointerId] = { x: ev.clientX, y: ev.clientY, type: ev.pointerType };
+    if (ev.pointerType === "pen") { penActive = true; if (penTimer) { clearTimeout(penTimer); penTimer = null; } }
+    // Palm-Rejection: bei aktivem Stift werden Touch-Punkte ignoriert
+    if (ev.pointerType === "touch" && penActive) { return; }
+    // Zwei-Finger-Touch -> Pinch/Pan (kein Zeichnen)
+    if (ev.pointerType === "touch" && countType("touch") === 2) { cancelDraw(); startPinch(); return; }
+    if (ev.pointerType === "touch" && countType("touch") > 2) { return; }
+    // Desktop-Pan: mittlere Maustaste oder Leertaste+links
+    if (ev.pointerType === "mouse" && (ev.button === 1 || (spaceDown && ev.button === 0))) {
+      panning = true; lastPan = { x: ev.clientX, y: ev.clientY };
+      if (ev.cancelable) { ev.preventDefault(); } return;
+    }
+    if (ev.pointerType === "mouse" && ev.button !== 0) { return; }  // nur links zeichnet
+    stage.setPointersPositions(ev);
+    drawDown(ev);
+  }
+
+  function onPointerMove(ev) {
+    if (pointers[ev.pointerId]) { pointers[ev.pointerId] = { x: ev.clientX, y: ev.clientY, type: ev.pointerType }; }
+    if (pinch && countType("touch") >= 2) { doPinch(); return; }
+    if (panning) {
+      panBy(ev.clientX - lastPan.x, ev.clientY - lastPan.y);
+      lastPan = { x: ev.clientX, y: ev.clientY }; return;
+    }
+    if (ev.pointerType === "touch" && penActive) { return; }
+    if (!drawing) { return; }
+    if (ev.cancelable && ev.preventDefault) { ev.preventDefault(); }
+    // Coalesced Events -> glatte Freihandlinien bei hoher Abtastrate
+    var evs = (ev.getCoalescedEvents && ev.getCoalescedEvents().length) ? ev.getCoalescedEvents() : [ev];
+    for (var i = 0; i < evs.length; i++) { stage.setPointersPositions(evs[i]); drawMove(); }
+  }
+
+  function onPointerUp(ev) {
+    delete pointers[ev.pointerId];
+    if (ev.pointerType === "pen") {
+      if (penTimer) { clearTimeout(penTimer); }
+      penTimer = setTimeout(function () { penActive = false; }, 700);
+    }
+    if (pinch && countType("touch") < 2) { pinch = null; }
+    if (panning && ev.pointerType === "mouse") { panning = false; }
+    if (drawing) { drawUp(); }
+  }
+
+  function startPinch() {
+    var t = touchPts(); if (t.length < 2) { return; }
+    pinch = { d: Math.hypot(t[0].x - t[1].x, t[0].y - t[1].y),
+              cx: (t[0].x + t[1].x) / 2, cy: (t[0].y + t[1].y) / 2 };
+  }
+  function doPinch() {
+    var t = touchPts(); if (t.length < 2 || !pinch) { return; }
+    var d = Math.hypot(t[0].x - t[1].x, t[0].y - t[1].y);
+    var cx = (t[0].x + t[1].x) / 2, cy = (t[0].y + t[1].y) / 2;
+    if (pinch.d > 0) { zoomAt(cx, cy, d / pinch.d); }
+    panBy(cx - pinch.cx, cy - pinch.cy);
+    pinch = { d: d, cx: cx, cy: cy };
+  }
+  function onWheel(ev) {
+    ev.preventDefault();
+    zoomAt(ev.clientX, ev.clientY, ev.deltaY < 0 ? 1.12 : 0.89);
   }
 
   // ── Autosave ────────────────────────────────────────────────────────────────
@@ -483,20 +574,25 @@
     fit();
     window.addEventListener("resize", fit);
 
-    if (cfg.canWrite) {
-      stage.on("mousedown touchstart", onDown);
-      stage.on("mousemove touchmove", onMove);
-      window.addEventListener("mouseup", onUp);
-      stage.on("touchend", onUp);
-      window.addEventListener("keydown", function (e) {
-        if ((e.key === "Delete" || e.key === "Backspace") && tr && tr.nodes().length) {
-          if (document.activeElement && document.activeElement.tagName === "TEXTAREA") { return; }
-          e.preventDefault(); pushUndo();
-          tr.nodes().forEach(function (n) { n.destroy(); });
-          detachTr(); markDirty(); annLayer.batchDraw();
-        }
-      });
-    }
+    // Native Pointer-Events (ein Pfad fuer Maus/Stift/Touch). Pan/Zoom auch im
+    // Nur-Lese-Modus; Zeichnen selbst ist in drawDown per canWrite gated.
+    var container = stage.container();
+    container.style.touchAction = "none";
+    container.addEventListener("pointerdown", onPointerDown);
+    container.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    container.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("keydown", function (e) {
+      var inText = document.activeElement && document.activeElement.tagName === "TEXTAREA";
+      if (e.code === "Space" && !inText) { spaceDown = true; }
+      if (cfg.canWrite && (e.key === "Delete" || e.key === "Backspace") && tr && tr.nodes().length && !inText) {
+        e.preventDefault(); pushUndo();
+        tr.nodes().forEach(function (n) { n.destroy(); });
+        detachTr(); markDirty(); annLayer.batchDraw();
+      }
+    });
+    window.addEventListener("keyup", function (e) { if (e.code === "Space") { spaceDown = false; } });
     setTool(cfg.canWrite ? "pen" : "select");
     aktualisiereButtons();
     setStatus(cfg.canWrite ? "bereit" : "schreibgeschützt");
