@@ -2912,6 +2912,7 @@ async def move_card_endpoint(
     position: int = Form(0),
     vehicle_id: int | None = Form(None),
     zone_order: str | None = Form(None),
+    detach_vehicle: bool = Form(False),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
@@ -2920,6 +2921,7 @@ async def move_card_endpoint(
         column_id=column_id, position=position,
         vehicle_id=vehicle_id,
         user_id=request.state.user.id,
+        detach_vehicle=detach_vehicle,
     )
     if kind == "vehicle":
         moved_vehicle = db.get(IncidentVehicle, uid)

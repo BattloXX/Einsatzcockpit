@@ -43,12 +43,33 @@ class GeocodeResult:
     display_name: str
 
 
+def _normalize_case(value: str | None) -> str | None:
+    """Normalisiert komplett grossgeschriebene Adressteile auf Titel-Schreibweise.
+
+    LIS/IPR liefert Adressen teils in Vollversalien (z.B. "DAMMSTRAßE 64, WOLFURT").
+    Nominatim findet solche durchgehend grossgeschriebenen Strings mitunter nicht,
+    obwohl "Dammstraße 64, Wolfurt" einen Treffer liefert. Ist ein Wert durchgehend
+    gross geschrieben (alle Buchstaben ausser "ß" sind Grossbuchstaben), wird er in
+    Titel-Schreibweise umgewandelt; gemischt/klein geschriebene Eingaben bleiben
+    unverändert. "ß" wird gesondert ignoriert, da es kein isupper()-Pendant hat und
+    ".upper()" es zu "SS" macht.
+    """
+    if not value:
+        return value
+    cased = [c for c in value if c.lower() != c.upper() and c != "ß"]
+    if cased and all(c.isupper() for c in cased):
+        return value.title()
+    return value
+
+
 async def geocode_address(
     street: str | None,
     house_number: str | None,
     city: str | None,
 ) -> GeocodeResult | None:
     """Geocodiert eine Adresse via Nominatim. Gibt None zurück bei Fehler oder keinem Treffer."""
+    street = _normalize_case(street)
+    city = _normalize_case(city)
     parts = [p for p in [street, house_number, city] if p]
     if not parts:
         return None

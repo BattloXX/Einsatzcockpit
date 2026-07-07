@@ -1048,8 +1048,15 @@ def move_card(
     position: int = 0,
     vehicle_id: int | None = None,
     user_id: int | None = None,
+    detach_vehicle: bool = False,
 ) -> None:
-    """Generic card move for DnD. kind: 'vehicle'|'task'|'message'."""
+    """Generic card move for DnD. kind: 'vehicle'|'task'|'message'.
+
+    detach_vehicle: True nur, wenn die Karte aus einer Fahrzeug-Zone heraus auf eine Spalte
+    gezogen wurde (bewusstes Lösen der Einheiten-Zuordnung). Beim reinen Umsortieren einer
+    mit einer Einheit verbundenen Karte innerhalb/zwischen Spalten bleibt die vehicle_id
+    erhalten — sonst ginge die Verbindung zur Einheit beim Verschieben verloren.
+    """
     if kind == "vehicle":
         vehicle = db.get(IncidentVehicle, uid)
         if not vehicle:
@@ -1122,13 +1129,17 @@ def move_card(
             )
             for i, sib in enumerate(siblings):
                 sib.display_order = i if i < position else i + 1
-            task.vehicle_id = None
+            # Einheiten-Zuordnung nur lösen, wenn die Karte bewusst aus der Fahrzeug-Zone
+            # gezogen wurde. Beim reinen Umsortieren auf dem Board bleibt sie erhalten.
+            if detach_vehicle:
+                task.vehicle_id = None
             task.column_id = column_id
             task.display_order = position
             db.flush()
             write_incident_change(
                 db, incident_id, "task.moved", "task", uid,
-                before=before, after={"column_id": column_id, "display_order": position},
+                before=before, after={"column_id": column_id, "display_order": position,
+                                      "vehicle_id": task.vehicle_id},
                 user_id=user_id,
             )
 
@@ -1167,13 +1178,17 @@ def move_card(
             )
             for i, sib in enumerate(siblings):
                 sib.display_order = i if i < position else i + 1
-            msg.vehicle_id = None
+            # Einheiten-Zuordnung nur lösen, wenn die Karte bewusst aus der Fahrzeug-Zone
+            # gezogen wurde (siehe move_card-Docstring / task-Zweig).
+            if detach_vehicle:
+                msg.vehicle_id = None
             msg.column_id = column_id
             msg.display_order = position
             db.flush()
             write_incident_change(
                 db, incident_id, "message.moved", "message", uid,
-                before=before, after={"column_id": column_id, "display_order": position, "vehicle_id": None},
+                before=before,
+                after={"column_id": column_id, "display_order": position, "vehicle_id": msg.vehicle_id},
                 user_id=user_id,
             )
 

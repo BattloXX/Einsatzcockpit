@@ -222,8 +222,10 @@ class PrintJob(TenantScoped, Base):
     incident_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True
     )
+    # major_incident.id ist Integer (INT), NICHT BigInteger — der FK-Spaltentyp muss exakt
+    # passen, sonst MySQL/MariaDB errno 150 ("Foreign key constraint is incorrectly formed").
     gsl_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("major_incident.id", ondelete="SET NULL"), nullable=True
+        Integer, ForeignKey("major_incident.id", ondelete="SET NULL"), nullable=True
     )
     objekt_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("objekt.id", ondelete="SET NULL"), nullable=True
