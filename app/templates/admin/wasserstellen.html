@@ -150,6 +150,10 @@
 .wsx-chip--ok .wsx-chip__d { background: var(--wsx-green); }
 .wsx-chip--err { color: var(--wsx-red); background: rgba(255,180,171,.10); border: 1px solid rgba(255,180,171,.35); }
 .wsx-chip--err .wsx-chip__d { background: var(--wsx-red); }
+.wsx-chip--warn { color: var(--wsx-amber); background: rgba(255,185,95,.10); border: 1px solid rgba(255,185,95,.35); }
+.wsx-chip--warn .wsx-chip__d { background: var(--wsx-amber); }
+.wsx-pill--warn { color: var(--wsx-amber); border-color: rgba(255,185,95,.35); background: rgba(255,185,95,.10); }
+.wsx-pill--err { color: var(--wsx-red); border-color: rgba(255,180,171,.35); background: rgba(255,180,171,.10); }
 .wsx-src { font-family: var(--wsx-mono); font-size: .62rem; color: var(--wsx-dim); padding: 1px 6px; border: 1px solid var(--wsx-line); border-radius: 4px; }
 .wsx-iconbtn { border: none; background: none; cursor: pointer; color: var(--wsx-dim); font-size: 1rem; padding: 4px 6px; border-radius: 5px; }
 .wsx-iconbtn:hover { color: var(--wsx-primary); background: var(--wsx-s3); }
@@ -173,9 +177,11 @@
     </div>
     <div class="wsx-pills">
       <span class="wsx-pill">GESAMT {{ gesamt }}</span>
-      <span class="wsx-pill wsx-pill--ok">AKTIV {{ aktiv_count }}</span>
+      <span class="wsx-pill wsx-pill--ok">BEREIT {{ aktiv_count - wartung_count }}</span>
+      {% if wartung_count %}<span class="wsx-pill wsx-pill--warn">WARTUNG {{ wartung_count }}</span>{% endif %}
+      {% if defekt_count %}<span class="wsx-pill wsx-pill--err">DEFEKT {{ defekt_count }}</span>{% endif %}
       {% if kapazitaet_l_min %}
-      <span class="wsx-pill" title="Verfügbare Löschwasser-Kapazität aller aktiven Stellen mit hinterlegter Ergiebigkeit">
+      <span class="wsx-pill" title="Verfügbare Löschwasser-Kapazität aller einsatzbereiten Stellen (ohne defekte) mit hinterlegter Ergiebigkeit">
         {{ '{:,}'.format(kapazitaet_l_min).replace(',', '.') }} L/MIN</span>
       {% endif %}
     </div>
@@ -189,6 +195,12 @@
     <select x-model="filterTyp">
       <option value="">Alle Typen</option>
       {% for code, label in typen.items() %}
+      <option value="{{ code }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select x-model="filterStatus">
+      <option value="">Alle Zustände</option>
+      {% for code, label in status_labels.items() %}
       <option value="{{ code }}">{{ label }}</option>
       {% endfor %}
     </select>
@@ -223,7 +235,8 @@
         <div class="wsx-legend__i"><span class="wsx-dot wsx-dot--ueberflur"></span>Überflur</div>
         <div class="wsx-legend__i"><span class="wsx-dot wsx-dot--unterflur"></span>Unterflur</div>
         <div class="wsx-legend__i"><span class="wsx-dot wsx-dot--loeschwasser"></span>Löschwasser</div>
-        <div class="wsx-legend__i"><span class="wsx-dot wsx-dot--inaktiv"></span>Inaktiv</div>
+        <div class="wsx-legend__i"><span class="wsx-dot" style="background:var(--wsx-amber);"></span>Wartung</div>
+        <div class="wsx-legend__i"><span class="wsx-dot wsx-dot--inaktiv"></span>Defekt</div>
       </div>
     </div>
 
@@ -262,6 +275,12 @@
               <input type="text" name="ergiebigkeit_l_min" class="wsx-input" placeholder="z. B. 1200">
               <label class="wsx-label">Hinweis (optional)</label>
               <input type="text" name="hinweis" class="wsx-input" placeholder="Zufahrt, Kupplung …">
+              <label class="wsx-label">Zustand</label>
+              <select name="status">
+                {% for code, label in status_labels.items() %}
+                <option value="{{ code }}">{{ label }}</option>
+                {% endfor %}
+              </select>
               <button type="submit" class="wsx-btn wsx-btn--primary" style="width:100%;margin-top:14px;justify-content:center;">Anlegen</button>
             </form>
           </div>
@@ -313,8 +332,8 @@
         <tbody>
           {% for w in wasserstellen %}
           <tr x-data="{ edit:false }"
-              x-show="passt($el.dataset.bez, $el.dataset.typ)"
-              data-bez="{{ w.bezeichnung|e }}" data-typ="{{ w.typ }}">
+              x-show="passt($el.dataset.bez, $el.dataset.typ, $el.dataset.status)"
+              data-bez="{{ w.bezeichnung|e }}" data-typ="{{ w.typ }}" data-status="{{ w.status }}">
             <template x-if="!edit">
               <td class="wsx-id">#{{ '%04d'|format(w.id) }}</td>
             </template>
@@ -337,10 +356,12 @@
             </template>
             <template x-if="!edit">
               <td>
-                {% if w.aktiv %}
-                <span class="wsx-chip wsx-chip--ok"><span class="wsx-chip__d"></span>Aktiv</span>
+                {% if w.status == 'defekt' %}
+                <span class="wsx-chip wsx-chip--err"><span class="wsx-chip__d"></span>Defekt</span>
+                {% elif w.status == 'wartung' %}
+                <span class="wsx-chip wsx-chip--warn"><span class="wsx-chip__d"></span>Wartung</span>
                 {% else %}
-                <span class="wsx-chip wsx-chip--err"><span class="wsx-chip__d"></span>Inaktiv</span>
+                <span class="wsx-chip wsx-chip--ok"><span class="wsx-chip__d"></span>Bereit</span>
                 {% endif %}
               </td>
             </template>
@@ -383,9 +404,14 @@
                     <input type="text" name="ergiebigkeit_l_min" class="wsx-input" value="{{ w.ergiebigkeit_l_min or '' }}"></div>
                   <div style="flex:1;min-width:150px;"><label class="wsx-label">Hinweis</label>
                     <input type="text" name="hinweis" class="wsx-input" value="{{ w.hinweis or '' }}" style="width:100%;"></div>
-                  <label class="wsx-check" style="margin-top:0;">
-                    <input type="checkbox" name="aktiv" value="1" {% if w.aktiv %}checked{% endif %}> aktiv
-                  </label>
+                  <div style="min-width:130px;">
+                    <label class="wsx-label">Zustand</label>
+                    <select name="status">
+                      {% for code, label in status_labels.items() %}
+                      <option value="{{ code }}" {% if code == w.status %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
                   <div style="display:flex;gap:6px;">
                     <button type="submit" class="wsx-btn wsx-btn--primary">Speichern</button>
                     <button type="button" class="wsx-btn" @click="edit=false">Abbrechen</button>
@@ -407,20 +433,24 @@ function wasserstellenAdmin() {
   return {
     suche: "",
     filterTyp: "",
+    filterStatus: "",
     panel: null,
     get sichtbar() {
       var q = (this.suche || "").toLowerCase().trim();
       var f = this.filterTyp;
+      var s = this.filterStatus;
       var n = 0;
       document.querySelectorAll(".wsx-table tbody tr").forEach(function (tr) {
         var bez = (tr.dataset.bez || "").toLowerCase();
         var typ = tr.dataset.typ || "";
-        if ((!f || typ === f) && (!q || bez.indexOf(q) >= 0)) { n++; }
+        var st = tr.dataset.status || "";
+        if ((!f || typ === f) && (!s || st === s) && (!q || bez.indexOf(q) >= 0)) { n++; }
       });
       return n;
     },
-    passt(bez, typ) {
+    passt(bez, typ, status) {
       if (this.filterTyp && typ !== this.filterTyp) return false;
+      if (this.filterStatus && status !== this.filterStatus) return false;
       var q = (this.suche || "").toLowerCase().trim();
       if (!q) return true;
       return (bez || "").toLowerCase().indexOf(q) >= 0;
@@ -434,10 +464,10 @@ function wasserstellenAdmin() {
           v = (v == null ? "" : String(v));
           return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
         };
-        var csv = "bezeichnung;typ;lat;lng;ergiebigkeit_l_min;aktiv;quelle\n";
+        var csv = "bezeichnung;typ;lat;lng;ergiebigkeit_l_min;zustand;quelle\n";
         rows.forEach(function (w) {
           csv += [w.bezeichnung, w.typ_label, w.lat, w.lng, w.ergiebigkeit_l_min,
-                  w.aktiv ? "aktiv" : "inaktiv", w.quelle].map(cell).join(";") + "\n";
+                  w.status_label || (w.aktiv ? "Bereit" : "Defekt"), w.quelle].map(cell).join(";") + "\n";
         });
         var blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
         var a = document.createElement("a");

@@ -264,26 +264,112 @@ async def autoprint_incident_background(incident_id: int) -> None:
         db.close()
 
 
-def _jobs_for_rule(db: Session, gateway, rule, context: dict) -> list[PrintJob]:
-    """Erzeugt Jobs für alle Dokumente × Zieldrucker einer Regel (idempotent)."""
+def _resolve_objekt_ids(db: Session, context: dict) -> list[int]:
+    """Objekt(e), auf die sich die Regel bezieht: explizit im Kontext oder – bei einem
+    Einsatz – die dort bestätigt verknüpften Objekte (ObjektEinsatz)."""
+    if context.get("objekt_id"):
+        return [int(context["objekt_id"])]
+    incident_id = context.get("incident_id")
+    if not incident_id:
+        return []
+    from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
+    rows = (
+        db.query(ObjektEinsatz.objekt_id)
+        .filter(
+            ObjektEinsatz.incident_id == incident_id,
+            ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
+        )
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def _seiten_for_elements(db: Session, objekt_id: int, elements: list[str]):
+    """Konkrete druckbare Objekt-Dokumentseiten für die gewählten Objekt-Elemente.
+
+    "bei_einsatz_drucken" → alle so markierten Seiten; jeder andere Schlüssel →
+    Seiten mit passender dokumentart. Nur Seiten mit vorhandenem Einzel-PDF
+    (einzel_pdf_pfad), da der Renderer (print_artifact_service) dieses lädt.
+    """
+    from sqlalchemy import or_
+
+    from app.models.objekt import ObjektDokumentSeite
+
+    dokumentarten = [e for e in elements if e != "bei_einsatz_drucken"]
+    bedingungen = []
+    if "bei_einsatz_drucken" in elements:
+        bedingungen.append(ObjektDokumentSeite.bei_einsatz_drucken.is_(True))
+    if dokumentarten:
+        bedingungen.append(ObjektDokumentSeite.dokumentart.in_(dokumentarten))
+    if not bedingungen:
+        return []
+    return (
+        db.query(ObjektDokumentSeite)
+        .filter(
+            ObjektDokumentSeite.objekt_id == objekt_id,
+            ObjektDokumentSeite.einzel_pdf_pfad.isnot(None),
+            or_(*bedingungen),
+        )
+        .order_by(ObjektDokumentSeite.dokument_id, ObjektDokumentSeite.seiten_nr)
+        .all()
+    )
+
+
+def _jobs_for_rule(
+    db: Session, gateway, rule, context: dict, *, source: str = JOB_SOURCE_RULE,
+) -> list[PrintJob]:
+    """Erzeugt Jobs einer Regel: je Dokument × Zieldrucker sowie – bei zugeordnetem
+    Objekt – je Objekt-Element-Seite × Zieldrucker (idempotent, außer bei source=manual)."""
+    from app.models.gateway import DOC_OBJEKT_DOKUMENT
+
     jobs: list[PrintJob] = []
     printer_ids = rule.printer_ids or []
-    documents = rule.documents or []
-    for document_type in documents:
+    if not printer_ids:
+        return jobs
+
+    def _add(**kw):
+        job, created = create_print_job(
+            db, org_id=rule.org_id, gateway_id=gateway.id, source=source,
+            rule_id=rule.id, incident_id=context.get("incident_id"),
+            gsl_id=context.get("gsl_id"), options=rule.options or {}, **kw,
+        )
+        if created:
+            jobs.append(job)
+
+    # 1) Dokumenttypen (Einsatzinfo, GSL-Lageblatt, Objektblatt …)
+    for document_type in (rule.documents or []):
         for printer_id in printer_ids:
-            job, created = create_print_job(
-                db,
-                org_id=rule.org_id,
-                gateway_id=gateway.id,
-                printer_id=printer_id,
-                document_type=document_type,
-                source=JOB_SOURCE_RULE,
-                rule_id=rule.id,
-                incident_id=context.get("incident_id"),
-                gsl_id=context.get("gsl_id"),
-                objekt_id=context.get("objekt_id"),
-                options=rule.options or {},
-            )
-            if created:
-                jobs.append(job)
+            _add(printer_id=printer_id, document_type=document_type, objekt_id=context.get("objekt_id"))
+
+    # 2) Objekt-Elemente → konkrete Objekt-Dokumentseiten des zugeordneten Objekts
+    objekt_elements = rule.objekt_elements or []
+    if objekt_elements:
+        for objekt_id in _resolve_objekt_ids(db, context):
+            for seite in _seiten_for_elements(db, objekt_id, objekt_elements):
+                for printer_id in printer_ids:
+                    _add(printer_id=printer_id, document_type=DOC_OBJEKT_DOKUMENT,
+                         objekt_id=objekt_id, artifact_ref=str(seite.id))
+    return jobs
+
+
+def build_test_jobs(db: Session, rule, incident) -> list[PrintJob]:
+    """„Testdruck dieser Regel": erzeugt die Jobs der Regel gegen einen echten Einsatz,
+    unabhängig von Trigger/aktiv/Filter, mit source=manual (immer neu, nie dedupliziert).
+    Der Aufrufer committet und dispatcht. Gibt [] zurück, wenn kein Gateway/keine Drucker."""
+    from app.models.gateway import Gateway
+
+    gateway = (
+        db.query(Gateway)
+        .filter(Gateway.org_id == rule.org_id, Gateway.device_token_hash.isnot(None))
+        .first()
+    )
+    if gateway is None:
+        return []
+    context = {
+        "incident_id": incident.id,
+        "stichwort": getattr(incident, "reason", None) or getattr(incident, "report_text", None),
+    }
+    jobs = _jobs_for_rule(db, gateway, rule, context, source=JOB_SOURCE_MANUAL)
+    if jobs:
+        db.flush()
     return jobs

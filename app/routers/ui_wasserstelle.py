@@ -15,7 +15,7 @@ from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.user import User
-from app.models.wasserstelle import WASSERSTELLE_TYPEN, Wasserstelle
+from app.models.wasserstelle import WASSERSTELLE_STATUS, WASSERSTELLE_TYPEN, Wasserstelle
 from app.services.wasserstelle_service import (
     importiere_eintraege,
     parse_wasserstellen_csv,
@@ -24,6 +24,13 @@ from app.services.wasserstelle_service import (
 router = APIRouter(prefix="/admin/wasserstellen", tags=["wasserstelle"])
 
 _ERLAUBTE_TYPEN = set(WASSERSTELLE_TYPEN.keys())
+_ERLAUBTE_STATUS = set(WASSERSTELLE_STATUS.keys())
+
+
+def _status_aktiv(status: str) -> tuple[str, bool]:
+    """Normalisiert den Status und leitet das operative aktiv-Flag ab (defekt = inaktiv)."""
+    status = status if status in _ERLAUBTE_STATUS else "bereit"
+    return status, status != "defekt"
 
 
 def _koord(roh: str) -> float | None:
@@ -65,6 +72,8 @@ def wasserstellen_json(
                 "lng": w.lng,
                 "ergiebigkeit_l_min": w.ergiebigkeit_l_min,
                 "aktiv": w.aktiv,
+                "status": w.status,
+                "status_label": w.status_label,
                 "quelle": w.quelle,
             }
             for w in rows
@@ -94,10 +103,13 @@ def wasserstellen_seite(
         "user": user,
         "wasserstellen": rows,
         "typen": WASSERSTELLE_TYPEN,
+        "status_labels": WASSERSTELLE_STATUS,
         "counts": counts,
         "gesamt": len(rows),
         "aktiv_count": sum(1 for w in rows if w.aktiv),
-        # Verfügbare Löschwasser-Kapazität (nur aktive Stellen mit hinterlegter Ergiebigkeit)
+        "wartung_count": sum(1 for w in rows if w.status == "wartung"),
+        "defekt_count": sum(1 for w in rows if w.status == "defekt"),
+        # Verfügbare Löschwasser-Kapazität (nur nicht-defekte Stellen mit hinterlegter Ergiebigkeit)
         "kapazitaet_l_min": sum(w.ergiebigkeit_l_min or 0 for w in rows if w.aktiv),
     })
 
@@ -115,11 +127,13 @@ def wasserstelle_neu(
     lng: str = Form(""),
     hinweis: str = Form(""),
     ergiebigkeit_l_min: str = Form(""),
+    status: str = Form("bereit"),
 ):
     if not bezeichnung.strip():
         raise HTTPException(400, "Bezeichnung ist erforderlich")
     if typ not in _ERLAUBTE_TYPEN:
         typ = "sonstige"
+    status, aktiv = _status_aktiv(status)
     w = Wasserstelle(
         org_id=user.org_id,
         bezeichnung=bezeichnung.strip()[:250],
@@ -129,7 +143,8 @@ def wasserstelle_neu(
         hinweis=hinweis.strip() or None,
         ergiebigkeit_l_min=int(ergiebigkeit_l_min) if ergiebigkeit_l_min.strip().isdigit() else None,
         quelle="manuell",
-        aktiv=True,
+        status=status,
+        aktiv=aktiv,
         erstellt_von_id=user.id,
         aktualisiert_von_id=user.id,
     )
@@ -156,7 +171,7 @@ def wasserstelle_bearbeiten(
     lng: str = Form(""),
     hinweis: str = Form(""),
     ergiebigkeit_l_min: str = Form(""),
-    aktiv: str = Form("1"),
+    status: str = Form("bereit"),
 ):
     w = db.get(Wasserstelle, wid)
     if not w or w.org_id != user.org_id:
@@ -169,7 +184,7 @@ def wasserstelle_bearbeiten(
     w.lng = _koord(lng)
     w.hinweis = hinweis.strip() or None
     w.ergiebigkeit_l_min = int(ergiebigkeit_l_min) if ergiebigkeit_l_min.strip().isdigit() else None
-    w.aktiv = aktiv in ("1", "true", "on")
+    w.status, w.aktiv = _status_aktiv(status)
     w.aktualisiert_von_id = user.id
     write_audit(db, "wasserstelle.updated", org_id=user.org_id, user_id=user.id,
                 entity_type="wasserstelle", entity_id=w.id,

@@ -105,14 +105,18 @@ TRIGGER_LABELS = {
 }
 
 # Objekt-Elemente, die eine Druckregel bei zugeordnetem Objekt mitdrucken kann.
+# Schlüssel bilden echte, im Dispatcher auflösbare Objekt-Dokumentseiten ab
+# (ObjektDokumentSeite): "bei_einsatz_drucken" = alle so markierten Seiten, alle
+# übrigen Schlüssel = ObjektDokumentSeite.dokumentart (siehe DOKUMENTARTEN in
+# app/models/objekt.py). So druckt eine Regel bei zugeordnetem Objekt genau diese Seiten.
 OBJEKT_ELEMENT_LABELS = {
-    "feuerwehrplan": "Feuerwehrplan",
-    "bma_laufkarten": "BMA-Laufkarten",
-    "hydrantenplan": "Hydranten-/Löschwasserplan",
-    "zufahrtsplan": "Zufahrtsplan",
-    "ansprechpartner": "Ansprechpartner-Liste",
-    "taktische_karte": "Taktische Karte",
-    "bei_einsatz_drucken": "Dokumentseiten „bei Einsatz drucken\"",
+    "bei_einsatz_drucken": "Seiten „bei Einsatz drucken\"",
+    "brandschutzplan": "Brandschutzplan",
+    "lageplan": "Lageplan",
+    "bma_datenblatt": "BMA Datenblatt",
+    "bma_melderplan": "BMA Melderplan",
+    "gefahrgutdatenblatt": "Gefahrgutdatenblatt",
+    "objektinformation": "Objektinformation",
 }
 
 # ── Parse-Status AlarmIngest ───────────────────────────────────────────────────

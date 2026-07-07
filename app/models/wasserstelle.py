@@ -41,6 +41,15 @@ WASSERSTELLE_TYPEN: dict[str, str] = {
     "sonstige": "Sonstige Entnahmestelle",
 }
 
+# Betriebszustand einer Wasserstelle (feiner als das binäre aktiv). 'aktiv' wird beim
+# Speichern daraus abgeleitet: nur 'defekt' => aktiv=False, damit die operativen Filter
+# (Einsatzinfo / Nachbar-Gefahren) defekte Stellen ausblenden, Wartung aber verfügbar bleibt.
+WASSERSTELLE_STATUS: dict[str, str] = {
+    "bereit": "Bereit",
+    "wartung": "Wartung",
+    "defekt": "Defekt",
+}
+
 # Abbildung fachlicher Typ → Karten-Icon-Kategorie (deckt sich mit den bestehenden
 # Hydranten-Icons in einsatz_info.js / app.css: ueberflur / unterflur / loeschwasser).
 WASSERSTELLE_ICON_KAT: dict[str, str] = {
@@ -80,6 +89,8 @@ class Wasserstelle(TenantScoped, Base):
     # Stabiler Schlüssel für idempotenten Import (leer bei Handanlage)
     import_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Betriebszustand: bereit / wartung / defekt (siehe WASSERSTELLE_STATUS)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="bereit", server_default="bereit")
 
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     aktualisiert_am: Mapped[datetime] = mapped_column(
@@ -95,6 +106,10 @@ class Wasserstelle(TenantScoped, Base):
     @property
     def typ_label(self) -> str:
         return WASSERSTELLE_TYPEN.get(self.typ, self.typ)
+
+    @property
+    def status_label(self) -> str:
+        return WASSERSTELLE_STATUS.get(self.status, self.status)
 
     @property
     def icon_kat(self) -> str:
