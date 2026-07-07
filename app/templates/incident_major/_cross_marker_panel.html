@@ -181,14 +181,22 @@
            style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.92);">
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"
              @click.self="lbOpen=false">
-          <img src="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/medien/{{ m.id }}/bild"
+          <img src="{% if m.media_type == 'image' %}/annotieren/cross_marker/{{ m.id }}/bild{% else %}/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/medien/{{ m.id }}/bild{% endif %}"
                style="max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.8);">
         </div>
         <button @click="lbOpen=false"
                 style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;
                        color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:50%;
                        width:40px;height:40px;display:flex;align-items:center;justify-content:center;">×</button>
+        {% if can_edit and m.media_type == 'image' %}
+        <a href="/annotieren/cross_marker/{{ m.id }}" @click.stop
+           style="position:fixed;top:16px;left:20px;background:rgba(0,0,0,.6);color:#fff;text-decoration:none;font-size:14px;line-height:1;padding:10px 14px;border-radius:8px;">✏️ Bearbeiten</a>
+        {% endif %}
       </div>
+      {% if can_edit and m.media_type == 'image' %}
+      <a href="/annotieren/cross_marker/{{ m.id }}" title="Bearbeiten" @click.stop
+         style="position:absolute;top:1px;left:1px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>
+      {% endif %}
       {% if can_edit %}
       <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/medien/{{ m.id }}/loeschen"
             hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'

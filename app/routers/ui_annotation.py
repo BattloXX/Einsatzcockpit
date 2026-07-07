@@ -237,3 +237,31 @@ def uebernahme_task(
         "can_note": has_role(user, *_EDIT_ROLLEN, "readonly"),
         "errors": [],
     })
+
+
+@router.post("/api/uebernahme/message/{message_id}", response_class=HTMLResponse)
+def uebernahme_message(
+    message_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_EDIT_ROLLEN)),
+    seiten_ids: str = Form(...),
+):
+    from app.models.incident import Incident, Message
+    from app.routers.ui_incident import _entity_logs, get_card_journal
+    from app.services.takeover_service import uebernehme_seiten
+    msg = db.get(Message, message_id)
+    if msg is None:
+        raise HTTPException(status_code=404, detail="Meldung nicht gefunden")
+    incident = db.get(Incident, msg.incident_id)
+    _incident_write_or_403(db, user, incident)
+    uebernehme_seiten(db, "message", msg, _parse_ids(seiten_ids), user, user.org_id)
+    db.commit()
+    db.refresh(msg, ["media"])
+    return templates.TemplateResponse(request, "incident/_message_modal.html", {
+        "user": user, "incident": incident, "msg": msg,
+        "can_edit": has_role(user, *_EDIT_ROLLEN),
+        "can_note": has_role(user, *_EDIT_ROLLEN, "readonly"),
+        "entity_logs": _entity_logs(db, incident.id, "message", message_id),
+        "card_journal": get_card_journal(db, incident.id, "message", message_id),
+    })

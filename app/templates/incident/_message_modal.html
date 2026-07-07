@@ -214,6 +214,90 @@
       <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB · Video 50 MB. Bilder werden automatisch verkleinert.</p>
     </form>
     {% endif %}
+    {% if can_edit %}
+    <div style="margin-top:6px;" x-data="{
+      offen: false, objekte: [], obj: null, dokumente: [], auswahl: [], suche: '', laden: false,
+      async open() {
+        this.offen = true; this.obj = null; this.dokumente = []; this.auswahl = [];
+        if (!this.objekte.length) {
+          this.laden = true;
+          try { const r = await fetch('/api/uebernahme/objekte?incident_id={{ incident.id }}'); this.objekte = (await r.json()).objekte || []; } catch (e) {}
+          this.laden = false;
+        }
+      },
+      get gefilterte() { const q = this.suche.toLowerCase().trim(); return this.objekte.filter(o => !q || o.name.toLowerCase().includes(q)); },
+      async waehle(o) {
+        this.obj = o; this.auswahl = []; this.dokumente = []; this.laden = true;
+        try { const r = await fetch('/api/uebernahme/objekt/' + o.id + '/seiten'); this.dokumente = (await r.json()).dokumente || []; } catch (e) {}
+        this.laden = false;
+      },
+      toggle(id) { const i = this.auswahl.indexOf(id); i < 0 ? this.auswahl.push(id) : this.auswahl.splice(i, 1); },
+      alle(dok) { dok.seiten.forEach(s => { if (this.auswahl.indexOf(s.id) < 0) this.auswahl.push(s.id); }); }
+    }" @keydown.escape.window="offen = false">
+      <button type="button" class="btn btn--secondary btn--sm" @click="open()">📂 Aus Objekt übernehmen</button>
+
+      <div x-show="offen" x-cloak @click.self="offen = false"
+           style="position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div style="background:var(--surface,#1a221a);border:1px solid var(--border-color,#374151);border-radius:12px;max-width:min(920px,96vw);max-height:88vh;width:100%;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border-color,#374151);">
+            <strong>Dokument aus Objekt übernehmen</strong>
+            <button type="button" @click="offen = false" class="btn btn--ghost btn--sm">✕</button>
+          </div>
+          <div style="padding:12px 16px;overflow:auto;flex:1;">
+            <template x-if="!obj">
+              <div>
+                <input type="text" x-model="suche" placeholder="Objekt suchen …" class="form-input" style="margin-bottom:10px;">
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <template x-for="o in gefilterte" :key="o.id">
+                    <button type="button" @click="waehle(o)" class="btn btn--ghost btn--sm" style="justify-content:flex-start;text-align:left;">
+                      <span x-text="o.name"></span>
+                      <span x-show="o.verknuepft" class="badge-pill badge-pill--green" style="margin-left:auto;font-size:.7em;">verknüpft</span>
+                    </button>
+                  </template>
+                  <div x-show="!gefilterte.length && !laden" class="text-muted" style="font-size:.85em;">Keine Objekte gefunden.</div>
+                </div>
+              </div>
+            </template>
+            <template x-if="obj">
+              <div>
+                <button type="button" @click="obj = null" class="btn btn--ghost btn--sm" style="margin-bottom:8px;">← Objekte</button>
+                <div style="font-weight:600;margin-bottom:8px;" x-text="obj.name"></div>
+                <template x-for="dok in dokumente" :key="dok.dokument_id">
+                  <div style="margin-bottom:12px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                      <span style="font-size:.85em;font-weight:600;" x-text="dok.name"></span>
+                      <button type="button" @click="alle(dok)" class="btn btn--ghost btn--xs">Alle</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;">
+                      <template x-for="s in dok.seiten" :key="s.id">
+                        <div @click="toggle(s.id)" style="position:relative;cursor:pointer;border:2px solid transparent;border-radius:6px;overflow:hidden;"
+                             :style="auswahl.includes(s.id) ? 'border-color:#3b82f6;' : ''">
+                          <img :src="s.thumb" loading="lazy" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#fff;">
+                          <span x-show="auswahl.includes(s.id)" style="position:absolute;top:2px;right:2px;background:#3b82f6;color:#fff;border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;">✓</span>
+                          <span style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);color:#fff;font-size:9px;text-align:center;" x-text="'S. ' + s.nr"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+                <div x-show="!dokumente.length && !laden" class="text-muted" style="font-size:.85em;">Keine übernehmbaren Seiten.</div>
+              </div>
+            </template>
+          </div>
+          <div style="padding:12px 16px;border-top:1px solid var(--border-color,#374151);display:flex;justify-content:flex-end;">
+            <form hx-post="/api/uebernahme/message/{{ msg.id }}" hx-target="#cardDetailBody" hx-swap="innerHTML"
+                  @htmx:after-request="if ($event.detail.successful) { offen = false; }">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="hidden" name="seiten_ids" :value="auswahl.join(',')">
+              <button type="submit" class="btn btn--primary btn--sm" :disabled="!auswahl.length">
+                Übernehmen (<span x-text="auswahl.length"></span>)
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 

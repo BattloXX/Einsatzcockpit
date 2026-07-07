@@ -2065,6 +2065,7 @@ async def lage_journal_entry_detail(
         "lage": lage,
         "entry": entry,
         "journal_categories": JOURNAL_CATEGORIES,
+        "can_edit": has_role(user, "incident_leader", "admin", "org_admin", "recorder"),
     })
 
 
