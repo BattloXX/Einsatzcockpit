@@ -26,6 +26,7 @@ from app.routers import (
     api_weather,
     auth,
     device_api,
+    gateway_api,
     lagekarte_api,
     public,
     sso,
@@ -40,6 +41,7 @@ from app.routers import (
     ui_breathing,
     ui_fahrtenbuch,
     ui_fahrtenbuch_admin,
+    ui_gateway,
     ui_gsl_staff,
     ui_hilfe,
     ui_incident,
@@ -439,6 +441,7 @@ app.include_router(api_weather.router)
 # TEMPORAER: EUS-Datenmigration — nach Abschluss entfernen (siehe app/routers/api_import.py)
 app.include_router(api_import.router)
 app.include_router(device_api.router)
+app.include_router(gateway_api.router)
 app.include_router(lagekarte_api.router)
 app.include_router(teams_bot.router)
 app.include_router(ws.router)
@@ -469,6 +472,7 @@ app.include_router(ui_uas.router)
 app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
 app.include_router(ui_wasserstelle.router)
+app.include_router(ui_gateway.router)
 app.include_router(ui_infoscreen_alarm.router)
 app.include_router(ui_verleih.router)
 app.include_router(ui_fahrtenbuch.router)

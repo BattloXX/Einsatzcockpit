@@ -4,6 +4,13 @@ from app.models.atemschutz_pruefung import (
     AtemschutzPruefung,
 )
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
+from app.models.gateway import (
+    AlarmIngest,
+    Gateway,
+    PrintJob,
+    PrintRule,
+    Printer,
+)
 from app.models.fahrtenbuch import (
     Fahrt,
     FahrtBenachrichtigung,
@@ -171,6 +178,7 @@ __all__ = [
     "ObjektDokument", "ObjektDokumentSeite", "ObjektKartenObjekt", "ObjektEinsatz",
     "ObjektSymbol", "AlarmInfoscreenToken", "InfoscreenUrl", "ObjektSeiteKiVorschlag",
     "Wasserstelle",
+    "Gateway", "Printer", "PrintJob", "AlarmIngest", "PrintRule",
     "UASDevice", "UASPilot", "UASFlugbewegung", "UASWartung",
     "UASEinsatz", "UASEinsatzRolleEintrag", "UASFlug", "UASCheckliste",
     "UASEreignis", "UASKartenobjekt", "UASMedien",

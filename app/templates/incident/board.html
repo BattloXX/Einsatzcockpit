@@ -260,6 +260,12 @@
         <a href="/archiv/{{ incident.id }}/pdf" target="_blank" class="dropdown-item">
           <span class="di-icon">📄</span> PDF exportieren
         </a>
+        {% if request.state.gateway_enabled %}
+        <button type="button" class="dropdown-item"
+                onclick="ecpgOpenPrintDialog({document_type:'einsatzinfo', incident_id:{{ incident.id }}, title:'Einsatzinfo drucken'})">
+          <span class="di-icon">🖨️</span> Auf Drucker drucken
+        </button>
+        {% endif %}
       </div>
     </div>
 
@@ -939,6 +945,10 @@
     </form>
   </div>
 </dialog>
+
+{% if request.state.gateway_enabled %}
+{% include "_print_dialog.html" %}
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

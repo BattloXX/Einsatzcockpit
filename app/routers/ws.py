@@ -22,7 +22,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.major_incident import MajorIncident
 from app.models.user import SmsGatewayToken, User
-from app.services.broadcast import LAGE_WS_OFFSET, ORG_WS_OFFSET, manager
+from app.services.broadcast import LAGE_WS_OFFSET, ORG_WS_OFFSET, broadcast_org, manager
 from app.services.sms_inbox_service import process_inbound_sms, record_inbound_sms
 
 logger = logging.getLogger("einsatzleiter.ws")
@@ -36,6 +36,12 @@ router = APIRouter()
 _sms_gateways: dict[int, list[WebSocket]] = defaultdict(list)
 # job_id → asyncio.Future für sms.result-Rückmeldung
 _sms_pending: dict[str, asyncio.Future] = {}
+
+# ── Print & Alarm Gateway (ECPG) Registry ──────────────────────────────────────
+# org_id → aktive Gateway-WebSocket-Verbindungen (Muster _sms_gateways).
+_print_gateways: dict[int, list[WebSocket]] = defaultdict(list)
+# job_id(str) → Future für die erste job_status-Rückmeldung (dispatch_print_job)
+_job_pending: dict[str, asyncio.Future] = {}
 
 
 # Close-Codes per RFC6455 (4000-4999 ist Application-Range)
@@ -331,3 +337,271 @@ async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: fl
     raise RuntimeError(
         f"Kein erreichbares SMS-Gateway für org_id={org_id} (letzter Fehler: {last_error})"
     )
+
+
+# ── Print & Alarm Gateway (ECPG) WebSocket ─────────────────────────────────────
+
+def _resolve_gateway(websocket: WebSocket):
+    """Löst das Bearer-Device-Token zu einem Gateway auf (Muster SMS-Gateway)."""
+    from app.models.gateway import Gateway
+
+    raw = (
+        websocket.headers.get("authorization", "")
+        or websocket.query_params.get("token", "")
+    )
+    if raw.lower().startswith("bearer "):
+        raw = raw[7:]
+    raw = raw.strip()
+    if not raw:
+        return None
+    token_hash = hash_api_key(raw)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw = (
+            db.query(Gateway)
+            .filter(Gateway.device_token_hash == token_hash)
+            .first()
+        )
+        if gw is not None:
+            _ = gw.org_id, gw.id  # eager vor Session-Close
+        return gw
+    finally:
+        db.close()
+
+
+def _touch_gateway(gateway_id: int, *, version: str | None = None) -> None:
+    from app.models.gateway import Gateway
+    from app.services.gateway_service import mark_seen
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw = db.get(Gateway, gateway_id)
+        if gw:
+            mark_seen(db, gw, version=version)
+            db.commit()
+    finally:
+        db.close()
+
+
+def _gateway_config_sync(gateway_id: int) -> dict:
+    from app.models.gateway import Gateway
+    from app.services.gateway_service import build_config_sync
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw = db.get(Gateway, gateway_id)
+        if not gw:
+            return {}
+        return build_config_sync(db, gw)
+    finally:
+        db.close()
+
+
+def _apply_job_status(job_id: int, status: str, error: str | None) -> int | None:
+    """Schreibt job_status vom Gateway in die DB. Gibt org_id zurück (für Broadcast)."""
+    from app.models.gateway import JOB_TERMINAL, PrintJob
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        job = db.get(PrintJob, job_id)
+        if not job:
+            return None
+        job.status = status
+        if error:
+            job.error = error[:500]
+        db.commit()
+        return job.org_id
+    finally:
+        db.close()
+
+
+def _set_serial_status(gateway_id: int, connected: bool) -> int | None:
+    from app.models.gateway import Gateway
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw = db.get(Gateway, gateway_id)
+        if not gw:
+            return None
+        gw.serial_connected = connected
+        db.commit()
+        return gw.org_id
+    finally:
+        db.close()
+
+
+@router.websocket("/ws/gateway")
+async def print_gateway_ws(websocket: WebSocket):
+    """WebSocket-Kanal für den Print & Alarm Gateway-Container (ausgehend, persistent).
+
+    Auth per Bearer-Device-Token (Authorization-Header oder ?token=). Bei Connect
+    wird sofort config_sync gepusht. Nachrichten-Typen siehe Konzept Abschnitt 6.
+    """
+    gateway = _resolve_gateway(websocket)
+    if gateway is None:
+        await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+        return
+
+    org_id = gateway.org_id
+    gateway_id = gateway.id
+
+    await websocket.accept()
+    _print_gateways[org_id].append(websocket)
+    _touch_gateway(gateway_id)
+    await broadcast_org(org_id, {"type": "gateway_status", "gateway_id": gateway_id, "online": True})
+    logger.info("ECPG-Gateway verbunden (org_id=%s, gateway_id=%s)", org_id, gateway_id)
+
+    # config_sync sofort pushen
+    await websocket.send_text(json.dumps({
+        "type": "config_sync", "payload": _gateway_config_sync(gateway_id),
+    }, ensure_ascii=False))
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            mtype = msg.get("type")
+            if mtype == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+            elif mtype in ("pong", "log_event", "ack"):
+                pass
+            elif mtype == "hello":
+                _touch_gateway(gateway_id, version=(msg.get("payload") or {}).get("version"))
+                await websocket.send_text(json.dumps({
+                    "type": "config_sync", "payload": _gateway_config_sync(gateway_id),
+                }, ensure_ascii=False))
+            elif mtype == "heartbeat":
+                _touch_gateway(gateway_id)
+            elif mtype == "job_status":
+                p = msg.get("payload") or {}
+                jid = p.get("job_id")
+                # Future auflösen (falls dispatch_print_job auf Zustellung wartet)
+                fut = _job_pending.pop(str(jid), None)
+                if fut and not fut.done():
+                    fut.set_result(p)
+                if jid is not None:
+                    o = _apply_job_status(int(jid), p.get("status", ""), p.get("error"))
+                    if o:
+                        await broadcast_org(o, {"type": "print_job_status", "job_id": int(jid),
+                                                "status": p.get("status")})
+            elif mtype == "serial_status":
+                p = msg.get("payload") or {}
+                o = _set_serial_status(gateway_id, bool(p.get("connected")))
+                if o:
+                    await broadcast_org(o, {"type": "gateway_serial", "gateway_id": gateway_id,
+                                            "connected": bool(p.get("connected"))})
+            elif mtype == "printer_report":
+                from app.services.printer_report_service import apply_printer_report
+                apply_printer_report(gateway_id, org_id, msg.get("payload") or {})
+                await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
+            elif mtype == "alarm_notice":
+                # Signal – der verbindliche Ingest läuft über REST POST /alarms.
+                logger.info("ECPG alarm_notice (org_id=%s): %s", org_id,
+                            (msg.get("payload") or {}).get("raw_hash"))
+            else:
+                logger.debug("ECPG-Gateway unbekannter Typ: %s", mtype)
+
+    except WebSocketDisconnect:
+        logger.info("ECPG-Gateway getrennt (org_id=%s, gateway_id=%s)", org_id, gateway_id)
+    finally:
+        _discard_print_gateway(org_id, websocket)
+        _mark_gateway_offline(gateway_id)
+        await broadcast_org(org_id, {"type": "gateway_status", "gateway_id": gateway_id, "online": False})
+
+
+def _discard_print_gateway(org_id: int, websocket: WebSocket) -> None:
+    try:
+        _print_gateways.get(org_id, []).remove(websocket)
+    except ValueError:
+        pass
+
+
+def _mark_gateway_offline(gateway_id: int) -> None:
+    from app.models.gateway import GATEWAY_STATUS_OFFLINE, Gateway
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw = db.get(Gateway, gateway_id)
+        # Nur offline setzen wenn keine weitere Verbindung dieser Org mehr offen ist.
+        if gw and not _print_gateways.get(gw.org_id):
+            gw.status = GATEWAY_STATUS_OFFLINE
+            gw.serial_connected = False
+            db.commit()
+    finally:
+        db.close()
+
+
+def is_gateway_connected(org_id: int) -> bool:
+    """True, wenn mindestens ein ECPG-Gateway dieser Org verbunden ist."""
+    return bool(_print_gateways.get(org_id))
+
+
+async def push_config_sync(org_id: int, gateway_id: int) -> None:
+    """Sendet aktualisierte config_sync an alle verbundenen Gateways der Org."""
+    payload = json.dumps({"type": "config_sync", "payload": _gateway_config_sync(gateway_id)},
+                         ensure_ascii=False)
+    for ws in list(_print_gateways.get(org_id, [])):
+        try:
+            await ws.send_text(payload)
+        except Exception:
+            _discard_print_gateway(org_id, ws)
+
+
+async def push_gateway_command(org_id: int, message: dict) -> bool:
+    """Sendet ein Kommando (discover_printers, probe_printer, test_page, cancel_job,
+    update_available) an die Gateways der Org. Gibt True bei mind. einem Empfänger."""
+    payload = json.dumps(message, ensure_ascii=False)
+    sent = False
+    for ws in list(_print_gateways.get(org_id, [])):
+        try:
+            await ws.send_text(payload)
+            sent = True
+        except Exception:
+            _discard_print_gateway(org_id, ws)
+    return sent
+
+
+async def dispatch_print_job(org_id: int, job_id: int, payload: dict, timeout: float = 20.0) -> dict:
+    """Sendet einen print_job an ein verbundenes Gateway und wartet auf die erste
+    job_status-Rückmeldung (Muster dispatch_sms, ohne Doppel-Retry bei Timeout)."""
+    gateways = list(_print_gateways.get(org_id, []))
+    if not gateways:
+        raise RuntimeError(f"Kein Gateway für org_id={org_id} verbunden")
+
+    key = str(job_id)
+    msg = json.dumps({"type": "print_job", "id": key, "payload": payload}, ensure_ascii=False)
+    loop = asyncio.get_event_loop()
+    last_error: Exception | None = None
+
+    for ws in reversed(gateways):
+        fut: asyncio.Future = loop.create_future()
+        _job_pending[key] = fut
+        try:
+            await ws.send_text(msg)
+        except Exception as exc:
+            _job_pending.pop(key, None)
+            _discard_print_gateway(org_id, ws)
+            last_error = exc
+            continue
+        try:
+            return await asyncio.wait_for(fut, timeout=timeout)
+        except TimeoutError:
+            # Senden gelang → nicht erneut versuchen (kein Doppeldruck). Job bleibt
+            # 'sent'; das Gateway spoolt und meldet den Endstatus asynchron nach.
+            _job_pending.pop(key, None)
+            return {"job_id": job_id, "status": "sent", "note": "timeout_waiting_status"}
+        except Exception:
+            _job_pending.pop(key, None)
+            raise
+
+    raise RuntimeError(f"Kein erreichbares Gateway für org_id={org_id} (letzter Fehler: {last_error})")

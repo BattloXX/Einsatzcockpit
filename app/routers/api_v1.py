@@ -618,6 +618,10 @@ async def create_incident_api(
     from app.services.objekt_matching_service import match_incident_background
     background_tasks.add_task(match_incident_background, incident.id)
 
+    # Automatikdruck (ECPG): Druckregeln mit Trigger einsatz_created auswerten.
+    from app.services.print_dispatcher import autoprint_incident_background
+    background_tasks.add_task(autoprint_incident_background, incident.id)
+
     # GSL-Trigger (nutzt vorerst keine Geocoding-Koords, da diese im Background kommen)
     _mi_site = None
     if api_key.org_id:

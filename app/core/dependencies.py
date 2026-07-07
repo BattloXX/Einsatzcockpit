@@ -35,6 +35,15 @@ def _set_objekt_state(request: HTTPConnection, org_id: int | None, db: Session) 
         request.state.objekt_enabled = False
 
 
+def _set_gateway_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
+    """Setzt request.state.gateway_enabled fail-safe (nie crashen)."""
+    try:
+        from app.services.gateway_service import gateway_effective_enabled
+        request.state.gateway_enabled = gateway_effective_enabled(org_id, db)
+    except Exception:
+        request.state.gateway_enabled = False
+
+
 def _set_fahrtenbuch_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
     """Setzt request.state.fahrtenbuch_modul_aktiv fail-safe (nie crashen)."""
     try:
@@ -82,6 +91,7 @@ def _resolve_current_org(
     # Modul-Defaults: aus (wird unten ggf. überschrieben)
     request.state.uas_module_enabled = False
     request.state.objekt_enabled = False
+    request.state.gateway_enabled = False
     request.state.fahrtenbuch_modul_aktiv = False
     request.state.atemschutz_pruefung_modul_aktiv = False
 
@@ -117,6 +127,7 @@ def _resolve_current_org(
             set_tenant_context(db, org_id)
             _set_uas_state(request, org_id, db)
             _set_objekt_state(request, org_id, db)
+            _set_gateway_state(request, org_id, db)
             _set_fahrtenbuch_state(request, org_id, db)
             _set_atemschutz_pruefung_state(request, org_id, db)
             return org_id
@@ -127,6 +138,7 @@ def _resolve_current_org(
     set_tenant_context(db, org_id)
     _set_uas_state(request, org_id, db)
     _set_objekt_state(request, org_id, db)
+    _set_gateway_state(request, org_id, db)
     _set_fahrtenbuch_state(request, org_id, db)
     _set_atemschutz_pruefung_state(request, org_id, db)
     return org_id

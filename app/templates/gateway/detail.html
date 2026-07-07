@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}{{ gw.name }} – Gateway – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>&#x1F5A8; {{ gw.name }}</h1>
+      <p class="page-header__sub">{{ gw.standort or 'Gateway' }} ·
+        {% if gw.status == 'online' and connected %}<span class="badge badge--green">Online</span>
+        {% elif not gw.is_paired %}<span class="badge badge--gray">Nicht gekoppelt</span>
+        {% else %}<span class="badge badge--red">Offline</span>{% endif %}
+        {% if gw.is_paired %}
+          · Alarmleitung:
+          {% if gw.serial_connected %}<span class="badge badge--green">verbunden</span>
+          {% else %}<span class="badge badge--gray">getrennt</span>{% endif %}
+        {% endif %}
+      </p>
+    </div>
+    <div class="page-header__actions">
+      <a href="/gateway" class="btn btn--ghost">&larr; Übersicht</a>
+    </div>
+  </div>
+
+  {% if request.query_params.get('pairing_code') %}
+  <div class="alert alert--info">
+    <strong>Pairing-Code (10 min gültig):</strong>
+    <code style="font-size:1.4em; letter-spacing:2px;">{{ request.query_params.get('pairing_code') }}</code>
+    – am Gateway als <code>ECPG_PAIRING_CODE</code> hinterlegen oder auf der Statusseite eingeben.
+  </div>
+  {% endif %}
+  {% if request.query_params.get('device_token') %}
+  <div class="alert alert--info">
+    <strong>Neues Device-Token (nur jetzt sichtbar):</strong>
+    <code style="word-break:break-all;">{{ request.query_params.get('device_token') }}</code>
+  </div>
+  {% endif %}
+  {% if request.query_params.get('saved') %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+  {% if request.query_params.get('discover') %}<div class="alert alert--info">Netzwerksuche angestoßen – Vorschläge erscheinen nach kurzer Zeit.</div>{% endif %}
+
+  <!-- Pairing / Token -->
+  <div class="card">
+    <h2>Kopplung</h2>
+    <div class="btn-row">
+      <form method="post" action="/gateway/{{ gw.id }}/pair-code" style="display:inline">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--primary" type="submit">Pairing-Code erzeugen</button>
+      </form>
+      {% if gw.is_paired %}
+      <form method="post" action="/gateway/{{ gw.id }}/rotate-token" style="display:inline">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--ghost" type="submit">Token rotieren</button>
+      </form>
+      <form method="post" action="/gateway/{{ gw.id }}/revoke" style="display:inline"
+            onsubmit="return confirm('Token widerrufen? Das Gateway muss neu gekoppelt werden.')">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--danger" type="submit">Token widerrufen</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- W&T Com-Server -->
+  <div class="card" id="wut">
+    <h2>Alarmleitung (W&amp;T Com-Server)</h2>
+    <form method="post" action="/gateway/{{ gw.id }}/wut" class="form-grid">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% set w = gw.wut_config or {} %}
+      <label>Host / IP <input type="text" name="host" value="{{ w.get('host','') }}" placeholder="192.168.1.50"></label>
+      <label>Port <input type="number" name="port" value="{{ w.get('port', 8000) }}"></label>
+      <label>Zeichensatz
+        <select name="charset">
+          <option value="cp850" {{ 'selected' if w.get('charset','cp850')=='cp850' }}>CP850</option>
+          <option value="latin-1" {{ 'selected' if w.get('charset')=='latin-1' }}>Latin-1</option>
+          <option value="utf-8" {{ 'selected' if w.get('charset')=='utf-8' }}>UTF-8</option>
+        </select>
+      </label>
+      <label>Datagramm-Ende
+        <select name="datagram_strategy">
+          <option value="idle" {{ 'selected' if w.get('datagram_strategy','idle')=='idle' }}>Idle-Timeout</option>
+          <option value="formfeed" {{ 'selected' if w.get('datagram_strategy')=='formfeed' }}>Form Feed (0x0C)</option>
+        </select>
+      </label>
+      <label>Idle-Timeout (ms) <input type="number" name="idle_ms" value="{{ w.get('idle_ms', 2000) }}"></label>
+      <label>Notfalldrucker
+        <select name="notfalldruck_printer_id">
+          <option value="">– keiner –</option>
+          {% for p in printers %}
+          <option value="{{ p.id }}" {{ 'selected' if w.get('notfalldruck_printer_id')==p.id }}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div><button class="btn btn--primary" type="submit">Speichern</button></div>
+    </form>
+  </div>
+
+  <!-- Drucker -->
+  <div class="card" id="drucker">
+    <h2>Drucker</h2>
+    <div class="btn-row">
+      <form method="post" action="/gateway/{{ gw.id }}/discover" style="display:inline">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--ghost" type="submit">Netzwerk durchsuchen</button>
+      </form>
+    </div>
+    <form method="post" action="/gateway/{{ gw.id }}/printers/add-ip" class="form-inline" style="margin:8px 0">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="text" name="name" placeholder="Name (z. B. Florianstation)" required>
+      <input type="text" name="ip" placeholder="IP-Adresse" required>
+      <button class="btn btn--primary" type="submit">+ Per IP hinzufügen</button>
+    </form>
+    {% if not printers %}
+    <p class="muted">Noch kein Drucker.</p>
+    {% else %}
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Modell</th><th>URI</th><th>Status</th><th>Aktiv</th><th></th></tr></thead>
+      <tbody>
+        {% for p in printers %}
+        <tr>
+          <td>{{ p.name }}</td>
+          <td>{{ p.modell or '–' }}</td>
+          <td><code>{{ p.uri }}</code></td>
+          <td>
+            {% if p.status and p.status.get('reachable') %}<span class="badge badge--green">erreichbar</span>
+            {% elif p.aktiv %}<span class="badge badge--gray">unbekannt</span>
+            {% else %}<span class="badge badge--gray">Vorschlag</span>{% endif %}
+          </td>
+          <td>
+            <form method="post" action="/gateway/printers/{{ p.id }}/toggle" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button class="btn btn--sm {{ 'btn--danger' if p.aktiv else 'btn--primary' }}" type="submit">
+                {{ 'Deaktivieren' if p.aktiv else 'Übernehmen' }}
+              </button>
+            </form>
+          </td>
+          <td>
+            <div class="btn-row">
+              <form method="post" action="/gateway/printers/{{ p.id }}/test" style="display:inline">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                <button class="btn btn--ghost btn--sm" type="submit" {{ 'disabled' if not p.aktiv }}>Testseite</button>
+              </form>
+              <form method="post" action="/gateway/printers/{{ p.id }}/delete" style="display:inline"
+                    onsubmit="return confirm('Drucker entfernen?')">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                <button class="btn btn--danger btn--sm" type="submit">Löschen</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <!-- Druckregeln -->
+  <div class="card" id="regeln">
+    <h2>Druckregeln</h2>
+    <form method="post" action="/gateway/rules/create" class="form-inline" style="margin-bottom:8px">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="text" name="name" placeholder="Regelname" required>
+      <select name="trigger">
+        {% for key, label in trigger_labels.items() %}
+        <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn--primary" type="submit">+ Regel</button>
+    </form>
+    {% if not rules %}
+    <p class="muted">Noch keine Druckregel.</p>
+    {% else %}
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Auslöser</th><th>Dokumente</th><th>Aktiv</th><th></th></tr></thead>
+      <tbody>
+        {% for r in rules %}
+        <tr>
+          <td>{{ r.name }}</td>
+          <td>{{ r.trigger_label }}</td>
+          <td>{{ (r.documents or []) | join(', ') or '–' }}</td>
+          <td>
+            <form method="post" action="/gateway/rules/{{ r.id }}/toggle" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button class="btn btn--sm {{ 'btn--green' if r.aktiv else 'btn--ghost' }}" type="submit">
+                {{ 'An' if r.aktiv else 'Aus' }}
+              </button>
+            </form>
+          </td>
+          <td>
+            <form method="post" action="/gateway/rules/{{ r.id }}/delete" style="display:inline"
+                  onsubmit="return confirm('Regel löschen?')">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button class="btn btn--danger btn--sm" type="submit">Löschen</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <!-- Druckhistorie -->
+  <div class="card" id="historie">
+    <h2>Druckhistorie</h2>
+    {% if not jobs %}
+    <p class="muted">Noch keine Druckaufträge.</p>
+    {% else %}
+    <table class="data-table">
+      <thead><tr><th>Zeit</th><th>Dokument</th><th>Drucker</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for j in jobs %}
+        <tr>
+          <td>{{ j.erstellt_am | local_datetime }}</td>
+          <td>{{ j.document_label }}</td>
+          <td>{{ j.printer_id or '–' }}</td>
+          <td>{{ j.source }}</td>
+          <td>{{ j.status_label }}{% if j.error %} <span class="muted">({{ j.error }})</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <form method="post" action="/gateway/{{ gw.id }}/delete"
+          onsubmit="return confirm('Dieses Gateway endgültig löschen?')">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button class="btn btn--danger" type="submit">Gateway löschen</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
