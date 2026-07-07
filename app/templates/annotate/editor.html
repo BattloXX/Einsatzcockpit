@@ -30,8 +30,16 @@
 {% block content %}
 <div class="anno">
   <div class="anno__bar">
-    <div class="anno__grp">
+    <div class="anno__grp" aria-label="Werkzeug">
+      <button type="button" class="anno-btn" data-anno-tool="select" title="Auswahl / Verschieben">✥</button>
       <button type="button" class="anno-btn is-active" data-anno-tool="pen" title="Stift (Freihand)">✏️</button>
+      <button type="button" class="anno-btn" data-anno-tool="arrow" title="Pfeil">↗</button>
+      <button type="button" class="anno-btn" data-anno-tool="line" title="Linie">／</button>
+      <button type="button" class="anno-btn" data-anno-tool="rect" title="Rechteck">▭</button>
+      <button type="button" class="anno-btn" data-anno-tool="ellipse" title="Ellipse">◯</button>
+      <button type="button" class="anno-btn" data-anno-tool="x" title="X-Markierung">✖</button>
+      <button type="button" class="anno-btn" data-anno-tool="text" title="Text">T</button>
+      <button type="button" class="anno-btn" data-anno-tool="eraser" title="Element löschen">⌫</button>
     </div>
     <div class="anno__sep"></div>
     <div class="anno__grp" aria-label="Farbe">
@@ -47,6 +55,12 @@
       <button type="button" class="anno-width" data-anno-width="4"  title="Dünn"><i style="width:6px;height:6px;"></i></button>
       <button type="button" class="anno-width is-active" data-anno-width="9"  title="Mittel"><i style="width:11px;height:11px;"></i></button>
       <button type="button" class="anno-width" data-anno-width="16" title="Dick"><i style="width:16px;height:16px;"></i></button>
+    </div>
+    <div class="anno__sep"></div>
+    <div class="anno__grp" aria-label="Textgröße">
+      <button type="button" class="anno-btn" data-anno-textsize="24" title="Text klein" style="font-size:.8rem;">T</button>
+      <button type="button" class="anno-btn is-active" data-anno-textsize="40" title="Text mittel">T</button>
+      <button type="button" class="anno-btn" data-anno-textsize="64" title="Text groß" style="font-size:1.4rem;">T</button>
     </div>
     <div class="anno__sep"></div>
     <div class="anno__grp">
