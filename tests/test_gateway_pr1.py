@@ -274,6 +274,75 @@ def test_on_event_empty_when_module_off(db):
     assert jobs == []
 
 
+def test_objekt_elements_create_dokumentseiten_jobs(db):
+    """Regel mit objekt_elements erzeugt DOC_OBJEKT_DOKUMENT-Jobs je passender Seite
+    des am Einsatz bestätigt verknüpften Objekts."""
+    from app.models.gateway import DOC_OBJEKT_DOKUMENT, PrintRule
+    from app.models.master import OrgSettings, SystemSettings
+    from app.models.objekt import (
+        OBJEKT_EINSATZ_BESTAETIGT,
+        Objekt,
+        ObjektDokument,
+        ObjektDokumentSeite,
+        ObjektEinsatz,
+    )
+
+    org = 991700
+    if not db.query(SystemSettings).filter(SystemSettings.key == "gateway_module_enabled").first():
+        db.add(SystemSettings(key="gateway_module_enabled", value="true"))
+    db.add(OrgSettings(org_id=org, gateway_module_enabled=True))
+    gw = Gateway(org_id=org, name="GW", device_token_hash=hash_api_key("tok-" + str(org)))
+    db.add(gw)
+    db.flush()
+
+    objekt = Objekt(org_id=org, nummer="OBJ-1", name="Schule")
+    db.add(objekt)
+    db.flush()
+    dok = ObjektDokument(org_id=org, objekt_id=objekt.id, dateiname_original="plan.pdf", pfad="p/plan.pdf")
+    db.add(dok)
+    db.flush()
+    # Eine „bei Einsatz drucken"-Seite (mit Einzel-PDF) + eine ohne Flag → nur erste zählt
+    db.add(ObjektDokumentSeite(org_id=org, objekt_id=objekt.id, dokument_id=dok.id, seiten_nr=1,
+                               einzel_pdf_pfad="p/plan_1.pdf", bei_einsatz_drucken=True))
+    db.add(ObjektDokumentSeite(org_id=org, objekt_id=objekt.id, dokument_id=dok.id, seiten_nr=2,
+                               einzel_pdf_pfad="p/plan_2.pdf", bei_einsatz_drucken=False))
+    # Objekt bestätigt mit dem Einsatz verknüpft
+    db.add(ObjektEinsatz(org_id=org, objekt_id=objekt.id, incident_id=777,
+                         quelle="manuell", status=OBJEKT_EINSATZ_BESTAETIGT))
+    rule = PrintRule(org_id=org, name="Objektunterlagen", aktiv=True, trigger="einsatz_created",
+                     objekt_elements=["bei_einsatz_drucken"], printer_ids=[gw.id])
+    db.add(rule)
+    db.flush()
+
+    jobs = disp.on_event(db, org, "einsatz_created", {"incident_id": 777})
+    assert len(jobs) == 1
+    assert jobs[0].document_type == DOC_OBJEKT_DOKUMENT
+    assert jobs[0].objekt_id == objekt.id
+    # idempotent
+    assert disp.on_event(db, org, "einsatz_created", {"incident_id": 777}) == []
+
+
+def test_build_test_jobs_ignores_trigger_and_filters(db):
+    """Testdruck erzeugt Jobs unabhängig von Trigger/aktiv/Filter, mit source=manual."""
+    from app.models.gateway import JOB_SOURCE_MANUAL, PrintRule
+
+    org = 991800
+    gw = Gateway(org_id=org, name="GW", device_token_hash=hash_api_key("tok-" + str(org)))
+    db.add(gw)
+    db.flush()
+    rule = PrintRule(org_id=org, name="Nur manuell", aktiv=False, trigger="manual_only",
+                     documents=["einsatzinfo"], printer_ids=[gw.id],
+                     filters={"min_alarmstufe": 9})  # Filter würde sonst blocken
+    db.add(rule)
+    db.flush()
+    incident = MagicMock(id=42, reason="B3", report_text=None)
+
+    jobs = disp.build_test_jobs(db, rule, incident)
+    assert len(jobs) == 1
+    assert jobs[0].source == JOB_SOURCE_MANUAL
+    assert jobs[0].incident_id == 42
+
+
 # ── Serieller Ingest (Idempotenz via raw_hash) ───────────────────────────────────
 
 def test_serial_ingest_idempotent(db, monkeypatch):

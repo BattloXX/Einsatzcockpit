@@ -419,7 +419,6 @@ def rule_save(
     page_range: str = Form(""),
     duplex: str = Form("off"),
     color: str = Form("color"),
-    sort_order: int = Form(0),
     gw: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -465,9 +464,78 @@ def rule_save(
     if page_range.strip():
         options["page_range"] = page_range.strip()[:40]
     rule.options = options
-    rule.sort_order = int(sort_order)
     db.commit()
     return RedirectResponse(_rule_return(gw, f"rule_saved=1#regel-{rule.id}"), status_code=303)
+
+
+@router.post("/rules/reorder")
+def rule_reorder(
+    request: Request,
+    order: str = Form(...),
+    gw: int | None = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    """Regel-Reihenfolge per Drag&Drop: `order` = JSON-Liste der Regel-IDs in neuer
+    Reihenfolge. sort_order = Position (0 = zuerst ausgewertet)."""
+    import json
+    try:
+        ids = [int(i) for i in json.loads(order)]
+    except (ValueError, TypeError):
+        return JSONResponse({"ok": False}, status_code=400)
+    rules = {
+        r.id: r for r in db.query(PrintRule).filter(
+            PrintRule.org_id == user.org_id, PrintRule.id.in_(ids)
+        ).all()
+    }
+    for pos, rid in enumerate(ids):
+        if rid in rules:
+            rules[rid].sort_order = pos
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+@router.post("/rules/{rule_id}/test")
+async def rule_test(
+    rule_id: int,
+    request: Request,
+    gw: int | None = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    """Testdruck: wertet die Regel gegen den zuletzt angelegten Einsatz der Org aus
+    (unabhängig von Trigger/aktiv/Filter) und stellt die Jobs zu."""
+    from app.models.incident import Incident
+    from app.services.print_dispatcher import build_test_jobs, dispatch_job
+
+    rule = db.get(PrintRule, rule_id)
+    if rule is None or rule.org_id != user.org_id:
+        raise HTTPException(status_code=404, detail="Regel nicht gefunden")
+    if not rule.printer_ids:
+        return RedirectResponse(_rule_return(gw, f"test_err=printer#regel-{rule.id}"), status_code=303)
+
+    incident = (
+        db.query(Incident)
+        .filter(Incident.primary_org_id == user.org_id)
+        .order_by(Incident.started_at.desc())
+        .first()
+    )
+    if incident is None:
+        return RedirectResponse(_rule_return(gw, f"test_err=incident#regel-{rule.id}"), status_code=303)
+
+    jobs = build_test_jobs(db, rule, incident)
+    db.commit()
+    for job in jobs:
+        try:
+            await dispatch_job(db, job)
+        except Exception:
+            logger.exception("Testdruck: Job %s nicht zustellbar", job.id)
+    return RedirectResponse(
+        _rule_return(gw, f"test_ok={len(jobs)}&test_inc={incident.id}#regel-{rule.id}"),
+        status_code=303,
+    )
 
 
 @router.post("/rules/{rule_id}/toggle")

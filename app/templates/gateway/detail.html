@@ -132,6 +132,11 @@
 /* Regeln */
 .gwx-rule { border: 1px solid var(--g-line); border-radius: 10px; background: var(--g-s2); overflow: hidden; }
 .gwx-rule + .gwx-rule { margin-top: 10px; }
+.gwx-rule.gwx-ghost { opacity: .4; }
+.gwx-rule.gwx-chosen { border-color: var(--g-primary-c); }
+.gwx-drag { cursor: grab; color: var(--g-dim); font-size: 1.1rem; line-height: 1; padding: 0 2px;
+  user-select: none; touch-action: none; }
+.gwx-drag:active { cursor: grabbing; }
 .gwx-rule__hd { display: flex; align-items: center; gap: 12px; padding: 11px 13px; cursor: pointer; }
 .gwx-rule__hd:hover { background: var(--g-s3); }
 .gwx-rule__name { font-weight: 700; }
@@ -207,6 +212,9 @@
     {% if q.get('test') %}<div class="gwx-alert gwx-alert--info">Testseite gesendet.</div>{% endif %}
     {% if q.get('error') == 'rule_dup' %}<div class="gwx-alert gwx-alert--err">Regelname bereits vergeben.</div>{% endif %}
     {% if q.get('error') == 'printer' %}<div class="gwx-alert gwx-alert--err">Bitte Name und IP angeben.</div>{% endif %}
+    {% if q.get('test_ok') %}<div class="gwx-alert gwx-alert--ok">Testdruck ausgelöst: {{ q.get('test_ok') }} Auftrag/Aufträge{% if q.get('test_inc') %} (Einsatz #{{ q.get('test_inc') }}){% endif %} an die Zieldrucker gesendet.</div>{% endif %}
+    {% if q.get('test_err') == 'printer' %}<div class="gwx-alert gwx-alert--err">Testdruck: Der Regel ist kein Zieldrucker zugewiesen.</div>{% endif %}
+    {% if q.get('test_err') == 'incident' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen Einsatz zum Testen.</div>{% endif %}
 
     {# ── Status-Kacheln ── #}
     {% set aktive_drucker = printers | selectattr('aktiv') | list %}
@@ -461,10 +469,14 @@
             {% if not rules %}
             <div class="gwx-empty">Noch keine Druckregel. Lege eine an, um bei Alarm automatisch zu drucken.</div>
             {% else %}
+            <p style="font-size:.76rem;color:var(--g-dim);margin:0 0 10px;">⠿ Ziehen ändert die Reihenfolge – obere Regeln werden zuerst ausgewertet.</p>
+            <div id="gwx-rule-list" data-gw="{{ gw.id }}">
             {% for r in rules %}
             {% set f = r.filters or {} %}{% set o = r.options or {} %}{% set fenster = f.get('zeitfenster') or {} %}
-            <div class="gwx-rule" id="regel-{{ r.id }}" x-data="{ open: {{ 'true' if q.get('rule_created')|string == r.id|string else 'false' }} }">
+            <div class="gwx-rule" id="regel-{{ r.id }}" data-rule-id="{{ r.id }}"
+                 x-data="{ open: {{ 'true' if q.get('rule_created')|string == r.id|string else 'false' }} }">
               <div class="gwx-rule__hd" @click="open=!open">
+                <span class="gwx-drag" title="Ziehen zum Sortieren" @click.stop>⠿</span>
                 <span x-text="open ? '▾' : '▸'" class="gwx-mono" style="color:var(--g-dim);"></span>
                 <div style="flex:1;min-width:0;">
                   <div class="gwx-rule__name">{{ r.name }}
@@ -481,6 +493,12 @@
                   </div>
                 </div>
                 <div class="gwx-inline" @click.stop>
+                  <form method="post" action="/gateway/rules/{{ r.id }}/test"
+                        onsubmit="return confirm('Diese Regel jetzt als Testdruck gegen den letzten Einsatz ausfuehren?')">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <input type="hidden" name="gw" value="{{ gw.id }}">
+                    <button class="gwx-btn gwx-btn--sm" type="submit" title="Regel gegen den letzten Einsatz testen">🧪 Testdruck</button>
+                  </form>
                   <form method="post" action="/gateway/rules/{{ r.id }}/toggle">
                     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                     <input type="hidden" name="gw" value="{{ gw.id }}">
@@ -502,8 +520,6 @@
                         {% for key, label in trigger_labels.items() %}
                         <option value="{{ key }}" {{ 'selected' if r.trigger==key }}>{{ label }}</option>{% endfor %}
                       </select></div>
-                    <div class="gwx-field"><label class="gwx-label">Priorität (0 = zuerst)</label>
-                      <input class="gwx-input gwx-input--mono" type="number" name="sort_order" value="{{ r.sort_order }}"></div>
                   </div>
 
                   <div class="gwx-sechd">📄 Inhalte (Dokumente)</div>
@@ -587,6 +603,7 @@
               </div>
             </div>
             {% endfor %}
+            </div>
             {% endif %}
           </div>
         </div>
@@ -640,4 +657,39 @@
     </div>
   </div>
 </div>
+
+{% if rules %}
+<script>
+  // Regel-Reihenfolge per Drag&Drop (SortableJS ist global via base.html geladen).
+  // DOMContentLoaded: laeuft nach den deferred Skripten (Sortable + csrf.js-fetch-Patch).
+  window.addEventListener('DOMContentLoaded', function () {
+    var list = document.getElementById('gwx-rule-list');
+    if (!list || typeof Sortable === 'undefined') return;
+    var gw = list.dataset.gw;
+    new Sortable(list, {
+      handle: '.gwx-drag',
+      draggable: '.gwx-rule',
+      animation: 150,
+      ghostClass: 'gwx-ghost',
+      chosenClass: 'gwx-chosen',
+      onEnd: function () {
+        var ids = Array.prototype.map.call(
+          list.querySelectorAll('.gwx-rule'),
+          function (el) { return parseInt(el.dataset.ruleId, 10); }
+        );
+        var body = new URLSearchParams();
+        body.set('order', JSON.stringify(ids));
+        if (gw) body.set('gw', gw);
+        // csrf.js patcht window.fetch und setzt den X-CSRF-Token-Header automatisch.
+        fetch('/gateway/rules/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+          credentials: 'same-origin',
+        }).catch(function () {});
+      },
+    });
+  });
+</script>
+{% endif %}
 {% endblock %}

@@ -19,10 +19,17 @@
   setTimeout(function () { karte.invalidateSize(); }, 200);
   window.addEventListener("resize", function () { karte.invalidateSize(); });
 
-  function icon(kat, aktiv) {
-    var c = aktiv ? (COLOR[kat] || COLOR.loeschwasser) : "#8c909f";
-    var style = "background:" + c + ";";
-    style += aktiv ? "box-shadow:0 0 9px " + c + ";" : "opacity:.55;border-style:dashed;";
+  // status: 'bereit' | 'wartung' | 'defekt' (Fallback: bereit)
+  function icon(kat, status) {
+    var base = COLOR[kat] || COLOR.loeschwasser;
+    var style;
+    if (status === "defekt") {
+      style = "background:#8c909f;opacity:.55;border-style:dashed;";
+    } else if (status === "wartung") {
+      style = "background:" + base + ";border-color:#ffb95f;box-shadow:0 0 9px #ffb95f;";
+    } else {
+      style = "background:" + base + ";box-shadow:0 0 9px " + base + ";";
+    }
     return L.divIcon({
       html: '<div class="wsx-marker" style="' + style + '">' + (TEXT[kat] || "≈") + "</div>",
       className: "wsx-marker-wrap", iconSize: null, iconAnchor: [9, 9]
@@ -41,11 +48,13 @@
       if (!d) { return; }
       (d.wasserstellen || []).forEach(function (w) {
         if (w.lat == null || w.lng == null) { return; }
-        var m = L.marker([w.lat, w.lng], { icon: icon(w.icon_kat, w.aktiv) }).addTo(karte);
+        var m = L.marker([w.lat, w.lng], { icon: icon(w.icon_kat, w.status) }).addTo(karte);
         var flow = (w.ergiebigkeit_l_min != null)
           ? '<br><span style="opacity:.7;">' + w.ergiebigkeit_l_min + " l/min</span>" : "";
+        var st = (w.status && w.status !== "bereit")
+          ? '<br><em>' + escapeHtml(w.status_label || w.status) + "</em>" : "";
         m.bindPopup("<strong>" + escapeHtml(w.bezeichnung) + "</strong><br>"
-          + escapeHtml(w.typ_label) + flow + (w.aktiv ? "" : "<br><em>inaktiv</em>"));
+          + escapeHtml(w.typ_label) + flow + st);
         bounds.push([w.lat, w.lng]);
       });
       if (bounds.length) { karte.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 }); }
@@ -60,7 +69,7 @@
     setVal("ws-neu-lat", lat);
     setVal("ws-neu-lng", lng);
     if (tempMarker) { karte.removeLayer(tempMarker); }
-    tempMarker = L.marker([lat, lng], { icon: icon("ueberflur", true) }).addTo(karte)
+    tempMarker = L.marker([lat, lng], { icon: icon("ueberflur", "bereit") }).addTo(karte)
       .bindPopup("Neue Wasserstelle hier").openPopup();
   });
 
