@@ -25,6 +25,20 @@
                      overflow: hidden; touch-action: none; }
   #anno-stage { touch-action: none; }
   #anno-stage canvas { background: #fff; }
+  /* Picker (taktische Zeichen / Flächen) als Bottom-Sheet */
+  .anno-tz { position: absolute; left: 0; right: 0; bottom: 0; max-height: 48%; overflow-y: auto;
+             background: #1a221a; border-top: 1px solid rgba(255,255,255,.15); padding: 12px 16px 18px;
+             z-index: 20; box-shadow: 0 -8px 24px rgba(0,0,0,.45); }
+  .anno-tz__search { width: 100%; max-width: 340px; padding: 9px 11px; margin-bottom: 10px;
+                     border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: #0d150f; color: #dce5d9; }
+  .anno-tz__h { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa3b2; margin: 10px 0 6px; }
+  .anno-tz__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-bottom: 6px; }
+  .anno-tz__item { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 6px;
+                   min-height: 44px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+                   background: #242c24; color: #dce5d9; cursor: pointer; }
+  .anno-tz__item img { width: 42px; height: 42px; object-fit: contain; background: #fff; border-radius: 4px; }
+  .anno-tz__item span { font-size: .7rem; text-align: center; line-height: 1.15; }
+  .anno-tz__item:hover { border-color: rgba(147,197,253,.5); }
 </style>
 {% endblock %}
 {% block content %}
@@ -40,6 +54,7 @@
       <button type="button" class="anno-btn" data-anno-tool="x" title="X-Markierung">✖</button>
       <button type="button" class="anno-btn" data-anno-tool="text" title="Text">T</button>
       <button type="button" class="anno-btn" data-anno-tool="eraser" title="Element löschen">⌫</button>
+      <button type="button" class="anno-btn" data-anno-panel="tz" title="Taktische Zeichen / Flächen">⬦</button>
     </div>
     <div class="anno__sep"></div>
     <div class="anno__grp" aria-label="Farbe">
@@ -73,6 +88,7 @@
     <button type="button" class="btn btn--primary btn--sm" data-anno-action="done">✓ Fertig</button>
   </div>
   <div class="anno__stagewrap"><div id="anno-stage"></div></div>
+  <div id="anno-tz" class="anno-tz" style="display:none;"></div>
 </div>
 
 <script>

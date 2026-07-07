@@ -1,0 +1,21 @@
+{
+  "symbole": [
+    { "id": "gefahr_allgemein",    "name": "Gefahr allgemein",       "such": "gefahr warnung achtung allgemein", "datei": "/static/tz/symbole/gefahr_allgemein.svg" },
+    { "id": "gefahr_ueberflutung", "name": "Gefahr Überflutung",     "such": "wasser hochwasser flut ueberflutung 9.8", "datei": "/static/tz/symbole/gefahr_ueberflutung.svg" },
+    { "id": "gefahr_explosion",    "name": "Gefahr Explosion",       "such": "ex explosion 9.9", "datei": "/static/tz/symbole/gefahr_explosion.svg" },
+    { "id": "schaden_allgemein",   "name": "Schaden allgemein",      "such": "schaden allgemein 10.1", "datei": "/static/tz/symbole/schaden_allgemein.svg" },
+    { "id": "feuerwehrfahrzeug",   "name": "Feuerwehrfahrzeug",      "such": "fahrzeug feuerwehr lf tlf kdo einheit", "datei": "/static/tz/symbole/feuerwehrfahrzeug.svg" }
+  ],
+  "flaechen": [
+    { "id": "einsatzgebiet",   "name": "Einsatzgebiet",           "such": "einsatz gebiet",              "stroke": "#1f4ed8", "dash": true },
+    { "id": "mure",            "name": "Mure, Lawine, Erdrutsch", "such": "mure lawine erdrutsch hang",  "stroke": "#c81e1e", "hatch": "horiz", "hatchColor": "#c81e1e" },
+    { "id": "schadensgebiet",  "name": "Schadensgebiet",          "such": "schaden gebiet",              "stroke": "#c81e1e" },
+    { "id": "stellflaeche",    "name": "Stellfläche",             "such": "stellflaeche stellplatz bereitstellung", "stroke": "#333333", "hatch": "diag", "hatchColor": "#111111", "bg": "rgba(150,150,150,0.35)" },
+    { "id": "suchgebiet",      "name": "Suchgebiet",              "such": "suche suchgebiet",            "stroke": "#7c3aed", "hatch": "diag", "hatchColor": "#7c3aed" },
+    { "id": "suchgebiet_ab",   "name": "Suchgebiet abgesucht",    "such": "suche abgesucht",             "stroke": "#f0796b", "hatch": "diag", "hatchColor": "#f0796b" },
+    { "id": "ueberflutung",    "name": "Überflutungsgebiet",      "such": "wasser hochwasser flut ueberflutung", "stroke": "#2563eb", "hatch": "diag", "hatchColor": "#2563eb" },
+    { "id": "verseucht",       "name": "Verseuchtes Gebiet",      "such": "verseucht gefahrstoff kontamination abc", "stroke": "#16a34a", "hatch": "diag", "hatchColor": "#16a34a" },
+    { "id": "zerstoert",       "name": "Zerstörtes Gebiet",       "such": "zerstoert zerstoerung",       "stroke": "#7f1d1d", "hatch": "diag", "hatchColor": "#7f1d1d" },
+    { "id": "brand",           "name": "Brandbereich",            "such": "brand feuer brandbereich",    "stroke": "#dc2626", "hatch": "diag", "hatchColor": "#dc2626" }
+  ]
+}

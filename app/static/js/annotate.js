@@ -16,6 +16,11 @@
   var saveTimer = null, dirty = false, saving = false;
   var UNDO_MAX = 60;
 
+  // Taktische Zeichen / Flaechen (aus /static/tz/tz-manifest.json)
+  var TZ = { symbole: {}, flaechen: {} };
+  var imgCache = {};
+  var aktSymbol = null, aktFlaeche = null;
+
   function byId(id) { return document.getElementById(id); }
   function pos() { return annLayer.getRelativePointerPosition(); }
 
@@ -68,7 +73,7 @@
     ensureTransformer();
     var sel = (tool === "select");
     annLayer.getChildren().forEach(function (n) {
-      if (n !== tr) { n.draggable(sel); wireListeners(n); }
+      if (n !== tr) { hydrate(n); n.draggable(sel); wireListeners(n); }
     });
     annLayer.draw();
   }
@@ -116,6 +121,7 @@
     annLayer.getChildren().forEach(function (n) { if (n !== tr) { n.draggable(sel); } });
     if (!sel) { detachTr(); }
     if (stage) { stage.container().style.cursor = sel ? "default" : "crosshair"; }
+    markPickerAktiv();
   }
 
   // ── Auswahl / Radierer ─────────────────────────────────────────────────────
@@ -196,6 +202,58 @@
     annLayer.add(g); wireShape(g); markDirty(); annLayer.batchDraw();
   }
 
+  // ── Taktische Zeichen (Symbole) + Flaechen ──────────────────────────────────
+  function hatchTile(f) {
+    var c = document.createElement("canvas"); c.width = 14; c.height = 14;
+    var x = c.getContext("2d");
+    if (f.bg) { x.fillStyle = f.bg; x.fillRect(0, 0, 14, 14); }
+    x.strokeStyle = f.hatchColor || f.stroke; x.lineWidth = 3; x.lineCap = "round";
+    x.beginPath();
+    if (f.hatch === "horiz") {
+      x.moveTo(0, 4); x.lineTo(14, 4); x.moveTo(0, 10); x.lineTo(14, 10);
+    } else {  // diag
+      x.moveTo(0, 14); x.lineTo(14, 0);
+      x.moveTo(-4, 4); x.lineTo(4, -4);
+      x.moveTo(10, 18); x.lineTo(18, 10);
+    }
+    x.stroke();
+    return c;
+  }
+  function applyFlaeche(rect, f) {
+    rect.stroke(f.stroke); rect.strokeWidth(3);
+    rect.dash(f.dash ? [12, 7] : []);
+    if (f.hatch) { rect.fillPatternImage(hatchTile(f)); rect.fillPatternRepeat("repeat"); }
+    else { rect.fill(null); }
+    rect.setAttr("annoType", "area"); rect.setAttr("flaeche", f.id);
+  }
+  function placeSymbol(item) {
+    var img = imgCache[item.datei];
+    if (!img) { img = new Image(); img.src = item.datei; imgCache[item.datei] = img; }
+    pushUndo();
+    var p = pos();
+    var s = Math.max(48, Math.min(natW, natH) * 0.09);
+    var node = new Konva.Image({ image: img, x: p.x - s / 2, y: p.y - s / 2, width: s, height: s });
+    node.setAttr("annoType", "symbol"); node.setAttr("symbolSrc", item.datei);
+    if (!img.complete) { img.onload = function () { annLayer.batchDraw(); }; }
+    annLayer.add(node); wireShape(node); markDirty(); annLayer.batchDraw();
+  }
+  // Nach Restore/Load die nicht serialisierten Teile (Bild-Bitmap, Muster) neu setzen
+  function hydrate(node) {
+    var t = node.getAttr && node.getAttr("annoType");
+    if (t === "symbol") {
+      var src = node.getAttr("symbolSrc");
+      if (src) {
+        var im = imgCache[src];
+        if (!im) { im = new Image(); im.src = src; imgCache[src] = im; }
+        node.image(im);
+        if (!im.complete) { im.onload = function () { node.image(im); annLayer.batchDraw(); }; }
+      }
+    } else if (t === "area") {
+      var f = TZ.flaechen[node.getAttr("flaeche")];
+      if (f && f.hatch) { node.fillPatternImage(hatchTile(f)); node.fillPatternRepeat("repeat"); }
+    }
+  }
+
   // ── Zeichnen (Freihand + Formen) ────────────────────────────────────────────
   function onDown(e) {
     if (!cfg.canWrite) { return; }
@@ -206,6 +264,7 @@
     if (tool === "text") { onTextPlace(e); return; }
     if (ev && ev.preventDefault) { ev.preventDefault(); }
     if (tool === "x") { placeX(); return; }
+    if (tool === "symbol") { if (aktSymbol) { placeSymbol(aktSymbol); } return; }
 
     pushUndo();
     drawing = true;
@@ -217,8 +276,9 @@
       shape = new Konva.Line({ points: [p.x, p.y, p.x, p.y], stroke: color, strokeWidth: width, lineCap: "round" });
     } else if (tool === "arrow") {
       shape = new Konva.Arrow({ points: [p.x, p.y, p.x, p.y], stroke: color, fill: color, strokeWidth: width, pointerLength: head, pointerWidth: head, lineCap: "round" });
-    } else if (tool === "rect") {
+    } else if (tool === "rect" || tool === "area") {
       shape = new Konva.Rect({ x: p.x, y: p.y, width: 0, height: 0, stroke: color, strokeWidth: width });
+      if (tool === "area" && aktFlaeche) { applyFlaeche(shape, aktFlaeche); }
     } else if (tool === "ellipse") {
       shape = new Konva.Ellipse({ x: p.x, y: p.y, radiusX: 0, radiusY: 0, stroke: color, strokeWidth: width });
     }
@@ -235,7 +295,7 @@
       var pts = shape.points(); pts.push(p.x, p.y); shape.points(pts);
     } else if (tool === "line" || tool === "arrow") {
       shape.points([startPt.x, startPt.y, p.x, p.y]);
-    } else if (tool === "rect") {
+    } else if (tool === "rect" || tool === "area") {
       shape.x(Math.min(startPt.x, p.x)); shape.y(Math.min(startPt.y, p.y));
       shape.width(Math.abs(p.x - startPt.x)); shape.height(Math.abs(p.y - startPt.y));
     } else if (tool === "ellipse") {
@@ -251,7 +311,7 @@
     if (shape) {
       var tooSmall = false;
       if (tool === "pen") { tooSmall = shape.points().length <= 2; }
-      else if (tool === "rect") { tooSmall = Math.abs(shape.width()) < 3 && Math.abs(shape.height()) < 3; }
+      else if (tool === "rect" || tool === "area") { tooSmall = Math.abs(shape.width()) < 3 && Math.abs(shape.height()) < 3; }
       else if (tool === "ellipse") { tooSmall = shape.radiusX() < 2 && shape.radiusY() < 2; }
       else if (tool === "line" || tool === "arrow") {
         var pt = shape.points(); tooSmall = Math.hypot(pt[2] - pt[0], pt[3] - pt[1]) < 5;
@@ -304,6 +364,9 @@
     document.querySelectorAll("[data-anno-tool]").forEach(function (b) {
       b.addEventListener("click", function () { setTool(b.getAttribute("data-anno-tool")); });
     });
+    document.querySelectorAll("[data-anno-panel]").forEach(function (b) {
+      b.addEventListener("click", function () { togglePanel(); });
+    });
     document.querySelectorAll("[data-anno-color]").forEach(function (b) {
       b.addEventListener("click", function () { color = b.getAttribute("data-anno-color"); setActive("[data-anno-color]", b); });
     });
@@ -328,6 +391,74 @@
     });
   }
 
+  // ── Picker (taktische Zeichen + Flaechen) ───────────────────────────────────
+  function markPickerAktiv() {
+    var b = document.querySelector('[data-anno-panel="tz"]');
+    if (b) { b.classList.toggle("is-active", tool === "symbol" || tool === "area"); }
+  }
+  function togglePanel(show) {
+    var el = byId("anno-tz"); if (!el) { return; }
+    var open = (show === undefined) ? (el.style.display === "none" || !el.style.display) : show;
+    el.style.display = open ? "block" : "none";
+  }
+  function recentAdd(kind, id) {
+    var r;
+    try { r = JSON.parse(localStorage.getItem("anno_tz_recent") || "[]"); } catch (e) { r = []; }
+    r = r.filter(function (x) { return !(x.kind === kind && x.id === id); });
+    r.unshift({ kind: kind, id: id });
+    try { localStorage.setItem("anno_tz_recent", JSON.stringify(r.slice(0, 8))); } catch (e) { /* ignore */ }
+  }
+  function flaecheSwatch(f) {
+    var c = document.createElement("canvas"); c.width = 30; c.height = 24;
+    var x = c.getContext("2d");
+    if (f.hatch) { x.fillStyle = x.createPattern(hatchTile(f), "repeat"); x.fillRect(0, 0, 30, 24); }
+    x.strokeStyle = f.stroke; x.lineWidth = 2;
+    if (f.dash) { x.setLineDash([5, 3]); }
+    x.strokeRect(1, 1, 28, 22);
+    return c.toDataURL();
+  }
+  function pickSymbol(item) { aktSymbol = item; setTool("symbol"); recentAdd("symbole", item.id); togglePanel(false); }
+  function pickFlaeche(item) { aktFlaeche = item; setTool("area"); recentAdd("flaechen", item.id); togglePanel(false); }
+  function itemEl(kind, item) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "anno-tz__item"; b.title = item.name;
+    b.setAttribute("data-such", item.such || "");
+    var media = kind === "symbole" ? item.datei : flaecheSwatch(item);
+    b.innerHTML = '<img src="' + media + '" alt=""><span>' + item.name + "</span>";
+    b.addEventListener("click", function () { kind === "symbole" ? pickSymbol(item) : pickFlaeche(item); });
+    return b;
+  }
+  function renderPicker(m) {
+    var el = byId("anno-tz"); if (!el) { return; }
+    el.innerHTML = '<input type="text" class="anno-tz__search" placeholder="Suchen …">';
+    function section(titel, kind, items) {
+      var box = document.createElement("div");
+      box.innerHTML = '<div class="anno-tz__h">' + titel + "</div>";
+      var grid = document.createElement("div"); grid.className = "anno-tz__grid";
+      items.forEach(function (it) { grid.appendChild(itemEl(kind, it)); });
+      box.appendChild(grid);
+      return box;
+    }
+    el.appendChild(section("Symbole", "symbole", m.symbole || []));
+    el.appendChild(section("Flächen", "flaechen", m.flaechen || []));
+    var such = el.querySelector(".anno-tz__search");
+    such.addEventListener("input", function () {
+      var q = such.value.toLowerCase().trim();
+      el.querySelectorAll(".anno-tz__item").forEach(function (b) {
+        var txt = b.title.toLowerCase() + " " + (b.getAttribute("data-such") || "");
+        b.style.display = (!q || txt.indexOf(q) !== -1) ? "" : "none";
+      });
+    });
+  }
+  function loadManifest() {
+    var url = cfg.tzManifest || "/static/tz/tz-manifest.json";
+    fetch(url).then(function (r) { return r.json(); }).then(function (m) {
+      (m.symbole || []).forEach(function (s) { TZ.symbole[s.id] = s; var im = new Image(); im.src = s.datei; imgCache[s.datei] = im; });
+      (m.flaechen || []).forEach(function (f) { TZ.flaechen[f.id] = f; });
+      renderPicker(m);
+    }).catch(function () { /* Picker optional */ });
+  }
+
   // ── Init ───────────────────────────────────────────────────────────────────
   function initStage(img) {
     natW = img.naturalWidth || img.width;
@@ -347,7 +478,7 @@
     }
     stage.add(annLayer);
     ensureTransformer();
-    annLayer.getChildren().forEach(function (n) { if (n !== tr) { wireListeners(n); n.draggable(false); } });
+    annLayer.getChildren().forEach(function (n) { if (n !== tr) { hydrate(n); wireListeners(n); n.draggable(false); } });
 
     fit();
     window.addEventListener("resize", fit);
@@ -373,6 +504,7 @@
 
   function boot() {
     bindToolbar();
+    loadManifest();
     var c0 = document.querySelector('[data-anno-color]');
     var w0 = document.querySelector('[data-anno-width="9"]') || document.querySelector('[data-anno-width]');
     var ts0 = document.querySelector('[data-anno-textsize="40"]') || document.querySelector('[data-anno-textsize]');
