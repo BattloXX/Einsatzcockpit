@@ -96,8 +96,11 @@
     stageId: "anno-stage",
     bildUrl: {{ bild_url | tojson }},
     saveUrl: "/api/annotation/{{ media_typ }}/{{ media_id }}",
+    lockUrl: "/api/annotation/{{ media_typ }}/{{ media_id }}/lock",
     annotationJson: {{ annotation_json | tojson }},
     canWrite: {{ 'true' if can_write else 'false' }},
+    lockOther: {{ 'true' if lock_other else 'false' }},
+    lockName: {{ lock_name | tojson }},
     csrf: {{ request.state.csrf_token | tojson }},
     backUrl: document.referrer || "/"
   };

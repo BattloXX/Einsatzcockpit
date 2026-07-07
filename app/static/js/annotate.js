@@ -13,7 +13,7 @@
   var tool = "pen", color = "#e11d1d", width = 9, textSize = 40;
   var drawing = false, shape = null, startPt = null;
   var undoStack = [], redoStack = [];
-  var saveTimer = null, dirty = false, saving = false;
+  var saveTimer = null, dirty = false, saving = false, lockHeartbeat = null;
   var UNDO_MAX = 60;
 
   // Taktische Zeichen / Flaechen (aus /static/tz/tz-manifest.json)
@@ -444,7 +444,27 @@
   function bufferOffline(body) {
     try { sessionStorage.setItem("anno_buffer_" + cfg.saveUrl, body); } catch (e) { /* ignore */ }
   }
+  function resendBuffered() {
+    var b;
+    try { b = sessionStorage.getItem("anno_buffer_" + cfg.saveUrl); } catch (e) { return; }
+    if (!b) { return; }
+    fetch(cfg.saveUrl, {
+      method: "PUT", headers: { "Content-Type": "application/json", "X-CSRF-Token": cfg.csrf }, body: b,
+    }).then(function (r) {
+      if (r.ok) { try { sessionStorage.removeItem("anno_buffer_" + cfg.saveUrl); } catch (e) { /* ignore */ } }
+    }).catch(function () { /* beim naechsten Mal erneut */ });
+  }
   function setStatus(txt) { var el = byId("anno-status"); if (el) { el.textContent = txt; } }
+
+  // ── Soft-Lock (Heartbeat) ───────────────────────────────────────────────────
+  function lockRefresh() {
+    if (!cfg.canWrite || !cfg.lockUrl) { return; }
+    fetch(cfg.lockUrl, { method: "POST", headers: { "X-CSRF-Token": cfg.csrf } }).catch(function () {});
+  }
+  function lockRelease() {
+    if (!cfg.canWrite || !cfg.lockUrl) { return; }
+    try { fetch(cfg.lockUrl, { method: "DELETE", headers: { "X-CSRF-Token": cfg.csrf }, keepalive: true }); } catch (e) { /* ignore */ }
+  }
 
   // ── Toolbar ────────────────────────────────────────────────────────────────
   function setActive(selector, aktiv) {
@@ -595,7 +615,9 @@
     window.addEventListener("keyup", function (e) { if (e.code === "Space") { spaceDown = false; } });
     setTool(cfg.canWrite ? "pen" : "select");
     aktualisiereButtons();
-    setStatus(cfg.canWrite ? "bereit" : "schreibgeschützt");
+    setStatus(cfg.lockOther
+      ? ("⚠ wird gerade von " + (cfg.lockName || "jemand") + " bearbeitet")
+      : (cfg.canWrite ? "bereit" : "schreibgeschützt"));
   }
 
   function boot() {
@@ -614,10 +636,16 @@
     img.onerror = function () { setStatus("Bild konnte nicht geladen werden"); };
     img.src = cfg.bildUrl;
 
-    window.addEventListener("pagehide", function () { if (dirty) { save(true); } });
+    window.addEventListener("pagehide", function () { if (dirty) { save(true); } lockRelease(); });
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "hidden" && dirty) { save(true); }
     });
+
+    // Soft-Lock: Heartbeat + Offline-Puffer nachsenden (Warnung setzt initStage)
+    if (cfg.canWrite) {
+      resendBuffered();
+      lockHeartbeat = setInterval(lockRefresh, 60000);
+    }
   }
 
   if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", boot); }

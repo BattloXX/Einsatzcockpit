@@ -29,14 +29,21 @@ def strip_font_face_for_xhtml2pdf(html_str: str) -> str:
 
 
 def _media_b64_uri(media) -> str:
-    """Returns a base64 data URI for an image media object, or '' if unavailable."""
+    """Returns a base64 data URI for an image media object, or '' if unavailable.
+
+    Bevorzugt die annotierte Version (flaches PNG liegt als {stem}_annotated.png
+    neben dem Original), damit Einzeichnungen im Einsatzbericht erscheinen.
+    """
     if media.kind != "image":
         return ""
-    path = Path(settings.MEDIA_STORAGE_DIR) / media.storage_path
+    orig = Path(settings.MEDIA_STORAGE_DIR) / media.storage_path
+    annotated = orig.with_name(orig.stem + "_annotated.png")
+    path = annotated if annotated.exists() else orig
     if not path.exists():
         return ""
     data = path.read_bytes()
-    return f"data:{media.mime_type};base64,{base64.b64encode(data).decode()}"
+    mime = "image/png" if path.suffix.lower() == ".png" else media.mime_type
+    return f"data:{mime};base64,{base64.b64encode(data).decode()}"
 
 
 def _media_file_exists(media) -> bool:

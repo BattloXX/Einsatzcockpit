@@ -23,7 +23,7 @@ def _lade_media(db: Session, media_typ: str, media_id: int):  # type: ignore[no-
     media = ann_svc.resolve_media(db, media_typ, media_id)
     if media is None:
         raise HTTPException(status_code=404, detail="Medium nicht gefunden")
-    if not ann_svc.is_annotatable(media):
+    if not ann_svc.is_annotatable(media_typ, media):
         raise HTTPException(status_code=400, detail="Nur Bilder koennen annotiert werden")
     return media
 
@@ -40,15 +40,21 @@ def annotate_editor(
     if not ann_svc.can_read(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Zugriff")
     ann = ann_svc.get_annotation(db, media_typ, media_id)
-    spec = ann_svc.spec_for(media_typ)
+    can_write = ann_svc.can_write(db, user, media_typ, media)
+    lock = {"locked_by_other": False, "name": None}
+    if can_write:
+        lock = ann_svc.acquire_lock(db, media_typ, media_id, getattr(media, "org_id", None), user)
+        db.commit()
     return templates.TemplateResponse(request, "annotate/editor.html", {
         "user": user,
         "media_typ": media_typ,
         "media_id": media_id,
-        "bild_url": spec.bild_url(media),
+        "bild_url": f"/annotieren/{media_typ}/{media_id}/original",
         "annotation_json": (ann.annotation_json if ann else "") or "",
         "dateiname": getattr(media, "original_filename", ""),
-        "can_write": ann_svc.can_write(db, user, media_typ, media),
+        "can_write": can_write,
+        "lock_other": lock["locked_by_other"],
+        "lock_name": lock["name"] or "",
     })
 
 
@@ -91,6 +97,51 @@ def annotate_display(
     # PNG (annotiert) oder Original-MIME
     mime = "image/png" if path.suffix.lower() == ".png" else getattr(media, "mime_type", "image/jpeg")
     return FileResponse(path, media_type=mime)
+
+
+@router.get("/annotieren/{media_typ}/{media_id}/original")
+def annotate_original(
+    media_typ: str,
+    media_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly")),
+):
+    """Original-Bild (Editor-Hintergrund) — immer das Original, nie die annotierte Version."""
+    media = _lade_media(db, media_typ, media_id)
+    if not ann_svc.can_read(db, user, media_typ, media):
+        raise HTTPException(status_code=403, detail="Kein Zugriff")
+    p = ann_svc.original_abs_path(media_typ, media)
+    if not p or not p.exists():
+        return Response(status_code=404)
+    return FileResponse(p, media_type=getattr(media, "mime_type", None) or "image/jpeg")
+
+
+@router.post("/api/annotation/{media_typ}/{media_id}/lock")
+def annotate_lock(
+    media_typ: str,
+    media_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    media = _lade_media(db, media_typ, media_id)
+    if not ann_svc.can_write(db, user, media_typ, media):
+        raise HTTPException(status_code=403, detail="Kein Schreibrecht")
+    info = ann_svc.acquire_lock(db, media_typ, media_id, getattr(media, "org_id", None), user)
+    db.commit()
+    return JSONResponse(info)
+
+
+@router.delete("/api/annotation/{media_typ}/{media_id}/lock")
+def annotate_unlock(
+    media_typ: str,
+    media_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    ann_svc.release_lock(db, media_typ, media_id, user)
+    db.commit()
+    return JSONResponse({"ok": True})
 
 
 # ── Objektübernahme (Feature B) ──────────────────────────────────────────────

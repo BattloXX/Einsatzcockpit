@@ -21,9 +21,11 @@ from app.services import annotation_service as ann
 
 @pytest.fixture()
 def db():
+    from app.core.tenant import set_tenant_context
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
+    set_tenant_context(session, None)
     yield session
     session.close()
     Base.metadata.drop_all(bind=engine)
@@ -45,16 +47,16 @@ _USER = SimpleNamespace(id=7)
 
 
 def test_registry_und_annotatable():
-    assert "task" in ann.registry()
-    assert ann.is_annotatable(SimpleNamespace(kind="image"))
-    assert not ann.is_annotatable(SimpleNamespace(kind="pdf"))
+    assert set(ann.registry()) == {"task", "message", "person", "site", "cross_marker", "lage_journal"}
+    assert ann.is_annotatable("task", SimpleNamespace(kind="image"))
+    assert not ann.is_annotatable("task", SimpleNamespace(kind="pdf"))
 
 
 def test_save_schreibt_flaches_png_und_vektordaten(db, media, tmp_path):
     a = ann.save_annotation(db, _USER, "task", media, '{"attrs":{},"className":"Layer"}', _PNG)
     db.commit()
-    assert a.annotated_file is not None
-    abs_png = tmp_path / a.annotated_file
+    assert a.annotated_file == "abc_annotated.png"      # Dateiname-Marker neben dem Original
+    abs_png = ann._annotated_abs_path("task", media)
     assert abs_png.exists() and abs_png.read_bytes() == b"flaches-png-1"
     assert a.annotated_by == _USER.id and a.annotated_at is not None
     # get_annotation findet die Zeile wieder
@@ -96,6 +98,28 @@ def test_get_or_create_idempotent(db):
     a2 = ann.get_or_create(db, "task", 99, org_id=3)
     assert a1.id == a2.id
     assert db.query(MediaAnnotation).filter_by(media_typ="task", media_id=99).count() == 1
+
+
+def test_soft_lock_heartbeat_und_fremdlock(db):
+    from app.models.user import User
+    db.add(User(id=1, username="anna", display_name="Anna A.", password_hash="x", active=True))
+    db.flush()
+    userA, userB = SimpleNamespace(id=1), SimpleNamespace(id=2)
+
+    # A nimmt den Lock -> kein Fremd-Lock
+    assert ann.acquire_lock(db, "task", 500, 1, userA)["locked_by_other"] is False
+    db.commit()
+    # B oeffnet -> Fremd-Lock von A gemeldet (Last-write-wins: B uebernimmt trotzdem)
+    info = ann.acquire_lock(db, "task", 500, 1, userB)
+    db.commit()
+    assert info["locked_by_other"] is True and info["name"] == "Anna A."
+    # A kann den (jetzt B gehoerenden) Lock nicht freigeben, B schon
+    ann.release_lock(db, "task", 500, userA)
+    db.commit()
+    assert ann.get_annotation(db, "task", 500).locked_by == 2
+    ann.release_lock(db, "task", 500, userB)
+    db.commit()
+    assert ann.get_annotation(db, "task", 500).locked_by is None
 
 
 # ── Endpoint-Auth: ohne Login kein Zugriff ───────────────────────────────────

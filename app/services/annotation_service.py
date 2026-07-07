@@ -1,15 +1,19 @@
 """Resolver + Persistenz fuer die Bild-Annotation (media_typ-agnostisch).
 
 Kapselt den Zugriff auf die sechs Media-Typen hinter einer Registry, sodass
-Editor/Save/Serve typunabhaengig arbeiten. In PR1 ist nur `task` verdrahtet;
-weitere Typen werden in spaeteren PRs ergaenzt (Registry-Eintrag genuegt).
+Editor/Save/Serve/Lock typunabhaengig arbeiten:
+  - Einsatz: task_media, message_media, person_media   (media_service-Schema)
+  - GSL:     site_media, cross_marker_media, lage_journal_media (lage_media_service-Schema)
+
+Das flache PNG wird IMMER neben das Original geschrieben (…/{stem}_annotated.png);
+annotated_file traegt nur den Dateinamen als Marker -> unabhaengig vom Storage-Root.
 """
 from __future__ import annotations
 
 import base64
 import binascii
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -18,28 +22,59 @@ from sqlalchemy.orm import Session
 from app.core.permissions import has_role
 from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
 from app.models.user import User
-from app.services.media_service import _storage_root, absolute_path
+
+LOCK_TTL_SEC = 300  # Soft-Lock 5 Minuten (per Heartbeat verlaengert)
+_EDIT_ROLLEN = ("incident_leader", "admin", "recorder")
 
 
 @dataclass(frozen=True)
 class MediaSpec:
     typ: str
     model: type
-    # media-Objekt -> Original-Bild-URL (Editor-Hintergrund / Anzeige)
-    bild_url: Callable[[object], str]
-    # media-Objekt -> zugehoerige incident_id (fuer Zugriffspruefung); None wenn n/a
-    incident_id: Callable[[object], int | None]
+    kind_of: Callable[[object], str]          # media -> 'image'|'pdf'|'video'
+    abs_path: Callable[[object], Path]        # media -> Originaldatei
+    access: Callable[[Session, User, object], bool]
 
 
-def _task_bild_url(m) -> str:  # type: ignore[no-untyped-def]
-    return f"/medien/datei/{m.id}"
+def _may_access_incident(user: User, incident) -> bool:  # type: ignore[no-untyped-def]
+    if incident is None:
+        return False
+    if has_role(user, "system_admin"):
+        return True
+    if user.org_id and incident.primary_org_id == user.org_id:
+        return True
+    return any(io.org_id == user.org_id for io in (incident.collaborating_orgs or []))
 
 
-# Registry: pro media_typ ein Spec. PR1 = nur "task".
+def _access_incident(db: Session, user: User, media) -> bool:  # type: ignore[no-untyped-def]
+    from app.models.incident import Incident
+    return _may_access_incident(user, db.get(Incident, media.incident_id))
+
+
+def _access_org(db: Session, user: User, media) -> bool:  # type: ignore[no-untyped-def]
+    return has_role(user, "system_admin") or bool(user.org_id and media.org_id == user.org_id)
+
+
 def _build_registry() -> dict[str, MediaSpec]:
-    from app.models.incident import TaskMedia
+    from app.models.incident import MessageMedia, PersonMedia, TaskMedia
+    from app.models.major_incident import CrossMarkerMedia, LageJournalMedia, SiteMedia
+    from app.services.lage_media_service import (
+        cross_media_path,
+        journal_media_path,
+        site_media_path,
+    )
+    from app.services.media_service import absolute_path
+
+    def kind_ec(m): return getattr(m, "kind", None)          # task/message/person
+    def kind_gsl(m): return getattr(m, "media_type", None)   # site/cross/journal
+
     return {
-        "task": MediaSpec("task", TaskMedia, _task_bild_url, lambda m: m.incident_id),
+        "task":         MediaSpec("task", TaskMedia, kind_ec, absolute_path, _access_incident),
+        "message":      MediaSpec("message", MessageMedia, kind_ec, absolute_path, _access_incident),
+        "person":       MediaSpec("person", PersonMedia, kind_ec, absolute_path, _access_incident),
+        "site":         MediaSpec("site", SiteMedia, kind_gsl, site_media_path, _access_org),
+        "cross_marker": MediaSpec("cross_marker", CrossMarkerMedia, kind_gsl, cross_media_path, _access_org),
+        "lage_journal": MediaSpec("lage_journal", LageJournalMedia, kind_gsl, journal_media_path, _access_org),
     }
 
 
@@ -58,48 +93,22 @@ def spec_for(media_typ: str) -> MediaSpec | None:
 
 
 def resolve_media(db: Session, media_typ: str, media_id: int):  # type: ignore[no-untyped-def]
-    """Media-Zeile zu (typ, id) laden oder None."""
     spec = spec_for(media_typ)
-    if spec is None:
-        return None
-    return db.get(spec.model, media_id)
+    return db.get(spec.model, media_id) if spec else None
 
 
-def _incident_for(db: Session, spec: MediaSpec, media):  # type: ignore[no-untyped-def]
-    from app.models.incident import Incident
-    inc_id = spec.incident_id(media)
-    return db.get(Incident, inc_id) if inc_id else None
-
-
-def _may_access_incident(user: User, incident) -> bool:  # type: ignore[no-untyped-def]
-    """Muster ui_media._user_may_access_incident (hier inline, um Router-Import
-    zu vermeiden)."""
-    if incident is None:
-        return False
-    if has_role(user, "system_admin"):
-        return True
-    if user.org_id and incident.primary_org_id == user.org_id:
-        return True
-    return any(io.org_id == user.org_id for io in (incident.collaborating_orgs or []))
+def is_annotatable(media_typ: str, media) -> bool:  # type: ignore[no-untyped-def]
+    spec = spec_for(media_typ)
+    return bool(spec and media is not None and spec.kind_of(media) == "image")
 
 
 def can_read(db: Session, user: User, media_typ: str, media) -> bool:  # type: ignore[no-untyped-def]
     spec = spec_for(media_typ)
-    if spec is None or media is None:
-        return False
-    return _may_access_incident(user, _incident_for(db, spec, media))
+    return bool(spec and media is not None and spec.access(db, user, media))
 
 
 def can_write(db: Session, user: User, media_typ: str, media) -> bool:  # type: ignore[no-untyped-def]
-    """Schreibrecht = Lesezugriff auf den Host + Bearbeiter-Rolle."""
-    if not can_read(db, user, media_typ, media):
-        return False
-    return has_role(user, "incident_leader", "admin", "recorder")
-
-
-def is_annotatable(media) -> bool:  # type: ignore[no-untyped-def]
-    """Nur Bilder werden annotiert (keine PDFs/Videos)."""
-    return getattr(media, "kind", None) == "image"
+    return can_read(db, user, media_typ, media) and has_role(user, *_EDIT_ROLLEN)
 
 
 # ── Annotation-Zeile ─────────────────────────────────────────────────────────
@@ -121,67 +130,55 @@ def get_or_create(db: Session, media_typ: str, media_id: int, org_id: int | None
     return ann
 
 
-def _annotated_abs_path(media) -> Path:  # type: ignore[no-untyped-def]
-    """Pfad des flachen PNG neben dem Original (…/{stem}_annotated.png)."""
-    orig = absolute_path(media)
+def original_abs_path(media_typ: str, media) -> Path:  # type: ignore[no-untyped-def]
+    return spec_for(media_typ).abs_path(media)
+
+
+def _annotated_abs_path(media_typ: str, media) -> Path:  # type: ignore[no-untyped-def]
+    orig = original_abs_path(media_typ, media)
     return orig.with_name(orig.stem + "_annotated.png")
 
 
-def _annotated_rel_path(media) -> str:  # type: ignore[no-untyped-def]
-    return str(_annotated_abs_path(media).relative_to(_storage_root()))
-
-
 def save_annotation(
-    db: Session,
-    user: User,
-    media_typ: str,
-    media,  # type: ignore[no-untyped-def]
-    annotation_json: str,
-    png_data_url: str | None,
+    db: Session, user: User, media_typ: str, media,  # type: ignore[no-untyped-def]
+    annotation_json: str, png_data_url: str | None,
 ) -> MediaAnnotation:
-    """Speichert Vektordaten + optional das flache PNG (Data-URL). Archiviert den
-    vorherigen annotation_json-Stand in media_annotation_version."""
+    """Speichert Vektordaten + optional das flache PNG (neben dem Original).
+    Archiviert den vorherigen annotation_json-Stand."""
     ann = get_or_create(db, media_typ, media.id, getattr(media, "org_id", None))
-
-    # Vorstand archivieren (Nachvollziehbarkeit)
     if ann.annotation_json:
         db.add(MediaAnnotationVersion(
             annotation_id=ann.id, annotation_json=ann.annotation_json, created_by=user.id,
         ))
-
     ann.annotation_json = annotation_json
     ann.annotated_at = datetime.now(UTC)
     ann.annotated_by = user.id
 
-    # Flaches PNG aus Data-URL (data:image/png;base64,…) schreiben
     if png_data_url and "," in png_data_url:
-        b64 = png_data_url.split(",", 1)[1]
         try:
-            raw = base64.b64decode(b64)
+            raw = base64.b64decode(png_data_url.split(",", 1)[1])
         except (binascii.Error, ValueError):
             raw = None
         if raw:
-            abs_path = _annotated_abs_path(media)
+            abs_path = _annotated_abs_path(media_typ, media)
             abs_path.parent.mkdir(parents=True, exist_ok=True)
             abs_path.write_bytes(raw)
-            ann.annotated_file = _annotated_rel_path(media)
-
+            ann.annotated_file = abs_path.name
     db.flush()
     return ann
 
 
 def display_abs_path(db: Session, media_typ: str, media) -> Path | None:  # type: ignore[no-untyped-def]
-    """Anzuzeigende Datei: flaches annotiertes PNG falls vorhanden, sonst Original."""
+    """Flaches annotiertes PNG falls vorhanden, sonst das Original."""
     ann = get_annotation(db, media_typ, media.id)
     if ann and ann.annotated_file:
-        p = _storage_root() / ann.annotated_file
+        p = _annotated_abs_path(media_typ, media)
         if p.exists():
             return p
-    return absolute_path(media)
+    return original_abs_path(media_typ, media)
 
 
 def annotated_media_ids(db: Session, media_typ: str, media_ids: list[int]) -> set[int]:
-    """media_ids, fuer die ein flaches annotiertes PNG existiert (fuer Badge/Anzeige)."""
     if not media_ids:
         return set()
     rows = (
@@ -194,3 +191,37 @@ def annotated_media_ids(db: Session, media_typ: str, media_ids: list[int]) -> se
         .all()
     )
     return {r[0] for r in rows}
+
+
+# ── Soft-Lock (Heartbeat, TTL 5 min; Last-write-wins mit Warnung) ────────────
+
+def _lock_frisch(ann: MediaAnnotation) -> bool:
+    if not ann.locked_by or not ann.locked_at:
+        return False
+    la = ann.locked_at if ann.locked_at.tzinfo else ann.locked_at.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - la) < timedelta(seconds=LOCK_TTL_SEC)
+
+
+def lock_info(db: Session, ann: MediaAnnotation, user: User) -> dict:
+    """Fremd-Lock-Status (fuer die 'wird gerade bearbeitet'-Warnung)."""
+    if ann and _lock_frisch(ann) and ann.locked_by != user.id:
+        other = db.get(User, ann.locked_by)
+        return {"locked_by_other": True, "name": other.display_name if other else "jemand"}
+    return {"locked_by_other": False, "name": None}
+
+
+def acquire_lock(db: Session, media_typ: str, media_id: int, org_id: int | None, user: User) -> dict:
+    ann = get_or_create(db, media_typ, media_id, org_id)
+    info = lock_info(db, ann, user)          # Fremd-Lock VOR Uebernahme melden
+    ann.locked_by = user.id
+    ann.locked_at = datetime.now(UTC)
+    db.flush()
+    return info
+
+
+def release_lock(db: Session, media_typ: str, media_id: int, user: User) -> None:
+    ann = get_annotation(db, media_typ, media_id)
+    if ann and ann.locked_by == user.id:
+        ann.locked_by = None
+        ann.locked_at = None
+        db.flush()
