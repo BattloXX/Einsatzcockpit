@@ -88,14 +88,6 @@
         <div id="hydranten-liste"><span class="text-muted">Lade Löschwasser …</span></div>
       </div>
 
-      {% if objekt_enabled %}
-      <!-- Gefahren der Nachbarobjekte (Umkreis) -->
-      <div class="card" id="nachbar-gefahren-card" style="padding:14px;">
-        <h3 style="margin:0 0 10px;">⚠️ Gefahren in der Umgebung</h3>
-        <div id="nachbar-gefahren"><span class="text-muted">Lade Nachbar-Gefahren …</span></div>
-      </div>
-      {% endif %}
-
       <!-- Ausrückordnung -->
       {% if dispatch_vehicles %}
       <div class="card" style="padding:14px;">
@@ -136,6 +128,12 @@
             <a href="/einsatz/{{ incident.id }}" class="btn btn--sm btn--secondary">Im Board manuell verknüpfen</a>
           </div>
         {% endif %}
+
+        <!-- Gefahren der Nachbarobjekte (Umkreis) -->
+        <div class="card" id="nachbar-gefahren-card" style="padding:14px;">
+          <h3 style="margin:0 0 10px;">⚠️ Gefahren in der Umgebung</h3>
+          <div id="nachbar-gefahren"><span class="text-muted">Lade Nachbar-Gefahren …</span></div>
+        </div>
       {% endif %}
 
       <!-- Absprung ins Board -->
