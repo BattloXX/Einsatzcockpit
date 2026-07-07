@@ -388,6 +388,12 @@ class OrgSettings(Base):
     # Effektiv = Settings.HYDRANT_ENABLED AND dieser Wert.
     hydrant_layer_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # Print & Alarm Gateway (ECPG): je Org aktivierbar, effektiv = SystemSettings-Key
+    # "gateway_module_enabled" == "true" AND dieser Wert (Muster UAS/Objekt).
+    gateway_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Gateway gilt als offline nach N Minuten ohne Heartbeat → Admin-Benachrichtigung.
+    gateway_offline_alert_min: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+
     # GSL-Feature-Flags je Org (effektiv = SystemSettings-Globalschalter AND dieser Wert).
     # Default True = Modul aktiv sofern global nicht deaktiviert.
     mi_feature_stab:           Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

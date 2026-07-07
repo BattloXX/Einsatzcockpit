@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Gateway / Druck – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>&#x1F5A8; Gateway / Druck</h1>
+      <p class="page-header__sub">Lokale Print- & Alarm-Gateways verwalten</p>
+    </div>
+  </div>
+
+  {% if request.query_params.get('deleted') %}
+  <div class="alert alert--success">Gateway gelöscht.</div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Neues Gateway</h2>
+    <form method="post" action="/gateway/create" class="form-inline">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="text" name="name" placeholder="Name (z. B. Gerätehaus)" required maxlength="150">
+      <input type="text" name="standort" placeholder="Standort (optional)" maxlength="200">
+      <button type="submit" class="btn btn--primary">+ Gateway anlegen</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Gateways</h2>
+    {% if not gateways %}
+    <p class="muted">Noch kein Gateway angelegt.</p>
+    {% else %}
+    <table class="data-table">
+      <thead>
+        <tr><th>Name</th><th>Standort</th><th>Status</th><th>Version</th><th>Zuletzt gesehen</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for gw in gateways %}
+        <tr>
+          <td><a href="/gateway/{{ gw.id }}">{{ gw.name }}</a></td>
+          <td>{{ gw.standort or '–' }}</td>
+          <td>
+            {% if gw.status == 'online' and connected %}
+              <span class="badge badge--green">Online</span>
+            {% elif not gw.is_paired %}
+              <span class="badge badge--gray">Nicht gekoppelt</span>
+            {% else %}
+              <span class="badge badge--red">Offline</span>
+            {% endif %}
+          </td>
+          <td>{{ gw.version or '–' }}</td>
+          <td>{{ (gw.last_seen_at | local_datetime) if gw.last_seen_at else '–' }}</td>
+          <td><a href="/gateway/{{ gw.id }}" class="btn btn--ghost btn--sm">Verwalten</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

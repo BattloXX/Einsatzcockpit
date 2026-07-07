@@ -131,6 +131,12 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "objekt_seite_ki_vorschlag",
     # Wasserstellen-/Löschwasser-Stammdaten (TenantScoped via Mixin)
     "wasserstelle",
+    # Print & Alarm Gateway (ECPG) – TenantScoped via Mixin
+    "gateway",
+    "printer",
+    "print_job",
+    "alarm_ingest",
+    "print_rule",
     # GSL/Großschadenslage (SEC-1 Defense-in-Depth-Backstop) — bisher nur durch
     # ~95 manuelle _check_org_access()-Aufrufe in ui_major_incident.py geschützt;
     # ein vergessener Aufruf wäre ein Cross-Tenant-IDOR ohne DB-seitigen Schutz.

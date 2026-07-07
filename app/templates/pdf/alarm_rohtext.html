@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4 portrait; margin: 16mm 14mm; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #111; }
+  .kopf { border-bottom: 3px solid #b71921; padding-bottom: 6px; margin-bottom: 12px; }
+  h1 { font-size: 18pt; margin: 0; color: #b71921; }
+  .meta { font-size: 9pt; color: #666; margin-top: 4px; }
+  pre { white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', monospace;
+        font-size: 11pt; line-height: 1.35; border: 1px solid #ccc; padding: 10px; }
+</style>
+</head>
+<body>
+  <div class="kopf">
+    <h1>&#x1F6A8; Alarm – Originaltext</h1>
+    <div class="meta">
+      {% if received_at %}Empfangen: {{ received_at.strftime('%d.%m.%Y %H:%M:%S') }} (UTC){% endif %}
+    </div>
+  </div>
+  <pre>{{ raw_text }}</pre>
+</body>
+</html>

@@ -64,6 +64,38 @@ def generate_weather_dashboard_token() -> str:
     return "wxdb_" + secrets.token_urlsafe(32)
 
 
+def generate_gateway_token() -> str:
+    """Langlebiges Device-Token für den Print & Alarm Gateway-Container (nach Pairing)."""
+    return "ecpg_" + secrets.token_urlsafe(32)
+
+
+def generate_pairing_code() -> str:
+    """Kurzlebiger Einmal-Code fürs Gateway-Pairing (gut abtippbar)."""
+    # 8 Zeichen, keine leicht verwechselbaren (0/O, 1/I/l)
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+# ── ECPG: kurzlebige signierte Artifact-URLs (PDF-Download durchs Gateway) ─────
+# Das Gateway lädt fertige PDFs über eine signierte, kurzlebige URL – kein
+# generischer API-Zugriff auf Einsatzdaten.
+_artifact_signer = URLSafeTimedSerializer(settings.SECRET_KEY, salt="ecpg-artifact")
+ARTIFACT_TOKEN_MAX_AGE = 300  # 5 min
+
+
+def sign_artifact_token(job_id: int, org_id: int) -> str:
+    return _artifact_signer.dumps({"j": job_id, "o": org_id})
+
+
+def unsign_artifact_token(token: str) -> tuple[int, int] | None:
+    """Returns (job_id, org_id) or None (ungültig/abgelaufen/manipuliert)."""
+    try:
+        data = _artifact_signer.loads(token, max_age=ARTIFACT_TOKEN_MAX_AGE)
+        return (data["j"], data["o"])
+    except (BadSignature, SignatureExpired, KeyError, TypeError):
+        return None
+
+
 def sign_session(
     user_id: int,
     *,

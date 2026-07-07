@@ -1,0 +1,91 @@
+{# Wiederverwendbarer manueller Druck-Dialog (ECPG).
+   Einbinden auf Seiten mit gateway_enabled; öffnen via ecpgOpenPrintDialog(ctx),
+   ctx = {document_type?, incident_id?, gsl_id?, objekt_id?, artifact_ref?, title?}. #}
+<div id="ecpgPrintDialog" class="ecpg-modal" style="display:none">
+  <div class="ecpg-modal__box">
+    <h3 id="ecpgPrintTitle">Drucken</h3>
+    <form id="ecpgPrintForm">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="document_type" id="ecpgDocType">
+      <input type="hidden" name="incident_id" id="ecpgIncidentId">
+      <input type="hidden" name="gsl_id" id="ecpgGslId">
+      <input type="hidden" name="objekt_id" id="ecpgObjektId">
+      <input type="hidden" name="artifact_ref" id="ecpgArtifactRef">
+      <label>Drucker
+        <select name="printer_id" id="ecpgPrinter" required></select>
+      </label>
+      <label>Kopien
+        <input type="number" name="copies" value="1" min="1" max="20" style="width:5rem">
+      </label>
+      <label>Duplex
+        <select name="duplex">
+          <option value="off">einseitig</option>
+          <option value="long-edge">beidseitig (lange Kante)</option>
+          <option value="short-edge">beidseitig (kurze Kante)</option>
+        </select>
+      </label>
+      <div id="ecpgPrintMsg" class="ecpg-msg"></div>
+      <div class="ecpg-modal__actions">
+        <button type="button" class="btn btn--ghost" onclick="ecpgClosePrintDialog()">Abbrechen</button>
+        <button type="submit" class="btn btn--primary" id="ecpgPrintSubmit">Drucken</button>
+      </div>
+    </form>
+  </div>
+</div>
+<style>
+  .ecpg-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;
+    align-items:center;justify-content:center;z-index:1200}
+  .ecpg-modal__box{background:var(--card-bg,#fff);color:inherit;border-radius:10px;
+    padding:20px;max-width:420px;width:92%;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+  .ecpg-modal__box label{display:block;margin:10px 0}
+  .ecpg-modal__box select,.ecpg-modal__box input{margin-top:3px}
+  .ecpg-modal__actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+  .ecpg-msg{min-height:1.2em;font-size:.9em;margin-top:8px}
+  .ecpg-msg.err{color:#b71921}.ecpg-msg.ok{color:#137333}
+</style>
+<script>
+(function(){
+  let ctx = {};
+  window.ecpgOpenPrintDialog = async function(c){
+    ctx = c || {};
+    document.getElementById('ecpgPrintTitle').textContent = ctx.title || 'Drucken';
+    document.getElementById('ecpgDocType').value = ctx.document_type || 'einsatzinfo';
+    document.getElementById('ecpgIncidentId').value = ctx.incident_id || '';
+    document.getElementById('ecpgGslId').value = ctx.gsl_id || '';
+    document.getElementById('ecpgObjektId').value = ctx.objekt_id || '';
+    document.getElementById('ecpgArtifactRef').value = ctx.artifact_ref || '';
+    const msg = document.getElementById('ecpgPrintMsg'); msg.textContent=''; msg.className='ecpg-msg';
+    const sel = document.getElementById('ecpgPrinter');
+    sel.innerHTML = '<option>lädt…</option>';
+    document.getElementById('ecpgPrintDialog').style.display='flex';
+    try{
+      const r = await fetch('/gateway/printers.json'); const d = await r.json();
+      if(!d.connected){ msg.textContent='Hinweis: aktuell ist kein Gateway online – der Job wird nachgeholt.'; }
+      sel.innerHTML = (d.printers||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')
+        || '<option value="">kein aktiver Drucker</option>';
+      const last = localStorage.getItem('ecpg_last_printer');
+      if(last){ sel.value = last; }
+    }catch(e){ sel.innerHTML='<option value="">Fehler beim Laden</option>'; }
+  };
+  window.ecpgClosePrintDialog = function(){
+    document.getElementById('ecpgPrintDialog').style.display='none';
+  };
+  document.getElementById('ecpgPrintForm').addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    const btn = document.getElementById('ecpgPrintSubmit');
+    const msg = document.getElementById('ecpgPrintMsg');
+    btn.disabled = true; msg.className='ecpg-msg'; msg.textContent='Sende…';
+    const fd = new FormData(this);
+    localStorage.setItem('ecpg_last_printer', fd.get('printer_id'));
+    try{
+      const r = await fetch('/gateway/print/job', {method:'POST', body:fd});
+      const d = await r.json();
+      if(d.ok){ msg.className='ecpg-msg ok';
+        msg.textContent = 'Gesendet an ' + (d.printer||'Drucker') + ' (' + (d.status||'') + ')';
+        setTimeout(ecpgClosePrintDialog, 1400);
+      } else { msg.className='ecpg-msg err'; msg.textContent = d.error || 'Fehler'; }
+    }catch(e){ msg.className='ecpg-msg err'; msg.textContent='Netzwerkfehler'; }
+    finally{ btn.disabled=false; }
+  });
+})();
+</script>

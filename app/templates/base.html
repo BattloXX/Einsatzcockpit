@@ -77,6 +77,9 @@
           {% if request.state.objekt_enabled %}
           <a href="/objekte/" class="{% if request.url.path.startswith('/objekte') %}active{% endif %}">🏢 Objekte</a>
           {% endif %}
+          {% if request.state.gateway_enabled and user and (user.is_org_admin or user.is_system_admin) %}
+          <a href="/gateway" class="{% if request.url.path.startswith('/gateway') %}active{% endif %}">🖨️ Gateway / Druck</a>
+          {% endif %}
           <a href="/statistik" class="{% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
         </div>
       </div>
@@ -202,6 +205,9 @@
       {% endif %}
       {% if request.state.objekt_enabled %}
       <a href="/objekte/" class="mobile-menu__link {% if request.url.path.startswith('/objekte') %}active{% endif %}">🏢 Objekte</a>
+      {% endif %}
+      {% if request.state.gateway_enabled and user and (user.is_org_admin or user.is_system_admin) %}
+      <a href="/gateway" class="mobile-menu__link {% if request.url.path.startswith('/gateway') %}active{% endif %}">🖨️ Gateway / Druck</a>
       {% endif %}
       <a href="/statistik" class="mobile-menu__link {% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
     </nav>

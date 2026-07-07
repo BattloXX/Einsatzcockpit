@@ -104,6 +104,36 @@
         </div>
       </div>
     </form>
+
+    {% set _gateway_sys_on = sys_settings.get('gateway_module_enabled') == 'true' %}
+    <form method="post" action="/admin/settings/system/gateway-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+          <label style="font-weight:600">&#x1F5A8; Print &amp; Alarm Gateway</label>
+          <p class="form-hint" style="margin-top:.25rem">
+            Lokaler Docker-Container (Repo einsatzcockpit-gateway) für seriellen Leitstellen-Alarm
+            und Netzwerkdruck.<br>
+            Zweistufig schaltbar: erst systemweit an, dann je Organisation.
+            Ausschalten versteckt alle Ansichten &ndash; <strong>keine Daten werden gelöscht</strong>.
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" name="enabled_raw" value="1"
+                   {% if _gateway_sys_on %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <span>Systemweit aktivieren</span>
+          </label>
+          {% if _gateway_sys_on %}
+          <span class="badge badge--success">AN</span>
+          {% else %}
+          <span class="badge badge--muted">AUS</span>
+          {% endif %}
+        </div>
+      </div>
+    </form>
   </div>
 </section>
 {% endif %}
@@ -363,6 +393,25 @@
         </div>
       </div>
       {% endif %}
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F5A8; Print &amp; Alarm Gateway</h3>
+      {% set _gateway_org_on = (org_settings.gateway_module_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not gateway_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="gateway_module_enabled_raw" value="1"
+                 {% if _gateway_org_on %}checked{% endif %}
+                 {% if not gateway_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Print &amp; Alarm Gateway für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet die Gateway-/Drucker-/Druckregel-Verwaltung („Gateway / Druck") ein.
+          Der lokale Container wird per Einmal-Code gekoppelt (siehe Wiki).
+          {% if not gateway_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F697; Fahrtenbuch</h3>
       {% set _fb_on = (org_settings.fahrtenbuch_modul_aktiv) if org_settings else false %}
