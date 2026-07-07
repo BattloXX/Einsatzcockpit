@@ -1,0 +1,111 @@
+"""PR1 Bild-Annotation: Resolver + Persistenz (Vektor-JSON, flaches PNG, Versionen)."""
+import base64
+from types import SimpleNamespace
+
+import pytest
+from sqlalchemy import BigInteger, create_engine
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.orm import sessionmaker
+
+
+@compiles(BigInteger, "sqlite")
+def _bigint_sqlite(element, compiler, **kw):
+    return "INTEGER"
+
+
+from app.config import settings
+from app.db import Base
+from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
+from app.services import annotation_service as ann
+
+
+@pytest.fixture()
+def db():
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+    yield session
+    session.close()
+    Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture()
+def media(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "MEDIA_STORAGE_DIR", str(tmp_path))
+    rel = "task/1/abc.jpg"
+    p = tmp_path / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"original-jpg-bytes")
+    return SimpleNamespace(id=1, storage_path=rel, kind="image", org_id=5)
+
+
+_PNG = "data:image/png;base64," + base64.b64encode(b"flaches-png-1").decode()
+_PNG2 = "data:image/png;base64," + base64.b64encode(b"flaches-png-2").decode()
+_USER = SimpleNamespace(id=7)
+
+
+def test_registry_und_annotatable():
+    assert "task" in ann.registry()
+    assert ann.is_annotatable(SimpleNamespace(kind="image"))
+    assert not ann.is_annotatable(SimpleNamespace(kind="pdf"))
+
+
+def test_save_schreibt_flaches_png_und_vektordaten(db, media, tmp_path):
+    a = ann.save_annotation(db, _USER, "task", media, '{"attrs":{},"className":"Layer"}', _PNG)
+    db.commit()
+    assert a.annotated_file is not None
+    abs_png = tmp_path / a.annotated_file
+    assert abs_png.exists() and abs_png.read_bytes() == b"flaches-png-1"
+    assert a.annotated_by == _USER.id and a.annotated_at is not None
+    # get_annotation findet die Zeile wieder
+    assert ann.get_annotation(db, "task", 1).id == a.id
+    # Original unangetastet
+    assert (tmp_path / media.storage_path).read_bytes() == b"original-jpg-bytes"
+
+
+def test_zweiter_save_archiviert_vorstand(db, media):
+    ann.save_annotation(db, _USER, "task", media, "STAND-A", _PNG)
+    db.commit()
+    ann.save_annotation(db, _USER, "task", media, "STAND-B", _PNG2)
+    db.commit()
+    a = ann.get_annotation(db, "task", 1)
+    assert a.annotation_json == "STAND-B"
+    versionen = db.query(MediaAnnotationVersion).filter_by(annotation_id=a.id).all()
+    assert len(versionen) == 1 and versionen[0].annotation_json == "STAND-A"
+
+
+def test_display_pfad_bevorzugt_annotierte_version(db, media, tmp_path):
+    # ohne Annotation -> Original
+    assert ann.display_abs_path(db, "task", media) == tmp_path / media.storage_path
+    ann.save_annotation(db, _USER, "task", media, "X", _PNG)
+    db.commit()
+    # mit Annotation -> flaches PNG
+    p = ann.display_abs_path(db, "task", media)
+    assert p.suffix == ".png" and p.exists()
+
+
+def test_annotated_media_ids(db, media):
+    assert ann.annotated_media_ids(db, "task", [1, 2]) == set()
+    ann.save_annotation(db, _USER, "task", media, "X", _PNG)
+    db.commit()
+    assert ann.annotated_media_ids(db, "task", [1, 2]) == {1}
+
+
+def test_get_or_create_idempotent(db):
+    a1 = ann.get_or_create(db, "task", 99, org_id=3)
+    a2 = ann.get_or_create(db, "task", 99, org_id=3)
+    assert a1.id == a2.id
+    assert db.query(MediaAnnotation).filter_by(media_typ="task", media_id=99).count() == 1
+
+
+# ── Endpoint-Auth: ohne Login kein Zugriff ───────────────────────────────────
+
+def test_editor_endpoint_ohne_login(client):
+    r = client.get("/annotieren/task/123456", follow_redirects=False)
+    assert r.status_code in (302, 401, 403)
+
+
+def test_save_endpoint_ohne_login(client):
+    r = client.put("/api/annotation/task/123456",
+                   json={"annotation_json": "{}", "png": None}, follow_redirects=False)
+    assert r.status_code in (302, 401, 403)

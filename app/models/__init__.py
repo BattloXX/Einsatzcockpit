@@ -42,6 +42,7 @@ from app.models.major_incident import (
     StaffAssignment,
     StaffFunction,
 )
+from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
 from app.models.master import (
     AIPromptVersion,
     AlarmType,
@@ -172,4 +173,5 @@ __all__ = [
     "UASEinsatz", "UASEinsatzRolleEintrag", "UASFlug", "UASCheckliste",
     "UASEreignis", "UASKartenobjekt", "UASMedien",
     "AtemschutzGeraet", "AtemschutzPruefung", "AtemschutzPruefBenachrichtigung",
+    "MediaAnnotation", "MediaAnnotationVersion",
 ]

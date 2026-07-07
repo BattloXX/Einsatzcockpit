@@ -41,6 +41,7 @@ from app.routers import (
     ui_fahrtenbuch_admin,
     ui_gsl_staff,
     ui_hilfe,
+    ui_annotation,
     ui_incident,
     ui_infoscreen_alarm,
     ui_invitation,
@@ -445,6 +446,7 @@ app.include_router(ui_backup.router)
 app.include_router(ui_major_incident.router)
 app.include_router(ui_gsl_staff.router)
 app.include_router(ui_media.router)
+app.include_router(ui_annotation.router)
 app.include_router(ui_breathing.router)
 app.include_router(ui_archive.router)
 app.include_router(ui_hilfe.router)

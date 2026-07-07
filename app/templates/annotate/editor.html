@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Bild bearbeiten{% endblock %}
+{% block head_extra %}
+<style>
+  .anno { position: fixed; inset: 0; z-index: 4000; background: #0d150f; display: flex; flex-direction: column; }
+  .anno__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px;
+               background: #1a221a; border-bottom: 1px solid rgba(255,255,255,.12); }
+  .anno__grp { display: flex; align-items: center; gap: 6px; }
+  .anno__sep { width: 1px; height: 30px; background: rgba(255,255,255,.15); }
+  .anno__spacer { flex: 1 1 auto; }
+  .anno__status { color: #9aa3b2; font-size: .85rem; white-space: nowrap; }
+  /* Touch-Targets min. 44x44 (Handschuh-tauglich) */
+  .anno-btn { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+              font-size: 1.15rem; border: 1px solid rgba(255,255,255,.18); border-radius: 8px;
+              background: #242c24; color: #dce5d9; cursor: pointer; }
+  .anno-btn.is-active { background: rgba(147,197,253,.18); border-color: rgba(147,197,253,.5); }
+  .anno-btn:disabled { opacity: .4; cursor: default; }
+  .anno-color { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; padding: 0; }
+  .anno-color.is-active { border-color: #fff; box-shadow: 0 0 0 2px #000; }
+  .anno-width { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+                border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: #242c24; cursor: pointer; }
+  .anno-width.is-active { background: rgba(147,197,253,.18); border-color: rgba(147,197,253,.5); }
+  .anno-width i { display: block; border-radius: 999px; background: #dce5d9; }
+  .anno__stagewrap { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center;
+                     overflow: hidden; touch-action: none; }
+  #anno-stage { touch-action: none; }
+  #anno-stage canvas { background: #fff; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="anno">
+  <div class="anno__bar">
+    <div class="anno__grp">
+      <button type="button" class="anno-btn is-active" data-anno-tool="pen" title="Stift (Freihand)">✏️</button>
+    </div>
+    <div class="anno__sep"></div>
+    <div class="anno__grp" aria-label="Farbe">
+      <button type="button" class="anno-color" data-anno-color="#e11d1d" style="background:#e11d1d" title="Rot – Gefahr/Feuer"></button>
+      <button type="button" class="anno-color" data-anno-color="#2563eb" style="background:#2563eb" title="Blau – Wasser"></button>
+      <button type="button" class="anno-color" data-anno-color="#eab308" style="background:#eab308" title="Gelb – Hinweis"></button>
+      <button type="button" class="anno-color" data-anno-color="#16a34a" style="background:#16a34a" title="Grün – sicher"></button>
+      <button type="button" class="anno-color" data-anno-color="#111111" style="background:#111111" title="Schwarz"></button>
+      <button type="button" class="anno-color" data-anno-color="#ffffff" style="background:#ffffff;border-color:#888" title="Weiß"></button>
+    </div>
+    <div class="anno__sep"></div>
+    <div class="anno__grp" aria-label="Strichstärke">
+      <button type="button" class="anno-width" data-anno-width="4"  title="Dünn"><i style="width:6px;height:6px;"></i></button>
+      <button type="button" class="anno-width is-active" data-anno-width="9"  title="Mittel"><i style="width:11px;height:11px;"></i></button>
+      <button type="button" class="anno-width" data-anno-width="16" title="Dick"><i style="width:16px;height:16px;"></i></button>
+    </div>
+    <div class="anno__sep"></div>
+    <div class="anno__grp">
+      <button type="button" class="anno-btn" data-anno-action="undo" title="Rückgängig" disabled>↶</button>
+      <button type="button" class="anno-btn" data-anno-action="redo" title="Wiederholen" disabled>↷</button>
+      <button type="button" class="anno-btn" data-anno-action="clear" title="Alles löschen">🗑</button>
+    </div>
+    <div class="anno__spacer"></div>
+    <span class="anno__status" id="anno-status">…</span>
+    <button type="button" class="btn btn--primary btn--sm" data-anno-action="done">✓ Fertig</button>
+  </div>
+  <div class="anno__stagewrap"><div id="anno-stage"></div></div>
+</div>
+
+<script>
+  window.ANNOTATE_CONFIG = {
+    stageId: "anno-stage",
+    bildUrl: {{ bild_url | tojson }},
+    saveUrl: "/api/annotation/{{ media_typ }}/{{ media_id }}",
+    annotationJson: {{ annotation_json | tojson }},
+    canWrite: {{ 'true' if can_write else 'false' }},
+    csrf: {{ request.state.csrf_token | tojson }},
+    backUrl: document.referrer || "/"
+  };
+</script>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/konva.min.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/annotate.js?v={{ ASSET_VERSION }}"></script>
+{% endblock %}
