@@ -76,6 +76,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     sys_settings = {s.key: s.value for s in db.query(SystemSettings).all()} if is_sysadmin else {}
     from app.models.weather import WeatherStation
+    from app.services.gateway_service import gateway_system_enabled as _gateway_system_enabled
     from app.services.objekt_service import objekt_system_enabled
     from app.services.uas_service import uas_system_enabled
     weather_stations = (
@@ -95,6 +96,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "sys_settings": sys_settings,
         "uas_sys_enabled": uas_system_enabled(db),
         "objekt_sys_enabled": objekt_system_enabled(db),
+        "gateway_sys_enabled": _gateway_system_enabled(db),
         "timezones": common_timezones(),
         "default_timezone": app_settings.DEFAULT_TIMEZONE,
         "weather_stations": weather_stations,
@@ -145,6 +147,7 @@ async def save_org_settings(
     objekt_module_enabled_raw: str = Form(""),
     objekt_geo_match_radius_raw: str = Form(""),
     objekt_ki_klassifikation_raw: str = Form(""),
+    gateway_module_enabled_raw: str = Form(""),
     fahrtenbuch_modul_aktiv_raw: str = Form(""),
     atemschutz_pruefung_modul_aktiv_raw: str = Form(""),
     einsatzinfo_sms_enabled_raw: str = Form(""),
@@ -324,6 +327,23 @@ async def save_org_settings(
                 pass
         # KI-Dokumentklassifizierung (Opt-in, zusaetzlich zum AI-Setup)
         org_s.objekt_ki_klassifikation_enabled = objekt_ki_klassifikation_raw in ("1", "true", "on")
+
+    # Print & Alarm Gateway: Org-Toggle — nur änderbar wenn System-Flag aktiv.
+    from app.services.gateway_service import gateway_system_enabled
+    if gateway_system_enabled(db):
+        old_gw = org_s.gateway_module_enabled
+        new_gw = gateway_module_enabled_raw in ("1", "true", "on")
+        org_s.gateway_module_enabled = new_gw
+        if old_gw != new_gw:
+            from app.core.audit import write_audit
+            write_audit(
+                db,
+                "gateway.org_toggle",
+                org_id=effective_org_id,
+                user_id=user.id,
+                payload={"alt": old_gw, "neu": new_gw},
+                ip=request.client.host if request.client else None,
+            )
 
     # Hydranten-/Löschwasser-Layer (Hidden+Checkbox: None = Feld nicht im Formular → unveraendert)
     if hydrant_layer_enabled_raw is not None:
@@ -1331,6 +1351,52 @@ def toggle_objekt_system(
     write_audit(
         db,
         "objekt.system_toggle",
+        user_id=user.id,
+        payload={"alt": old_value, "neu": new_value},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+
+    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
+    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
+@router.post("/settings/system/gateway-toggle")
+def toggle_gateway_system(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    enabled_raw: str = Form(""),
+):
+    """Systemweiten Print-&-Alarm-Gateway-Flag umschalten (nur system_admin).
+
+    Setzt SystemSettings key "gateway_module_enabled" auf "true" oder "false"
+    (Muster UAS/Objekt). Beim Ausschalten bleiben Org-Daten/-Toggles erhalten.
+    """
+    new_enabled = enabled_raw in ("1", "true", "on")
+    new_value = "true" if new_enabled else "false"
+
+    row = db.query(SystemSettings).filter(SystemSettings.key == "gateway_module_enabled").first()
+    old_value = row.value if row else "false"
+
+    from datetime import UTC, datetime
+    if row is None:
+        row = SystemSettings(
+            key="gateway_module_enabled",
+            value=new_value,
+            updated_at=datetime.now(UTC),
+            updated_by_user_id=user.id,
+        )
+        db.add(row)
+    else:
+        row.value = new_value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user.id
+
+    from app.core.audit import write_audit
+    write_audit(
+        db,
+        "gateway.system_toggle",
         user_id=user.id,
         payload={"alt": old_value, "neu": new_value},
         ip=request.client.host if request.client else None,
