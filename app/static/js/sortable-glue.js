@@ -144,7 +144,15 @@
         const zoneOrder = JSON.stringify(
           zoneCards.map(c => ({ kind: c.dataset.kind, id: parseInt(c.dataset.uid, 10) }))
         );
-        postMove(incidentId, { kind, uid, column_id: toColumnId, position, zone_order: zoneOrder });
+        // Nur wenn die Karte AUS einer Fahrzeug-Zone auf eine Spalte gezogen wurde, ist das
+        // ein bewusstes Lösen der Einheiten-Zuordnung (detach_vehicle). Beim Umsortieren
+        // einer Spalten-Karte, die mit einer Einheit verbunden ist, bleibt die Verbindung
+        // erhalten (Server löscht die vehicle_id dann nicht).
+        const payload = { kind, uid, column_id: toColumnId, position, zone_order: zoneOrder };
+        if (evt.from.classList.contains('sortable-zone--vehicle')) {
+          payload.detach_vehicle = '1';
+        }
+        postMove(incidentId, payload);
       } catch (err) {
         console.warn('[sortable-glue] onEnd-Fehler:', err);
       }

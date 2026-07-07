@@ -140,6 +140,68 @@ def test_parse_operation_extracts_real_schema_including_exercise_flag(setup_db):
         db.close()
 
 
+def test_parse_operation_uses_delivered_coordinates_directly(setup_db):
+    """Liefert die LIS-Operation eigene Koordinaten (Operation.LocationX/Y, echtes Schema
+    aus dem Mitschnitt), werden sie direkt nach WGS84 übernommen und am Einsatz gesetzt —
+    ohne Adressvalidierung/Geocoding."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        raw_op = {
+            "Id": "op-mit-koordinaten",
+            "Number": "t_f140010",
+            "Description": "BMA Ausgelöst",
+            "BeginTime": "2026-07-05T21:22:40",
+            "Address": {"Street": "KESSELSTRAßE", "Housenumber": "42", "Community": "WOLFURT"},
+            "Type": {"Code": "t_f14", "Type": "Schulungseinsatz (ohne RFL) - Feuerwehr"},
+            "LocationX": "105669",
+            "LocationY": "257241",
+        }
+
+        parsed = lis_sync._parse_operation(raw_op, org)
+        assert parsed["lat"] is not None and parsed["lng"] is not None
+        # Plausibel für Wolfurt/Vorarlberg (siehe lis_geo-Plausibilitätsgrenzen)
+        assert 47.4 < parsed["lat"] < 47.5
+        assert 9.7 < parsed["lng"] < 9.8
+
+        incident, created = lis_sync._get_or_link_incident(db, org, parsed)
+        assert created is True
+        assert incident.lat == parsed["lat"]
+        assert incident.lng == parsed["lng"]
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_parse_operation_marks_ended_operation_as_closed(setup_db):
+    """EndTime gesetzt → is_closed=True (Steuersignal gegen Alarmierung bei Backfill
+    historischer/bereits beendeter Operationen). Ohne EndTime → is_closed=False."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        base = {
+            "Id": "op-ended",
+            "Number": "t_f140011",
+            "Description": "BMA Ausgelöst",
+            "BeginTime": "2026-07-05T21:22:40",
+            "Address": {"Street": "Kesselstraße", "Housenumber": "42", "Community": "Wolfurt"},
+            "Type": {"Code": "t_f14", "Type": "Feuer"},
+        }
+        aktiv = lis_sync._parse_operation(base, org)
+        assert aktiv["is_closed"] is False
+
+        beendet = lis_sync._parse_operation({**base, "EndTime": "2026-07-05T21:33:50"}, org)
+        assert beendet["is_closed"] is True
+        assert beendet["ended_at"] is not None
+
+        # .NET-Default-Datum zählt nicht als beendet
+        default = lis_sync._parse_operation({**base, "EndTime": "0001-01-01T00:00:00"}, org)
+        assert default["is_closed"] is False
+    finally:
+        db.rollback()
+        db.close()
+
+
 def test_repeated_lis_sync_is_idempotent_no_duplicate():
     """Wiederholtes Polling derselben LIS-Operation (z.B. jeden 30s) darf nie
     einen zweiten Einsatz anlegen — direkter lis_operation_id-Treffer greift."""

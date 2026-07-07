@@ -105,11 +105,36 @@ def _incident_belongs_to_major_incident(db: Session, incident_id: int) -> bool:
     return _incident_major_incident_id(db, incident_id) is not None
 
 
+def _parse_operation_coords(op: dict, address: dict) -> tuple[float | None, float | None]:
+    """Einsatz-Koordinaten aus der LIS-Operation (projiziertes GMSC-System) → WGS84.
+
+    LIS liefert die Einsatzposition als Operation.LocationX/LocationY (siehe echten
+    Mitschnitt: `<a:LocationX>105669</a:LocationX><a:LocationY>257241</a:LocationY>`) im
+    selben ganzzahligen System wie die Fahrzeugpositionen — daher dieselbe Umrechnung
+    (lis_unit_coords_to_wgs84). Sind die Operation-Werte leer, wird ersatzweise die
+    Adress-Ebene (Address.LocationX/Y) probiert. Ohne belastbare Werte → (None, None),
+    dann greift der Adress-Geocoding-Fallback in sync_operation().
+    """
+    for src in (op, address):
+        loc_x, loc_y = src.get("LocationX"), src.get("LocationY")
+        if loc_x is None or loc_y is None:
+            continue
+        try:
+            coords = lis_unit_coords_to_wgs84(float(loc_x), float(loc_y))
+        except (TypeError, ValueError):
+            coords = None
+        if coords:
+            return coords
+    return None, None
+
+
 def _parse_operation(op: dict, org: FireDept | None) -> dict:
     address = op.get("Address") or {}
     type_obj = op.get("Type") or {}
     reason = op.get("Description") or op.get("Name")
     started_raw = op.get("BeginTime") or op.get("CreationTime")
+    lat, lng = _parse_operation_coords(op, address)
+    ended_at = _parse_operation_datetime(op.get("EndTime"), org)
     return {
         "lis_operation_id": op.get("Id"),
         "lis_operation_number": op.get("Number"),
@@ -117,10 +142,16 @@ def _parse_operation(op: dict, org: FireDept | None) -> dict:
         "street": address.get("Street"),
         "house_no": address.get("Housenumber"),
         "city": address.get("Community"),
+        "lat": lat,
+        "lng": lng,
         "report_text": reason,
         "alarm_type_code": map_stichwort(type_obj.get("Code") or type_obj.get("Type")),
         "started_at": _parse_operation_datetime(started_raw, org),
         "is_exercise": is_exercise_operation(type_obj),
+        # EndTime gesetzt → Operation in LIS bereits beendet (z.B. Backfill historischer
+        # Einsätze oder zwischen zwei Polls geschlossen). Steuert, ob noch alarmiert wird.
+        "ended_at": ended_at,
+        "is_closed": ended_at is not None,
     }
 
 
@@ -140,7 +171,14 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         # war der Einsatz nur durch unseren eigenen Auto-Close geschlossen (nicht manuell),
         # wiedereröffnen. lis_auto_close_locked verhindert danach jeden weiteren automatischen
         # Abschluss dieses Einsatzes — nur noch ein manueller Abschluss im Einsatzcockpit zählt.
-        if existing.status == "closed" and existing.closed_via_lis_auto and not existing.lis_auto_close_locked:
+        # NICHT wiedereröffnen, wenn die Operation selbst bereits beendet ist (Backfill
+        # historischer/geschlossener Operationen liefert diese Operation mit gesetzter EndTime).
+        if (
+            existing.status == "closed"
+            and existing.closed_via_lis_auto
+            and not existing.lis_auto_close_locked
+            and not parsed.get("is_closed")
+        ):
             from app.services.incident_service import reopen_incident
             reopen_incident(db, existing, user_id=None)
             existing.lis_auto_close_locked = True
@@ -170,6 +208,8 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         )
         return match, False
 
+    # Koordinaten direkt aus der LIS-Operation übernehmen, falls mitgeliefert — dann
+    # KEINE nachgelagerte Adressvalidierung/Geocoding nötig (siehe sync_operation()).
     incident = create_incident(
         db,
         alarm_type_code=parsed["alarm_type_code"],
@@ -178,6 +218,8 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         address_street=parsed["street"],
         address_no=parsed["house_no"],
         address_city=parsed["city"],
+        lat=parsed.get("lat"),
+        lng=parsed.get("lng"),
         report_text=parsed["report_text"],
         reason=parsed["reason"],
         primary_org_id=org.id,
@@ -185,10 +227,18 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
     incident.lis_operation_id = parsed["lis_operation_id"]
     incident.lis_operation_number = parsed["lis_operation_number"]
     db.flush()
-    logger.info(
-        "Einsatz %s aus LIS-Operation %s neu angelegt (Org %s, zuerst über LIS geliefert)",
-        incident.id, parsed["lis_operation_id"], org.id,
-    )
+    if parsed.get("lat") is not None and parsed.get("lng") is not None:
+        logger.info(
+            "Einsatz %s aus LIS-Operation %s neu angelegt (Org %s) — Koordinaten aus LIS "
+            "übernommen (lat=%.5f, lon=%.5f), kein Geocoding nötig",
+            incident.id, parsed["lis_operation_id"], org.id, parsed["lat"], parsed["lng"],
+        )
+    else:
+        logger.info(
+            "Einsatz %s aus LIS-Operation %s neu angelegt (Org %s, zuerst über LIS geliefert) — "
+            "keine Koordinaten in der LIS-Operation, Adress-Geocoding folgt",
+            incident.id, parsed["lis_operation_id"], org.id,
+        )
     return incident, True
 
 
@@ -621,12 +671,48 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
         await manager.broadcast(incident.id, {"type": "lis_sync", "reload_board": True})
 
     if created:
+        # Adress-Geocoding-Fallback: nur wenn die LIS-Operation KEINE eigenen Koordinaten
+        # mitgeliefert hat (sonst wurden diese bereits direkt übernommen, siehe
+        # _get_or_link_incident). Läuft in der bestehenden Session (kein Request-Kontext);
+        # die normalisierte Adress-Schreibweise (Vollversalien → Titel) steckt in
+        # geocode_address(). Fehler dürfen die LIS-Anlage nie abbrechen.
+        if incident.lat is None and incident.lng is None and (parsed["street"] or parsed["city"]):
+            try:
+                from app.services.geocoding import geocode_address
+                geo = await geocode_address(parsed["street"], parsed["house_no"], parsed["city"])
+            except Exception:
+                geo = None
+                logger.exception("Adress-Geocoding nach LIS-Anlage fehlgeschlagen (Einsatz %s)", incident.id)
+            if geo:
+                incident.lat, incident.lng = geo.lat, geo.lng
+                db.flush()
+                logger.info(
+                    "Einsatz %s per Adress-Geocoding verortet (lat=%.5f, lon=%.5f)",
+                    incident.id, geo.lat, geo.lng,
+                )
+
         # Objekt-Matching fuer den frisch aus LIS angelegten Einsatz
         try:
             from app.services.objekt_matching_service import match_incident_background
             await match_incident_background(incident.id)
         except Exception:
             logger.exception("Objekt-Matching nach LIS-Anlage fehlgeschlagen (Einsatz %s)", incident.id)
+
+        if parsed.get("is_closed"):
+            # Der Einsatz war bei Anlage in LIS bereits abgeschlossen (Backfill historischer
+            # Einsätze oder Operation zwischen zwei Polls beendet). Zur Dokumentation anlegen,
+            # aber KEINE Alarmierung (Push/SMS/Teams/Board-Toast) mehr auslösen und den Einsatz
+            # direkt schließen, damit er nicht fälschlich als aktiver Alarm erscheint.
+            from app.services.incident_service import close_incident
+            close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
+            db.flush()
+            logger.info(
+                "Einsatz %s aus bereits beendeter LIS-Operation %s angelegt (Org %s) — "
+                "keine Alarmierung, direkt geschlossen",
+                incident.id, parsed["lis_operation_id"], org.id,
+            )
+            return
+
         from app.services.broadcast import broadcast_org
         await broadcast_org(org.id, {
             "type": "incident_created",
