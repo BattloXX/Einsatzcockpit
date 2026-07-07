@@ -13,6 +13,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Automatische Einsatzanlage aus dem Alarmierungssystem (REST-API, idempotent)
 - LIS/IPR-Anbindung an das Leitstellensystem: Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus, Meldungen, automatisches Schließen
 - SMS-Einsatzinfo bei Alarm sowie SMS-Empfang mit Weiterleitungsregeln (Teams, Gruppen, Mitglieder, Ad-hoc)
+- Print & Alarm Gateway: lokaler Docker-Container für seriellen Leitstellen-Alarm (→ Einsatzanlage) und Netzwerkdruck (Automatik-Druckregeln + manuell)
 - Teams-Alarmierung: vollständige Alarm-Karte (Kartenbild, Google-Maps-Link, No-Login-Alarmübersicht) bei jeder Einsatzanlage, optional mit Bot-Zusage/-Absage
 - Gesetzeskonforme Atemschutzüberwachung mit Rückzugsdruckberechnung
 - Mannschaftsregister mit Qualifikationen und Ablaufdaten
@@ -46,6 +47,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Backups](Installation-Backups) | Datenbank-Dumps, Audit-Log-Sicherung |
 | [Updates](Installation-Updates) | git pull / In-App ZIP-Update, Migrationen, Neustart |
 | [SMS-Gateway](Installation-SMS-Gateway) | Android-Gateway-App einrichten: APK, Geräte-Login-QR, Akku-Optimierung |
+| [Print & Alarm Gateway](Installation-Print-Alarm-Gateway) | Lokalen Docker-Container koppeln: Pairing-Code, W&T-Alarmleitung, Netzwerkdrucker |
 | [Troubleshooting](Installation-Troubleshooting) | Häufige Fehler und Lösungen |
 
 ### Anwender
@@ -94,6 +96,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
 | [Teams-Alarmierung](Administration-Teams-Alarmierung) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
+| [Print & Alarm Gateway](Administration-Print-Alarm-Gateway) | Modul aktivieren (System+Org), Gateways koppeln, Drucker & Discovery, Druckregeln (Automatikdruck), manueller Druck |
 
 ### Entwickler
 | Seite | Beschreibung |
