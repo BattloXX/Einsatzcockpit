@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import base64
 import binascii
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Callable
 
 from sqlalchemy.orm import Session
 

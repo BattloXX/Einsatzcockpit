@@ -271,7 +271,6 @@ def infoscreen_daten(
     db: Session = Depends(get_db),
 ):
     """Aktueller Zustand als JSON (Polling-Fallback + Initial-Load)."""
-    import json as _json
 
     from app.models.incident import Incident
 

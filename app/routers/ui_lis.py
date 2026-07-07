@@ -155,7 +155,7 @@ async def lis_test_connection(
         return JSONResponse({"ok": False, "message": "Konfiguration unvollständig (URL, Organisation, Zugangsdaten)."})
 
     from app.core.crypto import decrypt_secret
-    from app.services.lis.lis_client import LisAuthError, LisClientError, LisClient
+    from app.services.lis.lis_client import LisAuthError, LisClient, LisClientError
 
     try:
         password = decrypt_secret(cfg.password_enc)

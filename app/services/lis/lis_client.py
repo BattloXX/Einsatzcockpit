@@ -16,7 +16,8 @@ import hashlib
 import logging
 import uuid
 import xml.etree.ElementTree as ET
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -597,7 +598,7 @@ class LisClient:
 
 
 def _parse_mtom_binary(content_type: str, body: bytes) -> bytes:
-    header = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8")
+    header = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode()
     msg = email.message_from_bytes(header + body)
     binary_part = None
     for part in msg.walk():
