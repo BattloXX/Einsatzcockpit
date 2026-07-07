@@ -68,6 +68,20 @@
     node.off(".anno");
     node.on("dragstart.anno transformstart.anno", pushUndo);
     node.on("dragend.anno transformend.anno", markDirty);
+    // Symbol/Flaeche (Gruppe) per Doppelklick/-tipp nachträglich beschriften
+    if (node.findOne) {
+      node.on("dblclick.anno dbltap.anno", function (e) {
+        var at = node.getAttr("annoType");
+        if (!cfg.canWrite || tool !== "select" || (at !== "symbol" && at !== "area")) { return; }
+        if (e && e.evt && e.evt.preventDefault) { e.evt.preventDefault(); }
+        var cur = "", alt = node.findOne(".tzlabel");
+        if (alt) { var txt = alt.findOne("Text"); if (txt) { cur = txt.text(); } }
+        var ev = e && e.evt ? e.evt : null;
+        openLabelEditor(ev ? ev.clientX : 100, ev ? ev.clientY : 100, cur, function (val) {
+          pushUndo(); setNodeLabel(node, val); markDirty();
+        });
+      });
+    }
   }
   function wireShape(node) { node.draggable(tool === "select"); wireListeners(node); }
 
@@ -163,6 +177,35 @@
     var r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16);
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   }
+  // Konva.Label (Kontrast-Box + Text) in aktueller Farbe/Groesse
+  function makeLabelNode(text, x, y) {
+    var boxDunkel = _luminanz(color) > 0.5;  // helle Schrift -> dunkle Box
+    var label = new Konva.Label({ x: x || 0, y: y || 0, name: "tzlabel" });
+    label.add(new Konva.Tag({ fill: boxDunkel ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.8)", cornerRadius: 4 }));
+    label.add(new Konva.Text({ text: text, fontSize: textSize, fill: color, padding: 7, fontStyle: "bold" }));
+    return label;
+  }
+  // Freischwebendes Textfeld (fixed) an Bildschirmposition; ruft cb(wert) beim Commit.
+  function openLabelEditor(cx, cy, initial, cb) {
+    var ta = document.createElement("textarea");
+    ta.rows = 1; ta.value = initial || "";
+    ta.style.cssText = "position:fixed;z-index:5000;left:" + (cx != null ? cx : 100) + "px;top:" +
+      (cy != null ? cy : 100) + "px;font-size:16px;padding:5px 7px;border:1px solid #93c5fd;" +
+      "border-radius:6px;background:#0d150f;color:#fff;min-width:140px;resize:none;";
+    document.body.appendChild(ta);
+    setTimeout(function () { ta.focus(); ta.select(); }, 0);  // nach dem Klick-Fokuszyklus
+    var done = false;
+    function commit() {
+      if (done) { return; } done = true;
+      var val = ta.value.replace(/\s+$/, ""); ta.remove();
+      cb(val);
+    }
+    ta.addEventListener("blur", commit);
+    ta.addEventListener("keydown", function (k) {
+      if (k.key === "Enter" && !k.shiftKey) { k.preventDefault(); ta.blur(); }
+      if (k.key === "Escape") { done = true; ta.remove(); }  // abbrechen ohne Aenderung
+    });
+  }
   function onTextPlace(ev) {
     var p = pos();
     // Verhindert, dass der Default den Fokus auf den Canvas legt und die gerade
@@ -170,30 +213,33 @@
     if (ev && ev.cancelable && ev.preventDefault) { ev.preventDefault(); }
     var cx = ev && ev.clientX != null ? ev.clientX : 100;
     var cy = ev && ev.clientY != null ? ev.clientY : 100;
-    var ta = document.createElement("textarea");
-    ta.rows = 1;
-    ta.style.cssText = "position:fixed;z-index:5000;left:" + cx + "px;top:" + cy +
-      "px;font-size:16px;padding:5px 7px;border:1px solid #93c5fd;border-radius:6px;" +
-      "background:#0d150f;color:#fff;min-width:140px;resize:none;";
-    document.body.appendChild(ta);
-    setTimeout(function () { ta.focus(); }, 0);  // nach dem Klick-Fokuszyklus fokussieren
-    var done = false;
-    function commit() {
-      if (done) { return; } done = true;
-      var val = ta.value.replace(/\s+$/, ""); ta.remove();
+    openLabelEditor(cx, cy, "", function (val) {
       if (!val) { return; }
       pushUndo();
-      var boxDunkel = _luminanz(color) > 0.5;  // helle Schrift -> dunkle Box
-      var label = new Konva.Label({ x: p.x, y: p.y });
-      label.add(new Konva.Tag({ fill: boxDunkel ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.8)", cornerRadius: 4 }));
-      label.add(new Konva.Text({ text: val, fontSize: textSize, fill: color, padding: 7, fontStyle: "bold" }));
-      annLayer.add(label); wireShape(label); markDirty(); annLayer.batchDraw();
-    }
-    ta.addEventListener("blur", commit);
-    ta.addEventListener("keydown", function (k) {
-      if (k.key === "Enter" && !k.shiftKey) { k.preventDefault(); ta.blur(); }
-      if (k.key === "Escape") { ta.value = ""; ta.blur(); }
+      var label = makeLabelNode(val, p.x, p.y);
+      annLayer.add(label); wireShape(label);
+      markDirty(); annLayer.batchDraw();
     });
+  }
+  // Symbol/Flaeche (Gruppe) beschriften: vorhandenes Label ersetzen bzw. entfernen
+  function setNodeLabel(group, text) {
+    if (!group.findOne) { return; }
+    var alt = group.findOne(".tzlabel");
+    if (alt) { alt.destroy(); }
+    if (!text) { annLayer.batchDraw(); return; }
+    var lbl = makeLabelNode(text, 0, 0);
+    group.add(lbl);
+    var lw = lbl.getWidth(), typ = group.getAttr("annoType");
+    if (typ === "area") {
+      var rect = group.findOne("Rect");
+      var rw = rect ? rect.width() : 0;
+      lbl.position({ x: rw / 2 - lw / 2, y: 4 });
+    } else {  // symbol: mittig unter dem Zeichen
+      var im = group.findOne(".tzimg");
+      var half = im ? im.height() / 2 : 24;
+      lbl.position({ x: -lw / 2, y: half + 4 });
+    }
+    annLayer.batchDraw();
   }
 
   // ── X-Markierung ────────────────────────────────────────────────────────────
@@ -231,31 +277,58 @@
     else { rect.fill(null); }
     rect.setAttr("annoType", "area"); rect.setAttr("flaeche", f.id);
   }
-  function placeSymbol(item) {
+  function placeSymbol(item, ev) {
     var img = imgCache[item.datei];
     if (!img) { img = new Image(); img.src = item.datei; imgCache[item.datei] = img; }
     pushUndo();
     var p = pos();
     var s = Math.max(48, Math.min(natW, natH) * 0.09);
-    var node = new Konva.Image({ image: img, x: p.x - s / 2, y: p.y - s / 2, width: s, height: s });
-    node.setAttr("annoType", "symbol"); node.setAttr("symbolSrc", item.datei);
+    // Symbol als Gruppe (Bild + optionaler Text), damit Zeichen und Beschriftung
+    // zusammen verschoben/skaliert werden.
+    var g = new Konva.Group({ x: p.x, y: p.y });
+    g.setAttr("annoType", "symbol"); g.setAttr("symbolSrc", item.datei);
+    var node = new Konva.Image({ image: img, x: -s / 2, y: -s / 2, width: s, height: s, name: "tzimg" });
+    g.add(node);
     if (!img.complete) { img.onload = function () { annLayer.batchDraw(); }; }
-    annLayer.add(node); wireShape(node); markDirty(); annLayer.batchDraw();
+    annLayer.add(g); wireShape(g); markDirty(); annLayer.batchDraw();
+    var cx = ev && ev.clientX != null ? ev.clientX : 100;
+    var cy = ev && ev.clientY != null ? ev.clientY : 100;
+    openLabelEditor(cx, cy, "", function (val) { if (val) { setNodeLabel(g, val); markDirty(); } });
+  }
+  // Fertige Flaeche mit Text beschriften -> Rechteck + Label in eine Gruppe fassen
+  function wrapAreaWithLabel(rect, val) {
+    var rx = rect.x(), ry = rect.y(), rw = rect.width(), rh = rect.height();
+    var g = new Konva.Group({ x: rx, y: ry });
+    g.setAttr("annoType", "area"); g.setAttr("flaeche", rect.getAttr("flaeche"));
+    rect.position({ x: 0, y: 0 });
+    rect.setAttr("annoType", null);      // Meta wandert auf die Gruppe
+    rect.moveTo(g);
+    annLayer.add(g);
+    setNodeLabel(g, val);
+    wireShape(g);
   }
   // Nach Restore/Load die nicht serialisierten Teile (Bild-Bitmap, Muster) neu setzen
   function hydrate(node) {
     var t = node.getAttr && node.getAttr("annoType");
+    var cls = node.getClassName ? node.getClassName() : null;
     if (t === "symbol") {
       var src = node.getAttr("symbolSrc");
       if (src) {
         var im = imgCache[src];
         if (!im) { im = new Image(); im.src = src; imgCache[src] = im; }
-        node.image(im);
-        if (!im.complete) { im.onload = function () { node.image(im); annLayer.batchDraw(); }; }
+        // Neu: Gruppe mit Bild-Kind; alt: blankes Konva.Image
+        var target = (cls === "Group" && node.findOne) ? (node.findOne(".tzimg") || node.findOne("Image")) : node;
+        if (target && target.image) {
+          target.image(im);
+          if (!im.complete) { im.onload = function () { target.image(im); annLayer.batchDraw(); }; }
+        }
       }
     } else if (t === "area") {
       var f = TZ.flaechen[node.getAttr("flaeche")];
-      if (f && f.hatch) { node.fillPatternImage(hatchTile(f)); node.fillPatternRepeat("repeat"); }
+      if (f && f.hatch) {
+        var rect = (cls === "Group" && node.findOne) ? node.findOne("Rect") : node;
+        if (rect && rect.fillPatternImage) { rect.fillPatternImage(hatchTile(f)); rect.fillPatternRepeat("repeat"); }
+      }
     }
   }
 
@@ -267,7 +340,7 @@
     if (tool === "text") { onTextPlace(ev); return; }
     if (ev && ev.cancelable && ev.preventDefault) { ev.preventDefault(); }
     if (tool === "x") { placeX(); return; }
-    if (tool === "symbol") { if (aktSymbol) { placeSymbol(aktSymbol); } return; }
+    if (tool === "symbol") { if (aktSymbol) { placeSymbol(aktSymbol, ev); } return; }
 
     pushUndo();
     drawing = true;
@@ -305,7 +378,7 @@
     annLayer.batchDraw();
   }
 
-  function drawUp() {
+  function drawUp(cx, cy) {
     if (!drawing) { return; }
     drawing = false;
     if (shape) {
@@ -317,7 +390,14 @@
         var pt = shape.points(); tooSmall = Math.hypot(pt[2] - pt[0], pt[3] - pt[1]) < 5;
       }
       if (tooSmall) { shape.destroy(); undoStack.pop(); aktualisiereButtons(); }
-      else { wireShape(shape); markDirty(); }
+      else {
+        wireShape(shape); markDirty();
+        // Flaeche direkt nach dem Aufziehen optional beschriften
+        if (tool === "area") {
+          var rect = shape;
+          openLabelEditor(cx, cy, "", function (val) { if (val) { wrapAreaWithLabel(rect, val); markDirty(); } });
+        }
+      }
     }
     shape = null; annLayer.batchDraw();
   }
@@ -392,7 +472,7 @@
     }
     if (pinch && countType("touch") < 2) { pinch = null; }
     if (panning && ev.pointerType === "mouse") { panning = false; }
-    if (drawing) { drawUp(); }
+    if (drawing) { drawUp(ev.clientX, ev.clientY); }
   }
 
   function startPinch() {
