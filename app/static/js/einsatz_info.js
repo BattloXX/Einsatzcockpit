@@ -32,6 +32,24 @@
   setTimeout(function () { karte.invalidateSize(); }, 200);
   window.addEventListener("resize", function () { karte.invalidateSize(); });
 
+  // Druck: Karte fuer die geaenderte Druckgroesse neu vermessen, damit die
+  // (aus der Bildschirmansicht gecachten) Kacheln den Ausschnitt fuellen.
+  window.einsatzInfoKarte = karte;
+  window.addEventListener("beforeprint", function () {
+    try { karte.invalidateSize(); } catch (e) { /* egal */ }
+  });
+  window.einsatzInfoDrucken = function () {
+    try { karte.invalidateSize(); } catch (e) { /* egal */ }
+    // kurze Verzoegerung, damit Leaflet die Kacheln neu positioniert
+    setTimeout(function () { window.print(); }, 350);
+  };
+  // Druck-Zeitstempel (nur im Druckkopf sichtbar)
+  var tsEl = document.getElementById("ei-print-ts");
+  if (tsEl) {
+    try { tsEl.textContent = "Gedruckt: " + new Date().toLocaleString("de-AT"); }
+    catch (e) { tsEl.textContent = "Gedruckt: " + new Date().toLocaleString(); }
+  }
+
   // objektBounds treibt den Zoom (Einsatzort + Objekte). hydrantBounds nur
   // als sanfter Fallback, wenn es sonst nichts zum Zentrieren gibt.
   var objektBounds = [];

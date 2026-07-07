@@ -33,8 +33,48 @@
   font-size: .76rem; padding: 2px 7px; border-radius: 999px;
   background: rgba(242,176,46,.14); border: 1px solid rgba(242,176,46,.4);
 }
+/* Druckansicht: nur am Bildschirm ausgeblendeter Druckkopf */
+.ei-print-header { display: none; }
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  html, body { background: #fff !important; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Seiten-Chrome + interaktive Steuerung ausblenden */
+  .topnav, .bottom-nav, .mobile-menu, .mobile-menu-backdrop, #toast-container,
+  .incident-alert-overlay, dialog, .pwa-install-btn, .pwa-install-ios,
+  .ei-noprint, .leaflet-control-zoom { display: none !important; }
+  .main-content { margin: 0 !important; padding: 0 !important; }
+  /* Layout: einspaltig, Karte oben */
+  .einsatz-info { max-width: none !important; padding: 0 !important; }
+  .ei-grid { display: block !important; }
+  .ei-map-wrap { position: static !important; margin-bottom: 10px; }
+  #einsatz-info-karte { height: 105mm !important; min-height: 0 !important; background: #fff !important; }
+  .ei-side { display: block !important; }
+  .ei-side .card, .einsatz-info__kopf { break-inside: avoid; page-break-inside: avoid; margin-bottom: 8px !important; }
+  /* Kontrast fuer Papier (App laeuft im Dark-Theme) */
+  .card, .einsatz-info__kopf { background: #fff !important; border: 1px solid #999 !important; box-shadow: none !important; color: #111 !important; }
+  .card h3, .einsatz-info__kopf strong { color: #111 !important; }
+  .text-muted { color: #555 !important; }
+  /* Hydranten-Liste: Scroll-Deckel aufheben, damit alle Eintraege drucken */
+  .hydrant-liste { max-height: none !important; overflow: visible !important; }
+  .hydrant-liste__row { border: 1px solid #bbb !important; color: #111 !important; }
+  .leaflet-control-attribution { color: #333 !important; background: rgba(255,255,255,.7) !important; }
+  /* Druckkopf sichtbar */
+  .ei-print-header {
+    display: flex !important; justify-content: space-between; align-items: baseline;
+    border-bottom: 2px solid #111; padding-bottom: 6px; margin-bottom: 10px;
+    font-weight: 700; font-size: 1.05rem; color: #111;
+  }
+}
 </style>
 <div class="page-content einsatz-info">
+
+  <!-- Nur im Druck sichtbarer Kopf -->
+  <div class="ei-print-header" aria-hidden="true">
+    <span>🚨 Einsatzinformation · {{ incident.alarm_type_code }}</span>
+    <span id="ei-print-ts" style="font-weight:400;font-size:.85rem;"></span>
+  </div>
 
   {% if incident.is_exercise %}
   <div class="exercise-topbar" style="margin:0 0 12px;">⚠ ÜBUNG / SIMULATION ⚠</div>
@@ -57,7 +97,9 @@
         <span class="badge-pill badge-pill--green" x-text="'✅ ' + zusagen"></span>
         <span class="badge-pill badge-pill--red" x-text="'❌ ' + absagen"></span>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="ei-noprint" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn--secondary"
+                onclick="if(window.einsatzInfoDrucken){window.einsatzInfoDrucken()}else{window.print()}">🖨 Drucken</button>
         <a href="/einsatz/{{ incident.id }}" class="btn btn--primary">🖥 Zum Einsatz-Board</a>
         {% set lk_url = lagekarte_url(incident) %}
         {% if lk_url %}
@@ -113,8 +155,8 @@
               </div>
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                 {% if v.status == 'vorschlag' %}<span class="badge-pill badge-pill--amber">Vorschlag{% if v.distanz_m %} · {{ v.distanz_m }} m{% endif %}</span>{% endif %}
-                <a href="/objekte/{{ o.id }}/objektblatt.pdf?anhang=1" target="_blank" rel="noopener" class="btn btn--sm btn--ghost" title="Objektblatt inkl. Dokumente drucken">🖨 Drucken</a>
-                <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary">Objektinfo öffnen</a>
+                <a href="/objekte/{{ o.id }}/objektblatt.pdf?anhang=1" target="_blank" rel="noopener" class="btn btn--sm btn--ghost ei-noprint" title="Objektblatt inkl. Dokumente drucken">🖨 Drucken</a>
+                <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary ei-noprint">Objektinfo öffnen</a>
               </div>
             </div>
             <div hx-get="/objekte/{{ o.id }}/einsatz-fragment" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px;">
@@ -125,7 +167,7 @@
         {% else %}
           <div class="card" style="padding:14px;">
             <p class="text-muted" style="margin:0 0 8px;">Kein Objekt zugeordnet.</p>
-            <a href="/einsatz/{{ incident.id }}" class="btn btn--sm btn--secondary">Im Board manuell verknüpfen</a>
+            <a href="/einsatz/{{ incident.id }}" class="btn btn--sm btn--secondary ei-noprint">Im Board manuell verknüpfen</a>
           </div>
         {% endif %}
 
@@ -137,7 +179,7 @@
       {% endif %}
 
       <!-- Absprung ins Board -->
-      <a href="/einsatz/{{ incident.id }}" class="btn btn--primary btn--full">🖥 Zum Einsatz-Board</a>
+      <a href="/einsatz/{{ incident.id }}" class="btn btn--primary btn--full ei-noprint">🖥 Zum Einsatz-Board</a>
     </div>
   </div>
 </div>
