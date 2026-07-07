@@ -53,32 +53,16 @@
     <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px;font-weight:600;letter-spacing:.04em;">BILDER</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;">
       {% for m in entry.media %}
-      <div x-data="{lbOpen:false}" style="display:inline-block;position:relative;">
+      <div style="display:inline-block;position:relative;">
         <img src="/lage/{{ lage.id }}/journal/{{ entry.id }}/medien/{{ m.id }}/bild?thumb=true"
              alt="{{ m.original_filename }}"
              style="width:96px;height:96px;object-fit:cover;border-radius:6px;
                     border:1px solid var(--border);cursor:zoom-in;"
-             @click="lbOpen=true">
+             {% if m.media_type == 'image' %}onclick="openImageLightbox([{src:'/annotieren/lage_journal/{{ m.id }}/bild'{% if can_edit %},edit:'/annotieren/lage_journal/{{ m.id }}'{% endif %}}])"{% else %}onclick="openMediaViewer('/lage/{{ lage.id }}/journal/{{ entry.id }}/medien/{{ m.id }}/bild', 'image', {{ m.original_filename|tojson }})"{% endif %}>
         {% if can_edit and m.media_type == 'image' %}
         <a href="/annotieren/lage_journal/{{ m.id }}" title="Bearbeiten" @click.stop
            style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>
         {% endif %}
-        <div x-show="lbOpen" x-cloak @keydown.escape.window="lbOpen=false"
-             style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.92);">
-          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"
-               @click.self="lbOpen=false">
-            <img src="{% if m.media_type == 'image' %}/annotieren/lage_journal/{{ m.id }}/bild{% else %}/lage/{{ lage.id }}/journal/{{ entry.id }}/medien/{{ m.id }}/bild{% endif %}"
-                 style="max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.8);">
-          </div>
-          <button @click="lbOpen=false"
-                  style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;
-                         color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:50%;
-                         width:40px;height:40px;display:flex;align-items:center;justify-content:center;">×</button>
-          {% if can_edit and m.media_type == 'image' %}
-          <a href="/annotieren/lage_journal/{{ m.id }}" @click.stop
-             style="position:fixed;top:16px;left:20px;background:rgba(0,0,0,.6);color:#fff;text-decoration:none;font-size:14px;line-height:1;padding:10px 14px;border-radius:8px;">✏️ Bearbeiten</a>
-          {% endif %}
-        </div>
         <div style="font-size:.65rem;color:var(--text-muted);text-align:center;margin-top:2px;
                     max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
           {{ m.original_filename }}

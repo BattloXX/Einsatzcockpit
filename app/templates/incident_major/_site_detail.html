@@ -502,49 +502,26 @@
 
   {# ── Fotos ────────────────────────────────────────────────────────── #}
   {% if site.media %}
+  {% set imgs = site.media|selectattr('media_type', 'equalto', 'image')|list %}
   <div style="margin-top:16px;"
        x-data="{
-         lbOpen: false,
-         lbItems: [{% for m in site.media %}{{ m.id }}{% if not loop.last %},{% endif %}{% endfor %}],
-         lbUrls: [{% for m in site.media %}'{% if m.media_type == 'image' %}/annotieren/site/{{ m.id }}/bild{% else %}/lage-medien/{{ m.id }}{% endif %}'{% if not loop.last %},{% endif %}{% endfor %}],
-         lbImg: [{% for m in site.media %}{{ 'true' if m.media_type == 'image' else 'false' }}{% if not loop.last %},{% endif %}{% endfor %}],
-         lbIdx: 0,
-         lbShow(i) { this.lbIdx = i; this.lbOpen = true; },
-         lbClose() { this.lbOpen = false; },
-         init() {
-           const dlg = this.$el.closest('dialog');
-           if (!dlg) return;
-           var _lb = this;
-           const h = function(e) { if (_lb.lbOpen) { e.preventDefault(); _lb.lbClose(); } };
-           dlg.addEventListener('cancel', h);
-           this.$cleanup(function() { dlg.removeEventListener('cancel', h); });
-         }
+         lbItems: [{% for m in imgs %}{src:'/annotieren/site/{{ m.id }}/bild'{% if can_edit %},edit:'/annotieren/site/{{ m.id }}'{% endif %}}{% if not loop.last %},{% endif %}{% endfor %}],
+         open(i) { openImageLightbox(this.lbItems, i); }
        }">
     <div class="res-section__title">Fotos</div>
     <div class="media-grid">
+      {% set lbi = namespace(i=0) %}
       {% for m in site.media %}
       <div style="position:relative;display:inline-block;">
         <img src="/lage-medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}"
              class="media-thumb" loading="lazy" style="cursor:zoom-in"
-             @click="lbShow({{ loop.index0 }})">
+             {% if m.media_type == 'image' %}@click="open({{ lbi.i }})"{% set lbi.i = lbi.i + 1 %}{% else %}onclick="openMediaViewer('/lage-medien/{{ m.id }}', '{{ m.media_type }}', {{ m.original_filename|tojson }})"{% endif %}>
         {% if can_edit and m.media_type == 'image' %}
         <a href="/annotieren/site/{{ m.id }}" title="Bearbeiten" @click.stop
            style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>
         {% endif %}
       </div>
       {% endfor %}
-    </div>
-    <div x-show="lbOpen" x-cloak
-         style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;"
-         @click.self="lbClose()">
-      <img :src="lbUrls[lbIdx]"
-           style="max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.7);">
-      <button @click="lbClose()"
-              style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;color:#fff;font-size:26px;line-height:1;cursor:pointer;border-radius:50%;width:40px;height:40px;">×</button>
-      {% if can_edit %}
-      <a x-show="lbImg[lbIdx]" :href="'/annotieren/site/' + lbItems[lbIdx]" @click.stop
-         style="position:fixed;top:16px;left:20px;background:rgba(0,0,0,.6);color:#fff;text-decoration:none;font-size:14px;line-height:1;padding:10px 14px;border-radius:8px;">✏️ Bearbeiten</a>
-      {% endif %}
     </div>
   </div>
   {% endif %}

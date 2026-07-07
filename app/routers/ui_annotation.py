@@ -201,7 +201,11 @@ def uebernahme_seiten_liste(
             continue
         dokumente.append({
             "dokument_id": d.id, "name": d.dateiname_original,
-            "seiten": [{"id": s.id, "nr": s.seiten_nr, "thumb": f"/objekt-medien/seite/{s.id}/thumb"} for s in ss],
+            "seiten": [{
+                "id": s.id, "nr": s.seiten_nr,
+                "thumb": f"/objekt-medien/seite/{s.id}/thumb",
+                "bild": f"/objekt-medien/seite/{s.id}/bild",
+            } for s in ss],
         })
     return {"dokumente": dokumente}
 

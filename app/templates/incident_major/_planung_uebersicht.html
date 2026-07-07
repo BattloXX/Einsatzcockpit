@@ -8,7 +8,27 @@
   {% set total_alarmed.n = total_alarmed.n + (res.alarmed | length) %}
 {% endfor %}
 
-<div class="planung-wrap">
+{# Status(Phasen)-Zählung über alle Einsatzstellen #}
+{% set phasen = [
+  ('eingegangen', 'Eingegangen'), ('erkundung', 'Erkundung'), ('bewertet', 'Bewertet'),
+  ('disponiert', 'Disponiert'), ('in_arbeit', 'In Arbeit'), ('erledigt', 'Erledigt'),
+  ('abgebrochen', 'Abgebrochen')
+] %}
+{% set pcnt = namespace(m={}) %}
+{% for site in sites_sorted %}
+  {% set _k = site.phase.value if site.phase else 'eingegangen' %}
+  {% set _ = pcnt.m.update({_k: pcnt.m.get(_k, 0) + 1}) %}
+{% endfor %}
+
+<div class="planung-wrap" x-data="{
+  versteckt: JSON.parse(localStorage.getItem('planung_hidden_{{ lage.id }}') || '[]'),
+  sichtbar(ph) { return !this.versteckt.includes(ph); },
+  toggle(ph) {
+    const i = this.versteckt.indexOf(ph);
+    i < 0 ? this.versteckt.push(ph) : this.versteckt.splice(i, 1);
+    localStorage.setItem('planung_hidden_{{ lage.id }}', JSON.stringify(this.versteckt));
+  }
+}">
 
   {# Statistik-Leiste #}
   <div class="planung-stats">
@@ -36,6 +56,21 @@
     {% endif %}
   </div>
 
+  {# Status-Filter: Phasen ein-/ausblenden (Anzahl je Status) #}
+  <div class="planung-statusfilter" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 12px;">
+    <span style="font-size:.7rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-family:'JetBrains Mono',monospace;margin-right:2px;">Status</span>
+    {% for val, label in phasen %}
+    {% set c = pcnt.m.get(val, 0) %}
+    <label style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--border);border-radius:999px;cursor:pointer;font-size:.78rem;user-select:none;"
+           :style="sichtbar('{{ val }}') ? 'background:rgba(147,197,253,.14);border-color:rgba(147,197,253,.45);' : 'opacity:.5;'">
+      <input type="checkbox" :checked="sichtbar('{{ val }}')" @change="toggle('{{ val }}')"
+             style="width:14px;height:14px;cursor:pointer;">
+      {{ label }}
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--text-muted);">{{ c }}</span>
+    </label>
+    {% endfor %}
+  </div>
+
   {# Einsatzstellen-Karten-Grid (nach Priorität sortiert, vom Endpoint übergeben) #}
   <div class="planung-grid">
     {% for site in sites_sorted %}
@@ -49,6 +84,8 @@
     {% set total_res = (res.vor_ort | length) + (res.alarmed | length) %}
 
     <div class="planung-card" style="border-left:3px solid {{ prio_color_hex }};cursor:pointer;"
+         data-phase="{{ site.phase.value if site.phase else 'eingegangen' }}"
+         x-show="sichtbar('{{ site.phase.value if site.phase else 'eingegangen' }}')"
          hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}"
          hx-target="#siteDetailContent"
          hx-swap="innerHTML">
