@@ -621,7 +621,9 @@
   }
   function renderPicker(m) {
     var el = byId("anno-tz"); if (!el) { return; }
-    el.innerHTML = '<input type="text" class="anno-tz__search" placeholder="Suchen …">';
+    el.innerHTML = '<div class="anno-tz__bar"><span class="anno-tz__title">Taktische Zeichen / Flächen</span>' +
+      '<button type="button" class="anno-tz__close" aria-label="Schließen" title="Schließen (Esc)">✕</button></div>' +
+      '<input type="text" class="anno-tz__search" placeholder="Suchen …">';
     function section(titel, kind, items) {
       var box = document.createElement("div");
       box.innerHTML = '<div class="anno-tz__h">' + titel + "</div>";
@@ -647,6 +649,7 @@
         b.style.display = (!q || txt.indexOf(q) !== -1) ? "" : "none";
       });
     });
+    el.querySelector(".anno-tz__close").addEventListener("click", function () { togglePanel(false); });
   }
   function loadManifest() {
     var url = cfg.tzManifest || "/static/tz/tz-manifest.json";
@@ -693,6 +696,19 @@
     window.addEventListener("keydown", function (e) {
       var inText = document.activeElement && document.activeElement.tagName === "TEXTAREA";
       if (e.code === "Space" && !inText) { spaceDown = true; }
+      if (e.key === "Escape") {
+        var panel = byId("anno-tz");
+        if (panel && panel.style.display === "block") {
+          var such = panel.querySelector(".anno-tz__search");
+          // Im Suchfeld mit Text: erst Suche leeren, sonst Panel schliessen
+          if (such && document.activeElement === such && such.value) {
+            such.value = ""; such.dispatchEvent(new Event("input"));
+          } else {
+            togglePanel(false);
+          }
+          e.preventDefault(); return;
+        }
+      }
       if (cfg.canWrite && (e.key === "Delete" || e.key === "Backspace") && tr && tr.nodes().length && !inText) {
         e.preventDefault(); pushUndo();
         tr.nodes().forEach(function (n) { n.destroy(); });
