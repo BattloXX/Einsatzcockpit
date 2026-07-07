@@ -1,0 +1,455 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Wasserstellen{% endblock %}
+
+{% block admin_content %}
+<style>
+/* ── Wasserstellen · taktisches Dark-Layout (scoped auf .wsx) ──────────────── */
+.wsx {
+  --wsx-bg: #081425; --wsx-s1: #111c2d; --wsx-s2: #152031; --wsx-s3: #1f2a3c;
+  --wsx-high: #2a3548; --wsx-line: #424754; --wsx-line2: #55606f;
+  --wsx-text: #d8e3fb; --wsx-muted: #c2c6d6; --wsx-dim: #8c909f;
+  --wsx-primary: #adc6ff; --wsx-primary-c: #4d8eff; --wsx-on-primary: #002e6a;
+  --wsx-amber: #ffb95f; --wsx-teal: #5ad1c0; --wsx-red: #ffb4ab; --wsx-green: #6ee7a0;
+  --wsx-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  color: var(--wsx-text);
+  background: var(--wsx-bg);
+  margin: -24px -28px -40px;           /* Admin-Padding (24 28 40) aufheben → randlos */
+  padding: 0;
+  display: flex; flex-direction: column;
+  min-height: calc(100vh - var(--topnav-h));
+}
+@media (max-width: 1100px) { .wsx { margin: -16px; min-height: 0; } }
+
+/* Toolbar */
+.wsx-bar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 12px 18px; background: var(--wsx-s1);
+  border-bottom: 1px solid var(--wsx-line);
+}
+.wsx-brand { display: flex; align-items: center; gap: 10px; }
+.wsx-brand__icon {
+  width: 38px; height: 38px; border-radius: 6px; flex-shrink: 0;
+  background: var(--wsx-primary-c); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 1.25rem;
+}
+.wsx-brand__t { font-size: 1.15rem; font-weight: 700; line-height: 1.1; }
+.wsx-brand__s { font-size: .72rem; color: var(--wsx-dim); font-family: var(--wsx-mono); letter-spacing: .04em; }
+.wsx-pills { display: flex; gap: 6px; margin-left: 4px; }
+.wsx-pill {
+  font-family: var(--wsx-mono); font-size: .68rem; letter-spacing: .05em;
+  padding: 3px 8px; border-radius: 4px; border: 1px solid var(--wsx-line);
+  background: var(--wsx-s2); color: var(--wsx-muted); white-space: nowrap;
+}
+.wsx-pill--ok { color: var(--wsx-primary); border-color: rgba(173,198,255,.35); background: rgba(77,142,255,.12); }
+.wsx-spacer { flex: 1 1 auto; }
+.wsx-search { position: relative; }
+.wsx-search input {
+  background: var(--wsx-bg); border: 1px solid var(--wsx-line); border-radius: 6px;
+  padding: 7px 10px 7px 30px; color: var(--wsx-text); font-size: .85rem; width: 210px;
+}
+.wsx-search input:focus { outline: none; border-color: var(--wsx-primary-c); }
+.wsx-search__ic { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--wsx-dim); font-size: .85rem; }
+.wsx select {
+  background: var(--wsx-bg); border: 1px solid var(--wsx-line); border-radius: 6px;
+  padding: 7px 10px; color: var(--wsx-text); font-size: .85rem;
+}
+.wsx-btn {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: .82rem; font-weight: 600; padding: 7px 12px; border-radius: 6px;
+  border: 1px solid var(--wsx-line); background: var(--wsx-s2); color: var(--wsx-text);
+  transition: background .12s, border-color .12s, transform .06s;
+}
+.wsx-btn:hover { background: var(--wsx-high); border-color: var(--wsx-line2); }
+.wsx-btn:active { transform: scale(.97); }
+.wsx-btn--primary { background: var(--wsx-primary-c); border-color: var(--wsx-primary-c); color: #fff; }
+.wsx-btn--primary:hover { background: #3f7ef0; }
+.wsx-btn.is-on { background: var(--wsx-high); border-color: var(--wsx-primary-c); }
+
+/* Flash */
+.wsx-flash { margin: 10px 18px 0; padding: 10px 14px; border-radius: 8px; font-size: .88rem;
+  border: 1px solid var(--wsx-line); background: var(--wsx-s2); }
+.wsx-flash--ok { border-left: 3px solid var(--wsx-green); }
+.wsx-flash--err { border-left: 3px solid var(--wsx-red); }
+
+/* Map canvas */
+.wsx-mapwrap { position: relative; flex: 0 0 auto; height: 52vh; min-height: 340px; border-bottom: 1px solid var(--wsx-line); }
+#ws-map { position: absolute; inset: 0; background: var(--wsx-bg); }
+/* OSM-Kacheln taktisch abdunkeln (nur Kachel-Ebene; Marker/Popups bleiben normal) */
+.wsx-mapwrap .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(1.05) saturate(.7) grayscale(.15);
+}
+.wsx-marker {
+  width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--wsx-bg);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--wsx-mono); font-size: 9px; font-weight: 700; color: #06121f;
+}
+.leaflet-container .wsx-marker-wrap { background: none; border: none; }
+
+/* Legend */
+.wsx-legend {
+  position: absolute; left: 14px; bottom: 14px; z-index: 500;
+  background: rgba(21,32,49,.92); backdrop-filter: blur(6px);
+  border: 1px solid var(--wsx-line); border-radius: 10px; padding: 10px 12px;
+  box-shadow: 0 8px 26px rgba(0,0,0,.5);
+}
+.wsx-legend__h { font-family: var(--wsx-mono); font-size: .6rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--wsx-dim); margin-bottom: 7px; }
+.wsx-legend__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 14px; }
+.wsx-legend__i { display: flex; align-items: center; gap: 6px; font-family: var(--wsx-mono); font-size: .68rem; color: var(--wsx-muted); }
+.wsx-dot { width: 11px; height: 11px; border-radius: 50%; border: 1px solid var(--wsx-bg); flex-shrink: 0; }
+.wsx-dot--ueberflur { background: var(--wsx-primary-c); }
+.wsx-dot--unterflur { background: var(--wsx-amber); }
+.wsx-dot--loeschwasser { background: var(--wsx-teal); }
+.wsx-dot--inaktiv { background: transparent; border: 1px dashed var(--wsx-red); }
+
+/* Slide-over Drawer (Neu / Import) */
+.wsx-drawer {
+  position: absolute; top: 12px; right: 12px; bottom: 12px; width: 340px; max-width: calc(100% - 24px);
+  z-index: 600; background: var(--wsx-s1); border: 1px solid var(--wsx-line); border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6); display: flex; flex-direction: column; overflow: hidden;
+}
+.wsx-drawer__head { display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid var(--wsx-line); font-weight: 700; }
+.wsx-drawer__body { padding: 14px; overflow-y: auto; }
+.wsx-x { cursor: pointer; border: none; background: none; color: var(--wsx-dim); font-size: 1.1rem; line-height: 1; }
+.wsx-x:hover { color: var(--wsx-text); }
+.wsx-label { display: block; font-size: .72rem; color: var(--wsx-dim); margin: 10px 0 4px; font-family: var(--wsx-mono); letter-spacing: .03em; text-transform: uppercase; }
+.wsx-input, .wsx-drawer select {
+  width: 100%; background: var(--wsx-bg); border: 1px solid var(--wsx-line); border-radius: 6px;
+  padding: 8px 10px; color: var(--wsx-text); font-size: .88rem;
+}
+.wsx-input:focus, .wsx-drawer select:focus { outline: none; border-color: var(--wsx-primary-c); }
+.wsx-row2 { display: flex; gap: 8px; }
+.wsx-row2 > div { flex: 1; }
+.wsx-hint { font-size: .78rem; color: var(--wsx-dim); margin: 2px 0 6px; }
+.wsx-check { display: flex; align-items: center; gap: 8px; font-size: .82rem; margin-top: 10px; cursor: pointer; }
+
+/* Registry table */
+.wsx-reg { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 220px; background: var(--wsx-bg); }
+.wsx-reg__head { display: flex; align-items: center; gap: 10px; padding: 10px 18px; background: var(--wsx-s1); border-bottom: 1px solid var(--wsx-line); }
+.wsx-reg__title { display: flex; align-items: center; gap: 8px; font-family: var(--wsx-mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--wsx-primary); }
+.wsx-reg__scroll { flex: 1; overflow: auto; }
+.wsx-table { width: 100%; border-collapse: collapse; }
+.wsx-table thead th {
+  position: sticky; top: 0; z-index: 2; background: var(--wsx-s1);
+  font-family: var(--wsx-mono); font-size: .64rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--wsx-dim); text-align: left; font-weight: 500; padding: 9px 12px;
+  border-bottom: 1px solid var(--wsx-line);
+}
+.wsx-table td { padding: 8px 12px; border-bottom: 1px solid rgba(66,71,84,.4); font-size: .85rem; vertical-align: middle; }
+.wsx-table tbody tr:hover { background: rgba(42,53,72,.35); }
+.wsx-id { font-family: var(--wsx-mono); font-weight: 600; color: var(--wsx-primary); white-space: nowrap; }
+.wsx-type { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.wsx-flow { font-family: var(--wsx-mono); text-align: right; white-space: nowrap; }
+.wsx-num { text-align: right; }
+.wsx-coord { font-family: var(--wsx-mono); font-size: .74rem; color: var(--wsx-dim); white-space: nowrap; }
+.wsx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px;
+  font-family: var(--wsx-mono); font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; font-weight: 600; }
+.wsx-chip__d { width: 6px; height: 6px; border-radius: 50%; }
+.wsx-chip--ok { color: var(--wsx-green); background: rgba(110,231,160,.10); border: 1px solid rgba(110,231,160,.35); }
+.wsx-chip--ok .wsx-chip__d { background: var(--wsx-green); }
+.wsx-chip--err { color: var(--wsx-red); background: rgba(255,180,171,.10); border: 1px solid rgba(255,180,171,.35); }
+.wsx-chip--err .wsx-chip__d { background: var(--wsx-red); }
+.wsx-src { font-family: var(--wsx-mono); font-size: .62rem; color: var(--wsx-dim); padding: 1px 6px; border: 1px solid var(--wsx-line); border-radius: 4px; }
+.wsx-iconbtn { border: none; background: none; cursor: pointer; color: var(--wsx-dim); font-size: 1rem; padding: 4px 6px; border-radius: 5px; }
+.wsx-iconbtn:hover { color: var(--wsx-primary); background: var(--wsx-s3); }
+.wsx-iconbtn--del:hover { color: var(--wsx-red); }
+.wsx-editcell { background: var(--wsx-s2); }
+.wsx-editform { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; padding: 6px 0; }
+.wsx-editform .wsx-input, .wsx-editform select { width: auto; }
+.wsx-empty { padding: 30px 18px; color: var(--wsx-dim); font-size: .9rem; }
+</style>
+
+<div class="wsx" x-data="wasserstellenAdmin()">
+
+  {# ── Toolbar ── #}
+  <div class="wsx-bar">
+    <div class="wsx-brand">
+      <div class="wsx-brand__icon">💧</div>
+      <div>
+        <div class="wsx-brand__t">Wasserstellen</div>
+        <div class="wsx-brand__s">LÖSCHWASSER-STAMMDATEN</div>
+      </div>
+    </div>
+    <div class="wsx-pills">
+      <span class="wsx-pill">GESAMT {{ gesamt }}</span>
+      <span class="wsx-pill wsx-pill--ok">AKTIV {{ aktiv_count }}</span>
+    </div>
+
+    <div class="wsx-spacer"></div>
+
+    <div class="wsx-search">
+      <span class="wsx-search__ic">🔍</span>
+      <input type="text" placeholder="Suchen …" x-model="suche">
+    </div>
+    <select x-model="filterTyp">
+      <option value="">Alle Typen</option>
+      {% for code, label in typen.items() %}
+      <option value="{{ code }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="button" class="wsx-btn" @click="exportCsv()">⭳ CSV</button>
+    <button type="button" class="wsx-btn" :class="panel==='import' && 'is-on'"
+            @click="panel = panel==='import' ? null : 'import'">📥 Import</button>
+    <button type="button" class="wsx-btn wsx-btn--primary"
+            @click="panel = panel==='neu' ? null : 'neu'">＋ Neue Quelle</button>
+  </div>
+
+  {# ── Import-Rückmeldung ── #}
+  {% if request.query_params.get('import_neu') is not none %}
+  <div class="wsx-flash wsx-flash--ok">
+    ✅ Import: <strong>{{ request.query_params.get('import_neu') }}</strong> neu,
+    <strong>{{ request.query_params.get('import_akt') }}</strong> aktualisiert,
+    {{ request.query_params.get('import_skip') }} übersprungen.
+  </div>
+  {% elif request.query_params.get('import_fehler') %}
+  <div class="wsx-flash wsx-flash--err">
+    ⚠️ Import fehlgeschlagen: keine gültigen Zeilen (erwartet GIS-Export … GRUPPE;UNTERGRUPP … RECHTSWERT;HOCHWERT).
+  </div>
+  {% endif %}
+
+  {# ── Karte (Primär-Canvas) ── #}
+  <div class="wsx-mapwrap">
+    <div id="ws-map"></div>
+
+    {# Legende #}
+    <div class="wsx-legend">
+      <div class="wsx-legend__h">Legende</div>
+      <div class="wsx-legend__grid">
+        <div class="wsx-legend__i"><span class="wsx-dot wsx-dot--ueberflur"></span>Überflur</div>
+        <div class="wsx-legend__i"><span class="wsx-dot wsx-dot--unterflur"></span>Unterflur</div>
+        <div class="wsx-legend__i"><span class="wsx-dot wsx-dot--loeschwasser"></span>Löschwasser</div>
+        <div class="wsx-legend__i"><span class="wsx-dot wsx-dot--inaktiv"></span>Inaktiv</div>
+      </div>
+    </div>
+
+    {# Slide-over: Neue Quelle / Import #}
+    <div class="wsx-drawer" x-show="panel" x-transition.opacity x-cloak>
+      {# Neu #}
+      <template x-if="panel==='neu'">
+        <div style="display:flex;flex-direction:column;height:100%;">
+          <div class="wsx-drawer__head">
+            <span>➕ Neue Wasserstelle</span>
+            <button type="button" class="wsx-x" @click="panel=null">✕</button>
+          </div>
+          <div class="wsx-drawer__body">
+            <form method="post" action="/admin/wasserstellen/neu">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <label class="wsx-label">Bezeichnung</label>
+              <input type="text" name="bezeichnung" class="wsx-input" required placeholder="z. B. Hydrant Senderstraße 10">
+              <label class="wsx-label">Typ</label>
+              <select name="typ">
+                {% for code, label in typen.items() %}
+                <option value="{{ code }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+              <div class="wsx-row2">
+                <div>
+                  <label class="wsx-label">Breite (lat)</label>
+                  <input type="text" name="lat" id="ws-neu-lat" class="wsx-input" placeholder="47.4652">
+                </div>
+                <div>
+                  <label class="wsx-label">Länge (lng)</label>
+                  <input type="text" name="lng" id="ws-neu-lng" class="wsx-input" placeholder="9.7503">
+                </div>
+              </div>
+              <div class="wsx-hint">Tipp: In die Karte klicken übernimmt die Koordinaten.</div>
+              <label class="wsx-label">Ergiebigkeit (l/min, optional)</label>
+              <input type="text" name="ergiebigkeit_l_min" class="wsx-input" placeholder="z. B. 1200">
+              <label class="wsx-label">Hinweis (optional)</label>
+              <input type="text" name="hinweis" class="wsx-input" placeholder="Zufahrt, Kupplung …">
+              <button type="submit" class="wsx-btn wsx-btn--primary" style="width:100%;margin-top:14px;justify-content:center;">Anlegen</button>
+            </form>
+          </div>
+        </div>
+      </template>
+
+      {# Import #}
+      <template x-if="panel==='import'">
+        <div style="display:flex;flex-direction:column;height:100%;">
+          <div class="wsx-drawer__head">
+            <span>📥 CSV-Import</span>
+            <button type="button" class="wsx-x" @click="panel=null">✕</button>
+          </div>
+          <div class="wsx-drawer__body">
+            <p class="wsx-hint">GIS-Export (MGI/EPSG:31281). Koordinaten werden automatisch nach WGS84 umgerechnet. Wiederholte Importe aktualisieren bestehende Einträge.</p>
+            <form method="post" action="/admin/wasserstellen/import" enctype="multipart/form-data">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <label class="wsx-label">CSV-Datei</label>
+              <input type="file" name="datei" accept=".csv,text/csv" required class="wsx-input">
+              <label class="wsx-check">
+                <input type="checkbox" name="ersetzen" value="1">
+                Bisherige Import-Datensätze vorher ersetzen
+              </label>
+              <button type="submit" class="wsx-btn" style="width:100%;margin-top:14px;justify-content:center;">Importieren</button>
+            </form>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  {# ── Registry-Tabelle ── #}
+  <div class="wsx-reg">
+    <div class="wsx-reg__head">
+      <div class="wsx-reg__title">▚ Source Registry</div>
+      <span class="wsx-pill" x-text="'ANGEZEIGT ' + sichtbar"></span>
+    </div>
+    <div class="wsx-reg__scroll">
+      {% if not wasserstellen %}
+      <div class="wsx-empty">Noch keine Wasserstellen. Lege eine an oder importiere ein CSV.</div>
+      {% else %}
+      <table class="wsx-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Typ</th><th>Bezeichnung</th><th class="wsx-num">Ergieb. (l/min)</th>
+            <th>Koordinaten</th><th>Status</th><th>Quelle</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w in wasserstellen %}
+          <tr x-data="{ edit:false }"
+              x-show="passt($el.dataset.bez, $el.dataset.typ)"
+              data-bez="{{ w.bezeichnung|e }}" data-typ="{{ w.typ }}">
+            <template x-if="!edit">
+              <td class="wsx-id">#{{ '%04d'|format(w.id) }}</td>
+            </template>
+            <template x-if="!edit">
+              <td>
+                <span class="wsx-type"><span class="wsx-dot wsx-dot--{{ w.icon_kat }}"></span>{{ w.typ_label }}</span>
+              </td>
+            </template>
+            <template x-if="!edit">
+              <td>
+                {{ w.bezeichnung }}
+                {% if w.hinweis %}<div class="wsx-coord" style="color:var(--wsx-dim);">{{ w.hinweis }}</div>{% endif %}
+              </td>
+            </template>
+            <template x-if="!edit">
+              <td class="wsx-flow">{% if w.ergiebigkeit_l_min %}{{ '{:,}'.format(w.ergiebigkeit_l_min).replace(',', '.') }}{% else %}—{% endif %}</td>
+            </template>
+            <template x-if="!edit">
+              <td class="wsx-coord">{% if w.lat is not none and w.lng is not none %}{{ '%.5f'|format(w.lat) }}, {{ '%.5f'|format(w.lng) }}{% else %}—{% endif %}</td>
+            </template>
+            <template x-if="!edit">
+              <td>
+                {% if w.aktiv %}
+                <span class="wsx-chip wsx-chip--ok"><span class="wsx-chip__d"></span>Aktiv</span>
+                {% else %}
+                <span class="wsx-chip wsx-chip--err"><span class="wsx-chip__d"></span>Inaktiv</span>
+                {% endif %}
+              </td>
+            </template>
+            <template x-if="!edit">
+              <td><span class="wsx-src">{{ 'IMPORT' if w.quelle == 'import' else 'MANUELL' }}</span></td>
+            </template>
+            <template x-if="!edit">
+              <td style="white-space:nowrap;text-align:right;">
+                <button type="button" class="wsx-iconbtn" @click="edit=true" title="Bearbeiten">✎</button>
+                <form method="post" action="/admin/wasserstellen/{{ w.id }}/loeschen" style="display:inline;"
+                      onsubmit="return confirm('Diese Wasserstelle wirklich loeschen?');">
+                  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                  <button type="submit" class="wsx-iconbtn wsx-iconbtn--del" title="Löschen">🗑</button>
+                </form>
+              </td>
+            </template>
+
+            {# Inline-Bearbeiten #}
+            <template x-if="edit">
+              <td colspan="8" class="wsx-editcell">
+                <form method="post" action="/admin/wasserstellen/{{ w.id }}/bearbeiten" class="wsx-editform">
+                  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                  <div style="flex:2;min-width:180px;">
+                    <label class="wsx-label">Bezeichnung</label>
+                    <input type="text" name="bezeichnung" class="wsx-input" value="{{ w.bezeichnung }}" required style="width:100%;">
+                  </div>
+                  <div style="min-width:150px;">
+                    <label class="wsx-label">Typ</label>
+                    <select name="typ">
+                      {% for code, label in typen.items() %}
+                      <option value="{{ code }}" {% if code == w.typ %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div style="width:110px;"><label class="wsx-label">lat</label>
+                    <input type="text" name="lat" class="wsx-input" value="{% if w.lat is not none %}{{ w.lat }}{% endif %}"></div>
+                  <div style="width:110px;"><label class="wsx-label">lng</label>
+                    <input type="text" name="lng" class="wsx-input" value="{% if w.lng is not none %}{{ w.lng }}{% endif %}"></div>
+                  <div style="width:110px;"><label class="wsx-label">l/min</label>
+                    <input type="text" name="ergiebigkeit_l_min" class="wsx-input" value="{{ w.ergiebigkeit_l_min or '' }}"></div>
+                  <div style="flex:1;min-width:150px;"><label class="wsx-label">Hinweis</label>
+                    <input type="text" name="hinweis" class="wsx-input" value="{{ w.hinweis or '' }}" style="width:100%;"></div>
+                  <label class="wsx-check" style="margin-top:0;">
+                    <input type="checkbox" name="aktiv" value="1" {% if w.aktiv %}checked{% endif %}> aktiv
+                  </label>
+                  <div style="display:flex;gap:6px;">
+                    <button type="submit" class="wsx-btn wsx-btn--primary">Speichern</button>
+                    <button type="button" class="wsx-btn" @click="edit=false">Abbrechen</button>
+                  </div>
+                </form>
+              </td>
+            </template>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+function wasserstellenAdmin() {
+  return {
+    suche: "",
+    filterTyp: "",
+    panel: null,
+    get sichtbar() {
+      var q = (this.suche || "").toLowerCase().trim();
+      var f = this.filterTyp;
+      var n = 0;
+      document.querySelectorAll(".wsx-table tbody tr").forEach(function (tr) {
+        var bez = (tr.dataset.bez || "").toLowerCase();
+        var typ = tr.dataset.typ || "";
+        if ((!f || typ === f) && (!q || bez.indexOf(q) >= 0)) { n++; }
+      });
+      return n;
+    },
+    passt(bez, typ) {
+      if (this.filterTyp && typ !== this.filterTyp) return false;
+      var q = (this.suche || "").toLowerCase().trim();
+      if (!q) return true;
+      return (bez || "").toLowerCase().indexOf(q) >= 0;
+    },
+    async exportCsv() {
+      try {
+        var r = await fetch("/admin/wasserstellen.json");
+        var d = await r.json();
+        var rows = d.wasserstellen || [];
+        var cell = function (v) {
+          v = (v == null ? "" : String(v));
+          return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+        };
+        var csv = "bezeichnung;typ;lat;lng;ergiebigkeit_l_min;aktiv;quelle\n";
+        rows.forEach(function (w) {
+          csv += [w.bezeichnung, w.typ_label, w.lat, w.lng, w.ergiebigkeit_l_min,
+                  w.aktiv ? "aktiv" : "inaktiv", w.quelle].map(cell).join(";") + "\n";
+        });
+        var blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "wasserstellen.csv";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+      } catch (e) {}
+    },
+  };
+}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/wasserstellen_admin.js?v={{ ASSET_VERSION }}"></script>
+{% endblock %}

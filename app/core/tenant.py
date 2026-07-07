@@ -129,6 +129,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "alarm_infoscreen_token",
     "infoscreen_url",
     "objekt_seite_ki_vorschlag",
+    # Wasserstellen-/Löschwasser-Stammdaten (TenantScoped via Mixin)
+    "wasserstelle",
     # GSL/Großschadenslage (SEC-1 Defense-in-Depth-Backstop) — bisher nur durch
     # ~95 manuelle _check_org_access()-Aufrufe in ui_major_incident.py geschützt;
     # ein vergessener Aufruf wäre ein Cross-Tenant-IDOR ohne DB-seitigen Schutz.

@@ -10,7 +10,7 @@
      or '/admin/sms-test' in _p or '/admin/sms-senden' in _p or '/infoscreen-alarm' in _p %}
   {% set active_group = 'verwaltung' %}
 {% elif '/admin/gruppen' in _p or '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p
-       or '/admin/teams-alarmierung' in _p %}
+       or '/admin/teams-alarmierung' in _p or '/admin/wasserstellen' in _p %}
   {% set active_group = 'stammdaten' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
@@ -237,6 +237,11 @@
                class="admin-nav__item {% if '/admin/verleih' in request.url.path %}is-active{% endif %}"
                {{ tip('Geräteverleih Artikelstammdaten und Stücklisten') }}>
               <span class="admin-nav__icon">📦</span>Geräteverleih
+            </a>
+            <a href="/admin/wasserstellen"
+               class="admin-nav__item {% if '/admin/wasserstellen' in request.url.path %}is-active{% endif %}"
+               {{ tip('Löschwasser-Stammdaten: Hydranten, Saugstellen, Löschteiche — pflegen und aus CSV importieren') }}>
+              <span class="admin-nav__icon">🚰</span>Wasserstellen
             </a>
             <a href="/admin/einsatzinfo-sms"
                class="admin-nav__item {% if '/admin/einsatzinfo-sms' in request.url.path %}is-active{% endif %}"

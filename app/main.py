@@ -32,6 +32,7 @@ from app.routers import (
     teams_bot,
     ui_admin,
     ui_ai_prompts,
+    ui_annotation,
     ui_archive,
     ui_atemschutz_pruefung,
     ui_atemschutz_pruefung_admin,
@@ -41,7 +42,6 @@ from app.routers import (
     ui_fahrtenbuch_admin,
     ui_gsl_staff,
     ui_hilfe,
-    ui_annotation,
     ui_incident,
     ui_infoscreen_alarm,
     ui_invitation,
@@ -62,6 +62,7 @@ from app.routers import (
     ui_termin,
     ui_uas,
     ui_verleih,
+    ui_wasserstelle,
     ui_weather,
     ws,
 )
@@ -95,8 +96,9 @@ async def lifespan(app: FastAPI):
     # geladen; eine spätere Re-Konfiguration kann dann mitten im Request mit
     # "failed to locate a name" abbrechen und den Request in einen 500 reißen.
     # Hier fällt ein solcher Fehler stattdessen deterministisch beim Boot auf.
-    import app.models  # noqa: F401 – importiert alle Modell-Module in die Registry
     from sqlalchemy.orm import configure_mappers
+
+    import app.models  # noqa: F401 – importiert alle Modell-Module in die Registry
     configure_mappers()
 
     # Bootstrap admin on first start
@@ -466,6 +468,7 @@ app.include_router(ui_termin.router)
 app.include_router(ui_uas.router)
 app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
+app.include_router(ui_wasserstelle.router)
 app.include_router(ui_infoscreen_alarm.router)
 app.include_router(ui_verleih.router)
 app.include_router(ui_fahrtenbuch.router)

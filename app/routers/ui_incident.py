@@ -919,13 +919,124 @@ async def incident_hydranten(incident_id: int, request: Request, db: Session = D
         except Exception:
             osm = []
 
+    # Eigene Wasserstellen-Stammdaten (Vorrang). OSM-Hydranten, die auf einer eigenen
+    # Wasserstelle liegen, werden ausgeblendet — OSM bleibt so nur für Nachbarorte,
+    # für die keine Stammdaten existieren, sichtbar (kein Doppelbild).
+    stammdaten: list = []
+    if incident.primary_org_id and lat is not None and lng is not None:
+        from app.services.wasserstelle_service import (
+            dedupe_osm_gegen_stammdaten,
+            lade_wasserstellen_im_umkreis,
+        )
+        stammdaten = lade_wasserstellen_im_umkreis(
+            db, incident.primary_org_id, lat, lng,
+            radius_m=settings.HYDRANT_RADIUS_EINSATZINFO_M,
+        )
+        if stammdaten:
+            osm = dedupe_osm_gegen_stammdaten(
+                osm, stammdaten, schwelle_m=settings.WASSERSTELLE_OSM_DEDUPE_M
+            )
+
     org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
     return {
-        "hydranten": merge_hydranten(osm, manuell),
+        "hydranten": merge_hydranten(merge_hydranten(stammdaten, osm), manuell),
         "stand": format_local_datetime(stand, org) if stand else None,
         "zentrum": ({"lat": lat, "lng": lng} if lat is not None and lng is not None else None),
         "aktiv": enabled,
     }
+
+
+@router.get("/einsatz/{incident_id}/nachbar-gefahren.json")
+def incident_nachbar_gefahren(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    """Gefahren der Nachbarobjekte im Umkreis (Standard 400 m) um das Einsatzobjekt.
+
+    Liefert je Objekt (außer den bereits mit dem Einsatz verknüpften) die
+    strukturierten Gefahren mit Piktogramm für die Einsatzinfo-Karte.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(401, "Nicht angemeldet")
+    incident = _incident_or_404(incident_id, db)
+    if not can_access_incident(user, incident):
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+
+    if not getattr(request.state, "objekt_enabled", False) or not incident.primary_org_id:
+        return {"objekte": [], "radius_m": settings.NACHBAR_GEFAHR_RADIUS_M}
+
+    from app.models.objekt import (
+        GEFAHR_PIKTOGRAMME,
+        OBJEKT_EINSATZ_BESTAETIGT,
+        Objekt,
+        ObjektEinsatz,
+    )
+    from app.services.hydrant_service import _haversine_m, _richtung
+
+    # Bezugspunkt: Einsatzkoordinate, sonst ein verknüpftes Objekt.
+    lat, lng = incident.lat, incident.lng
+    verknuepfungen = db.query(ObjektEinsatz).filter(
+        ObjektEinsatz.incident_id == incident_id
+    ).all()
+    if lat is None or lng is None:
+        for oe in sorted(
+            verknuepfungen,
+            key=lambda o: 0 if o.status == OBJEKT_EINSATZ_BESTAETIGT else 1,
+        ):
+            obj = db.get(Objekt, oe.objekt_id)
+            if obj and obj.lat is not None and obj.lng is not None:
+                lat, lng = obj.lat, obj.lng
+                break
+    if lat is None or lng is None:
+        return {"objekte": [], "radius_m": settings.NACHBAR_GEFAHR_RADIUS_M}
+
+    # Bereits verknüpfte Objekte ausblenden (das sind keine „Nachbarn").
+    eigene_ids = {oe.objekt_id for oe in verknuepfungen}
+    radius = settings.NACHBAR_GEFAHR_RADIUS_M
+
+    kandidaten = (
+        db.query(Objekt)
+        .options(selectinload(Objekt.gefahren))
+        .filter(
+            Objekt.org_id == incident.primary_org_id,
+            Objekt.lat.is_not(None),
+            Objekt.lng.is_not(None),
+        )
+        .all()
+    )
+
+    ergebnis: list[dict] = []
+    for o in kandidaten:
+        if o.id in eigene_ids or not o.gefahren:
+            continue
+        dist = _haversine_m(lat, lng, o.lat, o.lng)
+        if dist > radius:
+            continue
+        gefahren = []
+        for g in o.gefahren:
+            piktogramm = "⚠️"
+            label = ""
+            if g.gefahr:
+                roh = GEFAHR_PIKTOGRAMME.get(g.gefahr.piktogramm_typ, "⚠️")
+                teile = roh.split(" ", 1)
+                piktogramm = teile[0]
+                label = teile[1] if len(teile) > 1 else g.gefahr.name
+            gefahren.append({
+                "name": g.gefahr.name if g.gefahr else (label or "Gefahr"),
+                "piktogramm": piktogramm,
+                "un_nummer": g.un_nummer,
+                "stoffname": g.stoffname,
+            })
+        ergebnis.append({
+            "objekt_id": o.id,
+            "name": o.name,
+            "lat": o.lat,
+            "lng": o.lng,
+            "entfernung_m": int(round(dist)),
+            "richtung": _richtung(lat, lng, o.lat, o.lng),
+            "gefahren": gefahren,
+        })
+
+    ergebnis.sort(key=lambda e: e["entfernung_m"])
+    return {"objekte": ergebnis, "radius_m": radius}
 
 
 @router.get("/einsatz/{incident_id}/dashboard", response_class=HTMLResponse)

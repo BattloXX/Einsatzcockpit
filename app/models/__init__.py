@@ -42,7 +42,6 @@ from app.models.major_incident import (
     StaffAssignment,
     StaffFunction,
 )
-from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
 from app.models.master import (
     AIPromptVersion,
     AlarmType,
@@ -62,6 +61,7 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
+from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
 from app.models.objekt import (
     AlarmInfoscreenToken,
     GefahrenKatalog,
@@ -132,6 +132,7 @@ from app.models.verleih import (
     VerleihStueckliste,
     VerleihStuecklistePosition,
 )
+from app.models.wasserstelle import Wasserstelle
 from app.models.weather import WeatherReading, WeatherStation
 from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherAlertState
 
@@ -169,6 +170,7 @@ __all__ = [
     "ObjektAuswahl", "ObjektKontakt", "ObjektWohnanlage",
     "ObjektDokument", "ObjektDokumentSeite", "ObjektKartenObjekt", "ObjektEinsatz",
     "ObjektSymbol", "AlarmInfoscreenToken", "InfoscreenUrl", "ObjektSeiteKiVorschlag",
+    "Wasserstelle",
     "UASDevice", "UASPilot", "UASFlugbewegung", "UASWartung",
     "UASEinsatz", "UASEinsatzRolleEintrag", "UASFlug", "UASCheckliste",
     "UASEreignis", "UASKartenobjekt", "UASMedien",

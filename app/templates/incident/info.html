@@ -14,6 +14,25 @@
   .ei-map-wrap { position: static; }
   #einsatz-info-karte { height: 52vh; min-height: 320px; }
 }
+/* Nachbar-Gefahren (Umkreis) */
+.nachbar-gefahr-icon {
+  background: var(--amber, #f2b02e); color: #1a1a1a;
+  border: 2px solid #fff; border-radius: 999px; box-shadow: 0 1px 4px rgba(0,0,0,.4);
+  min-width: 28px; height: 28px; padding: 0 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .8rem; line-height: 1; white-space: nowrap;
+}
+#nachbar-gefahren { display: flex; flex-direction: column; gap: 8px; }
+.nachbar-gefahr-row {
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: pointer;
+}
+.nachbar-gefahr-row:hover { border-color: rgba(242,176,46,.55); }
+.nachbar-gefahr-row__head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.nachbar-gefahr-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.nachbar-gefahr-chip {
+  font-size: .76rem; padding: 2px 7px; border-radius: 999px;
+  background: rgba(242,176,46,.14); border: 1px solid rgba(242,176,46,.4);
+}
 </style>
 <div class="page-content einsatz-info">
 
@@ -68,6 +87,14 @@
         <h3 style="margin:0 0 10px;">🚰 Nächste Hydranten</h3>
         <div id="hydranten-liste"><span class="text-muted">Lade Löschwasser …</span></div>
       </div>
+
+      {% if objekt_enabled %}
+      <!-- Gefahren der Nachbarobjekte (Umkreis) -->
+      <div class="card" id="nachbar-gefahren-card" style="padding:14px;">
+        <h3 style="margin:0 0 10px;">⚠️ Gefahren in der Umgebung</h3>
+        <div id="nachbar-gefahren"><span class="text-muted">Lade Nachbar-Gefahren …</span></div>
+      </div>
+      {% endif %}
 
       <!-- Ausrückordnung -->
       {% if dispatch_vehicles %}

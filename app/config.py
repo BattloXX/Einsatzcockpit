@@ -130,6 +130,11 @@ class Settings(BaseSettings):
     HYDRANT_MAX: int = 40                     # max. zurückgegebene Entnahmestellen (Standard)
     HYDRANT_MAX_EINSATZINFO: int = 120        # max. Entnahmestellen im 2-km-Radius (Liste lädt nach)
     HYDRANT_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
+    # Eigene Wasserstellen-Stammdaten haben Vorrang; OSM-Hydranten näher als dieser
+    # Wert an einer eigenen Wasserstelle werden ausgeblendet (kein Doppelbild).
+    WASSERSTELLE_OSM_DEDUPE_M: int = 25
+    # Gefahren der Nachbarobjekte im Umkreis des Einsatzobjekts (Einsatzinfo-Karte)
+    NACHBAR_GEFAHR_RADIUS_M: int = 400
 
     # Wetter (GeoSphere Austria / ZAMG — CC BY 4.0, Standardquelle / Fallback ohne API-Key)
     WEATHER_ENABLED: bool = True

@@ -105,9 +105,15 @@
   var HYDRANT_ICON_TEXT = { ueberflur: "H", unterflur: "UH", loeschwasser: "≈" };
   var hydrantById = {};
 
-  function hydrantIcon(typ) {
-    var t = HYDRANT_ICON_TEXT[typ] || "H";
-    var cls = "hydrant-icon hydrant-icon--" + (typ || "hydrant");
+  // Icon-Kategorie (ueberflur/unterflur/loeschwasser) — Stammdaten liefern icon_kat,
+  // OSM liefert nur den (bereits normalisierten) typ.
+  function iconKat(h) { return h.icon_kat || h.typ || "hydrant"; }
+  // Anzeige-Label: Stammdaten liefern detailliertes typ_label, sonst Grundtyp.
+  function hydrantLabel(h) { return h.typ_label || HYDRANT_LABEL[h.typ] || "Hydrant"; }
+
+  function hydrantIcon(kat) {
+    var t = HYDRANT_ICON_TEXT[kat] || "H";
+    var cls = "hydrant-icon hydrant-icon--" + (kat || "hydrant");
     return L.divIcon({
       html: '<div class="' + cls + '">' + t + "</div>",
       className: "hydrant-divicon",
@@ -122,12 +128,14 @@
   var LISTE_SICHTBAR = 5;
 
   function hydrantRowHtml(h) {
-    var label = HYDRANT_LABEL[h.typ] || "Hydrant";
+    var label = hydrantLabel(h);
+    var kat = iconKat(h);
     var dist = (h.entfernung_m != null) ? (h.entfernung_m + " m" + (h.richtung ? " " + h.richtung : "")) : "";
-    var quelle = h.quelle === "objekt" ? " · Objekt" : "";
+    var quelle = h.quelle === "objekt" ? " · Objekt"
+      : (h.quelle === "stammdaten" ? " · FW" : "");
     return '<button type="button" class="hydrant-liste__row" data-hid="' + h.id + '">'
-      + '<span class="hydrant-icon hydrant-icon--' + (h.typ || "hydrant") + '">'
-      + (HYDRANT_ICON_TEXT[h.typ] || "H") + "</span>"
+      + '<span class="hydrant-icon hydrant-icon--' + kat + '">'
+      + (HYDRANT_ICON_TEXT[kat] || "H") + "</span>"
       + '<span class="hydrant-liste__text"><strong>' + label + "</strong>"
       + (h.ref ? ' <span class="text-muted">' + h.ref + "</span>" : "")
       + quelle + "</span>"
@@ -180,8 +188,8 @@
         // Manuelle Objekt-Hydranten sind bereits als Objekt-Symbole auf der Karte —
         // nur in der Liste zeigen, nicht doppelt als Marker zeichnen.
         if (h.quelle === "objekt") { return; }
-        var m = L.marker([h.lat, h.lng], { icon: hydrantIcon(h.typ) }).addTo(karte);
-        var label = HYDRANT_LABEL[h.typ] || "Hydrant";
+        var m = L.marker([h.lat, h.lng], { icon: hydrantIcon(iconKat(h)) }).addTo(karte);
+        var label = hydrantLabel(h);
         m.bindPopup("<strong>" + label + "</strong>"
           + (h.ref ? "<br>" + h.ref : "")
           + (h.entfernung_m != null ? "<br>" + h.entfernung_m + " m" : ""));
@@ -194,5 +202,74 @@
     .catch(function () {
       var box = document.getElementById("hydranten-liste");
       if (box) { box.innerHTML = '<span class="text-muted">Hydranten konnten nicht geladen werden.</span>'; }
+    });
+
+  /* ── Gefahren der Nachbarobjekte (Umkreis, Standard 400 m) ── */
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function gefahrenObjektIcon(objekt) {
+    var pik = (objekt.gefahren || []).map(function (g) { return g.piktogramm || "⚠️"; }).slice(0, 3).join("");
+    return L.divIcon({
+      html: '<div class="nachbar-gefahr-icon">' + (pik || "⚠️") + "</div>",
+      className: "nachbar-gefahr-divicon",
+      iconSize: null,
+      iconAnchor: [14, 14]
+    });
+  }
+
+  function renderNachbarGefahren(objekte, radius) {
+    var box = document.getElementById("nachbar-gefahren");
+    if (!box) { return; }
+    if (!objekte || !objekte.length) {
+      box.innerHTML = '<span class="text-muted">Keine Gefahren in Nachbarobjekten (' + (radius || 400) + ' m).</span>';
+      return;
+    }
+    var html = "";
+    objekte.forEach(function (o) {
+      var chips = (o.gefahren || []).map(function (g) {
+        return '<span class="nachbar-gefahr-chip" title="' + escapeHtml(g.name)
+          + (g.un_nummer ? " · UN " + escapeHtml(g.un_nummer) : "") + '">'
+          + (g.piktogramm || "⚠️") + " " + escapeHtml(g.name) + "</span>";
+      }).join("");
+      var dist = (o.entfernung_m != null) ? (o.entfernung_m + " m" + (o.richtung ? " " + o.richtung : "")) : "";
+      html += '<div class="nachbar-gefahr-row" data-oid="' + o.objekt_id + '">'
+        + '<div class="nachbar-gefahr-row__head"><strong>' + escapeHtml(o.name) + "</strong>"
+        + '<span class="text-muted" style="font-size:.78rem;">' + dist + "</span></div>"
+        + '<div class="nachbar-gefahr-chips">' + chips + "</div></div>";
+    });
+    box.innerHTML = html;
+    box.querySelectorAll(".nachbar-gefahr-row").forEach(function (row) {
+      row.addEventListener("click", function () {
+        var m = nachbarMarkerById[row.dataset.oid];
+        if (m) { karte.setView(m.getLatLng(), 18); m.openPopup(); }
+      });
+    });
+  }
+
+  var nachbarMarkerById = {};
+  fetch("/einsatz/" + incidentId + "/nachbar-gefahren.json")
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d) { renderNachbarGefahren([], 400); return; }
+      (d.objekte || []).forEach(function (o) {
+        if (o.lat == null || o.lng == null) { return; }
+        var m = L.marker([o.lat, o.lng], { icon: gefahrenObjektIcon(o) }).addTo(karte);
+        var chips = (o.gefahren || []).map(function (g) {
+          return (g.piktogramm || "⚠️") + " " + escapeHtml(g.name)
+            + (g.un_nummer ? " (UN " + escapeHtml(g.un_nummer) + ")" : "");
+        }).join("<br>");
+        m.bindPopup("<strong>⚠️ " + escapeHtml(o.name) + "</strong>"
+          + (o.entfernung_m != null ? " <span>" + o.entfernung_m + " m</span>" : "")
+          + "<br>" + chips);
+        nachbarMarkerById[o.objekt_id] = m;
+      });
+      renderNachbarGefahren(d.objekte, d.radius_m);
+    })
+    .catch(function () {
+      var box = document.getElementById("nachbar-gefahren");
+      if (box) { box.innerHTML = '<span class="text-muted">Nachbar-Gefahren konnten nicht geladen werden.</span>'; }
     });
 })();
