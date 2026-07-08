@@ -3,7 +3,7 @@
   {% if objekt.gefahren %}
   <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
     {% for g in objekt.gefahren %}
-    <div class="objekt-gefahr-zeile" x-data="{ edit: false, links: {{ g.links|tojson }} }">
+    <div class="objekt-gefahr-zeile" x-data='{ edit: false, links: {{ g.links|tojson }} }'>
       <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">
         <span class="objekt-gefahr-chip__label">
           {{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠️')[:2] if g.gefahr else '⚠️' }}

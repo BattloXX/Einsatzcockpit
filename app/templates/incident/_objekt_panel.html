@@ -50,7 +50,7 @@
 
   {% if darf_verknuepfen and kandidaten %}
   <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;"
-       x-data="{ q: '', kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, t: {{ (o.anzeige_nummer ~ ' ' ~ o.name)|tojson }} }{{ ',' if not loop.last }}{% endfor %}] }">
+       x-data='{ q: "", kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, t: {{ (o.anzeige_nummer ~ " " ~ o.name)|tojson }} }{{ "," if not loop.last }}{% endfor %}] }'>
     <div class="text-muted" style="font-size:0.78em;margin-bottom:4px;">
       {% if verknuepfungen %}Anderes Objekt verknüpfen{% else %}Objekt manuell verknüpfen{% endif %}
     </div>

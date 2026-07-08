@@ -176,7 +176,7 @@
            alt="{{ m.original_filename }}"
            style="width:64px;height:64px;object-fit:cover;border-radius:4px;
                   border:1px solid var(--border);cursor:zoom-in;"
-           {% if m.media_type == 'image' %}onclick="openImageLightbox([{src:'/annotieren/cross_marker/{{ m.id }}/bild'{% if can_edit %},edit:'/annotieren/cross_marker/{{ m.id }}'{% endif %}}])"{% else %}onclick="openMediaViewer('/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/medien/{{ m.id }}/bild', 'image', {{ m.original_filename|tojson }})"{% endif %}>
+           {% if m.media_type == 'image' %}onclick="openImageLightbox([{src:'/annotieren/cross_marker/{{ m.id }}/bild'{% if can_edit %},edit:'/annotieren/cross_marker/{{ m.id }}'{% endif %}}])"{% else %}onclick='openMediaViewer("/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/medien/{{ m.id }}/bild", "image", {{ m.original_filename|tojson }})'{% endif %}>
       {% if can_edit and m.media_type == 'image' %}
       <a href="/annotieren/cross_marker/{{ m.id }}" title="Bearbeiten" @click.stop
          style="position:absolute;top:1px;left:1px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>
