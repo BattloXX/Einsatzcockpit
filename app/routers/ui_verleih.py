@@ -5,7 +5,17 @@ import json
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session, selectinload
 
@@ -480,6 +490,7 @@ async def verleih_neu_form(
 async def verleih_neu(
     request: Request,
     lage_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -597,6 +608,10 @@ async def verleih_neu(
                 logger.warning("Foto-Upload beim Anlegen fehlgeschlagen", exc_info=True)
 
     await broadcast_lage(lage_id, {"type": "verleih:changed", "lage_id": lage_id})
+
+    # Optionaler Auto-Druck am Stationsdrucker (nur wenn OrgSettings.verleih_autodruck aktiv).
+    from app.services.print_dispatcher import autoprint_verleih_background
+    background_tasks.add_task(autoprint_verleih_background, ausleihe.id)
 
     trigger = {"verleihChanged": True}
     if pin_nachricht:

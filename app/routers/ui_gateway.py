@@ -94,7 +94,9 @@ def gateway_detail(
         db.query(PrintJob).filter(PrintJob.gateway_id == gw.id)
         .order_by(PrintJob.erstellt_am.desc()).limit(30).all()
     )
+    from app.models.master import OrgSettings
     from app.routers.ws import get_passthrough_status
+    os_row = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     return templates.TemplateResponse(request, "gateway/detail.html", {
         "user": user,
         "gw": gw,
@@ -106,7 +108,31 @@ def gateway_detail(
         "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
         "trigger_labels": TRIGGER_LABELS,
         "passthrough_status": get_passthrough_status(user.org_id),
+        "verleih_autodruck": bool(os_row and os_row.verleih_autodruck),
     })
+
+
+# ── Org-Druckeinstellungen ─────────────────────────────────────────────────────
+
+@router.post("/{gateway_id}/verleih-autodruck")
+def gateway_verleih_autodruck(
+    gateway_id: int,
+    request: Request,
+    enabled: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    """Schaltet den automatischen Stationsdruck von Verleihscheinen (OrgSettings)."""
+    _gw_or_404(db, user.org_id, gateway_id)
+    from app.models.master import OrgSettings
+    row = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
+    if row is None:
+        row = OrgSettings(org_id=user.org_id)
+        db.add(row)
+    row.verleih_autodruck = enabled == "1"
+    db.commit()
+    return RedirectResponse(f"/gateway/{gateway_id}?verleih_autodruck=1#regeln", status_code=303)
 
 
 # ── Gateway-CRUD + Pairing ─────────────────────────────────────────────────────

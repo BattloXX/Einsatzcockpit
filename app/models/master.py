@@ -393,6 +393,9 @@ class OrgSettings(Base):
     gateway_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Gateway gilt als offline nach N Minuten ohne Heartbeat → Admin-Benachrichtigung.
     gateway_offline_alert_min: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    # Verleihscheine bei Anlage automatisch am Stationsdrucker drucken (nur wirksam,
+    # wenn Gateway-Modul aktiv + ein aktiver Drucker verbunden ist).
+    verleih_autodruck: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # GSL-Feature-Flags je Org (effektiv = SystemSettings-Globalschalter AND dieser Wert).
     # Default True = Modul aktiv sofern global nicht deaktiviert.

@@ -120,6 +120,9 @@
        hx-on::after-swap="var _d=document.getElementById('siteDetailModal');if(_d&&!_d.open)_d.showModal()">
   </div>
 </dialog>
+
+{# Druck-Umschalter (Station/lokal) für den Verleihschein aus dem Detail-Panel. #}
+{% include "_print_dialog.html" %}
 {% endblock %}
 
 {% block lage_scripts %}

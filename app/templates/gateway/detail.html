@@ -482,6 +482,32 @@
         </div>
       </div>
 
+      {# ── Verleihschein-Auto-Druck ── #}
+      <div class="gwx-col-12">
+        <div class="gwx-panel">
+          <div class="gwx-panel__hd">
+            <div>
+              <div class="gwx-panel__t">🧾 Verleihschein automatisch drucken</div>
+              <div class="gwx-panel__sub">Neue Verleihscheine (Geräteverleih) direkt am Stationsdrucker ausgeben.</div>
+            </div>
+          </div>
+          <div class="gwx-panel__bd">
+            <form method="post" action="/gateway/{{ gw.id }}/verleih-autodruck" class="gwx-inline" style="align-items:center;gap:10px;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="hidden" name="enabled" value="{{ '0' if verleih_autodruck else '1' }}">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.86rem;">
+                <input type="checkbox" onchange="this.form.submit()" {% if verleih_autodruck %}checked{% endif %}>
+                <span>Bei Anlage eines Verleihscheins automatisch am Standarddrucker drucken</span>
+              </label>
+            </form>
+            <p style="font-size:.76rem;color:var(--g-dim);margin:8px 0 0;">
+              Wirksam nur bei aktivem Gateway-Modul und mindestens einem aktiven Drucker.
+              Gedruckt wird am Drucker mit Rolle „standard" (sonst am ersten aktiven).
+            </p>
+          </div>
+        </div>
+      </div>
+
       {# ── Druckregeln ── #}
       <div class="gwx-col-12">
         <div class="gwx-panel" id="regeln">

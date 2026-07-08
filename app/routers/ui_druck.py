@@ -27,6 +27,7 @@ from app.models.gateway import (
     DOC_TEILNAHME,
     DOC_TROOP_PROTOKOLL,
     DOC_UAS,
+    DOC_VERLEIH_SCHEIN,
     DOCUMENT_TYPE_LABELS,
 )
 from app.models.user import User
@@ -111,6 +112,14 @@ def _verify_org(db: Session, org_id: int, document_type: str,
         if (lage is None or getattr(lage, "org_id", None) != org_id
                 or entry is None or entry.major_incident_id != lage.id):
             raise HTTPException(status_code=404, detail="Journaleintrag nicht gefunden")
+    elif document_type == DOC_VERLEIH_SCHEIN:
+        from app.models.major_incident import MajorIncident
+        from app.models.verleih import VerleihAusleihe
+        lage = db.get(MajorIncident, gsl_id) if gsl_id else None
+        ausleihe = db.get(VerleihAusleihe, int(artifact_ref)) if artifact_ref else None
+        if (lage is None or getattr(lage, "org_id", None) != org_id
+                or ausleihe is None or ausleihe.lage_id != lage.id):
+            raise HTTPException(status_code=404, detail="Verleihschein nicht gefunden")
     else:
         raise HTTPException(status_code=400, detail="Unbekannter Dokumenttyp")
 
