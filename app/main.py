@@ -78,6 +78,46 @@ logger = logging.getLogger("einsatzleiter")
 for _noisy in ("fontTools", "weasyprint", "PIL", "pdf2image"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
+
+def _install_ws_quiet_exception_handler() -> None:
+    """Dämpft benigne WebSocket-Trennungen im asyncio-Log.
+
+    Wenn ein WS-Client (Print-/SMS-Gateway, Browser) nicht mehr auf den keepalive-Ping
+    antwortet (Netzabbruch o. Ä.), schließt uvicorn/websockets die Verbindung mit
+    `ConnectionClosedError` (1011, "keepalive ping timeout"). Diese landet als
+    „exception in shielded future" beim asyncio-Default-Handler auf ERROR-Level –
+    reines Rauschen, KEIN Absturz (die Verbindung wird geschlossen und der Client
+    reconnectet). Hier auf DEBUG herabgestuft; alle übrigen Loop-Exceptions laufen
+    unverändert über den bisherigen Handler."""
+    try:
+        from websockets.exceptions import ConnectionClosed
+    except Exception:  # pragma: no cover - websockets immer vorhanden (uvicorn-Dep)
+        ConnectionClosed = None  # type: ignore[assignment]
+
+    loop = asyncio.get_running_loop()
+    prev = loop.get_exception_handler()
+
+    def _handler(loop_, context: dict) -> None:
+        exc = context.get("exception")
+        # Die Exception hängt je nach asyncio-Codepfad am 'future'/'task' statt an
+        # 'exception' (z. B. "exception in shielded future"). Beide Fälle abdecken.
+        if exc is None:
+            fut = context.get("future") or context.get("task")
+            try:
+                if fut is not None and fut.done() and not fut.cancelled():
+                    exc = fut.exception()
+            except Exception:
+                exc = None
+        name = type(exc).__name__ if exc is not None else ""
+        if (ConnectionClosed is not None and isinstance(exc, ConnectionClosed)) or name in (
+            "ConnectionClosedError", "ConnectionClosedOK", "ConnectionClosed",
+        ):
+            logger.debug("WebSocket getrennt (keepalive/close): %s", exc)
+            return
+        (prev or loop_.default_exception_handler)(context)
+
+    loop.set_exception_handler(_handler)
+
 # In-Memory-Log-Buffer so früh wie möglich registrieren, damit auch Startup-Logs erfasst werden
 from app import log_buffer as _log_buffer  # noqa: E402
 
@@ -109,6 +149,9 @@ async def lifespan(app: FastAPI):
 
     import app.models  # noqa: F401 – importiert alle Modell-Module in die Registry
     configure_mappers()
+
+    # Benigne WebSocket-Trennungen dämpfen (siehe _install_ws_quiet_exception_handler).
+    _install_ws_quiet_exception_handler()
 
     # Redis Pub/Sub-Bus für worker-übergreifende WS-Zustellung starten (No-Op ohne
     # REDIS_URL). Nach dem Router-Import, damit alle Bus-Handler registriert sind.
