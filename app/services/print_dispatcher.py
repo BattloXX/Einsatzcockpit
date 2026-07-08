@@ -131,25 +131,27 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
         "artifact_url": artifact_url(job),
         "options": job.options or {},
     }
+    # attempts + 'sent' VOR dem Await committen und danach den Status NICHT erneut
+    # schreiben: Den Laufzeit-Status (printing/done/failed) besitzt der Gateway-Callback
+    # `_apply_job_status` (eigene Session). Ein zweiter Commit hier nach dem Await
+    # kollidierte mit diesem Callback auf derselben print_job-Zeile → MariaDB-Fehler
+    # 1020 „Record has changed since last read" (Prod-Log 2026-07-08).
     job.attempts = (job.attempts or 0) + 1
+    job.status = JOB_SENT
+    db.commit()
     try:
         result = await dispatch_print_job(job.org_id, job.id, payload)
     except RuntimeError as exc:
+        db.refresh(job)
         job.status = JOB_FAILED
         job.error = str(exc)[:500]
         db.commit()
         logger.warning("Druckauftrag %s nicht zustellbar: %s", job.id, exc)
         return {"job_id": job.id, "status": JOB_FAILED, "error": str(exc)}
 
-    # Gateway hat den Job entgegengenommen. Endstatus folgt via job_status.
-    status = result.get("status") or JOB_SENT
-    if status not in ("done", "printing", "failed"):
-        status = JOB_SENT
-    job.status = status
-    if result.get("error"):
-        job.error = str(result["error"])[:500]
-    db.commit()
-    return {"job_id": job.id, "status": job.status, "error": job.error}
+    # Erfolgreich übergeben. Endstatus kommt asynchron via job_status → _apply_job_status.
+    return {"job_id": job.id, "status": result.get("status") or JOB_SENT,
+            "error": result.get("error")}
 
 
 # ── Domain-Events → Druckregeln (Phase 4) ──────────────────────────────────────
@@ -290,12 +292,13 @@ def _resolve_autoprint_printer(db: Session, org_id: int):
 
 
 async def autoprint_verleih_background(ausleihe_id: int) -> None:
-    """Background-Hook nach Verleihschein-Anlage: druckt automatisch am Stationsdrucker,
-    wenn OrgSettings.verleih_autodruck aktiv ist UND Gateway-Modul + ein aktiver Drucker
-    verfügbar sind. Best-effort – Fehler dürfen den Request nie beeinflussen."""
+    """Background-Hook nach Verleihschein-Anlage. Druckt automatisch, wenn Gateway-Modul
+    aktiv ist – primär über Druckregeln (Trigger verleih_created, voller Drucker-/Filter-
+    Kontrolle), sonst als einfacher Fallback über OrgSettings.verleih_autodruck an den
+    Standarddrucker. Best-effort – Fehler dürfen den Request nie beeinflussen."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
-    from app.models.gateway import DOC_VERLEIH_SCHEIN
+    from app.models.gateway import DOC_VERLEIH_SCHEIN, TRIGGER_VERLEIH_CREATED
     from app.models.master import OrgSettings
     from app.models.verleih import VerleihAusleihe
     from app.services.gateway_service import gateway_effective_enabled
@@ -308,26 +311,34 @@ async def autoprint_verleih_background(ausleihe_id: int) -> None:
             return
         org_id = a.org_id
         set_tenant_context(db, org_id)
-        row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
-        if not row or not row.verleih_autodruck:
-            return
         if not gateway_effective_enabled(org_id, db):
             return
-        gateway, printer = _resolve_autoprint_printer(db, org_id)
-        if gateway is None or printer is None:
-            return
-        defaults = printer.defaults or {}
-        job, _created = create_print_job(
-            db, org_id=org_id, gateway_id=gateway.id, printer_id=printer.id,
-            document_type=DOC_VERLEIH_SCHEIN, source=JOB_SOURCE_RULE,
-            gsl_id=a.lage_id, artifact_ref=str(a.id),
-            options={"copies": 1, "duplex": defaults.get("duplex") or "off"},
-        )
+
+        # 1) Regelbasiert (Trigger verleih_created) – Admin wählt Drucker/Filter.
+        context = {"gsl_id": a.lage_id, "ausleihe_id": a.id}
+        jobs = on_event(db, org_id, TRIGGER_VERLEIH_CREATED, context)
+
+        # 2) Fallback: einfacher Toggle an den Standarddrucker – NUR wenn keine Regel griff.
+        if not jobs:
+            row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+            if row and row.verleih_autodruck:
+                gateway, printer = _resolve_autoprint_printer(db, org_id)
+                if gateway is not None and printer is not None:
+                    defaults = printer.defaults or {}
+                    job, _created = create_print_job(
+                        db, org_id=org_id, gateway_id=gateway.id, printer_id=printer.id,
+                        document_type=DOC_VERLEIH_SCHEIN, source=JOB_SOURCE_RULE,
+                        gsl_id=a.lage_id, artifact_ref=str(a.id),
+                        options={"copies": 1, "duplex": defaults.get("duplex") or "off"},
+                    )
+                    jobs = [job]
+
         db.commit()
-        try:
-            await dispatch_job(db, job)
-        except Exception as exc:  # pragma: no cover
-            logger.warning("Verleih-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+        for job in jobs:
+            try:
+                await dispatch_job(db, job)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Verleih-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
     except Exception as exc:  # pragma: no cover
         logger.warning("Verleih-Auto-Druck fehlgeschlagen (Ausleihe %s): %s", ausleihe_id, exc)
     finally:
@@ -390,7 +401,7 @@ def _jobs_for_rule(
 ) -> list[PrintJob]:
     """Erzeugt Jobs einer Regel: je Dokument × Zieldrucker sowie – bei zugeordnetem
     Objekt – je Objekt-Element-Seite × Zieldrucker (idempotent, außer bei source=manual)."""
-    from app.models.gateway import DOC_OBJEKT_DOKUMENT
+    from app.models.gateway import DOC_OBJEKT_DOKUMENT, DOC_VERLEIH_SCHEIN
 
     jobs: list[PrintJob] = []
     printer_ids = rule.printer_ids or []
@@ -406,10 +417,20 @@ def _jobs_for_rule(
         if created:
             jobs.append(job)
 
+    documents = rule.documents or []
+
     # 1) Dokumenttypen (Einsatzinfo, GSL-Lageblatt, Objektblatt …)
-    for document_type in (rule.documents or []):
+    for document_type in documents:
+        if document_type == DOC_VERLEIH_SCHEIN:
+            continue  # braucht Vorgangs-Kontext → unten mit artifact_ref (ausleihe_id)
         for printer_id in printer_ids:
             _add(printer_id=printer_id, document_type=document_type, objekt_id=context.get("objekt_id"))
+
+    # 1b) Verleihschein: nur sinnvoll mit ausleihe_id im Kontext (Trigger verleih_created).
+    if DOC_VERLEIH_SCHEIN in documents and context.get("ausleihe_id"):
+        for printer_id in printer_ids:
+            _add(printer_id=printer_id, document_type=DOC_VERLEIH_SCHEIN,
+                 artifact_ref=str(context["ausleihe_id"]))
 
     # 2) Objekt-Elemente → konkrete Objekt-Dokumentseiten des zugeordneten Objekts
     objekt_elements = rule.objekt_elements or []

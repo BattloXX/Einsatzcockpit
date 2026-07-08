@@ -501,8 +501,9 @@
               </label>
             </form>
             <p style="font-size:.76rem;color:var(--g-dim);margin:8px 0 0;">
-              Wirksam nur bei aktivem Gateway-Modul und mindestens einem aktiven Drucker.
-              Gedruckt wird am Drucker mit Rolle „standard" (sonst am ersten aktiven).
+              Einfacher Fallback an den Drucker mit Rolle „standard" (sonst erster aktiver).
+              Für volle Kontrolle (Drucker, Kopien, A3, Filter) stattdessen eine Druckregel mit
+              Auslöser „Verleihschein angelegt" anlegen – existiert eine solche Regel, hat sie Vorrang.
             </p>
           </div>
         </div>
@@ -636,6 +637,11 @@
                       <select name="color">
                         <option value="color" {{ 'selected' if o.get('color','color')=='color' }}>Farbe</option>
                         <option value="monochrome" {{ 'selected' if o.get('color')=='monochrome' }}>S/W</option>
+                      </select></div>
+                    <div class="gwx-field"><label class="gwx-label">Format (A3 nur, wenn Drucker es kann)</label>
+                      <select name="media">
+                        <option value="A4" {{ 'selected' if o.get('media','A4')=='A4' }}>A4</option>
+                        <option value="A3" {{ 'selected' if o.get('media')=='A3' }}>A3</option>
                       </select></div>
                   </div>
 

@@ -72,6 +72,12 @@ from app.routers import (
 
 logger = logging.getLogger("einsatzleiter")
 
+# Laute Drittanbieter-Logger dämpfen: WeasyPrint subsettet bei JEDEM PDF-Druck Fonts
+# über fontTools, das dabei hunderte DEBUG/INFO-Zeilen erzeugt (Prod-Log 2026-07-08).
+# Auf WARNING setzen (deckt via Logger-Hierarchie auch fontTools.subset/.ttLib/.timer ab).
+for _noisy in ("fontTools", "weasyprint", "PIL", "pdf2image"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 # In-Memory-Log-Buffer so früh wie möglich registrieren, damit auch Startup-Logs erfasst werden
 from app import log_buffer as _log_buffer  # noqa: E402
 

@@ -41,6 +41,13 @@
           <option value="short-edge">beidseitig (kurze Kante)</option>
         </select>
       </label>
+      {# Format: A3 erscheint nur, wenn der gewählte Drucker es laut Discovery kann. #}
+      <label id="ecpgFormatWrap" style="display:none">Format
+        <select name="media" id="ecpgMedia">
+          <option value="A4">A4</option>
+          <option value="A3">A3</option>
+        </select>
+      </label>
       <div id="ecpgPrintMsg" class="ecpg-msg"></div>
       <div class="ecpg-modal__actions">
         <button type="button" class="btn btn--ghost" onclick="ecpgClosePrintDialog()">Abbrechen</button>
@@ -128,6 +135,21 @@
     }
   }
 
+  // Format-Auswahl: A3 nur anbieten, wenn der gewählte Drucker es laut Discovery kann.
+  function updateFormatOptions(){
+    const sel = document.getElementById('ecpgPrinter');
+    const wrap = document.getElementById('ecpgFormatWrap');
+    const mediaSel = document.getElementById('ecpgMedia');
+    if(!sel || !wrap || !mediaSel) return;
+    const p = (window._ecpgPrinters || []).find(x => String(x.id) === String(sel.value));
+    const media = (p && p.media) || ['A4'];
+    const hasA3 = media.indexOf('A3') !== -1;
+    const a3opt = mediaSel.querySelector('option[value="A3"]');
+    if(a3opt){ a3opt.disabled = !hasA3; a3opt.style.display = hasA3 ? '' : 'none'; }
+    if(!hasA3 && mediaSel.value === 'A3'){ mediaSel.value = 'A4'; }
+    wrap.style.display = hasA3 ? 'block' : 'none';
+  }
+
   function openDialogWithStation(printers, connected){
     document.getElementById('ecpgPrintTitle').textContent = ctx.title || 'Drucken';
     document.getElementById('ecpgDocType').value = ctx.document_type || 'einsatzinfo';
@@ -145,8 +167,9 @@
     }).join('');
     const last = localStorage.getItem('ecpg_last_printer');
     if(last){ sel.value = last; }
-    sel.onchange = updatePrinterHint;
+    sel.onchange = function(){ updatePrinterHint(); updateFormatOptions(); };
     updatePrinterHint();
+    updateFormatOptions();
     document.getElementById('ecpgTarget').style.display = 'flex';
     let target = 'station';
     try{ target = localStorage.getItem('ec_print_target') || 'station'; }catch(e){}
