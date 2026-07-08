@@ -690,7 +690,7 @@
             {% set printer_names = {} %}{% for p in printers %}{% set _ = printer_names.update({p.id: p.name}) %}{% endfor %}
             <div style="overflow:auto;">
               <table class="gwx-table">
-                <thead><tr><th>Zeit</th><th>Dokument</th><th>Drucker</th><th>Quelle</th><th>Status</th></tr></thead>
+                <thead><tr><th>Zeit</th><th>Dokument</th><th>Drucker</th><th>Quelle</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                   {% for j in jobs %}
                   <tr>
@@ -703,6 +703,15 @@
                       {% elif j.status in ('failed','canceled') %}<span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>
                       {% else %}<span class="gwx-chip gwx-chip--warn"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>{% endif %}
                       {% if j.error %}<span style="color:var(--g-dim);font-size:.76rem;"> {{ j.error }}</span>{% endif %}
+                    </td>
+                    <td style="text-align:right;white-space:nowrap;">
+                      {% if j.status not in ('done','failed','canceled') %}
+                      <form method="post" action="/gateway/jobs/{{ j.id }}/cancel" style="display:inline;"
+                            onsubmit="return confirm('Diesen Druckauftrag abbrechen?');">
+                        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                        <button type="submit" class="gwx-btn gwx-btn--sm" title="Druckauftrag abbrechen">✖ Abbrechen</button>
+                      </form>
+                      {% endif %}
                     </td>
                   </tr>
                   {% endfor %}
