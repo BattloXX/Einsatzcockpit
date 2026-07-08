@@ -658,23 +658,35 @@ async def manual_print(
 
     from app.services.print_dispatcher import create_print_job, dispatch_job
 
-    job, _ = create_print_job(
-        db,
-        org_id=user.org_id,
-        gateway_id=printer.gateway_id,
-        printer_id=printer.id,
-        document_type=document_type,
-        source="manual",
-        incident_id=incident_id,
-        gsl_id=gsl_id,
-        objekt_id=objekt_id,
-        artifact_ref=artifact_ref,
-        options={"copies": int(copies), "duplex": duplex},
-        created_by_id=user.id,
-    )
-    db.commit()
+    # Kein roher 500: unerwartete Fehler beim Anlegen/Zustellen als klare JSON-Meldung
+    # zurückgeben (der Dialog zeigt sie an) und den Traceback loggen.
+    try:
+        job, _ = create_print_job(
+            db,
+            org_id=user.org_id,
+            gateway_id=printer.gateway_id,
+            printer_id=printer.id,
+            document_type=document_type,
+            source="manual",
+            incident_id=incident_id,
+            gsl_id=gsl_id,
+            objekt_id=objekt_id,
+            artifact_ref=artifact_ref,
+            options={"copies": int(copies), "duplex": duplex},
+            created_by_id=user.id,
+        )
+        db.commit()
+        result = await dispatch_job(db, job)
+    except Exception:
+        logger.exception(
+            "Manueller Druck fehlgeschlagen (document_type=%s, printer_id=%s, org_id=%s)",
+            document_type, printer_id, user.org_id,
+        )
+        return JSONResponse(
+            {"ok": False, "error": "Druckauftrag konnte nicht gesendet werden (siehe Server-Log)."},
+            status_code=200,
+        )
 
-    result = await dispatch_job(db, job)
     ok = result.get("status") not in ("failed",)
     return JSONResponse({
         "ok": ok,
