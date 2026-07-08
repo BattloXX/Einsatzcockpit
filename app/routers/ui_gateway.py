@@ -731,3 +731,31 @@ async def manual_print(
         "error": result.get("error"),
         "printer": printer.name,
     })
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_print_job(
+    job_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    """Bricht einen (noch nicht abgeschlossenen) Druckauftrag ab: setzt den Cloud-Status
+    auf 'canceled' und sendet dem Gateway das cancel_job-Kommando (CUPS-Job + Spool)."""
+    from app.models.gateway import JOB_CANCELED, JOB_TERMINAL, PrintJob
+    from app.routers.ws import push_gateway_command
+    from app.services.broadcast import broadcast_org
+
+    job = db.get(PrintJob, job_id)
+    if job is None or job.org_id != user.org_id:
+        raise HTTPException(status_code=404, detail="Druckauftrag nicht gefunden")
+    gw_id = job.gateway_id
+    if job.status not in JOB_TERMINAL:
+        job.status = JOB_CANCELED
+        job.error = "Abgebrochen (manuell)"
+        db.commit()
+        await push_gateway_command(user.org_id, {"type": "cancel_job", "payload": {"job_id": job_id}})
+        await broadcast_org(user.org_id, {"type": "print_job_status", "job_id": job_id,
+                                          "status": JOB_CANCELED})
+    return RedirectResponse(f"/gateway/{gw_id}?job_canceled=1#historie", status_code=303)
