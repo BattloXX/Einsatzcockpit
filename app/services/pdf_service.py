@@ -131,6 +131,7 @@ def _load_pdf_context(incident: Incident) -> tuple:
     from sqlalchemy.orm import joinedload as _jl
 
     from app.models.fahrtenbuch import Fahrt, FahrtStatus
+    from app.models.master import VehicleMaster
     from app.models.teilnahme import Teilnahme
     from app.services.incident_service import combined_verlauf
 
@@ -144,6 +145,10 @@ def _load_pdf_context(incident: Incident) -> tuple:
 
         teilnahmen = (
             db.query(Teilnahme)
+            # fahrzeug ist lazy="joined", dessen dept aber nicht – ohne dieses nested
+            # Eager-Loading scheitert t.fahrzeug.display_label (→ dept.short_code) im
+            # Template mit DetachedInstanceError, sobald diese Session geschlossen ist.
+            .options(_jl(Teilnahme.fahrzeug).joinedload(VehicleMaster.dept))
             .filter(
                 Teilnahme.bezug_typ == "einsatz",
                 Teilnahme.bezug_id == incident.id,
