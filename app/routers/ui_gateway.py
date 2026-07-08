@@ -76,7 +76,7 @@ def gateway_liste(
     })
 
 
-@router.get("/{gateway_id}", response_class=HTMLResponse)
+@router.get("/{gateway_id:int}", response_class=HTMLResponse)
 def gateway_detail(
     gateway_id: int,
     request: Request,
