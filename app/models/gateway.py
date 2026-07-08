@@ -63,8 +63,9 @@ DOC_TEILNAHME = "teilnahme"              # Teilnehmerliste (artifact_ref = "<bez
 DOC_OBJEKT_SAMMEL = "objekt_sammel"      # Objekt-Dokumente Sammelmappe (objekt_id, artifact_ref = art-Filter)
 DOC_UAS = "uas"                          # UAS-PDFs (artifact_ref = "<subtyp>:<id>[:<id2>]")
 DOC_GSL_JOURNAL = "gsl_journal"          # GSL-Einsatzjournal-Eintrag (gsl_id + artifact_ref = Eintrag-ID)
+DOC_VERLEIH_SCHEIN = "verleih_schein"    # Verleihschein (gsl_id = lage_id + artifact_ref = ausleihe_id)
 # Reserviert (Station-Rendering steht noch aus – Route-Kontext-Refactor nötig):
-# gsl_bericht, mannschaft, qr_einsatz, verleih_schein. Diese Drucke laufen bis dahin
+# gsl_bericht, mannschaft, qr_einsatz. Diese Drucke laufen bis dahin
 # weiterhin nur lokal (unveränderte window.print-/PDF-Ansichten).
 
 DOCUMENT_TYPE_LABELS = {
@@ -79,6 +80,7 @@ DOCUMENT_TYPE_LABELS = {
     DOC_OBJEKT_SAMMEL: "Objekt-Sammelmappe",
     DOC_UAS: "Drohnen-Dokument",
     DOC_GSL_JOURNAL: "GSL-Journal",
+    DOC_VERLEIH_SCHEIN: "Verleihschein",
 }
 
 # ── PrintJob-Status ────────────────────────────────────────────────────────────

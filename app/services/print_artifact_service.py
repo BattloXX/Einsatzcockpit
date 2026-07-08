@@ -20,6 +20,7 @@ from app.models.gateway import (
     DOC_TEILNAHME,
     DOC_TROOP_PROTOKOLL,
     DOC_UAS,
+    DOC_VERLEIH_SCHEIN,
     PrintJob,
 )
 
@@ -72,6 +73,8 @@ def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
         return _render_uas(db, job)
     if job.document_type == DOC_GSL_JOURNAL:
         return _render_gsl_journal(db, job, base_url)
+    if job.document_type == DOC_VERLEIH_SCHEIN:
+        return _render_verleih_schein(db, job, base_url)
     raise ArtifactError(f"Unbekannter Dokumenttyp: {job.document_type}")
 
 
@@ -398,6 +401,37 @@ def _render_gsl_journal(db, job: PrintJob, base_url: str) -> bytes:
     html_str = _t.env.get_template("incident_major/_journal_entry_druck.html").render(
         lage=lage, entry=entry, journal_categories=JOURNAL_CATEGORIES,
         now=datetime.now(UTC), user=SimpleNamespace(org=lage.org),
+    )
+    return _html_to_pdf(html_str, base_url)
+
+
+def _render_verleih_schein(db, job: PrintJob, base_url: str) -> bytes:
+    """Verleihschein (gsl_id = lage_id + artifact_ref = ausleihe_id).
+
+    Rendert die bestehende, eigenständige Druck-Template zu PDF. Org-Scope strikt:
+    Lage der Job-Org UND Ausleihe gehört zur Lage. Kein Journal-Seiteneffekt (der
+    liegt im interaktiven Route-Pfad)."""
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from app.core.templating import templates as _t
+    from app.models.major_incident import IncidentSite, MajorIncident
+    from app.models.master import FireDept
+    from app.models.verleih import VerleihAusleihe
+
+    if not job.gsl_id or not job.artifact_ref:
+        raise ArtifactError("Verleihschein ohne gsl_id/ausleihe_id")
+    lage = db.get(MajorIncident, job.gsl_id)
+    if lage is None or lage.org_id != job.org_id:
+        raise ArtifactError("Großschadenslage nicht gefunden")
+    ausleihe = db.get(VerleihAusleihe, int(job.artifact_ref))
+    if ausleihe is None or ausleihe.lage_id != lage.id:
+        raise ArtifactError("Ausleihe nicht gefunden")
+    site = db.get(IncidentSite, ausleihe.site_id) if ausleihe.site_id else None
+    dept = db.get(FireDept, lage.org_id)
+    html_str = _t.env.get_template("verleih/druck.html").render(
+        user=SimpleNamespace(org=dept), lage=lage, a=ausleihe, site=site,
+        org_name=(dept.name if dept else "Feuerwehr"), now=datetime.now(UTC),
     )
     return _html_to_pdf(html_str, base_url)
 

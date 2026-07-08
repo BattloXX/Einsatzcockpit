@@ -119,3 +119,36 @@ def test_verify_org_teilnahme_bad_ref_404(db, incident):
     with pytest.raises(HTTPException) as ei:
         _verify_org(db, _ORG_A, "teilnahme", None, None, None, "einsatz")
     assert ei.value.status_code == 404
+
+
+# ── Verleihschein (gsl_id + ausleihe_id) ────────────────────────────────────────
+
+def test_verify_org_verleih_missing_404(db, incident):
+    # Ohne gsl_id/ausleihe_id → keine Lage → 404 (kein Leak fremder Daten).
+    with pytest.raises(HTTPException) as ei:
+        _verify_org(db, _ORG_A, "verleih_schein", None, None, None, None)
+    assert ei.value.status_code == 404
+
+
+def test_render_verleih_schein_pdf(db):
+    """End-to-End: echte Zeilen → render_job_pdf liefert ein PDF (Template + Pipeline)."""
+    from types import SimpleNamespace
+
+    from app.models.major_incident import MajorIncident
+    from app.models.verleih import VerleihAusleihe, VerleihStatus
+    from app.services.print_artifact_service import render_job_pdf
+
+    db.add(FireDept(id=_ORG_A, slug="a", name="Org A", color="#f00", bos="Feuerwehr"))
+    db.flush()
+    lage = MajorIncident(org_id=_ORG_A, name="Testlage")
+    db.add(lage)
+    db.flush()
+    a = VerleihAusleihe(org_id=_ORG_A, lage_id=lage.id, name="Max Muster",
+                        status=VerleihStatus.ausgeliehen)
+    db.add(a)
+    db.flush()
+    job = SimpleNamespace(document_type="verleih_schein", gsl_id=lage.id, incident_id=None,
+                          objekt_id=None, artifact_ref=str(a.id), org_id=_ORG_A)
+    pdf = render_job_pdf(db, job)
+    assert isinstance(pdf, bytes) and len(pdf) > 500
+    assert pdf[:4] == b"%PDF"

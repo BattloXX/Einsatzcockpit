@@ -8,8 +8,8 @@
       </span>
     </div>
     <div style="display:flex;gap:6px;align-items:center;">
-      <a href="/lage/{{ lage.id }}/verleih/{{ a.id }}/drucken" target="_blank"
-         class="btn btn--ghost btn--xs" title="Verleihschein drucken">&#128438;</a>
+      <button type="button" class="btn btn--ghost btn--xs" title="Verleihschein drucken"
+         onclick="ecpgPrint({document_type:'verleih_schein', gsl_id:{{ lage.id }}, artifact_ref:'{{ a.id }}', title:'Verleihschein drucken', localUrl:'/lage/{{ lage.id }}/verleih/{{ a.id }}/drucken'})">&#128438;</button>
       <button type="button" class="btn btn--ghost btn--xs" onclick="closeVerleihPanel()">x</button>
     </div>
   </div>

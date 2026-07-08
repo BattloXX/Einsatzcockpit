@@ -264,6 +264,76 @@ async def autoprint_incident_background(incident_id: int) -> None:
         db.close()
 
 
+def _resolve_autoprint_printer(db: Session, org_id: int):
+    """Zieldrucker für Auto-Druck: erstes gekoppeltes Gateway der Org + aktiver Drucker,
+    bevorzugt Rolle 'standard'. Gibt (gateway, printer) oder (None, None)."""
+    from app.models.gateway import Gateway, Printer
+
+    gateway = (
+        db.query(Gateway)
+        .filter(Gateway.org_id == org_id, Gateway.device_token_hash.isnot(None))
+        .first()
+    )
+    if gateway is None:
+        return None, None
+    printers = (
+        db.query(Printer)
+        .filter(Printer.gateway_id == gateway.id, Printer.aktiv == True)  # noqa: E712
+        .order_by(Printer.name)
+        .execution_options(include_all_tenants=True)
+        .all()
+    )
+    if not printers:
+        return gateway, None
+    standard = next((p for p in printers if (p.defaults or {}).get("role") == "standard"), None)
+    return gateway, (standard or printers[0])
+
+
+async def autoprint_verleih_background(ausleihe_id: int) -> None:
+    """Background-Hook nach Verleihschein-Anlage: druckt automatisch am Stationsdrucker,
+    wenn OrgSettings.verleih_autodruck aktiv ist UND Gateway-Modul + ein aktiver Drucker
+    verfügbar sind. Best-effort – Fehler dürfen den Request nie beeinflussen."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.gateway import DOC_VERLEIH_SCHEIN
+    from app.models.master import OrgSettings
+    from app.models.verleih import VerleihAusleihe
+    from app.services.gateway_service import gateway_effective_enabled
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        a = db.get(VerleihAusleihe, ausleihe_id)
+        if a is None:
+            return
+        org_id = a.org_id
+        set_tenant_context(db, org_id)
+        row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        if not row or not row.verleih_autodruck:
+            return
+        if not gateway_effective_enabled(org_id, db):
+            return
+        gateway, printer = _resolve_autoprint_printer(db, org_id)
+        if gateway is None or printer is None:
+            return
+        defaults = printer.defaults or {}
+        job, _created = create_print_job(
+            db, org_id=org_id, gateway_id=gateway.id, printer_id=printer.id,
+            document_type=DOC_VERLEIH_SCHEIN, source=JOB_SOURCE_RULE,
+            gsl_id=a.lage_id, artifact_ref=str(a.id),
+            options={"copies": 1, "duplex": defaults.get("duplex") or "off"},
+        )
+        db.commit()
+        try:
+            await dispatch_job(db, job)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Verleih-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Verleih-Auto-Druck fehlgeschlagen (Ausleihe %s): %s", ausleihe_id, exc)
+    finally:
+        db.close()
+
+
 def _resolve_objekt_ids(db: Session, context: dict) -> list[int]:
     """Objekt(e), auf die sich die Regel bezieht: explizit im Kontext oder – bei einem
     Einsatz – die dort bestätigt verknüpften Objekte (ObjektEinsatz)."""
