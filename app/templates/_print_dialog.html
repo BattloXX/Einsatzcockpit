@@ -59,22 +59,29 @@
   </div>
 </div>
 <style>
-  .ecpg-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;
-    align-items:center;justify-content:center;z-index:1200}
-  .ecpg-modal__box{background:var(--card-bg,#fff);color:inherit;border-radius:10px;
-    padding:20px;max-width:420px;width:92%;box-shadow:0 10px 40px rgba(0,0,0,.3)}
-  .ecpg-modal__box label{display:block;margin:10px 0}
-  .ecpg-modal__box select,.ecpg-modal__box input{margin-top:3px}
-  .ecpg-modal__actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+  .ecpg-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;
+    align-items:center;justify-content:center;z-index:1200;backdrop-filter:blur(2px)}
+  .ecpg-modal__box{background:var(--surface-mid,#152031);color:var(--text,#d8e3fb);
+    border:1px solid var(--border,#424754);border-radius:12px;
+    padding:20px;max-width:440px;width:92%;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+  .ecpg-modal__box h3{margin:0 0 14px;font-size:1.1rem;font-weight:700}
+  .ecpg-modal__box label{display:block;margin:12px 0;font-size:.82rem;color:var(--text-muted,#c2c6d6)}
+  .ecpg-modal__box select,.ecpg-modal__box input{margin-top:4px;width:100%;
+    background:var(--surface,#081425);border:1px solid var(--border,#424754);border-radius:6px;
+    padding:8px 10px;color:var(--text,#d8e3fb);font-size:.9rem}
+  .ecpg-modal__box input[type=number]{width:5.5rem}
+  .ecpg-modal__box select:focus,.ecpg-modal__box input:focus{outline:none;border-color:var(--primary-c,#4d8eff)}
+  .ecpg-modal__actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
   .ecpg-msg{min-height:1.2em;font-size:.9em;margin-top:8px}
-  .ecpg-msg.err{color:#b71921}.ecpg-msg.ok{color:#137333}
-  .ecpg-hint{font-size:.88em;color:var(--text-muted,#666);margin:12px 0 0}
-  .ecpg-target{display:flex;gap:6px;margin:4px 0 14px;background:var(--surface-high,#eef0f4);
-    padding:4px;border-radius:8px}
-  .ecpg-target__btn{flex:1;padding:8px 10px;border:1px solid transparent;border-radius:6px;
-    background:transparent;color:inherit;cursor:pointer;font-size:.9em;font-weight:600}
-  .ecpg-target__btn.is-active{background:var(--card-bg,#fff);border-color:var(--border,#ccc);
-    box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .ecpg-msg.err{color:var(--red-light,#ffb4ab)}.ecpg-msg.ok{color:#6ee7a0}
+  .ecpg-hint{font-size:.86em;color:var(--text-muted,#c2c6d6);margin:14px 0 0;line-height:1.4}
+  .ecpg-target{display:flex;gap:5px;margin:2px 0 16px;background:var(--surface,#081425);
+    padding:4px;border-radius:9px;border:1px solid var(--border,#424754)}
+  .ecpg-target__btn{flex:1;padding:9px 10px;border:1px solid transparent;border-radius:6px;
+    background:transparent;color:var(--text-muted,#c2c6d6);cursor:pointer;font-size:.88rem;font-weight:600;
+    transition:background .12s,color .12s}
+  .ecpg-target__btn.is-active{background:var(--surface-high,#2a3548);color:var(--text,#d8e3fb);
+    border-color:var(--border,#55606f)}
 </style>
 <script>
 (function(){
