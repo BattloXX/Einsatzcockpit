@@ -56,9 +56,9 @@
   .card, .einsatz-info__kopf { background: #fff !important; border: 1px solid #999 !important; box-shadow: none !important; color: #111 !important; }
   .card h3, .einsatz-info__kopf strong { color: #111 !important; }
   .text-muted { color: #555 !important; }
-  /* Hydranten-Liste: Scroll-Deckel aufheben, damit alle Eintraege drucken */
+  /* Hydranten-Liste (nur die 3 naechsten): kein Scroll-Deckel im Druck */
   .hydrant-liste { max-height: none !important; overflow: visible !important; }
-  .hydrant-liste__row { border: 1px solid #bbb !important; color: #111 !important; }
+  .hydrant-liste__row { border: 1px solid #bbb !important; color: #111 !important; break-inside: avoid; }
   .leaflet-control-attribution { color: #333 !important; background: rgba(255,255,255,.7) !important; }
   /* Druckkopf sichtbar */
   .ei-print-header {
