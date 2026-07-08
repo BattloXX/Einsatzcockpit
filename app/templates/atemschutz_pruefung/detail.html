@@ -54,7 +54,8 @@
       </div>
     </div>
     <div style="display:flex;gap:.5rem;">
-      <a href="/atemschutz-pruefung/{{ pruefung.id }}/pdf" target="_blank" class="btn btn--primary btn--sm">PDF drucken</a>
+      <button type="button" class="btn btn--primary btn--sm"
+              onclick="ecpgPrint({document_type:'as_pruefung', artifact_ref:'{{ pruefung.id }}', title:'Atemschutzprüfung drucken', localUrl:'/atemschutz-pruefung/{{ pruefung.id }}/pdf'})">PDF drucken</button>
     </div>
   </div>
 
@@ -154,4 +155,6 @@
     </div>
   </div>
 </div>
+{# Druck-Umschalter (Station/lokal) – erscheint nur bei verbundenem Stationsdrucker. #}
+{% include "_print_dialog.html" %}
 {% endblock %}

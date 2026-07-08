@@ -451,6 +451,7 @@
   </form>
 </dialog>
 
+{% include "_print_dialog.html" %}
 {% endblock %}
 
 {% block lage_scripts %}
@@ -615,10 +616,19 @@ window.openJournalDetail = function(entryId) {
   });
 };
 
-// Einzelnen Journal-Eintrag drucken
+// Einzelnen Journal-Eintrag drucken (Station/lokal-Umschalter, sonst wie bisher lokal)
 window.printJournalEntry = function(entryId) {
-  var win = window.open('/lage/{{ lage.id }}/journal/' + entryId + '/druck', '_blank', 'width=700,height=600');
-  if (win) win.focus();
+  // Lokale Ausgabe (bisheriges Druckfenster) vor dem Aufruf bereitstellen.
+  window.__gslJournalLocal = function() {
+    var win = window.open('/lage/{{ lage.id }}/journal/' + entryId + '/druck', '_blank', 'width=700,height=600');
+    if (win) win.focus();
+  };
+  if (typeof window.ecpgPrint === 'function') {
+    ecpgPrint({document_type:'gsl_journal', gsl_id:{{ lage.id }}, artifact_ref:String(entryId),
+               title:'Journaleintrag drucken', localFn:'__gslJournalLocal'});
+  } else {
+    window.__gslJournalLocal();
+  }
 };
 
 // WS: staff:changed → Banner + Tafel neu laden

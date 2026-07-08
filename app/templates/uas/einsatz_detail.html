@@ -242,8 +242,10 @@
   <a href="/uas/einsatz/{{ einsatz.id }}/karte" class="btn btn--ghost">&#x1F5FA; Karte</a>
   <a href="/uas/einsatz/{{ einsatz.id }}/eintreffmeldung" class="btn btn--ghost">&#x1F4CB; Eintreffmeldung</a>
   <a href="/uas/notfallcheckliste" class="btn btn--ghost" target="_blank">&#x1F6A8; Notfallcheckliste</a>
-  <a href="/uas/einsatz/{{ einsatz.id }}/pdf/eintreffmeldung" class="btn btn--ghost" target="_blank">&#x1F4C4; PDF Eintreffmeldung</a>
-  <a href="/uas/einsatz/{{ einsatz.id }}/pdf/gesamt" class="btn btn--ghost" target="_blank">&#x1F4D1; Gesamt-PDF</a>
+  <button type="button" class="btn btn--ghost"
+    onclick="ecpgPrint({document_type:'uas', artifact_ref:'eintreffmeldung:{{ einsatz.id }}', title:'Eintreffmeldung drucken', localUrl:'/uas/einsatz/{{ einsatz.id }}/pdf/eintreffmeldung'})">&#x1F4C4; PDF Eintreffmeldung</button>
+  <button type="button" class="btn btn--ghost"
+    onclick="ecpgPrint({document_type:'uas', artifact_ref:'gesamt:{{ einsatz.id }}', title:'Gesamtbericht drucken', localUrl:'/uas/einsatz/{{ einsatz.id }}/pdf/gesamt'})">&#x1F4D1; Gesamt-PDF</button>
 </div>
 
 {# ── Flugbuch ── #}
@@ -331,4 +333,5 @@
   color:var(--text);
 }
 </style>
+{% include "_print_dialog.html" %}
 {% endblock %}

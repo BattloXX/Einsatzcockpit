@@ -104,6 +104,11 @@ async def lifespan(app: FastAPI):
     import app.models  # noqa: F401 – importiert alle Modell-Module in die Registry
     configure_mappers()
 
+    # Redis Pub/Sub-Bus für worker-übergreifende WS-Zustellung starten (No-Op ohne
+    # REDIS_URL). Nach dem Router-Import, damit alle Bus-Handler registriert sind.
+    from app.services import ws_bus
+    await ws_bus.start()
+
     # Bootstrap admin on first start
     _bootstrap_admin()
 
@@ -158,6 +163,8 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        from app.services import ws_bus
+        await ws_bus.stop()
         autoclose_task.cancel()
         watchdog_task.cancel()
         reminder_task.cancel()

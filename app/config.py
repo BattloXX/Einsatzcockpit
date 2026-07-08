@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     TEST_SYSTEM: bool = False
 
+    # Redis Pub/Sub-Bus für worker-übergreifende WebSocket-Zustellung. Leer = aus:
+    # dann läuft alles In-Process (korrekt bei -w 1). Bei -w 2+ (siehe
+    # deploy/einsatzleiter.service) MUSS dies gesetzt sein, sonst erreichen Broadcasts
+    # und Gateway-Druckaufträge nur den Worker, der den jeweiligen Socket hält.
+    REDIS_URL: str = ""
+
     # Brand-Identität (Einsatzcockpit)
     APP_NAME: str = "Einsatzcockpit"
     APP_TAGLINE: str = "Echtzeit-Führung im Einsatz"

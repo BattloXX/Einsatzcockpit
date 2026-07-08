@@ -260,12 +260,12 @@
         <a href="/archiv/{{ incident.id }}/pdf" target="_blank" class="dropdown-item">
           <span class="di-icon">📄</span> PDF exportieren
         </a>
-        {% if request.state.gateway_enabled %}
+        {# Drucken immer verfügbar: lokal (Dieses Gerät) ohne Gateway, Stationsdrucker bei
+           verbundenem Drucker. Kein Gate – sonst fehlt der lokale Druck (Muster info.html). #}
         <button type="button" class="dropdown-item"
                 onclick="ecpgPrint({document_type:'einsatzinfo', incident_id:{{ incident.id }}, title:'Einsatzinfo drucken'})">
           <span class="di-icon">🖨️</span> Drucken
         </button>
-        {% endif %}
       </div>
     </div>
 
@@ -946,9 +946,9 @@
   </div>
 </dialog>
 
-{% if request.state.gateway_enabled %}
+{# Einheitlicher Druck-Dialog: Umschalter erscheint nur bei Gateway+Druckern, sonst lokal.
+   Immer einbinden, damit ecpgPrint auch ohne Gateway-Modul lokal drucken kann. #}
 {% include "_print_dialog.html" %}
-{% endif %}
 {% endblock %}
 
 {% block scripts %}

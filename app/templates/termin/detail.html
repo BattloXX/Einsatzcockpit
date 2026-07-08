@@ -56,8 +56,8 @@
         {% endif %}
         <a id="teilnahme-druck-link" href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/druck" target="_blank"
            class="btn btn--ghost btn--sm">🖨 Drucken</a>
-        <a id="teilnahme-pdf-link" href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.pdf" target="_blank"
-           class="btn btn--ghost btn--sm">📄 PDF</a>
+        <button type="button" id="teilnahme-pdf-link" class="btn btn--ghost btn--sm"
+                onclick="ecpgPrint({document_type:'teilnahme', artifact_ref:'{{ termin.typ }}:{{ termin.id }}', title:'Teilnehmerliste drucken', localUrl:'/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.pdf'})">📄 PDF</button>
         <a id="teilnahme-xlsx-link" href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.xlsx"
            class="btn btn--ghost btn--sm">📊 Excel</a>
       </div>
@@ -227,4 +227,5 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 {% endif %}
 
+{% include "_print_dialog.html" %}
 {% endblock %}
