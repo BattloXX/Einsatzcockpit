@@ -251,6 +251,15 @@
           <div class="gwx-tile__l">Regeln aktiv</div></div>
       </div>
       {% endif %}
+      {# Redis-Bus: trägt bei mehreren Workern (-w 2+) die Druckauftrags-Zustellung.
+         Aktiv = ok; Aus = REDIS_URL fehlt (bei -w 2 riskant); Fehler = konfiguriert, aber
+         nicht verbunden. #}
+      <div class="gwx-tile" title="{% if redis_status.connected %}Redis-Bus verbunden – Druckaufträge werden worker-übergreifend zugestellt.{% elif not redis_status.configured %}REDIS_URL nicht gesetzt – nur bei einem Worker (-w 1) unbedenklich; bei -w 2+ kann der Stationsdruck worker-abhängig fehlschlagen.{% else %}REDIS_URL gesetzt, aber keine Verbindung – Redis-Dienst prüfen.{% endif %}">
+        <div class="gwx-tile__ic">🧩</div>
+        <div><div class="gwx-tile__v" style="color:{% if redis_status.connected %}var(--g-green){% elif not redis_status.configured %}var(--g-dim){% else %}#ffb4ab{% endif %};">
+            {{ 'Aktiv' if redis_status.connected else ('Aus' if not redis_status.configured else 'Fehler') }}</div>
+          <div class="gwx-tile__l">Redis-Bus</div></div>
+      </div>
     </div>
 
     <div class="gwx-grid">
