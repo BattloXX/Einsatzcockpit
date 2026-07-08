@@ -105,7 +105,7 @@
           {% if u.active %}Deaktivieren{% else %}Aktivieren{% endif %}
         </button>
         <button type="button" class="btn btn--danger btn--xs"
-                onclick="if(confirm('Benutzer ' + {{ u.username | tojson }} + ' endgültig löschen? Alle zugehörigen Daten werden entfernt. Dies kann nicht rückgängig gemacht werden!')) postAction('/admin/benutzer/{{ u.id }}/endgueltig-loeschen')"
+                onclick='if(confirm("Benutzer " + {{ u.username | tojson }} + " endgültig löschen? Alle zugehörigen Daten werden entfernt. Dies kann nicht rückgängig gemacht werden!")) postAction("/admin/benutzer/{{ u.id }}/endgueltig-loeschen")'
                 {{ tip('Account und alle zugehörigen Daten endgültig löschen') }}>
           Löschen
         </button>

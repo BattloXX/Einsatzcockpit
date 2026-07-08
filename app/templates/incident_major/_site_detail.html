@@ -515,7 +515,7 @@
       <div style="position:relative;display:inline-block;">
         <img src="/lage-medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}"
              class="media-thumb" loading="lazy" style="cursor:zoom-in"
-             {% if m.media_type == 'image' %}@click="open({{ lbi.i }})"{% set lbi.i = lbi.i + 1 %}{% else %}onclick="openMediaViewer('/lage-medien/{{ m.id }}', '{{ m.media_type }}', {{ m.original_filename|tojson }})"{% endif %}>
+             {% if m.media_type == 'image' %}@click="open({{ lbi.i }})"{% set lbi.i = lbi.i + 1 %}{% else %}onclick='openMediaViewer("/lage-medien/{{ m.id }}", "{{ m.media_type }}", {{ m.original_filename|tojson }})'{% endif %}>
         {% if can_edit and m.media_type == 'image' %}
         <a href="/annotieren/site/{{ m.id }}" title="Bearbeiten" @click.stop
            style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>

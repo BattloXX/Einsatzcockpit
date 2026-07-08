@@ -225,7 +225,10 @@ def test_revision_erneut_nach_neuem_datum(pr2_db):
 
 def test_pr2_routen_vorhanden():
     from app.routers.ui_objekt import router
-    pfade = {r.path for r in router.routes}
+    # Pfad-Konverter (":int" bei den Routen mit /kataloge-Geschwistern, um Shadowing
+    # zu verhindern) für den Vergleich normalisieren – der Test prüft die Existenz der
+    # Routen, nicht ihren Converter.
+    pfade = {r.path.replace(":int", "") for r in router.routes}
     assert "/objekte/{objekt_id}/gefahren" in pfade
     assert "/objekte/{objekt_id}/merkmale" in pfade
     assert "/objekte/{objekt_id}/kontakte" in pfade
