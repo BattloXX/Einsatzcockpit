@@ -384,6 +384,26 @@ def test_printer_report_creates_suggestion_and_updates(db):
     assert printers[0].uri == "ipp://10.0.0.9/ipp/print"
 
 
+def test_printer_status_updates_reachable_by_id(db):
+    """Periodischer Health-Check aktualisiert reachable/checked_at id-basiert,
+    nur für Drucker DIESES Gateways."""
+    from app.services.printer_report_service import apply_printer_status
+    gw = _make_gateway(db)
+    p1 = Printer(org_id=_ORG_A, gateway_id=gw.id, name="D1", uri="ipp://10.0.0.5/x", aktiv=True)
+    p2 = Printer(org_id=_ORG_A, gateway_id=gw.id, name="D2", uri="ipp://10.0.0.6/x", aktiv=True)
+    db.add_all([p1, p2])
+    db.commit()
+
+    apply_printer_status(gw.id, _ORG_A, {"printers": [
+        {"printer_id": p1.id, "status": {"reachable": True, "state": "idle"}},
+        {"printer_id": p2.id, "status": {"reachable": False}},
+    ]})
+    db.expire_all()
+    assert db.get(Printer, p1.id).status.get("reachable") is True
+    assert db.get(Printer, p1.id).status.get("checked_at")  # default gesetzt
+    assert db.get(Printer, p2.id).status.get("reachable") is False
+
+
 # ── Tenant-Isolation ─────────────────────────────────────────────────────────────
 
 def test_tenant_isolation_gateway(setup_db):

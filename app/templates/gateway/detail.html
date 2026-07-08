@@ -219,6 +219,9 @@
     {# ── Status-Kacheln ── #}
     {% set aktive_drucker = printers | selectattr('aktiv') | list %}
     {% set aktive_regeln = rules | selectattr('aktiv') | list %}
+    {% set _on = namespace(n=0) %}
+    {% for p in aktive_drucker if p.status and p.status.get('reachable') %}{% set _on.n = _on.n + 1 %}{% endfor %}
+    {% set _pt = passthrough_status or {} %}
     <div class="gwx-tiles">
       <div class="gwx-tile">
         <div class="gwx-tile__ic">🔌</div>
@@ -226,20 +229,28 @@
           <div class="gwx-tile__l">Verbindung</div></div>
       </div>
       <div class="gwx-tile">
+        <div class="gwx-tile__ic">🖨️</div>
+        <div><div class="gwx-tile__v" style="color:{{ 'var(--g-green)' if _on.n == aktive_drucker|length and aktive_drucker else 'inherit' }};">{{ _on.n }}<span style="font-size:.9rem;color:var(--g-dim);"> / {{ aktive_drucker|length }}</span></div>
+          <div class="gwx-tile__l">Drucker online</div></div>
+      </div>
+      <div class="gwx-tile">
         <div class="gwx-tile__ic">📟</div>
         <div><div class="gwx-tile__v">{{ 'Aktiv' if gw.serial_connected else '—' }}</div>
           <div class="gwx-tile__l">Alarmleitung</div></div>
       </div>
+      {% if _pt.get('enabled') %}
       <div class="gwx-tile">
-        <div class="gwx-tile__ic">🖨️</div>
-        <div><div class="gwx-tile__v">{{ aktive_drucker|length }}<span style="font-size:.9rem;color:var(--g-dim);"> / {{ printers|length }}</span></div>
-          <div class="gwx-tile__l">Drucker aktiv</div></div>
+        <div class="gwx-tile__ic">🔀</div>
+        <div><div class="gwx-tile__v">{{ _pt.get('clients', 0) }}</div>
+          <div class="gwx-tile__l">Fan-Out-Clients</div></div>
       </div>
+      {% else %}
       <div class="gwx-tile">
         <div class="gwx-tile__ic">⚙️</div>
         <div><div class="gwx-tile__v">{{ aktive_regeln|length }}<span style="font-size:.9rem;color:var(--g-dim);"> / {{ rules|length }}</span></div>
           <div class="gwx-tile__l">Regeln aktiv</div></div>
       </div>
+      {% endif %}
     </div>
 
     <div class="gwx-grid">
@@ -311,7 +322,29 @@
                     <option value="{{ p.id }}" {{ 'selected' if w.get('notfalldruck_printer_id')==p.id }}>{{ p.name }}</option>
                     {% endfor %}
                   </select></div>
+                <div class="gwx-field"><label class="gwx-label">Drucker-Check alle (s)</label>
+                  <input class="gwx-input gwx-input--mono" type="number" min="15" name="health_interval_s" value="{{ w.get('health_interval_s', 60) }}"></div>
               </div>
+
+              <div class="gwx-sechd">🔀 Serial-Fan-Out (W&amp;T-Strom durchschleifen)</div>
+              <p style="font-size:.8rem;color:var(--g-dim);margin:0 0 10px;">
+                Stellt den W&amp;T-Datenstrom 1:1 (nur Empfang) auf einem TCP-Port bereit, sodass sich
+                mehrere Clients gleichzeitig verbinden und dieselben Alarme erhalten. Nur im vertrauten
+                LAN aktivieren.</p>
+              <div class="gwx-formgrid">
+                <div class="gwx-field" style="justify-content:end;">
+                  <label class="gwx-check" style="border:none;background:none;padding:0;">
+                    <input type="checkbox" name="passthrough_enabled" value="1" {{ 'checked' if w.get('passthrough_enabled') }}> Fan-Out aktiv</label></div>
+                <div class="gwx-field"><label class="gwx-label">Port</label>
+                  <input class="gwx-input gwx-input--mono" type="number" name="passthrough_port" value="{{ w.get('passthrough_port', 0) or '' }}" placeholder="z. B. 8100"></div>
+                <div class="gwx-field"><label class="gwx-label">Bind-Adresse</label>
+                  <input class="gwx-input gwx-input--mono" type="text" name="passthrough_bind" value="{{ w.get('passthrough_bind', '0.0.0.0') }}"></div>
+                <div class="gwx-field"><label class="gwx-label">Max. Clients</label>
+                  <input class="gwx-input gwx-input--mono" type="number" min="1" name="passthrough_max_clients" value="{{ w.get('passthrough_max_clients', 8) }}"></div>
+                <div class="gwx-field" style="grid-column:1 / -1;"><label class="gwx-label">IP-Allowlist (Komma-getrennt, leer = alle im LAN)</label>
+                  <input class="gwx-input gwx-input--mono" type="text" name="passthrough_allowlist" value="{{ (w.get('passthrough_allowlist') or [])|join(', ') }}" placeholder="10.0.0.5, 192.168.1.0/24"></div>
+              </div>
+
               <div class="gwx-btnrow" style="margin-top:14px;">
                 <button class="gwx-btn gwx-btn--primary" type="submit">Speichern</button>
               </div>
@@ -372,6 +405,8 @@
                   </div>
                   {% if p.status and p.status.get('reachable') %}
                   <span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>erreichbar</span>
+                  {% elif p.status and p.status.get('reachable') == false %}
+                  <span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>offline</span>
                   {% elif p.aktiv %}
                   <span class="gwx-chip"><span class="gwx-chip__d"></span>unbekannt</span>
                   {% else %}
@@ -385,6 +420,7 @@
                   {% if d.get('duplex') and d.get('duplex') != 'off' %}<span class="gwx-role">Duplex</span>{% endif %}
                   {% if d.get('color') == 'monochrome' %}<span class="gwx-role">S/W</span>{% endif %}
                   {% if p.status and p.status.get('toner_pct') is not none %}<span>🩸 {{ p.status.get('toner_pct') }} %</span>{% endif %}
+                  {% if p.status and p.status.get('checked_at') %}<span title="Zuletzt geprüft (UTC)">🕓 {{ p.status.get('checked_at')[11:16] }}</span>{% endif %}
                 </div>
 
                 <template x-if="cfg">

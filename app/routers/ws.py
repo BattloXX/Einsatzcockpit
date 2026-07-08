@@ -42,6 +42,15 @@ _sms_pending: dict[str, asyncio.Future] = {}
 _print_gateways: dict[int, list[WebSocket]] = defaultdict(list)
 # job_id(str) → Future für die erste job_status-Rückmeldung (dispatch_print_job)
 _job_pending: dict[str, asyncio.Future] = {}
+# org_id → letzter Serial-Fan-Out-Status {enabled, listening, clients} (best effort, live).
+_passthrough_status: dict[int, dict] = {}
+
+
+def get_passthrough_status(org_id: int | None) -> dict | None:
+    """Letzter gemeldeter Serial-Fan-Out-Status der Org (oder None)."""
+    if org_id is None:
+        return None
+    return _passthrough_status.get(org_id)
 
 
 # Close-Codes per RFC6455 (4000-4999 ist Application-Range)
@@ -402,7 +411,7 @@ def _gateway_config_sync(gateway_id: int) -> dict:
 
 def _apply_job_status(job_id: int, status: str, error: str | None) -> int | None:
     """Schreibt job_status vom Gateway in die DB. Gibt org_id zurück (für Broadcast)."""
-    from app.models.gateway import JOB_TERMINAL, PrintJob
+    from app.models.gateway import PrintJob
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -503,6 +512,18 @@ async def print_gateway_ws(websocket: WebSocket):
                 from app.services.printer_report_service import apply_printer_report
                 apply_printer_report(gateway_id, org_id, msg.get("payload") or {})
                 await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
+            elif mtype == "printer_status":
+                # Periodischer Erreichbarkeits-Check je Drucker (id-basiert).
+                from app.services.printer_report_service import apply_printer_status
+                apply_printer_status(gateway_id, org_id, msg.get("payload") or {})
+                await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
+            elif mtype == "passthrough_status":
+                p = msg.get("payload") or {}
+                _passthrough_status[org_id] = {
+                    "enabled": bool(p.get("enabled")),
+                    "listening": bool(p.get("listening")),
+                    "clients": int(p.get("clients") or 0),
+                }
             elif mtype == "alarm_notice":
                 # Signal – der verbindliche Ingest läuft über REST POST /alarms.
                 logger.info("ECPG alarm_notice (org_id=%s): %s", org_id,

@@ -122,6 +122,7 @@ def gateway_detail(
         db.query(PrintJob).filter(PrintJob.gateway_id == gw.id)
         .order_by(PrintJob.erstellt_am.desc()).limit(30).all()
     )
+    from app.routers.ws import get_passthrough_status
     return templates.TemplateResponse(request, "gateway/detail.html", {
         "user": user,
         "gw": gw,
@@ -132,6 +133,7 @@ def gateway_detail(
         "doc_labels": DOCUMENT_TYPE_LABELS,
         "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
         "trigger_labels": TRIGGER_LABELS,
+        "passthrough_status": get_passthrough_status(user.org_id),
     })
 
 
@@ -225,11 +227,18 @@ async def gateway_wut_config(
     charset: str = Form("cp850"),
     datagram_strategy: str = Form("idle"),
     notfalldruck_printer_id: int | None = Form(None),
+    health_interval_s: int = Form(60),
+    passthrough_enabled: str = Form(""),
+    passthrough_port: int = Form(0),
+    passthrough_bind: str = Form("0.0.0.0"),
+    passthrough_max_clients: int = Form(8),
+    passthrough_allowlist: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
 ):
     gw = _gw_or_404(db, user.org_id, gateway_id)
+    allowlist = [a.strip() for a in passthrough_allowlist.replace(";", ",").split(",") if a.strip()]
     gw.wut_config = {
         "host": host.strip(),
         "port": int(port),
@@ -237,6 +246,14 @@ async def gateway_wut_config(
         "charset": charset.strip() or "cp850",
         "datagram_strategy": datagram_strategy,
         "notfalldruck_printer_id": notfalldruck_printer_id,
+        # Drucker-Health-Check-Intervall (Sekunden)
+        "health_interval_s": max(15, int(health_interval_s)),
+        # Serial-Fan-Out (Durchschleifen des W&T-Stroms an mehrere Clients)
+        "passthrough_enabled": passthrough_enabled in ("1", "true", "on"),
+        "passthrough_port": int(passthrough_port),
+        "passthrough_bind": passthrough_bind.strip() or "0.0.0.0",
+        "passthrough_max_clients": max(1, int(passthrough_max_clients)),
+        "passthrough_allowlist": allowlist,
     }
     db.commit()
     from app.routers.ws import push_config_sync
@@ -625,7 +642,15 @@ def printers_json(
     connected = _is_connected(user.org_id)
     return JSONResponse({
         "connected": connected,
-        "printers": [{"id": p.id, "name": p.name} for p in printers],
+        "printers": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "reachable": (p.status or {}).get("reachable"),
+                "checked_at": (p.status or {}).get("checked_at"),
+            }
+            for p in printers
+        ],
     })
 
 

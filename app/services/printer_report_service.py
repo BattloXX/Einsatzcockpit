@@ -11,8 +11,8 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-from app.db import SessionLocal
 from app.core.tenant import set_tenant_context
+from app.db import SessionLocal
 from app.models.gateway import Printer
 
 logger = logging.getLogger("einsatzleiter.print")
@@ -24,6 +24,34 @@ def _identity_key(identity: dict) -> str | None:
         if v:
             return f"{k}:{v}"
     return None
+
+
+def apply_printer_status(gateway_id: int, org_id: int, payload: dict) -> None:
+    """Übernimmt einen id-basierten Erreichbarkeits-Check je Drucker (periodischer
+    Health-Check des Gateways): payload = {printers: [{printer_id, status:{reachable,...}}]}.
+    Nur Drucker DIESES Gateways werden aktualisiert (Scope)."""
+    entries = payload.get("printers") or []
+    if not entries:
+        return
+    now = datetime.now(UTC).replace(tzinfo=None)
+    by_id = {int(e["printer_id"]): (e.get("status") or {}) for e in entries if e.get("printer_id")}
+    if not by_id:
+        return
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        printers = (
+            db.query(Printer)
+            .filter(Printer.gateway_id == gateway_id, Printer.id.in_(list(by_id)))
+            .all()
+        )
+        for p in printers:
+            st = dict(by_id.get(p.id) or {})
+            st.setdefault("checked_at", now.isoformat())
+            p.status = st
+        db.commit()
+    finally:
+        db.close()
 
 
 def _match_printer(printers: list[Printer], entry: dict) -> Printer | None:

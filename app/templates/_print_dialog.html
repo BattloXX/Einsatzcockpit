@@ -29,6 +29,7 @@
       <input type="hidden" name="artifact_ref" id="ecpgArtifactRef">
       <label>Drucker
         <select name="printer_id" id="ecpgPrinter" required></select>
+        <div id="ecpgPrinterHint" class="ecpg-hint" style="margin-top:4px"></div>
       </label>
       <label>Kopien
         <input type="number" name="copies" value="1" min="1" max="20" style="width:5rem">
@@ -114,6 +115,19 @@
     try{ localStorage.setItem('ec_print_target', t); }catch(e){}
   }
 
+  function updatePrinterHint(){
+    const sel = document.getElementById('ecpgPrinter');
+    const hint = document.getElementById('ecpgPrinterHint');
+    if(!sel || !hint) return;
+    const p = (window._ecpgPrinters || []).find(x => String(x.id) === String(sel.value));
+    if(p && p.reachable === false){
+      hint.textContent = 'Drucker aktuell offline – Auftrag wird gespoolt und nachgeholt.';
+      hint.style.color = '#b91c1c';
+    } else {
+      hint.textContent = '';
+    }
+  }
+
   function openDialogWithStation(printers, connected){
     document.getElementById('ecpgPrintTitle').textContent = ctx.title || 'Drucken';
     document.getElementById('ecpgDocType').value = ctx.document_type || 'einsatzinfo';
@@ -124,9 +138,15 @@
     const msg = document.getElementById('ecpgPrintMsg'); msg.textContent=''; msg.className='ecpg-msg';
     if(!connected){ msg.textContent='Hinweis: Gateway aktuell offline – der Auftrag wird nachgeholt.'; }
     const sel = document.getElementById('ecpgPrinter');
-    sel.innerHTML = printers.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+    window._ecpgPrinters = printers;
+    sel.innerHTML = printers.map(p=>{
+      const dot = p.reachable === true ? '🟢 ' : (p.reachable === false ? '🔴 ' : '');
+      return `<option value="${p.id}">${dot}${p.name}</option>`;
+    }).join('');
     const last = localStorage.getItem('ecpg_last_printer');
     if(last){ sel.value = last; }
+    sel.onchange = updatePrinterHint;
+    updatePrinterHint();
     document.getElementById('ecpgTarget').style.display = 'flex';
     let target = 'station';
     try{ target = localStorage.getItem('ec_print_target') || 'station'; }catch(e){}
