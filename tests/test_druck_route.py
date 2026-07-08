@@ -16,6 +16,7 @@ def _bigint_sqlite(element, compiler, **kw):
 
 from app.core.tenant import set_tenant_context
 from app.db import Base
+from app.models.atemschutz_pruefung import AtemschutzPruefung
 from app.models.incident import Incident
 from app.models.master import FireDept
 from app.routers.ui_druck import _verify_org
@@ -66,3 +67,55 @@ def test_verify_org_unknown_type_400(db, incident):
     with pytest.raises(HTTPException) as ei:
         _verify_org(db, _ORG_A, "quatsch", incident.id, None, None, None)
     assert ei.value.status_code == 400
+
+
+# ── Atemschutzprüfung (artifact_ref = kommagetrennte IDs) ───────────────────────
+
+@pytest.fixture
+def pruefungen(db):
+    from datetime import date
+    db.add(FireDept(id=_ORG_A, slug="a", name="Org A", color="#f00", bos="Feuerwehr"))
+    db.flush()
+    p1 = AtemschutzPruefung(org_id=_ORG_A, geraet_id=1, eingesetzt_am=date.today())
+    p2 = AtemschutzPruefung(org_id=_ORG_A, geraet_id=1, eingesetzt_am=date.today())
+    db.add_all([p1, p2])
+    db.flush()
+    return [p1, p2]
+
+
+def test_verify_org_as_pruefung_own_ok(db, pruefungen):
+    ref = ",".join(str(p.id) for p in pruefungen)
+    _verify_org(db, _ORG_A, "as_pruefung", None, None, None, ref)  # kein Fehler
+
+
+def test_verify_org_as_pruefung_foreign_404(db, pruefungen):
+    ref = str(pruefungen[0].id)
+    with pytest.raises(HTTPException) as ei:
+        _verify_org(db, _ORG_B, "as_pruefung", None, None, None, ref)
+    assert ei.value.status_code == 404
+
+
+def test_verify_org_as_pruefung_partly_foreign_404(db, pruefungen):
+    # Eine eigene + eine nicht existente ID → nicht alle gehören der Org → 404
+    ref = f"{pruefungen[0].id},99999999"
+    with pytest.raises(HTTPException) as ei:
+        _verify_org(db, _ORG_A, "as_pruefung", None, None, None, ref)
+    assert ei.value.status_code == 404
+
+
+# ── Teilnehmerliste (Bezug-Org-Schutz gegen _bezug_meta-Leak) ───────────────────
+
+def test_verify_org_teilnahme_own_einsatz_ok(db, incident):
+    _verify_org(db, _ORG_A, "teilnahme", None, None, None, f"einsatz:{incident.id}")
+
+
+def test_verify_org_teilnahme_foreign_einsatz_404(db, incident):
+    with pytest.raises(HTTPException) as ei:
+        _verify_org(db, _ORG_B, "teilnahme", None, None, None, f"einsatz:{incident.id}")
+    assert ei.value.status_code == 404
+
+
+def test_verify_org_teilnahme_bad_ref_404(db, incident):
+    with pytest.raises(HTTPException) as ei:
+        _verify_org(db, _ORG_A, "teilnahme", None, None, None, "einsatz")
+    assert ei.value.status_code == 404

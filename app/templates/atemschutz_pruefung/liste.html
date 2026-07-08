@@ -82,7 +82,7 @@
     <a href="/atemschutz-pruefung/export.xlsx?geraet_id={{ filter_geraet_id }}&von={{ filter_von }}&bis={{ filter_bis }}"
        class="btn btn--ghost btn--sm">Excel-Export</a>
     {% if pruefungen %}
-    <button type="submit" form="sammel-form" class="btn btn--primary btn--sm">Auswahl als PDF drucken</button>
+    <button type="button" class="btn btn--primary btn--sm" onclick="asSammelDrucken()">Auswahl als PDF drucken</button>
     {% endif %}
   </form>
 
@@ -154,4 +154,19 @@
     </div>
   </form>
 </div>
+{% include "_print_dialog.html" %}
+<script>
+// Sammeldruck: gewählte Protokolle → Station (kommagetrennte IDs) oder lokal (Formular-POST).
+window.asSammelDrucken = function() {
+  var ids = Array.prototype.slice.call(document.querySelectorAll('.as-row-check:checked')).map(function(c){ return c.value; });
+  if (!ids.length) { alert('Bitte mindestens ein Protokoll auswählen.'); return; }
+  window.__asSammelLocal = function() { document.getElementById('sammel-form').submit(); };
+  if (typeof window.ecpgPrint === 'function') {
+    ecpgPrint({document_type:'as_pruefung', artifact_ref:ids.join(','),
+               title:'Atemschutzprüfungen drucken', localFn:'__asSammelLocal'});
+  } else {
+    window.__asSammelLocal();
+  }
+};
+</script>
 {% endblock %}

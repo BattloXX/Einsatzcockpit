@@ -46,41 +46,13 @@ def _gw_or_404(db: Session, org_id: int | None, gateway_id: int) -> Gateway:
 
 
 def _is_connected(org_id: int | None) -> bool:
-    """Ist ein Gateway dieser Org online?
+    """Ist ein Gateway dieser Org online? (Live-WS-Registry ODER DB-Heartbeat).
 
-    Primär die Live-WS-Registry (aktueller Prozess). Fallback auf den DB-Heartbeat
-    (status online + last_seen_at der letzten 2 Min) – nötig bei mehreren Workern,
-    da die In-Memory-Registry pro Prozess liegt und ein Request sonst fälschlich
-    "offline" meldet, obwohl das Gateway an einem anderen Worker verbunden ist.
-    """
-    if org_id is None:
-        return False
-    from app.routers.ws import is_gateway_connected
-    if is_gateway_connected(org_id):
-        return True
-    from datetime import UTC, datetime, timedelta
-
-    from app.core.tenant import set_tenant_context
-    from app.db import SessionLocal
-    from app.models.gateway import GATEWAY_STATUS_ONLINE, Gateway
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=2)
-        gw = (
-            db.query(Gateway)
-            .filter(
-                Gateway.org_id == org_id,
-                Gateway.device_token_hash.isnot(None),
-                Gateway.status == GATEWAY_STATUS_ONLINE,
-                Gateway.last_seen_at.isnot(None),
-                Gateway.last_seen_at >= cutoff,
-            )
-            .first()
-        )
-        return gw is not None
-    finally:
-        db.close()
+    Delegiert an ws.gateway_online – nötig bei mehreren Workern, da die In-Memory-
+    Registry pro Prozess liegt und ein Request sonst fälschlich "offline" meldet,
+    obwohl das Gateway an einem anderen Worker verbunden ist."""
+    from app.routers.ws import gateway_online
+    return gateway_online(org_id)
 
 
 # ── Übersicht ──────────────────────────────────────────────────────────────────

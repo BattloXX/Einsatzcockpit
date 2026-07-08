@@ -353,8 +353,8 @@
       </form>
       {% endif %}
 
-      <a href="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/pdf" target="_blank"
-         class="btn btn--ghost btn--sm" target="_blank" title="Trupp-Protokoll als PDF">📄 PDF</a>
+      <button type="button" class="btn btn--ghost btn--sm" title="Trupp-Protokoll als PDF"
+         onclick="ecpgPrint({document_type:'troop_protokoll', incident_id:{{ incident.id }}, artifact_ref:'{{ troop.id }}', title:'Atemschutz-Protokoll drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/pdf'})">📄 PDF</button>
     </div>
 
     <!-- ── Meldungen (pressure log history) ── -->
@@ -531,6 +531,7 @@
     </div>
   </form>
 </dialog>
+{% include "_print_dialog.html" %}
 {% endblock %}
 
 {% block scripts %}

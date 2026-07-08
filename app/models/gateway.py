@@ -57,6 +57,15 @@ DOC_GSL_LAGEBLATT = "gsl_lageblatt"
 DOC_ALARM_ROHTEXT = "alarm_rohtext"
 DOC_OBJEKTBLATT = "objektblatt"
 DOC_OBJEKT_DOKUMENT = "objekt_dokument"
+DOC_AS_PRUEFUNG = "as_pruefung"          # Atemschutzgeräteprüfung (artifact_ref = kommagetrennte IDs)
+DOC_TROOP_PROTOKOLL = "troop_protokoll"  # Atemschutztrupp (incident_id + artifact_ref = troop_id)
+DOC_TEILNAHME = "teilnahme"              # Teilnehmerliste (artifact_ref = "<bezug_typ>:<bezug_id>[:<sort>]")
+DOC_OBJEKT_SAMMEL = "objekt_sammel"      # Objekt-Dokumente Sammelmappe (objekt_id, artifact_ref = art-Filter)
+DOC_UAS = "uas"                          # UAS-PDFs (artifact_ref = "<subtyp>:<id>[:<id2>]")
+DOC_GSL_JOURNAL = "gsl_journal"          # GSL-Einsatzjournal-Eintrag (gsl_id + artifact_ref = Eintrag-ID)
+# Reserviert (Station-Rendering steht noch aus – Route-Kontext-Refactor nötig):
+# gsl_bericht, mannschaft, qr_einsatz, verleih_schein. Diese Drucke laufen bis dahin
+# weiterhin nur lokal (unveränderte window.print-/PDF-Ansichten).
 
 DOCUMENT_TYPE_LABELS = {
     DOC_EINSATZINFO: "Einsatzinfo",
@@ -64,6 +73,12 @@ DOCUMENT_TYPE_LABELS = {
     DOC_ALARM_ROHTEXT: "Alarm-Rohtext",
     DOC_OBJEKTBLATT: "Objektblatt",
     DOC_OBJEKT_DOKUMENT: "Objekt-Dokument",
+    DOC_AS_PRUEFUNG: "Atemschutzprüfung",
+    DOC_TROOP_PROTOKOLL: "Atemschutz-Protokoll",
+    DOC_TEILNAHME: "Teilnehmerliste",
+    DOC_OBJEKT_SAMMEL: "Objekt-Sammelmappe",
+    DOC_UAS: "Drohnen-Dokument",
+    DOC_GSL_JOURNAL: "GSL-Journal",
 }
 
 # ── PrintJob-Status ────────────────────────────────────────────────────────────

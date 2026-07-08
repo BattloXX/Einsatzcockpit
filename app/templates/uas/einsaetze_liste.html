@@ -135,8 +135,10 @@
         <td style="text-align:right;white-space:nowrap;">
           <a href="/uas/einsatz/{{ e.id }}/flug/neu" class="btn btn--ghost btn--sm" title="Flug anlegen">+ Flug</a>
           <a href="/uas/einsatz/{{ e.id }}" class="btn btn--ghost btn--sm">Detail</a>
-          <a href="/uas/einsatz/{{ e.id }}/pdf/eintreffmeldung" target="_blank" class="btn btn--ghost btn--sm" title="Eintreffmeldung PDF">&#x1F4C4;</a>
-          <a href="/uas/einsatz/{{ e.id }}/pdf/gesamt" target="_blank" class="btn btn--ghost btn--sm" title="Gesamtbericht PDF">&#x1F4CB;</a>
+          <button type="button" class="btn btn--ghost btn--sm" title="Eintreffmeldung PDF"
+            onclick="ecpgPrint({document_type:'uas', artifact_ref:'eintreffmeldung:{{ e.id }}', title:'Eintreffmeldung drucken', localUrl:'/uas/einsatz/{{ e.id }}/pdf/eintreffmeldung'})">&#x1F4C4;</button>
+          <button type="button" class="btn btn--ghost btn--sm" title="Gesamtbericht PDF"
+            onclick="ecpgPrint({document_type:'uas', artifact_ref:'gesamt:{{ e.id }}', title:'Gesamtbericht drucken', localUrl:'/uas/einsatz/{{ e.id }}/pdf/gesamt'})">&#x1F4CB;</button>
         </td>
       </tr>
       {% endfor %}
@@ -197,4 +199,5 @@
   <div class="alert" style="margin-top:1rem">Noch keine Drohneneins&auml;tze erfasst.</div>
   {% endif %}
 </div>
+{% include "_print_dialog.html" %}
 {% endblock %}

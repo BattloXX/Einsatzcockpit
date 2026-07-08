@@ -34,13 +34,15 @@
     &#x1F4CB; Notfallcheckliste
   </a>
   <div class="flug-qbtn-group">
-    <a href="/uas/flug/{{ flug.id }}/pdf/flugbuch" class="flug-qbtn flug-qbtn--pdf" target="_blank">
+    <button type="button" class="flug-qbtn flug-qbtn--pdf"
+      onclick="ecpgPrint({document_type:'uas', artifact_ref:'flugbuch:{{ flug.id }}', title:'Flugbuch drucken', localUrl:'/uas/flug/{{ flug.id }}/pdf/flugbuch'})">
       &#x1F4C4; PDF Flugbuch
-    </a>
+    </button>
     {% for row in checklisten %}
-    <a href="/uas/flug/{{ flug.id }}/pdf/checkliste/{{ row.checkliste.id }}" class="flug-qbtn flug-qbtn--pdf" target="_blank">
+    <button type="button" class="flug-qbtn flug-qbtn--pdf"
+      onclick="ecpgPrint({document_type:'uas', artifact_ref:'checkliste:{{ row.checkliste.id }}:{{ flug.id }}', title:'Checkliste drucken', localUrl:'/uas/flug/{{ flug.id }}/pdf/checkliste/{{ row.checkliste.id }}'})">
       &#x1F4C4; PDF {% if row.checkliste.typ == 'vorflug' %}Vorflug{% else %}Nachflug{% endif %}-CL
-    </a>
+    </button>
     {% endfor %}
   </div>
 </div>
@@ -177,9 +179,11 @@
       <span style="font-size:.88rem;color:var(--text)">{{ e.beschreibung[:80] if e.beschreibung else '(keine Beschreibung)' }}</span>
       <span style="font-size:.78rem;color:var(--text-muted);margin-left:auto">{{ e.datum_lokal or '' }}</span>
       <a href="/uas/ereignis/{{ e.id }}" class="btn btn--ghost btn--sm">Details</a>
-      <a href="/uas/ereignis/{{ e.id }}/pdf/protokoll" class="btn btn--ghost btn--sm" target="_blank">&#x1F4C4; PDF</a>
+      <button type="button" class="btn btn--ghost btn--sm"
+        onclick="ecpgPrint({document_type:'uas', artifact_ref:'ereignis_protokoll:{{ e.id }}', title:'Ereignis-Protokoll drucken', localUrl:'/uas/ereignis/{{ e.id }}/pdf/protokoll'})">&#x1F4C4; PDF</button>
       {% if e.typ == 'unfall' %}
-      <a href="/uas/ereignis/{{ e.id }}/pdf/acg" class="btn btn--ghost btn--sm" target="_blank">&#x1F4C4; ACG</a>
+      <button type="button" class="btn btn--ghost btn--sm"
+        onclick="ecpgPrint({document_type:'uas', artifact_ref:'ereignis_acg:{{ e.id }}', title:'ACG-Bericht drucken', localUrl:'/uas/ereignis/{{ e.id }}/pdf/acg'})">&#x1F4C4; ACG</button>
       {% endif %}
     </div>
     {% endfor %}
@@ -226,4 +230,5 @@
 .flug-qbtn--pdf { color:var(--text-muted) }
 .flug-qbtn-group { display:contents }
 </style>
+{% include "_print_dialog.html" %}
 {% endblock %}

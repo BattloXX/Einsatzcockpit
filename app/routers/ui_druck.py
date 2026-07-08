@@ -17,10 +17,16 @@ from app.core.permissions import require_role
 from app.db import get_db
 from app.models.gateway import (
     DOC_ALARM_ROHTEXT,
+    DOC_AS_PRUEFUNG,
     DOC_EINSATZINFO,
+    DOC_GSL_JOURNAL,
     DOC_GSL_LAGEBLATT,
     DOC_OBJEKT_DOKUMENT,
+    DOC_OBJEKT_SAMMEL,
     DOC_OBJEKTBLATT,
+    DOC_TEILNAHME,
+    DOC_TROOP_PROTOKOLL,
+    DOC_UAS,
     DOCUMENT_TYPE_LABELS,
 )
 from app.models.user import User
@@ -61,6 +67,50 @@ def _verify_org(db: Session, org_id: int, document_type: str,
         ing = db.get(AlarmIngest, int(artifact_ref)) if artifact_ref else None
         if not _own(ing, "org_id"):
             raise HTTPException(status_code=404, detail="Alarmtext nicht gefunden")
+    elif document_type == DOC_AS_PRUEFUNG:
+        # artifact_ref = kommagetrennte IDs – jede muss der Org gehören.
+        from app.services.print_artifact_service import _parse_ref_ids
+        from app.models.atemschutz_pruefung import AtemschutzPruefung
+        ids = _parse_ref_ids(artifact_ref)
+        treffer = (
+            db.query(AtemschutzPruefung)
+            .filter(AtemschutzPruefung.id.in_(ids), AtemschutzPruefung.org_id == org_id)
+            .execution_options(include_all_tenants=True)
+            .count()
+        ) if ids else 0
+        if not ids or treffer != len(set(ids)):
+            raise HTTPException(status_code=404, detail="Atemschutzprüfung nicht gefunden")
+    elif document_type == DOC_TROOP_PROTOKOLL:
+        from app.models.breathing import BreathingTroop
+        from app.models.incident import Incident
+        troop = db.get(BreathingTroop, int(artifact_ref)) if artifact_ref else None
+        inc = db.get(Incident, incident_id) if incident_id else None
+        if (troop is None or inc is None or troop.incident_id != inc.id
+                or getattr(inc, "primary_org_id", None) != org_id):
+            raise HTTPException(status_code=404, detail="Atemschutztrupp nicht gefunden")
+    elif document_type == DOC_TEILNAHME:
+        from app.services.print_artifact_service import teilnahme_bezug_gehoert_org
+        teile = (artifact_ref or "").split(":")
+        if len(teile) < 2 or not teile[1].isdigit() or not teilnahme_bezug_gehoert_org(
+            db, teile[0], int(teile[1]), org_id
+        ):
+            raise HTTPException(status_code=404, detail="Teilnehmerliste nicht gefunden")
+    elif document_type == DOC_OBJEKT_SAMMEL:
+        from app.models.objekt import Objekt
+        if not (objekt_id and _own(db.get(Objekt, objekt_id), "org_id")):
+            raise HTTPException(status_code=404, detail="Objekt nicht gefunden")
+    elif document_type == DOC_UAS:
+        # Org wird strikt im Renderer je Subtyp geprüft; hier nur Format validieren.
+        teile = (artifact_ref or "").split(":")
+        if len(teile) < 2 or not teile[1].isdigit():
+            raise HTTPException(status_code=422, detail="Ungültige UAS-Referenz")
+    elif document_type == DOC_GSL_JOURNAL:
+        from app.models.major_incident import LageJournalEntry, MajorIncident
+        lage = db.get(MajorIncident, gsl_id) if gsl_id else None
+        entry = db.get(LageJournalEntry, int(artifact_ref)) if artifact_ref else None
+        if (lage is None or getattr(lage, "org_id", None) != org_id
+                or entry is None or entry.major_incident_id != lage.id):
+            raise HTTPException(status_code=404, detail="Journaleintrag nicht gefunden")
     else:
         raise HTTPException(status_code=400, detail="Unbekannter Dokumenttyp")
 

@@ -22,6 +22,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.major_incident import MajorIncident
 from app.models.user import SmsGatewayToken, User
+from app.services import ws_bus
 from app.services.broadcast import LAGE_WS_OFFSET, ORG_WS_OFFSET, broadcast_org, manager
 from app.services.sms_inbox_service import process_inbound_sms, record_inbound_sms
 
@@ -493,10 +494,16 @@ async def print_gateway_ws(websocket: WebSocket):
             elif mtype == "job_status":
                 p = msg.get("payload") or {}
                 jid = p.get("job_id")
-                # Future auflösen (falls dispatch_print_job auf Zustellung wartet)
+                # Future auflösen (falls dispatch_print_job auf Zustellung wartet).
+                # Liegt es lokal → direkt; sonst (Bus aktiv) auf einem anderen
+                # Worker → dorthin melden, damit dessen Future aufgelöst wird.
                 fut = _job_pending.pop(str(jid), None)
                 if fut and not fut.done():
                     fut.set_result(p)
+                elif ws_bus.enabled() and jid is not None:
+                    await ws_bus.publish(ws_bus.CH_GW, {
+                        "kind": "job_status", "org_id": org_id, "job_id": jid, "payload": p,
+                    })
                 if jid is not None:
                     o = _apply_job_status(int(jid), p.get("status", ""), p.get("error"))
                     if o:
@@ -563,24 +570,48 @@ def _mark_gateway_offline(gateway_id: int) -> None:
 
 
 def is_gateway_connected(org_id: int) -> bool:
-    """True, wenn mindestens ein ECPG-Gateway dieser Org verbunden ist."""
+    """True, wenn ein ECPG-Gateway dieser Org an DIESEM Worker verbunden ist."""
     return bool(_print_gateways.get(org_id))
 
 
-async def push_config_sync(org_id: int, gateway_id: int) -> None:
-    """Sendet aktualisierte config_sync an alle verbundenen Gateways der Org."""
-    payload = json.dumps({"type": "config_sync", "payload": _gateway_config_sync(gateway_id)},
-                         ensure_ascii=False)
-    for ws in list(_print_gateways.get(org_id, [])):
-        try:
-            await ws.send_text(payload)
-        except Exception:
-            _discard_print_gateway(org_id, ws)
+def gateway_online(org_id: int | None) -> bool:
+    """True, wenn ein Gateway dieser Org verbunden ist – worker-übergreifend.
+
+    Lokale Registry ODER DB-Heartbeat (status online + last_seen der letzten 2 Min):
+    der Socket kann bei -w 2+ an einem ANDEREN Worker hängen. Grundlage für die
+    Dispatch-Vorprüfung (schnelles Scheitern, statt 20 s auf ein Future zu warten,
+    wenn gar kein Gateway verbunden ist)."""
+    if org_id is None:
+        return False
+    if is_gateway_connected(org_id):
+        return True
+    from datetime import timedelta
+
+    from app.models.gateway import GATEWAY_STATUS_ONLINE, Gateway
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=2)
+        gw = (
+            db.query(Gateway)
+            .filter(
+                Gateway.org_id == org_id,
+                Gateway.device_token_hash.isnot(None),
+                Gateway.status == GATEWAY_STATUS_ONLINE,
+                Gateway.last_seen_at.isnot(None),
+                Gateway.last_seen_at >= cutoff,
+            )
+            .first()
+        )
+        return gw is not None
+    finally:
+        db.close()
 
 
-async def push_gateway_command(org_id: int, message: dict) -> bool:
-    """Sendet ein Kommando (discover_printers, probe_printer, test_page, cancel_job,
-    update_available) an die Gateways der Org. Gibt True bei mind. einem Empfänger."""
+async def _send_to_local_gateways(org_id: int, message: dict) -> bool:
+    """Sendet eine Nachricht an die an DIESEM Worker verbundenen Gateways der Org.
+
+    Gemeinsamer Zusteller für den lokalen Pfad und den Bus-Handler."""
     payload = json.dumps(message, ensure_ascii=False)
     sent = False
     for ws in list(_print_gateways.get(org_id, [])):
@@ -592,9 +623,86 @@ async def push_gateway_command(org_id: int, message: dict) -> bool:
     return sent
 
 
+async def _bus_gateway_deliver(payload: dict) -> None:
+    """Bus-Handler (CH_GW): stellt Gateway-Nachrichten an lokale Sockets zu bzw.
+    löst wartende Dispatch-Futures auf (worker-übergreifend)."""
+    kind = payload.get("kind")
+    org_id = payload.get("org_id")
+    if kind == "print_job":
+        await _send_to_local_gateways(org_id, {
+            "type": "print_job", "id": str(payload.get("job_id")),
+            "payload": payload.get("payload") or {},
+        })
+    elif kind == "command":
+        await _send_to_local_gateways(org_id, payload.get("message") or {})
+    elif kind == "config_sync":
+        await _send_to_local_gateways(org_id, {
+            "type": "config_sync", "payload": _gateway_config_sync(payload.get("gateway_id")),
+        })
+    elif kind == "job_status":
+        fut = _job_pending.pop(str(payload.get("job_id")), None)
+        if fut and not fut.done():
+            fut.set_result(payload.get("payload") or {})
+
+
+ws_bus.register(ws_bus.CH_GW, _bus_gateway_deliver)
+
+
+async def push_config_sync(org_id: int, gateway_id: int) -> None:
+    """Sendet aktualisierte config_sync an alle verbundenen Gateways der Org."""
+    if ws_bus.enabled():
+        await ws_bus.publish(ws_bus.CH_GW, {
+            "kind": "config_sync", "org_id": org_id, "gateway_id": gateway_id,
+        })
+        return
+    await _send_to_local_gateways(org_id, {
+        "type": "config_sync", "payload": _gateway_config_sync(gateway_id),
+    })
+
+
+async def push_gateway_command(org_id: int, message: dict) -> bool:
+    """Sendet ein Kommando (discover_printers, probe_printer, test_page, cancel_job,
+    update_available) an die Gateways der Org. Gibt True bei mind. einem Empfänger
+    (im Bus-Modus: DB-Heartbeat, da der Socket an einem anderen Worker hängen kann)."""
+    if ws_bus.enabled():
+        await ws_bus.publish(ws_bus.CH_GW, {
+            "kind": "command", "org_id": org_id, "message": message,
+        })
+        return gateway_online(org_id)
+    return await _send_to_local_gateways(org_id, message)
+
+
 async def dispatch_print_job(org_id: int, job_id: int, payload: dict, timeout: float = 20.0) -> dict:
     """Sendet einen print_job an ein verbundenes Gateway und wartet auf die erste
-    job_status-Rückmeldung (Muster dispatch_sms, ohne Doppel-Retry bei Timeout)."""
+    job_status-Rückmeldung (Muster dispatch_sms, ohne Doppel-Retry bei Timeout).
+
+    Bus-Modus (REDIS_URL gesetzt): Der Auftrag wird auf CH_GW publiziert – so
+    erreicht er das Gateway auch, wenn dessen Socket an einem anderen Worker hängt.
+    Die job_status-Rückmeldung löst das Future via Bus wieder auf. Ohne Redis läuft
+    der bisherige In-Process-Pfad (_dispatch_print_job_local)."""
+    if ws_bus.enabled():
+        if not gateway_online(org_id):
+            raise RuntimeError(f"Kein Gateway für org_id={org_id} verbunden")
+        key = str(job_id)
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        _job_pending[key] = fut
+        await ws_bus.publish(ws_bus.CH_GW, {
+            "kind": "print_job", "org_id": org_id, "job_id": job_id, "payload": payload,
+        })
+        try:
+            return await asyncio.wait_for(fut, timeout=timeout)
+        except TimeoutError:
+            _job_pending.pop(key, None)
+            return {"job_id": job_id, "status": "sent", "note": "timeout_waiting_status"}
+        except Exception:
+            _job_pending.pop(key, None)
+            raise
+    return await _dispatch_print_job_local(org_id, job_id, payload, timeout)
+
+
+async def _dispatch_print_job_local(org_id: int, job_id: int, payload: dict, timeout: float) -> dict:
+    """In-Process-Zustellung (kein Redis): Socket muss an DIESEM Worker hängen."""
     gateways = list(_print_gateways.get(org_id, []))
     if not gateways:
         raise RuntimeError(f"Kein Gateway für org_id={org_id} verbunden")

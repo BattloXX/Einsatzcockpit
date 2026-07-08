@@ -101,7 +101,8 @@
           <td>{{ t.entry_at|local_time if t.entry_at else '–' }}</td>
           <td>{{ t.withdraw_at|local_time if t.withdraw_at else '–' }}</td>
           <td>{{ t.back_at|local_time if t.back_at else '–' }}</td>
-          <td><a href="/einsatz/{{ incident.id }}/atemschutz/{{ t.id }}/pdf" target="_blank" class="btn btn--ghost btn--xs">📄 PDF</a></td>
+          <td><button type="button" class="btn btn--ghost btn--xs"
+            onclick="ecpgPrint({document_type:'troop_protokoll', incident_id:{{ incident.id }}, artifact_ref:'{{ t.id }}', title:'Atemschutz-Protokoll drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/{{ t.id }}/pdf'})">📄 PDF</button></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -142,8 +143,10 @@
     </dl>
     <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap">
       <a href="/uas/einsatz/{{ uas_einsatz.id }}" class="btn btn--ghost btn--sm">&#x2192; Drohneneinsatz-Detail</a>
-      <a href="/uas/einsatz/{{ uas_einsatz.id }}/pdf/eintreffmeldung" target="_blank" class="btn btn--ghost btn--sm">&#x1F4C4; Eintreffmeldung</a>
-      <a href="/uas/einsatz/{{ uas_einsatz.id }}/pdf/gesamt" target="_blank" class="btn btn--ghost btn--sm">&#x1F4CB; Gesamtbericht</a>
+      <button type="button" class="btn btn--ghost btn--sm"
+        onclick="ecpgPrint({document_type:'uas', artifact_ref:'eintreffmeldung:{{ uas_einsatz.id }}', title:'Eintreffmeldung drucken', localUrl:'/uas/einsatz/{{ uas_einsatz.id }}/pdf/eintreffmeldung'})">&#x1F4C4; Eintreffmeldung</button>
+      <button type="button" class="btn btn--ghost btn--sm"
+        onclick="ecpgPrint({document_type:'uas', artifact_ref:'gesamt:{{ uas_einsatz.id }}', title:'Gesamtbericht drucken', localUrl:'/uas/einsatz/{{ uas_einsatz.id }}/pdf/gesamt'})">&#x1F4CB; Gesamtbericht</button>
     </div>
   </div>
   {% endif %}
@@ -191,7 +194,8 @@
                 onclick="document.getElementById('mannschaft-dialog').showModal()">+ Teilnehmer</button>
         {% endif %}
         <a id="teilnahme-druck-link" href="/teilnahme/einsatz/{{ incident.id }}/druck" target="_blank" class="btn btn--ghost btn--sm">🖨 Drucken</a>
-        <a id="teilnahme-pdf-link" href="/teilnahme/einsatz/{{ incident.id }}/export.pdf" target="_blank" class="btn btn--ghost btn--sm">📄 PDF</a>
+        <button type="button" id="teilnahme-pdf-link" class="btn btn--ghost btn--sm"
+          onclick="ecpgPrint({document_type:'teilnahme', artifact_ref:'einsatz:{{ incident.id }}', title:'Teilnehmerliste drucken', localUrl:'/teilnahme/einsatz/{{ incident.id }}/export.pdf'})">📄 PDF</button>
         <a id="teilnahme-xlsx-link" href="/teilnahme/einsatz/{{ incident.id }}/export.xlsx" class="btn btn--ghost btn--sm">📊 Excel</a>
       </div>
     </div>
@@ -288,4 +292,5 @@ document.getElementById("mannschaft-dialog").addEventListener("click", function(
 document.getElementById("mannschaft-dialog").addEventListener("close", _refreshMannschaft);
 </script>
 {% endif %}
+{% include "_print_dialog.html" %}
 {% endblock %}

@@ -18,9 +18,11 @@ ExecStart=/home/clp-einsatz/htdocs/einsatzleiter/.venv/bin/gunicorn \
     --access-logfile - \
     --error-logfile - \
     app.main:app
-# Worker-Hinweis: Mit -w 2+ müssen WebSocket-Clients per NGINX ip_hash
-# immer zum selben Worker geroutet werden (Sticky Sessions), damit WS-Broadcasts
-# alle Clients erreichen. Ohne ip_hash oder Redis: -w 1 verwenden.
+# Worker-Hinweis: Mit -w 2+ MUSS REDIS_URL in der .env gesetzt sein (Redis Pub/Sub-
+# Bus, app/services/ws_bus.py), damit Live-Broadcasts UND Gateway-Druckaufträge
+# worker-übergreifend zugestellt werden. NGINX ip_hash (Sticky Sessions) pinnt jede
+# WS-Verbindung auf einen Worker, löst aber NICHT den Fall, dass ein Druck-Request
+# auf einem anderen Worker landet als der Gateway-Socket. Ohne Redis: -w 1 verwenden.
 # Empfohlene Formel: -w (2 × CPU-Kerne). Die DB-Pool-Größe (pool_size=10/max_overflow=20
 # in db.py) deckt 2 Worker mit je ~40 anyio-Threads problemlos ab.
 Restart=on-failure
