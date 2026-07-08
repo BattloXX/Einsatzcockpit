@@ -99,7 +99,7 @@
       </div>
       <div class="ei-noprint" style="display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" class="btn btn--secondary"
-                onclick="if(window.einsatzInfoDrucken){window.einsatzInfoDrucken()}else{window.print()}">🖨 Drucken</button>
+                onclick="ecpgPrint({document_type:'einsatzinfo', incident_id:{{ incident.id }}, title:'Einsatzinfo drucken', localFn:'einsatzInfoDrucken'})">🖨 Drucken</button>
         <a href="/einsatz/{{ incident.id }}" class="btn btn--primary">🖥 Zum Einsatz-Board</a>
         {% set lk_url = lagekarte_url(incident) %}
         {% if lk_url %}
@@ -155,7 +155,8 @@
               </div>
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                 {% if v.status == 'vorschlag' %}<span class="badge-pill badge-pill--amber">Vorschlag{% if v.distanz_m %} · {{ v.distanz_m }} m{% endif %}</span>{% endif %}
-                <a href="/objekte/{{ o.id }}/objektblatt.pdf?anhang=1" target="_blank" rel="noopener" class="btn btn--sm btn--ghost ei-noprint" title="Objektblatt inkl. Dokumente drucken">🖨 Drucken</a>
+                <button type="button" class="btn btn--sm btn--ghost ei-noprint" title="Objektblatt drucken"
+                        onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ o.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ o.id }}/objektblatt.pdf?anhang=1'})">🖨 Drucken</button>
                 <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary ei-noprint">Objektinfo öffnen</a>
               </div>
             </div>
@@ -183,6 +184,9 @@
     </div>
   </div>
 </div>
+
+{# Einheitlicher Druck-Dialog: Umschalter erscheint nur bei Gateway+Druckern, sonst lokal. #}
+{% include "_print_dialog.html" %}
 {% endblock %}
 
 {% block scripts %}

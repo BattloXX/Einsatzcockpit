@@ -1,9 +1,25 @@
-{# Wiederverwendbarer manueller Druck-Dialog (ECPG).
-   Einbinden auf Seiten mit gateway_enabled; öffnen via ecpgOpenPrintDialog(ctx),
-   ctx = {document_type?, incident_id?, gsl_id?, objekt_id?, artifact_ref?, title?}. #}
+{# Einheitlicher Druck-Einstieg (ECPG).
+   Aufruf: ecpgPrint(ctx) — ctx = {document_type, incident_id?, gsl_id?, objekt_id?,
+   artifact_ref?, title?, localUrl?, localFn?}.
+
+   Verhalten:
+   - Ist ein Gateway mit VERBUNDENEN Druckern verfügbar (printers.json: connected &&
+     printers>0), öffnet sich der Dialog mit Umschalter „Stationsdrucker / Dieses Gerät".
+   - Andernfalls (Modul aus / offline / kein Drucker) wird OHNE Dialog direkt lokal
+     gedruckt — exakt wie bisher (localFn > localUrl > gemeinsame Server-PDF).
+   localFn/localUrl erhalten den bestehenden lokalen Druck der jeweiligen Seite
+   (z. B. Kartenansicht der Einsatzinfo, Objektblatt inkl. Anhang). #}
 <div id="ecpgPrintDialog" class="ecpg-modal" style="display:none">
   <div class="ecpg-modal__box">
     <h3 id="ecpgPrintTitle">Drucken</h3>
+
+    {# Zielauswahl – nur sichtbar, wenn ein Gateway mit Druckern verfügbar ist #}
+    <div class="ecpg-target" id="ecpgTarget">
+      <button type="button" class="ecpg-target__btn" data-target="station" id="ecpgTgtStation">🖨️ Stationsdrucker</button>
+      <button type="button" class="ecpg-target__btn" data-target="local" id="ecpgTgtLocal">💻 Dieses Gerät</button>
+    </div>
+
+    {# Pane: Stationsdrucker (Gateway) #}
     <form id="ecpgPrintForm">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <input type="hidden" name="document_type" id="ecpgDocType">
@@ -27,9 +43,19 @@
       <div id="ecpgPrintMsg" class="ecpg-msg"></div>
       <div class="ecpg-modal__actions">
         <button type="button" class="btn btn--ghost" onclick="ecpgClosePrintDialog()">Abbrechen</button>
-        <button type="submit" class="btn btn--primary" id="ecpgPrintSubmit">Drucken</button>
+        <button type="submit" class="btn btn--primary" id="ecpgPrintSubmit">An Stationsdrucker</button>
       </div>
     </form>
+
+    {# Pane: Dieses Gerät (lokal) #}
+    <div id="ecpgLocalPane" style="display:none">
+      <p class="ecpg-hint">Öffnet die Druckvorschau auf diesem Gerät – der Browser-Druckdialog
+        übernimmt Drucker und Kopien.</p>
+      <div class="ecpg-modal__actions">
+        <button type="button" class="btn btn--ghost" onclick="ecpgClosePrintDialog()">Abbrechen</button>
+        <button type="button" class="btn btn--primary" id="ecpgLocalBtn">Druckvorschau öffnen</button>
+      </div>
+    </div>
   </div>
 </div>
 <style>
@@ -42,12 +68,46 @@
   .ecpg-modal__actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
   .ecpg-msg{min-height:1.2em;font-size:.9em;margin-top:8px}
   .ecpg-msg.err{color:#b71921}.ecpg-msg.ok{color:#137333}
+  .ecpg-hint{font-size:.88em;color:var(--text-muted,#666);margin:12px 0 0}
+  .ecpg-target{display:flex;gap:6px;margin:4px 0 14px;background:var(--surface-high,#eef0f4);
+    padding:4px;border-radius:8px}
+  .ecpg-target__btn{flex:1;padding:8px 10px;border:1px solid transparent;border-radius:6px;
+    background:transparent;color:inherit;cursor:pointer;font-size:.9em;font-weight:600}
+  .ecpg-target__btn.is-active{background:var(--card-bg,#fff);border-color:var(--border,#ccc);
+    box-shadow:0 1px 3px rgba(0,0,0,.12)}
 </style>
 <script>
 (function(){
+  const GATEWAY_ENABLED = {{ 'true' if request.state.gateway_enabled else 'false' }};
   let ctx = {};
-  window.ecpgOpenPrintDialog = async function(c){
-    ctx = c || {};
+
+  function localUrlFor(c){
+    const p = new URLSearchParams();
+    p.set('document_type', c.document_type || 'einsatzinfo');
+    if(c.incident_id) p.set('incident_id', c.incident_id);
+    if(c.gsl_id) p.set('gsl_id', c.gsl_id);
+    if(c.objekt_id) p.set('objekt_id', c.objekt_id);
+    if(c.artifact_ref) p.set('artifact_ref', c.artifact_ref);
+    return '/druck/dokument.pdf?' + p.toString();
+  }
+
+  // Lokaler Druck: bestehende Seiten-Aktion bevorzugen (localFn/localUrl), sonst
+  // die gemeinsame Server-PDF öffnen. So bleibt der lokale Druck exakt wie bisher.
+  function doLocal(c){
+    if(c.localFn && typeof window[c.localFn] === 'function'){ window[c.localFn](); return; }
+    window.open(c.localUrl || localUrlFor(c), '_blank', 'noopener');
+  }
+
+  function showTarget(t){
+    const isStation = t === 'station';
+    document.getElementById('ecpgPrintForm').style.display = isStation ? '' : 'none';
+    document.getElementById('ecpgLocalPane').style.display = isStation ? 'none' : '';
+    document.getElementById('ecpgTgtStation').classList.toggle('is-active', isStation);
+    document.getElementById('ecpgTgtLocal').classList.toggle('is-active', !isStation);
+    try{ localStorage.setItem('ec_print_target', t); }catch(e){}
+  }
+
+  function openDialogWithStation(printers, connected){
     document.getElementById('ecpgPrintTitle').textContent = ctx.title || 'Drucken';
     document.getElementById('ecpgDocType').value = ctx.document_type || 'einsatzinfo';
     document.getElementById('ecpgIncidentId').value = ctx.incident_id || '';
@@ -55,21 +115,46 @@
     document.getElementById('ecpgObjektId').value = ctx.objekt_id || '';
     document.getElementById('ecpgArtifactRef').value = ctx.artifact_ref || '';
     const msg = document.getElementById('ecpgPrintMsg'); msg.textContent=''; msg.className='ecpg-msg';
+    if(!connected){ msg.textContent='Hinweis: Gateway aktuell offline – der Auftrag wird nachgeholt.'; }
     const sel = document.getElementById('ecpgPrinter');
-    sel.innerHTML = '<option>lädt…</option>';
+    sel.innerHTML = printers.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+    const last = localStorage.getItem('ecpg_last_printer');
+    if(last){ sel.value = last; }
+    document.getElementById('ecpgTarget').style.display = 'flex';
+    let target = 'station';
+    try{ target = localStorage.getItem('ec_print_target') || 'station'; }catch(e){}
+    showTarget(target);
     document.getElementById('ecpgPrintDialog').style.display='flex';
-    try{
-      const r = await fetch('/gateway/printers.json'); const d = await r.json();
-      if(!d.connected){ msg.textContent='Hinweis: aktuell ist kein Gateway online – der Job wird nachgeholt.'; }
-      sel.innerHTML = (d.printers||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')
-        || '<option value="">kein aktiver Drucker</option>';
-      const last = localStorage.getItem('ecpg_last_printer');
-      if(last){ sel.value = last; }
-    }catch(e){ sel.innerHTML='<option value="">Fehler beim Laden</option>'; }
+  }
+
+  // Einheitlicher Einstieg.
+  window.ecpgPrint = async function(c){
+    ctx = c || {};
+    // Ohne Gateway-Modul: direkt lokal drucken (keine Umschaltung).
+    if(!GATEWAY_ENABLED){ doLocal(ctx); return; }
+    let d = null;
+    try{ const r = await fetch('/gateway/printers.json'); d = await r.json(); }catch(e){ d = null; }
+    const printers = (d && d.printers) || [];
+    if(printers.length > 0){
+      openDialogWithStation(printers, !!(d && d.connected));
+    } else {
+      // Gateway ohne verbundene Drucker → wie bisher lokal drucken.
+      doLocal(ctx);
+    }
   };
+  // Rückwärtskompatibler Alias (bestehende Aufrufe).
+  window.ecpgOpenPrintDialog = window.ecpgPrint;
+
   window.ecpgClosePrintDialog = function(){
     document.getElementById('ecpgPrintDialog').style.display='none';
   };
+
+  document.getElementById('ecpgTgtStation').addEventListener('click', ()=>showTarget('station'));
+  document.getElementById('ecpgTgtLocal').addEventListener('click', ()=>showTarget('local'));
+  document.getElementById('ecpgLocalBtn').addEventListener('click', function(){
+    doLocal(ctx); ecpgClosePrintDialog();
+  });
+
   document.getElementById('ecpgPrintForm').addEventListener('submit', async function(ev){
     ev.preventDefault();
     const btn = document.getElementById('ecpgPrintSubmit');

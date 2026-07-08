@@ -39,6 +39,7 @@ from app.routers import (
     ui_atemschutz_pruefung_admin,
     ui_backup,
     ui_breathing,
+    ui_druck,
     ui_fahrtenbuch,
     ui_fahrtenbuch_admin,
     ui_gateway,
@@ -473,6 +474,7 @@ app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
 app.include_router(ui_wasserstelle.router)
 app.include_router(ui_gateway.router)
+app.include_router(ui_druck.router)
 app.include_router(ui_infoscreen_alarm.router)
 app.include_router(ui_verleih.router)
 app.include_router(ui_fahrtenbuch.router)
