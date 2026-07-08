@@ -11,16 +11,23 @@ from app.core.security import sign_artifact_token, unsign_artifact_token
 from app.models.gateway import (
     DOC_ALARM_ROHTEXT,
     DOC_AS_PRUEFUNG,
+    DOC_CROSS_KARTE,
     DOC_EINSATZINFO,
+    DOC_GSL_BERICHT,
     DOC_GSL_JOURNAL,
     DOC_GSL_LAGEBLATT,
+    DOC_LAGE_KARTE,
     DOC_OBJEKT_DOKUMENT,
     DOC_OBJEKT_SAMMEL,
     DOC_OBJEKTBLATT,
+    DOC_QR_EINSATZ,
+    DOC_SITE_KARTE,
+    DOC_STELLEN_KARTE,
     DOC_TEILNAHME,
     DOC_TROOP_PROTOKOLL,
     DOC_UAS,
     DOC_VERLEIH_SCHEIN,
+    HTML_RENDER_DOC_TYPES,
     PrintJob,
 )
 
@@ -29,10 +36,21 @@ class ArtifactError(Exception):
     """Rendering nicht möglich (fehlende Bezugsdaten / unbekannter Typ)."""
 
 
+def is_html_render(job: PrintJob) -> bool:
+    """True, wenn der Job nicht als Server-PDF, sondern als HTML-Seite ausgeliefert wird,
+    die das Gateway per Headless-Chromium rendert (Leaflet-Karten)."""
+    return job.document_type in HTML_RENDER_DOC_TYPES
+
+
 def artifact_url(job: PrintJob) -> str:
-    """Baut die signierte Download-URL für einen Job (Gateway-Sicht)."""
+    """Baut die signierte URL für einen Job (Gateway-Sicht).
+
+    Für PDF-Dokumente die PDF-Auslieferung; für Leaflet-Karten die HTML-Render-Seite,
+    die das Gateway per Chromium rendert."""
     token = sign_artifact_token(job.id, job.org_id)
     base = settings.effective_public_base_url.rstrip("/")
+    if is_html_render(job):
+        return f"{base}/api/v1/print/render/{job.id}?sig={token}"
     return f"{base}/api/v1/print/artifacts/{job.id}?sig={token}"
 
 
@@ -75,6 +93,10 @@ def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
         return _render_gsl_journal(db, job, base_url)
     if job.document_type == DOC_VERLEIH_SCHEIN:
         return _render_verleih_schein(db, job, base_url)
+    if job.document_type == DOC_QR_EINSATZ:
+        return _render_qr_einsatz(db, job, base_url)
+    if job.document_type == DOC_GSL_BERICHT:
+        return _render_gsl_bericht(db, job, base_url)
     raise ArtifactError(f"Unbekannter Dokumenttyp: {job.document_type}")
 
 
@@ -434,6 +456,128 @@ def _render_verleih_schein(db, job: PrintJob, base_url: str) -> bytes:
         org_name=(dept.name if dept else "Feuerwehr"), now=datetime.now(UTC),
     )
     return _html_to_pdf(html_str, base_url)
+
+
+def _render_qr_einsatz(db, job: PrintJob, base_url: str) -> bytes:
+    """QR-Druckseite eines Einsatzes (incident_id). QR verweist auf die öffentliche
+    Einsatzinformation (/alarm/{token}); benötigt daher einen Alarm-Token.
+
+    Request-frei: die Ziel-URL wird aus settings.effective_public_base_url gebildet
+    (statt aus request.base_url wie im interaktiven Pfad)."""
+    from types import SimpleNamespace
+
+    from app.core.templating import templates as _t
+    from app.models.incident import Incident
+    from app.models.master import FireDept
+    from app.services.qr_service import generate_qr_datauri
+
+    if not job.incident_id:
+        raise ArtifactError("QR-Druck ohne incident_id")
+    incident = db.get(Incident, job.incident_id)
+    if incident is None or getattr(incident, "primary_org_id", None) != job.org_id:
+        raise ArtifactError("Einsatz nicht gefunden")
+    if not incident.alarm_token:
+        raise ArtifactError("QR-Druck benötigt einen Alarm-Token (nur lokal druckbar)")
+    pub = settings.effective_public_base_url.rstrip("/")
+    url = f"{pub}/alarm/{incident.alarm_token}"
+    img_datauri = generate_qr_datauri(url, druck=True, box_size=14)
+    org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
+    logo_url = (org.logo_path if org and org.logo_path else None) or "/static/img/Logo-rot.png"
+    html_str = _t.env.get_template("incident/qr_print.html").render(
+        incident=incident, qr_img=img_datauri, qr_url=url, logo_url=logo_url,
+        base_url=base_url.rstrip("/"), user=SimpleNamespace(org=org),
+    )
+    return _html_to_pdf(html_str, base_url)
+
+
+def _render_gsl_bericht(db, job: PrintJob, base_url: str) -> bytes:
+    """GSL-Gesamtbericht/Einsatzjournal (gsl_id = lage_id). Nutzt denselben
+    Kontext-Builder wie die interaktive Route (build_bericht_context)."""
+    from types import SimpleNamespace
+
+    from app.core.templating import templates as _t
+    from app.models.major_incident import MajorIncident
+    from app.routers.ui_major_incident import build_bericht_context
+
+    if not job.gsl_id:
+        raise ArtifactError("GSL-Bericht ohne gsl_id")
+    lage = db.get(MajorIncident, job.gsl_id)
+    if lage is None or lage.org_id != job.org_id:
+        raise ArtifactError("Großschadenslage nicht gefunden")
+    ctx = build_bericht_context(db, lage)
+    ctx["user"] = SimpleNamespace(org=_org(db, lage.org_id))
+    html_str = _t.env.get_template("incident_major/druck_bericht.html").render(**ctx)
+    return _html_to_pdf(html_str, base_url)
+
+
+# ── Leaflet-Karten: HTML-Seite fürs Gateway-Chromium-Rendering ─────────────────
+
+def render_map_html(db, job: PrintJob) -> str:
+    """Rendert die HTML-Druckseite einer Leaflet-Karte serverseitig (render_mode).
+
+    Die Seite enthält Leaflet + Tiles; sie wird NICHT hier zu PDF, sondern vom Gateway
+    per Headless-Chromium gerendert. Nutzt dieselben Kontext-Builder wie die interaktiven
+    Routen (build_karte_context / build_stellen_multi_context)."""
+    from types import SimpleNamespace
+    from urllib.parse import parse_qs
+
+    from app.core.templating import templates as _t
+    from app.models.major_incident import CrossSiteMarker, IncidentSite, MajorIncident
+
+    if not job.gsl_id:
+        raise ArtifactError("Karten-Druck ohne gsl_id")
+    lage = db.get(MajorIncident, job.gsl_id)
+    if lage is None or lage.org_id != job.org_id:
+        raise ArtifactError("Großschadenslage nicht gefunden")
+    ref = job.artifact_ref or ""
+
+    if job.document_type == DOC_LAGE_KARTE:
+        from app.routers.ui_major_incident import build_karte_context
+        q = parse_qs(ref)
+
+        def _f(key: str) -> float:
+            try:
+                return float(q.get(key, ["0"])[0])
+            except (TypeError, ValueError):
+                return 0.0
+
+        fmt = q.get("fmt", ["A4 portrait"])[0]
+        ctx = build_karte_context(db, lage, _f("min_lat"), _f("min_lng"),
+                                  _f("max_lat"), _f("max_lng"), fmt)
+        tmpl = "incident_major/karte_druck.html"
+    elif job.document_type == DOC_SITE_KARTE:
+        from app.routers.ui_major_incident import (
+            PHASE_LABELS,
+            SITE_LOG_KIND_LABEL,
+            SITE_PRIORITY_LABEL,
+        )
+        site = db.get(IncidentSite, int(ref)) if ref.isdigit() else None
+        if site is None or site.major_incident_id != lage.id:
+            raise ArtifactError("Stelle nicht gefunden")
+        ctx = {
+            "lage": lage, "site": site, "phase_labels": PHASE_LABELS,
+            "prio_label": SITE_PRIORITY_LABEL, "site_log_kind_label": SITE_LOG_KIND_LABEL,
+        }
+        tmpl = "incident_major/_site_druck.html"
+    elif job.document_type == DOC_CROSS_KARTE:
+        marker = db.get(CrossSiteMarker, int(ref)) if ref.isdigit() else None
+        if marker is None or marker.major_incident_id != lage.id:
+            raise ArtifactError("Übergreifende Meldung nicht gefunden")
+        ctx = {"lage": lage, "marker": marker}
+        tmpl = "incident_major/_cross_marker_druck.html"
+    elif job.document_type == DOC_STELLEN_KARTE:
+        from app.routers.ui_major_incident import build_stellen_multi_context
+        q = parse_qs(ref)
+        ctx = build_stellen_multi_context(
+            db, lage, q.get("ids", [""])[0], q.get("cross_ids", [""])[0]
+        )
+        tmpl = "incident_major/_stellen_multi_druck.html"
+    else:
+        raise ArtifactError(f"Kein Karten-Dokumenttyp: {job.document_type}")
+
+    ctx["user"] = SimpleNamespace(org=_org(db, lage.org_id))
+    ctx["render_mode"] = True
+    return _t.env.get_template(tmpl).render(**ctx)
 
 
 def _html_to_pdf(html_str: str, base_url: str) -> bytes:

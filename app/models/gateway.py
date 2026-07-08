@@ -64,9 +64,23 @@ DOC_OBJEKT_SAMMEL = "objekt_sammel"      # Objekt-Dokumente Sammelmappe (objekt_
 DOC_UAS = "uas"                          # UAS-PDFs (artifact_ref = "<subtyp>:<id>[:<id2>]")
 DOC_GSL_JOURNAL = "gsl_journal"          # GSL-Einsatzjournal-Eintrag (gsl_id + artifact_ref = Eintrag-ID)
 DOC_VERLEIH_SCHEIN = "verleih_schein"    # Verleihschein (gsl_id = lage_id + artifact_ref = ausleihe_id)
-# Reserviert (Station-Rendering steht noch aus – Route-Kontext-Refactor nötig):
-# gsl_bericht, mannschaft, qr_einsatz. Diese Drucke laufen bis dahin
-# weiterhin nur lokal (unveränderte window.print-/PDF-Ansichten).
+DOC_QR_EINSATZ = "qr_einsatz"            # QR-Druckseite eines Einsatzes (incident_id)
+DOC_GSL_BERICHT = "gsl_bericht"          # GSL-Gesamtbericht/Einsatzjournal (gsl_id = lage_id)
+# Hinweis: „mannschaft" wird über DOC_TEILNAHME (artifact_ref = "einsatz:<id>") abgedeckt.
+
+# Leaflet-Karten – am Stationsdrucker über Gateway-Headless-Chromium gerendert
+# (nicht WeasyPrint, da JS/Tiles nötig). Der Job trägt kein PDF, sondern eine signierte
+# HTML-Render-URL (siehe HTML_RENDER_DOC_TYPES / render_page_path).
+DOC_LAGE_KARTE = "lage_karte"            # Lagekarte (gsl_id + artifact_ref = "min_lat=..&..&fmt=..")
+DOC_SITE_KARTE = "site_karte"            # Einzel-Stelle Druck (gsl_id + artifact_ref = site_id)
+DOC_CROSS_KARTE = "cross_karte"          # Übergreifende Meldung Druck (gsl_id + artifact_ref = marker_id)
+DOC_STELLEN_KARTE = "stellen_karte"      # Mehrfach-Auswahl (gsl_id + artifact_ref = "ids=..&cross_ids=..")
+
+# Dokumenttypen, deren Artefakt keine Server-PDF ist, sondern eine HTML-Seite, die das
+# Gateway per Headless-Chromium rendert und druckt (render_kind="html").
+HTML_RENDER_DOC_TYPES = frozenset({
+    DOC_LAGE_KARTE, DOC_SITE_KARTE, DOC_CROSS_KARTE, DOC_STELLEN_KARTE,
+})
 
 DOCUMENT_TYPE_LABELS = {
     DOC_EINSATZINFO: "Einsatzinfo",
@@ -81,6 +95,12 @@ DOCUMENT_TYPE_LABELS = {
     DOC_UAS: "Drohnen-Dokument",
     DOC_GSL_JOURNAL: "GSL-Journal",
     DOC_VERLEIH_SCHEIN: "Verleihschein",
+    DOC_QR_EINSATZ: "QR-Einsatzinfo",
+    DOC_GSL_BERICHT: "GSL-Gesamtbericht",
+    DOC_LAGE_KARTE: "Lagekarte",
+    DOC_SITE_KARTE: "Stellen-Druck",
+    DOC_CROSS_KARTE: "Meldungs-Druck",
+    DOC_STELLEN_KARTE: "Stellen-Auswahl",
 }
 
 # ── PrintJob-Status ────────────────────────────────────────────────────────────

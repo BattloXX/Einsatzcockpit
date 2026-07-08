@@ -122,7 +122,7 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
     (printing/done/failed) kommt asynchron per job_status vom Gateway zurück.
     """
     from app.routers.ws import dispatch_print_job
-    from app.services.print_artifact_service import artifact_url
+    from app.services.print_artifact_service import artifact_url, is_html_render
 
     payload = {
         "job_id": job.id,
@@ -131,6 +131,11 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
         "artifact_url": artifact_url(job),
         "options": job.options or {},
     }
+    # Leaflet-Karten: artifact_url zeigt auf eine HTML-Seite; das Gateway rendert sie
+    # per Headless-Chromium (JS/Tiles) statt eine PDF herunterzuladen. Die Seitengröße
+    # (A4/A3, Hoch/Quer) bestimmt das @page-CSS der Druckseite (preferCSSPageSize).
+    if is_html_render(job):
+        payload["render_kind"] = "html"
     # attempts + 'sent' VOR dem Await committen und danach den Status NICHT erneut
     # schreiben: Den Laufzeit-Status (printing/done/failed) besitzt der Gateway-Callback
     # `_apply_job_status` (eigene Session). Ein zweiter Commit hier nach dem Await

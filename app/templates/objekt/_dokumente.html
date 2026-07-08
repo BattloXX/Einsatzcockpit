@@ -11,7 +11,8 @@
       </form>
       {% endif %}
       {% if gesamt > 0 %}
-      <a href="/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1" target="_blank" class="btn btn--ghost btn--xs">📄 „Bei Einsatz drucken"-Mappe</a>
+      <button type="button" class="btn btn--ghost btn--xs"
+              onclick="ecpgPrint({document_type:'objekt_sammel', objekt_id:{{ objekt.id }}, artifact_ref:'einsatzdruck', title:'Einsatzdruck-Mappe', localUrl:'/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1'})">📄 „Bei Einsatz drucken"-Mappe</button>
       {% endif %}
     </div>
   </div>
@@ -171,7 +172,8 @@
         <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:2px;">
           {% if s.bei_einsatz_drucken %}<span class="badge-pill badge-pill--red" style="font-size:0.7em;">Einsatzdruck</span>{% endif %}
           {% if s.stand %}<span class="text-muted" style="font-size:0.75em;">{{ s.stand.strftime('%d.%m.%Y') }}</span>{% endif %}
-          <a href="/objekt-medien/seite/{{ s.id }}/pdf" target="_blank" class="text-muted" style="font-size:0.75em;margin-left:auto;" title="Einzelseite als PDF öffnen">📄 PDF</a>
+          <button type="button" class="text-muted" style="font-size:0.75em;margin-left:auto;background:none;border:none;padding:0;cursor:pointer;font:inherit;" title="Einzelseite drucken (Station/lokal)"
+                  onclick="ecpgPrint({document_type:'objekt_dokument', artifact_ref:'{{ s.id }}', title:'Dokumentseite drucken', localUrl:'/objekt-medien/seite/{{ s.id }}/pdf'})">📄 PDF</button>
         </div>
       </div>
     </div>

@@ -268,7 +268,7 @@
     (<span x-text="selectedIds.length"></span> Stellen,
     <span x-text="selectedCrossIds.length"></span> Meldungen)
   </div>
-  <button type="button" class="btn btn--secondary" onclick="window.open('/lage/{{ lage.id }}/druck/bericht','_blank')">
+  <button type="button" class="btn btn--secondary" onclick="ecpgPrint({document_type:'gsl_bericht', gsl_id:{{ lage.id }}, title:'GSL-Gesamtbericht drucken', localUrl:'/lage/{{ lage.id }}/druck/bericht'})">
     📋 Gesamtprotokoll
   </button>
   <button type="button" class="btn btn--primary"
@@ -369,12 +369,18 @@ function printCenter() {
 
     printSelected() {
       if (this.selectedIds.length === 0 && this.selectedCrossIds.length === 0) return;
-      var url = '/lage/{{ lage.id }}/druck/stellen?ids=' + this.selectedIds.join(',')
-              + '&cross_ids=' + this.selectedCrossIds.join(',');
-      window.open(url, '_blank');
+      var qs = 'ids=' + this.selectedIds.join(',') + '&cross_ids=' + this.selectedCrossIds.join(',');
+      var url = '/lage/{{ lage.id }}/druck/stellen?' + qs;
+      if (typeof window.ecpgPrint === 'function') {
+        ecpgPrint({document_type: 'stellen_karte', gsl_id: {{ lage.id }}, artifact_ref: qs,
+                   title: 'Ausgewählte drucken', localUrl: url});
+      } else {
+        window.open(url, '_blank');
+      }
     }
   };
 }
 </script>
+{% include "_print_dialog.html" %}
 </body>
 </html>

@@ -130,6 +130,81 @@ def test_verify_org_verleih_missing_404(db, incident):
     assert ei.value.status_code == 404
 
 
+# ── QR-Einsatz + GSL-Bericht + Objektblatt (_verify_org) ────────────────────────
+
+def test_verify_org_qr_einsatz_own_ok(db, incident):
+    _verify_org(db, _ORG_A, "qr_einsatz", incident.id, None, None, None)
+
+
+def test_verify_org_qr_einsatz_foreign_404(db, incident):
+    with pytest.raises(HTTPException) as ei:
+        _verify_org(db, _ORG_B, "qr_einsatz", incident.id, None, None, None)
+    assert ei.value.status_code == 404
+
+
+@pytest.fixture
+def lage(db):
+    from app.models.major_incident import MajorIncident
+    db.add(FireDept(id=_ORG_A, slug="a", name="Org A", color="#f00", bos="Feuerwehr"))
+    db.flush()
+    lg = MajorIncident(org_id=_ORG_A, name="Testlage")
+    db.add(lg)
+    db.flush()
+    return lg
+
+
+def test_verify_org_gsl_bericht_own_ok(db, lage):
+    _verify_org(db, _ORG_A, "gsl_bericht", None, lage.id, None, None)
+
+
+def test_verify_org_gsl_bericht_foreign_404(db, lage):
+    with pytest.raises(HTTPException) as ei:
+        _verify_org(db, _ORG_B, "gsl_bericht", None, lage.id, None, None)
+    assert ei.value.status_code == 404
+
+
+# ── Leaflet-Karten: HTML-Render statt PDF (Gateway-Chromium) ────────────────────
+
+def test_is_html_render_and_artifact_url_for_maps(db, lage):
+    from types import SimpleNamespace
+
+    from app.services.print_artifact_service import artifact_url, is_html_render
+
+    map_job = SimpleNamespace(id=123, org_id=_ORG_A, document_type="lage_karte",
+                              gsl_id=lage.id, artifact_ref="min_lat=1&fmt=A4 portrait")
+    pdf_job = SimpleNamespace(id=124, org_id=_ORG_A, document_type="einsatzinfo",
+                              gsl_id=None, artifact_ref=None)
+    assert is_html_render(map_job) is True
+    assert is_html_render(pdf_job) is False
+    assert "/api/v1/print/render/123" in artifact_url(map_job)
+    assert "/api/v1/print/artifacts/124" in artifact_url(pdf_job)
+
+
+def test_render_map_html_lage_karte(db, lage):
+    """render_map_html liefert die Leaflet-Seite im render_mode (Chromium-Signal)."""
+    from types import SimpleNamespace
+
+    from app.services.print_artifact_service import render_map_html
+
+    job = SimpleNamespace(document_type="lage_karte", gsl_id=lage.id, org_id=_ORG_A,
+                          artifact_ref="min_lat=48.1&min_lng=9.7&max_lat=48.2&max_lng=9.8&fmt=A4 landscape")
+    html = render_map_html(db, job)
+    assert "leaflet" in html.lower()
+    assert "__ecpgReady = true" in html          # render_mode aktiv
+    assert "window.print()" in html              # lokaler Zweig bleibt im Template
+
+
+def test_render_map_html_foreign_org_raises(db, lage):
+    from types import SimpleNamespace
+
+    from app.services.print_artifact_service import ArtifactError, render_map_html
+
+    job = SimpleNamespace(document_type="lage_karte", gsl_id=lage.id, org_id=_ORG_B,
+                          artifact_ref="min_lat=48.1&min_lng=9.7&max_lat=48.2&max_lng=9.8&fmt=A4 portrait")
+    with pytest.raises(ArtifactError):
+        render_map_html(db, job)
+
+
 def test_render_verleih_schein_pdf(db):
     """End-to-End: echte Zeilen → render_job_pdf liefert ein PDF (Template + Pipeline)."""
     from types import SimpleNamespace

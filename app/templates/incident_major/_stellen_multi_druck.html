@@ -378,6 +378,11 @@
     maps.forEach(function(m) { m.invalidateSize(); });
   });
 
+  // render_mode: Gateway-Chromium wartet auf window.__ecpgReady statt window.print().
+  var ECPG_RENDER = {{ 'true' if render_mode else 'false' }};
+  function ecpgFinish() {
+    if (ECPG_RENDER) { window.__ecpgReady = true; } else { window.print(); }
+  }
   // Auto-print: wait for all tile layers to load, fallback 10s
   var loadedCount = 0;
   var printed = false;
@@ -385,21 +390,24 @@
     loadedCount++;
     if (loadedCount >= tileLayers.length && !printed) {
       printed = true;
-      setTimeout(function() { window.print(); }, 800);
+      setTimeout(ecpgFinish, 800);
     }
   }
   tileLayers.forEach(function(tl) {
     tl.on('load', oneTileLayerLoaded);
   });
   setTimeout(function() {
-    if (!printed) { printed = true; window.print(); }
+    if (!printed) { printed = true; ecpgFinish(); }
   }, 10000);
 
   {% else %}
   // No maps – print after images load or 2s fallback
+  var ECPG_RENDER = {{ 'true' if render_mode else 'false' }};
   var printed = false;
   function tryPrint() {
-    if (!printed) { printed = true; window.print(); }
+    if (printed) return;
+    printed = true;
+    if (ECPG_RENDER) { window.__ecpgReady = true; } else { window.print(); }
   }
   window.addEventListener('load', function() { setTimeout(tryPrint, 300); });
   setTimeout(tryPrint, 2000);

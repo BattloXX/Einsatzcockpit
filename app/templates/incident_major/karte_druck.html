@@ -172,6 +172,9 @@
 
   window.addEventListener('beforeprint', fitView);
 
+  // render_mode: das Gateway rendert die Seite per Chromium und wartet auf
+  // window.__ecpgReady – dann KEIN window.print() (das übernimmt Chromium via page.pdf).
+  var ECPG_RENDER = {{ 'true' if render_mode else 'false' }};
   var printed = false;
   function doPrint() {
     if (printed) return;
@@ -181,7 +184,11 @@
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit',
       });
-    setTimeout(function () { window.print(); }, 600);
+    if (ECPG_RENDER) {
+      setTimeout(function () { window.__ecpgReady = true; }, 600);
+    } else {
+      setTimeout(function () { window.print(); }, 600);
+    }
   }
 
   tiles.on('load', doPrint);

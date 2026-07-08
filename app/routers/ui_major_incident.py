@@ -3426,17 +3426,12 @@ async def lage_druck(
     })
 
 
-@router.get("/lage/{lage_id}/druck/bericht", response_class=HTMLResponse)
-async def lage_druck_bericht(
-    request: Request,
-    lage_id: int,
-    db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
-):
-    user = request.state.user
-    lage = _lage_or_404(lage_id, db)
-    _check_org_access(user, lage)
+def build_bericht_context(db: Session, lage) -> dict:
+    """Baut den Template-Kontext für den GSL-Gesamtbericht (druck_bericht.html).
 
+    Request-frei, damit sowohl die interaktive Route als auch das Server-PDF-Rendering
+    (print_artifact_service._render_gsl_bericht) denselben Kontext nutzen. `user` wird vom
+    Aufrufer ergänzt (Route: request.state.user; Renderer: SimpleNamespace(org=lage.org))."""
     sites_by_phase = _sites_by_phase(lage)
 
     active_sites = [
@@ -3454,7 +3449,7 @@ async def lage_druck_bericht(
 
     comms = (
         db.query(CommLogEntry)
-        .filter(CommLogEntry.major_incident_id == lage_id)
+        .filter(CommLogEntry.major_incident_id == lage.id)
         .order_by(CommLogEntry.ts.desc())
         .limit(50)
         .all()
@@ -3463,7 +3458,7 @@ async def lage_druck_bericht(
     journal_entries = (
         db.query(LageJournalEntry)
         .filter(
-            LageJournalEntry.major_incident_id == lage_id,
+            LageJournalEntry.major_incident_id == lage.id,
             LageJournalEntry.category.notin_(resource_service.RESSOURCE_CATEGORIES),
         )
         .options(selectinload(LageJournalEntry.media))
@@ -3473,8 +3468,7 @@ async def lage_druck_bericht(
 
     cross_markers = sorted(lage.cross_site_markers, key=lambda m: m.sort_index)
 
-    return templates.TemplateResponse(request, "incident_major/druck_bericht.html", {
-        "user": user,
+    return {
         "lage": lage,
         "active_sites": active_sites,
         "done_sites": done_sites,
@@ -3489,15 +3483,13 @@ async def lage_druck_bericht(
         "journal_entries": journal_entries,
         "journal_categories": JOURNAL_CATEGORIES,
         "now": datetime.now(UTC),
-    })
+    }
 
 
-@router.get("/lage/{lage_id}/druck/stellen", response_class=HTMLResponse)
-async def lage_druck_stellen(
+@router.get("/lage/{lage_id}/druck/bericht", response_class=HTMLResponse)
+async def lage_druck_bericht(
     request: Request,
     lage_id: int,
-    ids: str = Query(""),
-    cross_ids: str = Query(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
@@ -3505,6 +3497,14 @@ async def lage_druck_stellen(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
+    ctx = build_bericht_context(db, lage)
+    ctx["user"] = user
+    return templates.TemplateResponse(request, "incident_major/druck_bericht.html", ctx)
+
+
+def build_stellen_multi_context(db: Session, lage, ids: str, cross_ids: str) -> dict:
+    """Template-Kontext für die Mehrfach-Auswahl-Druckseite (_stellen_multi_druck.html).
+    Request-frei (interaktive Route + Gateway-HTML-Render)."""
     site_id_list = [int(x) for x in ids.split(",") if x.strip().isdigit()]
     cross_id_list = [int(x) for x in cross_ids.split(",") if x.strip().isdigit()]
 
@@ -3516,7 +3516,7 @@ async def lage_druck_stellen(
                 db.query(IncidentSite)
                 .filter(
                     IncidentSite.id.in_(site_id_list),
-                    IncidentSite.major_incident_id == lage_id,
+                    IncidentSite.major_incident_id == lage.id,
                 )
                 .options(
                     selectinload(IncidentSite.log_entries),
@@ -3536,7 +3536,7 @@ async def lage_druck_stellen(
                 db.query(CrossSiteMarker)
                 .filter(
                     CrossSiteMarker.id.in_(cross_id_list),
-                    CrossSiteMarker.major_incident_id == lage_id,
+                    CrossSiteMarker.major_incident_id == lage.id,
                 )
                 .options(
                     selectinload(CrossSiteMarker.log_entries),
@@ -3547,14 +3547,30 @@ async def lage_druck_stellen(
         }
         cross_markers = [cross_map[i] for i in cross_id_list if i in cross_map]
 
-    return templates.TemplateResponse(request, "incident_major/_stellen_multi_druck.html", {
+    return {
         "lage": lage,
         "sites": sites,
         "cross_markers": cross_markers,
         "phase_labels": PHASE_LABELS,
         "prio_label": SITE_PRIORITY_LABEL,
         "site_log_kind_label": SITE_LOG_KIND_LABEL,
-    })
+    }
+
+
+@router.get("/lage/{lage_id}/druck/stellen", response_class=HTMLResponse)
+async def lage_druck_stellen(
+    request: Request,
+    lage_id: int,
+    ids: str = Query(""),
+    cross_ids: str = Query(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    ctx = build_stellen_multi_context(db, lage, ids, cross_ids)
+    return templates.TemplateResponse(request, "incident_major/_stellen_multi_druck.html", ctx)
 
 
 # ── Abschnitte / Sektoren ────────────────────────────────────────────────────
@@ -4038,24 +4054,16 @@ async def lage_karte(
     })
 
 
-@router.get("/lage/{lage_id}/karte/druck", response_class=HTMLResponse)
-async def lage_karte_druck(
-    request: Request,
-    lage_id: int,
-    min_lat: float = Query(...),
-    min_lng: float = Query(...),
-    max_lat: float = Query(...),
-    max_lng: float = Query(...),
-    fmt: str = Query("A4 portrait"),
-    db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
-):
+_KARTE_VALID_FMTS = {"A4 portrait", "A4 landscape", "A3 portrait", "A3 landscape"}
+
+
+def build_karte_context(db: Session, lage, min_lat: float, min_lng: float,
+                        max_lat: float, max_lng: float, fmt: str) -> dict:
+    """Template-Kontext der Lagekarte (karte_druck.html). Request-frei, damit
+    interaktive Route und Gateway-HTML-Render (Chromium) denselben Kontext nutzen."""
     import json
-    user = request.state.user
-    lage = _lage_or_404(lage_id, db)
-    _check_org_access(user, lage)
-    _VALID_FMTS = {"A4 portrait", "A4 landscape", "A3 portrait", "A3 landscape"}
-    if fmt not in _VALID_FMTS:
+
+    if fmt not in _KARTE_VALID_FMTS:
         fmt = "A4 portrait"
 
     def _site_color(s: IncidentSite) -> str:
@@ -4099,7 +4107,7 @@ async def lage_karte_druck(
         "lat": m.lat, "lng": m.lng,
     } for m in lage.cross_site_markers if m.lat and m.lng])
 
-    return templates.TemplateResponse(request, "incident_major/karte_druck.html", {
+    return {
         "lage": lage,
         "min_lat": min_lat, "min_lng": min_lng,
         "max_lat": max_lat, "max_lng": max_lng,
@@ -4107,7 +4115,26 @@ async def lage_karte_druck(
         "map_sites_json": map_sites_json,
         "sectors_json": sectors_json,
         "cross_markers_json": cross_markers_json,
-    })
+    }
+
+
+@router.get("/lage/{lage_id}/karte/druck", response_class=HTMLResponse)
+async def lage_karte_druck(
+    request: Request,
+    lage_id: int,
+    min_lat: float = Query(...),
+    min_lng: float = Query(...),
+    max_lat: float = Query(...),
+    max_lng: float = Query(...),
+    fmt: str = Query("A4 portrait"),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    ctx = build_karte_context(db, lage, min_lat, min_lng, max_lat, max_lng, fmt)
+    return templates.TemplateResponse(request, "incident_major/karte_druck.html", ctx)
 
 
 @router.get("/lage/{lage_id}/karte-sektoren")
