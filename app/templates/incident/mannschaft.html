@@ -87,8 +87,8 @@
       </span>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a id="teilnahme-druck-link" href="/teilnahme/einsatz/{{ incident.id }}/druck" target="_blank"
-         class="btn btn--ghost btn--sm">&#128424; Drucken</a>
+      <button id="teilnahme-druck-link" type="button" class="btn btn--ghost btn--sm"
+              onclick="ecpgPrint({document_type:'teilnahme', artifact_ref:'einsatz:{{ incident.id }}', title:'Mannschaftsliste drucken', localUrl:'/teilnahme/einsatz/{{ incident.id }}/druck'})">&#128424; Drucken</button>
       <a id="teilnahme-pdf-link" href="/teilnahme/einsatz/{{ incident.id }}/export.pdf" target="_blank"
          class="btn btn--ghost btn--sm">&#128196; PDF</a>
       <a id="teilnahme-xlsx-link" href="/teilnahme/einsatz/{{ incident.id }}/export.xlsx"
@@ -234,4 +234,5 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 {% endif %}
 
+{% include "_print_dialog.html" %}
 {% endblock %}

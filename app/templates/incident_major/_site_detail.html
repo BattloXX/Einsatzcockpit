@@ -67,8 +67,8 @@
       {% if can_edit %}
       <button class="btn btn--xs btn--ghost" x-show="!editing" @click.stop="editing=true" title="Bezeichnung/Adresse bearbeiten">✏️</button>
       {% endif %}
-      <a href="/lage/{{ lage.id }}/stellen/{{ site.id }}/druck" target="_blank"
-         class="btn btn--xs btn--ghost" title="Drucken" style="text-decoration:none;">🖨</a>
+      <button type="button" class="btn btn--xs btn--ghost" title="Drucken (Station/lokal)" style="text-decoration:none;"
+              onclick="ecpgPrint({document_type:'site_karte', gsl_id:{{ lage.id }}, artifact_ref:'{{ site.id }}', title:'Stelle drucken', localUrl:'/lage/{{ lage.id }}/stellen/{{ site.id }}/druck'})">🖨</button>
     </div>
     {# ── Inline-Editform ─────────────────────────────────────────── #}
     {% if can_edit %}

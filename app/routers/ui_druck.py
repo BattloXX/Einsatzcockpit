@@ -19,11 +19,13 @@ from app.models.gateway import (
     DOC_ALARM_ROHTEXT,
     DOC_AS_PRUEFUNG,
     DOC_EINSATZINFO,
+    DOC_GSL_BERICHT,
     DOC_GSL_JOURNAL,
     DOC_GSL_LAGEBLATT,
     DOC_OBJEKT_DOKUMENT,
     DOC_OBJEKT_SAMMEL,
     DOC_OBJEKTBLATT,
+    DOC_QR_EINSATZ,
     DOC_TEILNAHME,
     DOC_TROOP_PROTOKOLL,
     DOC_UAS,
@@ -120,6 +122,14 @@ def _verify_org(db: Session, org_id: int, document_type: str,
         if (lage is None or getattr(lage, "org_id", None) != org_id
                 or ausleihe is None or ausleihe.lage_id != lage.id):
             raise HTTPException(status_code=404, detail="Verleihschein nicht gefunden")
+    elif document_type == DOC_QR_EINSATZ:
+        from app.models.incident import Incident
+        if not (incident_id and _own(db.get(Incident, incident_id), "primary_org_id")):
+            raise HTTPException(status_code=404, detail="Einsatz nicht gefunden")
+    elif document_type == DOC_GSL_BERICHT:
+        from app.models.major_incident import MajorIncident
+        if not (gsl_id and _own(db.get(MajorIncident, gsl_id), "org_id")):
+            raise HTTPException(status_code=404, detail="Großschadenslage nicht gefunden")
     else:
         raise HTTPException(status_code=400, detail="Unbekannter Dokumenttyp")
 

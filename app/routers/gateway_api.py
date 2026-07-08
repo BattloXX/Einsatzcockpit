@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_api_key
@@ -130,3 +130,31 @@ def get_artifact(job_id: int, sig: str = "", db: Session = Depends(get_db)):
     except ArtifactError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return Response(content=pdf, media_type="application/pdf")
+
+
+@router.get("/print/render/{job_id}", response_class=HTMLResponse)
+def get_render_page(job_id: int, sig: str = "", db: Session = Depends(get_db)):
+    """Liefert die HTML-Seite eines Leaflet-Karten-Druckauftrags – nur mit gültiger
+    Signatur. Das Gateway lädt diese Seite per Headless-Chromium (JS/Tiles) und druckt
+    sie. Rendert im Modus render_mode (kein window.print, setzt window.__ecpgReady)."""
+    set_tenant_context(db, None)
+    from app.models.gateway import HTML_RENDER_DOC_TYPES, PrintJob
+    from app.services.print_artifact_service import (
+        ArtifactError,
+        render_map_html,
+        verify_artifact_token,
+    )
+
+    org_id = verify_artifact_token(job_id, sig)
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Ungültige oder abgelaufene Signatur")
+    job = db.get(PrintJob, job_id)
+    if job is None or job.org_id != org_id:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    if job.document_type not in HTML_RENDER_DOC_TYPES:
+        raise HTTPException(status_code=400, detail="Kein HTML-Render-Dokumenttyp")
+    try:
+        html = render_map_html(db, job)
+    except ArtifactError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return HTMLResponse(content=html)

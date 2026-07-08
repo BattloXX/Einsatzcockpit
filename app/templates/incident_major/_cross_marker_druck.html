@@ -212,11 +212,13 @@
   setTimeout(function() { map.invalidateSize(); }, 50);
   setTimeout(function() { map.invalidateSize(); }, 300);
   window.addEventListener('beforeprint', function() { map.invalidateSize(); });
+  var ECPG_RENDER = {{ 'true' if render_mode else 'false' }};
   var printed = false;
   function autoPrint() {
     if (printed) return;
     printed = true;
-    setTimeout(function() { window.print(); }, 800);
+    if (ECPG_RENDER) { setTimeout(function() { window.__ecpgReady = true; }, 800); }
+    else { setTimeout(function() { window.print(); }, 800); }
   }
   tiles.on('load', autoPrint);
   setTimeout(autoPrint, 8000);
@@ -224,7 +226,10 @@
 </script>
 {% else %}
 <script>
-window.addEventListener('load', function() { setTimeout(window.print, 300); });
+window.addEventListener('load', function() {
+  if ({{ 'true' if render_mode else 'false' }}) { window.__ecpgReady = true; }
+  else { setTimeout(window.print, 300); }
+});
 </script>
 {% endif %}
 <script>

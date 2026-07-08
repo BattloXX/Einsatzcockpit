@@ -516,6 +516,7 @@
   </div>
 </div>
 
+{% include "_print_dialog.html" %}
 {% endblock %}
 
 {% block lage_scripts %}
@@ -1560,14 +1561,21 @@
     var nw = map.containerPointToLatLng(ptNW);
     var se = map.containerPointToLatLng(ptSE);
 
-    var url = '/lage/{{ lage.id }}/karte/druck'
-      + '?min_lat=' + se.lat.toFixed(6)
+    var qs = 'min_lat=' + se.lat.toFixed(6)
       + '&min_lng=' + nw.lng.toFixed(6)
       + '&max_lat=' + nw.lat.toFixed(6)
       + '&max_lng=' + se.lng.toFixed(6)
       + '&fmt=' + encodeURIComponent(format);
+    var url = '/lage/{{ lage.id }}/karte/druck?' + qs;
 
-    window.open(url, '_blank');
+    // Bei verbundenem Gateway: Stations-/Lokal-Umschalter (Karte rendert das Gateway
+    // per Chromium); sonst wie bisher lokale Druckseite im neuen Tab.
+    if (typeof window.ecpgPrint === 'function') {
+      ecpgPrint({document_type: 'lage_karte', gsl_id: {{ lage.id }}, artifact_ref: qs,
+                 title: 'Lagekarte drucken', localUrl: url});
+    } else {
+      window.open(url, '_blank');
+    }
     closePrintPreview();
   };
 

@@ -29,3 +29,15 @@ def test_printers_json_not_shadowed_by_gateway_detail():
 
 def test_gateway_detail_still_matches_numeric_id():
     assert _match_endpoint("/gateway/42") == "gateway_detail"
+
+
+# ── HTML-Render-Route (Leaflet-Karten fürs Gateway-Chromium) ────────────────────
+
+def test_render_route_is_registered():
+    assert _match_endpoint("/api/v1/print/render/1") == "get_render_page"
+
+
+def test_render_route_rejects_bad_signature(client):
+    # Ungültige Signatur → 403 (vor DB-Zugriff); keine offene HTML-Auslieferung.
+    r = client.get("/api/v1/print/render/1?sig=bogus")
+    assert r.status_code == 403

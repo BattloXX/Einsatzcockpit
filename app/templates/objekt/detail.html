@@ -51,7 +51,8 @@
         </form>
         {% endif %}
       {% endif %}
-      <a href="/objekte/{{ objekt.id }}/objektblatt.pdf?anhang=1" target="_blank" class="btn btn--ghost">🖨 Objektblatt (PDF)</a>
+      <button type="button" class="btn btn--ghost"
+              onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ objekt.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ objekt.id }}/objektblatt.pdf?anhang=1'})">🖨 Objektblatt (PDF)</button>
       <a href="/objekte/{{ objekt.id }}/einsatz" class="btn btn--ghost">📱 Einsatzansicht</a>
       <a href="/objekte/" class="btn btn--ghost">Zurück</a>
     </div>
@@ -148,4 +149,5 @@
     </section>
   </div>
 </div>
+{% include "_print_dialog.html" %}
 {% endblock %}

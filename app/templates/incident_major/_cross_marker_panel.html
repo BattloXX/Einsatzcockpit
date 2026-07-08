@@ -13,9 +13,8 @@
         <button type="button" @click="editing=true"
                 class="btn btn--xs btn--ghost" title="Bearbeiten">✏️</button>
         {% endif %}
-        <a href="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/druck"
-           target="_blank" class="btn btn--xs btn--ghost"
-           title="Drucken" style="text-decoration:none;">🖨</a>
+        <button type="button" class="btn btn--xs btn--ghost" title="Drucken (Station/lokal)" style="text-decoration:none;"
+                onclick="ecpgPrint({document_type:'cross_karte', gsl_id:{{ lage.id }}, artifact_ref:'{{ marker.id }}', title:'Meldung drucken', localUrl:'/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/druck'})">🖨</button>
       </div>
       <div style="font-size:.72rem;color:var(--text-muted);margin-top:2px;" x-show="!editing">
         {{ marker.type_label }}

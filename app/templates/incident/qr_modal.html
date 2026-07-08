@@ -11,7 +11,9 @@
     <p class="qr-hint">Diesen Code mit einem anderen Gerät scannen, um direkt dem Einsatz beizutreten.</p>
     <p class="qr-valid"><strong>Gültig bis Einsatzende.</strong></p>
     <a href="{{ qr_url }}" class="btn btn--ghost btn--sm" title="QR-Ziel-URL öffnen">Link kopieren</a>
-    <a href="/einsatz/{{ incident.id }}/qr/print" target="_blank" rel="noopener" class="btn btn--primary btn--sm" title="Druckansicht mit großem QR und Einsatzdaten öffnen">🖨 QR-Code drucken</a>
+    <button type="button" class="btn btn--primary btn--sm" title="QR-Druckseite (Station/lokal)"
+            onclick="ecpgPrint({document_type:'qr_einsatz', incident_id:{{ incident.id }}, title:'QR-Code drucken', localUrl:'/einsatz/{{ incident.id }}/qr/print'})">🖨 QR-Code drucken</button>
   </div>
 </div>
+{% include "_print_dialog.html" %}
 {% endblock %}
