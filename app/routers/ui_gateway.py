@@ -46,10 +46,41 @@ def _gw_or_404(db: Session, org_id: int | None, gateway_id: int) -> Gateway:
 
 
 def _is_connected(org_id: int | None) -> bool:
+    """Ist ein Gateway dieser Org online?
+
+    Primär die Live-WS-Registry (aktueller Prozess). Fallback auf den DB-Heartbeat
+    (status online + last_seen_at der letzten 2 Min) – nötig bei mehreren Workern,
+    da die In-Memory-Registry pro Prozess liegt und ein Request sonst fälschlich
+    "offline" meldet, obwohl das Gateway an einem anderen Worker verbunden ist.
+    """
     if org_id is None:
         return False
     from app.routers.ws import is_gateway_connected
-    return is_gateway_connected(org_id)
+    if is_gateway_connected(org_id):
+        return True
+    from datetime import UTC, datetime, timedelta
+
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.gateway import GATEWAY_STATUS_ONLINE, Gateway
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=2)
+        gw = (
+            db.query(Gateway)
+            .filter(
+                Gateway.org_id == org_id,
+                Gateway.device_token_hash.isnot(None),
+                Gateway.status == GATEWAY_STATUS_ONLINE,
+                Gateway.last_seen_at.isnot(None),
+                Gateway.last_seen_at >= cutoff,
+            )
+            .first()
+        )
+        return gw is not None
+    finally:
+        db.close()
 
 
 # ── Übersicht ──────────────────────────────────────────────────────────────────
@@ -579,11 +610,17 @@ def printers_json(
     user: User = Depends(require_role("recorder")),
     _guard: None = Depends(require_gateway_enabled),
 ):
-    """Aktive Drucker der Org – für den manuellen Druck-Dialog."""
+    """Aktive Drucker der Org – für den manuellen Druck-Dialog.
+
+    Explizit org-gefiltert + include_all_tenants: die Druckerliste hängt so allein am
+    expliziten org_id-Filter und nicht am (evtl. nicht gesetzten) Tenant-Kontext des
+    AJAX-Requests – verhindert eine fälschlich leere Liste ("kein Drucker verbunden")."""
     printers = (
         db.query(Printer)
         .filter(Printer.org_id == user.org_id, Printer.aktiv == True)  # noqa: E712
-        .order_by(Printer.name).all()
+        .order_by(Printer.name)
+        .execution_options(include_all_tenants=True)
+        .all()
     )
     connected = _is_connected(user.org_id)
     return JSONResponse({
