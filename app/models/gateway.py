@@ -110,6 +110,7 @@ TRIGGER_EINSATZ_UPDATED = "einsatz_updated"
 TRIGGER_GSL_CREATED = "gsl_created"
 TRIGGER_GSL_LAGE_UPDATED = "gsl_lage_updated"
 TRIGGER_ALARM_SERIAL = "alarm_serial_received"
+TRIGGER_VERLEIH_CREATED = "verleih_created"
 TRIGGER_MANUAL_ONLY = "manual_only"
 
 TRIGGER_LABELS = {
@@ -118,7 +119,20 @@ TRIGGER_LABELS = {
     TRIGGER_GSL_CREATED: "Großschadenslage angelegt",
     TRIGGER_GSL_LAGE_UPDATED: "GSL-Lage aktualisiert",
     TRIGGER_ALARM_SERIAL: "Serieller Alarm empfangen",
+    TRIGGER_VERLEIH_CREATED: "Verleihschein angelegt",
     TRIGGER_MANUAL_ONLY: "Nur manuell",
+}
+
+# Dokumenttypen, die als Druckregel sinnvoll sind: ohne per-Objekt/-Vorgang-artifact_ref
+# renderbar bzw. über einen dedizierten Trigger mit Kontext versorgt (verleih_schein via
+# TRIGGER_VERLEIH_CREATED). Die übrigen DOCUMENT_TYPE_LABELS (teilnahme, uas, …) brauchen
+# eine artifact_ref und laufen nur über den manuellen/lokalen Druck – daher NICHT im Regel-Editor.
+RULE_DOCUMENT_LABELS = {
+    DOC_EINSATZINFO: DOCUMENT_TYPE_LABELS[DOC_EINSATZINFO],
+    DOC_GSL_LAGEBLATT: DOCUMENT_TYPE_LABELS[DOC_GSL_LAGEBLATT],
+    DOC_OBJEKTBLATT: DOCUMENT_TYPE_LABELS[DOC_OBJEKTBLATT],
+    DOC_ALARM_ROHTEXT: DOCUMENT_TYPE_LABELS[DOC_ALARM_ROHTEXT],
+    DOC_VERLEIH_SCHEIN: DOCUMENT_TYPE_LABELS[DOC_VERLEIH_SCHEIN],
 }
 
 # Objekt-Elemente, die eine Druckregel bei zugeordnetem Objekt mitdrucken kann.

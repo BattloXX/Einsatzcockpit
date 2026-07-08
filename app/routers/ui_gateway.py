@@ -19,6 +19,7 @@ from app.db import get_db
 from app.models.gateway import (
     DOCUMENT_TYPE_LABELS,
     OBJEKT_ELEMENT_LABELS,
+    RULE_DOCUMENT_LABELS,
     TRIGGER_LABELS,
     Gateway,
     Printer,
@@ -104,7 +105,7 @@ def gateway_detail(
         "rules": rules,
         "jobs": jobs,
         "connected": _is_connected(user.org_id),
-        "doc_labels": DOCUMENT_TYPE_LABELS,
+        "doc_labels": RULE_DOCUMENT_LABELS,
         "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
         "trigger_labels": TRIGGER_LABELS,
         "passthrough_status": get_passthrough_status(user.org_id),
@@ -465,6 +466,7 @@ def rule_save(
     page_range: str = Form(""),
     duplex: str = Form("off"),
     color: str = Form("color"),
+    media: str = Form("A4"),
     gw: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -488,7 +490,7 @@ def rule_save(
     if trigger in TRIGGER_LABELS:
         rule.trigger = trigger
 
-    rule.documents = [d for d in documents if d in DOCUMENT_TYPE_LABELS]
+    rule.documents = [d for d in documents if d in RULE_DOCUMENT_LABELS]
     rule.objekt_elements = [e for e in objekt_elements if e in OBJEKT_ELEMENT_LABELS]
     rule.printer_ids = [int(p) for p in printer_ids]
     rule.fallback_printer_id = fallback_printer_id
@@ -507,6 +509,8 @@ def rule_save(
     rule.filters = filters
 
     options: dict = {"copies": max(1, int(copies)), "duplex": duplex, "color": color}
+    if media in ("A3", "A4"):
+        options["media"] = media
     if page_range.strip():
         options["page_range"] = page_range.strip()[:40]
     rule.options = options
@@ -646,6 +650,8 @@ def printers_json(
                 "name": p.name,
                 "reachable": (p.status or {}).get("reachable"),
                 "checked_at": (p.status or {}).get("checked_at"),
+                # Unterstützte Papiergrößen (aus der Discovery); A3 nur wenn der Drucker es kann.
+                "media": (p.capabilities or {}).get("media") or ["A4"],
             }
             for p in printers
         ],
@@ -665,6 +671,7 @@ async def manual_print(
     artifact_ref: str | None = Form(None),
     copies: int = Form(1),
     duplex: str = Form("off"),
+    media: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("recorder")),
     _guard: None = Depends(require_gateway_enabled),
@@ -678,6 +685,12 @@ async def manual_print(
     printer = db.get(Printer, printer_id)
     if printer is None or printer.org_id != user.org_id or not printer.aktiv:
         return JSONResponse({"ok": False, "error": "Drucker nicht verfügbar"}, status_code=400)
+
+    # Papiergröße nur übernehmen, wenn der Drucker sie laut Discovery kann (A4 = immer).
+    opts = {"copies": int(copies), "duplex": duplex}
+    supported_media = (printer.capabilities or {}).get("media") or ["A4"]
+    if media in ("A3", "A4") and media in supported_media:
+        opts["media"] = media
 
     from app.services.print_dispatcher import create_print_job, dispatch_job
 
@@ -695,7 +708,7 @@ async def manual_print(
             gsl_id=gsl_id,
             objekt_id=objekt_id,
             artifact_ref=artifact_ref,
-            options={"copies": int(copies), "duplex": duplex},
+            options=opts,
             created_by_id=user.id,
         )
         db.commit()

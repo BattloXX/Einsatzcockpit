@@ -81,3 +81,38 @@ async def test_dispatch_timeout_returns_sent_not_retried():
     finally:
         ws._print_gateways.pop(org_id, None)
         ws._job_pending.pop(str(job_id), None)
+
+
+async def test_dispatch_job_commits_sent_before_await_no_status_overwrite(monkeypatch):
+    """Race-Fix: print_dispatcher.dispatch_job committet attempts+'sent' VOR dem Await
+    und schreibt den Status danach NICHT erneut – der Laufzeitstatus (printing/done)
+    gehört dem Gateway-Callback _apply_job_status. Ein zweiter Commit hier kollidierte
+    sonst auf der print_job-Zeile (MariaDB 1020 „Record has changed since last read")."""
+    import uuid
+
+    import app.routers.ws as ws
+    import app.services.print_dispatcher as pd
+    from app.core.tenant import set_tenant_context
+    from app.models.gateway import JOB_QUEUED, JOB_SENT, PrintJob
+    from tests.conftest import TestingSession
+
+    db = TestingSession()
+    set_tenant_context(db, None)
+    job = PrintJob(org_id=1, gateway_id=1, printer_id=1, document_type="einsatzinfo",
+                   idempotency_key="race-" + uuid.uuid4().hex, status=JOB_QUEUED)
+    db.add(job)
+    db.commit()
+
+    async def fake_dispatch(org_id, job_id, payload, timeout=20.0):
+        return {"job_id": job_id, "status": "done"}
+    monkeypatch.setattr(ws, "dispatch_print_job", fake_dispatch)
+    monkeypatch.setattr("app.services.print_artifact_service.artifact_url", lambda j: "http://x/a")
+
+    try:
+        result = await pd.dispatch_job(db, job)
+        db.refresh(job)
+        assert job.status == JOB_SENT       # NICHT 'done' – das schreibt der Callback
+        assert job.attempts == 1
+        assert result["status"] == "done"   # Rückgabe für den Aufrufer bleibt erhalten
+    finally:
+        db.close()
