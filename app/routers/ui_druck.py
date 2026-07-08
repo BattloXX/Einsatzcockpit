@@ -7,6 +7,7 @@ immer möglich sein. Zugriff org-scoped (Session), Rolle recorder+ analog manuel
 """
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -24,6 +25,7 @@ from app.models.gateway import (
 )
 from app.models.user import User
 
+logger = logging.getLogger("einsatzleiter.druck")
 router = APIRouter(prefix="/druck", tags=["druck"])
 
 
@@ -92,9 +94,36 @@ def dokument_pdf(
     try:
         pdf = render_job_pdf(db, job)
     except ArtifactError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        # Fehlende Bezugsdaten – als klare Meldung statt PDF ausliefern.
+        return _fehler_seite(str(exc), status=422)
+    except Exception:
+        # Jeder andere Fehler (z. B. PDF-Renderer) darf keinen rohen 500 zeigen –
+        # verständliche Seite ausliefern und den vollständigen Traceback loggen.
+        logger.exception(
+            "Druck-PDF-Rendering fehlgeschlagen (document_type=%s, incident_id=%s, gsl_id=%s, "
+            "objekt_id=%s, artifact_ref=%s, org_id=%s)",
+            document_type, incident_id, gsl_id, objekt_id, artifact_ref, user.org_id,
+        )
+        return _fehler_seite(
+            "Das Druck-PDF konnte auf dem Server nicht erstellt werden. Bitte über den "
+            "Stationsdrucker drucken oder den Administrator informieren.",
+            status=502,
+        )
     return Response(
         content=pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{document_type}.pdf"'},
     )
+
+
+def _fehler_seite(text: str, *, status: int) -> Response:
+    """Kleine, lesbare Fehlerseite (der Druck öffnet in einem neuen Tab)."""
+    html = (
+        "<!doctype html><meta charset='utf-8'>"
+        "<title>Druck nicht möglich</title>"
+        "<body style='font-family:system-ui,sans-serif;background:#081425;color:#d8e3fb;"
+        "display:flex;min-height:90vh;align-items:center;justify-content:center;text-align:center;padding:24px'>"
+        f"<div><div style='font-size:2.2rem;margin-bottom:10px'>🖨️</div>"
+        f"<p style='max-width:36rem;line-height:1.5'>{text}</p></div></body>"
+    )
+    return Response(content=html, media_type="text/html", status_code=status)
