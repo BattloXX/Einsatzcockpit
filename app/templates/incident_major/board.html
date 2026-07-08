@@ -128,19 +128,29 @@
   /* Phase-Tabs ersetzt durch native Select */
   .lage-phase-tabs { display: none !important; }
   .lage-phase-select { display: none; }
+  /* Alter Phasen-Select wird auf Mobil durch die Phasen-Leiste (unten) ersetzt. */
+  .lage-phase-select { display: none !important; }
+
+  /* Mobile Phasen-Umschalter: gut sichtbare, sticky Pill-Leiste direkt über dem Board.
+     Ersetzt das leicht zu übersehende Select in der vollen Kopfzeile. */
+  .lage-phasebar { display: none; }
   @media (max-width: 760px) {
-    .lage-phase-select {
-      display: block;
-      background: var(--surface-high);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md, .5rem);
-      padding: 5px 9px;
-      font-size: .85rem;
-      cursor: pointer;
-      max-width: 160px;
+    .lage-phasebar {
+      display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      padding: 8px; position: sticky; top: 0; z-index: 20;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      scrollbar-width: none;
     }
+    .lage-phasebar::-webkit-scrollbar { display: none; }
   }
+  .lage-phasechip {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 13px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+    background: var(--surface-high); color: var(--text-muted);
+    border: 1px solid var(--border); font-size: .85rem; font-weight: 600;
+  }
+  .lage-phasechip.is-active { background: rgba(212,34,37,.15); color: var(--text); border-color: var(--red); }
+  .lage-phasechip__n { font-size: .72rem; opacity: .7; }
 </style>
 {% endblock %}
 
@@ -209,18 +219,7 @@
   </a>
   {% endif %}
 
-  {# ── Mobile Phasen-Select (nur ≤760px) ── #}
-  <select class="lage-phase-select" id="lage-phase-select" onchange="lageSwitchPhase(this.value)">
-    {% for phase in phase_order %}
-    <option value="{{ phase.value }}">{{ phase_labels[phase] }} ({{ sites_by_phase[phase]|length }})</option>
-    {% endfor %}
-    {% if show_abgebrochen and abgebrochen_sites %}
-    <option value="abgebrochen">Abgebrochen ({{ abgebrochen_sites|length }})</option>
-    {% endif %}
-    {% if mi_features.uebergreifend %}
-    <option value="uebergreifend">📍 Übergreifend ({{ cross_markers|length }})</option>
-    {% endif %}
-  </select>
+  {# Mobile Phasen-Umschaltung: eigene sticky Pill-Leiste über dem Board (siehe unten). #}
 
   {% if can_manage %}
   <a href="/lage/{{ lage.id }}/bearbeiten" class="btn btn--ghost btn--sm" title="Lage bearbeiten">✏️</a>
@@ -269,6 +268,28 @@
     'in_arbeit':   '#fbbf24',
     'erledigt':    '#4ade80'
   } %}
+  {# ── Mobile: Phasen-Umschalter (nur ≤760px, sticky über dem Board) ── #}
+  <div class="lage-phasebar" role="tablist" aria-label="Phase wählen">
+    {% for phase in phase_order %}
+    <button type="button" class="lage-phasechip{% if loop.first %} is-active{% endif %}"
+            data-phasechip="{{ phase.value }}" onclick="lageSwitchPhase('{{ phase.value }}')">
+      {{ phase_labels[phase] }} <span class="lage-phasechip__n">{{ sites_by_phase[phase]|length }}</span>
+    </button>
+    {% endfor %}
+    {% if show_abgebrochen and abgebrochen_sites %}
+    <button type="button" class="lage-phasechip" data-phasechip="abgebrochen"
+            onclick="lageSwitchPhase('abgebrochen')">
+      Abgebrochen <span class="lage-phasechip__n">{{ abgebrochen_sites|length }}</span>
+    </button>
+    {% endif %}
+    {% if mi_features.uebergreifend %}
+    <button type="button" class="lage-phasechip" data-phasechip="uebergreifend"
+            onclick="lageSwitchPhase('uebergreifend')">
+      📍 Übergreifend <span class="lage-phasechip__n">{{ cross_markers|length }}</span>
+    </button>
+    {% endif %}
+  </div>
+
   <div class="phase-board" id="lage-board" data-lage-id="{{ lage.id }}">
 
     {% for phase in phase_order %}
@@ -619,6 +640,9 @@ function lageSwitchPhase(phase) {
   }
   var sel = document.getElementById('lage-phase-select');
   if (sel && sel.value !== phase) sel.value = phase;
+  document.querySelectorAll('[data-phasechip]').forEach(function(b) {
+    b.classList.toggle('is-active', b.dataset.phasechip === phase);
+  });
   try { sessionStorage.setItem('lage_phase_{{ lage.id }}', phase); } catch(e) {}
 }
 

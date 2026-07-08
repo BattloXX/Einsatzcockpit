@@ -8,8 +8,9 @@
  * damit das Objekt erkennbar ist. Hydranten (bis 2 km entfernt) erweitern den
  * Ausschnitt NICHT, sonst zoomt die Karte zu weit heraus.
  *
- * Liste: zeigt max. 5 Entnahmestellen gleichzeitig, die restlichen erscheinen beim
- * Scrollen im inneren Scrollbereich.
+ * Liste + Marker: nur die 3 naechsten Loeschwasserstellen (Einsatzinformation ist eine
+ * Schnellreferenz; die vollstaendige Hydranten-Ebene liegt im Board/auf der Lagekarte).
+ * Das haelt auch den Ausdruck kurz.
  */
 (function () {
   "use strict";
@@ -140,10 +141,8 @@
     });
   }
 
-  // Liste zeigt max. 5 Einträge gleichzeitig (CSS-Höhendeckel); die restlichen
-  // Entnahmestellen erscheinen beim Scrollen im inneren Scrollbereich. Die Marker
-  // liegen ohnehin alle auf der Karte.
-  var LISTE_SICHTBAR = 5;
+  // Einsatzinformation: nur die 3 nächsten Entnahmestellen (Liste UND Karte).
+  var LISTE_MAX = 3;
 
   function hydrantRowHtml(h) {
     var label = hydrantLabel(h);
@@ -179,12 +178,7 @@
     }
     var html = "";
     hydranten.forEach(function (h) { html += hydrantRowHtml(h); });
-    var mehr = hydranten.length > LISTE_SICHTBAR
-      ? '<div class="hydrant-liste__mehr text-muted">' + hydranten.length
-        + " Entnahmestellen · scrollen für mehr</div>"
-      : "";
     box.innerHTML = '<div class="hydrant-liste" id="hydrant-liste-scroll">' + html + "</div>"
-      + mehr
       + (stand ? '<div class="text-muted" style="font-size:.72rem;margin-top:8px;">Stand: ' + stand + " · Quelle: OpenStreetMap</div>" : "");
     document.querySelectorAll("#hydrant-liste-scroll .hydrant-liste__row").forEach(bindHydrantRow);
   }
@@ -201,7 +195,9 @@
       if (!objektBounds.length && d.zentrum && d.zentrum.lat != null) {
         zentrumFallback = [d.zentrum.lat, d.zentrum.lng];
       }
-      (d.hydranten || []).forEach(function (h) {
+      // Nur die 3 nächsten Entnahmestellen (Server liefert nach Entfernung sortiert).
+      var naechste = (d.hydranten || []).slice(0, LISTE_MAX);
+      naechste.forEach(function (h) {
         if (h.lat == null || h.lng == null) { return; }
         // Manuelle Objekt-Hydranten sind bereits als Objekt-Symbole auf der Karte —
         // nur in der Liste zeigen, nicht doppelt als Marker zeichnen.
@@ -214,7 +210,7 @@
         hydrantById[h.id] = m;
         hydrantBounds.push([h.lat, h.lng]);
       });
-      renderHydrantenListe(d.hydranten, d.stand, d.aktiv);
+      renderHydrantenListe(naechste, d.stand, d.aktiv);
       fit();
     })
     .catch(function () {
