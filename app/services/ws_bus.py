@@ -41,6 +41,16 @@ def enabled() -> bool:
     return bool(getattr(settings, "REDIS_URL", ""))
 
 
+def status() -> dict:
+    """Status des Redis-Bus für die Admin-Anzeige (sync-sicher, ohne Live-Ping).
+
+    configured = REDIS_URL gesetzt; connected = Redis-Client aktiv UND Subscriber-Loop
+    läuft (start() war erfolgreich). Spiegelt den Zustand DIESES Workers – da alle
+    Worker denselben Redis nutzen, ist er repräsentativ."""
+    running = _pubsub_task is not None and not _pubsub_task.done()
+    return {"configured": enabled(), "connected": bool(_redis is not None and running)}
+
+
 def register(channel: str, handler: Callable[[dict], Awaitable[None]]) -> None:
     """Registriert den lokalen Zusteller für einen Kanal (beim Import der Module).
 

@@ -97,6 +97,7 @@ def gateway_detail(
     )
     from app.models.master import OrgSettings
     from app.routers.ws import get_passthrough_status
+    from app.services import ws_bus
     os_row = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     return templates.TemplateResponse(request, "gateway/detail.html", {
         "user": user,
@@ -110,6 +111,7 @@ def gateway_detail(
         "trigger_labels": TRIGGER_LABELS,
         "passthrough_status": get_passthrough_status(user.org_id),
         "verleih_autodruck": bool(os_row and os_row.verleih_autodruck),
+        "redis_status": ws_bus.status(),
     })
 
 
