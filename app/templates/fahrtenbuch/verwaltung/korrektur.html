@@ -101,6 +101,25 @@
         </div>
         {% endif %}
 
+        {% if fahrt.fahrzeug and fahrt.fahrzeug.einsatzleiter_abfrage %}
+        <div class="form-group" x-data="maschinistAutocomplete('einsatzleiter', '{{ fahrt.einsatzleiter_name or '' }}', '{{ fahrt.einsatzleiter_member_id or '' }}')">
+          <label class="form-label">Einsatzleiter (optional)</label>
+          <input type="hidden" name="einsatzleiter_member_id" :value="memberId">
+          <div style="position:relative;">
+            <input type="text" name="einsatzleiter_name" id="einsatzleiter_name"
+                   class="form-control"
+                   placeholder="Name tippen (optional)…" autocomplete="new-password"
+                   x-model="query"
+                   hx-get="/fahrtenbuch/hx/maschinist"
+                   hx-target="#einsatzleiter-suggestions"
+                   hx-trigger="input changed delay:200ms"
+                   hx-include="[name='einsatzleiter_name']"
+                   @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
+            <div id="einsatzleiter-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+          </div>
+        </div>
+        {% endif %}
+
         {% if fahrt.fahrzeug and fahrt.fahrzeug.erfasst_km %}
         <div class="form-group">
           <label class="form-label">km-Stand *</label>

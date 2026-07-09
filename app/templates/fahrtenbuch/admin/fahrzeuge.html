@@ -61,6 +61,7 @@
         {% if fz.erfasst_km %}<span class="badge badge--blue">km</span>{% endif %}
         {% if fz.erfasst_betriebsstunden %}<span class="badge badge--blue">BH</span>{% endif %}
         {% if fz.seilwinde_abfrage %}<span class="badge badge--blue">Seilwinde</span>{% endif %}
+        {% if fz.einsatzleiter_abfrage %}<span class="badge badge--blue">EL</span>{% endif %}
         {% if fz.qr_token %}<span class="badge badge--success">QR</span>{% endif %}
       </span>
       <span style="font-size:.8rem;color:var(--text-muted);margin-left:.25rem;">&#9660;</span>
@@ -89,6 +90,9 @@
           </label>
           <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
             <input type="checkbox" name="seilwinde_abfrage" value="on" {% if fz.seilwinde_abfrage %}checked{% endif %}> Seilwinde abfragen
+          </label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+            <input type="checkbox" name="einsatzleiter_abfrage" value="on" {% if fz.einsatzleiter_abfrage %}checked{% endif %}> Einsatzleiter abfragen (optional)
           </label>
         </div>
 

@@ -157,6 +157,26 @@ def test_fahrttyp_aus_zweck(db_session, org, fahrzeug, zweck):
     assert fahrt.fahrttyp == FahrtKategorie.einsatz
 
 
+def test_einsatzleiter_optional_gespeichert(db_session, org, fahrzeug, zweck):
+    """Einsatzleiter ist optional: mit Angabe wird er denormalisiert gespeichert."""
+    fahrzeug.einsatzleiter_abfrage = True
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    daten["einsatzleiter_name"] = "Eva Einsatzleiterin"
+    fahrt = erstelle_fahrt(daten, db_session)
+    assert fahrt.einsatzleiter_name == "Eva Einsatzleiterin"
+
+
+def test_einsatzleiter_darf_leer_bleiben(db_session, org, fahrzeug, zweck):
+    """Auch bei aktivierter Abfrage bleibt der Einsatzleiter optional (kein Zwang)."""
+    fahrzeug.einsatzleiter_abfrage = True
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    fahrt = erstelle_fahrt(daten, db_session)
+    assert fahrt.einsatzleiter_name is None
+    assert fahrt.einsatzleiter_member_id is None
+
+
 # ── Storno & Revision ─────────────────────────────────────────────────────────
 
 def test_storno(db_session, org, fahrzeug, zweck):

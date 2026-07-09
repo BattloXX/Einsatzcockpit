@@ -116,6 +116,9 @@
         {% if fahrt.gruppenkommandant_name %}
         <div class="fd-row"><span class="fd-row__label">Gruppenkommandant</span><span class="fd-row__value">{{ fahrt.gruppenkommandant_name }}</span></div>
         {% endif %}
+        {% if fahrt.einsatzleiter_name %}
+        <div class="fd-row"><span class="fd-row__label">Einsatzleiter</span><span class="fd-row__value">{{ fahrt.einsatzleiter_name }}</span></div>
+        {% endif %}
       </div>
 
       {# Fahrzeugmetrik & Zweck #}
