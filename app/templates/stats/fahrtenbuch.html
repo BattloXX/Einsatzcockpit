@@ -56,6 +56,7 @@
         <option value="">Alle</option>
         <option value="einsatz" {% if filter.fahrttyp == 'einsatz' %}selected{% endif %}>Einsatz</option>
         <option value="uebung" {% if filter.fahrttyp == 'uebung' %}selected{% endif %}>Übung</option>
+        <option value="taetigkeit" {% if filter.fahrttyp == 'taetigkeit' %}selected{% endif %}>Tätigkeit</option>
         <option value="sonstige" {% if filter.fahrttyp == 'sonstige' %}selected{% endif %}>Sonstige</option>
       </select>
     </div>
@@ -158,6 +159,7 @@ const gruppierung = {{ gruppierung|tojson }};
 const datasets = [
   { label: 'Einsatz',  data: {{ gruppen|map(attribute='einsatz')|list|tojson }},  backgroundColor: '#d42225' },
   { label: 'Übung',   data: {{ gruppen|map(attribute='uebung')|list|tojson }},   backgroundColor: '#1877f2' },
+  { label: 'Tätigkeit', data: {{ gruppen|map(attribute='taetigkeit')|list|tojson }}, backgroundColor: '#0f766e' },
   { label: 'Sonstige', data: {{ gruppen|map(attribute='sonstige')|list|tojson }}, backgroundColor: '#6b7280' },
 ];
 {% else %}
