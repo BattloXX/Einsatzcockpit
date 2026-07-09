@@ -2053,6 +2053,15 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
     }
 
 
+def _panel_template(view: str | None) -> str:
+    """Wählt das Objekt-Panel-Template: Board-Sidebar (default) oder Einsatzinfo-Seite.
+
+    Beide Templates rendern aus demselben _panel_context (verknuepfungen, kandidaten,
+    darf_verknuepfen, …) – so kann direkt auf der Einsatzinfo-Seite verknüpft/gelöst/
+    bestätigt werden, ohne den Backend-Code zu duplizieren (view="info")."""
+    return "incident/_ei_objekt_section.html" if view == "info" else "incident/_objekt_panel.html"
+
+
 @router.get("/einsatz-panel/{incident_id}", response_class=HTMLResponse)
 def einsatz_panel(
     incident_id: int,
@@ -2060,9 +2069,10 @@ def einsatz_panel(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
+    view: str = "",
 ):
     return templates.TemplateResponse(
-        request, "incident/_objekt_panel.html",
+        request, _panel_template(view),
         _panel_context(request, db, user, incident_id),
     )
 
@@ -2075,6 +2085,7 @@ async def einsatz_manuell_verknuepfen(
     user: User = Depends(require_role(*_MATCH_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
     objekt_id: int = Form(...),
+    view: str = Form(""),
 ):
     from app.models.incident import Incident
     from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
@@ -2109,7 +2120,7 @@ async def einsatz_manuell_verknuepfen(
         except Exception:
             pass
     return templates.TemplateResponse(
-        request, "incident/_objekt_panel.html",
+        request, _panel_template(view),
         _panel_context(request, db, user, incident_id),
     )
 
@@ -2122,6 +2133,7 @@ def einsatz_match_bestaetigen(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_MATCH_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
+    view: str = Form(""),
 ):
     from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
 
@@ -2139,7 +2151,7 @@ def einsatz_match_bestaetigen(
                 incident_id=incident_id, payload={"quelle": verknuepfung.quelle})
     db.commit()
     return templates.TemplateResponse(
-        request, "incident/_objekt_panel.html",
+        request, _panel_template(view),
         _panel_context(request, db, user, incident_id),
     )
 
@@ -2152,6 +2164,7 @@ async def einsatz_match_loesen(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_MATCH_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
+    view: str = Form(""),
 ):
     from app.models.objekt import ObjektEinsatz
     from app.services.objekt_matching_service import entferne_gefahren_meldungen
@@ -2178,7 +2191,7 @@ async def einsatz_match_loesen(
         except Exception:
             pass
     return templates.TemplateResponse(
-        request, "incident/_objekt_panel.html",
+        request, _panel_template(view),
         _panel_context(request, db, user, incident_id),
     )
 

@@ -51,6 +51,19 @@
   .media-thumbs img { height: 80pt; width: auto; max-width: 120pt; object-fit: contain; border: 1px solid #ddd; border-radius: 3pt; }
   .media-link { font-size: 8pt; color: #555; }
   .media-link a { color: #d42225; }
+  .objekt-block { border: 1px solid #d42225; border-radius: 4pt; margin: 6pt 0; padding: 0;
+                  page-break-inside: avoid; overflow: hidden; }
+  .objekt-block table { margin: 0; }
+  .objekt-block td { border: none; vertical-align: top; padding: 7pt 9pt; }
+  .objekt-block .obj-name { font-size: 11pt; font-weight: 700; color: #d42225; }
+  .objekt-block .obj-meta { font-size: 8.5pt; color: #444; margin-top: 2pt; }
+  .objekt-block .obj-tag { display: inline-block; font-size: 7pt; font-weight: 700; text-transform: uppercase;
+                           letter-spacing: .04em; padding: 1pt 5pt; border-radius: 3pt; margin-left: 4pt; }
+  .obj-tag--best { background: #18a957; color: #fff; }
+  .obj-tag--vor { background: #f2b02e; color: #111; }
+  .objekt-block .obj-gefahr { font-size: 8.5pt; color: #111; margin-top: 2pt; }
+  .objekt-block .obj-map { width: 220pt; height: auto; display: block; border-left: 1px solid #eee; }
+  .objekt-block .obj-map img { width: 220pt; height: auto; display: block; }
 </style>
 </head>
 <body>
@@ -90,6 +103,34 @@
     <div class="meta">Erstellt: {{ now|local_datetime }}</div>
   </div>
 </div>
+
+{% if objekte %}
+<h2>Objekt{{ 'e' if objekte|length != 1 else '' }} am Einsatzort <span style="font-size:9pt;font-weight:normal;color:#666;">({{ objekte|length }})</span></h2>
+{% for o in objekte %}
+<div class="objekt-block">
+  <table>
+    <tr>
+      <td>
+        <span class="obj-name">{{ o.name }}{% if o.nummer %} <span style="color:#888;font-weight:400;">#{{ o.nummer }}</span>{% endif %}</span>
+        {% if o.status == 'bestaetigt' %}<span class="obj-tag obj-tag--best">verknüpft</span>
+        {% else %}<span class="obj-tag obj-tag--vor">Vorschlag{% if o.quelle == 'geo' and o.distanz_m is not none %} · {{ o.distanz_m }} m{% endif %}</span>{% endif %}
+        {% if o.adresse %}<div class="obj-meta">{{ o.adresse }}</div>{% endif %}
+        {% if o.bma %}<div class="obj-meta">BMA/RFL-Nr.: <strong>{{ o.bma }}</strong></div>{% endif %}
+        {% if o.gefahren %}
+        <div class="obj-meta" style="margin-top:5pt;font-weight:700;color:#d42225;">Objektgefahren:</div>
+        {% for g in o.gefahren %}
+        <div class="obj-gefahr">&#9888; {{ g.name }}{% if g.detail %} <span style="color:#555;">({{ g.detail }})</span>{% endif %}</div>
+        {% endfor %}
+        {% endif %}
+      </td>
+      {% if o.map_uri %}
+      <td class="obj-map" style="width:220pt;"><img src="{{ o.map_uri }}" alt="Objektkarte {{ o.name }}"></td>
+      {% endif %}
+    </tr>
+  </table>
+</div>
+{% endfor %}
+{% endif %}
 
 <h2>Fahrzeuge</h2>
 <table>

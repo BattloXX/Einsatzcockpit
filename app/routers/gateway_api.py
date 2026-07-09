@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
@@ -68,7 +68,9 @@ async def pair(request: Request, db: Session = Depends(get_db)):
 # ── Serieller Alarm-Ingest ─────────────────────────────────────────────────────
 
 @router.post("/gateway/alarms")
-async def ingest_alarm(request: Request, db: Session = Depends(get_db)):
+async def ingest_alarm(
+    request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+):
     """Nimmt einen seriell empfangenen Alarm entgegen (idempotent via Rohtext-Hash)."""
     set_tenant_context(db, None)
     gateway = _resolve_gateway_from_bearer(request, db)
@@ -94,13 +96,28 @@ async def ingest_alarm(request: Request, db: Session = Depends(get_db)):
     )
     db.commit()
 
-    # Board/Infoscreen live informieren
+    # Board/Infoscreen live informieren + Objekt-Verknüpfung nachziehen.
+    # Wie bei UI-/API-/LIS-Anlage: Geocoding (setzt Koordinaten) und Objekt-Matching
+    # (BMA-Nr./Adresse; Geo-Stufe folgt nach dem Geocoding) als Background-Task.
+    # Ohne das wurden bei Gateway-Alarmen nie Objekte automatisch verknüpft.
     if created and ingest.einsatz_id:
         try:
             from app.services.broadcast import broadcast_org
             await broadcast_org(gateway.org_id, {"type": "incident_created", "incident_id": ingest.einsatz_id})
         except Exception:
             pass
+
+        from app.models.incident import Incident
+        inc = db.get(Incident, ingest.einsatz_id)
+        if inc is not None:
+            if inc.lat is None and (inc.address_street or inc.address_city):
+                from app.routers.api_v1 import _geocode_incident
+                background_tasks.add_task(
+                    _geocode_incident, inc.id,
+                    inc.address_street, inc.address_no, inc.address_city,
+                )
+            from app.services.objekt_matching_service import match_incident_background
+            background_tasks.add_task(match_incident_background, inc.id)
 
     return {
         "ingest_id": ingest.id,
