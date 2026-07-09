@@ -21,7 +21,7 @@
     <strong>Neuer Zweck</strong>
   </div>
   <div style="padding:1rem;">
-    <form method="post" action="/admin/fahrtenbuch/zwecke/neu" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;">
+    <form method="post" action="/admin/fahrtenbuch/zwecke/neu{{ org_q }}" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group" style="margin:0;">
         <label class="form-label" style="font-size:.8rem;">Name</label>
@@ -90,7 +90,7 @@
         <td>
           <details>
             <summary class="btn btn--ghost btn--xs">Bearbeiten</summary>
-            <form method="post" action="/admin/fahrtenbuch/zwecke/{{ z.id }}/bearbeiten"
+            <form method="post" action="/admin/fahrtenbuch/zwecke/{{ z.id }}/bearbeiten{{ org_q }}"
                   style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:flex-end;margin-top:.5rem;">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="text" name="name" value="{{ z.name }}" class="form-control form-control--sm" required>

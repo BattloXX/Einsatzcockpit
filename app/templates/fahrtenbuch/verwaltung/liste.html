@@ -13,6 +13,11 @@
 
 .fb-count{font-size:.78rem;color:var(--text-muted);margin-bottom:.75rem;font-family:'JetBrains Mono',monospace;}
 
+.fb-orgbar{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.55rem .85rem;margin-bottom:1rem;background:rgba(58,123,213,.1);border:1px solid rgba(58,123,213,.35);border-radius:var(--radius-md);}
+.fb-orgbar__label{font-size:.8rem;font-weight:700;color:#93c5fd;white-space:nowrap;}
+.fb-orgbar__hint{font-size:.75rem;color:var(--text-muted);}
+.fb-orgbar select{max-width:280px;}
+
 .fb-bulkbar{display:flex;align-items:center;gap:.85rem;flex-wrap:wrap;padding:.6rem .85rem;margin-bottom:.75rem;background:var(--surface-mid);border:1px solid var(--border);border-radius:var(--radius-md);}
 .fb-bulkbar label{display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.82rem;}
 .fb-bulkbar__count{font-size:.78rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;}
@@ -63,8 +68,21 @@
   </div>
   {% include "fahrtenbuch/_tabs.html" %}
 
+  {% if is_sysadmin %}
+  <form method="get" action="/verwaltung/fahrten" class="fb-orgbar">
+    <span class="fb-orgbar__label">&#128737; Sysadmin – Organisation:</span>
+    <select name="org" class="form-control form-control--sm" onchange="this.form.submit()">
+      {% for o in sysadmin_orgs %}
+      <option value="{{ o.id }}" {% if acting_org and o.id == acting_org.id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+    <span class="fb-orgbar__hint">Fahrtenbuch dieser Organisation ansehen &amp; verändern</span>
+  </form>
+  {% endif %}
+
   {# Filter #}
   <form method="get" class="fb-filter">
+    {% if is_sysadmin and acting_org %}<input type="hidden" name="org" value="{{ acting_org.id }}">{% endif %}
     <div>
       <label class="form-label">Von</label>
       <input type="date" name="von" value="{{ filter.von }}" class="form-control form-control--sm">
@@ -116,7 +134,7 @@
   </p>
 
   {% if is_sysadmin %}
-  <form id="fb-bulk-form" method="post" action="/verwaltung/fahrten/loeschen" onsubmit="return fbConfirmDelete()">
+  <form id="fb-bulk-form" method="post" action="/verwaltung/fahrten/loeschen{{ org_q }}" onsubmit="return fbConfirmDelete()">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="zurueck" value="{{ request.query_string.decode() }}">
     <div class="fb-bulkbar">
@@ -168,7 +186,7 @@
             {% if f.nicht_statistikrelevant %}<span class="fb-badge fb-badge--gray" title="nicht statistikrelevant">n.s.</span>{% endif %}
           </td>
           <td style="text-align:right;">
-            <a href="/verwaltung/fahrten/{{ f.id }}" style="color:var(--red-light);font-weight:700;font-size:.78rem;text-decoration:none;">Detail</a>
+            <a href="/verwaltung/fahrten/{{ f.id }}{{ org_q }}" style="color:var(--red-light);font-weight:700;font-size:.78rem;text-decoration:none;">Detail</a>
           </td>
         </tr>
         {% else %}
@@ -213,7 +231,7 @@
         </div>
       </div>
       <div class="fb-mcard__footer">
-        <a href="/verwaltung/fahrten/{{ f.id }}" class="btn btn--ghost btn--sm">Detail</a>
+        <a href="/verwaltung/fahrten/{{ f.id }}{{ org_q }}" class="btn btn--ghost btn--sm">Detail</a>
       </div>
     </div>
     {% else %}

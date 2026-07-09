@@ -39,7 +39,7 @@
   <div class="fab-header">
     <div class="fab-header__top">
       <h1 class="fab-header__title">Fahrt #{{ fahrt.id }} korrigieren</h1>
-      <a href="/verwaltung/fahrten/{{ fahrt.id }}" class="btn btn--ghost btn--sm" style="flex-shrink:0;">&#8592; Zurück</a>
+      <a href="/verwaltung/fahrten/{{ fahrt.id }}{{ org_q }}" class="btn btn--ghost btn--sm" style="flex-shrink:0;">&#8592; Zurück</a>
     </div>
   </div>
 
@@ -85,7 +85,6 @@
             <div id="maschinist-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
           </div>
           <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
-          <p style="font-size:.78rem;color:var(--red-light);margin:.35rem 0 0;font-weight:600;">&#9888; Nur einen Maschinisten eintragen. Bei mehreren Maschinisten je eine eigene Fahrt anlegen – sonst kann die Fahrt nicht gewertet werden.</p>
         </div>
 
         {% if fahrt.fahrzeug and fahrt.fahrzeug.zweiter_maschinist_pflicht %}
@@ -133,7 +132,7 @@
         {% if fahrt.fahrzeug and fahrt.fahrzeug.erfasst_km %}
         <div class="form-group">
           <label class="form-label">km-Stand *</label>
-          <input type="number" name="km_stand_neu" class="form-control" inputmode="numeric"
+          <input type="number" name="km_stand_neu" class="form-control" inputmode="numeric" required
                  value="{{ fahrt.km_stand_neu or '' }}">
         </div>
         {% endif %}

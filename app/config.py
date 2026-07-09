@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # Cookie-Flags
     COOKIE_SECURE: bool = False  # In Produktion auf true (HTTPS)
 
+    # Fahrtenbuch per <iframe> auf externen (vertrauenswürdigen) Seiten einbettbar machen.
+    # Leerzeichen-getrennte Liste erlaubter Eltern-Origins (CSP frame-ancestors), z.B.
+    # "https://feuerwehr.wolfurt.at". Leer = Einbettung nur same-origin.
+    FAHRTENBUCH_FRAME_ANCESTORS: str = "https://feuerwehr.wolfurt.at"
+
     VAPID_PRIVATE_KEY: str = ""
     VAPID_PUBLIC_KEY: str = ""
     VAPID_CLAIM_EMAIL: str = "admin@feuerwehr-wolfurt.at"

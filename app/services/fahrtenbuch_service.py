@@ -143,7 +143,10 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
     bh_delta = None
     sw_delta = None
 
-    if fahrzeug.erfasst_km and daten.get("km_stand_neu") is not None:
+    if fahrzeug.erfasst_km:
+        # Bei km-erfassenden Fahrzeugen ist der km-Stand Pflicht.
+        if daten.get("km_stand_neu") is None:
+            raise HTTPException(status_code=422, detail="km_pflicht")
         erg = pruefe_zaehler(fahrzeug, "km", daten["km_stand_neu"])
         if erg.warnung and not daten.get("km_warnung_bestaetigt"):
             raise HTTPException(status_code=422, detail="km_warnung_nicht_bestaetigt")

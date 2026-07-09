@@ -1,9 +1,12 @@
 {# Fahrtenbuch: Haupt-Tab-Leiste (Fahrten / Statistik / Fahrzeuge / Einstellungen) #}
 {% from "_tabnav.html" import tabnav %}
 {% set _fp = request.url.path %}
+{# system_admin-Impersonation: gewählte Org (?org=) an alle Tab-Links weiterreichen #}
+{% set _org = request.query_params.get('org') %}
+{% set _q = ('?org=' ~ _org) if _org else '' %}
 {{ tabnav([
-  {'label': 'Fahrten', 'href': '/verwaltung/fahrten', 'active': ('/verwaltung/fahrten' in _fp and '/statistik' not in _fp)},
-  {'label': 'Statistik', 'href': '/statistik/fahrtenbuch', 'active': ('/statistik/fahrtenbuch' in _fp)},
-  {'label': 'Fahrzeuge', 'href': '/admin/fahrtenbuch/fahrzeuge', 'active': ('/admin/fahrtenbuch/fahrzeuge' in _fp)},
-  {'label': 'Einstellungen', 'href': '/admin/fahrtenbuch/zwecke', 'active': (_fp.startswith('/admin/fahrtenbuch/zwecke') or _fp.startswith('/admin/fahrtenbuch/zielorte') or _fp.startswith('/admin/fahrtenbuch/token') or _fp.startswith('/admin/fahrtenbuch/einstellungen'))},
+  {'label': 'Fahrten', 'href': '/verwaltung/fahrten' ~ _q, 'active': ('/verwaltung/fahrten' in _fp and '/statistik' not in _fp)},
+  {'label': 'Statistik', 'href': '/statistik/fahrtenbuch' ~ _q, 'active': ('/statistik/fahrtenbuch' in _fp)},
+  {'label': 'Fahrzeuge', 'href': '/admin/fahrtenbuch/fahrzeuge' ~ _q, 'active': ('/admin/fahrtenbuch/fahrzeuge' in _fp)},
+  {'label': 'Einstellungen', 'href': '/admin/fahrtenbuch/zwecke' ~ _q, 'active': (_fp.startswith('/admin/fahrtenbuch/zwecke') or _fp.startswith('/admin/fahrtenbuch/zielorte') or _fp.startswith('/admin/fahrtenbuch/token') or _fp.startswith('/admin/fahrtenbuch/einstellungen'))},
 ]) }}

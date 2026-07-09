@@ -91,7 +91,9 @@
 
   {% if fehler %}
   <div class="alert alert--error" style="margin-bottom:1rem;">
-    {% if fehler == "km_warnung_nicht_bestaetigt" %}
+    {% if fehler == "km_pflicht" %}
+      Bitte den km-Stand eingeben – für dieses Fahrzeug ist der km-Stand ein Pflichtfeld.
+    {% elif fehler == "km_warnung_nicht_bestaetigt" %}
       Bitte den km-Warnhinweis bestätigen.
     {% elif fehler == "bh_warnung_nicht_bestaetigt" %}
       Bitte den Betriebsstunden-Warnhinweis bestätigen.

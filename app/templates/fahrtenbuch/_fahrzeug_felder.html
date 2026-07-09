@@ -20,7 +20,6 @@
   </div>
   <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
   <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
-  <p style="font-size:.78rem;color:var(--red-light);margin:.35rem 0 0;font-weight:600;">&#9888; Nur einen Maschinisten eintragen. Sind mehrere Maschinisten gefahren, bitte je Maschinist eine eigene Fahrt anlegen – sonst kann die Fahrt nicht gewertet werden.</p>
 </div>
 
 {% if fahrzeug.erfasst_km %}
@@ -30,7 +29,7 @@
     <span class="fab-stat__badge">Letzter: {{ fahrzeug.km_aktuell }} km</span>
   </div>
   <input type="number" name="km_stand_neu" id="km_stand_neu"
-         class="form-control fab-stat__input" inputmode="numeric"
+         class="form-control fab-stat__input" inputmode="numeric" required
          x-model.number="km"
          min="{{ fahrzeug.km_aktuell }}" step="1"
          placeholder="{{ fahrzeug.km_aktuell }}"

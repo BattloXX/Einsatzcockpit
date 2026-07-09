@@ -67,7 +67,7 @@
       <span style="font-size:.8rem;color:var(--text-muted);margin-left:.25rem;">&#9660;</span>
     </summary>
     <div style="padding:1rem;border-top:1px solid var(--border);">
-      <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/fahrtenbuch"
+      <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/fahrtenbuch{{ org_q }}"
             style="display:flex;flex-direction:column;gap:.75rem;">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 
@@ -130,7 +130,7 @@
       </div>
       <details style="margin-bottom:.75rem;">
         <summary class="btn btn--ghost btn--sm">Zähler korrigieren (Admin)</summary>
-        <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/zaehler-korrektur"
+        <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/zaehler-korrektur{{ org_q }}"
               style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;margin-top:.75rem;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <div class="form-group" style="margin:0;">
@@ -154,7 +154,7 @@
         {% if fz.qr_token %}
         <span style="font-size:.8rem;color:var(--text-muted);">QR-Token vorhanden</span>
         {% endif %}
-        <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/qr">
+        <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/qr{{ org_q }}">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button type="submit" class="btn btn--ghost btn--sm">
             {% if fz.qr_token %}QR neu generieren &amp; herunterladen{% else %}QR-Code generieren{% endif %}
@@ -185,7 +185,7 @@
       var ids = Array.from(list.querySelectorAll('[data-id]')).map(function(el) {
         return parseInt(el.dataset.id, 10);
       });
-      fetch('/admin/fahrtenbuch/fahrzeuge/sortierung', {
+      fetch('/admin/fahrtenbuch/fahrzeuge/sortierung{{ org_q }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: ids }),

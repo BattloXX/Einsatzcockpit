@@ -34,7 +34,7 @@
     {% else %}
     <div class="alert alert--warn" style="margin-bottom:1rem;">Noch kein Token generiert.</div>
     {% endif %}
-    <form method="post" action="/admin/fahrtenbuch/token">
+    <form method="post" action="/admin/fahrtenbuch/token{{ org_q }}">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <button type="submit" class="btn btn--primary">
         {% if org and org.fahrtenbuch_token %}Token rotieren (neuer Link){% else %}Token generieren{% endif %}
