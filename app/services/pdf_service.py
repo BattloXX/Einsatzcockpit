@@ -178,16 +178,102 @@ def _load_pdf_context(incident: Incident) -> tuple:
 
         journal = list(reversed(combined_verlauf(db, incident.id)))
 
-        return primary_org, teilnahmen, fahrten_km, journal
+        # Verknüpfte Objekte inkl. statischer Objektkarte (solange die Session offen
+        # ist – render_objekt_map_png greift auf objekt.karten_objekte zu).
+        objekte = _load_incident_objekte(db, incident)
+
+        return primary_org, teilnahmen, fahrten_km, journal, objekte
     except Exception:
-        return None, [], [], []
+        logger.exception("PDF-Kontext laden fehlgeschlagen (Einsatz %s)", incident.id)
+        return None, [], [], [], []
     finally:
         db.close()
 
 
+def _load_incident_objekte(db, incident: Incident) -> list[dict]:
+    """Lädt die mit dem Einsatz verknüpften Objekte für den Ausdruck.
+
+    Rendert je Objekt die statische Objektkarte (roter Marker + Lagekarten-Symbole)
+    als Base64-Data-URI. Bestätigte Treffer zuerst, danach Vorschläge. Fail-safe:
+    fehlt das Objekt-Modul oder die Kartenkacheln, bleibt map_uri leer.
+    """
+    from sqlalchemy.orm import selectinload as _sl
+
+    from app.models.objekt import (
+        OBJEKT_EINSATZ_BESTAETIGT,
+        Objekt,
+        ObjektEinsatz,
+    )
+    from app.services.objekt_pdf_service import render_objekt_map_png
+
+    verknuepfungen = (
+        db.query(ObjektEinsatz)
+        .options(
+            _sl(ObjektEinsatz.objekt).selectinload(Objekt.karten_objekte),
+            _sl(ObjektEinsatz.objekt).selectinload(Objekt.gefahren),
+            _sl(ObjektEinsatz.objekt).selectinload(Objekt.bma),
+        )
+        .filter(ObjektEinsatz.incident_id == incident.id)
+        .execution_options(include_all_tenants=True)
+        .all()
+    )
+    if not verknuepfungen:
+        return []
+
+    # Bestätigt vor Vorschlag, dann nach Objektnummer/Name stabil sortieren.
+    verknuepfungen.sort(
+        key=lambda oe: (
+            0 if oe.status == OBJEKT_EINSATZ_BESTAETIGT else 1,
+            (oe.objekt.anzeige_nummer or "") if oe.objekt else "",
+        )
+    )
+
+    ergebnis: list[dict] = []
+    for oe in verknuepfungen:
+        o = oe.objekt
+        if o is None:
+            continue
+        gefahren = []
+        for og in o.gefahren:
+            name = og.gefahr.name if og.gefahr else "Gefahr"
+            zusatz = []
+            if og.un_nummer:
+                zusatz.append(f"UN {og.un_nummer}")
+            if og.gefahrnummer:
+                zusatz.append(f"GN {og.gefahrnummer}")
+            if og.stoffname:
+                zusatz.append(og.stoffname)
+            gefahren.append({"name": name, "detail": " · ".join(zusatz)})
+
+        map_uri = None
+        try:
+            png = render_objekt_map_png(o)
+            if png:
+                map_uri = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+        except Exception:
+            logger.exception("Objektkarte für Einsatz-PDF fehlgeschlagen (Objekt %s)", o.id)
+
+        adresse = f"{o.strasse or ''} {o.hausnummer or ''}".strip()
+        if o.ort:
+            adresse = (adresse + ", " + o.ort).strip(", ")
+
+        ergebnis.append({
+            "name": o.name,
+            "nummer": o.anzeige_nummer,
+            "adresse": adresse,
+            "bma": (o.bma.bma_nummer if o.bma else None),
+            "status": oe.status,
+            "quelle": oe.quelle,
+            "distanz_m": oe.distanz_m,
+            "gefahren": gefahren,
+            "map_uri": map_uri,
+        })
+    return ergebnis
+
+
 def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
     template = templates.env.get_template("pdf/incident_report.html")
-    primary_org, teilnahmen, fahrten_km, journal = _load_pdf_context(incident)
+    primary_org, teilnahmen, fahrten_km, journal, objekte = _load_pdf_context(incident)
     pseudo_user = SimpleNamespace(org=primary_org)
     teilnahmen.sort(key=lambda t: (t.funktion.sortierung if t.funktion else 9999, t.hinzugefuegt_am or 0))
 
@@ -196,6 +282,7 @@ def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
         teilnahmen=teilnahmen,
         fahrten_km=fahrten_km,
         journal=journal,
+        objekte=objekte,
         now=datetime.now(UTC),
         base_url=base_url,
         user=pseudo_user,

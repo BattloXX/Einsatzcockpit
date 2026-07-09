@@ -1,0 +1,73 @@
+{# Objekt-Bereich der Einsatzinfo-Seite: verknüpfte Objekte + direkte manuelle
+   Verknüpfung (Suche + Verknüpfen). Gerendert aus _panel_context (view=info),
+   HTMX-Swaps ersetzen #ei-objekt-section. #}
+<div id="ei-objekt-section" style="display:flex;flex-direction:column;gap:12px;">
+
+  {% for v in verknuepfungen %}
+  {% set o = v.objekt %}
+  <div class="card" style="padding:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
+      <div style="min-width:0;">
+        <strong>🏢 {{ o.name }}</strong>
+        <span class="text-muted" style="font-size:.85rem;"> {{ o.anzeige_nummer }}{% if o.adresse_zeile %} · {{ o.adresse_zeile }}{% endif %}</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        {% if v.status == 'vorschlag' %}<span class="badge-pill badge-pill--amber">Vorschlag{% if v.distanz_m %} · {{ v.distanz_m }} m{% endif %}</span>{% endif %}
+        {% if darf_verknuepfen and v.status == 'vorschlag' %}
+        <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/bestaetigen"
+              hx-target="#ei-objekt-section" hx-swap="outerHTML" style="display:inline;margin:0;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="view" value="info">
+          <button type="submit" class="btn btn--sm btn--primary ei-noprint">✓ Bestätigen</button>
+        </form>
+        {% endif %}
+        <button type="button" class="btn btn--sm btn--ghost ei-noprint" title="Objektblatt drucken"
+                onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ o.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ o.id }}/objektblatt.pdf?anhang=1'})">🖨 Drucken</button>
+        <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary ei-noprint">Objektinfo öffnen</a>
+        {% if darf_verknuepfen %}
+        <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/loesen"
+              hx-target="#ei-objekt-section" hx-swap="outerHTML"
+              hx-confirm="Verknüpfung zu {{ o.name }} lösen?" style="display:inline;margin:0;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="view" value="info">
+          <button type="submit" class="btn btn--sm btn--ghost ei-noprint" title="Verknüpfung lösen">Lösen</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    <div hx-get="/objekte/{{ o.id }}/einsatz-fragment" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px;">
+      <span class="text-muted">Lade Objektdaten …</span>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if darf_verknuepfen and kandidaten %}
+  <div class="card" style="padding:14px;"
+       x-data='{ q: "", kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, t: {{ (o.anzeige_nummer ~ " " ~ o.name)|tojson }} }{{ "," if not loop.last }}{% endfor %}] }'>
+    <div style="font-weight:600;margin-bottom:6px;">
+      {% if verknuepfungen %}Weiteres Objekt verknüpfen{% else %}🏢 Objekt manuell verknüpfen{% endif %}
+    </div>
+    {% if not verknuepfungen %}
+    <p class="text-muted" style="margin:0 0 8px;font-size:.85rem;">Automatisch wurde kein Objekt zugeordnet. Objekt suchen und direkt verknüpfen:</p>
+    {% endif %}
+    <input type="text" x-model="q" class="form-input" placeholder="Objekt suchen (Nummer oder Name) …" style="width:100%;">
+    <div style="max-height:220px;overflow:auto;margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+      <template x-for="k in kandidaten.filter(function (x) { return x.t.toLowerCase().indexOf(q.toLowerCase()) !== -1; })" :key="k.id">
+        <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/verknuepfen"
+              hx-target="#ei-objekt-section" hx-swap="outerHTML" style="margin:0;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="view" value="info">
+          <input type="hidden" name="objekt_id" :value="k.id">
+          <button type="submit" class="btn btn--secondary btn--sm" style="width:100%;text-align:left;" x-text="'+ ' + k.t"></button>
+        </form>
+      </template>
+      <div x-show="kandidaten.filter(function (x) { return x.t.toLowerCase().indexOf(q.toLowerCase()) !== -1; }).length === 0"
+           class="text-muted" style="font-size:.82rem;padding:4px 2px;">Kein passendes Objekt.</div>
+    </div>
+  </div>
+  {% elif not verknuepfungen %}
+  <div class="card" style="padding:14px;">
+    <p class="text-muted" style="margin:0;">Kein Objekt zugeordnet.{% if not darf_verknuepfen %} (Keine Berechtigung zum Verknüpfen.){% endif %}</p>
+  </div>
+  {% endif %}
+</div>

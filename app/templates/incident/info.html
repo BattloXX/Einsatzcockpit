@@ -142,35 +142,15 @@
       </div>
       {% endif %}
 
-      <!-- Objektinformationen inkl. Dokumenten -->
+      <!-- Objektinformationen inkl. Dokumenten + direkte manuelle Verknüpfung.
+           Lazy per HTMX geladen (_ei_objekt_section.html); Verknüpfen/Bestätigen/
+           Lösen laufen über die einsatz-panel-Endpoints (view=info). -->
       {% if objekt_enabled %}
-        {% if objekt_verknuepfungen %}
-          {% for v in objekt_verknuepfungen %}
-          {% set o = v.objekt %}
-          <div class="card" style="padding:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
-              <div style="min-width:0;">
-                <strong>🏢 {{ o.name }}</strong>
-                <span class="text-muted" style="font-size:.85rem;"> {{ o.anzeige_nummer }}{% if o.adresse_zeile %} · {{ o.adresse_zeile }}{% endif %}</span>
-              </div>
-              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                {% if v.status == 'vorschlag' %}<span class="badge-pill badge-pill--amber">Vorschlag{% if v.distanz_m %} · {{ v.distanz_m }} m{% endif %}</span>{% endif %}
-                <button type="button" class="btn btn--sm btn--ghost ei-noprint" title="Objektblatt drucken"
-                        onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ o.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ o.id }}/objektblatt.pdf?anhang=1'})">🖨 Drucken</button>
-                <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary ei-noprint">Objektinfo öffnen</a>
-              </div>
-            </div>
-            <div hx-get="/objekte/{{ o.id }}/einsatz-fragment" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px;">
-              <span class="text-muted">Lade Objektdaten …</span>
-            </div>
-          </div>
-          {% endfor %}
-        {% else %}
-          <div class="card" style="padding:14px;">
-            <p class="text-muted" style="margin:0 0 8px;">Kein Objekt zugeordnet.</p>
-            <a href="/einsatz/{{ incident.id }}" class="btn btn--sm btn--secondary ei-noprint">Im Board manuell verknüpfen</a>
-          </div>
-        {% endif %}
+        <div id="ei-objekt-section"
+             hx-get="/objekte/einsatz-panel/{{ incident.id }}?view=info"
+             hx-trigger="load" hx-swap="outerHTML">
+          <div class="card" style="padding:14px;"><span class="text-muted">Lade Objektdaten …</span></div>
+        </div>
 
         <!-- Gefahren der Nachbarobjekte (Umkreis) -->
         <div class="card" id="nachbar-gefahren-card" style="padding:14px;">
