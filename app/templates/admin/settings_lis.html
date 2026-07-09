@@ -205,6 +205,18 @@
       <button type="submit" class="btn btn--primary btn--sm">Aufzeichnung starten</button>
     </form>
 
+    <form method="post" action="/admin/lis/capture/auto-toggle" style="margin-bottom:18px">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="target_org_id" value="{{ org.id }}">
+      <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;cursor:pointer">
+        <input type="checkbox" name="auto_capture_on_new_operation" value="1"
+               {% if config and config.auto_capture_on_new_operation %}checked{% endif %}
+               onchange="this.form.requestSubmit()">
+        Aufzeichnung automatisch für 120 Minuten starten, sobald ein neuer Einsatz
+        aus dieser LIS-Anbindung angelegt wird
+      </label>
+    </form>
+
     {% include "admin/_lis_captures.html" %}
   </div>
 </section>

@@ -43,6 +43,26 @@ IDLE_MODI = {
     "einsatzliste": "Letzte Einsätze",
 }
 
+# Gesamtstatus des Einsatzes für den Alarm-Kopf (Wandmonitor): solange noch KEIN
+# Fahrzeug tatsächlich disponiert wurde (kein IncidentVehicle-Datensatz), gilt der
+# Einsatz als noch nicht übernommen — rot blinkend, damit das im Gerätehaus auffällt.
+# Sobald mindestens ein Fahrzeug existiert, ist er "Übernommen" (IncidentVehicle.
+# unit_status defaulted bereits auf "Einsatz übernommen"), sobald das ERSTE Fahrzeug
+# "Am Einsatzort" meldet, springt der Gesamtstatus auf "Am Einsatzort".
+GESAMTSTATUS_LABEL = {
+    "nicht_gesetzt": "Status nicht gesetzt",
+    "uebernommen": "Übernommen",
+    "am_einsatzort": "Am Einsatzort",
+}
+
+
+def _gesamtstatus(iv_rows: list) -> str:
+    if not iv_rows:
+        return "nicht_gesetzt"
+    if any(v.unit_status == "Am Einsatzort" for v in iv_rows):
+        return "am_einsatzort"
+    return "uebernommen"
+
 
 def _token_org(db: Session, token: str) -> tuple[AlarmInfoscreenToken, FireDept]:
     """Validiert den Token (Hash-Lookup) und liefert Token-Zeile + Org."""
@@ -422,6 +442,7 @@ def infoscreen_daten(
             gesehen.add(v.vehicle_master_id)
             fahrzeuge.append(_eintrag(v.vehicle_master, v))
 
+        gesamtstatus = _gesamtstatus(iv_rows)
         daten.update({
             "modus": "alarm",
             "fahrzeuge": fahrzeuge,
@@ -435,6 +456,8 @@ def infoscreen_daten(
                 "lat": incident.lat,
                 "lng": incident.lng,
                 "rsvp": {"zusagen": zusagen, "absagen": absagen, "namen": rsvp_namen},
+                "gesamtstatus": gesamtstatus,
+                "gesamtstatus_label": GESAMTSTATUS_LABEL[gesamtstatus],
             },
         })
 

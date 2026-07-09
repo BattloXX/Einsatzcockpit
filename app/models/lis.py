@@ -36,6 +36,11 @@ class OrgLisConfig(Base):
     # (SetOperationUnitStatus) — abschaltbar, weil dies aktiv in das echte
     # Leitstellensystem schreibt statt nur zu lesen. Default aus, opt-in je Org.
     push_vehicle_status: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Diagnose (nur system_admin, siehe ui_lis.py "Diagnose"-Sektion): startet die
+    # Rohdaten-Aufzeichnung (lis_capture.py) automatisch für 120 Minuten, sobald ein
+    # neuer Einsatz aus dieser LIS-Anbindung angelegt wird — spart den manuellen Klick
+    # genau während des kurzen Zeitfensters, in dem ein echter Einsatz läuft.
+    auto_capture_on_new_operation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Zugangsdaten
     username: Mapped[str | None] = mapped_column(String(150), nullable=True)

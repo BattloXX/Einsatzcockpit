@@ -733,6 +733,25 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
             background_tasks=None,
         )
 
+        # Diagnose (system_admin-Opt-in, siehe ui_lis.py): Rohdaten-Aufzeichnung
+        # automatisch für 120 Minuten starten, damit ein echter Einsatz nicht verpasst
+        # wird, weil niemand rechtzeitig manuell auf "Aufzeichnung starten" geklickt hat.
+        # Best-effort — ein Fehlschlag (z.B. bereits laufende Aufzeichnung) darf die
+        # Einsatz-Anlage nie beeinträchtigen.
+        if config.auto_capture_on_new_operation:
+            from app.services.lis.lis_capture import start_capture_for_org
+            try:
+                await start_capture_for_org(org.id, duration_minutes=120)
+                logger.info(
+                    "LIS-Capture automatisch gestartet (120 min) nach Neuanlage von Einsatz %s (Org %s)",
+                    incident.id, org.id,
+                )
+            except ValueError as exc:
+                logger.info(
+                    "LIS-Capture automatisch NICHT gestartet für Einsatz %s (Org %s): %s",
+                    incident.id, org.id, exc,
+                )
+
 
 # ── Backfill (historische Einsätze) ──────────────────────────────────────────
 async def backfill_organization(

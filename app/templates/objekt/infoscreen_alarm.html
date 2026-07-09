@@ -48,6 +48,14 @@
     .is-alarm__badge { background: #fff; color: var(--is-red); font-size: 2.4rem; font-weight: 800;
                        line-height: 1; padding: 6px 16px; border-radius: 10px; }
     .is-alarm__stichwort { font-size: 2.7rem; font-weight: 800; line-height: 1.06; text-transform: uppercase; }
+    .is-gesamtstatus { display: inline-flex; align-items: center; font-size: 1.1rem; font-weight: 800;
+                       letter-spacing: .04em; text-transform: uppercase; padding: 7px 18px; border-radius: 999px;
+                       border: 2px solid rgba(255,255,255,.5); align-self: center; }
+    .is-gesamtstatus--uebernommen { background: rgba(11,78,110,.6); border-color: var(--is-blue); color: #eaf6ff; }
+    .is-gesamtstatus--am_einsatzort { background: rgba(20,83,45,.65); border-color: var(--is-green); color: #eafff1; }
+    .is-gesamtstatus--nicht_gesetzt { background: var(--is-red-deep); color: #fff;
+                                       animation: is-status-blink 1s steps(1,end) infinite; }
+    @keyframes is-status-blink { 50% { background: #fff; color: var(--is-red-deep); border-color: var(--is-red-deep); } }
     .is-alarm__adresse { font-size: 2rem; font-weight: 600; margin-top: 6px; display: flex; align-items: center; gap: 8px; }
     .is-alarm__meldung { font-size: 1.25rem; opacity: .92; margin-top: 4px;
                          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
@@ -578,6 +586,21 @@
     if (cnt) { cnt.textContent = fahrzeuge.length ? "(" + fahrzeuge.length + ")" : ""; }
   }
 
+  // ── Gesamtstatus des Einsatzes (Kopf-Badge: Status nicht gesetzt / Übernommen / Am Einsatzort) ──
+  function gesamtstatusHtml(inc) {
+    var gs = (inc && inc.gesamtstatus) || "nicht_gesetzt";
+    var label = (inc && inc.gesamtstatus_label) || "Status nicht gesetzt";
+    return '<span class="is-gesamtstatus is-gesamtstatus--' + gs + '" id="is-gesamtstatus">' + esc(label) + "</span>";
+  }
+
+  function aktualisiereGesamtstatus(inc) {
+    var el = document.getElementById("is-gesamtstatus");
+    if (!el) { return; }
+    var gs = (inc && inc.gesamtstatus) || "nicht_gesetzt";
+    el.className = "is-gesamtstatus is-gesamtstatus--" + gs;
+    el.textContent = (inc && inc.gesamtstatus_label) || "Status nicht gesetzt";
+  }
+
   function rsvpHeaderHtml(rsvp) {
     if (!rsvp || (rsvp.zusagen + rsvp.absagen) <= 0) { return ""; }
     return '<span style="color:#dcfce7;">✅ ' + rsvp.zusagen + "</span>" +
@@ -620,7 +643,8 @@
       '<div class="is-alarm__kopf"><div>' +
       '<div class="is-alarm__stichzeile">' +
       '<span class="is-alarm__badge">' + esc(inc.stichwort || "ALARM") + "</span>" +
-      '<span class="is-alarm__stichwort">' + esc(kopfzeile) + "</span></div>" +
+      '<span class="is-alarm__stichwort">' + esc(kopfzeile) + "</span>" +
+      gesamtstatusHtml(inc) + "</div>" +
       '<div class="is-alarm__adresse">📍 ' + esc(inc.adresse || "") + "</div>" +
       '<div class="is-alarm__rsvp" id="is-header-rsvp">' + rsvpHeaderHtml(inc.rsvp) + "</div></div>" +
       '<div class="is-alarm__timer"><div class="cap">Einsatzzeit</div>' +
@@ -770,6 +794,7 @@
           if (daten.modus === "alarm") {
             aktualisiereFahrzeuge(daten.fahrzeuge);
             aktualisiereRsvp(daten.incident && daten.incident.rsvp);
+            aktualisiereGesamtstatus(daten.incident);
           } else if (daten.modus === "gsl") {
             aktualisiereGsl(daten);
           }

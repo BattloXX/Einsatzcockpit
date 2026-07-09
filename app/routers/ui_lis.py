@@ -227,6 +227,28 @@ async def lis_capture_start(
     return _captures_response(request, db, user, target_org_id)
 
 
+@router.post("/lis/capture/auto-toggle")
+async def lis_capture_auto_toggle(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    target_org_id: int = Form(...),
+    auto_capture_on_new_operation: str = Form(""),
+):
+    """Schaltet den automatischen 120-Minuten-Capture-Start bei neuem Einsatz
+    ein/aus (siehe lis_sync.py::sync_operation() und lis_capture.py). Bewusst
+    getrennt vom allgemeinen /lis/save-Formular (nur org_admin/admin), da dies
+    ein Diagnose-Feature ist und nur einem system_admin zugänglich sein darf."""
+    cfg = _get_or_create_config(db, target_org_id)
+    cfg.auto_capture_on_new_operation = auto_capture_on_new_operation == "1"
+    cfg.updated_at = datetime.now(UTC)
+    write_audit(db, "lis.config.auto_capture_toggled", org_id=target_org_id, user_id=user.id,
+                payload={"auto_capture_on_new_operation": cfg.auto_capture_on_new_operation},
+                ip=request.client.host if request.client else None)
+    db.commit()
+    return RedirectResponse(f"/admin/lis?org_id={target_org_id}&flash=saved", status_code=302)
+
+
 @router.post("/lis/capture/{run_id}/cancel")
 async def lis_capture_cancel(
     run_id: str,

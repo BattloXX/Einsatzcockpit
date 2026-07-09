@@ -588,6 +588,128 @@ def test_sync_operation_new_incident_triggers_notify(monkeypatch):
         db.close()
 
 
+# ── sync_operation: Diagnose-Opt-in startet Rohdaten-Aufzeichnung automatisch ──
+
+def _notify_raw_op(op_id: str) -> dict:
+    return {
+        "Id": op_id,
+        "Number": "f900001",
+        "Name": "Verkehrsunfall",
+        "Description": "Verkehrsunfall",
+        "BeginTime": "2026-07-04T10:00:00",
+        "Address": {"Street": "Teststrasse", "Housenumber": "1", "Community": "Wolfurt"},
+        "Type": {"Code": "t4", "Type": "Verkehrsunfall"},
+    }
+
+
+def test_sync_operation_auto_starts_capture_when_enabled(monkeypatch):
+    """OrgLisConfig.auto_capture_on_new_operation=True: sync_operation() muss bei
+    Neuanlage automatisch eine 120-Minuten-Aufzeichnung starten (Diagnose-Opt-in,
+    system_admin, siehe ui_lis.py)."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        from app.models.lis import OrgLisConfig
+        config = OrgLisConfig(
+            org_id=ORG_ID, organization_id="org-guid", auto_capture_on_new_operation=True,
+        )
+
+        async def fake_notify(*a, **kw):
+            pass
+
+        monkeypatch.setattr("app.services.incident_notify.notify_incident_created", fake_notify)
+
+        calls = []
+
+        async def fake_start_capture(org_id, duration_minutes=120):
+            calls.append((org_id, duration_minutes))
+            return "run-id-test"
+
+        monkeypatch.setattr(
+            "app.services.lis.lis_capture.start_capture_for_org", fake_start_capture,
+        )
+
+        asyncio.run(
+            lis_sync.sync_operation(db, org, config, _FakeLisClientNoTasks(),
+                                    _notify_raw_op("lis-op-autocap-on"))
+        )
+
+        assert calls == [(ORG_ID, 120)]
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_operation_does_not_start_capture_when_disabled(monkeypatch):
+    """Default (auto_capture_on_new_operation=False): keine automatische Aufzeichnung —
+    das Diagnose-Feature ist bewusst Opt-in."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        from app.models.lis import OrgLisConfig
+        config = OrgLisConfig(org_id=ORG_ID, organization_id="org-guid")  # Default: False
+
+        async def fake_notify(*a, **kw):
+            pass
+
+        monkeypatch.setattr("app.services.incident_notify.notify_incident_created", fake_notify)
+
+        calls = []
+
+        async def fake_start_capture(org_id, duration_minutes=120):
+            calls.append((org_id, duration_minutes))
+            return "run-id-test"
+
+        monkeypatch.setattr(
+            "app.services.lis.lis_capture.start_capture_for_org", fake_start_capture,
+        )
+
+        asyncio.run(
+            lis_sync.sync_operation(db, org, config, _FakeLisClientNoTasks(),
+                                    _notify_raw_op("lis-op-autocap-off"))
+        )
+
+        assert calls == []
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_operation_auto_capture_failure_does_not_break_incident_creation(monkeypatch):
+    """start_capture_for_org() wirft ValueError, wenn bereits eine Aufzeichnung fuer
+    die Org laeuft (siehe lis_capture.py) — das darf die Einsatz-Anlage nie stoeren."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        from app.models.lis import OrgLisConfig
+        config = OrgLisConfig(
+            org_id=ORG_ID, organization_id="org-guid", auto_capture_on_new_operation=True,
+        )
+
+        async def fake_notify(*a, **kw):
+            pass
+
+        monkeypatch.setattr("app.services.incident_notify.notify_incident_created", fake_notify)
+
+        async def failing_start_capture(org_id, duration_minutes=120):
+            raise ValueError("Für diese Organisation läuft bereits eine Aufzeichnung.")
+
+        monkeypatch.setattr(
+            "app.services.lis.lis_capture.start_capture_for_org", failing_start_capture,
+        )
+
+        asyncio.run(
+            lis_sync.sync_operation(db, org, config, _FakeLisClientNoTasks(),
+                                    _notify_raw_op("lis-op-autocap-fail"))
+        )
+
+        incident = db.query(Incident).filter(Incident.lis_operation_id == "lis-op-autocap-fail").first()
+        assert incident is not None
+    finally:
+        db.rollback()
+        db.close()
+
+
 class _FakeLisClientRecordingSelectOperation(_FakeLisClientNoTasks):
     """Zeichnet select_operation()-Aufrufe auf (Experiment 2, 2026-07-05): sync_operation()
     muss select_operation() mit der konkreten operationId aufrufen, BEVOR get_tasks()
