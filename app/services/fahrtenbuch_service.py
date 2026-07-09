@@ -197,6 +197,8 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
         ausbildner_name=daten.get("ausbildner_name"),
         gruppenkommandant_member_id=daten.get("gruppenkommandant_member_id"),
         gruppenkommandant_name=daten.get("gruppenkommandant_name"),
+        einsatzleiter_member_id=daten.get("einsatzleiter_member_id"),
+        einsatzleiter_name=daten.get("einsatzleiter_name"),
         schaden_vorhanden=bool(daten.get("schaden_vorhanden")),
         schaden_betriebsfaehig=daten.get("schaden_betriebsfaehig"),
         schaden_beschreibung=daten.get("schaden_beschreibung"),

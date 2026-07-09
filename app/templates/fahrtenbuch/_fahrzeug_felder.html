@@ -106,6 +106,27 @@
 </div>
 {% endif %}
 
+{% if fahrzeug.einsatzleiter_abfrage %}
+<div class="form-group" x-data="maschinistAutocomplete('einsatzleiter', '{{ form_daten.get('einsatzleiter_name', '') }}', '{{ form_daten.get('einsatzleiter_member_id', '') }}')">
+  <label class="form-label" for="einsatzleiter_name">Einsatzleiter (optional)</label>
+  <input type="hidden" name="einsatzleiter_member_id" :value="memberId">
+  <div style="position:relative;">
+    <input type="text" name="einsatzleiter_name" id="einsatzleiter_name"
+           class="form-control form-control--lg"
+           placeholder="Name tippen (optional)…" autocomplete="new-password"
+           x-model="query"
+           hx-get="/fahrtenbuch/hx/maschinist"
+           hx-target="#einsatzleiter-suggestions"
+           hx-trigger="input changed delay:200ms"
+           hx-include="[name='einsatzleiter_name']"
+           hx-vals='js:{t:window.FAB_TOKEN||""}'
+           @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
+    <div id="einsatzleiter-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+  </div>
+  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen. Kann leer bleiben.</p>
+</div>
+{% endif %}
+
 {% if fahrzeug.seilwinde_abfrage %}
 <fieldset class="fab-subcard" style="margin-top:0;">
   <legend class="fab-subcard__title" style="padding:0;">Seilwinde</legend>

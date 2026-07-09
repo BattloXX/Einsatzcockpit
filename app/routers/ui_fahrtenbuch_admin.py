@@ -424,6 +424,7 @@ async def fahrzeug_fahrtenbuch_settings(
     erfasst_betriebsstunden: bool = Form(False),
     zweiter_maschinist_pflicht: bool = Form(False),
     seilwinde_abfrage: bool = Form(False),
+    einsatzleiter_abfrage: bool = Form(False),
     warn_schwelle_km: int = Form(50),
     warn_schwelle_bh: str = Form("10"),
     schaden_mail_override: str = Form(""),
@@ -445,6 +446,7 @@ async def fahrzeug_fahrtenbuch_settings(
     fz.erfasst_betriebsstunden = erfasst_betriebsstunden
     fz.zweiter_maschinist_pflicht = zweiter_maschinist_pflicht
     fz.seilwinde_abfrage = seilwinde_abfrage
+    fz.einsatzleiter_abfrage = einsatzleiter_abfrage
     fz.warn_schwelle_km = warn_schwelle_km
     fz.warn_schwelle_bh = Decimal(warn_schwelle_bh)
     fz.schaden_mail_override = schaden_mail_override.strip() or None

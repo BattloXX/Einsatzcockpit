@@ -93,6 +93,8 @@ class VehicleMaster(Base):
     erfasst_betriebsstunden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     zweiter_maschinist_pflicht: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     seilwinde_abfrage: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Optionale Einsatzleiter-Abfrage im Fahrtenbuch (Feld erscheint, Eingabe bleibt optional)
+    einsatzleiter_abfrage: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Plausibilitäts-Schwellen
     warn_schwelle_km: Mapped[int] = mapped_column(Integer, default=50, nullable=False)

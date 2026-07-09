@@ -160,7 +160,7 @@ async def hx_maschinist_autocomplete(
     q = (
         qp.get("q") or qp.get("maschinist_name") or qp.get("maschinist2_name")
         or qp.get("ausbildner_name") or qp.get("gruppenkommandant_name")
-        or qp.get("seilwinde_bediener_name") or ""
+        or qp.get("seilwinde_bediener_name") or qp.get("einsatzleiter_name") or ""
     )
     user = _current_user(request)
     token_org: OrgSettings | None = getattr(request.state, "fahrtenbuch_org", None)
@@ -425,6 +425,8 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
         "ausbildner_name": _str("ausbildner_name"),
         "gruppenkommandant_member_id": _int("gruppenkommandant_member_id"),
         "gruppenkommandant_name": _str("gruppenkommandant_name"),
+        "einsatzleiter_member_id": _int("einsatzleiter_member_id"),
+        "einsatzleiter_name": _str("einsatzleiter_name"),
         "schaden_vorhanden": _bool("schaden_vorhanden"),
         "schaden_betriebsfaehig": _bool("schaden_betriebsfaehig") if _bool("schaden_vorhanden") else None,
         "schaden_beschreibung": _str("schaden_beschreibung"),

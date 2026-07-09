@@ -153,6 +153,11 @@ class Fahrt(Base):
         BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
     )
     gruppenkommandant_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    # Einsatzleiter (optional, je Fahrzeug aktivierbar via VehicleMaster.einsatzleiter_abfrage)
+    einsatzleiter_member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    einsatzleiter_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
 
     # Schaden
     schaden_vorhanden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
