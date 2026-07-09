@@ -312,9 +312,12 @@ def render_fahrtenbuch_bericht_pdf(
     die Auswertungen für alle Fahrzeuge, alle Maschinisten und Maschinisten je
     Fahrzeug. ``filter_info`` trägt den (vorgefilterten) Zeitraum für den Kopf.
     """
+    from app.services.chart_svg import build_bericht_charts
+    charts = build_bericht_charts(daten)
     template = templates.env.get_template("pdf/fahrtenbuch_bericht.html")
     html_str = template.render(
         daten=daten,
+        charts=charts,
         filter=filter_info,
         user=user,
         now=datetime.now(UTC),
