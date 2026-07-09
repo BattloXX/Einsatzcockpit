@@ -101,6 +101,7 @@ def sign_session(
     *,
     qr: bool = False,
     device: bool = False,
+    remember: bool = False,
     incident_id: int | None = None,
     lage_id: int | None = None,
     display_name: str | None = None,
@@ -115,13 +116,18 @@ def sign_session(
             payload["n"] = display_name  # type: ignore[index]
     elif device:
         payload = {"u": user_id, "d": 1}
+    elif remember:
+        # "Login merken": längeres, gleitendes Fenster (siehe unsign_session).
+        payload = {"u": user_id, "r": 1}
     else:
         payload = user_id
     return _signer.dumps(payload)
 
 
-def unsign_session(token: str) -> tuple[int, bool, int | None, bool, str | None, int | None] | None:
-    """Returns (user_id, is_qr, qr_incident_id, is_device, display_name, qr_lage_id) or None."""
+def unsign_session(
+    token: str,
+) -> tuple[int, bool, int | None, bool, str | None, int | None, bool] | None:
+    """Returns (user_id, is_qr, qr_incident_id, is_device, display_name, qr_lage_id, is_remember) or None."""
     try:
         # Load without max_age so we can check expiry manually per session type.
         data, ts = _signer.loads(token, max_age=None, return_timestamp=True)
@@ -130,13 +136,22 @@ def unsign_session(token: str) -> tuple[int, bool, int | None, bool, str | None,
 
         if isinstance(data, dict) and data.get("d"):
             # Device session: no timeout whatsoever.
-            return (data["u"], False, None, True, None, None)
+            return (data["u"], False, None, True, None, None, False)
 
         if isinstance(data, dict) and data.get("qr"):
             # QR session: enforce absolute max_age only (DB controls incident/lage validity).
             if age_s > settings.SESSION_MAX_AGE_SECONDS:
                 return None
-            return (data["u"], True, data.get("i"), False, data.get("n"), data.get("l"))
+            return (data["u"], True, data.get("i"), False, data.get("n"), data.get("l"), False)
+
+        if isinstance(data, dict) and data.get("r"):
+            # "Login merken": längeres, gleitendes Fenster. Die Middleware re-signt bei
+            # jedem Request (Sliding Window), daher age ≈ Zeit seit letzter Aktivität.
+            if age_s > settings.SESSION_REMEMBER_MAX_AGE_SECONDS:
+                return None
+            if age_s > settings.SESSION_REMEMBER_INACTIVITY_SECONDS:
+                return None
+            return (data["u"], False, None, False, None, None, True)
 
         if isinstance(data, int):
             # Regular user session: enforce absolute max_age AND inactivity window.
@@ -146,7 +161,7 @@ def unsign_session(token: str) -> tuple[int, bool, int | None, bool, str | None,
                 return None
             if age_s > settings.SESSION_INACTIVITY_SECONDS:
                 return None
-            return (data, False, None, False, None, None)
+            return (data, False, None, False, None, None, False)
 
         return None
     except (BadSignature, SignatureExpired):
