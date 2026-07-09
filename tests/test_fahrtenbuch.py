@@ -540,6 +540,76 @@ def test_loeschen_route_sysadmin_loescht(client: TestClient, db_session, org, fa
     assert db_session.query(Fahrt).filter(Fahrt.id == fahrt_id).execution_options(include_all_tenants=True).first() is None
 
 
+# ── Fahrzeug-Links / Export ───────────────────────────────────────────────────
+
+def test_exportiere_fahrzeug_links_enthaelt_link():
+    import io
+    import openpyxl
+    from types import SimpleNamespace
+    from app.services.excel_export_service import exportiere_fahrzeug_links
+    fzs = [
+        SimpleNamespace(code="LFA", name="LF-A", kennzeichen="W-1", type="LF", qr_token="tok1"),
+        SimpleNamespace(code="KDO", name="Kdo", kennzeichen=None, type="", qr_token=None),
+    ]
+    data = exportiere_fahrzeug_links(fzs, "ORGT", "https://x.at/")
+    wb = openpyxl.load_workbook(io.BytesIO(data))
+    rows = list(wb.active.iter_rows(values_only=True))
+    assert rows[0] == ("Fahrzeug", "Name", "Kennzeichen", "Typ", "Fahrtenbuch-Link")
+    assert rows[1][4] == "https://x.at/f/ORGT/v/tok1"
+    assert rows[2][4] in (None, "")  # kein QR-Token → kein Link
+
+
+def test_fahrzeuge_export_links_route(client: TestClient, db_session, org):
+    """POST erzeugt fehlende QR-Tokens und liefert eine Excel-Datei zurück."""
+    from app.models.master import OrgSettings, VehicleMaster
+    org_s = (
+        db_session.query(OrgSettings)
+        .filter(OrgSettings.org_id == org.id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if not org_s:
+        org_s = OrgSettings(org_id=org.id)
+        db_session.add(org_s)
+    org_s.fahrtenbuch_token = "ORGTOKEN123"
+    fz = VehicleMaster(dept_id=org.id, code="EXP-FZ", name="Export-FZ", type="Test", display_order=7)
+    db_session.add(fz)
+    db_session.commit()
+    fz_id = fz.id
+
+    _login(client, db_session, org, "fz_export_admin", role_code="fahrtenbuch_admin")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post("/admin/fahrtenbuch/fahrzeuge/export-links", data={"_csrf": csrf},
+                    follow_redirects=False)
+    assert r.status_code == 200
+    assert "spreadsheet" in r.headers.get("content-type", "")
+    # fehlender QR-Token wurde erzeugt
+    db_session.expire_all()
+    fz2 = db_session.query(VehicleMaster).filter(VehicleMaster.id == fz_id).execution_options(include_all_tenants=True).first()
+    assert fz2.qr_token
+
+
+def test_fahrzeuge_export_links_ohne_org_token_redirect(client: TestClient, db_session, org):
+    from app.models.master import OrgSettings
+    org_s = (
+        db_session.query(OrgSettings)
+        .filter(OrgSettings.org_id == org.id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if not org_s:
+        org_s = OrgSettings(org_id=org.id)
+        db_session.add(org_s)
+    org_s.fahrtenbuch_token = None
+    db_session.commit()
+    _login(client, db_session, org, "fz_export_notoken", role_code="fahrtenbuch_admin")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post("/admin/fahrtenbuch/fahrzeuge/export-links", data={"_csrf": csrf},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert "qr_kein_org_token" in r.headers.get("location", "")
+
+
 def test_fahrtenbuch_neu_rendert_offline_draft_markup(client: TestClient, db_session, org):
     """PR6 (STAB-2): Formular muss ohne Jinja-/Template-Fehler rendern und den
     Offline-Draft-Hinweis + localStorage-Key enthalten."""

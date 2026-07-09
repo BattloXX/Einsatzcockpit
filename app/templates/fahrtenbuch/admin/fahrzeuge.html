@@ -29,11 +29,17 @@
 {% block content %}
 <div class="container" style="max-width:1200px;margin:0 auto;padding:1rem;">
 {% include "fahrtenbuch/_tabs.html" %}
-<div class="page-header">
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
   <div>
     <h1>Fahrzeuge – Fahrtenbuch-Einstellungen</h1>
     <p class="page-header__sub">km/BH-Zähler, Warnschwellen, QR-Codes je Fahrzeug <span id="sort-saved">&#10003; Reihenfolge gespeichert</span></p>
   </div>
+  <form method="post" action="/admin/fahrtenbuch/fahrzeuge/export-links{{ org_q }}" style="flex-shrink:0;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" class="btn btn--ghost btn--sm" title="Excel mit allen Fahrzeugen und ihren direkten Fahrtenbuch-Links">
+      &#11015; Fahrzeuge inkl. Link exportieren
+    </button>
+  </form>
 </div>
 
 {% if saved %}
@@ -150,6 +156,23 @@
       </details>
 
       <hr style="margin:1rem 0;border-color:var(--border);">
+      {% if fz.qr_token and org_token %}
+      <div style="margin-bottom:.75rem;">
+        <label class="form-label" style="font-size:.8rem;">Direkter Fahrtenbuch-Link (Fahrzeug vorausgewählt)</label>
+        {% set fz_link = base_url ~ '/f/' ~ org_token ~ '/v/' ~ fz.qr_token %}
+        <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+          <input type="text" readonly value="{{ fz_link }}" class="form-control form-control--sm fz-link-input"
+                 style="flex:1;min-width:240px;font-family:'JetBrains Mono',monospace;font-size:.78rem;"
+                 onclick="this.select()">
+          <button type="button" class="btn btn--ghost btn--sm fz-link-copy" data-link="{{ fz_link }}">Kopieren</button>
+          <a href="{{ fz_link }}" target="_blank" rel="noopener" class="btn btn--ghost btn--sm">Öffnen</a>
+        </div>
+      </div>
+      {% elif not org_token %}
+      <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">
+        Für Direkt-Links zuerst unter <a href="/admin/fahrtenbuch/token{{ org_q }}">Token/QR</a> einen Org-Token anlegen.
+      </div>
+      {% endif %}
       <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
         {% if fz.qr_token %}
         <span style="font-size:.8rem;color:var(--text-muted);">QR-Token vorhanden</span>
@@ -201,5 +224,26 @@
     },
   });
 })();
+
+// Direkt-Link je Fahrzeug in die Zwischenablage kopieren
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.fz-link-copy');
+  if (!btn) return;
+  var link = btn.dataset.link || '';
+  function done() {
+    var orig = btn.textContent;
+    btn.textContent = 'Kopiert ✓';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(done).catch(function() {
+      var inp = btn.parentElement.querySelector('.fz-link-input');
+      if (inp) { inp.select(); document.execCommand('copy'); done(); }
+    });
+  } else {
+    var inp = btn.parentElement.querySelector('.fz-link-input');
+    if (inp) { inp.select(); document.execCommand('copy'); done(); }
+  }
+});
 </script>
 {% endblock %}
