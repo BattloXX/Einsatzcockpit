@@ -193,3 +193,25 @@ def test_fahrtenbuch_iframe_default_wenn_nicht_konfiguriert(monkeypatch):
     h = _security_headers_for("/verwaltung/fahrten")
     assert "frame-ancestors 'none'" in h["content-security-policy"]
     assert h["x-frame-options"] == "DENY"
+
+
+def test_csrf_cookie_samesite_none_bei_embedding(monkeypatch):
+    """Aktive Iframe-Einbettung + HTTPS → CSRF-Cookie SameSite=None; Secure,
+    damit das Cookie im Cross-Site-Iframe gesendet wird (sonst Double-Submit-Fehler)."""
+    from app.config import settings
+    from app.middleware import csrf
+    monkeypatch.setattr(settings, "FAHRTENBUCH_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at")
+    monkeypatch.setattr(settings, "COOKIE_SECURE", True)
+    attrs = csrf._csrf_cookie_attrs()
+    assert "SameSite=None" in attrs
+    assert "Secure" in attrs
+
+
+def test_csrf_cookie_samesite_lax_ohne_embedding(monkeypatch):
+    from app.config import settings
+    from app.middleware import csrf
+    monkeypatch.setattr(settings, "FAHRTENBUCH_FRAME_ANCESTORS", "")
+    monkeypatch.setattr(settings, "COOKIE_SECURE", True)
+    attrs = csrf._csrf_cookie_attrs()
+    assert "SameSite=Lax" in attrs
+    assert "SameSite=None" not in attrs
