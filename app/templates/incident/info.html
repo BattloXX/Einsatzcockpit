@@ -37,7 +37,7 @@
 .ei-print-header { display: none; }
 
 @media print {
-  @page { size: A4; margin: 12mm; }
+  @page { size: A4; margin: 10mm; }
   html, body { background: #fff !important; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /* Seiten-Chrome + interaktive Steuerung ausblenden */
@@ -45,26 +45,54 @@
   .incident-alert-overlay, dialog, .pwa-install-btn, .pwa-install-ios,
   .ei-noprint, .leaflet-control-zoom { display: none !important; }
   .main-content { margin: 0 !important; padding: 0 !important; }
-  /* Layout: einspaltig, Karte oben */
-  .einsatz-info { max-width: none !important; padding: 0 !important; }
+  /* Kompakte Grundschrift fuer den Ausdruck */
+  .einsatz-info { max-width: none !important; padding: 0 !important; font-size: 11px !important; line-height: 1.3 !important; }
+  .einsatz-info h3 { margin: 0 0 4px !important; font-size: .9rem !important; }
+  /* Layout: Karte oben (kleiner), Seitenspalte darunter als 2-Spalten-Raster */
   .ei-grid { display: block !important; }
-  .ei-map-wrap { position: static !important; margin-bottom: 10px; }
-  #einsatz-info-karte { height: 105mm !important; min-height: 0 !important; background: #fff !important; }
-  .ei-side { display: block !important; }
-  .ei-side .card, .einsatz-info__kopf { break-inside: avoid; page-break-inside: avoid; margin-bottom: 8px !important; }
+  .ei-map-wrap { position: static !important; margin-bottom: 8px; }
+  #einsatz-info-karte { height: 58mm !important; min-height: 0 !important; background: #fff !important; }
+  .ei-side {
+    display: grid !important; grid-template-columns: 1fr 1fr !important;
+    gap: 6px 10px !important; align-items: start !important;
+  }
+  /* HTMX-Wrapper "auflösen", damit seine Karten direkt im 2-Spalten-Raster liegen */
+  #ei-objekt-section { display: contents !important; }
+  .ei-side .card, .einsatz-info__kopf {
+    break-inside: avoid; page-break-inside: avoid;
+    margin-bottom: 0 !important; padding: 6px 9px !important;
+  }
+  .einsatz-info__kopf { padding: 6px 10px !important; }
   /* Kontrast fuer Papier (App laeuft im Dark-Theme) */
   .card, .einsatz-info__kopf { background: #fff !important; border: 1px solid #999 !important; box-shadow: none !important; color: #111 !important; }
   .card h3, .einsatz-info__kopf strong { color: #111 !important; }
   .text-muted { color: #555 !important; }
   /* Hydranten-Liste (nur die 3 naechsten): kein Scroll-Deckel im Druck */
-  .hydrant-liste { max-height: none !important; overflow: visible !important; }
-  .hydrant-liste__row { border: 1px solid #bbb !important; color: #111 !important; break-inside: avoid; }
+  .hydrant-liste { max-height: none !important; overflow: visible !important; gap: 3px !important; }
+  .hydrant-liste__row { border: 1px solid #bbb !important; color: #111 !important; break-inside: avoid; padding: 3px 6px !important; }
   .leaflet-control-attribution { color: #333 !important; background: rgba(255,255,255,.7) !important; }
+  /* Objekt-Unterabschnitte (Gefahren/BMA/Kontakte/Dokumente/Anfahrt): statt geschachtelter
+     Karten nur noch schlanke Randlinie, damit nicht doppelt Rahmen+Padding gedruckt wird */
+  div[hx-get*="einsatz-fragment"] .card {
+    border: none !important; border-left: 3px solid #999 !important; border-radius: 0 !important;
+    box-shadow: none !important; background: transparent !important;
+    padding: 3px 0 3px 8px !important; margin-bottom: 4px !important;
+  }
+  div[hx-get*="einsatz-fragment"] .objekt-gefahr-card { border-left-color: #b71921 !important; }
+  div[hx-get*="einsatz-fragment"] .objekt-einsatz-bma { border-left-color: #a06a00 !important; }
+  div[hx-get*="einsatz-fragment"] .objekt-dl { grid-template-columns: 84px 1fr !important; gap: 2px 8px !important; }
+  div[hx-get*="einsatz-fragment"] .objekt-einsatz-kachel {
+    padding: 4px 8px !important; min-height: 0 !important; margin-bottom: 3px !important; gap: 6px !important;
+  }
+  div[hx-get*="einsatz-fragment"] .objekt-einsatz-telbtn {
+    min-height: 0 !important; padding: 1px 8px !important; background: transparent !important;
+    color: #111 !important; border: 1px solid #999 !important;
+  }
   /* Druckkopf sichtbar */
   .ei-print-header {
     display: flex !important; justify-content: space-between; align-items: baseline;
-    border-bottom: 2px solid #111; padding-bottom: 6px; margin-bottom: 10px;
-    font-weight: 700; font-size: 1.05rem; color: #111;
+    border-bottom: 2px solid #111; padding-bottom: 4px; margin-bottom: 6px;
+    font-weight: 700; font-size: 1rem; color: #111;
   }
 }
 </style>

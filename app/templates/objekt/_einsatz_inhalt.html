@@ -106,7 +106,7 @@
                    .catch(() => { this.laeuft = false; });
                } }">
   <h3 style="margin:0 0 10px;">📄 Dokumente</h3>
-  <div style="display:flex;gap:6px;margin-bottom:10px;">
+  <div class="ei-noprint" style="display:flex;gap:6px;margin-bottom:10px;">
     <input type="text" x-model="q" @keydown.enter.prevent="suchen()" class="form-input" style="flex:1;padding:6px 10px;"
            placeholder="In Dokumenten suchen (Raum, Melderlinie, Text …)">
     <button type="button" class="btn btn--ghost btn--xs" @click="suchen()">Suchen</button>
