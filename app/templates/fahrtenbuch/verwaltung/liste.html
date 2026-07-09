@@ -37,6 +37,7 @@
 .fb-badge--red{background:rgba(216,48,48,.18);color:var(--red-light);border-color:rgba(216,48,48,.3);}
 .fb-badge--blue{background:rgba(58,123,213,.18);color:#93c5fd;border-color:rgba(58,123,213,.3);}
 .fb-badge--gray{background:var(--surface-high);color:var(--text-muted);border-color:var(--border);}
+.fb-badge--green{background:rgba(16,122,110,.18);color:#5eead4;border-color:rgba(16,122,110,.3);}
 .fb-warn-icon{color:var(--red-light);font-size:1rem;}
 
 .fb-mobile-list{display:none;flex-direction:column;gap:.6rem;}
@@ -106,6 +107,7 @@
         <option value="">Alle</option>
         <option value="einsatz" {% if filter.fahrttyp == 'einsatz' %}selected{% endif %}>Einsatz</option>
         <option value="uebung" {% if filter.fahrttyp == 'uebung' %}selected{% endif %}>Übung</option>
+        <option value="taetigkeit" {% if filter.fahrttyp == 'taetigkeit' %}selected{% endif %}>Tätigkeit</option>
         <option value="sonstige" {% if filter.fahrttyp == 'sonstige' %}selected{% endif %}>Sonstige</option>
       </select>
     </div>
@@ -167,7 +169,7 @@
           {% if is_sysadmin %}<td><input type="checkbox" class="fb-check" name="ids" value="{{ f.id }}" form="fb-bulk-form"></td>{% endif %}
           <td style="font-family:'JetBrains Mono',monospace;">{{ f.zeitpunkt|local_datetime }}</td>
           <td>
-            <span class="fb-badge {% if f.fahrttyp.value == 'einsatz' %}fb-badge--red{% elif f.fahrttyp.value == 'uebung' %}fb-badge--blue{% else %}fb-badge--gray{% endif %}">
+            <span class="fb-badge {% if f.fahrttyp.value == 'einsatz' %}fb-badge--red{% elif f.fahrttyp.value == 'uebung' %}fb-badge--blue{% elif f.fahrttyp.value == 'taetigkeit' %}fb-badge--green{% else %}fb-badge--gray{% endif %}">
               {{ f.fahrzeug.code if f.fahrzeug else '—' }}
             </span>
           </td>
@@ -178,7 +180,7 @@
               {% if f.km_delta is not none %}<span style="color:var(--red-light);opacity:.7;font-size:.75rem;"> (+{{ f.km_delta }})</span>{% endif %}
             {% else %}—{% endif %}
           </td>
-          <td>{{ f.fahrttyp.value|capitalize }}</td>
+          <td>{{ f.fahrttyp.label }}</td>
           <td style="color:var(--text-muted);">{{ f.zweck.name if f.zweck else '—' }}</td>
           <td>
             {% if f.schaden_vorhanden %}<span class="fb-warn-icon" title="Schaden">&#9888;</span>{% endif %}
@@ -199,7 +201,7 @@
   {# Mobile-Karten #}
   <div class="fb-mobile-list">
     {% for f in fahrten %}
-    <div class="fb-mcard" style="--fb-accent:{% if f.fahrttyp.value == 'einsatz' %}var(--red){% elif f.fahrttyp.value == 'uebung' %}var(--org-task){% else %}var(--text-muted){% endif %};{% if f.status.value != 'aktiv' %}opacity:.6;{% endif %}">
+    <div class="fb-mcard" style="--fb-accent:{% if f.fahrttyp.value == 'einsatz' %}var(--red){% elif f.fahrttyp.value == 'uebung' %}var(--org-task){% elif f.fahrttyp.value == 'taetigkeit' %}#0f766e{% else %}var(--text-muted){% endif %};{% if f.status.value != 'aktiv' %}opacity:.6;{% endif %}">
       <div class="fb-mcard__top">
         <span class="fb-mcard__vehicle" style="display:flex;align-items:center;gap:.5rem;">
           {% if is_sysadmin %}<input type="checkbox" class="fb-check" name="ids" value="{{ f.id }}" form="fb-bulk-form">{% endif %}
@@ -220,7 +222,7 @@
         </div>
         <div>
           <div class="fb-mcard__label">Typ / Zweck</div>
-          <div class="fb-mcard__value">{{ f.fahrttyp.value|capitalize }} / {{ f.zweck.name if f.zweck else '—' }}</div>
+          <div class="fb-mcard__value">{{ f.fahrttyp.label }} / {{ f.zweck.name if f.zweck else '—' }}</div>
         </div>
         <div>
           <div class="fb-mcard__label">Status</div>

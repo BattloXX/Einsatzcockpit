@@ -74,7 +74,7 @@ def exportiere_fahrten(fahrten: list[Fahrt], org=None) -> bytes:
             zielort_text,
             zweck.name if zweck else "",
             f.zweck_freitext or "",
-            f.fahrttyp.value if f.fahrttyp else "",
+            f.fahrttyp.label if f.fahrttyp else "",
             str(f.incident_id) if f.incident_id else "",
             f.ausbildner_name or "",
             f.gruppenkommandant_name or "",

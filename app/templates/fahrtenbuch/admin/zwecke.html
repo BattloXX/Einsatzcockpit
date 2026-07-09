@@ -32,6 +32,7 @@
         <select name="kategorie" class="form-control form-control--sm" required>
           <option value="einsatz">Einsatz</option>
           <option value="uebung">Übung</option>
+          <option value="taetigkeit">Tätigkeit</option>
           <option value="sonstige">Sonstige</option>
         </select>
       </div>
@@ -78,6 +79,7 @@
         <td>
           {% if z.kategorie.value == 'einsatz' %}<span class="badge badge--red">Einsatz</span>
           {% elif z.kategorie.value == 'uebung' %}<span class="badge badge--blue">Übung</span>
+          {% elif z.kategorie.value == 'taetigkeit' %}<span class="badge badge--green">Tätigkeit</span>
           {% else %}<span class="badge badge--gray">Sonstige</span>{% endif %}
         </td>
         <td>
@@ -97,6 +99,7 @@
               <select name="kategorie" class="form-control form-control--sm">
                 <option value="einsatz" {% if z.kategorie.value == 'einsatz' %}selected{% endif %}>Einsatz</option>
                 <option value="uebung" {% if z.kategorie.value == 'uebung' %}selected{% endif %}>Übung</option>
+                <option value="taetigkeit" {% if z.kategorie.value == 'taetigkeit' %}selected{% endif %}>Tätigkeit</option>
                 <option value="sonstige" {% if z.kategorie.value == 'sonstige' %}selected{% endif %}>Sonstige</option>
               </select>
               <input type="number" name="sort" value="{{ z.sort }}" class="form-control form-control--sm" style="width:60px;">

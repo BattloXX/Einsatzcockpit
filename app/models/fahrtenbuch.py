@@ -32,7 +32,18 @@ from app.db import Base
 class FahrtKategorie(enum.StrEnum):
     einsatz = "einsatz"
     uebung = "uebung"
+    taetigkeit = "taetigkeit"
     sonstige = "sonstige"
+
+    @property
+    def label(self) -> str:
+        """Anzeigename (mit korrekten Umlauten) für UI/Export/Statistik."""
+        return {
+            "einsatz": "Einsatz",
+            "uebung": "Übung",
+            "taetigkeit": "Tätigkeit",
+            "sonstige": "Sonstige",
+        }.get(self.value, self.value.capitalize())
 
 
 class FahrtStatus(enum.StrEnum):

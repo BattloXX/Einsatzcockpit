@@ -319,6 +319,23 @@ def test_zweck_freitext_ignoriert_bei_anderer_kategorie(db_session, org, fahrzeu
     assert f.zweck_freitext is None
 
 
+def test_fahrtkategorie_label():
+    assert FahrtKategorie.taetigkeit.label == "Tätigkeit"
+    assert FahrtKategorie.uebung.label == "Übung"
+    assert FahrtKategorie.einsatz.label == "Einsatz"
+
+
+def test_taetigkeit_zweck_ohne_freitext(db_session, org, fahrzeug, zweck):
+    """Kategorie 'taetigkeit': feste Listenwerte, kein Freitext (auch wenn mitgeschickt)."""
+    zweck.kategorie = FahrtKategorie.taetigkeit
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    daten["zweck_freitext"] = "sollte ignoriert werden"
+    f = erstelle_fahrt(daten, db_session)
+    assert f.fahrttyp == FahrtKategorie.taetigkeit
+    assert f.zweck_freitext is None
+
+
 def _login(client: TestClient, db_session, org, username: str, role_code: str = "readonly"):
     from app.core.security import hash_password
     user = User(
@@ -376,6 +393,17 @@ def test_zweck_felder_sonstige_zeigt_freitext(client: TestClient, db_session, or
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
     assert r.status_code == 200
     assert 'name="zweck_freitext"' in r.text
+
+
+def test_zweck_felder_taetigkeit_kein_freitext(client: TestClient, db_session, org):
+    """Kategorie 'taetigkeit' blendet KEIN Freitext-Feld ein (feste Liste)."""
+    _login(client, db_session, org, "zf_taetig_tester")
+    z = Fahrtzweck(org_id=org.id, name="Materialtransport", kategorie=FahrtKategorie.taetigkeit)
+    db_session.add(z)
+    db_session.commit()
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
+    assert r.status_code == 200
+    assert 'name="zweck_freitext"' not in r.text
 
 
 def test_zweck_felder_uebung_kein_freitext(client: TestClient, db_session, org):
