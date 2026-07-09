@@ -470,6 +470,12 @@
        hx-on::after-swap="var _d=document.getElementById('siteDetailModal');if(_d&&!_d.open)_d.showModal()">
   </div>
 </dialog>
+
+{# Einheitlicher Druck-Dialog (ecpgPrint) – wird vom Stellen-Detail (_site_detail.html)
+   und vom Übergreifende-Meldung-Panel (_cross_marker_panel.html) für den 🖨-Button
+   benötigt. Ohne diesen Include ist window.ecpgPrint undefiniert und der Druck-Button
+   im Stellen-Detail reagiert nicht. #}
+{% include "_print_dialog.html" %}
 {% endblock %}
 
 {% block lage_scripts %}
