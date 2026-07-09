@@ -13,6 +13,7 @@ from app.models.gateway import (
     DOC_AS_PRUEFUNG,
     DOC_CROSS_KARTE,
     DOC_EINSATZINFO,
+    DOC_FAHRTENBUCH_BERICHT,
     DOC_GSL_BERICHT,
     DOC_GSL_JOURNAL,
     DOC_GSL_LAGEBLATT,
@@ -97,6 +98,8 @@ def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
         return _render_qr_einsatz(db, job, base_url)
     if job.document_type == DOC_GSL_BERICHT:
         return _render_gsl_bericht(db, job, base_url)
+    if job.document_type == DOC_FAHRTENBUCH_BERICHT:
+        return _render_fahrtenbuch_bericht(db, job, base_url)
     raise ArtifactError(f"Unbekannter Dokumenttyp: {job.document_type}")
 
 
@@ -222,6 +225,89 @@ def _org(db, org_id: int):
     """Lädt die FireDept (Org) – für Timezone/Anzeige im Pseudo-User-Kontext."""
     from app.models.master import FireDept
     return db.get(FireDept, org_id)
+
+
+def _render_fahrtenbuch_bericht(db, job: PrintJob, base_url: str) -> bytes:
+    """Fahrtenbuch-Statistik-Bericht (A4-Querformat, drei Seiten).
+
+    artifact_ref = URL-Query mit dem vorgefilterten Zeitraum + optionalen Filtern:
+    ``von=YYYY-MM-DD&bis=YYYY-MM-DD&fahrzeug_id=..&fahrttyp=..&zweck_id=..``.
+    Die Fahrten werden strikt org-scoped (job.org_id) neu geladen und aggregiert."""
+    from types import SimpleNamespace
+    from urllib.parse import parse_qs
+
+    from sqlalchemy.orm import joinedload
+
+    from app.core.timezones import local_date_to_utc
+    from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck
+    from app.models.master import VehicleMaster
+    from app.services.fahrtenbuch_service import berechne_bericht_daten
+    from app.services.pdf_service import render_fahrtenbuch_bericht_pdf
+
+    qs = parse_qs(job.artifact_ref or "", keep_blank_values=True)
+    von = (qs.get("von") or [""])[0]
+    bis = (qs.get("bis") or [""])[0]
+    fahrttyp = (qs.get("fahrttyp") or [""])[0]
+    try:
+        fahrzeug_id = int((qs.get("fahrzeug_id") or ["0"])[0] or 0)
+    except ValueError:
+        fahrzeug_id = 0
+    try:
+        zweck_id = int((qs.get("zweck_id") or ["0"])[0] or 0)
+    except ValueError:
+        zweck_id = 0
+
+    org = _org(db, job.org_id)
+
+    q = (
+        db.query(Fahrt)
+        .filter(
+            Fahrt.org_id == job.org_id,
+            Fahrt.status == FahrtStatus.aktiv,
+            Fahrt.nicht_statistikrelevant == False,  # noqa: E712
+        )
+        .execution_options(include_all_tenants=True)
+        .options(joinedload(Fahrt.fahrzeug))
+    )
+    dv = local_date_to_utc(von, org=org) if von else None
+    if dv:
+        q = q.filter(Fahrt.zeitpunkt >= dv)
+    dbis = local_date_to_utc(bis, end=True, org=org) if bis else None
+    if dbis:
+        q = q.filter(Fahrt.zeitpunkt <= dbis)
+    if fahrzeug_id:
+        q = q.filter(Fahrt.fahrzeug_id == fahrzeug_id)
+    if fahrttyp:
+        try:
+            q = q.filter(Fahrt.fahrttyp == FahrtKategorie(fahrttyp))
+        except ValueError:
+            pass
+    if zweck_id:
+        q = q.filter(Fahrt.zweck_id == zweck_id)
+
+    fahrten = q.all()
+    daten = berechne_bericht_daten(fahrten)
+
+    # Filter-Beschriftungen für den Kopf auflösen (nur Anzeige).
+    typ_labels = {"einsatz": "Einsatz", "uebung": "Übung",
+                  "taetigkeit": "Tätigkeit", "sonstige": "Sonstige"}
+    fahrzeug_label = ""
+    if fahrzeug_id:
+        fz = db.get(VehicleMaster, fahrzeug_id)
+        fahrzeug_label = fz.code if fz and getattr(fz, "dept_id", None) == job.org_id else ""
+    zweck_label = ""
+    if zweck_id:
+        zw = db.get(Fahrtzweck, zweck_id)
+        zweck_label = zw.name if zw and getattr(zw, "org_id", None) == job.org_id else ""
+
+    filter_info = {
+        "von": von, "bis": bis,
+        "fahrzeug_label": fahrzeug_label,
+        "typ_label": typ_labels.get(fahrttyp, ""),
+        "zweck_label": zweck_label,
+    }
+    pseudo_user = SimpleNamespace(org=org)
+    return render_fahrtenbuch_bericht_pdf(daten, filter_info, user=pseudo_user, base_url=base_url)
 
 
 def _render_troop(db, job: PrintJob, base_url: str) -> bytes:

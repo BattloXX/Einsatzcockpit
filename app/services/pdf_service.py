@@ -298,3 +298,35 @@ def render_teilnahme_pdf(
         buf = io.BytesIO()
         pisa.CreatePDF(io.StringIO(html_str), dest=buf)
         return buf.getvalue()
+
+
+def render_fahrtenbuch_bericht_pdf(
+    daten: dict,
+    filter_info: dict,
+    user,
+    base_url: str = "",
+) -> bytes:
+    """Fahrtenbuch-Statistik-Bericht als A4-Querformat-PDF (drei Seiten).
+
+    ``daten`` stammt aus ``fahrtenbuch_service.berechne_bericht_daten`` und enthält
+    die Auswertungen für alle Fahrzeuge, alle Maschinisten und Maschinisten je
+    Fahrzeug. ``filter_info`` trägt den (vorgefilterten) Zeitraum für den Kopf.
+    """
+    template = templates.env.get_template("pdf/fahrtenbuch_bericht.html")
+    html_str = template.render(
+        daten=daten,
+        filter=filter_info,
+        user=user,
+        now=datetime.now(UTC),
+        base_url=base_url,
+    )
+    try:
+        from weasyprint import HTML  # noqa: PLC0415 – lazy: GTK ggf. nicht verfügbar
+        buf = io.BytesIO()
+        HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+        return buf.getvalue()
+    except OSError:
+        from xhtml2pdf import pisa  # noqa: PLC0415
+        buf = io.BytesIO()
+        pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
+        return buf.getvalue()

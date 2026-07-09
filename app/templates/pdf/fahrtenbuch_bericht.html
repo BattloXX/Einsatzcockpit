@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: A4 landscape;
+    margin: 12mm 12mm 14mm 12mm;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; margin: 0; }
+
+  /* Jede Auswertung füllt eine eigene Querformat-Seite.
+     min-height = Druckbereich A4-Quer (210mm − 12mm − 14mm Rand ≈ 184mm),
+     leicht darunter gewählt, damit kein Leerseiten-Überlauf entsteht. */
+  .report-page { page-break-after: always; display: flex; flex-direction: column; min-height: 180mm; }
+  .report-page:last-child { page-break-after: auto; }
+
+  .header-box { background: #d42225; color: #fff; padding: 9pt 12pt; margin-bottom: 10pt; }
+  .header-box table { width: 100%; border-collapse: collapse; }
+  .header-box td { border: none; padding: 1pt 3pt; background: none; color: #fff; }
+  .kicker { font-size: 8.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; opacity: .85; }
+  .title { font-size: 15pt; font-weight: 700; margin: 2pt 0 3pt; }
+  .meta { font-size: 8.5pt; color: rgba(255,255,255,.9); }
+  .brand-col { text-align: right; vertical-align: top; font-size: 8pt; color: rgba(255,255,255,.82); }
+
+  table.data { width: 100%; border-collapse: collapse; flex: 1; }
+  table.data th { background: #333; color: #fff; padding: 6pt 8pt; text-align: left; font-size: 8.5pt;
+                  text-transform: uppercase; letter-spacing: .04em; }
+  table.data th.num, table.data td.num { text-align: right; }
+  table.data td { padding: 5pt 8pt; border-bottom: 1px solid #e2e2e2; font-size: 9.5pt; }
+  table.data tbody tr:nth-child(even) td { background: #f7f7f7; }
+  table.data td.name { font-weight: 600; }
+  table.data .tot { font-weight: 700; color: #d42225; }
+
+  tfoot td, tr.sum td { background: #ececec !important; font-weight: 700; border-top: 2px solid #bbb;
+                        border-bottom: none; font-size: 9.5pt; }
+
+  .fz-block { margin-bottom: 11pt; page-break-inside: avoid; }
+  .fz-block h3 { margin: 0 0 4pt; font-size: 11pt; color: #d42225;
+                 border-bottom: 2px solid #d42225; padding-bottom: 2pt; }
+  .fz-block table.data { flex: none; }
+
+  .empty { text-align: center; color: #999; padding: 20pt; font-size: 10pt; }
+  .foot-note { margin-top: 8pt; font-size: 7.5pt; color: #777; border-top: 1px solid #ddd; padding-top: 4pt; }
+  .test-banner { background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:10pt;
+                 padding:3pt;letter-spacing:.1em;margin-bottom:6pt; }
+</style>
+</head>
+<body>
+
+{% macro kopf(kicker_txt) %}
+<div class="header-box">
+  <table>
+    <tr>
+      <td style="width:74%;vertical-align:top;">
+        <div class="kicker">{{ kicker_txt }}</div>
+        <div class="title">Fahrtenbuch-Statistik</div>
+        <div class="meta">
+          Zeitraum:
+          {% if filter.von %}{{ filter.von }}{% else %}Beginn{% endif %}
+          &ndash;
+          {% if filter.bis %}{{ filter.bis }}{% else %}heute{% endif %}
+          {% if filter.fahrzeug_label %}&nbsp;|&nbsp; Fahrzeug: {{ filter.fahrzeug_label }}{% endif %}
+          {% if filter.typ_label %}&nbsp;|&nbsp; Typ: {{ filter.typ_label }}{% endif %}
+          {% if filter.zweck_label %}&nbsp;|&nbsp; Zweck: {{ filter.zweck_label }}{% endif %}
+        </div>
+      </td>
+      <td class="brand-col">
+        {{ brand }}<br>
+        {% if user and user.org %}{{ user.org.name }}{% endif %}<br>
+        Erstellt: {{ now|local_datetime }}
+      </td>
+    </tr>
+  </table>
+</div>
+{% endmacro %}
+
+{% macro fussnote() %}
+<div class="foot-note">
+  Grundlage: statistikrelevante, aktive Fahrten im gewählten Zeitraum. Der Korbmaschinist
+  (2. Maschinist/Steiger) wird bei den Personen-Auswertungen mitgezählt.
+</div>
+{% endmacro %}
+
+<!-- ============ Seite 1: Einsätze/Übungen je Fahrzeug ============ -->
+<div class="report-page">
+  {% if TEST_SYSTEM %}<div class="test-banner">TEST SYSTEM</div>{% endif %}
+  {{ kopf("Einsätze / Übungen – alle Fahrzeuge") }}
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Fahrzeug</th>
+        <th class="num">Einsatz</th>
+        <th class="num">Übung</th>
+        <th class="num">Tätigkeit</th>
+        <th class="num">Sonstige</th>
+        <th class="num">Gesamt</th>
+        <th class="num">km</th>
+        <th class="num">BH (h)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in daten.fahrzeuge %}
+      <tr>
+        <td class="name">{{ r.label }}</td>
+        <td class="num">{{ r.einsatz }}</td>
+        <td class="num">{{ r.uebung }}</td>
+        <td class="num">{{ r.taetigkeit }}</td>
+        <td class="num">{{ r.sonstige }}</td>
+        <td class="num tot">{{ r.gesamt }}</td>
+        <td class="num">{{ r.km }}</td>
+        <td class="num">{{ r.bh }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty">Keine Daten im gewählten Zeitraum</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if daten.fahrzeuge %}
+    <tfoot>
+      <tr class="sum">
+        <td>Summe</td>
+        <td class="num">{{ daten.fahrzeuge|sum(attribute='einsatz') }}</td>
+        <td class="num">{{ daten.fahrzeuge|sum(attribute='uebung') }}</td>
+        <td class="num">{{ daten.fahrzeuge|sum(attribute='taetigkeit') }}</td>
+        <td class="num">{{ daten.fahrzeuge|sum(attribute='sonstige') }}</td>
+        <td class="num">{{ daten.fahrzeuge|sum(attribute='gesamt') }}</td>
+        <td class="num">{{ daten.fahrzeuge|sum(attribute='km') }}</td>
+        <td class="num">{{ daten.fahrzeuge|sum(attribute='bh') }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+  {{ fussnote() }}
+</div>
+
+<!-- ============ Seite 2: Maschinisten – alle Fahrzeuge ============ -->
+<div class="report-page">
+  {% if TEST_SYSTEM %}<div class="test-banner">TEST SYSTEM</div>{% endif %}
+  {{ kopf("Maschinisten – alle Fahrzeuge") }}
+  <table class="data">
+    <thead>
+      <tr>
+        <th style="width:36pt;" class="num">#</th>
+        <th>Maschinist</th>
+        <th class="num">Einsatz</th>
+        <th class="num">Übung</th>
+        <th class="num">Tätigkeit</th>
+        <th class="num">Sonstige</th>
+        <th class="num">Gesamt</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in daten.maschinisten %}
+      <tr>
+        <td class="num">{{ loop.index }}</td>
+        <td class="name">{{ r.label }}</td>
+        <td class="num">{{ r.einsatz }}</td>
+        <td class="num">{{ r.uebung }}</td>
+        <td class="num">{{ r.taetigkeit }}</td>
+        <td class="num">{{ r.sonstige }}</td>
+        <td class="num tot">{{ r.gesamt }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="empty">Keine Daten im gewählten Zeitraum</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if daten.maschinisten %}
+    <tfoot>
+      <tr class="sum">
+        <td></td>
+        <td>Summe ({{ daten.maschinisten|length }} Personen)</td>
+        <td class="num">{{ daten.maschinisten|sum(attribute='einsatz') }}</td>
+        <td class="num">{{ daten.maschinisten|sum(attribute='uebung') }}</td>
+        <td class="num">{{ daten.maschinisten|sum(attribute='taetigkeit') }}</td>
+        <td class="num">{{ daten.maschinisten|sum(attribute='sonstige') }}</td>
+        <td class="num">{{ daten.maschinisten|sum(attribute='gesamt') }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+  {{ fussnote() }}
+</div>
+
+<!-- ============ Seite 3: Maschinisten je Fahrzeug ============ -->
+<div class="report-page">
+  {% if TEST_SYSTEM %}<div class="test-banner">TEST SYSTEM</div>{% endif %}
+  {{ kopf("Maschinisten je Fahrzeug") }}
+  {% for fz in daten.je_fahrzeug %}
+  <div class="fz-block">
+    <h3>{{ fz.label }}</h3>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Maschinist</th>
+          <th class="num">Einsatz</th>
+          <th class="num">Übung</th>
+          <th class="num">Tätigkeit</th>
+          <th class="num">Sonstige</th>
+          <th class="num">Gesamt</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in fz.zeilen %}
+        <tr>
+          <td class="name">{{ r.label }}</td>
+          <td class="num">{{ r.einsatz }}</td>
+          <td class="num">{{ r.uebung }}</td>
+          <td class="num">{{ r.taetigkeit }}</td>
+          <td class="num">{{ r.sonstige }}</td>
+          <td class="num tot">{{ r.gesamt }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="sum">
+          <td>Summe</td>
+          <td class="num">{{ fz.summe.einsatz }}</td>
+          <td class="num">{{ fz.summe.uebung }}</td>
+          <td class="num">{{ fz.summe.taetigkeit }}</td>
+          <td class="num">{{ fz.summe.sonstige }}</td>
+          <td class="num">{{ fz.summe.gesamt }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Keine Daten im gewählten Zeitraum</div>
+  {% endfor %}
+  {{ fussnote() }}
+</div>
+
+</body>
+</html>
