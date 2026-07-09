@@ -62,15 +62,33 @@
     break-inside: avoid; page-break-inside: avoid;
     margin-bottom: 0 !important; padding: 6px 9px !important;
   }
+  /* Objekt-Karte(n) + Nachbar-Gefahren sind unterschiedlich hoch/unvorhersehbar –
+     als eigene volle Zeile drucken statt sie mit einer kurzen Karte zu paaren
+     (sonst bleibt die Rasterzeile leer/riesig, weil ihre Hoehe vom hohen Partner
+     bestimmt wird -> grosse weisse Flaechen). Nur Hydranten+Ausrueckordnung
+     bleiben oben nebeneinander. */
+  #ei-objekt-section > .card, #nachbar-gefahren-card { grid-column: 1 / -1 !important; }
   .einsatz-info__kopf { padding: 6px 10px !important; }
   /* Kontrast fuer Papier (App laeuft im Dark-Theme) */
   .card, .einsatz-info__kopf { background: #fff !important; border: 1px solid #999 !important; box-shadow: none !important; color: #111 !important; }
   .card h3, .einsatz-info__kopf strong { color: #111 !important; }
   .text-muted { color: #555 !important; }
-  /* Hydranten-Liste (nur die 3 naechsten): kein Scroll-Deckel im Druck */
+  /* Hydranten-Liste (nur die 3 naechsten): kein Scroll-Deckel im Druck.
+     Die Zeilen tragen ihr eigenes (dunkles) Hintergrund-CSS, nicht ".card" -
+     ohne diese Zeile blieben sie dunkelblau auf dem sonst weissen Ausdruck. */
   .hydrant-liste { max-height: none !important; overflow: visible !important; gap: 3px !important; }
-  .hydrant-liste__row { border: 1px solid #bbb !important; color: #111 !important; break-inside: avoid; padding: 3px 6px !important; }
+  .hydrant-liste__row {
+    background: #f4f4f4 !important; border: 1px solid #bbb !important; color: #111 !important;
+    break-inside: avoid; padding: 3px 6px !important;
+  }
+  .hydrant-liste__dist, .hydrant-liste__text { color: #111 !important; }
   .leaflet-control-attribution { color: #333 !important; background: rgba(255,255,255,.7) !important; }
+  /* Weitere Komponenten mit eigenem (dunklem) Theme-Hintergrund, die nicht ueber
+     ".card" laufen und sonst ebenfalls dunkel drucken wuerden. */
+  .badge-pill { background: #eee !important; border-color: #999 !important; color: #111 !important; }
+  .objekt-gefahr-chip, .nachbar-gefahr-chip, .nachbar-gefahr-row {
+    background: #f4f4f4 !important; border-color: #999 !important; color: #111 !important;
+  }
   /* Objekt-Unterabschnitte (Gefahren/BMA/Kontakte/Dokumente/Anfahrt): statt geschachtelter
      Karten nur noch schlanke Randlinie, damit nicht doppelt Rahmen+Padding gedruckt wird */
   div[hx-get*="einsatz-fragment"] .card {

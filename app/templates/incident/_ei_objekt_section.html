@@ -42,7 +42,10 @@
   {% endfor %}
 
   {% if darf_verknuepfen and kandidaten %}
-  <div class="card" style="padding:14px;"
+  {# Reine Verknuepfen-Aktion ohne Zusatzinfo -> im Druck ausblenden, wenn schon ein
+     Objekt verknuepft ist. Ohne Verknuepfung bleibt der Hinweistext "kein Objekt
+     automatisch zugeordnet" gedruckt sichtbar (informativ). #}
+  <div class="card{{ ' ei-noprint' if verknuepfungen else '' }}" style="padding:14px;"
        x-data='{ q: "", kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, t: {{ (o.anzeige_nummer ~ " " ~ o.name)|tojson }} }{{ "," if not loop.last }}{% endfor %}] }'>
     <div style="font-weight:600;margin-bottom:6px;">
       {% if verknuepfungen %}Weiteres Objekt verknüpfen{% else %}🏢 Objekt manuell verknüpfen{% endif %}
@@ -50,8 +53,8 @@
     {% if not verknuepfungen %}
     <p class="text-muted" style="margin:0 0 8px;font-size:.85rem;">Automatisch wurde kein Objekt zugeordnet. Objekt suchen und direkt verknüpfen:</p>
     {% endif %}
-    <input type="text" x-model="q" class="form-input" placeholder="Objekt suchen (Nummer oder Name) …" style="width:100%;">
-    <div style="max-height:220px;overflow:auto;margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+    <input type="text" x-model="q" class="form-input ei-noprint" placeholder="Objekt suchen (Nummer oder Name) …" style="width:100%;">
+    <div class="ei-noprint" style="max-height:220px;overflow:auto;margin-top:8px;display:flex;flex-direction:column;gap:4px;">
       <template x-for="k in kandidaten.filter(function (x) { return x.t.toLowerCase().indexOf(q.toLowerCase()) !== -1; })" :key="k.id">
         <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/verknuepfen"
               hx-target="#ei-objekt-section" hx-swap="outerHTML" style="margin:0;">
