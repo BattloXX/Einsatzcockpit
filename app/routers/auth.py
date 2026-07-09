@@ -40,14 +40,14 @@ def _get_dummy_password_hash() -> str:
     return _dummy_password_hash
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
+def _set_session_cookie(response: Response, token: str, max_age: int | None = None) -> None:
     response.set_cookie(
         "session",
         token,
         httponly=True,
         secure=settings.COOKIE_SECURE,
         samesite="lax",
-        max_age=settings.SESSION_MAX_AGE_SECONDS,
+        max_age=max_age if max_age is not None else settings.SESSION_MAX_AGE_SECONDS,
     )
 
 
@@ -73,6 +73,7 @@ async def login(
     username: str = Form(...),
     password: str = Form(...),
     next: str = Form(""),
+    remember: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """Login mit Account-Lockout (Phase 7).
@@ -152,9 +153,15 @@ async def login(
                 ip=request.client.host if request.client else None)
     db.commit()
 
-    token = sign_session(user.id)
+    # "Login merken": längeres, gleitendes Session-Fenster (7 Tage Inaktivität,
+    # bis 30 Tage absolut). Checkbox sendet nur bei Aktivierung einen Wert.
+    is_remember = bool(remember)
+    token = sign_session(user.id, remember=is_remember)
     redirect = RedirectResponse(_safe_next(next), status_code=302)
-    _set_session_cookie(redirect, token)
+    _set_session_cookie(
+        redirect, token,
+        max_age=settings.SESSION_REMEMBER_MAX_AGE_SECONDS if is_remember else None,
+    )
     return redirect
 
 

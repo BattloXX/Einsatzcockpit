@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = SECRET_KEY_PLACEHOLDER
     SESSION_MAX_AGE_SECONDS: int = 86400    # 24 Stunden (normaler Benutzer)
     SESSION_INACTIVITY_SECONDS: int = 28800  # 8 Stunden Inaktivitäts-Timeout
+    # "Login merken": längeres, gleitendes Fenster. Solange der Nutzer mindestens
+    # alle 7 Tage aktiv ist, bleibt er bis zur absoluten Obergrenze (30 Tage) eingeloggt.
+    SESSION_REMEMBER_INACTIVITY_SECONDS: int = 604800   # 7 Tage Inaktivität (gleitend)
+    SESSION_REMEMBER_MAX_AGE_SECONDS: int = 2592000     # 30 Tage absolute Obergrenze
 
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8092

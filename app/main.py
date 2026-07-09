@@ -332,11 +332,13 @@ async def session_middleware(request: Request, call_next):
     request.state.qr_lage_id = None
     request.state.is_device = False
     _refresh_user_id: int | None = None  # set for non-QR sessions to trigger cookie refresh
+    _refresh_remember: bool = False      # "Login merken" – längeres, gleitendes Fenster
 
     if token:
         session_data = unsign_session(token)
         if session_data:
-            user_id, is_qr, qr_incident_id, is_device, display_name, qr_lage_id = session_data
+            (user_id, is_qr, qr_incident_id, is_device, display_name,
+             qr_lage_id, is_remember) = session_data
             db = SessionLocal()
             set_tenant_context(db, None)
             try:
@@ -388,6 +390,7 @@ async def session_middleware(request: Request, call_next):
                 elif user and not is_device:
                     # Regular session: refresh token to slide the inactivity window.
                     _refresh_user_id = user_id
+                    _refresh_remember = is_remember
                 request.state.user = user
                 request.state.display_name = display_name
                 request.state.qr_incident_id = qr_incident_id
@@ -407,13 +410,17 @@ async def session_middleware(request: Request, call_next):
     if (_refresh_user_id is not None and request.state.user is not None
             and request.url.path != "/logout"):
         from app.core.security import sign_session as _sign
+        _cookie_max_age = (
+            settings.SESSION_REMEMBER_MAX_AGE_SECONDS if _refresh_remember
+            else settings.SESSION_MAX_AGE_SECONDS
+        )
         response.set_cookie(
             "session",
-            _sign(_refresh_user_id),
+            _sign(_refresh_user_id, remember=_refresh_remember),
             httponly=True,
             secure=settings.COOKIE_SECURE,
             samesite="lax",
-            max_age=settings.SESSION_MAX_AGE_SECONDS,
+            max_age=_cookie_max_age,
         )
 
     return response
