@@ -151,10 +151,15 @@
           </select>
         </div>
 
-        {# Dynamische Fahrzeug-Felder (Maschinist/km/BH/2. Maschinist/Seilwinde) #}
+        {# Dynamische Fahrzeug-Felder (Maschinist/km/BH/2. Maschinist/Seilwinde).
+           Das Partial erwartet die Variable "fahrzeug"; beim Vorauswählen per Link
+           heißt sie hier preset_fahrzeug. Ohne dieses Mapping bliebe der Block leer
+           (Felder „fielen weg"), obwohl das Fahrzeug gewählt ist. #}
         <div id="fahrzeug-felder">
           {% if preset_fahrzeug %}
-            {% include "fahrtenbuch/_fahrzeug_felder.html" with context %}
+            {% with fahrzeug = preset_fahrzeug %}
+              {% include "fahrtenbuch/_fahrzeug_felder.html" with context %}
+            {% endwith %}
           {% endif %}
         </div>
       </div>
