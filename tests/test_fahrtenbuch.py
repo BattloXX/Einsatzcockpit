@@ -133,6 +133,28 @@ def test_erstelle_fahrt_erfolgreich(db_session, org, fahrzeug, zweck):
     assert fahrzeug.km_aktuell == 1010
 
 
+def test_km_pflicht_bei_erfasst_km(db_session, org, fahrzeug, zweck):
+    """Fahrzeug mit erfasst_km ohne km-Stand → 422 (km ist Pflichtfeld)."""
+    fahrzeug.erfasst_km = True
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    daten["km_stand_neu"] = None
+    with pytest.raises(HTTPException) as exc:
+        erstelle_fahrt(daten, db_session)
+    assert exc.value.detail == "km_pflicht"
+
+
+def test_km_optional_wenn_nicht_erfasst(db_session, org, fahrzeug, zweck):
+    """Fahrzeug ohne erfasst_km darf ohne km-Stand gespeichert werden."""
+    fahrzeug.erfasst_km = False
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    daten["km_stand_neu"] = None
+    fahrt = erstelle_fahrt(daten, db_session)
+    assert fahrt.id is not None
+    assert fahrt.km_stand_neu is None
+
+
 def test_erstelle_fahrt_warnung_ohne_bestaetigung(db_session, org, fahrzeug, zweck):
     daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
     daten["km_stand_neu"] = 1100  # delta=100 > schwelle=50
@@ -415,11 +437,56 @@ def test_verwaltung_liste_ohne_loeschen_fuer_fahrtenbuch_admin(client: TestClien
 
 
 def test_verwaltung_liste_zeigt_loeschen_fuer_sysadmin(client: TestClient, db_session, org):
-    """Sysadmin sieht das Bulk-Löschen-Formular in der Verwaltungsliste."""
+    """Sysadmin sieht das Bulk-Löschen-Formular + Org-Umschalter in der Verwaltungsliste."""
     _login(client, db_session, org, "el_liste_sys", role_code="system_admin")
     r = client.get("/verwaltung/fahrten")
     assert r.status_code == 200
     assert "fb-bulk-form" in r.text
+    assert "fb-orgbar" in r.text  # Org-Auswahl für Sysadmin
+
+
+def _org_mit_fahrt(db_session, slug: str, name: str, maschinist: str):
+    """Legt eine zweite Org mit Fahrzeug, Zweck und einer Fahrt an. Gibt die Org zurück."""
+    from app.models.master import FireDept
+    from app.services.fahrtenbuch_service import erstelle_fahrt
+    o = FireDept(slug=slug, name=name)
+    db_session.add(o)
+    db_session.flush()
+    fz = VehicleMaster(dept_id=o.id, code=f"{slug}-FZ", name="Fahrzeug", type="Test",
+                       display_order=5, erfasst_km=False)
+    db_session.add(fz)
+    db_session.flush()
+    z = Fahrtzweck(org_id=o.id, name=f"{slug}-Zweck", kategorie=FahrtKategorie.uebung)
+    db_session.add(z)
+    db_session.flush()
+    erstelle_fahrt({
+        "org_id": o.id, "fahrzeug_id": fz.id, "zweck_id": z.id,
+        "maschinist_name": maschinist, "km_stand_neu": None,
+        "erfasst_via": FahrtErfassungsweg.web,
+    }, db_session)
+    db_session.commit()
+    return o
+
+
+def test_sysadmin_sieht_fremde_org_via_org_param(client: TestClient, db_session, org):
+    """system_admin kann via ?org=<id> das Fahrtenbuch einer anderen Org ansehen."""
+    orgB = _org_mit_fahrt(db_session, "testorgb-fb", "Test-Org-B-FB", "Bernd Fremdorg")
+    _login(client, db_session, org, "fb_sysadmin_cross", role_code="system_admin")
+    r = client.get(f"/verwaltung/fahrten?org={orgB.id}&status=alle")
+    assert r.status_code == 200
+    assert "Bernd Fremdorg" in r.text
+    # Ohne ?org bleibt der Sysadmin in seiner eigenen Org – fremde Fahrt nicht sichtbar
+    r2 = client.get("/verwaltung/fahrten?status=alle")
+    assert "Bernd Fremdorg" not in r2.text
+
+
+def test_regular_admin_ignoriert_org_param(client: TestClient, db_session, org):
+    """Ein regulärer fahrtenbuch_admin bleibt trotz ?org=<id> in seiner eigenen Org."""
+    orgC = _org_mit_fahrt(db_session, "testorgc-fb", "Test-Org-C-FB", "Clara Fremdorg")
+    _login(client, db_session, org, "fb_regular_cross", role_code="fahrtenbuch_admin")
+    r = client.get(f"/verwaltung/fahrten?org={orgC.id}&status=alle")
+    assert r.status_code == 200
+    assert "Clara Fremdorg" not in r.text
 
 
 def test_loeschen_route_verweigert_nicht_sysadmin(client: TestClient, db_session, org):

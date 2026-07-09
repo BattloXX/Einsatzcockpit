@@ -171,3 +171,25 @@ def test_default_route_csp_bleibt_streng():
     assert "frame-src 'self' https:;" not in csp  # nicht global geoeffnet
     assert "frame-ancestors 'none'" in csp
     assert h["x-frame-options"] == "DENY"
+
+
+def test_fahrtenbuch_iframe_erlaubt_externe_origin(monkeypatch):
+    """Fahrtenbuch-Seiten sind auf der konfigurierten externen Origin einbettbar:
+    CSP frame-ancestors enthält die Origin und X-Frame-Options wird NICHT gesetzt
+    (kann keine fremde Origin erlauben)."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "FAHRTENBUCH_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at")
+    for path in ("/verwaltung/fahrten", "/fahrtenbuch/neu", "/f/abc123"):
+        h = _security_headers_for(path)
+        csp = h["content-security-policy"]
+        assert "frame-ancestors 'self' https://feuerwehr.wolfurt.at" in csp
+        assert "x-frame-options" not in h
+
+
+def test_fahrtenbuch_iframe_default_wenn_nicht_konfiguriert(monkeypatch):
+    """Ohne konfigurierte Origins bleibt das Fahrtenbuch streng (kein Fremd-Framing)."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "FAHRTENBUCH_FRAME_ANCESTORS", "")
+    h = _security_headers_for("/verwaltung/fahrten")
+    assert "frame-ancestors 'none'" in h["content-security-policy"]
+    assert h["x-frame-options"] == "DENY"

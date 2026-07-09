@@ -1,9 +1,11 @@
 {# Fahrtenbuch: Unter-Tabs innerhalb "Einstellungen" (Zwecke / Zielorte / Token / Allgemein) #}
 {% from "_tabnav.html" import subtabnav %}
 {% set _fp = request.url.path %}
+{% set _org = request.query_params.get('org') %}
+{% set _q = ('?org=' ~ _org) if _org else '' %}
 {{ subtabnav([
-  {'label': 'Fahrtzwecke', 'href': '/admin/fahrtenbuch/zwecke', 'active': _fp.startswith('/admin/fahrtenbuch/zwecke')},
-  {'label': 'Zielorte', 'href': '/admin/fahrtenbuch/zielorte', 'active': _fp.startswith('/admin/fahrtenbuch/zielorte')},
-  {'label': 'Token / QR', 'href': '/admin/fahrtenbuch/token', 'active': _fp.startswith('/admin/fahrtenbuch/token')},
-  {'label': 'Allgemein', 'href': '/admin/fahrtenbuch/einstellungen', 'active': _fp.startswith('/admin/fahrtenbuch/einstellungen')},
+  {'label': 'Fahrtzwecke', 'href': '/admin/fahrtenbuch/zwecke' ~ _q, 'active': _fp.startswith('/admin/fahrtenbuch/zwecke')},
+  {'label': 'Zielorte', 'href': '/admin/fahrtenbuch/zielorte' ~ _q, 'active': _fp.startswith('/admin/fahrtenbuch/zielorte')},
+  {'label': 'Token / QR', 'href': '/admin/fahrtenbuch/token' ~ _q, 'active': _fp.startswith('/admin/fahrtenbuch/token')},
+  {'label': 'Allgemein', 'href': '/admin/fahrtenbuch/einstellungen' ~ _q, 'active': _fp.startswith('/admin/fahrtenbuch/einstellungen')},
 ]) }}

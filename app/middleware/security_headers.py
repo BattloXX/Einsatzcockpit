@@ -16,6 +16,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.config import settings
+
 _CSP_BASE = (
     "default-src 'self'; "
     "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org "
@@ -73,6 +75,26 @@ def _is_embeddable_route(path: str) -> bool:
     return False
 
 
+# Fahrtenbuch-Seiten dürfen (falls konfiguriert) auf externen, vertrauenswürdigen
+# Websites per <iframe> eingebettet werden – z.B. dem Feuerwehr-Intern-Bereich.
+_FAHRTENBUCH_FRAME_PREFIXES = (
+    "/fahrtenbuch",            # Erfassungsformular + HTMX-Partials
+    "/f/",                     # Token-/QR-Erfassung (öffentlich)
+    "/verwaltung/fahrten",     # Fahrtenbuch-Verwaltung
+    "/admin/fahrtenbuch",      # Stammdaten (Zwecke/Zielorte/Fahrzeuge/Token/Einstellungen)
+    "/statistik/fahrtenbuch",  # Fahrtenbuch-Statistik
+)
+
+
+def _is_fahrtenbuch_route(path: str) -> bool:
+    return any(path == p or path.startswith(p) for p in _FAHRTENBUCH_FRAME_PREFIXES)
+
+
+def _fahrtenbuch_frame_ancestors() -> str:
+    """Liefert die konfigurierten externen Eltern-Origins (leerzeichen-getrennt), oder ""."""
+    return " ".join((settings.FAHRTENBUCH_FRAME_ANCESTORS or "").split())
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
@@ -81,11 +103,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         embeddable = _is_embeddable_route(path)
         infoscreen = path.startswith("/wetter/infoscreen/")
         alarm_infoscreen = path.startswith("/infoscreen/alarm/")
+        # Fahrtenbuch auf externen Seiten einbettbar, sofern Eltern-Origins konfiguriert sind.
+        fb_ancestors = _fahrtenbuch_frame_ancestors() if _is_fahrtenbuch_route(path) else ""
 
         if infoscreen:
             csp = _CSP_INFOSCREEN
         elif alarm_infoscreen:
             csp = _CSP_ALARM_INFOSCREEN
+        elif fb_ancestors:
+            csp = _CSP_BASE + f"; frame-ancestors 'self' {fb_ancestors}"
         elif embeddable:
             csp = _CSP_SAMEORIGIN_FRAME
         else:
@@ -104,7 +130,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # setzt darum SAMEORIGIN — konsistent mit frame-ancestors 'self', statt
         # eines widerspruechlichen DENY (das mit einem evtl. vom Reverse-Proxy
         # gesetzten SAMEORIGIN zu "DENY, SAMEORIGIN" kombiniert wuerde).
-        if embeddable or alarm_infoscreen:
+        if fb_ancestors:
+            # X-Frame-Options kann keine fremde Origin erlauben (ALLOW-FROM ist tot).
+            # Deshalb hier KEIN X-Frame-Options setzen – moderne Browser richten sich
+            # nach CSP frame-ancestors. Ein evtl. vom Reverse-Proxy (nginx) gesetztes
+            # X-Frame-Options muss dort separat für diese Pfade entfernt werden.
+            pass
+        elif embeddable or alarm_infoscreen:
             response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         else:
             response.headers.setdefault("X-Frame-Options", "DENY")

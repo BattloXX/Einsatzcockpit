@@ -16,7 +16,7 @@
 <div class="alert alert--success" style="margin-bottom:1rem;">Einstellungen gespeichert.</div>
 {% endif %}
 
-<form method="post" action="/admin/fahrtenbuch/einstellungen">
+<form method="post" action="/admin/fahrtenbuch/einstellungen{{ org_q }}">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 
   <div class="card" style="margin-bottom:1.25rem;">

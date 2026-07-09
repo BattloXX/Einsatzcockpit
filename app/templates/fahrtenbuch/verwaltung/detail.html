@@ -55,7 +55,7 @@
 
   <div class="fd-header">
     <div class="fd-header__left">
-      <a href="/verwaltung/fahrten" class="btn btn--ghost btn--sm">&#8592; Liste</a>
+      <a href="/verwaltung/fahrten{{ org_q }}" class="btn btn--ghost btn--sm">&#8592; Liste</a>
       <div>
         <div class="fd-header__title">
           <h1>Fahrt #{{ fahrt.id }}</h1>
@@ -83,11 +83,11 @@
   {% endif %}
   {% if original %}
   <div class="alert alert--warn">
-    Korrektur von <a href="/verwaltung/fahrten/{{ original.id }}">#{{ original.id }}</a> ({{ original.zeitpunkt|local_datetime }})
+    Korrektur von <a href="/verwaltung/fahrten/{{ original.id }}{{ org_q }}">#{{ original.id }}</a> ({{ original.zeitpunkt|local_datetime }})
   </div>
   {% endif %}
   {% if ersatz %}
-  <div class="alert alert--warn">Ersetzt durch <a href="/verwaltung/fahrten/{{ ersatz.id }}">#{{ ersatz.id }}</a></div>
+  <div class="alert alert--warn">Ersetzt durch <a href="/verwaltung/fahrten/{{ ersatz.id }}{{ org_q }}">#{{ ersatz.id }}</a></div>
   {% endif %}
 
   <div class="fd-grid">
@@ -189,7 +189,7 @@
         </div>
         {% endif %}
         {% if fahrt.status.value == 'aktiv' %}
-        <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/schaden-retry" style="margin-top:.75rem;">
+        <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/schaden-retry{{ org_q }}" style="margin-top:.75rem;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button type="submit" class="btn btn--ghost btn--sm">Erneut senden</button>
         </form>
@@ -230,8 +230,8 @@
   {% if fahrt.status.value == 'aktiv' and can_edit %}
   <div class="fd-actions">
     <div class="fd-actions__group">
-      <a href="/verwaltung/fahrten/{{ fahrt.id }}/korrektur" class="btn btn--ghost btn--sm">&#9998; Korrigieren</a>
-      <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/statistikflag">
+      <a href="/verwaltung/fahrten/{{ fahrt.id }}/korrektur{{ org_q }}" class="btn btn--ghost btn--sm">&#9998; Korrigieren</a>
+      <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/statistikflag{{ org_q }}">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <button type="submit" class="btn btn--ghost btn--sm">
           Statistik {{ 'aktivieren' if fahrt.nicht_statistikrelevant else 'deaktivieren' }}
@@ -246,7 +246,7 @@
            style="position:absolute;bottom:calc(100% + 4px);right:0;z-index:100;
                   background:var(--surface-mid);border:1px solid var(--border);
                   border-radius:.5rem;padding:1rem;min-width:280px;box-shadow:0 8px 24px rgba(0,0,0,.4);">
-        <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/storno">
+        <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/storno{{ org_q }}">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <label class="form-label" style="font-size:.85rem;">Storno-Grund</label>
           <textarea name="grund" class="form-control" rows="2" style="margin-bottom:.5rem;" placeholder="Grund…"></textarea>

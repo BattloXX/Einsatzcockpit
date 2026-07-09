@@ -1,6 +1,16 @@
 {# Dynamisch per HTMX geladen: zweck-spezifische Felder #}
 {% if zweck %}
 
+{% if zweck.kategorie.value == 'sonstige' %}
+<div class="form-group">
+  <label class="form-label" for="zweck_freitext">Zweck (Freitext)</label>
+  <input type="text" name="zweck_freitext" id="zweck_freitext" class="form-control form-control--lg"
+         maxlength="200" placeholder="Zweck der Fahrt beschreiben…"
+         value="{{ form_daten.get('zweck_freitext', '') if form_daten else '' }}">
+  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Kurze Beschreibung, wofür die Fahrt war.</p>
+</div>
+{% endif %}
+
 {% if zweck.verlangt_ausbildner %}
 <div class="form-group" x-data="maschinistAutocomplete('ausbildner')">
   <label class="form-label" for="ausbildner_name">Ausbildner *</label>
@@ -67,16 +77,6 @@
   </div>
   <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
   <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen. Kann leer bleiben.</p>
-</div>
-{% endif %}
-
-{% if zweck.kategorie.value == 'sonstige' %}
-<div class="form-group">
-  <label class="form-label" for="zweck_freitext">Zweck (Freitext)</label>
-  <input type="text" name="zweck_freitext" id="zweck_freitext" class="form-control form-control--lg"
-         maxlength="200" placeholder="Zweck der Fahrt beschreiben…"
-         value="{{ form_daten.get('zweck_freitext', '') if form_daten else '' }}">
-  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Kurze Beschreibung, wofür die Fahrt war.</p>
 </div>
 {% endif %}
 
