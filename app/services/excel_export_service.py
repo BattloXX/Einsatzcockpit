@@ -101,3 +101,50 @@ def exportiere_fahrten(fahrten: list[Fahrt], org=None) -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def exportiere_fahrzeug_links(fahrzeuge: list, org_token: str, base_url: str) -> bytes:
+    """Excel mit allen Fahrzeugen inkl. direktem Fahrtenbuch-Link (QR-Deep-Link).
+
+    Der Link öffnet das Erfassungsformular mit vorausgewähltem Fahrzeug:
+    {base_url}/f/{org_token}/v/{qr_token}. Fahrzeuge ohne QR-Token erhalten
+    keinen Link (Spalte bleibt leer).
+    """
+    try:
+        import openpyxl
+        from openpyxl.styles import Alignment, Font, PatternFill
+    except ImportError:
+        raise RuntimeError("openpyxl ist nicht installiert. `pip install openpyxl` ausführen.")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Fahrzeuge"
+
+    HEADER_FILL = PatternFill("solid", fgColor="2D2D2D")
+    HEADER_FONT = Font(bold=True, color="FFFFFF")
+
+    headers = ["Fahrzeug", "Name", "Kennzeichen", "Typ", "Fahrtenbuch-Link"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.fill = HEADER_FILL
+        cell.font = HEADER_FONT
+        cell.alignment = Alignment(horizontal="center")
+    ws.row_dimensions[1].height = 18
+
+    base = (base_url or "").rstrip("/")
+    for fz in fahrzeuge:
+        link = f"{base}/f/{org_token}/v/{fz.qr_token}" if fz.qr_token else ""
+        row_idx = ws.max_row + 1
+        ws.append([fz.code or "", fz.name or "", fz.kennzeichen or "", fz.type or "", link])
+        if link:
+            cell = ws.cell(row=row_idx, column=5)
+            cell.hyperlink = link
+            cell.style = "Hyperlink"
+
+    for i, w in enumerate([16, 26, 14, 20, 70], 1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

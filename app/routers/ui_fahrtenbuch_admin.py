@@ -16,7 +16,7 @@ from app.db import get_db
 from app.core.tenant import set_tenant_context
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
 from app.models.master import FireDept, OrgSettings, VehicleMaster
-from app.services.excel_export_service import exportiere_fahrten
+from app.services.excel_export_service import exportiere_fahrten, exportiere_fahrzeug_links
 from app.services.fahrtenbuch_service import (
     korrigiere_fahrt,
     stammdaten_korrektur_zaehler,
@@ -711,9 +711,55 @@ async def fahrzeuge_fahrtenbuch(request: Request, db: Session = Depends(get_db))
         .order_by(VehicleMaster.display_order)
         .all()
     )
+    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first()
     return templates.TemplateResponse(request, "fahrtenbuch/admin/fahrzeuge.html", {
         "user": user, "fahrzeuge": fahrzeuge,
+        "org_token": org_s.fahrtenbuch_token if org_s else None,
+        "base_url": str(request.base_url).rstrip("/"),
         "saved": request.query_params.get("saved"),
         "zaehler_saved": request.query_params.get("zaehler_saved"),
         **_sysadmin_org_context(request, user, org, db),
     })
+
+
+@router.post("/admin/fahrtenbuch/fahrzeuge/export-links")
+async def fahrzeuge_export_links(request: Request, db: Session = Depends(get_db)):
+    """Excel-Export aller (aktiven) Fahrzeuge inkl. direktem Fahrtenbuch-Link.
+
+    Fehlende QR-Tokens werden erzeugt, damit jedes Fahrzeug einen Link erhält.
+    """
+    user, org_id, org = _fb_admin(request, db)
+    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first()
+    if not org_s or not org_s.fahrtenbuch_token:
+        return RedirectResponse(f"/admin/fahrtenbuch/fahrzeuge{_redirect_q(request, qr_kein_org_token=1)}", status_code=303)
+    fahrzeuge = (
+        db.query(VehicleMaster)
+        .filter(
+            VehicleMaster.dept_id == org_id,
+            VehicleMaster.deleted == False,  # noqa: E712
+            VehicleMaster.is_adhoc == False,  # noqa: E712
+            VehicleMaster.is_external == False,  # noqa: E712
+        )
+        .execution_options(include_all_tenants=True)
+        .order_by(VehicleMaster.display_order)
+        .all()
+    )
+    # Fehlende QR-Tokens erzeugen, damit der Export für jedes Fahrzeug einen Link enthält.
+    changed = False
+    for fz in fahrzeuge:
+        if not fz.qr_token:
+            fz.qr_token = secrets.token_urlsafe(24)
+            changed = True
+    if changed:
+        write_audit(db, action="fahrtenbuch_qr_tokens_bulk", org_id=org_id, user_id=user.id)
+        db.commit()
+
+    base_url = str(request.base_url).rstrip("/")
+    xlsx_bytes = exportiere_fahrzeug_links(fahrzeuge, org_s.fahrtenbuch_token, base_url)
+    org_name = (org.name if org else str(org_id)).replace(" ", "_")
+    dateiname = f"Fahrzeuge_Links_{org_name}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{dateiname}\""},
+    )
