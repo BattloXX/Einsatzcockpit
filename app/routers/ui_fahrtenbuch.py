@@ -213,7 +213,7 @@ async def hx_fahrzeug_felder(
 
 @router.get("/fahrtenbuch/hx/zweck-felder", response_class=HTMLResponse)
 async def hx_zweck_felder(
-    request: Request, zweck_id: int = 0, db: Session = Depends(get_db)
+    request: Request, zweck_id: int = 0, fahrzeug_id: int = 0, db: Session = Depends(get_db)
 ):
     user = _current_user(request)
     token_org: OrgSettings | None = getattr(request.state, "fahrtenbuch_org", None)
@@ -224,6 +224,16 @@ async def hx_zweck_felder(
     org_id = user.org_id if user else (token_org.org_id if token_org else None)
 
     zweck = db.query(Fahrtzweck).filter(Fahrtzweck.id == zweck_id).first() if zweck_id else None
+
+    # Fahrzeug laden, damit das optionale Einsatzleiter-Feld auch bei einer
+    # fahrzeugseitig aktivierten Abfrage (VehicleMaster.einsatzleiter_abfrage) erscheint.
+    fahrzeug = (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.id == fahrzeug_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+        if fahrzeug_id else None
+    )
 
     incidents = []
     if zweck and zweck.kategorie == FahrtKategorie.einsatz and org_id:
@@ -256,8 +266,10 @@ async def hx_zweck_felder(
 
     return templates.TemplateResponse(request, "fahrtenbuch/_zweck_felder.html", {
         "zweck": zweck,
+        "fahrzeug": fahrzeug,
         "incidents": incidents,
         "gk_members": gk_members,
+        "form_daten": {},
     })
 
 
@@ -420,6 +432,7 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
         "zielort_id": _int("zielort_id"),
         "zielort_freitext": _str("zielort_freitext"),
         "zweck_id": _int("zweck_id"),
+        "zweck_freitext": _str("zweck_freitext"),
         "incident_id": _int("incident_id"),
         "ausbildner_member_id": _int("ausbildner_member_id"),
         "ausbildner_name": _str("ausbildner_name"),

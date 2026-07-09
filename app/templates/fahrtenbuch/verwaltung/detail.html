@@ -157,6 +157,7 @@
               <span class="fd-status {% if fahrt.fahrttyp.value == 'einsatz' %}fd-status--aktiv{% else %}fd-status--gray{% endif %}">{{ fahrt.fahrttyp.value|capitalize }}</span>
             </div>
             <div style="font-size:.85rem;margin-top:.3rem;">{{ fahrt.zweck.name if fahrt.zweck else '—' }}</div>
+            {% if fahrt.zweck_freitext %}<div style="font-size:.85rem;margin-top:.15rem;color:var(--text-muted);">{{ fahrt.zweck_freitext }}</div>{% endif %}
           </div>
         </div>
         {% if fahrt.seilwinde_wartung is not none %}

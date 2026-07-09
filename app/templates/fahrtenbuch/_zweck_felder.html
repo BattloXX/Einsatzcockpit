@@ -15,9 +15,11 @@
            hx-trigger="input changed delay:200ms"
            hx-include="[name='ausbildner_name']"
            hx-vals='js:{t:window.FAB_TOKEN||""}'
+           :class="warn ? 'fb-input-warn' : ''"
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="ausbildner-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>
+  <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
   <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
 </div>
 {% endif %}
@@ -36,10 +38,45 @@
            hx-trigger="input changed delay:200ms"
            hx-include="[name='gruppenkommandant_name']"
            hx-vals='js:{t:window.FAB_TOKEN||""}'
+           :class="warn ? 'fb-input-warn' : ''"
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="gk-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>
+  <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
   <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
+</div>
+{% endif %}
+
+{% if zweck.optional_einsatzleiter or (fahrzeug and fahrzeug.einsatzleiter_abfrage) %}
+<div class="form-group" x-data="maschinistAutocomplete('einsatzleiter', '{{ form_daten.get('einsatzleiter_name', '') if form_daten else '' }}', '{{ form_daten.get('einsatzleiter_member_id', '') if form_daten else '' }}')">
+  <label class="form-label" for="einsatzleiter_name">Einsatzleiter (optional)</label>
+  <input type="hidden" name="einsatzleiter_member_id" :value="memberId">
+  <div style="position:relative;">
+    <input type="text" name="einsatzleiter_name" id="einsatzleiter_name"
+           class="form-control form-control--lg"
+           placeholder="Name tippen (optional)…" autocomplete="new-password"
+           x-model="query"
+           hx-get="/fahrtenbuch/hx/maschinist"
+           hx-target="#einsatzleiter-suggestions"
+           hx-trigger="input changed delay:200ms"
+           hx-include="[name='einsatzleiter_name']"
+           hx-vals='js:{t:window.FAB_TOKEN||""}'
+           :class="warn ? 'fb-input-warn' : ''"
+           @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
+    <div id="einsatzleiter-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+  </div>
+  <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
+  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen. Kann leer bleiben.</p>
+</div>
+{% endif %}
+
+{% if zweck.kategorie.value == 'sonstige' %}
+<div class="form-group">
+  <label class="form-label" for="zweck_freitext">Zweck (Freitext)</label>
+  <input type="text" name="zweck_freitext" id="zweck_freitext" class="form-control form-control--lg"
+         maxlength="200" placeholder="Zweck der Fahrt beschreiben…"
+         value="{{ form_daten.get('zweck_freitext', '') if form_daten else '' }}">
+  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Kurze Beschreibung, wofür die Fahrt war.</p>
 </div>
 {% endif %}
 

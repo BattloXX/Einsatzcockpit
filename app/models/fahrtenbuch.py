@@ -58,6 +58,8 @@ class Fahrtzweck(TenantScoped, Base):
     )
     verlangt_ausbildner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     verlangt_gruppenkommandant: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Optionale Felder (kein Pflichtfeld, blendet nur die Abfrage ein)
+    optional_einsatzleiter: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     aktiv: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
@@ -140,6 +142,8 @@ class Fahrt(Base):
     fahrttyp: Mapped[FahrtKategorie] = mapped_column(
         SAEnum(FahrtKategorie, name="fahrt_kategorie_enum"), nullable=False
     )
+    # Freitext-Zweck (nur bei Zweck-Kategorie "sonstige" erfasst)
+    zweck_freitext: Mapped[str | None] = mapped_column(String(200), nullable=True)
     incident_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True
     )

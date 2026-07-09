@@ -43,6 +43,9 @@
 .fab-subcard{border:1px solid var(--border);border-radius:var(--radius-md);padding:1rem;margin-top:.25rem;background:rgba(255,255,255,.02);}
 .fab-subcard__title{font-weight:700;font-size:.9rem;margin:0 0 .85rem;}
 
+.fb-input-warn{border-color:#f59e0b !important;background:rgba(245,158,11,.08) !important;}
+.fb-name-warn{font-size:.8rem;color:#f59e0b;margin:.35rem 0 0;font-weight:600;}
+
 .fab-now-row{display:flex;gap:.5rem;align-items:stretch;}
 .fab-now-row .form-control{flex:1;}
 .fab-now-btn{flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700;letter-spacing:.04em;}
@@ -135,7 +138,7 @@
                   hx-target="#fahrzeug-felder"
                   hx-trigger="change"
                   hx-include="[name='fahrzeug_id']"
-                  @change="fahrzeugId = $event.target.value">
+                  @change="fahrzeugId = $event.target.value; $nextTick(() => { const z = document.getElementById('zweck_id'); if (z && z.value) htmx.trigger(z, 'change'); })">
             <option value="">— Fahrzeug wählen —</option>
             {% for fz in fahrzeuge %}
             <option value="{{ fz.id }}"
@@ -183,7 +186,7 @@
                   hx-get="/fahrtenbuch/hx/zweck-felder"
                   hx-target="#zweck-felder"
                   hx-trigger="change"
-                  hx-include="[name='zweck_id'],[name='t']"
+                  hx-include="[name='zweck_id'],[name='fahrzeug_id'],[name='t']"
                   {% if form_daten.get('zweck_id') %}
                   x-init="$nextTick(() => $el.dispatchEvent(new Event('change')))"
                   {% endif %}>
@@ -312,19 +315,30 @@ function maschinistAutocomplete(prefix, initialName, initialId) {
   return {
     query: initialName || '',
     memberId: initialId || '',
+    // Name, der zum aktuell ausgewaehlten Member gehoert – weicht die Eingabe davon ab,
+    // gilt sie als "nicht in der Mannschaftsliste".
+    selectedName: initialId ? (initialName || '') : '',
     open: false,
+    // Gelbe Warnung: es steht ein Name da, der zu KEINEM Mitglied aus der Liste passt.
+    // Erst nach dem Verlassen des Feldes (open=false) anzeigen, nicht schon beim Tippen.
+    get warn() {
+      return this.query.trim().length > 0 && !this.memberId && !this.open;
+    },
     init() {
       this.$el.addEventListener('member-selected', (e) => {
         this.memberId = e.detail.id;
+        this.selectedName = e.detail.name;
         this.query = e.detail.name;
         this.open = false;
       });
       this.$watch('query', (val) => {
-        if (!val) this.memberId = '';
+        // Sobald der Text vom ausgewaehlten Namen abweicht, ist die Member-Zuordnung ungueltig.
+        if (!val || val !== this.selectedName) this.memberId = '';
       });
     },
     select(id, name) {
       this.memberId = id;
+      this.selectedName = name;
       this.query = name;
       this.open = false;
     }

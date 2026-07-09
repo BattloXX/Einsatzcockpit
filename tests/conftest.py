@@ -51,6 +51,12 @@ def setup_db():
 
 @pytest.fixture
 def client():
+    # Rate-Limit-Zustand je Test zurücksetzen: der slowapi-Limiter nutzt In-Memory-Storage,
+    # das sonst über die gesamte Session akkumuliert – viele Logins in einem Test-File
+    # könnten das /login-Limit für nachfolgende Tests aufbrauchen (Cross-Test-Pollution).
+    from app.core.rate_limit import limiter
+    if limiter is not None:
+        limiter.reset()
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as c:
         yield c

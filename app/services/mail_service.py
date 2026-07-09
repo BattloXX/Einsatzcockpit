@@ -172,6 +172,28 @@ def _looks_like_email(value: str) -> bool:
     return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value))
 
 
+def normalize_email_list(raw: str | None) -> str:
+    """Zerlegt eine Eingabe mit mehreren E-Mail-Adressen (getrennt durch Komma,
+    Semikolon, Leerzeichen oder Zeilenumbruch) in eine bereinigte, komma-separierte
+    Liste. Ungültige und doppelte Adressen werden verworfen; das Ergebnis ist
+    header-sicher (jede Adresse hat _looks_like_email bestanden) und kann direkt
+    als To-Header verwendet werden. Gibt "" zurück, wenn keine gültige Adresse bleibt.
+    """
+    if not raw:
+        return ""
+    ergebnis: list[str] = []
+    gesehen: set[str] = set()
+    for teil in re.split(r"[,;\s]+", raw.strip()):
+        teil = teil.strip()
+        if not teil or not _looks_like_email(teil):
+            continue
+        if teil.lower() in gesehen:
+            continue
+        gesehen.add(teil.lower())
+        ergebnis.append(teil)
+    return ", ".join(ergebnis)
+
+
 async def send_contact_message(*, name: str, reply_email: str, message: str, db=None) -> None:
     """Versendet eine Kontaktanfrage von der öffentlichen Startseite an den Betreiber.
 

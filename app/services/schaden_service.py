@@ -57,6 +57,10 @@ async def melde_schaden(fahrt: Fahrt, db: Session, base_url: str = "") -> None:
 
     org = db.query(OrgSettings).filter(OrgSettings.org_id == fahrt.org_id).first()
     mail_addr, teams_url = _empfaenger(fahrzeug, org)
+    # Mehrere Empfänger möglich: auf eine bereinigte, komma-separierte Liste normalisieren
+    # (deckt auch Alt-Werte mit Semikolon/Leerzeichen ab). Leer -> nicht senden.
+    from app.services.mail_service import normalize_email_list
+    mail_addr = normalize_email_list(mail_addr) or None
 
     betriebsfaehig_text = "Ja" if fahrt.schaden_betriebsfaehig else "Nein"
     betreff = (

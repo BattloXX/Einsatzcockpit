@@ -42,7 +42,7 @@ def exportiere_fahrten(fahrten: list[Fahrt], org=None) -> bytes:
         "Maschinist", "2. Maschinist",
         "km-Stand", "gefahrene km", "BH-Stand", "BH-Delta",
         "Seilwinde-BH", "Seilwinde-Delta",
-        "Zielort", "Zweck", "Fahrttyp", "Einsatz-Nr",
+        "Zielort", "Zweck", "Zweck-Freitext", "Fahrttyp", "Einsatz-Nr",
         "Ausbildner", "Gruppenkommandant", "Einsatzleiter",
         "Schaden", "betriebsfähig", "Schadenbeschreibung",
         "statistikrelevant", "Status",
@@ -73,6 +73,7 @@ def exportiere_fahrten(fahrten: list[Fahrt], org=None) -> bytes:
             str(f.seilwinde_bh_delta) if f.seilwinde_bh_delta is not None else "",
             zielort_text,
             zweck.name if zweck else "",
+            f.zweck_freitext or "",
             f.fahrttyp.value if f.fahrttyp else "",
             str(f.incident_id) if f.incident_id else "",
             f.ausbildner_name or "",
@@ -90,7 +91,7 @@ def exportiere_fahrten(fahrten: list[Fahrt], org=None) -> bytes:
         ws.append(row)
 
     # Spaltenbreiten
-    COL_WIDTHS = [16, 12, 12, 22, 22, 10, 12, 10, 10, 12, 14, 22, 22, 10, 12,
+    COL_WIDTHS = [16, 12, 12, 22, 22, 10, 12, 10, 10, 12, 14, 22, 22, 24, 10, 12,
                   22, 22, 22, 8, 12, 30, 14, 12, 12, 22, 30]
     for i, w in enumerate(COL_WIDTHS, 1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w

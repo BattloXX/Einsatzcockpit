@@ -107,7 +107,8 @@
           </div>
           <div class="form-group">
             <label class="form-label">Schaden-Mail Override</label>
-            <input type="email" name="schaden_mail_override" value="{{ fz.schaden_mail_override or '' }}" class="form-control" placeholder="geraetewart@ff.at">
+            <input type="text" name="schaden_mail_override" value="{{ fz.schaden_mail_override or '' }}" class="form-control" placeholder="geraetewart@ff.at, kdt@ff.at">
+            <small class="form-hint">Mehrere Adressen durch Komma getrennt.</small>
           </div>
           <div class="form-group">
             <label class="form-label">Teams-Webhook Override</label>

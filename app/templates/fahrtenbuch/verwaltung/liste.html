@@ -13,6 +13,12 @@
 
 .fb-count{font-size:.78rem;color:var(--text-muted);margin-bottom:.75rem;font-family:'JetBrains Mono',monospace;}
 
+.fb-bulkbar{display:flex;align-items:center;gap:.85rem;flex-wrap:wrap;padding:.6rem .85rem;margin-bottom:.75rem;background:var(--surface-mid);border:1px solid var(--border);border-radius:var(--radius-md);}
+.fb-bulkbar label{display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.82rem;}
+.fb-bulkbar__count{font-size:.78rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;}
+.fb-bulkbar__spacer{flex:1;}
+.fb-check{width:18px;height:18px;cursor:pointer;flex-shrink:0;}
+
 .fb-card{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-card);}
 .fb-table{width:100%;border-collapse:collapse;}
 .fb-table th{background:var(--surface-mid);color:var(--text-muted);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;text-align:left;font-family:'JetBrains Mono',monospace;white-space:nowrap;}
@@ -100,16 +106,33 @@
     </div>
   </form>
 
+  {% if request.query_params.get('geloescht') %}
+  <div class="alert alert--success" style="margin-bottom:1rem;">{{ request.query_params.get('geloescht') }} Fahrt(en) endgültig gelöscht.</div>
+  {% endif %}
+
   <p class="fb-count">
     {{ gesamt }} Eintrag{% if gesamt != 1 %}e{% endif %} gefunden
     {% if gesamt > pro_seite %} · Seite {{ seite }}{% endif %}
   </p>
+
+  {% if is_sysadmin %}
+  <form id="fb-bulk-form" method="post" action="/verwaltung/fahrten/loeschen" onsubmit="return fbConfirmDelete()">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="zurueck" value="{{ request.query_string.decode() }}">
+    <div class="fb-bulkbar">
+      <label><input type="checkbox" id="fb-check-all" style="width:18px;height:18px;cursor:pointer;"> Alle auf dieser Seite</label>
+      <span class="fb-bulkbar__count" id="fb-check-count">0 markiert</span>
+      <span class="fb-bulkbar__spacer"></span>
+      <button type="submit" class="btn btn--danger btn--sm" id="fb-delete-btn" disabled>&#128465; Markierte löschen</button>
+    </div>
+  {% endif %}
 
   {# Desktop-Tabelle #}
   <div class="fb-card fb-table-wrap" style="overflow-x:auto;">
     <table class="fb-table">
       <thead>
         <tr>
+          {% if is_sysadmin %}<th style="width:36px;"></th>{% endif %}
           <th>Datum/Zeit</th>
           <th>Fahrzeug</th>
           <th>Maschinist</th>
@@ -123,6 +146,7 @@
       <tbody>
         {% for f in fahrten %}
         <tr class="{% if f.status.value != 'aktiv' %}fb-row--inactive{% elif f.schaden_vorhanden %}fb-row--alert{% endif %}">
+          {% if is_sysadmin %}<td><input type="checkbox" class="fb-check" name="ids" value="{{ f.id }}" form="fb-bulk-form"></td>{% endif %}
           <td style="font-family:'JetBrains Mono',monospace;">{{ f.zeitpunkt|local_datetime }}</td>
           <td>
             <span class="fb-badge {% if f.fahrttyp.value == 'einsatz' %}fb-badge--red{% elif f.fahrttyp.value == 'uebung' %}fb-badge--blue{% else %}fb-badge--gray{% endif %}">
@@ -148,7 +172,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Keine Fahrten gefunden</td></tr>
+        <tr><td colspan="{% if is_sysadmin %}9{% else %}8{% endif %}" style="text-align:center;color:var(--text-muted);padding:2rem;">Keine Fahrten gefunden</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -159,7 +183,10 @@
     {% for f in fahrten %}
     <div class="fb-mcard" style="--fb-accent:{% if f.fahrttyp.value == 'einsatz' %}var(--red){% elif f.fahrttyp.value == 'uebung' %}var(--org-task){% else %}var(--text-muted){% endif %};{% if f.status.value != 'aktiv' %}opacity:.6;{% endif %}">
       <div class="fb-mcard__top">
-        <span class="fb-mcard__vehicle">{{ f.fahrzeug.code if f.fahrzeug else '—' }}</span>
+        <span class="fb-mcard__vehicle" style="display:flex;align-items:center;gap:.5rem;">
+          {% if is_sysadmin %}<input type="checkbox" class="fb-check" name="ids" value="{{ f.id }}" form="fb-bulk-form">{% endif %}
+          {{ f.fahrzeug.code if f.fahrzeug else '—' }}
+        </span>
         <span class="fb-mcard__time">{{ f.zeitpunkt|local_datetime }}</span>
       </div>
       <div class="fb-mcard__grid">
@@ -194,6 +221,8 @@
     {% endfor %}
   </div>
 
+  {% if is_sysadmin %}</form>{% endif %}
+
   {# Paginierung #}
   {% if gesamt > pro_seite %}
   <div style="display:flex;gap:.5rem;margin-top:1rem;justify-content:center;">
@@ -207,4 +236,42 @@
   </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if is_sysadmin %}
+<script>
+// Sysadmin-Bulk-Löschen: nur die aktuell sichtbaren Checkboxen (Desktop ODER Mobile)
+// zählen/markieren, damit "Alle" und der Zähler zur sichtbaren Ansicht passen.
+function fbVisibleChecks() {
+  return Array.prototype.slice.call(document.querySelectorAll('.fb-check'))
+    .filter(function(c) { return c.offsetParent !== null; });
+}
+function fbConfirmDelete() {
+  var n = document.querySelectorAll('.fb-check:checked').length;
+  if (n === 0) return false;
+  return confirm('Wirklich ' + n + ' Fahrt(en) unwiderruflich loeschen? Dies kann nicht rueckgaengig gemacht werden.');
+}
+(function() {
+  var all = document.getElementById('fb-check-all');
+  var btn = document.getElementById('fb-delete-btn');
+  var cnt = document.getElementById('fb-check-count');
+  function update() {
+    var n = document.querySelectorAll('.fb-check:checked').length;
+    if (cnt) cnt.textContent = n + ' markiert';
+    if (btn) btn.disabled = (n === 0);
+  }
+  if (all) {
+    all.addEventListener('change', function() {
+      fbVisibleChecks().forEach(function(c) { c.checked = all.checked; });
+      update();
+    });
+  }
+  document.addEventListener('change', function(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('fb-check')) update();
+  });
+  update();
+})();
+</script>
+{% endif %}
 {% endblock %}
