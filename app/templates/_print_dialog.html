@@ -9,7 +9,12 @@
      gedruckt — exakt wie bisher (localFn > localUrl > gemeinsame Server-PDF).
    localFn/localUrl erhalten den bestehenden lokalen Druck der jeweiligen Seite
    (z. B. Kartenansicht der Einsatzinfo, Objektblatt inkl. Anhang). #}
-<div id="ecpgPrintDialog" class="ecpg-modal" style="display:none">
+{# Natives <dialog> statt <div>: Stelle-/Meldung-Detail (siteDetailModal etc.) sind
+   selbst <dialog>-Elemente und rendern im Browser-"Top Layer" - ein normales
+   position:fixed-Div (auch mit hohem z-index) landet darunter und ist dann
+   unsichtbar/nicht erreichbar. Als eigenes <dialog> per showModal() geoeffnet,
+   reiht es sich korrekt ueber ein bereits offenes Dialog ein. #}
+<dialog id="ecpgPrintDialog" class="ecpg-modal">
   <div class="ecpg-modal__box">
     <h3 id="ecpgPrintTitle">Drucken</h3>
 
@@ -65,10 +70,12 @@
       </div>
     </div>
   </div>
-</div>
+</dialog>
 <style>
+  dialog.ecpg-modal{border:none;padding:0;max-width:none;max-height:none;background:transparent}
   .ecpg-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;
     align-items:center;justify-content:center;z-index:1200;backdrop-filter:blur(2px)}
+  .ecpg-modal:not([open]){display:none}
   .ecpg-modal__box{background:var(--surface-mid,#152031);color:var(--text,#d8e3fb);
     border:1px solid var(--border,#424754);border-radius:12px;
     padding:20px;max-width:440px;width:92%;box-shadow:0 18px 50px rgba(0,0,0,.55)}
@@ -174,7 +181,8 @@
     let target = 'station';
     try{ target = localStorage.getItem('ec_print_target') || 'station'; }catch(e){}
     showTarget(target);
-    document.getElementById('ecpgPrintDialog').style.display='flex';
+    const dlg = document.getElementById('ecpgPrintDialog');
+    if(!dlg.open){ dlg.showModal(); }
   }
 
   // Einheitlicher Einstieg.
@@ -196,7 +204,8 @@
   window.ecpgOpenPrintDialog = window.ecpgPrint;
 
   window.ecpgClosePrintDialog = function(){
-    document.getElementById('ecpgPrintDialog').style.display='none';
+    const dlg = document.getElementById('ecpgPrintDialog');
+    if(dlg.open){ dlg.close(); }
   };
 
   document.getElementById('ecpgTgtStation').addEventListener('click', ()=>showTarget('station'));
