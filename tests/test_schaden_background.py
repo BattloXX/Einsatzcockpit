@@ -81,3 +81,46 @@ async def test_melde_schaden_background_swallows_errors(fahrt_mit_schaden):
 @pytest.mark.asyncio
 async def test_melde_schaden_background_unknown_fahrt_id_noop():
     await schaden_service.melde_schaden_background(-1, base_url="http://test")
+
+
+# ── Mehrere Mail-Empfänger ────────────────────────────────────────────────────
+
+def test_normalize_email_list_trennt_und_bereinigt():
+    from app.services.mail_service import normalize_email_list
+    # Komma, Semikolon, Leerzeichen und Zeilenumbruch werden als Trenner akzeptiert
+    assert normalize_email_list("a@x.at; b@y.at  c@z.at") == "a@x.at, b@y.at, c@z.at"
+    assert normalize_email_list("a@x.at,\nb@y.at") == "a@x.at, b@y.at"
+
+
+def test_normalize_email_list_verwirft_ungueltige_und_duplikate():
+    from app.services.mail_service import normalize_email_list
+    assert normalize_email_list("gut@x.at, kaputt, a@x.at, GUT@x.at") == "gut@x.at, a@x.at"
+    assert normalize_email_list("") == ""
+    assert normalize_email_list(None) == ""
+    assert normalize_email_list("nur-müll ; ,, ") == ""
+
+
+@pytest.mark.asyncio
+async def test_melde_schaden_sendet_an_mehrere_adressen(db_session, fahrt_mit_schaden):
+    """Ein Fahrzeug mit mehreren (gemischt getrennten) Schaden-Adressen erzeugt einen
+    komma-separierten To-Header, sodass alle Empfänger die Mail erhalten."""
+    from app.models.fahrtenbuch import Fahrt
+    fahrt = db_session.get(Fahrt, fahrt_mit_schaden)
+    fz = (
+        db_session.query(VehicleMaster)
+        .filter(VehicleMaster.id == fahrt.fahrzeug_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    fz.schaden_mail_override = "a@x.at; b@y.at  c@z.at"
+    db_session.flush()
+
+    sent: dict = {}
+
+    async def fake_send(msg, cfg):
+        sent["to"] = msg["To"]
+
+    with patch("app.services.mail_service._send", side_effect=fake_send):
+        await schaden_service.melde_schaden(fahrt, db_session, base_url="http://test")
+
+    assert sent.get("to") == "a@x.at, b@y.at, c@z.at"

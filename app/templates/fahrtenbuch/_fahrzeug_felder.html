@@ -14,10 +14,13 @@
            hx-trigger="input changed delay:200ms"
            hx-include="[name='maschinist_name']"
            hx-vals='js:{t:window.FAB_TOKEN||""}'
+           :class="warn ? 'fb-input-warn' : ''"
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="maschinist-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>
+  <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
   <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
+  <p style="font-size:.78rem;color:var(--red-light);margin:.35rem 0 0;font-weight:600;">&#9888; Nur einen Maschinisten eintragen. Sind mehrere Maschinisten gefahren, bitte je Maschinist eine eigene Fahrt anlegen – sonst kann die Fahrt nicht gewertet werden.</p>
 </div>
 
 {% if fahrzeug.erfasst_km %}
@@ -99,31 +102,12 @@
            hx-trigger="input changed delay:200ms"
            hx-include="[name='maschinist2_name']"
            hx-vals='js:{t:window.FAB_TOKEN||""}'
+           :class="warn ? 'fb-input-warn' : ''"
            @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
     <div id="maschinist2-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
   </div>
+  <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
   <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
-</div>
-{% endif %}
-
-{% if fahrzeug.einsatzleiter_abfrage %}
-<div class="form-group" x-data="maschinistAutocomplete('einsatzleiter', '{{ form_daten.get('einsatzleiter_name', '') }}', '{{ form_daten.get('einsatzleiter_member_id', '') }}')">
-  <label class="form-label" for="einsatzleiter_name">Einsatzleiter (optional)</label>
-  <input type="hidden" name="einsatzleiter_member_id" :value="memberId">
-  <div style="position:relative;">
-    <input type="text" name="einsatzleiter_name" id="einsatzleiter_name"
-           class="form-control form-control--lg"
-           placeholder="Name tippen (optional)…" autocomplete="new-password"
-           x-model="query"
-           hx-get="/fahrtenbuch/hx/maschinist"
-           hx-target="#einsatzleiter-suggestions"
-           hx-trigger="input changed delay:200ms"
-           hx-include="[name='einsatzleiter_name']"
-           hx-vals='js:{t:window.FAB_TOKEN||""}'
-           @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
-    <div id="einsatzleiter-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
-  </div>
-  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen. Kann leer bleiben.</p>
 </div>
 {% endif %}
 
@@ -172,9 +156,11 @@
              hx-trigger="input changed delay:200ms"
              hx-include="[name='seilwinde_bediener_name']"
              hx-vals='js:{t:window.FAB_TOKEN||""}'
+             :class="warn ? 'fb-input-warn' : ''"
              @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
       <div id="seilwinde-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
     </div>
+    <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
     <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
   </div>
 

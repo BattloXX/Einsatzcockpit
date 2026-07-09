@@ -95,6 +95,13 @@ def same_org_or_system_admin(user, target_org_id: int) -> bool:
     return user.org_id == target_org_id
 
 
+def is_system_admin(user) -> bool:
+    """True if the user has the system_admin role."""
+    if user is None:
+        return False
+    return "system_admin" in {r.code for r in user.roles}
+
+
 def is_fahrtenbuch_admin(user) -> bool:
     """True if user can manage Fahrtenbuch (org_admin, fahrtenbuch_admin, or system_admin)."""
     return has_role(user, "fahrtenbuch_admin")

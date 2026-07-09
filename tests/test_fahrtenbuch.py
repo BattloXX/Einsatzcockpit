@@ -279,6 +279,172 @@ def test_verwaltung_ohne_login(client: TestClient):
     assert response.status_code in (302, 401, 403)
 
 
+def test_zweck_freitext_nur_bei_sonstige(db_session, org, fahrzeug, zweck):
+    zweck.kategorie = FahrtKategorie.sonstige
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    daten["zweck_freitext"] = "Fahrzeugwäsche"
+    f = erstelle_fahrt(daten, db_session)
+    assert f.zweck_freitext == "Fahrzeugwäsche"
+
+
+def test_zweck_freitext_ignoriert_bei_anderer_kategorie(db_session, org, fahrzeug, zweck):
+    zweck.kategorie = FahrtKategorie.uebung
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    daten["zweck_freitext"] = "sollte ignoriert werden"
+    f = erstelle_fahrt(daten, db_session)
+    assert f.zweck_freitext is None
+
+
+def _login(client: TestClient, db_session, org, username: str, role_code: str = "readonly"):
+    from app.core.security import hash_password
+    user = User(
+        username=username, password_hash=hash_password("Test1234!"),
+        display_name=username, org_id=org.id, active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    role = db_session.query(Role).filter(Role.code == role_code).first()
+    if not role:
+        role = Role(code=role_code, label=role_code)
+        db_session.add(role)
+        db_session.flush()
+    db_session.add(UserRole(user_id=user.id, role_id=role.id))
+    db_session.commit()
+    client.get("/login")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post("/login", data={"username": username, "password": "Test1234!", "_csrf": csrf},
+                    follow_redirects=False)
+    assert r.status_code == 302
+    return user
+
+
+def test_zweck_felder_zeigt_einsatzleiter_bei_zweck_flag(client: TestClient, db_session, org):
+    """Zweck mit optional_einsatzleiter blendet das (optionale) Einsatzleiter-Feld ein."""
+    _login(client, db_session, org, "el_zweck_tester")
+    z = Fahrtzweck(org_id=org.id, name="EL-Zweck", kategorie=FahrtKategorie.einsatz,
+                   optional_einsatzleiter=True)
+    db_session.add(z)
+    db_session.commit()
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
+    assert r.status_code == 200
+    assert 'name="einsatzleiter_name"' in r.text
+
+
+def test_zweck_felder_zeigt_einsatzleiter_bei_fahrzeug_flag(client: TestClient, db_session, org, fahrzeug):
+    """Auch ohne Zweck-Flag erscheint das Feld, wenn das Fahrzeug es aktiviert hat."""
+    _login(client, db_session, org, "el_fahrzeug_tester")
+    fahrzeug.einsatzleiter_abfrage = True
+    z = Fahrtzweck(org_id=org.id, name="Kein-EL-Zweck", kategorie=FahrtKategorie.uebung,
+                   optional_einsatzleiter=False)
+    db_session.add(z)
+    db_session.commit()
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}&fahrzeug_id={fahrzeug.id}")
+    assert r.status_code == 200
+    assert 'name="einsatzleiter_name"' in r.text
+
+
+def test_zweck_felder_sonstige_zeigt_freitext(client: TestClient, db_session, org):
+    """Zweck-Kategorie 'sonstige' blendet das Freitext-Zweck-Feld ein."""
+    _login(client, db_session, org, "zf_sonstige_tester")
+    z = Fahrtzweck(org_id=org.id, name="Sonstiges", kategorie=FahrtKategorie.sonstige)
+    db_session.add(z)
+    db_session.commit()
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
+    assert r.status_code == 200
+    assert 'name="zweck_freitext"' in r.text
+
+
+def test_zweck_felder_uebung_kein_freitext(client: TestClient, db_session, org):
+    _login(client, db_session, org, "zf_uebung_tester")
+    z = Fahrtzweck(org_id=org.id, name="Übung X", kategorie=FahrtKategorie.uebung)
+    db_session.add(z)
+    db_session.commit()
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
+    assert r.status_code == 200
+    assert 'name="zweck_freitext"' not in r.text
+
+
+def test_zweck_felder_ohne_flags_kein_einsatzleiter(client: TestClient, db_session, org, fahrzeug):
+    """Ohne beide Flags erscheint kein Einsatzleiter-Feld (keine Duplikate/kein Zwang)."""
+    _login(client, db_session, org, "el_kein_tester")
+    fahrzeug.einsatzleiter_abfrage = False
+    z = Fahrtzweck(org_id=org.id, name="Plain-Zweck", kategorie=FahrtKategorie.uebung,
+                   optional_einsatzleiter=False)
+    db_session.add(z)
+    db_session.commit()
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}&fahrzeug_id={fahrzeug.id}")
+    assert r.status_code == 200
+    assert 'name="einsatzleiter_name"' not in r.text
+
+
+# ── Sysadmin-Löschen ──────────────────────────────────────────────────────────
+
+def test_loesche_fahrten_entfernt_und_rechnet_zaehler_neu(db_session, org, fahrzeug, zweck):
+    from app.services.fahrtenbuch_service import loesche_fahrten
+    fahrzeug.km_aktuell = 1000
+    db_session.flush()
+    d1 = _basis_daten(org.id, fahrzeug.id, zweck.id); d1["km_stand_neu"] = 1010
+    f1 = erstelle_fahrt(d1, db_session)
+    d2 = _basis_daten(org.id, fahrzeug.id, zweck.id); d2["km_stand_neu"] = 1030
+    f2 = erstelle_fahrt(d2, db_session)
+    assert fahrzeug.km_aktuell == 1030
+
+    n = loesche_fahrten([f2.id], org.id, user_id=1, db=db_session)
+    assert n == 1
+    assert db_session.query(Fahrt).filter(Fahrt.id == f2.id).execution_options(include_all_tenants=True).first() is None
+    # Zählerstand fällt auf den höchsten verbliebenen aktiven Wert zurück
+    assert fahrzeug.km_aktuell == 1010
+
+
+def test_loesche_fahrten_nur_eigene_org(db_session, org, fahrzeug, zweck):
+    from app.services.fahrtenbuch_service import loesche_fahrten
+    f = erstelle_fahrt(_basis_daten(org.id, fahrzeug.id, zweck.id), db_session)
+    n = loesche_fahrten([f.id], org_id=org.id + 9999, user_id=1, db=db_session)
+    assert n == 0
+    assert db_session.query(Fahrt).filter(Fahrt.id == f.id).execution_options(include_all_tenants=True).first() is not None
+
+
+def test_verwaltung_liste_ohne_loeschen_fuer_fahrtenbuch_admin(client: TestClient, db_session, org):
+    """Fahrtenbuch-Admin sieht kein Bulk-Löschen; Liste rendert fehlerfrei."""
+    _login(client, db_session, org, "el_liste_admin", role_code="fahrtenbuch_admin")
+    r = client.get("/verwaltung/fahrten")
+    assert r.status_code == 200
+    assert "fb-bulk-form" not in r.text
+
+
+def test_verwaltung_liste_zeigt_loeschen_fuer_sysadmin(client: TestClient, db_session, org):
+    """Sysadmin sieht das Bulk-Löschen-Formular in der Verwaltungsliste."""
+    _login(client, db_session, org, "el_liste_sys", role_code="system_admin")
+    r = client.get("/verwaltung/fahrten")
+    assert r.status_code == 200
+    assert "fb-bulk-form" in r.text
+
+
+def test_loeschen_route_verweigert_nicht_sysadmin(client: TestClient, db_session, org):
+    """Fahrtenbuch-Admin (kein Sysadmin) darf nicht löschen → 403."""
+    _login(client, db_session, org, "el_nichtsys", role_code="fahrtenbuch_admin")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post("/verwaltung/fahrten/loeschen",
+                    data={"_csrf": csrf, "ids": "1"}, follow_redirects=False)
+    assert r.status_code == 403
+
+
+def test_loeschen_route_sysadmin_loescht(client: TestClient, db_session, org, fahrzeug, zweck):
+    """Sysadmin kann markierte Fahrten über die Route löschen."""
+    f = erstelle_fahrt(_basis_daten(org.id, fahrzeug.id, zweck.id), db_session)
+    db_session.commit()
+    fahrt_id = f.id
+    _login(client, db_session, org, "el_sysadmin", role_code="system_admin")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post("/verwaltung/fahrten/loeschen",
+                    data={"_csrf": csrf, "ids": str(fahrt_id)}, follow_redirects=False)
+    assert r.status_code == 303
+    assert "geloescht=1" in r.headers.get("location", "")
+    assert db_session.query(Fahrt).filter(Fahrt.id == fahrt_id).execution_options(include_all_tenants=True).first() is None
+
+
 def test_fahrtenbuch_neu_rendert_offline_draft_markup(client: TestClient, db_session, org):
     """PR6 (STAB-2): Formular muss ohne Jinja-/Template-Fehler rendern und den
     Offline-Draft-Hinweis + localStorage-Key enthalten."""

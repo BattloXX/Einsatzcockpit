@@ -103,8 +103,8 @@ class VehicleMaster(Base):
     # Token / QR für vorausgefülltes Formular
     qr_token: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
 
-    # Schaden-Empfänger Override
-    schaden_mail_override: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Schaden-Empfänger Override (eine oder mehrere Adressen, komma-separiert)
+    schaden_mail_override: Mapped[str | None] = mapped_column(String(500), nullable=True)
     schaden_teams_webhook_override: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     # LIS/IPR: stabile ReferenceId des Fahrzeugs im Leitstellensystem, manuell gepflegt
@@ -430,7 +430,7 @@ class OrgSettings(Base):
     # Fahrtenbuch-Konfiguration je Org
     fahrtenbuch_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     fahrtenbuch_token: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
-    schaden_mail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    schaden_mail: Mapped[str | None] = mapped_column(String(500), nullable=True)
     schaden_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     fahrt_doppel_minuten: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
 

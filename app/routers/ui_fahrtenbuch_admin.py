@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.audit import write_audit
-from app.core.permissions import is_fahrtenbuch_admin
+from app.core.permissions import is_fahrtenbuch_admin, is_system_admin, require_system_admin
 from app.core.templating import templates
 from app.core.timezones import local_date_to_utc
 from app.db import get_db
@@ -106,6 +106,7 @@ async def fahrten_liste(
         "pro_seite": pro_seite,
         "fahrzeuge": fahrzeuge,
         "zwecke": zwecke,
+        "is_sysadmin": is_system_admin(user),
         "filter": {
             "von": von, "bis": bis, "fahrzeug_id": fahrzeug_id,
             "fahrttyp": fahrttyp, "zweck_id": zweck_id, "status": status,
@@ -229,6 +230,26 @@ async def fahrt_storno(
     return RedirectResponse(f"/verwaltung/fahrten/{fahrt_id}?storniert=1", status_code=303)
 
 
+@router.post("/verwaltung/fahrten/loeschen")
+async def fahrten_loeschen(request: Request, db: Session = Depends(get_db)):
+    """Endgültiges Löschen markierter Fahrten – nur für Systemadministratoren."""
+    user = require_system_admin(request)
+    from app.services.fahrtenbuch_service import loesche_fahrten
+    form = await request.form()
+    ids: list[int] = []
+    for raw in form.getlist("ids"):
+        try:
+            ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    anzahl = loesche_fahrten(ids, user.org_id, user.id, db)
+    db.commit()
+    zurueck = (form.get("zurueck") or "").lstrip("?")
+    ziel = f"/verwaltung/fahrten?{zurueck}" if zurueck else "/verwaltung/fahrten"
+    sep = "&" if "?" in ziel else "?"
+    return RedirectResponse(f"{ziel}{sep}geloescht={anzahl}", status_code=303)
+
+
 @router.get("/verwaltung/fahrten/{fahrt_id}/korrektur", response_class=HTMLResponse)
 async def fahrt_korrektur_formular(
     request: Request, fahrt_id: int, db: Session = Depends(get_db)
@@ -337,6 +358,7 @@ async def zweck_neu(
     request: Request,
     name: str = Form(...), kategorie: str = Form(...),
     verlangt_ausbildner: bool = Form(False), verlangt_gruppenkommandant: bool = Form(False),
+    optional_einsatzleiter: bool = Form(False),
     sort: int = Form(0),
     db: Session = Depends(get_db),
 ):
@@ -346,6 +368,7 @@ async def zweck_neu(
         name=name, kategorie=FahrtKategorie(kategorie),
         verlangt_ausbildner=verlangt_ausbildner,
         verlangt_gruppenkommandant=verlangt_gruppenkommandant,
+        optional_einsatzleiter=optional_einsatzleiter,
         sort=sort,
     ))
     db.commit()
@@ -357,6 +380,7 @@ async def zweck_bearbeiten(
     request: Request, zweck_id: int,
     name: str = Form(...), kategorie: str = Form(...),
     verlangt_ausbildner: bool = Form(False), verlangt_gruppenkommandant: bool = Form(False),
+    optional_einsatzleiter: bool = Form(False),
     aktiv: bool = Form(True), sort: int = Form(0),
     db: Session = Depends(get_db),
 ):
@@ -368,6 +392,7 @@ async def zweck_bearbeiten(
     z.kategorie = FahrtKategorie(kategorie)
     z.verlangt_ausbildner = verlangt_ausbildner
     z.verlangt_gruppenkommandant = verlangt_gruppenkommandant
+    z.optional_einsatzleiter = optional_einsatzleiter
     z.aktiv = aktiv
     z.sort = sort
     db.commit()
@@ -449,7 +474,8 @@ async def fahrzeug_fahrtenbuch_settings(
     fz.einsatzleiter_abfrage = einsatzleiter_abfrage
     fz.warn_schwelle_km = warn_schwelle_km
     fz.warn_schwelle_bh = Decimal(warn_schwelle_bh)
-    fz.schaden_mail_override = schaden_mail_override.strip() or None
+    from app.services.mail_service import normalize_email_list
+    fz.schaden_mail_override = normalize_email_list(schaden_mail_override) or None
     fz.schaden_teams_webhook_override = schaden_teams_webhook_override.strip() or None
     db.commit()
     return RedirectResponse("/admin/fahrtenbuch/fahrzeuge?saved=1", status_code=303)
@@ -564,7 +590,8 @@ async def fahrtenbuch_einstellungen_speichern(
     org = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     if not org:
         raise HTTPException(status_code=404)
-    org.schaden_mail = schaden_mail.strip() or None
+    from app.services.mail_service import normalize_email_list
+    org.schaden_mail = normalize_email_list(schaden_mail) or None
     org.schaden_teams_webhook_url = schaden_teams_webhook_url.strip() or None
     org.fahrt_doppel_minuten = max(1, fahrt_doppel_minuten)
     write_audit(db, action="fahrtenbuch.einstellungen_gespeichert", org_id=user.org_id, user_id=user.id)

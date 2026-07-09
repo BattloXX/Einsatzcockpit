@@ -15,6 +15,7 @@ from app.core.audit import write_audit
 from app.models.fahrtenbuch import (
     Fahrt,
     FahrtErfassungsweg,
+    FahrtKategorie,
     FahrtStatus,
     Fahrtzweck,
 )
@@ -192,6 +193,7 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
         zielort_freitext=daten.get("zielort_freitext"),
         zweck_id=daten["zweck_id"],
         fahrttyp=zweck.kategorie,
+        zweck_freitext=daten.get("zweck_freitext") if zweck.kategorie == FahrtKategorie.sonstige else None,
         incident_id=daten.get("incident_id"),
         ausbildner_member_id=daten.get("ausbildner_member_id"),
         ausbildner_name=daten.get("ausbildner_name"),
@@ -281,6 +283,51 @@ def korrigiere_fahrt(original: Fahrt, neue_daten: dict[str, Any], user_id: int, 
         payload={"neue_fahrt_id": neue_fahrt.id},
     )
     return neue_fahrt
+
+
+def loesche_fahrten(ids: list[int], org_id: int, user_id: int, db: Session) -> int:
+    """Löscht mehrere Fahrten endgültig (Hard-Delete, nur Sysadmin).
+
+    Rechnet die Zählerstände der betroffenen Fahrzeuge neu (eine gelöschte Fahrt kann
+    der bisherige Höchststand gewesen sein) und schreibt je Fahrt ein Audit.
+    Gibt die Anzahl gelöschter Fahrten zurück. Nur Fahrten der eigenen Org werden gelöscht.
+    """
+    if not ids:
+        return 0
+    fahrten = (
+        db.query(Fahrt)
+        .filter(Fahrt.id.in_(ids), Fahrt.org_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .all()
+    )
+    fahrzeug_ids: set[int] = set()
+    geloescht = 0
+    for fahrt in fahrten:
+        fahrzeug_ids.add(fahrt.fahrzeug_id)
+        write_audit(
+            db,
+            action="fahrt_geloescht",
+            org_id=org_id,
+            user_id=user_id,
+            entity_type="fahrt",
+            entity_id=fahrt.id,
+            payload={"fahrzeug_id": fahrt.fahrzeug_id, "zeitpunkt": fahrt.zeitpunkt},
+        )
+        db.delete(fahrt)
+        geloescht += 1
+    db.flush()
+    # Zählerstände der betroffenen Fahrzeuge auf den höchsten verbliebenen aktiven Wert setzen
+    if fahrzeug_ids:
+        fahrzeuge = (
+            db.query(VehicleMaster)
+            .filter(VehicleMaster.id.in_(fahrzeug_ids))
+            .execution_options(include_all_tenants=True)
+            .all()
+        )
+        for fz in fahrzeuge:
+            for art in ["km", "bh", "seilwinde_bh"]:
+                recompute_zaehlerstand(fz, art, db)
+    return geloescht
 
 
 def stammdaten_korrektur_zaehler(

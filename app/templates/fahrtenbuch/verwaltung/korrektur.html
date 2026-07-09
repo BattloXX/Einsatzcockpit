@@ -25,6 +25,9 @@
 
 .fab-grid{display:flex;flex-direction:column;gap:var(--gutter);}
 
+.fb-input-warn{border-color:#f59e0b !important;background:rgba(245,158,11,.08) !important;}
+.fb-name-warn{font-size:.8rem;color:#f59e0b;margin:.35rem 0 0;font-weight:600;}
+
 .fab-actions{position:sticky;bottom:0;left:0;right:0;padding:1rem 0 max(.5rem, env(safe-area-inset-bottom));margin:.25rem -1rem 0;background:linear-gradient(to top, var(--bg) 60%, transparent);}
 .fab-actions .btn{width:100%;}
 </style>
@@ -77,9 +80,12 @@
                    hx-target="#maschinist-suggestions"
                    hx-trigger="input changed delay:200ms"
                    hx-include="[name='maschinist_name']"
+                   :class="warn ? 'fb-input-warn' : ''"
                    @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
             <div id="maschinist-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
           </div>
+          <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
+          <p style="font-size:.78rem;color:var(--red-light);margin:.35rem 0 0;font-weight:600;">&#9888; Nur einen Maschinisten eintragen. Bei mehreren Maschinisten je eine eigene Fahrt anlegen – sonst kann die Fahrt nicht gewertet werden.</p>
         </div>
 
         {% if fahrt.fahrzeug and fahrt.fahrzeug.zweiter_maschinist_pflicht %}
@@ -95,13 +101,15 @@
                    hx-target="#maschinist2-suggestions"
                    hx-trigger="input changed delay:200ms"
                    hx-include="[name='maschinist2_name']"
+                   :class="warn ? 'fb-input-warn' : ''"
                    @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
             <div id="maschinist2-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
           </div>
+          <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
         </div>
         {% endif %}
 
-        {% if fahrt.fahrzeug and fahrt.fahrzeug.einsatzleiter_abfrage %}
+        {% if (fahrt.fahrzeug and fahrt.fahrzeug.einsatzleiter_abfrage) or (fahrt.zweck and fahrt.zweck.optional_einsatzleiter) %}
         <div class="form-group" x-data="maschinistAutocomplete('einsatzleiter', '{{ fahrt.einsatzleiter_name or '' }}', '{{ fahrt.einsatzleiter_member_id or '' }}')">
           <label class="form-label">Einsatzleiter (optional)</label>
           <input type="hidden" name="einsatzleiter_member_id" :value="memberId">
@@ -114,9 +122,11 @@
                    hx-target="#einsatzleiter-suggestions"
                    hx-trigger="input changed delay:200ms"
                    hx-include="[name='einsatzleiter_name']"
+                   :class="warn ? 'fb-input-warn' : ''"
                    @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
             <div id="einsatzleiter-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
           </div>
+          <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
         </div>
         {% endif %}
 
@@ -165,6 +175,14 @@
             {% endfor %}
           </select>
         </div>
+
+        {% if fahrt.zweck and fahrt.zweck.kategorie.value == 'sonstige' %}
+        <div class="form-group">
+          <label class="form-label">Zweck (Freitext)</label>
+          <input type="text" name="zweck_freitext" class="form-control" maxlength="200"
+                 value="{{ fahrt.zweck_freitext or '' }}" placeholder="Zweck der Fahrt beschreiben…">
+        </div>
+        {% endif %}
       </div>
     </div>
 
@@ -198,17 +216,25 @@ function maschinistAutocomplete(prefix, initialName, initialId) {
   return {
     query: initialName || '',
     memberId: initialId || '',
+    selectedName: initialId ? (initialName || '') : '',
     open: false,
+    get warn() {
+      return this.query.trim().length > 0 && !this.memberId && !this.open;
+    },
     init() {
       this.$el.addEventListener('member-selected', (e) => {
         this.memberId = e.detail.id;
+        this.selectedName = e.detail.name;
         this.query = e.detail.name;
         this.open = false;
       });
-      this.$watch('query', (val) => { if (!val) this.memberId = ''; });
+      this.$watch('query', (val) => {
+        if (!val || val !== this.selectedName) this.memberId = '';
+      });
     },
     select(id, name) {
       this.memberId = id;
+      this.selectedName = name;
       this.query = name;
       this.open = false;
     }

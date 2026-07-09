@@ -40,11 +40,18 @@
         <input type="number" name="sort" class="form-control form-control--sm" value="0" style="width:70px;">
       </div>
       <div style="display:flex;flex-direction:column;gap:.25rem;">
+        <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);">Pflichtfelder</span>
         <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
           <input type="checkbox" name="verlangt_ausbildner" value="on"> Ausbildner erforderlich
         </label>
         <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
           <input type="checkbox" name="verlangt_gruppenkommandant" value="on"> GK erforderlich
+        </label>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.25rem;">
+        <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);">Optionale Felder</span>
+        <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+          <input type="checkbox" name="optional_einsatzleiter" value="on"> Einsatzleiter (optional)
         </label>
       </div>
       <button type="submit" class="btn btn--primary btn--sm">Hinzufügen</button>
@@ -58,7 +65,7 @@
       <tr>
         <th>Name</th>
         <th>Kategorie</th>
-        <th>Pflichtfelder</th>
+        <th>Pflicht-/Optionalfelder</th>
         <th>Aktiv</th>
         <th>Sort</th>
         <th></th>
@@ -76,6 +83,7 @@
         <td>
           {% if z.verlangt_ausbildner %}<span class="badge badge--blue">Ausbildner</span>{% endif %}
           {% if z.verlangt_gruppenkommandant %}<span class="badge badge--blue">GK</span>{% endif %}
+          {% if z.optional_einsatzleiter %}<span class="badge badge--gray">EL (opt.)</span>{% endif %}
         </td>
         <td>{% if z.aktiv %}<span class="badge badge--success">Ja</span>{% else %}<span class="badge badge--gray">Nein</span>{% endif %}</td>
         <td>{{ z.sort }}</td>
@@ -97,6 +105,9 @@
               </label>
               <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
                 <input type="checkbox" name="verlangt_gruppenkommandant" value="on" {% if z.verlangt_gruppenkommandant %}checked{% endif %}> GK
+              </label>
+              <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+                <input type="checkbox" name="optional_einsatzleiter" value="on" {% if z.optional_einsatzleiter %}checked{% endif %}> EL (opt.)
               </label>
               <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer;">
                 <input type="checkbox" name="aktiv" value="on" {% if z.aktiv %}checked{% endif %}> Aktiv
