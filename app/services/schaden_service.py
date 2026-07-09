@@ -82,7 +82,7 @@ async def melde_schaden(fahrt: Fahrt, db: Session, base_url: str = "") -> None:
     if mail_addr:
         try:
             from app.services.mail_service import _build_message, _send, get_smtp_cfg
-            smtp_cfg = get_smtp_cfg()
+            smtp_cfg = get_smtp_cfg(db)
             body_html = "<pre>" + body_text + "</pre>"
             if detail_url:
                 body_html += f'<p><a href="{detail_url}">Fahrt in der Verwaltung öffnen</a></p>'

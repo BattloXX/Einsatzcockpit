@@ -180,7 +180,9 @@
               <tr>
                 <td>{{ b.kanal }}</td>
                 <td style="word-break:break-all;">{{ b.empfaenger[:60] }}{% if b.empfaenger|length > 60 %}…{% endif %}</td>
-                <td><span class="fd-pill {% if b.status == 'gesendet' %}fd-pill--green{% else %}fd-pill--red{% endif %}">{{ b.status }}</span></td>
+                <td><span class="fd-pill {% if b.status == 'gesendet' %}fd-pill--green{% else %}fd-pill--red{% endif %}"
+                          {% if b.fehlertext %}title="{{ b.fehlertext }}"{% endif %}>{{ b.status }}</span>
+                  {% if b.fehlertext %}<div style="font-size:.72rem;color:var(--text-muted);margin-top:2px;">{{ b.fehlertext }}</div>{% endif %}</td>
                 <td>{{ (b.gesendet_am|local).strftime('%d.%m. %H:%M') }}</td>
               </tr>
               {% endfor %}
