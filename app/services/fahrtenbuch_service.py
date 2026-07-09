@@ -333,6 +333,100 @@ def loesche_fahrten(ids: list[int], org_id: int, user_id: int, db: Session) -> i
     return geloescht
 
 
+def berechne_bericht_daten(fahrten: list[Fahrt]) -> dict[str, Any]:
+    """Aggregiert Fahrten für den Statistik-Berichtsdruck (Querformat, drei Seiten).
+
+    Liefert drei Auswertungen über die bereits gefilterte Fahrtenliste:
+      - ``fahrzeuge``: je Fahrzeug Einsatz/Übung/Tätigkeit/Sonstige + km + BH
+      - ``maschinisten``: je Maschinist (über alle Fahrzeuge) Einsatz/Übung/…
+      - ``je_fahrzeug``: je Fahrzeug eine Maschinisten-Aufstellung
+
+    Der Korbmaschinist (2. Maschinist/Steiger) wird – wo vorhanden – ebenfalls als
+    Maschinist gezählt, damit die Summen der Personen-Auswertung nicht kleiner sind
+    als die Fahrten mit doppelter Besatzung.
+    """
+    TYPEN = ("einsatz", "uebung", "taetigkeit", "sonstige")
+
+    def _leer(label: str) -> dict:
+        return {"label": label, "einsatz": 0, "uebung": 0, "taetigkeit": 0,
+                "sonstige": 0, "km": 0, "bh": Decimal("0")}
+
+    def _typ(f: Fahrt) -> str:
+        if f.fahrttyp == FahrtKategorie.einsatz:
+            return "einsatz"
+        if f.fahrttyp == FahrtKategorie.uebung:
+            return "uebung"
+        if f.fahrttyp == FahrtKategorie.taetigkeit:
+            return "taetigkeit"
+        return "sonstige"
+
+    fahrzeuge: dict[str, dict] = {}
+    maschinisten: dict[str, dict] = {}
+    je_fahrzeug: dict[str, dict] = {}  # fz_key -> {label, personen: {pkey: row}}
+
+    for f in fahrten:
+        typ = _typ(f)
+        fz_key = str(f.fahrzeug_id)
+        fz_label = f.fahrzeug.code if f.fahrzeug else fz_key
+
+        # 1) je Fahrzeug (Einsatz/Übung …)
+        row = fahrzeuge.setdefault(fz_key, _leer(fz_label))
+        row["label"] = fz_label
+        row[typ] += 1
+        if f.km_delta:
+            row["km"] += int(f.km_delta)
+        if f.betriebsstunden_delta:
+            row["bh"] += Decimal(str(f.betriebsstunden_delta))
+
+        # Maschinist + optionaler Korbmaschinist (beide zählen als Maschinist)
+        personen: list[tuple[str, str]] = []
+        pkey = str(f.maschinist_member_id or f.maschinist_name or "?")
+        personen.append((pkey, f.maschinist_name or pkey))
+        if f.maschinist2_name or f.maschinist2_member_id:
+            k2 = str(f.maschinist2_member_id or f.maschinist2_name)
+            personen.append((k2, (f.maschinist2_name or k2) + " (Korb)"))
+
+        for pk, plabel in personen:
+            # 2) Maschinisten gesamt (alle Fahrzeuge)
+            mrow = maschinisten.setdefault(pk, _leer(plabel))
+            mrow["label"] = plabel
+            mrow[typ] += 1
+
+            # 3) Maschinisten je Fahrzeug
+            grp = je_fahrzeug.setdefault(fz_key, {"label": fz_label, "personen": {}})
+            grp["label"] = fz_label
+            prow = grp["personen"].setdefault(pk, _leer(plabel))
+            prow["label"] = plabel
+            prow[typ] += 1
+
+    def _gesamt(r: dict) -> int:
+        return sum(r[t] for t in TYPEN)
+
+    def _sort(rows: list[dict]) -> list[dict]:
+        for r in rows:
+            r["gesamt"] = _gesamt(r)
+        return sorted(rows, key=lambda r: (-r["gesamt"], r["label"].lower()))
+
+    fz_liste = _sort(list(fahrzeuge.values()))
+    ma_liste = _sort(list(maschinisten.values()))
+
+    je_fahrzeug_liste = []
+    for grp in sorted(je_fahrzeug.values(), key=lambda g: g["label"].lower()):
+        zeilen = _sort(list(grp["personen"].values()))
+        summe = _leer("Summe")
+        for z in zeilen:
+            for t in TYPEN:
+                summe[t] += z[t]
+        summe["gesamt"] = _gesamt(summe)
+        je_fahrzeug_liste.append({"label": grp["label"], "zeilen": zeilen, "summe": summe})
+
+    return {
+        "fahrzeuge": fz_liste,
+        "maschinisten": ma_liste,
+        "je_fahrzeug": je_fahrzeug_liste,
+    }
+
+
 def stammdaten_korrektur_zaehler(
     fahrzeug: VehicleMaster, art: str, wert: Decimal | int, user_id: int, db: Session
 ) -> None:

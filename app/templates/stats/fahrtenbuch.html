@@ -73,6 +73,7 @@
     <div style="display:flex;gap:.4rem;">
       <button type="submit" class="btn btn--primary btn--sm">Anzeigen</button>
       <a href="/statistik/fahrtenbuch" class="btn btn--ghost btn--sm">Reset</a>
+      <button type="button" class="btn btn--ghost btn--sm" onclick="printBericht()" title="Berichtsdruck (Querformat) – alle Fahrzeuge, Maschinisten gesamt und je Fahrzeug">🖨️ Bericht drucken</button>
     </div>
   </div>
 </form>
@@ -118,6 +119,7 @@
   </table>
 </div>
 </div>
+{% include "_print_dialog.html" %}
 {% endblock %}
 
 {% block scripts %}
@@ -147,6 +149,24 @@ function setZeitraum(preset) {
   document.querySelector('[name="von"]').value = von;
   document.querySelector('[name="bis"]').value = bis;
   document.querySelector('form[method="get"]').submit();
+}
+
+// Berichtsdruck (Querformat) – nutzt den einheitlichen Druck-Einstieg (Stations-/
+// Lokaldruck). Der Zeitraum + aktive Filter werden aus dem Filterformular übernommen.
+function printBericht() {
+  const form = document.querySelector('form[method="get"]');
+  const val = (name) => { const el = form.querySelector('[name="' + name + '"]'); return el ? el.value : ''; };
+  const ref = new URLSearchParams();
+  ref.set('von', val('von'));
+  ref.set('bis', val('bis'));
+  ref.set('fahrzeug_id', val('fahrzeug_id') || '0');
+  ref.set('fahrttyp', val('fahrttyp'));
+  ref.set('zweck_id', val('zweck_id') || '0');
+  ecpgPrint({
+    document_type: 'fahrtenbuch_bericht',
+    artifact_ref: ref.toString(),
+    title: 'Fahrtenbuch-Bericht drucken',
+  });
 }
 </script>
 

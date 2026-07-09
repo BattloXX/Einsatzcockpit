@@ -19,6 +19,7 @@ from app.models.gateway import (
     DOC_ALARM_ROHTEXT,
     DOC_AS_PRUEFUNG,
     DOC_EINSATZINFO,
+    DOC_FAHRTENBUCH_BERICHT,
     DOC_GSL_BERICHT,
     DOC_GSL_JOURNAL,
     DOC_GSL_LAGEBLATT,
@@ -130,6 +131,11 @@ def _verify_org(db: Session, org_id: int, document_type: str,
         from app.models.major_incident import MajorIncident
         if not (gsl_id and _own(db.get(MajorIncident, gsl_id), "org_id")):
             raise HTTPException(status_code=404, detail="Großschadenslage nicht gefunden")
+    elif document_type == DOC_FAHRTENBUCH_BERICHT:
+        # Kein org-fremder Bezug: der Bericht wird ausschließlich aus der Session-Org
+        # (org_id) aggregiert; artifact_ref trägt nur den Zeitraum/Filter. Zugriff genügt.
+        if not org_id:
+            raise HTTPException(status_code=404, detail="Keine Organisation")
     else:
         raise HTTPException(status_code=400, detail="Unbekannter Dokumenttyp")
 
