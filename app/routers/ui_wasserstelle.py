@@ -70,6 +70,7 @@ def wasserstellen_json(
                 "icon_kat": w.icon_kat,
                 "lat": w.lat,
                 "lng": w.lng,
+                "hinweis": w.hinweis,
                 "ergiebigkeit_l_min": w.ergiebigkeit_l_min,
                 "aktiv": w.aktiv,
                 "status": w.status,
