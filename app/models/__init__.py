@@ -32,7 +32,12 @@ from app.models.incident import (
     Task,
 )
 from app.models.invitation import OrgInvitation, OrgPartner
-from app.models.lagefuehrung import LagefuehrungBerechtigung, LagefuehrungEvent, LagefuehrungFeature
+from app.models.lagefuehrung import (
+    LagefuehrungBerechtigung,
+    LagefuehrungEvent,
+    LagefuehrungFeature,
+    LagefuehrungSnapshot,
+)
 from app.models.lagekarte import LagekarteToken
 from app.models.lis import LisSyncedObject, OrgLisConfig
 from app.models.major_incident import (
@@ -187,5 +192,5 @@ __all__ = [
     "UASEreignis", "UASKartenobjekt", "UASMedien",
     "AtemschutzGeraet", "AtemschutzPruefung", "AtemschutzPruefBenachrichtigung",
     "MediaAnnotation", "MediaAnnotationVersion",
-    "LagefuehrungFeature", "LagefuehrungEvent", "LagefuehrungBerechtigung",
+    "LagefuehrungFeature", "LagefuehrungEvent", "LagefuehrungBerechtigung", "LagefuehrungSnapshot",
 ]

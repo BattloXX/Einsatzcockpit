@@ -119,3 +119,26 @@ class LagefuehrungBerechtigung(TenantScoped, Base):
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
     granted_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class LagefuehrungSnapshot(TenantScoped, Base):
+    """Momentaufnahme ('Lage einfrieren', Phase 3, F-Snapshot): PNG-Export des Kartenstands
+    zu einem Zeitpunkt, an ein lagefuehrung_event (event_typ='snapshot.erstellt') verlinkt.
+    """
+    __tablename__ = "lagefuehrung_snapshot"
+    __table_args__ = (
+        Index("ix_lagefuehrung_snapshot_org_incident", "org_id", "incident_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    incident_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False
+    )
+    stored_filename: Mapped[str] = mapped_column(String(80), nullable=False)
+    bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

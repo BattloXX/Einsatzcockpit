@@ -146,6 +146,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "lagefuehrung_feature",
     "lagefuehrung_event",
     "lagefuehrung_berechtigung",
+    "lagefuehrung_snapshot",
 })
 
 

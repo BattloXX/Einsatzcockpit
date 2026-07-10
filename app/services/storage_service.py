@@ -196,6 +196,8 @@ def reconcile_storage(db: Session, org_id: int) -> int:
             "       SELECT id FROM major_incident WHERE org_id = :oid"
             "     )"
             "   )"
+            "  UNION ALL"
+            "  SELECT COALESCE(bytes, 0) FROM lagefuehrung_snapshot WHERE org_id = :oid"
             ") AS t"
         ),
         {"oid": org_id},

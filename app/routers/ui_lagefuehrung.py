@@ -11,7 +11,7 @@ import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.permissions import can_access_incident, has_role
@@ -23,6 +23,7 @@ from app.models.lagefuehrung import (
     LagefuehrungBerechtigung,
     LagefuehrungEvent,
     LagefuehrungFeature,
+    LagefuehrungSnapshot,
 )
 from app.models.user import User
 from app.services.broadcast import manager
@@ -368,12 +369,46 @@ async def lagefuehrung_wasserstellen(
     return JSONResponse(stellen)
 
 
+# ── Windrichtung (Phase 3, F-Wind): GeoSphere-Vorbelegung für das Windrichtung-Symbol ──
+
+@router.get("/einsatz/{incident_id}/lagefuehrung/wind.json")
+async def lagefuehrung_wind(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    """Aktuelle Windrichtung am Einsatzort (weather_service, Kachelmann/GeoSphere/Open-Meteo
+    ohne Konfigurationspflicht, siehe app/services/weather_service.py::get_current).
+    Leeres Objekt bei fehlenden Koordinaten oder wenn keine Quelle liefert — der Client
+    platziert das Symbol dann mit rotation=0 und lässt es manuell drehen.
+    """
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+
+    if incident.lat is None or incident.lng is None:
+        return JSONResponse({})
+
+    from app.services import weather_service
+
+    current = await weather_service.get_current(incident.lat, incident.lng, org_id=incident.primary_org_id)
+    if not current:
+        return JSONResponse({})
+    return JSONResponse({
+        "wind_direction_deg": current.wind_direction_deg,
+        "wind_speed_ms": current.wind_speed_ms,
+        "source": current.source,
+    })
+
+
 # ── Chronologie ──────────────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/events.json")
 async def lagefuehrung_events(
     incident_id: int,
     request: Request,
+    limit: int = 50,
     db: Session = Depends(get_db),
     _guard: None = Depends(require_lagefuehrung_enabled),
 ):
@@ -381,11 +416,15 @@ async def lagefuehrung_events(
     incident = _incident_or_404(incident_id, db)
     _check_access(user, incident)
 
+    # limit ist standardmäßig 50 (Chronologie-Anzeige), das Replay (Phase 3, lagefuehrung.js
+    # enterReplay()) fragt mit einem hohen Limit die volle Historie ab, um daraus den
+    # Kartenzustand zu jedem Zeitpunkt zu rekonstruieren.
+    limit = max(1, min(limit, 2000))
     events = (
         db.query(LagefuehrungEvent)
         .filter(LagefuehrungEvent.incident_id == incident_id)
         .order_by(LagefuehrungEvent.ts.desc())
-        .limit(50)
+        .limit(limit)
         .all()
     )
     return JSONResponse([_event_dict(e) for e in events])
@@ -442,7 +481,10 @@ async def lagefuehrung_feature_create(
     )
     db.add(feature)
     db.flush()
-    _log_event(db, incident, user, "feature.created", "feature", feature.id, {"typ": typ})
+    # Voller Feature-Snapshot im Payload (nicht nur {"typ": typ}) — Grundlage für das
+    # Lage-Replay (Phase 3): der Kartenzustand zu einem Zeitpunkt wird ausschließlich aus
+    # den Event-Payloads rekonstruiert (lagefuehrung.js::replayStateAt).
+    _log_event(db, incident, user, "feature.created", "feature", feature.id, _feature_dict(feature))
     db.commit()
 
     out = _feature_dict(feature)
@@ -484,7 +526,9 @@ async def lagefuehrung_feature_update(
     feature.version += 1
     feature.updated_at = datetime.now(UTC)
 
-    _log_event(db, incident, user, "feature.updated", "feature", feature.id, {"version": feature.version})
+    # Voller Post-Update-Snapshot statt nur {"version": ...} — Replay-Fundament (siehe
+    # feature.created oben).
+    _log_event(db, incident, user, "feature.updated", "feature", feature.id, _feature_dict(feature))
     db.commit()
 
     out = _feature_dict(feature)
@@ -511,8 +555,12 @@ async def lagefuehrung_feature_delete(
     if version is not None and version != feature.version:
         raise HTTPException(409, "Feature wurde zwischenzeitlich von einem anderen Nutzer geändert")
 
+    # Snapshot VOR dem Löschen einfangen (für Chronologie/Audit) — die eigentliche
+    # Replay-Rekonstruktion braucht das payload hier nicht (event_typ="feature.deleted"
+    # entfernt die feature_id unabhängig vom Inhalt aus dem rekonstruierten Zustand).
+    vorher = _feature_dict(feature)
     feature.deleted_at = datetime.now(UTC)
-    _log_event(db, incident, user, "feature.deleted", "feature", feature.id, None)
+    _log_event(db, incident, user, "feature.deleted", "feature", feature.id, vorher)
     db.commit()
 
     await manager.broadcast(incident_id, {"type": "lagefuehrung.feature.deleted", "feature_id": feature.id})
@@ -621,6 +669,99 @@ async def lagefuehrung_berechtigung_entziehen(
         "user_id": target_user_id, "granted": False,
     })
     return Response(status_code=204)
+
+
+# ── Momentaufnahme ("Lage einfrieren", Phase 3, F-Snapshot) ─────────────────────
+
+@router.post("/einsatz/{incident_id}/lagefuehrung/momentaufnahme")
+async def lagefuehrung_momentaufnahme_erstellen(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_edit_access(user, incident, db)
+
+    if incident.lat is None or incident.lng is None:
+        raise HTTPException(400, "Einsatz ohne Koordinaten — keine Momentaufnahme möglich")
+    if not incident.primary_org_id:
+        raise HTTPException(400, "Einsatz ohne Organisation — keine Momentaufnahme möglich")
+    org_id: int = incident.primary_org_id
+
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    label = (data.get("label") or "").strip() or None
+
+    from app.services.lagefuehrung_pdf_service import gather_map_render_context, render_lagefuehrung_map_png
+    from app.services.lagefuehrung_snapshot_service import save_snapshot_png
+    from app.services.storage_service import reserve_storage
+
+    # Kartenrendern (staticmap/requests) ist blockierendes Netzwerk-I/O — wie beim
+    # PDF-Lagebericht in einem Thread ausführen, damit der Event-Loop nicht blockiert.
+    def _render() -> bytes | None:
+        ctx = gather_map_render_context(incident, db)
+        return render_lagefuehrung_map_png(
+            incident, ctx["features"], ctx["vehicles_positions"], ctx["objekt_marker"],
+        )
+
+    png_bytes = await asyncio.to_thread(_render)
+    if not png_bytes:
+        raise HTTPException(400, "Momentaufnahme konnte nicht gerendert werden")
+
+    stored_filename = save_snapshot_png(org_id, incident_id, png_bytes)
+    reserve_storage(db, org_id, len(png_bytes))
+
+    snapshot = LagefuehrungSnapshot(
+        org_id=org_id,
+        incident_id=incident_id,
+        stored_filename=stored_filename,
+        bytes=len(png_bytes),
+        label=label,
+        created_by=user.id,
+    )
+    db.add(snapshot)
+    db.flush()
+    _log_event(db, incident, user, "snapshot.erstellt", "snapshot", snapshot.id, {"label": label})
+    db.commit()
+
+    await manager.broadcast(incident_id, {"type": "lagefuehrung.chronologie_changed"})
+    return JSONResponse({
+        "id": snapshot.id,
+        "label": snapshot.label,
+        "created_at": snapshot.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }, status_code=201)
+
+
+@router.get("/einsatz/{incident_id}/lagefuehrung/momentaufnahme/{snapshot_id}/bild")
+async def lagefuehrung_momentaufnahme_bild(
+    incident_id: int,
+    snapshot_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+
+    snapshot = (
+        db.query(LagefuehrungSnapshot)
+        .filter(LagefuehrungSnapshot.id == snapshot_id, LagefuehrungSnapshot.incident_id == incident_id)
+        .first()
+    )
+    if not snapshot:
+        raise HTTPException(404, "Momentaufnahme nicht gefunden")
+
+    from app.services.lagefuehrung_snapshot_service import snapshot_path
+
+    path = snapshot_path(snapshot)
+    if not path.exists():
+        raise HTTPException(404, "Bilddatei nicht gefunden")
+    return FileResponse(path, media_type="image/png")
 
 
 # ── PDF-Lagebericht ──────────────────────────────────────────────────────────────

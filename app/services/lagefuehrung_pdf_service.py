@@ -39,6 +39,8 @@ _EVENT_LABELS = {
     "fuehrer.changed": "Lageführung übernommen",
     "berechtigung.erteilt": "Editor-Recht vergeben",
     "berechtigung.entzogen": "Editor-Recht entzogen",
+    "snapshot.erstellt": "Momentaufnahme erstellt",
+    "vehicle.pinned": "Fahrzeug manuell platziert",
 }
 
 
@@ -102,9 +104,13 @@ def render_lagefuehrung_map_png(
         return None
 
 
-def _load_lagebericht_context(incident: Incident, db: Session) -> dict:
-    primary_org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
+def gather_map_render_context(incident: Incident, db: Session) -> dict:
+    """Sammelt Features/Fahrzeugpositionen/Objekt-Marker für render_lagefuehrung_map_png().
 
+    Eigene Funktion (statt nur Teil von _load_lagebericht_context), weil die Momentaufnahme
+    (Phase 3, ui_lagefuehrung.py::lagefuehrung_momentaufnahme) dieselbe Kartenkachel wie der
+    PDF-Lagebericht rendert, aber weder Events noch die Zeichen-Legende braucht.
+    """
     features = (
         db.query(LagefuehrungFeature)
         .filter(
@@ -135,7 +141,8 @@ def _load_lagebericht_context(incident: Incident, db: Session) -> dict:
             .all()
         )
         for row in rows:
-            latest_position.setdefault(row.vehicle_id, row)
+            if row.vehicle_id is not None:
+                latest_position.setdefault(row.vehicle_id, row)
     vehicles_positions = [
         (v, latest_position[v.vehicle_master_id].lat if v.vehicle_master_id in latest_position else None,
          latest_position[v.vehicle_master_id].lon if v.vehicle_master_id in latest_position else None)
@@ -155,6 +162,18 @@ def _load_lagebericht_context(incident: Incident, db: Session) -> dict:
     if ov and ov.objekt and ov.objekt.lat is not None and ov.objekt.lng is not None:
         objekt_marker = (ov.objekt.lat, ov.objekt.lng)
 
+    return {
+        "features": features,
+        "vehicles_positions": vehicles_positions,
+        "objekt_marker": objekt_marker,
+    }
+
+
+def _load_lagebericht_context(incident: Incident, db: Session) -> dict:
+    primary_org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
+    map_ctx = gather_map_render_context(incident, db)
+    features = map_ctx["features"]
+
     events = (
         db.query(LagefuehrungEvent)
         .filter(LagefuehrungEvent.incident_id == incident.id)
@@ -171,8 +190,8 @@ def _load_lagebericht_context(incident: Incident, db: Session) -> dict:
     return {
         "primary_org": primary_org,
         "features": features,
-        "vehicles_positions": vehicles_positions,
-        "objekt_marker": objekt_marker,
+        "vehicles_positions": map_ctx["vehicles_positions"],
+        "objekt_marker": map_ctx["objekt_marker"],
         "events": events,
         "zeichen_legende": zeichen_legende,
     }
