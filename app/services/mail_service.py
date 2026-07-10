@@ -86,6 +86,72 @@ def _build_message(*, to: str, subject: str, body_txt: str,
     return msg
 
 
+def _org_smtp_cfg(db, org_id: int | None) -> dict[str, Any] | None:
+    """Lädt den eigenen SMTP-Server einer Org (OrgSmtpConfig), falls vorhanden,
+    aktiviert und vollständig konfiguriert. Liefert ein Dict im selben Format wie
+    get_smtp_cfg() oder None (dann greift der globale SMTP als Fallback)."""
+    if db is None or org_id is None:
+        return None
+    try:
+        from app.core.crypto import decrypt_secret
+        from app.models.org_mail import OrgSmtpConfig
+
+        cfg = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == org_id).first()
+        if not cfg or not cfg.enabled or not cfg.is_fully_configured:
+            return None
+        return {
+            "host": cfg.host,
+            "port": cfg.port,
+            "user": cfg.user,
+            "password": decrypt_secret(cfg.password_enc),
+            "from_addr": cfg.from_addr,
+            "starttls": cfg.starttls,
+            "timeout": cfg.timeout,
+        }
+    except Exception:
+        logger.exception("Eigener SMTP-Server der Org %s konnte nicht geladen werden — Fallback global", org_id)
+        return None
+
+
+async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | None = None) -> None:
+    """Zentraler Versand-Dispatcher: Office 365 (falls für die Org aktiviert +
+    vollständig konfiguriert) zuerst versuchen, sonst/bei Fehlschlag SMTP —
+    zuerst der eigene SMTP-Server der Org, sonst der globale.
+
+    Graph-Fehler werden verschluckt (das ist der Sinn des Fallbacks) und nur
+    geloggt; ein anschließender SMTP-Fehler wird wie bisher propagiert, damit
+    Aufrufer (z.B. schaden_service) einen echten Fehlschlag weiterhin korrekt
+    protokollieren können.
+    """
+    if org_id is not None and settings.O365_MAIL_ENABLED:
+        o365_cfg = None
+        try:
+            from app.models.org_mail import OrgO365MailConfig
+
+            o365_cfg = (
+                db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
+                if db is not None else None
+            )
+        except Exception:
+            logger.exception("O365-Config-Lookup fehlgeschlagen (Org %s) — Fallback SMTP", org_id)
+            o365_cfg = None
+
+        if o365_cfg and o365_cfg.enabled and o365_cfg.is_fully_configured:
+            try:
+                from app.services.o365_mail_service import send_via_graph
+                await send_via_graph(msg, o365_cfg)
+                return  # Erfolg — kein SMTP-Versand mehr noetig
+            except Exception as exc:
+                logger.warning(
+                    "O365-Mailversand fehlgeschlagen (Org %s) — Fallback SMTP: %s", org_id, exc,
+                )
+
+    cfg = smtp_cfg
+    if cfg is None:
+        cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
+    await _send(msg, cfg)
+
+
 async def _send(msg: EmailMessage, smtp_cfg: dict) -> None:
     """Versendet eine E-Mail. Bei fehlender SMTP-Konfiguration wird die Mail nur geloggt."""
     if not smtp_cfg.get("host"):
@@ -119,8 +185,9 @@ async def _send(msg: EmailMessage, smtp_cfg: dict) -> None:
     await aiosmtplib.send(msg, **kwargs)
 
 
-async def send_password_reset(*, to: str, reset_url: str, user_display_name: str, db=None) -> None:
-    smtp_cfg = get_smtp_cfg(db)
+async def send_password_reset(*, to: str, reset_url: str, user_display_name: str,
+                               db=None, org_id: int | None = None) -> None:
+    smtp_cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
     subject = "Passwort zurücksetzen – Einsatzcockpit"
     ttl = settings.PASSWORD_RESET_TTL_MIN
     body_txt = (
@@ -154,7 +221,7 @@ kannst du diese Mail ignorieren. Dein Passwort bleibt unverändert.</p>
 """
     msg = _build_message(to=to, subject=subject, body_txt=body_txt,
                          body_html=body_html, smtp_cfg=smtp_cfg)
-    await _send(msg, smtp_cfg)
+    await deliver(db, org_id, msg, smtp_cfg)
 
 
 CONTACT_RECIPIENT = "johannes@battlogg.org"
@@ -234,8 +301,8 @@ async def send_contact_message(*, name: str, reply_email: str, message: str, db=
 
 async def send_welcome_mail(*, to: str, username: str, password: str,
                             user_display_name: str, app_url: str = "",
-                            is_test: bool = False, db=None) -> None:
-    smtp_cfg = get_smtp_cfg(db)
+                            is_test: bool = False, db=None, org_id: int | None = None) -> None:
+    smtp_cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
     subject = "Willkommen bei Einsatzcockpit – Zugangsdaten"
     test_notice_txt = "\n⚠️  HINWEIS: Dies ist ein TESTSYSTEM – bitte keine Echtdaten eingeben.\n" if is_test else ""
     test_notice_html = (
@@ -282,13 +349,13 @@ async def send_welcome_mail(*, to: str, username: str, password: str,
 """
     msg = _build_message(to=to, subject=subject, body_txt=body_txt,
                          body_html=body_html, smtp_cfg=smtp_cfg)
-    await _send(msg, smtp_cfg)
+    await deliver(db, org_id, msg, smtp_cfg)
 
 
 async def send_sso_welcome_mail(*, to: str, user_display_name: str,
                                  app_url: str, org_slug: str, org_name: str = "",
-                                 is_test: bool = False, db=None) -> None:
-    smtp_cfg = get_smtp_cfg(db)
+                                 is_test: bool = False, db=None, org_id: int | None = None) -> None:
+    smtp_cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
     subject = "Anmeldung per Microsoft-Login – Einsatzcockpit"
     sso_url = f"{app_url.rstrip('/')}/sso/{org_slug}/login"
     safe_url = html.escape(app_url.rstrip("/"))
@@ -349,7 +416,7 @@ border-radius:0 4px 4px 0;margin:16px 0;font-size:0.95rem;">
 """
     msg = _build_message(to=to, subject=subject, body_txt=body_txt,
                          body_html=body_html, smtp_cfg=smtp_cfg)
-    await _send(msg, smtp_cfg)
+    await deliver(db, org_id, msg, smtp_cfg)
 
 
 async def send_test_mail(*, to: str, db=None) -> None:

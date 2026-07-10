@@ -154,6 +154,7 @@ async def create_user(
                 app_url=app_url,
                 is_test=is_test,
                 db=db,
+                org_id=target_org_id,
             )
         except Exception:
             logger_admin.warning("Willkommensmail an %s konnte nicht gesendet werden", email_clean)
@@ -171,6 +172,7 @@ async def create_user(
                     org_name=org.name if org else "",
                     is_test=is_test,
                     db=db,
+                    org_id=target_org_id,
                 )
             else:
                 logger_admin.warning("SSO-Mail nicht versendbar: org_slug unbekannt für org_id=%s", target_org_id)
@@ -823,7 +825,7 @@ async def send_user_reset_mail(
         await send_password_reset(
             to=u.email, reset_url=reset_url,
             user_display_name=u.full_name or u.display_name or u.username,
-            db=db,
+            db=db, org_id=u.org_id,
         )
     except Exception:
         return RedirectResponse("/admin/benutzer?error=mail_failed", status_code=303)

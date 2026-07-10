@@ -261,6 +261,26 @@ user.auth_provider       ← 'local' oder 'entra'
 user.password_hash       ← NULL wenn nur SSO
 ```
 
+## Mail-Versand je Organisation
+
+Fallback-Kette (siehe `app/services/mail_service.py::deliver()`): Office 365 →
+eigener SMTP der Org → globaler SMTP (`system_settings`, s.o.).
+
+```
+org_smtp_config          ← eigener SMTP-Server je Org
+  id, org_id FK (UNIQUE), enabled (BOOL)
+  host, port, user, password_enc (Fernet-verschlüsselt)
+  from_addr, starttls (BOOL), timeout
+  imap_enabled, imap_host, imap_port, imap_use_ssl  ← Vorbereitung Posteingang, KEINE Verarbeitung implementiert
+
+org_o365_mail_config      ← Microsoft Graph App-only-Mailversand je Org
+  id, org_id FK (UNIQUE), enabled (BOOL)
+  tenant_id, client_id
+  client_secret_enc (Fernet-verschlüsselt)
+  sender_address
+  read_enabled              ← Vorbereitung Posteingang (Mail.Read), KEINE Verarbeitung implementiert
+```
+
 ## UAS / Drohnen-Modul
 
 ```

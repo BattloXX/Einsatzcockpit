@@ -53,6 +53,7 @@ from app.routers import (
     ui_media,
     ui_objekt,
     ui_objekt_dokumente,
+    ui_org_mail,
     ui_password_reset,
     ui_profile,
     ui_push,
@@ -526,6 +527,7 @@ app.include_router(ui_push.router)
 app.include_router(ui_settings.router)
 app.include_router(ui_sso.router)
 app.include_router(ui_lis.router)
+app.include_router(ui_org_mail.router)
 app.include_router(ui_teams_bot.router)
 app.include_router(ui_sysadmin.router)
 app.include_router(ui_ai_prompts.router)

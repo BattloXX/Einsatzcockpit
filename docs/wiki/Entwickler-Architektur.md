@@ -41,6 +41,7 @@ Browser (HTMX + Alpine.js + WebSocket)
     │   ├── ui_verleih.py       – Geräteverleih (Ausleihe, Stücklisten)
     │   ├── ui_profile.py       – Benutzer-Profil (Name/E-Mail/Passwort/Avatar)
     │   ├── ui_password_reset.py
+    │   ├── ui_org_mail.py      – Mail-Versand-Admin (/admin/mail: eigener SMTP + Office 365, Test-Mail)
     │   ├── api_v1.py           – REST-API (Alarmierung, Lage-Alarm)
     │   ├── lagekarte_api.py    – GeoJSON-Feed für lagekarte.info
     │   ├── device_api.py       – SMS-Gateway/Geräte-WebSocket-Anbindung
@@ -87,7 +88,8 @@ Browser (HTMX + Alpine.js + WebSocket)
     │   ├── alarm_service.py          – Alarmtyp-Lookup + org-aware
     │   ├── seed_service.py           – Seed-Template-Anwendung bei Org-Anlage
     │   ├── sms_service.py            – SMS-Versand via Gateway-Container
-    │   ├── mail_service.py           – SMTP (Passwort-Reset, Einladungen)
+    │   ├── mail_service.py           – deliver(): O365 → eigener SMTP der Org → globaler SMTP (Fallback-Kette)
+    │   ├── o365_mail_service.py      – Microsoft Graph App-only-Mailversand (Client-Credentials, sendMail)
     │   └── update_service.py         – ZIP-Update + Alembic-Migration
     └── Models (SQLAlchemy ORM)
         ├── incident.py       – Incident, Task, TaskMedia, IncidentOrg, IncidentToken, ...
@@ -98,6 +100,7 @@ Browser (HTMX + Alpine.js + WebSocket)
         ├── master.py         – FireDept, Member (TenantScoped), AlarmType (TenantScoped),
         │                       OrgSettings (uas_module_enabled, weather_enabled, ...), SeedTemplate, ...
         ├── sso.py            – OrgSsoConfig, OrgSsoGroupMap
+        ├── org_mail.py       – OrgSmtpConfig, OrgO365MailConfig (je Fernet-verschlüsseltes Secret)
         ├── uas.py            – UASDevice, UASPilot, UASEinsatz, UASFlug, UASEreignis, ...
         ├── verleih.py        – VerleihArtikel, VerleihStueckliste, VerleihAusleihe, ...
         ├── weather.py        – WeatherStation (TenantScoped, Haupt-DB), WeatherReading (Wetter-DB)

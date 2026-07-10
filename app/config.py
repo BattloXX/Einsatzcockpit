@@ -217,6 +217,12 @@ class Settings(BaseSettings):
     SSO_JWKS_CACHE_TTL: int = 3600
     SSO_SCOPES: str = "openid profile email User.Read"
 
+    # Mail-Versand je Org: Office 365 / Microsoft Graph (App-only, Client-Credentials),
+    # mit SMTP (org-eigen oder global) als automatischem Fallback (mail_service.deliver()).
+    O365_MAIL_ENABLED: bool = True    # globaler Kill-Switch, analog LIS_ENABLED/SSO_ENABLED
+    O365_MAIL_HTTP_TIMEOUT: int = 15
+    O365_MAIL_TOKEN_MARGIN_S: int = 60  # Sicherheitsmarge vor Token-Ablauf im Cache
+
     @property
     def effective_public_base_url(self) -> str:
         return self.PUBLIC_BASE_URL or self.APP_BASE_URL

@@ -99,7 +99,7 @@ async def forgot_submit(
             to=user.email,  # type: ignore[arg-type]
             reset_url=reset_url,
             user_display_name=user.full_name or user.display_name or user.username,
-            db=db,
+            db=db, org_id=user.org_id,
         )
     except Exception as exc:  # pragma: no cover
         logger.error("Versand des Passwort-Reset-Mails fehlgeschlagen für user_id=%s: %s",

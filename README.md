@@ -8,7 +8,7 @@ Multi-User, mandantenfähig, Echtzeit. Für Feuerwehr, BOS und Gemeinden.
 [![CI](https://github.com/BattloXX/Einsatzcockpit/actions/workflows/ci.yml/badge.svg)](https://github.com/BattloXX/Einsatzcockpit/actions)
 ![Python](https://img.shields.io/badge/python-3.14-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green)
-![Version](https://img.shields.io/badge/version-3.3.0-orange)
+![Version](https://img.shields.io/badge/version-3.4.0-orange)
 
 ---
 
@@ -67,6 +67,7 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **Lokale Wetterstation** | Davis Vantage Pro 2 Plus via Meteobridge PRO RED: HTTPS-Push-Ingest (wxst_-Token, Rate-Limiting 120/min), denormalisierter Ist-Stand-Snapshot in Haupt-DB, separate Zeitreihen-DB (kein Bloat), Online/Offline-Indikator, 24-h-Sparkline (Temp/Wind), Echtzeit-Szenario-Analyse aus lokalen Messwerten; Nacht-Retention 03:30 |
 | **UAS / Drohnen-Modul** | Vollständige BOS-Drohnendokumentation gemäß RL-UAS LFV Vorarlberg 2024: Geräteregister, Wartungsbuch, Pilotenregister, Flugbuch, Vor-/Nachflug-Checklisten (4-Augen), Notfall-/Unfall-Workflow, ACG-Meldung, Lagekarte, DSGVO-Medien, PDF-Anhänge 8.1–8.6; zweistufiger Feature-Flag |
 | **Single Sign-On (Entra ID)** | Microsoft-365-Login pro Org: BYO App-Registrierung, OAuth2/PKCE/OIDC, JIT-Provisioning, Gruppen→Rollen-Mapping, enforce_sso; Client Secret Fernet-verschlüsselt |
+| **Mail-Versand je Organisation** | Eigener SMTP-Server und/oder Office 365 / Microsoft Graph (App-only, Client-Credentials) je Org, automatische Fallback-Kette (O365 → eigener SMTP → globaler SMTP); Secrets Fernet-verschlüsselt; Vorbereitung für künftigen Posteingangs-Abruf (IMAP/Mail.Read) — noch ohne Verarbeitung |
 | **Geräteverleih** | Artikel- und Stücklisten-Stammdaten; Ausgabe & Rücknahme von Material im GSL-Kontext; Barcode/QR-Scan im Browser; SMS-Erinnerungen; Foto-Dokumentation; Druckschein |
 | **Benutzer-Profil** | Eigener Name, E-Mail, Passwort und Avatar; Profilbild erscheint in Log-Einträgen und Stab |
 | **Digitales Fahrtenbuch** | Fahrterfassung mit km/BH-Zählerstand, Seilwinde (BH, Züge, Wartung), Maschinist-Autocomplete, Fahrtzweck, Zielort, Schadensangabe (Mail+Teams); Token/QR-Zugang ohne Login; Doppelfahrt-Erkennung; Korrektur-/Storno-Workflow; Zählerstand-Berechnung; Benachrichtigungs-Audit |
@@ -314,13 +315,24 @@ TEST_SYSTEM=false
 BOOTSTRAP_ADMIN_USER=admin
 BOOTSTRAP_ADMIN_PASSWORD=   # Leer → wird beim ersten Start zufällig generiert und einmalig geloggt
 
-# ── E-Mail / Passwort-Reset ────────────────────────────────────────
+# ── E-Mail / Passwort-Reset (globaler Fallback) ────────────────────
+# Bevorzugt in den System-Einstellungen pflegen (system_admin); ENV = Fallback.
+# Jede Org kann zusätzlich einen eigenen SMTP-Server und/oder Office 365 unter
+# /admin/mail hinterlegen — siehe Wiki: Administration-Mail-Versand.
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_USER=einsatz@example.com
 SMTP_PASSWORD=smtp-passwort
 SMTP_FROM=einsatz@example.com
 SMTP_STARTTLS=true
+
+# ── Mail-Versand je Organisation: Office 365 / Microsoft Graph ────
+# Verbindungsdaten (Tenant/Client-ID, Secret, Absender-Postfach) werden pro Org
+# unter /admin/mail gepflegt (Fernet-verschlüsseltes Secret) — hier nur der
+# globale Kill-Switch. Siehe Wiki: Administration-Mail-Versand.
+O365_MAIL_ENABLED=true
+O365_MAIL_HTTP_TIMEOUT=15
+O365_MAIL_TOKEN_MARGIN_S=60   # Sicherheitsmarge (Sekunden) vor Token-Ablauf im Cache
 
 # ── Web-Push (VAPID) ───────────────────────────────────────────────
 # Schlüssel generieren: python -m app.cli generate-vapid
@@ -484,6 +496,9 @@ alembic downgrade -1
 | `0135_gefahren_links_anreicherung.py` | Gefahren: weiterführende Links + Gefahrgut-DB-Anreicherung (Stoffname/Klasse/Kemler) |
 | `0136_message_objekt_gefahr.py` | Board: Objektgefahren-Meldungen (Message ↔ Objektgefahr) |
 | `0137_infoscreen_urls_monitore.py` | Infoscreen: URL-Rotation, Monitor-Matrix, GSL-Ansicht, persistente Monitor-URL |
+| `0138–0150_*` | Objekt-Rotation, Media-Annotation, Wasserstellen, Print-/Alarm-Gateway, Fahrtenbuch-Erweiterungen (siehe `docs/MIGRATION_RUNBOOK.md` für Details) |
+| `0151_lis_auto_capture.py` | LIS/IPR-Diagnose: automatischer Rohdaten-Capture-Start (120 min) bei neuem Einsatz, Opt-in je Org |
+| `0152_org_mail.py` | Mail-Versand je Org: `org_smtp_config` (eigener SMTP-Server), `org_o365_mail_config` (Microsoft Graph) |
 
 Vollständiger Migrationsleitfaden: [`docs/MIGRATION_RUNBOOK.md`](docs/MIGRATION_RUNBOOK.md)
 
@@ -735,7 +750,7 @@ tests/
 ┌─────────────▼──┐  ┌───────▼──────┐  ┌───▼──────────────┐
 │  MariaDB 10.11 │  │ MariaDB      │  │ app_storage/ │  │ app/static/      │
 │  (utf8mb4)     │  │ _weather     │  │ incident_    │  │ css, js, img     │
-│ 137 Migrationen│  │ (Zeitreihe)  │  │ media/       │  │ (kein Auth nötig)│
+│ 152 Migrationen│  │ (Zeitreihe)  │  │ media/       │  │ (kein Auth nötig)│
 └────────────────┘  └─────────────┘  └─────────────┘  └──────────────────┘
 ```
 
@@ -916,6 +931,7 @@ app/
 │   ├── breathing.py     BreathingTroop, TroopMember, PressureLog
 │   ├── weather.py       WeatherStation (TenantScoped, Haupt-DB), WeatherReading (Wetter-DB)
 │   ├── lis.py           OrgLisConfig, LisSyncedObject
+│   ├── org_mail.py      OrgSmtpConfig, OrgO365MailConfig (je Fernet-verschlüsseltes Secret)
 │   ├── sms.py           SmsGroup, SmsEinsatzinfoRecipient, SmsLog, SmsForwardRule, SmsInbox (SmsGatewayToken in user.py)
 │   └── password_reset.py
 ├── routers/
@@ -939,6 +955,7 @@ app/
 │   ├── ui_push.py            Web-Push-Verwaltung
 │   ├── ui_password_reset.py
 │   ├── ui_lis.py              LIS/IPR-Admin-UI (/admin/lis: Org-Konfig, Verbindungstest, Diagnose-Aufzeichnung)
+│   ├── ui_org_mail.py         Mail-Versand-Admin (/admin/mail: eigener SMTP + Office 365, Test-Mail)
 │   ├── ui_sms.py              SMS-Gruppen, Einsatzinfo-Vorlagen, manueller Versand, Weiterleitungsregeln
 │   ├── ui_teams_bot.py        Teams-Alarmierung-Admin-UI (/admin/teams-alarmierung: Webhook + Bot-Konfig, Kanalbindungen, Testkarte)
 │   ├── teams_bot.py           Öffentliche Alarmübersicht (/alarm/{token}) + Kartenbild-Endpoint
@@ -985,7 +1002,8 @@ app/
 │   ├── teams_card.py            Teams-Kartenaufbau (MessageCard, Inhalts-Schalter)
 │   ├── teams_alarm_service.py   Teams-Alarm-Dispatch: Webhook-Basis-Modus + Bot-Fallback-Logik
 │   ├── teams_bot_service.py     Teams-Bot-Versand (Ausgang) — Grundgerüst, Live-Verifikation ausständig
-│   ├── mail_service.py          SMTP (Passwort-Reset, Einladungen)
+│   ├── mail_service.py          deliver(): O365 → eigener SMTP der Org → globaler SMTP (Fallback-Kette)
+│   ├── o365_mail_service.py     Microsoft Graph App-only-Mailversand (Client-Credentials, sendMail)
 │   └── update_service.py        ZIP-Update + Alembic-Migration
 ├── static/
 │   ├── css/app.css          Fertiger Tailwind-Build (committet)
@@ -1002,7 +1020,7 @@ app/
     ├── media/               gallery.html
     ├── admin/               sysadmin_orgs.html, konfig.html, ...
     └── ...
-alembic/versions/            Migrationen 0001–0137
+alembic/versions/            Migrationen 0001–0152
 docs/
 ├── MIGRATION_RUNBOOK.md     Vollständiger Migrationsleitfaden
 ├── multi-tenancy-konzept.md Technisches Konzeptdokument
@@ -1026,6 +1044,7 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **3.4.0** | 2026-07-10 | **Mail-Versand je Organisation**: eigener SMTP-Server und/oder Office 365 / Microsoft Graph (App-only, Client-Credentials), automatische Fallback-Kette (O365 → eigener SMTP → globaler SMTP), Secrets Fernet-verschlüsselt, `/admin/mail`; Vorbereitung für künftigen Posteingangs-Abruf (IMAP/Mail.Read); Einsatz-Infoscreen: **Gesamtstatus im Alarm-Kopf** (rot blinkend „Status nicht gesetzt" → „Übernommen" → „Am Einsatzort"); LIS-Diagnose: automatischer Rohdaten-Capture-Start (120 min) bei neuem Einsatz, Opt-in je Org |
 | **3.3.0** | 2026-07-06 | Dokument-**Volltextsuche** (PDF-Textlayer + Tesseract-OCR) in Objektverwaltung und Einsatzinfo; zentrale **Katalog-/Auswahllisten- und Karten-Symbol-Verwaltung** (Symbolbild-Upload); Gefahren mit **weiterführenden Links** (Katalog + objektspezifisch) und **UN-Nummer-Anreicherung** aus der offenen BAM-Gefahrgut-DB (dl-de/by-2.0) + Deep-Links (ERICard/BAM); neue Board-Spalte **„Objektgefahren"** (Meldungen je Gefahr automatisch beim Match, inkl. Links); **Infoscreen-Ausbau**: frei rotierende URLs je Monitor (Matrix), vererbtes Wetter, Großschadenslage-Sonderansicht, Einsatz sichtbar solange aktiv, dauerhaft kopierbare (Fernet-verschlüsselte) Monitor-URLs; **RSVP** (Zu-/Absagen) in Einsatzinfo und Infoscreen |
 | **3.2.0** | 2026-07-05 | Objektverwaltung (PR 1–9): Objekte mit BMA/FSD-Block, strukturierten Gefahren, Kontakten, Merkmalen, Wohnanlagen-Daten und Stiegen-Adressen; PDF-Pipeline mit Seiten-Zerlegung (pypdf + pdf2image/Poppler), Galerie mit Bulk-Klassifikation und Fullscreen-Viewer; Objekt-Lagekarte mit Symbol-Editor; Alarm-Matching (BMA-Nr. → Adresse → Geo) mit Board-Panel und mobiler Einsatzansicht; Alarm-Infoscreen für Wandmonitore (Token, WebSocket, Idle-Modi); Objektblatt-Druck mit QR und Einsatzdruck-Anhang; KI-Dokumentklassifizierung (Vision, Review-Queue, opt-in); Offline-Precaching in der Android-App; neue Rolle „Objektverwalter"; zweistufiger Feature-Flag (System + Org) |
 | **3.1.0** | 2026-07-04 | LIS/IPR-Anbindung an das Leitstellensystem der Landeswarnzentrale (SOAP/WCF): automatischer Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus/-position, Meldungen, Zu-/Absagen, Dokumente, automatisches Schließen bei Abschluss in LIS, Leitstellen-Nr. als führende Kennung (Board, Archiv, Verlauf, PDF), Anrufer/Melder-Anzeige mit Klick-zum-Anrufen, Diagnose-Aufzeichnungstool; SMS-Empfang & Weiterleitung (Teams/Gruppen/Mitglieder/Ad-hoc) über native Android-Gateway-App |

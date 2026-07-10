@@ -943,13 +943,13 @@ async def weather_alert_test_mail(
     else:
         try:
             from app.models.master import FireDept
-            from app.services.mail_service import _build_message, _send, get_smtp_cfg
+            from app.services.mail_service import _build_message, _org_smtp_cfg, deliver, get_smtp_cfg
             org = db.query(FireDept).filter(FireDept.id == effective_org_id).first()
-            smtp_cfg = get_smtp_cfg()
+            smtp_cfg = _org_smtp_cfg(db, effective_org_id) or get_smtp_cfg(db)
             betreff = f"[Wetterwarnung Test] – {org.name if org else ''}"
             body = "Dies ist eine Test-Wetterwarnung von Einsatzcockpit.\n\nGeoSphere Austria (CC BY 4.0)"
             msg = _build_message(to=mail_to, subject=betreff, body_txt=body, smtp_cfg=smtp_cfg)
-            await _send(msg, smtp_cfg)
+            await deliver(db, effective_org_id, msg, smtp_cfg)
         except Exception as exc:
             error = str(exc)[:200]
 
@@ -1202,7 +1202,7 @@ async def _invite_org_admin(request: Request, db, org: FireDept, email: str, dis
         await send_password_reset(
             to=email.lower(), reset_url=reset_url,
             user_display_name=new_user.display_name,
-            db=db,
+            db=db, org_id=new_user.org_id,
         )
     except Exception:
         pass

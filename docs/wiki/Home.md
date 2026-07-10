@@ -2,7 +2,7 @@
 
 Digitales Einsatzleiter-Werkzeug für österreichische Feuerwehren — Multi-User, Multi-Organisations-fähig, Echtzeit.
 
-**Version:** 3.3.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
+**Version:** 3.4.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
 
 ## Was ist das?
 
@@ -27,6 +27,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Objektverwaltung: Einsatzunterlagen zu BMA-Objekten und Wohnanlagen — Gefahren (mit Links + Gefahrgut-DB-Anreicherung per UN-Nummer), Schlüsselsafe, Melderpläne mit PDF-Zerlegung und **Volltextsuche (OCR)**, Objekt-Lagekarte, Alarm-Matching mit **Objektgefahren-Board-Spalte**, Objektblatt-Druck; pflegbare Kataloge/Auswahllisten und Karten-Symbole (Bild-Upload)
 - Alarm-Infoscreen für Wandmonitore: URL-Rotation je Monitor (Matrix), Wetter, Großschadenslage-Sonderansicht, RSVP-Anzeige, dauerhaft kopierbare Monitor-URLs
 - SSO via Microsoft Entra ID (JIT-Provisioning, Gruppen-Mapping, PKCE/OIDC)
+- Mail-Versand je Organisation: eigener SMTP-Server und/oder Office 365 / Microsoft Graph, mit automatischer Fallback-Kette
 - Geräteverleih für Großschadenslagen (Artikel, Stücklisten, Barcode-Scan, SMS)
 - PWA für Offline-Betrieb, Web-Push-Benachrichtigungen
 - QR-Code-Schnellzugriff für zustoßende Einsatzkräfte
@@ -90,6 +91,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Geräteverleih (Admin)](Administration-Geraeteverleih) | Artikel und Stücklisten pflegen, Verleih-Übersicht |
 | [Drohne / UAS](Administration-Drohne-UAS) | Modul aktivieren, Geräteregister, Wartungsbuch, Pilotenregister, Compliance |
 | [Single Sign-On (Entra ID)](Administration-Single-Sign-On) | Microsoft-365-Login einrichten, Gruppen-Mapping, JIT-Provisioning |
+| [Mail-Versand (SMTP / Office 365)](Administration-Mail-Versand) | Eigenen SMTP-Server und/oder Office 365 je Org einrichten, Fallback-Kette, Azure-App-Registrierung für Mail.Send |
 | [Lokale Wetterstation](Administration-Wetterstation) | Davis/Meteobridge-Anbindung: Station anlegen, Push-Token, Meteobridge-URL, Datenbankarchitektur |
 | [Fahrtenbuch](Administration-Fahrtenbuch) | Fahrzeuge konfigurieren, Zwecke/Zielorte, Token/QR, Schadensmeldung, Fahrten-Verwaltung |
 | [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |

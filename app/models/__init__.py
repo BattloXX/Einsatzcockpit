@@ -34,6 +34,7 @@ from app.models.incident import (
 from app.models.invitation import OrgInvitation, OrgPartner
 from app.models.lagekarte import LagekarteToken
 from app.models.lis import LisSyncedObject, OrgLisConfig
+from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
 from app.models.major_incident import (
     CitizenReport,
     CommLogEntry,
@@ -146,6 +147,7 @@ from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherA
 __all__ = [
     "OrgSsoConfig", "OrgSsoGroupMap",
     "OrgLisConfig", "LisSyncedObject",
+    "OrgSmtpConfig", "OrgO365MailConfig",
     "TeamsAlarmConfig", "TeamsChannelBinding", "TeamsCardPost", "AlarmToken",
     "User", "Role", "UserRole", "ApiKey", "AuditLog", "PushSubscription",
     "DeviceToken", "FcmToken", "PushLog", "SmsGatewayToken",

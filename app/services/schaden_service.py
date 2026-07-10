@@ -81,14 +81,14 @@ async def melde_schaden(fahrt: Fahrt, db: Session, base_url: str = "") -> None:
     # Mail
     if mail_addr:
         try:
-            from app.services.mail_service import _build_message, _send, get_smtp_cfg
-            smtp_cfg = get_smtp_cfg(db)
+            from app.services.mail_service import _build_message, _org_smtp_cfg, deliver, get_smtp_cfg
+            smtp_cfg = _org_smtp_cfg(db, fahrt.org_id) or get_smtp_cfg(db)
             body_html = "<pre>" + body_text + "</pre>"
             if detail_url:
                 body_html += f'<p><a href="{detail_url}">Fahrt in der Verwaltung öffnen</a></p>'
             msg = _build_message(to=mail_addr, subject=betreff, body_txt=body_text,
                                  body_html=body_html, smtp_cfg=smtp_cfg)
-            await _send(msg, smtp_cfg)
+            await deliver(db, fahrt.org_id, msg, smtp_cfg)
             ok, err = True, None
         except Exception as exc:
             logger.error("Schadenmeldung-Mail-Fehler: %s", exc)

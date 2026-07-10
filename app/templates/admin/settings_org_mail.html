@@ -1,0 +1,391 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Mail-Versand{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Mail-Versand'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>Mail-Versand</h1>
+    <p class="page-header__sub">Eigener SMTP-Server und/oder Office 365 / Microsoft Graph je Organisation &mdash; ohne eigene Angabe wird der globale System-SMTP verwendet</p>
+  </div>
+</div>
+
+{% if flash == 'saved' %}
+<div class="alert alert--success mb-4">Einstellungen gespeichert.</div>
+{% elif flash and flash.startswith('error') %}
+<div class="alert alert--error mb-4">Fehler beim Speichern.</div>
+{% endif %}
+
+{% if is_sysadmin and all_orgs %}
+<section class="card mb-4">
+  <div class="card-body" style="padding:16px 20px">
+    <label style="font-weight:600;margin-bottom:6px;display:block">Organisation:</label>
+    <select class="form-control" style="max-width:320px"
+            onchange="location.href='/admin/mail?org_id='+this.value">
+      <option value="">-- bitte wählen --</option>
+      {% for o in all_orgs %}
+      <option value="{{ o.id }}" {% if org and org.id == o.id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</section>
+{% endif %}
+
+{% if not org %}
+<div class="alert alert--info">Bitte eine Organisation auswählen.</div>
+{% else %}
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Reihenfolge beim Versand</h2></div>
+  <div class="card-body" style="padding:16px 20px">
+    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+      Ist Office 365 aktiviert und vollständig konfiguriert, wird zuerst darüber versendet.
+      Schlägt das fehl (oder ist Office 365 nicht/unvollständig konfiguriert), wird auf
+      den eigenen SMTP-Server dieser Organisation ausgewichen &mdash; ist auch der nicht
+      konfiguriert, greift der globale System-SMTP als letzte Stufe.
+    </p>
+  </div>
+</section>
+
+{% if not o365_globally_enabled %}
+<div class="alert alert--warn mb-4">
+  <strong>Office 365 / Microsoft Graph ist global deaktiviert</strong>
+  (<code>O365_MAIL_ENABLED=false</code> in der Server-Konfiguration).
+  Die Office-365-Einstellungen unten werden ignoriert, bis der Plattform-Admin das Modul wieder aktiviert.
+</div>
+{% endif %}
+
+<!-- ── Eigener SMTP-Server ─────────────────────────────────────────────────── -->
+<form method="post" action="/admin/mail/smtp/save">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin and org %}
+  <input type="hidden" name="target_org_id" value="{{ org.id }}">
+  {% endif %}
+
+  <section class="card mb-4">
+    <div class="card-header"><h2>Eigener SMTP-Server</h2></div>
+    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+
+      <div class="form-group" style="margin:0">
+        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" name="enabled" value="1"
+                 {% if smtp_config and smtp_config.enabled %}checked{% endif %}
+                 class="toggle-checkbox">
+          <span class="toggle-switch"></span>
+          Eigenen SMTP-Server verwenden
+        </label>
+        <p class="form-hint" style="margin:4px 0 0 0">Ohne Aktivierung wird der globale System-SMTP verwendet.</p>
+      </div>
+
+      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
+        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+          <label for="host">Host</label>
+          <input type="text" id="host" name="host"
+                 value="{{ smtp_config.host or '' if smtp_config else '' }}"
+                 placeholder="smtp.example.at" class="form-input" autocomplete="off">
+        </div>
+        <div class="form-group" style="margin:0;width:120px">
+          <label for="port">Port</label>
+          <input type="number" id="port" name="port" min="1" max="65535"
+                 value="{{ smtp_config.port if smtp_config else 587 }}" class="form-input">
+        </div>
+        <div class="form-group" style="margin:0;width:160px">
+          <label for="timeout">Timeout (Sek.)</label>
+          <input type="number" id="timeout" name="timeout" min="1" max="120"
+                 value="{{ smtp_config.timeout if smtp_config else 15 }}" class="form-input">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin:0">
+        <label for="smtp_user">Benutzername</label>
+        <input type="text" id="smtp_user" name="smtp_user"
+               value="{{ smtp_config.user or '' if smtp_config else '' }}"
+               class="form-input" autocomplete="off">
+      </div>
+
+      <div class="form-group" style="margin:0">
+        <label for="password">Passwort</label>
+        {% if smtp_config and smtp_config.password_enc %}
+        <div id="secret-status-smtp" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="color:var(--color-success);font-size:.85rem">&#10003; Passwort gesetzt</span>
+          <button type="button" class="btn btn--ghost btn--sm"
+                  onclick="document.getElementById('secret-status-smtp').style.display='none';document.getElementById('secret-replace-smtp').style.display='';document.getElementById('secret_changed_smtp').value='1'">
+            Ersetzen
+          </button>
+        </div>
+        <div id="secret-replace-smtp" style="display:none">
+          <input type="password" id="password" name="password"
+                 class="form-input" autocomplete="new-password" placeholder="Neues Passwort eingeben">
+        </div>
+        {% else %}
+        <input type="password" id="password" name="password"
+               class="form-input" autocomplete="new-password" placeholder="Passwort eingeben"
+               oninput="document.getElementById('secret_changed_smtp').value='1'">
+        {% endif %}
+        <input type="hidden" id="secret_changed_smtp" name="secret_changed"
+               value="{{ '0' if smtp_config and smtp_config.password_enc else '1' }}">
+        <p class="form-hint">Wird Fernet-verschlüsselt in der Datenbank gespeichert &mdash; nie im Klartext angezeigt</p>
+      </div>
+
+      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+          <label for="from_addr">Absenderadresse</label>
+          <input type="text" id="from_addr" name="from_addr"
+                 value="{{ smtp_config.from_addr or '' if smtp_config else '' }}"
+                 placeholder="einsatz@feuerwehr-beispiel.at" class="form-input" autocomplete="off">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" name="starttls" value="1"
+                   {% if not smtp_config or smtp_config.starttls %}checked{% endif %}
+                   class="toggle-checkbox">
+            <span class="toggle-switch"></span>
+            STARTTLS
+          </label>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="submit" class="btn btn--primary">Speichern</button>
+        <input type="email" id="smtp-test-recipient" placeholder="Test-Empfänger (optional)"
+               class="form-input" style="max-width:260px">
+        <button type="button" class="btn btn--ghost"
+                onclick="einsatzcockpitSmtpTest()">
+          Test-Mail senden
+        </button>
+      </div>
+      <div id="smtp-test-result" style="font-size:.85rem"></div>
+    </div>
+  </section>
+</form>
+
+<!-- ── Office 365 / Microsoft Graph ────────────────────────────────────────── -->
+<form method="post" action="/admin/mail/o365/save">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin and org %}
+  <input type="hidden" name="target_org_id" value="{{ org.id }}">
+  {% endif %}
+
+  <section class="card mb-4">
+    <div class="card-header"><h2>Office 365 / Microsoft Graph</h2></div>
+    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+
+      <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+        Braucht eine Azure-AD-App-Registrierung mit Application permission
+        <code>Mail.Send</code> (admin-consented), ggf. eingeschränkt auf das
+        Absender-Postfach über eine Application Access Policy.
+      </p>
+
+      <div class="form-group" style="margin:0">
+        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" name="enabled" value="1"
+                 {% if o365_config and o365_config.enabled %}checked{% endif %}
+                 class="toggle-checkbox">
+          <span class="toggle-switch"></span>
+          Office 365 aktiviert
+        </label>
+        <p class="form-hint" style="margin:4px 0 0 0">Wird zuerst versucht, bevor auf SMTP zurückgefallen wird.</p>
+      </div>
+
+      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
+        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+          <label for="tenant_id">Tenant-ID</label>
+          <input type="text" id="tenant_id" name="tenant_id"
+                 value="{{ o365_config.tenant_id or '' if o365_config else '' }}"
+                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                 class="form-input" autocomplete="off">
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+          <label for="client_id">App (Client)-ID</label>
+          <input type="text" id="client_id" name="client_id"
+                 value="{{ o365_config.client_id or '' if o365_config else '' }}"
+                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                 class="form-input" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin:0">
+        <label for="client_secret">Client-Secret</label>
+        {% if o365_config and o365_config.client_secret_enc %}
+        <div id="secret-status-o365" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="color:var(--color-success);font-size:.85rem">&#10003; Secret gesetzt</span>
+          <button type="button" class="btn btn--ghost btn--sm"
+                  onclick="document.getElementById('secret-status-o365').style.display='none';document.getElementById('secret-replace-o365').style.display='';document.getElementById('secret_changed_o365').value='1'">
+            Ersetzen
+          </button>
+        </div>
+        <div id="secret-replace-o365" style="display:none">
+          <input type="password" id="client_secret" name="client_secret"
+                 class="form-input" autocomplete="new-password" placeholder="Neues Client-Secret eingeben">
+        </div>
+        {% else %}
+        <input type="password" id="client_secret" name="client_secret"
+               class="form-input" autocomplete="new-password" placeholder="Client-Secret eingeben"
+               oninput="document.getElementById('secret_changed_o365').value='1'">
+        {% endif %}
+        <input type="hidden" id="secret_changed_o365" name="secret_changed"
+               value="{{ '0' if o365_config and o365_config.client_secret_enc else '1' }}">
+        <p class="form-hint">Wird Fernet-verschlüsselt in der Datenbank gespeichert &mdash; nie im Klartext angezeigt</p>
+      </div>
+
+      <div class="form-group" style="margin:0">
+        <label for="sender_address">Absender-Postfach</label>
+        <input type="text" id="sender_address" name="sender_address"
+               value="{{ o365_config.sender_address or '' if o365_config else '' }}"
+               placeholder="einsatz@feuerwehr-beispiel.at" class="form-input" autocomplete="off">
+        <p class="form-hint">Postfach/UPN, dessen Rechte die App-Registrierung zum Senden nutzt.</p>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="submit" class="btn btn--primary">Speichern</button>
+        <input type="email" id="o365-test-recipient" placeholder="Test-Empfänger (optional)"
+               class="form-input" style="max-width:260px">
+        <button type="button" class="btn btn--ghost"
+                onclick="einsatzcockpitO365Test()">
+          Test-Mail senden
+        </button>
+      </div>
+      <div id="o365-test-result" style="font-size:.85rem"></div>
+    </div>
+  </section>
+</form>
+
+<!-- ── Posteingang abrufen (Vorbereitung, noch nicht aktiv) ───────────────────── -->
+<form method="post" action="/admin/mail/smtp/save">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin and org %}
+  <input type="hidden" name="target_org_id" value="{{ org.id }}">
+  {% endif %}
+  <!-- Formular teilt sich die SMTP-Config-Tabelle — bereits gesetzte SMTP-Felder
+       unverändert mitschicken, damit sie beim Speichern hier nicht verloren gehen. -->
+  <input type="hidden" name="enabled" value="{{ '1' if smtp_config and smtp_config.enabled else '' }}">
+  <input type="hidden" name="host" value="{{ smtp_config.host or '' if smtp_config else '' }}">
+  <input type="hidden" name="port" value="{{ smtp_config.port if smtp_config else 587 }}">
+  <input type="hidden" name="smtp_user" value="{{ smtp_config.user or '' if smtp_config else '' }}">
+  <input type="hidden" name="from_addr" value="{{ smtp_config.from_addr or '' if smtp_config else '' }}">
+  <input type="hidden" name="starttls" value="{{ '1' if not smtp_config or smtp_config.starttls else '' }}">
+  <input type="hidden" name="timeout" value="{{ smtp_config.timeout if smtp_config else 15 }}">
+  <input type="hidden" name="secret_changed" value="0">
+
+  <section class="card mb-4">
+    <div class="card-header"><h2>Posteingang abrufen (Vorbereitung)</h2></div>
+    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+      <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
+        <strong>Konfiguration wird gespeichert, der automatische Abruf ist noch nicht
+        aktiv/implementiert.</strong> Diese Felder bereiten das künftige Abholen
+        eingehender Mails aus dem eigenen SMTP-Postfach (per IMAP) bzw. dem
+        Office-365-Postfach (per Microsoft Graph <code>Mail.Read</code>) nur vor.
+      </p>
+
+      <div class="form-group" style="margin:0">
+        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" name="imap_enabled" value="1"
+                 {% if smtp_config and smtp_config.imap_enabled %}checked{% endif %}
+                 class="toggle-checkbox">
+          <span class="toggle-switch"></span>
+          IMAP-Abruf vorbereiten (eigener SMTP-Server, gleiches Postfach/gleiche Zugangsdaten)
+        </label>
+      </div>
+
+      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
+        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+          <label for="imap_host">IMAP-Host</label>
+          <input type="text" id="imap_host" name="imap_host"
+                 value="{{ smtp_config.imap_host or '' if smtp_config else '' }}"
+                 placeholder="imap.example.at" class="form-input" autocomplete="off">
+        </div>
+        <div class="form-group" style="margin:0;width:120px">
+          <label for="imap_port">Port</label>
+          <input type="number" id="imap_port" name="imap_port" min="1" max="65535"
+                 value="{{ smtp_config.imap_port if smtp_config else 993 }}" class="form-input">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" name="imap_use_ssl" value="1"
+                   {% if not smtp_config or smtp_config.imap_use_ssl %}checked{% endif %}
+                   class="toggle-checkbox">
+            <span class="toggle-switch"></span>
+            SSL/TLS
+          </label>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </div>
+  </section>
+</form>
+
+<form method="post" action="/admin/mail/o365/save">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin and org %}
+  <input type="hidden" name="target_org_id" value="{{ org.id }}">
+  {% endif %}
+  <!-- Teilt sich die O365-Config-Tabelle — bereits gesetzte O365-Felder unverändert mitschicken. -->
+  <input type="hidden" name="enabled" value="{{ '1' if o365_config and o365_config.enabled else '' }}">
+  <input type="hidden" name="tenant_id" value="{{ o365_config.tenant_id or '' if o365_config else '' }}">
+  <input type="hidden" name="client_id" value="{{ o365_config.client_id or '' if o365_config else '' }}">
+  <input type="hidden" name="sender_address" value="{{ o365_config.sender_address or '' if o365_config else '' }}">
+  <input type="hidden" name="secret_changed" value="0">
+
+  <section class="card mb-4">
+    <div class="card-body" style="padding:16px 20px">
+      <div class="form-group" style="margin:0">
+        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" name="read_enabled" value="1"
+                 {% if o365_config and o365_config.read_enabled %}checked{% endif %}
+                 class="toggle-checkbox">
+          <span class="toggle-switch"></span>
+          Mail.Read-Abruf vorbereiten (Office-365-Postfach, gleiche App-Registrierung)
+        </label>
+        <p class="form-hint" style="margin:4px 0 0 0">Braucht zusätzlich die Application-Permission <code>Mail.Read</code> in Azure &mdash; nur eine Absichts-Flag, kein Abruf implementiert.</p>
+      </div>
+      <div style="margin-top:12px">
+        <button type="submit" class="btn btn--primary">Speichern</button>
+      </div>
+    </div>
+  </section>
+</form>
+
+<script>
+function einsatzcockpitSmtpTest() {
+  var result = document.getElementById("smtp-test-result");
+  result.textContent = "Sende...";
+  var recipient = document.getElementById("smtp-test-recipient").value;
+  var params = new URLSearchParams();
+  params.set("_csrf", "{{ request.state.csrf_token }}");
+  {% if is_sysadmin and org %}
+  params.set("target_org_id", "{{ org.id }}");
+  {% endif %}
+  params.set("recipient", recipient);
+  fetch("/admin/mail/smtp/test", { method: "POST", body: params })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      result.textContent = d.message;
+      result.style.color = d.ok ? "var(--color-success)" : "var(--color-danger)";
+    })
+    .catch(function () { result.textContent = "Fehler beim Testen."; });
+}
+
+function einsatzcockpitO365Test() {
+  var result = document.getElementById("o365-test-result");
+  result.textContent = "Sende...";
+  var recipient = document.getElementById("o365-test-recipient").value;
+  var params = new URLSearchParams();
+  params.set("_csrf", "{{ request.state.csrf_token }}");
+  {% if is_sysadmin and org %}
+  params.set("target_org_id", "{{ org.id }}");
+  {% endif %}
+  params.set("recipient", recipient);
+  fetch("/admin/mail/o365/test", { method: "POST", body: params })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      result.textContent = d.message;
+      result.style.color = d.ok ? "var(--color-success)" : "var(--color-danger)";
+    })
+    .catch(function () { result.textContent = "Fehler beim Testen."; });
+}
+</script>
+
+{% endif %}
+{% endblock %}

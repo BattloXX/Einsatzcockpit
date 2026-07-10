@@ -76,8 +76,8 @@ async def dispatch_alert(
     # ── Mail ──────────────────────────────────────────────────────────────────
     if rule.channel_mail and mail_to:
         try:
-            from app.services.mail_service import _build_message, _send, get_smtp_cfg
-            smtp_cfg = get_smtp_cfg()
+            from app.services.mail_service import _build_message, _org_smtp_cfg, deliver, get_smtp_cfg
+            smtp_cfg = _org_smtp_cfg(db, rule.org_id) or get_smtp_cfg(db)
             if detail_url:
                 body_html += f'<p><a href="{detail_url}">Wetter-Panel öffnen</a></p>'
             msg = _build_message(
@@ -87,7 +87,7 @@ async def dispatch_alert(
                 body_html=body_html,
                 smtp_cfg=smtp_cfg,
             )
-            await _send(msg, smtp_cfg)
+            await deliver(db, rule.org_id, msg, smtp_cfg)
             ok, err = True, None
         except Exception as exc:
             logger.error("dispatch_alert Mail-Fehler Regel %s: %s", rule.key, exc)
