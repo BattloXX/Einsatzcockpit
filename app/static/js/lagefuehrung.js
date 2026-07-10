@@ -44,14 +44,16 @@
     return L.divIcon({ html: html, className: "lft-divicon", iconSize: null, iconAnchor: anchor });
   }
 
+  // Ohne eigens zugeordnetes taktisches Zeichen (Fahrzeugverwaltung) zeigt jedes
+  // Fahrzeug das generische Feuerwehrfahrzeug-Symbol statt eines schmucklosen
+  // Farbkreises — Statusfarbe bleibt als Ring um das Symbol sichtbar.
+  var VEHICLE_ICON_FALLBACK = "feuerwehrfahrzeug";
   function vehicleIcon(color, zeichenKey) {
-    if (zeichenKey) {
-      return divIcon(
-        '<div class="lft-vehicle-tz" style="border-color:' + color + '"><img src="' + tzIconUrl(zeichenKey) + '" alt=""></div>',
-        [16, 16]
-      );
-    }
-    return divIcon('<div class="lft-vehicle-icon" style="border-color:' + color + '"></div>', [12, 12]);
+    var key = zeichenKey || VEHICLE_ICON_FALLBACK;
+    return divIcon(
+      '<div class="lft-vehicle-tz" style="border-color:' + color + '"><img src="' + tzIconUrl(key) + '" alt=""></div>',
+      [16, 16]
+    );
   }
 
   function tzIconUrl(zeichenKey) {
