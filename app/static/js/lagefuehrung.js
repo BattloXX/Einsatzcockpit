@@ -155,19 +155,22 @@
         var text = document.createElement("span");
         text.textContent = (v.label || "Fahrzeug") + " · " + v.unit_status;
         li.appendChild(text);
-        if (v.lat == null || v.lng == null) {
-          var btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "btn btn--ghost btn--xs";
-          btn.textContent = "📍 Platzieren";
-          btn.addEventListener("click", function () { armPlacement("fahrzeug-pin", v); });
-          li.appendChild(btn);
-        } else {
+        // Immer platzierbar/verschiebbar — auch wenn bereits eine (ggf. veraltete oder aus
+        // einem anderen Einsatz übernommene) Position vorliegt, da GPS-Positionen je
+        // Fahrzeug org-weit zuletzt-gemeldet korrelieren und nicht zwingend zu diesem
+        // Einsatz passen. Der Lageführer muss die Position jederzeit manuell setzen können.
+        if (v.lat != null && v.lng != null) {
           var ok = document.createElement("span");
           ok.className = "lft-fahrzeuge__auf-karte";
           ok.textContent = "auf Karte";
           li.appendChild(ok);
         }
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn btn--ghost btn--xs";
+        btn.textContent = (v.lat == null || v.lng == null) ? "📍 Platzieren" : "📍 Verschieben";
+        btn.addEventListener("click", function () { armPlacement("fahrzeug-pin", v); });
+        li.appendChild(btn);
         el.appendChild(li);
       });
     }
@@ -238,6 +241,19 @@
       if (f.typ === "distanz") {
         return { color: (f.props && f.props.color) || "#6b7280", weight: 2, dashArray: "6 4", fillOpacity: 0.04 };
       }
+      if (f.props && f.props.flaeche_key) {
+        // Fläche aus der Flächen-Palette (tz-manifest.json flaechen[]) — Vereinfachung ohne
+        // echtes SVG-Schraffur-Pattern (Muster: Farbnäherung statt exaktem Muster, wie bei der
+        // PDF-Kartenapproximation in lagefuehrung_pdf_service.py): Füllfarbe = Schraffurfarbe
+        // mit niedriger Deckkraft, Randfarbe = stroke, gestrichelt wenn dash=true.
+        return {
+          color: f.props.color || "#e53e3e",
+          weight: 3,
+          dashArray: f.props.dash ? "6 4" : null,
+          fillColor: f.props.hatchColor || f.props.color || "#e53e3e",
+          fillOpacity: f.props.hatch ? 0.22 : 0.1,
+        };
+      }
       return { color: (f.props && f.props.color) || "#e53e3e", weight: 3 };
     }
 
@@ -300,28 +316,43 @@
       return divIcon(html, [16, 16]);
     }
 
-    function bindTzPopup(layer, f) {
+    var FEATURE_TITEL = { text: "Text", meldung: "Meldung", marker: "Marker", zeichnung: "Zeichnung" };
+    function featureTitel(f) {
+      if (f.typ === "taktisches_zeichen") { return f.label || "Symbol"; }
+      if (f.props && f.props.flaeche_key) { return "Fläche"; }
+      return FEATURE_TITEL[f.typ] || f.typ;
+    }
+
+    // Generischer Bearbeiten-Popup für JEDEN Feature-Typ (vorher nur taktische Zeichen mit
+    // Drehen/Größe, aber ohne Beschriftungsfeld — Zeichnungen/Marker/Meldungen hatten gar
+    // keinen oder nur einen reinen Lese-Popup). Beschriftung ist jetzt bei allen Typen
+    // editierbar; Drehen/Größe bleibt auf taktische Zeichen beschränkt (einzige Typen mit
+    // rotation/scale-Feldern).
+    function bindFeaturePopup(layer, f) {
+      var zeigeDrehGroesse = f.typ === "taktisches_zeichen";
       var el = document.createElement("div");
       el.className = "lft-tz-popup";
       el.innerHTML =
-        '<div class="lft-tz-popup__title">' + escapeHtml(f.label || "") + '</div>' +
-        '<div class="lft-tz-popup__row"><span>Drehen</span>' +
-        '<button type="button" data-rot="-15">↺</button>' +
-        '<button type="button" data-rot="15">↻</button></div>' +
-        '<div class="lft-tz-popup__row"><span>Größe</span>' +
-        '<button type="button" data-scale="0.75">S</button>' +
-        '<button type="button" data-scale="1">M</button>' +
-        '<button type="button" data-scale="1.5">L</button></div>';
+        '<div class="lft-tz-popup__title">' + escapeHtml(featureTitel(f)) + '</div>' +
+        '<div class="lft-tz-popup__row lft-tz-popup__row--label">' +
+        '<input type="text" class="form-input lft-tz-popup__label-input" value="' + escapeHtml(f.label || "") + '" placeholder="Beschriftung">' +
+        '<button type="button" data-save-label>Speichern</button></div>' +
+        (zeigeDrehGroesse ?
+          '<div class="lft-tz-popup__row"><span>Drehen</span>' +
+          '<button type="button" data-rot="-15">↺</button>' +
+          '<button type="button" data-rot="15">↻</button></div>' +
+          '<div class="lft-tz-popup__row"><span>Größe</span>' +
+          '<button type="button" data-scale="0.75">S</button>' +
+          '<button type="button" data-scale="1">M</button>' +
+          '<button type="button" data-scale="1.5">L</button></div>'
+          : '');
       layer.bindPopup(el);
       layer.on("popupopen", function () { beginEditing(f.id); });
       layer.on("popupclose", function () { endEditing(f.id); });
-      el.addEventListener("click", function (ev) {
-        var btn = ev.target.closest("button");
-        if (!btn) { return; }
+
+      function speichern(patch) {
         var current = layer.lft_feature;
-        var patch = { version: current.version };
-        if (btn.dataset.rot) { patch.rotation = ((current.rotation || 0) + parseInt(btn.dataset.rot, 10) + 360) % 360; }
-        if (btn.dataset.scale) { patch.scale = parseFloat(btn.dataset.scale); }
+        patch.version = current.version;
         fetchJson(apiBase + "/features/" + current.id, {
           method: "PATCH",
           headers: { "Content-Type": "application/json", "X-CSRF-Token": opts.csrfToken },
@@ -329,6 +360,20 @@
         }).then(function (updated) {
           renderFeature(updated);
         }).catch(function () { ladeFeatures(); });
+      }
+      el.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("button");
+        if (!btn) { return; }
+        var current = layer.lft_feature;
+        var patch = {};
+        if (btn.dataset.rot) { patch.rotation = ((current.rotation || 0) + parseInt(btn.dataset.rot, 10) + 360) % 360; }
+        if (btn.dataset.scale) { patch.scale = parseFloat(btn.dataset.scale); }
+        if (btn.hasAttribute("data-save-label")) { patch.label = el.querySelector(".lft-tz-popup__label-input").value; }
+        speichern(patch);
+      });
+      var labelInput = el.querySelector(".lft-tz-popup__label-input");
+      labelInput.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter") { speichern({ label: labelInput.value }); }
       });
     }
 
@@ -344,6 +389,9 @@
           if (f.typ === "meldung") {
             return L.marker(latlng, { icon: divIcon('<div class="lft-meldung-icon">📢</div>', [14, 28]) });
           }
+          if (f.typ === "text") {
+            return L.marker(latlng, { icon: divIcon("", [0, 0]) });
+          }
           if (f.typ === "distanz" && f.props && f.props.kind === "kreis") {
             return L.circle(latlng, { radius: f.props.distanz_m || 0, color: "#6b7280", weight: 2, dashArray: "6 4", fillOpacity: 0.04 });
           }
@@ -354,15 +402,17 @@
       if (!layer) { return; }
       layer.lft_feature = f;
 
-      if (f.typ === "taktisches_zeichen") {
-        bindTzPopup(layer, f);
-      } else if (f.typ === "meldung") {
-        layer.bindPopup('<strong>📢 Meldung</strong><br>' + escapeHtml(f.label || ""));
-      } else if (f.typ === "distanz") {
+      if (f.typ === "distanz") {
         var text = (f.props && f.props.distanz_m != null) ? (f.props.distanz_m + " m") : "";
         if (text) { layer.bindTooltip(text, { permanent: true, direction: "center" }); }
-      } else if (f.label) {
-        layer.bindTooltip(escapeHtml(f.label), { permanent: true, direction: "top" });
+      } else {
+        bindFeaturePopup(layer, f);
+        if (f.label && f.typ !== "meldung") {
+          layer.bindTooltip(escapeHtml(f.label), {
+            permanent: true, direction: "top",
+            className: f.typ === "text" ? "lft-text-label" : undefined,
+          });
+        }
       }
 
       layer.addTo(layerZeichnung);
@@ -414,6 +464,7 @@
         pointToLayer: function (geoJsonPoint, latlng) {
           if (f.typ === "taktisches_zeichen" && f.zeichen_key) { return L.marker(latlng, { icon: tzFeatureIcon(f) }); }
           if (f.typ === "meldung") { return L.marker(latlng, { icon: divIcon('<div class="lft-meldung-icon">📢</div>', [14, 28]) }); }
+          if (f.typ === "text") { return L.marker(latlng, { icon: divIcon("", [0, 0]) }); }
           if (f.typ === "distanz" && f.props && f.props.kind === "kreis") {
             return L.circle(latlng, { radius: f.props.distanz_m || 0, color: "#6b7280", weight: 2, dashArray: "6 4", fillOpacity: 0.04 });
           }
@@ -427,7 +478,10 @@
       } else if (f.typ === "distanz" && f.props && f.props.distanz_m != null) {
         layer.bindTooltip(f.props.distanz_m + " m", { permanent: true, direction: "center" });
       } else if (f.label) {
-        layer.bindTooltip(escapeHtml(f.label), { permanent: true, direction: "top" });
+        layer.bindTooltip(escapeHtml(f.label), {
+          permanent: true, direction: "top",
+          className: f.typ === "text" ? "lft-text-label" : undefined,
+        });
       }
       layer.addTo(layerReplay);
     }
@@ -555,6 +609,10 @@
       });
     }
 
+    // Von der Flächen-Palette (Taktik-Tab) vorgemerkter Stil für die als Nächstes gezeichnete
+    // Fläche — Auswahl dort startet automatisch das Polygon-Werkzeug (siehe renderFlaechenPicker).
+    var pendingFlaecheStyle = null;
+
     if (opts.editierbar && karte.pm) {
       enableDrawTools();
 
@@ -562,8 +620,26 @@
         var layer = e.layer;
         var geojson = layer.toGeoJSON().geometry;
         var typ = e.shape === "Marker" ? "marker" : "zeichnung";
-        layerZeichnung.removeLayer(layer);
-        createFeature({ typ: typ, geometry: geojson, layer_gruppe: "zeichnung" });
+        // Geoman hängt den frisch gezeichneten Layer direkt an die Karte (nicht an
+        // layerZeichnung) — ohne karte.removeLayer(...) blieb die unstilisierte
+        // Geoman-Rohform (Standard-Blau, Standard-Leaflet-Pin) dauerhaft sichtbar, zusätzlich
+        // zur sauber gerenderten Version aus renderFeature() (Fehlerbild: "blaue Marker beim
+        // Zeichnen"). layerZeichnung.removeLayer(layer) war ein No-Op.
+        karte.removeLayer(layer);
+
+        var payload = { typ: typ, geometry: geojson, layer_gruppe: "zeichnung" };
+        if (pendingFlaecheStyle && e.shape === "Polygon") {
+          payload.label = pendingFlaecheStyle.name;
+          payload.props = {
+            flaeche_key: pendingFlaecheStyle.id,
+            color: pendingFlaecheStyle.stroke,
+            hatch: pendingFlaecheStyle.hatch || null,
+            hatchColor: pendingFlaecheStyle.hatchColor || null,
+            dash: !!pendingFlaecheStyle.dash,
+          };
+        }
+        pendingFlaecheStyle = null;
+        createFeature(payload);
       });
 
       karte.on("pm:remove", function (e) {
@@ -618,6 +694,36 @@
       });
     }
 
+    function openTextForm(latlng) {
+      var marker = L.marker(latlng, { icon: divIcon("", [0, 0]) }).addTo(karte);
+      var el = document.createElement("div");
+      el.className = "lft-meldung-form";
+      el.innerHTML =
+        '<input type="text" class="form-input" placeholder="Text">' +
+        '<div class="lft-meldung-form__actions">' +
+        '<button type="button" class="btn btn--sm btn--primary" data-action="save">Speichern</button>' +
+        '<button type="button" class="btn btn--sm btn--ghost" data-action="cancel">Abbrechen</button></div>';
+      marker.bindPopup(el, { closeOnClick: false }).openPopup();
+      el.querySelector('[data-action="cancel"]').addEventListener("click", function () {
+        karte.removeLayer(marker);
+      });
+      function speichern() {
+        var text = el.querySelector("input").value.trim();
+        karte.removeLayer(marker);
+        if (!text) { return; }
+        createFeature({
+          typ: "text",
+          geometry: { type: "Point", coordinates: [latlng.lng, latlng.lat] },
+          label: text,
+          layer_gruppe: "zeichnung"
+        });
+      }
+      el.querySelector('[data-action="save"]').addEventListener("click", speichern);
+      el.querySelector("input").addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter") { speichern(); }
+      });
+    }
+
     function handlePlacementClick(latlng) {
       var p = pendingPlacement;
       if (p.kind === "tz") {
@@ -632,6 +738,9 @@
       } else if (p.kind === "meldung") {
         disarmPlacement();
         openMeldungForm(latlng);
+      } else if (p.kind === "text") {
+        disarmPlacement();
+        openTextForm(latlng);
       } else if (p.kind === "distanzlinie") {
         p.points.push(latlng);
         if (p.points.length === 2) {
@@ -730,11 +839,27 @@
       }
 
       var tzPickerEl = document.getElementById("lft-tz-picker");
+      var flaechenPickerEl = document.getElementById("lft-flaechen-picker");
       if (tzPickerEl) {
         fetch("/static/tz/tz-manifest.json").then(function (r) { return r.json(); }).then(function (m) {
           renderTzPicker(tzPickerEl, m.symbole || []);
+          if (flaechenPickerEl) { renderFlaechenPicker(flaechenPickerEl, m.flaechen || []); }
         }).catch(function () {});
       }
+
+      document.querySelectorAll("[data-lft-tzsub]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          document.querySelectorAll("[data-lft-tzsub]").forEach(function (b) { b.classList.remove("lft-tz-subtab--aktiv"); });
+          btn.classList.add("lft-tz-subtab--aktiv");
+          var sub = btn.getAttribute("data-lft-tzsub");
+          document.querySelectorAll("[data-lft-tzsub-panel]").forEach(function (panel) {
+            panel.hidden = panel.getAttribute("data-lft-tzsub-panel") !== sub;
+          });
+        });
+      });
+
+      var btnText = document.getElementById("lft-tool-text");
+      if (btnText) { btnText.addEventListener("click", function () { armPlacement("text"); }); }
 
       initFahrzeugSuche();
     }
@@ -830,6 +955,36 @@
           b.style.display = (!q || txt.indexOf(q) !== -1) ? "" : "none";
         });
       });
+    }
+
+    // Flächen-Palette (tz-manifest.json flaechen[]): Auswahl merkt den Stil vor und startet
+    // sofort das Geoman-Polygon-Werkzeug — analog dazu, dass die Symbol-Auswahl sofort den
+    // Platzierungsmodus mit dem richtigen Zeichen aktiviert (siehe pm:create-Handler oben).
+    function renderFlaechenPicker(el, flaechen) {
+      el.innerHTML = "";
+      var grid = document.createElement("div");
+      grid.className = "lft-flaechen-picker__grid";
+      flaechen.forEach(function (fl) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "lft-flaechen-picker__item";
+        btn.title = fl.name;
+        var swatch = document.createElement("span");
+        swatch.className = "lft-flaechen-picker__swatch";
+        swatch.style.background = fl.hatchColor || fl.stroke || "#e53e3e";
+        swatch.style.borderColor = fl.stroke || "#e53e3e";
+        if (fl.dash) { swatch.style.borderStyle = "dashed"; }
+        btn.appendChild(swatch);
+        var label = document.createElement("span");
+        label.textContent = fl.name;
+        btn.appendChild(label);
+        btn.addEventListener("click", function () {
+          pendingFlaecheStyle = fl;
+          if (karte.pm) { karte.pm.enableDraw("Polygon"); }
+        });
+        grid.appendChild(btn);
+      });
+      el.appendChild(grid);
     }
 
     // ── Präsenz + Rechtevergabe ───────────────────────────────────────────────
