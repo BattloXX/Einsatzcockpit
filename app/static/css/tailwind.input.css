@@ -1780,6 +1780,7 @@ button.htmx-request,
 }
 .lft-tab--aktiv { background: rgba(147, 197, 253, .15); color: #93c5fd; }
 .lft-tab-panel { display: flex; flex-direction: column; gap: 14px; }
+.lft-tab-panel[hidden] { display: none; }
 .lft-layer-gruppe { display: flex; flex-direction: column; gap: 6px; }
 .lft-layer-gruppe label { display: flex; align-items: center; gap: 8px; font-size: .82rem; cursor: pointer; }
 .lft-basislayer { display: flex; flex-direction: column; gap: 4px; }
