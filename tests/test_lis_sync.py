@@ -817,9 +817,13 @@ def test_sync_vehicle_location_ignores_unmapped_reference_id():
         incident, vehicle_master, _ = _make_incident_with_vehicle(db, ORG_ID)
         person_unit = _s5_unit(ref_id="andreas.schneider4", location_x="105251", location_y="257303")
 
+        # Delta statt Absolutwert: die Tabelle ist session-weit geteilt (setup_db
+        # räumt erst am Ende der gesamten Testsuite auf), andere Tests können
+        # bereits eigene VehiclePosition-Zeilen angelegt haben.
+        count_before = db.query(VehiclePosition).count()
         lis_sync._sync_vehicle_status(db, org, incident, [person_unit])
 
-        assert db.query(VehiclePosition).count() == 0
+        assert db.query(VehiclePosition).count() == count_before
     finally:
         db.rollback()
         db.close()

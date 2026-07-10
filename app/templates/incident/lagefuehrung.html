@@ -46,6 +46,7 @@
           {% if objekt_enabled %}
           <label><input type="checkbox" id="lft-layer-objekt" checked> 🏢 Objekt</label>
           {% endif %}
+          <label><input type="checkbox" id="lft-layer-wasserstellen" checked> 💧 Wasserstellen</label>
           <label><input type="checkbox" id="lft-layer-zeichnung" checked> ✏️ Zeichnungen</label>
         </div>
 
@@ -66,6 +67,15 @@
             <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzkreis">⭕ Distanzkreis</button>
           </div>
         </div>
+
+        <details class="lft-fahrzeuge" open>
+          <summary class="lft-chronologie__title">Fahrzeuge</summary>
+          <ul id="lft-fahrzeuge-liste" class="lft-fahrzeuge__liste"></ul>
+          <div class="lft-fahrzeuge__add">
+            <input type="text" id="lft-fahrzeug-suche" class="form-input" placeholder="Fahrzeug suchen und hinzufügen …" autocomplete="off">
+            <div id="lft-fahrzeug-vorschlaege" class="lft-fahrzeuge__vorschlaege" hidden></div>
+          </div>
+        </details>
         {% else %}
         <p class="form-hint" style="margin-top:10px;">Nur Ansicht — Zeichnen erfordert eine Bearbeiter-Rolle.</p>
         {% endif %}
