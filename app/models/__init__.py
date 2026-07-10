@@ -4,13 +4,6 @@ from app.models.atemschutz_pruefung import (
     AtemschutzPruefung,
 )
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
-from app.models.gateway import (
-    AlarmIngest,
-    Gateway,
-    PrintJob,
-    PrintRule,
-    Printer,
-)
 from app.models.fahrtenbuch import (
     Fahrt,
     FahrtBenachrichtigung,
@@ -19,6 +12,13 @@ from app.models.fahrtenbuch import (
     FahrtStatus,
     Fahrtzweck,
     Zielort,
+)
+from app.models.gateway import (
+    AlarmIngest,
+    Gateway,
+    Printer,
+    PrintJob,
+    PrintRule,
 )
 from app.models.incident import (
     Incident,
@@ -35,7 +35,6 @@ from app.models.invitation import OrgInvitation, OrgPartner
 from app.models.lagefuehrung import LagefuehrungBerechtigung, LagefuehrungEvent, LagefuehrungFeature
 from app.models.lagekarte import LagekarteToken
 from app.models.lis import LisSyncedObject, OrgLisConfig
-from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
 from app.models.major_incident import (
     CitizenReport,
     CommLogEntry,
@@ -93,6 +92,7 @@ from app.models.objekt import (
     ObjektWohnanlage,
     ObjektZusatzadresse,
 )
+from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
 from app.models.password_reset import PasswordResetToken
 from app.models.sms import (
     SmsEinsatzinfoRecipient,

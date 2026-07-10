@@ -215,8 +215,9 @@ def render_lagefuehrung_pdf(incident: Incident, db: Session, base_url: str = "")
         return buf.getvalue()
     except Exception as exc:
         logger.warning("WeasyPrint fehlgeschlagen (Lagebericht), Fallback auf xhtml2pdf: %s", exc)
-        from app.services.pdf_service import strip_font_face_for_xhtml2pdf  # noqa: PLC0415
         from xhtml2pdf import pisa  # noqa: PLC0415
+
+        from app.services.pdf_service import strip_font_face_for_xhtml2pdf  # noqa: PLC0415
         buf = io.BytesIO()
         pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
         return buf.getvalue()

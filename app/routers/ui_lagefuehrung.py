@@ -221,7 +221,8 @@ async def lagefuehrung_vehicles(
             .all()
         )
         for row in rows:
-            latest_position.setdefault(row.vehicle_id, row)
+            if row.vehicle_id is not None:
+                latest_position.setdefault(row.vehicle_id, row)
 
     out = []
     for v in vehicles:
