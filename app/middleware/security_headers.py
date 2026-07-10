@@ -21,7 +21,7 @@ from app.config import settings
 _CSP_BASE = (
     "default-src 'self'; "
     "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org "
-    "https://*.rainviewer.com; "
+    "https://*.rainviewer.com https://*.wien.gv.at; "
     "media-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "

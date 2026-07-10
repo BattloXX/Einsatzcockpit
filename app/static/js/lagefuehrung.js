@@ -7,6 +7,17 @@
 (function () {
   "use strict";
 
+  // Leaflets Default-Icon verweist relativ zur CSS-Datei auf images/marker-icon.png,
+  // das Projekt liefert die Bilder aber unter /static/img/leaflet/ aus (Muster
+  // map-picker.js/wasserstellen_admin.js) — ohne diesen Fix zeigen alle Punkte ohne
+  // eigenes divIcon (z. B. per Geoman gezeichnete Marker) ein kaputtes Bild-Symbol.
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconUrl: "/static/img/leaflet/marker-icon.png",
+    iconRetinaUrl: "/static/img/leaflet/marker-icon-2x.png",
+    shadowUrl: "/static/img/leaflet/marker-shadow.png"
+  });
+
   function fetchJson(url, opts) {
     return fetch(url, opts).then(function (r) {
       if (!r.ok) {
@@ -142,10 +153,20 @@
       });
     }
 
+    function markerFeatureIcon(f) {
+      var color = (f.props && f.props.color) || "#e53e3e";
+      return divIcon('<div class="lft-vehicle-icon" style="border-color:' + color + '"></div>', [12, 12]);
+    }
+
     function renderFeature(f) {
       if (featureLayers[f.id]) { layerZeichnung.removeLayer(featureLayers[f.id]); }
       if (!f.geometry) { return; }
-      var group = L.geoJSON(f.geometry, { style: featureStyle(f) });
+      var group = L.geoJSON(f.geometry, {
+        style: featureStyle(f),
+        pointToLayer: function (geoJsonPoint, latlng) {
+          return L.marker(latlng, { icon: markerFeatureIcon(f) });
+        }
+      });
       var layer = group.getLayers()[0];
       if (!layer) { return; }
       layer.lft_feature = f;
@@ -173,7 +194,10 @@
         el.innerHTML = "";
         (liste || []).forEach(function (e) {
           var li = document.createElement("li");
-          li.textContent = e.ts.substring(11, 16) + " · " + e.event_typ;
+          // e.ts kommt als UTC mit Z-Suffix vom Server (CLAUDE.md-Regel) — hier lokal
+          // formatieren, sonst zeigt die Chronologie die UTC- statt der Ortszeit an.
+          var zeit = new Date(e.ts).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" });
+          li.textContent = zeit + " · " + e.event_typ;
           el.appendChild(li);
         });
       }).catch(function () {});
