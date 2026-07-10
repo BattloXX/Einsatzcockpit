@@ -89,7 +89,7 @@
 {% block scripts %}
 <script src="/static/js/leaflet.min.js"></script>
 <script src="/static/js/leaflet-geoman.min.js"></script>
-<script src="/static/js/lagefuehrung.js"></script>
+<script src="/static/js/lagefuehrung.js?v={{ ASSET_VERSION }}"></script>
 <script>
   initLagefuehrungKarte({
     elementId: "lft-karte",
