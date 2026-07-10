@@ -188,12 +188,6 @@
     <a href="/einsatz/{{ incident.id }}/info"
        class="btn btn--sm btn--primary incident-header__navlink"
        {{ tip('Einsatzinformation: Karte, Objektdaten, Ausrückordnung, Hydranten') }}>ℹ️ Einsatzinfo</a>
-    {% set lk_url = lagekarte_url(incident) %}
-    {% if lk_url %}
-    <a href="{{ lk_url }}" target="_blank" rel="noopener"
-       class="btn btn--sm btn--secondary incident-header__navlink"
-       {{ tip('Einsatz in lagekarte.info öffnen (neues Fenster)') }}>🗺️ Karte</a>
-    {% endif %}
     {% if breathing_enabled %}
     <a href="/einsatz/{{ incident.id }}/atemschutz" class="btn btn--sm btn--secondary incident-header__navlink"
        {{ tip('Atemschutzüberwachung — Pressluft-Trupp-Steuerung') }}>🫁 AS</a>
