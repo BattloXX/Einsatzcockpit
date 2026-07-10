@@ -241,6 +241,63 @@ async def lagefuehrung_vehicles(
     return JSONResponse(out)
 
 
+@router.post("/einsatz/{incident_id}/lagefuehrung/vehicles/{iv_id}/pin")
+async def lagefuehrung_vehicle_pin(
+    incident_id: int,
+    iv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    """Manuelle Position für ein Board-Fahrzeug ohne (aktuelle) GPS-Koordinate setzen.
+
+    Muster `vehicle_manual_pin` (app/routers/ui_major_incident.py) — dort für die
+    Großschadenslage, hier für den Einzeleinsatz. `VehiclePosition.incident_id`
+    bleibt bewusst NULL: die Spalte ist strukturell nur an `major_incident`
+    gebunden (siehe Phase-1-Recherche), normale Einsätze korrelieren Positionen
+    ausschließlich über vehicle_id + org_id + Aktualität.
+    """
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_edit_access(user, incident, db)
+
+    iv = (
+        db.query(IncidentVehicle)
+        .filter(IncidentVehicle.id == iv_id, IncidentVehicle.incident_id == incident_id)
+        .first()
+    )
+    if not iv:
+        raise HTTPException(404, "Fahrzeug nicht gefunden")
+
+    data = await request.json()
+    try:
+        lat = float(data["lat"])
+        lng = float(data["lng"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "lat/lng fehlen")
+
+    from app.models.major_incident import VehiclePosition
+
+    now = datetime.now(UTC)
+    db.add(VehiclePosition(
+        incident_id=None,
+        org_id=incident.primary_org_id,
+        vehicle_id=iv.vehicle_master_id,
+        resource_label=iv.vehicle_master.display_label if iv.vehicle_master else None,
+        lat=lat,
+        lon=lng,
+        source="manual",
+        recorded_at=now,
+        received_at=now,
+        reported_by=user.id,
+    ))
+    _log_event(db, incident, user, "vehicle.pinned", "vehicle", iv.id, {"lat": lat, "lng": lng})
+    db.commit()
+
+    await manager.broadcast(incident_id, {"type": "lagefuehrung.vehicle.pinned", "iv_id": iv.id})
+    return JSONResponse({"ok": True})
+
+
 # ── Auto-Layer: Objekt ──────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/objekte.json")
@@ -282,6 +339,32 @@ async def lagefuehrung_objekte(
             "url": f"/objekte/{o.id}",
         })
     return JSONResponse(out)
+
+
+# ── Auto-Layer: Wasserstellen ────────────────────────────────────────────────────
+
+@router.get("/einsatz/{incident_id}/lagefuehrung/wasserstellen.json")
+async def lagefuehrung_wasserstellen(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+
+    if not incident.primary_org_id or incident.lat is None or incident.lng is None:
+        return JSONResponse([])
+
+    from app.config import settings
+    from app.services.wasserstelle_service import lade_wasserstellen_im_umkreis
+
+    stellen = lade_wasserstellen_im_umkreis(
+        db, incident.primary_org_id, incident.lat, incident.lng,
+        radius_m=settings.HYDRANT_RADIUS_EINSATZINFO_M,
+    )
+    return JSONResponse(stellen)
 
 
 # ── Chronologie ──────────────────────────────────────────────────────────────────

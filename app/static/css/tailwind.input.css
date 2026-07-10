@@ -1899,6 +1899,60 @@ button.htmx-request,
 
 .lft-locked { filter: drop-shadow(0 0 0 2px #f6ad55); outline: 2px dashed #f6ad55; outline-offset: 2px; }
 
+/* ── Lageführung: Fahrzeuge-Sidebar (Wasserstellen-Layer nutzt bestehende .hydrant-* Klassen) ── */
+.lft-fahrzeuge { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px; }
+.lft-fahrzeuge__liste {
+  list-style: none;
+  margin: 6px 0 8px;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lft-fahrzeuge__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: .76rem;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.lft-fahrzeuge__auf-karte { font-size: .68rem; color: var(--text-muted); white-space: nowrap; }
+.lft-fahrzeuge__add { position: relative; }
+.lft-fahrzeuge__vorschlaege {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 2px;
+  background: var(--surface-high);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-modal, 0 8px 24px rgba(0, 0, 0, .4));
+  max-height: 220px;
+  overflow-y: auto;
+}
+.lft-fahrzeuge__vorschlag {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: .78rem;
+  font-family: inherit;
+}
+.lft-fahrzeuge__vorschlag:last-child { border-bottom: none; }
+.lft-fahrzeuge__vorschlag:hover:not(:disabled) { background: rgba(255, 255, 255, .06); }
+.lft-fahrzeuge__vorschlag--inuse, .lft-fahrzeuge__vorschlag:disabled { color: var(--text-muted); cursor: not-allowed; }
+
 @media (max-width: 760px) {
   .lft-banner { flex-direction: column; align-items: flex-start; }
   .lft-tz-picker__grid { grid-template-columns: 1fr; }

@@ -113,6 +113,7 @@
     var layerEinsatzort = L.layerGroup().addTo(karte);
     var layerFahrzeuge = L.layerGroup().addTo(karte);
     var layerObjekt = L.layerGroup().addTo(karte);
+    var layerWasserstellen = L.layerGroup().addTo(karte);
     var layerZeichnung = L.layerGroup().addTo(karte);
 
     function bindToggle(checkboxId, group) {
@@ -125,6 +126,7 @@
     bindToggle("lft-layer-einsatzort", layerEinsatzort);
     bindToggle("lft-layer-fahrzeuge", layerFahrzeuge);
     bindToggle("lft-layer-objekt", layerObjekt);
+    bindToggle("lft-layer-wasserstellen", layerWasserstellen);
     bindToggle("lft-layer-zeichnung", layerZeichnung);
 
     // ── Auto-Layer: Einsatzort ───────────────────────────────────────────────
@@ -135,9 +137,39 @@
     }
 
     // ── Auto-Layer: Fahrzeuge (Polling, LIS aktualisiert die DB im Hintergrund) ─
+    // Board-Fahrzeuge ohne (aktuelle) GPS-Position werden nicht auf der Karte
+    // geplottet, erscheinen aber in der Fahrzeuge-Sidebar mit "Platzieren"-Button
+    // (manuelle Position, Muster GSL vehicle_manual_pin).
     var vehicleMarkers = {};
+    function renderFahrzeugeListe(liste) {
+      var el = document.getElementById("lft-fahrzeuge-liste");
+      if (!el) { return; }
+      el.innerHTML = "";
+      (liste || []).forEach(function (v) {
+        var li = document.createElement("li");
+        li.className = "lft-fahrzeuge__item";
+        var text = document.createElement("span");
+        text.textContent = (v.label || "Fahrzeug") + " · " + v.unit_status;
+        li.appendChild(text);
+        if (v.lat == null || v.lng == null) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btn btn--ghost btn--xs";
+          btn.textContent = "📍 Platzieren";
+          btn.addEventListener("click", function () { armPlacement("fahrzeug-pin", v); });
+          li.appendChild(btn);
+        } else {
+          var ok = document.createElement("span");
+          ok.className = "lft-fahrzeuge__auf-karte";
+          ok.textContent = "auf Karte";
+          li.appendChild(ok);
+        }
+        el.appendChild(li);
+      });
+    }
     function ladeFahrzeuge() {
       fetchJson(apiBase + "/vehicles.json").then(function (liste) {
+        renderFahrzeugeListe(liste);
         var seen = {};
         (liste || []).forEach(function (v) {
           if (v.lat == null || v.lng == null) { return; }
@@ -171,6 +203,28 @@
         });
       }).catch(function () {});
     }
+
+    // ── Auto-Layer: Wasserstellen (Löschwasser-Stammdaten, statisch je Ladung) ──
+    var WASSERSTELLE_ICON_TEXT = { ueberflur: "H", unterflur: "UH", loeschwasser: "≈" };
+    function wasserstelleIcon(kat) {
+      var t = WASSERSTELLE_ICON_TEXT[kat] || "H";
+      return L.divIcon({
+        html: '<div class="hydrant-icon hydrant-icon--' + (kat || "hydrant") + '">' + t + "</div>",
+        className: "hydrant-divicon", iconSize: null, iconAnchor: [11, 11]
+      });
+    }
+    function ladeWasserstellen() {
+      fetchJson(apiBase + "/wasserstellen.json").then(function (liste) {
+        (liste || []).forEach(function (w) {
+          var kat = w.icon_kat || w.typ || "hydrant";
+          var label = (w.typ_label || "Wasserstelle") + (w.ref ? " · " + w.ref : "");
+          L.marker([w.lat, w.lng], { icon: wasserstelleIcon(kat) })
+            .addTo(layerWasserstellen)
+            .bindTooltip(escapeHtml(label));
+        });
+      }).catch(function () {});
+    }
+    ladeWasserstellen();
 
     // ── Manuelle Features: Zeichnungen, taktische Zeichen, Meldungen, Distanz ───
     var featureLayers = {}; // feature.id -> Leaflet-Layer
@@ -465,6 +519,18 @@
           });
           disarmPlacement();
         }
+      } else if (p.kind === "fahrzeug-pin") {
+        disarmPlacement();
+        fetchJson(apiBase + "/vehicles/" + p.data.id + "/pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": opts.csrfToken },
+          body: JSON.stringify({ lat: latlng.lat, lng: latlng.lng })
+        }).then(function () {
+          ladeFahrzeuge();
+          ladeChronologie();
+        }).catch(function () {
+          alert("Fahrzeug konnte nicht platziert werden.");
+        });
       }
     }
 
@@ -487,6 +553,61 @@
           renderTzPicker(tzPickerEl, m.symbole || []);
         }).catch(function () {});
       }
+
+      initFahrzeugSuche();
+    }
+
+    // ── Fahrzeug hinzufügen (wird danach auch im Board angezeigt) ────────────
+    function submitAddVehicle(vehicleMasterId) {
+      var form = document.createElement("form");
+      form.method = "post";
+      form.action = "/einsatz/" + opts.incidentId + "/fahrzeug-hinzufuegen";
+      form.style.display = "none";
+      [
+        ["_csrf", opts.csrfToken],
+        ["vehicle_master_id", vehicleMasterId],
+        ["next", "/einsatz/" + opts.incidentId + "/lagefuehrung"]
+      ].forEach(function (pair) {
+        var input = document.createElement("input");
+        input.type = "hidden"; input.name = pair[0]; input.value = pair[1];
+        form.appendChild(input);
+      });
+      document.body.appendChild(form);
+      form.submit();
+    }
+
+    function initFahrzeugSuche() {
+      var input = document.getElementById("lft-fahrzeug-suche");
+      var resultsEl = document.getElementById("lft-fahrzeug-vorschlaege");
+      if (!input || !resultsEl) { return; }
+      var suchTimer = null;
+      input.addEventListener("input", function () {
+        var q = input.value.trim();
+        if (suchTimer) { clearTimeout(suchTimer); }
+        suchTimer = setTimeout(function () {
+          fetchJson("/einsatz/" + opts.incidentId + "/fahrzeug-vorschlaege?q=" + encodeURIComponent(q))
+            .then(function (data) {
+              var items = (data && data.items) || [];
+              resultsEl.innerHTML = "";
+              if (!items.length) { resultsEl.hidden = true; return; }
+              items.slice(0, 8).forEach(function (it) {
+                var row = document.createElement("button");
+                row.type = "button";
+                row.className = "lft-fahrzeuge__vorschlag" + (it.in_use ? " lft-fahrzeuge__vorschlag--inuse" : "");
+                row.disabled = it.in_use;
+                row.textContent = it.display_label + (it.name ? " – " + it.name : "") + (it.in_use ? " (bereits im Einsatz)" : "");
+                if (!it.in_use) {
+                  row.addEventListener("click", function () { submitAddVehicle(it.id); });
+                }
+                resultsEl.appendChild(row);
+              });
+              resultsEl.hidden = false;
+            }).catch(function () {});
+        }, 250);
+      });
+      document.addEventListener("click", function (ev) {
+        if (ev.target !== input && !resultsEl.contains(ev.target)) { resultsEl.hidden = true; }
+      });
     }
 
     function renderTzPicker(el, symbole) {

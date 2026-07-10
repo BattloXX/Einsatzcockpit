@@ -1559,12 +1559,23 @@ async def attach_vehicle_to_incident(
     commander_free_text: str = Form(""),
     note: str = Form(""),
     column_id: int | None = Form(None),
+    next_url: str = Form("", alias="next"),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
     """Fügt ein Fahrzeug zum laufenden Einsatz hinzu — entweder per Master-ID oder
     durch Anlegen eines neuen, nicht in den Stammdaten existierenden Fahrzeugs.
+
+    `next` (Formfeld): optionales Rücksprungziel (z. B. die Lagekarte statt des
+    Boards) — nur interne Pfade zulassen (Open-Redirect-Schutz, Muster
+    auth.py::_safe_next). Python-seitig als `next_url` benannt, um den
+    Builtin `next()` nicht zu verschatten (unten mehrfach für Generator-Suchen
+    verwendet).
     """
+    redirect_to = (
+        next_url if (next_url.startswith("/") and not next_url.startswith("//"))
+        else f"/einsatz/{incident_id}"
+    )
     incident = _incident_or_404(incident_id, db)
     db.refresh(incident, ["columns", "vehicles"])
 
@@ -1600,7 +1611,7 @@ async def attach_vehicle_to_incident(
         None,
     )
     if existing:
-        return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
+        return RedirectResponse(redirect_to, status_code=303)
 
     # Wurde die Einheit über den "+ Einheit"-Button einer konkreten Spalte (Abschnitt) angelegt,
     # landet sie direkt dort statt immer in "Tatsächlich im Einsatz".
@@ -1640,7 +1651,7 @@ async def attach_vehicle_to_incident(
         prepend_card(db, target_col.id, "vehicle", iv.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "vehicle_added", "reload_board": True})
-    return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
+    return RedirectResponse(redirect_to, status_code=303)
 
 
 # ── Fahrzeug verschieben ──────────────────────────────────────────────────────
