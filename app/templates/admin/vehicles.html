@@ -102,7 +102,7 @@
           </button>
           {% else %}
           <button class="btn btn--ghost btn--xs"
-                  onclick="openEditVehicle({{ v.id }}, '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', {{ v.is_first_train|lower }}, '{{ v.bos_override or "" }}', '{{ v.lis_reference_id or "" }}')">
+                  onclick="openEditVehicle({{ v.id }}, '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', {{ v.is_first_train|lower }}, '{{ v.bos_override or "" }}', '{{ v.lis_reference_id or "" }}', '{{ v.taktisches_zeichen or "" }}')">
             Bearbeiten
           </button>
           {% endif %}
@@ -173,6 +173,16 @@
           <input type="text" name="lis_reference_id" class="form-input" maxlength="60" placeholder="z.B. rlf_wolfu">
           <p class="form-hint">Stabile Kennung aus dem Leitstellensystem — für automatische Statusübernahme (S4/S5)</p>
         </div>
+        <div class="form-group">
+          <label class="form-label">Taktisches Zeichen (Lagekarte, optional)</label>
+          <select name="taktisches_zeichen" class="form-select">
+            <option value="">– kein Zeichen (einfacher Statuskreis) –</option>
+            {% for s in tz_symbole %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <p class="form-hint">Für die automatische Fahrzeug-Darstellung auf der Lagekarte (Lageführung)</p>
+        </div>
       </div>
       <div class="modal__footer">
         <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
@@ -219,6 +229,16 @@
           <label class="form-label">LIS-ReferenceId (optional)</label>
           <input type="text" name="lis_reference_id" id="ev_lis_reference_id" class="form-input" maxlength="60" placeholder="z.B. rlf_wolfu">
           <p class="form-hint">Stabile Kennung aus dem Leitstellensystem — für automatische Statusübernahme (S4/S5)</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Taktisches Zeichen (Lagekarte, optional)</label>
+          <select name="taktisches_zeichen" id="ev_taktisches_zeichen" class="form-select">
+            <option value="">– kein Zeichen (einfacher Statuskreis) –</option>
+            {% for s in tz_symbole %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <p class="form-hint">Für die automatische Fahrzeug-Darstellung auf der Lagekarte (Lageführung)</p>
         </div>
       </div>
       <div class="modal__footer">
@@ -338,13 +358,14 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function openEditVehicle(id, code, name, type, firstTrain, bosOverride, lisReferenceId) {
+function openEditVehicle(id, code, name, type, firstTrain, bosOverride, lisReferenceId, taktischesZeichen) {
   document.getElementById('ev_code').value = code;
   document.getElementById('ev_name').value = name;
   document.getElementById('ev_type').value = type;
   document.getElementById('ev_first_train').checked = firstTrain;
   document.getElementById('ev_bos_override').value = bosOverride || '';
   document.getElementById('ev_lis_reference_id').value = lisReferenceId || '';
+  document.getElementById('ev_taktisches_zeichen').value = taktischesZeichen || '';
   document.getElementById('editVehicleForm').action = `/admin/fahrzeuge/${id}/edit`;
   document.getElementById('editVehicleModal').showModal();
 }

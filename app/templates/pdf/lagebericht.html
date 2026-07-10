@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+{% include "pdf/_emoji_font_face.html" %}
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 20mm 15mm 18mm 15mm;
+  }
+  body { font-family: 'Helvetica Neue', Arial, 'Noto Emoji', sans-serif; font-size: 10pt; color: #111; }
+  h1 { font-size: 16pt; color: #d42225; margin-bottom: 4pt; }
+  h2 { font-size: 12pt; border-bottom: 2px solid #d42225; padding-bottom: 3pt; margin-top: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0; }
+  th { background: #d42225; color: white; padding: 4pt 6pt; text-align: left; font-size: 9pt; }
+  td { padding: 3pt 6pt; border-bottom: 1px solid #e0e0e0; font-size: 9pt; }
+  tr:nth-child(even) td { background: #f9f9f9; }
+  .header-box { background: #d42225; color: #fff; border: 2px solid #d42225; padding: 8pt 12pt;
+                margin-bottom: 12pt; }
+  .header-box .alarm-badge { font-size: 24pt; font-weight: bold; color: #fff; }
+  .header-box .meta { color: rgba(255,255,255,.88); font-size: 9pt; }
+  .exercise-banner { background: #f2b02e; color: #111; text-align: center; font-weight: bold;
+                     padding: 4pt; font-size: 14pt; margin-bottom: 8pt; }
+  .karte { margin: 6pt 0; text-align: center; }
+  .karte img { max-width: 100%; border: 1px solid #ddd; border-radius: 3pt; }
+  .legende { display: flex; flex-wrap: wrap; gap: 6pt 14pt; margin: 4pt 0 8pt; font-size: 8.5pt; }
+  .legende__eintrag { display: inline-flex; align-items: center; gap: 4pt; }
+  .legende__farbe { display: inline-block; width: 8pt; height: 8pt; border-radius: 50%; }
+  .footer-zeile { margin-top: 14pt; font-size: 7.5pt; color: #666; }
+</style>
+</head>
+<body>
+
+{% if TEST_SYSTEM %}
+<div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
+{% endif %}
+{% if incident.is_exercise %}
+<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTEINSATZ ⚠</div>
+{% endif %}
+
+<div class="header-box">
+  <div class="alarm-badge">{{ incident.alarm_type_code }} · Lagebericht</div>
+  <div><strong>Einsatz #{{ incident.nummer or incident.id }}</strong> —
+    {{ incident.address_street or '' }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</div>
+  <div class="meta">Alarmzeit: {{ format_local_datetime(incident.started_at, org) }}</div>
+  {% if fuehrer_name %}<div class="meta">Lageführung: <strong>{{ fuehrer_name }}</strong></div>{% endif %}
+</div>
+
+{% if karte_datauri %}
+<h2>🗺 Kartenausschnitt</h2>
+<div class="karte"><img src="{{ karte_datauri }}" alt="Lagekarte"></div>
+<p style="font-size:7.5pt;color:#666;">Vereinfachte Druckdarstellung — taktische Zeichen als
+  Farbpunkte approximiert, siehe Legende.</p>
+{% endif %}
+
+{% if zeichen_legende %}
+<h2>🏷 Legende</h2>
+<div class="legende">
+  <span class="legende__eintrag"><span class="legende__farbe" style="background:#d42225"></span> Einsatzort</span>
+  <span class="legende__eintrag"><span class="legende__farbe" style="background:#2563eb"></span> Objekt</span>
+  <span class="legende__eintrag"><span class="legende__farbe" style="background:#f6ad55"></span> Fahrzeug</span>
+  {% for _key, name in zeichen_legende %}
+  <span class="legende__eintrag"><span class="legende__farbe" style="background:#2563eb"></span> {{ name }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2>🚒 Kräfteübersicht</h2>
+{% if vehicles_positions %}
+<table>
+  <tr><th>Fahrzeug</th><th>Status</th><th>Hinzugefügt</th></tr>
+  {% for v, _lat, _lng in vehicles_positions %}
+  <tr>
+    <td>{{ v.vehicle_master.display_label if v.vehicle_master else '?' }}</td>
+    <td>{{ v.unit_status }}</td>
+    <td>{{ format_local_datetime(v.created_at, org) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p style="color:#888; font-size:9pt; font-style:italic;">Keine Fahrzeuge zugeordnet.</p>
+{% endif %}
+
+<h2>📜 Chronologie</h2>
+{% if events %}
+<table>
+  <tr><th style="width:80pt;">Zeit</th><th>Eintrag</th></tr>
+  {% set ns = namespace(last_date='') %}
+  {% for e in events %}
+  {% set entry_date = format_local_datetime(e.ts, org)[:10] %}
+  {% if ns.last_date != entry_date %}
+  {% set ns.last_date = entry_date %}
+  <tr style="background:#ececec;">
+    <td colspan="2" style="font-size:8.5pt; font-weight:bold; color:#444; padding:4pt 6pt 3pt; border-bottom:1px solid #ccc;">
+      {{ entry_date }}
+    </td>
+  </tr>
+  {% endif %}
+  <tr>
+    <td style="white-space:nowrap; font-variant-numeric:tabular-nums; color:#555;">{{ format_local_datetime(e.ts, org)[11:] }}</td>
+    <td>{{ event_label(e) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p style="color:#888; font-size:9pt; font-style:italic;">Keine Ereignisse vorhanden.</p>
+{% endif %}
+
+<div class="footer-zeile">Erstellt mit {{ brand }} – https://{{ brand_domain }}/</div>
+
+</body>
+</html>

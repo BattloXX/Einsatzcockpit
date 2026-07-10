@@ -921,6 +921,8 @@ async def vehicles_list(
     vehicles = q.order_by(FireDept.name, VehicleMaster.display_order).all()
     saved = request.query_params.get("saved")
     error = request.query_params.get("error")
+    from app.services.tz_service import list_tz_symbole
+    tz_symbole = list_tz_symbole(kat={"Einheiten", "Fahrzeuge"})
     return templates.TemplateResponse(request, "admin/vehicles.html", {
         "user": user, "vehicles": vehicles, "all_orgs": all_orgs,
         "is_sysadmin": is_sysadmin, "saved": saved, "error": error,
@@ -928,6 +930,7 @@ async def vehicles_list(
         "filter_org_id": filter_org_id,
         "filter_status": filter_status,
         "filter_kind": filter_kind,
+        "tz_symbole": tz_symbole,
     })
 
 
@@ -939,6 +942,7 @@ async def create_vehicle(
     bos_override: str = Form(""),
     dept_id: int | None = Form(None),
     lis_reference_id: str = Form(""),
+    taktisches_zeichen: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     from app.core.permissions import has_role
@@ -954,6 +958,7 @@ async def create_vehicle(
         is_first_train=bool(is_first_train),
         bos_override=bos_override or None,
         lis_reference_id=lis_reference_id.strip()[:60] or None,
+        taktisches_zeichen=taktisches_zeichen.strip() or None,
         display_order=max_order,
     )
     db.add(v)
@@ -1004,6 +1009,7 @@ async def edit_vehicle(
     is_first_train: str = Form(""),
     bos_override: str = Form(""),
     lis_reference_id: str = Form(""),
+    taktisches_zeichen: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     v = db.get(VehicleMaster, vehicle_id)
@@ -1014,6 +1020,7 @@ async def edit_vehicle(
         v.is_first_train = bool(is_first_train)
         v.bos_override = bos_override or None
         v.lis_reference_id = lis_reference_id.strip()[:60] or None
+        v.taktisches_zeichen = taktisches_zeichen.strip() or None
         write_audit(db, "admin.vehicle.edited", user_id=request.state.user.id,
                     entity_type="vehicle_master", entity_id=vehicle_id)
         db.commit()

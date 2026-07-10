@@ -32,7 +32,7 @@ from app.models.incident import (
     Task,
 )
 from app.models.invitation import OrgInvitation, OrgPartner
-from app.models.lagefuehrung import LagefuehrungEvent, LagefuehrungFeature
+from app.models.lagefuehrung import LagefuehrungBerechtigung, LagefuehrungEvent, LagefuehrungFeature
 from app.models.lagekarte import LagekarteToken
 from app.models.lis import LisSyncedObject, OrgLisConfig
 from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
@@ -187,5 +187,5 @@ __all__ = [
     "UASEreignis", "UASKartenobjekt", "UASMedien",
     "AtemschutzGeraet", "AtemschutzPruefung", "AtemschutzPruefBenachrichtigung",
     "MediaAnnotation", "MediaAnnotationVersion",
-    "LagefuehrungFeature", "LagefuehrungEvent",
+    "LagefuehrungFeature", "LagefuehrungEvent", "LagefuehrungBerechtigung",
 ]

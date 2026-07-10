@@ -21,6 +21,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -92,3 +93,29 @@ class LagefuehrungEvent(Base, TenantScoped):
     ref_typ: Mapped[str | None] = mapped_column(String(32), nullable=True)
     ref_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     payload: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+
+
+class LagefuehrungBerechtigung(TenantScoped, Base):
+    """Vom Lageführer explizit vergebene Editor-Rechte (Phase 2, F10).
+
+    Ergänzt (ersetzt nicht) die rollenbasierte Editierberechtigung aus Phase 1:
+    ein Viewer ohne Editor-Rolle kann hierüber trotzdem zum Editor ernannt werden.
+    """
+    __tablename__ = "lagefuehrung_berechtigung"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "user_id", name="uq_lagefuehrung_berechtigung"),
+        Index("ix_lagefuehrung_berechtigung_org_incident", "org_id", "incident_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    incident_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    granted_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    granted_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

@@ -111,6 +111,10 @@ class VehicleMaster(Base):
     # (siehe LIS_IPR_Schnittstellen_Dokumentation.md Abschnitt 7.3)
     lis_reference_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
 
+    # Lageführung: taktisches Zeichen (id aus app/static/tz/tz-manifest.json), für die
+    # automatische Fahrzeug-Darstellung auf der Lagekarte. NULL = einfacher Statuskreis.
+    taktisches_zeichen: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     dept: Mapped[FireDept] = relationship(back_populates="vehicles")
 
     @property
