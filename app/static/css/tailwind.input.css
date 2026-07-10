@@ -1970,6 +1970,7 @@ button.htmx-request,
   gap: 6px;
   color: #fff;
 }
+.lft-replay-panel[hidden] { display: none; }
 .lft-replay-panel__zeile { display: flex; align-items: center; gap: 10px; }
 .lft-replay-panel__zeit { flex: 1; font-size: .8rem; color: var(--text-muted); }
 .lft-replay-panel__slider { flex: 1; }
