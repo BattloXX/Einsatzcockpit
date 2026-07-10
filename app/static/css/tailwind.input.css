@@ -1824,6 +1824,20 @@ button.htmx-request,
   line-height: 1;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
 }
+.lft-objekt-icon { position: relative; display: inline-block; }
+.lft-objekt-icon__warn {
+  position: absolute; top: -6px; right: -9px;
+  background: #e53e3e; color: #fff; border-radius: 50%;
+  width: 15px; height: 15px; font-size: 10px; line-height: 15px; text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+.lft-objekt-popup { min-width: 180px; max-width: 260px; font-size: .8rem; }
+.lft-objekt-popup__title { font-weight: 700; margin-bottom: 4px; }
+.lft-objekt-popup__vulgo { font-weight: 400; opacity: .75; }
+.lft-objekt-popup__gefahren { margin: 4px 0; }
+.lft-objekt-popup__gefahr { padding: 2px 0; }
+.lft-objekt-popup__info { margin: 4px 0; opacity: .85; }
+.lft-objekt-popup__kontakte { margin: 4px 0; }
 
 /* ── Lageführung Phase 2: Werkzeuge, Taktik-Palette, Presence, Locks ───────── */
 .lft-werkzeuge { display: flex; flex-direction: column; gap: 6px; }

@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Einsatz #{{ incident.nummer or incident.id }} – Lagekarte</title>
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+{% set map_heights = {'A4 portrait': 230, 'A4 landscape': 150, 'A3 portrait': 350, 'A3 landscape': 230} %}
+{% set map_widths  = {'A4 portrait': 190, 'A4 landscape': 277, 'A3 portrait': 277, 'A3 landscape': 400} %}
+{% set map_h = map_heights.get(fmt, 150) %}
+{% set map_w = map_widths.get(fmt, 277) %}
+{% set format_names = {'A4 portrait': 'A4 Hochformat', 'A4 landscape': 'A4 Querformat', 'A3 portrait': 'A3 Hochformat', 'A3 landscape': 'A3 Querformat'} %}
+{% set fmt_name = format_names.get(fmt, fmt) %}
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: {{ fmt }}; margin: 10mm; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #fff; color: #111; }
+
+  .no-print {}
+  @media print { .no-print { display: none !important; } }
+
+  .print-bar {
+    background: #f3f4f6; border-bottom: 1px solid #d1d5db;
+    padding: 8px 16px; display: flex; align-items: center; gap: 10px;
+    font-size: 9.5pt;
+  }
+  .print-btn {
+    background: #1f2937; color: #fff; border: none; border-radius: 4px;
+    padding: 5px 14px; font-size: 9.5pt; cursor: pointer;
+  }
+  .print-btn:hover { background: #374151; }
+
+  #print-content { width: {{ map_w }}mm; margin: 0 auto; }
+  #karte-map { width: 100%; height: {{ map_h }}mm; }
+
+  .karte-kopf {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-bottom: 4px; margin-bottom: 3px;
+  }
+  .karte-kopf .kk-titel { font-size: 12pt; font-weight: 800; }
+  .karte-kopf .kk-sub { font-size: 8.5pt; color: #444; }
+
+  .karte-footer {
+    border-top: 1.5px solid #aaa;
+    padding: 5px 0 3px;
+    display: flex;
+    gap: 16px;
+    font-size: 8.5pt;
+    color: #333;
+    line-height: 1.5;
+  }
+  .karte-footer .fc { flex: 1; }
+  .karte-footer .fc--right { text-align: right; flex: 0 0 auto; }
+
+  .karte-legende {
+    display: flex; flex-wrap: wrap; gap: 8px 14px;
+    font-size: 8pt; color: #333; padding: 4px 0 2px;
+    border-top: 1px solid #ddd;
+  }
+  .karte-legende .lg-item { display: flex; align-items: center; gap: 4px; }
+  .karte-legende .lg-item img { width: 14px; height: 14px; object-fit: contain; }
+  .karte-legende .lg-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+
+  .exercise-banner {
+    background: #fef9c3; border-bottom: 2px solid #fde68a;
+    padding: 5px 16px; text-align: center;
+    color: #92400e; font-weight: 700; font-size: 9pt;
+  }
+</style>
+</head>
+<body>
+
+<div class="no-print print-bar">
+  <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="print-btn" style="text-decoration:none;background:#374151;">← Lagekarte</a>
+  <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
+  <span>{{ fmt_name }} · Einsatz #{{ incident.nummer or incident.id }}</span>
+</div>
+
+<div id="print-content">
+{% if TEST_SYSTEM %}
+<div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
+{% endif %}
+{% if incident.is_exercise %}
+<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
+{% endif %}
+
+<div class="karte-kopf">
+  <div>
+    <div class="kk-titel">Einsatz #{{ incident.nummer or incident.id }} · {{ incident.alarm_type_code }}{% if incident.reason %} – {{ incident.reason }}{% endif %}</div>
+    <div class="kk-sub">
+      {%- if incident.address_street -%}
+      {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}
+      {%- endif -%}
+    </div>
+  </div>
+  <div class="kk-sub">Beginn: {{ incident.started_at|local_datetime }}</div>
+</div>
+
+<div id="karte-map"></div>
+
+<div id="karte-legende" class="karte-legende"></div>
+
+<div class="karte-footer">
+  <div class="fc">{{ fmt_name }}</div>
+  <div class="fc fc--right">
+    <div id="print-ts" style="font-weight:700;">–</div>
+  </div>
+</div>
+</div>{# /print-content #}
+
+<script src="/static/js/leaflet.min.js"></script>
+<script>
+(function () {
+  var apiBase = "{{ api_base }}";
+  var layers = {{ active_layers_json | safe }};
+  var hasLayer = {};
+  layers.forEach(function (l) { hasLayer[l] = true; });
+  var beschriftung = !!hasLayer.beschriftung;
+
+  var bounds = L.latLngBounds([{{ min_lat }}, {{ min_lng }}], [{{ max_lat }}, {{ max_lng }}]);
+
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconUrl: '/static/img/leaflet/marker-icon.png',
+    iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
+    shadowUrl: '/static/img/leaflet/marker-shadow.png',
+  });
+
+  var map = L.map('karte-map', { zoomControl: false, attributionControl: false, zoomSnap: 0 });
+  var tileUrl = {{ baselayer | tojson }} === 'ortho'
+    ? 'https://mapsneu.wien.gv.at/basemap/bmaporthofoto30cm/normal/google3857/{z}/{y}/{x}.jpeg'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  var tiles = L.tileLayer(tileUrl, { subdomains: 'abc', maxZoom: 20, attribution: '' }).addTo(map);
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function divIcon(html, anchor) {
+    return L.divIcon({ html: html, className: '', iconSize: null, iconAnchor: anchor });
+  }
+  function tzIconUrl(key) { return '/static/tz/symbole/' + key + '.svg'; }
+  function bindLabel(layer, text) {
+    if (!beschriftung || !text) { return; }
+    layer.bindTooltip(text, { permanent: true, direction: 'top', className: 'lft-druck-label' });
+  }
+
+  var usedZeichen = {}; // key -> true
+
+  var fetches = [];
+
+  if (hasLayer.einsatzort) {
+    {% if incident.lat is not none and incident.lng is not none %}
+    var einsatzortMarker = L.marker([{{ incident.lat }}, {{ incident.lng }}], {
+      icon: divIcon('<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));">📍</div>', [14, 28])
+    }).addTo(map);
+    bindLabel(einsatzortMarker, 'Einsatzort');
+    {% endif %}
+  }
+
+  if (hasLayer.fahrzeuge) {
+    fetches.push(fetch(apiBase + '/vehicles.json').then(function (r) { return r.json(); }).then(function (liste) {
+      (liste || []).forEach(function (v) {
+        if (v.lat == null || v.lng == null) { return; }
+        var key = v.zeichen_key || 'feuerwehrfahrzeug';
+        usedZeichen[key] = true;
+        var m = L.marker([v.lat, v.lng], {
+          icon: divIcon('<div style="width:34px;height:34px;border-radius:50%;background:#fff;border:3px solid ' + v.color +
+            ';box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:3px;">' +
+            '<img src="' + tzIconUrl(key) + '" alt="" style="width:100%;height:100%;object-fit:contain;"></div>', [16, 16])
+        }).addTo(map);
+        bindLabel(m, escapeHtml(v.label || 'Fahrzeug'));
+      });
+    }).catch(function () {}));
+  }
+
+  if (hasLayer.objekt) {
+    fetches.push(fetch(apiBase + '/objekte.json').then(function (r) { return r.json(); }).then(function (liste) {
+      (liste || []).forEach(function (o) {
+        var warn = (o.gefahren && o.gefahren.length) ? '⚠' : '';
+        var m = L.marker([o.lat, o.lng], {
+          icon: divIcon('<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));">🏢' + warn + '</div>', [14, 28])
+        }).addTo(map);
+        bindLabel(m, escapeHtml(o.name || 'Objekt') + (o.gefahren && o.gefahren.length ? ' · ' + o.gefahren.map(function (g) { return g.piktogramm + ' ' + escapeHtml(g.name); }).join(', ') : ''));
+      });
+    }).catch(function () {}));
+  }
+
+  if (hasLayer.wasserstellen) {
+    var wasserstelleText = { ueberflur: 'H', unterflur: 'UH', loeschwasser: '≈' };
+    fetches.push(fetch(apiBase + '/wasserstellen.json').then(function (r) { return r.json(); }).then(function (liste) {
+      (liste || []).forEach(function (w) {
+        var kat = w.icon_kat || w.typ || 'hydrant';
+        var t = wasserstelleText[kat] || 'H';
+        var m = L.marker([w.lat, w.lng], {
+          icon: L.divIcon({
+            html: '<div class="hydrant-icon hydrant-icon--' + kat + '">' + t + '</div>',
+            className: 'hydrant-divicon', iconSize: null, iconAnchor: [11, 11]
+          })
+        }).addTo(map);
+        bindLabel(m, escapeHtml((w.typ_label || 'Wasserstelle') + (w.ref ? ' · ' + w.ref : '')));
+      });
+    }).catch(function () {}));
+  }
+
+  if (hasLayer.zeichnung) {
+    fetches.push(fetch(apiBase + '/features.json').then(function (r) { return r.json(); }).then(function (liste) {
+      (liste || []).forEach(function (f) {
+        if (!f.geometry) { return; }
+        var style = { color: (f.props && f.props.color) || '#e53e3e', weight: 3 };
+        if (f.props && f.props.flaeche_key) {
+          style = {
+            color: f.props.color || '#e53e3e', weight: 3,
+            dashArray: f.props.dash ? '6 4' : null,
+            fillColor: f.props.hatchColor || f.props.color || '#e53e3e',
+            fillOpacity: f.props.hatch ? 0.22 : 0.1,
+          };
+        } else if (f.typ === 'distanz') {
+          style = { color: '#6b7280', weight: 2, dashArray: '6 4', fillOpacity: 0.04 };
+        }
+        var group = L.geoJSON(f.geometry, {
+          style: style,
+          pointToLayer: function (pt, latlng) {
+            if (f.typ === 'taktisches_zeichen' && f.zeichen_key) {
+              usedZeichen[f.zeichen_key] = true;
+              var rot = f.rotation || 0, scale = f.scale || 1;
+              return L.marker(latlng, { icon: divIcon('<img src="' + tzIconUrl(f.zeichen_key) + '" alt="" style="width:32px;height:32px;transform:rotate(' + rot + 'deg) scale(' + scale + ');transform-origin:center center;">', [16, 16]) });
+            }
+            if (f.typ === 'meldung') {
+              return L.marker(latlng, { icon: divIcon('<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));">📢</div>', [14, 28]) });
+            }
+            if (f.typ === 'text') { return L.marker(latlng, { icon: divIcon('', [0, 0]) }); }
+            if (f.typ === 'distanz' && f.props && f.props.kind === 'kreis') {
+              return L.circle(latlng, { radius: f.props.distanz_m || 0, color: '#6b7280', weight: 2, dashArray: '6 4', fillOpacity: 0.04 });
+            }
+            return L.marker(latlng, { icon: divIcon('<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid ' + ((f.props && f.props.color) || '#e53e3e') + ';"></div>', [12, 12]) });
+          }
+        });
+        var layer = group.getLayers()[0];
+        if (!layer) { return; }
+        layer.addTo(map);
+        if (f.typ === 'distanz') {
+          var text = (f.props && f.props.distanz_m != null) ? (f.props.distanz_m + ' m') : '';
+          if (text) { layer.bindTooltip(text, { permanent: true, direction: 'center', className: 'lft-druck-label' }); }
+        } else if (f.label && f.typ !== 'meldung') {
+          bindLabel(layer, escapeHtml(f.label));
+        }
+      });
+    }).catch(function () {}));
+  }
+
+  function renderLegende() {
+    var keys = Object.keys(usedZeichen);
+    var el = document.getElementById('karte-legende');
+    if (!keys.length) { el.style.display = 'none'; return; }
+    fetch('/static/tz/tz-manifest.json').then(function (r) { return r.json(); }).then(function (m) {
+      var byId = {};
+      (m.symbole || []).forEach(function (s) { byId[s.id] = s; });
+      keys.forEach(function (k) {
+        var s = byId[k];
+        if (!s) { return; }
+        var item = document.createElement('div');
+        item.className = 'lg-item';
+        item.innerHTML = '<img src="' + s.datei + '" alt=""><span>' + escapeHtml(s.name) + '</span>';
+        el.appendChild(item);
+      });
+    }).catch(function () {});
+  }
+
+  function fitView() {
+    map.invalidateSize();
+    map.fitBounds(bounds, { padding: [0, 0], animate: false });
+  }
+  setTimeout(fitView, 50);
+  setTimeout(fitView, 200);
+  window.addEventListener('beforeprint', fitView);
+
+  var printed = false;
+  function doPrint() {
+    if (printed) { return; }
+    printed = true;
+    document.getElementById('print-ts').textContent =
+      'Stand: ' + new Date().toLocaleString('de-AT', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    renderLegende();
+    setTimeout(function () { window.print(); }, 700);
+  }
+
+  Promise.all(fetches).then(function () {
+    tiles.on('load', doPrint);
+    setTimeout(doPrint, 6000);
+  });
+}());
+</script>
+</body>
+</html>

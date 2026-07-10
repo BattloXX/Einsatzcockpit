@@ -188,6 +188,50 @@ async def lagefuehrung_seite(
     })
 
 
+# ── Druck: WYSIWYG-Kartendruck (Muster incident_major/karte_druck.html) ─────────
+# Frisches, eigenständiges Leaflet-Rendering statt statischem staticmap-PNG, damit
+# exakt das gedruckt wird, was auf der interaktiven Karte sichtbar ist (aktueller
+# Kartenausschnitt + eingeschaltete Layer). Kein Journal/Kräfteübersicht — nur
+# Karte, Legende der verwendeten Zeichen und Zeitstempel (Nutzer-Vorgabe).
+
+_LFT_DRUCK_VALID_FMTS = {"A4 portrait", "A4 landscape", "A3 portrait", "A3 landscape"}
+_LFT_DRUCK_VALID_LAYERS = {"einsatzort", "fahrzeuge", "objekt", "wasserstellen", "zeichnung", "beschriftung"}
+
+
+@router.get("/einsatz/{incident_id}/lagefuehrung/karte/druck", response_class=HTMLResponse)
+async def lagefuehrung_karte_druck(
+    incident_id: int,
+    request: Request,
+    min_lat: float,
+    min_lng: float,
+    max_lat: float,
+    max_lng: float,
+    fmt: str = "A4 landscape",
+    layers: str = "",
+    baselayer: str = "osm",
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+
+    if fmt not in _LFT_DRUCK_VALID_FMTS:
+        fmt = "A4 landscape"
+    active_layers = [t for t in layers.split(",") if t in _LFT_DRUCK_VALID_LAYERS]
+    if not active_layers:
+        active_layers = sorted(_LFT_DRUCK_VALID_LAYERS)
+
+    return templates.TemplateResponse(request, "incident/lagefuehrung_druck.html", {
+        "incident": incident,
+        "min_lat": min_lat, "min_lng": min_lng, "max_lat": max_lat, "max_lng": max_lng,
+        "fmt": fmt,
+        "active_layers_json": json.dumps(active_layers),
+        "api_base": f"/einsatz/{incident_id}/lagefuehrung",
+        "baselayer": "ortho" if baselayer == "ortho" else "osm",
+    })
+
+
 # ── Auto-Layer: Fahrzeuge ───────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/vehicles.json")
@@ -316,11 +360,20 @@ async def lagefuehrung_objekte(
     if not getattr(request.state, "objekt_enabled", False):
         return JSONResponse([])
 
-    from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
+    from app.models.objekt import (
+        GEFAHR_PIKTOGRAMME,
+        OBJEKT_EINSATZ_BESTAETIGT,
+        Objekt,
+        ObjektEinsatz,
+        ObjektGefahr,
+    )
 
     verknuepfungen = (
         db.query(ObjektEinsatz)
-        .options(selectinload(ObjektEinsatz.objekt))
+        .options(
+            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren).selectinload(ObjektGefahr.gefahr),
+            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte),
+        )
         .filter(
             ObjektEinsatz.incident_id == incident_id,
             ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
@@ -332,6 +385,21 @@ async def lagefuehrung_objekte(
         o = ov.objekt
         if not o or o.lat is None or o.lng is None:
             continue
+        gefahren = []
+        for g in o.gefahren:
+            piktogramm, name = "⚠️", (g.gefahr.name if g.gefahr else "Gefahr")
+            if g.gefahr:
+                roh = GEFAHR_PIKTOGRAMME.get(g.gefahr.piktogramm_typ, "⚠️")
+                teile = roh.split(" ", 1)
+                piktogramm = teile[0]
+            gefahren.append({
+                "name": name, "piktogramm": piktogramm,
+                "un_nummer": g.un_nummer, "stoffname": g.stoffname,
+            })
+        kontakte = [{
+            "art": k.art, "name": k.name,
+            "telefone": k.telefone, "erreichbarkeit": k.erreichbarkeit,
+        } for k in o.kontakte]
         out.append({
             "objekt_id": o.id,
             "name": o.name,
@@ -339,6 +407,10 @@ async def lagefuehrung_objekte(
             "lat": o.lat,
             "lng": o.lng,
             "url": f"/objekte/{o.id}",
+            "informationen": o.informationen,
+            "anfahrtsweg": o.anfahrtsweg,
+            "gefahren": gefahren,
+            "kontakte": kontakte,
         })
     return JSONResponse(out)
 

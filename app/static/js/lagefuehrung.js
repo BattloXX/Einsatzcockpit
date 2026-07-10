@@ -44,12 +44,10 @@
     return L.divIcon({ html: html, className: "lft-divicon", iconSize: null, iconAnchor: anchor });
   }
 
-  // Ohne eigens zugeordnetes taktisches Zeichen (Fahrzeugverwaltung) zeigt jedes
-  // Fahrzeug das Fahrzeug-Grundzeichen (Rechteck mit Rädern — bei kleiner
-  // Darstellung deutlich als Fahrzeug erkennbar, anders als z. B.
-  // "feuerwehrfahrzeug", das nur ein schmuckloses rotes Rechteck ist).
-  // Statusfarbe bleibt als Ring um das Symbol sichtbar.
-  var VEHICLE_ICON_FALLBACK = "fahrzeug_grund";
+  // Ohne eigens zugeordnetes taktisches Zeichen (Fahrzeugverwaltung, Board- oder
+  // manuell hinzugefügte Fahrzeuge) zeigt jedes Fahrzeug das generische
+  // "feuerwehrfahrzeug"-Symbol. Statusfarbe bleibt als Ring um das Symbol sichtbar.
+  var VEHICLE_ICON_FALLBACK = "feuerwehrfahrzeug";
   function vehicleIcon(color, zeichenKey) {
     var key = zeichenKey || VEHICLE_ICON_FALLBACK;
     return divIcon(
@@ -133,6 +131,25 @@
     bindToggle("lft-layer-wasserstellen", layerWasserstellen);
     bindToggle("lft-layer-zeichnung", layerZeichnung);
 
+    // "Beschriftungen" ist kein eigener L.layerGroup (die Labels sind permanente Tooltips,
+    // direkt an die jeweiligen Feature-Layer gebunden — Zeichnungen/Zeichen/Distanzen), daher
+    // eigene Sichtbarkeits-Steuerung statt addLayer/removeLayer: beim Rendern wird der
+    // Tooltip immer gebunden, aber sofort geschlossen/geöffnet je nach aktuellem Zustand.
+    var beschriftungenSichtbar = true;
+    function applyLabelVisibility(layer) {
+      var tt = layer.getTooltip && layer.getTooltip();
+      if (!tt || !tt.options.permanent) { return; }
+      if (beschriftungenSichtbar) { layer.openTooltip(); } else { layer.closeTooltip(); }
+    }
+    var cbBeschriftung = document.getElementById("lft-layer-beschriftung");
+    if (cbBeschriftung) {
+      cbBeschriftung.addEventListener("change", function () {
+        beschriftungenSichtbar = this.checked;
+        Object.keys(featureLayers).forEach(function (id) { applyLabelVisibility(featureLayers[id]); });
+        layerReplay.eachLayer(applyLabelVisibility);
+      });
+    }
+
     // ── Auto-Layer: Einsatzort ───────────────────────────────────────────────
     if (opts.incidentLat != null && opts.incidentLng != null) {
       L.marker([opts.incidentLat, opts.incidentLng], { icon: divIcon('<div class="lft-einsatzort-icon">📍</div>', [14, 28]) })
@@ -201,12 +218,49 @@
     setInterval(ladeFahrzeuge, 15000);
 
     // ── Auto-Layer: Objekt ───────────────────────────────────────────────────
+    // Zeigt nicht nur das Objekt-Symbol, sondern die am Objekt gepflegten Infos
+    // (Gefahren, Informationen, Anfahrtsweg, Kontakte) im Popup — Gefahren zusätzlich
+    // als kleines Warnzeichen direkt am Symbol, damit sie auch ohne Klick auffallen.
+    function objektIconHtml(o) {
+      var warn = (o.gefahren && o.gefahren.length) ? '<span class="lft-objekt-icon__warn">⚠</span>' : "";
+      return '<div class="lft-objekt-icon">🏢' + warn + '</div>';
+    }
+    function objektPopupHtml(o) {
+      var html = '<div class="lft-objekt-popup">';
+      html += '<div class="lft-objekt-popup__title">' + escapeHtml(o.name || "Objekt") +
+        (o.vulgoname ? ' <span class="lft-objekt-popup__vulgo">(' + escapeHtml(o.vulgoname) + ')</span>' : "") + '</div>';
+      if (o.gefahren && o.gefahren.length) {
+        html += '<div class="lft-objekt-popup__gefahren">';
+        o.gefahren.forEach(function (g) {
+          html += '<div class="lft-objekt-popup__gefahr">' + (g.piktogramm || "⚠️") + " " + escapeHtml(g.name) +
+            (g.un_nummer ? " · UN " + escapeHtml(g.un_nummer) : "") +
+            (g.stoffname ? " · " + escapeHtml(g.stoffname) : "") + "</div>";
+        });
+        html += "</div>";
+      }
+      if (o.informationen) {
+        html += '<div class="lft-objekt-popup__info">' + escapeHtml(o.informationen) + "</div>";
+      }
+      if (o.anfahrtsweg) {
+        html += '<div class="lft-objekt-popup__info"><strong>Anfahrt:</strong> ' + escapeHtml(o.anfahrtsweg) + "</div>";
+      }
+      if (o.kontakte && o.kontakte.length) {
+        html += '<div class="lft-objekt-popup__kontakte">';
+        o.kontakte.forEach(function (k) {
+          html += "<div>" + escapeHtml(k.name) +
+            (k.telefone && k.telefone.length ? " · " + escapeHtml(k.telefone.join(", ")) : "") + "</div>";
+        });
+        html += "</div>";
+      }
+      html += '<a href="' + o.url + '" target="_blank" rel="noopener">Objektdaten öffnen</a></div>';
+      return html;
+    }
     if (opts.objektEnabled) {
       fetchJson(apiBase + "/objekte.json").then(function (liste) {
         (liste || []).forEach(function (o) {
-          L.marker([o.lat, o.lng], { icon: divIcon('<div class="lft-objekt-icon">🏢</div>', [14, 28]) })
+          L.marker([o.lat, o.lng], { icon: divIcon(objektIconHtml(o), [14, 28]) })
             .addTo(layerObjekt)
-            .bindPopup('<strong>' + escapeHtml(o.name || "Objekt") + '</strong><br><a href="' + o.url + '" target="_blank" rel="noopener">Objektdaten öffnen</a>');
+            .bindPopup(objektPopupHtml(o));
         });
       }).catch(function () {});
     }
@@ -418,6 +472,7 @@
       layer.addTo(layerZeichnung);
       if (opts.editierbar) { bindEditSync(layer, f); }
       applyLockVisual(layer, f);
+      applyLabelVisibility(layer);
       featureLayers[f.id] = layer;
     }
 
@@ -484,6 +539,7 @@
         });
       }
       layer.addTo(layerReplay);
+      applyLabelVisibility(layer);
     }
 
     function renderReplayAt(index) {
@@ -528,6 +584,35 @@
       if (opts.editierbar && karte.pm) { enableDrawTools(); }
       var panel = document.getElementById("lft-replay-panel");
       if (panel) { panel.hidden = true; }
+    }
+
+    // ── Druck: WYSIWYG-Kartendruck (Muster GSL-Lagekarte) ────────────────────
+    // Druckt exakt den aktuellen Kartenausschnitt mit den gerade eingeschalteten
+    // Layern (inkl. Beschriftungen-Zustand) — kein separater Bericht/Journal.
+    var btnDruck = document.getElementById("lft-tool-druck");
+    if (btnDruck) {
+      btnDruck.addEventListener("click", function () {
+        var b = karte.getBounds();
+        var aktiveLayer = [];
+        [
+          ["lft-layer-einsatzort", "einsatzort"],
+          ["lft-layer-fahrzeuge", "fahrzeuge"],
+          ["lft-layer-objekt", "objekt"],
+          ["lft-layer-wasserstellen", "wasserstellen"],
+          ["lft-layer-zeichnung", "zeichnung"],
+          ["lft-layer-beschriftung", "beschriftung"],
+        ].forEach(function (pair) {
+          var cb = document.getElementById(pair[0]);
+          if (cb && cb.checked) { aktiveLayer.push(pair[1]); }
+        });
+        var fmtSel = document.getElementById("lft-druck-format");
+        var fmt = fmtSel ? fmtSel.value : "A4 landscape";
+        var qs = "min_lat=" + b.getSouth().toFixed(6) + "&min_lng=" + b.getWest().toFixed(6) +
+          "&max_lat=" + b.getNorth().toFixed(6) + "&max_lng=" + b.getEast().toFixed(6) +
+          "&fmt=" + encodeURIComponent(fmt) + "&layers=" + encodeURIComponent(aktiveLayer.join(",")) +
+          "&baselayer=" + (baselayerSelect ? baselayerSelect.value : "osm");
+        window.open(apiBase + "/karte/druck?" + qs, "_blank");
+      });
     }
 
     var btnReplay = document.getElementById("lft-tool-replay");
