@@ -641,6 +641,21 @@ async def favicon():
     return RedirectResponse("/static/img/favicon.ico")
 
 
+@app.get("/health", include_in_schema=False)
+async def health():
+    """Unauthentifizierter Verfügbarkeits-Check für externes Monitoring (z. B. Uptime Kuma)."""
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("health check: DB nicht erreichbar")
+        return JSONResponse({"status": "error", "db": "down"}, status_code=503)
+    finally:
+        db.close()
+    return JSONResponse({"status": "ok", "db": "up"})
+
+
 # Override OpenAPI schema to add X-API-Key security scheme
 def _custom_openapi():
     if app.openapi_schema:
