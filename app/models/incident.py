@@ -26,7 +26,7 @@ TASK_STATUS_VALUES = ["open", "in_progress", "done", "cancelled"]
 _TRAFFIC_LIGHT_LEGACY = {"open": "meldung", "in_progress": "achtung", "done": "erledigt", "cancelled": "storniert"}
 PERSON_STATUS_VALUES = ["gefunden", "versorgt", "abtransportiert", "verstorben"]
 FIXED_COLUMN_TITLES = {
-    "active":     "Tatsächlich im Einsatz",
+    "active":     "Einheiten",
     "tasks":      "Aufträge",
     "messages":   "Meldungen",
     "neighbor":   "Nachalarmierung",

@@ -150,10 +150,6 @@
         {% if request.state.lagefuehrung_modul_aktiv %}
         <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="btn btn--secondary">🗺️ Lageführung</a>
         {% endif %}
-        {% set lk_url = lagekarte_url(incident) %}
-        {% if lk_url %}
-        <a href="{{ lk_url }}" target="_blank" rel="noopener" class="btn btn--secondary">🗺️ lagekarte.info</a>
-        {% endif %}
       </div>
     </div>
   </div>
