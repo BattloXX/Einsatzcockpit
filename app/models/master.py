@@ -461,6 +461,10 @@ class OrgSettings(Base):
     atemschutz_wart_mail: Mapped[str | None] = mapped_column(String(255), nullable=True)
     atemschutz_wart_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
+    # Lageführung (einsatzbezogene Lagekarte): je Org aktivierbar, effektiv = SystemSettings-Key
+    # "lagefuehrung_modul_aktiv" == "true" AND dieser Wert (Muster UAS/Objekt).
+    lagefuehrung_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     org: Mapped[FireDept] = relationship(back_populates="settings")
 
     @property

@@ -76,6 +76,15 @@ def _set_atemschutz_pruefung_state(request: HTTPConnection, org_id: int | None, 
         request.state.atemschutz_pruefung_modul_aktiv = False
 
 
+def _set_lagefuehrung_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
+    """Setzt request.state.lagefuehrung_modul_aktiv fail-safe (nie crashen)."""
+    try:
+        from app.services.lagefuehrung_service import lagefuehrung_effective_enabled
+        request.state.lagefuehrung_modul_aktiv = lagefuehrung_effective_enabled(org_id, db)
+    except Exception:
+        request.state.lagefuehrung_modul_aktiv = False
+
+
 def _resolve_current_org(
     request: HTTPConnection,
     db: Session = Depends(get_db),
@@ -94,6 +103,7 @@ def _resolve_current_org(
     request.state.gateway_enabled = False
     request.state.fahrtenbuch_modul_aktiv = False
     request.state.atemschutz_pruefung_modul_aktiv = False
+    request.state.lagefuehrung_modul_aktiv = False
 
     user = getattr(request.state, "user", None)
     if user is None:
@@ -130,6 +140,7 @@ def _resolve_current_org(
             _set_gateway_state(request, org_id, db)
             _set_fahrtenbuch_state(request, org_id, db)
             _set_atemschutz_pruefung_state(request, org_id, db)
+            _set_lagefuehrung_state(request, org_id, db)
             return org_id
         set_tenant_context(db, None)
         return None
@@ -141,6 +152,7 @@ def _resolve_current_org(
     _set_gateway_state(request, org_id, db)
     _set_fahrtenbuch_state(request, org_id, db)
     _set_atemschutz_pruefung_state(request, org_id, db)
+    _set_lagefuehrung_state(request, org_id, db)
     return org_id
 
 

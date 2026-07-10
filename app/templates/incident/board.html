@@ -194,6 +194,10 @@
     <a href="/einsatz/{{ incident.id }}/atemschutz" class="btn btn--sm btn--secondary incident-header__navlink"
        {{ tip('Atemschutzüberwachung — Pressluft-Trupp-Steuerung') }}>🫁 AS</a>
     {% endif %}
+    {% if request.state.lagefuehrung_modul_aktiv %}
+    <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="btn btn--sm btn--secondary incident-header__navlink"
+       {{ tip('Lageführung — einsatzbezogene Lagekarte mit Fahrzeugen, Objekt und Zeichenwerkzeugen') }}>🗺️ Lageführung</a>
+    {% endif %}
     <a href="/einsatz/{{ incident.id }}/funkjournal" class="btn btn--sm btn--secondary incident-header__navlink"
        {{ tip('Funkjournal – Sprüche und lagerelevante Einträge') }}>📻 Funk</a>
 

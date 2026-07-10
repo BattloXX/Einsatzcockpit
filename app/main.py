@@ -48,6 +48,7 @@ from app.routers import (
     ui_incident,
     ui_infoscreen_alarm,
     ui_invitation,
+    ui_lagefuehrung,
     ui_lis,
     ui_major_incident,
     ui_media,
@@ -511,6 +512,7 @@ app.include_router(lagekarte_api.router)
 app.include_router(teams_bot.router)
 app.include_router(ws.router)
 app.include_router(ui_incident.router)
+app.include_router(ui_lagefuehrung.router)
 app.include_router(ui_invitation.router)
 app.include_router(ui_backup.router)
 app.include_router(ui_major_incident.router)

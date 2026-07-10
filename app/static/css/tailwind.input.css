@@ -1751,3 +1751,66 @@ button.htmx-request,
 .objekt-einsatz-kachel--melderplan { border-left: 5px solid var(--red); }
 .objekt-einsatz-telbtn { min-height: 44px; display: inline-flex; align-items: center; }
 .objekt-einsatz .objekt-dl { grid-template-columns: 120px 1fr; }
+
+/* ── Lageführung (Lagekarte je Einsatz, Phase 1 / MVP) ────────────────────── */
+.lft-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface-high);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  font-size: .85rem;
+}
+.lft-sidebar { display: flex; flex-direction: column; gap: 14px; }
+.lft-tabs { display: flex; gap: 6px; }
+.lft-tab {
+  font-size: .78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface-high);
+  color: var(--text-muted);
+}
+.lft-tab--aktiv { background: rgba(147, 197, 253, .15); color: #93c5fd; }
+.lft-layer-gruppe { display: flex; flex-direction: column; gap: 6px; }
+.lft-layer-gruppe label { display: flex; align-items: center; gap: 8px; font-size: .82rem; cursor: pointer; }
+.lft-basislayer { display: flex; flex-direction: column; gap: 4px; }
+.lft-chronologie { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px; }
+.lft-chronologie__title { font-size: .78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+.lft-chronologie__liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lft-chronologie__liste li {
+  font-size: .76rem;
+  color: var(--text-muted);
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: 4px;
+}
+.lft-divicon { background: transparent; border: none; }
+.lft-vehicle-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+}
+.lft-einsatzort-icon, .lft-objekt-icon {
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
+}
+@media (max-width: 760px) {
+  .lft-banner { flex-direction: column; align-items: flex-start; }
+}
