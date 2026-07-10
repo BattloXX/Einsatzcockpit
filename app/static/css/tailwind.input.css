@@ -1866,9 +1866,11 @@ button.htmx-request,
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface-high);
+  color: var(--on-surface);
   cursor: pointer;
   font-family: inherit;
 }
+.lft-tz-popup__row button:hover { background: var(--surface-highest); }
 
 .lft-meldung-form { min-width: 200px; }
 .lft-meldung-form textarea { width: 100%; resize: vertical; }
@@ -2043,9 +2045,11 @@ button.htmx-request,
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface-high);
+  color: var(--on-surface);
   cursor: pointer;
   font-family: inherit;
 }
+.lft-tz-popup__row--label button:hover { background: var(--surface-highest); }
 
 .lft-text-label.leaflet-tooltip {
   background: rgba(20, 20, 20, .78);
