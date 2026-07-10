@@ -58,6 +58,13 @@
           </select>
         </div>
 
+        <div class="lft-werkzeuge">
+          <label class="form-label">Lage-Replay</label>
+          <div class="lft-werkzeuge__grid">
+            <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-replay">⏱ Replay</button>
+          </div>
+        </div>
+
         {% if can_edit %}
         <div class="lft-werkzeuge">
           <label class="form-label">Weitere Werkzeuge</label>
@@ -65,6 +72,8 @@
             <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-meldung">📢 Meldung</button>
             <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzlinie">📏 Distanzlinie</button>
             <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzkreis">⭕ Distanzkreis</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-wind">🧭 Windrichtung</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-snapshot">📸 Momentaufnahme</button>
           </div>
         </div>
 
@@ -92,7 +101,20 @@
       </div>
       {% endif %}
     </aside>
-    <div id="lft-karte" class="objekt-karte-canvas card"></div>
+    <div class="lft-karte-wrap">
+      <div id="lft-karte" class="objekt-karte-canvas card"></div>
+      <div id="lft-replay-panel" class="lft-replay-panel" hidden>
+        <div class="lft-replay-panel__zeile">
+          <span>⏱ Replay</span>
+          <span id="lft-replay-zeit" class="lft-replay-panel__zeit"></span>
+          <button type="button" class="btn btn--ghost btn--xs" id="lft-replay-exit">Beenden</button>
+        </div>
+        <div class="lft-replay-panel__zeile">
+          <button type="button" class="btn btn--ghost btn--xs" id="lft-replay-play">▶</button>
+          <input type="range" id="lft-replay-slider" class="lft-replay-panel__slider" min="0" max="0" value="0">
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

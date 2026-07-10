@@ -29,3 +29,6 @@ migration_log.json
 .ruff_cache/
 htmlcov/
 .coverage
+
+# Laufzeit-Medienablage (Fotos/Momentaufnahmen/PDFs) — lokal generiert, nicht versioniert
+app_storage/

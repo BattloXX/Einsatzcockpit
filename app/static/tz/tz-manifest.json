@@ -1,6 +1,13 @@
 {
   "symbole": [
     {
+      "id": "windrichtung",
+      "name": "Windrichtung",
+      "such": "wind windrichtung pfeil meteo wetter",
+      "kat": "Wetter",
+      "datei": "/static/tz/symbole/windrichtung.svg"
+    },
+    {
       "id": "einheit_trupp",
       "name": "Trupp",
       "such": "trupp 0.1 einheit staerke",
