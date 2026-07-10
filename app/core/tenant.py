@@ -145,6 +145,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     # Lageführung-Modul (TenantScoped via Mixin)
     "lagefuehrung_feature",
     "lagefuehrung_event",
+    "lagefuehrung_berechtigung",
 })
 
 

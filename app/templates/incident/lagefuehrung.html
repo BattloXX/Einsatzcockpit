@@ -11,13 +11,17 @@
       <h1>🗺️ Lageführung</h1>
       <p class="text-muted">Einsatz #{{ incident.nummer or incident.id }} — Fahrzeuge, Objekt und Einsatzort werden automatisch angezeigt. Zeichenwerkzeuge oben links auf der Karte.</p>
     </div>
-    <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">← Zurück zum Einsatz</a>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="/einsatz/{{ incident.id }}/lagefuehrung/pdf" target="_blank" rel="noopener" class="btn btn--ghost">📄 PDF-Lagebericht</a>
+      <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">← Zurück zum Einsatz</a>
+    </div>
   </div>
 
   <div id="lft-banner" class="lft-banner">
     <span id="lft-banner-text">
       {% if fuehrer_name %}Lageführung: <strong>{{ fuehrer_name }}</strong>{% else %}Noch keine Lageführung übernommen{% endif %}
     </span>
+    <div id="lft-presence" class="lft-presence"></div>
     {% if can_edit %}
     <form method="post" action="/einsatz/{{ incident.id }}/lagefuehrung/uebernehmen">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -29,34 +33,54 @@
   <div class="objekt-karte-layout">
     <aside class="card lft-sidebar" style="padding:12px;">
       <div class="lft-tabs">
-        <div class="lft-tab lft-tab--aktiv">Layer</div>
-      </div>
-
-      <div class="lft-layer-gruppe">
-        <label><input type="checkbox" id="lft-layer-einsatzort" checked> 📍 Einsatzort</label>
-        <label><input type="checkbox" id="lft-layer-fahrzeuge" checked> 🚒 Fahrzeuge</label>
-        {% if objekt_enabled %}
-        <label><input type="checkbox" id="lft-layer-objekt" checked> 🏢 Objekt</label>
+        <button type="button" class="lft-tab lft-tab--aktiv" data-lft-tab="layer">Layer</button>
+        {% if can_edit %}
+        <button type="button" class="lft-tab" data-lft-tab="taktik">Taktik</button>
         {% endif %}
-        <label><input type="checkbox" id="lft-layer-zeichnung" checked> ✏️ Zeichnungen</label>
       </div>
 
-      <div class="lft-basislayer">
-        <label class="form-label">Basiskarte</label>
-        <select id="lft-baselayer-select" class="form-input">
-          <option value="osm">OSM Standard</option>
-          <option value="ortho">Orthofoto (basemap.at)</option>
-        </select>
+      <div class="lft-tab-panel" data-lft-panel="layer">
+        <div class="lft-layer-gruppe">
+          <label><input type="checkbox" id="lft-layer-einsatzort" checked> 📍 Einsatzort</label>
+          <label><input type="checkbox" id="lft-layer-fahrzeuge" checked> 🚒 Fahrzeuge</label>
+          {% if objekt_enabled %}
+          <label><input type="checkbox" id="lft-layer-objekt" checked> 🏢 Objekt</label>
+          {% endif %}
+          <label><input type="checkbox" id="lft-layer-zeichnung" checked> ✏️ Zeichnungen</label>
+        </div>
+
+        <div class="lft-basislayer">
+          <label class="form-label">Basiskarte</label>
+          <select id="lft-baselayer-select" class="form-input">
+            <option value="osm">OSM Standard</option>
+            <option value="ortho">Orthofoto (basemap.at)</option>
+          </select>
+        </div>
+
+        {% if can_edit %}
+        <div class="lft-werkzeuge">
+          <label class="form-label">Weitere Werkzeuge</label>
+          <div class="lft-werkzeuge__grid">
+            <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-meldung">📢 Meldung</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzlinie">📏 Distanzlinie</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzkreis">⭕ Distanzkreis</button>
+          </div>
+        </div>
+        {% else %}
+        <p class="form-hint" style="margin-top:10px;">Nur Ansicht — Zeichnen erfordert eine Bearbeiter-Rolle.</p>
+        {% endif %}
+
+        <details class="lft-chronologie">
+          <summary class="lft-chronologie__title">Chronologie</summary>
+          <ul id="lft-chronologie-liste" class="lft-chronologie__liste"></ul>
+        </details>
       </div>
 
-      {% if not can_edit %}
-      <p class="form-hint" style="margin-top:10px;">Nur Ansicht — Zeichnen erfordert eine Bearbeiter-Rolle.</p>
+      {% if can_edit %}
+      <div class="lft-tab-panel" data-lft-panel="taktik" hidden>
+        <div id="lft-tz-picker" class="lft-tz-picker"></div>
+      </div>
       {% endif %}
-
-      <details class="lft-chronologie">
-        <summary class="lft-chronologie__title">Chronologie</summary>
-        <ul id="lft-chronologie-liste" class="lft-chronologie__liste"></ul>
-      </details>
     </aside>
     <div id="lft-karte" class="objekt-karte-canvas card"></div>
   </div>
@@ -74,7 +98,11 @@
     incidentLng: {{ incident.lng if incident.lng is not none else 'null' }},
     csrfToken: "{{ request.state.csrf_token }}",
     editierbar: {{ 'true' if can_edit else 'false' }},
-    objektEnabled: {{ 'true' if objekt_enabled else 'false' }}
+    objektEnabled: {{ 'true' if objekt_enabled else 'false' }},
+    userId: {{ user.id }},
+    userName: "{{ user.display_name|replace('"', '\\"') }}",
+    isFuehrer: {{ 'true' if is_fuehrer else 'false' }},
+    grantedUserIds: {{ granted_user_ids | tojson }}
   });
 </script>
 {% endblock %}

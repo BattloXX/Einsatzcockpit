@@ -6,6 +6,7 @@ wie die übrigen Einsatz-Unterseiten in ui_incident.py.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 
@@ -17,7 +18,12 @@ from app.core.permissions import can_access_incident, has_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentVehicle
-from app.models.lagefuehrung import LAGEFUEHRUNG_FEATURE_TYPEN, LagefuehrungEvent, LagefuehrungFeature
+from app.models.lagefuehrung import (
+    LAGEFUEHRUNG_FEATURE_TYPEN,
+    LagefuehrungBerechtigung,
+    LagefuehrungEvent,
+    LagefuehrungFeature,
+)
 from app.models.user import User
 from app.services.broadcast import manager
 
@@ -61,10 +67,26 @@ def _check_access(user: User, incident: Incident) -> None:
         raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
 
 
-def _check_edit_access(user: User, incident: Incident) -> None:
+def _has_granted_edit_access(db: Session, incident_id: int, user_id: int) -> bool:
+    """Vom Lageführer explizit vergebene Editor-Rechte (Phase 2, ergänzt _EDIT_ROLES)."""
+    return (
+        db.query(LagefuehrungBerechtigung)
+        .filter(
+            LagefuehrungBerechtigung.incident_id == incident_id,
+            LagefuehrungBerechtigung.user_id == user_id,
+        )
+        .first()
+        is not None
+    )
+
+
+def _check_edit_access(user: User, incident: Incident, db: Session) -> None:
     _check_access(user, incident)
-    if not has_role(user, *_EDIT_ROLES):
-        raise HTTPException(403, "Keine Berechtigung zum Bearbeiten der Lagekarte")
+    if has_role(user, *_EDIT_ROLES):
+        return
+    if _has_granted_edit_access(db, incident.id, user.id):
+        return
+    raise HTTPException(403, "Keine Berechtigung zum Bearbeiten der Lagekarte")
 
 
 def _log_event(
@@ -147,11 +169,20 @@ async def lagefuehrung_seite(
         fuehrer = db.get(User, incident.lagefuehrung_fuehrer_user_id)
         fuehrer_name = fuehrer.display_name if fuehrer else None
 
+    can_edit = has_role(user, *_EDIT_ROLES) or _has_granted_edit_access(db, incident_id, user.id)
+    is_fuehrer = incident.lagefuehrung_fuehrer_user_id == user.id
+    granted_user_ids = [
+        row.user_id for row in
+        db.query(LagefuehrungBerechtigung).filter(LagefuehrungBerechtigung.incident_id == incident_id).all()
+    ]
+
     return templates.TemplateResponse(request, "incident/lagefuehrung.html", {
         "user": user,
         "incident": incident,
-        "can_edit": has_role(user, *_EDIT_ROLES),
+        "can_edit": can_edit,
+        "is_fuehrer": is_fuehrer,
         "fuehrer_name": fuehrer_name,
+        "granted_user_ids": granted_user_ids,
         "objekt_enabled": bool(getattr(request.state, "objekt_enabled", False)),
     })
 
@@ -201,6 +232,7 @@ async def lagefuehrung_vehicles(
             "kennzeichen": v.vehicle_master.kennzeichen if v.vehicle_master else None,
             "unit_status": v.unit_status,
             "color": _UNIT_STATUS_COLOR.get(v.unit_status, _DEFAULT_STATUS_COLOR),
+            "zeichen_key": v.vehicle_master.taktisches_zeichen if v.vehicle_master else None,
             "lat": pos.lat if pos else None,
             "lng": pos.lon if pos else None,
             "position_source": pos.source if pos else None,
@@ -301,7 +333,7 @@ async def lagefuehrung_feature_create(
 ):
     user = _current_user_or_401(request)
     incident = _incident_or_404(incident_id, db)
-    _check_edit_access(user, incident)
+    _check_edit_access(user, incident, db)
 
     data = await request.json()
     typ = (data.get("typ") or "zeichnung").strip()
@@ -344,7 +376,7 @@ async def lagefuehrung_feature_update(
 ):
     user = _current_user_or_401(request)
     incident = _incident_or_404(incident_id, db)
-    _check_edit_access(user, incident)
+    _check_edit_access(user, incident, db)
 
     feature = _feature_query(db, incident_id).filter(LagefuehrungFeature.id == feature_id).first()
     if not feature:
@@ -387,7 +419,7 @@ async def lagefuehrung_feature_delete(
 ):
     user = _current_user_or_401(request)
     incident = _incident_or_404(incident_id, db)
-    _check_edit_access(user, incident)
+    _check_edit_access(user, incident, db)
 
     feature = _feature_query(db, incident_id).filter(LagefuehrungFeature.id == feature_id).first()
     if not feature:
@@ -414,7 +446,7 @@ async def lagefuehrung_uebernehmen(
 ):
     user = _current_user_or_401(request)
     incident = _incident_or_404(incident_id, db)
-    _check_edit_access(user, incident)
+    _check_edit_access(user, incident, db)
 
     alt_fuehrer_id = incident.lagefuehrung_fuehrer_user_id
     incident.lagefuehrung_fuehrer_user_id = user.id
@@ -429,3 +461,106 @@ async def lagefuehrung_uebernehmen(
         "name": user.display_name,
     })
     return RedirectResponse(f"/einsatz/{incident_id}/lagefuehrung", status_code=303)
+
+
+# ── Rechtevergabe durch den Lageführer ──────────────────────────────────────────
+
+def _require_fuehrer(user: User, incident: Incident) -> None:
+    if incident.lagefuehrung_fuehrer_user_id != user.id:
+        raise HTTPException(403, "Nur der aktuelle Lageführer kann Editor-Rechte vergeben")
+
+
+@router.post("/einsatz/{incident_id}/lagefuehrung/berechtigung/{target_user_id}")
+async def lagefuehrung_berechtigung_erteilen(
+    incident_id: int,
+    target_user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+    _require_fuehrer(user, incident)
+
+    target = db.get(User, target_user_id)
+    if not target:
+        raise HTTPException(404, "Nutzer nicht gefunden")
+
+    if not _has_granted_edit_access(db, incident_id, target_user_id):
+        db.add(LagefuehrungBerechtigung(
+            org_id=incident.primary_org_id,
+            incident_id=incident_id,
+            user_id=target_user_id,
+            granted_by_user_id=user.id,
+        ))
+        _log_event(db, incident, user, "berechtigung.erteilt", "user", target_user_id, {
+            "name": target.display_name,
+        })
+        db.commit()
+
+    await manager.broadcast(incident_id, {
+        "type": "lagefuehrung.berechtigung.changed",
+        "user_id": target_user_id, "granted": True,
+    })
+    return JSONResponse({"user_id": target_user_id, "granted": True})
+
+
+@router.delete("/einsatz/{incident_id}/lagefuehrung/berechtigung/{target_user_id}")
+async def lagefuehrung_berechtigung_entziehen(
+    incident_id: int,
+    target_user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+    _require_fuehrer(user, incident)
+
+    eintrag = (
+        db.query(LagefuehrungBerechtigung)
+        .filter(
+            LagefuehrungBerechtigung.incident_id == incident_id,
+            LagefuehrungBerechtigung.user_id == target_user_id,
+        )
+        .first()
+    )
+    if eintrag:
+        db.delete(eintrag)
+        _log_event(db, incident, user, "berechtigung.entzogen", "user", target_user_id, None)
+        db.commit()
+
+    await manager.broadcast(incident_id, {
+        "type": "lagefuehrung.berechtigung.changed",
+        "user_id": target_user_id, "granted": False,
+    })
+    return Response(status_code=204)
+
+
+# ── PDF-Lagebericht ──────────────────────────────────────────────────────────────
+
+@router.get("/einsatz/{incident_id}/lagefuehrung/pdf")
+async def lagefuehrung_pdf(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+
+    from app.services.lagefuehrung_pdf_service import render_lagefuehrung_pdf
+
+    # render_lagefuehrung_pdf rendert die Kartenkachel synchron via staticmap/requests —
+    # in einem Thread ausfuehren, damit der Event-Loop nicht blockiert (Muster
+    # staticmap_service.py-Docstring).
+    pdf_bytes = await asyncio.to_thread(render_lagefuehrung_pdf, incident, db, str(request.base_url))
+    filename = f"lagebericht_einsatz_{incident.id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
