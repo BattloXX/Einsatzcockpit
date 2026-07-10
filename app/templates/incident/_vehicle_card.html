@@ -7,8 +7,13 @@
      hx-trigger="click[!event.target.closest('select,input,button,label,.assigned-task,.assigned-msg,.assigned-person')]"
      hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
   <div class="card__body">
-    <div class="card__title">
-      {{ vehicle.vehicle_master.display_label }}
+    <div class="card__title card__title--vehicle">
+      {% if vehicle.vehicle_master.taktisches_zeichen %}
+      <img class="card__vehicle-icon" src="/static/tz/symbole/{{ vehicle.vehicle_master.taktisches_zeichen }}.svg" alt="" title="{{ vehicle.vehicle_master.type }}">
+      {% else %}
+      <span class="card__vehicle-icon card__vehicle-icon--dot" title="{{ vehicle.vehicle_master.type }}"></span>
+      {% endif %}
+      <span>{{ vehicle.vehicle_master.display_label }}</span>
       {% if vehicle.vehicle_master.is_external %}<span style="font-size:.58rem;padding:1px 4px;border-radius:3px;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.3);margin-left:3px;vertical-align:middle;">FREMD</span>{% endif %}
       <span class="card__org">{{ vehicle.vehicle_master.org_display_name }}</span>
       {% set bos = vehicle.vehicle_master.effective_bos %}
@@ -16,7 +21,6 @@
       <span class="badge badge--bos" style="font-size:.65rem; padding:1px 5px; border-radius:3px; background:rgba(255,255,255,.12); margin-left:4px;">{{ bos }}</span>
       {% endif %}
     </div>
-    <div class="card__sub">{{ vehicle.vehicle_master.type }}</div>
     {% if can_edit and gk_member_candidates is defined %}
     <div style="margin-top:3px;" onclick="event.stopPropagation()">
       <select class="form-select form-select--xs"
