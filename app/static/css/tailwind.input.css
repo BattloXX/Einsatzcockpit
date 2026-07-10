@@ -316,6 +316,14 @@ body.mobile-menu-open { overflow: hidden; }
 .card__status--red    { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
 .card__body { padding: 10px 12px; padding-right: 28px; }
 .card__title { font-weight: 700; font-size: .95rem; color: var(--on-surface); }
+.card__title--vehicle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.card__vehicle-icon {
+  width: 22px; height: 22px; border-radius: 50%; background: #fff;
+  border: 2px solid var(--org-color, var(--border));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  padding: 2px; object-fit: contain; flex-shrink: 0;
+}
+.card__vehicle-icon--dot { padding: 0; background: var(--org-color, var(--border)); }
 .card__sub { font-size: .82rem; color: var(--text-muted); margin-top: 2px; }
 .card__org { font-size: .72rem; color: var(--text-muted); font-weight: 500; margin-left: 6px;
              font-family: 'JetBrains Mono', monospace; }
