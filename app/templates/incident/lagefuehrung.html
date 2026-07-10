@@ -69,6 +69,7 @@
         <div class="lft-werkzeuge">
           <label class="form-label">Weitere Werkzeuge</label>
           <div class="lft-werkzeuge__grid">
+            <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-text">📝 Text</button>
             <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-meldung">📢 Meldung</button>
             <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzlinie">📏 Distanzlinie</button>
             <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzkreis">⭕ Distanzkreis</button>
@@ -97,7 +98,12 @@
 
       {% if can_edit %}
       <div class="lft-tab-panel" data-lft-panel="taktik" hidden>
-        <div id="lft-tz-picker" class="lft-tz-picker"></div>
+        <div class="lft-tz-subtabs">
+          <button type="button" class="lft-tz-subtab lft-tz-subtab--aktiv" data-lft-tzsub="symbole">Symbole</button>
+          <button type="button" class="lft-tz-subtab" data-lft-tzsub="flaechen">Flächen</button>
+        </div>
+        <div id="lft-tz-picker" class="lft-tz-picker" data-lft-tzsub-panel="symbole"></div>
+        <div id="lft-flaechen-picker" class="lft-tz-picker" data-lft-tzsub-panel="flaechen" hidden></div>
       </div>
       {% endif %}
     </aside>

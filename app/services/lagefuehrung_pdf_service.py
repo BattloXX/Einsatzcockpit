@@ -30,6 +30,7 @@ _TYP_FARBE = {
     "distanz": "#6b7280",
     "zeichnung": "#e53e3e",
     "marker": "#e53e3e",
+    "text": "#111827",
 }
 
 _EVENT_LABELS = {
