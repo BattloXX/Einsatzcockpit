@@ -45,9 +45,11 @@
   }
 
   // Ohne eigens zugeordnetes taktisches Zeichen (Fahrzeugverwaltung) zeigt jedes
-  // Fahrzeug das generische Feuerwehrfahrzeug-Symbol statt eines schmucklosen
-  // Farbkreises — Statusfarbe bleibt als Ring um das Symbol sichtbar.
-  var VEHICLE_ICON_FALLBACK = "feuerwehrfahrzeug";
+  // Fahrzeug das Fahrzeug-Grundzeichen (Rechteck mit Rädern — bei kleiner
+  // Darstellung deutlich als Fahrzeug erkennbar, anders als z. B.
+  // "feuerwehrfahrzeug", das nur ein schmuckloses rotes Rechteck ist).
+  // Statusfarbe bleibt als Ring um das Symbol sichtbar.
+  var VEHICLE_ICON_FALLBACK = "fahrzeug_grund";
   function vehicleIcon(color, zeichenKey) {
     var key = zeichenKey || VEHICLE_ICON_FALLBACK;
     return divIcon(
