@@ -134,6 +134,36 @@
         </div>
       </div>
     </form>
+
+    {% set _lagefuehrung_sys_on = sys_settings.get('lagefuehrung_modul_aktiv') == 'true' %}
+    <form method="post" action="/admin/settings/system/lagefuehrung-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+          <label style="font-weight:600">&#x1F5FA;&#xFE0F; Lageführung (Lagekarte)</label>
+          <p class="form-hint" style="margin-top:.25rem">
+            Einsatzbezogene Lagekarte mit Auto-Layern (Fahrzeuge, Objekt, Einsatzort) und
+            Zeichenwerkzeugen.<br>
+            Zweistufig schaltbar: erst systemweit an, dann je Organisation.
+            Ausschalten versteckt alle Ansichten &ndash; <strong>keine Daten werden gelöscht</strong>.
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" name="enabled_raw" value="1"
+                   {% if _lagefuehrung_sys_on %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <span>Systemweit aktivieren</span>
+          </label>
+          {% if _lagefuehrung_sys_on %}
+          <span class="badge badge--success">AN</span>
+          {% else %}
+          <span class="badge badge--muted">AUS</span>
+          {% endif %}
+        </div>
+      </div>
+    </form>
   </div>
 </section>
 {% endif %}
@@ -342,6 +372,25 @@
         <small class="form-hint">
           Schaltet das Drohnenmodul (Geräteregister, Piloten, Flugbuch, Karten-Integration) für diese Org ein.
           {% if not uas_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F5FA;&#xFE0F; Lageführung (Lagekarte)</h3>
+      {% set _lagefuehrung_org_on = (org_settings.lagefuehrung_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not lagefuehrung_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="lagefuehrung_modul_aktiv_raw" value="1"
+                 {% if _lagefuehrung_org_on %}checked{% endif %}
+                 {% if not lagefuehrung_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Lageführung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet die einsatzbezogene Lagekarte (Auto-Layer Fahrzeuge/Objekt/Einsatzort,
+          Zeichenwerkzeuge, Ereignisprotokoll) für diese Org ein.
+          {% if not lagefuehrung_sys_enabled %}
           <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
           {% endif %}
         </small>

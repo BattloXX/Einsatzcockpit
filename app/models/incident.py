@@ -99,6 +99,11 @@ class Incident(Base):
     # Dient als Offline-Fallback, wenn Overpass am Einsatzort nicht erreichbar ist.
     hydranten_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     hydranten_stand: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Lageführung: aktueller Lageführer der einsatzbezogenen Lagekarte (Rollen-Grundgerüst
+    # Phase 1 — Übernahme jederzeit möglich, kein hartes Locking).
+    lagefuehrung_fuehrer_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=True
+    )
 
     columns: Mapped[list[IncidentColumn]] = relationship(
         back_populates="incident", order_by="IncidentColumn.display_order", cascade="all, delete-orphan"
@@ -137,6 +142,9 @@ class Incident(Base):
     )
     leader_member: Mapped[object | None] = relationship(
         "Member", foreign_keys=[incident_leader_member_id], lazy="joined"
+    )
+    lagefuehrung_fuehrer: Mapped[User | None] = relationship(
+        "User", foreign_keys=[lagefuehrung_fuehrer_user_id], lazy="joined"
     )
 
 

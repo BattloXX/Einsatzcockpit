@@ -77,6 +77,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     sys_settings = {s.key: s.value for s in db.query(SystemSettings).all()} if is_sysadmin else {}
     from app.models.weather import WeatherStation
     from app.services.gateway_service import gateway_system_enabled as _gateway_system_enabled
+    from app.services.lagefuehrung_service import lagefuehrung_system_enabled
     from app.services.objekt_service import objekt_system_enabled
     from app.services.uas_service import uas_system_enabled
     weather_stations = (
@@ -97,6 +98,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "uas_sys_enabled": uas_system_enabled(db),
         "objekt_sys_enabled": objekt_system_enabled(db),
         "gateway_sys_enabled": _gateway_system_enabled(db),
+        "lagefuehrung_sys_enabled": lagefuehrung_system_enabled(db),
         "timezones": common_timezones(),
         "default_timezone": app_settings.DEFAULT_TIMEZONE,
         "weather_stations": weather_stations,
@@ -150,6 +152,7 @@ async def save_org_settings(
     gateway_module_enabled_raw: str = Form(""),
     fahrtenbuch_modul_aktiv_raw: str = Form(""),
     atemschutz_pruefung_modul_aktiv_raw: str = Form(""),
+    lagefuehrung_modul_aktiv_raw: str = Form(""),
     einsatzinfo_sms_enabled_raw: str = Form(""),
     hydrant_layer_enabled_raw: str | None = Form(None),
 ):
@@ -297,6 +300,24 @@ async def save_org_settings(
                 org_id=effective_org_id,
                 user_id=user.id,
                 payload={"alt": old_uas, "neu": new_uas},
+                ip=request.client.host if request.client else None,
+            )
+
+    # Lageführung: Org-Toggle — nur änderbar wenn System-Flag aktiv
+    # (gleiches Muster wie UAS: disabled-Checkbox darf den Wert nicht kippen).
+    from app.services.lagefuehrung_service import lagefuehrung_system_enabled
+    if lagefuehrung_system_enabled(db):
+        old_lagefuehrung = org_s.lagefuehrung_modul_aktiv
+        new_lagefuehrung = lagefuehrung_modul_aktiv_raw in ("1", "true", "on")
+        org_s.lagefuehrung_modul_aktiv = new_lagefuehrung
+        if old_lagefuehrung != new_lagefuehrung:
+            from app.core.audit import write_audit
+            write_audit(
+                db,
+                "lagefuehrung.org_toggle",
+                org_id=effective_org_id,
+                user_id=user.id,
+                payload={"alt": old_lagefuehrung, "neu": new_lagefuehrung},
                 ip=request.client.host if request.client else None,
             )
 
@@ -1304,6 +1325,54 @@ def toggle_uas_system(
     write_audit(
         db,
         "uas.system_toggle",
+        user_id=user.id,
+        payload={"alt": old_value, "neu": new_value},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+
+    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
+    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
+@router.post("/settings/system/lagefuehrung-toggle")
+def toggle_lagefuehrung_system(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    enabled_raw: str = Form(""),
+):
+    """Systemweiten Lageführung-Flag umschalten (nur system_admin).
+
+    Setzt SystemSettings key "lagefuehrung_modul_aktiv" auf "true" oder "false".
+    Beim Ausschalten bleiben alle Org-Daten und Org-Toggles erhalten;
+    Re-Aktivierung stellt die Sichtbarkeit sofort wieder her.
+    """
+    new_enabled = enabled_raw in ("1", "true", "on")
+    new_value = "true" if new_enabled else "false"
+
+    row = db.query(SystemSettings).filter(SystemSettings.key == "lagefuehrung_modul_aktiv").first()
+    old_value = row.value if row else "false"
+
+    if row is None:
+        from datetime import UTC, datetime
+        row = SystemSettings(
+            key="lagefuehrung_modul_aktiv",
+            value=new_value,
+            updated_at=datetime.now(UTC),
+            updated_by_user_id=user.id,
+        )
+        db.add(row)
+    else:
+        from datetime import UTC, datetime
+        row.value = new_value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user.id
+
+    from app.core.audit import write_audit
+    write_audit(
+        db,
+        "lagefuehrung.system_toggle",
         user_id=user.id,
         payload={"alt": old_value, "neu": new_value},
         ip=request.client.host if request.client else None,
