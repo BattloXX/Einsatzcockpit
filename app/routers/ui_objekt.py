@@ -2040,12 +2040,24 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
         .order_by(Objekt.nummer)
         .all()
     )
+    kandidaten = [o for o in kandidaten if o.id not in verknuepfte_ids]
+    if incident.lat is not None and incident.lng is not None:
+        # Vorschläge nach Entfernung zum Einsatzort sortieren statt nach Objekt-Nr. —
+        # bei der manuellen Verknüpfung sind die nächstgelegenen Objekte am relevantesten.
+        from app.services.hydrant_service import _haversine_m
+
+        def _distanz(o: Objekt) -> float:
+            if o.lat is None or o.lng is None:
+                return float("inf")
+            return _haversine_m(incident.lat, incident.lng, o.lat, o.lng)
+
+        kandidaten = sorted(kandidaten, key=_distanz)
     return {
         "user": user,
         "incident": incident,
         "verknuepfungen": verknuepfungen,
         "quellen_labels": OBJEKT_EINSATZ_QUELLEN,
-        "kandidaten": [o for o in kandidaten if o.id not in verknuepfte_ids],
+        "kandidaten": kandidaten,
         "darf_verknuepfen": is_objekt_verwalter(user) or any(
             r.code in ("incident_leader",) for r in user.roles
         ),

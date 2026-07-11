@@ -821,12 +821,18 @@ async def incident_info(incident_id: int, request: Request, db: Session = Depend
             .all()
         )
 
+    gmaps_url = (
+        f"https://maps.google.com/?q={incident.lat},{incident.lng}"
+        if incident.lat is not None and incident.lng is not None else None
+    )
+
     return templates.TemplateResponse(request, "incident/info.html", {
         "user": user,
         "incident": incident,
         "dispatch_vehicles": dispatch_vehicles,
         "objekt_verknuepfungen": objekt_verknuepfungen,
         "objekt_enabled": objekt_enabled,
+        "gmaps_url": gmaps_url,
     })
 
 
