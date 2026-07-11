@@ -337,6 +337,18 @@ async def session_middleware(request: Request, call_next):
     _refresh_user_id: int | None = None  # set for non-QR sessions to trigger cookie refresh
     _refresh_remember: bool = False      # "Login merken" – längeres, gleitendes Fenster
 
+    # Native-App-Erkennung (server-seitig statt client-seitig): index.html der
+    # Android-App haengt ?native=1 an ihre erste Navigation zu einsatzcockpit.com
+    # an (dort ist Capacitor garantiert verfuegbar). Client-seitige
+    # isNativePlatform()-Checks auf DIESER (remote nachgeladenen) Seite sind
+    # NICHT verlaesslich: Capacitor injiziert seine JS-Bruecke nicht zuverlaessig
+    # in Seiten, die per server.allowNavigation extern geladen werden (bekannte
+    # Einschraenkung, siehe ionic-team/capacitor#7454) — betraf zuletzt den
+    # "Über die App"-Menüeintrag (blieb dauerhaft ausgeblendet). Das Cookie ist
+    # bewusst harmlos/nicht sicherheitsrelevant (steuert nur UI-Sichtbarkeit).
+    _native_query = request.query_params.get("native") == "1"
+    request.state.is_native_app = _native_query or bool(request.cookies.get("ec_native"))
+
     if token:
         session_data = unsign_session(token)
         if session_data:
@@ -424,6 +436,13 @@ async def session_middleware(request: Request, call_next):
             secure=settings.COOKIE_SECURE,
             samesite="lax",
             max_age=_cookie_max_age,
+        )
+
+    if _native_query and not request.cookies.get("ec_native"):
+        response.set_cookie(
+            "ec_native", "1",
+            httponly=True, secure=settings.COOKIE_SECURE, samesite="lax",
+            max_age=400 * 24 * 3600,  # ~400 Tage (Chrome-Maximum) — lange, aber nicht sicherheitskritisch
         )
 
     return response

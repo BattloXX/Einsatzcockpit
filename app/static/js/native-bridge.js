@@ -293,36 +293,22 @@
     }, _batterySaver ? _DUTY_BATTERY_INTERVAL : _DUTY_NORMAL_INTERVAL);
   }
 
-  // ─── Menü-Eintrag "Über die App" ─────────────────────────────────────────────
-  // Nur innerhalb der nativen Android-App sichtbar (verlinkt auf die lokal
-  // gebündelte about.html, die App-Version/Update-Check/Gateway-Sprung zeigt).
-  function _showNativeAboutLink() {
-    document.querySelectorAll('.js-native-about').forEach((el) => {
-      el.style.removeProperty('display');
-    });
-  }
-
-  // ─── Native-Bruecke abwarten (Race bei echter Cross-Origin-Navigation) ──────
-  // Bei allowNavigation (kein lokales index.html) kann Capacitor die Bruecke
-  // minimal spaeter injizieren als dieses Skript ausgefuehrt wird. FCM/Battery/
-  // Duty-Poll heilen sich durch den 60s-Poll selbst, der einmalige
-  // Menue-Link-Reveal (_showNativeAboutLink) aber nicht — daher kurz nachpruefen
-  // (gleiches Muster wie waitForCapacitor in gateway.html/about.html).
-  function _waitForNative(cb, attemptsLeft) {
-    if (attemptsLeft === undefined) attemptsLeft = 10;
-    if (_isNative()) { cb(); return; }
-    if (attemptsLeft <= 0) return;
-    setTimeout(() => _waitForNative(cb, attemptsLeft - 1), 200);
-  }
-
   // ─── Initialisierung ─────────────────────────────────────────────────────────
+  // Hinweis: _isNative() ist auf dieser Seite mit Vorsicht zu genießen — Capacitor
+  // injiziert seine JS-Bruecke nicht zuverlaessig in Seiten, die per
+  // server.allowNavigation extern (Cross-Origin) nachgeladen werden (bekannte
+  // Einschraenkung, siehe ionic-team/capacitor#7454). Rein UI-steuernde
+  // Entscheidungen (z. B. native-only Menüpunkte) laufen daher serverseitig
+  // über request.state.is_native_app (ec_native-Cookie, siehe main.py) statt
+  // über einen Client-Check hier. FCM/Battery/Duty-Poll bleiben best-effort:
+  // schlagen sie fehl, heilt der 60s-Poll das von selbst, sobald die Bruecke
+  // (falls je) verfuegbar wird.
   function _init() {
-    _waitForNative(() => {
+    if (_isNative()) {
       _registerFcmToken();
       _initBattery();
       _pollDutyState();
-      _showNativeAboutLink();
-    });
+    }
 
     // Duty-Status-Poll starten (No-Op wenn nicht nativ)
     _startDutyPoll();
