@@ -195,6 +195,11 @@ class Settings(BaseSettings):
     BODENSEE_TEMP_FETCH_ENABLED: bool = False  # optionaler externer Adapter (nicht aktiv)
     BODENSEE_TEMP_SOURCE_URL: str = ""       # URL für externen Temperatur-Adapter
 
+    # Pegelmessstationen – kontinuierliches Polling unabhängig von Seitenaufrufen
+    # (ohne diesen Loop entstehen Lücken im 24-h-Verlauf, wenn niemand die Wetterseite öffnet)
+    ABFLUSS_POLL_ENABLED: bool = True
+    ABFLUSS_POLL_INTERVAL_S: int = 600       # Loop-Intervall (10 min, = abfluss_service._FETCH_TTL_S)
+
     # Fernet-Verschlüsselung (Client Secrets, KI-API-Keys)
     # Eigener Key für Datenverschlüsselung; unabhängig von SECRET_KEY rotierbar.
     # Generieren: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

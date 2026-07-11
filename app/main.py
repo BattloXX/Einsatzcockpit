@@ -203,6 +203,11 @@ async def lifespan(app: FastAPI):
     from app.services.weather_alert_loop import weather_alert_loop
     weather_alert_task = asyncio.create_task(weather_alert_loop())
 
+    # Background-Loop für kontinuierliches Pegel-Polling (alle 10 Minuten je Org,
+    # unabhängig von Seitenaufrufen – vermeidet Lücken im 24-h-Verlauf)
+    from app.services.abfluss_poll_loop import abfluss_poll_loop
+    abfluss_poll_task = asyncio.create_task(abfluss_poll_loop())
+
     # Background-Loop für die LIS/IPR-Anbindung (Poll-Intervall je Org konfigurierbar)
     from app.services.lis.lis_loop import lis_poll_loop
     lis_task = asyncio.create_task(lis_poll_loop())
@@ -225,11 +230,12 @@ async def lifespan(app: FastAPI):
         weather_retention_task.cancel()
         vehicle_position_retention_task.cancel()
         weather_alert_task.cancel()
+        abfluss_poll_task.cancel()
         lis_task.cancel()
         lis_capture_retention_task.cancel()
         for t in (autoclose_task, watchdog_task, reminder_task, lagemeldung_task, verleih_task,
                   weather_retention_task, vehicle_position_retention_task, weather_alert_task,
-                  lis_task, lis_capture_retention_task):
+                  abfluss_poll_task, lis_task, lis_capture_retention_task):
             try:
                 await t
             except (asyncio.CancelledError, Exception):
