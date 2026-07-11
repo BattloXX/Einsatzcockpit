@@ -154,9 +154,14 @@ a:hover { text-decoration: underline; }
 
 /* ── Top Navigation ───────────────────────────────────────── */
 .topnav {
-  position: sticky; top: 0; z-index: 100; height: var(--topnav-h);
+  position: sticky; top: 0; z-index: 100;
+  /* Android/iOS: WebView zeichnet edge-to-edge unter die System-Statusleiste –
+     Hoehe + Top-Padding um den Inset erweitern, damit Inhalt (Burger/Logo/User)
+     nicht dahinter verschwindet (siehe Vorfall 2026-07-11, Screenshot). */
+  height: calc(var(--topnav-h) + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
   background: var(--topnav-bg, #d42225); border-bottom: 1px solid rgba(0,0,0,.2);
-  display: flex; align-items: center; padding: 0 20px; gap: 24px;
+  display: flex; align-items: center; padding-left: 20px; padding-right: 20px; gap: 24px;
   box-shadow: 0 2px 8px rgba(0,0,0,.4);
 }
 .topnav__brand { display: flex; align-items: center; gap: 12px; }
@@ -994,7 +999,7 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .topnav__user .btn { display: none; }
   .topnav__admin-link { display: none; }
   .topnav__burger { display: inline-flex; }
-  .topnav { padding: 0 12px; gap: 10px; }
+  .topnav { padding-left: 12px; padding-right: 12px; gap: 10px; }
   .topnav__title {
     font-size: .9rem; max-width: 55vw; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis;
@@ -1024,7 +1029,7 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .detail-grid { grid-template-columns: 1fr; }
   /* Mobile-spezifische Topnav-Anpassungen (überschreiben den 900px-Block) */
   :root { --topnav-h: 56px; }
-  .topnav { padding: 0 10px; gap: 8px; }
+  .topnav { padding-left: 10px; padding-right: 10px; gap: 8px; }
   .topnav__logo { height: 28px; }
   .form-row { flex-direction: column; }
   .admin-main { padding: 16px; }
