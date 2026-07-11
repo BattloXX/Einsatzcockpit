@@ -33,15 +33,21 @@
   setTimeout(function () { karte.invalidateSize(); }, 200);
   window.addEventListener("resize", function () { karte.invalidateSize(); });
 
-  // Druck: Karte fuer die geaenderte Druckgroesse neu vermessen, damit die
-  // (aus der Bildschirmansicht gecachten) Kacheln den Ausschnitt fuellen.
+  // Druck: Karte fuer die geaenderte Druckgroesse neu vermessen UND neu zentrieren.
+  // invalidateSize() allein reicht nicht - die Bildschirm-Karte ist breiter/anders
+  // proportioniert als der Druck-Ausschnitt, die reine Groessen-Kompensation von
+  // Leaflet verschiebt den Kartenausschnitt dadurch sichtbar vom Objekt weg (Bug
+  // 2026-07-11: Druck-PDF zeigte den Einsatzort/das Objekt nicht mehr mittig,
+  // rechts blieb ein leerer, ungeladener Kachel-Bereich). fit() erzwingt danach
+  // denselben Ausschnitt (Einsatzort+Objekte) wie beim initialen Laden.
   window.einsatzInfoKarte = karte;
-  window.addEventListener("beforeprint", function () {
-    try { karte.invalidateSize(); } catch (e) { /* egal */ }
-  });
+  function refitFuerDruck() {
+    try { karte.invalidateSize(); fit(); } catch (e) { /* egal */ }
+  }
+  window.addEventListener("beforeprint", refitFuerDruck);
   window.einsatzInfoDrucken = function () {
-    try { karte.invalidateSize(); } catch (e) { /* egal */ }
-    // kurze Verzoegerung, damit Leaflet die Kacheln neu positioniert
+    refitFuerDruck();
+    // kurze Verzoegerung, damit Leaflet die Kacheln neu positioniert/laedt
     setTimeout(function () { window.print(); }, 350);
   };
   // Druck-Zeitstempel (nur im Druckkopf sichtbar)

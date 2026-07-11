@@ -5,13 +5,20 @@
 <style>
 .einsatz-info { max-width: 1600px; margin: 0 auto; padding: 12px 16px 24px; }
 .ei-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
-.ei-map-wrap { position: sticky; top: 12px; }
+/* z-index:0 spannt einen eigenen Stacking-Context auf, damit Leaflets interne
+   Panes (Marker/Popup/Controls bis z-index 1000) nicht ueber Seiten-Overlays
+   wie das mobile Menu (z-index 200) hinausragen koennen. */
+.ei-map-wrap { position: sticky; top: 12px; z-index: 0; }
 #einsatz-info-karte { height: calc(100vh - 190px); min-height: 440px; width: 100%; background: var(--surface); }
 .ei-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .ei-side .card { margin-bottom: 0; }
 @media (max-width: 900px) {
   .ei-grid { grid-template-columns: 1fr; }
-  .ei-map-wrap { position: static; }
+  /* position:static wuerde das z-index:0 oben wirkungslos machen (Stacking-Context
+     braucht eine Positionierung) - dadurch ragten Leaflet-Marker/-Controls auf dem
+     Handy ueber das mobile Menu hinaus (Bug 2026-07-11). position:relative behaelt
+     den normalen Fluss bei, erhaelt aber den Stacking-Context. */
+  .ei-map-wrap { position: relative; }
   #einsatz-info-karte { height: 52vh; min-height: 320px; }
 }
 /* Nachbar-Gefahren (Umkreis) */
