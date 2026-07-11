@@ -222,7 +222,9 @@ def test_geraet_login_pin_erfolgreich_setzt_session_und_rotiert_token(client):
     r = client.post("/geraet-login-pin", data={"pin": "abcd1234", "_csrf": csrf}, follow_redirects=False)
     assert r.status_code == 200  # rendert Bestaetigungsseite direkt (kein Redirect)
     assert "session" in r.cookies
-    assert "el_device_token" in r.text  # Confirmation-Page speichert den neuen Token per JS
+    # Ohne ec_native-Cookie (kein Aufruf aus der nativen App) reicht die
+    # Session-Cookie allein - Weiterleitung direkt auf die Startseite.
+    assert "window.location.replace('/')" in r.text
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -234,6 +236,23 @@ def test_geraet_login_pin_erfolgreich_setzt_session_und_rotiert_token(client):
         assert dt.last_used_at is not None
     finally:
         db.close()
+
+
+def test_geraet_login_pin_native_app_erhaelt_lokalen_redirect_mit_token(client):
+    """Kommt der Aufruf aus der nativen Android-App (?native=1, wie von index.html
+    gesetzt), kann Capacitor auf dieser remote nachgeladenen Seite die Bruecke
+    nicht zuverlässig nutzen (ionic-team/capacitor#7454) - die Bestätigungsseite
+    muss daher auf die lokale App-Seite zurückleiten und den frischen Token als
+    Query-Param mitgeben, statt ihn selbst per Preferences zu speichern."""
+    _make_device_token(pin="APPP1234")
+    client.get("/geraet-login-pin", params={"native": "1"})
+    assert "ec_native" in client.cookies
+
+    csrf = _csrf(client)
+    r = client.post("/geraet-login-pin", data={"pin": "appp1234", "_csrf": csrf}, follow_redirects=False)
+    assert r.status_code == 200
+    assert "session" in r.cookies
+    assert "https://localhost/index.html?pin_device_token=" in r.text
 
 
 def test_geraet_login_pin_falsche_pin_wird_abgelehnt(client):

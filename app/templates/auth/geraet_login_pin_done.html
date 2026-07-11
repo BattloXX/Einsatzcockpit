@@ -19,40 +19,29 @@
   </div>
 
   <script>
-    // In der Android-App (Capacitor): den neuen Geräte-Token dauerhaft speichern,
-    // damit die App künftig automatisch anmeldet (wie nach einem QR-Code-Scan).
-    // Im normalen Browser (kein Capacitor) einfach weiterleiten — die Session-Cookie
-    // reicht dort aus.
+    // Capacitor injiziert seine JS-Bruecke NICHT in Seiten, die per
+    // server.allowNavigation extern (Cross-Origin) nachgeladen werden — das ist
+    // eine bekannte Capacitor-Einschraenkung (kein Timing-Problem, die Bruecke
+    // kommt hier nie an), siehe ionic-team/capacitor#7454. Ein direkter
+    // Preferences.set()-Aufruf von dieser Seite aus funktioniert daher nie
+    // zuverlaessig (Bug: PIN-Login "vergisst" sich nach App-Neustart, obwohl die
+    // Weiterleitung noch klappte, weil die Web-Session-Cookie unabhaengig davon
+    // gesetzt wird).
     //
-    // Diese Seite wird — anders als der QR-Scan (lokale index.html) — erst nach
-    // zwei echten Cross-Origin-Navigationen erreicht (index.html -> PIN-Formular
-    // -> diese Seite). Die Capacitor-Bruecke kann dabei minimal spaeter injiziert
-    // werden als dieses Skript startet; ein einmaliger sofortiger Check kann das
-    // Fenster verpassen und den Token-Save stillschweigend auslassen, obwohl die
-    // Weiterleitung auf "/" noch klappt (Bug: PIN-Login "vergisst" sich nach
-    // App-Neustart). Deshalb kurz nachpruefen (Muster wie waitForCapacitor in
-    // gateway.html/about.html).
-    function waitForCapacitor(attemptsLeft) {
-      return new Promise(function (resolve) {
-        if (window.Capacitor && window.Capacitor.Plugins) { resolve(); return; }
-        if (attemptsLeft <= 0) { resolve(); return; }
-        setTimeout(function () { waitForCapacitor(attemptsLeft - 1).then(resolve); }, 200);
-      });
+    // Kommt die App her (request.state.is_native_app, serverseitig per
+    // ec_native-Cookie erkannt — siehe session_middleware in main.py), wird
+    // stattdessen auf die LOKALE index.html zurueckgeleitet (garantierter
+    // Bridge-Zugriff, wie beim QR-Scan) und der frische Geraete-Token per
+    // Query-Param mitgegeben; die dortige Boot-Logik speichert ihn dann
+    // zuverlaessig in den Capacitor-Preferences. Im normalen Browser reicht
+    // die Session-Cookie allein aus.
+    var rawToken = {{ raw_token|tojson }};
+    var isNativeApp = {{ request.state.is_native_app|tojson }};
+    if (isNativeApp) {
+      window.location.replace('https://localhost/index.html?pin_device_token=' + encodeURIComponent(rawToken));
+    } else {
+      window.location.replace('/');
     }
-
-    (async function () {
-      var rawToken = {{ raw_token|tojson }};
-      try {
-        await waitForCapacitor(10);
-        var Preferences = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences;
-        if (Preferences) {
-          await Preferences.set({ key: "el_device_token", value: rawToken });
-        }
-      } catch (e) {
-        console.warn("Geräte-Token konnte nicht lokal gespeichert werden:", e);
-      }
-      window.location.replace("/");
-    })();
   </script>
 </body>
 </html>
