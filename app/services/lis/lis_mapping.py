@@ -12,8 +12,10 @@ from datetime import datetime
 # Bewusst eine eigene, kleine Tabelle statt Import aus api_v1 (vermeidet Zirkelimport
 # app.routers.api_v1 ↔ app.services.lis.*). Werte spiegeln STUFE_MAP in api_v1.py.
 _STUFE_MAP: dict[str, str] = {
-    "f1": "F1", "f2": "F2", "f3": "F3", "f4": "F4", "f14": "F14",
-    "t1": "T1", "t2": "T2", "t3": "T3", "t4": "T4", "t6": "T6", "t7": "T7",
+    "f1": "F1", "f2": "F2", "f3": "F3", "f4": "F4", "f5": "F5",
+    "f10": "F10", "f11": "F11", "f14": "F14", "f21": "F21", "f30": "F30",
+    "t1": "T1", "t2": "T2", "t3": "T3", "t4": "T4", "t5": "T5",
+    "t6": "T6", "t7": "T7", "t21": "T21",
     "1": "T1", "2": "T2", "3": "T3", "4": "T4", "6": "T6", "7": "T7",
     "t9": "T9", "9": "T9",
 }

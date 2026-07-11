@@ -32,6 +32,11 @@ ROLES = [
     {"code": "readonly",             "label": "Nur Lesen"},
 ]
 
+# Vollständiger Alarmstichwort-Katalog der Vorarlberger Feuerwehren, siehe
+# https://feuerwehr-riezlern.at/sonstiges/wissenswertes/alarmstichworte (Stand 2026-07-11).
+# F5/F10/F21/F30/T5/T21 bewusst mit neutralen Flags (alle False) — Erstausrückung/
+# Nachbarn/GSL-Trigger sind operative Entscheidungen der jeweiligen Wehr und werden
+# über Admin → Stichwörter pro Org angepasst.
 ALARM_TYPES = [
     {"code": "F1",  "category": "F", "label": "Brand Klein",
      "default_first_train_only": True,  "notify_neighbors": False, "triggers_major_incident": False},
@@ -41,8 +46,18 @@ ALARM_TYPES = [
      "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
     {"code": "F4",  "category": "F", "label": "Brand Katastrophe",
      "default_first_train_only": False, "notify_neighbors": True,  "triggers_major_incident": False},
+    {"code": "F5",  "category": "F", "label": "Nachbarschaftshilfe Brand",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "F10", "category": "F", "label": "Abklärung",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "F11", "category": "F", "label": "Sondereinsatzmittel",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
     {"code": "F14", "category": "F", "label": "Fahrzeugbrand",
      "default_first_train_only": True,  "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "F21", "category": "F", "label": "Bootseinsatz Brand",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "F30", "category": "F", "label": "Proberuf",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
     {"code": "T1",  "category": "T", "label": "Technisch Klein",
      "default_first_train_only": True,  "notify_neighbors": False, "triggers_major_incident": False},
     {"code": "T2",  "category": "T", "label": "Technisch Mittel",
@@ -51,12 +66,16 @@ ALARM_TYPES = [
      "default_first_train_only": False, "notify_neighbors": True,  "triggers_major_incident": False},
     {"code": "T4",  "category": "T", "label": "Technisch Komplex",
      "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
+    {"code": "T5",  "category": "T", "label": "Nachbarschaftshilfe Technik",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
     {"code": "T6",  "category": "T", "label": "Wasserrettung",
      "default_first_train_only": False, "notify_neighbors": True,  "triggers_major_incident": False},
     {"code": "T7",  "category": "T", "label": "Technisch Speziell",
      "default_first_train_only": False, "notify_neighbors": True,  "triggers_major_incident": False},
     {"code": "T9",  "category": "T", "label": "Großschadenslage",
      "default_first_train_only": False, "notify_neighbors": True,  "triggers_major_incident": True},
+    {"code": "T21", "category": "T", "label": "Bootseinsatz Technik",
+     "default_first_train_only": False, "notify_neighbors": False, "triggers_major_incident": False},
 ]
 
 FIRE_DEPTS = [

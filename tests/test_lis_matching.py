@@ -69,6 +69,24 @@ def test_map_stichwort_handles_real_prefixed_code():
     assert lis_mapping.map_stichwort("f_f1") == "F1"
 
 
+def test_map_stichwort_f11():
+    """Regression (2026-07-11, echter Mitschnitt): LIS Type.Code 'f11' ('f11 -
+    Sondereinsatzmittel') fehlte in _STUFE_MAP und fiel auf den 'T1'-Fallback
+    zurück — ein Einsatz wurde dadurch fälschlich als T1 statt F11 dargestellt."""
+    assert lis_mapping.map_stichwort("f11") == "F11"
+    assert lis_mapping.map_stichwort("F11") == "F11"
+
+
+def test_map_stichwort_vollstaendiger_vorarlberger_katalog():
+    """Vollständiger Alarmstichwort-Katalog der Vorarlberger Feuerwehren (siehe
+    feuerwehr-riezlern.at/sonstiges/wissenswertes/alarmstichworte) muss 1:1 auf
+    den jeweils gleichnamigen internen Code gemappt werden."""
+    erwartet = ["F1", "F2", "F3", "F4", "F5", "F10", "F11", "F14", "F21", "F30",
+                "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T9", "T21"]
+    for code in erwartet:
+        assert lis_mapping.map_stichwort(code.lower()) == code
+
+
 # ── lis_mapping: Übungserkennung (Doku hat keinen Boolean/Enum dafür) ────────
 
 def test_is_exercise_operation_detects_real_schulungseinsatz():
