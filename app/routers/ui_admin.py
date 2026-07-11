@@ -2611,7 +2611,7 @@ async def device_token_detail(
 async def create_device_token(
     request: Request,
     label: str = Form(...),
-    device_type: str = Form("unit"),  # "unit" | "sms-gateway"
+    device_type: str = Form("unit"),  # "unit" | "sms-gateway" | "unit+sms-gateway"
     role_codes: list[str] = Form([]),
     org_id: int | None = Form(None),
     vehicle_master_id: int | None = Form(None),
@@ -2630,22 +2630,13 @@ async def create_device_token(
     )
 
     base_url = str(request.base_url).rstrip("/")
+    # Unbekannte Werte tolerant wie bisher als "unit" behandeln (bewusst kein 500 bei
+    # unerwarteter Eingabe).
+    if device_type not in ("unit", "sms-gateway", "unit+sms-gateway"):
+        device_type = "unit"
+    wants_gateway = device_type in ("sms-gateway", "unit+sms-gateway")
 
-    # ── SMS-Gateway-Token ────────────────────────────────────────────────────────
-    if device_type == "sms-gateway":
-        raw_token = generate_sms_gateway_token()
-        token_hash = hash_api_key(raw_token)
-        gw = SmsGatewayToken(label=label, token_hash=token_hash, org_id=target_org_id)
-        db.add(gw)
-        db.flush()
-        write_audit(db, "admin.sms_gateway_token.created", user_id=current_user.id,
-                    entity_type="sms_gateway_token", entity_id=gw.id,
-                    payload={"label": label})
-        db.commit()
-
-        # QR mit mode=sms-gateway damit die Android-App den Modus erkennt
-        login_url = f"{base_url}/geraet-login?token={raw_token}&mode=sms-gateway"
-        new_qr_b64: str | None = None
+    def _make_qr(login_url: str) -> str | None:
         try:
             import base64
             import io
@@ -2657,15 +2648,34 @@ async def create_device_token(
             img = qr.make_image(fill_color="black", back_color="white")
             buf = io.BytesIO()
             img.save(buf, format="PNG")
-            new_qr_b64 = base64.b64encode(buf.getvalue()).decode()
+            return base64.b64encode(buf.getvalue()).decode()
         except Exception:
-            pass
+            return None
 
-        return _render_device_tokens_page(request, db, current_user, new_token=raw_token,
+    # ── SMS-Gateway-Token (auch für den kombinierten Modus) ─────────────────────
+    raw_gw_token: str | None = None
+    if wants_gateway:
+        raw_gw_token = generate_sms_gateway_token()
+        gw = SmsGatewayToken(label=label, token_hash=hash_api_key(raw_gw_token), org_id=target_org_id)
+        db.add(gw)
+        db.flush()
+        write_audit(db, "admin.sms_gateway_token.created", user_id=current_user.id,
+                    entity_type="sms_gateway_token", entity_id=gw.id,
+                    payload={"label": label})
+
+    # ── SMS-Gateway-only: hier abschließen ───────────────────────────────────────
+    if device_type == "sms-gateway":
+        db.commit()
+
+        # QR mit mode=sms-gateway damit die Android-App den Modus erkennt
+        login_url = f"{base_url}/geraet-login?token={raw_gw_token}&mode=sms-gateway"
+        new_qr_b64 = _make_qr(login_url)
+
+        return _render_device_tokens_page(request, db, current_user, new_token=raw_gw_token,
                                           new_label=label, new_qr_b64=new_qr_b64,
                                           new_token_type="sms-gateway", base_url=base_url)
 
-    # ── Einheit-Gerät (bisheriger Pfad) ─────────────────────────────────────────
+    # ── Einheit-Gerät (auch für den kombinierten Modus) ──────────────────────────
     # Rollen: system_admin darf nur system_admin vergeben
     is_sysadmin = has_role(current_user, "system_admin")
     allowed_codes = (
@@ -2716,32 +2726,26 @@ async def create_device_token(
                 payload={"label": label, "role_codes": role_codes})
     db.commit()
 
-    login_url = f"{base_url}/geraet-login?token={raw_token}"
+    if device_type == "unit+sms-gateway":
+        # Ein QR koppelt Board-Login und SMS-Gateway in einem Scan.
+        login_url = (f"{base_url}/geraet-login?token={raw_token}"
+                     f"&gateway_token={raw_gw_token}&mode=unit+sms-gateway")
+    else:
+        login_url = f"{base_url}/geraet-login?token={raw_token}"
 
     # QR-Code für den Device-Login generieren (gleiche Methode wie Einsatz-QR)
-    new_qr_b64 = None
-    try:
-        import base64
-        import io
-
-        import qrcode  # type: ignore
-        qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=6, border=4)
-        qr.add_data(login_url)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        new_qr_b64 = base64.b64encode(buf.getvalue()).decode()
-    except Exception:
-        pass  # QR-Generierung optional; URL bleibt weiterhin sichtbar
+    new_qr_b64 = _make_qr(login_url)
 
     return _render_device_tokens_page(request, db, current_user, new_token=raw_token,
                                       new_label=label, new_qr_b64=new_qr_b64,
-                                      new_token_type="unit", base_url=base_url, new_pin=new_pin)
+                                      new_token_type=device_type, base_url=base_url,
+                                      new_pin=new_pin, new_gateway_token=raw_gw_token,
+                                      new_login_url=login_url if device_type == "unit+sms-gateway" else None)
 
 
 def _render_device_tokens_page(request, db, current_user, *, new_token=None, new_label=None,
-                               new_qr_b64=None, new_token_type="unit", base_url=None, new_pin=None):
+                               new_qr_b64=None, new_token_type="unit", base_url=None, new_pin=None,
+                               new_gateway_token=None, new_login_url=None):
     """Baut den Template-Kontext für die Geräte-Login-Seite auf."""
     from sqlalchemy.orm import joinedload as _jl
     all_tokens = (
@@ -2787,6 +2791,8 @@ def _render_device_tokens_page(request, db, current_user, *, new_token=None, new
         "new_label": new_label,
         "new_qr_b64": new_qr_b64,
         "new_pin": new_pin,
+        "new_gateway_token": new_gateway_token,
+        "new_login_url": new_login_url,
     })
 
 
