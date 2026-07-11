@@ -69,7 +69,7 @@ def alarm_stufe(wert: float, hq: HQWerte) -> tuple[int, str, str]:
         return 2, ">= HQ10",  "#f97316"
     if hq.hq1 and wert >= hq.hq1:
         return 1, ">= HQ1",   "#eab308"
-    return 0, "Normal",       "var(--ampel-gruen)"
+    return 0, "Normal",       "var(--ampel-green, #22c55e)"
 
 
 # ── HTML-Parsing ──────────────────────────────────────────────────────────────
