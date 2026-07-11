@@ -3012,20 +3012,7 @@ async def assign_device_vehicle(
     db.commit()
 
 
-# ── SMS-Test ───────────────────────────────────────────────────────────────────
-
-@router.get("/sms-test", response_class=HTMLResponse)
-async def sms_test_page(request: Request, _=Depends(require_role("admin"))):
-    from app.routers.ws import _sms_gateways
-    user = request.state.user
-    gateway_connected = bool(user.org_id and _sms_gateways.get(user.org_id))
-    return templates.TemplateResponse(request, "admin/sms_test.html", {
-        "user": user,
-        "gateway_connected": gateway_connected,
-        "result": request.query_params.get("result"),
-        "to": request.query_params.get("to", ""),
-    })
-
+# ── SMS-Gateway-Status ─────────────────────────────────────────────────────────
 
 @router.get("/sms-gateway/status", response_class=HTMLResponse)
 async def sms_gateway_status(request: Request, _=Depends(require_role("admin"))):
@@ -3045,23 +3032,3 @@ async def sms_gateway_status(request: Request, _=Depends(require_role("admin")))
         "Kein Gateway verbunden.</span>"
     )
 
-
-@router.post("/sms-test/senden")
-async def sms_test_send(
-    request: Request,
-    to: str = Form(...),
-    text: str = Form(...),
-    _=Depends(require_role("admin")),
-):
-    from urllib.parse import quote_plus
-
-    from app.services.sms_service import send_sms
-    user = request.state.user
-    to = to.strip()
-    text = text.strip()
-    if not to or not text:
-        return RedirectResponse(f"/admin/sms-test?result=empty&to={quote_plus(to)}", status_code=303)
-    if not user.org_id:
-        return RedirectResponse("/admin/sms-test?result=no_org", status_code=303)
-    ok = await send_sms(user.org_id, to, text)
-    return RedirectResponse(f"/admin/sms-test?result={'ok' if ok else 'fail'}&to={quote_plus(to)}", status_code=303)

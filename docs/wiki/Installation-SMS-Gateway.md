@@ -79,7 +79,7 @@ Ist [SMS-Empfang](Administration-SMS-Einsatzinfo) für die Organisation serverse
 ## Status prüfen
 
 - **In der App**: Gateway-Bildschirm zeigt Verbindungsstatus (grün = verbunden), Anzahl gesendeter SMS und ein Verbindungslog (kopierbar/herunterladbar für die Fehlersuche)
-- **Im Admin-Bereich**: **Admin → SMS-Test** (`/admin/sms-test`) zeigt den aktuellen Verbindungsstatus und erlaubt eine Test-SMS direkt vom Server aus
+- **Im Admin-Bereich**: **Admin → Geräte-Login** zeigt bei jedem SMS-Gateway-Eintrag den aktuellen Verbindungsstatus; eine Test-SMS lässt sich über **Admin → SMS senden** direkt vom Server aus verschicken
 
 ---
 
