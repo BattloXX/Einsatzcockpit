@@ -641,3 +641,24 @@ def test_fahrtenbuch_neu_rendert_offline_draft_markup(client: TestClient, db_ses
     assert r.status_code == 200
     assert "draft-restored-hinweis" in r.text
     assert "fahrt_draft_v1" in r.text
+
+
+# ── Fremde/Ad-hoc Ressourcen: nicht im Fahrtenbuch ───────────────────────────
+
+def test_fahrtenbuch_admin_liste_zeigt_keine_fremden_ressourcen(client: TestClient, db_session, org, fahrzeug):
+    """Nutzer-Feedback 2026-07-11: Fremdorganisationen/Ad-hoc-Ressourcen (Stammdaten
+    'Ressourcen') sind keine echten eigenen Fahrzeuge und sollen im Fahrtenbuch
+    (weder Admin-Liste noch Erfassung) nicht auswählbar sein."""
+    _login(client, db_session, org, "fb_fremd_admin", role_code="org_admin")
+    fremd = VehicleMaster(dept_id=org.id, code="FREMD-1", name="Fremdes Fahrzeug",
+                          is_external=True, adhoc_org_name="FF Nachbarort", display_order=100)
+    adhoc = VehicleMaster(dept_id=org.id, code="ADHOC-1", name="Ad-hoc-Fahrzeug",
+                          is_adhoc=True, display_order=101)
+    db_session.add_all([fremd, adhoc])
+    db_session.commit()
+
+    r = client.get("/admin/fahrtenbuch/fahrzeuge")
+    assert r.status_code == 200
+    assert fahrzeug.code in r.text
+    assert "FREMD-1" not in r.text
+    assert "ADHOC-1" not in r.text
