@@ -2,7 +2,9 @@
 
 ← [Zurück zur Startseite](Home)
 
-Die Lagekarte.info-Integration ermöglicht es, einen laufenden Einsatz mit korrekten Koordinaten auf [lagekarte.info](https://www.lagekarte.info) zu öffnen und die Fahrzeuge des Einsatzes als Live-Pins auf der Karte anzuzeigen.
+Die Lagekarte.info-Integration ermöglicht es, die Fahrzeuge eines laufenden Einsatzes per GeoJSON/KML-Feed in [lagekarte.info](https://www.lagekarte.info) einzubinden — für Organisationen, die weiterhin mit lagekarte.info arbeiten.
+
+> **Hinweis:** Der direkte **🗺️ lagekarte.info**-Button im Einsatz-Board und in der Einsatzinfo wurde entfernt — die einsatzbezogene Lagekarte läuft jetzt über das eingebaute [Lageführung](Anwender-Lagefuehrung)-Modul (kein externer Dienst nötig, automatische Fahrzeug-/Objektdaten). Der GeoJSON/KML-Feed dieser Seite bleibt für Organisationen bestehen, die zusätzlich lagekarte.info nutzen möchten.
 
 ---
 
@@ -20,43 +22,6 @@ Koordinaten werden beim Einsatz-Board unter der Alarmstichworter-Anzeige gespeic
 6. **Speichern** klicken.
 
 > **Hinweis**: Wenn Geocoding keinen Treffer liefert, startet die Karte am konfigurierten Org-Fallback-Standort (→ [Org-Einstellungen](#fallback-standort)).
-
----
-
-## Lagekarte.info öffnen
-
-Sobald Koordinaten gespeichert sind, erscheint im Einsatz-Header (neben *AS-Überwachung*) der Button **🗺️ Lagekarte**.
-
-- Ein Klick öffnet lagekarte.info in einem **neuen Fenster**.
-- **Wenn ein SHASH-Link gespeichert ist**: wird dieser verwendet (→ öffnet das gespeicherte lagekarte.info-Projekt).
-- **Ohne SHASH-Link**: wird automatisch ein Einsatz-Link der Form `?einsatz=lat,lng` generiert, der lagekarte.info auf die Einsatzkoordinaten zentriert.
-
----
-
-## Eigenen Projekt-Link verwenden (SHASH)
-
-lagekarte.info erlaubt es, die aktuelle Kartenansicht zu speichern und per Link zu teilen. Dieser Link kann im Einsatz hinterlegt werden, damit der **🗺️ Lagekarte**-Button immer die vollständige Projektansicht öffnet.
-
-**So wird der SHASH-Link gespeichert:**
-
-1. lagekarte.info öffnen und die gewünschte Karte einrichten (Layer, Zoom, Bereich etc.).
-2. In lagekarte.info auf **Speichern & Teilen** klicken — den angezeigten Link kopieren (enthält `?shash=...`).
-3. Im Einsatz-Board auf die Adresse klicken → Bearbeitungs-Modal öffnen.
-4. Den kopierten Link im Feld **Lagekarte.info-Projekt-Link** einfügen.
-5. **Speichern**.
-
-**Unterstützte Link-Formen** (alle werden unverändert gespeichert und verwendet):
-
-| Parameter | Bedeutung | Beispiel |
-|-----------|-----------|---------|
-| `?shash=…` | Gespeichertes Projekt (Speichern & Teilen) | `?shash=AbCdEf` |
-| `?einsatz=lat,lng` | Einsatz-Marker setzen | `?einsatz=47.488847,9.741011` |
-| `?center=lat,lng,zoom` | Karte auf Position zentrieren | `?center=47.488847,9.741011,16` |
-| `?zoom=N` | Zoom-Level setzen | `?zoom=18` |
-| `?s=Stadt` | Stadtname suchen | `?s=Wolfurt` |
-| `?map=Name` | Kartentyp setzen | `?map=topo` |
-
-> Der Button erscheint nur, wenn entweder ein SHASH-Link **oder** Koordinaten gespeichert sind.
 
 ---
 

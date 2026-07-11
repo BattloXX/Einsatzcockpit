@@ -36,8 +36,9 @@
     {% endif %}
   </div>
 
-  <div class="objekt-karte-layout">
-    <aside class="card lft-sidebar" style="padding:12px;">
+  <div class="objekt-karte-layout lft-karte-layout">
+    <button type="button" id="lft-sidebar-toggle" class="lft-sidebar-toggle" aria-expanded="false" aria-controls="lft-sidebar">🧰 Werkzeuge</button>
+    <aside class="card lft-sidebar" id="lft-sidebar" style="padding:12px;">
       <div class="lft-tabs">
         <button type="button" class="lft-tab lft-tab--aktiv" data-lft-tab="layer">Layer</button>
         {% if can_edit %}
