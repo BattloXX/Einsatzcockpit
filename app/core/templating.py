@@ -224,3 +224,21 @@ try:
     templates.env.globals["ASSET_VERSION"] = str(int(max(_js_mtimes))) if _js_mtimes else "1"
 except OSError:
     templates.env.globals["ASSET_VERSION"] = "1"
+
+# Cache-Busting für Icons/Favicons: NGINX liefert /static/ mit
+# "Cache-Control: immutable" + 7 Tage Expiry direkt von der Platte aus (siehe
+# deploy/nginx-snippet.conf) – ohne Versions-Query im Dateinamen/Query-String
+# bleiben Browser bis zu 7 Tage beim alten Icon, auch nach einem Deploy.
+# ACHTUNG: static/manifest.webmanifest wird ebenfalls von NGINX direkt
+# ausgeliefert (kein Jinja) – der ?v=…-Query an den dortigen Icon-src-Werten
+# muss beim naechsten Icon-Wechsel manuell im JSON nachgezogen werden.
+_img_dir = _os.path.join(_os.path.dirname(__file__), "..", "static", "img")
+try:
+    _img_mtimes = [
+        _os.path.getmtime(_os.path.join(_img_dir, f))
+        for f in _os.listdir(_img_dir)
+        if f.startswith(("icon-", "favicon"))
+    ]
+    templates.env.globals["IMG_VERSION"] = str(int(max(_img_mtimes))) if _img_mtimes else "1"
+except OSError:
+    templates.env.globals["IMG_VERSION"] = "1"

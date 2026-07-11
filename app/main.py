@@ -638,7 +638,9 @@ async def service_worker():
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
-    return RedirectResponse("/static/img/favicon.ico")
+    from app.core.templating import templates
+    img_version = templates.env.globals.get("IMG_VERSION", "1")
+    return RedirectResponse(f"/static/img/favicon.ico?v={img_version}")
 
 
 @app.get("/health", include_in_schema=False)

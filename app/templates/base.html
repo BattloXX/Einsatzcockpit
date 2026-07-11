@@ -14,11 +14,11 @@
     .topnav__doku-panel a.active{background:rgba(183,25,33,.15);color:var(--red-light);}
     .mobile-menu__group-hdr{padding:14px 20px 4px;font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);}
   </style>
-  <link rel="manifest" href="/static/manifest.webmanifest">
-  <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
-  <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="/static/img/icon-192.png">
-  <link rel="apple-touch-icon" sizes="192x192" href="/static/img/icon-192.png">
+  <link rel="manifest" href="/static/manifest.webmanifest?v={{ IMG_VERSION }}">
+  <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico?v={{ IMG_VERSION }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png?v={{ IMG_VERSION }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/img/icon-192.png?v={{ IMG_VERSION }}">
+  <link rel="apple-touch-icon" sizes="192x192" href="/static/img/icon-192.png?v={{ IMG_VERSION }}">
   {% block head_extra %}{% endblock %}
 </head>
 <body x-data="appState()" @incident-created.window="onIncidentCreated($event.detail)"
