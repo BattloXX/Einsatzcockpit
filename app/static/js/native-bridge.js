@@ -302,14 +302,27 @@
     });
   }
 
+  // ─── Native-Bruecke abwarten (Race bei echter Cross-Origin-Navigation) ──────
+  // Bei allowNavigation (kein lokales index.html) kann Capacitor die Bruecke
+  // minimal spaeter injizieren als dieses Skript ausgefuehrt wird. FCM/Battery/
+  // Duty-Poll heilen sich durch den 60s-Poll selbst, der einmalige
+  // Menue-Link-Reveal (_showNativeAboutLink) aber nicht — daher kurz nachpruefen
+  // (gleiches Muster wie waitForCapacitor in gateway.html/about.html).
+  function _waitForNative(cb, attemptsLeft) {
+    if (attemptsLeft === undefined) attemptsLeft = 10;
+    if (_isNative()) { cb(); return; }
+    if (attemptsLeft <= 0) return;
+    setTimeout(() => _waitForNative(cb, attemptsLeft - 1), 200);
+  }
+
   // ─── Initialisierung ─────────────────────────────────────────────────────────
   function _init() {
-    if (_isNative()) {
+    _waitForNative(() => {
       _registerFcmToken();
       _initBattery();
       _pollDutyState();
       _showNativeAboutLink();
-    }
+    });
 
     // Duty-Status-Poll starten (No-Op wenn nicht nativ)
     _startDutyPoll();
