@@ -23,9 +23,27 @@
     // damit die App künftig automatisch anmeldet (wie nach einem QR-Code-Scan).
     // Im normalen Browser (kein Capacitor) einfach weiterleiten — die Session-Cookie
     // reicht dort aus.
+    //
+    // Diese Seite wird — anders als der QR-Scan (lokale index.html) — erst nach
+    // zwei echten Cross-Origin-Navigationen erreicht (index.html -> PIN-Formular
+    // -> diese Seite). Die Capacitor-Bruecke kann dabei minimal spaeter injiziert
+    // werden als dieses Skript startet; ein einmaliger sofortiger Check kann das
+    // Fenster verpassen und den Token-Save stillschweigend auslassen, obwohl die
+    // Weiterleitung auf "/" noch klappt (Bug: PIN-Login "vergisst" sich nach
+    // App-Neustart). Deshalb kurz nachpruefen (Muster wie waitForCapacitor in
+    // gateway.html/about.html).
+    function waitForCapacitor(attemptsLeft) {
+      return new Promise(function (resolve) {
+        if (window.Capacitor && window.Capacitor.Plugins) { resolve(); return; }
+        if (attemptsLeft <= 0) { resolve(); return; }
+        setTimeout(function () { waitForCapacitor(attemptsLeft - 1).then(resolve); }, 200);
+      });
+    }
+
     (async function () {
       var rawToken = {{ raw_token|tojson }};
       try {
+        await waitForCapacitor(10);
         var Preferences = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences;
         if (Preferences) {
           await Preferences.set({ key: "el_device_token", value: rawToken });
