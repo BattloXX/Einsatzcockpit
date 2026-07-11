@@ -2713,7 +2713,8 @@ async def create_device_token(
         if vm and (has_role(current_user, "system_admin") or vm.dept_id == target_org_id):
             safe_vehicle_id = vm.id
     dt = DeviceToken(label=label, token_hash=token_hash, user_id=device_user.id,
-                     vehicle_master_id=safe_vehicle_id)
+                     vehicle_master_id=safe_vehicle_id,
+                     paired_gateway_token_id=gw.id if device_type == "unit+sms-gateway" else None)
     db.add(dt)
     db.flush()
 

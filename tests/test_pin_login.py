@@ -255,6 +255,73 @@ def test_geraet_login_pin_native_app_erhaelt_lokalen_redirect_mit_token(client):
     assert "https://localhost/index.html?pin_device_token=" in r.text
 
 
+def _make_combined_device_token(*, pin: str) -> tuple[int, int, int]:
+    """Kombiniertes Geraet (Board + SMS-Gateway), wie ueber Admin -> Geraete-Login
+    -> "Geraet + SMS-Gateway" angelegt: DeviceToken mit paired_gateway_token_id."""
+    from app.models.user import SmsGatewayToken
+
+    unique = uuid.uuid4().hex[:12]
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = User(username=f"geraet_pin_gw_{unique}", display_name="Geraet-PIN-Gateway-Test",
+                    password_hash=hash_password("irrelevant-Aa1!"), org_id=ORG_ID,
+                    active=True, is_device=True)
+        db.add(user)
+        db.flush()
+        gw = SmsGatewayToken(label="Test-Kombi-Gateway", token_hash=hash_api_key(f"initial-gw-{unique}"),
+                              org_id=ORG_ID)
+        db.add(gw)
+        db.flush()
+        dt = DeviceToken(label="Test-Kombi-Geraet", token_hash=hash_api_key(f"initial-token-{unique}"),
+                         user_id=user.id, paired_gateway_token_id=gw.id)
+        dt.pairing_pin_hash = hash_api_key(pin.strip().upper())
+        dt.pairing_pin_expires_at = datetime.now(UTC) + timedelta(minutes=10)
+        db.add(dt)
+        db.commit()
+        return dt.id, gw.id, user.id
+    finally:
+        db.close()
+
+
+def test_geraet_login_pin_kombiniertes_geraet_rotiert_auch_gateway_token(client):
+    """Ein per PIN gekoppeltes kombiniertes Geraet (Board + SMS-Gateway) muss
+    auch den Gateway-Token zurueckerhalten (sonst kann die App die Gateway-Rolle
+    nie aktivieren, da anders als beim QR-Code kein Gateway-Token kodiert ist)."""
+    from app.models.user import SmsGatewayToken
+
+    dt_id, gw_id, _user_id = _make_combined_device_token(pin="GWPI1234")
+    alte_gw_hash = hash_api_key("initial-gw")
+
+    client.get("/geraet-login-pin", params={"native": "1"})
+    csrf = _csrf(client)
+    r = client.post("/geraet-login-pin", data={"pin": "gwpi1234", "_csrf": csrf}, follow_redirects=False)
+    assert r.status_code == 200
+    assert "session" in r.cookies
+    assert "https://localhost/index.html?pin_device_token=" in r.text
+    assert "&pin_gateway_token=" in r.text
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw = db.get(SmsGatewayToken, gw_id)
+        assert gw.token_hash != alte_gw_hash  # rotiert auf ein frisches Geheimnis
+    finally:
+        db.close()
+
+
+def test_geraet_login_pin_einheit_ohne_gateway_hat_keinen_gateway_token_im_redirect(client):
+    """Reines Einheit-Geraet (kein paired_gateway_token_id) darf serverseitig
+    keinen Gateway-Token an die Bestaetigungsseite uebergeben (JS haengt
+    pin_gateway_token nur an, wenn rawGatewayToken nicht null ist)."""
+    _make_device_token(pin="NOGW1234")
+    client.get("/geraet-login-pin", params={"native": "1"})
+    csrf = _csrf(client)
+    r = client.post("/geraet-login-pin", data={"pin": "nogw1234", "_csrf": csrf}, follow_redirects=False)
+    assert r.status_code == 200
+    assert "var rawGatewayToken = null;" in r.text
+
+
 def test_geraet_login_pin_falsche_pin_wird_abgelehnt(client):
     _make_device_token(pin="WXYZ7777")
     csrf = _csrf(client)

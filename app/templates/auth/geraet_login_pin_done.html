@@ -36,9 +36,16 @@
     // zuverlaessig in den Capacitor-Preferences. Im normalen Browser reicht
     // die Session-Cookie allein aus.
     var rawToken = {{ raw_token|tojson }};
+    var rawGatewayToken = {{ raw_gateway_token|tojson }};
     var isNativeApp = {{ request.state.is_native_app|tojson }};
     if (isNativeApp) {
-      window.location.replace('https://localhost/index.html?pin_device_token=' + encodeURIComponent(rawToken));
+      var url = 'https://localhost/index.html?pin_device_token=' + encodeURIComponent(rawToken);
+      // Kombiniertes Geraet (Board + SMS-Gateway) — Gateway-Token nur vorhanden,
+      // wenn das gekoppelte Geraet auch als SMS-Gateway angelegt wurde.
+      if (rawGatewayToken) {
+        url += '&pin_gateway_token=' + encodeURIComponent(rawGatewayToken);
+      }
+      window.location.replace(url);
     } else {
       window.location.replace('/');
     }

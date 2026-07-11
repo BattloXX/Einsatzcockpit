@@ -222,7 +222,7 @@ async def device_login_pin_submit(request: Request, pin: str = Form(...), db: Se
             request, "auth/geraet_login_pin.html",
             {"error": "PIN ungültig oder abgelaufen."}, status_code=401,
         )
-    dt, raw_token = result
+    dt, raw_token, raw_gateway_token = result
     user = db.get(User, dt.user_id)
     if not user or not user.active:
         return templates.TemplateResponse(
@@ -235,12 +235,14 @@ async def device_login_pin_submit(request: Request, pin: str = Form(...), db: Se
     user.last_login_at = now
     write_audit(db, "auth.device_login_pin", user_id=user.id,
                 ip=request.client.host if request.client else None,
-                payload={"device_token_id": dt.id, "label": dt.label})
+                payload={"device_token_id": dt.id, "label": dt.label,
+                         "gateway_paired": raw_gateway_token is not None})
     db.commit()
 
     session_token = sign_session(user.id, device=True)
     response = templates.TemplateResponse(request, "auth/geraet_login_pin_done.html", {
         "raw_token": raw_token,
+        "raw_gateway_token": raw_gateway_token,
     })
     response.set_cookie(
         "session", session_token,

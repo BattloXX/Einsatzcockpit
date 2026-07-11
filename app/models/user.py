@@ -164,9 +164,18 @@ class DeviceToken(Base):
     # Geheimnis und löscht die PIN (Einmal-Gebrauch), siehe device_login_service.py.
     pairing_pin_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     pairing_pin_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Bei "Geraet + SMS-Gateway" (kombiniertes Geraet, siehe ui_admin.py) hier
+    # das gleichzeitig erzeugte SmsGatewayToken verknuepft, damit die PIN-
+    # Pairing-Alternative (kein QR-Scan) die Gateway-Rolle mit aktivieren kann.
+    paired_gateway_token_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("sms_gateway_token.id", ondelete="SET NULL"), nullable=True
+    )
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
     vehicle: Mapped[VehicleMaster | None] = relationship("VehicleMaster", foreign_keys=[vehicle_master_id])
+    paired_gateway_token: Mapped["SmsGatewayToken | None"] = relationship(
+        "SmsGatewayToken", foreign_keys=[paired_gateway_token_id]
+    )
 
     @property
     def is_active(self) -> bool:
