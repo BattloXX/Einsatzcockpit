@@ -152,6 +152,7 @@
                     background:var(--surface-mid); border:1px solid var(--border); border-radius:.5rem;
                     min-width:190px; padding:8px 0; box-shadow:0 12px 32px rgba(0,0,0,.5);">
           <a href="/profil" class="{% if request.url.path.startswith('/profil') %}active{% endif %}">👤 Profil bearbeiten</a>
+          <a href="https://localhost/about.html" class="js-native-about" style="display:none">ℹ️ Über die App</a>
           <a href="/logout">🚪 Abmelden</a>
         </div>
       </div>
@@ -207,6 +208,7 @@
     </nav>
     <footer class="mobile-menu__footer">
       <a href="/profil" class="mobile-menu__link {% if request.url.path.startswith('/profil') %}active{% endif %}">👤 Mein Profil</a>
+      <a href="https://localhost/about.html" class="mobile-menu__link js-native-about" style="display:none">ℹ️ Über die App</a>
       {% if is_admin %}
       <a href="/admin" class="mobile-menu__link {% if '/admin' in request.url.path %}active{% endif %}">⚙ Verwaltung</a>
       {% endif %}

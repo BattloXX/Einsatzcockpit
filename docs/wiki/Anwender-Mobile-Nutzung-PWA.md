@@ -23,6 +23,8 @@ Die native Android-App (separates APK, siehe [SMS-Gateway](Installation-SMS-Gate
 
 Geräte-Pairing (QR-Code/PIN) erzeugt eine dauerhafte Geräte-Session ohne Ablauf — gedacht für fest verbaute/gemeinsam genutzte Geräte (Fahrzeug-Tablet, Gerätehaus-Anzeige, SMS-Gateway-Handy). Die persönliche Anmeldung (Account-Login/SMS-PIN) ist an den einzelnen Nutzer gebunden und läuft nach spätestens 30 Tagen ab.
 
+Nach **Mit Account anmelden** merkt sich die App das und überspringt den Anmelde-Screen bei künftigen App-Starts, solange die Web-Session noch gültig ist — die App landet dann direkt auf dem Einsatz-Board. Ist die Session abgelaufen, erscheint automatisch die normale Login-Seite.
+
 ### Gerät + SMS-Gateway kombinieren
 
 Ein Android-Gerät kann gleichzeitig als Einheit-Gerät (zeigt das Einsatz-Board) **und** als
@@ -31,6 +33,14 @@ Fahrzeug-Tablet mit SIM-Karte. Unter **Admin → Geräte-Login → + Gerät regi
 „Gerät + SMS-Gateway" wählen: es wird ein einziger QR-Code erzeugt, der beide Rollen koppelt. Nach
 dem Scan zeigt die App das Einsatz-Board als Hauptansicht; der SMS-Gateway-Dienst läuft im
 Hintergrund weiter (erkennbar an der dauerhaften Benachrichtigung „SMS-Gateway aktiv").
+
+### Über die App
+
+Im Nutzer-Menü (Profil-Dropdown bzw. mobiles Menü) erscheint innerhalb der nativen Android-App
+der Eintrag **„Über die App"**. Dort werden die installierte und die aktuell verfügbare
+App-Version angezeigt, ein Update kann direkt heruntergeladen werden (wie beim SMS-Gateway-Status),
+und ist dieses Gerät als SMS-Gateway konfiguriert, führt ein Button direkt zum
+SMS-Gateway-Status. Der Eintrag ist nur innerhalb der App sichtbar, nicht im Browser/PWA.
 
 ## Installation auf iOS (Safari)
 

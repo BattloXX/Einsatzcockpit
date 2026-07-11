@@ -293,12 +293,22 @@
     }, _batterySaver ? _DUTY_BATTERY_INTERVAL : _DUTY_NORMAL_INTERVAL);
   }
 
+  // ─── Menü-Eintrag "Über die App" ─────────────────────────────────────────────
+  // Nur innerhalb der nativen Android-App sichtbar (verlinkt auf die lokal
+  // gebündelte about.html, die App-Version/Update-Check/Gateway-Sprung zeigt).
+  function _showNativeAboutLink() {
+    document.querySelectorAll('.js-native-about').forEach((el) => {
+      el.style.removeProperty('display');
+    });
+  }
+
   // ─── Initialisierung ─────────────────────────────────────────────────────────
   function _init() {
     if (_isNative()) {
       _registerFcmToken();
       _initBattery();
       _pollDutyState();
+      _showNativeAboutLink();
     }
 
     // Duty-Status-Poll starten (No-Op wenn nicht nativ)
