@@ -12,9 +12,10 @@ import hashlib
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.permissions import can_access_incident
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident
@@ -46,6 +47,15 @@ def _resolve_alarm_token(db: Session, plain: str) -> tuple[AlarmToken, Incident]
 @router.get("/alarm/{token}", response_class=HTMLResponse)
 def alarm_summary(token: str, request: Request, db: Session = Depends(get_db)):
     _tok, incident = _resolve_alarm_token(db, token)
+
+    # Per SMS/Teams verschickter Link ist derselbe fuer alle Empfaenger (mit und
+    # ohne Login). Ist der Aufrufer bereits eingeloggt und fuer diesen Einsatz
+    # berechtigt, direkt auf die interne Einsatzinfo weiterleiten statt die
+    # oeffentliche No-Login-Ansicht zu zeigen.
+    user = getattr(request.state, "user", None)
+    if user and can_access_incident(user, incident):
+        return RedirectResponse(f"/einsatz/{incident.id}/info")
+
     org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
     return templates.TemplateResponse(request, "public/alarm_summary.html", {
         "incident": incident,

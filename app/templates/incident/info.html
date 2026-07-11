@@ -146,6 +146,9 @@
       <div class="ei-noprint" style="display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" class="btn btn--secondary"
                 onclick="ecpgPrint({document_type:'einsatzinfo', incident_id:{{ incident.id }}, title:'Einsatzinfo drucken', localFn:'einsatzInfoDrucken'})">🖨 Drucken</button>
+        {% if gmaps_url %}
+        <a href="{{ gmaps_url }}" target="_blank" rel="noopener" class="btn btn--secondary">🗺 Google Maps</a>
+        {% endif %}
         <a href="/einsatz/{{ incident.id }}" class="btn btn--primary">🖥 Zum Einsatz-Board</a>
         {% if request.state.lagefuehrung_modul_aktiv %}
         <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="btn btn--secondary">🗺️ Lageführung</a>
