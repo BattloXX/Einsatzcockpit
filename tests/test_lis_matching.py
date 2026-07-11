@@ -125,7 +125,6 @@ def test_find_matching_incident_matches_within_window():
         match = lis_matching.find_matching_incident(
             db, ORG_ID,
             alarm_type_code="T1",
-            reason="Brandmeldeanlage",
             street="Achstraße",
             city="Wolfurt",
             started_at=incident.started_at + timedelta(hours=1),
@@ -145,7 +144,6 @@ def test_find_matching_incident_rejects_different_alarm_type():
         match = lis_matching.find_matching_incident(
             db, ORG_ID,
             alarm_type_code="T1",
-            reason="Brandmeldeanlage",
             street="Achstraße",
             city="Wolfurt",
             started_at=incident.started_at,
@@ -164,7 +162,6 @@ def test_find_matching_incident_rejects_outside_window():
         match = lis_matching.find_matching_incident(
             db, ORG_ID,
             alarm_type_code="T1",
-            reason="Brandmeldeanlage",
             street="Achstraße",
             city="Wolfurt",
             started_at=incident.started_at + timedelta(hours=4),
@@ -184,7 +181,6 @@ def test_find_matching_incident_rejects_closed_incident():
         match = lis_matching.find_matching_incident(
             db, ORG_ID,
             alarm_type_code="T1",
-            reason="Brandmeldeanlage",
             street="Achstraße",
             city="Wolfurt",
             started_at=incident.started_at,
@@ -204,7 +200,7 @@ def test_find_matching_incident_direct_lis_operation_id_hit():
         match = lis_matching.find_matching_incident(
             db, ORG_ID,
             alarm_type_code="T9",  # irrelevant für den direkten ID-Match
-            reason=None, street=None, city=None, started_at=None,
+            street=None, city=None, started_at=None,
             lis_operation_id="op-guid-123",
         )
         assert match is not None
@@ -214,7 +210,7 @@ def test_find_matching_incident_direct_lis_operation_id_hit():
         db.close()
 
 
-def test_find_matching_incident_none_without_reason_or_address():
+def test_find_matching_incident_none_without_address():
     db = _session()
     try:
         _make_incident(db)
@@ -222,12 +218,37 @@ def test_find_matching_incident_none_without_reason_or_address():
         match = lis_matching.find_matching_incident(
             db, ORG_ID,
             alarm_type_code="T1",
-            reason=None,
             street=None,
             city=None,
             started_at=datetime(2026, 7, 3, 20, 0, tzinfo=UTC),
         )
         assert match is None
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_find_matching_incident_matches_despite_different_reason_text():
+    """Reproduziert Prod-Vorfall #200/#201: gleiches Stichwort an gleicher Adresse,
+    aber völlig unterschiedlicher Meldungstext (einmal rohes Pager-Markup '[...] >',
+    einmal bereinigt) — laut Nutzer-Entscheidung genügt Stichwort + Adresse, der
+    Meldungstext wird gar nicht mehr verglichen."""
+    db = _session()
+    try:
+        incident = _make_incident(
+            db, reason="3.OG - [PATIENTENRETTUNG] > RTW/NEF vor Ort",
+            address_street="Kellhofstraße", address_no="10", address_city="Wolfurt",
+        )
+
+        match = lis_matching.find_matching_incident(
+            db, ORG_ID,
+            alarm_type_code="T1",
+            street="KELLHOFSTRAßE",
+            city="WOLFURT",
+            started_at=incident.started_at,
+        )
+        assert match is not None
+        assert match.id == incident.id
     finally:
         db.rollback()
         db.close()
@@ -250,7 +271,6 @@ def test_lis_created_incident_can_later_be_linked_via_api_matching():
         match = lis_matching.find_matching_incident(
             db, ORG_ID,
             alarm_type_code="T4",
-            reason="Verkehrsunfall",
             street="Bundesstraße",
             city="Wolfurt",
             started_at=lis_incident.started_at,

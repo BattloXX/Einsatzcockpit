@@ -2,8 +2,9 @@
 
 Die LIS-API liefert keine Leitstellennummer, die 1:1 auf einen bereits per
 POST /api/v1/einsatz angelegten Incident verweist. Die Verknüpfung erfolgt
-daher heuristisch über Einsatzgrund + Adresse + Alarmstichwort innerhalb
-eines Zeitfensters (siehe Plan / Nutzer-Entscheidung: 3 Stunden).
+daher heuristisch über Alarmstichwort + Adresse innerhalb eines Zeitfensters
+(siehe Plan / Nutzer-Entscheidung: 3 Stunden). Der freie Einsatzgrund-/
+Meldungstext wird bewusst NICHT verglichen — siehe find_matching_incident().
 """
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.models.incident import Incident
-from app.services.lis.lis_mapping import normalize_address, normalize_reason
+from app.services.lis.lis_mapping import normalize_address
 
 DEFAULT_WINDOW_HOURS = 3
 
@@ -26,7 +27,6 @@ def find_matching_incident(
     org_id: int,
     *,
     alarm_type_code: str,
-    reason: str | None,
     street: str | None,
     city: str | None,
     started_at: datetime | None,
@@ -38,9 +38,14 @@ def find_matching_incident(
     Zwei Verknüpfungswege:
     1) Direkter Treffer über eine bereits gemerkte lis_operation_id — schnellster,
        eindeutiger Pfad, wird bei jedem Sync-Durchlauf zuerst versucht.
-    2) Heuristik über normalisierten Einsatzgrund + Adresse (Straße/Ort) +
-       Alarmstichwort, eingeschränkt auf ein Zeitfenster von window_hours um
-       started_at.
+    2) Heuristik über Alarmstichwort (alarm_type_code) + normalisierte Adresse
+       (Straße/Ort), eingeschränkt auf ein Zeitfenster von window_hours um
+       started_at. Der freie Einsatzgrund-/Meldungstext wird NICHT verglichen —
+       zwei Quellen (z.B. Alarmierungs-Rohtext vs. LIS) formulieren denselben
+       Alarm oft unterschiedlich (Vorfall 2026-07-11: Einsätze #200/#201 an
+       derselben Adresse mit identischem Stichwort blieben getrennt, weil ihr
+       Meldungstext nach Normalisierung nicht exakt gleich war). Stichwort +
+       Adresse gelten als ausreichend eindeutig für denselben Einsatz.
 
     Es werden ausschließlich AKTIVE Einsätze der Org verglichen — abgeschlossene
     Einsätze scheiden aus (reduziert False-Positives bei wiederkehrenden Alarmen
@@ -58,10 +63,9 @@ def find_matching_incident(
         if by_id:
             return by_id
 
-    target_reason = normalize_reason(reason)
     target_address = normalize_address(street, city)
-    if not target_reason or not target_address:
-        # Ohne Grund oder Adresse ist die Heuristik nicht zuverlässig genug —
+    if not target_address:
+        # Ohne Adresse ist die Heuristik nicht zuverlässig genug —
         # lieber keinen (Fehl-)Match als einen falschen.
         return None
 
@@ -76,8 +80,6 @@ def find_matching_incident(
     )
 
     for candidate in candidates:
-        if normalize_reason(candidate.reason) != target_reason:
-            continue
         if normalize_address(candidate.address_street, candidate.address_city) != target_address:
             continue
         if started_at is not None and candidate.started_at is not None:
