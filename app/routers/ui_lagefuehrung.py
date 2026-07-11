@@ -376,6 +376,7 @@ async def lagefuehrung_objekte(
             selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren).selectinload(ObjektGefahr.gefahr),
             selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte),
             selectinload(ObjektEinsatz.objekt).selectinload(Objekt.karten_objekte),
+            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.bma),
         )
         .filter(
             ObjektEinsatz.incident_id == incident_id,
@@ -424,6 +425,8 @@ async def lagefuehrung_objekte(
             "objekt_id": o.id,
             "name": o.name,
             "vulgoname": o.vulgoname,
+            "adresse": o.adresse_zeile,
+            "bma_nummer": o.bma.bma_nummer if o.bma else None,
             "lat": o.lat,
             "lng": o.lng,
             "url": f"/objekte/{o.id}",

@@ -249,6 +249,12 @@
       var html = '<div class="lft-objekt-popup">';
       html += '<div class="lft-objekt-popup__title">' + escapeHtml(o.name || "Objekt") +
         (o.vulgoname ? ' <span class="lft-objekt-popup__vulgo">(' + escapeHtml(o.vulgoname) + ')</span>' : "") + '</div>';
+      if (o.adresse || o.bma_nummer) {
+        html += '<div class="lft-objekt-popup__info">' +
+          (o.adresse ? escapeHtml(o.adresse) : "") +
+          (o.adresse && o.bma_nummer ? " · " : "") +
+          (o.bma_nummer ? "🔥 BMA " + escapeHtml(o.bma_nummer) : "") + "</div>";
+      }
       if (o.gefahren && o.gefahren.length) {
         html += '<div class="lft-objekt-popup__gefahren">';
         o.gefahren.forEach(function (g) {

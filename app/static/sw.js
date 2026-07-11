@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v4';
+const CACHE = 'ec-v5';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)

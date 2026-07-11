@@ -99,6 +99,9 @@ das System das passende Objekt — zuerst über die **BMA-Nummer im Alarmtext** 
 über die **Adresse** (inklusive Stiegen-Zusatzadressen), zuletzt über **geografische Nähe** (nur
 als Vorschlag). Am Einsatz-Board erscheint das **Objekt-Panel** in der Sidebar: Vorschläge
 bestätigen oder lösen dürfen Einsatzleiter und Objektverwalter; manuell verknüpfen geht dort auch.
+Verknüpfte Objekte zeigen dort **Name, Adresse und BMA-Nummer** prominent (die interne `OBJ-XXXX`-
+Nummer nur noch klein); die manuelle Suche beim Verknüpfen findet Treffer über Name, Adresse
+**und** BMA-Nummer — nicht nur über die Objekt-Nummer.
 
 **Objektgefahren am Board:** Sobald ein Objekt verknüpft ist, legt das System für jede seiner
 Gefahren automatisch eine Meldung in der eigenen Board-Spalte **„Objektgefahren"** an — übersichtlich
