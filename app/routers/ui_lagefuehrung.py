@@ -363,9 +363,11 @@ async def lagefuehrung_objekte(
     from app.models.objekt import (
         GEFAHR_PIKTOGRAMME,
         OBJEKT_EINSATZ_BESTAETIGT,
+        OBJEKT_SYMBOL_TYPEN,
         Objekt,
         ObjektEinsatz,
         ObjektGefahr,
+        parse_karten_geometry,
     )
 
     verknuepfungen = (
@@ -373,6 +375,7 @@ async def lagefuehrung_objekte(
         .options(
             selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren).selectinload(ObjektGefahr.gefahr),
             selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte),
+            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.karten_objekte),
         )
         .filter(
             ObjektEinsatz.incident_id == incident_id,
@@ -400,6 +403,23 @@ async def lagefuehrung_objekte(
             "art": k.art, "name": k.name,
             "telefone": k.telefone, "erreichbarkeit": k.erreichbarkeit,
         } for k in o.kontakte]
+        # Hinterlegte Geometrien (Zufahrten, Sammelplaetze, ...) aus der
+        # Objekt-Lagekarte (objekt_karten_objekt) — Punkte via lat/lng, Linien/
+        # Flaechen via geometry_json, s. objekt_karte.js fuer das Analogon.
+        kartenobjekte = []
+        for k in o.karten_objekte:
+            geometry = parse_karten_geometry(k.geometry_json)
+            if geometry is None and (k.lat is None or k.lng is None):
+                continue
+            kartenobjekte.append({
+                "id": k.id,
+                "typ": k.typ,
+                "typ_label": OBJEKT_SYMBOL_TYPEN.get(k.typ, k.typ),
+                "lat": k.lat,
+                "lng": k.lng,
+                "geometry": geometry,
+                "label": k.label,
+            })
         out.append({
             "objekt_id": o.id,
             "name": o.name,
@@ -411,6 +431,7 @@ async def lagefuehrung_objekte(
             "anfahrtsweg": o.anfahrtsweg,
             "gefahren": gefahren,
             "kontakte": kontakte,
+            "kartenobjekte": kartenobjekte,
         })
     return JSONResponse(out)
 

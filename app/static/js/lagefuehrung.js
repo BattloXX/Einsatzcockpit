@@ -111,12 +111,31 @@
       });
     });
 
+    // ── Mobile: Werkzeuge (Layer/Taktik-Palette) als Bottom-Sheet ────────────────
+    // Konzept Kap. 5.2: "Karte vollflächig, Palette als Bottom-Sheet." — auf
+    // Desktop/Tablet bleibt die feste Sidebar (Editieren ist dort optimiert), erst
+    // ab der 760px-Mobilbreite greift die CSS-Umschaltung auf position:fixed;
+    // dieser Button blendet das Sheet dort ein/aus (per Default eingeklappt, damit
+    // die Karte wie im Konzept beschrieben vollflächig sichtbar bleibt).
+    var sidebarToggle = document.getElementById("lft-sidebar-toggle");
+    var sidebar = document.getElementById("lft-sidebar");
+    if (sidebarToggle && sidebar) {
+      sidebarToggle.addEventListener("click", function () {
+        var offen = sidebar.classList.toggle("lft-sidebar--offen");
+        sidebarToggle.setAttribute("aria-expanded", offen ? "true" : "false");
+        sidebarToggle.textContent = offen ? "✕ Schließen" : "🧰 Werkzeuge";
+      });
+    }
+
     // ── Layer-Gruppen ────────────────────────────────────────────────────────
     var layerEinsatzort = L.layerGroup().addTo(karte);
     var layerFahrzeuge = L.layerGroup().addTo(karte);
     var layerObjekt = L.layerGroup().addTo(karte);
     var layerWasserstellen = L.layerGroup().addTo(karte);
     var layerZeichnung = L.layerGroup().addTo(karte);
+    // Punkt-Marker der hinterlegten Objekt-Kartenobjekte (Zufahrten/Sammelplaetze/...),
+    // fuer den Beschriftungen-Toggle separat gehalten (s. u.).
+    var objektKartenLayers = [];
 
     function bindToggle(checkboxId, group) {
       var cb = document.getElementById(checkboxId);
@@ -147,6 +166,7 @@
         beschriftungenSichtbar = this.checked;
         Object.keys(featureLayers).forEach(function (id) { applyLabelVisibility(featureLayers[id]); });
         layerReplay.eachLayer(applyLabelVisibility);
+        objektKartenLayers.forEach(applyLabelVisibility);
       });
     }
 
@@ -255,12 +275,50 @@
       html += '<a href="' + o.url + '" target="_blank" rel="noopener">Objektdaten öffnen</a></div>';
       return html;
     }
+    // Hinterlegte Geometrien der Objekt-Lagekarte (Zufahrten, Sammelplaetze, ...) —
+    // gleiche Kurzsymbole/Stile wie objekt_karte.js, damit Einheiten das Symbol aus
+    // der Objektverwaltung wiedererkennen. Punkte = Marker mit Kuerzel, Linien/
+    // Flaechen (z. B. Zufahrten) = gestrichelte Geometrie mit Hover-Label.
+    var KARTENOBJEKT_TEXT = {
+      fsd: "FSD", schluesselbox: "BOX", bsp: "BSP", bmz: "BMZ", fbf: "FBF", dlk_stellplatz: "DLK",
+      objektfunk: "FUNK", sammelplatz: "SP", feuerloescher: "FL", hauptzugang: "➜", nebenzugang: "➜",
+      stiege: "ST", aufzug: "AZ", gefahr_ex: "EX", gefahr_gas: "GAS", gefahr_chemie: "CHE",
+      gefahr_strom: "kV", gefahr_pv: "PV", hydrant_ueberflur: "H", hydrant_unterflur: "UH"
+    };
+    var KARTENOBJEKT_STIL = {
+      fsd: "box", schluesselbox: "box", bsp: "box", bmz: "box", fbf: "box", dlk_stellplatz: "box",
+      objektfunk: "box", aufzug: "box", sammelplatz: "gruen", stiege: "gruen", feuerloescher: "rot",
+      hauptzugang: "pfeil", nebenzugang: "pfeil", gefahr_ex: "dreieck", gefahr_gas: "dreieck",
+      gefahr_chemie: "dreieck", gefahr_strom: "dreieck", gefahr_pv: "dreieck",
+      hydrant_ueberflur: "hydrant", hydrant_unterflur: "hydrant"
+    };
+    function kartenobjektIconHtml(k) {
+      var text = KARTENOBJEKT_TEXT[k.typ] || (k.typ || "?").slice(0, 3).toUpperCase();
+      var stil = KARTENOBJEKT_STIL[k.typ] || "box";
+      return '<div class="lft-kobj-icon lft-kobj-icon--' + stil + '">' + escapeHtml(text) + '</div>';
+    }
+    function renderKartenobjekt(k) {
+      if (k.geometry) {
+        var geoLayer = L.geoJSON(k.geometry, { style: { color: "#2563eb", weight: 3, dashArray: "6 4", fillOpacity: 0.08 } });
+        if (k.label) { geoLayer.bindTooltip(k.label, { sticky: true }); }
+        geoLayer.addTo(layerObjekt);
+        return;
+      }
+      if (k.lat == null || k.lng == null) { return; }
+      var marker = L.marker([k.lat, k.lng], { icon: divIcon(kartenobjektIconHtml(k), [13, 13]) });
+      var label = k.label || k.typ_label;
+      if (label) { marker.bindTooltip(label, { permanent: true, direction: "top", className: "lft-kobj-label" }); }
+      marker.addTo(layerObjekt);
+      applyLabelVisibility(marker);
+      objektKartenLayers.push(marker);
+    }
     if (opts.objektEnabled) {
       fetchJson(apiBase + "/objekte.json").then(function (liste) {
         (liste || []).forEach(function (o) {
           L.marker([o.lat, o.lng], { icon: divIcon(objektIconHtml(o), [14, 28]) })
             .addTo(layerObjekt)
             .bindPopup(objektPopupHtml(o));
+          (o.kartenobjekte || []).forEach(renderKartenobjekt);
         });
       }).catch(function () {});
     }
@@ -589,9 +647,59 @@
     // ── Druck: WYSIWYG-Kartendruck (Muster GSL-Lagekarte) ────────────────────
     // Druckt exakt den aktuellen Kartenausschnitt mit den gerade eingeschalteten
     // Layern (inkl. Beschriftungen-Zustand) — kein separater Bericht/Journal.
+    var DRUCK_LAYER_CHECKBOX_IDS = [
+      "lft-layer-einsatzort", "lft-layer-fahrzeuge", "lft-layer-objekt",
+      "lft-layer-wasserstellen", "lft-layer-zeichnung", "lft-layer-beschriftung"
+    ];
+
+    // QuickPrint (Konzept Kap. 2.2, lagekarte.info-Verhalten): Papierformat,
+    // Basiskarte und die zuletzt gedruckten Layer je Browser/Nutzer merken, damit
+    // beim naechsten Einsatz nicht wieder alles auf den Standard zurueckgesetzt ist.
+    var DRUCK_SETTINGS_KEY = "lft_druck_settings";
+    function speichereDruckEinstellungen() {
+      try {
+        var fmtSel = document.getElementById("lft-druck-format");
+        var layers = DRUCK_LAYER_CHECKBOX_IDS.filter(function (id) {
+          var cb = document.getElementById(id);
+          return cb && cb.checked;
+        });
+        localStorage.setItem(DRUCK_SETTINGS_KEY, JSON.stringify({
+          fmt: fmtSel ? fmtSel.value : null,
+          layers: layers,
+          baselayer: baselayerSelect ? baselayerSelect.value : null
+        }));
+      } catch (e) { /* z. B. Private Browsing ohne localStorage-Zugriff */ }
+    }
+    (function wendeGespeicherteDruckEinstellungenAn() {
+      var gespeichert;
+      try {
+        var raw = localStorage.getItem(DRUCK_SETTINGS_KEY);
+        gespeichert = raw ? JSON.parse(raw) : null;
+      } catch (e) { gespeichert = null; }
+      if (!gespeichert) { return; }
+      var fmtSel = document.getElementById("lft-druck-format");
+      if (fmtSel && gespeichert.fmt) { fmtSel.value = gespeichert.fmt; }
+      if (gespeichert.baselayer && baselayerSelect && baselayerSelect.value !== gespeichert.baselayer) {
+        baselayerSelect.value = gespeichert.baselayer;
+        baselayerSelect.dispatchEvent(new Event("change"));
+      }
+      if (Array.isArray(gespeichert.layers)) {
+        DRUCK_LAYER_CHECKBOX_IDS.forEach(function (id) {
+          var cb = document.getElementById(id);
+          if (!cb) { return; }
+          var soll = gespeichert.layers.indexOf(id) !== -1;
+          if (cb.checked !== soll) {
+            cb.checked = soll;
+            cb.dispatchEvent(new Event("change"));
+          }
+        });
+      }
+    })();
+
     var btnDruck = document.getElementById("lft-tool-druck");
     if (btnDruck) {
       btnDruck.addEventListener("click", function () {
+        speichereDruckEinstellungen();
         var b = karte.getBounds();
         var aktiveLayer = [];
         [

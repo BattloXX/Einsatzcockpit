@@ -1839,6 +1839,24 @@ button.htmx-request,
 .lft-objekt-popup__info { margin: 4px 0; opacity: .85; }
 .lft-objekt-popup__kontakte { margin: 4px 0; }
 
+/* Hinterlegte Objekt-Geometrien (Zufahrten/Sammelplaetze/...) — Kuerzel-Badges
+   analog objekt_karte.js SYMBOLE-Stile, damit Einheiten das Symbol aus der
+   Objektverwaltung auf der Einsatzkarte wiedererkennen. */
+.lft-kobj-icon {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 18px; padding: 0 3px;
+  font-size: 9px; font-weight: 700; line-height: 1; letter-spacing: .02em;
+  border-radius: 4px; border: 2px solid; box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+  background: #fff; color: #1a1a1a;
+}
+.lft-kobj-icon--box { border-color: #475569; }
+.lft-kobj-icon--gruen { border-color: #16a34a; }
+.lft-kobj-icon--rot { border-color: #dc2626; }
+.lft-kobj-icon--pfeil { border-color: #2563eb; border-radius: 50%; }
+.lft-kobj-icon--dreieck { border-color: #eab308; background: #fef9c3; }
+.lft-kobj-icon--hydrant { border-color: #0284c7; border-radius: 50%; }
+.lft-kobj-label { font-size: .7rem; }
+
 /* ── Lageführung Phase 2: Werkzeuge, Taktik-Palette, Presence, Locks ───────── */
 .lft-werkzeuge { display: flex; flex-direction: column; gap: 6px; }
 .lft-werkzeuge__grid { display: flex; flex-direction: column; gap: 6px; }
@@ -2086,4 +2104,53 @@ button.htmx-request,
 @media (max-width: 760px) {
   .lft-banner { flex-direction: column; align-items: flex-start; }
   .lft-tz-picker__grid { grid-template-columns: 1fr; }
+}
+
+/* ── Mobile: Werkzeuge (Layer/Taktik) als Bottom-Sheet (Konzept Kap. 5.2) ─────
+   "Karte vollflächig, Palette als Bottom-Sheet." Ab 760px wird die feste
+   Sidebar zu einem einklappbaren, von unten einfahrenden Panel über der Karte,
+   Muster .anno-tz aus annotate/editor.html (gleiche Domäne: Palette über Karte/
+   Canvas), hier aber position:fixed statt absolute, da die Lageführung-Seite
+   (mit Header/Banner) kein eigener Vollbild-Container wie der Annotation-Editor
+   ist. */
+.lft-sidebar-toggle { display: none; }
+@media (max-width: 760px) {
+  .lft-karte-layout { position: relative; }
+  .lft-karte-layout .objekt-karte-canvas { height: calc(100vh - 260px); min-height: 320px; }
+  .lft-karte-layout .lft-sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 0;
+    overflow: hidden;
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, .45);
+    z-index: 500;
+    transition: max-height .25s ease;
+  }
+  .lft-karte-layout .lft-sidebar.lft-sidebar--offen {
+    max-height: 70vh;
+    overflow-y: auto;
+    padding-bottom: 64px !important;
+  }
+  .lft-sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    z-index: 501;
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: 22px;
+    border: none;
+    background: var(--surface-high);
+    color: var(--on-surface);
+    font-weight: 600;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .5);
+  }
 }
