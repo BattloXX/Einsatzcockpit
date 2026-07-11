@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#d42225">
+  <title>Anmeldung per SMS-PIN – {{ brand }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
+  <script src="/static/js/csrf.js" defer></script>
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="/static/img/logo_einsatzcockpit.png" alt="{{ brand }}" onerror="this.style.display='none'" class="login-logo__img">
+        <h1 class="login-logo__title" style="font-size:1.15rem;margin-top:4px">Anmeldung per SMS-PIN</h1>
+        <p class="login-logo__sub">Wir senden dir einen Einmal-PIN per SMS.</p>
+      </div>
+
+      {% if error %}
+      <div class="alert alert--error">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="/pin-login" class="login-form">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-group">
+          <label for="phone">Handynummer</label>
+          <input type="tel" id="phone" name="phone" required autofocus
+                 autocomplete="tel" class="form-input" placeholder="+43 664 1234567">
+        </div>
+        <button type="submit" class="btn btn--primary btn--full">PIN anfordern</button>
+      </form>
+      <div style="text-align:center; margin-top:14px;">
+        <a href="/login" class="link-sm">← zurück zur normalen Anmeldung</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

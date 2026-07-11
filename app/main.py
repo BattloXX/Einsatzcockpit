@@ -56,6 +56,7 @@ from app.routers import (
     ui_objekt_dokumente,
     ui_org_mail,
     ui_password_reset,
+    ui_pin_login,
     ui_profile,
     ui_push,
     ui_settings,
@@ -502,6 +503,7 @@ app.include_router(auth.router)
 app.include_router(sso.router)
 app.include_router(public.router)
 app.include_router(ui_password_reset.router)
+app.include_router(ui_pin_login.router)
 app.include_router(api_v1.router)
 app.include_router(api_weather.router)
 # TEMPORAER: EUS-Datenmigration — nach Abschluss entfernen (siehe app/routers/api_import.py)

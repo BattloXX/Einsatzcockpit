@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#d42225">
+  <title>Geräte-PIN – {{ brand }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/csrf.js" defer></script>
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="/static/img/logo_einsatzcockpit.png" alt="{{ brand }}"
+             onerror="this.style.display='none'" class="login-logo__img">
+        <p class="login-logo__sub">{{ brand_tagline }}</p>
+      </div>
+
+      <p style="text-align:center; margin-bottom:6px; font-size:1.05rem; font-weight:600;">
+        Geräte-PIN eingeben
+      </p>
+      <p style="text-align:center; color:var(--text-muted); margin-bottom:20px; font-size:.85rem;">
+        Alternative zum QR-Code-Scan. Die PIN wird im Admin-Bereich unter "Geräte-Login" angezeigt.
+      </p>
+
+      {% if error %}
+      <p style="text-align:center; color:#f87171; font-size:.88rem; margin-bottom:12px;">{{ error }}</p>
+      {% endif %}
+
+      <form method="post" action="/geraet-login-pin" class="login-form">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-group">
+          <label for="pin">PIN</label>
+          <input type="text" id="pin" name="pin" required
+                 autocomplete="one-time-code" class="form-input"
+                 placeholder="ABCD1234" autofocus autocapitalize="characters"
+                 style="letter-spacing:.2em; text-align:center; font-size:1.3rem;">
+        </div>
+        <button type="submit" class="btn btn--primary btn--full">Anmelden</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

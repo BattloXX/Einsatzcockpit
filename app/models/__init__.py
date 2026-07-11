@@ -97,6 +97,7 @@ from app.models.objekt import (
     ObjektWohnanlage,
     ObjektZusatzadresse,
 )
+from app.models.login_pin import LoginPin
 from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
 from app.models.password_reset import PasswordResetToken
 from app.models.sms import (
@@ -166,7 +167,7 @@ __all__ = [
     "Incident", "IncidentColumn", "IncidentVehicle", "Task", "Message",
     "RescuedPerson", "IncidentLog", "IncidentChange", "IncidentToken",
     "BreathingTroop", "TroopMember", "PressureLog",
-    "PasswordResetToken",
+    "PasswordResetToken", "LoginPin",
     "LagekarteToken",
     "MajorIncident", "MajorIncidentStatus", "Sector", "StaffAssignment", "StaffFunction",
     "IncidentSite", "SitePhase", "SitePriority", "SiteResourceAssignment",

@@ -2707,6 +2707,10 @@ async def create_device_token(
     db.add(dt)
     db.flush()
 
+    # Pairing-PIN als abtippbare Alternative zum QR-Code-Scan direkt mit anlegen.
+    from app.services.device_login_service import erzeuge_pairing_pin
+    new_pin = erzeuge_pairing_pin(db, dt)
+
     write_audit(db, "admin.device_token.created", user_id=current_user.id,
                 entity_type="device_token", entity_id=dt.id,
                 payload={"label": label, "role_codes": role_codes})
@@ -2733,11 +2737,11 @@ async def create_device_token(
 
     return _render_device_tokens_page(request, db, current_user, new_token=raw_token,
                                       new_label=label, new_qr_b64=new_qr_b64,
-                                      new_token_type="unit", base_url=base_url)
+                                      new_token_type="unit", base_url=base_url, new_pin=new_pin)
 
 
 def _render_device_tokens_page(request, db, current_user, *, new_token=None, new_label=None,
-                               new_qr_b64=None, new_token_type="unit", base_url=None):
+                               new_qr_b64=None, new_token_type="unit", base_url=None, new_pin=None):
     """Baut den Template-Kontext für die Geräte-Login-Seite auf."""
     from sqlalchemy.orm import joinedload as _jl
     all_tokens = (
@@ -2782,6 +2786,7 @@ def _render_device_tokens_page(request, db, current_user, *, new_token=None, new
         "new_token_type": new_token_type,
         "new_label": new_label,
         "new_qr_b64": new_qr_b64,
+        "new_pin": new_pin,
     })
 
 
@@ -2945,6 +2950,34 @@ async def reactivate_device_token(
                 payload={"label": dt.label})
     db.commit()
     return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
+
+
+@router.post("/geraete-login/{token_id}/pin-neu")
+async def regenerate_device_pairing_pin(
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    """Erzeugt eine neue Pairing-PIN (Alternative zum QR-Scan) für ein bestehendes
+    Gerät — z.B. wenn die vorherige PIN abgelaufen oder schon verbraucht ist.
+    Rendert die Seite direkt (statt Redirect), damit die PIN einmalig angezeigt
+    werden kann, ohne im Query-String/Browserverlauf zu landen."""
+    dt = db.get(DeviceToken, token_id)
+    _assert_device_token_access(dt, request.state.user)
+    assert dt is not None
+    current_user = request.state.user
+
+    from app.services.device_login_service import erzeuge_pairing_pin
+    new_pin = erzeuge_pairing_pin(db, dt)
+    write_audit(db, "admin.device_token.pin_regenerated", user_id=current_user.id,
+                entity_type="device_token", entity_id=token_id,
+                payload={"label": dt.label})
+    db.commit()
+
+    base_url = str(request.base_url).rstrip("/")
+    return _render_device_tokens_page(request, db, current_user, new_label=dt.label,
+                                      base_url=base_url, new_pin=new_pin)
 
 
 @router.post("/geraete-login/{token_id}/fahrzeug")
