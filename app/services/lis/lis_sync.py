@@ -193,7 +193,6 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
     match = find_matching_incident(
         db, org.id,
         alarm_type_code=parsed["alarm_type_code"],
-        reason=parsed["reason"],
         street=parsed["street"],
         city=parsed["city"],
         started_at=parsed["started_at"],

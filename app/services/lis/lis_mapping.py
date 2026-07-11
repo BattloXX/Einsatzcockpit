@@ -137,9 +137,9 @@ def parse_person_response(description: str | None, task_type: str | None) -> dic
     }
 
 
-# ── Normalisierung für die Matching-Heuristik (Grund/Adresse) ─────────────────
+# ── Normalisierung für die Matching-Heuristik (Adresse) ────────────────────────
 _WS_RE = re.compile(r"\s+")
-_PUNCT_RE = re.compile(r"[.,;:!?\"'`´()\[\]{}/\\-]+")
+_PUNCT_RE = re.compile(r"[.,;:!?\"'`´()\[\]{}/\\<>|-]+")
 
 
 def _normalize_text(value: str | None) -> str:
@@ -149,10 +149,6 @@ def _normalize_text(value: str | None) -> str:
     text = _PUNCT_RE.sub(" ", text)
     text = _WS_RE.sub(" ", text)
     return text.strip()
-
-
-def normalize_reason(value: str | None) -> str:
-    return _normalize_text(value)
 
 
 def normalize_address(street: str | None, city: str | None) -> str:

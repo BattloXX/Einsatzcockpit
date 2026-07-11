@@ -93,7 +93,6 @@ def _create_or_link_incident(
         match = find_matching_incident(
             db, org_id,
             alarm_type_code=alarm_code,
-            reason=reason,
             street=street,
             city=city,
             started_at=started_at,

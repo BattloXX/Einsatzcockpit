@@ -526,16 +526,15 @@ async def create_incident_api(
 
     # LIS/IPR-Verknüpfung: falls dieser Einsatz bereits zuvor über LIS geliefert und
     # angelegt wurde (kein external_key vorhanden), wird ihm hier der external_key
-    # nachgetragen statt einen doppelten Einsatz anzulegen. Matching über Einsatzgrund
-    # + Adresse + Alarmstichwort innerhalb eines Zeitfensters (keine Leitstellennummer
-    # in der Push-API verfügbar) — siehe app.services.lis.lis_matching.
+    # nachgetragen statt einen doppelten Einsatz anzulegen. Matching über Alarmstichwort
+    # + Adresse innerhalb eines Zeitfensters (keine Leitstellennummer in der Push-API
+    # verfügbar) — siehe app.services.lis.lis_matching.
     linked_from_lis: Incident | None = None
     if api_key.org_id:
         from app.services.lis.lis_matching import find_matching_incident
         candidate = find_matching_incident(
             db, api_key.org_id,
             alarm_type_code=alarm_type_code,
-            reason=payload.Einsatzgrund,
             street=payload.Strasse,
             city=payload.Ort,
             started_at=started_at,
