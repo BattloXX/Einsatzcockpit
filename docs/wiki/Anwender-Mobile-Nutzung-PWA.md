@@ -23,6 +23,15 @@ Die native Android-App (separates APK, siehe [SMS-Gateway](Installation-SMS-Gate
 
 Geräte-Pairing (QR-Code/PIN) erzeugt eine dauerhafte Geräte-Session ohne Ablauf — gedacht für fest verbaute/gemeinsam genutzte Geräte (Fahrzeug-Tablet, Gerätehaus-Anzeige, SMS-Gateway-Handy). Die persönliche Anmeldung (Account-Login/SMS-PIN) ist an den einzelnen Nutzer gebunden und läuft nach spätestens 30 Tagen ab.
 
+### Gerät + SMS-Gateway kombinieren
+
+Ein Android-Gerät kann gleichzeitig als Einheit-Gerät (zeigt das Einsatz-Board) **und** als
+SMS-Gateway (sendet/empfängt SMS über die eingebaute SIM) laufen — z. B. ein fest verbautes
+Fahrzeug-Tablet mit SIM-Karte. Unter **Admin → Geräte-Login → + Gerät registrieren** die Option
+„Gerät + SMS-Gateway" wählen: es wird ein einziger QR-Code erzeugt, der beide Rollen koppelt. Nach
+dem Scan zeigt die App das Einsatz-Board als Hauptansicht; der SMS-Gateway-Dienst läuft im
+Hintergrund weiter (erkennbar an der dauerhaften Benachrichtigung „SMS-Gateway aktiv").
+
 ## Installation auf iOS (Safari)
 
 1. App in **Safari** öffnen (`https://einsatzleiter.feuerwehr-wolfurt.at`)

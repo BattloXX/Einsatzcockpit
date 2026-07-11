@@ -19,6 +19,8 @@
   <div class="alert alert--success" style="margin-bottom:20px;">
     {% if new_token_type == 'sms-gateway' %}
     <strong>SMS-Gateway „{{ new_label }}" erstellt.</strong> Bitte den QR-Code jetzt mit der Android-App scannen – Token wird nur einmal angezeigt.
+    {% elif new_token_type == 'unit+sms-gateway' %}
+    <strong>Gerät „{{ new_label }}" (Board + SMS-Gateway) erstellt.</strong> Ein Scan koppelt beides – Token werden nur einmal angezeigt.
     {% else %}
     <strong>Gerät „{{ new_label }}" erstellt.</strong> Bitte die URL / den QR-Code jetzt sichern – sie werden nur einmal angezeigt.
     {% endif %}
@@ -30,6 +32,8 @@
         <div style="display:flex;align-items:center;gap:8px;">
           {% if new_token_type == 'sms-gateway' %}
           <code id="newTokenUrl" style="flex:1;word-break:break-all;font-size:.83rem;">{{ new_token }}</code>
+          {% elif new_token_type == 'unit+sms-gateway' and new_login_url %}
+          <code id="newTokenUrl" style="flex:1;word-break:break-all;font-size:.83rem;">{{ new_login_url }}</code>
           {% else %}
           <code id="newTokenUrl" style="flex:1;word-break:break-all;font-size:.83rem;">{{ base_url }}/geraet-login?token={{ new_token }}</code>
           {% endif %}
@@ -37,9 +41,17 @@
             📋 Kopieren
           </button>
         </div>
+        {% if new_token_type == 'unit+sms-gateway' and new_gateway_token %}
+        <div style="margin-top:8px;font-size:.8rem;font-weight:600;">SMS-Gateway-Token (Bestandteil der URL oben)</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:2px;">
+          <code style="flex:1;word-break:break-all;font-size:.83rem;">{{ new_gateway_token }}</code>
+        </div>
+        {% endif %}
         <div style="margin-top:6px;font-size:.78rem;color:var(--color-text-muted);">
           {% if new_token_type == 'sms-gateway' %}
           → QR-Code mit Android-App scannen, um den SMS-Gateway-Modus zu aktivieren
+          {% elif new_token_type == 'unit+sms-gateway' %}
+          → In der Android-App QR scannen – Board-Login und SMS-Gateway werden gemeinsam eingerichtet
           {% else %}
           → In der Android-App QR scannen <strong>oder</strong> URL direkt öffnen
           {% endif %}
@@ -48,7 +60,9 @@
       {% if new_qr_b64 %}
       <div style="background:#fff;border-radius:6px;padding:8px;display:inline-block;">
         <div style="font-size:.75rem;font-weight:600;color:#333;text-align:center;margin-bottom:4px;">
-          {% if new_token_type == 'sms-gateway' %}SMS-Gateway QR{% else %}App-Login QR-Code{% endif %}
+          {% if new_token_type == 'sms-gateway' %}SMS-Gateway QR
+          {%- elif new_token_type == 'unit+sms-gateway' %}Kombi-QR (Board + Gateway)
+          {%- else %}App-Login QR-Code{% endif %}
         </div>
         <img src="data:image/png;base64,{{ new_qr_b64 }}"
              alt="QR-Code Login" style="width:160px;height:160px;display:block;">
@@ -308,6 +322,7 @@
       <li><strong>PIN statt Scannen</strong>: Alternative zum QR-Code, falls kein Kamerazugriff möglich ist — 10 Minuten gültig, einmal verwendbar. Über "PIN neu" jederzeit eine frische PIN erzeugen.</li>
       <li><strong>SMS-Gateway</strong>: Beim QR-Scannen mit der Android-App wechselt die App in den Gateway-Modus und verbindet sich dauerhaft als SMS-Sender.</li>
       <li>Der aktuell verbundene SMS-Gateway-Status ist unter <a href="/admin/sms-gateway/status" class="link-sm">Admin → SMS-Gateway-Status</a> sichtbar.</li>
+      <li><strong>Gerät + SMS-Gateway</strong>: Ein Gerät kann gleichzeitig als Einheit-Board und als SMS-Gateway laufen (z.B. ein fest verbautes Fahrzeug-Tablet mit SIM). Ein Scan koppelt beide Rollen; das Board wird angezeigt, der SMS-Versand läuft im Hintergrund weiter.</li>
     </ul>
   </div>
 </div>
@@ -325,8 +340,8 @@
       <!-- Typ-Auswahl -->
       <div class="form-group">
         <label class="form-label">Gerätetyp <span style="color:var(--color-danger)">*</span></label>
-        <div style="display:flex;gap:12px;margin-top:6px;">
-          <label style="flex:1;display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;border:2px solid var(--border);border-radius:8px;transition:border-color .15s;"
+        <div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap;">
+          <label style="flex:1;min-width:180px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;border:2px solid var(--border);border-radius:8px;transition:border-color .15s;"
                  id="typeUnitLabel">
             <input type="radio" name="device_type" value="unit" checked
                    onchange="updateDeviceTypeUi()" style="margin-top:3px;flex-shrink:0;">
@@ -335,13 +350,22 @@
               <div style="font-size:.8rem;color:var(--color-text-muted);margin-top:2px;">Tablet / Anzeigescreen mit Standort &amp; Push</div>
             </div>
           </label>
-          <label style="flex:1;display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;border:2px solid var(--border);border-radius:8px;transition:border-color .15s;"
+          <label style="flex:1;min-width:180px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;border:2px solid var(--border);border-radius:8px;transition:border-color .15s;"
                  id="typeGwLabel">
             <input type="radio" name="device_type" value="sms-gateway"
                    onchange="updateDeviceTypeUi()" style="margin-top:3px;flex-shrink:0;">
             <div>
               <div style="font-weight:600;font-size:.93rem;">📡 SMS-Gateway</div>
               <div style="font-size:.8rem;color:var(--color-text-muted);margin-top:2px;">Android-Gerät sendet SMS über eingebaute SIM</div>
+            </div>
+          </label>
+          <label style="flex:1;min-width:180px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px 14px;border:2px solid var(--border);border-radius:8px;transition:border-color .15s;"
+                 id="typeCombinedLabel">
+            <input type="radio" name="device_type" value="unit+sms-gateway"
+                   onchange="updateDeviceTypeUi()" style="margin-top:3px;flex-shrink:0;">
+            <div>
+              <div style="font-weight:600;font-size:.93rem;">📱📡 Gerät + SMS-Gateway</div>
+              <div style="font-size:.8rem;color:var(--color-text-muted);margin-top:2px;">Board-Gerät, sendet zusätzlich SMS über eingebaute SIM</div>
             </div>
           </label>
         </div>
@@ -425,21 +449,35 @@ function confirmDelete(form) {
 }
 
 function updateDeviceTypeUi() {
-  const isSmsGw = document.querySelector('input[name="device_type"][value="sms-gateway"]')?.checked;
+  const selected = document.querySelector('input[name="device_type"]:checked')?.value || 'unit';
+  const isSmsGwOnly = selected === 'sms-gateway';
+  const isCombined = selected === 'unit+sms-gateway';
   const unitFields = document.getElementById('unitOnlyFields');
   const createBtn = document.getElementById('createBtn');
   const labelInput = document.getElementById('deviceLabelInput');
   const unitLabel = document.getElementById('typeUnitLabel');
   const gwLabel = document.getElementById('typeGwLabel');
+  const combinedLabel = document.getElementById('typeCombinedLabel');
 
-  if (unitFields) unitFields.style.display = isSmsGw ? 'none' : '';
-  if (createBtn) createBtn.textContent = isSmsGw ? 'SMS-Gateway erstellen & Token generieren' : 'Gerät erstellen & Token generieren';
-  if (labelInput) labelInput.placeholder = isSmsGw ? 'z.B. SMS-Gateway Wolfurt' : 'z.B. Tablet Gerätehaus EG';
+  // Einheit-Felder (Rollen/Fahrzeug) gelten für "unit" und "unit+sms-gateway",
+  // nur bei reinem SMS-Gateway ausgeblendet.
+  if (unitFields) unitFields.style.display = isSmsGwOnly ? 'none' : '';
+  if (createBtn) {
+    createBtn.textContent = isSmsGwOnly ? 'SMS-Gateway erstellen & Token generieren'
+      : isCombined ? 'Gerät + SMS-Gateway erstellen & Token generieren'
+      : 'Gerät erstellen & Token generieren';
+  }
+  if (labelInput) {
+    labelInput.placeholder = isSmsGwOnly ? 'z.B. SMS-Gateway Wolfurt'
+      : isCombined ? 'z.B. Fahrzeug-Tablet KDO 1'
+      : 'z.B. Tablet Gerätehaus EG';
+  }
 
   const activeBorder = 'var(--color-primary, #3b82f6)';
   const defaultBorder = 'var(--border)';
-  if (unitLabel) unitLabel.style.borderColor = isSmsGw ? defaultBorder : activeBorder;
-  if (gwLabel) gwLabel.style.borderColor = isSmsGw ? activeBorder : defaultBorder;
+  if (unitLabel) unitLabel.style.borderColor = selected === 'unit' ? activeBorder : defaultBorder;
+  if (gwLabel) gwLabel.style.borderColor = isSmsGwOnly ? activeBorder : defaultBorder;
+  if (combinedLabel) combinedLabel.style.borderColor = isCombined ? activeBorder : defaultBorder;
 }
 
 // Initial state
