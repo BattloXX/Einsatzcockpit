@@ -17,6 +17,7 @@ Fahrzeuge sind org-spezifisch: jede Organisation verwaltet ihre eigenen Fahrzeug
 | Code | Kürzel (z.B. `RLF`, `KDOF`) |
 | Name | Vollständiger Name |
 | Typ | Kategorisierung |
+| Kennzeichen | Amtliches Kennzeichen (optional) — dieselbe Angabe wie im Fahrtenbuch, hier oder dort gepflegt wirkt sich auf beide Ansichten aus |
 | Erstausrückung | ✓ = dieses Fahrzeug rückt bei T1/T2/F1/F2 aus |
 | Reihenfolge | Sortierung im Board |
 | Aktiv | Inaktive Fahrzeuge erscheinen nicht mehr |

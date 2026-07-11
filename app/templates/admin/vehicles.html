@@ -62,6 +62,7 @@
         <th style="width:32px;"></th>
         <th>Code</th>
         <th>Name / Typ</th>
+        <th>Kennzeichen</th>
         <th>Organisation</th>
         <th>BOS</th>
         <th>Erstausr.</th>
@@ -80,6 +81,7 @@
           {% endif %}
         </td>
         <td data-label="Name / Typ">{{ v.name }}<br><small class="text-muted">{{ v.type }}</small></td>
+        <td data-label="Kennzeichen">{{ v.kennzeichen or '–' }}</td>
         <td data-label="Organisation">
           {% if v.is_external %}
           <span style="color:#fbbf24;">{{ v.adhoc_org_name or '–' }}</span>
@@ -97,12 +99,12 @@
         <td data-label="Aktionen" style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap;">
           {% if v.is_external %}
           <button class="btn btn--ghost btn--xs"
-                  onclick="openEditExternal({{ v.id }}, '{{ v.adhoc_org_name|replace("'","\\'")|e }}', '{{ v.adhoc_org_short or "" }}', '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', '{{ v.bos_override or "" }}')">
+                  onclick="openEditExternal({{ v.id }}, '{{ v.adhoc_org_name|replace("'","\\'")|e }}', '{{ v.adhoc_org_short or "" }}', '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', '{{ v.bos_override or "" }}', '{{ v.kennzeichen or "" }}')">
             Bearbeiten
           </button>
           {% else %}
           <button class="btn btn--ghost btn--xs"
-                  onclick="openEditVehicle({{ v.id }}, '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', {{ v.is_first_train|lower }}, '{{ v.bos_override or "" }}', '{{ v.lis_reference_id or "" }}', '{{ v.taktisches_zeichen or "" }}')">
+                  onclick="openEditVehicle({{ v.id }}, '{{ v.code }}', '{{ v.name|replace("'","\\'")|e }}', '{{ v.type|replace("'","\\'")|e }}', {{ v.is_first_train|lower }}, '{{ v.bos_override or "" }}', '{{ v.lis_reference_id or "" }}', '{{ v.taktisches_zeichen or "" }}', '{{ v.kennzeichen or "" }}')">
             Bearbeiten
           </button>
           {% endif %}
@@ -155,6 +157,11 @@
         <div class="form-group">
           <label class="form-label">Typ / Beschreibung</label>
           <input type="text" name="type" class="form-input" maxlength="200" placeholder="z.B. Rüstlöschfahrzeug, Hochleistungspumpe, Atemschutzsammelplatz">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kennzeichen (optional)</label>
+          <input type="text" name="kennzeichen" class="form-input" maxlength="20" placeholder="z.B. B 1234">
+          <p class="form-hint">Wird auch im Fahrtenbuch dieser Ressource verwendet/angezeigt.</p>
         </div>
         <div class="form-group">
           <label class="form-label">BOS-Kategorie (leer = Org-Standard)</label>
@@ -212,6 +219,11 @@
         <div class="form-group">
           <label class="form-label">Typ / Beschreibung</label>
           <input type="text" name="type" id="ev_type" class="form-input" maxlength="200">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kennzeichen (optional)</label>
+          <input type="text" name="kennzeichen" id="ev_kennzeichen" class="form-input" maxlength="20" placeholder="z.B. B 1234">
+          <p class="form-hint">Wird auch im Fahrtenbuch dieser Ressource verwendet/angezeigt.</p>
         </div>
         <div class="form-group">
           <label class="form-label">BOS-Kategorie (leer = Org-Standard)</label>
@@ -287,6 +299,10 @@
                  placeholder="z.B. 3000 l/min, Atemluftfüllstation, mobile Einheit">
         </div>
         <div class="form-group">
+          <label class="form-label">Kennzeichen (optional)</label>
+          <input type="text" name="kennzeichen" class="form-input" maxlength="20" placeholder="z.B. B 1234">
+        </div>
+        <div class="form-group">
           <label class="form-label">BOS-Kategorie</label>
           <select name="bos_override" class="form-select">
             <option value="">– nicht zugeordnet –</option>
@@ -338,6 +354,10 @@
           <input type="text" name="type" id="ee_type" class="form-input" maxlength="200">
         </div>
         <div class="form-group">
+          <label class="form-label">Kennzeichen (optional)</label>
+          <input type="text" name="kennzeichen" id="ee_kennzeichen" class="form-input" maxlength="20" placeholder="z.B. B 1234">
+        </div>
+        <div class="form-group">
           <label class="form-label">BOS-Kategorie</label>
           <select name="bos_override" id="ee_bos_override" class="form-select">
             <option value="">– nicht zugeordnet –</option>
@@ -358,7 +378,7 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function openEditVehicle(id, code, name, type, firstTrain, bosOverride, lisReferenceId, taktischesZeichen) {
+function openEditVehicle(id, code, name, type, firstTrain, bosOverride, lisReferenceId, taktischesZeichen, kennzeichen) {
   document.getElementById('ev_code').value = code;
   document.getElementById('ev_name').value = name;
   document.getElementById('ev_type').value = type;
@@ -366,17 +386,19 @@ function openEditVehicle(id, code, name, type, firstTrain, bosOverride, lisRefer
   document.getElementById('ev_bos_override').value = bosOverride || '';
   document.getElementById('ev_lis_reference_id').value = lisReferenceId || '';
   document.getElementById('ev_taktisches_zeichen').value = taktischesZeichen || '';
+  document.getElementById('ev_kennzeichen').value = kennzeichen || '';
   document.getElementById('editVehicleForm').action = `/admin/fahrzeuge/${id}/edit`;
   document.getElementById('editVehicleModal').showModal();
 }
 
-function openEditExternal(id, orgName, orgShort, code, name, type, bosOverride) {
+function openEditExternal(id, orgName, orgShort, code, name, type, bosOverride, kennzeichen) {
   document.getElementById('ee_org_name').value = orgName;
   document.getElementById('ee_org_short').value = orgShort;
   document.getElementById('ee_code').value = code;
   document.getElementById('ee_name').value = name;
   document.getElementById('ee_type').value = type;
   document.getElementById('ee_bos_override').value = bosOverride || '';
+  document.getElementById('ee_kennzeichen').value = kennzeichen || '';
   document.getElementById('editExternalForm').action = `/admin/fahrzeuge/${id}/edit-extern`;
   document.getElementById('editExternalModal').showModal();
 }
