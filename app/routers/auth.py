@@ -200,6 +200,56 @@ async def device_login(request: Request, token: str, db: Session = Depends(get_d
     return redirect
 
 
+@router.get("/geraet-login-pin", response_class=HTMLResponse)
+async def device_login_pin_form(request: Request):
+    """PIN-Eingabeformular fürs Geräte-Pairing — Alternative zum QR-Code-Scan
+    (z.B. wenn kein Kamerazugriff möglich ist). PIN wird im Admin-Bereich neben
+    dem QR-Code angezeigt (Admin → Geräte-Login)."""
+    return templates.TemplateResponse(request, "auth/geraet_login_pin.html", {"error": None})
+
+
+@router.post("/geraet-login-pin", response_class=HTMLResponse)
+@(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
+async def device_login_pin_submit(request: Request, pin: str = Form(...), db: Session = Depends(get_db)):
+    from app.services.device_login_service import redeem_pairing_pin
+
+    result = redeem_pairing_pin(db, pin)
+    if result is None:
+        write_audit(db, "auth.device_login_pin.failed",
+                    ip=request.client.host if request.client else None)
+        db.commit()
+        return templates.TemplateResponse(
+            request, "auth/geraet_login_pin.html",
+            {"error": "PIN ungültig oder abgelaufen."}, status_code=401,
+        )
+    dt, raw_token = result
+    user = db.get(User, dt.user_id)
+    if not user or not user.active:
+        return templates.TemplateResponse(
+            request, "auth/geraet_login_pin.html",
+            {"error": "Gerät nicht verfügbar."}, status_code=401,
+        )
+
+    now = datetime.now(UTC)
+    dt.last_used_at = now
+    user.last_login_at = now
+    write_audit(db, "auth.device_login_pin", user_id=user.id,
+                ip=request.client.host if request.client else None,
+                payload={"device_token_id": dt.id, "label": dt.label})
+    db.commit()
+
+    session_token = sign_session(user.id, device=True)
+    response = templates.TemplateResponse(request, "auth/geraet_login_pin_done.html", {
+        "raw_token": raw_token,
+    })
+    response.set_cookie(
+        "session", session_token,
+        httponly=True, secure=settings.COOKIE_SECURE, samesite="lax",
+        max_age=10 * 365 * 24 * 3600,  # ~10 Jahre; kein Ablauf für Geräte-Sessions
+    )
+    return response
+
+
 @router.get("/logout")
 async def logout(request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)

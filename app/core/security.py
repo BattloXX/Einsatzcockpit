@@ -76,6 +76,11 @@ def generate_pairing_code() -> str:
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
+def generate_numeric_pin(length: int = 6) -> str:
+    """6-stelliger Einmal-PIN fürs SMS-Login (numerisch, gewohntes SMS-OTP-Format)."""
+    return "".join(secrets.choice("0123456789") for _ in range(length))
+
+
 # ── ECPG: kurzlebige signierte Artifact-URLs (PDF-Download durchs Gateway) ─────
 # Das Gateway lädt fertige PDFs über eine signierte, kurzlebige URL – kein
 # generischer API-Zugriff auf Einsatzdaten.

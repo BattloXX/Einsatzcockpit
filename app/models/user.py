@@ -158,6 +158,12 @@ class DeviceToken(Base):
     last_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_location_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     duty_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Pairing-PIN: kurzlebige, abtippbare Alternative zum QR-Code-Scan beim
+    # Geräte-Login (z.B. wenn kein Kamerazugriff möglich ist). sha256-Hex wie
+    # Gateway.pairing_code_hash — Einlösen ersetzt token_hash durch ein frisches
+    # Geheimnis und löscht die PIN (Einmal-Gebrauch), siehe device_login_service.py.
+    pairing_pin_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pairing_pin_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
     vehicle: Mapped[VehicleMaster | None] = relationship("VehicleMaster", foreign_keys=[vehicle_master_id])

@@ -10,6 +10,19 @@ Die Webapp kann wie eine native App auf dem Gerät installiert werden. Installie
 - Erhalten Push-Benachrichtigungen
 - Erscheinen auf dem Homescreen
 
+## Anmeldung in der Android-App
+
+Die native Android-App (separates APK, siehe [SMS-Gateway](Installation-SMS-Gateway) für den Download-Link) bietet beim ersten Start vier Anmeldewege:
+
+| Weg | Für wen | Wie |
+|-----|---------|-----|
+| **QR-Code scannen** | Geräte-Pairing (Tablet, Anzeigegerät, SMS-Gateway) | Admin erzeugt QR-Code unter **Admin → Geräte-Login**, App scannt ihn |
+| **PIN eingeben statt scannen** | Geräte-Pairing ohne Kamerazugriff | Admin zeigt zusätzlich zum QR-Code eine PIN (10 Minuten gültig, einmal verwendbar); PIN in der App eintippen |
+| **Mit Account anmelden** | Persönliche Accounts | Normale Benutzername/Passwort-Anmeldung, bleibt bis zu 30 Tage aktiv |
+| **Per SMS-PIN anmelden** | Persönliche Accounts, passwortlos | Handynummer eingeben → Einmal-PIN per SMS → PIN eintippen. Setzt ein verbundenes SMS-Gateway der eigenen Organisation voraus |
+
+Geräte-Pairing (QR-Code/PIN) erzeugt eine dauerhafte Geräte-Session ohne Ablauf — gedacht für fest verbaute/gemeinsam genutzte Geräte (Fahrzeug-Tablet, Gerätehaus-Anzeige, SMS-Gateway-Handy). Die persönliche Anmeldung (Account-Login/SMS-PIN) ist an den einzelnen Nutzer gebunden und läuft nach spätestens 30 Tagen ab.
+
 ## Installation auf iOS (Safari)
 
 1. App in **Safari** öffnen (`https://einsatzleiter.feuerwehr-wolfurt.at`)

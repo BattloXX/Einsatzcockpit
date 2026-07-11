@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#d42225">
+  <title>Angemeldet – {{ brand }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <div class="login-card" style="text-align:center;">
+      <div class="login-logo">
+        <img src="/static/img/logo_einsatzcockpit.png" alt="{{ brand }}"
+             onerror="this.style.display='none'" class="login-logo__img">
+      </div>
+      <p style="margin:16px 0; font-size:1.05rem; font-weight:600;">Anmeldung erfolgreich…</p>
+    </div>
+  </div>
+
+  <script>
+    // In der Android-App (Capacitor): den neuen Geräte-Token dauerhaft speichern,
+    // damit die App künftig automatisch anmeldet (wie nach einem QR-Code-Scan).
+    // Im normalen Browser (kein Capacitor) einfach weiterleiten — die Session-Cookie
+    // reicht dort aus.
+    (async function () {
+      var rawToken = {{ raw_token|tojson }};
+      try {
+        var Preferences = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences;
+        if (Preferences) {
+          await Preferences.set({ key: "el_device_token", value: rawToken });
+        }
+      } catch (e) {
+        console.warn("Geräte-Token konnte nicht lokal gespeichert werden:", e);
+      }
+      window.location.replace("/");
+    })();
+  </script>
+</body>
+</html>

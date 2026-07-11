@@ -55,6 +55,23 @@
         <div style="font-size:.7rem;color:#555;text-align:center;margin-top:4px;">Mit {{ brand }} App scannen</div>
       </div>
       {% endif %}
+      {% if new_pin %}
+      <div style="background:var(--surface-high);border-radius:6px;padding:12px 14px;">
+        <div style="font-size:.8rem;font-weight:600;margin-bottom:6px;">PIN statt Scannen</div>
+        <div style="font-family:monospace;font-size:1.3rem;letter-spacing:.15em;">{{ new_pin }}</div>
+        <div style="margin-top:6px;font-size:.78rem;color:var(--color-text-muted);">
+          → In der App "PIN eingeben statt scannen" wählen. Gültig 10 Minuten, einmalig verwendbar.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% elif saved and new_pin %}
+  <div class="alert alert--success" style="margin-bottom:20px;">
+    <strong>Neue PIN für „{{ new_label }}" erzeugt.</strong> Nur einmal angezeigt — bitte jetzt notieren.
+    <div style="margin-top:12px;background:var(--surface-high);border-radius:6px;padding:12px 14px;max-width:260px;">
+      <div style="font-family:monospace;font-size:1.3rem;letter-spacing:.15em;">{{ new_pin }}</div>
+      <div style="margin-top:6px;font-size:.78rem;color:var(--color-text-muted);">Gültig 10 Minuten, einmalig verwendbar.</div>
     </div>
   </div>
   {% elif saved %}
@@ -151,6 +168,9 @@
           </td>
           <td style="white-space:nowrap;">
             {% if dt.is_active %}
+            <form method="post" action="/admin/geraete-login/{{ dt.id }}/pin-neu" style="display:inline;">
+              <button class="btn btn--ghost btn--sm" {{ tip('Neue PIN als Alternative zum QR-Code-Scan erzeugen') }}>PIN neu</button>
+            </form>
             <form method="post" action="/admin/geraete-login/{{ dt.id }}/widerrufen" style="display:inline;"
                   data-label="{{ dt.label }}" onsubmit="return confirmRevoke(this)">
               <button class="btn btn--ghost btn--sm" {{ tip('Anmeldung sofort sperren') }}>Widerrufen</button>
@@ -285,6 +305,7 @@
       <li>Widerrufene Token können reaktiviert werden.</li>
       <li>Jedes Gerät erhält eine eigene Session und kann unabhängig gesperrt werden.</li>
       <li>Geräte erscheinen nicht in der normalen Benutzerliste.</li>
+      <li><strong>PIN statt Scannen</strong>: Alternative zum QR-Code, falls kein Kamerazugriff möglich ist — 10 Minuten gültig, einmal verwendbar. Über "PIN neu" jederzeit eine frische PIN erzeugen.</li>
       <li><strong>SMS-Gateway</strong>: Beim QR-Scannen mit der Android-App wechselt die App in den Gateway-Modus und verbindet sich dauerhaft als SMS-Sender.</li>
       <li>Der aktuell verbundene SMS-Gateway-Status ist unter <a href="/admin/sms-gateway/status" class="link-sm">Admin → SMS-Gateway-Status</a> sichtbar.</li>
     </ul>
