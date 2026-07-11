@@ -7,7 +7,10 @@
     <div class="objekt-panel-eintrag {% if v.status == 'vorschlag' %}objekt-panel-eintrag--vorschlag{% endif %}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
         <div style="min-width:0;">
-          <a href="/objekte/{{ o.id }}/einsatz" style="font-weight:600;">{{ o.anzeige_nummer }} {{ o.name }}</a>
+          <a href="/objekte/{{ o.id }}/einsatz" style="font-weight:600;">{{ o.name }}</a>
+          <div class="text-muted" style="font-size:0.78em;">
+            {% if o.adresse_zeile %}{{ o.adresse_zeile }}{% endif %}{% if o.bma and o.bma.bma_nummer %}{% if o.adresse_zeile %} · {% endif %}🔥 BMA {{ o.bma.bma_nummer }}{% endif %}{% if o.adresse_zeile or (o.bma and o.bma.bma_nummer) %} · {% endif %}{{ o.anzeige_nummer }}
+          </div>
           <div class="text-muted" style="font-size:0.78em;">
             {{ quellen_labels.get(v.quelle, v.quelle) }}{% if v.distanz_m is not none %} ({{ v.distanz_m }} m){% endif %}
             {% if v.status == 'vorschlag' %} · <span style="color:#fbbf24;">Vorschlag</span>{% endif %}
@@ -50,20 +53,20 @@
 
   {% if darf_verknuepfen and kandidaten %}
   <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;"
-       x-data='{ q: "", kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, t: {{ (o.anzeige_nummer ~ " " ~ o.name)|tojson }} }{{ "," if not loop.last }}{% endfor %}] }'>
+       x-data='{ q: "", kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, l: {{ (o.name ~ (" · " ~ o.adresse_zeile if o.adresse_zeile else ""))|tojson }}, t: {{ (o.name ~ " " ~ o.adresse_zeile ~ " " ~ (o.bma.bma_nummer if o.bma and o.bma.bma_nummer else "") ~ " " ~ o.anzeige_nummer)|lower|tojson }} }{{ "," if not loop.last }}{% endfor %}] }'>
     <div class="text-muted" style="font-size:0.78em;margin-bottom:4px;">
       {% if verknuepfungen %}Anderes Objekt verknüpfen{% else %}Objekt manuell verknüpfen{% endif %}
     </div>
-    <input type="text" x-model="q" class="form-input" placeholder="Objekt suchen …"
+    <input type="text" x-model="q" class="form-input" placeholder="Objekt suchen (Name, Adresse, BMA-Nr.) …"
            style="padding:4px 8px;width:100%;">
     <div style="max-height:170px;overflow:auto;margin-top:4px;display:flex;flex-direction:column;gap:3px;">
-      <template x-for="k in kandidaten.filter(function (x) { return x.t.toLowerCase().indexOf(q.toLowerCase()) !== -1; })" :key="k.id">
+      <template x-for="k in kandidaten.filter(function (x) { return x.t.indexOf(q.toLowerCase()) !== -1; })" :key="k.id">
         <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/verknuepfen"
               hx-target="#objekt-panel" hx-swap="outerHTML" style="margin:0;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="objekt_id" :value="k.id">
           <button type="submit" class="btn btn--ghost btn--xs"
-                  style="width:100%;text-align:left;" x-text="'+ ' + k.t"></button>
+                  style="width:100%;text-align:left;" x-text="'+ ' + k.l"></button>
         </form>
       </template>
     </div>

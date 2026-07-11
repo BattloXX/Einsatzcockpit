@@ -2035,6 +2035,7 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
     verknuepfte_ids = {v.objekt_id for v in verknuepfungen}
     kandidaten = (
         db.query(Objekt)
+        .options(selectinload(Objekt.bma))
         .filter(Objekt.status.in_(("freigegeben", "in_ueberarbeitung")))
         .order_by(Objekt.nummer)
         .all()
