@@ -196,3 +196,119 @@ def test_save_endpoint_ohne_login(client):
     r = client.put("/api/annotation/task/123456",
                    json={"annotation_json": "{}", "png": None}, follow_redirects=False)
     assert r.status_code in (302, 401, 403)
+
+
+# ── Quota (Session 2026-07-12): annotierte Bilder wurden nie gegen die Org-
+# Quota gebucht, weder beim Speichern (reserve) noch beim Loeschen (release). ─
+
+@pytest.fixture()
+def real_task_media(db, tmp_path, monkeypatch):
+    """Echte Task/Incident/FireDept-Zeilen (statt SimpleNamespace), damit
+    _org_of_incident() die Org ueber den Einsatz aufloesen kann."""
+    from datetime import UTC, datetime
+
+    from app.models.incident import Incident, Task, TaskMedia
+    from app.models.master import FireDept
+
+    monkeypatch.setattr(settings, "MEDIA_STORAGE_DIR", str(tmp_path))
+    org = FireDept(slug="ann-quota", name="Annotation Quota Org", color="#123456", bos="Feuerwehr")
+    db.add(org)
+    db.flush()
+    inc = Incident(primary_org_id=org.id, alarm_type_code="T1", status="active",
+                   started_at=datetime.now(UTC).replace(tzinfo=None))
+    db.add(inc)
+    db.flush()
+    task = Task(incident_id=inc.id, title="Testauftrag")
+    db.add(task)
+    db.flush()
+    rel = "task/1/xyz.jpg"
+    p = tmp_path / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"original")
+    media = TaskMedia(task_id=task.id, incident_id=inc.id, kind="image",
+                      original_filename="xyz.jpg", storage_path=rel, mime_type="image/jpeg", bytes=8)
+    db.add(media)
+    db.flush()
+    return org, media
+
+
+def _echtes_png(groesse=(2, 2)) -> str:
+    import io as _io
+
+    from PIL import Image
+    buf = _io.BytesIO()
+    Image.new("RGB", groesse, color=(1, 2, 3)).save(buf, "PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def test_save_annotation_reserviert_quota_fuer_task_medien(db, real_task_media):
+    from app.services.storage_service import get_org_storage_info
+    org, media = real_task_media
+
+    ann.save_annotation(db, _USER, "task", media, '{"a":1}', _echtes_png())
+    db.commit()
+
+    abs_png = ann._annotated_abs_path("task", media)
+    assert abs_png.exists()
+    assert get_org_storage_info(db, org.id)["used_bytes"] == abs_png.stat().st_size
+    # org_id der Annotation-Zeile wird beim Speichern nachgetragen (war vorher
+    # immer NULL fuer Task/Message/Person, siehe get_or_create-Aufruf)
+    assert ann.get_annotation(db, "task", media.id).org_id == org.id
+
+
+def test_save_annotation_re_save_bucht_nur_delta(db, real_task_media):
+    from app.services.storage_service import get_org_storage_info
+    org, media = real_task_media
+
+    ann.save_annotation(db, _USER, "task", media, "STAND-A", _echtes_png((2, 2)))
+    db.commit()
+    abs_png = ann._annotated_abs_path("task", media)
+    erste_groesse = abs_png.stat().st_size
+
+    # Zweites Speichern derselben Annotation (ueberschreibt dieselbe Datei) darf
+    # nicht nochmal die volle Groesse buchen, nur die Differenz -- deutlich
+    # groesseres Bild, damit die Dateigroesse garantiert unterschiedlich ist.
+    ann.save_annotation(db, _USER, "task", media, "STAND-B", _echtes_png((80, 80)))
+    db.commit()
+    zweite_groesse = abs_png.stat().st_size
+
+    assert zweite_groesse != erste_groesse
+    assert get_org_storage_info(db, org.id)["used_bytes"] == zweite_groesse
+
+
+def test_delete_annotation_and_files_gibt_quota_frei_und_loescht_datei(db, real_task_media):
+    from app.services.storage_service import get_org_storage_info
+    org, media = real_task_media
+
+    ann.save_annotation(db, _USER, "task", media, '{"a":1}', _echtes_png())
+    db.commit()
+    abs_png = ann._annotated_abs_path("task", media)
+    assert abs_png.exists()
+    assert get_org_storage_info(db, org.id)["used_bytes"] > 0
+
+    ann.delete_annotation_and_files(db, "task", media)
+    db.commit()
+
+    assert not abs_png.exists()
+    assert get_org_storage_info(db, org.id)["used_bytes"] == 0
+    assert ann.get_annotation(db, "task", media.id) is None
+
+
+def test_delete_media_raeumt_annotation_mit_auf(db, real_task_media):
+    """media_service.delete_media() (Task/Message/Person) muss beim Loeschen der
+    Medienzeile auch eine vorhandene Annotation inkl. Quota-Freigabe entfernen."""
+    from app.services.media_service import delete_media
+    from app.services.storage_service import get_org_storage_info
+    org, media = real_task_media
+
+    ann.save_annotation(db, _USER, "task", media, '{"a":1}', _echtes_png())
+    db.commit()
+    abs_png = ann._annotated_abs_path("task", media)
+    assert abs_png.exists()
+
+    delete_media(media, db)
+    db.commit()
+
+    assert not abs_png.exists()
+    assert get_org_storage_info(db, org.id)["used_bytes"] == 0
+    assert ann.get_annotation(db, "task", 1) is None

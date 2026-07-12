@@ -203,6 +203,15 @@ def reconcile_storage(db: Session, org_id: int) -> int:
         {"oid": org_id},
     )
     total = int(result.scalar() or 0)
+
+    # Annotierte Bilder (_annotated.png je bearbeitetem Foto) stehen in keiner
+    # bytes-Spalte einer Medientabelle (die bleibt beim Original) -- reiner
+    # SQL-SUM erfasst sie nie. Ohne diese Ergaenzung wuerde "Speicher neu
+    # berechnen" den tatsaechlichen Verbrauch systematisch unterschaetzen
+    # (Bug, siehe Session 2026-07-12).
+    from app.services.annotation_service import total_annotated_bytes
+    total += total_annotated_bytes(db, org_id)
+
     from datetime import UTC, datetime
     now = datetime.now(UTC).isoformat() if _dialect(db) == "sqlite" else None
     if now:

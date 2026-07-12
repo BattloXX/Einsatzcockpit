@@ -10,9 +10,6 @@ Weitere Tests:
 """
 import asyncio
 import io
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -20,20 +17,20 @@ from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
 
+
 # BigInteger → INTEGER für SQLite
 @compiles(BigInteger, "sqlite")
 def _bigint_sqlite(element, compiler, **kw):
     return "INTEGER"
 
 from app.db import Base
-from app.models.master import FireDept, OrgStorageUsage
+from app.models.master import FireDept
 from app.services.storage_service import (
     get_org_storage_info,
     reconcile_storage,
     release_storage,
     reserve_storage,
 )
-
 
 TEST_DB_URL = "sqlite:///:memory:"
 
@@ -201,6 +198,51 @@ def test_reconcile_storage_includes_journal_and_cross_marker_media(db, orgs):
 
     total = reconcile_storage(db, org_a.id)
     assert total == 600, "reconcile_storage zaehlt journal_media/cross_marker_media nicht mit (KONS-1-Regression)"
+
+
+# ── reconcile_storage + annotierte Bilder: Regressionstest (Session 2026-07-12) ─
+# Annotierte PNGs stehen in keiner bytes-Spalte einer Medientabelle (die bleibt
+# beim Original) -- ein reiner SQL-SUM erfasst sie nie. reconcile_storage muss
+# sie ueber annotation_service.total_annotated_bytes() zusaetzlich einrechnen.
+
+def test_reconcile_storage_includes_annotated_images(db, orgs, monkeypatch, tmp_path):
+    import base64
+    from types import SimpleNamespace
+
+    from PIL import Image
+
+    from app.models.major_incident import IncidentSite, MajorIncident, SiteMedia
+    from app.services import annotation_service as ann_svc
+    from app.services import lage_media_service
+
+    org_a, _ = orgs
+    monkeypatch.setattr(lage_media_service, "_LAGE_MEDIA_DIR", str(tmp_path / "lage_media"))
+
+    lage = MajorIncident(org_id=org_a.id, name="Annotation-Reconcile-Testlage")
+    db.add(lage)
+    db.flush()
+    site = IncidentSite(major_incident_id=lage.id, org_id=org_a.id, bezeichnung="Stelle")
+    db.add(site)
+    db.flush()
+    media = SiteMedia(incident_site_id=site.id, stored_filename="orig.jpg",
+                      original_filename="orig.jpg", media_type="image", bytes=100, org_id=org_a.id)
+    db.add(media)
+    db.flush()
+
+    buf = io.BytesIO()
+    Image.new("RGB", (2, 2), color=(0, 255, 0)).save(buf, "PNG")
+    png_data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    ann_svc.save_annotation(db, SimpleNamespace(id=1), "site", media, '{"a":1}', png_data_url)
+    db.commit()
+
+    abs_png = ann_svc._annotated_abs_path("site", media)
+    assert abs_png.exists()
+
+    total = reconcile_storage(db, org_a.id)
+    assert total == 100 + abs_png.stat().st_size, (
+        "reconcile_storage zaehlt annotierte Bilder nicht mit -- Speicher-Anzeige "
+        "unterschaetzt den tatsaechlichen Verbrauch"
+    )
 
 
 # ── Retry bei transienten MariaDB-Sperrkonflikten (Vorfall 2026-07-06) ─────────

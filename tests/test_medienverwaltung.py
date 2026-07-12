@@ -167,3 +167,61 @@ def test_medienverwaltung_bulk_loeschen(client, setup_db):
         assert db.get(TaskMedia, id2) is None
     finally:
         db.close()
+
+
+# ── GSL-Medien (Site/CrossMarker/LageJournal): Session 2026-07-12 ────────────
+# Vorher schreibgeschuetzt in der Medienverwaltung, weil es dafuer keine
+# quota-korrekte Loeschfunktion gab -- jetzt ueber lage_media_service.delete_*.
+
+def _make_site_media(org_id: int, *, filename: str, size: int) -> tuple[int, int]:
+    from app.models.major_incident import IncidentSite, MajorIncident, SiteMedia
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        lage = MajorIncident(org_id=org_id, name="Medienverwaltung-Testlage")
+        db.add(lage)
+        db.flush()
+        site = IncidentSite(major_incident_id=lage.id, org_id=org_id, bezeichnung="Testlage-Stelle")
+        db.add(site)
+        db.flush()
+        media = SiteMedia(incident_site_id=site.id, stored_filename=filename,
+                          original_filename=filename, media_type="image", bytes=size, org_id=org_id)
+        db.add(media)
+        db.commit()
+        return media.id, lage.id
+    finally:
+        db.close()
+
+
+def test_medienverwaltung_zeigt_und_loescht_gsl_medien(client, setup_db):
+    from app.models.major_incident import SiteMedia
+    from app.services.storage_service import get_org_storage_info, reserve_storage
+
+    org_id = _make_org_admin("mv_admin_gsl", "mv-gsl")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        reserve_storage(db, org_id, 5_000)
+        db.commit()
+    finally:
+        db.close()
+    media_id, _lage_id = _make_site_media(org_id, filename="stelle.jpg", size=5_000)
+
+    _login(client, "mv_admin_gsl", "Test1234!")
+    r = client.get("/admin/medien")
+    assert "stelle.jpg" in r.text
+    assert f"/admin/medien/site/{media_id}/loeschen" in r.text
+
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(f"/admin/medien/site/{media_id}/loeschen",
+                    data={"_csrf": csrf}, follow_redirects=False)
+    assert r.status_code == 303
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.get(SiteMedia, media_id) is None
+        assert get_org_storage_info(db, org_id)["used_bytes"] == 0
+    finally:
+        db.close()

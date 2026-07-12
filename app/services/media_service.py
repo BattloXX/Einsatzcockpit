@@ -50,6 +50,9 @@ VIDEO_MIMES = {"video/mp4", "video/quicktime", "video/x-matroska", "video/webm"}
 
 ALLOWED_MIMES = IMAGE_MIMES | PDF_MIMES | VIDEO_MIMES
 
+# ORM-Klassenname -> annotation_service media_typ, fuer delete_media() (siehe unten)
+_ANNOTATABLE_TYP_BY_CLASS = {"TaskMedia": "task", "MessageMedia": "message", "PersonMedia": "person"}
+
 
 @dataclass
 class UploadResult:
@@ -522,6 +525,13 @@ def delete_media(media, db: Session) -> None:
             incident = db.get(Incident, incident_id)
             if incident:
                 _release(db, incident.primary_org_id, n_bytes)
+    # Annotation (falls das Bild bearbeitet wurde) mit aufraeumen: sonst bleibt
+    # die _annotated.png als Datei-Leiche liegen und ihre Quota-Reservierung
+    # wird nie freigegeben (Bug, siehe Session 2026-07-12).
+    _media_typ = _ANNOTATABLE_TYP_BY_CLASS.get(type(media).__name__)
+    if _media_typ:
+        from app.services.annotation_service import delete_annotation_and_files
+        delete_annotation_and_files(db, _media_typ, media)
     db.delete(media)
 
 

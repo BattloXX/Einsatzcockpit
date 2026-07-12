@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.major_incident import CrossMarkerMedia, LageJournalMedia, SiteMedia
@@ -267,3 +268,55 @@ def delete_cross_media_files(media: CrossMarkerMedia) -> None:
             p.unlink(missing_ok=True)
         except Exception:
             pass
+
+
+# ── Loeschen inkl. Quota-Freigabe + Annotation-Cleanup ────────────────────────
+# GSL-Medien (Site/CrossMarker/LageJournal) hatten bisher KEINE Loeschfunktion,
+# die die beim Upload reservierte Quota wieder freigibt (media_service.delete_media
+# macht das fuer Task/Message/Person schon lange richtig) -- Bug, siehe Session
+# 2026-07-12: jedes geloeschte GSL-Foto liess used_bytes dauerhaft zu hoch stehen.
+
+def delete_site_media(media: SiteMedia, db: Session) -> None:
+    """Loescht eine SiteMedia-Zeile inkl. Dateien, Annotation und Quota-Freigabe."""
+    for p in (site_media_path(media), site_thumb_path(media)):
+        try:
+            if p and p.exists():
+                p.unlink()
+        except OSError as e:
+            logger.warning("site media delete failed for %s: %s", p, e)
+    n_bytes = media.bytes or 0
+    if n_bytes > 0 and media.org_id:
+        from app.services.storage_service import release_storage
+        release_storage(db, media.org_id, n_bytes)
+    from app.services.annotation_service import delete_annotation_and_files
+    delete_annotation_and_files(db, "site", media)
+    db.delete(media)
+
+
+def delete_cross_marker_media(media: CrossMarkerMedia, db: Session) -> None:
+    """Loescht eine CrossMarkerMedia-Zeile inkl. Dateien, Annotation und Quota-Freigabe."""
+    delete_cross_media_files(media)
+    n_bytes = media.bytes or 0
+    if n_bytes > 0 and media.org_id:
+        from app.services.storage_service import release_storage
+        release_storage(db, media.org_id, n_bytes)
+    from app.services.annotation_service import delete_annotation_and_files
+    delete_annotation_and_files(db, "cross_marker", media)
+    db.delete(media)
+
+
+def delete_journal_media(media: LageJournalMedia, db: Session) -> None:
+    """Loescht eine LageJournalMedia-Zeile inkl. Dateien, Annotation und Quota-Freigabe."""
+    for p in (journal_media_path(media), journal_thumb_path(media)):
+        try:
+            if p and p.exists():
+                p.unlink()
+        except OSError as e:
+            logger.warning("journal media delete failed for %s: %s", p, e)
+    n_bytes = media.bytes or 0
+    if n_bytes > 0 and media.org_id:
+        from app.services.storage_service import release_storage
+        release_storage(db, media.org_id, n_bytes)
+    from app.services.annotation_service import delete_annotation_and_files
+    delete_annotation_and_files(db, "lage_journal", media)
+    db.delete(media)

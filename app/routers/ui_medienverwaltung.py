@@ -139,7 +139,7 @@ def _gather_gsl(db: Session, org_id: int) -> list[_Row]:
             annotated=m.id in ann_versions, annotated_at=ann_versions.get(m.id),
             context_label=f"Lage-Stelle: {site.bezeichnung}" if site else "–",
             context_url=f"/lage/{site.major_incident_id}" if site else None,
-            deletable=False,
+            deletable=True,
             thumb_url=f"/lage-medien/thumb/{m.id}" if m.media_type == "image" else None,
             file_url=f"/lage-medien/{m.id}",
         ))
@@ -166,7 +166,7 @@ def _gather_gsl(db: Session, org_id: int) -> list[_Row]:
             annotated=m.id in ann_versions, annotated_at=ann_versions.get(m.id),
             context_label=f"Übergreifend: {marker.title}" if marker else "–",
             context_url=f"/lage/{marker.major_incident_id}" if marker else None,
-            deletable=False,
+            deletable=True,
             thumb_url=(f"{base}?thumb=true" if base and m.media_type == "image" else None),
             file_url=base or "#",
         ))
@@ -193,7 +193,7 @@ def _gather_gsl(db: Session, org_id: int) -> list[_Row]:
             annotated=m.id in ann_versions, annotated_at=ann_versions.get(m.id),
             context_label="Lage-Journal" if entry else "–",
             context_url=f"/lage/{entry.major_incident_id}" if entry else None,
-            deletable=False,
+            deletable=True,
             thumb_url=(f"{base}?thumb=true" if base and m.media_type == "image" else None),
             file_url=base or "#",
         ))
@@ -328,25 +328,44 @@ async def medien_bulk_loeschen(
 
 
 def _loesche_eines(db: Session, user, typ: str, media_id: int) -> None:
-    """Loescht eine Medienzeile — nur fuer die drei Typen mit fertiger, quota-
-    korrekter Loeschfunktion (Task/Message/Person). Fuer GSL-Medientypen existiert
-    dafuer heute keine generische Funktion (siehe annotation_service-Recherche);
-    diese bleiben schreibgeschuetzt und werden hier ignoriert."""
-    from app.models.incident import Incident, MessageMedia, PersonMedia, TaskMedia
-    from app.services.media_service import delete_media
+    """Loescht eine Medienzeile — Einsatz-Medien (Task/Message/Person) ueber
+    incident.primary_org_id org-geprueft, GSL-Medien (Site/CrossMarker/
+    LageJournal) direkt ueber media.org_id."""
+    if typ in ("task", "message", "person"):
+        from app.models.incident import Incident, MessageMedia, PersonMedia, TaskMedia
+        from app.services.media_service import delete_media
 
-    model = {"task": TaskMedia, "message": MessageMedia, "person": PersonMedia}.get(typ)
-    if model is None:
+        model = {"task": TaskMedia, "message": MessageMedia, "person": PersonMedia}[typ]
+        media = db.get(model, media_id)
+        if media is None:
+            return
+        incident = db.get(Incident, media.incident_id)
+        if not incident:
+            return
+        if not (has_role(user, "system_admin") or (user.org_id and incident.primary_org_id == user.org_id)):
+            return
+        delete_media(media, db)
         return
-    media = db.get(model, media_id)
-    if media is None:
-        return
-    incident = db.get(Incident, media.incident_id)
-    if not incident:
-        return
-    if not (has_role(user, "system_admin") or (user.org_id and incident.primary_org_id == user.org_id)):
-        return
-    delete_media(media, db)
+
+    if typ in ("site", "cross_marker", "lage_journal"):
+        from app.models.major_incident import CrossMarkerMedia, LageJournalMedia, SiteMedia
+        from app.services.lage_media_service import (
+            delete_cross_marker_media,
+            delete_journal_media,
+            delete_site_media,
+        )
+
+        model, deleter = {
+            "site": (SiteMedia, delete_site_media),
+            "cross_marker": (CrossMarkerMedia, delete_cross_marker_media),
+            "lage_journal": (LageJournalMedia, delete_journal_media),
+        }[typ]
+        media = db.get(model, media_id)
+        if media is None:
+            return
+        if not (has_role(user, "system_admin") or (user.org_id and media.org_id == user.org_id)):
+            return
+        deleter(media, db)
 
 
 def _redirect_zurueck(request: Request) -> RedirectResponse:

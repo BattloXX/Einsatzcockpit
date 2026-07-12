@@ -1408,7 +1408,7 @@ async def site_media_delete(
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
     from app.models.major_incident import SiteMedia as _SiteMedia
-    from app.services.lage_media_service import site_media_path, site_thumb_path
+    from app.services.lage_media_service import delete_site_media
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
@@ -1418,10 +1418,7 @@ async def site_media_delete(
     media = db.get(_SiteMedia, media_id)
     if not media or media.incident_site_id != site_id:
         raise HTTPException(status_code=404)
-    for p in (site_media_path(media), site_thumb_path(media)):
-        if p and p.exists():
-            p.unlink(missing_ok=True)
-    db.delete(media)
+    delete_site_media(media, db)
     db.commit()
     return Response(status_code=204)
 
@@ -2039,7 +2036,39 @@ async def lage_journal_delete(
     entry = db.get(LageJournalEntry, entry_id)
     if not entry or entry.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
+    # Fotos einzeln vorher aufraeumen (Dateien + Quota-Freigabe + Annotation) --
+    # die ORM-Kaskade wuerde die Zeilen zwar mitloeschen, aber weder Dateien
+    # entfernen noch Quota freigeben (Bug, siehe Session 2026-07-12).
+    from app.services.lage_media_service import delete_journal_media
+    for m in list(entry.media):
+        delete_journal_media(m, db)
     db.delete(entry)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/lage/{lage_id}/journal/{entry_id}/medien/{media_id}/loeschen")
+async def journal_media_delete(
+    request: Request,
+    lage_id: int,
+    entry_id: int,
+    media_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    """Loescht ein einzelnes Foto aus dem Lage-Journal (bisher gab es nur die
+    Loeschung des ganzen Journal-Eintrags inkl. aller Fotos)."""
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    entry = db.get(LageJournalEntry, entry_id)
+    if not entry or entry.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    media = db.get(LageJournalMedia, media_id)
+    if not media or media.journal_entry_id != entry_id:
+        raise HTTPException(status_code=404)
+    from app.services.lage_media_service import delete_journal_media
+    delete_journal_media(media, db)
     db.commit()
     return Response(status_code=204)
 
@@ -2456,9 +2485,8 @@ async def cross_marker_media_delete(
     media = db.get(CrossMarkerMedia, media_id)
     if not media or media.marker_id != mid:
         raise HTTPException(status_code=404)
-    from app.services.lage_media_service import delete_cross_media_files
-    delete_cross_media_files(media)
-    db.delete(media)
+    from app.services.lage_media_service import delete_cross_marker_media
+    delete_cross_marker_media(media, db)
     db.commit()
     return Response(status_code=204)
 

@@ -35,6 +35,7 @@ class MediaSpec:
     abs_path: Callable[[object], Path]        # media -> Originaldatei
     access: Callable[[Session, User, object], bool]
     thumb_path: Callable[[object], Path | None]  # media -> Thumbnail-Datei (fuer Regenerierung)
+    org_of: Callable[[Session, object], int | None]  # media -> org_id (fuer Quota-Buchung)
 
 
 def _may_access_incident(user: User, incident) -> bool:  # type: ignore[no-untyped-def]
@@ -56,6 +57,22 @@ def _access_org(db: Session, user: User, media) -> bool:  # type: ignore[no-unty
     return has_role(user, "system_admin") or bool(user.org_id and media.org_id == user.org_id)
 
 
+def _org_of_incident(db: Session, media) -> int | None:  # type: ignore[no-untyped-def]
+    """Org-Ermittlung fuer Task/Message/Person-Medien: keine eigene org_id-Spalte,
+    Org kommt ueber den verknuepften Einsatz."""
+    incident_id = getattr(media, "incident_id", None)
+    if incident_id is None:
+        return None
+    from app.models.incident import Incident
+    incident = db.get(Incident, incident_id)
+    return incident.primary_org_id if incident else None
+
+
+def _org_of_direct(db: Session, media) -> int | None:  # type: ignore[no-untyped-def]
+    """Org-Ermittlung fuer GSL-Medien: org_id steht direkt auf der Zeile."""
+    return getattr(media, "org_id", None)
+
+
 def _build_registry() -> dict[str, MediaSpec]:
     from app.models.incident import MessageMedia, PersonMedia, TaskMedia
     from app.models.major_incident import CrossMarkerMedia, LageJournalMedia, SiteMedia
@@ -74,17 +91,17 @@ def _build_registry() -> dict[str, MediaSpec]:
 
     return {
         "task":         MediaSpec("task", TaskMedia, kind_ec, absolute_path,
-                                   _access_incident, absolute_thumb_path),
+                                   _access_incident, absolute_thumb_path, _org_of_incident),
         "message":      MediaSpec("message", MessageMedia, kind_ec, absolute_path,
-                                   _access_incident, absolute_thumb_path),
+                                   _access_incident, absolute_thumb_path, _org_of_incident),
         "person":       MediaSpec("person", PersonMedia, kind_ec, absolute_path,
-                                   _access_incident, absolute_thumb_path),
+                                   _access_incident, absolute_thumb_path, _org_of_incident),
         "site":         MediaSpec("site", SiteMedia, kind_gsl, site_media_path,
-                                   _access_org, site_thumb_path),
+                                   _access_org, site_thumb_path, _org_of_direct),
         "cross_marker": MediaSpec("cross_marker", CrossMarkerMedia, kind_gsl, cross_media_path,
-                                   _access_org, cross_media_thumb_path),
+                                   _access_org, cross_media_thumb_path, _org_of_direct),
         "lage_journal": MediaSpec("lage_journal", LageJournalMedia, kind_gsl, journal_media_path,
-                                   _access_org, journal_thumb_path),
+                                   _access_org, journal_thumb_path, _org_of_direct),
     }
 
 
@@ -154,8 +171,21 @@ def save_annotation(
     annotation_json: str, png_data_url: str | None,
 ) -> MediaAnnotation:
     """Speichert Vektordaten + optional das flache PNG (neben dem Original).
-    Archiviert den vorherigen annotation_json-Stand."""
-    ann = get_or_create(db, media_typ, media.id, getattr(media, "org_id", None))
+    Archiviert den vorherigen annotation_json-Stand.
+
+    Quota: das flache PNG belegt echten Speicherplatz, der bisher nie gegen die
+    Org-Quota gebucht wurde (Bug, siehe Session 2026-07-12) -- reserve/release
+    laeuft ueber das Groessen-Delta zur vorherigen Annotation (Datei wird am
+    selben Pfad ueberschrieben, ein zweites Speichern derselben Annotation soll
+    also nicht nochmal die volle Groesse buchen). reserve_storage() wird VOR
+    dem Schreiben aufgerufen, damit bei ueberschrittener Quota (413) keine
+    Datei-Leiche auf der Platte zurueckbleibt."""
+    spec = spec_for(media_typ)
+    org_id = spec.org_of(db, media) if spec else None
+
+    ann = get_or_create(db, media_typ, media.id, org_id)
+    if org_id is not None:
+        ann.org_id = org_id  # self-heilend: korrigiert historisch leere org_id (Task/Message/Person)
     if ann.annotation_json:
         db.add(MediaAnnotationVersion(
             annotation_id=ann.id, annotation_json=ann.annotation_json, created_by=user.id,
@@ -171,9 +201,17 @@ def save_annotation(
             raw = None
         if raw:
             abs_path = _annotated_abs_path(media_typ, media)
+            old_bytes = abs_path.stat().st_size if abs_path.exists() else 0
+            delta = len(raw) - old_bytes
+            if org_id is not None and delta > 0:
+                from app.services.storage_service import reserve_storage
+                reserve_storage(db, org_id, delta)
             abs_path.parent.mkdir(parents=True, exist_ok=True)
             abs_path.write_bytes(raw)
             ann.annotated_file = abs_path.name
+            if org_id is not None and delta < 0:
+                from app.services.storage_service import release_storage
+                release_storage(db, org_id, -delta)
             _regenerate_thumb(media_typ, media, raw)
     db.flush()
     return ann
@@ -196,6 +234,55 @@ def _regenerate_thumb(media_typ: str, media, png_bytes: bytes) -> None:  # type:
     thumb_abs = spec.thumb_path(media)
     if thumb_abs is not None:
         regenerate_thumbnail_from_bytes(png_bytes, thumb_abs)
+
+
+def delete_annotation_and_files(db: Session, media_typ: str, media) -> None:  # type: ignore[no-untyped-def]
+    """Raeumt die Annotation einer Medienzeile auf, wenn diese selbst geloescht
+    wird: gibt die dafuer reservierte Quota frei, loescht die annotierte PNG-
+    Datei und die MediaAnnotation-Zeile (+Versionsverlauf). Ohne diesen Aufruf
+    blieb die _annotated.png bisher als Datei-Leiche liegen UND die dafuer
+    reservierte Quota wurde nie wieder freigegeben (Bug, siehe Session
+    2026-07-12). Muss von JEDER Medien-Loeschfunktion aufgerufen werden, die
+    ein annotierbares Bild (Task/Message/Person/Site/CrossMarker/LageJournal)
+    entfernt."""
+    ann = get_annotation(db, media_typ, media.id)
+    if ann is None:
+        return
+    if ann.annotated_file:
+        abs_path = _annotated_abs_path(media_typ, media)
+        if abs_path.exists():
+            n_bytes = abs_path.stat().st_size
+            spec = spec_for(media_typ)
+            org_id = spec.org_of(db, media) if spec else None
+            if org_id is not None and n_bytes > 0:
+                from app.services.storage_service import release_storage
+                release_storage(db, org_id, n_bytes)
+            abs_path.unlink(missing_ok=True)
+    db.query(MediaAnnotationVersion).filter(MediaAnnotationVersion.annotation_id == ann.id).delete()
+    db.delete(ann)
+
+
+def total_annotated_bytes(db: Session, org_id: int) -> int:
+    """Summe der Dateigroessen aller aktuell vorhandenen annotierten PNGs einer
+    Org. Wird von storage_service.reconcile_storage() addiert: annotierte
+    Dateien stehen nicht in der bytes-Spalte der Medientabellen (die bleibt
+    beim Original), ein reiner SQL-SUM ueber die Medientabellen erfasst sie
+    also nie (Bug, siehe Session 2026-07-12)."""
+    total = 0
+    rows = db.query(MediaAnnotation).filter(MediaAnnotation.annotated_file.isnot(None)).all()
+    for ann in rows:
+        spec = spec_for(ann.media_typ)
+        if spec is None:
+            continue
+        media = db.get(spec.model, ann.media_id)
+        if media is None:
+            continue
+        if spec.org_of(db, media) != org_id:
+            continue
+        abs_path = _annotated_abs_path(ann.media_typ, media)
+        if abs_path.exists():
+            total += abs_path.stat().st_size
+    return total
 
 
 def display_abs_path(db: Session, media_typ: str, media) -> Path | None:  # type: ignore[no-untyped-def]
