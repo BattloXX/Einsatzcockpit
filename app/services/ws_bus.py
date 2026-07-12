@@ -30,6 +30,8 @@ logger = logging.getLogger("einsatzleiter.ws_bus")
 # Kanäle
 CH_WS = "ec:ws"   # Browser-Broadcasts (ConnectionManager: Einsatz/Lage/Org)
 CH_GW = "ec:gw"   # Print-&-Alarm-Gateway-Ebene (print_job, command, config_sync, job_status)
+CH_LAGEDOKUMENT = "ec:lagedokument"              # Yjs-Sync-Updates (Lagedokument-Inhalt)
+CH_LAGEDOKUMENT_AWARENESS = "ec:lagedokument-aw"  # Yjs-Awareness (Presence/Cursor)
 
 _redis = None
 _pubsub_task: asyncio.Task | None = None

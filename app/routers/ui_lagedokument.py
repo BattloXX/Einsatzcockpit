@@ -9,8 +9,12 @@ Lagedarstellung (SKKM-Lagemeldung, Uebergabeprotokoll o.Ae.).
 
 PR 1: klassisches Speichern (kein Realtime-Sync).
 PR 2: WebSocket-Endpoint fuer die Yjs-CRDT-Live-Kollaboration (Sync-Relay ueber
-app/services/lagedokument_collab.py). Rooms leben In-Memory pro Worker -- fuer
-Mehr-Worker-Korrektheit siehe PR 5 (Redis-Relay).
+app/services/lagedokument_collab.py).
+PR 5: Mehr-Worker-Korrektheit ueber den Redis-Bus (app/services/ws_bus.py) --
+lagedokument_collab wird deshalb HIER auf Modulebene importiert (nicht erst
+lazy im WS-Handler), damit dessen ws_bus.register(...)-Aufrufe VOR
+ws_bus.start() (main.py, nach Router-Import) laufen und die Kanaele
+abonniert werden.
 """
 from __future__ import annotations
 
@@ -25,6 +29,7 @@ from app.core.permissions import has_role, require_role, same_org_or_system_admi
 from app.core.templating import templates
 from app.db import get_db
 from app.models.major_incident import LageDokument, MajorIncident
+from app.services.lagedokument_collab import get_or_create_room, release_room_if_empty
 
 router = APIRouter()
 logger = logging.getLogger("einsatzleiter.lagedokument")
@@ -127,7 +132,6 @@ async def lagedokument_ws(websocket: WebSocket, lage_id: int):
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.user import User
-    from app.services.lagedokument_collab import get_or_create_room, release_room_if_empty
 
     token = websocket.cookies.get("session")
     session_data = unsign_session(token) if token else None

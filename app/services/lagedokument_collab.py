@@ -9,17 +9,24 @@ Persistenz: debounced Voll-Snapshot (10s nach der letzten Aenderung, zusaetzlich
 beim Verwerfen eines leeren Rooms). Kein Event-Log/eigene BaseYStore-Klasse --
 fuer ein einzelnes Textdokument je Lage waere das unnoetige Komplexitaet.
 
-WICHTIG: Rooms leben nur In-Memory PRO WORKER (wie die bestehende Lageführung-
-Presence in app/routers/ws.py) -- bei mehreren Workern (Prod: -w 2) sehen sich
-Nutzer auf unterschiedlichen Workern ohne den Redis-Relay aus PR5 nicht live.
+Mehr-Worker-Korrektheit (Prod: -w 2): Rooms leben weiterhin In-Memory PRO
+WORKER (wie die bestehende Lageführung-Presence in app/routers/ws.py), aber
+Inhalts-Updates UND Awareness (Presence/Cursor) werden zusaetzlich ueber den
+bestehenden Redis-Bus (app/services/ws_bus.py, CH_LAGEDOKUMENT[_AWARENESS])
+an alle Worker weitergereicht, die lokal denselben Room offen haben -- ohne
+REDIS_URL (Dev/-w 1) ist der Bus inaktiv und ws_bus.publish() ein No-Op, dann
+bleibt alles wie zuvor rein In-Process.
 """
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 
-from pycrdt import Doc
+from pycrdt import Doc, YMessageType, read_message
 from pycrdt.websocket.yroom import YRoom
+
+from app.services import ws_bus
 
 logger = logging.getLogger("einsatzleiter.lagedokument_collab")
 
@@ -31,6 +38,13 @@ _save_tasks: dict[int, asyncio.Task] = {}
 _dirty: dict[int, bool] = {}
 _room_org: dict[int, int] = {}
 _lock = asyncio.Lock()
+
+# Waehrend ein via Redis empfangenes Remote-Update/-Awareness-Frame auf den
+# lokalen Room angewendet wird, fuer diese Lage gesetzt -- verhindert, dass
+# der eigene ydoc-Observer/on_message-Hook es sofort wieder zurueck an den
+# Bus publiziert (Echo-Schleife zwischen den Workern).
+_applying_remote_update: set[int] = set()
+_applying_remote_awareness: set[int] = set()
 
 
 def _load_ydoc_state(lage_id: int) -> tuple[bytes | None, str | None]:
@@ -84,8 +98,95 @@ def _save_ydoc_state(lage_id: int, state: bytes, org_id: int) -> None:
         db.close()
 
 
-def _mark_dirty(lage_id: int, _event=None) -> None:
+def _on_ydoc_event(lage_id: int, event) -> None:
+    """ydoc.observe-Callback: markiert den Room als dirty (fuer den debounced
+    Save) UND reicht eigene (nicht via Bus empfangene) Aenderungen an die
+    anderen Worker weiter."""
     _dirty[lage_id] = True
+    if lage_id in _applying_remote_update or not ws_bus.enabled():
+        return
+    asyncio.create_task(_publish_update(lage_id, event.update))
+
+
+async def _publish_update(lage_id: int, update: bytes) -> None:
+    await ws_bus.publish(ws_bus.CH_LAGEDOKUMENT, {
+        "lage_id": lage_id,
+        "update": base64.b64encode(update).decode("ascii"),
+    })
+
+
+async def _bus_deliver_update(payload: dict) -> None:
+    """Bus-Handler (CH_LAGEDOKUMENT): wendet ein auf einem anderen Worker
+    entstandenes Update auf den lokalen Room an (No-Op, falls hier kein
+    lokaler Room fuer diese Lage offen ist)."""
+    lage_id = payload.get("lage_id")
+    update_b64 = payload.get("update")
+    if lage_id is None or not update_b64:
+        return
+    room = _rooms.get(lage_id)
+    if room is None:
+        return
+    try:
+        update = base64.b64decode(update_b64)
+    except Exception:
+        logger.exception("Lagedokument %s: ungueltiges Bus-Update ignoriert", lage_id)
+        return
+    _applying_remote_update.add(lage_id)
+    try:
+        room.ydoc.apply_update(update)
+    finally:
+        _applying_remote_update.discard(lage_id)
+
+
+def _on_room_message(lage_id: int, message: bytes) -> bool:
+    """room.on_message-Hook: reicht Awareness-Rohnachrichten (Presence/Cursor)
+    zusaetzlich an die anderen Worker weiter. Gibt nie True zurueck -- die
+    normale Verarbeitung durch YRoom.serve() (lokale Zustellung, Anwenden auf
+    room.awareness) laeuft immer unveraendert weiter, dies ist nur ein
+    zusaetzlicher Abzweig."""
+    if message and message[0] == YMessageType.AWARENESS and lage_id not in _applying_remote_awareness \
+            and ws_bus.enabled():
+        asyncio.create_task(_publish_awareness(lage_id, message))
+    return False
+
+
+async def _publish_awareness(lage_id: int, message: bytes) -> None:
+    await ws_bus.publish(ws_bus.CH_LAGEDOKUMENT_AWARENESS, {
+        "lage_id": lage_id,
+        "message": base64.b64encode(message).decode("ascii"),
+    })
+
+
+async def _bus_deliver_awareness(payload: dict) -> None:
+    """Bus-Handler (CH_LAGEDOKUMENT_AWARENESS): reicht ein auf einem anderen
+    Worker empfangenes Awareness-Frame an die lokal verbundenen Clients
+    weiter und wendet es auf den lokalen room.awareness-Zustand an."""
+    lage_id = payload.get("lage_id")
+    message_b64 = payload.get("message")
+    if lage_id is None or not message_b64:
+        return
+    room = _rooms.get(lage_id)
+    if room is None:
+        return
+    try:
+        message = base64.b64decode(message_b64)
+    except Exception:
+        logger.exception("Lagedokument %s: ungueltiges Bus-Awareness-Frame ignoriert", lage_id)
+        return
+    _applying_remote_awareness.add(lage_id)
+    try:
+        for client in list(room.clients):
+            asyncio.create_task(client.send(message))
+        room.awareness.apply_awareness_update(read_message(message[1:]), room)
+    finally:
+        _applying_remote_awareness.discard(lage_id)
+
+
+# Beim Import registrieren, damit ws_bus.start() (main.py, nach Router-Import)
+# beide Kanaele abonniert -- ui_lagedokument.py importiert dieses Modul daher
+# auf Modulebene (nicht erst lazy im WS-Handler), siehe dortiger Kommentar.
+ws_bus.register(ws_bus.CH_LAGEDOKUMENT, _bus_deliver_update)
+ws_bus.register(ws_bus.CH_LAGEDOKUMENT_AWARENESS, _bus_deliver_awareness)
 
 
 async def _debounced_saver(lage_id: int, org_id: int) -> None:
@@ -128,7 +229,8 @@ async def get_or_create_room(lage_id: int, org_id: int) -> YRoom:
         _rooms[lage_id] = room
         _room_org[lage_id] = org_id
         _dirty[lage_id] = False
-        room.ydoc.observe(lambda event, _lid=lage_id: _mark_dirty(_lid, event))
+        room.ydoc.observe(lambda event, _lid=lage_id: _on_ydoc_event(_lid, event))
+        room.on_message = lambda message, _lid=lage_id: _on_room_message(_lid, message)
         _room_tasks[lage_id] = asyncio.create_task(room.start())
         await room.started.wait()
         _save_tasks[lage_id] = asyncio.create_task(_debounced_saver(lage_id, org_id))
@@ -164,3 +266,5 @@ async def release_room_if_empty(lage_id: int) -> None:
         _rooms.pop(lage_id, None)
         _dirty.pop(lage_id, None)
         _room_org.pop(lage_id, None)
+        _applying_remote_update.discard(lage_id)
+        _applying_remote_awareness.discard(lage_id)
