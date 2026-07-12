@@ -3,6 +3,41 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/quill.snow.css">
+{% if can_edit %}
+<script type="importmap">
+{
+  "imports": {
+    "yjs": "/static/js/collab/yjs.mjs",
+    "y-websocket": "/static/js/collab/y-websocket.js",
+    "y-protocols/auth": "/static/js/collab/y-protocols/auth.js",
+    "y-protocols/awareness": "/static/js/collab/y-protocols/awareness.js",
+    "y-protocols/sync": "/static/js/collab/y-protocols/sync.js",
+    "lib0/array": "/static/js/collab/lib0/array.js",
+    "lib0/binary": "/static/js/collab/lib0/binary.js",
+    "lib0/broadcastchannel": "/static/js/collab/lib0/broadcastchannel.js",
+    "lib0/buffer": "/static/js/collab/lib0/buffer.js",
+    "lib0/decoding": "/static/js/collab/lib0/decoding.js",
+    "lib0/encoding": "/static/js/collab/lib0/encoding.js",
+    "lib0/environment": "/static/js/collab/lib0/environment.js",
+    "lib0/error": "/static/js/collab/lib0/error.js",
+    "lib0/function": "/static/js/collab/lib0/function.js",
+    "lib0/iterator": "/static/js/collab/lib0/iterator.js",
+    "lib0/logging": "/static/js/collab/lib0/logging.js",
+    "lib0/map": "/static/js/collab/lib0/map.js",
+    "lib0/math": "/static/js/collab/lib0/math.js",
+    "lib0/object": "/static/js/collab/lib0/object.js",
+    "lib0/observable": "/static/js/collab/lib0/observable.js",
+    "lib0/promise": "/static/js/collab/lib0/promise.js",
+    "lib0/random": "/static/js/collab/lib0/random.js",
+    "lib0/set": "/static/js/collab/lib0/set.js",
+    "lib0/string": "/static/js/collab/lib0/string.js",
+    "lib0/time": "/static/js/collab/lib0/time.js",
+    "lib0/url": "/static/js/collab/lib0/url.js",
+    "lib0/webcrypto": "/static/js/collab/lib0/webcrypto.js"
+  }
+}
+</script>
+{% endif %}
 <style>
 /* ── Quill Dark Mode (identisch zu stab.html) ─────────────────────────────── */
 .ql-toolbar.ql-snow {
@@ -74,6 +109,13 @@ document.addEventListener('DOMContentLoaded', function() {
       [{list:'ordered'},{list:'bullet'}],[{header:[3,4,false]}],['blockquote'],['clean']] },
     placeholder: 'Lagedokument…',
   });
+  // Vorbefuellen aus dem zuletzt gespeicherten HTML-Snapshot -- WICHTIG als
+  // Fallback, falls der Yjs-WebSocket-Sync nicht zustande kommt (z.B. Firewall/
+  // Proxy blockiert WS): ohne Vorbefuellen wuerde der Speichern-Button dann
+  // versehentlich leeren Inhalt sichern. Sobald die Live-Kollaboration (siehe
+  // Modul-Script unten) synchronisiert hat, ueberschreibt QuillBinding den
+  // Editorinhalt autoritativ aus dem Yjs-Dokument (kurzes Aufblitzen moeglich,
+  // aber kein Datenverlustrisiko).
   var initial = {{ (dokument.content_html or '')|tojson }};
   if (initial) { _ldQuill.clipboard.dangerouslyPasteHTML(initial); }
 });
@@ -82,6 +124,21 @@ document.getElementById('form-lagedokument').addEventListener('submit', function
   if (!_ldQuill) return;
   var html = _ldQuill.getSemanticHTML ? _ldQuill.getSemanticHTML() : _ldQuill.root.innerHTML;
   document.getElementById('lagedokument-content-html').value = html;
+});
+</script>
+<script type="module">
+import { initLagedokumentCollab } from '/static/js/lagedokument-collab.js';
+
+document.addEventListener('DOMContentLoaded', function () {
+  function start() {
+    if (!_ldQuill) { setTimeout(start, 20); return; }
+    initLagedokumentCollab({
+      lageId: {{ lage.id }},
+      quill: _ldQuill,
+      userName: {{ (user.display_name or user.username)|tojson }},
+    });
+  }
+  start();
 });
 </script>
 {% endif %}

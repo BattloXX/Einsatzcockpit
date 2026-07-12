@@ -33,7 +33,7 @@ _room_org: dict[int, int] = {}
 _lock = asyncio.Lock()
 
 
-def _load_ydoc_state(lage_id: int) -> bytes | None:
+def _load_ydoc_state(lage_id: int) -> tuple[bytes | None, str | None]:
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.major_incident import LageDokument
@@ -42,9 +42,26 @@ def _load_ydoc_state(lage_id: int) -> bytes | None:
     set_tenant_context(db, None)
     try:
         dok = db.query(LageDokument).filter(LageDokument.major_incident_id == lage_id).first()
-        return dok.ydoc_state if dok else None
+        if dok is None:
+            return None, None
+        return dok.ydoc_state, dok.content_html
     finally:
         db.close()
+
+
+def _strip_html_to_text(html: str) -> str:
+    """Best-effort Klartext-Extraktion fuer den einmaligen Bootstrap eines
+    Y.Text aus einem vorhandenen content_html-Snapshot (Uebergangsfall: ein
+    Lagedokument, das per klassischem Speichern-Formular -- PR1, vor dem ersten
+    Live-Kollaborations-Aufruf -- entstanden ist, hat noch keinen ydoc_state).
+    Verliert Formatierung, erhaelt aber den Text -- kein sicherheitsrelevanter
+    Pfad (nur Ausgangszustand des Editors, kein gespeicherter/gerenderter Wert)."""
+    import re
+    from html import unescape
+
+    text = re.sub(r"<(p|div|br|li)[^>]*>", "\n", html, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    return unescape(text).strip()
 
 
 def _save_ydoc_state(lage_id: int, state: bytes, org_id: int) -> None:
@@ -91,14 +108,22 @@ async def get_or_create_room(lage_id: int, org_id: int) -> YRoom:
         if room is not None:
             return room
         doc = Doc()
-        existing = await asyncio.to_thread(_load_ydoc_state, lage_id)
-        if existing:
+        existing_state, existing_html = await asyncio.to_thread(_load_ydoc_state, lage_id)
+        if existing_state:
             try:
-                doc.apply_update(existing)
+                doc.apply_update(existing_state)
             except Exception:
                 logger.exception(
                     "Lagedokument %s: gespeicherter CRDT-Zustand beschaedigt, starte leer", lage_id,
                 )
+        elif existing_html:
+            # Bootstrap: noch kein Yjs-Zustand vorhanden, aber ein klassischer
+            # content_html-Snapshot aus PR1 -- Klartext als Ausgangsstand uebernehmen
+            # (Formatierung geht dabei verloren, siehe _strip_html_to_text).
+            from pycrdt import Text as _Text
+            text = _strip_html_to_text(existing_html)
+            if text:
+                doc.get("content", type=_Text).insert(0, text)
         room = YRoom(ydoc=doc)
         _rooms[lage_id] = room
         _room_org[lage_id] = org_id
@@ -126,7 +151,14 @@ async def release_room_if_empty(lage_id: int) -> None:
         if save_task:
             save_task.cancel()
         room_task = _room_tasks.pop(lage_id, None)
-        await room.stop()
+        try:
+            await room.stop()
+        except RuntimeError:
+            # room.started wird von pycrdt gesetzt, bevor die interne Awareness-Task
+            # ihr eigenes Setup abgeschlossen hat (Race) -- kann bei einem Release
+            # unmittelbar nach dem Erzeugen auftreten (z.B. sofortiger Verbindungsabbruch).
+            # Dann ist ohnehin nichts zu stoppen.
+            logger.debug("Lagedokument %s: Room war beim Stop noch nicht vollstaendig gestartet", lage_id)
         if room_task:
             room_task.cancel()
         _rooms.pop(lage_id, None)

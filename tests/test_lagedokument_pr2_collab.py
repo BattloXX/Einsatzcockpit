@@ -123,3 +123,35 @@ async def test_room_laedt_gespeicherten_zustand_und_speichert_bei_release(setup_
     check_doc.apply_update(saved_state)
     assert str(check_doc.get("content", type=Text)) == "Vorbefuellter Text!"
     assert lage_id not in collab._rooms
+
+
+def test_strip_html_to_text():
+    html = "<p>Erster Absatz</p><p>Zweiter <strong>Absatz</strong> &amp; mehr</p>"
+    assert collab._strip_html_to_text(html) == "Erster Absatz\nZweiter Absatz & mehr"
+
+
+@pytest.mark.asyncio
+async def test_room_bootstrapt_aus_content_html_wenn_kein_ydoc_state_vorhanden(setup_db):
+    """Uebergangsfall: ein per klassischem Speichern-Formular (PR1) entstandenes
+    Lagedokument hat noch keinen ydoc_state -- der erste Live-Kollaborations-
+    Aufbau muss den vorhandenen content_html-Snapshot als Klartext uebernehmen,
+    statt mit einem leeren Dokument zu starten."""
+    org_id, lage_id = await asyncio.to_thread(
+        _make_user_with_lage, "ldws_bootstrap", org_slug="ldws-bootstrap", rolle="incident_leader",
+    )
+
+    def _seed_html():
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            db.add(LageDokument(major_incident_id=lage_id, org_id=org_id,
+                                content_html="<p>Klassisch gespeicherter Text</p>",
+                                updated_at=__import__("datetime").datetime.now(__import__("datetime").UTC)))
+            db.commit()
+        finally:
+            db.close()
+    await asyncio.to_thread(_seed_html)
+
+    room = await collab.get_or_create_room(lage_id, org_id)
+    assert str(room.ydoc.get("content", type=Text)) == "Klassisch gespeicherter Text"
+    await collab.release_room_if_empty(lage_id)
