@@ -68,6 +68,15 @@
   border: 1px solid var(--border);
 }
 .ld-presence__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ld-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: .78rem; padding: 2px 9px; border-radius: 999px; margin-bottom: 8px;
+}
+.ld-status__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ld-status--connected { color: #16a34a; }
+.ld-status--connected .ld-status__dot { background: #16a34a; }
+.ld-status--offline { color: #d97706; }
+.ld-status--offline .ld-status__dot { background: #d97706; }
 </style>
 {% endblock %}
 
@@ -90,19 +99,24 @@
     {% endif %}
 
     {% if can_edit %}
+    <div id="lagedokument-status" class="ld-status ld-status--offline"><span class="ld-status__dot"></span>verbinde…</div>
     <div id="lagedokument-presence" class="ld-presence"></div>
     <form id="form-lagedokument" method="post" action="/lage/{{ lage.id }}/lagedokument">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div id="lagedokument-editor"></div>
       <input type="hidden" name="content_html" id="lagedokument-content-html">
-      <div style="margin-top:10px;">
+      <div style="margin-top:10px;display:flex;gap:8px;">
         <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+        <button type="button" id="btn-lagedokument-drucken" class="btn btn--secondary btn--sm">🖨 Drucken</button>
       </div>
     </form>
     {% else %}
     <div class="ql-snow"><div class="ql-editor" style="padding:0;">
       {{ dokument.content_html|safe if dokument.content_html else '<p class="text-muted">Noch kein Inhalt.</p>'|safe }}
     </div></div>
+    <div style="margin-top:10px;">
+      <a href="/lage/{{ lage.id }}/lagedokument/druck" target="_blank" class="btn btn--secondary btn--sm">🖨 Drucken</a>
+    </div>
     {% endif %}
   </div>
 </div>
@@ -162,6 +176,23 @@ function renderPresence(users) {
   }).join('');
 }
 
+function renderStatus(status) {
+  var el = document.getElementById('lagedokument-status');
+  if (!el) return;
+  if (status === 'connected') {
+    el.className = 'ld-status ld-status--connected';
+    el.innerHTML = '<span class="ld-status__dot"></span>verbunden';
+  } else {
+    el.className = 'ld-status ld-status--offline';
+    el.innerHTML = '<span class="ld-status__dot"></span>offline – Änderungen werden nachgeholt';
+  }
+}
+
+function captureContentHtml() {
+  if (!_ldQuill) return '';
+  return _ldQuill.getSemanticHTML ? _ldQuill.getSemanticHTML() : _ldQuill.root.innerHTML;
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   function start() {
     if (!_ldQuill) { setTimeout(start, 20); return; }
@@ -171,9 +202,28 @@ document.addEventListener('DOMContentLoaded', function () {
       userId: {{ user.id }},
       userName: {{ (user.display_name or user.username)|tojson }},
       onPresenceChange: renderPresence,
+      onStatusChange: renderStatus,
     });
   }
   start();
+
+  var druckBtn = document.getElementById('btn-lagedokument-drucken');
+  if (druckBtn) {
+    druckBtn.addEventListener('click', function () {
+      // Aktuellen Live-Stand als HTML-Snapshot sichern, BEVOR die Druckansicht
+      // geoeffnet wird -- die Druckseite liest content_html (nicht den
+      // Yjs-Live-Zustand), sonst waere ein Ausdruck ohne vorheriges manuelles
+      // Speichern veraltet.
+      var body = new URLSearchParams();
+      body.set('_csrf', {{ request.state.csrf_token|tojson }});
+      body.set('content_html', captureContentHtml());
+      fetch('/lage/{{ lage.id }}/lagedokument', {
+        method: 'POST', body: body, redirect: 'manual', credentials: 'same-origin',
+      }).catch(function () {}).finally(function () {
+        window.open('/lage/{{ lage.id }}/lagedokument/druck', '_blank');
+      });
+    });
+  }
 });
 </script>
 {% endif %}

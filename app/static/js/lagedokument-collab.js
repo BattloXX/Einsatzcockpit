@@ -21,7 +21,7 @@ function colorForUserId(userId) {
   return PRESENCE_PALETTE[idx];
 }
 
-export function initLagedokumentCollab({ lageId, quill, userId, userName, onPresenceChange }) {
+export function initLagedokumentCollab({ lageId, quill, userId, userName, onPresenceChange, onStatusChange }) {
   const ydoc = new Y.Doc();
   const ytext = ydoc.getText(YTEXT_NAME);
 
@@ -29,6 +29,14 @@ export function initLagedokumentCollab({ lageId, quill, userId, userName, onPres
   const serverUrl = protocol + '//' + location.host + '/ws/lagedokument';
   const provider = new WebsocketProvider(serverUrl, String(lageId), ydoc, {});
   const awareness = provider.awareness;
+
+  if (typeof onStatusChange === 'function') {
+    // 'status' feuert bei jedem Verbindungswechsel (verbunden/getrennt/verbindet);
+    // WebsocketProvider versucht selbststaendig einen Reconnect (exponential backoff),
+    // Aenderungen bleiben lokal im Y.Doc gepuffert und werden beim Wiederverbinden
+    // automatisch nachgeholt (Standard-Yjs-Sync-Verhalten).
+    provider.on('status', function (event) { onStatusChange(event.status); });
+  }
 
   if (userName) {
     awareness.setLocalStateField('user', {

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ lage.name }} – Lagedokument</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11pt; color: #111;
+         background: #fff; padding: 20px; max-width: 720px; }
+  h1 { font-size: 13pt; margin-bottom: 2px; }
+  .header { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 14px; }
+  .header__meta { font-size: 9pt; color: #555; margin-top: 3px; }
+  .body { font-size: 10pt; line-height: 1.6; }
+  .body p { margin: 6px 0; }
+  .no-print { margin-bottom: 16px; }
+  .btn-print { padding: 7px 18px; background: #111; color: #fff; border: none;
+               border-radius: 5px; cursor: pointer; font-size: 10pt; margin-right: 8px; }
+  .print-footer { margin-top: 20px; font-size: 8pt; color: #999;
+                  text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
+  @media print {
+    .no-print { display: none !important; }
+    body { padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨 Drucken / PDF</button>
+  <a href="javascript:window.close()" style="font-size:10pt;color:#3b82f6;">✕ Schließen</a>
+</div>
+
+{% if TEST_SYSTEM %}
+<div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
+{% endif %}
+
+<div class="header">
+  <h1>{{ lage.name }} – Lagedokument</h1>
+  <div class="header__meta">
+    Ausdruck: {{ now|local_datetime }}
+    {% if dokument.updated_at %}
+    &nbsp;·&nbsp; Zuletzt gespeichert: {{ dokument.updated_at|local_datetime }}
+    {% endif %}
+  </div>
+</div>
+
+<div class="body">
+  {{ dokument.content_html|safe if dokument.content_html else '<p style="color:#999;">Noch kein Inhalt.</p>'|safe }}
+</div>
+
+<div class="print-footer">
+  {{ lage.name }} · {{ now|local_datetime }} · {{ brand }}
+</div>
+</body>
+</html>

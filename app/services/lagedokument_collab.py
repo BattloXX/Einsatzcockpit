@@ -93,6 +93,7 @@ def _save_ydoc_state(lage_id: int, state: bytes, org_id: int) -> None:
             dok = LageDokument(major_incident_id=lage_id, org_id=org_id, updated_at=datetime.now(UTC))
             db.add(dok)
         dok.ydoc_state = state
+        dok.updated_at = datetime.now(UTC)
         db.commit()
     finally:
         db.close()

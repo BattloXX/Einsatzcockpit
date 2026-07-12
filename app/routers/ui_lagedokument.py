@@ -107,6 +107,28 @@ async def lagedokument_save(
     return RedirectResponse(f"/lage/{lage_id}/lagedokument?gespeichert=1", status_code=303)
 
 
+@router.get("/lage/{lage_id}/lagedokument/druck", response_class=HTMLResponse)
+async def lagedokument_druck(
+    lage_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role(*_LESE_ROLLEN)),
+):
+    """Druckansicht auf Basis des letzten gespeicherten HTML-Snapshots (nicht des
+    Live-Yjs-Zustands -- konsistent mit den uebrigen /druck-Routen: Browser-Print
+    ueber window.print(), kein serverseitiges PDF-Rendering fuer dieses Dokument)."""
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    dokument = _get_or_create_dokument(db, lage)
+    db.commit()
+    return templates.TemplateResponse(request, "incident_major/_lagedokument_druck.html", {
+        "lage": lage,
+        "dokument": dokument,
+        "now": datetime.now(UTC),
+    })
+
+
 # ── Realtime-Kollaboration (Yjs-CRDT-Sync) ────────────────────────────────────
 
 class _FastAPIChannel:
