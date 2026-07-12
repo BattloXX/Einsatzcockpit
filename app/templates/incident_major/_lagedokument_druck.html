@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{ lage.name }} – Lagedokument</title>
+<title>{{ lage.name }} – Lagebericht</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 11pt; color: #111;
@@ -36,7 +36,7 @@
 {% endif %}
 
 <div class="header">
-  <h1>{{ lage.name }} – Lagedokument</h1>
+  <h1>{{ lage.name }} – Lagebericht</h1>
   <div class="header__meta">
     Ausdruck: {{ now|local_datetime }}
     {% if dokument.updated_at %}

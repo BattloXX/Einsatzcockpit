@@ -1,11 +1,17 @@
 """Lagedokument: gemeinsam bearbeitbares Dokument je Lage (GSL/Stab).
 
-Eigenstaendig vom Einsatzjournal (das bleibt Append-only) UND vom bestehenden
-"KI-Lagebericht" (KI-generierte Einmal-Zusammenfassung, siehe
-ui_major_incident.py::lage_ki_bericht) -- daher bewusst "Lagedokument" statt
-"Lagebericht" genannt, keine Namens-/Routenkollision. Ein dauerhaftes,
-fortlaufend bearbeitbares Textdokument je Lage, gedacht als zusammenfassende
-Lagedarstellung (SKKM-Lagemeldung, Uebergabeprotokoll o.Ae.).
+Nutzerseitig heisst das Feature "Lagebericht" (Nav-Label, Seitentitel in
+lagedokument.html) -- intern heissen Modell/Tabelle/Router weiter
+"LageDokument"/"lage_dokument"/"lagedokument" (historisch entstanden, um eine
+Routen-/Namenskollision mit der urspruenglich EPHEMEREN KI-Zusammenfassung
+(POST /lage/{id}/lagebericht, ui_major_incident.py::lage_ki_bericht) zu
+vermeiden). Diese beiden Werkzeuge sind inzwischen zusammengefuehrt: der
+"KI-Entwurf"-Button in lagedokument.html ruft dieselbe (unveraendert
+gebliebene) Route auf und fuegt den generierten Text in den Editor ein, statt
+ihn nur ephemer anzuzeigen. Eigenstaendig vom Einsatzjournal (das bleibt
+Append-only). Ein dauerhaftes, fortlaufend bearbeitbares Textdokument je Lage,
+gedacht als zusammenfassende Lagedarstellung (SKKM-Lagemeldung,
+Uebergabeprotokoll o.Ae.).
 
 PR 1: klassisches Speichern (kein Realtime-Sync).
 PR 2: WebSocket-Endpoint fuer die Yjs-CRDT-Live-Kollaboration (Sync-Relay ueber

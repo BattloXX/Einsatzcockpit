@@ -3197,8 +3197,12 @@ async def lage_ki_bericht(
     _check_org_access(user, lage)
 
     if not is_enabled():
+        # data-ai-error: Marker fuer den Lagebericht-Editor (lagedokument.html), um
+        # eine Fehlermeldung von einem echten KI-Entwurf zu unterscheiden -- wird
+        # sonst (z.B. bei der urspruenglichen Dashboard-Nutzung) ignoriert.
         return HTMLResponse(
-            '<p style="color:var(--text-muted);font-size:.85rem;">KI-Dienst nicht aktiviert.</p>'
+            '<p data-ai-error="1" style="color:var(--text-muted);font-size:.85rem;">'
+            "KI-Dienst nicht aktiviert.</p>"
         )
 
     sites_by_phase = _sites_by_phase(lage)
@@ -3231,7 +3235,7 @@ async def lage_ki_bericht(
         text = await generate_situation_brief(context, org_id=lage.org_id)
     except AIServiceError as e:
         return HTMLResponse(
-            f'<p style="color:#f87171;font-size:.85rem;">{e}</p>'
+            f'<p data-ai-error="1" style="color:#f87171;font-size:.85rem;">{e}</p>'
         )
 
     safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

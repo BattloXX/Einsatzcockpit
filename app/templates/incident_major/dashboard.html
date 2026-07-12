@@ -207,24 +207,12 @@
         </div>
       </div>
 
-      <div class="dash-section" style="--dash-accent:var(--yellow);" x-data="{loading:false}">
-        <div class="dash-section__title" style="display:flex;align-items:center;justify-content:space-between;">
-          <span>✨ KI-Lagebericht</span>
-          <form hx-post="/lage/{{ lage.id }}/lagebericht"
-                hx-target="#ki-bericht-result"
-                hx-swap="innerHTML"
-                hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-                hx-indicator="#ki-spin"
-                style="margin:0;">
-            <button type="submit" class="btn btn--ghost btn--sm">
-              ✨ Generieren
-              <span id="ki-spin" class="htmx-indicator" style="font-size:.75rem;"> …</span>
-            </button>
-          </form>
-        </div>
-        <div id="ki-bericht-result" style="min-height:24px;margin-top:8px;">
-          <span style="font-size:.78rem;color:var(--text-muted);">Klick auf „Generieren" erstellt eine KI-Lagezusammenfassung.</span>
-        </div>
+      <div class="dash-section" style="--dash-accent:var(--yellow);">
+        <div class="dash-section__title">📄 Lagebericht</div>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:10px;">
+          Gemeinsam bearbeitbares Dokument mit KI-Unterstützung, live für mehrere Stabsmitglieder.
+        </p>
+        <a href="/lage/{{ lage.id }}/lagedokument" class="btn btn--ghost btn--sm">📄 Lagebericht öffnen</a>
       </div>
 
     </div>

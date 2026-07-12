@@ -1,8 +1,9 @@
 """Lagedokument PR1: Grundgeruest ohne Realtime-Sync.
 
-Gemeinsam bearbeitbares Dokument je Lage (eigenstaendig vom Einsatzjournal
-UND vom bestehenden "KI-Lagebericht" -- daher bewusst "Lagedokument" genannt,
-keine Namens-/Routenkollision mit POST /lage/{id}/lagebericht).
+Gemeinsam bearbeitbares Dokument je Lage (eigenstaendig vom Einsatzjournal).
+Nutzerseitig "Lagebericht" genannt (intern weiter LageDokument/lage_dokument);
+zum KI-Entwurf-Button (ruft POST /lage/{id}/lagebericht auf) siehe
+tests/test_lagedokument_pr7_ki_merge.py.
 Prueft Zugriffsschutz (Login/Rolle/Org), Speichern+Sanitizing, Eindeutigkeit
 pro Lage (kein Duplikat bei mehrfachem Speichern).
 """
@@ -59,7 +60,7 @@ def test_lagedokument_readonly_kann_lesen_aber_nicht_speichern(client, setup_db)
 
     r = client.get(f"/lage/{lage_id}/lagedokument")
     assert r.status_code == 200
-    assert "Lagedokument" in r.text
+    assert "Lagebericht" in r.text
 
     csrf = client.cookies.get("ec_csrf")
     r = client.post(f"/lage/{lage_id}/lagedokument",

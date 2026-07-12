@@ -1,5 +1,5 @@
 {% extends "incident_major/_lage_layout.html" %}
-{% block title %}{{ lage.name }} – Lagedokument{% endblock %}
+{% block title %}{{ lage.name }} – Lagebericht{% endblock %}
 
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/quill.snow.css">
@@ -83,7 +83,7 @@
 {% block lage_content %}
 <div style="max-width:900px;margin:0 auto;">
   <div class="dash-section" style="--dash-accent:var(--red);">
-    <div class="dash-section__title">📝 Lagedokument</div>
+    <div class="dash-section__title">📝 Lagebericht</div>
     <p class="ld-meta">
       Gemeinsames Dokument für die zusammenfassende Lagedarstellung.
       {% if dokument.updated_at %}
@@ -105,18 +105,22 @@
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div id="lagedokument-editor"></div>
       <input type="hidden" name="content_html" id="lagedokument-content-html">
-      <div style="margin-top:10px;display:flex;gap:8px;">
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
         <button type="button" id="btn-lagedokument-drucken" class="btn btn--secondary btn--sm">🖨 Drucken</button>
+        <button type="button" id="btn-lagedokument-ki" class="btn btn--secondary btn--sm">✨ KI-Entwurf</button>
+        <span id="lagedokument-ki-fehler" style="font-size:.8rem;color:#f87171;"></span>
       </div>
     </form>
     {% else %}
     <div class="ql-snow"><div class="ql-editor" style="padding:0;">
       {{ dokument.content_html|safe if dokument.content_html else '<p class="text-muted">Noch kein Inhalt.</p>'|safe }}
     </div></div>
-    <div style="margin-top:10px;">
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
       <a href="/lage/{{ lage.id }}/lagedokument/druck" target="_blank" class="btn btn--secondary btn--sm">🖨 Drucken</a>
+      <button type="button" id="btn-lagedokument-ki-vorschau" class="btn btn--secondary btn--sm">✨ KI-Vorschlag anzeigen</button>
     </div>
+    <div id="lagedokument-ki-vorschau-ergebnis" style="margin-top:8px;"></div>
     {% endif %}
   </div>
 </div>
@@ -138,7 +142,7 @@ document.addEventListener('DOMContentLoaded', function() {
       toolbar: [['bold','italic','underline'],['strike'],['link'],
       [{list:'ordered'},{list:'bullet'}],[{header:[3,4,false]}],['blockquote'],['clean']],
     },
-    placeholder: 'Lagedokument…',
+    placeholder: 'Lagebericht…',
   });
   // Vorbefuellen aus dem zuletzt gespeicherten HTML-Snapshot -- WICHTIG als
   // Fallback, falls der Yjs-WebSocket-Sync nicht zustande kommt (z.B. Firewall/
@@ -193,6 +197,17 @@ function captureContentHtml() {
   return _ldQuill.getSemanticHTML ? _ldQuill.getSemanticHTML() : _ldQuill.root.innerHTML;
 }
 
+function requestKiEntwurf() {
+  // Ruft die bestehende KI-Lagebericht-Route unveraendert auf (gleicher Prompt/
+  // Kontext wie zuvor die Dashboard-Karte) -- liefert ein HTML-Fragment
+  // (<p>...</p> bei Erfolg, <p data-ai-error="1">...</p> bei Fehler).
+  return fetch('/lage/{{ lage.id }}/lagebericht', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: {{ request.state.csrf_token|tojson }} }),
+  }).then(function (r) { return r.text(); });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   function start() {
     if (!_ldQuill) { setTimeout(start, 20); return; }
@@ -224,6 +239,59 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     });
   }
+
+  var kiBtn = document.getElementById('btn-lagedokument-ki');
+  var kiFehler = document.getElementById('lagedokument-ki-fehler');
+  if (kiBtn) {
+    kiBtn.addEventListener('click', function () {
+      if (!_ldQuill) return;
+      kiBtn.disabled = true;
+      var altText = kiBtn.textContent;
+      kiBtn.textContent = '✨ …';
+      kiFehler.textContent = '';
+      requestKiEntwurf().then(function (html) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        if (tmp.querySelector('[data-ai-error]')) {
+          kiFehler.textContent = tmp.textContent.trim();
+          return;
+        }
+        var sel = _ldQuill.getSelection();
+        var index = sel ? sel.index : _ldQuill.getLength();
+        _ldQuill.clipboard.dangerouslyPasteHTML(index, html, 'user');
+      }).catch(function () {
+        kiFehler.textContent = 'KI-Entwurf konnte nicht geladen werden.';
+      }).finally(function () {
+        kiBtn.disabled = false;
+        kiBtn.textContent = altText;
+      });
+    });
+  }
+});
+</script>
+{% else %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var btn = document.getElementById('btn-lagedokument-ki-vorschau');
+  var out = document.getElementById('lagedokument-ki-vorschau-ergebnis');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    btn.disabled = true;
+    var altText = btn.textContent;
+    btn.textContent = '✨ …';
+    fetch('/lage/{{ lage.id }}/lagebericht', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ _csrf: {{ request.state.csrf_token|tojson }} }),
+    }).then(function (r) { return r.text(); }).then(function (html) {
+      out.innerHTML = html;
+    }).catch(function () {
+      out.textContent = 'KI-Vorschlag konnte nicht geladen werden.';
+    }).finally(function () {
+      btn.disabled = false;
+      btn.textContent = altText;
+    });
+  });
 });
 </script>
 {% endif %}

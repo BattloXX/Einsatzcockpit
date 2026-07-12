@@ -581,14 +581,16 @@ class LageJournalMedia(Base):
 
 
 # ── Lagedokument: gemeinsam bearbeitbares Dokument (Word-Online-artig) ───────
-# Eigenständig vom Einsatzjournal (das bleibt Append-only) UND vom bestehenden
-# "KI-Lagebericht" (KI-generierte Einmal-Zusammenfassung, siehe
-# ui_major_incident.py::lage_ki_bericht, POST /lage/{id}/lagebericht) — daher
-# bewusst "Lagedokument" statt "Lagebericht" genannt, keine Namenskollision.
-# Ein dauerhaftes, fortlaufend bearbeitbares Textdokument je Lage.
-# content_html ist der letzte sanitisierte Snapshot (Druck/Export/Fallback
-# ohne JS); ydoc_state haelt den vollstaendigen Yjs-CRDT-Stand fuer die
-# Live-Kollaboration (ab PR 2).
+# Eigenständig vom Einsatzjournal (das bleibt Append-only). Nutzerseitig heisst
+# das Feature "Lagebericht" (siehe lagedokument.html) -- die Klasse/Tabelle
+# heisst intern weiter "LageDokument"/"lage_dokument" (historisch: urspruenglich
+# von der ephemeren KI-Lagebericht-Anzeige unterschieden, POST
+# /lage/{id}/lagebericht, ui_major_incident.py::lage_ki_bericht; inzwischen
+# zusammengefuehrt -- der KI-Entwurf-Button in lagedokument.html ruft dieselbe
+# Route auf und fuegt den Text in den Editor ein). Ein dauerhaftes, fortlaufend
+# bearbeitbares Textdokument je Lage. content_html ist der letzte sanitisierte
+# Snapshot (Druck/Export/Fallback ohne JS); ydoc_state haelt den vollstaendigen
+# Yjs-CRDT-Stand fuer die Live-Kollaboration.
 
 class LageDokument(Base):
     __tablename__ = "lage_dokument"
