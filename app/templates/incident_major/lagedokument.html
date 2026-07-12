@@ -4,6 +4,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/quill.snow.css">
 {% if can_edit %}
+<link rel="stylesheet" href="/static/css/quill-cursors.min.css">
 <script type="importmap">
 {
   "imports": {
@@ -57,6 +58,16 @@
 .ql-editor.ql-blank::before { color: var(--text-muted, #9ca3af); }
 #lagedokument-editor { min-height: 400px; }
 .ld-meta { font-size: .78rem; color: var(--text-muted); margin-bottom: 10px; }
+.ld-presence {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: .78rem; color: var(--text-muted); margin-bottom: 8px; min-height: 20px;
+}
+.ld-presence__chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px; background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border);
+}
+.ld-presence__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 </style>
 {% endblock %}
 
@@ -79,6 +90,7 @@
     {% endif %}
 
     {% if can_edit %}
+    <div id="lagedokument-presence" class="ld-presence"></div>
     <form id="form-lagedokument" method="post" action="/lage/{{ lage.id }}/lagedokument">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div id="lagedokument-editor"></div>
@@ -99,14 +111,19 @@
 {% block lage_scripts %}
 <script src="/static/js/quill.min.js"></script>
 {% if can_edit %}
+<script src="/static/js/quill-cursors.js"></script>
 <script>
 var _ldQuill = null;
 document.addEventListener('DOMContentLoaded', function() {
   if (typeof Quill === 'undefined') return;
+  if (typeof QuillCursors !== 'undefined') { Quill.register('modules/cursors', QuillCursors); }
   _ldQuill = new Quill('#lagedokument-editor', {
     theme: 'snow',
-    modules: { toolbar: [['bold','italic','underline'],['strike'],['link'],
-      [{list:'ordered'},{list:'bullet'}],[{header:[3,4,false]}],['blockquote'],['clean']] },
+    modules: {
+      cursors: true,
+      toolbar: [['bold','italic','underline'],['strike'],['link'],
+      [{list:'ordered'},{list:'bullet'}],[{header:[3,4,false]}],['blockquote'],['clean']],
+    },
     placeholder: 'Lagedokument…',
   });
   // Vorbefuellen aus dem zuletzt gespeicherten HTML-Snapshot -- WICHTIG als
@@ -129,13 +146,31 @@ document.getElementById('form-lagedokument').addEventListener('submit', function
 <script type="module">
 import { initLagedokumentCollab } from '/static/js/lagedokument-collab.js';
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function renderPresence(users) {
+  var el = document.getElementById('lagedokument-presence');
+  if (!el) return;
+  if (!users.length) { el.textContent = ''; return; }
+  el.innerHTML = '<span>Gerade hier:</span>' + users.map(function (u) {
+    var color = (u.color || '#4f8cff').replace(/[^#0-9a-fA-F]/g, '');
+    return '<span class="ld-presence__chip"><span class="ld-presence__dot" style="background:' + color + '"></span>' + escapeHtml(u.name || '?') + '</span>';
+  }).join('');
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   function start() {
     if (!_ldQuill) { setTimeout(start, 20); return; }
     initLagedokumentCollab({
       lageId: {{ lage.id }},
       quill: _ldQuill,
+      userId: {{ user.id }},
       userName: {{ (user.display_name or user.username)|tojson }},
+      onPresenceChange: renderPresence,
     });
   }
   start();
