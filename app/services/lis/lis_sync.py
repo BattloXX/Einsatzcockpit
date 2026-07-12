@@ -639,9 +639,15 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
         # sync_organization()). Siehe select_operation()-Docstring in lis_client.py.
         await client.select_operation(config.organization_id, operation_id=parsed["lis_operation_id"])
         tasks = await client.get_tasks(parsed["lis_operation_id"])
-    except LisClientError:
-        logger.exception(
-            "LIS-Tasks für Operation %s (Org %s) fehlgeschlagen", parsed["lis_operation_id"], org.id,
+    except LisClientError as e:
+        # Bekannter, server-seitiger LIS-Bug (SessionData.get_OrganizationId() NREt bei
+        # GetTasks) -- sieben unabhaengige Live-Experimente haben bestaetigt, dass dies
+        # NICHT durch eine Aenderung an unserem Request behebbar ist (siehe
+        # docs/lis-integration bzw. Projekt-Notizen). Nur eine kurze Warnung statt
+        # vollem Traceback bei jedem ~30s-Poll-Zyklus, um das Log nicht zuzumuellen.
+        logger.warning(
+            "LIS-Tasks für Operation %s (Org %s) fehlgeschlagen (bekannter Server-Bug, "
+            "nicht clientseitig behebbar): %s", parsed["lis_operation_id"], org.id, e,
         )
         tasks = []
 
