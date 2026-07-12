@@ -1,0 +1,33 @@
+{% from "public/_icons.html" import icon %}
+<nav class="pub-nav" data-open="false" aria-label="Hauptnavigation">
+  <div class="pub-wrap pub-nav__inner">
+    <a class="pub-brand" href="/" aria-label="{{ brand }} – Startseite">
+      <span class="pub-brand__mark">{{ icon("dashboard") }}</span>
+      {{ brand }}
+    </a>
+
+    <div class="pub-nav__links">
+      {% for item in public_nav %}
+      <a href="{{ item.href }}"{% if active_nav == item.slug %} class="is-active" aria-current="page"{% endif %}>{{ item.label }}</a>
+      {% endfor %}
+    </div>
+
+    <div class="pub-nav__right">
+      <a class="pub-nav__icon" href="{{ public_github_url }}" target="_blank" rel="noopener" aria-label="Quellcode auf GitHub">
+        {{ icon("github") }}
+      </a>
+      <a class="pub-btn pub-btn--primary pub-btn--sm" href="{{ public_app_url }}">Zum Login</a>
+      <button class="pub-burger" type="button" aria-label="Menü öffnen" aria-expanded="false" aria-controls="pub-mobile">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="pub-mobile" id="pub-mobile">
+    {% for item in public_nav %}
+    <a href="{{ item.href }}"{% if active_nav == item.slug %} aria-current="page"{% endif %}>{{ item.label }}</a>
+    {% endfor %}
+    <a href="{{ public_github_url }}" target="_blank" rel="noopener">Auf GitHub ansehen</a>
+    <a class="pub-btn pub-btn--primary" href="{{ public_app_url }}">Zum Login</a>
+  </div>
+</nav>

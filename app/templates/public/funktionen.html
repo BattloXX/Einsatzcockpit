@@ -1,0 +1,38 @@
+{% extends "public/base.html" %}
+{% from "public/_macros.html" import split_section, chip_grid %}
+
+{% block page_title %}Funktionen{% endblock %}
+{% block meta_description %}Vom ersten Alarm bis zur Großschadenslage: Lageführung, Alarmierung, SKKM-Stabsarbeit, Wetterwarnungen, Objektverwaltung und Dokumentation – die Module von Einsatzcockpit im Überblick.{% endblock %}
+
+{% block content %}
+<section class="pub-section pub-section--tight pub-topo">
+  <div class="pub-wrap">
+    <span class="pub-eyebrow">[ FUNKTIONEN ]</span>
+    <h1 class="pub-h1">Vom ersten Alarm bis zur Großschadenslage.</h1>
+    <p class="pub-lead" style="margin-top:20px;max-width:44rem">Einsatzcockpit deckt den
+      gesamten Einsatzverlauf ab – von der Alarmierung über die Lageführung bis zur
+      Dokumentation. Jedes Modul ist aus der Einsatzpraxis entstanden.</p>
+  </div>
+</section>
+
+<div class="pub-wrap">
+  {% for f in features %}
+  {{ split_section(f, status_map, reverse=(loop.index0 % 2 == 1)) }}
+  {% endfor %}
+</div>
+
+<!-- Und vieles mehr -->
+<section class="pub-section pub-section--alt">
+  <div class="pub-wrap">
+    <div class="pub-section__head">
+      <span class="pub-eyebrow">[ UND VIELES MEHR ]</span>
+      <h2 class="pub-h2">Weitere Bausteine</h2>
+      <p class="pub-section__sub">Zusätzliche Module und Schnittstellen – laufend ergänzt.</p>
+    </div>
+    {{ chip_grid(chips) }}
+    <p style="color:var(--text-muted);font-size:13px;margin-top:20px">
+      Status-Angaben (Verfügbar/Beta) werden mit dem tatsächlichen Stand abgeglichen.
+    </p>
+  </div>
+</section>
+{% endblock %}

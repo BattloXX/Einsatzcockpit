@@ -1,0 +1,27 @@
+{% extends "public/base.html" %}
+{% from "public/_macros.html" import timeline %}
+
+{% block page_title %}Roadmap{% endblock %}
+{% block meta_description %}Woran gerade gearbeitet wird: der aktuelle Entwicklungsstand von Einsatzcockpit – verfügbare Module, laufende Arbeiten und geplante Erweiterungen.{% endblock %}
+
+{% block content %}
+<section class="pub-section pub-section--tight pub-topo">
+  <div class="pub-wrap">
+    <span class="pub-eyebrow">[ ROADMAP ]</span>
+    <h1 class="pub-h1">Woran gerade gearbeitet wird.</h1>
+    <p class="pub-lead" style="margin-top:20px;max-width:44rem">Ein offener Blick auf den
+      Entwicklungsstand – was verfügbar ist, was gerade entsteht und was als Nächstes geplant ist.</p>
+  </div>
+</section>
+
+<section class="pub-section" style="padding-top:16px">
+  <div class="pub-wrap" style="max-width:820px">
+    {{ timeline(roadmap, status_map, available_items) }}
+
+    <p class="pub-lead" style="margin-top:40px;color:var(--text-muted)">
+      Die Roadmap ist nicht in Stein gemeißelt – Prioritäten richten sich nach dem Bedarf der
+      Feuerwehren. Wünsche und Ideen gerne als GitHub-Issue.
+    </p>
+  </div>
+</section>
+{% endblock %}

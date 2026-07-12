@@ -1,0 +1,25 @@
+{% from "public/_icons.html" import icon %}
+<footer class="pub-footer">
+  <div class="pub-wrap">
+    <div class="pub-footer__top">
+      <div>
+        <a class="pub-brand" href="/">
+          <span class="pub-brand__mark">{{ icon("dashboard") }}</span>{{ brand }}
+        </a>
+        <p style="color:var(--text-muted);max-width:28rem;margin:12px 0 0;font-size:14px">
+          Einsatzcockpit ist ein privates, nicht-kommerzielles Open-Source-Projekt.
+        </p>
+      </div>
+      <div class="pub-footer__links">
+        <a href="{{ public_github_url }}" target="_blank" rel="noopener">GitHub</a>
+        <a href="/impressum">Impressum</a>
+        <a href="/datenschutz">Datenschutz</a>
+        <a href="/ueber-das-projekt#kontakt">Kontakt</a>
+      </div>
+    </div>
+    <div class="pub-footer__bar">
+      <span class="pub-footer__note">© {{ year }} {{ brand }} · Nicht-kommerziell · Open Source</span>
+      <span class="pub-footer__tag">[{{ brand_domain }}]</span>
+    </div>
+  </div>
+</footer>

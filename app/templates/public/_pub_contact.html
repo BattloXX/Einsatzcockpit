@@ -1,0 +1,37 @@
+{# Kontaktformular -- postet an die bestehende Route POST /kontakt (Honeypot +
+   serverseitiger Mailversand). ``kontakt`` = Statuswert aus der Redirect-Query. #}
+<section class="pub-section pub-section--alt" id="kontakt">
+  <div class="pub-wrap">
+    <span class="pub-eyebrow">[ KONTAKT ]</span>
+    <h2 class="pub-h2">Kontakt aufnehmen</h2>
+    <p class="pub-section__sub">Fragen, Interesse oder Feedback? Schreiben Sie uns – wir melden uns zurück.</p>
+
+    {% if kontakt == 'ok' %}
+    <div class="pub-alert pub-alert--ok" style="margin-top:20px">Vielen Dank! Ihre Nachricht wurde gesendet.</div>
+    {% elif kontakt == 'fehler' %}
+    <div class="pub-alert pub-alert--err" style="margin-top:20px">Die Nachricht konnte nicht gesendet werden. Bitte prüfen Sie Ihre Eingaben oder versuchen Sie es später erneut.</div>
+    {% endif %}
+
+    <form class="pub-form" method="post" action="/kontakt">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="pub-honeypot" aria-hidden="true">
+        <label>Bitte leer lassen <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+      </div>
+      <div>
+        <label for="k-name">Name</label>
+        <input id="k-name" type="text" name="name" required maxlength="120">
+      </div>
+      <div>
+        <label for="k-email">E-Mail</label>
+        <input id="k-email" type="email" name="email" required maxlength="160">
+      </div>
+      <div>
+        <label for="k-msg">Nachricht</label>
+        <textarea id="k-msg" name="message" required maxlength="4000"></textarea>
+      </div>
+      <div>
+        <button type="submit" class="pub-btn pub-btn--primary">Nachricht senden</button>
+      </div>
+    </form>
+  </div>
+</section>

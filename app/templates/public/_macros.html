@@ -1,0 +1,114 @@
+{# Wiederverwendbare Komponenten des oeffentlichen Bereichs.
+   status_map = public_content.STATUS (wird vom Router in den Kontext gegeben). #}
+{% from "public/_icons.html" import icon %}
+
+{# ── Status-Badge (pulsierender Dot + Label) ─────────────────────────── #}
+{% macro status_badge(key, status_map, pulse=false) -%}
+  {%- set s = status_map[key] -%}
+  <span class="pub-status pub-status--{{ s.cls }}">
+    <span class="pub-dot{% if pulse %} pub-dot--pulse{% endif %}"></span>{{ s.label }}
+  </span>
+{%- endmacro %}
+
+{# ── Feature-Karte (Startseite; verlinkt auf /funktionen#anker) ──────── #}
+{% macro feature_card(f, status_map, delay=0) -%}
+  <article class="pub-card pub-reveal" data-delay="{{ delay }}">
+    <span class="pub-card__icon">{{ icon(f.icon) }}</span>
+    <div style="margin-bottom:10px">{{ status_badge(f.status, status_map) }}</div>
+    <h3 class="pub-h3">{{ f.title }}</h3>
+    <p class="pub-card__text">{{ f.tagline }}</p>
+    <a class="pub-card__link" href="/funktionen#{{ f.anchor }}">
+      Details ansehen {{ icon("arrow") }}
+    </a>
+  </article>
+{%- endmacro %}
+
+{# ── Alternierende Split-Sektion (Funktionsseite) ───────────────────── #}
+{% macro split_section(f, status_map, reverse=false, image="/static/img/public/feature-placeholder.svg") -%}
+  <section class="pub-split{% if reverse %} pub-split--reverse{% endif %}" id="{{ f.anchor }}">
+    <div class="pub-split__text">
+      <div class="pub-split__head">
+        <span class="pub-split__icon">{{ icon(f.icon) }}</span>
+        {{ status_badge(f.status, status_map) }}
+      </div>
+      <h2 class="pub-h2">{{ f.title }}</h2>
+      <ul class="pub-split__list">
+        {% for b in f.bullets %}
+        <li>{{ icon("check") }}<span>{{ b }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="pub-split__visual">
+      <div class="pub-frame pub-frame--placeholder">
+        <div class="pub-frame__inner">
+          <img src="{{ image }}" alt="Visualisierung: {{ f.title }} (Platzhalter)" loading="lazy" width="800" height="500">
+        </div>
+      </div>
+    </div>
+  </section>
+{%- endmacro %}
+
+{# ── Chip-Grid ("Und vieles mehr") ──────────────────────────────────── #}
+{% macro chip_grid(chips) -%}
+  <div class="pub-chips">
+    {% for c in chips %}
+    <span class="pub-chip">
+      {{ c.label }}{% if c.tag %} <span class="pub-chip__tag">{{ c.tag }}</span>{% endif %}
+    </span>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+{# ── Roadmap-Timeline ───────────────────────────────────────────────── #}
+{% macro timeline(groups, status_map, available_items) -%}
+  <div class="pub-timeline">
+    {% for g in groups %}
+    <div class="pub-tl-group">
+      <div class="pub-tl-group__head">{{ status_badge(g.status, status_map, pulse=true) }}</div>
+      <ul class="pub-tl-items">
+        {% for it in g["items"] %}
+        <li class="pub-tl-item pub-tl-item--{{ status_map[g.status].cls }}">
+          <h4>{{ it.title }}</h4>
+          <p>{{ it.text }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+    {# "Verfuegbar" aus den Highlight-Modulen abgeleitet #}
+    <div class="pub-tl-group">
+      <div class="pub-tl-group__head">{{ status_badge("verfuegbar", status_map) }}</div>
+      <ul class="pub-tl-items">
+        {% for it in available_items %}
+        <li class="pub-tl-item pub-tl-item--avail">
+          <h4>{{ it.title }}</h4>
+          <p>{{ it.text }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+{%- endmacro %}
+
+{# ── Terminal-Panel (Open-Source-Sektion) ───────────────────────────── #}
+{% macro terminal_panel(clone_url) -%}
+  <div class="pub-terminal">
+    <div class="pub-terminal__bar">
+      <span class="pub-terminal__dots">
+        <i style="background:rgba(232,70,45,.55)"></i>
+        <i style="background:rgba(210,153,34,.55)"></i>
+        <i style="background:rgba(35,134,54,.6)"></i>
+      </span>
+      <span class="pub-terminal__title">git clone</span>
+    </div>
+    <div class="pub-terminal__body">
+      <div><span class="c-prompt">$</span>git clone {{ clone_url }}</div>
+      <span class="c-muted">Cloning into 'einsatzcockpit'...</span>
+      <span class="c-muted">remote: Enumerating objects: done.</span>
+      <span class="c-muted">Receiving objects: 100%, done.</span>
+      <div style="margin-top:10px"><span class="c-prompt">$</span>docker compose up -d</div>
+      <span class="c-ok">[OK] Einsatzcockpit laeuft.</span>
+      <span class="pub-terminal__caret"></span>
+    </div>
+  </div>
+{%- endmacro %}

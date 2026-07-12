@@ -1,0 +1,65 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import icon %}
+
+{% block page_title %}Über das Projekt{% endblock %}
+{% block meta_description %}Einsatzcockpit ist aus dem aktiven Feuerwehrdienst entstanden – ein privates, nicht-kommerzielles Open-Source-Projekt, in der Freizeit und aus Überzeugung entwickelt.{% endblock %}
+
+{% block content %}
+<section class="pub-section pub-section--tight pub-topo">
+  <div class="pub-wrap">
+    <span class="pub-eyebrow">[ ÜBER DAS PROJEKT ]</span>
+    <h1 class="pub-h1">Ein Projekt aus der Praxis – nicht aus dem Vertrieb.</h1>
+  </div>
+</section>
+
+<section class="pub-section" style="padding-top:24px">
+  <div class="pub-wrap" style="max-width:760px">
+    <p class="pub-lead">Einsatzcockpit ist im aktiven Feuerwehrdienst entstanden – aus dem
+      Bedürfnis, im Einsatz den Überblick zu behalten, Aufträge sauber zu koordinieren und
+      alles nachvollziehbar zu dokumentieren, ohne Zettelwirtschaft.</p>
+    <p class="pub-lead" style="margin-top:20px">Aus einem kleinen Hilfswerkzeug ist über die
+      Zeit eine Plattform gewachsen, die den gesamten Einsatzverlauf begleitet. Entwickelt
+      wird sie in der Freizeit – und aus Überzeugung nicht-kommerziell.</p>
+    <p class="pub-lead" style="margin-top:20px">Wir glauben, dass Werkzeuge für den
+      Katastrophenschutz offen, prüfbar und unabhängig sein sollten. Deshalb ist der gesamte
+      Quellcode Open Source und kann auf eigener Infrastruktur betrieben werden.</p>
+  </div>
+</section>
+
+<!-- Prinzipien -->
+<section class="pub-section pub-section--alt">
+  <div class="pub-wrap">
+    <div class="pub-section__head">
+      <span class="pub-eyebrow">[ PRINZIPIEN ]</span>
+      <h2 class="pub-h2">Wofür das Projekt steht</h2>
+    </div>
+    <div class="pub-grid-4">
+      {% for p in principles %}
+      <div class="pub-card">
+        <span class="pub-card__icon">{{ icon(p.icon) }}</span>
+        <h3 class="pub-h3">{{ p.title }}</h3>
+        <p class="pub-card__text" style="margin-bottom:0">{{ p.text }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- Mitmachen -->
+<section class="pub-section">
+  <div class="pub-wrap" style="max-width:760px">
+    <span class="pub-eyebrow">[ MITMACHEN ]</span>
+    <h2 class="pub-h2">Beitragen &amp; Feedback geben</h2>
+    <p class="pub-lead" style="margin-top:20px">Einsatzcockpit lebt vom Austausch mit anderen
+      Feuerwehren. Feedback, Fehlermeldungen und Ideen sind willkommen – als GitHub-Issue,
+      Pull Request oder Erfahrungsbericht.</p>
+    <div style="margin-top:28px">
+      <a class="pub-btn pub-btn--primary" href="{{ public_github_url }}" target="_blank" rel="noopener">
+        {{ icon("github") }} Zum GitHub-Repository
+      </a>
+    </div>
+  </div>
+</section>
+
+{% include "public/_pub_contact.html" %}
+{% endblock %}

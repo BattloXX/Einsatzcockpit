@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0D1117">
+  <title>{% block page_title %}{{ brand }}{% endblock %} – {{ brand }}</title>
+  <meta name="description" content="{% block meta_description %}{{ brand }} – das digitale Cockpit für den Feuerwehreinsatz. Open Source und nicht-kommerziell.{% endblock %}">
+  <link rel="canonical" href="{{ request.url }}">
+
+  {# Open Graph / Twitter #}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ brand }}">
+  <meta property="og:title" content="{{ self.page_title() }}">
+  <meta property="og:description" content="{{ self.meta_description() }}">
+  <meta property="og:image" content="{% block og_image %}/static/img/public/og-default.svg{% endblock %}">
+  <meta property="og:url" content="{{ request.url }}">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="stylesheet" href="/static/css/fonts.css?v={{ CSS_VERSION }}">
+  <link rel="stylesheet" href="/static/css/public.css?v={{ CSS_VERSION }}">
+  <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
+
+  {# Strukturierte Daten: kostenloses Notfall-/Einsatz-Werkzeug #}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "{{ brand }}",
+    "applicationCategory": "Emergency",
+    "operatingSystem": "Web",
+    "url": "{{ request.url }}",
+    "sameAs": "{{ public_github_url }}",
+    "description": "Digitale Einsatzführung für Feuerwehren – von der Alarmierung bis zur Großschadenslage. Open Source und kostenlos.",
+    "offers": { "@type": "Offer", "price": 0, "priceCurrency": "EUR" }
+  }
+  </script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="pub{% block body_class %}{% endblock %}">
+
+  {% include "public/_pub_nav.html" %}
+
+  <main id="inhalt">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% include "public/_pub_footer.html" %}
+
+  <script>
+    // Burger-Menue: Tastatur-bedienbar, schliesst bei Escape und Klick auf Link.
+    (function () {
+      var nav = document.querySelector('.pub-nav');
+      if (!nav) return;
+      var burger = nav.querySelector('.pub-burger');
+      function setOpen(open) {
+        nav.setAttribute('data-open', open ? 'true' : 'false');
+        if (burger) burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      if (burger) burger.addEventListener('click', function () {
+        setOpen(nav.getAttribute('data-open') !== 'true');
+      });
+      nav.querySelectorAll('.pub-mobile a').forEach(function (a) {
+        a.addEventListener('click', function () { setOpen(false); });
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') setOpen(false);
+      });
+    })();
+  </script>
+  {% block body_end %}{% endblock %}
+</body>
+</html>

@@ -267,10 +267,9 @@ def _entity_logs(db: Session, incident_id: int, entity_type: str, entity_id: int
 def index(request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
-        # Nicht angemeldet → öffentliche Startseite (Funktionsumfang, Kontakt).
-        from app.routers.public import render_public_page
-        return render_public_page(request, db, "landing",
-                                  kontakt=request.query_params.get("kontakt"))
+        # Nicht angemeldet → öffentliche Startseite (Ops-Room-Design, /funktionen etc.).
+        from app.routers.public import render_start
+        return render_start(request, kontakt=request.query_params.get("kontakt"))
     active_major = (
         db.query(MajorIncident)
         .filter(MajorIncident.status == MajorIncidentStatus.active)

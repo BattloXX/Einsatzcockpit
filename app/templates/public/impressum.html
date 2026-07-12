@@ -1,0 +1,30 @@
+{% extends "public/base.html" %}
+
+{% block page_title %}Impressum{% endblock %}
+{% block meta_description %}Impressum von {{ brand }}.{% endblock %}
+
+{% block content %}
+<section class="pub-section pub-topo">
+  <div class="pub-wrap">
+    <article class="pub-doc">
+      <span class="pub-todo">TODO · vor Veröffentlichung prüfen</span>
+      <h1>Impressum</h1>
+
+      <h2>Betreiber</h2>
+      <p>Johannes Battlogg</p>
+
+      <h2>Kontakt</h2>
+      <p>E-Mail: <a href="mailto:{{ public_contact_email }}">{{ public_contact_email }}</a></p>
+
+      <h2>Projekt</h2>
+      <p>Einsatzcockpit ist ein privates, nicht-kommerzielles Open-Source-Projekt.<br>
+        Idee: Roman Reiter · Umsetzung: Johannes Battlogg</p>
+
+      <h2>Haftungsausschluss</h2>
+      <p>Die Inhalte dieser Seite wurden mit größtmöglicher Sorgfalt erstellt. Für die
+        Richtigkeit, Vollständigkeit und Aktualität der Inhalte wird jedoch keine Gewähr
+        übernommen.</p>
+    </article>
+  </div>
+</section>
+{% endblock %}

@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     APP_TAGLINE: str = "Echtzeit-Führung im Einsatz"
     APP_DOMAIN: str = "einsatzcockpit.com"
 
+    # Öffentlicher Bereich (Pre-Login-Website). Als Konstanten konfigurierbar,
+    # damit die Marketing-Seiten (Header-Button "Zum Login", GitHub-Links,
+    # Kontakt) ohne Markup-Änderung angepasst werden können.
+    PUBLIC_APP_URL: str = "https://app.einsatzcockpit.com"
+    PUBLIC_GITHUB_URL: str = "https://github.com/BattloXX/einsatzcockpit"
+    PUBLIC_CONTACT_EMAIL: str = "johannes@battlogg.org"
+
     # Cookie-Flags
     COOKIE_SECURE: bool = False  # In Produktion auf true (HTTPS)
 

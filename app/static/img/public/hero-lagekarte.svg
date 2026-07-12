@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" role="img" aria-label="Stilisierte taktische Lagekarte (Platzhalter)">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#30363D" stroke-width="1" opacity="0.35"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="500" fill="#0D1117"/>
+  <rect width="800" height="500" fill="url(#grid)"/>
+  <!-- Hoehenlinien -->
+  <g fill="none" stroke="#30363D" stroke-width="1.5" opacity="0.6">
+    <path d="M-20 140C160 90 300 200 480 150S760 70 830 130"/>
+    <path d="M-20 250C180 210 320 310 500 260S780 190 830 240"/>
+    <path d="M-20 370C160 330 320 420 500 370S770 320 830 360"/>
+  </g>
+  <!-- Einsatzabschnitt (Sektor-Polygon) -->
+  <path d="M300 200 L470 180 L520 300 L360 340 Z" fill="#4A7FA5" fill-opacity="0.10" stroke="#4A7FA5" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <!-- Strassen -->
+  <g stroke="#8B949E" stroke-width="2" opacity="0.5" fill="none">
+    <path d="M60 460 L320 300 L560 320 L740 210"/>
+    <path d="M120 60 L280 240 L400 260"/>
+  </g>
+  <!-- Fahrzeug-Marker (Stahlblau) -->
+  <g fill="#4A7FA5">
+    <rect x="336" y="286" width="14" height="14" transform="rotate(45 343 293)"/>
+    <rect x="546" y="306" width="14" height="14" transform="rotate(45 553 313)"/>
+  </g>
+  <!-- Einsatzstelle (Signalrot) mit Pulsring -->
+  <circle cx="410" cy="250" r="26" fill="none" stroke="#E8462D" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="410" cy="250" r="12" fill="#E8462D"/>
+  <path d="M410 238 v-14 M410 262 v14 M398 250 h-14 M422 250 h14" stroke="#E8462D" stroke-width="2"/>
+  <!-- Gefahren-Marker -->
+  <path d="M250 150 l12 20 h-24 Z" fill="#0D1117" stroke="#E8462D" stroke-width="2"/>
+  <rect x="253" y="156" width="6" height="7" fill="#E8462D"/>
+</svg>

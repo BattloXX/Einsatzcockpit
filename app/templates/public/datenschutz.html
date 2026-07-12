@@ -1,0 +1,49 @@
+{% extends "public/base.html" %}
+
+{% block page_title %}Datenschutz{% endblock %}
+{% block meta_description %}Datenschutzerklärung von {{ brand }} – keine Tracker, keine Cookies auf der öffentlichen Website.{% endblock %}
+
+{% block content %}
+<section class="pub-section pub-topo">
+  <div class="pub-wrap">
+    <article class="pub-doc">
+      <span class="pub-todo">TODO · vor Veröffentlichung prüfen</span>
+      <h1>Datenschutzerklärung</h1>
+      <p>Der Schutz Ihrer personenbezogenen Daten ist uns wichtig. Nachfolgend informieren wir
+        Sie über die Verarbeitung personenbezogener Daten bei der Nutzung von {{ brand }}
+        ({{ brand_domain }}).</p>
+
+      <h2>Verantwortlicher</h2>
+      <p>Johannes Battlogg<br>E-Mail: <a href="mailto:{{ public_contact_email }}">{{ public_contact_email }}</a></p>
+
+      <h2>Öffentliche Website</h2>
+      <p>Diese Vorstellungswebsite setzt keine Cookies und bindet keine Tracker oder externen
+        Dienste ein. Schriften und alle weiteren Ressourcen werden ausschließlich vom eigenen
+        Server ausgeliefert. Server-Logfiles können IP-Adresse, Zeitpunkt und aufgerufene
+        Ressource zum sicheren Betrieb enthalten.</p>
+
+      <h2>Kontaktformular</h2>
+      <p>Wenn Sie uns über das Kontaktformular schreiben, werden die von Ihnen angegebenen
+        Daten (Name, E-Mail-Adresse, Nachricht) zur Bearbeitung der Anfrage per E-Mail
+        übermittelt und gespeichert.</p>
+
+      <h2>Anwendung (nach Anmeldung)</h2>
+      <p>In der angemeldeten Anwendung werden die zur Einsatzdokumentation eingegebenen Daten
+        sowie technisch notwendige Zugangs- und Sitzungsdaten (Anmeldedaten, Session-Cookie,
+        CSRF-Schutz-Cookie) verarbeitet. Es findet kein Tracking und keine Analyse durch
+        Dritte statt.</p>
+
+      <h2>Rechtsgrundlage</h2>
+      <p>Die Verarbeitung erfolgt zur Erfüllung vertraglicher bzw. vorvertraglicher Maßnahmen
+        (Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;b DSGVO) sowie auf Grundlage unseres berechtigten
+        Interesses am sicheren Betrieb (Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;f DSGVO).</p>
+
+      <h2>Ihre Rechte</h2>
+      <p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der
+        Verarbeitung, Datenübertragbarkeit sowie Widerspruch. Wenden Sie sich dafür an die
+        oben genannte Kontaktadresse. Zudem besteht ein Beschwerderecht bei der zuständigen
+        Aufsichtsbehörde.</p>
+    </article>
+  </div>
+</section>
+{% endblock %}

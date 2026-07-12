@@ -1,0 +1,97 @@
+{% extends "public/base.html" %}
+{% from "public/_icons.html" import icon %}
+{% from "public/_macros.html" import feature_card, terminal_panel %}
+
+{% block page_title %}Das digitale Cockpit für den Feuerwehreinsatz{% endblock %}
+{% block meta_description %}Einsatzcockpit unterstützt Feuerwehren von der Alarmierung bis zur Großschadenslage – Lagekarte, Alarmierung, Ressourcen und Dokumentation in einer Plattform. Kostenlos und Open Source.{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<header class="pub-hero pub-topo">
+  <span class="pub-scanline" aria-hidden="true"></span>
+  <div class="pub-wrap pub-hero__grid">
+    <div class="pub-hero__copy pub-reveal">
+      <span class="pub-eyebrow">OPEN SOURCE · NICHT-KOMMERZIELL · VON FEUERWEHRLEUTEN ENTWICKELT</span>
+      <h1 class="pub-h1">Das digitale Cockpit für den Feuerwehreinsatz.</h1>
+      <p class="pub-lead">Einsatzcockpit unterstützt Feuerwehren von der Alarmierung bis zur
+        Großschadenslage – Lagekarte, Alarmierung, Ressourcen und Dokumentation in einer
+        Plattform. Kostenlos und Open Source.</p>
+      <div class="pub-hero__actions">
+        <a class="pub-btn pub-btn--primary pub-btn--lg" href="/funktionen">Funktionen entdecken</a>
+        <a class="pub-btn pub-btn--outline pub-btn--lg" href="{{ public_github_url }}" target="_blank" rel="noopener">
+          {{ icon("github") }} Auf GitHub ansehen
+        </a>
+      </div>
+    </div>
+    <div class="pub-hero__visual pub-reveal" data-delay="2">
+      <div class="pub-frame pub-frame--placeholder">
+        <div class="pub-frame__inner">
+          <img src="/static/img/public/hero-lagekarte.svg" alt="Stilisierte taktische Lagekarte (Platzhalter)" width="800" height="500">
+          <span class="pub-frame__badge"><span class="pub-dot pub-dot--pulse"></span>LAGE: AKTIV</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- Fakten-Leiste -->
+<section class="pub-trust">
+  <div class="pub-wrap pub-trust__inner">
+    {% for fact in trust_facts %}
+    <div class="pub-trust__item"><span class="pub-dot pub-dot--pulse"></span>{{ fact }}</div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- Feature-Highlights -->
+<section class="pub-section">
+  <div class="pub-wrap">
+    <div class="pub-section__head">
+      <span class="pub-eyebrow">[ SYSTEM-MODULE ]</span>
+      <h2 class="pub-h2">Vom ersten Alarm bis zur Großschadenslage.</h2>
+      <p class="pub-section__sub">Alles, was die Einsatzführung braucht – in einem Werkzeug.</p>
+    </div>
+    <div class="pub-cards">
+      {% for f in features %}
+      {{ feature_card(f, status_map, delay=(loop.index0 % 3) + 1) }}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- Open-Source-Sektion -->
+<section class="pub-section pub-section--alt">
+  <div class="pub-wrap pub-split" style="border-bottom:0;padding:0">
+    <div class="pub-split__text">
+      <span class="pub-eyebrow pub-eyebrow--green">[ SOURCE_CODE: TRANSPARENZ ]</span>
+      <h2 class="pub-h2">Offen. Transparent. Gemeinsam.</h2>
+      <p class="pub-lead" style="margin-top:20px">Einsatzcockpit ist ein privates,
+        nicht-kommerzielles Projekt – aus dem aktiven Feuerwehrdienst entstanden und in der
+        Freizeit entwickelt. Der Quellcode ist offen: einsehbar, prüfbar und auf eigener
+        Infrastruktur betreibbar.</p>
+      <div style="margin-top:28px">
+        <a class="pub-btn pub-btn--primary" href="{{ public_github_url }}" target="_blank" rel="noopener">
+          {{ icon("github") }} Zum GitHub-Repository
+        </a>
+      </div>
+    </div>
+    <div class="pub-split__visual">
+      {{ terminal_panel(public_github_url + ".git") }}
+    </div>
+  </div>
+</section>
+
+<!-- Abschluss-CTA -->
+<section class="pub-cta pub-topo">
+  <div class="pub-cta__bg"></div>
+  <div class="pub-wrap">
+    <h2 class="pub-h2">Bereit für den Einsatz?</h2>
+    <p class="pub-lead">Die offene Plattform für Ihre Feuerwehr – kostenlos, transparent und
+      aus der Praxis. Melden Sie sich an oder nehmen Sie Kontakt auf.</p>
+    <div class="pub-cta__actions">
+      <a class="pub-btn pub-btn--primary pub-btn--lg" href="{{ public_app_url }}">Zum Login</a>
+      <a class="pub-btn pub-btn--outline pub-btn--lg" href="/ueber-das-projekt#kontakt">Kontakt aufnehmen</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

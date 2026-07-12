@@ -12,12 +12,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 
 from app.core.permissions import require_system_admin
 from app.core.templating import templates
 from app.db import get_db
 from app.models.user import User
+from app.services import public_content as pc
 from app.services import site_pages
 from app.services.mail_service import send_contact_message
 
@@ -30,9 +38,44 @@ MAX_IMG_BYTES = 4 * 1024 * 1024  # 4 MB
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
+def public_context(request: Request, active_nav: str, **extra) -> dict:
+    """Gemeinsamer Template-Kontext für die neue öffentliche Website (Ops-Room-Design).
+
+    Bündelt die strukturierten Inhalte aus ``app.services.public_content`` samt
+    Navigation/Status-Map, sodass die Seiten-Templates rein datengetrieben sind.
+    """
+    ctx = {
+        "user": getattr(request.state, "user", None),
+        "active_nav": active_nav,
+        "year": datetime.now(UTC).year,
+        "public_nav": pc.NAV,
+        "status_map": pc.STATUS,
+        "features": pc.FEATURES,
+        "trust_facts": pc.TRUST_FACTS,
+        "chips": pc.MORE_CHIPS,
+        "roadmap": pc.ROADMAP,
+        "available_items": pc.available_roadmap_items(),
+        "principles": pc.PRINCIPLES,
+    }
+    ctx.update(extra)
+    return ctx
+
+
+def render_start(request: Request, *, kontakt: str | None = None) -> HTMLResponse:
+    """Öffentliche Startseite (für nicht angemeldete Besucher)."""
+    return templates.TemplateResponse(
+        request, "public/start.html",
+        public_context(request, "start", kontakt=kontakt),
+    )
+
+
 def render_public_page(request: Request, db, slug: str, *, preview: bool = False,
                        kontakt: str | None = None) -> HTMLResponse:
-    """Rendert eine öffentliche Seite (HTML-Body aus dem CMS) im festen Gerüst."""
+    """Legacy-CMS-Renderer (WYSIWYG-Body im alten Gerüst).
+
+    Wird nur noch für die Admin-Vorschau (``/startseite/vorschau``) genutzt; die
+    öffentlichen Seiten laufen inzwischen über die strukturierten Templates.
+    """
     meta = site_pages.PAGES[slug]
     return templates.TemplateResponse(request, "public/page.html", {
         "user": getattr(request.state, "user", None),
@@ -46,21 +89,42 @@ def render_public_page(request: Request, db, slug: str, *, preview: bool = False
     })
 
 
-# ── Öffentliche Seiten ────────────────────────────────────────────────────────
+# ── Öffentliche Seiten (Ops-Room-Design, strukturierte Templates) ─────────────
+
+@router.get("/funktionen", response_class=HTMLResponse)
+async def funktionen(request: Request):
+    return templates.TemplateResponse(
+        request, "public/funktionen.html", public_context(request, "funktionen"))
+
+
+@router.get("/ueber-das-projekt", response_class=HTMLResponse)
+async def ueber(request: Request, kontakt: str | None = None):
+    return templates.TemplateResponse(
+        request, "public/ueber.html", public_context(request, "ueber", kontakt=kontakt))
+
+
+@router.get("/roadmap", response_class=HTMLResponse)
+async def roadmap(request: Request):
+    return templates.TemplateResponse(
+        request, "public/roadmap.html", public_context(request, "roadmap"))
+
 
 @router.get("/impressum", response_class=HTMLResponse)
-async def impressum(request: Request, db=Depends(get_db)):
-    return render_public_page(request, db, "impressum")
-
-
-@router.get("/about", response_class=HTMLResponse)
-async def about(request: Request, db=Depends(get_db)):
-    return render_public_page(request, db, "about")
+async def impressum(request: Request):
+    return templates.TemplateResponse(
+        request, "public/impressum.html", public_context(request, None))
 
 
 @router.get("/datenschutz", response_class=HTMLResponse)
-async def datenschutz(request: Request, db=Depends(get_db)):
-    return render_public_page(request, db, "datenschutz")
+async def datenschutz(request: Request):
+    return templates.TemplateResponse(
+        request, "public/datenschutz.html", public_context(request, None))
+
+
+@router.get("/about")
+async def about_redirect():
+    # Alte About-Seite → neue "Über das Projekt"-Seite (Bestands-Links am Leben halten).
+    return RedirectResponse("/ueber-das-projekt", status_code=308)
 
 
 @router.post("/kontakt")
@@ -69,18 +133,48 @@ async def contact_submit(
     name: str = Form(""), email: str = Form(""), message: str = Form(""),
     website: str = Form(""),  # Honeypot – muss leer bleiben
 ):
+    # Das Kontaktformular lebt auf /ueber-das-projekt#kontakt – dorthin zurück.
+    ok = "/ueber-das-projekt?kontakt=ok#kontakt"
+    fehler = "/ueber-das-projekt?kontakt=fehler#kontakt"
     if website.strip():
-        return RedirectResponse("/?kontakt=ok#kontakt", status_code=303)
+        return RedirectResponse(ok, status_code=303)
     if not name.strip() or not email.strip() or not message.strip():
-        return RedirectResponse("/?kontakt=fehler#kontakt", status_code=303)
+        return RedirectResponse(fehler, status_code=303)
     try:
         await send_contact_message(
             name=name.strip(), reply_email=email.strip(), message=message.strip(), db=db,
         )
     except Exception:
         logger.exception("Kontaktformular: Versand fehlgeschlagen")
-        return RedirectResponse("/?kontakt=fehler#kontakt", status_code=303)
-    return RedirectResponse("/?kontakt=ok#kontakt", status_code=303)
+        return RedirectResponse(fehler, status_code=303)
+    return RedirectResponse(ok, status_code=303)
+
+
+# ── SEO: robots.txt + sitemap.xml ─────────────────────────────────────────────
+
+_PUBLIC_PATHS = ["/", "/funktionen", "/ueber-das-projekt", "/roadmap", "/impressum", "/datenschutz"]
+
+
+@router.get("/robots.txt", response_class=PlainTextResponse)
+async def robots(request: Request):
+    base = str(request.base_url).rstrip("/")
+    return PlainTextResponse(
+        "User-agent: *\nAllow: /\n"
+        "Disallow: /admin/\nDisallow: /lage/\nDisallow: /api/\n"
+        f"Sitemap: {base}/sitemap.xml\n"
+    )
+
+
+@router.get("/sitemap.xml")
+async def sitemap(request: Request):
+    base = str(request.base_url).rstrip("/")
+    urls = "".join(f"<url><loc>{base}{p}</loc></url>" for p in _PUBLIC_PATHS)
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{urls}</urlset>"
+    )
+    return Response(content=xml, media_type="application/xml")
 
 
 @router.get("/startseite/vorschau", response_class=HTMLResponse)

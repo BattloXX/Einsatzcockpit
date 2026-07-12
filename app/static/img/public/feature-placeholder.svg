@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" role="img" aria-label="Platzhalter-Visual">
+  <defs>
+    <pattern id="fgrid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#30363D" stroke-width="1" opacity="0.3"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="500" fill="#161B22"/>
+  <rect width="800" height="500" fill="url(#fgrid)"/>
+  <!-- abstrakte Datenmodule -->
+  <g stroke="#30363D" stroke-width="1.5" fill="#0D1117">
+    <rect x="80" y="90" width="300" height="120"/>
+    <rect x="420" y="90" width="300" height="120"/>
+    <rect x="80" y="240" width="640" height="170"/>
+  </g>
+  <g fill="#4A7FA5" opacity="0.8">
+    <rect x="100" y="112" width="120" height="10"/>
+    <rect x="100" y="132" width="200" height="8"/>
+    <rect x="440" y="112" width="140" height="10"/>
+  </g>
+  <g fill="#E8462D">
+    <rect x="100" y="160" width="60" height="26"/>
+  </g>
+  <!-- Chart-Linie -->
+  <path d="M110 380 L210 330 L300 350 L400 300 L500 320 L620 270 L690 290" fill="none" stroke="#238636" stroke-width="2.5"/>
+  <circle cx="400" cy="300" r="5" fill="#238636"/>
+  <text x="400" y="470" fill="#8B949E" font-family="monospace" font-size="16" text-anchor="middle" letter-spacing="2">PLATZHALTER</text>
+</svg>
