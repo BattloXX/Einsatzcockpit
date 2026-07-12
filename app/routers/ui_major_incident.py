@@ -1450,7 +1450,7 @@ async def lage_media_serve(
     path = site_media_path(media)
     if not path.exists():
         raise HTTPException(status_code=404)
-    return FileResponse(str(path), media_type="image/jpeg")
+    return FileResponse(str(path), media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/lage-medien/thumb/{media_id}")
@@ -1476,7 +1476,9 @@ async def lage_media_thumb(
     path = thumb if thumb.exists() else site_media_path(media)
     if not path.exists():
         raise HTTPException(status_code=404)
-    return FileResponse(str(path), media_type="image/jpeg")
+    # no-cache: Datei kann per Annotations-Editor nachtraeglich unter demselben Pfad
+    # ueberschrieben werden -- Revalidierung statt Browser-Cache erzwingen.
+    return FileResponse(str(path), media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
 # ── Lage beenden (nur manuell) ───────────────────────────────────────────────
@@ -2020,7 +2022,7 @@ async def lage_journal_media_image(
     p = journal_thumb_path(m) if thumb else journal_media_path(m)
     if not p.exists():
         raise HTTPException(status_code=404)
-    return FileResponse(str(p), media_type="image/jpeg")
+    return FileResponse(str(p), media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
 @router.post("/lage/{lage_id}/journal/{entry_id}/loeschen")
@@ -2436,7 +2438,7 @@ async def cross_marker_media_serve(
     p = cross_media_thumb_path(media) if thumb else cross_media_path(media)
     if not p.exists():
         raise HTTPException(status_code=404)
-    return FileResponse(str(p), media_type="image/jpeg")
+    return FileResponse(str(p), media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
 @router.post("/lage/{lage_id}/uebergreifend/{mid}/medien/{media_id}/loeschen")

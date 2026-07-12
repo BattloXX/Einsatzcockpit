@@ -114,6 +114,20 @@ def _size_limit_for_kind(kind: str) -> int:
 
 
 # ── Bild-Pipeline ─────────────────────────────────────────────────
+def _write_thumb(img, dest_path: Path) -> None:
+    """Skaliert eine bereits geoeffnete PIL-Image-Instanz auf MEDIA_THUMB_SIZE und
+    speichert sie als JPEG q=80 unter dest_path. Gemeinsamer Helper fuer den
+    Upload-Pfad (_process_image) und die Thumb-Regenerierung nach Bildbearbeitung
+    (annotation_service._regenerate_thumb)."""
+    from PIL import Image
+
+    thumb = img.copy()
+    if thumb.mode not in ("RGB", "L"):
+        thumb = thumb.convert("RGB")
+    thumb.thumbnail((settings.MEDIA_THUMB_SIZE, settings.MEDIA_THUMB_SIZE), Image.Resampling.LANCZOS)
+    thumb.save(dest_path, "JPEG", quality=80, optimize=True)
+
+
 def _process_image(data: bytes, dest_dir: Path) -> tuple[Path, Path, int, int, str]:
     """Verkleinert auf MAX_WIDTHxMAX_HEIGHT, EXIF-Rotation, schreibt JPEG + Thumb.
     Returns: (storage_path, thumb_path, width, height, mime_type)."""
@@ -134,12 +148,29 @@ def _process_image(data: bytes, dest_dir: Path) -> tuple[Path, Path, int, int, s
     thumb_path = dest_dir / f"{uid}_thumb.jpg"
 
     img.save(main_path, "JPEG", quality=85, optimize=True, progressive=True)
-
-    thumb = img.copy()
-    thumb.thumbnail((settings.MEDIA_THUMB_SIZE, settings.MEDIA_THUMB_SIZE), Image.Resampling.LANCZOS)
-    thumb.save(thumb_path, "JPEG", quality=80, optimize=True)
+    _write_thumb(img, thumb_path)
 
     return main_path, thumb_path, img.width, img.height, "image/jpeg"
+
+
+def regenerate_thumbnail_from_bytes(image_bytes: bytes, dest_path: Path) -> bool:
+    """Erzeugt/ueberschreibt ein Thumbnail-JPEG unter dest_path aus beliebigen
+    Bilddaten (z.B. dem geflachten PNG einer Bildbearbeitung). Wird von
+    annotation_service.save_annotation() aufgerufen, damit Miniaturansichten nach
+    dem Bearbeiten sofort den aktuellen Stand zeigen. Gibt True bei Erfolg zurueck,
+    False bei einem (best-effort geloggten) Fehler -- ein fehlgeschlagenes
+    Thumb-Update darf den eigentlichen Annotation-Save nie verhindern."""
+    from PIL import Image, ImageOps
+
+    try:
+        img = Image.open(io.BytesIO(image_bytes))  # type: ignore[assignment]
+        img = ImageOps.exif_transpose(img)  # type: ignore[assignment]
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_thumb(img, dest_path)
+        return True
+    except Exception:
+        logger.warning("Thumb-Regenerierung fehlgeschlagen fuer %s", dest_path, exc_info=True)
+        return False
 
 
 # ── PDF-Pipeline ──────────────────────────────────────────────────

@@ -34,6 +34,7 @@ class MediaSpec:
     kind_of: Callable[[object], str]          # media -> 'image'|'pdf'|'video'
     abs_path: Callable[[object], Path]        # media -> Originaldatei
     access: Callable[[Session, User, object], bool]
+    thumb_path: Callable[[object], Path | None]  # media -> Thumbnail-Datei (fuer Regenerierung)
 
 
 def _may_access_incident(user: User, incident) -> bool:  # type: ignore[no-untyped-def]
@@ -60,21 +61,30 @@ def _build_registry() -> dict[str, MediaSpec]:
     from app.models.major_incident import CrossMarkerMedia, LageJournalMedia, SiteMedia
     from app.services.lage_media_service import (
         cross_media_path,
+        cross_media_thumb_path,
         journal_media_path,
+        journal_thumb_path,
         site_media_path,
+        site_thumb_path,
     )
-    from app.services.media_service import absolute_path
+    from app.services.media_service import absolute_path, absolute_thumb_path
 
     def kind_ec(m): return getattr(m, "kind", None)          # task/message/person
     def kind_gsl(m): return getattr(m, "media_type", None)   # site/cross/journal
 
     return {
-        "task":         MediaSpec("task", TaskMedia, kind_ec, absolute_path, _access_incident),
-        "message":      MediaSpec("message", MessageMedia, kind_ec, absolute_path, _access_incident),
-        "person":       MediaSpec("person", PersonMedia, kind_ec, absolute_path, _access_incident),
-        "site":         MediaSpec("site", SiteMedia, kind_gsl, site_media_path, _access_org),
-        "cross_marker": MediaSpec("cross_marker", CrossMarkerMedia, kind_gsl, cross_media_path, _access_org),
-        "lage_journal": MediaSpec("lage_journal", LageJournalMedia, kind_gsl, journal_media_path, _access_org),
+        "task":         MediaSpec("task", TaskMedia, kind_ec, absolute_path,
+                                   _access_incident, absolute_thumb_path),
+        "message":      MediaSpec("message", MessageMedia, kind_ec, absolute_path,
+                                   _access_incident, absolute_thumb_path),
+        "person":       MediaSpec("person", PersonMedia, kind_ec, absolute_path,
+                                   _access_incident, absolute_thumb_path),
+        "site":         MediaSpec("site", SiteMedia, kind_gsl, site_media_path,
+                                   _access_org, site_thumb_path),
+        "cross_marker": MediaSpec("cross_marker", CrossMarkerMedia, kind_gsl, cross_media_path,
+                                   _access_org, cross_media_thumb_path),
+        "lage_journal": MediaSpec("lage_journal", LageJournalMedia, kind_gsl, journal_media_path,
+                                   _access_org, journal_thumb_path),
     }
 
 
@@ -164,8 +174,28 @@ def save_annotation(
             abs_path.parent.mkdir(parents=True, exist_ok=True)
             abs_path.write_bytes(raw)
             ann.annotated_file = abs_path.name
+            _regenerate_thumb(media_typ, media, raw)
     db.flush()
     return ann
+
+
+def _regenerate_thumb(media_typ: str, media, png_bytes: bytes) -> None:  # type: ignore[no-untyped-def]
+    """Ueberschreibt das bestehende Thumbnail der Medienzeile mit einer aus dem
+    geflachten Annotations-PNG neu berechneten Miniaturansicht (gleicher Dateipfad
+    wie bisher, ueber die typ-spezifische thumb_path-Aufloesung der Registry -- so
+    funktioniert es sowohl fuer task/message/person (thumb_path-DB-Spalte) als auch
+    fuer site/cross_marker/lage_journal (Dateiname-Konvention, keine eigene Spalte).
+    Ohne dieses Update zeigt /medien/thumb/{id} (und die GSL-Pendants) nach einer
+    Bearbeitung weiterhin das unbearbeitete Original, da das Thumb-JPEG sonst nur
+    einmal beim Upload erzeugt wird (Bug, siehe Session 2026-07-12)."""
+    from app.services.media_service import regenerate_thumbnail_from_bytes
+
+    spec = spec_for(media_typ)
+    if spec is None:
+        return
+    thumb_abs = spec.thumb_path(media)
+    if thumb_abs is not None:
+        regenerate_thumbnail_from_bytes(png_bytes, thumb_abs)
 
 
 def display_abs_path(db: Session, media_typ: str, media) -> Path | None:  # type: ignore[no-untyped-def]
@@ -191,6 +221,26 @@ def annotated_media_ids(db: Session, media_typ: str, media_ids: list[int]) -> se
         .all()
     )
     return {r[0] for r in rows}
+
+
+def annotated_versions(db: Session, media_typ: str, media_ids: list[int]) -> dict[int, int]:
+    """Wie annotated_media_ids(), liefert zusaetzlich einen Versions-Zeitstempel je
+    media_id (Unix-Sekunden von annotated_at). Templates haengen ihn als
+    Cache-Buster an die Thumb-URL (?v=...), damit ein per HTMX neu gerenderter
+    <img>-Tag mit unveraendertem src nicht aus dem Browser-Cache bedient wird,
+    obwohl das Thumb-File gerade neu geschrieben wurde (siehe _regenerate_thumb)."""
+    if not media_ids:
+        return {}
+    rows = (
+        db.query(MediaAnnotation.media_id, MediaAnnotation.annotated_at)
+        .filter(
+            MediaAnnotation.media_typ == media_typ,
+            MediaAnnotation.media_id.in_(media_ids),
+            MediaAnnotation.annotated_file.isnot(None),
+        )
+        .all()
+    )
+    return {mid: int(ts.timestamp()) for mid, ts in rows if ts is not None}
 
 
 # ── Soft-Lock (Heartbeat, TTL 5 min; Last-write-wins mit Warnung) ────────────

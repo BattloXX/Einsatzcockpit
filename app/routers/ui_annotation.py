@@ -96,7 +96,9 @@ def annotate_display(
         return Response(status_code=404)
     # PNG (annotiert) oder Original-MIME
     mime = "image/png" if path.suffix.lower() == ".png" else getattr(media, "mime_type", "image/jpeg")
-    return FileResponse(path, media_type=mime)
+    # no-cache: nach einer erneuten Bearbeitung liegt unter derselben URL sofort ein
+    # neues PNG -- Revalidierung statt Browser-Cache erzwingen (siehe ui_media.py).
+    return FileResponse(path, media_type=mime, headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/annotieren/{media_typ}/{media_id}/original")

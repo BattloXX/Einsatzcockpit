@@ -38,7 +38,7 @@ def media(tmp_path, monkeypatch):
     p = tmp_path / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_bytes(b"original-jpg-bytes")
-    return SimpleNamespace(id=1, storage_path=rel, kind="image", org_id=5)
+    return SimpleNamespace(id=1, storage_path=rel, kind="image", org_id=5, thumb_path=None)
 
 
 _PNG = "data:image/png;base64," + base64.b64encode(b"flaches-png-1").decode()
@@ -91,6 +91,69 @@ def test_annotated_media_ids(db, media):
     ann.save_annotation(db, _USER, "task", media, "X", _PNG)
     db.commit()
     assert ann.annotated_media_ids(db, "task", [1, 2]) == {1}
+
+
+def test_annotated_versions_liefert_zeitstempel(db, media):
+    assert ann.annotated_versions(db, "task", [1, 2]) == {}
+    ann.save_annotation(db, _USER, "task", media, "X", _PNG)
+    db.commit()
+    versions = ann.annotated_versions(db, "task", [1, 2])
+    assert list(versions) == [1]
+    assert versions[1] == int(ann.get_annotation(db, "task", 1).annotated_at.timestamp())
+
+
+def _echtes_png() -> str:
+    """Erzeugt ein valides 2x2-PNG (fuer Tests, die Pillow tatsaechlich oeffnen)."""
+    import io as _io
+
+    from PIL import Image
+    buf = _io.BytesIO()
+    Image.new("RGB", (2, 2), color=(255, 0, 0)).save(buf, "PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def test_save_regeneriert_thumbnail_aus_bearbeitetem_bild(db, media, tmp_path):
+    """Bug-Fix: Nach dem Speichern einer Bearbeitung muss die Miniaturansicht
+    (thumb_path) den bearbeiteten Stand zeigen, nicht mehr das Original-Thumb
+    (siehe [[project-*]]/Session 2026-07-12: /medien/thumb/{id} zeigte bisher
+    dauerhaft das unbearbeitete Bild)."""
+    thumb_rel = "task/1/abc_thumb.jpg"
+    thumb_abs = tmp_path / thumb_rel
+    thumb_abs.parent.mkdir(parents=True, exist_ok=True)
+    thumb_abs.write_bytes(b"altes-thumb")
+    media.thumb_path = thumb_rel
+
+    ann.save_annotation(db, _USER, "task", media, '{"a":1}', _echtes_png())
+    db.commit()
+
+    neuer_inhalt = thumb_abs.read_bytes()
+    assert neuer_inhalt != b"altes-thumb"
+    # Muss ein valides JPEG sein (PIL kann es wieder oeffnen)
+    from PIL import Image
+    with Image.open(thumb_abs) as img:
+        img.verify()
+
+
+def test_save_regeneriert_thumbnail_fuer_gsl_medientyp(db, tmp_path, monkeypatch):
+    """Site/CrossMarker/LageJournal-Medien haben KEINE thumb_path-Spalte (Thumb-Pfad
+    wird per Dateinamens-Konvention aus stored_filename abgeleitet, siehe
+    lage_media_service.site_thumb_path) -- die Registry muss auch fuer diese drei
+    Typen die richtige Thumb-Datei regenerieren, nicht nur fuer task/message/person."""
+    monkeypatch.chdir(tmp_path)  # site_thumb_path() nutzt CWD-relative Pfade
+
+    site_media = SimpleNamespace(id=42, incident_site_id=9, stored_filename="xyz.jpg",
+                                 media_type="image", org_id=5)
+    thumb_abs = ann.spec_for("site").thumb_path(site_media)
+    thumb_abs.parent.mkdir(parents=True, exist_ok=True)
+    thumb_abs.write_bytes(b"altes-site-thumb")
+
+    ann.save_annotation(db, _USER, "site", site_media, '{"a":1}', _echtes_png())
+    db.commit()
+
+    assert thumb_abs.read_bytes() != b"altes-site-thumb"
+    from PIL import Image
+    with Image.open(thumb_abs) as img:
+        img.verify()
 
 
 def test_get_or_create_idempotent(db):

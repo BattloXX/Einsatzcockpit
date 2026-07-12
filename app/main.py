@@ -52,6 +52,7 @@ from app.routers import (
     ui_lis,
     ui_major_incident,
     ui_media,
+    ui_medienverwaltung,
     ui_objekt,
     ui_objekt_dokumente,
     ui_org_mail,
@@ -545,6 +546,7 @@ app.include_router(ui_backup.router)
 app.include_router(ui_major_incident.router)
 app.include_router(ui_gsl_staff.router)
 app.include_router(ui_media.router)
+app.include_router(ui_medienverwaltung.router)
 app.include_router(ui_annotation.router)
 app.include_router(ui_breathing.router)
 app.include_router(ui_archive.router)

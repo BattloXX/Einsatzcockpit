@@ -110,6 +110,14 @@ async def media_gallery(
     })
 
 
+# Bilder koennen ueber den Annotations-Editor nachtraeglich veraendert werden
+# (Datei wird an Ort und Stelle neu geschrieben, siehe annotation_service._regenerate_thumb).
+# "no-cache" erzwingt eine Revalidierung (If-None-Match/If-Modified-Since) statt
+# blindem Vertrauen auf einen ggf. veralteten Browser-Cache-Eintrag fuer dieselbe
+# URL -- FileResponse liefert ETag/Last-Modified automatisch aus dem Datei-Stat.
+_NO_CACHE_HEADERS = {"Cache-Control": "no-cache"}
+
+
 def _serve_file(user, media, db, download: bool = False):
     if not media:
         return Response(status_code=404)
@@ -127,6 +135,7 @@ def _serve_file(user, media, db, download: bool = False):
         media_type=media.mime_type,
         filename=media.original_filename,
         content_disposition_type="attachment" if download else "inline",
+        headers=_NO_CACHE_HEADERS,
     )
 
 
@@ -138,11 +147,11 @@ def _serve_thumb(user, media, db):
         return Response(status_code=403)
     thumb = absolute_thumb_path(media)
     if thumb and thumb.exists():
-        return FileResponse(thumb, media_type="image/jpeg")
+        return FileResponse(thumb, media_type="image/jpeg", headers=_NO_CACHE_HEADERS)
     if media.kind == "image":
         path = absolute_path(media)
         if path.exists():
-            return FileResponse(path, media_type=media.mime_type)
+            return FileResponse(path, media_type=media.mime_type, headers=_NO_CACHE_HEADERS)
     return Response(status_code=404)
 
 
