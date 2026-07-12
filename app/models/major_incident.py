@@ -3,7 +3,19 @@ from __future__ import annotations
 import enum
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.types import TypeDecorator
 
@@ -566,6 +578,37 @@ class LageJournalMedia(Base):
     bytes:            Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     org_id:           Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
+
+
+# ── Lagedokument: gemeinsam bearbeitbares Dokument (Word-Online-artig) ───────
+# Eigenständig vom Einsatzjournal (das bleibt Append-only) UND vom bestehenden
+# "KI-Lagebericht" (KI-generierte Einmal-Zusammenfassung, siehe
+# ui_major_incident.py::lage_ki_bericht, POST /lage/{id}/lagebericht) — daher
+# bewusst "Lagedokument" statt "Lagebericht" genannt, keine Namenskollision.
+# Ein dauerhaftes, fortlaufend bearbeitbares Textdokument je Lage.
+# content_html ist der letzte sanitisierte Snapshot (Druck/Export/Fallback
+# ohne JS); ydoc_state haelt den vollstaendigen Yjs-CRDT-Stand fuer die
+# Live-Kollaboration (ab PR 2).
+
+class LageDokument(Base):
+    __tablename__ = "lage_dokument"
+
+    id:                 Mapped[int] = mapped_column(Integer, primary_key=True)
+    major_incident_id:  Mapped[int] = mapped_column(
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), unique=True, index=True)
+    org_id:             Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), index=True)
+    content_html:       Mapped[str | None] = mapped_column(Text, nullable=True)
+    ydoc_state:         Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    updated_at:         Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=True)
+
+    @validates("content_html")
+    def _sanitize_content_html(self, key, value):
+        # Gleicher Choke-Point wie LageJournalEntry.body_html (SEC-9): wird mit
+        # |safe gerendert, Sanitisierung zentral am Modell statt pro Schreibpfad.
+        from app.core.html_utils import sanitize_html
+        return sanitize_html(value)
 
 
 # ── Lage-QR-Token (Schnellzugang per QR-Code) ────────────────────────────────

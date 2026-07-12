@@ -1,0 +1,88 @@
+{% extends "incident_major/_lage_layout.html" %}
+{% block title %}{{ lage.name }} – Lagedokument{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/quill.snow.css">
+<style>
+/* ── Quill Dark Mode (identisch zu stab.html) ─────────────────────────────── */
+.ql-toolbar.ql-snow {
+  background: var(--surface-elevated, #1e2130);
+  border-color: var(--border) !important;
+  border-radius: 4px 4px 0 0;
+}
+.ql-toolbar.ql-snow .ql-stroke { stroke: var(--text-muted, #9ca3af); }
+.ql-toolbar.ql-snow .ql-fill  { fill:   var(--text-muted, #9ca3af); }
+.ql-container.ql-snow {
+  background: var(--surface, #12141f);
+  color: var(--on-surface, #e5e7eb);
+  border-color: var(--border) !important;
+  border-radius: 0 0 4px 4px;
+  font-size: .92rem;
+}
+.ql-editor.ql-blank::before { color: var(--text-muted, #9ca3af); }
+#lagedokument-editor { min-height: 400px; }
+.ld-meta { font-size: .78rem; color: var(--text-muted); margin-bottom: 10px; }
+</style>
+{% endblock %}
+
+{% block lage_content %}
+<div style="max-width:900px;margin:0 auto;">
+  <div class="dash-section" style="--dash-accent:var(--red);">
+    <div class="dash-section__title">📝 Lagedokument</div>
+    <p class="ld-meta">
+      Gemeinsames Dokument für die zusammenfassende Lagedarstellung.
+      {% if dokument.updated_at %}
+      Zuletzt gespeichert: {{ dokument.updated_at|local_datetime }}
+      {% if dokument.updated_by_user_id %}von einem Stabsmitglied{% endif %}.
+      {% else %}
+      Noch keine Speicherung.
+      {% endif %}
+    </p>
+
+    {% if gespeichert %}
+    <div class="alert alert--success" style="margin-bottom:12px;">✓ Gespeichert.</div>
+    {% endif %}
+
+    {% if can_edit %}
+    <form id="form-lagedokument" method="post" action="/lage/{{ lage.id }}/lagedokument">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div id="lagedokument-editor"></div>
+      <input type="hidden" name="content_html" id="lagedokument-content-html">
+      <div style="margin-top:10px;">
+        <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+      </div>
+    </form>
+    {% else %}
+    <div class="ql-snow"><div class="ql-editor" style="padding:0;">
+      {{ dokument.content_html|safe if dokument.content_html else '<p class="text-muted">Noch kein Inhalt.</p>'|safe }}
+    </div></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block lage_scripts %}
+<script src="/static/js/quill.min.js"></script>
+{% if can_edit %}
+<script>
+var _ldQuill = null;
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof Quill === 'undefined') return;
+  _ldQuill = new Quill('#lagedokument-editor', {
+    theme: 'snow',
+    modules: { toolbar: [['bold','italic','underline'],['strike'],['link'],
+      [{list:'ordered'},{list:'bullet'}],[{header:[3,4,false]}],['blockquote'],['clean']] },
+    placeholder: 'Lagedokument…',
+  });
+  var initial = {{ (dokument.content_html or '')|tojson }};
+  if (initial) { _ldQuill.clipboard.dangerouslyPasteHTML(initial); }
+});
+
+document.getElementById('form-lagedokument').addEventListener('submit', function() {
+  if (!_ldQuill) return;
+  var html = _ldQuill.getSemanticHTML ? _ldQuill.getSemanticHTML() : _ldQuill.root.innerHTML;
+  document.getElementById('lagedokument-content-html').value = html;
+});
+</script>
+{% endif %}
+{% endblock %}

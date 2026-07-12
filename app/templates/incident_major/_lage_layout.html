@@ -7,6 +7,8 @@
   {% set _tab = 'dashboard' %}
 {% elif _p.startswith(_base + '/stab') %}
   {% set _tab = 'stab' %}
+{% elif _p.startswith(_base + '/lagedokument') %}
+  {% set _tab = 'lagedokument' %}
 {% elif _p.startswith(_base + '/funkjournal') %}
   {% set _tab = 'funkjournal' %}
 {% elif _p.startswith(_base + '/meldungen') %}
@@ -31,6 +33,7 @@
   'board':      '📋 Board',
   'dashboard':  '📊 Dashboard',
   'stab':       '👥 Stab',
+  'lagedokument':'📝 Lagedokument',
   'funkjournal':'📻 Funkjournal',
   'meldungen':  '📥 Meldungen',
   'zeitreise':  '🕐 Zeitreise',
@@ -79,6 +82,10 @@
         <a href="{{ _base }}/stab"
            class="lage-tab {% if _tab == 'stab' %}lage-tab--active{% endif %}">
           👥 Stab
+        </a>
+        <a href="{{ _base }}/lagedokument"
+           class="lage-tab {% if _tab == 'lagedokument' %}lage-tab--active{% endif %}">
+          📝 Lagedokument
         </a>
         {% endif %}
         {% if mi_features.funkjournal %}
@@ -152,6 +159,10 @@
       <a href="{{ _base }}/stab"
          class="lage-mobile-nav__item {% if _tab == 'stab' %}lage-mobile-nav__item--active{% endif %}">
         👥 Stab
+      </a>
+      <a href="{{ _base }}/lagedokument"
+         class="lage-mobile-nav__item {% if _tab == 'lagedokument' %}lage-mobile-nav__item--active{% endif %}">
+        📝 Lagedokument
       </a>
       {% endif %}
       {% if mi_features.funkjournal %}

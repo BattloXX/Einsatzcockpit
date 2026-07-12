@@ -48,6 +48,7 @@ from app.routers import (
     ui_incident,
     ui_infoscreen_alarm,
     ui_invitation,
+    ui_lagedokument,
     ui_lagefuehrung,
     ui_lis,
     ui_major_incident,
@@ -545,6 +546,7 @@ app.include_router(ui_invitation.router)
 app.include_router(ui_backup.router)
 app.include_router(ui_major_incident.router)
 app.include_router(ui_gsl_staff.router)
+app.include_router(ui_lagedokument.router)
 app.include_router(ui_media.router)
 app.include_router(ui_medienverwaltung.router)
 app.include_router(ui_annotation.router)
