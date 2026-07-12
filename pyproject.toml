@@ -74,6 +74,11 @@ dependencies = [
     # Redis Pub/Sub-Bus für worker-übergreifende WebSocket-Zustellung (nur genutzt,
     # wenn REDIS_URL gesetzt ist; siehe app/services/ws_bus.py)
     "redis>=5",
+    # Lagedokument: Yjs-CRDT-Sync-Server (Realtime-Kollaboration, kollaborativer
+    # Editor GSL/Stab) – reine Python-Implementierung des Yjs-Protokolls, gleicher
+    # Stack wie JupyterLab-RTC, siehe app/services/lagedokument_collab.py
+    "pycrdt>=0.14",
+    "pycrdt-websocket>=0.16",
 ]
 
 [project.optional-dependencies]

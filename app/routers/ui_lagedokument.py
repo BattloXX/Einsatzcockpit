@@ -7,14 +7,17 @@ ui_major_incident.py::lage_ki_bericht) -- daher bewusst "Lagedokument" statt
 fortlaufend bearbeitbares Textdokument je Lage, gedacht als zusammenfassende
 Lagedarstellung (SKKM-Lagemeldung, Uebergabeprotokoll o.Ae.).
 
-PR 1: klassisches Speichern (kein Realtime-Sync). Live-Kollaboration (Yjs)
-folgt in einem separaten PR, siehe Plan.
+PR 1: klassisches Speichern (kein Realtime-Sync).
+PR 2: WebSocket-Endpoint fuer die Yjs-CRDT-Live-Kollaboration (Sync-Relay ueber
+app/services/lagedokument_collab.py). Rooms leben In-Memory pro Worker -- fuer
+Mehr-Worker-Korrektheit siehe PR 5 (Redis-Relay).
 """
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -24,9 +27,13 @@ from app.db import get_db
 from app.models.major_incident import LageDokument, MajorIncident
 
 router = APIRouter()
+logger = logging.getLogger("einsatzleiter.lagedokument")
 
 _EDIT_ROLLEN = ("incident_leader", "admin", "org_admin", "recorder")
 _LESE_ROLLEN = (*_EDIT_ROLLEN, "readonly")
+
+WS_CLOSE_UNAUTHORIZED = 4401
+WS_CLOSE_FORBIDDEN = 4403
 
 
 def _lage_or_404(lage_id: int, db: Session) -> MajorIncident:
@@ -93,3 +100,72 @@ async def lagedokument_save(
     dokument.updated_by_user_id = user.id
     db.commit()
     return RedirectResponse(f"/lage/{lage_id}/lagedokument?gespeichert=1", status_code=303)
+
+
+# ── Realtime-Kollaboration (Yjs-CRDT-Sync) ────────────────────────────────────
+
+class _FastAPIChannel:
+    """Adapter: erfuellt pycrdt's `Channel`-Protokoll (path/send/recv) ueber eine
+    FastAPI-WebSocket-Verbindung, damit YRoom.serve() sie direkt bedienen kann."""
+
+    def __init__(self, websocket: WebSocket, path: str):
+        self._ws = websocket
+        self.path = path
+
+    async def send(self, message: bytes) -> None:
+        await self._ws.send_bytes(message)
+
+    async def recv(self) -> bytes:
+        return await self._ws.receive_bytes()
+
+
+@router.websocket("/ws/lagedokument/{lage_id}")
+async def lagedokument_ws(websocket: WebSocket, lage_id: int):
+    """Realtime-Sync-Kanal fuer ein Lagedokument. Nur fuer Bearbeiten-Rollen --
+    Lesende (readonly) bekommen im Template gar keine Editor-/Yjs-Anbindung."""
+    from app.core.security import unsign_session
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.user import User
+    from app.services.lagedokument_collab import get_or_create_room, release_room_if_empty
+
+    token = websocket.cookies.get("session")
+    session_data = unsign_session(token) if token else None
+    if not session_data:
+        await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+        return
+    user_id = session_data[0]
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
+        if user is None:
+            await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+            return
+        _ = [r.code for r in user.roles]  # vor Session-Ende laden
+        if not has_role(user, *_EDIT_ROLLEN):
+            await websocket.close(code=WS_CLOSE_FORBIDDEN)
+            return
+        lage = db.get(MajorIncident, lage_id)
+        if lage is None or not same_org_or_system_admin(user, lage.org_id):
+            await websocket.close(code=WS_CLOSE_FORBIDDEN)
+            return
+        org_id = lage.org_id
+    finally:
+        db.close()
+
+    await websocket.accept()
+    channel = _FastAPIChannel(websocket, path=f"lagedokument-{lage_id}")
+    try:
+        room = await get_or_create_room(lage_id, org_id)
+        await room.serve(channel)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        logger.exception("Lagedokument-WS %s: Fehler im Sync-Room", lage_id)
+    finally:
+        try:
+            await release_room_if_empty(lage_id)
+        except Exception:
+            logger.exception("Lagedokument-WS %s: Aufraeumen fehlgeschlagen", lage_id)
