@@ -207,6 +207,7 @@ h1, h2, h3, .pub-h1, .pub-h2, .pub-h3 {
   color: var(--text);
 }
 .pub-brand__mark {
+  display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 32px; flex: none;
   color: var(--accent);
 }
@@ -420,6 +421,7 @@ h1, h2, h3, .pub-h1, .pub-h2, .pub-h3 {
 }
 .pub-card:hover { border-color: var(--accent); transform: translateY(-2px); }
 .pub-card__icon {
+  display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 32px;
   color: var(--accent);
   margin-bottom: 16px;
@@ -455,7 +457,10 @@ h1, h2, h3, .pub-h1, .pub-h2, .pub-h3 {
 }
 .pub-split__list li svg { width: 18px; height: 18px; color: var(--green); flex: none; margin-top: 3px; }
 .pub-split__head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
-.pub-split__icon { width: 30px; height: 30px; color: var(--accent); flex: none; }
+.pub-split__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; color: var(--accent); flex: none;
+}
 .pub-split__icon svg { width: 100%; height: 100%; }
 
 @media (min-width: 900px) {
