@@ -85,7 +85,14 @@ def generate_numeric_pin(length: int = 6) -> str:
 # Das Gateway lädt fertige PDFs über eine signierte, kurzlebige URL – kein
 # generischer API-Zugriff auf Einsatzdaten.
 _artifact_signer = URLSafeTimedSerializer(settings.SECRET_KEY, salt="ecpg-artifact")
-ARTIFACT_TOKEN_MAX_AGE = 300  # 5 min
+# Das Gateway speichert die URL beim Empfang eines Jobs einmalig im lokalen Spool
+# und wiederholt bei einem Fehlschlag denselben Download mit Backoff (20/40/80/
+# 160/320s, bis zu 5 Versuche = ~620s kumuliert), OHNE die URL neu zu holen
+# (ecpg/print_manager.py). Bei 300s (5 min) lief das Fenster spaetestens ab dem
+# 4. Versuch ab -> ein einmal fehlgeschlagener Job konnte nie mehr erfolgreich
+# werden (Vorfall 2026-07-13: alle "objektblatt"-Jobs endeten dauerhaft mit 403
+# "abgelaufene Signatur"). 1200s deckt die volle Retry-Kette mit Marge ab.
+ARTIFACT_TOKEN_MAX_AGE = 1200  # 20 min
 
 
 def sign_artifact_token(job_id: int, org_id: int) -> str:

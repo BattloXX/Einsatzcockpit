@@ -406,7 +406,7 @@ def _jobs_for_rule(
 ) -> list[PrintJob]:
     """Erzeugt Jobs einer Regel: je Dokument × Zieldrucker sowie – bei zugeordnetem
     Objekt – je Objekt-Element-Seite × Zieldrucker (idempotent, außer bei source=manual)."""
-    from app.models.gateway import DOC_OBJEKT_DOKUMENT, DOC_VERLEIH_SCHEIN
+    from app.models.gateway import DOC_OBJEKT_DOKUMENT, DOC_OBJEKTBLATT, DOC_VERLEIH_SCHEIN
 
     jobs: list[PrintJob] = []
     printer_ids = rule.printer_ids or []
@@ -428,6 +428,21 @@ def _jobs_for_rule(
     for document_type in documents:
         if document_type == DOC_VERLEIH_SCHEIN:
             continue  # braucht Vorgangs-Kontext → unten mit artifact_ref (ausleihe_id)
+        if document_type == DOC_OBJEKTBLATT:
+            # Objektblatt braucht immer ein konkretes Objekt: entweder explizit im
+            # Kontext (z.B. manueller Testdruck fuer ein Objekt) oder - beim
+            # Einsatz-Trigger - die dort bestaetigt verknuepften Objekte. Ohne diese
+            # Aufloesung blieb objekt_id fuer jede Auto-Druckregel mit Objektblatt am
+            # Trigger "Einsatz angelegt" leer, render_job_pdf scheiterte dann immer
+            # mit "Objektblatt ohne objekt_id" (Vorfall 2026-07-13).
+            objekt_ids = (
+                [int(context["objekt_id"])] if context.get("objekt_id")
+                else _resolve_objekt_ids(db, context)
+            )
+            for objekt_id in objekt_ids:
+                for printer_id in printer_ids:
+                    _add(printer_id=printer_id, document_type=document_type, objekt_id=objekt_id)
+            continue
         for printer_id in printer_ids:
             _add(printer_id=printer_id, document_type=document_type, objekt_id=context.get("objekt_id"))
 
