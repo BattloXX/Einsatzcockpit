@@ -50,21 +50,6 @@ FEATURES: list[dict] = [
         ],
     },
     {
-        "key": "alarmierung",
-        "anchor": "alarmierung",
-        "title": "Alarmierung & Print-Gateway",
-        "status": "verfuegbar",
-        "icon": "bell",
-        "tagline": "Anbindung an die lokale Infrastruktur im Feuerwehrhaus – "
-                   "Ausdruck und Alarmmonitor, auch bei Netzstörungen.",
-        "bullets": [
-            "Anbindung an die lokale Infrastruktur im Feuerwehrhaus (ECPG)",
-            "Automatische Einsatzausdrucke",
-            "Alarmmonitor",
-            "Robuste Alarmverarbeitung auch bei Netzstörungen",
-        ],
-    },
-    {
         "key": "grossschadenslage",
         "anchor": "grossschadenslage",
         "title": "Großschadenslage (SKKM)",
@@ -124,6 +109,22 @@ FEATURES: list[dict] = [
             "Atemschutzgeräteprüfung mit Prüfhistorie",
             "Mannschaftslisten mit Anwesenheitserfassung (Einsätze, Übungen, Veranstaltungen)",
             "Auswertbar und jederzeit abrufbar",
+        ],
+    },
+    {
+        "key": "alarmierung",
+        "anchor": "alarmierung",
+        "title": "Alarmierung & Print-Gateway",
+        "status": "verfuegbar",
+        "icon": "bell",
+        "image": "/seite/bild/Gateway.png",
+        "tagline": "Anbindung an die lokale Infrastruktur im Feuerwehrhaus – "
+                   "Ausdruck und Alarmmonitor, auch bei Netzstörungen.",
+        "bullets": [
+            "Anbindung an die lokale Infrastruktur im Feuerwehrhaus (ECPG)",
+            "Automatische Einsatzausdrucke",
+            "Alarmmonitor",
+            "Robuste Alarmverarbeitung auch bei Netzstörungen",
         ],
     },
 ]
