@@ -245,6 +245,38 @@ def test_reconcile_storage_includes_annotated_images(db, orgs, monkeypatch, tmp_
     )
 
 
+# ── reconcile_storage + Objektverwaltung: Regressionstest (Session 2026-07-13) ─
+# Dokumente/Medien der Objektverwaltung (objekt_dokument) wurden live via
+# reserve_storage gezaehlt, fehlten aber in reconcile_storage -> nach einem
+# "Speicher neu berechnen" verschwand ihr Anteil aus der Quota. belegt_bytes
+# haelt bereits Original + abgeleitete Seiten, daher genau diese Spalte summieren.
+
+def test_reconcile_storage_includes_objekt_dokumente(db, orgs):
+    from app.models.objekt import Objekt, ObjektDokument
+
+    org_a, org_b = orgs
+    obj = Objekt(org_id=org_a.id, name="Objekt A", nummer="A1")
+    db.add(obj)
+    db.flush()
+    db.add(ObjektDokument(org_id=org_a.id, objekt_id=obj.id, dateiname_original="plan.pdf",
+                          pfad="a/plan.pdf", groesse_bytes=1000, belegt_bytes=1500, status="fertig"))
+    db.add(ObjektDokument(org_id=org_a.id, objekt_id=obj.id, dateiname_original="eri.pdf",
+                          pfad="a/eri.pdf", groesse_bytes=2000, belegt_bytes=2500, status="fertig"))
+    # Fremd-Org-Dokument darf NICHT mitgezaehlt werden (Org-Isolation)
+    obj_b = Objekt(org_id=org_b.id, name="Objekt B", nummer="B1")
+    db.add(obj_b)
+    db.flush()
+    db.add(ObjektDokument(org_id=org_b.id, objekt_id=obj_b.id, dateiname_original="x.pdf",
+                          pfad="b/x.pdf", groesse_bytes=9000, belegt_bytes=9000, status="fertig"))
+    db.commit()
+
+    total = reconcile_storage(db, org_a.id)
+    assert total == 4000, (
+        "reconcile_storage zaehlt Objektverwaltungs-Dokumente (objekt_dokument.belegt_bytes) "
+        "nicht mit -- nach einem Reconcile faellt der Objekt-Speicher aus der Quota"
+    )
+
+
 # ── Retry bei transienten MariaDB-Sperrkonflikten (Vorfall 2026-07-06) ─────────
 # INSERT/UPDATE auf das gemeinsame org_storage_usage-Row warf unter paralleler
 # Dokumentverarbeitung MySQL-Error 1020 ("Record has changed since last read;
