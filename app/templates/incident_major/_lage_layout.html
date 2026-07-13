@@ -80,12 +80,8 @@
         </a>
         {% if mi_features.stab %}
         <a href="{{ _base }}/stab"
-           class="lage-tab {% if _tab == 'stab' %}lage-tab--active{% endif %}">
+           class="lage-tab {% if _tab == 'stab' or _tab == 'lagedokument' %}lage-tab--active{% endif %}">
           👥 Stab
-        </a>
-        <a href="{{ _base }}/lagedokument"
-           class="lage-tab {% if _tab == 'lagedokument' %}lage-tab--active{% endif %}">
-          📝 Lagebericht
         </a>
         {% endif %}
         {% if mi_features.funkjournal %}
@@ -157,12 +153,8 @@
       </a>
       {% if mi_features.stab %}
       <a href="{{ _base }}/stab"
-         class="lage-mobile-nav__item {% if _tab == 'stab' %}lage-mobile-nav__item--active{% endif %}">
+         class="lage-mobile-nav__item {% if _tab == 'stab' or _tab == 'lagedokument' %}lage-mobile-nav__item--active{% endif %}">
         👥 Stab
-      </a>
-      <a href="{{ _base }}/lagedokument"
-         class="lage-mobile-nav__item {% if _tab == 'lagedokument' %}lage-mobile-nav__item--active{% endif %}">
-        📝 Lagebericht
       </a>
       {% endif %}
       {% if mi_features.funkjournal %}

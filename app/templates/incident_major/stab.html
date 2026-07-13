@@ -104,6 +104,8 @@
 }
 .stab-tab:hover { color: var(--text); }
 .stab-tab.active { background: var(--surface-high); color: var(--text); box-shadow: var(--shadow-card); }
+/* Lagebericht ist eine eigene Seite -> als Link-Tab (navigiert weg, kein x-show-Panel) */
+a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
 
 /* Panel (Formular / KI-Pressemeldung) */
 .dash-section {
@@ -273,6 +275,7 @@
   {# ── Tab-Navigation ────────────────────────────────────────────────────────── #}
   <div class="stab-tabs">
     <button class="stab-tab" :class="{active: tab==='einsatzjournal'}" @click="setTab('einsatzjournal')">Einsatzjournal</button>
+    <a class="stab-tab" href="/lage/{{ lage.id }}/lagedokument">📝 Lagebericht</a>
     <button class="stab-tab" :class="{active: tab==='tafel'}" @click="setTab('tafel')">Besetzungstafel</button>
     <button class="stab-tab" :class="{active: tab==='journal'}" @click="setTab('journal')">Personenjournal</button>
   </div>
