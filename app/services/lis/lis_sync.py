@@ -722,7 +722,7 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
         await broadcast_org(org.id, {
             "type": "incident_created",
             "incident_id": incident.id,
-            "url": f"/einsatz/{incident.id}",
+            "url": f"/einsatz/{incident.id}/info",
             "title": f"Neuer Einsatz aus LIS: {parsed['alarm_type_code']}",
         })
 

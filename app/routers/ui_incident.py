@@ -385,7 +385,7 @@ async def new_incident(
             {
                 "type": "incident_created", "incident_id": incident.id,
                 "alarm": alarm_type_code, "is_exercise": is_exercise,
-                "url": f"/einsatz/{incident.id}",
+                "url": f"/einsatz/{incident.id}/info",
                 "title": f"{'[ÜBUNG] ' if is_exercise else ''}Neuer Einsatz: {alarm_type_code}",
             },
         )

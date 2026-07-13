@@ -664,7 +664,7 @@ async def create_incident_api(
                 "alarm": alarm_type_code,
                 "address": address,
                 "is_exercise": payload.Uebung,
-                "url": f"/einsatz/{incident.id}",
+                "url": f"/einsatz/{incident.id}/info",
                 "title": f"{exercise_prefix}Neuer Einsatz: {alarm_type_code} – {address}",
             },
         )
