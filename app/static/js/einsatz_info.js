@@ -25,7 +25,7 @@
   var objektIds = (el.dataset.objektIds || "").split(",").filter(Boolean);
 
   var karte = L.map(el, { zoomControl: true });
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  var tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap"
   }).addTo(karte);
@@ -42,13 +42,28 @@
   // denselben Ausschnitt (Einsatzort+Objekte) wie beim initialen Laden.
   window.einsatzInfoKarte = karte;
   function refitFuerDruck() {
-    try { karte.invalidateSize(); fit(); } catch (e) { /* egal */ }
+    // animate:false: eine animierte Schwenk-Bewegung braucht laenger als das
+    // 'load'-Event der Kacheln unten abwartet und wurde beim Druck teils mitten
+    // in der Animation erwischt (Ausdruck zeigte dann einen Zwischenstand statt
+    // des Zielausschnitts, Bug 2026-07-13).
+    try { karte.invalidateSize(false); fit(true); } catch (e) { /* egal */ }
   }
   window.addEventListener("beforeprint", refitFuerDruck);
   window.einsatzInfoDrucken = function () {
     refitFuerDruck();
-    // kurze Verzoegerung, damit Leaflet die Kacheln neu positioniert/laedt
-    setTimeout(function () { window.print(); }, 350);
+    // Auf das tatsaechliche Laden der Kacheln im neuen Ausschnitt warten statt
+    // eine feste Verzoegerung zu raten - bei langsamer Kachel-Antwort reichten
+    // 350ms nicht immer, der Ausdruck zeigte dann noch den alten/falschen
+    // Kartenausschnitt (Bug 2026-07-13). Harte Obergrenze als Fallback, falls
+    // das Tile-Loading haengen bleibt.
+    var gedruckt = false;
+    function druckenEinmal() {
+      if (gedruckt) { return; }
+      gedruckt = true;
+      window.print();
+    }
+    tileLayer.once("load", function () { setTimeout(druckenEinmal, 80); });
+    setTimeout(druckenEinmal, 1500);
   };
   // Druck-Zeitstempel (nur im Druckkopf sichtbar)
   var tsEl = document.getElementById("ei-print-ts");
@@ -63,17 +78,18 @@
   var hydrantBounds = [];
   var zentrumFallback = null;
 
-  function fit() {
+  function fit(instant) {
+    var animate = !instant;
     if (objektBounds.length > 1) {
-      karte.fitBounds(objektBounds, { padding: [45, 45], maxZoom: 18 });
+      karte.fitBounds(objektBounds, { padding: [45, 45], maxZoom: 18, animate: animate });
     } else if (objektBounds.length === 1) {
-      karte.setView(objektBounds[0], 18);
+      karte.setView(objektBounds[0], 18, { animate: animate });
     } else if (zentrumFallback) {
-      karte.setView(zentrumFallback, 17);
+      karte.setView(zentrumFallback, 17, { animate: animate });
     } else if (hydrantBounds.length) {
-      karte.fitBounds(hydrantBounds, { padding: [45, 45], maxZoom: 17 });
+      karte.fitBounds(hydrantBounds, { padding: [45, 45], maxZoom: 17, animate: animate });
     } else {
-      karte.setView([47.4652, 9.7503], 14); /* Fallback Wolfurt */
+      karte.setView([47.4652, 9.7503], 14, { animate: animate }); /* Fallback Wolfurt */
     }
   }
 

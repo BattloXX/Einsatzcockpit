@@ -142,12 +142,20 @@ def parse_person_response(description: str | None, task_type: str | None) -> dic
 # ── Normalisierung für die Matching-Heuristik (Adresse) ────────────────────────
 _WS_RE = re.compile(r"\s+")
 _PUNCT_RE = re.compile(r"[.,;:!?\"'`´()\[\]{}/\\<>|-]+")
+# ß/Umlaute auf ASCII-Ersatz abbilden: BMA-/RFL-Alarmtexte kommen teils ueber
+# serielle Schnittstellen mit eingeschraenktem Zeichensatz ("Kesselstrasse"),
+# waehrend Objekt-Stammdaten manuell mit korrekter Schreibweise ("Kesselstraße")
+# angelegt werden - ohne diese Abbildung schlug der Adressabgleich in Stufe 2
+# von match_incident() bei sonst identischer Adresse still fehl (Vorfall 2026-07-13,
+# Einsatz F14 Kesselstraße 42 wurde trotz Objekt-Treffer nicht automatisch verknuepft).
+_UMLAUT_MAP = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
 
 
 def _normalize_text(value: str | None) -> str:
     if not value:
         return ""
     text = value.strip().lower()
+    text = text.translate(_UMLAUT_MAP)
     text = _PUNCT_RE.sub(" ", text)
     text = _WS_RE.sub(" ", text)
     return text.strip()
