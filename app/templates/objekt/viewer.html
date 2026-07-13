@@ -168,7 +168,10 @@
         <img x-show="i === idx"
              :data-akt="i === idx ? '1' : '0'"
              :src="'/objekt-medien/seite/' + sid + '/bild?r=' + (rotationen[i] || 0)"
-             :style="'transform: translate(' + panX + 'px,' + panY + 'px) scale(' + (zoom * rotFit) + ') rotate(' + tempRot + 'deg); transition: ' + ((isDragging || isPinching) ? 'none' : 'transform 0.15s ease') + ';'"
+             :style="{
+               transform: 'translate(' + panX + 'px,' + panY + 'px) scale(' + (zoom * rotFit) + ') rotate(' + tempRot + 'deg)',
+               transition: (isDragging || isPinching) ? 'none' : 'transform 0.15s ease'
+             }"
              @dblclick="toggleZoom()"
              @load="if (i === idx && tempRot % 180 !== 0) rotFitAktualisieren()"
              loading="lazy" alt="Dokumentseite">
