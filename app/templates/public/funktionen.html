@@ -17,7 +17,7 @@
 
 <div class="pub-wrap">
   {% for f in features %}
-  {{ split_section(f, status_map, reverse=(loop.index0 % 2 == 1)) }}
+  {{ split_section(f, status_map, reverse=(loop.index0 % 2 == 1), image=f.get('image', '/static/img/public/feature-placeholder.svg')) }}
   {% endfor %}
 </div>
 

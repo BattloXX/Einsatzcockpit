@@ -39,6 +39,7 @@ FEATURES: list[dict] = [
         "title": "Lageführung",
         "status": "verfuegbar",
         "icon": "map",
+        "image": "/seite/bild/Lagefuehrung.png",
         "tagline": "Digitale Echtzeit-Lagekarte: taktische Zeichen, Bereiche und "
                    "Marker – gemeinsam bearbeitet.",
         "bullets": [
@@ -69,6 +70,7 @@ FEATURES: list[dict] = [
         "title": "Großschadenslage (SKKM)",
         "status": "verfuegbar",
         "icon": "hub",
+        "image": "/seite/bild/Grossschadenslage.png",
         "tagline": "Stabsarbeit nach SKKM: Kräfte, Ressourcen, Einsatztagebuch "
                    "und taktische Karte für ausgedehnte Lagen.",
         "bullets": [
@@ -84,6 +86,7 @@ FEATURES: list[dict] = [
         "title": "Wetterwarnungen",
         "status": "verfuegbar",
         "icon": "cloud",
+        "image": "/seite/bild/Wetter.png",
         "tagline": "Konfigurierbare Warnregeln auf Basis amtlicher Wetterdaten – "
                    "automatisch bei Unwetter-, Hochwasser- und Sturmlagen.",
         "bullets": [
@@ -98,6 +101,7 @@ FEATURES: list[dict] = [
         "title": "Objektverwaltung",
         "status": "beta",
         "icon": "clipboard",
+        "image": "/seite/bild/Objektverwaltung.png",
         "tagline": "Einsatzrelevante Objekte zentral: Daten, Pläne, "
                    "Ansprechpartner und Besonderheiten – im Einsatz sofort abrufbar.",
         "bullets": [
@@ -112,6 +116,7 @@ FEATURES: list[dict] = [
         "title": "Protokollierung & Dokumentation",
         "status": "verfuegbar",
         "icon": "doc",
+        "image": "/seite/bild/Protokollierung.png",
         "tagline": "Lückenlose Dokumentation im Einsatz und im Alltagsbetrieb – "
                    "auswertbar und jederzeit abrufbar.",
         "bullets": [

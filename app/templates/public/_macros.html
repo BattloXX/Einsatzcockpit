@@ -25,6 +25,7 @@
 
 {# ── Alternierende Split-Sektion (Funktionsseite) ───────────────────── #}
 {% macro split_section(f, status_map, reverse=false, image="/static/img/public/feature-placeholder.svg") -%}
+  {%- set is_placeholder = (image == "/static/img/public/feature-placeholder.svg") -%}
   <section class="pub-split{% if reverse %} pub-split--reverse{% endif %}" id="{{ f.anchor }}">
     <div class="pub-split__text">
       <div class="pub-split__head">
@@ -39,9 +40,9 @@
       </ul>
     </div>
     <div class="pub-split__visual">
-      <div class="pub-frame pub-frame--placeholder">
+      <div class="pub-frame{{ ' pub-frame--placeholder' if is_placeholder else '' }}">
         <div class="pub-frame__inner">
-          <img src="{{ image }}" alt="Visualisierung: {{ f.title }} (Platzhalter)" loading="lazy" width="800" height="500">
+          <img src="{{ image }}" alt="{{ 'Visualisierung: ' ~ f.title ~ ' (Platzhalter)' if is_placeholder else f.title }}" loading="lazy" width="800" height="500">
         </div>
       </div>
     </div>
