@@ -327,8 +327,11 @@ def _sync_vehicle_location(
 ) -> None:
     """Schreibt eine LIS-Position in dieselbe Positionshistorie (VehiclePosition),
     in die auch die App per GPS schreibt — nicht in ein separates Feld. Auf der
-    Lagekarte gewinnt je Fahrzeug automatisch die zuletzt empfangene Position,
-    unabhängig davon ob sie von der App oder vom LIS stammt."""
+    Lagekarte gewinnt je Fahrzeug normalerweise die zuletzt empfangene Position,
+    unabhängig davon ob sie von der App oder vom LIS stammt — AUSSER die zuletzt
+    gesetzte Position ist eine manuelle (source="manual"): ein Nutzer, der ein
+    Fahrzeug bewusst auf der Lagekarte verschiebt, darf nicht vom nächsten
+    LIS-Poll-Zyklus (alle wenige Sekunden) wieder zurückgesetzt werden."""
     loc_x, loc_y = unit.get("LocationX"), unit.get("LocationY")
     if loc_x is None or loc_y is None:
         return
@@ -338,6 +341,19 @@ def _sync_vehicle_location(
         coords = None
     if not coords:
         return
+
+    if lage_id is not None:
+        letzte = (
+            db.query(VehiclePosition.source)
+            .filter(
+                VehiclePosition.incident_id == lage_id,
+                VehiclePosition.vehicle_id == vehicle_master.id,
+            )
+            .order_by(VehiclePosition.received_at.desc())
+            .first()
+        )
+        if letzte and letzte[0] == "manual":
+            return
 
     lat, lon = coords
     now = datetime.now(UTC)

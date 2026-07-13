@@ -194,15 +194,19 @@ def collect_situation_context(incident_id: int, db: Session) -> dict[str, Any]:
 def _resolve_org_id(db: Session, requested: int | None) -> int | None:
     """Liefert eine gültige fire_dept.id zurück.
 
-    Reihenfolge: 1) explizit übergeben, 2) erste FireDept-Zeile nach ID,
-    3) None (keine Org in der DB → kein Fallback möglich).
+    Eine explizit übergebene Org wird NIE durch eine andere Org ersetzt — ist sie
+    ungültig, ist das Ergebnis None statt eines Fallbacks (Vorfall: Einsätze ohne
+    auflösbare Org landeten sonst still bei der Org mit der kleinsten fire_dept.id,
+    unabhängig davon, welche Org eigentlich gemeint war — z.B. bei API-Keys ohne
+    org_id). Der "erste Org"-Fallback greift nur noch, wenn gar keine Org verlangt
+    wurde UND genau eine Org existiert (Single-Tenant-Altfall) — bei mehreren Orgs
+    wäre das Erraten der falschen Org schlimmer als ein fehlender Fallback.
     """
     from app.models.master import FireDept
-    if requested:
-        if db.get(FireDept, requested):
-            return requested
-    any_org = db.query(FireDept).order_by(FireDept.id).first()
-    return any_org.id if any_org else None
+    if requested is not None:
+        return requested if db.get(FireDept, requested) else None
+    orgs = db.query(FireDept.id).limit(2).all()
+    return orgs[0][0] if len(orgs) == 1 else None
 
 
 def create_incident(
