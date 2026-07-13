@@ -76,6 +76,7 @@ async def ingest_alarm(
     gateway = _resolve_gateway_from_bearer(request, db)
     if gateway is None:
         raise HTTPException(status_code=401, detail="Ungültiges Device-Token")
+    assert gateway.org_id is not None  # Gateway wird immer mit org_id angelegt
 
     data = await request.json()
     raw_text = data.get("raw_text") or ""

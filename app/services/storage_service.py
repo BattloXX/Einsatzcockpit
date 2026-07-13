@@ -35,7 +35,9 @@ def _dialect(db: Session) -> str:
 def _is_retryable_lock_error(exc: OperationalError) -> bool:
     orig = getattr(exc, "orig", None)
     args = getattr(orig, "args", None)
-    return bool(args) and args[0] in _RETRYABLE_MYSQL_ERRNOS
+    if not args:
+        return False
+    return args[0] in _RETRYABLE_MYSQL_ERRNOS
 
 
 def _execute(db: Session, stmt: TextClause, params: dict):

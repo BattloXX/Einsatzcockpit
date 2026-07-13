@@ -48,6 +48,7 @@ def artifact_url(job: PrintJob) -> str:
 
     Für PDF-Dokumente die PDF-Auslieferung; für Leaflet-Karten die HTML-Render-Seite,
     die das Gateway per Chromium rendert."""
+    assert job.org_id is not None  # create_print_job() setzt org_id immer
     token = sign_artifact_token(job.id, job.org_id)
     base = settings.effective_public_base_url.rstrip("/")
     if is_html_render(job):
@@ -257,6 +258,7 @@ def _render_fahrtenbuch_bericht(db, job: PrintJob, base_url: str) -> bytes:
     except ValueError:
         zweck_id = 0
 
+    assert job.org_id is not None  # create_print_job() setzt org_id immer
     org = _org(db, job.org_id)
 
     q = (
@@ -350,6 +352,7 @@ def _render_teilnahme(db, job: PrintJob, base_url: str) -> bytes:
     if len(teile) < 2 or not teile[1].isdigit():
         raise ArtifactError("Teilnehmerliste ohne Bezug (artifact_ref)")
     bezug_typ, bezug_id = teile[0], int(teile[1])
+    assert job.org_id is not None  # create_print_job() setzt org_id immer
     if not teilnahme_bezug_gehoert_org(db, bezug_typ, bezug_id, job.org_id):
         raise ArtifactError("Bezug nicht gefunden")
     teilnahmen = (
@@ -419,6 +422,7 @@ def _render_uas(db, job: PrintJob) -> bytes:
     if len(teile) < 2 or not teile[1].isdigit():
         raise ArtifactError("UAS-Dokument ohne Subtyp/ID (artifact_ref)")
     subtyp, oid = teile[0], int(teile[1])
+    assert job.org_id is not None  # create_print_job() setzt org_id immer
     org_id = job.org_id
     org = _org(db, org_id)
 

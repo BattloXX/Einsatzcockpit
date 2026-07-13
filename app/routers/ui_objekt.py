@@ -2045,11 +2045,12 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
         # Vorschläge nach Entfernung zum Einsatzort sortieren statt nach Objekt-Nr. —
         # bei der manuellen Verknüpfung sind die nächstgelegenen Objekte am relevantesten.
         from app.services.hydrant_service import _haversine_m
+        inc_lat, inc_lng = incident.lat, incident.lng
 
         def _distanz(o: Objekt) -> float:
             if o.lat is None or o.lng is None:
                 return float("inf")
-            return _haversine_m(incident.lat, incident.lng, o.lat, o.lng)
+            return _haversine_m(inc_lat, inc_lng, o.lat, o.lng)
 
         kandidaten = sorted(kandidaten, key=_distanz)
     return {

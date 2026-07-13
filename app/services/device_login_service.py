@@ -58,7 +58,8 @@ def redeem_pairing_pin(db: Session, pin: str) -> tuple[DeviceToken, str, str | N
     )
     if dt is None:
         return None
-    if dt.pairing_pin_expires_at is None or _naive_utc(dt.pairing_pin_expires_at) < now:
+    expires_at = _naive_utc(dt.pairing_pin_expires_at)
+    if expires_at is None or expires_at < now:
         return None
 
     raw_token = secrets.token_urlsafe(32)

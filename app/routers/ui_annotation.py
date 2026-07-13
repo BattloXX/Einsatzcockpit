@@ -260,6 +260,8 @@ def uebernahme_message(
     if msg is None:
         raise HTTPException(status_code=404, detail="Meldung nicht gefunden")
     incident = db.get(Incident, msg.incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Einsatz nicht gefunden")
     _incident_write_or_403(db, user, incident)
     uebernehme_seiten(db, "message", msg, _parse_ids(seiten_ids), user, user.org_id)
     db.commit()

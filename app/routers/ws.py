@@ -651,7 +651,7 @@ def _mark_gateway_offline(gateway_id: int) -> None:
     try:
         gw = db.get(Gateway, gateway_id)
         # Nur offline setzen wenn keine weitere Verbindung dieser Org mehr offen ist.
-        if gw and not _print_gateways.get(gw.org_id):
+        if gw and gw.org_id is not None and not _print_gateways.get(gw.org_id):
             gw.status = GATEWAY_STATUS_OFFLINE
             gw.serial_connected = False
             db.commit()
@@ -717,7 +717,16 @@ async def _bus_gateway_deliver(payload: dict) -> None:
     """Bus-Handler (CH_GW): stellt Gateway-Nachrichten an lokale Sockets zu bzw.
     löst wartende Dispatch-Futures auf (worker-übergreifend)."""
     kind = payload.get("kind")
+    # job_status meldet eine wartende Dispatch-Future (worker-lokal via job_id) auf -
+    # kein org-gebundenes Zustellen an WebSockets, daher ohne org_id im Payload.
+    if kind == "job_status":
+        fut = _job_pending.pop(str(payload.get("job_id")), None)
+        if fut and not fut.done():
+            fut.set_result(payload.get("payload") or {})
+        return
     org_id = payload.get("org_id")
+    if not isinstance(org_id, int):
+        return
     if kind == "print_job":
         await _send_to_local_gateways(org_id, {
             "type": "print_job", "id": str(payload.get("job_id")),
@@ -726,13 +735,12 @@ async def _bus_gateway_deliver(payload: dict) -> None:
     elif kind == "command":
         await _send_to_local_gateways(org_id, payload.get("message") or {})
     elif kind == "config_sync":
+        gateway_id = payload.get("gateway_id")
+        if not isinstance(gateway_id, int):
+            return
         await _send_to_local_gateways(org_id, {
-            "type": "config_sync", "payload": _gateway_config_sync(payload.get("gateway_id")),
+            "type": "config_sync", "payload": _gateway_config_sync(gateway_id),
         })
-    elif kind == "job_status":
-        fut = _job_pending.pop(str(payload.get("job_id")), None)
-        if fut and not fut.done():
-            fut.set_result(payload.get("payload") or {})
 
 
 ws_bus.register(ws_bus.CH_GW, _bus_gateway_deliver)

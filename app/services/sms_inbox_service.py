@@ -79,7 +79,7 @@ async def process_inbound_sms(inbox_id: int) -> None:
     set_tenant_context(db, None)
     try:
         entry = db.get(SmsInbox, inbox_id)
-        if entry is None:
+        if entry is None or entry.org_id is None:
             return
         org_id = entry.org_id
 

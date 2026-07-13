@@ -258,6 +258,7 @@ async def gateway_wut_config(
     }
     db.commit()
     from app.routers.ws import push_config_sync
+    assert user.org_id is not None  # _gw_or_404 oben hat bereits org-gebunden gefunden
     await push_config_sync(user.org_id, gw.id)
     return RedirectResponse(f"/gateway/{gw.id}?saved=1#wut", status_code=303)
 
@@ -287,6 +288,7 @@ async def printer_add_ip(
     db.add(p)
     db.commit()
     from app.routers.ws import push_config_sync
+    assert user.org_id is not None  # _gw_or_404 oben hat bereits org-gebunden gefunden
     await push_config_sync(user.org_id, gw.id)
     return RedirectResponse(f"/gateway/{gw.id}?saved=1#drucker", status_code=303)
 
@@ -311,6 +313,7 @@ async def printer_rename(
     # Gateway kennt Drucker per Identität/URI, der Anzeigename ist rein Cloud-seitig —
     # trotzdem Config-Sync, damit CUPS-Queue-Beschriftung ggf. mitzieht.
     from app.routers.ws import push_config_sync
+    assert user.org_id is not None  # Guard oben hat bereits org-gebunden gefunden
     await push_config_sync(user.org_id, p.gateway_id)
     return RedirectResponse(f"/gateway/{p.gateway_id}?saved=1#drucker", status_code=303)
 
@@ -341,6 +344,7 @@ async def printer_defaults(
     p.defaults = defaults
     db.commit()
     from app.routers.ws import push_config_sync
+    assert user.org_id is not None  # Guard oben hat bereits org-gebunden gefunden
     await push_config_sync(user.org_id, p.gateway_id)
     return RedirectResponse(f"/gateway/{p.gateway_id}?saved=1#drucker", status_code=303)
 
@@ -362,6 +366,7 @@ async def printer_toggle(
         p.activated_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
     from app.routers.ws import push_config_sync
+    assert user.org_id is not None  # Guard oben hat bereits org-gebunden gefunden
     await push_config_sync(user.org_id, p.gateway_id)
     return RedirectResponse(f"/gateway/{p.gateway_id}?saved=1#drucker", status_code=303)
 
@@ -381,6 +386,7 @@ async def printer_delete(
     db.delete(p)
     db.commit()
     from app.routers.ws import push_config_sync
+    assert user.org_id is not None  # Guard oben hat bereits org-gebunden gefunden
     await push_config_sync(user.org_id, gwid)
     return RedirectResponse(f"/gateway/{gwid}?deleted=1#drucker", status_code=303)
 
@@ -395,6 +401,7 @@ async def printer_discover(
 ):
     _gw_or_404(db, user.org_id, gateway_id)
     from app.routers.ws import push_gateway_command
+    assert user.org_id is not None  # _gw_or_404 oben hat bereits org-gebunden gefunden
     await push_gateway_command(user.org_id, {"type": "discover_printers"})
     return RedirectResponse(f"/gateway/{gateway_id}?discover=1#drucker", status_code=303)
 
@@ -411,6 +418,7 @@ async def printer_test(
     if p is None or p.org_id != user.org_id:
         raise HTTPException(status_code=404, detail="Drucker nicht gefunden")
     from app.routers.ws import push_gateway_command
+    assert user.org_id is not None  # Guard oben hat bereits org-gebunden gefunden
     await push_gateway_command(user.org_id, {"type": "test_page", "printer_id": p.id})
     return RedirectResponse(f"/gateway/{p.gateway_id}?test=1#drucker", status_code=303)
 
@@ -696,6 +704,7 @@ async def manual_print(
 
     from app.services.print_dispatcher import create_print_job, dispatch_job
 
+    assert user.org_id is not None  # authentifizierter Nutzer hat immer eine Org
     # Kein roher 500: unerwartete Fehler beim Anlegen/Zustellen als klare JSON-Meldung
     # zurückgeben (der Dialog zeigt sie an) und den Traceback loggen.
     try:
@@ -757,6 +766,7 @@ async def cancel_print_job(
         job.status = JOB_CANCELED
         job.error = "Abgebrochen (manuell)"
         db.commit()
+        assert user.org_id is not None  # Guard oben hat bereits org-gebunden gefunden
         await push_gateway_command(user.org_id, {"type": "cancel_job", "payload": {"job_id": job_id}})
         await broadcast_org(user.org_id, {"type": "print_job_status", "job_id": job_id,
                                           "status": JOB_CANCELED})

@@ -144,6 +144,7 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
     job.attempts = (job.attempts or 0) + 1
     job.status = JOB_SENT
     db.commit()
+    assert job.org_id is not None  # create_print_job() setzt org_id immer
     try:
         result = await dispatch_print_job(job.org_id, job.id, payload)
     except RuntimeError as exc:
@@ -315,6 +316,7 @@ async def autoprint_verleih_background(ausleihe_id: int) -> None:
         if a is None:
             return
         org_id = a.org_id
+        assert org_id is not None  # jede Ausleihe gehoert immer einer Org
         set_tenant_context(db, org_id)
         if not gateway_effective_enabled(org_id, db):
             return

@@ -47,6 +47,7 @@ async def notify_gsl_created(
     except Exception:
         logger.exception("GSL-Sonderalarm-SMS fehlgeschlagen (Lage %s)", lage.id)
     if teams_args is not None:
+        assert base_url is not None  # teams_args ist nur gesetzt, wenn base_url vorhanden ist
         try:
             await post_gsl_alarm_card(*teams_args, base_url=base_url)
         except Exception:

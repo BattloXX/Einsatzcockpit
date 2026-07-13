@@ -209,7 +209,7 @@ async def get_or_create_room(lage_id: int, org_id: int) -> YRoom:
         room = _rooms.get(lage_id)
         if room is not None:
             return room
-        doc = Doc()
+        doc: Doc = Doc()
         existing_state, existing_html = await asyncio.to_thread(_load_ydoc_state, lage_id)
         if existing_state:
             try:

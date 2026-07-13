@@ -140,7 +140,7 @@ def stacked_bar_svg(
     for i, label in enumerate(labels):
         cx = plot_left + band * i + band / 2
         bx = cx - bar_w / 2
-        y_cursor = plot_bottom
+        y_cursor: float = plot_bottom
         for s in series:
             val = _num(s["data"][i])
             if val <= 0:

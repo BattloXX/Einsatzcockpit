@@ -94,7 +94,8 @@ def pair_gateway(db: Session, code: str) -> tuple[Gateway, str] | None:
     )
     if gw is None:
         return None
-    if gw.pairing_expires_at is None or _naive_utc(gw.pairing_expires_at) < now:
+    expires_at = _naive_utc(gw.pairing_expires_at)
+    if expires_at is None or expires_at < now:
         return None
 
     raw_token = generate_gateway_token()

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -36,7 +37,7 @@ _BACKFILL_INTERVAL = timedelta(hours=24)
 
 # ── Kleine Hilfsfunktionen ──────────────────────────────────────────────────
 def _op_field(op: dict, *path: str):
-    cur = op
+    cur: Any = op
     for key in path:
         if not isinstance(cur, dict):
             return None
@@ -642,6 +643,8 @@ async def _close_incidents_missing_from_lis(
 
 # ── Ein Operation-Objekt vollständig verarbeiten ─────────────────────────────
 async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, client: LisClient, op: dict) -> None:
+    # Wird nur nach is_fully_configured-Pruefung in sync_organization() aufgerufen.
+    assert config.organization_id
     parsed = _parse_operation(op, org)
     if not parsed["lis_operation_id"]:
         return
@@ -779,6 +782,8 @@ async def backfill_organization(
     db: Session, org: FireDept, config: OrgLisConfig, client: LisClient,
     filters: tuple[str, ...] = ("LastDay", "LastMonth"),
 ) -> None:
+    # Wird nur nach is_fully_configured-Pruefung in sync_organization() aufgerufen.
+    assert config.organization_id
     for operation_filter in filters:
         start_index = 0
         count = 50
@@ -820,6 +825,9 @@ async def _maybe_backfill(db: Session, org: FireDept, config: OrgLisConfig, clie
 async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) -> None:
     if not config.enabled or not config.is_fully_configured:
         return
+    # is_fully_configured garantiert bereits, dass diese Felder gesetzt sind - hier nur
+    # fuer die Typpruefung explizit gemacht (config.* bleibt sonst "str | None").
+    assert config.base_url and config.organization_id and config.username and config.password_enc
 
     from app.core.crypto import decrypt_secret
     try:
@@ -879,7 +887,9 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
                 "LIS-Operation %s (Org %s) konnte nicht synchronisiert werden", op.get("Id"), org.id,
             )
 
-    active_operation_ids = {op.get("Id") for op in operations if op.get("Id")}
+    active_operation_ids = {
+        op_id for op in operations if (op_id := op.get("Id"))
+    }
     await _close_incidents_missing_from_lis(db, org, active_operation_ids)
 
     await _maybe_backfill(db, org, config, client)
@@ -915,6 +925,7 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
         config = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == incident.primary_org_id).first()
         if not config or not config.enabled or not config.push_vehicle_status or not config.is_fully_configured:
             return
+        assert config.base_url and config.organization_id and config.username and config.password_enc
         try:
             password = decrypt_secret(config.password_enc)
         except Exception:

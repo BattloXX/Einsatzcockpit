@@ -179,7 +179,7 @@ async def capture_traffic(
 
             # Zwischenstand sichern, damit ein laufender Capture-Lauf im Admin-UI
             # sichtbar ist, bevor die volle Dauer abgelaufen ist.
-            recorder.write_summary(duration_minutes=duration_minutes, finished=False)
+            recorder.write_summary(duration_minutes=int(duration_minutes), finished=False)
 
             remaining = (stop_at - datetime.now(UTC)).total_seconds()
             if remaining <= 0:
@@ -190,7 +190,7 @@ async def capture_traffic(
         logger.info("LIS-Capture (Org %s) abgebrochen", recorder.org_id)
         raise
     finally:
-        recorder.write_summary(duration_minutes=duration_minutes, finished=finished)
+        recorder.write_summary(duration_minutes=int(duration_minutes), finished=finished)
         try:
             _bundle_capture_into_zip(recorder.out_dir, recorder.run_id)
         except OSError:
@@ -252,6 +252,9 @@ async def start_capture_for_org(
         config = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == org_id).first()
         if not config or not config.is_fully_configured:
             raise ValueError("LIS-Konfiguration unvollständig (URL, Organisation, Zugangsdaten).")
+        # is_fully_configured garantiert bereits, dass diese Felder gesetzt sind - hier
+        # nur fuer die Typpruefung explizit gemacht (config.* bleibt sonst "str | None").
+        assert config.base_url and config.organization_id and config.username and config.password_enc
         base_url, site, organization_id, username, project_id = (
             config.base_url, config.site, config.organization_id, config.username, config.project_id,
         )

@@ -38,7 +38,7 @@ MAX_IMG_BYTES = 4 * 1024 * 1024  # 4 MB
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
-def public_context(request: Request, active_nav: str, **extra) -> dict:
+def public_context(request: Request, active_nav: str | None, **extra) -> dict:
     """Gemeinsamer Template-Kontext für die neue öffentliche Website (Ops-Room-Design).
 
     Bündelt die strukturierten Inhalte aus ``app.services.public_content`` samt

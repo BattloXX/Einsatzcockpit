@@ -45,7 +45,7 @@ def _hash_pin(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _normalize_phone(phone: str) -> str:
+def _normalize_phone(phone: str | None) -> str:
     return _PHONE_STRIP_RE.sub("", phone or "").strip()
 
 
@@ -83,7 +83,7 @@ async def pin_login_submit(request: Request, phone: str = Form(...), db: Session
         return redirect
 
     match = _find_user_by_phone(db, phone_norm)
-    if not match or not match.org_id:
+    if not match or not match.org_id or not match.phone:
         return redirect
 
     from app.routers.ws import is_sms_gateway_connected

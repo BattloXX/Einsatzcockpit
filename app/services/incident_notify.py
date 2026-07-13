@@ -109,6 +109,7 @@ async def notify_incident_created(
     except Exception:
         logger.exception("Push-Benachrichtigung fehlgeschlagen (Einsatz %s)", incident.id)
     if teams_args is not None:
+        assert base_url is not None  # teams_args ist nur gesetzt, wenn base_url vorhanden ist
         try:
             await post_incident_card(*teams_args, base_url=base_url)
         except Exception:
