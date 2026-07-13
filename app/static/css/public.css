@@ -180,6 +180,29 @@ h1, h2, h3, .pub-h1, .pub-h2, .pub-h3 {
   50%      { opacity: .5; transform: scale(1.25); }
 }
 
+/* ── Testsystem-Banner (nur wenn TEST_SYSTEM aktiv) ─────── */
+.pub-testbanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: repeating-linear-gradient(
+    -45deg, rgba(232,70,45,.14) 0 14px, rgba(232,70,45,.06) 14px 28px);
+  border-bottom: 1px solid var(--accent);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-align: center;
+  padding: 8px 16px;
+}
+.pub-testbanner strong { color: var(--accent); letter-spacing: .08em; }
+.pub-testbanner__dot {
+  width: 9px; height: 9px; border-radius: 9999px; flex: none;
+  background: var(--accent);
+  animation: pub-pulse 2s cubic-bezier(.4,0,.6,1) infinite;
+}
+
 /* ── Navigation ─────────────────────────────────────────── */
 .pub-nav {
   position: sticky;

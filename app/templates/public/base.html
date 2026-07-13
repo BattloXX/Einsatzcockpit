@@ -39,6 +39,13 @@
 </head>
 <body class="pub{% block body_class %}{% endblock %}">
 
+  {% if TEST_SYSTEM %}
+  <div class="pub-testbanner" role="status">
+    <span class="pub-testbanner__dot"></span>
+    <span><strong>TESTSYSTEM</strong> — Vorschau-Umgebung, keine echten Einsatzdaten.</span>
+  </div>
+  {% endif %}
+
   {% include "public/_pub_nav.html" %}
 
   <main id="inhalt">

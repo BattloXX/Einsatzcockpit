@@ -204,8 +204,8 @@ templates.env.globals["brand_tagline"] = _settings.APP_TAGLINE
 templates.env.globals["brand_domain"] = _settings.APP_DOMAIN
 
 # Öffentlicher Bereich: Login-/GitHub-/Kontakt-Ziele als Template-Globals
-# ({{ public_app_url }}, {{ public_github_url }}, {{ public_contact_email }}).
-templates.env.globals["public_app_url"] = _settings.PUBLIC_APP_URL
+# ({{ public_login_url }}, {{ public_github_url }}, {{ public_contact_email }}).
+templates.env.globals["public_login_url"] = _settings.PUBLIC_LOGIN_URL
 templates.env.globals["public_github_url"] = _settings.PUBLIC_GITHUB_URL
 templates.env.globals["public_contact_email"] = _settings.PUBLIC_CONTACT_EMAIL
 

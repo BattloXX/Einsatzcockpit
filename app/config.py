@@ -38,7 +38,11 @@ class Settings(BaseSettings):
     # Öffentlicher Bereich (Pre-Login-Website). Als Konstanten konfigurierbar,
     # damit die Marketing-Seiten (Header-Button "Zum Login", GitHub-Links,
     # Kontakt) ohne Markup-Änderung angepasst werden können.
-    PUBLIC_APP_URL: str = "https://app.einsatzcockpit.com"
+    # PUBLIC_LOGIN_URL bewusst relativ ("/login"): oeffentliche Seite und App
+    # laufen auf derselben Instanz -- so loggt jedes Deployment (Produktion wie
+    # test.einsatzcockpit.com) in seine EIGENE Instanz ein, nicht in eine fest
+    # verdrahtete Fremd-Domain.
+    PUBLIC_LOGIN_URL: str = "/login"
     PUBLIC_GITHUB_URL: str = "https://github.com/BattloXX/einsatzcockpit"
     PUBLIC_CONTACT_EMAIL: str = "johannes@battlogg.org"
 

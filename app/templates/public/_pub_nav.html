@@ -16,7 +16,7 @@
       <a class="pub-nav__icon" href="{{ public_github_url }}" target="_blank" rel="noopener" aria-label="Quellcode auf GitHub">
         {{ icon("github") }}
       </a>
-      <a class="pub-btn pub-btn--primary pub-btn--sm" href="{{ public_app_url }}">Zum Login</a>
+      <a class="pub-btn pub-btn--primary pub-btn--sm" href="{{ public_login_url }}">Zum Login</a>
       <button class="pub-burger" type="button" aria-label="Menü öffnen" aria-expanded="false" aria-controls="pub-mobile">
         <span></span><span></span><span></span>
       </button>
@@ -28,6 +28,6 @@
     <a href="{{ item.href }}"{% if active_nav == item.slug %} aria-current="page"{% endif %}>{{ item.label }}</a>
     {% endfor %}
     <a href="{{ public_github_url }}" target="_blank" rel="noopener">Auf GitHub ansehen</a>
-    <a class="pub-btn pub-btn--primary" href="{{ public_app_url }}">Zum Login</a>
+    <a class="pub-btn pub-btn--primary" href="{{ public_login_url }}">Zum Login</a>
   </div>
 </nav>
