@@ -173,7 +173,7 @@ class DeviceToken(Base):
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
     vehicle: Mapped[VehicleMaster | None] = relationship("VehicleMaster", foreign_keys=[vehicle_master_id])
-    paired_gateway_token: Mapped["SmsGatewayToken | None"] = relationship(
+    paired_gateway_token: Mapped[SmsGatewayToken | None] = relationship(
         "SmsGatewayToken", foreign_keys=[paired_gateway_token_id]
     )
 

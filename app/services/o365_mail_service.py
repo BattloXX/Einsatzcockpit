@@ -121,7 +121,7 @@ def _graph_payload(msg: EmailMessage) -> dict:
     }
 
 
-async def send_via_graph(msg: EmailMessage, cfg: "OrgO365MailConfig") -> None:
+async def send_via_graph(msg: EmailMessage, cfg: OrgO365MailConfig) -> None:
     """Versendet eine bereits gebaute EmailMessage über Microsoft Graph. Wirft
     O365MailError bei jedem Fehlschlag (Konfiguration, Token, Versand) — der
     Aufrufer (mail_service.deliver()) fängt das ab und fällt auf SMTP zurück."""

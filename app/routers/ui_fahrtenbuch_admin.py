@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.audit import write_audit
 from app.core.permissions import is_fahrtenbuch_admin, is_system_admin, require_system_admin
 from app.core.templating import templates
+from app.core.tenant import set_tenant_context
 from app.core.timezones import local_date_to_utc
 from app.db import get_db
-from app.core.tenant import set_tenant_context
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
 from app.models.master import FireDept, OrgSettings, VehicleMaster
 from app.services.excel_export_service import exportiere_fahrten, exportiere_fahrzeug_links
@@ -421,7 +421,10 @@ async def schaden_retry(
 @router.get("/admin/fahrtenbuch/zwecke", response_class=HTMLResponse)
 async def zwecke_liste(request: Request, db: Session = Depends(get_db)):
     user, org_id, org = _fb_admin(request, db)
-    zwecke = db.query(Fahrtzweck).filter(Fahrtzweck.org_id == org_id).execution_options(include_all_tenants=True).order_by(Fahrtzweck.sort).all()
+    zwecke = (
+        db.query(Fahrtzweck).filter(Fahrtzweck.org_id == org_id)
+        .execution_options(include_all_tenants=True).order_by(Fahrtzweck.sort).all()
+    )
     return templates.TemplateResponse(request, "fahrtenbuch/admin/zwecke.html", {
         "user": user, "zwecke": zwecke,
         **_sysadmin_org_context(request, user, org, db),
@@ -479,7 +482,10 @@ async def zweck_bearbeiten(
 @router.get("/admin/fahrtenbuch/zielorte", response_class=HTMLResponse)
 async def zielorte_liste(request: Request, db: Session = Depends(get_db)):
     user, org_id, org = _fb_admin(request, db)
-    zielorte = db.query(Zielort).filter(Zielort.org_id == org_id).execution_options(include_all_tenants=True).order_by(Zielort.sort).all()
+    zielorte = (
+        db.query(Zielort).filter(Zielort.org_id == org_id)
+        .execution_options(include_all_tenants=True).order_by(Zielort.sort).all()
+    )
     return templates.TemplateResponse(request, "fahrtenbuch/admin/zielorte.html", {
         "user": user, "zielorte": zielorte,
         **_sysadmin_org_context(request, user, org, db),
@@ -596,9 +602,14 @@ async def qr_generieren(
     db.commit()
 
     # Org-Token für den QR-Link ermitteln
-    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first()
+    org_s = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == org_id)
+        .execution_options(include_all_tenants=True).first()
+    )
     if not org_s or not org_s.fahrtenbuch_token:
-        return RedirectResponse(f"/admin/fahrtenbuch/fahrzeuge{_redirect_q(request, qr_kein_org_token=1)}", status_code=303)
+        return RedirectResponse(
+            f"/admin/fahrtenbuch/fahrzeuge{_redirect_q(request, qr_kein_org_token=1)}", status_code=303,
+        )
 
     base_url = str(request.base_url).rstrip("/")
     url = f"{base_url}/f/{org_s.fahrtenbuch_token}/v/{fz.qr_token}"
@@ -624,7 +635,10 @@ async def org_token_generieren(
     request: Request, db: Session = Depends(get_db)
 ):
     user, org_id, org = _fb_admin(request, db)
-    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first()
+    org_s = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == org_id)
+        .execution_options(include_all_tenants=True).first()
+    )
     if not org_s:
         raise HTTPException(status_code=404)
     org_s.fahrtenbuch_token = secrets.token_urlsafe(24)
@@ -636,7 +650,10 @@ async def org_token_generieren(
 @router.get("/admin/fahrtenbuch/token", response_class=HTMLResponse)
 async def org_token_seite(request: Request, db: Session = Depends(get_db)):
     user, org_id, org = _fb_admin(request, db)
-    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first()
+    org_s = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == org_id)
+        .execution_options(include_all_tenants=True).first()
+    )
     base_url = str(request.base_url).rstrip("/")
     return templates.TemplateResponse(request, "fahrtenbuch/admin/token.html", {
         "user": user, "org": org_s, "base_url": base_url,
@@ -648,7 +665,10 @@ async def org_token_seite(request: Request, db: Session = Depends(get_db)):
 @router.get("/admin/fahrtenbuch/einstellungen", response_class=HTMLResponse)
 async def fahrtenbuch_einstellungen(request: Request, db: Session = Depends(get_db)):
     user, org_id, org = _fb_admin(request, db)
-    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first()
+    org_s = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == org_id)
+        .execution_options(include_all_tenants=True).first()
+    )
     return templates.TemplateResponse(request, "fahrtenbuch/admin/einstellungen.html", {
         "user": user, "org": org_s,
         "saved": request.query_params.get("saved"),
@@ -665,7 +685,10 @@ async def fahrtenbuch_einstellungen_speichern(
     db: Session = Depends(get_db),
 ):
     user, org_id, org = _fb_admin(request, db)
-    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first()
+    org_s = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == org_id)
+        .execution_options(include_all_tenants=True).first()
+    )
     if not org_s:
         raise HTTPException(status_code=404)
     from app.services.mail_service import normalize_email_list
@@ -716,7 +739,10 @@ async def fahrzeuge_fahrtenbuch(request: Request, db: Session = Depends(get_db))
         .order_by(VehicleMaster.display_order)
         .all()
     )
-    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first()
+    org_s = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == org_id)
+        .execution_options(include_all_tenants=True).first()
+    )
     return templates.TemplateResponse(request, "fahrtenbuch/admin/fahrzeuge.html", {
         "user": user, "fahrzeuge": fahrzeuge,
         "org_token": org_s.fahrtenbuch_token if org_s else None,
@@ -734,9 +760,14 @@ async def fahrzeuge_export_links(request: Request, db: Session = Depends(get_db)
     Fehlende QR-Tokens werden erzeugt, damit jedes Fahrzeug einen Link erhält.
     """
     user, org_id, org = _fb_admin(request, db)
-    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).execution_options(include_all_tenants=True).first()
+    org_s = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == org_id)
+        .execution_options(include_all_tenants=True).first()
+    )
     if not org_s or not org_s.fahrtenbuch_token:
-        return RedirectResponse(f"/admin/fahrtenbuch/fahrzeuge{_redirect_q(request, qr_kein_org_token=1)}", status_code=303)
+        return RedirectResponse(
+            f"/admin/fahrtenbuch/fahrzeuge{_redirect_q(request, qr_kein_org_token=1)}", status_code=303,
+        )
     fahrzeuge = (
         db.query(VehicleMaster)
         .filter(

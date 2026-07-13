@@ -341,6 +341,8 @@ def teilnahme_bezug_gehoert_org(db, bezug_typ: str, bezug_id: int, org_id: int) 
 
 def _render_teilnahme(db, job: PrintJob, base_url: str) -> bytes:
     """Teilnehmerliste (artifact_ref = "<bezug_typ>:<bezug_id>[:<sort>]")."""
+    from types import SimpleNamespace
+
     from app.models.teilnahme import Teilnahme
     from app.services.pdf_service import render_teilnahme_pdf
 
@@ -403,7 +405,13 @@ def _render_uas(db, job: PrintJob) -> bytes:
     import json as _json
 
     from app.models.uas import (
-        UASCheckliste, UASDevice, UASEinsatz, UASEreignis, UASFlug, UASPilot, UASWartung,
+        UASCheckliste,
+        UASDevice,
+        UASEinsatz,
+        UASEreignis,
+        UASFlug,
+        UASPilot,
+        UASWartung,
     )
     from app.services import uas_pdf
 

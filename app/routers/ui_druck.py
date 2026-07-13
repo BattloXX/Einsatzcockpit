@@ -73,8 +73,8 @@ def _verify_org(db: Session, org_id: int, document_type: str,
             raise HTTPException(status_code=404, detail="Alarmtext nicht gefunden")
     elif document_type == DOC_AS_PRUEFUNG:
         # artifact_ref = kommagetrennte IDs – jede muss der Org gehören.
-        from app.services.print_artifact_service import _parse_ref_ids
         from app.models.atemschutz_pruefung import AtemschutzPruefung
+        from app.services.print_artifact_service import _parse_ref_ids
         ids = _parse_ref_ids(artifact_ref)
         treffer = (
             db.query(AtemschutzPruefung)

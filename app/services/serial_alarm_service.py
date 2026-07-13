@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.models.gateway import PARSE_FAILED, PARSE_OK, AlarmIngest
+from app.models.gateway import PARSE_FAILED, AlarmIngest
 
 logger = logging.getLogger("einsatzleiter.alarm")
 

@@ -25,7 +25,6 @@ from app.models.gateway import (
     Printer,
 )
 
-
 # ── Feature-Flags ──────────────────────────────────────────────────────────────
 
 def gateway_system_enabled(db: Session) -> bool:

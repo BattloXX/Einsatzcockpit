@@ -40,6 +40,7 @@ from app.models.lagefuehrung import (
 )
 from app.models.lagekarte import LagekarteToken
 from app.models.lis import LisSyncedObject, OrgLisConfig
+from app.models.login_pin import LoginPin
 from app.models.major_incident import (
     CitizenReport,
     CommLogEntry,
@@ -97,7 +98,6 @@ from app.models.objekt import (
     ObjektWohnanlage,
     ObjektZusatzadresse,
 )
-from app.models.login_pin import LoginPin
 from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
 from app.models.password_reset import PasswordResetToken
 from app.models.sms import (
