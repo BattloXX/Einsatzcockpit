@@ -7,7 +7,8 @@
 {% set _p = request.url.path %}
 {% if '/admin/geraete-login' in _p or '/admin/push' in _p or '/admin/benutzer' in _p
      or '/admin/api-keys' in _p or '/admin/lagekarte-tokens' in _p or '/admin/audit' in _p
-     or '/admin/sms-senden' in _p or '/infoscreen-alarm' in _p or '/admin/medien' in _p
+     or '/admin/sms-senden' in _p or '/infoscreen-alarm' in _p
+     or ('/admin/medien' in _p and not is_sysadmin)
      or _p.startswith('/gateway') %}
   {% set active_group = 'verwaltung' %}
 {% elif '/admin/gruppen' in _p or '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p
@@ -17,6 +18,7 @@
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
        or '/admin/lis' in _p or '/admin/mail' in _p
+       or ('/admin/medien' in _p and is_sysadmin)
        or _p == '/admin/settings/wetter' or _p.startswith('/admin/settings/wetter?') %}
   {% set active_group = 'einstellungen' %}
 {% elif _p == '/admin/hilfe' %}
@@ -294,11 +296,16 @@
                {{ tip('Vollständiges Aktionsprotokoll') }}>
               <span class="admin-nav__icon">📜</span>Audit-Log
             </a>
+            {# Fuer system_admin liegt der Eintrag im Sysadmin-Block (Gruppe
+               "Einstellungen") -- dort schaut der Sysadmin; hier nur fuer
+               Org-Admins, damit er nicht doppelt erscheint. #}
+            {% if not is_sysadmin %}
             <a href="/admin/medien"
                class="admin-nav__item {% if '/admin/medien' in request.url.path %}is-active{% endif %}"
                {{ tip('Alle hochgeladenen Medien: Größe, Alter, Typ – sortierbar und filterbar') }}>
               <span class="admin-nav__icon">🖼️</span>Medienverwaltung
             </a>
+            {% endif %}
             <a href="/admin/sms-senden"
                class="admin-nav__item {% if '/admin/sms-senden' in request.url.path %}is-active{% endif %}"
                {{ tip('SMS manuell an Gruppen oder Mitglieder senden') }}>
@@ -406,6 +413,11 @@
                class="admin-nav__item {% if '/admin/system/quotas' in request.url.path %}is-active{% endif %}"
                {{ tip('Speicher- und KI-Token-Quota je Organisation festlegen') }}>
               <span class="admin-nav__icon">📦</span>Quota-Verwaltung
+            </a>
+            <a href="/admin/medien"
+               class="admin-nav__item {% if '/admin/medien' in request.url.path %}is-active{% endif %}"
+               {{ tip('Alle hochgeladenen Medien jeder Organisation: Größe, Alter, Typ – sortier- und filterbar (Org per Umschalter wählbar)') }}>
+              <span class="admin-nav__icon">🖼️</span>Medienverwaltung
             </a>
             {% endif %}
           </div>
