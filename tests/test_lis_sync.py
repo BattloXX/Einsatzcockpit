@@ -377,6 +377,7 @@ def _s5_unit(ref_id: str = "rlf_wolfu", location_x="105308", location_y="260817"
         "OperationUnitStatusType": {"Label": "S5 - am Einsatzort"},
         "LocationX": location_x,
         "LocationY": location_y,
+        "UnitType": {"Type": "Vehicle"},
     }
 
 
@@ -444,12 +445,249 @@ def test_sync_vehicle_location_skipped_when_coordinates_missing():
             "OperationUnitStatusType": {"Label": "S4 - zum Einsatzort"},
             "LocationX": None,
             "LocationY": None,
+            "UnitType": {"Type": "Vehicle"},
         }
 
         lis_sync._sync_vehicle_status(db, org, incident, [unit])
 
         assert db.query(VehiclePosition).filter(VehiclePosition.vehicle_id == vehicle_master.id).count() == 0
         assert incident_vehicle.unit_status == "Einsatz übernommen"
+    finally:
+        db.rollback()
+        db.close()
+
+
+# ── Externe Fahrzeuge (fremde Organisationen, sync_external_units) ─────────
+
+def _foreign_vehicle_unit(
+    ref_id: str = "tlf1_riede", org_id: str = "0332bdc3-3c96-4e7a-8a4d-60151aaccdd0",
+    name: str = "Bregenz-Rieden TLF 2000", alias: str = "tlf1_riede",
+) -> dict:
+    """Wie im echten F4-Mitschnitt (2026-07-14): fremdes Fahrzeug ohne eigene
+    lis_reference_id-Zuordnung, Status S5, mit Koordinaten."""
+    return {
+        "Id": "ou-foreign-1",
+        "ReferenceId": ref_id,
+        "Alias": alias,
+        "Name": name,
+        "OrganizationId": org_id,
+        "OperationUnitStatusType": {"Label": "S5 - am Einsatzort"},
+        "LocationX": "103981",
+        "LocationY": "261747",
+        "UnitType": {"Type": "Vehicle", "Label": "Fahrzeug"},
+    }
+
+
+def _foreign_person_unit(ref_id: str = "") -> dict:
+    """Teilnehmende Person (RSVP) — läuft über _sync_person_responses()/GetTasks,
+    darf NIE als Fahrzeug/VehicleMaster landen, auch nicht mit sync_external_units."""
+    return {
+        "Id": "ou-person-1",
+        "ReferenceId": ref_id,
+        "Name": "gotthard.pasi",
+        "OrganizationId": "a0b12f7c-537d-488d-b7d3-7791f2f96ef6",
+        "OperationUnitStatusType": {"Label": "Zugesagt"},
+        "UnitType": {"Type": "Operational", "Label": "Kraft"},
+    }
+
+
+def test_sync_vehicle_status_creates_external_vehicle_when_opted_in():
+    """Ein fremdes Fahrzeug (kein eigener VehicleMaster) wird bei
+    sync_external_units=True als externer Platzhalter übernommen und erscheint
+    wie ein eigenes Fahrzeug mit S4/S5-Status auf dem Board."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _, _ = _make_incident_with_vehicle(db, ORG_ID)  # legt nur Spalte "dispatched" an
+        db.add(IncidentColumn(
+            incident_id=incident.id, code="active", title="Tatsächlich im Einsatz",
+            column_kind="vehicles", is_fixed=True,
+        ))
+        db.flush()
+
+        count_before = db.query(VehicleMaster).filter(VehicleMaster.dept_id == ORG_ID).count()
+        changed = lis_sync._sync_vehicle_status(
+            db, org, incident, [_foreign_vehicle_unit()], sync_external_units=True,
+        )
+
+        assert changed is True
+        vm = (
+            db.query(VehicleMaster)
+            .filter(VehicleMaster.dept_id == ORG_ID, VehicleMaster.lis_reference_id == "tlf1_riede")
+            .first()
+        )
+        assert vm is not None
+        assert vm.is_external is True
+        assert vm.lis_auto_created is True
+        assert vm.name == "Bregenz-Rieden TLF 2000"
+        assert db.query(VehicleMaster).filter(VehicleMaster.dept_id == ORG_ID).count() == count_before + 1
+
+        iv = (
+            db.query(IncidentVehicle)
+            .filter(IncidentVehicle.incident_id == incident.id, IncidentVehicle.vehicle_master_id == vm.id)
+            .first()
+        )
+        assert iv is not None
+        assert iv.unit_status == "Am Einsatzort"
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_vehicle_status_external_vehicle_uses_root_org_map_for_display_name():
+    """Wenn GetRootOrganizations einen Namen für die OrganizationId liefert, wird
+    dieser als adhoc_org_name übernommen (Anzeige der Herkunftsorganisation)."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _, _ = _make_incident_with_vehicle(db, ORG_ID)
+        db.add(IncidentColumn(
+            incident_id=incident.id, code="active", title="Tatsächlich im Einsatz",
+            column_kind="vehicles", is_fixed=True,
+        ))
+        db.flush()
+
+        root_org_map = {"0332bdc3-3c96-4e7a-8a4d-60151aaccdd0": "Feuerwehr Bregenz-Rieden"}
+        lis_sync._sync_vehicle_status(
+            db, org, incident, [_foreign_vehicle_unit()],
+            sync_external_units=True, root_org_map=root_org_map,
+        )
+
+        vm = (
+            db.query(VehicleMaster)
+            .filter(VehicleMaster.dept_id == ORG_ID, VehicleMaster.lis_reference_id == "tlf1_riede")
+            .first()
+        )
+        assert vm.adhoc_org_name == "Feuerwehr Bregenz-Rieden"
+        assert vm.adhoc_org_short  # abgeleitetes Kürzel, nicht leer
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_vehicle_status_ignores_foreign_vehicle_without_opt_in():
+    """Ohne sync_external_units bleibt das bisherige Verhalten: fremde Fahrzeuge
+    werden verworfen, kein VehicleMaster/IncidentVehicle entsteht."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _, _ = _make_incident_with_vehicle(db, ORG_ID)
+        db.add(IncidentColumn(
+            incident_id=incident.id, code="active", title="Tatsächlich im Einsatz",
+            column_kind="vehicles", is_fixed=True,
+        ))
+        db.flush()
+
+        vm_count_before = db.query(VehicleMaster).filter(VehicleMaster.dept_id == ORG_ID).count()
+        # _make_incident_with_vehicle() legt bereits ein eigenes IncidentVehicle
+        # ("rlf_wolfu" in Spalte "dispatched") an — hier zählt nur das Delta.
+        iv_count_before = db.query(IncidentVehicle).filter(IncidentVehicle.incident_id == incident.id).count()
+        changed = lis_sync._sync_vehicle_status(db, org, incident, [_foreign_vehicle_unit()])
+
+        assert changed is False
+        assert db.query(VehicleMaster).filter(VehicleMaster.dept_id == ORG_ID).count() == vm_count_before
+        assert db.query(IncidentVehicle).filter(
+            IncidentVehicle.incident_id == incident.id,
+        ).count() == iv_count_before
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_vehicle_status_ignores_person_and_device_unit_types():
+    """UnitType.Type != "Vehicle" (Personen/Geräte) darf nie als Fahrzeug angelegt
+    werden, auch nicht mit sync_external_units=True."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _, _ = _make_incident_with_vehicle(db, ORG_ID)
+        db.add(IncidentColumn(
+            incident_id=incident.id, code="active", title="Tatsächlich im Einsatz",
+            column_kind="vehicles", is_fixed=True,
+        ))
+        db.flush()
+
+        count_before = db.query(VehicleMaster).filter(VehicleMaster.dept_id == ORG_ID).count()
+        changed = lis_sync._sync_vehicle_status(
+            db, org, incident, [_foreign_person_unit()], sync_external_units=True,
+        )
+
+        assert changed is False
+        assert db.query(VehicleMaster).filter(VehicleMaster.dept_id == ORG_ID).count() == count_before
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_vehicle_status_external_vehicle_reused_not_duplicated():
+    """Zwei aufeinanderfolgende Poll-Zyklen (wie im echten 30s-Loop) dürfen nur
+    EINEN externen VehicleMaster anlegen — get-or-create über lis_reference_id."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _, _ = _make_incident_with_vehicle(db, ORG_ID)
+        db.add(IncidentColumn(
+            incident_id=incident.id, code="active", title="Tatsächlich im Einsatz",
+            column_kind="vehicles", is_fixed=True,
+        ))
+        db.flush()
+
+        lis_sync._sync_vehicle_status(db, org, incident, [_foreign_vehicle_unit()], sync_external_units=True)
+        lis_sync._sync_vehicle_status(db, org, incident, [_foreign_vehicle_unit()], sync_external_units=True)
+
+        matches = (
+            db.query(VehicleMaster)
+            .filter(VehicleMaster.dept_id == ORG_ID, VehicleMaster.lis_reference_id == "tlf1_riede")
+            .all()
+        )
+        assert len(matches) == 1
+        assert db.query(IncidentVehicle).filter(
+            IncidentVehicle.incident_id == incident.id,
+            IncidentVehicle.vehicle_master_id == matches[0].id,
+        ).count() == 1
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_push_vehicle_status_to_lis_skips_external_vehicle(monkeypatch):
+    """Ein extern/automatisch aus LIS übernommenes Fahrzeug darf niemals per
+    SetOperationUnitStatus kommandiert werden — push_vehicle_status_to_lis muss
+    für solche Fahrzeuge sofort zurückkehren, ohne den LIS-Client überhaupt zu
+    instanziieren (sonst könnten wir fremde Organisationen fernsteuern)."""
+    import app.db as appdb
+
+    monkeypatch.setattr(appdb, "SessionLocal", TestingSession)
+
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _, _ = _make_incident_with_vehicle(db, ORG_ID)
+        db.add(IncidentColumn(
+            incident_id=incident.id, code="active", title="Tatsächlich im Einsatz",
+            column_kind="vehicles", is_fixed=True,
+        ))
+        db.flush()
+
+        # Kein OrgLisConfig nötig: der Guard muss VOR jeder Config-/Passwort-Abfrage
+        # greifen, rein anhand von vehicle_master.is_external.
+        lis_sync._sync_vehicle_status(db, org, incident, [_foreign_vehicle_unit()], sync_external_units=True)
+        iv = (
+            db.query(IncidentVehicle)
+            .join(VehicleMaster, IncidentVehicle.vehicle_master_id == VehicleMaster.id)
+            .filter(VehicleMaster.lis_reference_id == "tlf1_riede")
+            .first()
+        )
+        assert iv is not None
+        db.commit()
+
+        def _fail_client(*a, **kw):
+            raise AssertionError("LisClient darf für externe Fahrzeuge nie instanziiert werden")
+
+        monkeypatch.setattr(lis_sync, "LisClient", _fail_client)
+
+        # Darf nicht raisen und muss vor der LisClient-Instanziierung zurückkehren.
+        asyncio.run(lis_sync.push_vehicle_status_to_lis(iv.id, "Am Einsatzort"))
     finally:
         db.rollback()
         db.close()

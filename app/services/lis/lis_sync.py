@@ -243,11 +243,21 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
 
 
 # ── Fahrzeugstatus (S4/S5) ───────────────────────────────────────────────────
-def _sync_vehicle_status(db: Session, org: FireDept, incident, units: list[dict]) -> bool:
+def _sync_vehicle_status(
+    db: Session, org: FireDept, incident, units: list[dict],
+    *, sync_external_units: bool = False, root_org_map: dict[str, str] | None = None,
+) -> bool:
     lage_id = _incident_major_incident_id(db, incident.id)
     changed = False
 
     for unit in units:
+        # GetOperationUnits liefert neben Fahrzeugen auch teilnehmende Personen
+        # (UnitType.Type == "Operational" — deren RSVP läuft separat über
+        # _sync_person_responses()/GetTasks) und Geräte (UnitType.Type == "Device").
+        # Nur Fahrzeuge sollen als IncidentVehicle erscheinen.
+        if _op_field(unit, "UnitType", "Type") != "Vehicle":
+            continue
+
         ref_id = unit.get("ReferenceId")
         if not ref_id:
             continue
@@ -257,8 +267,16 @@ def _sync_vehicle_status(db: Session, org: FireDept, incident, units: list[dict]
             .filter(VehicleMaster.dept_id == org.id, VehicleMaster.lis_reference_id == ref_id)
             .first()
         )
+        if not vehicle_master and sync_external_units:
+            # Fremde Organisation (z.B. Nachbarwehr, Rotes Kreuz) ohne eigene
+            # lis_reference_id-Zuordnung — als externen Platzhalter übernehmen statt
+            # zu verwerfen (siehe OrgLisConfig.sync_external_units).
+            vehicle_master = _get_or_create_external_vehicle(db, org, unit, root_org_map or {})
         if not vehicle_master:
-            logger.warning(
+            # debug statt warning: bei Großereignissen (F4) melden sich pro Poll-Zyklus
+            # dutzende fremde Einheiten, die ohne sync_external_units bewusst ignoriert
+            # werden — eine Warnung je Einheit würde das Log zumüllen.
+            logger.debug(
                 "LIS-Einheit %r (Org %s) hat keine lis_reference_id-Zuordnung — Status/Position wird ignoriert",
                 ref_id, org.id,
             )
@@ -320,6 +338,72 @@ def _sync_vehicle_status(db: Session, org: FireDept, incident, units: list[dict]
         _sync_vehicle_location(db, org, incident, vehicle_master, unit, lage_id)
 
     return changed
+
+
+# ── Externe Fahrzeuge (fremde Organisationen) als Platzhalter übernehmen ─────
+def _get_or_create_external_vehicle(
+    db: Session, org: FireDept, unit: dict, root_org_map: dict[str, str],
+) -> VehicleMaster | None:
+    """Legt für eine fremde LIS-Einheit (UnitType.Type == "Vehicle", keine eigene
+    lis_reference_id-Zuordnung) einen externen VehicleMaster-Platzhalter an bzw. gibt
+    einen bereits angelegten zurück (get-or-create über dept_id + lis_reference_id +
+    is_external). Nutzt dieselben Felder (is_external/adhoc_org_name/adhoc_org_short)
+    wie die manuelle externe Fahrzeug-Anlage in ui_admin.py, damit Board/Lagekarte
+    ohne Änderung funktionieren.
+
+    root_org_map (Id -> Name aus GetRootOrganizations, siehe sync_organization()) wird
+    nur für die Anzeige der Herkunftsorganisation genutzt und ist best-effort — der
+    LIS-Name selbst enthält i.d.R. bereits die Organisation (z.B. "Bregenz-Rieden TLF
+    2000"), ein generischer Platzhaltername verhindert nur, dass fälschlich die eigene
+    Org angezeigt wird (siehe VehicleMaster.org_display_name-Fallback)."""
+    ref_id = unit.get("ReferenceId")
+    name = unit.get("Name")
+    if not ref_id or not name:
+        return None
+
+    vehicle_master = (
+        db.query(VehicleMaster)
+        .filter(
+            VehicleMaster.dept_id == org.id,
+            VehicleMaster.lis_reference_id == ref_id,
+            VehicleMaster.is_external.is_(True),
+            VehicleMaster.deleted.is_(False),
+        )
+        .first()
+    )
+    if vehicle_master:
+        return vehicle_master
+
+    lis_org_id = unit.get("OrganizationId")
+    adhoc_org_name = root_org_map.get(lis_org_id) if lis_org_id else None
+    if adhoc_org_name:
+        adhoc_org_short = "".join(w[0] for w in adhoc_org_name.split()[:3]).upper()[:3] or None
+    else:
+        adhoc_org_name = "Fremde Organisation (LIS)"
+        adhoc_org_short = None
+
+    code = str(unit.get("Alias") or ref_id)[:30]
+    max_order = db.query(VehicleMaster).filter(VehicleMaster.dept_id == org.id).count()
+    vehicle_master = VehicleMaster(
+        dept_id=org.id,
+        code=code,
+        name=str(name)[:150],
+        type="",
+        is_external=True,
+        lis_auto_created=True,
+        lis_reference_id=str(ref_id)[:60],
+        adhoc_org_name=adhoc_org_name[:150],
+        adhoc_org_short=adhoc_org_short,
+        active=True,
+        display_order=max_order,
+    )
+    db.add(vehicle_master)
+    db.flush()
+    logger.info(
+        "Externes LIS-Fahrzeug %r (%s, Org %s) neu als VehicleMaster %s angelegt",
+        name, ref_id, org.id, vehicle_master.id,
+    )
+    return vehicle_master
 
 
 # ── Fahrzeugposition (nur wenn LIS Koordinaten liefert, i.d.R. Status S5) ────
@@ -642,7 +726,10 @@ async def _close_incidents_missing_from_lis(
 
 
 # ── Ein Operation-Objekt vollständig verarbeiten ─────────────────────────────
-async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, client: LisClient, op: dict) -> None:
+async def sync_operation(
+    db: Session, org: FireDept, config: OrgLisConfig, client: LisClient, op: dict,
+    *, root_org_map: dict[str, str] | None = None,
+) -> None:
     # Wird nur nach is_fully_configured-Pruefung in sync_organization() aufgerufen.
     assert config.organization_id
     parsed = _parse_operation(op, org)
@@ -681,7 +768,11 @@ async def sync_operation(db: Session, org: FireDept, config: OrgLisConfig, clien
             "LIS-Einheiten für Operation %s (Org %s) fehlgeschlagen", parsed["lis_operation_id"], org.id,
         )
         units = []
-    vehicles_changed = _sync_vehicle_status(db, org, incident, units)
+    vehicles_changed = _sync_vehicle_status(
+        db, org, incident, units,
+        sync_external_units=config.sync_external_units,
+        root_org_map=root_org_map,
+    )
 
     documents_changed = await _sync_documents(db, org, incident, client, parsed["lis_operation_id"])
 
@@ -849,12 +940,24 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
         logger.exception("LIS SelectOperation für Org %s fehlgeschlagen", org.id)
         return
 
+    root_org_map: dict[str, str] = {}
     try:
         # Experiment 3 (2026-07-05, nach Fehlschlag von Experiment 1+2 im Live-Test):
         # GetRootOrganizations primt vermutlich den OperationService-seitigen Session-Cache,
         # den GetTasks braucht (siehe get_root_organizations()-Docstring in lis_client.py).
-        # Best-effort: ein Fehlschlag hier darf den restlichen Sync nicht blockieren.
-        await client.get_root_organizations()
+        # Best-effort: ein Fehlschlag hier darf den restlichen Sync nicht blockieren. Das
+        # Ergebnis wird zusätzlich für die Anzeigenamen externer Einheiten genutzt (siehe
+        # sync_external_units/_get_or_create_external_vehicle) — die Feldnamen sind aber
+        # NICHT live verifiziert (der Aufruf kam im Referenz-Mitschnitt nie vor), daher rein
+        # additiv und defensiv geparst.
+        root_orgs = await client.get_root_organizations()
+        for lis_org in root_orgs:
+            if not isinstance(lis_org, dict):
+                continue
+            oid = lis_org.get("Id") or lis_org.get("OrganizationId")
+            oname = lis_org.get("Name")
+            if oid and oname:
+                root_org_map[str(oid)] = str(oname)
     except LisClientError:
         logger.exception("LIS GetRootOrganizations für Org %s fehlgeschlagen", org.id)
 
@@ -879,7 +982,7 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
 
     for op in operations:
         try:
-            await sync_operation(db, org, config, client, op)
+            await sync_operation(db, org, config, client, op, root_org_map=root_org_map)
             db.commit()
         except Exception:
             db.rollback()
@@ -918,6 +1021,11 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
     try:
         vehicle = db.get(IncidentVehicle, incident_vehicle_id)
         if not vehicle or not vehicle.lis_operation_unit_id:
+            return
+        if vehicle.vehicle_master and vehicle.vehicle_master.is_external:
+            # Fremde Organisationen (inkl. automatisch aus LIS übernommene externe
+            # Einheiten, siehe _get_or_create_external_vehicle) dürfen wir niemals per
+            # SetOperationUnitStatus kommandieren.
             return
         incident = db.get(Incident, vehicle.incident_id)
         if not incident or not incident.primary_org_id:

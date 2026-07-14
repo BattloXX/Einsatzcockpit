@@ -79,6 +79,9 @@
           {% if v.is_external %}
           <span class="badge-pill badge-pill--orange" style="font-size:.6rem;margin-left:4px;vertical-align:middle;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.4);">FREMD</span>
           {% endif %}
+          {% if v.lis_auto_created %}
+          <span class="badge-pill badge-pill--gray" style="font-size:.6rem;margin-left:4px;vertical-align:middle;" title="Automatisch aus LIS übernommen — wird bei Bedarf beim nächsten Poll neu angelegt">AUS LIS</span>
+          {% endif %}
         </td>
         <td data-label="Name / Typ">{{ v.name }}<br><small class="text-muted">{{ v.type }}</small></td>
         <td data-label="Kennzeichen">{{ v.kennzeichen or '–' }}</td>

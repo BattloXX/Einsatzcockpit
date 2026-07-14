@@ -95,6 +95,7 @@ async def lis_settings_save(
     target_org_id: int | None = Form(None),
     enabled: str = Form(""),
     push_vehicle_status: str = Form(""),
+    sync_external_units: str = Form(""),
     base_url: str = Form(""),
     site: str = Form("LIS"),
     organization_id: str = Form(""),
@@ -113,6 +114,7 @@ async def lis_settings_save(
 
     cfg.enabled = enabled == "1"
     cfg.push_vehicle_status = push_vehicle_status == "1"
+    cfg.sync_external_units = sync_external_units == "1"
     cfg.base_url = base_url.strip().rstrip("/") or None
     cfg.site = site.strip() or "LIS"
     cfg.organization_id = organization_id.strip() or None

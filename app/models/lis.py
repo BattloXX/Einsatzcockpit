@@ -41,6 +41,12 @@ class OrgLisConfig(Base):
     # neuer Einsatz aus dieser LIS-Anbindung angelegt wird — spart den manuellen Klick
     # genau während des kurzen Zeitfensters, in dem ein echter Einsatz läuft.
     auto_capture_on_new_operation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Übernimmt teilnehmende Fahrzeuge FREMDER Organisationen (z.B. andere Feuerwehren,
+    # Rotes Kreuz) aus GetOperationUnits als externe VehicleMaster-Platzhalter
+    # (is_external + lis_auto_created, siehe lis_sync.py::_get_or_create_external_vehicle).
+    # Default aus (opt-in) — ohne diesen Schalter werden fremde Einheiten wie bisher
+    # verworfen. Betrifft nur Großereignisse mit fremder Beteiligung (z.B. F4).
+    sync_external_units: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Zugangsdaten
     username: Mapped[str | None] = mapped_column(String(150), nullable=True)

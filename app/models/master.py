@@ -110,6 +110,11 @@ class VehicleMaster(Base):
     # LIS/IPR: stabile ReferenceId des Fahrzeugs im Leitstellensystem, manuell gepflegt
     # (siehe LIS_IPR_Schnittstellen_Dokumentation.md Abschnitt 7.3)
     lis_reference_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    # True, wenn dieser Platzhalter automatisch von lis_sync.py::_get_or_create_external_vehicle()
+    # für eine fremde Organisation angelegt wurde (siehe OrgLisConfig.sync_external_units) —
+    # grenzt ihn von manuell in der Admin-UI gepflegten externen Fahrzeugen ab (dort read-only,
+    # da er beim nächsten Poll ohnehin wiederverwendet/neu angelegt würde).
+    lis_auto_created: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Lageführung: taktisches Zeichen (id aus app/static/tz/tz-manifest.json), für die
     # automatische Fahrzeug-Darstellung auf der Lagekarte. NULL = einfacher Statuskreis.

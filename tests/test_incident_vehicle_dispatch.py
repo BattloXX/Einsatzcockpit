@@ -94,6 +94,7 @@ def _s4_unit(ref_id: str, operation_unit_id: str = "ou-guid-1") -> dict:
         "Id": operation_unit_id,
         "ReferenceId": ref_id,
         "OperationUnitStatusType": {"Label": "S4 - zum Einsatzort"},
+        "UnitType": {"Type": "Vehicle"},
     }
 
 
@@ -138,7 +139,8 @@ def test_sync_vehicle_status_without_status_does_not_create_vehicle():
         db.flush()
 
         unit = {"Id": "ou-2", "ReferenceId": "rlf_kein_status",
-                "OperationUnitStatusType": {"Label": "S1 - Einsatzbereit"}}
+                "OperationUnitStatusType": {"Label": "S1 - Einsatzbereit"},
+                "UnitType": {"Type": "Vehicle"}}
         lis_sync._sync_vehicle_status(db, org, incident, [unit])
 
         assert db.query(IncidentVehicle).filter(IncidentVehicle.incident_id == incident.id).count() == 0
