@@ -197,6 +197,7 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         street=parsed["street"],
         city=parsed["city"],
         started_at=parsed["started_at"],
+        report_text=parsed["report_text"],
     )
     if match:
         match.lis_operation_id = parsed["lis_operation_id"]

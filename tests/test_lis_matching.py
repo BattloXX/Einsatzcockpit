@@ -272,6 +272,151 @@ def test_find_matching_incident_matches_despite_different_reason_text():
         db.close()
 
 
+# ── Fallback: Teilstring-Match, wenn strukturierte Adresse auf einer Seite fehlt ──
+
+def test_find_matching_incident_fallback_street_in_report_text():
+    """Reproduziert Prod-Vorfall 2026-07-14 (Bregenz F4): der Pager-Text-Parser des
+    seriellen Gateways lieferte wegen des Ortsteil-Präfixes 'vorkloster' leere
+    Adressfelder — die LIS-Operation kam mit korrekter Adresse, matchte über den
+    Adress-Weg (2) aber nicht. Der Straßenname aus der LIS-Adresse muss den
+    bereits vorhandenen, adresslosen seriellen Einsatz über dessen report_text
+    finden."""
+    db = _session()
+    try:
+        seriell = _make_incident(
+            db, alarm_type_code="F4", address_street="", address_no="", address_city="",
+            report_text="bregenz vorkloster untere burggräflergasse 14 kellerbrand personen eingeschlossen",
+            started_at=datetime(2026, 7, 14, 11, 47, 22, tzinfo=UTC),
+        )
+
+        match = lis_matching.find_matching_incident(
+            db, ORG_ID,
+            alarm_type_code="F4",
+            street="UNTERE BURGGRÄFLERGASSE",
+            city="BREGENZ",
+            started_at=datetime(2026, 7, 14, 11, 25, 28, tzinfo=UTC),
+            report_text="[Kellerbrand] Personen eingeschlossen",
+        )
+        assert match is not None
+        assert match.id == seriell.id
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_find_matching_incident_fallback_reverse_direction():
+    """Umgekehrte Reihenfolge (Lauterach F11, wie im selben Vorfall beobachtet): der
+    serielle Alarm kommt zuerst (ohne Adresse), das LIS-Sync danach — muss den
+    bereits über report_text bekannten Straßennamen im eigenen freien Meldungstext
+    des seriellen Einsatzes wiederfinden."""
+    db = _session()
+    try:
+        lis_incident = _make_incident(
+            db, alarm_type_code="F11", address_street="FELLENTORSTRASSE", address_no="20",
+            address_city="LAUTERACH", reason="[Patientenbergung] [Bewusstlos] RTW und Notarzt vor Ort",
+            started_at=datetime(2026, 7, 14, 13, 2, 49, tzinfo=UTC),
+        )
+
+        match = lis_matching.find_matching_incident(
+            db, ORG_ID,
+            alarm_type_code="F11",
+            street="",
+            city="",
+            started_at=datetime(2026, 7, 14, 13, 3, 55, tzinfo=UTC),
+            report_text=(
+                "_drehleiter r2 lauterach fellentorstrasse 20 patientenbergung "
+                "bewusstlos rtw und notarzt vor ort"
+            ),
+        )
+        assert match is not None
+        assert match.id == lis_incident.id
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_find_matching_incident_fallback_ignores_short_street_names():
+    """Sehr kurze Straßenfragmente dürfen nicht als Fallback-Treffer zählen (sonst
+    steigt das Risiko generischer Fehltreffer in freiem Text)."""
+    db = _session()
+    try:
+        _make_incident(
+            db, alarm_type_code="F4", address_street="", address_city="",
+            reason="irgendein rohtext ohne verwertbare adresse",
+        )
+
+        match = lis_matching.find_matching_incident(
+            db, ORG_ID,
+            alarm_type_code="F4",
+            street="Au",  # < _MIN_FALLBACK_STREET_LEN
+            city="",
+            started_at=None,
+            report_text="irgendein rohtext ohne verwertbare adresse",
+        )
+        assert match is None
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_find_matching_incident_keeps_simultaneous_same_type_incidents_separate():
+    """Sturmtag-Regression: mehrere echte, unterschiedliche Einsätze mit demselben
+    Stichwort (T9) innerhalb weniger Minuten dürfen NICHT zusammengeführt werden,
+    nur weil beide denselben Alarmtyp haben — sie haben beidseitig eine
+    strukturierte Adresse und dürfen daher nie im Fallback landen, selbst wenn
+    (rein hypothetisch) ein Straßenname im Meldungstext des anderen vorkäme
+    (reproduziert 2026-07-14: 8 echte T9-Einsätze in Wolfurt binnen 11 Minuten
+    blieben zu Recht getrennt)."""
+    db = _session()
+    try:
+        _make_incident(
+            db, alarm_type_code="T9", address_street="Bahnweg", address_no="16",
+            address_city="Wolfurt", report_text="wolfurt bahnweg 16 strasse überflutet",
+            started_at=datetime(2026, 7, 14, 11, 28, 0, tzinfo=UTC),
+        )
+
+        match = lis_matching.find_matching_incident(
+            db, ORG_ID,
+            alarm_type_code="T9",
+            street="Bucher Straße",
+            city="Wolfurt",
+            started_at=datetime(2026, 7, 14, 11, 26, 35, tzinfo=UTC),
+            report_text="wolfurt bucher straße 9a baum auf strasse",
+        )
+        assert match is None
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_find_matching_incident_fallback_never_fires_when_both_sides_have_address():
+    """Härtet die neue Sicherheitsschranke direkt: selbst wenn der Straßenname der
+    einen Seite (konstruiert, adversarial) im Meldungstext der anderen vorkäme,
+    darf kein Match entstehen, solange beide Seiten eine strukturierte Adresse
+    haben — der Fallback ist strikt auf 'mindestens eine Seite ohne Adresse'
+    beschränkt."""
+    db = _session()
+    try:
+        _make_incident(
+            db, alarm_type_code="T9", address_street="Achstraße", address_city="Wolfurt",
+            report_text="wolfurt achstrasse: baum auf bahnweg gefallen",  # enthaelt "bahnweg"
+            started_at=datetime(2026, 7, 14, 11, 28, 0, tzinfo=UTC),
+        )
+
+        match = lis_matching.find_matching_incident(
+            db, ORG_ID,
+            alarm_type_code="T9",
+            street="Bahnweg",
+            city="Wolfurt",
+            started_at=datetime(2026, 7, 14, 11, 28, 0, tzinfo=UTC),
+            report_text="wolfurt bahnweg 16 strasse überflutet",
+        )
+        assert match is None
+    finally:
+        db.rollback()
+        db.close()
+
+
 # ── LIS-first: Einsatz kommt zuerst über LIS, API liefert später "denselben" ──
 
 def test_lis_created_incident_can_later_be_linked_via_api_matching():

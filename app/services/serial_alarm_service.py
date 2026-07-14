@@ -96,6 +96,7 @@ def _create_or_link_incident(
             street=street,
             city=city,
             started_at=started_at,
+            report_text=raw_text,
         )
     except Exception as exc:  # Matching darf den Ingest nie blockieren
         logger.warning("Alarm-Matching fehlgeschlagen (org %s): %s", org_id, exc)

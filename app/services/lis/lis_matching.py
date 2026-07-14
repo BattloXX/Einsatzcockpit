@@ -13,9 +13,14 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.models.incident import Incident
-from app.services.lis.lis_mapping import normalize_address
+from app.services.lis.lis_mapping import _normalize_text, normalize_address
 
 DEFAULT_WINDOW_HOURS = 3
+
+# Fallback-Teilstring-Match (siehe find_matching_incident()): Mindestlänge des
+# normalisierten Straßennamens, ab der ein Substring-Treffer als aussagekräftig
+# gilt — verhindert, dass sehr kurze/generische Fragmente fälschlich matchen.
+_MIN_FALLBACK_STREET_LEN = 5
 
 
 def _as_aware(value: datetime) -> datetime:
@@ -31,21 +36,38 @@ def find_matching_incident(
     city: str | None,
     started_at: datetime | None,
     lis_operation_id: str | None = None,
+    report_text: str | None = None,
     window_hours: int = DEFAULT_WINDOW_HOURS,
 ) -> Incident | None:
     """Findet einen bereits vorhandenen aktiven Incident, der zu einer LIS-Operation passt.
 
-    Zwei Verknüpfungswege:
+    Drei Verknüpfungswege (der Reihe nach versucht):
     1) Direkter Treffer über eine bereits gemerkte lis_operation_id — schnellster,
        eindeutiger Pfad, wird bei jedem Sync-Durchlauf zuerst versucht.
     2) Heuristik über Alarmstichwort (alarm_type_code) + normalisierte Adresse
        (Straße/Ort), eingeschränkt auf ein Zeitfenster von window_hours um
-       started_at. Der freie Einsatzgrund-/Meldungstext wird NICHT verglichen —
-       zwei Quellen (z.B. Alarmierungs-Rohtext vs. LIS) formulieren denselben
-       Alarm oft unterschiedlich (Vorfall 2026-07-11: Einsätze #200/#201 an
-       derselben Adresse mit identischem Stichwort blieben getrennt, weil ihr
+       started_at. Der freie Einsatzgrund-/Meldungstext wird hier NICHT
+       verglichen — zwei Quellen (z.B. Alarmierungs-Rohtext vs. LIS) formulieren
+       denselben Alarm oft unterschiedlich (Vorfall 2026-07-11: Einsätze #200/#201
+       an derselben Adresse mit identischem Stichwort blieben getrennt, weil ihr
        Meldungstext nach Normalisierung nicht exakt gleich war). Stichwort +
        Adresse gelten als ausreichend eindeutig für denselben Einsatz.
+    3) Fallback, NUR wenn (2) keinen Treffer liefert: Teilstring-Match des
+       Straßennamens der einen Seite im freien report_text der anderen Seite
+       (Vorfall 2026-07-14: der lokale Pager-Text-Parser des seriellen Gateways
+       scheiterte an einem zusätzlichen Ortsteil-/Rufnamen-Präfix
+       ("bregenz VORKLOSTER untere burggräflergasse…", "_drehleiter r2 lauterach
+       fellentorstraße…") und lieferte leere Adressfelder — die Operation kam
+       vom LIS mit korrekter Adresse, matchte aber nicht, weil (2) eine
+       strukturierte Adresse auf BEIDEN Seiten braucht. Absichtlich NUR ein
+       Fallback (nicht Teil von (2)) UND zusätzlich hart darauf beschränkt, dass
+       mindestens eine der beiden Seiten tatsächlich KEINE strukturierte Adresse
+       hat (siehe target_address/cand_address_norm-Prüfung im Code): an
+       Sturmtagen können mehrere echte, unterschiedliche Einsätze mit demselben
+       Stichwort (häufig T9) binnen weniger Minuten auflaufen — die haben aber
+       durchgehend eine strukturierte Adresse auf beiden Seiten und erreichen
+       diesen Fallback dadurch nie, selbst wenn ein Straßenname zufällig im
+       Meldungstext des jeweils anderen vorkäme.
 
     Es werden ausschließlich AKTIVE Einsätze der Org verglichen — abgeschlossene
     Einsätze scheiden aus (reduziert False-Positives bei wiederkehrenden Alarmen
@@ -63,12 +85,6 @@ def find_matching_incident(
         if by_id:
             return by_id
 
-    target_address = normalize_address(street, city)
-    if not target_address:
-        # Ohne Adresse ist die Heuristik nicht zuverlässig genug —
-        # lieber keinen (Fehl-)Match als einen falschen.
-        return None
-
     candidates = (
         db.query(Incident)
         .filter(
@@ -79,13 +95,45 @@ def find_matching_incident(
         .all()
     )
 
-    for candidate in candidates:
-        if normalize_address(candidate.address_street, candidate.address_city) != target_address:
-            continue
-        if started_at is not None and candidate.started_at is not None:
-            delta = abs(_as_aware(started_at) - _as_aware(candidate.started_at))
-            if delta > timedelta(hours=window_hours):
+    def _within_window(candidate: Incident) -> bool:
+        if started_at is None or candidate.started_at is None:
+            return True
+        return abs(_as_aware(started_at) - _as_aware(candidate.started_at)) <= timedelta(hours=window_hours)
+
+    target_address = normalize_address(street, city)
+    if target_address:
+        for candidate in candidates:
+            if not _within_window(candidate):
                 continue
-        return candidate
+            if normalize_address(candidate.address_street, candidate.address_city) == target_address:
+                return candidate
+
+    own_street_norm = _normalize_text(street)
+    own_report_norm = _normalize_text(report_text)
+    for candidate in candidates:
+        if not _within_window(candidate):
+            continue
+        cand_address_norm = normalize_address(candidate.address_street, candidate.address_city)
+        # Zusätzliche Sicherheitsschranke (unabhängig vom Substring-Vergleich selbst):
+        # der Fallback darf NUR greifen, wenn mindestens eine der beiden Seiten
+        # tatsächlich keine strukturierte Adresse hat — haben beide eine (auch wenn
+        # sie sich unterscheiden, z.B. zwei echte T9-Einsätze an einem Sturmtag),
+        # bleibt es bei der bereits getroffenen (Nicht-)Entscheidung aus Schritt (2).
+        if target_address and cand_address_norm:
+            continue
+        cand_street_norm = _normalize_text(candidate.address_street)
+        cand_report_norm = _normalize_text(candidate.report_text)
+        if (
+            len(own_street_norm) >= _MIN_FALLBACK_STREET_LEN
+            and cand_report_norm
+            and own_street_norm in cand_report_norm
+        ):
+            return candidate
+        if (
+            len(cand_street_norm) >= _MIN_FALLBACK_STREET_LEN
+            and own_report_norm
+            and cand_street_norm in own_report_norm
+        ):
+            return candidate
 
     return None
