@@ -242,6 +242,7 @@ async def fahrt_detail(request: Request, fahrt_id: int, db: Session = Depends(ge
         .options(
             joinedload(Fahrt.fahrzeug), joinedload(Fahrt.zweck),
             joinedload(Fahrt.zielort), joinedload(Fahrt.benachrichtigungen),
+            joinedload(Fahrt.medien),
         )
         .first()
     )
@@ -270,6 +271,44 @@ async def fahrt_detail(request: Request, fahrt_id: int, db: Session = Depends(ge
         "can_edit": is_fahrtenbuch_admin(user),
         **_sysadmin_org_context(request, user, org, db),
     })
+
+
+def _serve_fahrt_media(user, org_id: int, media_id: int, db: Session, *, thumb: bool):
+    from app.models.fahrtenbuch import FahrtMedia
+    from app.services.media_service import absolute_fahrt_media_path, absolute_fahrt_media_thumb_path
+
+    media = (
+        db.query(FahrtMedia)
+        .filter(FahrtMedia.id == media_id, FahrtMedia.org_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if media is None:
+        return Response(status_code=404)
+    path = None
+    if thumb:
+        thumb_path = absolute_fahrt_media_thumb_path(media)
+        if thumb_path is not None and thumb_path.exists():
+            path = thumb_path
+    if path is None:
+        path = absolute_fahrt_media_path(media)
+    if not path.exists():
+        return Response(status_code=404)
+    from fastapi.responses import FileResponse
+    return FileResponse(path, media_type=media.mime_type if not thumb else "image/jpeg",
+                         headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/medien/fahrt/datei/{media_id}")
+async def serve_fahrt_media_datei(media_id: int, request: Request, db: Session = Depends(get_db)):
+    user, org_id, _org = _fb_admin(request, db)
+    return _serve_fahrt_media(user, org_id, media_id, db, thumb=False)
+
+
+@router.get("/medien/fahrt/thumb/{media_id}")
+async def serve_fahrt_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
+    user, org_id, _org = _fb_admin(request, db)
+    return _serve_fahrt_media(user, org_id, media_id, db, thumb=True)
 
 
 @router.post("/verwaltung/fahrten/{fahrt_id}/storno")

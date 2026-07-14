@@ -110,3 +110,38 @@ async def alarm_map_png(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail="Kartenbild derzeit nicht verfügbar")
 
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+# ── Schadensfoto (No-Login, wird von Teams-Servern per URL geladen) ─────────────
+
+@router.get("/api/v1/teams/fahrt-foto/{media_id}.jpg")
+async def fahrt_foto_jpg(media_id: int, sig: str = "", db: Session = Depends(get_db)):
+    """Liefert ein Schadensfoto für die Teams-Adaptive-Card (siehe schaden_service.py::
+    _foto_urls). Auth-Muster wie alarm_map_png() oben: signierter Query-Token statt
+    Login (Teams' Cloud hat keine Session/Cookie)."""
+    from app.core.security import unsign_fahrt_foto_token
+    from app.models.fahrtenbuch import FahrtMedia
+    from app.services.media_service import absolute_fahrt_media_path
+
+    data = unsign_fahrt_foto_token(sig)
+    if data is None:
+        raise HTTPException(status_code=403, detail="Ungültige Signatur")
+    token_media_id, org_id = data
+    if token_media_id != media_id:
+        raise HTTPException(status_code=403, detail="Ungültige Signatur")
+
+    media = (
+        db.query(FahrtMedia)
+        .filter(FahrtMedia.id == media_id, FahrtMedia.org_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if media is None:
+        raise HTTPException(status_code=404, detail="Foto nicht gefunden")
+
+    path = absolute_fahrt_media_path(media)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Foto nicht gefunden")
+
+    from fastapi.responses import FileResponse
+    return FileResponse(path, media_type=media.mime_type, headers={"Cache-Control": "no-store"})

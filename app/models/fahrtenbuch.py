@@ -214,6 +214,9 @@ class Fahrt(Base):
     benachrichtigungen: Mapped[list[FahrtBenachrichtigung]] = relationship(
         back_populates="fahrt", cascade="all, delete-orphan"
     )
+    medien: Mapped[list[FahrtMedia]] = relationship(
+        back_populates="fahrt", cascade="all, delete-orphan", order_by="FahrtMedia.created_at"
+    )
 
 
 class FahrtBenachrichtigung(Base):
@@ -232,3 +235,34 @@ class FahrtBenachrichtigung(Base):
     gesendet_am: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     fahrt: Mapped[Fahrt] = relationship(back_populates="benachrichtigungen")
+
+
+class FahrtMedia(Base):
+    """Foto zu einer Schadensmeldung (Fahrtenbuch).
+
+    Bewusst kein incident_id-Feld wie TaskMedia/MessageMedia/PersonMedia (app/models/
+    incident.py) — eine Fahrt hat keinen zwingenden Einsatzbezug. Dateien liegen unter
+    settings.MEDIA_STORAGE_DIR/fahrt/{org_id}/{fahrt_id}/ (siehe media_service.py) und
+    werden nur über geschützte Routen (Web) bzw. eine signierte No-Login-URL
+    (Teams-Kartenbild, siehe app/core/security.py::sign_fahrt_foto_token) ausgeliefert.
+    """
+    __tablename__ = "fahrt_media"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    fahrt_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("fahrt.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False)
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    thumb_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), index=True)
+
+    fahrt: Mapped[Fahrt] = relationship(back_populates="medien")

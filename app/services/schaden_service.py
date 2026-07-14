@@ -44,6 +44,34 @@ def _empfaenger(fahrzeug: VehicleMaster, org: OrgSettings | None) -> tuple[str |
     return mail, teams
 
 
+def _foto_urls(fahrt: Fahrt) -> list[str]:
+    """Baut öffentliche, signierte Bild-URLs für die hochgeladenen Schadensfotos
+    (siehe app/core/security.py::sign_fahrt_foto_token). Teams' Cloud ruft die
+    Bild-URL server-seitig ab — anders als der Detail-Link (der im Browser des
+    Empfängers geöffnet wird) MUSS diese URL öffentlich per https erreichbar sein,
+    daher explizit settings.effective_public_base_url statt der (oft internen)
+    request.base_url. Ohne konfigurierte https-Basis werden keine Bilder angehängt
+    (Text/Link bleiben trotzdem vollständig) statt einer kaputten Bild-URL."""
+    from app.config import settings
+
+    if not fahrt.medien:
+        return []
+    base = settings.effective_public_base_url.rstrip("/")
+    if not base.startswith("https://"):
+        logger.warning(
+            "Schadenmeldung Fahrt %d: PUBLIC_BASE_URL ist nicht https — Fotos werden "
+            "NICHT an Teams gesendet (Teams-Cloud kann interne/http-URLs nicht laden).",
+            fahrt.id,
+        )
+        return []
+    from app.core.security import sign_fahrt_foto_token
+
+    return [
+        f"{base}/api/v1/teams/fahrt-foto/{m.id}.jpg?sig={sign_fahrt_foto_token(m.id, fahrt.org_id)}"
+        for m in fahrt.medien
+    ]
+
+
 async def melde_schaden(fahrt: Fahrt, db: Session, base_url: str = "") -> None:
     """Sendet Schadenmeldung per Mail & Teams (non-blocking) und protokolliert das Ergebnis."""
     fahrzeug = (
@@ -105,8 +133,14 @@ async def melde_schaden(fahrt: Fahrt, db: Session, base_url: str = "") -> None:
 
     # Teams
     if teams_url:
-        from app.services.teams_service import post_teams_karte
-        ok = await post_teams_karte(teams_url, betreff, body_text, url=detail_url or None)
+        from app.services.teams_card import build_schaden_message_card
+        from app.services.teams_service import post_teams_adaptive_card
+
+        payload = build_schaden_message_card(
+            fahrt, fahrzeug, betreff=betreff,
+            foto_urls=_foto_urls(fahrt), detail_url=detail_url or None,
+        )
+        ok = await post_teams_adaptive_card(teams_url, payload)
         db.add(FahrtBenachrichtigung(
             fahrt_id=fahrt.id,
             org_id=fahrt.org_id,

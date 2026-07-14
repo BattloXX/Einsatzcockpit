@@ -25,6 +25,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.config import settings
 from app.models.incident import Message, MessageMedia, PersonMedia, RescuedPerson, Task, TaskMedia
@@ -666,6 +667,77 @@ def absolute_uas_thumb_path(medien) -> Path | None:
     if not medien.thumb_path:
         return None
     return _storage_root() / medien.thumb_path
+
+
+# ── Fahrtenbuch/Schaden-Fotos ─────────────────────────────────────────────────
+
+def _fahrt_dir(org_id: int, fahrt_id: int) -> Path:
+    d = _storage_root() / "fahrt" / str(org_id) / str(fahrt_id)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def absolute_fahrt_media_path(media) -> Path:
+    return _storage_root() / media.storage_path
+
+
+def absolute_fahrt_media_thumb_path(media) -> Path | None:
+    if not media.thumb_path:
+        return None
+    return _storage_root() / media.thumb_path
+
+
+async def store_upload_for_schaden_foto(
+    file: StarletteUploadFile, fahrt_id: int, org_id: int, db: Session, user=None,
+):
+    """Verarbeitet ein Schadensfoto-Upload fuer eine Fahrt (nur Bilder — anders als
+    task_media/uas_medien gibt es hier keinen Video-/PDF-Anwendungsfall). Gleiche
+    Bild-Pipeline wie task_media (_process_image: Verkleinerung + Thumb). Gibt ein
+    befuelltes FahrtMedia-Objekt zurueck (noch nicht committet). `user` ist optional,
+    da Fahrten auch ueber den No-Login-Token-Zugang (siehe ui_fahrtenbuch.py) erfasst
+    werden."""
+    from app.models.fahrtenbuch import FahrtMedia
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Leere Datei.")
+
+    mime = _detect_mime(raw)
+    if mime is None:
+        client_ct = (file.content_type or "").lower().split(";")[0].strip()
+        if client_ct in IMAGE_MIMES:
+            mime = client_ct
+        else:
+            raise HTTPException(415, "Dateityp konnte nicht erkannt werden und ist nicht erlaubt.")
+    if mime not in IMAGE_MIMES:
+        raise HTTPException(415, f"Nur Fotos werden unterstuetzt (Dateityp '{mime}' abgelehnt).")
+    if mime in {"image/heic", "image/heif"} and not _HEIC_OK:
+        raise HTTPException(415, "HEIC-Dateien werden auf diesem Server nicht unterstuetzt.")
+    if len(raw) > _size_limit_for_kind("image"):
+        limit_mb = _size_limit_for_kind("image") // (1024 * 1024)
+        raise HTTPException(413, f"Foto zu gross. Limit: {limit_mb} MB.")
+
+    dest_dir = _fahrt_dir(org_id, fahrt_id)
+    storage_root = _storage_root().resolve()
+    main_p, thumb_p, width, height, out_mime = _process_image(raw, dest_dir)
+    stored_bytes = main_p.stat().st_size
+    _reserve(db, org_id, stored_bytes)
+
+    media = FahrtMedia(
+        fahrt_id=fahrt_id,
+        org_id=org_id,
+        uploaded_by_user_id=user.id if user else None,
+        original_filename=file.filename or "foto.jpg",
+        storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
+        thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/"),
+        mime_type=out_mime,
+        bytes=stored_bytes,
+        width=width,
+        height=height,
+    )
+    db.add(media)
+    db.flush()
+    return media
 
 
 def delete_uas_medien(medien, db: Session) -> None:

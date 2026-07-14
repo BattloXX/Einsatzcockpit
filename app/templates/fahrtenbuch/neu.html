@@ -116,7 +116,7 @@
     <a href="#" id="draft-discard-link" style="margin-left:.5rem;">Verwerfen</a>
   </div>
 
-  <form method="post" action="/fahrtenbuch"
+  <form method="post" action="/fahrtenbuch" enctype="multipart/form-data"
         x-data="fahrtForm()"
         @submit="onSubmit($event)">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -246,6 +246,14 @@
             <label class="form-label" for="schaden_beschreibung">Beschreibung *</label>
             <textarea name="schaden_beschreibung" id="schaden_beschreibung" class="form-control"
                       rows="3" :required="schaden" placeholder="Schadensbeschreibung…">{{ form_daten.get('schaden_beschreibung', '') }}</textarea>
+          </div>
+          <div style="margin-top:.85rem;">
+            <label class="form-label" for="schaden_fotos">Fotos (optional)</label>
+            <input type="file" name="schaden_fotos" id="schaden_fotos" class="form-control"
+                   accept="image/*" capture="environment" multiple>
+            <p class="form-hint" style="margin:.3rem 0 0;font-size:.78rem;">
+              Bis zu 5 Fotos, je max. 10 MB. Werden der Schadenmeldung (Mail/Teams) beigefügt.
+            </p>
           </div>
         </div>
       </div>
@@ -396,7 +404,10 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
   const formEl = document.querySelector('form[action="/fahrtenbuch"]');
   if (!formEl) return;
 
-  const SKIP_FIELDS = new Set(['_csrf', 't']);
+  // schaden_fotos: File-Objekte lassen sich weder sinnvoll in localStorage
+  // serialisieren noch per el.value auf einen Datei-Input zurückschreiben
+  // (würde InvalidStateError werfen) — Draft-Mechanismus bewusst ausklammern.
+  const SKIP_FIELDS = new Set(['_csrf', 't', 'schaden_fotos']);
 
   function saveDraft() {
     const data = new FormData(formEl);

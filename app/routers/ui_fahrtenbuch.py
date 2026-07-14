@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.core.templating import templates
 from app.core.timezones import local_input_to_utc, now_local
@@ -19,6 +20,11 @@ from app.services.schaden_service import melde_schaden_background
 
 router = APIRouter()
 logger = logging.getLogger("einsatzleiter.fahrtenbuch")
+
+# Schadensfotos: Obergrenze pro Fahrt (verhindert exzessive Massen-Uploads über ein
+# einziges <input multiple> — Größen-/Typ-Limits je Datei greifen zusätzlich in
+# media_service.py::store_upload_for_schaden_foto).
+MAX_SCHADEN_FOTOS = 5
 
 # slowapi Rate-Limiter (optional, fällt ohne Decorator graceful zurück)
 try:
@@ -102,6 +108,17 @@ async def fahrtenbuch_speichern(
 
     try:
         fahrt = erstelle_fahrt(daten, db)
+        if fahrt.schaden_vorhanden:
+            # Vor dem Commit verarbeiten: schlägt ein Foto fehl (Typ/Größe), soll die
+            # ganze Fahrt (inkl. Zähler-Updates) nicht halb gespeichert werden — greift
+            # in denselben except-Block wie erstelle_fahrt() (Rollback + Formular erneut).
+            from app.services.media_service import store_upload_for_schaden_foto
+            fotos = [
+                f for f in form.getlist("schaden_fotos")
+                if isinstance(f, StarletteUploadFile) and f.filename
+            ][:MAX_SCHADEN_FOTOS]
+            for foto in fotos:
+                await store_upload_for_schaden_foto(foto, fahrt.id, org_id, db, user=user)
         db.commit()
         if fahrt.schaden_vorhanden:
             base_url = str(request.base_url).rstrip("/")

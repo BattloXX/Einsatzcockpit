@@ -43,3 +43,24 @@ async def post_teams_karte(webhook_url: str, titel: str, text: str, url: str | N
     except Exception as exc:
         logger.error("Teams-Webhook-Fehler: %s", exc)
         return False
+
+
+async def post_teams_adaptive_card(webhook_url: str, payload: dict) -> bool:
+    """Sendet ein bereits fertig gebautes Adaptive-Card-Payload (siehe teams_card.py)
+    an den angegebenen Teams-Webhook. Anders als post_teams_karte() (MessageCard) kann
+    diese Karte Bilder enthalten, die auch über Workflows-Webhooks zuverlässig
+    dargestellt werden (siehe teams_card.py-Moduldocstring)."""
+    import httpx
+
+    if not webhook_url or not webhook_url.startswith("https://"):
+        logger.warning("Teams-Webhook-URL ungültig oder leer")
+        return False
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(webhook_url, json=payload)
+        resp.raise_for_status()
+        return True
+    except Exception as exc:
+        logger.error("Teams-Webhook-Fehler: %s", exc)
+        return False

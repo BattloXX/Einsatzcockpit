@@ -18,7 +18,9 @@ auch von den (auslaufenden) klassischen Connectors korrekt inkl. Bild/Buttons da
 from __future__ import annotations
 
 from app.core.timezones import format_local_datetime
+from app.models.fahrtenbuch import Fahrt
 from app.models.incident import Incident
+from app.models.master import VehicleMaster
 from app.models.teams_bot import TeamsAlarmConfig
 
 
@@ -95,6 +97,58 @@ def build_incident_message_card(
     }
     if actions:
         adaptive_card["actions"] = actions
+
+    return {
+        "type": "message",
+        "attachments": [
+            {"contentType": "application/vnd.microsoft.card.adaptive", "content": adaptive_card},
+        ],
+    }
+
+
+def build_schaden_message_card(
+    fahrt: Fahrt, fahrzeug: VehicleMaster, *, betreff: str, foto_urls: list[str], detail_url: str | None,
+) -> dict:
+    """Baut die Adaptive Card für eine Schadensmeldung (siehe schaden_service.py).
+
+    Ersetzt die frühere post_teams_karte()-MessageCard für diesen Anwendungsfall, weil
+    NUR das Adaptive-Card-Format Bilder in Workflows-Webhooks zuverlässig rendert
+    (siehe Modul-Docstring). foto_urls müssen bereits öffentliche https-URLs sein
+    (signiert via app/core/security.py::sign_fahrt_foto_token) — Teams' Cloud ruft sie
+    server-seitig ab und kann interne/http-URLs nicht laden."""
+    betriebsfaehig_text = "Ja" if fahrt.schaden_betriebsfaehig else "Nein"
+    lines = [
+        f"**Fahrzeug:** {fahrzeug.code} {fahrzeug.kennzeichen or ''}".strip(),
+        f"**Maschinist:** {fahrt.maschinist_name}",
+        f"**Zeitpunkt:** {fahrt.zeitpunkt.strftime('%d.%m.%Y %H:%M')}",
+        f"**Betriebsfähig:** {betriebsfaehig_text}",
+    ]
+    if fahrt.schaden_beschreibung:
+        lines.append(f"**Beschreibung:** {fahrt.schaden_beschreibung}")
+
+    body: list[dict] = [
+        {"type": "TextBlock", "text": f"⚠️ {betreff}", "weight": "Bolder", "size": "Large", "wrap": True},
+        {"type": "TextBlock", "text": "\n\n".join(lines), "wrap": True},
+    ]
+    if len(foto_urls) == 1:
+        body.append({"type": "Image", "url": foto_urls[0], "size": "Stretch"})
+    elif len(foto_urls) > 1:
+        body.append({
+            "type": "ImageSet",
+            "imageSize": "Medium",
+            "images": [{"type": "Image", "url": u} for u in foto_urls],
+        })
+
+    adaptive_card: dict = {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": body,
+    }
+    if detail_url:
+        adaptive_card["actions"] = [
+            {"type": "Action.OpenUrl", "title": "Fahrt öffnen", "url": detail_url},
+        ]
 
     return {
         "type": "message",

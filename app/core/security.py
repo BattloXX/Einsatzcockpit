@@ -108,6 +108,28 @@ def unsign_artifact_token(token: str) -> tuple[int, int] | None:
         return None
 
 
+# ── Fahrtenbuch/Schaden: signierte No-Login-URL fürs Teams-Kartenbild ──────────
+# Wie AlarmToken (app/models/teams_bot.py) für das Einsatz-Kartenbild: Teams' Cloud
+# ruft die Bild-URL server-seitig ab, ohne Session/Cookie — daher unsigniert per
+# Query-Token statt Login. Anders als der ECPG-Artifact-Token bewusst NICHT
+# zeitlich begrenzt (URLSafeSerializer statt -Timed): Teams kann eine Karte auch
+# Stunden/Tage nach dem Versand erneut rendern (z.B. beim Scrollen im Kanalverlauf).
+_fahrt_foto_signer = URLSafeSerializer(settings.SECRET_KEY, salt="fahrt-foto")
+
+
+def sign_fahrt_foto_token(media_id: int, org_id: int) -> str:
+    return _fahrt_foto_signer.dumps({"m": media_id, "o": org_id})
+
+
+def unsign_fahrt_foto_token(token: str) -> tuple[int, int] | None:
+    """Returns (media_id, org_id) or None (ungültig/manipuliert)."""
+    try:
+        data = _fahrt_foto_signer.loads(token)
+        return (data["m"], data["o"])
+    except (BadSignature, KeyError, TypeError):
+        return None
+
+
 def sign_session(
     user_id: int,
     *,
