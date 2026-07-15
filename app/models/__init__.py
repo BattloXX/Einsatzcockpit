@@ -174,7 +174,7 @@ __all__ = [
     "SiteLogEntry", "SiteMedia", "CommLogEntry", "CitizenReport",
     "VerleihArtikel", "VerleihStueckliste", "VerleihStuecklistePosition",
     "VerleihAusleihe", "VerleihPosition", "VerleihStatus", "VerleihFoto",
-    "WeatherStation", "WeatherReading",
+    "WeatherStation", "WeatherReading", "WeatherDashboardToken",
     "WeatherAlertRule", "WeatherAlertState", "WeatherAlertLog",
     "SmsGroup", "SmsGroupMember", "SmsEinsatzinfoRecipient", "SmsLog",
     "SmsInbox", "SmsForwardRule", "SmsForwardRuleGroup", "SmsForwardRuleMember",
