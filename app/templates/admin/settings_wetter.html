@@ -82,13 +82,14 @@
 
     {% if new_dashboard_token %}
     <div class="alert" style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.35);border-radius:6px;padding:.8rem 1rem;margin-bottom:1.25rem;">
-      <strong>&#x2705; Dashboard-Token erzeugt &ndash; URL wird nur einmal vollst&auml;ndig angezeigt!</strong>
+      <strong>&#x2705; Token "{{ new_dashboard_token_label }}" erzeugt &ndash; URL wird nur einmal vollst&auml;ndig angezeigt!</strong>
       <p style="font-size:.82rem;color:var(--text-muted);margin:.4rem 0;">
-        Kopieren Sie die URL und rufen Sie sie auf einem Infoscreen auf.
-        Der Token kann sp&auml;ter nicht erneut eingesehen werden (nur neu erzeugt).
+        Kopieren Sie die URL und rufen Sie sie auf einem Infoscreen auf, oder verwenden Sie den Token
+        f&uuml;r die Website-Einbindung (z.B. WordPress-Widget). Er kann sp&auml;ter nicht erneut
+        eingesehen werden (nur gel&ouml;scht und neu erzeugt).
       </p>
       <textarea id="wxDashUrl" readonly rows="2"
-                style="width:100%;font-family:var(--font-mono,monospace);font-size:.82rem;background:rgba(0,0,0,.25);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:.5rem;resize:vertical;">{{ dashboard_url }}</textarea>
+                style="width:100%;font-family:var(--font-mono,monospace);font-size:.82rem;background:rgba(0,0,0,.25);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:.5rem;resize:vertical;">{{ new_dashboard_url }}</textarea>
       <div style="display:flex;align-items:flex-start;gap:1rem;margin-top:.5rem;flex-wrap:wrap;">
         <button type="button" class="btn btn--sm btn--primary"
                 onclick="var t=document.getElementById('wxDashUrl');t.select();navigator.clipboard.writeText(t.value);this.textContent='Kopiert ✓';">
@@ -129,46 +130,53 @@
       Aktualisiert sich automatisch alle 5 Minuten.
     </div>
 
-    {% if org_settings and org_settings.weather_dashboard_token_hash %}
-    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;padding:.65rem 1rem;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.25);border-radius:6px;">
-      <span style="color:var(--ampel-gruen,#22c55e);font-size:1.1rem;">&#x2022;</span>
-      <span style="font-size:.88rem;">
-        Dashboard-Token ist aktiv. Die vollst&auml;ndige URL wurde beim Erzeugen angezeigt.
-        Token erneuern macht die bisherige URL sofort ung&uuml;ltig.
-      </span>
-    </div>
-
-    <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
-      <form method="post" action="/admin/settings/wetter/dashboard-token/generate" style="display:inline;">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-        <button type="submit" class="btn btn--sm"
-                onclick="return confirm('Neuen Dashboard-Token erzeugen? Die bisherige URL wird sofort ungültig.');">
-          &#x1F504; Token erneuern
-        </button>
-      </form>
-      <form method="post" action="/admin/settings/wetter/dashboard-token/revoke" style="display:inline;">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-        <button type="submit" class="btn btn--danger btn--sm"
-                onclick="return confirm('Dashboard-Token widerrufen? Kein anonymer Zugriff auf das Dashboard mehr möglich.');">
-          Zugang sperren
-        </button>
-      </form>
-    </div>
-
+    {% if dashboard_tokens %}
+    <table class="table" style="margin-bottom:1.25rem;">
+      <thead>
+        <tr>
+          <th>Bezeichnung</th>
+          <th>Erzeugt am</th>
+          <th>Zuletzt verwendet</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tok in dashboard_tokens %}
+        <tr>
+          <td>{{ tok.label }}</td>
+          <td>{{ (tok.created_at|local_datetime) if tok.created_at else '–' }}</td>
+          <td>{{ (tok.last_used_at|local_datetime) if tok.last_used_at else 'noch nie' }}</td>
+          <td style="text-align:right;">
+            <form method="post" action="/admin/settings/wetter/dashboard-token/{{ tok.id }}/loeschen" style="display:inline;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+              <button type="submit" class="btn btn--danger btn--sm"
+                      onclick="return confirm('Token &quot;{{ tok.label }}&quot; löschen? Jeder Verbraucher dieses Tokens (Infoscreen, Website-Widget, …) verliert sofort den Zugriff.');">
+                L&ouml;schen
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
     {% else %}
     <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1rem;">
-      Kein Dashboard-Token aktiv. Dashboard ist nicht erreichbar.
+      Noch kein Dashboard-Token erzeugt. Dashboard/Website-Widget sind nicht erreichbar.
     </p>
-    <form method="post" action="/admin/settings/wetter/dashboard-token/generate">
+    {% endif %}
+
+    <form method="post" action="/admin/settings/wetter/dashboard-token/neu" style="display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+      <div>
+        <label style="font-weight:600;font-size:.85rem;display:block;margin-bottom:.25rem;">Neuer Token f&uuml;r &hellip;</label>
+        <input type="text" name="label" class="form-control" placeholder="z.B. Infoscreen Ger&auml;tehaus, Website-Widget" required style="min-width:280px;">
+      </div>
       <button type="submit" class="btn btn--primary">
-        &#x1F511; Dashboard-Token erzeugen &amp; URL anzeigen
+        &#x1F511; Token erzeugen &amp; URL anzeigen
       </button>
     </form>
-    {% endif %}
 
   </div>
 </section>

@@ -13,7 +13,7 @@ Aufteilung (siehe docs/wetterstation-konzept.md):
 """
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Index, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.tenant import TenantScoped
@@ -58,6 +58,26 @@ class WeatherStation(Base, TenantScoped):
     last_dewpoint_c:    Mapped[float | None] = mapped_column(Float, nullable=True)
     last_solar_wm2:     Mapped[float | None] = mapped_column(Float, nullable=True)
     last_uv:            Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class WeatherDashboardToken(Base):
+    """Beschriftetes Token fuer den oeffentlichen, loginfreien Wetter-Zugriff
+    (Infoscreen-Dashboard + JSON-Endpoint fuer externe Einbettung, z.B. das
+    WordPress-Widget der Vereins-Website). Mehrere Tokens je Org moeglich, damit sich
+    z.B. Infoscreen und Website-Widget unabhaengig voneinander loeschen/erneuern
+    lassen, ohne den jeweils anderen Verbraucher zu invalidieren (Haupt-DB, plain
+    ``Base`` wie ``LagekarteToken``/``ApiKey`` -- der Lookup erfolgt vor jeder
+    Authentifizierung, also ohne Tenant-Kontext)."""
+    __tablename__ = "weather_dashboard_token"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(150), nullable=False)
+    org_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class WeatherReading(WeatherBase):

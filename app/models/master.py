@@ -361,8 +361,8 @@ class OrgSettings(Base):
     position_retention_days: Mapped[int] = mapped_column(Integer, default=30)
     # Wetter-Integration: NULL = globale Einstellung nutzen, True/False = org-spezifisch
     weather_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    # Wetter-Dashboard-Token (SHA256-Hash); NULL = kein Dashboard aktiviert
-    weather_dashboard_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    # Wetter-Dashboard-Tokens: siehe eigene, beschriftete Tabelle WeatherDashboardToken
+    # (mehrere Tokens je Org moeglich, z.B. Infoscreen + Website-Widget unabhaengig widerrufbar)
     # Darstellungszeitraum für historische Werte im Infoscreen (in Stunden), Default 24
     infoscreen_history_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
 
