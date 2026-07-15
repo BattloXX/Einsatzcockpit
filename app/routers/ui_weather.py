@@ -1245,8 +1245,12 @@ async def weather_public_json(
             weather_service.get_daily_forecast(lat, lng),
             return_exceptions=True,
         )
-        warnings = results[0] if not isinstance(results[0], Exception) else []
-        daily_forecast = results[1] if not isinstance(results[1], Exception) else None
+        warnings: list = []
+        daily_forecast: weather_service.DailyForecast | None = None
+        if not isinstance(results[0], Exception):
+            warnings = results[0]  # type: ignore[assignment]
+        if not isinstance(results[1], Exception):
+            daily_forecast = results[1]  # type: ignore[assignment]
 
         now_utc = datetime.now(UTC)
         active_warnings = [w for w in warnings if w.valid_from <= now_utc]
