@@ -118,6 +118,11 @@ def test_public_json_liefert_aktuelle_werte(client, setup_db, monkeypatch, tmp_p
     assert aktuell["solar_wm2"] == 480.0
     assert aktuell["uv"] == 4.2
 
+    from app.routers.ui_weather import _gefuehlte_temperatur
+    assert aktuell["gefuehlt_c"] == _gefuehlte_temperatur(24.3, 61.0, 2.1)
+
+    assert data["standort"]["lat"] is None  # _make_station ohne lat/lng in diesem Test
+
     # Tages-Min/Max aus den soeben eingefuegten WeatherReadings (alle "heute" == UTC-naher Test)
     assert data["heute"]["temp_min_c"] == 14.2
     assert data["heute"]["temp_max_c"] == 26.8
@@ -191,6 +196,9 @@ def test_public_json_liefert_warnungen_und_vorhersage(client, setup_db, monkeypa
     assert data["warnungen"][0]["event_type"] == "wind"
     assert data["warnungen"][0]["text"] == "Sturmwarnung"
 
+    assert data["standort"]["lat"] == 47.466
+    assert data["standort"]["lng"] == 9.738
+
     assert len(data["vorhersage"]) == 1
     tag = data["vorhersage"][0]
     assert tag["datum_label"] == "Mo 20.07."
@@ -198,3 +206,20 @@ def test_public_json_liefert_warnungen_und_vorhersage(client, setup_db, monkeypa
     assert tag["temp_min_c"] == 15.0
     assert tag["regen_mm"] == 0.5
     assert tag["wind_max_kmh"] == 18.0  # 5.0 m/s * 3.6
+
+
+def test_gefuehlte_temperatur():
+    from app.routers.ui_weather import _gefuehlte_temperatur
+
+    # Fehlender Eingabewert -> kein Ergebnis vorgetaeuscht
+    assert _gefuehlte_temperatur(None, 60.0, 2.0) is None
+    assert _gefuehlte_temperatur(20.0, None, 2.0) is None
+    assert _gefuehlte_temperatur(20.0, 60.0, None) is None
+
+    # Windstille, gemaessigt: gefuehlt nahe der tatsaechlichen Temperatur
+    windstill = _gefuehlte_temperatur(20.0, 50.0, 0.0)
+    assert windstill is not None and 17 < windstill < 21
+
+    # Starker Wind bei Kaelte kuehlt spuerbar ab
+    kalt_windig = _gefuehlte_temperatur(5.0, 70.0, 10.0)
+    assert kalt_windig is not None and kalt_windig < 5.0

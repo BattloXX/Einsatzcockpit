@@ -1,6 +1,7 @@
 """UI-Router: Wetter-Panel (HTMX-Partials für GSL-Board, Einzeleinsatz und /wetter-Seite)."""
 import asyncio
 import logging
+import math
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -32,6 +33,18 @@ def _wind_dir_label(deg: float | None) -> str:
     if deg is None:
         return "–"
     return _WIND_DIR_LABELS[round(deg / 45) % 8]
+
+
+def _gefuehlte_temperatur(temp_c: float | None, hum_pct: float | None, wind_ms: float | None) -> float | None:
+    """Gefuehlte Temperatur nach der "Apparent Temperature"-Formel des australischen
+    Bureau of Meteorology (Steadman 1994): AT = Ta + 0.33*e - 0.7*ws - 4.0, mit e =
+    Wasserdampfdruck aus Temperatur+Feuchte. Deckt Hitze- und Kaelte-Effekte in einer
+    einzigen Formel ab (keine getrennten Heat-Index/Windchill-Gueltigkeitsbereiche noetig).
+    """
+    if temp_c is None or hum_pct is None or wind_ms is None:
+        return None
+    e = (hum_pct / 100) * 6.105 * math.exp(17.27 * temp_c / (237.7 + temp_c))
+    return round(temp_c + 0.33 * e - 0.7 * wind_ms - 4.0, 1)
 
 
 _SOURCE_LABELS = {
@@ -1275,8 +1288,13 @@ async def weather_public_json(
             if station and station.last_measured_at else None
         ),
         "zuletzt_aktualisiert": format_local_time(station.last_measured_at, org) if station else "",
+        "standort": {
+            "lat": lat,
+            "lng": lng,
+        },
         "aktuell": {
             "temp_c":        primary.get("temp"),
+            "gefuehlt_c":    _gefuehlte_temperatur(primary.get("temp"), primary.get("hum"), wind_ms),
             "hum_pct":       primary.get("hum"),
             "wind_kmh":      round(wind_ms * 3.6, 1) if wind_ms is not None else None,
             "gust_kmh":      round(gust_ms * 3.6, 1) if gust_ms is not None else None,
