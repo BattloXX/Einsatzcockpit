@@ -148,7 +148,7 @@ from app.models.verleih import (
     VerleihStuecklistePosition,
 )
 from app.models.wasserstelle import Wasserstelle
-from app.models.weather import WeatherReading, WeatherStation
+from app.models.weather import WeatherDashboardToken, WeatherReading, WeatherStation
 from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherAlertState
 
 __all__ = [
@@ -174,7 +174,7 @@ __all__ = [
     "SiteLogEntry", "SiteMedia", "CommLogEntry", "CitizenReport",
     "VerleihArtikel", "VerleihStueckliste", "VerleihStuecklistePosition",
     "VerleihAusleihe", "VerleihPosition", "VerleihStatus", "VerleihFoto",
-    "WeatherStation", "WeatherReading",
+    "WeatherStation", "WeatherReading", "WeatherDashboardToken",
     "WeatherAlertRule", "WeatherAlertState", "WeatherAlertLog",
     "SmsGroup", "SmsGroupMember", "SmsEinsatzinfoRecipient", "SmsLog",
     "SmsInbox", "SmsForwardRule", "SmsForwardRuleGroup", "SmsForwardRuleMember",

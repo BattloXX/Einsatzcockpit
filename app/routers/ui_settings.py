@@ -563,11 +563,18 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
         if effective_org_id else None
     )
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
-    from app.models.weather import WeatherStation
+    from app.models.weather import WeatherDashboardToken, WeatherStation
     weather_stations = (
         db.query(WeatherStation)
         .filter(WeatherStation.org_id == effective_org_id)
         .order_by(WeatherStation.name)
+        .all()
+        if effective_org_id else []
+    )
+    dashboard_tokens = (
+        db.query(WeatherDashboardToken)
+        .filter(WeatherDashboardToken.org_id == effective_org_id)
+        .order_by(WeatherDashboardToken.created_at.desc())
         .all()
         if effective_org_id else []
     )
@@ -585,10 +592,11 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
         "weather_stations": weather_stations,
         "new_station_token": None,
         "new_station_id": None,
+        "dashboard_tokens": dashboard_tokens,
         "new_dashboard_token": None,
+        "new_dashboard_token_label": None,
         "weather_db_enabled": bool(app_settings.WEATHER_DATABASE_URL),
         "public_base_url": base_url,
-        "dashboard_url": f"{base_url}/wetter/infoscreen/DASHBOARD_TOKEN",
         "kachelmann_is_configured": kachelmann_service.is_configured(effective_org_id),
         "dashboard_qr": None,
         "alert_rules": alert_rules,
@@ -598,8 +606,10 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
     }
     ctx.update(extra)
     # QR-Code nur wenn gerade eine frische URL bekannt ist
-    if ctx.get("dashboard_url") and ctx.get("new_dashboard_token"):
-        ctx["dashboard_qr"] = _generate_qr_datauri(ctx["dashboard_url"])
+    if ctx.get("new_dashboard_token"):
+        dashboard_url = f"{base_url}/wetter/infoscreen/{ctx['new_dashboard_token']}"
+        ctx["dashboard_qr"] = _generate_qr_datauri(dashboard_url)
+        ctx["new_dashboard_url"] = dashboard_url
     return ctx
 
 
@@ -616,14 +626,17 @@ def weather_settings_page(
     )
 
 
-@router.post("/settings/wetter/dashboard-token/generate", response_class=HTMLResponse)
-async def weather_dashboard_token_generate(
+@router.post("/settings/wetter/dashboard-token/neu", response_class=HTMLResponse)
+async def weather_dashboard_token_create(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
+    label: str = Form(...),
     target_org_id: int | None = Form(None),
 ):
+    from app.core.audit import write_audit
     from app.core.security import generate_weather_dashboard_token, hash_api_key
+    from app.models.weather import WeatherDashboardToken
 
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
@@ -631,42 +644,48 @@ async def weather_dashboard_token_generate(
     if not effective_org_id:
         return RedirectResponse("/admin/settings/wetter", status_code=303)
 
-    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
-    if not org_settings:
-        org_settings = OrgSettings(org_id=effective_org_id)
-        db.add(org_settings)
-
+    label = label.strip() or "Unbenannt"
     raw = generate_weather_dashboard_token()
-    org_settings.weather_dashboard_token_hash = hash_api_key(raw)
+    tok = WeatherDashboardToken(
+        token_hash=hash_api_key(raw), label=label, org_id=effective_org_id,
+    )
+    db.add(tok)
+    write_audit(db, "admin.weather_dashboard_token.created", user_id=user.id,
+                payload={"label": label, "org_id": effective_org_id})
     db.commit()
 
-    base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
     return templates.TemplateResponse(
         request, "admin/settings_wetter.html",
         _weather_settings_context(
             request, db, user, org_id_param,
             new_dashboard_token=raw,
-            dashboard_url=f"{base_url}/wetter/infoscreen/{raw}",
+            new_dashboard_token_label=label,
         ),
     )
 
 
-@router.post("/settings/wetter/dashboard-token/revoke")
-async def weather_dashboard_token_revoke(
+@router.post("/settings/wetter/dashboard-token/{token_id}/loeschen")
+async def weather_dashboard_token_delete(
+    token_id: int,
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
     target_org_id: int | None = Form(None),
 ):
-    is_sysadmin = has_role(user, "system_admin")
-    effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+    from app.core.audit import write_audit
+    from app.core.permissions import same_org_or_system_admin
+    from app.models.weather import WeatherDashboardToken
 
-    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
-    if org_settings:
-        org_settings.weather_dashboard_token_hash = None
+    is_sysadmin = has_role(user, "system_admin")
+    tok = db.get(WeatherDashboardToken, token_id)
+    if tok and same_org_or_system_admin(user, tok.org_id):
+        write_audit(db, "admin.weather_dashboard_token.deleted", user_id=user.id,
+                    entity_type="weather_dashboard_token", entity_id=token_id,
+                    payload={"label": tok.label})
+        db.delete(tok)
         db.commit()
 
-    org_suffix = f"?org_id={effective_org_id}" if is_sysadmin else ""
+    org_suffix = f"?org_id={target_org_id}" if (is_sysadmin and target_org_id) else ""
     return RedirectResponse(f"/admin/settings/wetter{org_suffix}#dashboard", status_code=303)
 
 

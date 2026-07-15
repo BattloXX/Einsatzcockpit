@@ -995,21 +995,31 @@ async def weather_infoscreen(
     """Vollbild-Wetter-Dashboard fuer FullHD-Infoscreens. Zugriff nur mit gueltigem Token."""
     from app.core.security import hash_api_key
     from app.models.master import FireDept, OrgSettings
+    from app.models.weather import WeatherDashboardToken
 
     token_hash = hash_api_key(token)
-    # OrgSettings ist nicht TenantScoped – direkter Lookup ohne Tenant-Bypass noetig
+    # weder WeatherDashboardToken noch OrgSettings sind TenantScoped – direkter Lookup
+    # ohne Tenant-Bypass noetig (der Token IST hier die Authentifizierung)
+    dash_token = (
+        db.query(WeatherDashboardToken)
+        .execution_options(include_all_tenants=True)
+        .filter(WeatherDashboardToken.token_hash == token_hash)
+        .first()
+    )
+    if not dash_token:
+        raise HTTPException(status_code=401, detail="Ungueltiger oder geloeschter Dashboard-Token.")
+    dash_token.last_used_at = datetime.now(UTC)
+    db.commit()
+
+    org = db.query(FireDept).filter(FireDept.id == dash_token.org_id).first()
+    if not org:
+        raise HTTPException(status_code=404)
     org_settings = (
         db.query(OrgSettings)
         .execution_options(include_all_tenants=True)
-        .filter(OrgSettings.weather_dashboard_token_hash == token_hash)
+        .filter(OrgSettings.org_id == org.id)
         .first()
     )
-    if not org_settings:
-        raise HTTPException(status_code=401, detail="Ungueltiger oder gesperrter Dashboard-Token.")
-
-    org = db.query(FireDept).filter(FireDept.id == org_settings.org_id).first()
-    if not org:
-        raise HTTPException(status_code=404)
 
     station_views = _build_station_views(org.id, db)
     abfluss_views = await _build_abfluss_views(org.id, db)
@@ -1152,21 +1162,23 @@ async def weather_public_json(
     """
     from app.core.security import hash_api_key
     from app.core.timezones import format_local_time, local_date_to_utc, now_local
-    from app.models.master import FireDept, OrgSettings
-    from app.models.weather import WeatherReading, WeatherStation
+    from app.models.master import FireDept
+    from app.models.weather import WeatherDashboardToken, WeatherReading, WeatherStation
 
     token_hash = hash_api_key(token)
-    # OrgSettings ist nicht TenantScoped – direkter Lookup ohne Tenant-Bypass noetig
-    org_settings = (
-        db.query(OrgSettings)
+    # WeatherDashboardToken ist nicht TenantScoped – direkter Lookup ohne Tenant-Bypass noetig
+    dash_token = (
+        db.query(WeatherDashboardToken)
         .execution_options(include_all_tenants=True)
-        .filter(OrgSettings.weather_dashboard_token_hash == token_hash)
+        .filter(WeatherDashboardToken.token_hash == token_hash)
         .first()
     )
-    if not org_settings:
-        raise HTTPException(status_code=401, detail="Ungueltiger oder gesperrter Dashboard-Token.")
+    if not dash_token:
+        raise HTTPException(status_code=401, detail="Ungueltiger oder geloeschter Dashboard-Token.")
+    dash_token.last_used_at = datetime.now(UTC)
+    db.commit()
 
-    org = db.query(FireDept).filter(FireDept.id == org_settings.org_id).first()
+    org = db.query(FireDept).filter(FireDept.id == dash_token.org_id).first()
     if not org:
         raise HTTPException(status_code=404)
 

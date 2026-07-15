@@ -1,7 +1,8 @@
 """Tests fuer den oeffentlichen Wetter-JSON-Endpoint (GET /wetter/oeffentlich/{token}.json).
 
-Fuer externe Einbettung (z.B. WordPress-Widget der Vereins-Website) gedacht -- nutzt
-denselben Token wie das bestehende Infoscreen-Dashboard (OrgSettings.weather_dashboard_token_hash)."""
+Fuer externe Einbettung (z.B. WordPress-Widget der Vereins-Website) gedacht -- nutzt dasselbe
+Token-Modell wie das bestehende Infoscreen-Dashboard (WeatherDashboardToken, mehrere
+beschriftete Tokens je Org moeglich)."""
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -9,8 +10,8 @@ from app.config import settings
 from app.core.security import generate_weather_dashboard_token, generate_weather_station_token, hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.master import FireDept, OrgSettings
-from app.models.weather import WeatherStation
+from app.models.master import FireDept
+from app.models.weather import WeatherDashboardToken, WeatherStation
 
 
 def _make_org_with_token():
@@ -26,8 +27,7 @@ def _make_org_with_token():
         db.add(org)
         db.flush()
         raw = generate_weather_dashboard_token()
-        org_settings = OrgSettings(org_id=org.id, weather_dashboard_token_hash=hash_api_key(raw))
-        db.add(org_settings)
+        db.add(WeatherDashboardToken(token_hash=hash_api_key(raw), label="Test", org_id=org.id))
         db.commit()
         return raw, org.id
     finally:
