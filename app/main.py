@@ -94,10 +94,13 @@ def _install_ws_quiet_exception_handler() -> None:
     reines Rauschen, KEIN Absturz (die Verbindung wird geschlossen und der Client
     reconnectet). Hier auf DEBUG herabgestuft; alle übrigen Loop-Exceptions laufen
     unverändert über den bisherigen Handler."""
+    # Vorab-Annotation, damit mypy den Fallback (Modul fehlt) als Variable statt als
+    # "Neuzuweisung eines Typs" behandelt (Standardmuster fuer optionale Imports).
+    ConnectionClosed: type[BaseException] | None
     try:
         from websockets.exceptions import ConnectionClosed
     except Exception:  # pragma: no cover - websockets immer vorhanden (uvicorn-Dep)
-        ConnectionClosed = None  # type: ignore[assignment]
+        ConnectionClosed = None
 
     loop = asyncio.get_running_loop()
     prev = loop.get_exception_handler()
@@ -119,7 +122,16 @@ def _install_ws_quiet_exception_handler() -> None:
         ):
             logger.debug("WebSocket getrennt (keepalive/close): %s", exc)
             return
-        (prev or loop_.default_exception_handler)(context)
+        # prev (ein zuvor via set_exception_handler registrierter Callback) erwartet
+        # (loop, context) -- loop.default_exception_handler ist dagegen eine gebundene
+        # Methode und erwartet nur (context). Beide ueber denselben Aufruf zu bedienen
+        # (frueher: `(prev or loop_.default_exception_handler)(context)`) rief prev mit
+        # zu wenigen Argumenten auf und haette bei TypeError gecrasht, sobald bereits
+        # ein anderer Handler registriert war.
+        if prev is not None:
+            prev(loop_, context)
+        else:
+            loop_.default_exception_handler(context)
 
     loop.set_exception_handler(_handler)
 
@@ -152,7 +164,10 @@ async def lifespan(app: FastAPI):
     # Hier fällt ein solcher Fehler stattdessen deterministisch beim Boot auf.
     from sqlalchemy.orm import configure_mappers
 
-    import app.models  # noqa: F401 – importiert alle Modell-Module in die Registry
+    # Alias, sonst bindet `import app.models` den Namen `app` lokal in dieser Funktion
+    # (Python-Semantik von `import a.b`) -- das kollidiert mit dem weiter unten
+    # modulweiten `app = FastAPI(...)` (mypy: "Incompatible import of 'app'").
+    import app.models as _app_models  # noqa: F401 – importiert alle Modell-Module in die Registry
     configure_mappers()
 
     # Benigne WebSocket-Trennungen dämpfen (siehe _install_ws_quiet_exception_handler).

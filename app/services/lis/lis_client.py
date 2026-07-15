@@ -17,7 +17,7 @@ import logging
 import uuid
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 import httpx
@@ -606,7 +606,10 @@ def _parse_mtom_binary(content_type: str, body: bytes) -> bytes:
             binary_part = part
     if binary_part is None:
         raise LisClientError("MTOM-Antwort enthält keinen application/octet-stream-Teil")
-    raw = binary_part.get_payload(decode=True)
+    # typeshed inferiert fuer get_payload(decode=True) faelschlich einen
+    # Message[str, str]-Anteil in den Rueckgabetyp (bestaetigt per reveal_type) -- laut
+    # CPython-Doku ist der reale Rueckgabetyp bei decode=True immer bytes | None.
+    raw = cast("bytes | None", binary_part.get_payload(decode=True))
     if raw is None:
         raise LisClientError("MTOM-Binärteil konnte nicht dekodiert werden")
     if raw[:2] == b"\x1f\x8b":  # zusätzlich gzip-komprimiert (Doku 4.5)

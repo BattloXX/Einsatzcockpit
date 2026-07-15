@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse
+from pycrdt import Channel
 from sqlalchemy.orm import Session
 
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
@@ -137,19 +138,40 @@ async def lagedokument_druck(
 
 # ── Realtime-Kollaboration (Yjs-CRDT-Sync) ────────────────────────────────────
 
-class _FastAPIChannel:
-    """Adapter: erfuellt pycrdt's `Channel`-Protokoll (path/send/recv) ueber eine
-    FastAPI-WebSocket-Verbindung, damit YRoom.serve() sie direkt bedienen kann."""
+class _FastAPIChannel(Channel):
+    """Adapter: erfuellt pycrdt's `Channel`-Protokoll ueber eine FastAPI-WebSocket-Verbindung,
+    damit YRoom.serve() sie direkt bedienen kann.
+
+    Muss von `Channel` ERBEN (nicht nur strukturell path/send/recv nachbilden) --
+    YRoom.serve() iteriert per `async for message in channel:`, was `__aiter__`/`__anext__`
+    voraussetzt. `Channel` liefert dafuer eine Default-Implementierung, die aber nur bei
+    tatsaechlicher Vererbung wirksam wird (Bugfix 2026-07-15: die vorherige eigenstaendige
+    Klasse ohne Vererbung crashte bei jeder Verbindung mit
+    "TypeError: 'async for' requires an object with __aiter__ method" direkt nach der
+    ersten SYNC_STEP1-Nachricht -- die Live-Kollaboration hat dadurch nie echte Client-
+    Aenderungen empfangen). Muster: pycrdt.websocket.websocket.HttpxWebsocket (eigene
+    __anext__-Override wandelt Verbindungsabbrueche in ein sauberes StopAsyncIteration
+    statt sie als Fehler im Sync-Room zu loggen)."""
 
     def __init__(self, websocket: WebSocket, path: str):
         self._ws = websocket
-        self.path = path
+        self._path = path
+
+    @property
+    def path(self) -> str:
+        return self._path
 
     async def send(self, message: bytes) -> None:
         await self._ws.send_bytes(message)
 
     async def recv(self) -> bytes:
         return await self._ws.receive_bytes()
+
+    async def __anext__(self) -> bytes:
+        try:
+            return await self.recv()
+        except Exception:
+            raise StopAsyncIteration() from None
 
 
 @router.websocket("/ws/lagedokument/{lage_id}")

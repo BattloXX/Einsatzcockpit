@@ -129,12 +129,17 @@ def test_wartungsbuch_pdf_leer():
 
 
 def test_wartungsbuch_pdf_eintraege():
+    """Regression: wartungsbuch_pdf griff bisher auf Felder zu, die UASWartung nie hatte
+    (faellig_am/typ/durchgefuehrt_am/techniker statt naechste_faellig/art/datum/pruefer,
+    siehe app/models/uas.py) -- crashte bei jedem echten Aufruf mit AttributeError. Dieser
+    Test bildete den Bug bisher mit ab (SimpleNamespace in denselben falschen Feldnamen),
+    daher unbemerkt gruen. Jetzt mit den echten Modell-Feldnamen."""
     from app.services.uas_pdf import wartungsbuch_pdf
 
     w = SimpleNamespace(
-        faellig_am=date(2026, 7, 1), typ="monatlich",
-        durchgefuehrt_am=date(2026, 6, 30),
-        ergebnis="OK", techniker="H. Muster",
+        naechste_faellig=date(2026, 7, 1), art="monatliche_sichtkontrolle",
+        datum=date(2026, 6, 30),
+        ergebnis="OK", pruefer="H. Muster",
     )
     device = SimpleNamespace(bezeichnung="DJI Air 3")
     with patch("app.services.uas_pdf._render_pdf", side_effect=_fake_render):
@@ -142,7 +147,7 @@ def test_wartungsbuch_pdf_eintraege():
 
     html = result.decode()
     assert "H. Muster" in html
-    assert "monatlich" in html
+    assert "monatliche sichtkontrolle" in html  # art.replace('_', ' ')
 
 
 # ── Eintreffmeldung ───────────────────────────────────────────────────────────

@@ -329,7 +329,7 @@ def _render_troop(db, job: PrintJob, base_url: str) -> bytes:
     return render_troop_pdf(troop, incident, base_url=base_url)
 
 
-def teilnahme_bezug_gehoert_org(db, bezug_typ: str, bezug_id: int, org_id: int) -> bool:
+def teilnahme_bezug_gehoert_org(db, bezug_typ: str, bezug_id: int, org_id: int | None) -> bool:
     """True, wenn der Bezug (Einsatz/Termin) der Org gehört. Verhindert, dass über
     _bezug_meta Titel/Zeit eines fremden Bezugs geleakt werden (db.get umgeht Tenant)."""
     if bezug_typ == "einsatz":
@@ -448,10 +448,13 @@ def _render_uas(db, job: PrintJob) -> bytes:
         return uas_pdf.acg_unfall_pdf(_one(UASEreignis, oid))
     if subtyp == "wartungsbuch":
         device = _one(UASDevice, oid)
+        # Feldnamen korrigiert (echter Bug, nicht nur Typing): UASWartung hat weder
+        # uas_device_id noch faellig_am -- die echten Spalten sind device_id/datum
+        # (siehe app/models/uas.py); Query crashte bisher bei jedem Wartungsbuch-PDF-Druck.
         wartungen = (
             db.query(UASWartung)
-            .filter(UASWartung.uas_device_id == oid, UASWartung.org_id == org_id)
-            .order_by(UASWartung.faellig_am)
+            .filter(UASWartung.device_id == oid, UASWartung.org_id == org_id)
+            .order_by(UASWartung.datum)
             .execution_options(include_all_tenants=True)
             .all()
         )
