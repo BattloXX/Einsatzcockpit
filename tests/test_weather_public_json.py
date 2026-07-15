@@ -34,14 +34,15 @@ def _make_org_with_token():
         db.close()
 
 
-def _make_station(org_id: int, *, with_snapshot: bool = True) -> int:
+def _make_station(org_id: int, *, with_snapshot: bool = True, lat: float | None = None,
+                   lng: float | None = None) -> int:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         st = WeatherStation(
             org_id=org_id, name="FW-Haus Test",
             ingest_token_hash=hash_api_key(generate_weather_station_token()),
-            active=True,
+            active=True, lat=lat, lng=lng,
         )
         if with_snapshot:
             st.last_measured_at = datetime.now(UTC)
@@ -140,3 +141,60 @@ def test_public_json_ohne_verlaufsdaten_liefert_none(client, setup_db, monkeypat
     assert data["verlauf_24h"]["temp"] is None
     assert data["verlauf_24h"]["regen"] is None
     assert data["heute"]["temp_min_c"] is None
+
+
+def test_public_json_ohne_koordinaten_liefert_leere_listen(client, setup_db):
+    """Ohne Stations-/Org-Koordinaten bleiben warnungen/vorhersage leer statt zu crashen
+    (kein Aufruf externer Wetterdienste ohne bekannten Ort)."""
+    token, org_id = _make_org_with_token()
+    _make_station(org_id)  # kein lat/lng
+
+    r = client.get(f"/wetter/oeffentlich/{token}.json")
+    assert r.status_code == 200, r.text[:300]
+    data = r.json()
+    assert data["warnungen"] == []
+    assert data["vorhersage"] == []
+
+
+def test_public_json_liefert_warnungen_und_vorhersage(client, setup_db, monkeypatch):
+    """Mit bekannten Koordinaten werden GeoSphere-Warnungen und die Open-Meteo-
+    Tagesvorhersage abgefragt und ins JSON uebernommen (dieselben Quellen wie das
+    bestehende Infoscreen-Dashboard)."""
+    token, org_id = _make_org_with_token()
+    _make_station(org_id, lat=47.466, lng=9.738)
+
+    from app.routers import ui_weather
+    from app.services import weather_service
+    from app.services.weather_service import DailyForecast, DailyForecastDay, WeatherWarning
+
+    now = datetime.now(UTC)
+
+    async def _fake_warnings(lat, lng):
+        return [WeatherWarning(level=2, event_type="wind", text="Sturmwarnung",
+                                valid_from=now - timedelta(hours=1), valid_to=now + timedelta(hours=5))]
+
+    async def _fake_forecast(lat, lng):
+        return DailyForecast(days=[
+            DailyForecastDay(date_label="Mo 20.07.", temp_max_c=27.0, temp_min_c=15.0,
+                              precip_mm=0.5, wind_max_ms=5.0),
+        ])
+
+    monkeypatch.setattr(weather_service, "get_warnings", _fake_warnings)
+    monkeypatch.setattr(weather_service, "get_daily_forecast", _fake_forecast)
+    assert ui_weather.weather_service is weather_service  # gleiche Modul-Referenz wie gepatcht
+
+    r = client.get(f"/wetter/oeffentlich/{token}.json")
+    assert r.status_code == 200, r.text[:300]
+    data = r.json()
+
+    assert len(data["warnungen"]) == 1
+    assert data["warnungen"][0]["event_type"] == "wind"
+    assert data["warnungen"][0]["text"] == "Sturmwarnung"
+
+    assert len(data["vorhersage"]) == 1
+    tag = data["vorhersage"][0]
+    assert tag["datum_label"] == "Mo 20.07."
+    assert tag["temp_max_c"] == 27.0
+    assert tag["temp_min_c"] == 15.0
+    assert tag["regen_mm"] == 0.5
+    assert tag["wind_max_kmh"] == 18.0  # 5.0 m/s * 3.6

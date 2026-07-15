@@ -1229,6 +1229,44 @@ async def weather_public_json(
     wind_ms = primary.get("wind")
     gust_ms = primary.get("gust")
 
+    # Oeffentliche Zusatzdaten (GeoSphere-Warnungen, Open-Meteo-Tagesvorhersage) --
+    # dieselben Quellen wie das bestehende Infoscreen-Dashboard, siehe weather_infoscreen()
+    # oben. Koordinaten: erst Station, dann Org-Fallback.
+    lat: float | None = station.lat if station else None
+    lng: float | None = station.lng if station else None
+    if lat is None and org.fallback_lat and org.fallback_lng:
+        lat, lng = org.fallback_lat, org.fallback_lng
+
+    warn_views: list[dict] = []
+    vorhersage_tage: list[dict] = []
+    if lat is not None and lng is not None:
+        results = await asyncio.gather(
+            weather_service.get_warnings(lat, lng),
+            weather_service.get_daily_forecast(lat, lng),
+            return_exceptions=True,
+        )
+        warnings: list = []
+        daily_forecast: weather_service.DailyForecast | None = None
+        if not isinstance(results[0], Exception):
+            warnings = results[0]  # type: ignore[assignment]
+        if not isinstance(results[1], Exception):
+            daily_forecast = results[1]  # type: ignore[assignment]
+
+        now_utc = datetime.now(UTC)
+        active_warnings = [w for w in warnings if w.valid_from <= now_utc]
+        warn_views = _build_warning_views(active_warnings)
+
+        if daily_forecast:
+            for day in daily_forecast.days[:5]:
+                wind_kmh = round(day.wind_max_ms * 3.6, 1) if day.wind_max_ms is not None else None
+                vorhersage_tage.append({
+                    "datum_label": day.date_label,
+                    "temp_max_c": day.temp_max_c,
+                    "temp_min_c": day.temp_min_c,
+                    "regen_mm": day.precip_mm,
+                    "wind_max_kmh": wind_kmh,
+                })
+
     return JSONResponse({
         "org_name": org.name,
         "station_name": primary["name"],
@@ -1258,4 +1296,6 @@ async def weather_public_json(
             "temp":  _hist("temp"),
             "regen": _hist("rain"),
         },
+        "warnungen": warn_views,
+        "vorhersage": vorhersage_tage,
     })
