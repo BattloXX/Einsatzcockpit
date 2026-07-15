@@ -211,8 +211,12 @@
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === 'incident_closed') location.href = '/';
-        else if (msg.type === 'reload_board' || msg.type === 'incident_leader_changed') location.reload();
-        if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+        else if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+        // Reiner Anzeige-View (Logo/Uhr/Alarmtext) ohne Modals/Scroll-Zustand –
+        // ein Full-Reload auf jede Mutation ist hier unkritisch und stellt sicher,
+        // dass künftige Event-Typen (z.B. alarm_type_changed, address_updated)
+        // automatisch mitgenommen werden, statt wie bisher nur eine feste Liste.
+        else location.reload();
       } catch (_) {}
     };
     ws.onclose = function() { setTimeout(connectWs, 3000); };

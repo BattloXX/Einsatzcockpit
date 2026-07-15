@@ -1,0 +1,516 @@
+{# Dashboard-Datenbereich (Inhalt von #dashBody). Wird sowohl beim Vollseiten-Render
+   (dashboard.html) als auch vom Fragment-Endpoint GET /einsatz/{id}/dashboard/inhalt
+   gerendert -- identischer Kontext, kein Render-Drift.
+   Variablen: incident, active_vehicles, lanes_overview, tasks_open, tasks_done,
+   msgs_open, msgs_done, person_stats, lage_hints, lage_hints_ai, breathing_troops,
+   qr_img, qr_url, uas_einsatz, uas_flug_count, dash_weather, brand #}
+
+<!-- ══ HEADER ══ -->
+<header class="hdr">
+  <div class="hdr-left">
+
+    <!-- Logo -->
+    <img src="/static/img/logo_einsatzcockpit.png" alt="{{ brand }}"
+         style="height:2.8rem; width:auto; flex-shrink:0; opacity:.9;">
+
+    <div class="hdr-vsep"></div>
+
+    <!-- Alarm badge -->
+    <div class="alarm-badge">{{ incident.alarm_type_code or '?' }}</div>
+
+    <div class="hdr-vsep"></div>
+
+    <!-- Incident info -->
+    <div class="hdr-incident">
+      {% if incident.is_exercise %}
+      <div style="font-family:var(--font-mono);font-size:.7rem;font-weight:700;color:#fbbf24;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">⚠ ÜBUNG / SIMULATION ⚠</div>
+      {% endif %}
+      <div class="hdr-incident__label">Einsatzgrund &amp; Ort</div>
+      <div class="hdr-incident__title">
+        {% if incident.reason %}{{ incident.reason }}
+        {% elif incident.report_text %}{{ incident.report_text[:130] }}
+        {% else %}Einsatz {{ incident.id }}{% endif %}
+      </div>
+      {% if incident.address_street %}
+      <div class="hdr-incident__address">
+        {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %} &middot; {{ incident.address_city }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Right: EL + Timer + Clock -->
+  <div class="hdr-right">
+
+    <div class="hdr-block">
+      <div class="hdr-block__label">Einsatzleiter</div>
+      {% if incident.leader_member %}
+        <div class="hdr-block__value">{{ incident.leader_member.full_name }}</div>
+      {% else %}
+        <div class="hdr-block__value" style="color:#fbbf24;">nicht zugewiesen</div>
+      {% endif %}
+      <div class="status-pill status-pill--{{ 'exercise' if incident.is_exercise else 'active' }}">
+        <span class="pulse-dot pulse-dot--{{ 'amber' if incident.is_exercise else 'green' }}"></span>
+        {{ 'Übung aktiv' if incident.is_exercise else 'Einsatz aktiv' }}
+      </div>
+    </div>
+
+    <div class="hdr-block" style="text-align:center; min-width:11.5rem;">
+      <div class="hdr-block__label" style="text-align:center;">Einsatzdauer</div>
+      <div class="hdr-block__value--timer" id="elapsedTimer">00:00:00</div>
+    </div>
+
+    <div class="hdr-block" style="text-align:right; min-width:12rem;">
+      <div class="hdr-block__sub" id="clockDate" style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:2px;">–</div>
+      <div class="hdr-block__value--clock" id="clockTime">–</div>
+      <div class="hdr-block__sub live-indicator" id="wsLive">
+        <span class="pulse-dot pulse-dot--green" id="wsLiveDot"></span>
+        <span id="wsLiveLabel">Live</span>
+      </div>
+    </div>
+
+    {% if dash_weather %}
+    <div class="hdr-block" style="min-width:9.5rem;">
+      <div class="hdr-block__label">Wetter</div>
+      <div class="hdr-block__value">
+        {% if dash_weather.temperature_c is not none %}🌡 {{ '%.0f'|format(dash_weather.temperature_c) }}&deg;C{% else %}–{% endif %}
+      </div>
+      {% if dash_weather.wind_speed_ms is not none %}
+      <div class="hdr-block__sub">💨 {{ '%.0f'|format(dash_weather.wind_speed_ms) }} m/s {{ dash_weather.wind_dir }}</div>
+      {% endif %}
+      <div class="hdr-block__sub">
+        {% if dash_weather.rain_label %}🌧 {{ dash_weather.rain_label }}{% else %}☀ kein Regen{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if qr_img %}
+    <div class="hdr-qr">
+      <a href="/einsatz/{{ incident.id }}/qr" target="_blank" rel="noopener" title="QR-Code vergrößern">
+        <img src="data:image/png;base64,{{ qr_img }}" alt="Login-QR">
+        <span class="hdr-qr__label">📱 Beitreten</span>
+      </a>
+    </div>
+    {% endif %}
+
+  </div>
+</header>
+
+<!-- ══ LAGE-BAR ══ -->
+{# Rohdaten für den Ticker als JSON-Insel, damit die Rotation nach jedem WS-Swap
+   die aktuellen Hinweise neu einlesen kann (statt das beim ersten Laden gebackene
+   JS-Array weiterzuverwenden). #}
+<script type="application/json" id="lageHintsData">{{ {"hints": (lage_hints|map(attribute="text")|list if lage_hints else []), "hintsAI": (lage_hints_ai if lage_hints_ai else [])}|tojson }}</script>
+{% if lage_hints %}
+<div class="lage-bar">
+  <span class="lage-bar__icon" id="lageBarIcon">{% if lage_hints_ai and lage_hints_ai[0] %}✨{% else %}📢{% endif %}</span>
+  <span class="lage-bar__label">Lagehinweis</span>
+  <span class="lage-bar__sep"></span>
+  <span class="lage-bar__text" id="lageTicker">{{ lage_hints[0].text }}</span>
+</div>
+{% endif %}
+
+<!-- ══ ATEMSCHUTZ-STRIP ══ -->
+{% if breathing_troops %}
+<div class="bs-strip">
+  <div class="bs-strip__label">
+    <span style="font-size:1rem;">🔴</span> Atemschutz
+  </div>
+  {% for troop in breathing_troops %}
+  {# Druckklasse berechnen (300-bar-Welt: ≥150 ok, ≥100 warn, <100 crit) #}
+  {% set press = troop.lowest_current_pressure %}
+  {% if press is none %}
+    {% set press_class = 'none' %}
+  {% elif press >= 150 %}
+    {% set press_class = 'ok' %}
+  {% elif press >= 100 %}
+    {% set press_class = 'warn' %}
+  {% else %}
+    {% set press_class = 'crit' %}
+  {% endif %}
+  <div class="bs-card bs-card--{{ troop.status }}">
+    <div class="bs-info">
+      <div class="bs-name">{{ troop.name }}</div>
+      {% if troop.unit_name %}
+      <div class="bs-unit">{{ troop.unit_name }}</div>
+      {% endif %}
+      {% if troop.location_text %}
+      <div class="bs-unit" style="font-size:.65rem;opacity:.8">{{ troop.location_text }}</div>
+      {% endif %}
+    </div>
+    <div class="bs-metrics">
+      {% if press is not none %}
+      <div class="bs-press bs-press--{{ press_class }}">{{ press|int }} bar</div>
+      {% else %}
+      <div class="bs-press bs-press--none">kein Druck</div>
+      {% endif %}
+      {% if troop.entry_at %}
+      <div class="bs-time"
+           data-entry="{{ troop.entry_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+           data-planned="{{ troop.planned_duration_min or 0 }}">–</div>
+      {% endif %}
+    </div>
+    <div class="bs-badge bs-badge--{{ troop.status }}">
+      {% if troop.status == 'im_einsatz' %}Im Einsatz{% elif troop.status == 'rueckzug' %}Rückzug!{% else %}{{ troop.status }}{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- ══ MAIN ══ -->
+<div class="main"{% if uas_einsatz %} style="grid-template-columns: 1.9fr 1.35fr 1.35fr 1.3fr;"{% endif %}>
+
+  <!-- ── FAHRZEUGE nach Abschnitt gruppiert (Einheiten + Abschnitte in einer Ansicht) ── -->
+  {% set total_vehicles = lanes_overview|map(attribute='vehicles')|map('length')|sum %}
+  <div class="panel" style="min-height: 0;">
+    <div class="panel-hd">
+      <div class="panel-hd__top">
+        <div class="panel-hd__title">
+          <span class="panel-hd__icon">🚒</span> Fahrzeuge / Abschnitte
+        </div>
+        <span class="panel-badge panel-badge--green">{{ active_vehicles|length }}/{{ total_vehicles }} Fzg</span>
+      </div>
+    </div>
+    <div class="panel-body">
+      {% set any_shown = false %}
+      {% for lane in lanes_overview %}
+      {% if lane.vehicles or lane.column.section_leader or lane.column.section_leader_name or lane.column.code == 'active' %}
+      {% set any_shown = true %}
+      <div class="lane-group">
+        <div class="lane-group__head">
+          <span class="lane-group__title">
+            {% if lane.column.code == 'active' %}🚒{% else %}📍{% endif %}
+            {{ lane.column.title }}
+          </span>
+          {% if lane.column.section_leader %}
+          <span class="lane-group__leader">AL: {{ lane.column.section_leader.full_name }}</span>
+          {% elif lane.column.section_leader_name %}
+          <span class="lane-group__leader">AL: {{ lane.column.section_leader_name }}</span>
+          {% else %}
+          <span class="lane-group__leader lane-group__leader--none">kein Abschnittsleiter</span>
+          {% endif %}
+        </div>
+        {% if lane.vehicles %}
+        <div class="vehicle-grid">
+          {% for v in lane.vehicles %}
+          {% set vstatus = 'active' if v.unit_status == 'Am Einsatzort' else ('dispatch' if v.unit_status == 'Einsatz übernommen' else 'other') %}
+          <div class="v-card v-card--{{ vstatus }}">
+            <div class="v-code">{{ v.vehicle_master.display_label if v.vehicle_master else '—' }}</div>
+            {% if v.vehicle_master and v.vehicle_master.name %}
+            <div class="v-name">{{ v.vehicle_master.name }}</div>
+            {% endif %}
+            {% if v.commander %}
+            <div class="v-gk">{{ v.commander.full_name }}</div>
+            {% elif v.commander_name %}
+            <div class="v-gk">{{ v.commander_name }}</div>
+            {% else %}
+            <div class="v-nogk">kein GK</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-panel" style="min-height:36px; padding:4px;">keine Einheiten</div>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% if not any_shown %}
+      <div class="empty-panel">
+        <div class="empty-icon">🚒</div>
+        Keine Fahrzeuge im Einsatz
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── AUFTRÄGE ── -->
+  <div class="panel">
+    <div class="panel-hd">
+      <div class="panel-hd__top">
+        <div class="panel-hd__title">
+          <span class="panel-hd__icon">📋</span> Aufträge
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="chip chip--blue">
+          <span class="chip-num">{{ tasks_open|length }}</span>
+          <span class="chip-lbl">Offen</span>
+        </div>
+        <div class="chip chip--green">
+          <span class="chip-num">{{ tasks_done|length }}</span>
+          <span class="chip-lbl">Erledigt</span>
+        </div>
+      </div>
+      {% set t_total = tasks_open|length + tasks_done|length %}
+      {% if t_total > 0 %}
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:{{ ((tasks_done|length / t_total) * 100)|round }}%"></div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="panel-body">
+      <div class="item-list">
+
+        {% for t in tasks_open %}
+        {% set ts = t.status if t.status else 'open' %}
+        <div class="item-row">
+          <span class="item-icon">{% if ts == 'in_progress' %}🟡{% elif ts == 'cancelled' %}⚪{% else %}🔴{% endif %}</span>
+          <div class="item-body">
+            <div class="item-title">{{ t.title }}</div>
+            <div class="item-meta">
+              <span class="status-tag status-tag--{{ ts }}">{% if ts == 'open' %}Offen{% elif ts == 'in_progress' %}In Arbeit{% elif ts == 'cancelled' %}Storniert{% else %}{{ ts }}{% endif %}</span>
+              {% if t.vehicle and t.vehicle.vehicle_master %}
+                <span class="v-badge">{{ t.vehicle.vehicle_master.display_label }}</span>
+              {% else %}
+                <span class="unassigned">nicht zugewiesen</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+
+        {% if not tasks_open and not tasks_done %}
+        <div class="empty-panel">
+          <div class="empty-icon">✅</div>
+          Keine Aufträge
+        </div>
+        {% endif %}
+
+        {% if tasks_done %}
+        {% if tasks_open %}
+        <div class="divider">
+          <div class="divider__line"></div>
+          <span class="divider__text">Erledigt</span>
+          <div class="divider__line"></div>
+        </div>
+        {% endif %}
+        {% for t in tasks_done %}
+        <div class="item-row item-row--done">
+          <span class="item-icon">✓</span>
+          <div class="item-body">
+            <div class="item-title">{{ t.title }}</div>
+            {% if t.vehicle and t.vehicle.vehicle_master %}
+            <div class="item-meta"><span class="v-badge">{{ t.vehicle.vehicle_master.display_label }}</span></div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MELDUNGEN ── -->
+  <div class="panel">
+    <div class="panel-hd">
+      <div class="panel-hd__top">
+        <div class="panel-hd__title">
+          <span class="panel-hd__icon">📢</span> Meldungen
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="chip chip--blue">
+          <span class="chip-num">{{ msgs_open|length }}</span>
+          <span class="chip-lbl">Offen</span>
+        </div>
+        <div class="chip chip--green">
+          <span class="chip-num">{{ msgs_done|length }}</span>
+          <span class="chip-lbl">Erledigt</span>
+        </div>
+      </div>
+      {% set m_total = msgs_open|length + msgs_done|length %}
+      {% if m_total > 0 %}
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:{{ ((msgs_done|length / m_total) * 100)|round }}%"></div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="panel-body">
+      <div class="item-list">
+
+        {% for m in msgs_open %}
+        {% set ms = m.status if m.status else 'meldung' %}
+        <div class="item-row">
+          <span class="item-icon">{% if ms == 'achtung' %}⚠️{% elif ms == 'hinweis' %}💡{% elif ms == 'information' %}ℹ️{% else %}🔴{% endif %}</span>
+          <div class="item-body">
+            <div class="item-title">{{ m.title }}</div>
+            <div class="item-meta">
+              <span class="status-tag status-tag--{{ ms }}">{% if ms == 'meldung' %}Meldung{% elif ms == 'achtung' %}Achtung{% elif ms == 'hinweis' %}Hinweis{% elif ms == 'information' %}Information{% else %}{{ ms }}{% endif %}</span>
+              {% if m.vehicle and m.vehicle.vehicle_master %}
+                <span class="v-badge v-badge--msg">{{ m.vehicle.vehicle_master.display_label }}</span>
+              {% endif %}
+              {% if m.due_at %}
+                <span style="color:#fbbf24;">⏰ {{ m.due_at|local_time }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+
+        {% if not msgs_open and not msgs_done %}
+        <div class="empty-panel">
+          <div class="empty-icon">💬</div>
+          Keine Meldungen
+        </div>
+        {% endif %}
+
+        {% if msgs_done %}
+        {% if msgs_open %}
+        <div class="divider">
+          <div class="divider__line"></div>
+          <span class="divider__text">Erledigt</span>
+          <div class="divider__line"></div>
+        </div>
+        {% endif %}
+        {% for m in msgs_done %}
+        <div class="item-row item-row--done">
+          <span class="item-icon">✓</span>
+          <div class="item-body">
+            <div class="item-title">{{ m.title }}</div>
+          </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DROHNE (UAS) ── -->
+  {% if uas_einsatz %}
+  {% set uas_status_labels = {
+    'alarmiert': 'Alarmiert',
+    'angemeldet': 'Angemeldet',
+    'im_einsatz': 'Im Einsatz',
+    'abgemeldet': 'Abgemeldet',
+    'abgeschlossen': 'Abgeschlossen'
+  } %}
+  {% set uas_role_labels = {
+    'teamleiter': 'TL',
+    'pilot': 'PIC',
+    'operator': 'Operator',
+    'luftraumbeobachter': 'LRB',
+    'versorger': 'Vers.',
+    'bildschirmbeobachter': 'BSB',
+    'geraetewart': 'GW'
+  } %}
+  <div class="panel">
+    <div class="panel-hd">
+      <div class="panel-hd__top">
+        <div class="panel-hd__title">
+          <span class="panel-hd__icon">🚁</span> Drohne
+        </div>
+        <span class="uas-status-badge uas-status--{{ uas_einsatz.status }}">
+          {% if uas_einsatz.status == 'im_einsatz' %}<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5fcf8e;animation:blink 2s ease-in-out infinite;margin-right:3px;"></span>{% endif %}
+          {{ uas_status_labels.get(uas_einsatz.status, uas_einsatz.status) }}
+        </span>
+      </div>
+      {% if uas_einsatz.tetra_rufname %}
+      <div class="uas-info-row" style="padding-top:.4rem;">
+        <span style="font-size:.8rem;color:var(--text-dim);">📡</span>
+        <span>Rufname: <strong>{{ uas_einsatz.tetra_rufname }}</strong></span>
+      </div>
+      {% endif %}
+      <div class="uas-stat-row">
+        <div class="uas-stat">
+          <span class="uas-stat__num">{{ uas_flug_count }}</span>
+          <span class="uas-stat__lbl">Flüge</span>
+        </div>
+        <div class="uas-stat">
+          <span class="uas-stat__num">{{ uas_einsatz.rollen|length }}</span>
+          <span class="uas-stat__lbl">Team</span>
+        </div>
+      </div>
+    </div>
+    <div class="panel-body">
+      {% if uas_einsatz.rollen %}
+      {% for r in uas_einsatz.rollen %}
+      {% set person_name = (r.pilot.vorname ~ ' ' ~ r.pilot.nachname) if r.pilot else r.helfer_name or '—' %}
+      <div class="uas-role-row">
+        <span class="uas-role-tag">{{ uas_role_labels.get(r.rolle, r.rolle) }}</span>
+        <span class="uas-role-name">{{ person_name }}</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="empty-panel" style="min-height:40px;">
+        <div class="empty-icon" style="font-size:1.4rem;">🚁</div>
+        Kein Team zugewiesen
+      </div>
+      {% endif %}
+      <a href="/uas/einsatz/{{ uas_einsatz.id }}" class="uas-link" target="_blank" rel="noopener">
+        <span>🔗</span> Drohneneinsatz öffnen
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+</div><!-- /main -->
+
+<!-- ══ FOOTER – Personenstatistik (ohne Verstorben) ══ -->
+<footer class="footer">
+
+  <div class="ps-group ps-group--found">
+    <div class="ps-icon">🔍</div>
+    <div class="ps-info">
+      <div class="ps-label">Gefunden</div>
+      <div class="ps-count">{{ '%02d'|format(person_stats['gefunden']|length) }}</div>
+    </div>
+    {% if person_stats['gefunden'] %}
+    <div class="ps-names">
+      {% for p in person_stats['gefunden'][:4] %}
+      <div class="ps-name" style="color:var(--text-muted);">
+        {% if p.name %}{{ p.name }}{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}
+      </div>
+      {% endfor %}
+      {% if person_stats['gefunden']|length > 4 %}
+      <div class="ps-name" style="color:var(--text-dim);">+{{ person_stats['gefunden']|length - 4 }} weitere</div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="ps-group ps-group--treated">
+    <div class="ps-icon">🏥</div>
+    <div class="ps-info">
+      <div class="ps-label">Versorgt</div>
+      <div class="ps-count">{{ '%02d'|format(person_stats['versorgt']|length) }}</div>
+    </div>
+    {% if person_stats['versorgt'] %}
+    <div class="ps-names">
+      {% for p in person_stats['versorgt'][:4] %}
+      <div class="ps-name" style="color:var(--text-muted);">
+        {% if p.name %}{{ p.name }}{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}
+      </div>
+      {% endfor %}
+      {% if person_stats['versorgt']|length > 4 %}
+      <div class="ps-name" style="color:var(--text-dim);">+{{ person_stats['versorgt']|length - 4 }} weitere</div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="ps-group ps-group--transported">
+    <div class="ps-icon">🚑</div>
+    <div class="ps-info">
+      <div class="ps-label">Abtransportiert</div>
+      <div class="ps-count">{{ '%02d'|format(person_stats['abtransportiert']|length) }}</div>
+    </div>
+    {% if person_stats['abtransportiert'] %}
+    <div class="ps-names">
+      {% for p in person_stats['abtransportiert'][:4] %}
+      <div class="ps-name" style="color:var(--text-muted);">
+        {% if p.name %}{{ p.name }}{% else %}{{ p.person_group }}{% if p.age_range %}, {{ p.age_range }}{% endif %}{% endif %}
+      </div>
+      {% endfor %}
+      {% if person_stats['abtransportiert']|length > 4 %}
+      <div class="ps-name" style="color:var(--text-dim);">+{{ person_stats['abtransportiert']|length - 4 }} weitere</div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+</footer>
