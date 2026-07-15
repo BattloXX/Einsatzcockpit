@@ -91,7 +91,8 @@ def test_sms_link_platzhalter():
 
 def test_neue_routen_registriert():
     from app.main import app
-    pfade = {getattr(r, "path", "") for r in app.routes}
+    from tests.conftest import all_app_paths
+    pfade = all_app_paths(app)
     assert "/einsatz/{incident_id}/info" in pfade
     assert "/einsatz/{incident_id}/hydranten.json" in pfade
     assert "/objekte/{objekt_id}/hydranten.json" in pfade

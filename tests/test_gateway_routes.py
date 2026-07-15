@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from starlette.routing import Match
 
+from tests.conftest import flatten_routes
+
 
 def _match_endpoint(path: str, method: str = "GET") -> str | None:
     import app.main as m
     scope = {"type": "http", "method": method, "path": path}
-    for r in m.app.router.routes:
+    for r in flatten_routes(m.app.router.routes):
         matches = getattr(r, "matches", None)
         if matches is None:
             continue
