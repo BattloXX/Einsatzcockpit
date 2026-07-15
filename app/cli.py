@@ -3,6 +3,7 @@
 Verwendung:
   python -m app.cli create-admin --username admin --password geheim
   python -m app.cli create-api-key --label "Alarmierungssystem"
+  python -m app.cli promote-to-system-admin --username admin
 """
 import argparse
 import sys
@@ -29,11 +30,44 @@ def create_admin(username: str, password: str, display_name: str = "") -> None:
         )
         db.add(user)
         db.flush()
-        admin_role = db.query(Role).filter(Role.code == "admin").first()
+        # system_admin statt admin: dieser Account entsteht immer ohne org_id (org-los,
+        # organisationsuebergreifend) -- mit der Rolle "admin" waere er in jeder org-gescopten
+        # Einstellungsseite (z.B. Wetter) unsichtbar gefangen: is_sysadmin=False verhindert den
+        # Org-Waehler, org_id=None verhindert den Fallback -- die Seite zeigt dann nur noch
+        # "Keine Organisation ausgewaehlt" ohne jeden Ausweg.
+        admin_role = db.query(Role).filter(Role.code == "system_admin").first()
         if admin_role:
             db.add(UserRole(user_id=user.id, role_id=admin_role.id))
         db.commit()
-        print(f"✓ Admin '{username}' angelegt (ID {user.id}).")
+        print(f"✓ Admin '{username}' angelegt (ID {user.id}, Rolle system_admin).")
+    finally:
+        db.close()
+
+
+def promote_to_system_admin(username: str) -> None:
+    """Repariert Bestandskonten, die vor diesem Fix mit Rolle 'admin' + org_id=None
+    angelegt wurden (z.B. der allererste Bootstrap-Admin) und dadurch in org-gescopten
+    Einstellungsseiten (Wetter, ...) ohne Org-Auswahl feststecken."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            print(f"User '{username}' nicht gefunden.")
+            return
+        role = db.query(Role).filter(Role.code == "system_admin").first()
+        if not role:
+            print("Rolle 'system_admin' nicht gefunden (Rollen-Seed nicht gelaufen?).")
+            return
+        has_it = db.query(UserRole).filter(
+            UserRole.user_id == user.id, UserRole.role_id == role.id
+        ).first()
+        if has_it:
+            print(f"'{username}' hat bereits die Rolle system_admin.")
+            return
+        db.add(UserRole(user_id=user.id, role_id=role.id))
+        db.commit()
+        print(f"✓ '{username}' ist jetzt system_admin.")
     finally:
         db.close()
 
@@ -83,6 +117,9 @@ def main() -> None:
     p_sms.add_argument("--label", required=True)
     p_sms.add_argument("--org-id", type=int, required=True, help="ID der Feuerwehr (fire_dept.id)")
 
+    p_promote = sub.add_parser("promote-to-system-admin")
+    p_promote.add_argument("--username", required=True)
+
     args = parser.parse_args()
     if args.command == "create-admin":
         create_admin(args.username, args.password, args.display_name)
@@ -90,6 +127,8 @@ def main() -> None:
         create_api_key(args.label)
     elif args.command == "create-sms-gateway-token":
         create_sms_gateway_token(args.label, args.org_id)
+    elif args.command == "promote-to-system-admin":
+        promote_to_system_admin(args.username)
     else:
         parser.print_help()
         sys.exit(1)
