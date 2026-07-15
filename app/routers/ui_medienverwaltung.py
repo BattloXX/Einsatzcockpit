@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -95,7 +96,10 @@ def _gather_task_message_person(db: Session, org_id: int) -> list[_Row]:
             rows.append(_Row(
                 id=m.id, typ=typ, original_filename=m.original_filename, kind=m.kind,
                 bytes=m.bytes or 0, created_at=m.created_at,
-                uploader_name=uploaders.get(m.uploaded_by_user_id, "–"),
+                uploader_name=(
+                    uploaders.get(m.uploaded_by_user_id, "–")
+                    if m.uploaded_by_user_id is not None else "–"
+                ),
                 annotated=m.id in ann_versions, annotated_at=ann_versions.get(m.id),
                 context_label=_label(inc) if inc else "–",
                 context_url=f"/einsatz/{m.incident_id}" if inc else None,
@@ -135,7 +139,9 @@ def _gather_gsl(db: Session, org_id: int) -> list[_Row]:
         rows.append(_Row(
             id=m.id, typ="site", original_filename=m.original_filename, kind=m.media_type,
             bytes=m.bytes or 0, created_at=m.uploaded_at,
-            uploader_name=m.author_name or uploaders.get(m.uploaded_by, "–"),
+            uploader_name=m.author_name or (
+                uploaders.get(m.uploaded_by, "–") if m.uploaded_by is not None else "–"
+            ),
             annotated=m.id in ann_versions, annotated_at=ann_versions.get(m.id),
             context_label=f"Lage-Stelle: {site.bezeichnung}" if site else "–",
             context_url=f"/lage/{site.major_incident_id}" if site else None,
@@ -153,21 +159,23 @@ def _gather_gsl(db: Session, org_id: int) -> list[_Row]:
     )
     uploaders = _uploaders({m.uploaded_by for m in cross_media if m.uploaded_by})
     ann_versions = ann_svc.annotated_versions(db, "cross_marker", [m.id for m in cross_media])
-    for m in cross_media:
-        marker = markers.get(m.marker_id)
+    for cm in cross_media:
+        marker = markers.get(cm.marker_id)
         base = (
-            f"/lage/{marker.major_incident_id}/uebergreifend/{marker.id}/medien/{m.id}/bild"
+            f"/lage/{marker.major_incident_id}/uebergreifend/{marker.id}/medien/{cm.id}/bild"
             if marker else None
         )
         rows.append(_Row(
-            id=m.id, typ="cross_marker", original_filename=m.original_filename, kind=m.media_type,
-            bytes=m.bytes or 0, created_at=m.uploaded_at,
-            uploader_name=m.author_name or uploaders.get(m.uploaded_by, "–"),
-            annotated=m.id in ann_versions, annotated_at=ann_versions.get(m.id),
+            id=cm.id, typ="cross_marker", original_filename=cm.original_filename, kind=cm.media_type,
+            bytes=cm.bytes or 0, created_at=cm.uploaded_at,
+            uploader_name=cm.author_name or (
+                uploaders.get(cm.uploaded_by, "–") if cm.uploaded_by is not None else "–"
+            ),
+            annotated=cm.id in ann_versions, annotated_at=ann_versions.get(cm.id),
             context_label=f"Übergreifend: {marker.title}" if marker else "–",
             context_url=f"/lage/{marker.major_incident_id}" if marker else None,
             deletable=True,
-            thumb_url=(f"{base}?thumb=true" if base and m.media_type == "image" else None),
+            thumb_url=(f"{base}?thumb=true" if base and cm.media_type == "image" else None),
             file_url=base or "#",
         ))
 
@@ -180,21 +188,23 @@ def _gather_gsl(db: Session, org_id: int) -> list[_Row]:
     )
     uploaders = _uploaders({m.uploaded_by for m in journal_media if m.uploaded_by})
     ann_versions = ann_svc.annotated_versions(db, "lage_journal", [m.id for m in journal_media])
-    for m in journal_media:
-        entry = entries.get(m.journal_entry_id)
+    for jm in journal_media:
+        entry = entries.get(jm.journal_entry_id)
         base = (
-            f"/lage/{entry.major_incident_id}/journal/{m.journal_entry_id}/medien/{m.id}/bild"
+            f"/lage/{entry.major_incident_id}/journal/{jm.journal_entry_id}/medien/{jm.id}/bild"
             if entry else None
         )
         rows.append(_Row(
-            id=m.id, typ="lage_journal", original_filename=m.original_filename, kind=m.media_type,
-            bytes=m.bytes or 0, created_at=m.uploaded_at,
-            uploader_name=m.author_name or uploaders.get(m.uploaded_by, "–"),
-            annotated=m.id in ann_versions, annotated_at=ann_versions.get(m.id),
+            id=jm.id, typ="lage_journal", original_filename=jm.original_filename, kind=jm.media_type,
+            bytes=jm.bytes or 0, created_at=jm.uploaded_at,
+            uploader_name=jm.author_name or (
+                uploaders.get(jm.uploaded_by, "–") if jm.uploaded_by is not None else "–"
+            ),
+            annotated=jm.id in ann_versions, annotated_at=ann_versions.get(jm.id),
             context_label="Lage-Journal" if entry else "–",
             context_url=f"/lage/{entry.major_incident_id}" if entry else None,
             deletable=True,
-            thumb_url=(f"{base}?thumb=true" if base and m.media_type == "image" else None),
+            thumb_url=(f"{base}?thumb=true" if base and jm.media_type == "image" else None),
             file_url=base or "#",
         ))
     return rows
@@ -335,7 +345,10 @@ def _loesche_eines(db: Session, user, typ: str, media_id: int) -> None:
         from app.models.incident import Incident, MessageMedia, PersonMedia, TaskMedia
         from app.services.media_service import delete_media
 
-        model = {"task": TaskMedia, "message": MessageMedia, "person": PersonMedia}[typ]
+        # type[Any] statt implizitem Union der drei Modelltypen -- sonst inferiert mypy fuer
+        # db.get(model, media_id) nur die gemeinsame SQLAlchemy-Base statt des konkreten
+        # Modells und media.incident_id/media.org_id schlagen als Attributzugriff fehl.
+        model: type[Any] = {"task": TaskMedia, "message": MessageMedia, "person": PersonMedia}[typ]
         media = db.get(model, media_id)
         if media is None:
             return
@@ -355,11 +368,12 @@ def _loesche_eines(db: Session, user, typ: str, media_id: int) -> None:
             delete_site_media,
         )
 
-        model, deleter = {
+        model_deleter_map: dict[str, tuple[type[Any], Any]] = {
             "site": (SiteMedia, delete_site_media),
             "cross_marker": (CrossMarkerMedia, delete_cross_marker_media),
             "lage_journal": (LageJournalMedia, delete_journal_media),
-        }[typ]
+        }
+        model, deleter = model_deleter_map[typ]
         media = db.get(model, media_id)
         if media is None:
             return

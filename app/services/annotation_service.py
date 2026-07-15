@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -32,9 +33,13 @@ class MediaSpec:
     typ: str
     model: type
     kind_of: Callable[[object], str]          # media -> 'image'|'pdf'|'video'
-    abs_path: Callable[[object], Path]        # media -> Originaldatei
+    # abs_path/thumb_path: Any statt object -- die zugewiesenen Funktionen (absolute_path etc.)
+    # sind auf konkrete Medientypen (TaskMedia, SiteMedia, ...) typisiert; Callable-Parameter
+    # sind kontravariant, ein Callable[[TaskMedia], Path] ist also kein Callable[[object], Path].
+    # Zur Laufzeit ist das korrekt (jede Funktion wird nur mit ihrem eigenen Typ aufgerufen).
+    abs_path: Callable[[Any], Path]           # media -> Originaldatei
     access: Callable[[Session, User, object], bool]
-    thumb_path: Callable[[object], Path | None]  # media -> Thumbnail-Datei (fuer Regenerierung)
+    thumb_path: Callable[[Any], Path | None]  # media -> Thumbnail-Datei (fuer Regenerierung)
     org_of: Callable[[Session, object], int | None]  # media -> org_id (fuer Quota-Buchung)
 
 
@@ -158,7 +163,10 @@ def get_or_create(db: Session, media_typ: str, media_id: int, org_id: int | None
 
 
 def original_abs_path(media_typ: str, media) -> Path:  # type: ignore[no-untyped-def]
-    return spec_for(media_typ).abs_path(media)
+    spec = spec_for(media_typ)
+    if spec is None:
+        raise ValueError(f"Unbekannter media_typ: {media_typ!r}")
+    return spec.abs_path(media)
 
 
 def _annotated_abs_path(media_typ: str, media) -> Path:  # type: ignore[no-untyped-def]

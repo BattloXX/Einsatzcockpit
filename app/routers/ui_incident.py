@@ -4,6 +4,7 @@ import hashlib
 import io
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 import qrcode
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
@@ -789,7 +790,10 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
 
 # ── Board: gezielte HTMX-Fragment-Endpoints (ersetzen reload_board) ───────────
 
-_CARD_KIND_MODEL = {
+# type[Any] statt implizitem type[IncidentVehicle] | type[Task] | ... -- sonst inferiert mypy
+# fuer db.get(model, uid) nur die gemeinsame SQLAlchemy-Base statt des konkreten Modells und
+# jeder Attributzugriff (z.B. entity.incident_id) schlaegt fehl.
+_CARD_KIND_MODEL: dict[str, tuple[type[Any], str, str]] = {
     "vehicle": (IncidentVehicle, "_vehicle_card.html", "vehicle"),
     "task": (Task, "_task_card.html", "task"),
     "message": (Message, "_message_card.html", "msg"),
@@ -1188,6 +1192,7 @@ def incident_nachbar_gefahren(incident_id: int, request: Request, db: Session = 
     for o in kandidaten:
         if o.id in eigene_ids or not o.gefahren:
             continue
+        assert o.lat is not None and o.lng is not None  # SQL-Filter oben garantiert das
         dist = _haversine_m(lat, lng, o.lat, o.lng)
         if dist > radius:
             continue
@@ -1371,8 +1376,13 @@ async def _build_dashboard_context(
                     weather_service.get_nowcast(lat, lng),
                     return_exceptions=True,
                 )
-                current = None if isinstance(current, Exception) else current
-                nowcast = None if isinstance(nowcast, Exception) else nowcast
+                # BaseException (nicht nur Exception) checken, damit mypy current/nowcast
+                # danach vollstaendig auf den Erfolgstyp narrowt (gather(return_exceptions=True)
+                # liefert T | BaseException) -- reine Typ-Praezisierung, kein Verhaltensunterschied.
+                if isinstance(current, BaseException):
+                    current = None
+                if isinstance(nowcast, BaseException):
+                    nowcast = None
                 if current or nowcast:
                     rain_label = None
                     if nowcast and nowcast.peak_mm >= 0.05:
@@ -2184,7 +2194,10 @@ async def create_person(
     if note.strip():
         db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
                            user_id=request.state.user.id, author_name=get_author_name(request)))
-    rescued_col = next((c for c in db.get(Incident, incident_id).columns if c.code == "rescued"), None)
+    _incident_for_col = db.get(Incident, incident_id)
+    rescued_col = next(
+        (c for c in _incident_for_col.columns if c.code == "rescued"), None
+    ) if _incident_for_col else None
     if rescued_col:
         prepend_card(db, rescued_col.id, "person", person.id)
     from app.core.audit import write_incident_change

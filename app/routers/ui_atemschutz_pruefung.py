@@ -124,6 +124,13 @@ async def pruefung_speichern(
 
     org_id = user.org_id if user else org_settings.org_id  # type: ignore[union-attr]
 
+    def _form_str(key: str, default: str = "") -> str:
+        # form.get() liefert laut Starlette-Typing str | UploadFile | None (Formulare koennten
+        # theoretisch Datei-Uploads unter demselben Feldnamen enthalten) -- alle Felder hier
+        # sind aber reine Text-/Auswahlfelder, nie ein Datei-Upload.
+        val = form.get(key)
+        return val if isinstance(val, str) else default
+
     def _fehler_zurueck(text: str):
         return templates.TemplateResponse(request, "atemschutz_pruefung/formular.html", {
             "user": user,
@@ -136,7 +143,7 @@ async def pruefung_speichern(
             "fehler": text,
         }, status_code=422)
 
-    geraet_id = int(form.get("geraet_id") or 0)
+    geraet_id = int(_form_str("geraet_id") or "0")
     geraet = (
         db.query(AtemschutzGeraet)
         .filter(AtemschutzGeraet.id == geraet_id, AtemschutzGeraet.org_id == org_id)
@@ -146,7 +153,7 @@ async def pruefung_speichern(
     if not geraet:
         return _fehler_zurueck("Bitte ein gültiges Atemschutzgerät wählen.")
 
-    traeger_member_id = form.get("traeger_member_id") or ""
+    traeger_member_id = _form_str("traeger_member_id")
     traeger_member = None
     if traeger_member_id:
         traeger_member = (
@@ -155,7 +162,7 @@ async def pruefung_speichern(
             .execution_options(include_all_tenants=True)
             .first()
         )
-    traeger_free_text = (form.get("traeger_free_text") or "").strip() or None
+    traeger_free_text = _form_str("traeger_free_text").strip() or None
     if not traeger_member and not traeger_free_text:
         return _fehler_zurueck("Bitte einen Atemschutzträger wählen oder eintragen.")
 
@@ -170,7 +177,7 @@ async def pruefung_speichern(
         einsatz_art = "uebung"
 
     incident_id: int | None = None
-    incident_id_raw = form.get("incident_id") or ""
+    incident_id_raw = _form_str("incident_id")
     if einsatz_art == "einsatz" and incident_id_raw:
         inc = (
             db.query(Incident)
@@ -202,7 +209,7 @@ async def pruefung_speichern(
     sichtpruefung_ok = form.get("sichtpruefung_ok") == "ok"
     geraet_einsatzbereit_ok = form.get("geraet_einsatzbereit_ok") == "ok"
     hochdruckpruefung_ok = druckabfall_bar <= AtemschutzPruefung.HOCHDRUCK_DICHTPRUEFUNG_MAX_BAR_MIN
-    defekt_info = (form.get("defekt_info") or "").strip() or None
+    defekt_info = _form_str("defekt_info").strip() or None
 
     pruefung = AtemschutzPruefung(
         org_id=org_id,
@@ -215,7 +222,7 @@ async def pruefung_speichern(
         traeger_member=traeger_member,
         traeger_free_text=traeger_free_text,
         eingesetzt_am=eingesetzt_am,
-        ort_text=(form.get("ort_text") or "").strip() or None,
+        ort_text=_form_str("ort_text").strip() or None,
         einsatz_art=einsatz_art,
         incident_id=incident_id,
         flasche_gewechselt=form.get("flasche_gewechselt") == "on",

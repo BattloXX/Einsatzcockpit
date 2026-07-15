@@ -157,7 +157,10 @@ async def teams_alarm_settings_save_stichworte(
         return RedirectResponse("/admin/teams-alarmierung?flash=error_no_org", status_code=302)
 
     form = await request.form()
-    enabled_ids = {int(v) for k, v in form.multi_items() if k == "alarm_type_id"}
+    # Checkbox-Werte, nie Datei-Uploads -- isinstance-Guard narrowt str | UploadFile auf str.
+    enabled_ids = {
+        int(v) for k, v in form.multi_items() if k == "alarm_type_id" and isinstance(v, str)
+    }
 
     alarm_types = db.query(AlarmType).filter(AlarmType.org_id == effective_org_id).all()
     for at in alarm_types:
