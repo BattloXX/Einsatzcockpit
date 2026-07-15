@@ -350,13 +350,19 @@ async def fahrten_loeschen(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     ids: list[int] = []
     for raw in form.getlist("ids"):
+        # form.getlist() liefert laut Starlette-Typing str | UploadFile (Formulare koennten
+        # theoretisch Datei-Uploads unter demselben Feldnamen enthalten) -- dieses Feld ist aber
+        # immer eine Checkbox-Werteliste, nie ein Datei-Upload.
+        if not isinstance(raw, str):
+            continue
         try:
             ids.append(int(raw))
-        except (TypeError, ValueError):
+        except ValueError:
             continue
     anzahl = loesche_fahrten(ids, org_id, user.id, db)
     db.commit()
-    zurueck = (form.get("zurueck") or "").lstrip("?")
+    zurueck_raw = form.get("zurueck")
+    zurueck = (zurueck_raw if isinstance(zurueck_raw, str) else "").lstrip("?")
     ziel = f"/verwaltung/fahrten?{zurueck}" if zurueck else "/verwaltung/fahrten"
     sep = "&" if "?" in ziel else "?"
     return RedirectResponse(f"{ziel}{sep}geloescht={anzahl}", status_code=303)
