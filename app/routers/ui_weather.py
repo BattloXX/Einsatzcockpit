@@ -1130,3 +1130,120 @@ async def weather_infoscreen(
             "wind_dir_deg": station_views[0].get("wind_dir_deg") if station_views else None,
         },
     )
+
+
+# ── Oeffentliches Wetter-JSON (Token-Auth, kein Login) – fuer externe Einbettung ──
+# (z.B. WordPress-Widget der Feuerwehr-Website). Gleicher Token wie das Infoscreen-
+# Dashboard oben, damit kein zweites Token-Verwaltungs-UI noetig ist.
+
+@router.get(
+    "/wetter/oeffentlich/{token}.json",
+    include_in_schema=False,
+)
+async def weather_public_json(
+    request: Request,
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Aktuelle Wetterstations-Werte + Tages-Min/Max + 24h-Verlauf als JSON.
+
+    Fuer serverseitige Einbettung in Drittsysteme (z.B. ein PHP-Proxy auf der
+    Vereins-Website) gedacht -- kein CORS noetig, da der Aufruf server-zu-server laeuft.
+    """
+    from app.core.security import hash_api_key
+    from app.core.timezones import format_local_time, local_date_to_utc, now_local
+    from app.models.master import FireDept, OrgSettings
+    from app.models.weather import WeatherReading, WeatherStation
+
+    token_hash = hash_api_key(token)
+    # OrgSettings ist nicht TenantScoped – direkter Lookup ohne Tenant-Bypass noetig
+    org_settings = (
+        db.query(OrgSettings)
+        .execution_options(include_all_tenants=True)
+        .filter(OrgSettings.weather_dashboard_token_hash == token_hash)
+        .first()
+    )
+    if not org_settings:
+        raise HTTPException(status_code=401, detail="Ungueltiger oder gesperrter Dashboard-Token.")
+
+    org = db.query(FireDept).filter(FireDept.id == org_settings.org_id).first()
+    if not org:
+        raise HTTPException(status_code=404)
+
+    station_views = _build_station_views(org.id, db)
+    if not station_views:
+        raise HTTPException(status_code=404, detail="Keine aktive Wetterstation konfiguriert.")
+
+    primary = station_views[0]
+    station = db.get(WeatherStation, primary["id"])
+
+    # Tages-Min/Max (org-lokale Tagesgrenze, DB speichert naive UTC)
+    heute_min = heute_max = None
+    from app.db_weather import get_weather_session, weather_db_enabled
+    if weather_db_enabled():
+        today_str = now_local(org).strftime("%Y-%m-%d")
+        day_start_utc = local_date_to_utc(today_str, org=org)
+        session = get_weather_session()
+        try:
+            todays = (
+                session.query(WeatherReading)
+                .filter(
+                    WeatherReading.org_id == org.id,
+                    WeatherReading.station_id == primary["id"],
+                    WeatherReading.ts >= day_start_utc,
+                )
+                .all()
+            )
+        finally:
+            session.close()
+        temps = [r.temp_c for r in todays if r.temp_c is not None]
+        if temps:
+            heute_min, heute_max = min(temps), max(temps)
+
+    metric_history = _build_infoscreen_metric_history(
+        station_id=primary["id"], org_id=org.id, hours=24,
+    )
+
+    def _hist(name: str) -> dict | None:
+        entry = metric_history.get(name)
+        if not entry or not entry.get("svg"):
+            return None
+        svg = entry["svg"]
+        return {
+            "points": svg["points"], "width": svg["width"], "height": svg["height"],
+            "min": entry["min"], "max": entry["max"],
+        }
+
+    wind_ms = primary.get("wind")
+    gust_ms = primary.get("gust")
+
+    return JSONResponse({
+        "org_name": org.name,
+        "station_name": primary["name"],
+        "gemessen_um": (
+            station.last_measured_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+            if station and station.last_measured_at else None
+        ),
+        "zuletzt_aktualisiert": format_local_time(station.last_measured_at, org) if station else "",
+        "aktuell": {
+            "temp_c":        primary.get("temp"),
+            "hum_pct":       primary.get("hum"),
+            "wind_kmh":      round(wind_ms * 3.6, 1) if wind_ms is not None else None,
+            "gust_kmh":      round(gust_ms * 3.6, 1) if gust_ms is not None else None,
+            "wind_dir_label": primary.get("wind_dir"),
+            "pressure_hpa":  primary.get("pressure"),
+            "rain_rate_mmh": primary.get("rain_rate"),
+            "rain_day_mm":   primary.get("rain_day"),
+            "dewpoint_c":    primary.get("dew"),
+            "solar_wm2":     primary.get("solar"),
+            "uv":            primary.get("uv"),
+        },
+        "heute": {
+            "temp_min_c": heute_min,
+            "temp_max_c": heute_max,
+        },
+        "verlauf_24h": {
+            "temp":  _hist("temp"),
+            "regen": _hist("rain"),
+        },
+    })
