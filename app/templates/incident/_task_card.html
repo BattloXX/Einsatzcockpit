@@ -1,4 +1,5 @@
 <div class="card card--task {% if task.is_done %}card--done{% endif %} {% if task.is_cancelled %}card--cancelled{% endif %} {% if task.source == 'ai_suggestion' %}card--ai-suggestion{% endif %}"
+     id="task-card-{{ task.id }}"
      data-uid="{{ task.id }}" data-kind="task" data-status="{{ task.status or 'open' }}"
      hx-get="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/detail"
      hx-target="#cardDetailBody"
@@ -14,13 +15,11 @@
       <button class="btn btn--xs btn--primary"
               style="font-size:.65rem; padding:1px 6px;"
               hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ki-annehmen"
-              hx-swap="none"
-              hx-on::after-request="if(event.detail.successful){location.reload();}">✓</button>
+              hx-swap="none">✓</button>
       <button class="btn btn--xs btn--ghost"
               style="font-size:.65rem; padding:1px 6px;"
               hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ki-verwerfen"
-              hx-swap="none"
-              hx-on::after-request="if(event.detail.successful){location.reload();}">✗</button>
+              hx-swap="none">✗</button>
     </span>
     {% endif %}
   </div>

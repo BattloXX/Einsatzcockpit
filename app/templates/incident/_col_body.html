@@ -1,0 +1,33 @@
+{# Inhalt einer Kanban-Spalte (Karten + ggf. Funksprüche).
+   Variablen erwartet: col, col_vehicles, col_tasks, col_messages, col_persons,
+   incident, can_edit, lage_sprueche #}
+{% for _kind, _item in ordered_col_items(col, col_vehicles, col_tasks, col_messages, col_persons) %}
+  {% if _kind == 'vehicle' %}{% set vehicle = _item %}{% include "incident/_vehicle_card.html" %}
+  {% elif _kind == 'task' %}{% set task = _item %}{% include "incident/_task_card.html" %}
+  {% elif _kind == 'message' %}{% set msg = _item %}{% include "incident/_message_card.html" %}
+  {% elif _kind == 'person' %}{% set person = _item %}{% include "incident/_person_card.html" %}
+  {% endif %}
+{% endfor %}
+
+{% if col.code == 'messages' and lage_sprueche %}
+{% for spruch in lage_sprueche %}
+<div class="card card--message {% if spruch.handled %}card--done{% endif %}"
+     style="cursor:pointer; border-left:2px solid rgba(245,158,11,.5);"
+     onclick="window.location.href='/einsatz/{{ incident.id }}/funkjournal'">
+  <div class="card__body">
+    <div class="card__title">
+      <span style="font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:3px;
+                   background:rgba(168,85,247,.2);color:#d8b4fe;margin-right:4px;">SPRUCH</span>
+      {{ spruch.message[:120] }}{% if spruch.message|length > 120 %}…{% endif %}
+    </div>
+    {% if spruch.partner %}
+    <div class="card__sub">
+      {% if spruch.direction == 'in' %}Von:{% elif spruch.direction == 'out' %}An:{% else %}↔{% endif %}
+      {{ spruch.partner }}{% if spruch.channel %} · {{ spruch.channel }}{% endif %}
+    </div>
+    {% endif %}
+    <div class="card__meta"><span class="card__time">{{ spruch.ts|local_time }}</span></div>
+  </div>
+</div>
+{% endfor %}
+{% endif %}

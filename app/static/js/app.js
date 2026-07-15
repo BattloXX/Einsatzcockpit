@@ -253,6 +253,20 @@ function incidentBoard(incidentId, alarm, startedAt) {
     init() {
       this._connectWS(incidentId);
       this._setupKeyboard(incidentId);
+      this._trackOpenModalEntity();
+    },
+
+    // Merkt sich, welche Karte gerade im #cardDetailModal offen ist (kind/uid aus der
+    // aufgerufenen /detail-URL), damit WS-Events das offene Modal gezielt nachladen können.
+    _trackOpenModalEntity() {
+      const segToKind = { fahrzeug: 'vehicle', aufgabe: 'task', meldung: 'message', person: 'person' };
+      document.body.addEventListener('htmx:afterSwap', (e) => {
+        if (!e.target || e.target.id !== 'cardDetailBody') return;
+        const path = e.detail && e.detail.requestConfig && e.detail.requestConfig.path;
+        const m = path && path.match(/\/einsatz\/\d+\/(fahrzeug|aufgabe|meldung|person)\/(\d+)\/detail/);
+        e.target.dataset.openKind = m ? segToKind[m[1]] : '';
+        e.target.dataset.openUid = m ? m[2] : '';
+      });
     },
 
     toggleSidebar() {
@@ -262,6 +276,125 @@ function incidentBoard(incidentId, alarm, startedAt) {
 
     _bumpLastUpdate() {
       document.dispatchEvent(new CustomEvent('board-last-update', { detail: Date.now() }));
+    },
+
+    // ── Board-Events: gezielter HTMX-Swap statt location.reload() ──────────
+    _cardElId(kind, uid) {
+      return `${kind === 'message' ? 'msg' : kind}-card-${uid}`;
+    },
+
+    _cardDetailUrlSegment(kind) {
+      return { vehicle: 'fahrzeug', task: 'aufgabe', message: 'meldung', person: 'person' }[kind];
+    },
+
+    _swapCard(incidentId, kind, uid) {
+      if (kind == null || uid == null) return;
+      const el = document.getElementById(this._cardElId(kind, uid));
+      if (!el) return;
+      htmx.ajax('GET', `/einsatz/${incidentId}/karte/${kind}/${uid}`, { target: el, swap: 'outerHTML' });
+    },
+
+    _swapColumnBody(incidentId, columnId) {
+      if (columnId == null) return;
+      const zone = document.getElementById(`zone-${columnId}`);
+      if (!zone) return;
+      htmx.ajax('GET', `/einsatz/${incidentId}/spalte/${columnId}/inhalt`, { target: zone, swap: 'innerHTML' })
+        .then(() => { if (window.reapplyMobileLane) window.reapplyMobileLane(); });
+    },
+
+    _swapColumn(incidentId, columnId) {
+      if (columnId == null) return;
+      const col = document.getElementById(`col-${columnId}`);
+      if (!col) return;
+      htmx.ajax('GET', `/einsatz/${incidentId}/spalte/${columnId}`, { target: col, swap: 'outerHTML' })
+        .then(() => { if (window.reapplyMobileLane) window.reapplyMobileLane(); });
+    },
+
+    _swapKanban(incidentId) {
+      const kanban = document.getElementById('kanban');
+      if (!kanban) return;
+      htmx.ajax('GET', `/einsatz/${incidentId}/kanban`, { target: kanban, swap: 'innerHTML' })
+        .then(() => { if (window.reapplyMobileLane) window.reapplyMobileLane(); });
+    },
+
+    _swapKopfleiste(incidentId) {
+      // Reine OOB-Antwort (Alarm-Badge/Adresse, EL-vor-Ort, Lage-Ticker) — kein Haupt-Target nötig.
+      htmx.ajax('GET', `/einsatz/${incidentId}/kopfleiste`, { target: document.body, swap: 'none' })
+        .then(() => { if (window.buildLaneDropdown) window.buildLaneDropdown(); });
+    },
+
+    _refreshOpenModal(incidentId, kind, uid) {
+      const body = document.getElementById('cardDetailBody');
+      const modal = document.getElementById('cardDetailModal');
+      if (!body || !modal || !modal.open) return;
+      if (body.dataset.openKind !== kind || String(body.dataset.openUid) !== String(uid)) return;
+      const seg = this._cardDetailUrlSegment(kind);
+      if (!seg) return;
+      htmx.ajax('GET', `/einsatz/${incidentId}/${seg}/${uid}/detail`, { target: '#cardDetailBody', swap: 'innerHTML' });
+    },
+
+    _handleBoardEvent(ev, incidentId) {
+      switch (ev.type) {
+        case 'vehicle_updated':
+        case 'task_assigned':
+        case 'message_assigned':
+        case 'person_updated':
+          this._swapCard(incidentId, ev.kind, ev.uid);
+          this._refreshOpenModal(incidentId, ev.kind, ev.uid);
+          if (ev.vehicle_uid != null) this._swapCard(incidentId, 'vehicle', ev.vehicle_uid);
+          break;
+        case 'task_updated':
+        case 'message_updated':
+        case 'task_cancelled':
+          // Spalten-Swap statt Einzelkarte: Status-Wechsel kann die Karte ans
+          // Spaltenende verschieben (sink_done_cards serverseitig).
+          this._swapColumnBody(incidentId, ev.column_id);
+          if (ev.kind && ev.uid != null) this._refreshOpenModal(incidentId, ev.kind, ev.uid);
+          if (ev.vehicle_uid != null) this._swapCard(incidentId, 'vehicle', ev.vehicle_uid);
+          break;
+        case 'person_deleted': {
+          const el = document.getElementById(this._cardElId('person', ev.uid));
+          if (el) el.remove();
+          break;
+        }
+        case 'vehicle_added':
+        case 'vehicle_moved':
+        case 'task_created':
+        case 'message_created':
+        case 'person_created':
+        case 'ai_suggestions_ready':
+        case 'card_moved':
+          this._swapColumnBody(incidentId, ev.column_id);
+          if (ev.source_column_id != null && ev.source_column_id !== ev.column_id) {
+            this._swapColumnBody(incidentId, ev.source_column_id);
+          }
+          break;
+        case 'column_renamed':
+        case 'column_updated':
+          this._swapColumn(incidentId, ev.column_id);
+          break;
+        case 'column_created':
+        case 'column_deleted':
+        case 'columns_reordered':
+          this._swapKanban(incidentId);
+          break;
+        case 'alarm_type_changed':
+        case 'address_updated':
+        case 'incident_leader_changed':
+        case 'ai_hints_ready':
+          this._swapKopfleiste(incidentId);
+          break;
+        default:
+          // Sicherheitsnetz für (noch) unbekannte Event-Typen.
+          if (ev.reload_board) {
+            const modal = document.getElementById('cardDetailModal');
+            if (modal && modal.open) {
+              modal.addEventListener('close', () => location.reload(), { once: true });
+            } else {
+              location.reload();
+            }
+          }
+      }
     },
 
     _connectWS(id) {
@@ -280,14 +413,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
           if (e.data === 'pong') return;
           const ev = JSON.parse(e.data);
           this._bumpLastUpdate();
-          if (ev.reload_board) {
-            const modal = document.getElementById('cardDetailModal');
-            if (modal && modal.open) {
-              modal.addEventListener('close', () => location.reload(), { once: true });
-            } else {
-              location.reload();
-            }
-          }
+          this._handleBoardEvent(ev, id);
           if (ev.reload_breathing || ev.type === 'troop_created' || ev.type === 'troop_started' || ev.type === 'troop_status_changed') {
             if (document.getElementById('troopsGrid')) location.reload();
           }

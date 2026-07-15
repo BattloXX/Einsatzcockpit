@@ -1,4 +1,4 @@
-<div class="card card--rescue" data-uid="{{ person.id }}" data-kind="person" data-status="{{ person.status or 'gefunden' }}"
+<div class="card card--rescue" id="person-card-{{ person.id }}" data-uid="{{ person.id }}" data-kind="person" data-status="{{ person.status or 'gefunden' }}"
      style="cursor: pointer;"
      hx-get="/einsatz/{{ incident.id }}/person/{{ person.id }}/detail"
      hx-target="#cardDetailBody"

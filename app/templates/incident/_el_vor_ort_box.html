@@ -1,0 +1,35 @@
+{# Einsatzleiter vor Ort. Variablen: incident, can_edit, el_member_candidates, oob (optional) #}
+<div class="sidebar-box" id="elVorOrtBox" {% if oob %}hx-swap-oob="true"{% endif %}>
+  <div class="sidebar-box__title">Einsatzleiter vor Ort</div>
+  {% if can_edit %}
+  <form hx-post="/einsatz/{{ incident.id }}/einsatzleiter-mitglied" hx-swap="none">
+    <div class="input-row">
+      <select name="member_id" class="form-select">
+        <option value="">— nicht zugewiesen —</option>
+        {% for m in el_member_candidates %}
+        <option value="{{ m.id }}" {% if incident.incident_leader_member_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn--secondary btn--sm">OK</button>
+    </div>
+  </form>
+  {% if not el_member_candidates %}
+  <div class="text-muted" style="font-size:.8rem; margin-top:4px;">Keine Mitglieder mit EL-Qualifikation</div>
+  {% endif %}
+  <form hx-post="/einsatz/{{ incident.id }}/einsatzleiter-mitglied-neu" hx-swap="none"
+        @htmx:after-request="if(event.detail.successful){$el.reset();}">
+    <div class="input-row" style="margin-top:6px;">
+      <input type="text" name="full_name" class="form-input" placeholder="Name eingeben…" autocomplete="off">
+      <button type="submit" class="btn btn--secondary btn--sm">ergänzen</button>
+    </div>
+  </form>
+  {% else %}
+  {% if incident.leader_member %}
+  <div style="font-size:.9rem;"><strong>{{ incident.leader_member.full_name }}</strong></div>
+  {% elif incident.incident_leader_name %}
+  <div style="font-size:.9rem;"><strong>{{ incident.incident_leader_name }}</strong></div>
+  {% else %}
+  <div class="text-muted" style="font-size:.85rem;">Nicht zugewiesen</div>
+  {% endif %}
+  {% endif %}
+</div>
