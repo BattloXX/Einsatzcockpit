@@ -446,7 +446,11 @@ def _handle_major_incident_trigger(
         )
         auto_adopt = org_settings.mi_auto_adopt if org_settings else True
         if auto_adopt:
-            site = adopt_incident_as_site(
+            # Direkt inline zurueckgeben statt in `site` zu binden -- adopt_incident_as_site()
+            # gibt IncidentSite | None zurueck (idempotent: None wenn Site bereits existiert),
+            # waehrend `site` oben im triggers-Zweig aus handle_alarm_trigger() als nicht-
+            # optionales IncidentSite gebunden wuerde (gleicher Name, unterschiedlicher Typ).
+            return adopt_incident_as_site(
                 db, active_lage,
                 incident_id=incident_id,
                 external_key=external_key,
@@ -454,8 +458,7 @@ def _handle_major_incident_trigger(
                 org_id=org_id,
                 ort=ort, strasse=strasse, hausnr=hausnr, einsatzgrund=einsatzgrund,
                 lat=lat, lng=lng,
-            )
-            return site, None, False
+            ), None, False
     return None, None, False
 
 
@@ -647,6 +650,11 @@ async def create_incident_api(
             run_side_effect("gsl_trigger", _mi_trigger) or (None, None, False)
         )
         if _mi_lage_created:
+            # _mi_lage_created kann nur True sein, wenn _handle_major_incident_trigger()
+            # den handle_alarm_trigger()-Zweig genommen hat -- der liefert lage garantiert
+            # nicht-None zurueck (run_side_effect() typisiert fn generisch als Any | None,
+            # daher hier explizit).
+            assert _mi_lage is not None
             from app.services.gsl_notify import notify_gsl_created
             await notify_gsl_created(
                 _mi_lage, triggered_by_user_id=api_key.created_by_user_id,

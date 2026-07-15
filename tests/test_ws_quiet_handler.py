@@ -40,3 +40,27 @@ async def test_real_error_passes_through():
         return {"message": "boom", "future": fut}
     n = await _run_case(build)
     assert n == 1  # echter Fehler → Default-Handler läuft
+
+
+async def test_real_error_forwarded_to_previously_registered_handler():
+    """Regression: war zuvor bereits ein Handler via set_exception_handler registriert
+    (2-arg-Signatur (loop, context), z. B. von einer anderen Bibliothek), wurde er
+    fälschlich mit nur einem Argument (context) aufgerufen -> TypeError bei echten
+    Fehlern, sobald ein solcher Vorgänger-Handler existierte."""
+    loop = asyncio.get_running_loop()
+    calls: list[tuple] = []
+
+    def prev_handler(loop_, context):
+        calls.append((loop_, context))
+
+    loop.set_exception_handler(prev_handler)
+    m._install_ws_quiet_exception_handler()
+
+    fut = loop.create_future()
+    fut.set_exception(RuntimeError("echter Bug"))
+    loop.call_exception_handler({"message": "boom", "future": fut})
+
+    assert len(calls) == 1
+    forwarded_loop, forwarded_context = calls[0]
+    assert forwarded_loop is loop
+    assert forwarded_context.get("future") is fut

@@ -158,12 +158,18 @@ An ACG (Austro Control GmbH) zu melden gem. Luftfahrtgesetz §147a.</p>
 # ── Anh. 8.5: Wartungsbuch ───────────────────────────────────────────────────
 
 def wartungsbuch_pdf(wartungen: list, device=None) -> bytes:
+    # Feldnamen korrigiert (echter Bug): UASWartung hat weder faellig_am/typ/
+    # durchgefuehrt_am/techniker -- die echten Spalten sind naechste_faellig/art/
+    # datum/pruefer (siehe app/models/uas.py bzw. das analoge, korrekte Mapping in
+    # app/templates/uas/geraet_detail.html). .replace('_',' ') matcht die dortige
+    # Anzeige-Konvention fuer den art-Rohwert (z.B. "monatliche_sichtkontrolle").
     rows = ""
     for w in wartungen:
+        art_label = (w.art or "–").replace("_", " ")
         rows += (
-            f"<tr><td>{w.faellig_am or '–'}</td><td>{w.typ or '–'}</td>"
-            f"<td>{w.durchgefuehrt_am or '–'}</td><td>{w.ergebnis or '–'}</td>"
-            f"<td>{w.techniker or '–'}</td></tr>"
+            f"<tr><td>{w.naechste_faellig or '–'}</td><td>{art_label}</td>"
+            f"<td>{w.datum or '–'}</td><td>{w.ergebnis or '–'}</td>"
+            f"<td>{w.pruefer or '–'}</td></tr>"
         )
     if not rows:
         rows = '<tr><td colspan="5" style="text-align:center">Keine Einträge</td></tr>'

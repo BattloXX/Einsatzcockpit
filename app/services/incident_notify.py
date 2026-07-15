@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -68,6 +70,12 @@ async def notify_incident_created(
     push_body = address or incident.report_text or "Kein Ort angegeben"
     resolved_push_url = push_url or f"/einsatz/{incident.id}"
 
+    # Explizit lose typisiert (Any/Callable[..., int]) statt aus der ersten Zuweisung
+    # inferieren zu lassen -- notify_org (5 Args, org_id) und notify_all (4 Args, ohne
+    # org_id) haben unterschiedliche Signaturen, push_func/push_args werden aber je nach
+    # Zweig konsistent im jeweils passenden Paar gesetzt und weiter unten aufgerufen.
+    push_func: Callable[..., int]
+    push_args: tuple[Any, ...]
     if org_id:
         # Öffentlicher Einsatzinfo-Link (No-Login) für die SMS; request-loser Kontext →
         # settings.effective_public_base_url statt request.base_url.

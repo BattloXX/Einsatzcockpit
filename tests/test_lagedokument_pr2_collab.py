@@ -76,6 +76,59 @@ def test_ws_editor_kann_verbinden_und_sync_step1_empfangen(client, setup_db):
         assert msg[0] == 0  # YMessageType.SYNC
 
 
+# ── Regression: _FastAPIChannel muss von pycrdt.Channel erben ────────────────
+# Bugfix 2026-07-15: YRoom.serve() iteriert per `async for message in channel:` --
+# das setzt __aiter__/__anext__ voraus. _FastAPIChannel implementierte bisher nur
+# path/send/recv OHNE von Channel zu erben und bekam die von Channel per Vererbung
+# bereitgestellten __aiter__/__anext__ dadurch NICHT. Jede WS-Verbindung crashte direkt
+# nach der ersten SYNC_STEP1-Nachricht mit "TypeError: 'async for' requires an object
+# with __aiter__ method" -- die Live-Kollaboration hat dadurch nie echte Client-
+# Aenderungen empfangen. Der obige Test (nur bis zum Empfang der ersten Nachricht) hat
+# das nicht erkannt, da der Crash erst danach passiert (beim Betreten der async-for-Schleife).
+
+class _FakeWebSocket:
+    """Minimaler Stand-in fuer FastAPIs WebSocket, um YRoom.serve() direkt (ohne echten
+    WS-Transport) gegen den echten _FastAPIChannel-Adapter zu pruefen."""
+    def __init__(self, incoming: list[bytes]):
+        self.sent: list[bytes] = []
+        self._incoming = list(incoming)
+
+    async def send_bytes(self, message: bytes) -> None:
+        self.sent.append(message)
+
+    async def receive_bytes(self) -> bytes:
+        if self._incoming:
+            return self._incoming.pop(0)
+        raise RuntimeError("Client getrennt (simuliert)")
+
+
+@pytest.mark.asyncio
+async def test_fastapi_channel_ist_async_iterierbar():
+    """Ohne den Fix wirft schon `channel.__aiter__()` einen AttributeError bzw.
+    _FastAPIChannel() selbst ist kein gueltiges 'async for'-Ziel."""
+    from app.routers.ui_lagedokument import _FastAPIChannel
+    channel = _FastAPIChannel(_FakeWebSocket(incoming=[]), path="test")
+    assert channel.__aiter__() is channel
+    with pytest.raises(StopAsyncIteration):
+        await channel.__anext__()  # kein Client-Byte vorhanden -> sauberes Streamende
+
+
+@pytest.mark.asyncio
+async def test_room_serve_mit_fastapi_channel_crasht_nicht_beim_ersten_iterationsschritt():
+    """Direkter Repro-Test gegen die echte YRoom.serve()-Implementierung (nicht nur den
+    Adapter isoliert): vor dem Fix brach dieser Aufruf mit der oben beschriebenen
+    TypeError ab, nachdem genau eine SYNC_STEP1-Nachricht gesendet wurde."""
+    from app.routers.ui_lagedokument import _FastAPIChannel
+    from pycrdt.websocket.yroom import YRoom
+
+    ws = _FakeWebSocket(incoming=[])  # "Client" trennt sofort nach dem Connect
+    channel = _FastAPIChannel(ws, path="test-path")
+    room = YRoom(Doc())
+    await asyncio.wait_for(room.serve(channel), timeout=5)  # darf NICHT werfen
+    assert len(ws.sent) == 1  # genau die initiale SYNC_STEP1-Nachricht
+    assert ws.sent[0][0] == 0  # YMessageType.SYNC
+
+
 @pytest.mark.asyncio
 async def test_room_laedt_gespeicherten_zustand_und_speichert_bei_release(setup_db):
     org_id, lage_id = await asyncio.to_thread(

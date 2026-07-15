@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
@@ -32,6 +33,7 @@ from app.models.gateway import (
     DOC_UAS,
     DOC_VERLEIH_SCHEIN,
     DOCUMENT_TYPE_LABELS,
+    PrintJob,
 )
 from app.models.user import User
 
@@ -39,7 +41,7 @@ logger = logging.getLogger("einsatzleiter.druck")
 router = APIRouter(prefix="/druck", tags=["druck"])
 
 
-def _verify_org(db: Session, org_id: int, document_type: str,
+def _verify_org(db: Session, org_id: int | None, document_type: str,
                 incident_id: int | None, gsl_id: int | None,
                 objekt_id: int | None, artifact_ref: str | None) -> None:
     """Stellt sicher, dass das angeforderte Dokument der Org des Nutzers gehört.
@@ -158,14 +160,18 @@ def dokument_pdf(
 
     from app.services.print_artifact_service import ArtifactError, render_job_pdf
 
-    job = SimpleNamespace(
+    # render_job_pdf() und die _render_*-Funktionen greifen nur lesend auf eine Teilmenge
+    # der PrintJob-Felder zu (duck-typing) -- fuer die lokale Druckvorschau wird bewusst kein
+    # echtes PrintJob-Row angelegt. cast() dokumentiert das statt eine echte PrintJob-Instanz
+    # zu erzwingen.
+    job = cast(PrintJob, SimpleNamespace(
         document_type=document_type,
         incident_id=incident_id,
         gsl_id=gsl_id,
         objekt_id=objekt_id,
         artifact_ref=artifact_ref,
         org_id=user.org_id,
-    )
+    ))
     try:
         pdf = render_job_pdf(db, job)
     except ArtifactError as exc:
