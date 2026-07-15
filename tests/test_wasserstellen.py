@@ -152,7 +152,8 @@ def test_dedupe_osm_gegen_stammdaten():
 
 def test_routen_registriert():
     from app.main import app
-    pfade = {r.path for r in app.routes}
+    from tests.conftest import all_app_paths
+    pfade = all_app_paths(app)
     assert "/admin/wasserstellen" in pfade
     assert "/admin/wasserstellen/import" in pfade
     assert "/einsatz/{incident_id}/nachbar-gefahren.json" in pfade

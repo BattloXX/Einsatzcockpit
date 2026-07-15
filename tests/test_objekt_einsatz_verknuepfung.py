@@ -177,5 +177,6 @@ def test_search_addresses_parst_nominatim(monkeypatch):
 
 def test_adress_suche_route_registriert():
     from app.main import app
-    pfade = {r.path for r in app.routes}
+    from tests.conftest import all_app_paths
+    pfade = all_app_paths(app)
     assert "/objekte/adress-suche" in pfade
