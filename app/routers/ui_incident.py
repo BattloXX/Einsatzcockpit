@@ -3007,6 +3007,8 @@ async def delete_task_media(
     delete_media(media, db)
     db.commit()
     task = db.get(Task, task_id)
+    if not task:
+        return Response(status_code=404)
     db.refresh(task, ["media"])
     incident = _incident_or_404(incident_id, db)
     await manager.broadcast(incident_id, {
