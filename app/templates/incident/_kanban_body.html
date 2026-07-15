@@ -1,0 +1,15 @@
+{# Inhalt von #kanban (alle Spalten + "+ Neue Spalte"-Button).
+   Variablen: incident, can_edit, lage_sprueche, section_leader_candidates #}
+{% set kind_to_lane = {'tasks':'tasks','messages':'messages','rescued':'persons'} %}
+{% for col in incident.columns %}
+{% include "incident/_kanban_col.html" %}
+{% endfor %}
+
+<!-- + Neue Spalte / Abschnitt -->
+{% if can_edit %}
+<div style="display:flex; flex-direction:column; gap:6px; padding-top:2px; flex-shrink:0;">
+  <button class="kanban-add-col" type="button"
+          onclick="document.getElementById('addColumnDialog').showModal()"
+          title="Neuen Abschnitt/Spalte hinzufügen">+</button>
+</div>
+{% endif %}

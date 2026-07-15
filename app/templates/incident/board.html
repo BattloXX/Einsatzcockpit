@@ -128,45 +128,7 @@
 
 <!-- Incident Header -->
 <div class="incident-header" x-data="headerState('{{ incident.started_at|local_iso }}')">
-  <div class="incident-header__alarm">
-    {% if can_edit %}
-    <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}" style="cursor:pointer"
-          hx-get="/einsatz/{{ incident.id }}/alarm/bearbeiten"
-          hx-target="#cardDetailBody" hx-swap="innerHTML"
-          hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
-          title="Alarmstufe / Einsatzgrund bearbeiten">{{ incident.alarm_type_code }}</span>
-    {% else %}
-    <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
-    {% endif %}
-    {% set _grund = (incident.reason or incident.report_text or '') %}
-    <div class="incident-header__grundwrap">
-    {% if _grund %}
-    <span class="incident-header__grund">{{ _grund[:80] }}</span>
-    {% endif %}
-    {% if incident.address_street %}
-    {% if can_edit %}
-    <span class="incident-header__address" style="cursor:pointer"
-          hx-get="/einsatz/{{ incident.id }}/adresse/bearbeiten"
-          hx-target="#cardDetailBody" hx-swap="innerHTML"
-          hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
-          title="Adresse / Koordinaten bearbeiten">
-      {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %} 📍
-    </span>
-    {% else %}
-    <span class="incident-header__address">{{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</span>
-    {% endif %}
-    {% endif %}
-    </div>
-    {# ── Mobile Lane Select (nur ≤760px) – neben dem Einsatz, spart Platz für die Karten ── #}
-    <select class="mobile-lane-select" id="mobile-lane-select" title="Ansicht wechseln"></select>
-    {# ── Einsatzinfo (nur ≤760px, da .incident-header__actions mobil ausgeblendet ist) ── #}
-    <a href="/einsatz/{{ incident.id }}/info" class="incident-header__info-mobile"
-       title="Einsatzinformation: Karte, Objektdaten, Hydranten">ℹ️ Info</a>
-    {% if request.state.lagefuehrung_modul_aktiv %}
-    <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="incident-header__info-mobile"
-       title="Lageführung — einsatzbezogene Lagekarte">🗺️ Lage</a>
-    {% endif %}
-  </div>
+  {% include "incident/_header_alarm.html" %}
   <div class="incident-header__timer">
     <span class="timer" x-text="timerDisplay">00:00</span>
     <span class="last-update" :class="'last-update--' + lastUpdateState"
@@ -175,14 +137,7 @@
       <span class="last-update__time" x-text="lastUpdateDisplay">–</span>
     </span>
   </div>
-  {% if lage_hints %}
-  <div class="header-lage-ticker"
-       x-data='lageTicker({{ lage_hints|map(attribute="text")|list|tojson }}, {{ lage_hints_ai|tojson }})'
-       x-init="init()">
-    <span class="header-lage-ticker__icon" x-text="currentIsAI ? '✨' : 'ℹ'"></span>
-    <span class="header-lage-ticker__text" x-text="currentHint"></span>
-  </div>
-  {% endif %}
+  {% if lage_hints %}{% include "incident/_header_lage_ticker.html" %}{% endif %}
   <div class="incident-header__actions">
     {# ── Primäre Aktionen ────────────────────────────────────────────────── #}
     <a href="/einsatz/{{ incident.id }}/info"
@@ -312,10 +267,7 @@
   <aside class="sidebar" id="sidebar" :class="sidebarOpen ? '' : 'sidebar--collapsed'">
 
     <!-- Lage-Ticker -->
-    <div class="lage-ticker" id="lageTicker" x-data='lageTicker({{ lage_hints|map(attribute="text")|list|tojson }}, {{ lage_hints_ai|tojson }})'>
-      <span class="lage-ticker__icon" x-text="currentIsAI ? '✨' : 'ℹ'"></span>
-      <span class="lage-ticker__text" x-text="currentHint"></span>
-    </div>
+    {% include "incident/_sidebar_lage_ticker.html" %}
 
     <!-- Objekt-Panel (Objektverwaltung, laedt lazy; aktualisiert sich bei objekt_match-WS-Event) -->
     {% if request.state.objekt_enabled %}
@@ -329,7 +281,7 @@
     <div class="sidebar-box">
       <div class="sidebar-box__title" {{ tip('Neuen Auftrag in die Liste „Aufträge" einreihen') }}>Auftrag hinzufügen</div>
       <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-swap="none"
-            @htmx:after-request="if(event.detail.successful){this.reset();location.reload();}">
+            @htmx:after-request="if(event.detail.successful){$el.reset();}">
         <div class="input-row">
           <input type="text" name="title" placeholder="Auftrag..." class="form-input" id="taskInput"
                  required autocomplete="off">
@@ -356,7 +308,7 @@
     <div class="sidebar-box">
       <div class="sidebar-box__title" {{ tip('Lagemeldung mit optionalem Erinnerungs-Timer anlegen') }}>Meldung hinzufügen <kbd>Strg+M</kbd></div>
       <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-swap="none"
-            @htmx:after-request="if(event.detail.successful){this.reset();location.reload();}">
+            @htmx:after-request="if(event.detail.successful){$el.reset();}">
         <div class="input-row">
           <input type="text" name="title" placeholder="Meldung..." class="form-input" id="msgInput" required autocomplete="off">
           <button type="button" class="btn btn--icon btn--mic" title="Sprachdiktat (Strg+M)"
@@ -387,43 +339,7 @@
     {% endif %}
 
     <!-- Einsatzleiter vor Ort -->
-    {% if can_edit or incident.incident_leader_member_id %}
-    <div class="sidebar-box">
-      <div class="sidebar-box__title">Einsatzleiter vor Ort</div>
-      {% if can_edit %}
-      <form hx-post="/einsatz/{{ incident.id }}/einsatzleiter-mitglied" hx-swap="none"
-            @htmx:after-request="if(event.detail.successful){location.reload();}">
-        <div class="input-row">
-          <select name="member_id" class="form-select">
-            <option value="">— nicht zugewiesen —</option>
-            {% for m in el_member_candidates %}
-            <option value="{{ m.id }}" {% if incident.incident_leader_member_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>
-            {% endfor %}
-          </select>
-          <button type="submit" class="btn btn--secondary btn--sm">OK</button>
-        </div>
-      </form>
-      {% if not el_member_candidates %}
-      <div class="text-muted" style="font-size:.8rem; margin-top:4px;">Keine Mitglieder mit EL-Qualifikation</div>
-      {% endif %}
-      <form hx-post="/einsatz/{{ incident.id }}/einsatzleiter-mitglied-neu" hx-swap="none"
-            @htmx:after-request="if(event.detail.successful){this.reset();location.reload();}">
-        <div class="input-row" style="margin-top:6px;">
-          <input type="text" name="full_name" class="form-input" placeholder="Name eingeben…" autocomplete="off">
-          <button type="submit" class="btn btn--secondary btn--sm">ergänzen</button>
-        </div>
-      </form>
-      {% else %}
-      {% if incident.leader_member %}
-      <div style="font-size:.9rem;"><strong>{{ incident.leader_member.full_name }}</strong></div>
-      {% elif incident.incident_leader_name %}
-      <div style="font-size:.9rem;"><strong>{{ incident.incident_leader_name }}</strong></div>
-      {% else %}
-      <div class="text-muted" style="font-size:.85rem;">Nicht zugewiesen</div>
-      {% endif %}
-      {% endif %}
-    </div>
-    {% endif %}
+    {% if can_edit or incident.incident_leader_member_id %}{% include "incident/_el_vor_ort_box.html" %}{% endif %}
 
     <!-- Gefahrene Kilometer (Fahrtenbuch) -->
     {% if fahrten_km %}
@@ -480,67 +396,7 @@
 
   <!-- Kanban Board -->
   <div class="kanban" id="kanban" data-incident-id="{{ incident.id }}">
-    {% set columns = incident.columns %}
-    {% set kind_to_lane = {'tasks':'tasks','messages':'messages','rescued':'persons'} %}
-    {% for col in columns %}
-    {% set col_vehicles = incident.vehicles|selectattr('column_id', 'eq', col.id)|selectattr('removed_at', 'none')|list %}
-    {% set col_tasks = incident.tasks|selectattr('column_id', 'eq', col.id)|list %}
-    {% set col_messages = incident.messages|selectattr('column_id', 'eq', col.id)|list %}
-    {% set col_persons = incident.rescued_persons if col.column_kind == 'rescued' else [] %}
-    {% set col_count = col_vehicles|length + col_tasks|length + col_messages|length + col_persons|length %}
-    {% set lane = kind_to_lane.get(col.column_kind) or ('col-' + col.id|string) %}
-
-    <div class="kanban-col" id="col-{{ col.id }}"
-         data-col-id="{{ col.id }}" data-col-code="{{ col.code }}"
-         data-lane="{{ lane }}"
-         {% if lane == 'tasks' %}data-lane-active{% endif %}>
-      {% include "incident/_lane_header.html" %}
-      <div class="kanban-col__body sortable-zone" id="zone-{{ col.id }}">
-
-        {% for _kind, _item in ordered_col_items(col, col_vehicles, col_tasks, col_messages, col_persons) %}
-          {% if _kind == 'vehicle' %}{% set vehicle = _item %}{% include "incident/_vehicle_card.html" %}
-          {% elif _kind == 'task' %}{% set task = _item %}{% include "incident/_task_card.html" %}
-          {% elif _kind == 'message' %}{% set msg = _item %}{% include "incident/_message_card.html" %}
-          {% elif _kind == 'person' %}{% set person = _item %}{% include "incident/_person_card.html" %}
-          {% endif %}
-        {% endfor %}
-
-        {% if col.code == 'messages' and lage_sprueche %}
-        {% for spruch in lage_sprueche %}
-        <div class="card card--message {% if spruch.handled %}card--done{% endif %}"
-             style="cursor:pointer; border-left:2px solid rgba(245,158,11,.5);"
-             onclick="window.location.href='/einsatz/{{ incident.id }}/funkjournal'">
-          <div class="card__body">
-            <div class="card__title">
-              <span style="font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:3px;
-                           background:rgba(168,85,247,.2);color:#d8b4fe;margin-right:4px;">SPRUCH</span>
-              {{ spruch.message[:120] }}{% if spruch.message|length > 120 %}…{% endif %}
-            </div>
-            {% if spruch.partner %}
-            <div class="card__sub">
-              {% if spruch.direction == 'in' %}Von:{% elif spruch.direction == 'out' %}An:{% else %}↔{% endif %}
-              {{ spruch.partner }}{% if spruch.channel %} · {{ spruch.channel }}{% endif %}
-            </div>
-            {% endif %}
-            <div class="card__meta"><span class="card__time">{{ spruch.ts|local_time }}</span></div>
-          </div>
-        </div>
-        {% endfor %}
-        {% endif %}
-
-      </div>
-    </div>
-    {% endfor %}
-
-    <!-- + Neue Spalte / Abschnitt -->
-    {% if can_edit %}
-    <div style="display:flex; flex-direction:column; gap:6px; padding-top:2px; flex-shrink:0;">
-      <button class="kanban-add-col" type="button"
-              onclick="document.getElementById('addColumnDialog').showModal()"
-              title="Neuen Abschnitt/Spalte hinzufügen">+</button>
-    </div>
-    {% endif %}
-
+    {% include "incident/_kanban_body.html" %}
   </div>
 </div>
 
@@ -552,7 +408,7 @@
       <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-swap="none"
-          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';$el.closest('dialog').close();location.reload();}">
+          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';$el.closest('dialog').close();}">
       <div class="modal__body">
         <input type="hidden" name="column_id" :value="colId">
         {% if task_suggestions %}
@@ -606,7 +462,7 @@
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-swap="none"
           hx-encoding="multipart/form-data"
-          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';document.getElementById('newMsgPreview').innerHTML='';$el.closest('dialog').close();location.reload();}">
+          @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';document.getElementById('newMsgPreview').innerHTML='';$el.closest('dialog').close();}">
       <div class="modal__body">
         <div class="form-group">
           <label class="form-label" style="font-size:.82rem;">Typ</label>
@@ -673,7 +529,7 @@
       <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/abschnitt" hx-swap="none"
-          @htmx:after-request="if(event.detail.successful){$el.reset();$el.closest('dialog').close();location.reload();}">
+          @htmx:after-request="if(event.detail.successful){$el.reset();$el.closest('dialog').close();}">
       <div class="modal__body">
         <div class="form-group">
           <label class="form-label">NAME DER SPALTE</label>
@@ -1060,9 +916,7 @@ function deleteColumn(colId, colTitle) {
     method: 'DELETE',
     headers: {'X-CSRF-Token': csrfToken},
   }).then(function(r) {
-    if (r.ok) {
-      location.reload();
-    } else {
+    if (!r.ok) {
       r.json().then(function(j) {
         _colToast(j.detail || 'Spalte konnte nicht gelöscht werden.', 'warn');
       }).catch(function() {
@@ -1098,7 +952,7 @@ function renameColumn(colId, currentTitle) {
     headers: {'X-CSRF-Token': _csrfToken(), 'Content-Type': 'application/x-www-form-urlencoded'},
     body,
   }).then(function(r) {
-    if (r.ok) { location.reload(); } else { _colToast('Umbenennen fehlgeschlagen.', 'warn'); }
+    if (!r.ok) { _colToast('Umbenennen fehlgeschlagen.', 'warn'); }
   });
 }
 
@@ -1109,7 +963,7 @@ function setSectionLeader(colId, memberId) {
     headers: {'X-CSRF-Token': _csrfToken(), 'Content-Type': 'application/x-www-form-urlencoded'},
     body,
   }).then(function(r) {
-    if (r.ok) { location.reload(); } else { _colToast('Abschnittsleiter konnte nicht gesetzt werden.', 'warn'); }
+    if (!r.ok) { _colToast('Abschnittsleiter konnte nicht gesetzt werden.', 'warn'); }
   });
 }
 
@@ -1124,7 +978,7 @@ function promptSectionLeaderFreitext(colId) {
     headers: {'X-CSRF-Token': _csrfToken(), 'Content-Type': 'application/x-www-form-urlencoded'},
     body,
   }).then(function(r) {
-    if (r.ok) { location.reload(); } else { _colToast('Abschnittsleiter konnte nicht gesetzt werden.', 'warn'); }
+    if (!r.ok) { _colToast('Abschnittsleiter konnte nicht gesetzt werden.', 'warn'); }
   });
 }
 
@@ -1330,6 +1184,16 @@ function lageTicker(hints, aiFlags) {
     try { cur = localStorage.getItem(LANE_KEY) || 'tasks'; } catch(e) {}
     sel.value = cur;
   }
+  // Für Re-Aufbau nach gezieltem HTMX-Swap der Kopfleiste (enthält #mobile-lane-select)
+  window.buildLaneDropdown = buildLaneDropdown;
+  // Für Re-Anwendung nach Spalten-Swaps: neu eingefügte .kanban-col-Knoten haben das
+  // serverseitige data-lane-active nur auf der Default-Lane "tasks" gesetzt.
+  window.reapplyMobileLane = function () {
+    var lane = 'tasks';
+    try { lane = localStorage.getItem(LANE_KEY) || 'tasks'; } catch (e) { /* noop */ }
+    applyLane(lane);
+    buildLaneDropdown();
+  };
 
   // Initial lane setup
   try {

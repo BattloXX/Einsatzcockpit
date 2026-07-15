@@ -1,0 +1,7 @@
+{# KI-Lagehinweis-Ticker in der Kopfleiste. Variablen: lage_hints, lage_hints_ai, oob (optional) #}
+<div class="header-lage-ticker" id="headerLageTicker" {% if oob %}hx-swap-oob="true"{% endif %}
+     x-data='lageTicker({{ lage_hints|map(attribute="text")|list|tojson }}, {{ lage_hints_ai|tojson }})'
+     x-init="init()">
+  <span class="header-lage-ticker__icon" x-text="currentIsAI ? '✨' : 'ℹ'"></span>
+  <span class="header-lage-ticker__text" x-text="currentHint"></span>
+</div>

@@ -1,0 +1,18 @@
+{# Volle Kanban-Spalte (Header + Kartenkörper). Variablen: col, incident, can_edit,
+   lage_sprueche, section_leader_candidates, kind_to_lane, oob (optional) #}
+{% set col_vehicles = incident.vehicles|selectattr('column_id', 'eq', col.id)|selectattr('removed_at', 'none')|list %}
+{% set col_tasks = incident.tasks|selectattr('column_id', 'eq', col.id)|list %}
+{% set col_messages = incident.messages|selectattr('column_id', 'eq', col.id)|list %}
+{% set col_persons = incident.rescued_persons if col.column_kind == 'rescued' else [] %}
+{% set col_count = col_vehicles|length + col_tasks|length + col_messages|length + col_persons|length %}
+{% set lane = kind_to_lane.get(col.column_kind) or ('col-' + col.id|string) %}
+<div class="kanban-col" id="col-{{ col.id }}"
+     data-col-id="{{ col.id }}" data-col-code="{{ col.code }}"
+     data-lane="{{ lane }}"
+     {% if lane == 'tasks' %}data-lane-active{% endif %}
+     {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% include "incident/_lane_header.html" %}
+  <div class="kanban-col__body sortable-zone" id="zone-{{ col.id }}">
+    {% include "incident/_col_body.html" %}
+  </div>
+</div>

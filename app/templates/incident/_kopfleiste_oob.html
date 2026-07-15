@@ -1,0 +1,7 @@
+{# Gebündelte Out-of-Band-Fragmente für Kopfleiste/Sidebar-Live-Updates.
+   Variablen: incident, can_edit, el_member_candidates, lage_hints, lage_hints_ai #}
+{% set oob = true %}
+{% include "incident/_header_alarm.html" %}
+{% if can_edit or incident.incident_leader_member_id %}{% include "incident/_el_vor_ort_box.html" %}{% endif %}
+{% include "incident/_sidebar_lage_ticker.html" %}
+{% if lage_hints %}{% include "incident/_header_lage_ticker.html" %}{% endif %}

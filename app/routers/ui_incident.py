@@ -131,7 +131,7 @@ async def _trigger_ai_task_suggestions(
         db.commit()
         await manager.broadcast(incident_id, {
             "type": "ai_suggestions_ready",
-            "reload_board": True,
+            "column_id": tasks_col.id if tasks_col else None,
             "count": len(suggestions),
         })
     except Exception:
@@ -211,6 +211,30 @@ def _load_board_incident(incident_id: int, db: Session) -> Incident | None:
 
 
 _visible_incidents_q = visible_incidents_q
+
+
+def _compute_lage_hints(db: Session, incident: Incident, at: AlarmType | None) -> tuple[list, list[bool]]:
+    """KI-Lagehinweise für den Ticker: alarmtyp-gefiltert + KI-generierte vorangestellt."""
+    from sqlalchemy import exists as _exists
+    _has_any_alarm = _exists().where(LageHintAlarm.lage_hint_id == LageHint.id)
+    _has_matching = _exists().where(
+        (LageHintAlarm.lage_hint_id == LageHint.id)
+        & (LageHintAlarm.alarm_type_id == at.id)
+    ) if at else None
+    lage_hints = (
+        db.query(LageHint)
+        .filter(or_(~_has_any_alarm, _has_matching))  # type: ignore[arg-type]
+        .order_by(LageHint.display_order)
+        .all()
+    ) if at else (
+        db.query(LageHint)
+        .filter(~_has_any_alarm)
+        .order_by(LageHint.display_order)
+        .all()
+    )
+    lage_hints = _prepend_ai_hints(incident, lage_hints)
+    lage_hints_ai = [bool(getattr(h, 'is_ai', False)) for h in lage_hints]
+    return lage_hints, lage_hints_ai
 
 
 def _create_neighbor_invitations(
@@ -534,7 +558,7 @@ async def alarm_save(
     incident.report_text = report_text.strip() or None
     incident.reason = None
     db.commit()
-    await manager.broadcast(incident_id, {"type": "alarm_type_changed", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "alarm_type_changed"})
     return templates.TemplateResponse(request, "incident/_alarm_confirm_fahrzeuge.html", {
         "incident": incident,
     })
@@ -585,7 +609,7 @@ async def alarm_dispatch_vehicles(
                     added += 1
         if added:
             db.commit()
-            await manager.broadcast(incident_id, {"type": "vehicle_added", "reload_board": True})
+            await manager.broadcast(incident_id, {"type": "vehicle_added", "column_id": active_col.id})
 
     return templates.TemplateResponse(request, "incident/_alarm_confirm_ki.html", {
         "incident": incident,
@@ -649,25 +673,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)  # type: ignore[arg-type]
         if incident.alarm_type_code else None
     )
-    from sqlalchemy import exists as _exists
-    _has_any_alarm = _exists().where(LageHintAlarm.lage_hint_id == LageHint.id)
-    _has_matching = _exists().where(
-        (LageHintAlarm.lage_hint_id == LageHint.id)
-        & (LageHintAlarm.alarm_type_id == _at_board.id)
-    ) if _at_board else None
-    lage_hints = (
-        db.query(LageHint)
-        .filter(or_(~_has_any_alarm, _has_matching))  # type: ignore[arg-type]
-        .order_by(LageHint.display_order)
-        .all()
-    ) if _at_board else (
-        db.query(LageHint)
-        .filter(~_has_any_alarm)
-        .order_by(LageHint.display_order)
-        .all()
-    )
-    lage_hints = _prepend_ai_hints(incident, lage_hints)
-    lage_hints_ai = [bool(getattr(h, 'is_ai', False)) for h in lage_hints]
+    lage_hints, lage_hints_ai = _compute_lage_hints(db, incident, _at_board)
     task_suggestions = (
         db.query(TaskSuggestion)
         .join(TaskSuggestionAlarm, TaskSuggestionAlarm.task_suggestion_id == TaskSuggestion.id)
@@ -778,6 +784,176 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         "can_start_uas": can_start_uas,
         "fahrten_km": fahrten_km,
         "board_verlauf": board_verlauf,
+    })
+
+
+# ── Board: gezielte HTMX-Fragment-Endpoints (ersetzen reload_board) ───────────
+
+_CARD_KIND_MODEL = {
+    "vehicle": (IncidentVehicle, "_vehicle_card.html", "vehicle"),
+    "task": (Task, "_task_card.html", "task"),
+    "message": (Message, "_message_card.html", "msg"),
+    "person": (RescuedPerson, "_person_card.html", "person"),
+}
+
+
+@router.get("/einsatz/{incident_id}/karte/{kind}/{uid}", response_class=HTMLResponse)
+async def board_card_fragment(
+    incident_id: int, kind: str, uid: int, request: Request, db: Session = Depends(get_db)
+):
+    """Einzelne Board-Karte als Fragment für gezielten HTMX-Swap (statt reload_board)."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    entry = _CARD_KIND_MODEL.get(kind)
+    if not entry:
+        return Response("Unbekannte Kartenart", status_code=404)
+    model, template_name, var_name = entry
+    entity = db.get(model, uid)
+    if not entity or entity.incident_id != incident_id:
+        return Response("Nicht gefunden", status_code=404)
+    incident = _load_board_incident(incident_id, db)
+    if not incident:
+        return Response("Nicht gefunden", status_code=404)
+    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    return templates.TemplateResponse(request, f"incident/{template_name}", {
+        "incident": incident, "can_edit": can_edit, var_name: entity,
+    })
+
+
+@router.get("/einsatz/{incident_id}/spalte/{column_id}/inhalt", response_class=HTMLResponse)
+async def board_column_content_fragment(
+    incident_id: int, column_id: int, request: Request, db: Session = Depends(get_db)
+):
+    """Karteninhalt einer Spalte (innerHTML von #zone-{column_id})."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    col = db.get(IncidentColumn, column_id)
+    if not col or col.incident_id != incident_id:
+        return Response("Nicht gefunden", status_code=404)
+    incident = _load_board_incident(incident_id, db)
+    if not incident:
+        return Response("Nicht gefunden", status_code=404)
+    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    lage_sprueche = (
+        db.query(IncidentCommLog)
+        .filter(
+            IncidentCommLog.incident_id == incident_id,
+            IncidentCommLog.is_lage_relevant == True,  # noqa: E712
+        )
+        .order_by(IncidentCommLog.ts.desc())
+        .limit(20)
+        .all()
+    )
+    col_vehicles = [v for v in incident.vehicles if v.column_id == col.id and v.removed_at is None]
+    col_tasks = [t for t in incident.tasks if t.column_id == col.id]
+    col_messages = [m for m in incident.messages if m.column_id == col.id]
+    col_persons = incident.rescued_persons if col.column_kind == "rescued" else []
+    return templates.TemplateResponse(request, "incident/_col_body.html", {
+        "incident": incident, "can_edit": can_edit, "col": col,
+        "col_vehicles": col_vehicles, "col_tasks": col_tasks,
+        "col_messages": col_messages, "col_persons": col_persons,
+        "lage_sprueche": lage_sprueche,
+    })
+
+
+@router.get("/einsatz/{incident_id}/spalte/{column_id}", response_class=HTMLResponse)
+async def board_column_fragment(
+    incident_id: int, column_id: int, request: Request, db: Session = Depends(get_db)
+):
+    """Ganze Kanban-Spalte (Header + Kartenkörper) als Fragment."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    col = db.get(IncidentColumn, column_id)
+    if not col or col.incident_id != incident_id:
+        return Response("Nicht gefunden", status_code=404)
+    incident = _load_board_incident(incident_id, db)
+    if not incident:
+        return Response("Nicht gefunden", status_code=404)
+    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    org_ids = [incident.primary_org_id] if incident.primary_org_id else []
+    for _io in (incident.collaborating_orgs or []):
+        if _io.org_id not in org_ids:
+            org_ids.append(_io.org_id)
+    lage_sprueche = (
+        db.query(IncidentCommLog)
+        .filter(
+            IncidentCommLog.incident_id == incident_id,
+            IncidentCommLog.is_lage_relevant == True,  # noqa: E712
+        )
+        .order_by(IncidentCommLog.ts.desc())
+        .limit(20)
+        .all()
+    )
+    return templates.TemplateResponse(request, "incident/_kanban_col.html", {
+        "incident": incident, "can_edit": can_edit, "col": col,
+        "kind_to_lane": {"tasks": "tasks", "messages": "messages", "rescued": "persons"},
+        "section_leader_candidates": list_section_leader_candidates(db, org_ids),
+        "lage_sprueche": lage_sprueche, "oob": True,
+    })
+
+
+@router.get("/einsatz/{incident_id}/kanban", response_class=HTMLResponse)
+async def board_kanban_fragment(
+    incident_id: int, request: Request, db: Session = Depends(get_db)
+):
+    """Alle Kanban-Spalten (innerHTML von #kanban) — für Struktur-Änderungen
+    (Spalte angelegt/gelöscht/umsortiert)."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    incident = _load_board_incident(incident_id, db)
+    if not incident:
+        return Response("Nicht gefunden", status_code=404)
+    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    org_ids = [incident.primary_org_id] if incident.primary_org_id else []
+    for _io in (incident.collaborating_orgs or []):
+        if _io.org_id not in org_ids:
+            org_ids.append(_io.org_id)
+    lage_sprueche = (
+        db.query(IncidentCommLog)
+        .filter(
+            IncidentCommLog.incident_id == incident_id,
+            IncidentCommLog.is_lage_relevant == True,  # noqa: E712
+        )
+        .order_by(IncidentCommLog.ts.desc())
+        .limit(20)
+        .all()
+    )
+    return templates.TemplateResponse(request, "incident/_kanban_body.html", {
+        "incident": incident, "can_edit": can_edit,
+        "section_leader_candidates": list_section_leader_candidates(db, org_ids),
+        "lage_sprueche": lage_sprueche,
+    })
+
+
+@router.get("/einsatz/{incident_id}/kopfleiste", response_class=HTMLResponse)
+async def board_kopfleiste_fragment(
+    incident_id: int, request: Request, db: Session = Depends(get_db)
+):
+    """Alarm-Badge, Adresse, Lage-Ticker (Header+Sidebar) und EL-vor-Ort-Box als
+    Out-of-Band-Fragmente (Header-/Sidebar-Live-Updates ohne Full-Reload)."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    incident = _incident_or_404(incident_id, db)
+    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    org_ids = [incident.primary_org_id] if incident.primary_org_id else []
+    for _io in (incident.collaborating_orgs or []):
+        if _io.org_id not in org_ids:
+            org_ids.append(_io.org_id)
+    el_member_candidates = list_el_candidates(db, org_ids)
+    _at = (
+        get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)  # type: ignore[arg-type]
+        if incident.alarm_type_code else None
+    )
+    lage_hints, lage_hints_ai = _compute_lage_hints(db, incident, _at)
+    return templates.TemplateResponse(request, "incident/_kopfleiste_oob.html", {
+        "incident": incident, "can_edit": can_edit,
+        "el_member_candidates": el_member_candidates,
+        "lage_hints": lage_hints, "lage_hints_ai": lage_hints_ai,
     })
 
 
@@ -1273,10 +1449,7 @@ async def set_incident_leader_member(
     incident.incident_leader_member_id = member_id or None
     incident.incident_leader_name = None
     db.commit()
-    await manager.broadcast(incident_id, {
-        "type": "incident_leader_changed",
-        "reload_board": True,
-    })
+    await manager.broadcast(incident_id, {"type": "incident_leader_changed"})
     return Response(status_code=204)
 
 
@@ -1294,10 +1467,7 @@ async def set_incident_leader_member_new(
     incident.incident_leader_name = full_name.strip()
     incident.incident_leader_member_id = None
     db.commit()
-    await manager.broadcast(incident_id, {
-        "type": "incident_leader_changed",
-        "reload_board": True,
-    })
+    await manager.broadcast(incident_id, {"type": "incident_leader_changed"})
     return Response(status_code=204)
 
 
@@ -1327,7 +1497,9 @@ async def set_vehicle_gk_quick(
     vehicle.commander_name = None
     set_commander(db, vehicle, member_id or None, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
+    })
     return Response(status_code=204)
 
 
@@ -1345,7 +1517,9 @@ async def set_vehicle_commander_new(
     vehicle.commander_name = full_name.strip()
     vehicle.commander_member_id = None
     db.commit()
-    await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
+    })
     return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
 
 
@@ -1397,7 +1571,7 @@ async def create_task(
     prepend_card(db, task.column_id, "task", task.id)
     db.commit()
     await manager.broadcast(incident_id, {
-        "type": "task_created", "task_id": task.id, "reload_board": True,
+        "type": "task_created", "task_id": task.id, "column_id": task.column_id,
     })
     return templates.TemplateResponse(request, "incident/_task_card.html", {
         "task": task, "incident": incident,
@@ -1421,7 +1595,12 @@ async def toggle_task_done(
     if new_status == "done":
         sink_done_cards(db, col_id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "task_updated", "task_id": task_id, "reload_board": True})
+    # Spalten-Swap statt Einzelkarte: sink_done_cards() kann die Karte ans Spaltenende
+    # verschieben, das muss auch bei anderen Clients sichtbar werden.
+    await manager.broadcast(incident_id, {
+        "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
+        "column_id": task.column_id, "vehicle_uid": task.vehicle_id,
+    })
     # Re-render der Vehicle-Card, falls die Task zugewiesen ist (Strikethrough sichtbar).
     if task.vehicle_id:
         vehicle = db.get(IncidentVehicle, task.vehicle_id)
@@ -1461,7 +1640,10 @@ async def set_task_ampel(
     if status in ("done", "cancelled"):
         sink_done_cards(db, col_id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "task_updated", "task_id": task_id, "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
+        "column_id": col_id, "vehicle_uid": task.vehicle_id,
+    })
     return Response(status_code=204)
 
 
@@ -1482,7 +1664,10 @@ async def assign_task(
     else:
         task.vehicle_id = None
     db.commit()
-    await manager.broadcast(incident_id, {"type": "task_assigned", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "task_assigned", "kind": "task", "uid": task.id,
+        "column_id": task.column_id, "vehicle_uid": task.vehicle_id,
+    })
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     task_logs = _entity_logs(db, incident_id, "task", task_id)
@@ -1655,7 +1840,7 @@ async def attach_vehicle_to_incident(
     else:
         prepend_card(db, target_col.id, "vehicle", iv.id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "vehicle_added", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "vehicle_added", "column_id": target_col.id})
     return RedirectResponse(redirect_to, status_code=303)
 
 
@@ -1672,9 +1857,12 @@ async def move_vehicle(
     column = db.get(IncidentColumn, column_id)
     if not vehicle or not column:
         return Response(status_code=404)
+    source_column_id = vehicle.column_id
     move_vehicle_to_column(db, vehicle, column, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "vehicle_moved", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "vehicle_moved", "column_id": column_id, "source_column_id": source_column_id,
+    })
     return Response(status_code=204)
 
 
@@ -1691,7 +1879,7 @@ async def create_section(
     incident = _incident_or_404(incident_id, db)
     add_section_column(db, incident, title, column_kind=column_kind, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "column_created", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "column_created"})
     return Response(status_code=204)
 
 
@@ -1718,7 +1906,7 @@ async def rename_column_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "column_renamed", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "column_renamed", "column_id": column.id})
     return Response(status_code=204)
 
 
@@ -1753,7 +1941,7 @@ async def set_section_leader_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "column_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "column_updated", "column_id": column.id})
     return Response(status_code=204)
 
 
@@ -1783,7 +1971,7 @@ async def set_section_leader_freitext_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "column_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "column_updated", "column_id": column.id})
     return Response(status_code=204)
 
 
@@ -1802,7 +1990,7 @@ async def delete_column_endpoint(
         db.commit()
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=409)
-    await manager.broadcast(incident_id, {"type": "column_deleted", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "column_deleted"})
     return Response(status_code=204)
 
 
@@ -1821,7 +2009,7 @@ async def reorder_columns_endpoint(
             db.commit()
     except Exception:
         pass
-    await manager.broadcast(incident_id, {"type": "columns_reordered", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "columns_reordered"})
     return Response(status_code=204)
 
 
@@ -1882,7 +2070,7 @@ async def create_message(
             except _HE:
                 pass
         db.commit()
-    await manager.broadcast(incident_id, {"type": "message_created", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "message_created", "column_id": msg.column_id})
     return Response(status_code=204)
 
 
@@ -1900,7 +2088,11 @@ async def toggle_message(
     if msg.is_done:
         sink_done_cards(db, col_id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "message_updated", "reload_board": True})
+    # Spalten-Swap statt Einzelkarte: sink_done_cards() kann die Karte ans Spaltenende
+    # verschieben, das muss auch bei anderen Clients sichtbar werden.
+    await manager.broadcast(incident_id, {
+        "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": col_id,
+    })
     return Response(status_code=204)
 
 
@@ -1922,7 +2114,9 @@ async def set_message_ampel(
     if status in ("erledigt", "storniert"):
         sink_done_cards(db, col_id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "message_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": col_id,
+    })
     return Response(status_code=204)
 
 
@@ -1963,7 +2157,9 @@ async def create_person(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "person_created", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "person_created", "column_id": rescued_col.id if rescued_col else None,
+    })
     return Response(status_code=204)
 
 
@@ -2307,7 +2503,9 @@ async def set_vehicle_commander(
         return Response(status_code=404)
     set_commander(db, vehicle, member_id or None, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
+    })
     return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
 
 
@@ -2330,7 +2528,9 @@ async def set_vehicle_unit_status(
     db.commit()
     from app.services.lis.lis_sync import push_vehicle_status_to_lis
     background_tasks.add_task(push_vehicle_status_to_lis, vehicle.id, unit_status)
-    await manager.broadcast(incident_id, {"type": "vehicle_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
+    })
     return Response(status_code=204)
 
 
@@ -2400,7 +2600,9 @@ async def update_message_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "message_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": msg.column_id,
+    })
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
@@ -2436,7 +2638,10 @@ async def assign_message(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "message_assigned", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "message_assigned", "kind": "message", "uid": msg.id,
+        "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
+    })
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
@@ -2508,7 +2713,7 @@ async def update_person_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "person_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "person_updated", "kind": "person", "uid": person.id})
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
@@ -2542,7 +2747,7 @@ async def set_person_status_endpoint(
             user_id=request.state.user.id,
         )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "person_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "person_updated", "kind": "person", "uid": person.id})
     return Response(status_code=204)
 
 
@@ -2555,9 +2760,10 @@ async def delete_person_endpoint(
     person = db.get(RescuedPerson, person_id)
     if not person or person.incident_id != incident_id:
         return Response(status_code=404)
+    person_uid = person.id
     db.delete(person)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "person_deleted", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "person_deleted", "uid": person_uid})
     return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
 
 
@@ -2582,7 +2788,10 @@ async def update_task_endpoint(
         task.due_at = None
         task.due_after_sec = None
     db.commit()
-    await manager.broadcast(incident_id, {"type": "task_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "task_updated", "kind": "task", "uid": task.id, "column_id": task.column_id,
+        "vehicle_uid": task.vehicle_id,
+    })
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
@@ -2603,7 +2812,10 @@ async def cancel_task_endpoint(
         return Response(status_code=404)
     cancel_task(db, task, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "task_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "task_updated", "kind": "task", "uid": task.id, "column_id": task.column_id,
+        "vehicle_uid": task.vehicle_id,
+    })
     return Response(status_code=204)
 
 
@@ -2617,7 +2829,9 @@ async def accept_ai_suggestion(
         return Response(status_code=404)
     task.source = "manual"
     db.commit()
-    await manager.broadcast(incident_id, {"type": "task_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {
+        "type": "task_updated", "kind": "task", "uid": task.id, "column_id": task.column_id,
+    })
     return Response(status_code=204)
 
 
@@ -2629,9 +2843,10 @@ async def reject_ai_suggestion(
     task = db.get(Task, task_id)
     if not task or task.incident_id != incident_id or task.source != "ai_suggestion":
         return Response(status_code=404)
+    task_column_id = task.column_id
     db.delete(task)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "task_cancelled", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "task_cancelled", "column_id": task_column_id})
     return Response(status_code=204)
 
 
@@ -2691,7 +2906,7 @@ async def save_lagebild_journal(
     user_id = getattr(getattr(request.state, "user", None), "id", None)
     write_audit(db, "ai.lagebild.journal", incident_id=incident_id, user_id=user_id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "message_created", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "message_created", "column_id": msg.column_id})
     return Response(status_code=204)
 
 
@@ -2731,7 +2946,7 @@ async def regenerate_lage_hints(
     user_id = getattr(getattr(request.state, "user", None), "id", None)
     write_audit(db, "ai.lagehinweise.generated", incident_id=incident_id, user_id=user_id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "ai_hints_ready", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "ai_hints_ready"})
     return JSONResponse({"hints": hints})
 
 
@@ -2763,7 +2978,10 @@ async def upload_task_media(
     db.commit()
     db.refresh(task, ["media"])
     incident = _incident_or_404(incident_id, db)
-    await manager.broadcast(incident_id, {"type": "task_updated", "task_id": task_id, "reload_board": False})
+    await manager.broadcast(incident_id, {
+        "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
+        "column_id": task.column_id,
+    })
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     return templates.TemplateResponse(request, "incident/_task_media.html", {
@@ -2791,7 +3009,10 @@ async def delete_task_media(
     task = db.get(Task, task_id)
     db.refresh(task, ["media"])
     incident = _incident_or_404(incident_id, db)
-    await manager.broadcast(incident_id, {"type": "task_updated", "task_id": task_id, "reload_board": False})
+    await manager.broadcast(incident_id, {
+        "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
+        "column_id": task.column_id,
+    })
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     return templates.TemplateResponse(request, "incident/_task_media.html", {
@@ -2932,6 +3153,12 @@ async def move_card_endpoint(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
+    _entry = _CARD_KIND_MODEL.get(kind)
+    source_column_id = None
+    if _entry:
+        _entity_before = db.get(_entry[0], uid)
+        source_column_id = getattr(_entity_before, "column_id", None) if _entity_before else None
+
     move_card(
         db, incident_id, kind, uid,
         column_id=column_id, position=position,
@@ -2952,7 +3179,15 @@ async def move_card_endpoint(
         except Exception:
             pass
     db.commit()
-    await manager.broadcast(incident_id, {"type": "card_moved", "reload_board": True})
+    target_column_id = column_id
+    if _entry:
+        _entity_after = db.get(_entry[0], uid)
+        if _entity_after is not None:
+            target_column_id = getattr(_entity_after, "column_id", target_column_id)
+    await manager.broadcast(incident_id, {
+        "type": "card_moved", "kind": kind, "uid": uid,
+        "column_id": target_column_id, "source_column_id": source_column_id,
+    })
     return Response(status_code=204)
 
 
@@ -3125,7 +3360,7 @@ async def address_save(
     )
     db.commit()
 
-    await manager.broadcast(incident_id, {"type": "address_updated", "reload_board": True})
+    await manager.broadcast(incident_id, {"type": "address_updated"})
 
     org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
     return templates.TemplateResponse(request, "incident/_address_modal.html", {

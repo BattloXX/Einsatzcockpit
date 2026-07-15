@@ -1,0 +1,40 @@
+{# Alarmstufe + Adresse in der Kopfleiste. Variablen: incident, can_edit, oob (optional) #}
+<div class="incident-header__alarm" id="incidentHeaderAlarm" {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% if can_edit %}
+  <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}" style="cursor:pointer"
+        hx-get="/einsatz/{{ incident.id }}/alarm/bearbeiten"
+        hx-target="#cardDetailBody" hx-swap="innerHTML"
+        hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
+        title="Alarmstufe / Einsatzgrund bearbeiten">{{ incident.alarm_type_code }}</span>
+  {% else %}
+  <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
+  {% endif %}
+  {% set _grund = (incident.reason or incident.report_text or '') %}
+  <div class="incident-header__grundwrap">
+  {% if _grund %}
+  <span class="incident-header__grund">{{ _grund[:80] }}</span>
+  {% endif %}
+  {% if incident.address_street %}
+  {% if can_edit %}
+  <span class="incident-header__address" style="cursor:pointer"
+        hx-get="/einsatz/{{ incident.id }}/adresse/bearbeiten"
+        hx-target="#cardDetailBody" hx-swap="innerHTML"
+        hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
+        title="Adresse / Koordinaten bearbeiten">
+    {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %} 📍
+  </span>
+  {% else %}
+  <span class="incident-header__address">{{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</span>
+  {% endif %}
+  {% endif %}
+  </div>
+  {# ── Mobile Lane Select (nur ≤760px) – neben dem Einsatz, spart Platz für die Karten ── #}
+  <select class="mobile-lane-select" id="mobile-lane-select" title="Ansicht wechseln"></select>
+  {# ── Einsatzinfo (nur ≤760px, da .incident-header__actions mobil ausgeblendet ist) ── #}
+  <a href="/einsatz/{{ incident.id }}/info" class="incident-header__info-mobile"
+     title="Einsatzinformation: Karte, Objektdaten, Hydranten">ℹ️ Info</a>
+  {% if request.state.lagefuehrung_modul_aktiv %}
+  <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="incident-header__info-mobile"
+     title="Lageführung — einsatzbezogene Lagekarte">🗺️ Lage</a>
+  {% endif %}
+</div>
