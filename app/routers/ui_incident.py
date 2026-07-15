@@ -1220,20 +1220,17 @@ def incident_nachbar_gefahren(incident_id: int, request: Request, db: Session = 
     return {"objekte": ergebnis, "radius_m": radius}
 
 
-@router.get("/einsatz/{incident_id}/dashboard", response_class=HTMLResponse)
-async def incident_dashboard(
-    incident_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    user = getattr(request.state, "user", None)
-    if not user:
-        return RedirectResponse("/login", status_code=302)
+async def _build_dashboard_context(
+    incident: Incident, db: Session, request: Request, user: User
+) -> dict:
+    """Baut den Render-Kontext für das Dashboard (Vollseite + Fragment-Endpoint
+    /dashboard/inhalt) — ein Kontext-Aufbau, kein Render-Drift zwischen beiden.
 
-    incident = _load_board_incident(incident_id, db)
-    if not incident:
-        from fastapi import HTTPException
-        raise HTTPException(404, "Einsatz nicht gefunden")
+    Erzeugt/liest bei Bedarf einen Login-QR-Token; die Lookup-Query läuft zuerst,
+    ein Insert passiert nur beim allerersten Aufruf pro User+Einsatz, alle
+    weiteren Aufrufe (auch wiederholte Fragment-Refreshes) sind reine Reads.
+    """
+    incident_id = incident.id
 
     # Anzahl aktiver Fahrzeuge (für Kopf-Zählung) – Gruppierung selbst erfolgt weiter unten
     # über lanes_overview (nach Abschnitt/Spalte, mit Status als Rahmenfarbe je Karte).
@@ -1392,29 +1389,69 @@ async def incident_dashboard(
         _log.warning("Dashboard-Wetter konnte nicht geladen werden", exc_info=True)
         dash_weather = None
 
+    return {
+        "active_vehicles": active_vehicles,
+        "lanes_overview": lanes_overview,
+        "tasks_open": tasks_open,
+        "tasks_done": tasks_done,
+        "msgs_open": msgs_open,
+        "msgs_done": msgs_done,
+        "person_stats": person_stats,
+        "started_at_iso": started_at_iso,
+        "lage_hints": lage_hints,
+        "lage_hints_ai": lage_hints_ai,
+        "breathing_troops": breathing_troops,
+        "qr_img": qr_img_b64,
+        "qr_url": qr_url_str,
+        "uas_einsatz": uas_einsatz,
+        "uas_flug_count": uas_flug_count,
+        "dash_weather": dash_weather,
+    }
+
+
+@router.get("/einsatz/{incident_id}/dashboard", response_class=HTMLResponse)
+async def incident_dashboard(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+
+    incident = _load_board_incident(incident_id, db)
+    if not incident:
+        raise HTTPException(404, "Einsatz nicht gefunden")
+
+    ctx = await _build_dashboard_context(incident, db, request, user)
     return templates.TemplateResponse(
         request,
         "incident/dashboard.html",
-        {
-            "user": user,
-            "incident": incident,
-            "active_vehicles": active_vehicles,
-            "lanes_overview": lanes_overview,
-            "tasks_open": tasks_open,
-            "tasks_done": tasks_done,
-            "msgs_open": msgs_open,
-            "msgs_done": msgs_done,
-            "person_stats": person_stats,
-            "started_at_iso": started_at_iso,
-            "lage_hints": lage_hints,
-            "lage_hints_ai": lage_hints_ai,
-            "breathing_troops": breathing_troops,
-            "qr_img": qr_img_b64,
-            "qr_url": qr_url_str,
-            "uas_einsatz": uas_einsatz,
-            "uas_flug_count": uas_flug_count,
-            "dash_weather": dash_weather,
-        },
+        {"user": user, "incident": incident, **ctx},
+    )
+
+
+@router.get("/einsatz/{incident_id}/dashboard/inhalt", response_class=HTMLResponse)
+async def incident_dashboard_fragment(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Dashboard-Datenbereich (#dashBody) als Fragment — für WS-getriebene
+    Live-Updates ohne Full-Reload (siehe app/templates/incident/dashboard.html)."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+
+    incident = _load_board_incident(incident_id, db)
+    if not incident:
+        return Response("Nicht gefunden", status_code=404)
+
+    ctx = await _build_dashboard_context(incident, db, request, user)
+    return templates.TemplateResponse(
+        request,
+        "incident/_dashboard_body.html",
+        {"user": user, "incident": incident, **ctx},
     )
 
 
