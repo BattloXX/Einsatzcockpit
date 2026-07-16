@@ -174,7 +174,8 @@
         {% if fahrt.medien %}
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.9rem;">
           {% for m in fahrt.medien %}
-          <a href="/medien/fahrt/datei/{{ m.id }}" target="_blank" rel="noopener"
+          <a href="/medien/fahrt/datei/{{ m.id }}" rel="noopener"
+             onclick="event.preventDefault(); openMediaViewer('/medien/fahrt/datei/{{ m.id }}', 'image', {{ m.original_filename|tojson }});"
              style="display:block;width:96px;height:96px;border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border);">
             <img src="/medien/fahrt/thumb/{{ m.id }}" alt="Schadensfoto" loading="lazy"
                  style="width:100%;height:100%;object-fit:cover;">

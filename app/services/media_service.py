@@ -740,6 +740,24 @@ async def store_upload_for_schaden_foto(
     return media
 
 
+def delete_fahrt_media(media, db: Session) -> None:
+    """Loescht ein FahrtMedia-Eintrag (Schadensfoto) inkl. gespeicherter Dateien und gibt Quota frei."""
+    storage_root = _storage_root()
+    for rel in (media.storage_path, media.thumb_path):
+        if not rel:
+            continue
+        path = storage_root / rel
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError as e:
+            logger.warning("fahrt media delete failed for %s: %s", path, e)
+    n_bytes = media.bytes or 0
+    if n_bytes > 0:
+        _release(db, media.org_id, n_bytes)
+    db.delete(media)
+
+
 def delete_uas_medien(medien, db: Session) -> None:
     """Loescht UASMedien-Eintrag inkl. gespeicherte Dateien und gibt Quota frei."""
     storage_root = _storage_root()
