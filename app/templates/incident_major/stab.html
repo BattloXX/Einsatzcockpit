@@ -668,6 +668,10 @@ window.printJournalEntry = function(entryId) {
           htmx.ajax('GET', '/lage/{{ lage.id }}/stab/tafel', {target:'#stab-tafel', swap:'innerHTML'});
         } else if (msg.type === 'journal_updated') {
           htmx.ajax('GET', '/lage/{{ lage.id }}/stab/einsatzjournal', {target:'#journal-list', swap:'innerHTML'});
+        } else if (msg.type === 'lage_updated') {
+          htmx.ajax('GET', '/lage/{{ lage.id }}/kopf', { target: document.body, swap: 'none' });
+        } else if (msg.type === 'lage_closed') {
+          window.location.href = '/lage/{{ lage.id }}/dashboard';
         }
       } catch(e) {}
     };

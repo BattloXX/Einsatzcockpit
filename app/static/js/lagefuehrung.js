@@ -812,47 +812,53 @@
     // Fläche — Auswahl dort startet automatisch das Polygon-Werkzeug (siehe renderFlaechenPicker).
     var pendingFlaecheStyle = null;
 
+    // pm:create/pm:remove werden IMMER registriert (nicht nur wenn initial
+    // editierbar) -- damit eine live per WS erteilte Editor-Berechtigung
+    // (siehe lagefuehrung.berechtigung.changed weiter unten) sofort nutzbar
+    // ist, ohne dass erst ein Seiten-Reload die Handler nachtraeglich binden
+    // muesste. Ohne sichtbare Zeichenwerkzeuge (enableDrawTools() nicht
+    // aufgerufen) feuern diese Geoman-Events ohnehin nie.
+    karte.on("pm:create", function (e) {
+      var layer = e.layer;
+      var geojson = layer.toGeoJSON().geometry;
+      var typ = e.shape === "Marker" ? "marker" : "zeichnung";
+      // Geoman hängt den frisch gezeichneten Layer direkt an die Karte (nicht an
+      // layerZeichnung) — ohne karte.removeLayer(...) blieb die unstilisierte
+      // Geoman-Rohform (Standard-Blau, Standard-Leaflet-Pin) dauerhaft sichtbar, zusätzlich
+      // zur sauber gerenderten Version aus renderFeature() (Fehlerbild: "blaue Marker beim
+      // Zeichnen"). layerZeichnung.removeLayer(layer) war ein No-Op.
+      karte.removeLayer(layer);
+
+      var payload = { typ: typ, geometry: geojson, layer_gruppe: "zeichnung" };
+      if (pendingFlaecheStyle && e.shape === "Polygon") {
+        payload.label = pendingFlaecheStyle.name;
+        payload.props = {
+          flaeche_key: pendingFlaecheStyle.id,
+          color: pendingFlaecheStyle.stroke,
+          hatch: pendingFlaecheStyle.hatch || null,
+          hatchColor: pendingFlaecheStyle.hatchColor || null,
+          dash: !!pendingFlaecheStyle.dash,
+        };
+      }
+      pendingFlaecheStyle = null;
+      createFeature(payload);
+    });
+
+    karte.on("pm:remove", function (e) {
+      var layer = e.layer;
+      var f = layer.lft_feature;
+      if (!f) { return; }
+      fetchJson(apiBase + "/features/" + f.id + "?version=" + f.version, {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": opts.csrfToken }
+      }).then(function () {
+        delete featureLayers[f.id];
+        ladeChronologie();
+      }).catch(function () { ladeFeatures(); });
+    });
+
     if (opts.editierbar && karte.pm) {
       enableDrawTools();
-
-      karte.on("pm:create", function (e) {
-        var layer = e.layer;
-        var geojson = layer.toGeoJSON().geometry;
-        var typ = e.shape === "Marker" ? "marker" : "zeichnung";
-        // Geoman hängt den frisch gezeichneten Layer direkt an die Karte (nicht an
-        // layerZeichnung) — ohne karte.removeLayer(...) blieb die unstilisierte
-        // Geoman-Rohform (Standard-Blau, Standard-Leaflet-Pin) dauerhaft sichtbar, zusätzlich
-        // zur sauber gerenderten Version aus renderFeature() (Fehlerbild: "blaue Marker beim
-        // Zeichnen"). layerZeichnung.removeLayer(layer) war ein No-Op.
-        karte.removeLayer(layer);
-
-        var payload = { typ: typ, geometry: geojson, layer_gruppe: "zeichnung" };
-        if (pendingFlaecheStyle && e.shape === "Polygon") {
-          payload.label = pendingFlaecheStyle.name;
-          payload.props = {
-            flaeche_key: pendingFlaecheStyle.id,
-            color: pendingFlaecheStyle.stroke,
-            hatch: pendingFlaecheStyle.hatch || null,
-            hatchColor: pendingFlaecheStyle.hatchColor || null,
-            dash: !!pendingFlaecheStyle.dash,
-          };
-        }
-        pendingFlaecheStyle = null;
-        createFeature(payload);
-      });
-
-      karte.on("pm:remove", function (e) {
-        var layer = e.layer;
-        var f = layer.lft_feature;
-        if (!f) { return; }
-        fetchJson(apiBase + "/features/" + f.id + "?version=" + f.version, {
-          method: "DELETE",
-          headers: { "X-CSRF-Token": opts.csrfToken }
-        }).then(function () {
-          delete featureLayers[f.id];
-          ladeChronologie();
-        }).catch(function () { ladeFeatures(); });
-      });
     }
 
     // ── Taktische Zeichen: Palette + Platzierungsmodus ───────────────────────
@@ -997,7 +1003,12 @@
       handlePlacementClick(e.latlng);
     });
 
-    if (opts.editierbar) {
+    // Werkzeug-Buttons/Taktik-Picker/Fahrzeugsuche werden IMMER initialisiert
+    // (Markup liegt jetzt immer im DOM, siehe lagefuehrung.html) -- nur sichtbar
+    // gemacht wird per opts.editierbar bzw. beim live per WS toggled Grant/
+    // Revoke (siehe lagefuehrung.berechtigung.changed weiter unten). Ohne
+    // sichtbare Buttons/Tab werden diese Handler schlicht nie ausgeloest.
+    {
       var btnMeldung = document.getElementById("lft-tool-meldung");
       if (btnMeldung) { btnMeldung.addEventListener("click", function () { armPlacement("meldung"); }); }
       var btnLinie = document.getElementById("lft-tool-distanzlinie");
@@ -1220,6 +1231,39 @@
     }
     renderPresence();
 
+    // ── Live-Toggle der eigenen Editor-Berechtigung (kein Reload mehr) ───────
+    // Vormals loeste ein Wechsel des eigenen Editor-Status per
+    // lagefuehrung.berechtigung.changed einen kompletten location.reload() aus,
+    // weil Toolbar/Taktik-Tab/Fahrzeugsuche nur bei can_edit ueberhaupt ins DOM
+    // gerendert wurden (lagefuehrung.html). Diese Bloecke liegen jetzt immer im
+    // DOM (nur per "hidden" versteckt), ihre Klick-Handler/Picker werden immer
+    // initialisiert -- ein Berechtigungswechsel muss daher nur noch Sichtbarkeit,
+    // Geoman-Zeichenwerkzeuge und die Edit-Sync-Bindung bestehender Features
+    // (ladeFeatures() rendert jedes Feature neu und bindet bindEditSync() gemaess
+    // dem aktuellen opts.editierbar) umschalten (GSL-Reload-Audit 2026-07-16).
+    function applyEditierbarChange(neu) {
+      if (opts.editierbar === neu) { return; }
+      opts.editierbar = neu;
+      ["lft-uebernehmen-form", "lft-tab-taktik", "lft-edit-werkzeuge"].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) { el.hidden = !neu; }
+      });
+      var hint = document.getElementById("lft-readonly-hint");
+      if (hint) { hint.hidden = neu; }
+      if (!neu) {
+        // Falls der (jetzt versteckte) Taktik-Tab gerade aktiv war: zurueck auf Layer.
+        var taktikPanel = document.querySelector('[data-lft-panel="taktik"]');
+        if (taktikPanel && !taktikPanel.hidden) {
+          var layerTab = document.querySelector('[data-lft-tab="layer"]');
+          if (layerTab) { layerTab.click(); }
+        }
+      }
+      if (karte.pm) {
+        if (neu) { enableDrawTools(); } else { karte.pm.removeControls(); }
+      }
+      ladeFeatures();
+    }
+
     // ── Live-Updates über den bestehenden Einsatz-WebSocket-Kanal ────────────
     var ws = null;
     try {
@@ -1258,8 +1302,10 @@
           if (data.granted) { grantedUsers[data.user_id] = true; } else { delete grantedUsers[data.user_id]; }
           renderPresence();
           if (data.user_id === opts.userId) {
-            // eigener Editor-Status geändert — Seite neu laden, damit Werkzeuge erscheinen/verschwinden
-            location.reload();
+            // Rollenbasiertes Recht bleibt unabhaengig von der Berechtigungsliste bestehen
+            // (siehe can_edit_via_rolle in ui_lagefuehrung.py) -- ein Entzug wirkt sich auf
+            // solche Nutzer also nicht aus.
+            applyEditierbarChange(opts.editierbarViaRolle || !!data.granted);
           }
         }
       };

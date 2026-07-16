@@ -60,8 +60,14 @@
   {% endif %}
   {% if can_edit %}
   <div class="einh-card__actions">
+    {# hx-swap="none" + expliziter after-request-Trigger statt Verlass auf den
+       WS-Broadcast allein (ressource:changed) -- robuster gegen kurze
+       Verbindungsluecken, gleiches Ziel-Event wie der Container schon hoert
+       (ressourcen.html: hx-trigger="...ressourceChanged from:body"). #}
     {% if sectors %}
-    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/sektor" style="display:flex;gap:3px;flex:1;">
+    <form hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/sektor" hx-swap="none"
+          hx-on::after-request="if(event.detail.successful) htmx.trigger(document.body,'ressourceChanged')"
+          style="display:flex;gap:3px;flex:1;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <select name="sector_id" class="sektor-select">
         <option value="">→ Pool</option>
@@ -71,13 +77,17 @@
     </form>
     {% endif %}
     {% if e.sector_id %}
-    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/pool" style="margin:0;">
+    <form hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/pool" hx-swap="none"
+          hx-on::after-request="if(event.detail.successful) htmx.trigger(document.body,'ressourceChanged')"
+          style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <button type="submit" class="btn btn--xs btn--ghost" title="In Pool zurückführen">Pool</button>
     </form>
     {% endif %}
     {% if e.status != resource_service.STATUS_ABGERUECKT %}
-    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status" style="margin:0;">
+    <form hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/status" hx-swap="none"
+          hx-on::after-request="if(event.detail.successful) htmx.trigger(document.body,'ressourceChanged')"
+          style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <input type="hidden" name="status" value="{{ resource_service.STATUS_ABGERUECKT }}">
       <button type="submit" class="btn btn--xs btn--ghost" title="Abgerückt markieren">Abg.</button>
@@ -91,8 +101,10 @@
            hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/kommandant"
            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
            maxlength="120" autocomplete="off">
-    <form method="post" action="/lage/{{ lage.id }}/einheiten/{{ e.id }}/loeschen" style="margin:0;"
-          onsubmit="return confirm('{{ e.label }} entfernen?')">
+    <form hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/loeschen" hx-swap="none"
+          hx-confirm="{{ e.label }} entfernen?"
+          hx-on::after-request="if(event.detail.successful) htmx.trigger(document.body,'ressourceChanged')"
+          style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <button type="submit" class="btn btn--xs btn--ghost" style="color:var(--red);">✕</button>
     </form>

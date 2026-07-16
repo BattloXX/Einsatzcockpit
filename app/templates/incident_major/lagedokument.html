@@ -101,7 +101,7 @@
     {% if can_edit %}
     <div id="lagedokument-status" class="ld-status ld-status--offline"><span class="ld-status__dot"></span>verbinde…</div>
     <div id="lagedokument-presence" class="ld-presence"></div>
-    <form id="form-lagedokument" method="post" action="/lage/{{ lage.id }}/lagedokument">
+    <form id="form-lagedokument" hx-post="/lage/{{ lage.id }}/lagedokument" hx-swap="none">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div id="lagedokument-editor"></div>
       <input type="hidden" name="content_html" id="lagedokument-content-html">
@@ -155,10 +155,39 @@ document.addEventListener('DOMContentLoaded', function() {
   if (initial) { _ldQuill.clipboard.dangerouslyPasteHTML(initial); }
 });
 
-document.getElementById('form-lagedokument').addEventListener('submit', function() {
+// htmx:configRequest statt eines einfachen 'submit'-Listeners: laeuft
+// garantiert VOR dem eigentlichen HTMX-Request (unabhaengig von der
+// Registrierungsreihenfolge mehrerer 'submit'-Handler auf demselben Formular)
+// und traegt den aktuellen Editor-Inhalt direkt in die Request-Parameter ein.
+document.getElementById('form-lagedokument').addEventListener('htmx:configRequest', function(evt) {
   if (!_ldQuill) return;
   var html = _ldQuill.getSemanticHTML ? _ldQuill.getSemanticHTML() : _ldQuill.root.innerHTML;
   document.getElementById('lagedokument-content-html').value = html;
+  evt.detail.parameters['content_html'] = html;
+});
+
+// Kein location.reload() mehr nach dem Speichern (vormals volle Navigation
+// via Redirect+?gespeichert=1) -- stattdessen ein per JS eingefuegter,
+// selbst wieder entfernter Banner-Hinweis (der serverseitige "gespeichert"-Banner
+// oben bleibt fuer den Non-JS-/Redirect-Fallback erhalten); Live-Kollaborationsdokument
+// bleibt unangetastet (GSL-Reload-Audit 2026-07-16).
+document.getElementById('form-lagedokument').addEventListener('htmx:afterRequest', function(evt) {
+  if (!evt.detail.successful) {
+    alert('Fehler beim Speichern des Lageberichts.');
+    return;
+  }
+  var banner = document.getElementById('ld-saved-banner-js');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'ld-saved-banner-js';
+    banner.className = 'alert alert--success';
+    banner.style.marginBottom = '12px';
+    banner.textContent = '✓ Gespeichert.';
+    var form = document.getElementById('form-lagedokument');
+    form.parentNode.insertBefore(banner, form);
+  }
+  clearTimeout(window._ldBannerTimer);
+  window._ldBannerTimer = setTimeout(function() { banner.remove(); }, 3000);
 });
 </script>
 <script type="module">

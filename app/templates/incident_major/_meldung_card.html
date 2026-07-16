@@ -1,0 +1,79 @@
+{# Buergermeldungs-Karte. Eigenes Partial, damit annehmen/als-lageinfo/ablehnen
+   nur diese eine Karte per HTMX-outerHTML-Swap aktualisieren statt die ganze
+   Seite neu zu laden (GSL-Reload-Audit 2026-07-16).
+   Variablen: r (CitizenReport), lage, can_edit #}
+<div id="mel-{{ r.id }}" class="mel-card mel-card--{{ r.status }}">
+  <div class="mel-header">
+    <span class="mel-status mel-status--{{ r.status }}">
+      {% if r.status == 'new' %}Neu{% elif r.status == 'accepted' %}Angenommen{% else %}Abgelehnt{% endif %}
+    </span>
+    <span style="font-size:.75rem;color:var(--text-muted);">{{ r.created_at|local_datetime }}</span>
+    {% if r.reporter_name %}
+    <span style="font-size:.78rem;">{{ r.reporter_name }}</span>
+    {% endif %}
+    {% if r.reporter_contact %}
+    <span style="font-size:.78rem;color:var(--text-muted);">
+      {{ r.reporter_contact }}
+      {% if r.phone_verified %}
+      <span title="Telefonnummer per SMS verifiziert" style="color:var(--green);font-size:.85rem;">✓</span>
+      {% endif %}
+    </span>
+    {% endif %}
+  </div>
+
+  {% if r.ort or r.strasse %}
+  <div style="font-size:.78rem;color:#93c5fd;margin-bottom:8px;">
+    📍 {% if r.strasse %}{{ r.strasse }}{% if r.ort %}, {% endif %}{% endif %}{{ r.ort or '' }}
+  </div>
+  {% endif %}
+
+  <div class="mel-body">{{ r.description }}</div>
+
+  {% if r.photo_filename %}
+  <div x-data="{lbOpen:false}" style="margin-top:6px;display:inline-block;">
+    <img src="/lage/{{ lage.id }}/meldungen/{{ r.id }}/foto" alt="Foto" class="mel-photo"
+         style="cursor:zoom-in;" @click="lbOpen=true">
+    <div x-show="lbOpen" x-cloak @keydown.escape.window="lbOpen=false"
+         style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);">
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"
+           @click.self="lbOpen=false">
+        <img src="/lage/{{ lage.id }}/meldungen/{{ r.id }}/foto"
+             style="max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.8);">
+      </div>
+      <button @click="lbOpen=false"
+              style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;
+                     color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:50%;
+                     width:40px;height:40px;display:flex;align-items:center;justify-content:center;">×</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="mel-meta">
+    <span>#{{ r.id }}</span>
+    {% if r.source_ip %}<span>IP: {{ r.source_ip }}</span>{% endif %}
+    {% if r.site_id %}<span>→ Stelle #{{ r.site_id }}</span>{% endif %}
+  </div>
+
+  {% if can_edit and r.status == 'new' %}
+  <div class="mel-actions">
+    <form hx-post="/lage/{{ lage.id }}/meldungen/{{ r.id }}/annehmen"
+          hx-target="#mel-{{ r.id }}" hx-swap="outerHTML"
+          hx-confirm="Als Einsatzstelle übernehmen?" style="margin:0;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--secondary btn--sm">✓ Als Einsatzstelle anlegen</button>
+    </form>
+    <form hx-post="/lage/{{ lage.id }}/meldungen/{{ r.id }}/als-lageinfo"
+          hx-target="#mel-{{ r.id }}" hx-swap="outerHTML"
+          hx-confirm="Als übergreifende Lageinfo übernehmen?" style="margin:0;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--ghost btn--sm" style="color:#818cf8;border-color:rgba(129,140,248,.35);">📍 Als Lageinfo</button>
+    </form>
+    <form hx-post="/lage/{{ lage.id }}/meldungen/{{ r.id }}/ablehnen"
+          hx-target="#mel-{{ r.id }}" hx-swap="outerHTML"
+          hx-confirm="Meldung ablehnen?" style="margin:0;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--ghost btn--sm">✕ Ablehnen</button>
+    </form>
+  </div>
+  {% endif %}
+</div>

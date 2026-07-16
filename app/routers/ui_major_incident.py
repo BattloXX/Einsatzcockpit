@@ -439,7 +439,7 @@ def lage_board(
 
 # ── Einsatzstelle anlegen ────────────────────────────────────────────────────
 
-@router.post("/lage/{lage_id}/stellen/neu", response_class=HTMLResponse)
+@router.post("/lage/{lage_id}/stellen/neu")
 async def site_create(
     request: Request,
     lage_id: int,
@@ -487,6 +487,12 @@ async def site_create(
         db.rollback()
         raise
     await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
+    # Board (board.html) ruft per HTMX auf (hx-swap="none") -- die neue Karte
+    # erscheint bei allen verbundenen Clients (auch dem anlegenden) ueber den
+    # site_created-Broadcast (lage_board.js -> sitePhaseChanged), daher hier
+    # kein Redirect-Body noetig. Fallback fuer Nicht-HTMX-Aufrufer erhalten.
+    if _is_htmx(request):
+        return Response(status_code=204)
     return RedirectResponse(f"/lage/{lage_id}", status_code=303)
 
 
@@ -755,6 +761,64 @@ async def site_card_partial(
         "can_edit": _can_edit(user),
         "dispatch_counts": dispatch_counts,
     })
+
+
+# ── Phasen-Spalten-Partial (Board) ──────────────────────────────────────────
+# Refresh-Ziel fuer WS-Events, die eine Karte neu erscheinen lassen oder in
+# eine andere Phasen-Spalte verschieben (site_created/site_phase_changed) --
+# vormals loeste das einen kompletten location.reload() aus. Alle Spalten
+# hoeren per hx-trigger="sitePhaseChanged from:body" auf dasselbe Event
+# (board.html), analog zum bestehenden cross-marker-col-body-Muster; wer genau
+# betroffen ist, muss der Client dafuer nicht wissen.
+
+@router.get("/lage/{lage_id}/phase/{phase}/inhalt", response_class=HTMLResponse)
+async def phase_column_partial(
+    request: Request,
+    lage_id: int,
+    phase: str,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db, eager_sites=True)
+    _check_org_access(user, lage)
+    try:
+        phase_enum = SitePhase(phase)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Unbekannte Phase")
+
+    sites = sorted(
+        (s for s in lage.sites if s.phase == phase_enum),
+        key=lambda s: (s.sort_index, s.id),
+    )
+    sectors = sorted(lage.sectors, key=lambda s: s.id)
+    sectors_by_id = {s.id: s for s in sectors}
+    return templates.TemplateResponse(request, "incident_major/_phase_col_body.html", {
+        "lage": lage,
+        "sites": sites,
+        "prio_color": SITE_PRIORITY_COLOR,
+        "prio_label": SITE_PRIORITY_LABEL,
+        "sectors_by_id": sectors_by_id,
+        "can_edit": _can_edit(user),
+    })
+
+
+# ── Kopfzeilen-Partial (OOB) ─────────────────────────────────────────────────
+# Refresh-Ziel fuer lage_updated (Name/Status-Aenderung) auf allen Seiten mit
+# WS-Verbindung -- vormals loeste das einen Volltreload aus. Analog zu
+# _kopfleiste_oob.html beim Einsatz-Board.
+
+@router.get("/lage/{lage_id}/kopf", response_class=HTMLResponse)
+async def lage_kopf_oob(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    return templates.TemplateResponse(request, "incident_major/_lage_kopf_oob.html", {"lage": lage})
 
 
 # ── Einheit einer Einsatzstelle zuweisen (Board-Karte) ──────────────────────
@@ -3117,6 +3181,10 @@ async def meldung_annehmen(
         db.rollback()
         raise
     await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
+    if _is_htmx(request):
+        return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
+            "r": report, "lage": lage, "can_edit": _can_edit(user),
+        })
     return RedirectResponse(f"/lage/{lage_id}/meldungen", status_code=303)
 
 
@@ -3138,6 +3206,10 @@ async def meldung_ablehnen(
 
     report.status = "rejected"
     db.commit()
+    if _is_htmx(request):
+        return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
+            "r": report, "lage": lage, "can_edit": _can_edit(user),
+        })
     return RedirectResponse(f"/lage/{lage_id}/meldungen", status_code=303)
 
 
@@ -3178,6 +3250,10 @@ async def meldung_als_lageinfo(
     report.status = "accepted"
     db.commit()
     await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": m.id, "reload_board": False})
+    if _is_htmx(request):
+        return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
+            "r": report, "lage": lage, "can_edit": _can_edit(user),
+        })
     return RedirectResponse(f"/lage/{lage_id}/meldungen", status_code=303)
 
 
@@ -3612,6 +3688,31 @@ async def lage_druck_stellen(
 SECTOR_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#6b7280"]
 
 
+def _sektoren_context(lage: MajorIncident, user) -> dict:
+    """Kontext fuer sektoren.html UND das per HTMX nachgeladene _sektoren_grid.html
+    (CRUD-Formulare dort, siehe unten -- vormals reine Volltreload-Forms,
+    GSL-Reload-Audit 2026-07-16)."""
+    sectors = sorted(lage.sectors, key=lambda s: s.id)
+    sites_by_sector: dict[int | None, list] = {None: []}
+    for s in sectors:
+        sites_by_sector[s.id] = []
+    for site in lage.sites:
+        if site.phase not in (SitePhase.abgebrochen,):
+            sites_by_sector.setdefault(site.sector_id, []).append(site)
+    return {
+        "lage": lage,
+        "sectors": sectors,
+        "sites_by_sector": sites_by_sector,
+        "sector_colors": SECTOR_COLORS,
+        "prio_color": SITE_PRIORITY_COLOR,
+        "can_edit": _can_edit(user),
+    }
+
+
+def _is_htmx(request: Request) -> bool:
+    return request.headers.get("HX-Request") == "true"
+
+
 @router.get("/lage/{lage_id}/sektoren", response_class=HTMLResponse)
 async def sektoren_view(
     request: Request,
@@ -3623,27 +3724,14 @@ async def sektoren_view(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
-    sectors = sorted(lage.sectors, key=lambda s: s.id)
-    sites_by_sector: dict[int | None, list] = {None: []}
-    for s in sectors:
-        sites_by_sector[s.id] = []
-    for site in lage.sites:
-        if site.phase not in (SitePhase.abgebrochen,):
-            sites_by_sector.setdefault(site.sector_id, []).append(site)
-
     return templates.TemplateResponse(request, "incident_major/sektoren.html", {
         "user": user,
-        "lage": lage,
-        "sectors": sectors,
-        "sites_by_sector": sites_by_sector,
-        "sector_colors": SECTOR_COLORS,
         "phase_labels": PHASE_LABELS,
         "prio_label": SITE_PRIORITY_LABEL,
-        "prio_color": SITE_PRIORITY_COLOR,
-        "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db, lage.org_id),
         **_nav_counts(lage_id, lage, db),
+        **_sektoren_context(lage, user),
     })
 
 
@@ -3674,6 +3762,10 @@ async def sektor_create(
     if request.headers.get("accept", "").startswith("application/json"):
         from fastapi.responses import JSONResponse
         return JSONResponse({"id": sector.id, "name": sector.name, "color": sector.color})
+    if _is_htmx(request):
+        return templates.TemplateResponse(
+            request, "incident_major/_sektoren_grid.html", _sektoren_context(lage, user)
+        )
     return RedirectResponse(f"/lage/{lage_id}/sektoren", status_code=303)
 
 
@@ -3700,6 +3792,10 @@ async def sektor_edit(
     sector.color = color[:7] if color.startswith("#") else "#6b7280"
     sector.leader_label = leader_label.strip()[:80] or None
     db.commit()
+    if _is_htmx(request):
+        return templates.TemplateResponse(
+            request, "incident_major/_sektoren_grid.html", _sektoren_context(lage, user)
+        )
     return RedirectResponse(f"/lage/{lage_id}/sektoren", status_code=303)
 
 
@@ -3721,6 +3817,10 @@ async def sektor_delete(
 
     db.delete(sector)
     db.commit()
+    if _is_htmx(request):
+        return templates.TemplateResponse(
+            request, "incident_major/_sektoren_grid.html", _sektoren_context(lage, user)
+        )
     return RedirectResponse(f"/lage/{lage_id}/sektoren", status_code=303)
 
 
@@ -4474,7 +4574,8 @@ async def lage_einheit_create(
     )
     db.commit()
     await broadcast_lage(lage_id, {"type": "ressource:changed"})
-    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
+    # Nur noch per HTMX aufgerufen (ressourcen.html, hx-swap="none").
+    return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/kommandant")
@@ -4541,7 +4642,11 @@ async def lage_einheit_status(
         raise HTTPException(status_code=400)
     db.commit()
     await broadcast_lage(lage_id, {"type": "ressource:changed"})
-    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
+    # Nur noch per HTMX (_kraefteuebersicht.html, hx-swap="none") aufgerufen --
+    # der Container aktualisiert sich selbst ueber den ressource:changed-Broadcast/
+    # -Trigger, ein Redirect-Body wird nirgends mehr benoetigt (GSL-Reload-Audit
+    # 2026-07-16).
+    return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/sektor")
@@ -4572,7 +4677,8 @@ async def lage_einheit_sektor(
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
     await broadcast_lage(lage_id, {"type": "ressource:changed"})
-    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
+    # Nur noch per HTMX aufgerufen (siehe lage_einheit_status oben).
+    return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/einsatz")
@@ -4624,7 +4730,8 @@ async def lage_einheit_pool(
     )
     db.commit()
     await broadcast_lage(lage_id, {"type": "ressource:changed"})
-    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
+    # Nur noch per HTMX aufgerufen (siehe lage_einheit_status oben).
+    return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/fuehrer")
@@ -4674,7 +4781,8 @@ async def lage_einheit_delete(
     db.delete(einheit)
     db.commit()
     await broadcast_lage(lage_id, {"type": "ressource:changed"})
-    return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
+    # Nur noch per HTMX aufgerufen (siehe lage_einheit_status oben).
+    return Response(status_code=204)
 
 
 # ── Protokoll-Export ──────────────────────────────────────────────────────────

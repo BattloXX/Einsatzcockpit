@@ -170,7 +170,13 @@ async def lagefuehrung_seite(
         fuehrer = db.get(User, incident.lagefuehrung_fuehrer_user_id)
         fuehrer_name = fuehrer.display_name if fuehrer else None
 
-    can_edit = has_role(user, *_EDIT_ROLES) or _has_granted_edit_access(db, incident_id, user.id)
+    # can_edit_via_rolle getrennt von der Berechtigungsliste an das Template
+    # gereicht: das Frontend braucht beide Teile einzeln, um bei einem live per
+    # WS empfangenen lagefuehrung.berechtigung.changed (Widerruf) den korrekten
+    # Endzustand ("Rolle behaelt das Recht trotzdem") ohne Reload nachzubilden,
+    # statt die Seite pauschal neu zu laden (siehe lagefuehrung.js).
+    can_edit_via_rolle = has_role(user, *_EDIT_ROLES)
+    can_edit = can_edit_via_rolle or _has_granted_edit_access(db, incident_id, user.id)
     is_fuehrer = incident.lagefuehrung_fuehrer_user_id == user.id
     granted_user_ids = [
         row.user_id for row in
@@ -181,6 +187,7 @@ async def lagefuehrung_seite(
         "user": user,
         "incident": incident,
         "can_edit": can_edit,
+        "can_edit_via_rolle": can_edit_via_rolle,
         "is_fuehrer": is_fuehrer,
         "fuehrer_name": fuehrer_name,
         "granted_user_ids": granted_user_ids,

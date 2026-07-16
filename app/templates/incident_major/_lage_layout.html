@@ -54,8 +54,13 @@
     {% endif %}
     <div class="lage-ctx-bar__head">
       <a href="/lage" class="btn btn--ghost btn--sm" title="Alle Lagen">&#x2190; Lagen</a>
-      <div class="lage-ctx-bar__title" title="{{ lage.name }}">{{ lage.name }}</div>
-      <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+      {# id-Wrapper: Refresh-Ziel fuer den lage_updated-OOB-Swap (_lage_kopf_oob.html) --
+         Lage-Stammdaten koennen sich aendern, waehrend andere Nutzer bereits auf
+         Board/Karte/etc. sind (siehe GSL-Reload-Audit 2026-07-16). #}
+      <div id="lageCtxBarInfo" class="lage-ctx-bar__info">
+        <div class="lage-ctx-bar__title" title="{{ lage.name }}">{{ lage.name }}</div>
+        <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+      </div>
       {% block lage_head_extras %}{% endblock %}
       <!-- Mobile: Burger-Button für Lage-Navigation -->
       <button type="button" class="lage-burger-btn"

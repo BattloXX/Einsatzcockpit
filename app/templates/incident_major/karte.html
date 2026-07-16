@@ -1234,6 +1234,26 @@
   var wsDisconnectedAt = null;
   var wsReconnectAttempt = 0;
   var WS_RELOAD_COOLDOWN_MS = 10000;
+  // Sektoren + Stellen (inkl. Sektorzuordnung) frisch nachladen, ohne die
+  // Seite neu zu laden. Vormals nur fuer 'section:changed' genutzt; jetzt
+  // auch fuer site_created/site_phase_changed/site_updated wiederverwendet,
+  // die zuvor per location.reload() liefen (GSL-Reload-Audit 2026-07-16).
+  function refreshSitesAndSectors() {
+    return Promise.all([
+      fetch('/lage/' + lageId + '/karte-sektoren').then(function(r) { return r.json(); }),
+      fetch('/lage/' + lageId + '/karte-sites').then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+      SECTORS = results[0];
+      sectorMap = {};
+      SECTORS.forEach(function(s) { sectorMap[s.id] = s; });
+      var siteIdx = {};
+      results[1].forEach(function(e) { siteIdx[e.id] = e.sector_id; });
+      SITES.forEach(function(s) { if (s.id in siteIdx) s.sector_id = siteIdx[s.id]; });
+      renderSectorPolygons();
+      refreshMarkerColors();
+    });
+  }
+
   function connectWS() {
     var ws = new WebSocket(wsUrl);
     ws.onopen = function() {
@@ -1268,23 +1288,20 @@
             if (s.id === msg.site_id) { s.sector_id = msg.sector_id != null ? msg.sector_id : null; }
           });
           refreshMarkerColors();
-        } else if (msg.reload_board || msg.type === 'site_updated') {
+        } else if (msg.type === 'site_phase_changed' || msg.type === 'site_updated') {
+          // Bestehende Marker aktualisieren (Phase/Sektor) ohne Reload.
+          refreshSitesAndSectors().catch(function() {});
+        } else if (msg.type === 'site_created') {
+          // Bekannte, bewusst belassene Einschraenkung: eine neue Stelle bekommt
+          // hier noch keinen live eingefuegten Marker (die Karte kennt nur
+          // Stelle-ID+Sektor via /karte-sites, nicht Lat/Lng/Phase/Popup-Daten
+          // fuer einen neuen Marker) -- ein Reload bleibt fuer DIESEN einen Fall
+          // vorerst der einfachste korrekte Weg. site_phase_changed/site_updated/
+          // site:sector_changed betreffen dagegen immer einen bereits vorhandenen
+          // Marker und laufen oben gezielt ohne Reload.
           location.reload();
         } else if (msg.type === 'section:changed') {
-          // Sektoren + Stellen-Sektorzuordnungen neu laden ohne Seiten-Reload
-          Promise.all([
-            fetch('/lage/' + lageId + '/karte-sektoren').then(function(r) { return r.json(); }),
-            fetch('/lage/' + lageId + '/karte-sites').then(function(r) { return r.json(); }),
-          ]).then(function(results) {
-            SECTORS = results[0];
-            sectorMap = {};
-            SECTORS.forEach(function(s) { sectorMap[s.id] = s; });
-            var siteIdx = {};
-            results[1].forEach(function(e) { siteIdx[e.id] = e.sector_id; });
-            SITES.forEach(function(s) { if (s.id in siteIdx) s.sector_id = siteIdx[s.id]; });
-            renderSectorPolygons();
-            refreshMarkerColors();
-          }).catch(function() { location.reload(); });
+          refreshSitesAndSectors().catch(function() { location.reload(); });
         } else if (msg.type === 'cross_marker:changed') {
           fetch('/lage/' + lageId + '/karte-cross-markers')
             .then(function(r) { return r.json(); })
@@ -1298,6 +1315,10 @@
           } else {
             loadVehiclePositions();
           }
+        } else if (msg.type === 'lage_updated') {
+          htmx.ajax('GET', '/lage/' + lageId + '/kopf', { target: document.body, swap: 'none' });
+        } else if (msg.type === 'lage_closed') {
+          window.location.href = '/lage/' + lageId + '/dashboard';
         }
       } catch(e) {}
     };
