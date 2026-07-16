@@ -201,6 +201,8 @@ def reconcile_storage(db: Session, org_id: int) -> int:
             "  UNION ALL"
             "  SELECT COALESCE(bytes, 0) FROM lagefuehrung_snapshot WHERE org_id = :oid"
             "  UNION ALL"
+            "  SELECT COALESCE(bytes, 0) FROM fahrt_media WHERE org_id = :oid"
+            "  UNION ALL"
             # Objektverwaltung: belegt_bytes je Dokument haelt bereits die Summe aus
             # Original + allen abgeleiteten Seiten/Thumbs (objekt_dokument_service.py),
             # daher genau diese Spalte summieren -- objekt_dokument_seite NICHT separat

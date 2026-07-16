@@ -194,6 +194,127 @@ def _make_site_media(org_id: int, *, filename: str, size: int) -> tuple[int, int
         db.close()
 
 
+# ── Fahrtenbuch-Schadensfotos: Session 2026-07-16 ────────────────────────────
+# Fotos einer Fahrt (FahrtMedia) waren bisher weder in der Medienverwaltung
+# sichtbar noch loeschbar -- jetzt ueber media_service.delete_fahrt_media.
+
+def _make_fahrt_media(org_id: int, *, filename: str, size: int) -> tuple[int, int]:
+    from app.models.fahrtenbuch import Fahrt, FahrtErfassungsweg, FahrtKategorie, FahrtMedia, Fahrtzweck
+    from app.models.master import VehicleMaster
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        fahrzeug = VehicleMaster(dept_id=org_id, code="KDO1", name="Kommandofahrzeug")
+        db.add(fahrzeug)
+        zweck = Fahrtzweck(org_id=org_id, name="Übung", kategorie=FahrtKategorie.uebung)
+        db.add(zweck)
+        db.flush()
+        fahrt = Fahrt(
+            org_id=org_id, zeitpunkt=datetime.now(UTC).replace(tzinfo=None),
+            fahrzeug_id=fahrzeug.id, maschinist_name="Max Mustermann",
+            zweck_id=zweck.id, fahrttyp=FahrtKategorie.uebung,
+            erfasst_via=FahrtErfassungsweg.web,
+        )
+        db.add(fahrt)
+        db.flush()
+        media = FahrtMedia(
+            fahrt_id=fahrt.id, org_id=org_id, original_filename=filename,
+            storage_path=f"fahrt/{org_id}/{fahrt.id}/{filename}",
+            mime_type="image/jpeg", bytes=size,
+        )
+        db.add(media)
+        db.commit()
+        return media.id, fahrt.id
+    finally:
+        db.close()
+
+
+def test_medienverwaltung_zeigt_und_loescht_fahrt_medien(client, setup_db):
+    from app.models.fahrtenbuch import FahrtMedia
+    from app.services.storage_service import get_org_storage_info, reserve_storage
+
+    org_id = _make_org_admin("mv_admin_fahrt", "mv-fahrt")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        reserve_storage(db, org_id, 4_000)
+        db.commit()
+    finally:
+        db.close()
+    media_id, fahrt_id = _make_fahrt_media(org_id, filename="schaden.jpg", size=4_000)
+
+    _login(client, "mv_admin_fahrt", "Test1234!")
+    r = client.get("/admin/medien")
+    assert "schaden.jpg" in r.text
+    assert f"/verwaltung/fahrten/{fahrt_id}" in r.text
+    assert f"/admin/medien/fahrt/{media_id}/loeschen" in r.text
+
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(f"/admin/medien/fahrt/{media_id}/loeschen",
+                    data={"_csrf": csrf}, follow_redirects=False)
+    assert r.status_code == 303
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.get(FahrtMedia, media_id) is None
+        assert get_org_storage_info(db, org_id)["used_bytes"] == 0
+    finally:
+        db.close()
+
+
+# ── Objekt-Dokumente: Session 2026-07-16 ─────────────────────────────────────
+# Werden angezeigt (fuer Speicheruebersicht), sind aber NICHT ueber die
+# Medienverwaltung loeschbar -- Loeschen nur ueber die Objekt-Dokumentengalerie
+# (haengt an ObjektDokumentSeite/Klassifikation/Einsatzdruck).
+
+def _make_objekt_dokument(org_id: int, *, filename: str, belegt_bytes: int) -> int:
+    from app.models.objekt import Objekt, ObjektDokument
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = Objekt(org_id=org_id, nummer=1, name="Testobjekt")
+        db.add(objekt)
+        db.flush()
+        dok = ObjektDokument(
+            org_id=org_id, objekt_id=objekt.id, dateiname_original=filename,
+            pfad=f"a/{filename}", belegt_bytes=belegt_bytes,
+        )
+        db.add(dok)
+        db.commit()
+        return dok.id
+    finally:
+        db.close()
+
+
+def test_medienverwaltung_zeigt_objekt_dokument_ohne_loeschbutton(client, setup_db):
+    from app.models.objekt import ObjektDokument
+
+    org_id = _make_org_admin("mv_admin_objekt", "mv-objekt")
+    dok_id = _make_objekt_dokument(org_id, filename="plan.pdf", belegt_bytes=3_000)
+
+    _login(client, "mv_admin_objekt", "Test1234!")
+    r = client.get("/admin/medien")
+    assert "plan.pdf" in r.text
+    assert "Löschen nur im Objekt möglich" in r.text
+    assert f"/admin/medien/objekt_dokument/{dok_id}/loeschen" not in r.text
+
+    # Versuchter Loeschaufruf ueber die Medienverwaltung darf das Dokument nicht entfernen
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(f"/admin/medien/objekt_dokument/{dok_id}/loeschen",
+                    data={"_csrf": csrf}, follow_redirects=False)
+    assert r.status_code == 303
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.get(ObjektDokument, dok_id) is not None
+    finally:
+        db.close()
+
+
 def test_medienverwaltung_zeigt_und_loescht_gsl_medien(client, setup_db):
     from app.models.major_incident import SiteMedia
     from app.services.storage_service import get_org_storage_info, reserve_storage

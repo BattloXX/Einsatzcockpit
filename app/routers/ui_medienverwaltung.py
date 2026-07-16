@@ -1,9 +1,16 @@
 """Medienverwaltung (Admin): org-weite Uebersicht aller hochgeladenen Medien
-(Einsatz + Grossschadenslage) mit Groesse/Alter/Typ-Sortierung und -Filterung.
+(Einsatz + Grossschadenslage + Fahrtenbuch + Objektverwaltung) mit Groesse/
+Alter/Typ-Sortierung und -Filterung.
 
 Ergaenzt die bestehende /medien-Galerie (nur TaskMedia, ohne Groessen-/Sortier-
-Spalten) um eine Verwaltungssicht ueber alle sechs Medientypen hinweg, analog
+Spalten) um eine Verwaltungssicht ueber alle Medientypen hinweg, analog
 zur reinen Aggregat-Uebersicht /admin/system/quotas (dort nur Summen je Org).
+
+Objekt-Dokumente werden nur angezeigt (nicht loeschbar) -- sie sind an das
+Objekt gebunden (Seitenzerlegung/Klassifikation/Einsatzdruck) und muessen dort
+ueber die Objekt-Dokumentengalerie geloescht werden, damit die zugehoerigen
+ObjektDokumentSeite-Eintraege und Einsatzinfo-Verknuepfungen korrekt mit
+aufgeraeumt werden.
 """
 from __future__ import annotations
 
@@ -28,6 +35,7 @@ _PAGE_SIZE = 50
 _TYP_LABELS = {
     "task": "Auftrag", "message": "Meldung", "person": "Person",
     "site": "Lage-Stelle", "cross_marker": "Übergreifend", "lage_journal": "Lage-Journal",
+    "fahrt": "Fahrt", "objekt_dokument": "Objekt-Dokument",
 }
 _KIND_LABELS = {"image": "Bild", "pdf": "PDF", "video": "Video"}
 
@@ -48,6 +56,9 @@ class _Row:
     deletable: bool
     thumb_url: str | None
     file_url: str
+    # Nur gesetzt, wenn deletable=False und ein Hinweis angezeigt werden soll
+    # (z.B. Objekt-Dokumente: Loeschen nur im Objekt selbst moeglich).
+    hinweis: str | None = None
 
 
 def _target_org_id(user, org_param: int | None) -> int | None:
@@ -210,6 +221,87 @@ def _gather_gsl(db: Session, org_id: int) -> list[_Row]:
     return rows
 
 
+def _gather_fahrt(db: Session, org_id: int) -> list[_Row]:
+    from app.models.fahrtenbuch import Fahrt, FahrtMedia
+    from app.models.user import User
+
+    media = db.query(FahrtMedia).filter(FahrtMedia.org_id == org_id).all()
+    if not media:
+        return []
+
+    fahrt_ids = {m.fahrt_id for m in media}
+    fahrten = {f.id: f for f in db.query(Fahrt).filter(Fahrt.id.in_(fahrt_ids)).all()}
+    uploader_ids = {m.uploaded_by_user_id for m in media if m.uploaded_by_user_id}
+    uploaders = (
+        {u.id: u.display_name for u in db.query(User).filter(User.id.in_(uploader_ids)).all()}
+        if uploader_ids else {}
+    )
+
+    def _label(fahrt) -> str:
+        if not fahrt:
+            return "–"
+        fzg = f" · {fahrt.fahrzeug.code}" if fahrt.fahrzeug else ""
+        return f"Fahrt #{fahrt.id}{fzg}"
+
+    rows: list[_Row] = []
+    for m in media:
+        fahrt = fahrten.get(m.fahrt_id)
+        rows.append(_Row(
+            id=m.id, typ="fahrt", original_filename=m.original_filename, kind="image",
+            bytes=m.bytes or 0, created_at=m.created_at,
+            uploader_name=(
+                uploaders.get(m.uploaded_by_user_id, "–")
+                if m.uploaded_by_user_id is not None else "–"
+            ),
+            annotated=False, annotated_at=None,
+            context_label=_label(fahrt),
+            context_url=f"/verwaltung/fahrten/{m.fahrt_id}" if fahrt else None,
+            deletable=True,
+            thumb_url=f"/medien/fahrt/thumb/{m.id}",
+            file_url=f"/medien/fahrt/datei/{m.id}",
+        ))
+    return rows
+
+
+def _gather_objekt_dokumente(db: Session, org_id: int) -> list[_Row]:
+    from app.models.objekt import Objekt, ObjektDokument
+    from app.models.user import User
+
+    dokumente = db.query(ObjektDokument).filter(ObjektDokument.org_id == org_id).all()
+    if not dokumente:
+        return []
+
+    objekt_ids = {d.objekt_id for d in dokumente}
+    objekte = {o.id: o for o in db.query(Objekt).filter(Objekt.id.in_(objekt_ids)).all()}
+    uploader_ids = {d.hochgeladen_von_id for d in dokumente if d.hochgeladen_von_id}
+    uploaders = (
+        {u.id: u.display_name for u in db.query(User).filter(User.id.in_(uploader_ids)).all()}
+        if uploader_ids else {}
+    )
+
+    rows: list[_Row] = []
+    for d in dokumente:
+        objekt = objekte.get(d.objekt_id)
+        rows.append(_Row(
+            id=d.id, typ="objekt_dokument", original_filename=d.dateiname_original, kind="pdf",
+            # belegt_bytes statt groesse_bytes: haelt die Summe aus Original + abgeleiteten
+            # Seiten/Thumbs, exakt der Wert, den reconcile_storage fuer die Quota zaehlt.
+            bytes=d.belegt_bytes or 0, created_at=d.hochgeladen_am,
+            uploader_name=(
+                uploaders.get(d.hochgeladen_von_id, "–")
+                if d.hochgeladen_von_id is not None else "–"
+            ),
+            annotated=False, annotated_at=None,
+            context_label=f"Objekt {objekt.anzeige_nummer} · {objekt.name}" if objekt else "–",
+            context_url=f"/objekte/{d.objekt_id}" if objekt else None,
+            deletable=False,
+            thumb_url=None,
+            file_url=f"/objekt-medien/dokument/{d.id}/original",
+            hinweis="Löschen nur im Objekt möglich",
+        ))
+    return rows
+
+
 def _apply_filters(rows: list[_Row], *, typ: str, q: str, nur_bearbeitet: bool,
                     von: date | None, bis: date | None) -> list[_Row]:
     if typ:
@@ -282,7 +374,10 @@ async def medienverwaltung(
     except ValueError:
         bis = None
 
-    rows = _gather_task_message_person(db, org_id) + _gather_gsl(db, org_id)
+    rows = (
+        _gather_task_message_person(db, org_id) + _gather_gsl(db, org_id)
+        + _gather_fahrt(db, org_id) + _gather_objekt_dokumente(db, org_id)
+    )
     rows = _apply_filters(
         rows, typ=typ, q=q.strip(), nur_bearbeitet=bool(nur_bearbeitet), von=von_d, bis=bis_d,
     )
@@ -340,7 +435,23 @@ async def medien_bulk_loeschen(
 def _loesche_eines(db: Session, user, typ: str, media_id: int) -> None:
     """Loescht eine Medienzeile — Einsatz-Medien (Task/Message/Person) ueber
     incident.primary_org_id org-geprueft, GSL-Medien (Site/CrossMarker/
-    LageJournal) direkt ueber media.org_id."""
+    LageJournal) und Fahrt-Medien direkt ueber media.org_id. Objekt-Dokumente
+    sind ueber diese Funktion nicht loeschbar (typ "objekt_dokument" faellt
+    durch alle Zweige durch und wird stillschweigend uebersprungen) — sie
+    muessen ueber die Objekt-Dokumentengalerie geloescht werden, siehe
+    _gather_objekt_dokumente."""
+    if typ == "fahrt":
+        from app.models.fahrtenbuch import FahrtMedia
+        from app.services.media_service import delete_fahrt_media
+
+        media = db.get(FahrtMedia, media_id)
+        if media is None:
+            return
+        if not (has_role(user, "system_admin") or (user.org_id and media.org_id == user.org_id)):
+            return
+        delete_fahrt_media(media, db)
+        return
+
     if typ in ("task", "message", "person"):
         from app.models.incident import Incident, MessageMedia, PersonMedia, TaskMedia
         from app.services.media_service import delete_media

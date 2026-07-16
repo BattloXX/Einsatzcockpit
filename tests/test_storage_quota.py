@@ -277,6 +277,31 @@ def test_reconcile_storage_includes_objekt_dokumente(db, orgs):
     )
 
 
+# ── reconcile_storage + Fahrtenbuch: Regressionstest (Session 2026-07-16) ──────
+# Schadensfotos (fahrt_media) werden beim Upload bereits live ueber reserve_storage
+# gezaehlt (store_upload_for_schaden_foto), fehlten aber in reconcile_storage --
+# nach einem "Speicher neu berechnen" waere ihr Anteil aus der Quota verschwunden.
+
+def test_reconcile_storage_includes_fahrt_media(db, orgs):
+    from app.models.fahrtenbuch import FahrtMedia
+
+    org_a, org_b = orgs
+    db.add(FahrtMedia(org_id=org_a.id, fahrt_id=1, original_filename="schaden1.jpg",
+                      storage_path="fahrt/1/1/a.jpg", mime_type="image/jpeg", bytes=1000))
+    db.add(FahrtMedia(org_id=org_a.id, fahrt_id=1, original_filename="schaden2.jpg",
+                      storage_path="fahrt/1/1/b.jpg", mime_type="image/jpeg", bytes=2000))
+    # Fremd-Org-Foto darf NICHT mitgezaehlt werden (Org-Isolation)
+    db.add(FahrtMedia(org_id=org_b.id, fahrt_id=2, original_filename="fremd.jpg",
+                      storage_path="fahrt/2/2/c.jpg", mime_type="image/jpeg", bytes=9000))
+    db.commit()
+
+    total = reconcile_storage(db, org_a.id)
+    assert total == 3000, (
+        "reconcile_storage zaehlt Fahrtenbuch-Schadensfotos (fahrt_media) nicht mit -- "
+        "nach einem Reconcile faellt ihr Speicheranteil aus der Quota"
+    )
+
+
 # ── Retry bei transienten MariaDB-Sperrkonflikten (Vorfall 2026-07-06) ─────────
 # INSERT/UPDATE auf das gemeinsame org_storage_usage-Row warf unter paralleler
 # Dokumentverarbeitung MySQL-Error 1020 ("Record has changed since last read;

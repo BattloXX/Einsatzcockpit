@@ -167,6 +167,10 @@ th.sortable a:hover { text-decoration:underline; }
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <button type="submit" class="btn btn--danger btn--sm">Löschen</button>
           </form>
+          {% elif r.hinweis %}
+          <div class="text-muted" style="font-size:.72rem;max-width:180px;">
+            🔒 {{ r.hinweis }}{% if r.context_url %} – <a href="{{ r.context_url }}">im Objekt öffnen</a>{% endif %}
+          </div>
           {% endif %}
         </td>
       </tr>
