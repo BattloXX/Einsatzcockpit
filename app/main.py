@@ -39,6 +39,7 @@ from app.routers import (
     ui_atemschutz_pruefung_admin,
     ui_backup,
     ui_breathing,
+    ui_dibos,
     ui_druck,
     ui_fahrtenbuch,
     ui_fahrtenbuch_admin,
@@ -234,6 +235,16 @@ async def lifespan(app: FastAPI):
     from app.services.lis.lis_capture import lis_capture_retention_loop
     lis_capture_retention_task = asyncio.create_task(lis_capture_retention_loop())
 
+    # Background-Loop für die DIBOS-EventHub-Auto-Erkennung (leichter Poll je Org,
+    # startet bei eigenem Einsatz automatisch ein Voll-Tracing, siehe dibos_loop.py)
+    from app.services.dibos.dibos_loop import dibos_poll_loop
+    dibos_task = asyncio.create_task(dibos_poll_loop())
+
+    # Background-Loop für die Löschfrist von DIBOS-Rohdaten-Aufzeichnungen (täglich 04:05,
+    # DSGVO — enthalten Personenbezug, siehe dibos_capture.py)
+    from app.services.dibos.dibos_capture import dibos_trace_retention_loop
+    dibos_trace_retention_task = asyncio.create_task(dibos_trace_retention_loop())
+
     try:
         yield
     finally:
@@ -250,9 +261,12 @@ async def lifespan(app: FastAPI):
         abfluss_poll_task.cancel()
         lis_task.cancel()
         lis_capture_retention_task.cancel()
+        dibos_task.cancel()
+        dibos_trace_retention_task.cancel()
         for t in (autoclose_task, watchdog_task, reminder_task, lagemeldung_task, verleih_task,
                   weather_retention_task, vehicle_position_retention_task, weather_alert_task,
-                  abfluss_poll_task, lis_task, lis_capture_retention_task):
+                  abfluss_poll_task, lis_task, lis_capture_retention_task,
+                  dibos_task, dibos_trace_retention_task):
             try:
                 await t
             except (asyncio.CancelledError, Exception):
@@ -575,6 +589,7 @@ app.include_router(ui_push.router)
 app.include_router(ui_settings.router)
 app.include_router(ui_sso.router)
 app.include_router(ui_lis.router)
+app.include_router(ui_dibos.router)
 app.include_router(ui_org_mail.router)
 app.include_router(ui_teams_bot.router)
 app.include_router(ui_sysadmin.router)

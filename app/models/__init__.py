@@ -4,6 +4,7 @@ from app.models.atemschutz_pruefung import (
     AtemschutzPruefung,
 )
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
+from app.models.dibos import OrgDibosConfig
 from app.models.fahrtenbuch import (
     Fahrt,
     FahrtBenachrichtigung,
@@ -154,6 +155,7 @@ from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherA
 __all__ = [
     "OrgSsoConfig", "OrgSsoGroupMap",
     "OrgLisConfig", "LisSyncedObject",
+    "OrgDibosConfig",
     "OrgSmtpConfig", "OrgO365MailConfig",
     "TeamsAlarmConfig", "TeamsChannelBinding", "TeamsCardPost", "AlarmToken",
     "User", "Role", "UserRole", "ApiKey", "AuditLog", "PushSubscription",

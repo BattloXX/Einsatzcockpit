@@ -17,7 +17,7 @@
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
-       or '/admin/lis' in _p or '/admin/mail' in _p
+       or '/admin/lis' in _p or '/admin/dibos' in _p or '/admin/mail' in _p
        or ('/admin/medien' in _p and is_sysadmin)
        or _p == '/admin/settings/wetter' or _p.startswith('/admin/settings/wetter?') %}
   {% set active_group = 'einstellungen' %}
@@ -362,6 +362,11 @@
                class="admin-nav__item {% if '/admin/lis' in request.url.path %}is-active{% endif %}"
                {{ tip('Leitstellenanbindung (LIS/IPR): Verbindung ein-/ausschalten, Zugangsdaten hinterlegen') }}>
               <span class="admin-nav__icon">📡</span>LIS-Anbindung
+            </a>
+            <a href="/admin/dibos"
+               class="admin-nav__item {% if '/admin/dibos' in request.url.path %}is-active{% endif %}"
+               {{ tip('DIBOS EventHub / Elvis-Anbindung: rein lesendes Tracing, Zugangsdaten hinterlegen') }}>
+              <span class="admin-nav__icon">📻</span>DIBOS/Elvis-Tracing
             </a>
             <a href="/admin/mail"
                class="admin-nav__item {% if '/admin/mail' in request.url.path %}is-active{% endif %}"
