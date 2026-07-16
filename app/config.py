@@ -225,6 +225,11 @@ class Settings(BaseSettings):
     LIS_ENABLED: bool = True         # globaler Kill-Switch
     LIS_POLL_INTERVAL_S: int = 30    # Loop-Intervall
 
+    # DIBOS EventHub / Elvis-Anbindung (Landeswarnzentrale Vorarlberg) - reines
+    # Tracing/Diagnose-Feature, siehe app/services/dibos/
+    DIBOS_TRACE_ENABLED: bool = True   # globaler Kill-Switch für den Auto-Erkennungs-Loop
+    DIBOS_POLL_INTERVAL_S: int = 20    # Loop-Intervall (leichter Poll auf GetCurrentEvents)
+
     # SSO / Microsoft Entra ID
     SSO_ENABLED: bool = True
     MS_LOGIN_BASE_URL: str = "https://login.microsoftonline.com"

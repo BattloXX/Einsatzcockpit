@@ -1,0 +1,104 @@
+<div id="dibos-live"
+     hx-get="/admin/dibos/trace/{{ run_id }}/live?target_org_id={{ target_org_id }}"
+     hx-trigger="every 5s" hx-swap="outerHTML">
+  {% if not latest %}
+  <p class="form-hint">Noch kein Live-Snapshot für diesen Lauf vorhanden (erster Poll-Zyklus läuft noch).</p>
+  {% else %}
+  <p class="form-hint" style="margin-bottom:10px">
+    Letzter Poll: {{ latest.updated_at or '-' }} (UTC), Lauf {{ run_id }}
+  </p>
+
+  <h3 style="font-size:.9rem;margin:0 0 6px 0">Eigene Einsätze</h3>
+  {% if not latest.events %}
+  <p class="form-hint" style="margin-bottom:14px">Aktuell kein eigener Einsatz.</p>
+  {% else %}
+  <table class="table-admin" style="font-size:.8rem;margin-bottom:14px">
+    <thead>
+      <tr>
+        <th>Nummer</th><th>Stichwort</th><th>Kommentar</th><th>Alarmiert</th><th>Anrufer</th><th>Ziele</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in latest.events %}
+      <tr>
+        <td>{{ e.eventNumber }}</td>
+        <td>{{ e.tycodDescription }}</td>
+        <td>{{ e.eventComment }}</td>
+        <td>{{ e.dispatched or e.created }}</td>
+        <td>
+          {% for c in e.callers %}{{ c.name }} ({{ c.number }}){% if not loop.last %}, {% endif %}{% endfor %}
+        </td>
+        <td>{{ e.targets|join(', ') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h3 style="font-size:.9rem;margin:0 0 6px 0">Regionale Einsätze (andere Wehren, letzte {{ latest.public_events|length }})</h3>
+  {% if not latest.public_events %}
+  <p class="form-hint" style="margin-bottom:14px">Keine Daten.</p>
+  {% else %}
+  <table class="table-admin" style="font-size:.8rem;margin-bottom:14px">
+    <thead>
+      <tr><th>Nummer</th><th>Agentur</th><th>Stichwort</th><th>Alarmiert</th></tr>
+    </thead>
+    <tbody>
+      {% for e in latest.public_events[:15] %}
+      <tr>
+        <td>{{ e.eventNumber }}</td>
+        <td>{{ e.ag }}</td>
+        <td>{{ e.tycodDescription }}</td>
+        <td>{{ e.dispatched or e.created }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h3 style="font-size:.9rem;margin:0 0 6px 0">Fahrzeuge</h3>
+  {% if not latest.units %}
+  <p class="form-hint" style="margin-bottom:14px">Keine Daten.</p>
+  {% else %}
+  <table class="table-admin" style="font-size:.8rem;margin-bottom:14px">
+    <thead>
+      <tr><th>Kennung</th><th>Rufname</th><th>Typ</th><th>Status</th><th>Seit</th><th>Einsatz</th></tr>
+    </thead>
+    <tbody>
+      {% for u in latest.units %}
+      <tr>
+        <td>{{ u.unid }}</td>
+        <td>{{ u.unidRfl }}</td>
+        <td>{{ u.unitType }}</td>
+        <td>{{ u.currentStatusText }}</td>
+        <td>{{ u.currentStatusTime }}</td>
+        <td>{{ u.eventNumber or '-' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h3 style="font-size:.9rem;margin:0 0 6px 0">Funkgeräte</h3>
+  {% if not latest.radios %}
+  <p class="form-hint">Keine Daten.</p>
+  {% else %}
+  <table class="table-admin" style="font-size:.8rem">
+    <thead>
+      <tr><th>ISSI</th><th>Alias</th><th>Sprechgruppe</th><th>Status</th><th>Dienststelle</th></tr>
+    </thead>
+    <tbody>
+      {% for r in latest.radios %}
+      <tr>
+        <td>{{ r.issi }}</td>
+        <td>{{ r.alias }}</td>
+        <td>{{ r.talkGroup or '-' }}</td>
+        <td>{{ r.state or '-' }}</td>
+        <td>{{ r.department }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% endif %}
+</div>

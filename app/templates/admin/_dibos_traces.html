@@ -1,0 +1,70 @@
+{% if org %}
+<div id="dibos-traces" hx-get="/admin/dibos/trace/status?org_id={{ org.id }}" hx-trigger="every 10s" hx-swap="outerHTML">
+  {% if not traces %}
+  <p class="form-hint">Noch keine Aufzeichnungen für diese Organisation.</p>
+  {% else %}
+  <table class="table-admin" style="font-size:.82rem">
+    <thead>
+      <tr>
+        <th>Gestartet (UTC)</th>
+        <th>Status</th>
+        <th>Dauer</th>
+        <th>Exchanges</th>
+        <th>Aktionen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in traces %}
+      <tr>
+        <td>{{ t.run_id }}</td>
+        <td>
+          {% if t.running %}
+          <span class="badge-pill badge-pill--green">läuft</span>
+          {% elif t.finished %}
+          <span class="badge-pill badge-pill--gray">fertig</span>
+          {% else %}
+          <span class="badge-pill badge-pill--orange">abgebrochen</span>
+          {% endif %}
+        </td>
+        <td>{{ t.duration_minutes }} min</td>
+        <td>{{ t.exchange_count }}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn--ghost btn--xs"
+                  hx-get="/admin/dibos/trace/{{ t.run_id }}/live?target_org_id={{ org.id }}"
+                  hx-target="#dibos-live" hx-swap="outerHTML">
+            Live-Ansicht
+          </button>
+          {% if t.running %}
+          <button class="btn btn--ghost btn--xs"
+                  hx-post="/admin/dibos/trace/{{ t.run_id }}/cancel"
+                  hx-vals='{"_csrf": "{{ request.state.csrf_token }}", "target_org_id": "{{ org.id }}"}'
+                  hx-target="#dibos-traces" hx-swap="outerHTML">
+            Abbrechen
+          </button>
+          {% else %}
+          <button class="btn btn--ghost btn--xs" style="color:var(--color-danger)"
+                  hx-post="/admin/dibos/trace/{{ t.run_id }}/delete"
+                  hx-vals='{"_csrf": "{{ request.state.csrf_token }}", "target_org_id": "{{ org.id }}"}'
+                  hx-target="#dibos-traces" hx-swap="outerHTML"
+                  hx-confirm="Aufzeichnung wirklich löschen?">
+            Löschen
+          </button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <p class="form-hint" style="margin-top:10px">
+    Rohdateien liegen ausschließlich auf dem Server unter
+    <code>app_storage/dibos_trace/{{ org.id }}/&lt;Lauf&gt;/</code> —
+    kein Browser-Download (Personenbezug). Sobald ein Lauf endet (Zeit abgelaufen
+    oder "Abbrechen" geklickt), werden alle Rohdateien dort automatisch zu einem
+    einzigen ZIP zusammengefasst (Live-Snapshot bleibt als latest.json erhalten).
+    Werden nach {{ trace_retention_days }} Tagen automatisch gelöscht.
+  </p>
+</div>
+{% else %}
+<p class="form-hint">Bitte zuerst eine Organisation auswählen.</p>
+{% endif %}
