@@ -104,6 +104,33 @@
         reconnectAttempt = 0;
       });
 
+      // Einziger WS-Handler fuer das Lage-Board (vormals zusaetzlich dupliziert
+      // in board.html inline -- zwei unabhaengige Verbindungen zum selben
+      // Endpunkt mit widerspruechlicher Behandlung derselben Events, siehe
+      // GSL-Reload-Audit Session 2026-07-16). Vollstaendiger Dispatch aller
+      // von ui_major_incident.py::broadcast_lage() gesendeten Event-Typen,
+      // die das Board betreffen -- keiner davon reloadet mehr die Seite.
+      function refreshCard(siteId) {
+        const card = document.querySelector(`.site-card[data-site-id="${siteId}"]`);
+        if (card) {
+          htmx.ajax('GET', `/lage/${lageId}/stellen/${siteId}/card`, {
+            target: card,
+            swap: 'outerHTML',
+          }).then(() => scheduleInit());
+        }
+        const modal = document.getElementById('siteDetailModal');
+        const content = document.getElementById('siteDetailContent');
+        if (modal && modal.open && content) {
+          const header = content.querySelector('.modal__header[data-open-site-id]');
+          if (header && String(header.dataset.openSiteId) === String(siteId)) {
+            htmx.ajax('GET', `/lage/${lageId}/stellen/${siteId}`, {
+              target: '#siteDetailContent',
+              swap: 'innerHTML',
+            });
+          }
+        }
+      }
+
       ws.addEventListener('message', evt => {
         try {
           const msg = JSON.parse(evt.data);
@@ -111,28 +138,38 @@
             htmx.trigger(document.body, 'crossMarkerChanged');
             return;
           }
-          if (msg.type === 'site:card_changed' && msg.site_id) {
-            const card = document.querySelector(`.site-card[data-site-id="${msg.site_id}"]`);
-            if (card) {
-              htmx.ajax('GET', `/lage/${lageId}/stellen/${msg.site_id}/card`, {
-                target: card,
-                swap: 'outerHTML',
-              }).then(() => scheduleInit());
-            }
-            const modal = document.getElementById('siteDetailModal');
-            const content = document.getElementById('siteDetailContent');
-            if (modal && modal.open && content) {
-              const header = content.querySelector('.modal__header[data-open-site-id]');
-              if (header && String(header.dataset.openSiteId) === String(msg.site_id)) {
-                htmx.ajax('GET', `/lage/${lageId}/stellen/${msg.site_id}`, {
-                  target: '#siteDetailContent',
-                  swap: 'innerHTML',
-                });
-              }
-            }
+          // Reine Karten-Attribut-Aenderungen (keine Phasen-/Spaltenbewegung):
+          // site_updated/site:sector_changed aendern nie site.phase (site_edit()
+          // aendert nur Bezeichnung/Adresse; die Abschnitts-Zuweisung haengt nicht
+          // von der Phase ab) -- ein gezielter Karten-Swap genuegt, kein Reload.
+          if (
+            (msg.type === 'site:card_changed' || msg.type === 'site_prio_changed'
+              || msg.type === 'site_updated' || msg.type === 'site:sector_changed')
+            && msg.site_id
+          ) {
+            refreshCard(msg.site_id);
             return;
           }
-          if (msg.reload_board || msg.type === 'site:sector_changed') location.reload();
+          // Strukturelle Aenderungen (neue Karte / Karte wechselt die Phasen-Spalte):
+          // alle Phasen-Spalten hoeren per hx-trigger="sitePhaseChanged from:body"
+          // auf dieses Event und laden ihren Inhalt gezielt per htmx-GET neu
+          // (analog zum bestehenden cross-marker-col-body-Muster), niemand muss
+          // wissen, welche Spalte konkret betroffen ist.
+          if (msg.type === 'site_created' || msg.type === 'site_phase_changed') {
+            htmx.trigger(document.body, 'sitePhaseChanged');
+            return;
+          }
+          // Lage-Stammdaten (Name/Status) geaendert: nur die Kopfzeile per OOB
+          // nachladen, kein Reload -- analog zur Kopfleiste des Einsatz-Boards.
+          if (msg.type === 'lage_updated') {
+            htmx.ajax('GET', `/lage/${lageId}/kopf`, { target: document.body, swap: 'none' });
+            return;
+          }
+          // Lage beendet: Board ist als Live-Kontext vorbei -- gezielt aufs
+          // Dashboard weiterleiten statt die Seite blind neu zu laden.
+          if (msg.type === 'lage_closed') {
+            window.location.href = `/lage/${lageId}/dashboard`;
+          }
         } catch (e) { /* noop */ }
       });
 
@@ -166,4 +203,19 @@
   document.body.addEventListener('htmx:afterSwap',    scheduleInit);
   document.body.addEventListener('htmx:oobAfterSwap', scheduleInit);
   document.body.addEventListener('htmx:afterSettle',  scheduleInit);
+
+  // Kurzer optischer Puls auf einer frisch per WS/HTMX aktualisierten Karte
+  // (vormals inline in board.html neben der jetzt entfernten zweiten
+  // WS-Verbindung; hierher verschoben, damit es weiterhin ausgeloest wird).
+  document.body.addEventListener('htmx:afterSwap', evt => {
+    const tgt = evt.detail.target;
+    if (tgt && tgt.dataset && tgt.dataset.siteId) {
+      if (typeof window.applyBoardFilters === 'function') window.applyBoardFilters();
+      const newCard = document.querySelector(`.site-card[data-site-id="${tgt.dataset.siteId}"]`);
+      if (newCard) {
+        newCard.classList.add('site-card--refreshed');
+        setTimeout(() => newCard.classList.remove('site-card--refreshed'), 800);
+      }
+    }
+  });
 })();

@@ -300,7 +300,10 @@
         <span>{{ phase_labels[phase] }}</span>
         <span class="phase-col__count">{{ phase_sites|length }}</span>
       </div>
-      <div class="phase-col__body" data-phase="{{ phase.value }}">
+      <div class="phase-col__body" data-phase="{{ phase.value }}"
+           hx-get="/lage/{{ lage.id }}/phase/{{ phase.value }}/inhalt"
+           hx-trigger="sitePhaseChanged from:body"
+           hx-swap="innerHTML">
         {% for site in phase_sites %}
         {% include "incident_major/_site_card.html" %}
         {% endfor %}
@@ -314,7 +317,10 @@
         <span>Abgebrochen</span>
         <span class="phase-col__count">{{ abgebrochen_sites|length }}</span>
       </div>
-      <div class="phase-col__body" data-phase="abgebrochen">
+      <div class="phase-col__body" data-phase="abgebrochen"
+           hx-get="/lage/{{ lage.id }}/phase/abgebrochen/inhalt"
+           hx-trigger="sitePhaseChanged from:body"
+           hx-swap="innerHTML">
         {% for site in abgebrochen_sites %}
         {% include "incident_major/_site_card.html" %}
         {% endfor %}
@@ -361,7 +367,8 @@
       <h3 class="modal__title">Einsatzstelle anlegen</h3>
       <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
-    <form method="post" action="/lage/{{ lage.id }}/stellen/neu">
+    <form hx-post="/lage/{{ lage.id }}/stellen/neu" hx-swap="none"
+          hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); this.reset(); } else { alert('Fehler beim Anlegen: ' + (event.detail.xhr.responseText || 'unbekannter Fehler')); }">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
         <div class="form-group">
@@ -745,53 +752,11 @@ window.openMeldungDialog = function() {
   }, 150);
 })();
 
-// ── WebSocket: Einsatzkarten live aktualisieren ────────────────────────────
-(function() {
-  var proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  var lageId = {{ lage.id }};
-  var ws, ping;
-
-  function connect() {
-    ws = new WebSocket(proto + '://' + location.host + '/ws/lage/' + lageId);
-    ws.addEventListener('open', function() {
-      ping = setInterval(function() { if (ws.readyState === 1) ws.send('ping'); }, 25000);
-    });
-    ws.addEventListener('message', function(evt) {
-      try {
-        var msg = JSON.parse(evt.data);
-        if ((msg.type === 'site:card_changed' || msg.type === 'site_prio_changed' || msg.type === 'site:sector_changed') && msg.site_id) {
-          var card = document.querySelector('[data-site-id="' + msg.site_id + '"]');
-          if (card) {
-            htmx.ajax('GET', '/lage/' + lageId + '/stellen/' + msg.site_id + '/card', {
-              target: card,
-              swap: 'outerHTML'
-            });
-          }
-        }
-        if (msg.type === 'site_created' || msg.type === 'site_phase_changed' || msg.type === 'site_updated' || msg.type === 'lage_updated') {
-          location.reload();
-        }
-      } catch(e) {}
-    });
-    ws.addEventListener('close', function() {
-      clearInterval(ping);
-      setTimeout(connect, 5000);
-    });
-    ws.addEventListener('error', function() { ws.close(); });
-  }
-  connect();
-
-  document.body.addEventListener('htmx:afterSwap', function(e) {
-    var tgt = e.detail.target;
-    if (tgt && tgt.dataset && tgt.dataset.siteId) {
-      applyBoardFilters();
-      var newCard = document.querySelector('[data-site-id="' + tgt.dataset.siteId + '"]');
-      if (newCard) {
-        newCard.classList.add('site-card--refreshed');
-        setTimeout(function() { newCard.classList.remove('site-card--refreshed'); }, 800);
-      }
-    }
-  });
-})();
+// WebSocket-Verbindung + Live-Update-Dispatch fuer dieses Board leben jetzt
+// ausschliesslich in lage_board.js (initWs()) -- vormals oeffnete dieses
+// Inline-Skript eine ZWEITE, unabhaengige Verbindung zu /ws/lage/{{ lage.id }}
+// mit abweichender Event-Behandlung (u.a. Volltreload bei site_created/
+// site_phase_changed/site_updated/lage_updated). Siehe GSL-Reload-Audit
+// Session 2026-07-16.
 </script>
 {% endblock %}

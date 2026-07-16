@@ -368,6 +368,10 @@ function openFjLm(lageId, siteId, label) {
         var msg = JSON.parse(ev.data);
         if (msg.type === 'funkjournal:changed') {
           htmx.ajax('GET', '/lage/{{ lage.id }}/funkjournal/rows', {target:'#fj-table-section', swap:'innerHTML'});
+        } else if (msg.type === 'lage_updated') {
+          htmx.ajax('GET', '/lage/{{ lage.id }}/kopf', { target: document.body, swap: 'none' });
+        } else if (msg.type === 'lage_closed') {
+          window.location.href = '/lage/{{ lage.id }}/dashboard';
         }
       } catch(e) {}
     };

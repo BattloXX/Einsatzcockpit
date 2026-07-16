@@ -1170,6 +1170,13 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   flex-wrap: wrap;
   min-height: 44px;
 }
+.lage-ctx-bar__info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
 .lage-ctx-bar__title {
   font-weight: 700;
   font-size: .95rem;

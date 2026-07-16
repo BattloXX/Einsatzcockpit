@@ -28,7 +28,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pycrdt import Channel
 from sqlalchemy.orm import Session
 
@@ -111,6 +111,11 @@ async def lagedokument_save(
     dokument.updated_at = datetime.now(UTC)
     dokument.updated_by_user_id = user.id
     db.commit()
+    if request.headers.get("HX-Request") == "true":
+        # Nur noch per HTMX aufgerufen (lagedokument.html, hx-swap="none") --
+        # der Banner-Hinweis kommt clientseitig aus htmx:afterRequest, kein
+        # Redirect/Reload noetig (GSL-Reload-Audit 2026-07-16).
+        return Response(status_code=204)
     return RedirectResponse(f"/lage/{lage_id}/lagedokument?gespeichert=1", status_code=303)
 
 

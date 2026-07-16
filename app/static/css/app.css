@@ -82,6 +82,7 @@
 .lage-page{display:flex;flex-direction:column;height:calc(100vh - var(--topnav-h));}
 .lage-ctx-bar{flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);}
 .lage-ctx-bar__head{display:flex;align-items:center;gap:8px;padding:6px 12px;flex-wrap:wrap;min-height:44px;}
+.lage-ctx-bar__info{display:flex;align-items:center;gap:8px;flex:1;min-width:0;}
 .lage-ctx-bar__title{font-weight:700;font-size:.95rem;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .lage-ctx-bar__tabs-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-top:1px solid var(--border);}
 .lage-ctx-bar__tabs{display:flex;gap:2px;padding:3px;overflow-x:auto;flex:1;background:var(--surface-mid);border:1px solid var(--border);border-radius:var(--radius-lg,.75rem);scrollbar-width:none;}

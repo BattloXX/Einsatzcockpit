@@ -99,9 +99,14 @@ def test_lagedokument_speichern_und_erneut_laden(client, setup_db):
 
     r = client.get(f"/lage/{lage_id}/lagedokument")
     assert "Erster Stand" in r.text
-    assert "Gespeichert" not in r.text  # ohne ?gespeichert=1 kein Banner
+    # Ohne ?gespeichert=1 kein serverseitig gerenderter Banner (die Pruefung
+    # zielt auf die {% if gespeichert %}-Markup, nicht auf das statische JS
+    # weiter unten im Dokument, das den Banner nur nach einem erfolgreichen
+    # HTMX-Save clientseitig einfuegt, siehe htmx:afterRequest-Handler).
+    assert 'class="alert alert--success"' not in r.text
 
     r = client.get(r.request.url.path + "?gespeichert=1")
+    assert 'class="alert alert--success"' in r.text
     assert "Gespeichert" in r.text
 
 

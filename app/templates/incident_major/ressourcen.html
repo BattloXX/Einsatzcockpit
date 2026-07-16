@@ -181,7 +181,8 @@
      style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);">
   <div class="dash-section" style="--dash-accent:var(--green);margin:0;max-width:780px;">
     <div class="dash-section__title">➕ Einheit hinzufügen</div>
-    <form method="post" action="/lage/{{ lage.id }}/einheiten">
+    <form hx-post="/lage/{{ lage.id }}/einheiten" hx-swap="none"
+          hx-on::after-request="if(event.detail.successful){ this.reset(); htmx.trigger(document.body,'ressourceChanged'); } else { alert('Fehler beim Hinzufügen: ' + (event.detail.xhr.responseText || 'unbekannter Fehler')); }">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="res-add-grid">
         <div>
@@ -317,6 +318,10 @@ function resTypeChanged(v) {
         var msg = JSON.parse(evt.data);
         if (msg.type === 'site:card_changed' || msg.type === 'ressource:changed') {
           htmx.trigger(document.body, 'ressourceChanged');
+        } else if (msg.type === 'lage_updated') {
+          htmx.ajax('GET', '/lage/{{ lage.id }}/kopf', { target: document.body, swap: 'none' });
+        } else if (msg.type === 'lage_closed') {
+          window.location.href = '/lage/{{ lage.id }}/dashboard';
         }
       } catch(e) {}
     });

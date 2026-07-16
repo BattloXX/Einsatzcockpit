@@ -1,0 +1,8 @@
+{# Out-of-Band-Fragment fuer die Lage-Kopfzeile (Titel + Status).
+   Variablen: lage. Wird auf lage_updated per WS auf allen Seiten mit
+   WS-Verbindung (board/karte/funkjournal/ressourcen/stab) nachgeladen,
+   analog zu _kopfleiste_oob.html beim Einsatz-Board. #}
+<div id="lageCtxBarInfo" class="lage-ctx-bar__info" hx-swap-oob="true">
+  <div class="lage-ctx-bar__title" title="{{ lage.name }}">{{ lage.name }}</div>
+  <span class="lage-status lage-status--{{ lage.status.value }}">{{ lage.status.value }}</span>
+</div>

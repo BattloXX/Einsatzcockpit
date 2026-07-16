@@ -233,7 +233,10 @@
               hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/phase"
               hx-vals='{"_csrf": "{{ request.state.csrf_token }}", "sort_index": "0"}'
               name="phase" hx-trigger="change" hx-swap="none"
-              hx-on::after-request="if(event.detail.successful) location.reload()">
+              hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); }">
+        {# Board-Spalte aktualisiert sich selbst ueber den WS-Broadcast
+           (site_phase_changed -> sitePhaseChanged-Trigger auf allen Phasen-
+           Spalten, siehe lage_board.js) -- hier reicht der Panel-Refresh. #}
         {% for phase_key, phase_text in phase_labels.items() %}
         <option value="{{ phase_key.value }}" {% if site.phase == phase_key %}selected{% endif %}>{{ phase_text }}</option>
         {% endfor %}
