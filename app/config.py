@@ -130,6 +130,13 @@ class Settings(BaseSettings):
     OBJEKT_OCR_LANG: str = "deu+eng"               # Tesseract-Sprachpakete
     OBJEKT_VOLLTEXT_MAX_CHARS: int = 100_000        # Kappung je Seite
 
+    # Nachschlagewerke (Gefahrgut-Suche, Rettungsdatenblaetter, Karten-Overlays).
+    # Sync-Downloads landen hier (persistent, ausserhalb des read-only Repo-app/data);
+    # Fallback-Seed bleibt app/data/bam_gefahrgut.csv.
+    NACHSCHLAGEWERK_DATA_DIR: str = "app_storage/nachschlagewerk"
+    # Taeglicher Sync des Gefahrgut-Datensatzes (BAM/ADR, dl-de). False = aus.
+    NACHSCHLAGEWERK_SYNC_ENABLED: bool = True
+
     # KI-Integration (Anthropic Claude)
     ANTHROPIC_API_KEY: str = ""
     AI_ENABLED: bool = False

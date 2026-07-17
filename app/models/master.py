@@ -381,6 +381,11 @@ class OrgSettings(Base):
     # Objektverwaltung: je Org aktivierbar, effektiv = SystemSettings-Key
     # "objekt_module_enabled" == "true" AND dieser Wert (Muster UAS).
     objekt_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Nachschlagewerke (Gefahrgut-Suche, Rettungsdatenblaetter, Karten-Overlays):
+    # effektiv = SystemSettings-Key "nachschlagewerke_module_enabled" == "true"
+    # AND dieser Wert (Muster UAS/Objekt/Gateway).
+    nachschlagewerke_module_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False)
     # Geo-Fallback des Alarm-Matchings: max. Distanz Einsatz↔Objekt in Metern
     objekt_geo_match_radius_m: Mapped[int] = mapped_column(Integer, nullable=False, default=75)
     # Alarm-Infoscreen (Wandmonitor): Ruhezustand + Dauer der Alarmansicht

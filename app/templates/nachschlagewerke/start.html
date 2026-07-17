@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Nachschlagewerke – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>📚 Nachschlagewerke</h1>
+      <p class="text-muted">Gefahrgut, Rettungsdatenblätter und Ausbreitung – offline verfügbar</p>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;">
+    <a href="/nachschlagewerke/gefahrgut" class="card"
+       style="display:flex;gap:16px;align-items:flex-start;padding:18px;text-decoration:none;color:inherit;">
+      <div style="font-size:2.4rem;line-height:1;">☣️</div>
+      <div>
+        <h2 style="margin:0 0 6px;font-size:1.1rem;">Gefahrgut</h2>
+        <p class="text-muted" style="margin:0;">Suche nach UN-Nummer oder Stoffname – ERI-Karte mit
+          Eigenschaften, Gefahren und Schutzmaßnahmen.</p>
+      </div>
+    </a>
+    <a href="/nachschlagewerke/rettungskarten" class="card"
+       style="display:flex;gap:16px;align-items:flex-start;padding:18px;text-decoration:none;color:inherit;">
+      <div style="font-size:2.4rem;line-height:1;">🚑</div>
+      <div>
+        <h2 style="margin:0 0 6px;font-size:1.1rem;">Rettungsdatenblätter</h2>
+        <p class="text-muted" style="margin:0;">Rettungskarten für die technische Rettung – Suche
+          nach Hersteller und Modell.</p>
+      </div>
+    </a>
+  </div>
+</div>
+{% endblock %}

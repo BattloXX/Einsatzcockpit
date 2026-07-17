@@ -21,7 +21,8 @@ from app.db import get_db
 # (effektiv = System-Flag "true" AND Org-Flag) — hier nur gebündelt, damit pro
 # Request 2 Queries statt bis zu 10 anfallen (Audit B4).
 _SYSTEM_FLAG_KEYS = ("uas_module_enabled", "objekt_module_enabled",
-                     "gateway_module_enabled", "lagefuehrung_modul_aktiv")
+                     "gateway_module_enabled", "lagefuehrung_modul_aktiv",
+                     "nachschlagewerke_module_enabled")
 
 
 def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session) -> None:
@@ -48,6 +49,9 @@ def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session)
             "uas_module_enabled" in sys_on and org_s and org_s.uas_module_enabled)
         request.state.objekt_enabled = bool(
             "objekt_module_enabled" in sys_on and org_s and org_s.objekt_module_enabled)
+        request.state.nachschlagewerke_enabled = bool(
+            "nachschlagewerke_module_enabled" in sys_on
+            and org_s and org_s.nachschlagewerke_module_enabled)
         request.state.gateway_enabled = bool(
             "gateway_module_enabled" in sys_on and org_s and org_s.gateway_module_enabled)
         request.state.lagefuehrung_modul_aktiv = bool(
@@ -75,6 +79,7 @@ def _resolve_current_org(
     # Modul-Defaults: aus (wird unten ggf. überschrieben)
     request.state.uas_module_enabled = False
     request.state.objekt_enabled = False
+    request.state.nachschlagewerke_enabled = False
     request.state.gateway_enabled = False
     request.state.fahrtenbuch_modul_aktiv = False
     request.state.atemschutz_pruefung_modul_aktiv = False
