@@ -1008,17 +1008,32 @@
         });
         disarmPlacement();
       } else if (p.kind === "ausbreitung") {
-        var aLat = latlng.lat, aLng = latlng.lng, aLaenge = p.data.laenge || 300;
+        var aLat = latlng.lat, aLng = latlng.lng;
+        var d = p.data || {};
         disarmPlacement();
-        fetchJson(apiBase + "/ausbreitung.json?lat=" + aLat + "&lng=" + aLng + "&laenge=" + aLaenge)
+        var url = apiBase + "/ausbreitung.json?lat=" + aLat + "&lng=" + aLng;
+        if (d.modell === "gauss") {
+          url += "&modell=gauss&quellstaerke=" + (d.quellstaerke || 0) +
+                 "&stabilitaet=" + encodeURIComponent(d.stabilitaet || "D") +
+                 "&grenzwert=" + (d.grenzwert || 1);
+        } else {
+          url += "&modell=kegel&laenge=" + (d.laenge || 300);
+        }
+        fetchJson(url)
           .then(function (r) {
-            if (!r || !r.geometry) { alert("Ausbreitung konnte nicht berechnet werden (Koordinaten/Wind fehlen)."); return; }
+            if (!r || !r.geometry || !r.geometry.coordinates || !r.geometry.coordinates[0] || !r.geometry.coordinates[0].length) {
+              alert("Ausbreitung konnte nicht berechnet werden (Koordinaten/Wind fehlen oder kein Bereich ueber Grenzwert).");
+              return;
+            }
             var hinweis = r.wind_bekannt ? "" : " (kein Wind - Richtung Nord)";
+            var label = (r.modell === "gauss")
+              ? "Gauss-Fahne" + hinweis
+              : "Ausbreitung " + r.laenge_m + " m" + hinweis;
             createFeature({
               typ: "ausbreitung",
-              label: "Ausbreitung " + r.laenge_m + " m" + hinweis,
+              label: label,
               geometry: r.geometry,
-              props: { farbe: "#f59e0b", laenge_m: r.laenge_m, richtung_deg: r.richtung_deg },
+              props: { farbe: "#f59e0b", modell: r.modell, laenge_m: r.laenge_m || null, richtung_deg: r.richtung_deg },
               layer_gruppe: "zeichnung"
             });
           })
@@ -1096,14 +1111,32 @@
           armPlacement("gefahrenradius", { preset: null, zonen: [{ rolle: "sperr", radius_m: r, farbe: "#dc2626", label: "Sperrbereich" }] });
         });
       }
-      // Ausbreitungs-Kegel (windbezogen): Reichweite waehlen, dann Quellpunkt klicken.
+      // Ausbreitung (windbezogen): Modell Kegel (Richtwert) oder Gauss (Konzentration).
+      var selModell = document.getElementById("lft-plume-modell");
+      if (selModell) {
+        selModell.addEventListener("change", function () {
+          var gauss = selModell.value === "gauss";
+          var kf = document.getElementById("lft-plume-kegel-felder");
+          var gf = document.getElementById("lft-plume-gauss-felder");
+          if (kf) { kf.style.display = gauss ? "none" : "flex"; }
+          if (gf) { gf.style.display = gauss ? "flex" : "none"; }
+        });
+      }
       var btnPlume = document.getElementById("lft-plume-start");
       if (btnPlume) {
         btnPlume.addEventListener("click", function () {
-          var inp = document.getElementById("lft-plume-laenge");
-          var laenge = inp ? parseInt(inp.value, 10) : 300;
-          if (!laenge || laenge <= 0) { laenge = 300; }
-          armPlacement("ausbreitung", { laenge: laenge });
+          var modell = selModell ? selModell.value : "kegel";
+          if (modell === "gauss") {
+            var q = parseFloat((document.getElementById("lft-plume-q") || {}).value) || 0;
+            var stab = (document.getElementById("lft-plume-stab") || {}).value || "D";
+            var grenz = parseFloat((document.getElementById("lft-plume-grenz") || {}).value) || 1;
+            armPlacement("ausbreitung", { modell: "gauss", quellstaerke: q, stabilitaet: stab, grenzwert: grenz });
+          } else {
+            var inp = document.getElementById("lft-plume-laenge");
+            var laenge = inp ? parseInt(inp.value, 10) : 300;
+            if (!laenge || laenge <= 0) { laenge = 300; }
+            armPlacement("ausbreitung", { modell: "kegel", laenge: laenge });
+          }
         });
       }
 
