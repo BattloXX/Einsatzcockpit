@@ -7,6 +7,9 @@ Handler `request.form()` weiterhin nutzen können.
 - Bei unsafen Methoden (POST/PUT/PATCH/DELETE) muss der gleiche Wert
   als `X-CSRF-Token`-Header ODER als `_csrf`-Form-Feld vorhanden sein.
 - Stimmt nichts → 403.
+- Header-first (Audit B5): Ist der Header vorhanden, wird er sofort geprüft
+  und der Body ungepuffert durchgestreamt; nur der Formfeld-Fallback puffert
+  den Body (für Parse + Replay) im Speicher.
 
 Ausnahmen: /ws/*, /api/v1/* (X-API-Key authentifiziert), /static/*, /push/*,
 /api/import/* (TEMPORAER, X-Import-Key authentifiziert, siehe app/routers/api_import.py).
@@ -123,10 +126,31 @@ class CSRFMiddleware:
                     await resp(scope, receive, send)
                     return
 
-        # Body buffern, damit wir ihn ggf. parsen UND später replayen können
-        body_chunks: list[bytes] = []
-        more_body = True
         if needs_check:
+            # Header-first (Audit B5): Ist der X-CSRF-Token-Header vorhanden,
+            # wird er sofort geprüft und der Body UNGEPUFFERT durchgestreamt.
+            # Vorher wurde der komplette Body IMMER erst in den RAM gelesen —
+            # bei Objekt-PDF-Uploads bis zu 100 MB, die dann doppelt im
+            # Speicher lagen (Puffer + Replay). JS-Uploads setzen den Header
+            # bereits (csrf.js); der Body-Puffer bleibt nur noch als Fallback
+            # für klassische Formulare mit _csrf-Feld.
+            header_token = headers.get(CSRF_HEADER.lower())
+            if header_token:
+                if not _constant_time_eq(header_token, existing_token):
+                    from starlette.responses import JSONResponse
+                    resp = JSONResponse(
+                        {"detail": "CSRF-Token fehlt oder ungültig"},
+                        status_code=403,
+                    )
+                    await resp(scope, receive, send)
+                    return
+                await self._call_with_cookie(scope, receive, send, new_token)
+                return
+
+            # Fallback: Body buffern, damit wir das _csrf-Formfeld parsen UND
+            # den Body später replayen können.
+            body_chunks: list[bytes] = []
+            more_body = True
             while more_body:
                 message = await receive()
                 if message["type"] == "http.request":
@@ -140,10 +164,9 @@ class CSRFMiddleware:
             raw_body = b"".join(body_chunks)
             content_type = headers.get("content-type", "")
 
-            header_token = headers.get(CSRF_HEADER.lower())
-            submitted: str | None = header_token
+            submitted: str | None = None
 
-            if not submitted and "application/x-www-form-urlencoded" in content_type:
+            if "application/x-www-form-urlencoded" in content_type:
                 try:
                     parsed = parse_qs(raw_body.decode("utf-8", errors="ignore"),
                                       keep_blank_values=True)
@@ -151,7 +174,7 @@ class CSRFMiddleware:
                         submitted = parsed[CSRF_FORM_FIELD][0]
                 except Exception:
                     pass
-            elif not submitted and "multipart/form-data" in content_type:
+            elif "multipart/form-data" in content_type:
                 # Manuelles Multipart-Parsing wäre teuer. Pragmatisch:
                 # Suche den Token-Wert anhand der Boundary
                 try:
