@@ -108,7 +108,7 @@ async def dispatch_alert(
     # ── Teams ─────────────────────────────────────────────────────────────────
     if rule.channel_teams and teams_url:
         theme = _THEME_COLORS.get(result.state, "d42225")
-        ok = _post_teams(teams_url, betreff, body_text, detail_url or None, theme)
+        ok = await _post_teams(teams_url, betreff, body_text, detail_url or None, theme)
         db.add(WeatherAlertLog(
             org_id=rule.org_id,
             key=rule.key,
@@ -125,7 +125,7 @@ async def dispatch_alert(
     db.commit()
 
 
-def _post_teams(webhook_url: str, titel: str, text: str, url: str | None, theme: str) -> bool:
+async def _post_teams(webhook_url: str, titel: str, text: str, url: str | None, theme: str) -> bool:
     """Sendet Teams-Karte mit konfigurierter Farbe."""
     import httpx
 
@@ -147,7 +147,11 @@ def _post_teams(webhook_url: str, titel: str, text: str, url: str | None, theme:
             "targets": [{"os": "default", "uri": url}],
         }]
     try:
-        resp = httpx.post(webhook_url, json=payload, timeout=10.0)
+        # Async statt httpx.post (sync): der Aufruf lief bisher direkt im
+        # Event-Loop — bei hängendem Webhook stand der ganze Worker bis zu
+        # 10 s still (Audit B2).
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(webhook_url, json=payload)
         resp.raise_for_status()
         return True
     except Exception as exc:

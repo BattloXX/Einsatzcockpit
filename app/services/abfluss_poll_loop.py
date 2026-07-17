@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from app.services.loop_utils import iteration_watch
+
 logger = logging.getLogger("einsatzleiter.abfluss_poll_loop")
 
 
@@ -24,7 +26,8 @@ async def abfluss_poll_loop() -> None:
     while True:
         try:
             await asyncio.sleep(settings.ABFLUSS_POLL_INTERVAL_S)
-            await _poll_all_orgs()
+            with iteration_watch(logger, "abfluss_poll_loop", settings.ABFLUSS_POLL_INTERVAL_S):
+                await _poll_all_orgs()
         except asyncio.CancelledError:
             logger.info("abfluss_poll_loop beendet")
             break
@@ -33,20 +36,23 @@ async def abfluss_poll_loop() -> None:
 
 
 async def _poll_all_orgs() -> None:
-    from app.core.tenant import set_tenant_context
-    from app.db import SessionLocal
-    from app.models.master import OrgSettings
     from app.services import abfluss_service
 
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        orgs_stationen = [
-            (o.org_id, o.abfluss_stationen_list)
-            for o in db.query(OrgSettings).filter(OrgSettings.abfluss_stationen.isnot(None)).all()
-        ]
-    finally:
-        db.close()
+    def _lade_orgs() -> list[tuple[int, list]]:
+        from app.core.tenant import set_tenant_context
+        from app.db import SessionLocal
+        from app.models.master import OrgSettings
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            return [
+                (o.org_id, o.abfluss_stationen_list)
+                for o in db.query(OrgSettings).filter(OrgSettings.abfluss_stationen.isnot(None)).all()
+            ]
+        finally:
+            db.close()
+
+    orgs_stationen = await asyncio.to_thread(_lade_orgs)
 
     for org_id, stationen in orgs_stationen:
         if not stationen:

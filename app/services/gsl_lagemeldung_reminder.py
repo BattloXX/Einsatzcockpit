@@ -111,27 +111,38 @@ def _scan_and_create(db) -> list[dict]:
     return events
 
 
+def _scan_in_new_session() -> list[dict]:
+    """DB-Arbeit für den Threadpool (Audit B2): Session lebt komplett im Worker-Thread."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        return _scan_and_create(db)
+    finally:
+        db.close()
+
+
+async def _broadcast_events(events: list[dict]) -> None:
+    for ev in events:
+        lage_id = ev["lage_id"]
+        try:
+            if not ev.get("card_only"):
+                await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
+            await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": ev["site_id"]})
+        except Exception:
+            logger.exception(
+                "gsl_lagemeldung_reminder: WS-Broadcast für Lage %s fehlgeschlagen", lage_id
+            )
+
+
 async def gsl_lagemeldung_reminder_loop() -> None:
+    from app.services.loop_utils import iteration_watch
     logger.info("gsl_lagemeldung_reminder_loop gestartet")
     while True:
         try:
             await asyncio.sleep(LOOP_INTERVAL_SECONDS)
-            db = SessionLocal()
-            set_tenant_context(db, None)
-            try:
-                events = _scan_and_create(db)
-            finally:
-                db.close()
-            for ev in events:
-                lage_id = ev["lage_id"]
-                try:
-                    if not ev.get("card_only"):
-                        await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
-                    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": ev["site_id"]})
-                except Exception:
-                    logger.exception(
-                        "gsl_lagemeldung_reminder: WS-Broadcast für Lage %s fehlgeschlagen", lage_id
-                    )
+            with iteration_watch(logger, "gsl_lagemeldung_reminder_loop", LOOP_INTERVAL_SECONDS):
+                events = await asyncio.to_thread(_scan_in_new_session)
+                await _broadcast_events(events)
         except asyncio.CancelledError:
             logger.info("gsl_lagemeldung_reminder_loop beendet")
             break

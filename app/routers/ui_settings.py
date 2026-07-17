@@ -1017,7 +1017,7 @@ async def weather_alert_test_teams(
         error = "Kein Teams-Webhook konfiguriert."
     else:
         from app.services.weather_alert_dispatch import _post_teams
-        ok = _post_teams(webhook, "Wetterwarnung Test", "Dies ist eine Test-Wetterwarnung.", None, "f59e0b")
+        ok = await _post_teams(webhook, "Wetterwarnung Test", "Dies ist eine Test-Wetterwarnung.", None, "f59e0b")
         if not ok:
             error = "Teams-Post fehlgeschlagen (Webhook-URL prüfen)"
 
