@@ -21,7 +21,7 @@
             hx-confirm="Meldung löschen?"
             hx-on::after-request="if(event.detail.successful){this.closest('.site-card').remove()}"
             style="margin:0;flex-shrink:0;">
-        <button type="submit" class="btn btn--xs btn--ghost" title="Löschen"
+        <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost" title="Löschen"
                 style="opacity:.45;padding:0 5px;font-size:.65rem;line-height:1.6;">✕</button>
       </form>
       {% endif %}

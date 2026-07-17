@@ -148,7 +148,7 @@
   <form method="post" action="/admin/mitglieder/excel-import" enctype="multipart/form-data" class="modal__content">
     <div class="modal__header">
       <h3>Mannschaft aus Excel importieren</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <p style="margin-bottom:8px;font-size:.85rem;color:var(--text-muted);">
@@ -180,7 +180,7 @@
   <form method="post" action="/admin/mitglieder/neu" class="modal__content">
     <div class="modal__header">
       <h3>Neues Mitglied</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <div class="form-row">
@@ -216,7 +216,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Mitglied bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form method="post" id="editMemberForm">
       <div class="modal__body">
@@ -246,7 +246,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Qualifikationen für <span id="qe_name"></span></h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form method="post" id="qualiEditorForm">
       <div class="modal__body">

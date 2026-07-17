@@ -13,7 +13,7 @@
             hx-target="#abschnitt-merkmale" hx-swap="innerHTML"
             hx-confirm="Merkmal entfernen?" style="display:inline;">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button type="submit" class="objekt-gefahr-chip__del" title="Entfernen">×</button>
+        <button aria-label="Schließen" type="submit" class="objekt-gefahr-chip__del" title="Entfernen">×</button>
       </form>
       {% endif %}
     </div>

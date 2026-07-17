@@ -2166,3 +2166,12 @@ button.htmx-request,
     box-shadow: 0 2px 10px rgba(0, 0, 0, .5);
   }
 }
+
+/* ─── A11y: sichtbarer Tastatur-Fokus (Audit D1) ──────────────────────────────
+   :where() hält die Spezifität bei 0 — vorhandene, gezieltere Focus-Styles
+   (z.B. .topnav__burger:focus-visible) gewinnen weiterhin. */
+:root { --focus-outline: #7db4ff; }
+:where(a, button, [role="button"], [role="tab"], input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
+}

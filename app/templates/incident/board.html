@@ -405,7 +405,7 @@
   <div class="modal__content" style="min-width:min(400px,90vw);">
     <div class="modal__header">
       <h3 class="modal__title">Auftrag anlegen</h3>
-      <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-swap="none"
           @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';$el.closest('dialog').close();}">
@@ -458,7 +458,7 @@
   <div class="modal__content" style="min-width:min(400px,90vw);">
     <div class="modal__header">
       <h3 class="modal__title">Meldung anlegen</h3>
-      <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-swap="none"
           hx-encoding="multipart/form-data"
@@ -526,7 +526,7 @@
   <div class="modal__content" style="min-width:min(380px,90vw);">
     <div class="modal__header">
       <h3 class="modal__title">Abschnitt hinzufügen</h3>
-      <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/abschnitt" hx-swap="none"
           @htmx:after-request="if(event.detail.successful){$el.reset();$el.closest('dialog').close();}">
@@ -569,7 +569,7 @@
         <h3 class="modal__title">Einheit hinzufügen</h3>
         <p class="modal__subtitle">Vorschläge aus den Stammdaten oder neue Einheit anlegen</p>
       </div>
-      <button type="button" @click="$el.closest('dialog').close()" class="modal__close" title="Schließen">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close" title="Schließen">×</button>
     </div>
     <div class="modal__body">
       <div class="form-group">
@@ -678,7 +678,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>✨ KI-Lagebild</h3>
-      <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <div x-show="loading" style="text-align:center; padding:24px; color:#a78bfa;">
@@ -706,7 +706,7 @@
   <div class="modal__content" x-data="personWizard()">
     <div class="modal__header">
       <h3>Gerettete Person erfassen</h3>
-      <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form method="post" action="/einsatz/{{ incident.id }}/person">
       <input type="hidden" name="gender" :value="gender">

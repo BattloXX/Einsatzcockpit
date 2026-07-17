@@ -56,7 +56,7 @@
       </div>
       {% endif %}
     </div>
-    <button type="button"
+    <button aria-label="Schließen" type="button"
             onclick="(function(){var pw=document.getElementById('site-panel-wrap');if(pw)pw.classList.remove('open');var dm=document.getElementById('siteDetailModal');if(dm)dm.close();})()"
             class="btn btn--xs btn--ghost" style="flex-shrink:0;font-size:1rem;padding:0 6px;" title="Schließen">✕</button>
   </div>
@@ -186,7 +186,7 @@
             hx-confirm="Bild löschen?"
             hx-on::after-request="if(event.detail.successful){this.closest('.cm-thumb').remove()}"
             style="margin:0;position:absolute;top:1px;right:1px;">
-        <button type="submit" class="btn btn--xs btn--ghost"
+        <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost"
                 style="background:rgba(0,0,0,.7);color:var(--red);padding:0 3px;font-size:.6rem;line-height:1.4;">✕</button>
       </form>
       {% endif %}
@@ -249,7 +249,7 @@
           hx-confirm="Eintrag löschen?"
           hx-on::after-request="if(event.detail.successful){this.closest('div').remove()}"
           style="margin:0;">
-      <button type="submit" class="btn btn--xs btn--ghost"
+      <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost"
               style="opacity:.5;padding:0 4px;font-size:.6rem;">✕</button>
     </form>
     {% endif %}

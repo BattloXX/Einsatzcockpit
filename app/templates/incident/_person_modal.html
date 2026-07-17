@@ -3,7 +3,7 @@
     <h3 class="modal__title">Gerettete Person</h3>
     <p class="modal__subtitle">erfasst: {{ person.created_at|local_datetime }}</p>
   </div>
-  <button type="button" onclick="document.getElementById('cardDetailModal').close()" class="modal__close" title="Schließen">×</button>
+  <button aria-label="Schließen" type="button" onclick="document.getElementById('cardDetailModal').close()" class="modal__close" title="Schließen">×</button>
 </div>
 
 <div class="modal__body">
@@ -116,7 +116,7 @@
         {% if can_edit %}
         <form hx-post="/einsatz/{{ incident.id }}/person/{{ person.id }}/medien/{{ m.id }}/loeschen"
               hx-target="#cardDetailBody" hx-swap="innerHTML" style="margin:0;">
-          <button type="submit"
+          <button aria-label="Schließen" type="submit"
                   style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.75);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;"
                   title="Löschen">×</button>
         </form>

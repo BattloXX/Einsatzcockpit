@@ -43,7 +43,7 @@
         <div class="asgn-actions">
           <button class="btn btn--xs btn--ghost" title="Ablösen"
                   onclick="openAbloesen({{ a.id }}, '{{ role.name }}')">↕</button>
-          <button class="btn btn--xs btn--ghost" title="Beenden"
+          <button aria-label="Schließen" class="btn btn--xs btn--ghost" title="Beenden"
                   onclick="beendeAsgn({{ a.id }})">✕</button>
         </div>
         {% endif %}
@@ -73,7 +73,7 @@
           <span class="asgn-label">{{ a.display_name }} <span style="font-size:.65rem;">(MA)</span></span>
           <span class="asgn-since">{{ a.start_at|local_time }}</span>
           {% if can_edit and lage.status.value == 'active' %}
-          <button class="btn btn--xs btn--ghost" onclick="beendeAsgn({{ a.id }})">✕</button>
+          <button aria-label="Schließen" class="btn btn--xs btn--ghost" onclick="beendeAsgn({{ a.id }})">✕</button>
           {% endif %}
         </div>
         {% endfor %}

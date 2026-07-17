@@ -331,7 +331,7 @@
 <dialog id="newDeviceModal" style="background:var(--surface-mid);border:1px solid var(--border);border-radius:.75rem;color:var(--on-surface);padding:0;max-width:500px;width:100%;">
   <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
     <h2>Gerät registrieren</h2>
-    <button class="btn btn--ghost btn--sm" onclick="document.getElementById('newDeviceModal').close()">✕</button>
+    <button aria-label="Schließen" class="btn btn--ghost btn--sm" onclick="document.getElementById('newDeviceModal').close()">✕</button>
   </div>
   <div class="card-body">
     <form method="post" action="/admin/geraete-login/neu">

@@ -173,7 +173,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neue Meldungsvorlage</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form method="post" action="/admin/meldungsvorlagen/neu">
       <div class="modal__body">
@@ -196,7 +196,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Meldungsvorlage bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form method="post" id="editMsgForm">
       <div class="modal__body">
