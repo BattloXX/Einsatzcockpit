@@ -1,3 +1,6 @@
+import logging
+import time
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
@@ -10,6 +13,36 @@ engine = create_engine(
     pool_size=10,
     max_overflow=20,
 )
+
+_slow_query_logger = logging.getLogger("einsatzleiter.slow_query")
+
+
+def register_slow_query_logging(target_engine, threshold_ms: int) -> None:
+    """Loggt Queries oberhalb der Schwelle als WARNING (Audit B7).
+
+    Messbasis fuer gezielte Index-/N+1-Fixes: erst messen, dann optimieren.
+    Landet ueber den Log-Buffer auch in der Sysadmin-Log-Ansicht.
+    """
+    if threshold_ms <= 0:
+        return
+
+    @event.listens_for(target_engine, "before_cursor_execute")
+    def _sq_start(conn, cursor, statement, parameters, context, executemany):
+        conn.info.setdefault("sq_start", []).append(time.monotonic())
+
+    @event.listens_for(target_engine, "after_cursor_execute")
+    def _sq_end(conn, cursor, statement, parameters, context, executemany):
+        starts = conn.info.get("sq_start")
+        if not starts:
+            return
+        elapsed_ms = (time.monotonic() - starts.pop()) * 1000
+        if elapsed_ms >= threshold_ms:
+            _slow_query_logger.warning(
+                "Langsame Query: %.0f ms — %s", elapsed_ms, statement[:500],
+            )
+
+
+register_slow_query_logging(engine, settings.SLOW_QUERY_LOG_MS)
 
 
 # Setzt die Session-Zeitzone auf UTC, damit naive datetimes (die wir als UTC

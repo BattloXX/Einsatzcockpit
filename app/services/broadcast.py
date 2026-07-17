@@ -20,6 +20,8 @@ LAGE_WS_OFFSET = 10_000_000
 ORG_WS_OFFSET = 20_000_000
 # Sentinel-Key für broadcast_all über den Bus
 _ALL_KEY = -1
+# Sende-Timeout je Socket: haengende Clients werden getrennt statt gewartet
+_SEND_TIMEOUT_S = 2.0
 
 
 class ConnectionManager:
@@ -36,29 +38,38 @@ class ConnectionManager:
         async with self._lock:
             self._connections[incident_id].discard(ws)
 
+    async def _send_one(self, ws: WebSocket, payload: str) -> bool:
+        """Sendet an einen Socket; False bei Fehler ODER Timeout (Audit B6).
+
+        Timeout, damit ein haengender Client (voller TCP-Puffer, totes Netz)
+        die Zustellung an die uebrigen Sockets nicht aufhaelt.
+        """
+        try:
+            await asyncio.wait_for(ws.send_text(payload), timeout=_SEND_TIMEOUT_S)
+            return True
+        except Exception:
+            return False
+
     async def _deliver_local(self, incident_id: int, event: dict) -> None:
-        """Stellt ein Event an die lokalen Sockets dieses Workers zu."""
+        """Stellt ein Event parallel an die lokalen Sockets dieses Workers zu."""
         payload = json.dumps(event, ensure_ascii=False, default=str)
-        dead: set[WebSocket] = set()
-        for ws in list(self._connections.get(incident_id, [])):
-            try:
-                await ws.send_text(payload)
-            except Exception:
-                dead.add(ws)
+        targets = list(self._connections.get(incident_id, []))
+        if not targets:
+            return
+        results = await asyncio.gather(*(self._send_one(ws, payload) for ws in targets))
+        dead = {ws for ws, ok in zip(targets, results) if not ok}
         if dead:
             async with self._lock:
                 self._connections[incident_id] -= dead
 
     async def _deliver_all_local(self, event: dict) -> None:
-        """Stellt ein Event an ALLE lokalen Sockets dieses Workers zu."""
+        """Stellt ein Event parallel an ALLE lokalen Sockets dieses Workers zu."""
         payload = json.dumps(event, ensure_ascii=False, default=str)
-        all_ws = {ws for conns in self._connections.values() for ws in conns}
-        dead: set[WebSocket] = set()
-        for ws in all_ws:
-            try:
-                await ws.send_text(payload)
-            except Exception:
-                dead.add(ws)
+        all_ws = list({ws for conns in self._connections.values() for ws in conns})
+        if not all_ws:
+            return
+        results = await asyncio.gather(*(self._send_one(ws, payload) for ws in all_ws))
+        dead = {ws for ws, ok in zip(all_ws, results) if not ok}
         if dead:
             async with self._lock:
                 for conns in self._connections.values():

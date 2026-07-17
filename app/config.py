@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     TEST_SYSTEM: bool = False
 
+    # Slow-Query-Logging: Queries oberhalb dieser Schwelle (ms) landen als
+    # WARNING im Log ("einsatzleiter.slow_query") — Messbasis für gezielte
+    # Index-/N+1-Optimierungen. 0 = deaktiviert.
+    SLOW_QUERY_LOG_MS: int = 300
+
     # Redis Pub/Sub-Bus für worker-übergreifende WebSocket-Zustellung. Leer = aus:
     # dann läuft alles In-Process (korrekt bei -w 1). Bei -w 2+ (siehe
     # deploy/einsatzleiter.service) MUSS dies gesetzt sein, sonst erreichen Broadcasts
