@@ -1,0 +1,26 @@
+{% if q and q.strip() %}
+  {% if treffer %}
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    {% for e in treffer %}
+    <a href="/nachschlagewerke/gefahrgut/{{ e.un_vierstellig }}" class="card"
+       style="padding:12px 14px;text-decoration:none;color:inherit;display:flex;
+              align-items:center;gap:10px;flex-wrap:wrap;">
+      <span class="badge-pill badge-pill--red">UN {{ e.un_vierstellig }}</span>
+      <strong style="flex:1;min-width:160px;">{{ e.stoffname or "—" }}</strong>
+      {% if e.gefahrnummer %}<span class="badge-pill badge-pill--amber" title="Gefahrnummer (Kemler)">GN {{ e.gefahrnummer }}</span>{% endif %}
+      {% if e.klasse %}<span class="badge-pill badge-pill--gray">Kl. {{ e.klasse }}</span>{% endif %}
+      {% if e.verpackungsgruppe %}<span class="badge-pill badge-pill--gray">VG {{ e.verpackungsgruppe }}</span>{% endif %}
+      <span aria-hidden="true" style="opacity:.5;">›</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card" style="padding:16px;text-align:center;">
+    <p class="text-muted" style="margin:0;">Kein Treffer für „{{ q }}". UN-Nummer oder Stoffname prüfen.</p>
+  </div>
+  {% endif %}
+{% else %}
+  <div class="card" style="padding:16px;">
+    <p class="text-muted" style="margin:0;">Suchbegriff eingeben – UN-Nummer (z. B. 1203) oder Stoffname (z. B. Benzin).</p>
+  </div>
+{% endif %}
