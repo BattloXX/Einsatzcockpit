@@ -12,7 +12,7 @@
       <a href="/admin/verleih-uebersicht" class="btn btn--ghost">Aktive Ausleihen</a>
       <a href="/admin/verleih-artikel" class="btn btn--ghost">Artikel</a>
       <a href="/admin/verleih-stuecklisten" class="btn btn--ghost">Stucklisten</a>
-      <button class="btn btn--primary" onclick="document.getElementById('newGtModal').showModal()">+ Geraetetyp anlegen</button>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newGtModal">+ Geraetetyp anlegen</button>
     </div>
   </div>
 
@@ -38,7 +38,7 @@
         </td>
         <td style="white-space:nowrap;">
           <button class="btn btn--ghost btn--xs"
-                  onclick="document.getElementById('editGtModal-{{ gt.id }}').showModal()">Bearbeiten</button>
+                  data-ec-action="open-dialog" data-ec-dialog="editGtModal-{{ gt.id }}">Bearbeiten</button>
           <button class="btn btn--danger btn--xs"
                   hx-post="/admin/verleih-geraetetypen/{{ gt.id }}/loeschen"
                   hx-target="#gt-row-{{ gt.id }}"
@@ -59,7 +59,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neuer Geraetetyp</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">x</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
     </div>
     <form method="post" action="/admin/verleih-geraetetypen/neu">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -74,7 +74,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Anlegen</button>
       </div>
     </form>
@@ -87,7 +87,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Geraetetyp bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">x</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
     </div>
     <form method="post" action="/admin/verleih-geraetetypen/{{ gt.id }}/bearbeiten">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -102,7 +102,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>

@@ -4,7 +4,7 @@
     <div class="modal__title">KI-Auftragsvorschläge</div>
     <div class="modal__subtitle">Einsatz #{{ incident.id }}</div>
   </div>
-  <button class="modal__close" onclick="document.getElementById('cardDetailModal').close()">✕</button>
+  <button class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">✕</button>
 </div>
 <div class="modal__body">
   {% if vehicles_added is not none %}
@@ -26,7 +26,7 @@
 
   <div class="modal__footer">
     <button class="btn btn--ghost"
-            onclick="document.getElementById('cardDetailModal').close()">
+            data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">
       Nein, abschließen
     </button>
     <button class="btn btn--primary header-btn--ki"
@@ -41,7 +41,7 @@
   <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:1.5rem">KI ist nicht aktiviert.</p>
   <div class="modal__footer">
     <button class="btn btn--ghost"
-            onclick="document.getElementById('cardDetailModal').close()">
+            data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">
       Schließen
     </button>
   </div>

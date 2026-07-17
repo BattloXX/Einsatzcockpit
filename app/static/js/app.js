@@ -679,3 +679,25 @@ function urlBase64ToUint8Array(base64) {
   const raw = atob(b64);
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
+
+/* ─── CSP-Tranche 1 (Audit A1): Event-Delegation statt inline onclick ─────────
+ * Ein document-weiter Listener ersetzt die mechanischen onclick-Klassen
+ * (Dialog schliessen/oeffnen, Drucken). Delegation ueberlebt HTMX-Swaps,
+ * weil der Listener am document haengt, nicht am Button.
+ * Naechste Tranchen: weitere onclick-Klassen -> am Ende Nonce-CSP. */
+document.addEventListener('click', function (e) {
+  const el = e.target.closest('[data-ec-action]');
+  if (!el) return;
+  const action = el.getAttribute('data-ec-action');
+  if (action === 'close-dialog') {
+    const id = el.getAttribute('data-ec-dialog');
+    const dlg = id ? document.getElementById(id) : el.closest('dialog');
+    if (dlg && typeof dlg.close === 'function') dlg.close();
+  } else if (action === 'open-dialog') {
+    const id = el.getAttribute('data-ec-dialog');
+    const dlg = id ? document.getElementById(id) : null;
+    if (dlg && typeof dlg.showModal === 'function') dlg.showModal();
+  } else if (action === 'print') {
+    window.print();
+  }
+});

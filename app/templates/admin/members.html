@@ -8,8 +8,8 @@
       <p class="page-header__sub">{{ members|length }} Mitglieder</p>
     </div>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn--secondary" onclick="document.getElementById('excelImportModal').showModal()">Excel importieren</button>
-      <button class="btn btn--primary" onclick="document.getElementById('newMemberModal').showModal()">+ Mitglied</button>
+      <button class="btn btn--secondary" data-ec-action="open-dialog" data-ec-dialog="excelImportModal">Excel importieren</button>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newMemberModal">+ Mitglied</button>
     </div>
   </div>
 
@@ -148,7 +148,7 @@
   <form method="post" action="/admin/mitglieder/excel-import" enctype="multipart/form-data" class="modal__content">
     <div class="modal__header">
       <h3>Mannschaft aus Excel importieren</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <p style="margin-bottom:8px;font-size:.85rem;color:var(--text-muted);">
@@ -169,7 +169,7 @@
       </div>
     </div>
     <div class="modal__footer">
-      <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+      <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
       <button type="submit" class="btn btn--primary">Importieren</button>
     </div>
   </form>
@@ -180,7 +180,7 @@
   <form method="post" action="/admin/mitglieder/neu" class="modal__content">
     <div class="modal__header">
       <h3>Neues Mitglied</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <div class="form-row">
@@ -205,7 +205,7 @@
       </div>
     </div>
     <div class="modal__footer">
-      <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+      <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
       <button type="submit" class="btn btn--primary">Speichern</button>
     </div>
   </form>
@@ -216,7 +216,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Mitglied bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form method="post" id="editMemberForm">
       <div class="modal__body">
@@ -234,7 +234,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>
@@ -246,7 +246,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Qualifikationen für <span id="qe_name"></span></h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form method="post" id="qualiEditorForm">
       <div class="modal__body">
@@ -266,7 +266,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>

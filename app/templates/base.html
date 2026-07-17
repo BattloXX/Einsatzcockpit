@@ -254,7 +254,7 @@
     <div class="modal__content">
       <div class="modal__header">
         <h3 class="modal__title">App auf iPhone/iPad installieren</h3>
-        <button type="button" class="modal__close" onclick="document.getElementById('iosInstallHint').close()">×</button>
+        <button type="button" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="iosInstallHint">×</button>
       </div>
       <div class="modal__body">
         <p>Auf iOS funktioniert die Installation nur über Safari:</p>
@@ -268,7 +268,7 @@
         </p>
       </div>
       <div class="modal__footer">
-        <button type="button" class="btn btn--primary" onclick="document.getElementById('iosInstallHint').close()">Verstanden</button>
+        <button type="button" class="btn btn--primary" data-ec-action="close-dialog" data-ec-dialog="iosInstallHint">Verstanden</button>
       </div>
     </div>
   </dialog>

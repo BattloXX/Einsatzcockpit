@@ -10,7 +10,7 @@
       {% endif %}
     </div>
   </div>
-  <button class="modal__close" onclick="document.getElementById('cardDetailModal').close()">✕</button>
+  <button class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">✕</button>
 </div>
 <div class="modal__body">
   {% if incident.address_street or incident.caller_name or incident.caller_phone %}
@@ -67,7 +67,7 @@
 
     <div class="modal__footer">
       <button type="button" class="btn btn--ghost"
-              onclick="document.getElementById('cardDetailModal').close()">Abbrechen</button>
+              data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">Abbrechen</button>
       <button type="submit" class="btn btn--primary">Speichern</button>
     </div>
   </form>

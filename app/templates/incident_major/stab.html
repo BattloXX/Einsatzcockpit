@@ -389,7 +389,7 @@ a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; g
   <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
               border-bottom:1px solid var(--border);background:var(--surface-elevated,#1e2130);">
     <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);">JOURNALEINTRAG</span>
-    <button onclick="this.closest('dialog').close()" class="btn btn--xs btn--ghost">✕</button>
+    <button data-ec-action="close-dialog" class="btn btn--xs btn--ghost">✕</button>
   </div>
   <div id="journalDetailContent">
     <div style="padding:24px;color:var(--text-muted);font-size:.82rem;text-align:center;">Lade…</div>
@@ -423,7 +423,7 @@ a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; g
       <input type="text" name="note" class="form-input" placeholder="Zusatzinfo…" maxlength="120">
     </div>
     <div style="display:flex;gap:8px;margin-top:14px;">
-      <button type="button" onclick="document.getElementById('modal-besetzen').close()" class="btn btn--ghost btn--sm">Abbrechen</button>
+      <button type="button" data-ec-action="close-dialog" data-ec-dialog="modal-besetzen" class="btn btn--ghost btn--sm">Abbrechen</button>
       <button type="submit" class="btn btn--primary btn--sm">Besetzen</button>
     </div>
   </form>
@@ -448,7 +448,7 @@ a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; g
       <input type="text" name="note" class="form-input" placeholder="Übergabe-Hinweise…" maxlength="120">
     </div>
     <div style="display:flex;gap:8px;margin-top:14px;">
-      <button type="button" onclick="document.getElementById('modal-abloesen').close()" class="btn btn--ghost btn--sm">Abbrechen</button>
+      <button type="button" data-ec-action="close-dialog" data-ec-dialog="modal-abloesen" class="btn btn--ghost btn--sm">Abbrechen</button>
       <button type="submit" class="btn btn--primary btn--sm">Ablösen</button>
     </div>
   </form>

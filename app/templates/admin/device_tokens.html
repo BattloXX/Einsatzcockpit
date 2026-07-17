@@ -11,7 +11,7 @@
       <h1>Geräte-Login</h1>
       <p class="page-header__sub">Token-basierte Anmelde-URLs für Tablets, Anzeigegeräte und SMS-Gateways.</p>
     </div>
-    <button class="btn btn--primary" onclick="document.getElementById('newDeviceModal').showModal()"
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newDeviceModal"
             {{ tip('Neues Gerät oder SMS-Gateway registrieren') }}>+ Gerät registrieren</button>
   </div>
 
@@ -331,7 +331,7 @@
 <dialog id="newDeviceModal" style="background:var(--surface-mid);border:1px solid var(--border);border-radius:.75rem;color:var(--on-surface);padding:0;max-width:500px;width:100%;">
   <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
     <h2>Gerät registrieren</h2>
-    <button class="btn btn--ghost btn--sm" onclick="document.getElementById('newDeviceModal').close()">✕</button>
+    <button class="btn btn--ghost btn--sm" data-ec-action="close-dialog" data-ec-dialog="newDeviceModal">✕</button>
   </div>
   <div class="card-body">
     <form method="post" action="/admin/geraete-login/neu">
@@ -421,7 +421,7 @@
       </div>
 
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
-        <button type="button" class="btn btn--ghost" onclick="document.getElementById('newDeviceModal').close()">Abbrechen</button>
+        <button type="button" class="btn btn--ghost" data-ec-action="close-dialog" data-ec-dialog="newDeviceModal">Abbrechen</button>
         <button type="submit" class="btn btn--primary" id="createBtn">Gerät erstellen &amp; Token generieren</button>
       </div>
     </form>

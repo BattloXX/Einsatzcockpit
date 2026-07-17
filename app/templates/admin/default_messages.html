@@ -11,7 +11,7 @@
       <h1>Default-Meldungen</h1>
       <p class="page-header__sub">Meldung anlegen, dann Alarmstichwörter zuweisen und Fälligkeitszeit festlegen.</p>
     </div>
-    <button class="btn btn--primary" onclick="document.getElementById('newDmModal').showModal()">+ Meldung</button>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newDmModal">+ Meldung</button>
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
@@ -187,7 +187,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neue Default-Meldung</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form method="post" action="/admin/default-meldungen/neu">
       <div class="modal__body">
@@ -198,7 +198,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Anlegen</button>
       </div>
     </form>
@@ -210,7 +210,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Default-Meldung bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form method="post" id="editDmForm">
       <div class="modal__body">
@@ -220,7 +220,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>

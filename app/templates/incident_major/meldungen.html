@@ -69,11 +69,11 @@
     <button onclick="navigator.clipboard.writeText('{{ portal_url }}').then(()=>this.textContent='✓ Kopiert')"
             class="btn btn--ghost btn--sm">📋 Kopieren</button>
     <button class="btn btn--ghost btn--sm"
-            onclick="document.getElementById('qr-modal').showModal()">QR</button>
+            data-ec-action="open-dialog" data-ec-dialog="qr-modal">QR</button>
     <dialog id="qr-modal" class="mel-modal">
       <p style="font-size:.78rem;margin-bottom:10px;color:var(--text-muted);">QR-Code für Bürgerportal</p>
       <img src="/lage/{{ lage.id }}/meldungen/qr" alt="QR Code" style="width:200px;height:200px;background:#fff;border-radius:var(--radius-md, .5rem);">
-      <br><button onclick="this.closest('dialog').close()" class="btn btn--ghost btn--sm" style="margin-top:10px;">Schließen</button>
+      <br><button data-ec-action="close-dialog" class="btn btn--ghost btn--sm" style="margin-top:10px;">Schließen</button>
     </dialog>
     {% else %}
     <span class="portal-box__hint">Kein aktiver Portal-Link.</span>

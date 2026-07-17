@@ -12,7 +12,7 @@
       <a href="/admin/verleih-uebersicht" class="btn btn--ghost">Aktive Ausleihen</a>
       <a href="/admin/verleih-artikel" class="btn btn--ghost">Artikel</a>
       <a href="/admin/verleih-geraetetypen" class="btn btn--ghost">Geraetetypen</a>
-      <button class="btn btn--primary" onclick="document.getElementById('newSlModal').showModal()">+ Stuckliste anlegen</button>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newSlModal">+ Stuckliste anlegen</button>
     </div>
   </div>
 
@@ -25,7 +25,7 @@
       <div style="display:flex;gap:8px;">
         <span style="font-size:.78rem;color:var(--text-muted);">{{ sl.positionen|length }} Position(en)</span>
         <button class="btn btn--ghost btn--xs"
-                onclick="document.getElementById('editSlModal-{{ sl.id }}').showModal()">
+                data-ec-action="open-dialog" data-ec-dialog="editSlModal-{{ sl.id }}">
           Bearbeiten
         </button>
         <button class="btn btn--danger btn--xs"
@@ -63,7 +63,7 @@
     <div class="modal__content">
       <div class="modal__header">
         <h3>Stuckliste bearbeiten</h3>
-        <button type="button" onclick="this.closest('dialog').close()" class="modal__close">x</button>
+        <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
       </div>
       <form method="post" action="/admin/verleih-stuecklisten/{{ sl.id }}/bearbeiten"
             x-data="stuecklisteEditForm({{ sl.id }})"
@@ -186,7 +186,7 @@
           </div>
         </div>
         <div class="modal__footer">
-          <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+          <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
           <button type="submit" class="btn btn--primary">Aenderungen speichern</button>
         </div>
       </form>
@@ -202,7 +202,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neue Stuckliste</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">x</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
     </div>
     <form method="post" action="/admin/verleih-stuecklisten/neu"
           x-data="stuecklisteForm()">
@@ -301,7 +301,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Stuckliste anlegen</button>
       </div>
     </form>

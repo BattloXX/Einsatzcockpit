@@ -3,7 +3,7 @@
     <h3 class="modal__title">Gerettete Person</h3>
     <p class="modal__subtitle">erfasst: {{ person.created_at|local_datetime }}</p>
   </div>
-  <button type="button" onclick="document.getElementById('cardDetailModal').close()" class="modal__close" title="Schließen">×</button>
+  <button type="button" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal" class="modal__close" title="Schließen">×</button>
 </div>
 
 <div class="modal__body">

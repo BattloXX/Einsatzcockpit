@@ -11,7 +11,7 @@
     <h1>Benutzerverwaltung</h1>
     <p class="page-header__sub">Login-Accounts, Rollen, Kontaktdaten, Passwort-Reset</p>
   </div>
-  <button class="btn btn--primary" onclick="document.getElementById('newUserModal').showModal()"
+  <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newUserModal"
           {{ tip('Neuen Login-Account anlegen') }}>+ Benutzer</button>
 </div>
 
@@ -123,7 +123,7 @@
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="modal__header">
       <h3>Neuer Benutzer</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <div class="form-row">
@@ -178,7 +178,7 @@
       </div>
     </div>
     <div class="modal__footer">
-      <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+      <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
       <button type="submit" class="btn btn--primary">Anlegen</button>
     </div>
   </form>
@@ -188,7 +188,7 @@
 <dialog class="modal" id="editUserModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Benutzer bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">×</button></div>
     <form method="post" id="editUserForm">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -222,7 +222,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>
