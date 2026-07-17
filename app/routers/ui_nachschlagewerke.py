@@ -15,15 +15,21 @@ Tenant-Tabellen. Lesend fuer alle angemeldeten Nutzer der Org.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from sqlalchemy.orm import Session
 
 from app.core.permissions import require_role
 from app.core.templating import templates
+from app.db import get_db
 from app.models.user import User
-from app.services import gefahrgut_service
+from app.services import gefahrgut_service, rettungskarten_service
 
 router = APIRouter(prefix="/nachschlagewerke", tags=["nachschlagewerke"])
+# Zweiter Router OHNE /nachschlagewerke-Praefix: die PDF-Auslieferung liegt unter
+# /nachschlagewerk-cache/, damit der Service Worker sie cache-first behandelt
+# (unveraenderliche IDs -> offline verfuegbar, siehe sw.js).
+cache_router = APIRouter(tags=["nachschlagewerke"])
 
 # Alle Rollen der Org duerfen das Nachschlagewerk lesen.
 _LESE_ROLLEN = (
@@ -124,3 +130,69 @@ def gefahrgut_detail(
         "user": user,
         "eintrag": eintrag,
     })
+
+
+# ── Rettungsdatenblaetter ────────────────────────────────────────────────────
+
+@router.get("/rettungskarten", response_class=HTMLResponse)
+def rettungskarten_seite(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_nachschlagewerke_enabled),
+):
+    """Rettungsdatenblatt-Suche (Hersteller/Modell) + Liste der bereits gecachten."""
+    return templates.TemplateResponse(request, "nachschlagewerke/rettungskarten.html", {
+        "user": user,
+        "gecacht": rettungskarten_service.suche(db, ""),
+    })
+
+
+@router.post("/rettungskarten/suchen", response_class=HTMLResponse)
+def rettungskarten_suchen(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_nachschlagewerke_enabled),
+    hersteller: str = Form(...),
+    modell: str = Form(...),
+    baujahr_von: str = Form(""),
+    kraftstoff: str = Form(""),
+):
+    """On-demand: Cache-Treffer oder Einzelabruf; rendert das Ergebnis-Fragment (HTMX)."""
+    bj = None
+    if baujahr_von.strip().isdigit():
+        bj = int(baujahr_von.strip())
+    eintrag, links = rettungskarten_service.finde_oder_hole(
+        db, hersteller, modell, baujahr_von=bj, kraftstoff=kraftstoff or None)
+    return templates.TemplateResponse(request, "nachschlagewerke/_rettungskarten_result.html", {
+        "user": user,
+        "eintrag": eintrag,
+        "links": links,
+        "hersteller": hersteller,
+        "modell": modell,
+    })
+
+
+@cache_router.get("/nachschlagewerk-cache/rettungskarten/{rk_id:int}/original.pdf")
+def rettungskarten_pdf(
+    request: Request,
+    rk_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_nachschlagewerke_enabled),
+):
+    """Liefert das gecachte Rettungsdatenblatt-PDF (unveraenderliche URL -> SW cache-first)."""
+    from app.models.nachschlagewerk import RettungsdatenblattCache
+    eintrag = db.get(RettungsdatenblattCache, rk_id)
+    if eintrag is None:
+        raise HTTPException(status_code=404, detail="Rettungsdatenblatt nicht gefunden")
+    pfad = rettungskarten_service.absolute_pfad(eintrag)
+    if pfad is None or not pfad.exists():
+        raise HTTPException(status_code=404, detail="Datei nicht vorhanden")
+    return FileResponse(
+        str(pfad),
+        media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'inline; filename="rettungskarte-{rk_id}.pdf"'},
+    )

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Rettungsdatenblätter – Nachschlagewerke – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>🚑 Rettungsdatenblätter</h1>
+      <p class="text-muted">Rettungskarten für die technische Rettung – Suche nach Hersteller und Modell</p>
+    </div>
+    <div><a href="/nachschlagewerke/" class="btn btn--ghost">← Nachschlagewerke</a></div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-bottom:16px;">
+    <form hx-post="/nachschlagewerke/rettungskarten/suchen"
+          hx-target="#rk-result" hx-swap="innerHTML"
+          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label" for="rk-h">Hersteller</label>
+        <input type="text" id="rk-h" name="hersteller" class="form-input" placeholder="z. B. VW" required>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label" for="rk-m">Modell</label>
+        <input type="text" id="rk-m" name="modell" class="form-input" placeholder="z. B. Golf VII" required>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label" for="rk-b">Baujahr (ab)</label>
+        <input type="number" id="rk-b" name="baujahr_von" class="form-input" min="1950" max="2100" placeholder="optional">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <button type="submit" class="btn btn--primary btn--full">🔎 Suchen &amp; laden</button>
+      </div>
+    </form>
+    <small class="form-hint" style="margin-top:8px;display:block;">Beim ersten Aufruf wird die Karte
+      geladen und gespeichert – danach offline verfügbar.</small>
+  </div>
+
+  <div id="rk-result"></div>
+
+  {% if gecacht %}
+  <h2 style="font-size:1.05rem;margin:20px 0 10px;">Bereits verfügbar (offline)</h2>
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    {% for e in gecacht %}
+    <div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <strong style="flex:1;min-width:160px;">{{ e.anzeige_name }}</strong>
+      {% if e.kraftstoff %}<span class="badge-pill badge-pill--gray">{{ e.kraftstoff }}</span>{% endif %}
+      {% if e.hat_pdf %}
+      <a href="/nachschlagewerk-cache/rettungskarten/{{ e.id }}/original.pdf" target="_blank"
+         rel="noopener" class="btn btn--secondary btn--xs">📄 PDF öffnen</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
