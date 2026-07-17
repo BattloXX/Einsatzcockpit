@@ -102,6 +102,16 @@
               </div>
               <small class="form-hint">Preset wählen, dann auf die Karte klicken. ERG-2020-Richtwerte.</small>
             </details>
+            <details class="lft-ausbreitung" style="margin-top:8px;">
+              <summary class="btn btn--ghost btn--sm" style="display:inline-block;">🌬 Ausbreitung (Wind)</summary>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center;">
+                <label class="form-label" for="lft-plume-laenge" style="margin:0;">Reichweite</label>
+                <input type="number" id="lft-plume-laenge" class="form-input" min="10" max="20000"
+                       value="300" style="width:90px;padding:4px 6px;"> m
+                <button type="button" class="btn btn--ghost btn--xs" id="lft-plume-start">Kegel setzen</button>
+              </div>
+              <small class="form-hint">Quellpunkt auf die Karte klicken – Ausbreitung windbezogen (wind + 180°).</small>
+            </details>
             {% endif %}
           </div>
 

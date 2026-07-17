@@ -359,6 +359,10 @@
       if (f.typ === "distanz") {
         return { color: (f.props && f.props.color) || "#6b7280", weight: 2, dashArray: "6 4", fillOpacity: 0.04 };
       }
+      if (f.typ === "ausbreitung") {
+        var afarbe = (f.props && f.props.farbe) || "#f59e0b";
+        return { color: afarbe, weight: 2, fillColor: afarbe, fillOpacity: 0.18 };
+      }
       if (f.props && f.props.flaeche_key) {
         // Fläche aus der Flächen-Palette (tz-manifest.json flaechen[]) — Vereinfachung ohne
         // echtes SVG-Schraffur-Pattern (Muster: Farbnäherung statt exaktem Muster, wie bei der
@@ -1003,6 +1007,22 @@
           });
         });
         disarmPlacement();
+      } else if (p.kind === "ausbreitung") {
+        var aLat = latlng.lat, aLng = latlng.lng, aLaenge = p.data.laenge || 300;
+        disarmPlacement();
+        fetchJson(apiBase + "/ausbreitung.json?lat=" + aLat + "&lng=" + aLng + "&laenge=" + aLaenge)
+          .then(function (r) {
+            if (!r || !r.geometry) { alert("Ausbreitung konnte nicht berechnet werden (Koordinaten/Wind fehlen)."); return; }
+            var hinweis = r.wind_bekannt ? "" : " (kein Wind - Richtung Nord)";
+            createFeature({
+              typ: "ausbreitung",
+              label: "Ausbreitung " + r.laenge_m + " m" + hinweis,
+              geometry: r.geometry,
+              props: { farbe: "#f59e0b", laenge_m: r.laenge_m, richtung_deg: r.richtung_deg },
+              layer_gruppe: "zeichnung"
+            });
+          })
+          .catch(function () { alert("Ausbreitung konnte nicht berechnet werden."); });
       } else if (p.kind === "fahrzeug-pin") {
         disarmPlacement();
         fetchJson(apiBase + "/vehicles/" + p.data.id + "/pin", {
@@ -1074,6 +1094,16 @@
           var r = inp ? parseInt(inp.value, 10) : 0;
           if (!r || r <= 0) { alert("Bitte einen Radius in Metern eingeben."); return; }
           armPlacement("gefahrenradius", { preset: null, zonen: [{ rolle: "sperr", radius_m: r, farbe: "#dc2626", label: "Sperrbereich" }] });
+        });
+      }
+      // Ausbreitungs-Kegel (windbezogen): Reichweite waehlen, dann Quellpunkt klicken.
+      var btnPlume = document.getElementById("lft-plume-start");
+      if (btnPlume) {
+        btnPlume.addEventListener("click", function () {
+          var inp = document.getElementById("lft-plume-laenge");
+          var laenge = inp ? parseInt(inp.value, 10) : 300;
+          if (!laenge || laenge <= 0) { laenge = 300; }
+          armPlacement("ausbreitung", { laenge: laenge });
         });
       }
 
