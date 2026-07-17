@@ -136,6 +136,9 @@ class Settings(BaseSettings):
     NACHSCHLAGEWERK_DATA_DIR: str = "app_storage/nachschlagewerk"
     # Taeglicher Sync des Gefahrgut-Datensatzes (BAM/ADR, dl-de). False = aus.
     NACHSCHLAGEWERK_SYNC_ENABLED: bool = True
+    # Quelle des vollstaendigen Gefahrgut-Datensatzes (;-getrennte CSV, dl-de).
+    # Leer = kein Download, es bleibt beim gebuendelten Seed (offline nutzbar).
+    NACHSCHLAGEWERK_GEFAHRGUT_URL: str = ""
 
     # KI-Integration (Anthropic Claude)
     ANTHROPIC_API_KEY: str = ""
