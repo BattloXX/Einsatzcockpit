@@ -49,6 +49,14 @@ class Settings(BaseSettings):
     # Cookie-Flags
     COOKIE_SECURE: bool = False  # In Produktion auf true (HTTPS)
 
+    # Reverse-Proxy: X-Forwarded-For/-Proto nur akzeptieren, wenn die Anfrage
+    # von einer der TRUSTED_PROXY_IPS kommt (Komma-getrennt; "*" = alle, nicht
+    # empfohlen). Läuft die App OHNE vorgelagerten Proxy direkt am Netz,
+    # TRUST_PROXY_HEADERS=false setzen — sonst wäre die Client-IP für
+    # Rate-Limits und Audit-Logs per gefälschtem Header frei wählbar.
+    TRUST_PROXY_HEADERS: bool = True
+    TRUSTED_PROXY_IPS: str = "127.0.0.1,::1"
+
     # Fahrtenbuch per <iframe> auf externen (vertrauenswürdigen) Seiten einbettbar machen.
     # Leerzeichen-getrennte Liste erlaubter Eltern-Origins (CSP frame-ancestors), z.B.
     # "https://feuerwehr.wolfurt.at". Leer = Einbettung nur same-origin.

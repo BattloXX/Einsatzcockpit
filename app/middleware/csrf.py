@@ -19,6 +19,7 @@ daher hier ein leichtgewichtiger Origin-Check statt Token-Pflicht: Browser sende
 bei Cross-Origin-Requests einen Origin-Header, der bei Fremd-Origin abgelehnt wird;
 native HTTP-Clients senden i. d. R. keinen Origin-Header und bleiben unberührt.
 """
+import hmac
 import secrets
 from urllib.parse import parse_qs, urlsplit
 
@@ -69,12 +70,9 @@ def _parse_cookie(header_value: str) -> dict[str, str]:
 
 
 def _constant_time_eq(a: str, b: str) -> bool:
-    if len(a) != len(b):
-        return False
-    result = 0
-    for x, y in zip(a, b):
-        result |= ord(x) ^ ord(y)
-    return result == 0
+    # hmac.compare_digest statt Handarbeit: konstante Zeit auch bei
+    # unterschiedlicher Länge (die frühere Eigenbau-Variante leakte die Länge).
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 
 class CSRFMiddleware:

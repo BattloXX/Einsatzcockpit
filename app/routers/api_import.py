@@ -20,6 +20,7 @@ WICHTIG: Nur fuer die Dauer der Migration aktiv. Danach:
 """
 from __future__ import annotations
 
+import hmac
 import logging
 from datetime import date, datetime
 
@@ -39,7 +40,10 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 
 def verify_import_key(x_import_key: str = Header(...)) -> None:
     """Fail-closed: ohne konfigurierten Key ist der Endpunkt fuer niemanden nutzbar."""
-    if not settings.IMPORT_API_KEY or x_import_key != settings.IMPORT_API_KEY:
+    key_ok = settings.IMPORT_API_KEY and hmac.compare_digest(
+        x_import_key.encode("utf-8"), settings.IMPORT_API_KEY.encode("utf-8")
+    )
+    if not key_ok:
         raise HTTPException(status_code=403, detail="Ungueltiger Import-Key")
 
 
