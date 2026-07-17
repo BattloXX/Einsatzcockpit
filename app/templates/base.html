@@ -254,7 +254,7 @@
     <div class="modal__content">
       <div class="modal__header">
         <h3 class="modal__title">App auf iPhone/iPad installieren</h3>
-        <button type="button" class="modal__close" onclick="document.getElementById('iosInstallHint').close()">×</button>
+        <button aria-label="Schließen" type="button" class="modal__close" onclick="document.getElementById('iosInstallHint').close()">×</button>
       </div>
       <div class="modal__body">
         <p>Auf iOS funktioniert die Installation nur über Safari:</p>
@@ -279,12 +279,13 @@
     <div class="modal__content" id="cardDetailBody"></div>
   </dialog>
 
-  <!-- Toast container -->
-  <div id="toast-container" x-show="toasts.length > 0" class="toast-container">
+  <!-- Toast container (aria-live: Screenreader lesen neue Toasts vor, ohne Fokus-Klau) -->
+  <div id="toast-container" x-show="toasts.length > 0" class="toast-container"
+       role="status" aria-live="polite">
     <template x-for="toast in toasts" :key="toast.id">
       <div class="toast" :class="'toast--' + toast.type" x-transition>
         <span x-text="toast.msg"></span>
-        <button @click="removeToast(toast.id)" class="toast__close">×</button>
+        <button aria-label="Schließen" @click="removeToast(toast.id)" class="toast__close">×</button>
       </div>
     </template>
   </div>

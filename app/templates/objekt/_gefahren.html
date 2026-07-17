@@ -19,7 +19,7 @@
                 hx-target="#abschnitt-gefahren" hx-swap="innerHTML"
                 hx-confirm="Gefahr entfernen?" style="display:inline;">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button type="submit" class="btn btn--danger btn--xs" title="Entfernen">×</button>
+            <button aria-label="Schließen" type="submit" class="btn btn--danger btn--xs" title="Entfernen">×</button>
           </form>
         </span>
         {% endif %}
@@ -65,7 +65,7 @@
             <div style="display:flex;gap:6px;margin-bottom:4px;">
               <input type="text" name="link_label" class="form-input" style="flex:1;" placeholder="Bezeichnung" x-model="l.label">
               <input type="text" name="link_url" class="form-input" style="flex:2;" placeholder="https://…" x-model="l.url">
-              <button type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">×</button>
+              <button aria-label="Schließen" type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">×</button>
             </div>
           </template>
           <button type="button" class="btn btn--ghost btn--xs" @click="links.push({label:'',url:''})">+ Link</button>
@@ -121,7 +121,7 @@
         <div style="display:flex;gap:6px;margin-bottom:4px;">
           <input type="text" name="link_label" class="form-input" style="flex:1;" placeholder="Bezeichnung" x-model="l.label">
           <input type="text" name="link_url" class="form-input" style="flex:2;" placeholder="https://…" x-model="l.url">
-          <button type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">×</button>
+          <button aria-label="Schließen" type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">×</button>
         </div>
       </template>
       <button type="button" class="btn btn--ghost btn--xs" @click="links.push({label:'',url:''})">+ Link</button>

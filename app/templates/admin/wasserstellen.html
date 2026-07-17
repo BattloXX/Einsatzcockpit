@@ -158,7 +158,7 @@
   <form method="post" action="/admin/wasserstellen/neu" class="modal__content">
     <div class="modal__header">
       <h3>Neue Wasserstelle</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -212,7 +212,7 @@
   <form method="post" id="editForm" class="modal__content">
     <div class="modal__header">
       <h3>Wasserstelle bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -265,7 +265,7 @@
   <form method="post" action="/admin/wasserstellen/import" enctype="multipart/form-data" class="modal__content">
     <div class="modal__header">
       <h3>CSV-Import</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">

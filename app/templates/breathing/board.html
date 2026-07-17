@@ -395,7 +395,7 @@
         @submit="if (!validate()) $event.preventDefault()">
     <div class="modal__header">
       <h3>Trupp anlegen</h3>
-      <button type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       {% if request.query_params.get('error') == 'min_two_members' %}
@@ -517,7 +517,7 @@
               </div>
             </div>
 
-            <button type="button" @click="removeMember(i)" class="btn btn--icon btn--danger">×</button>
+            <button aria-label="Schließen" type="button" @click="removeMember(i)" class="btn btn--icon btn--danger">×</button>
           </div>
         </template>
       </div>
@@ -808,7 +808,7 @@ function newTroopForm() {
         + 'display:flex;align-items:center;justify-content:space-between;'
         + 'padding:10px 16px;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.4);';
       b.innerHTML = '<span>⚠ Seite war ' + sec + ' Sek. nicht aktiv – Warnungen könnten verpasst worden sein!</span>'
-        + '<button onclick="document.getElementById(\'breathing-hidden-banner\').remove()"'
+        + '<button aria-label="Schließen" onclick="document.getElementById(\'breathing-hidden-banner\').remove()"'
         + ' style="background:rgba(255,255,255,.2);border:none;color:#fff;'
         + 'padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:700;">✕</button>';
       document.body.prepend(b);

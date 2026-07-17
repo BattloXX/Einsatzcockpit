@@ -187,7 +187,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neue Default-Meldung</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form method="post" action="/admin/default-meldungen/neu">
       <div class="modal__body">
@@ -210,7 +210,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Default-Meldung bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form method="post" id="editDmForm">
       <div class="modal__body">

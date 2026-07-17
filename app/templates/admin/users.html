@@ -123,7 +123,7 @@
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="modal__header">
       <h3>Neuer Benutzer</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <div class="modal__body">
       <div class="form-row">
@@ -188,7 +188,7 @@
 <dialog class="modal" id="editUserModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Benutzer bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" id="editUserForm">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">

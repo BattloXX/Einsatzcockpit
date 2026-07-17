@@ -39,7 +39,7 @@
           hx-target="#sektorenGrid" hx-swap="innerHTML"
           hx-confirm="Abschnitt {{ sector.name }} löschen?" style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--ghost btn--sm" style="color:var(--red);">✕</button>
+      <button aria-label="Schließen" type="submit" class="btn btn--ghost btn--sm" style="color:var(--red);">✕</button>
     </form>
   </div>
 

@@ -10,7 +10,7 @@
       {% endif %}
     </div>
   </div>
-  <button class="modal__close" onclick="document.getElementById('cardDetailModal').close()">✕</button>
+  <button aria-label="Schließen" class="modal__close" onclick="document.getElementById('cardDetailModal').close()">✕</button>
 </div>
 <div class="modal__body">
   {% if incident.address_street or incident.caller_name or incident.caller_phone %}

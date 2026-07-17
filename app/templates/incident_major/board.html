@@ -365,7 +365,7 @@
   <div class="modal__content" style="min-width:min(480px,95vw);">
     <div class="modal__header">
       <h3 class="modal__title">Einsatzstelle anlegen</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form hx-post="/lage/{{ lage.id }}/stellen/neu" hx-swap="none"
           hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); this.reset(); } else { alert('Fehler beim Anlegen: ' + (event.detail.xhr.responseText || 'unbekannter Fehler')); }">
@@ -407,7 +407,7 @@
   <div class="modal__content" style="min-width:min(460px,95vw);">
     <div class="modal__header">
       <h3 class="modal__title">Übergreifende Meldung</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form hx-post="/lage/{{ lage.id }}/uebergreifend"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'

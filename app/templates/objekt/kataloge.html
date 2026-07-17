@@ -228,7 +228,7 @@
 <dialog class="modal" id="symbolModal">
   <div class="modal__content">
     <div class="modal__header"><h3 id="sy_titel">Neues Symbol</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" id="symbolForm" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -272,7 +272,7 @@
 <dialog class="modal" id="newAuswahlModal">
   <div class="modal__content">
     <div class="modal__header"><h3 id="na_titel">Neuer Eintrag</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" id="newAuswahlForm">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -294,7 +294,7 @@
 <dialog class="modal" id="editAuswahlModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Eintrag bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" id="editAuswahlForm">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -321,7 +321,7 @@
 <dialog class="modal" id="newKatModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Neue Kategorie</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" action="/objekte/kataloge/kategorien/neu">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -341,7 +341,7 @@
 <dialog class="modal" id="editKatModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Kategorie bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" id="editKatForm">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -365,7 +365,7 @@
 <dialog class="modal" id="newGefModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Neue Gefahr</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" action="/objekte/kataloge/gefahren/neu">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -395,7 +395,7 @@
 <dialog class="modal" id="editGefModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Gefahr bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" id="editGefForm">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -429,7 +429,7 @@
 <dialog class="modal" id="newMerkModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Neues Merkmal</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" action="/objekte/kataloge/merkmale/neu">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -451,7 +451,7 @@
 <dialog class="modal" id="editMerkModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Merkmal bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
     <form method="post" id="editMerkForm">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
@@ -489,7 +489,7 @@ function gefLinkAddRow(containerId, label, url) {
   row.style.cssText = 'display:flex;gap:6px;margin-bottom:4px;';
   row.innerHTML = '<input type="text" name="link_label" class="form-input" style="flex:1;" placeholder="Bezeichnung">' +
     '<input type="text" name="link_url" class="form-input" style="flex:2;" placeholder="https://…">' +
-    '<button type="button" class="btn btn--ghost btn--xs">×</button>';
+    '<button aria-label="Schließen" type="button" class="btn btn--ghost btn--xs">×</button>';
   row.querySelector('button').onclick = function () { row.remove(); };
   row.children[0].value = label || '';
   row.children[1].value = url || '';

@@ -106,7 +106,7 @@
           hx-on::after-request="if(event.detail.successful) htmx.trigger(document.body,'ressourceChanged')"
           style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--xs btn--ghost" style="color:var(--red);">✕</button>
+      <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost" style="color:var(--red);">✕</button>
     </form>
   </div>
   {% endif %}

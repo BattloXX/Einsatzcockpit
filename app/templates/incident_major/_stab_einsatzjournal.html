@@ -49,7 +49,7 @@
             <img src="/lage/{{ lage.id }}/journal/{{ entry.id }}/medien/{{ m.id }}/bild"
                  style="max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.8);">
           </div>
-          <button @click="lbOpen=false"
+          <button aria-label="Schließen" @click="lbOpen=false"
                   style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;
                          color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:50%;
                          width:40px;height:40px;display:flex;align-items:center;justify-content:center;">×</button>
@@ -74,7 +74,7 @@
         hx-confirm="Eintrag löschen?"
         hx-on::after-request="if(event.detail.successful){this.closest('.journal-row').remove()}"
         style="margin:0;">
-    <button type="submit" class="btn btn--xs btn--ghost" title="Löschen"
+    <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost" title="Löschen"
             style="opacity:.5;padding:1px 5px;font-size:.65rem;">✕</button>
   </form>
   {% endif %}

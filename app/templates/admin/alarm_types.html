@@ -46,7 +46,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neuer Alarmtyp</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form method="post" action="/admin/alarmtypen/neu">
       <div class="modal__body">
@@ -87,7 +87,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Alarmtyp bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
     </div>
     <form method="post" id="editAtForm">
       <div class="modal__body">
