@@ -509,7 +509,7 @@ async def new_incident(
 
 
 @router.post("/einsatz/{incident_id}/ki-aufgaben-vorschlaege")
-async def request_ai_task_suggestions(
+def request_ai_task_suggestions(
     incident_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -534,7 +534,7 @@ async def request_ai_task_suggestions(
 # ── Alarmstufe / Einsatzgrund bearbeiten ─────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/alarm/bearbeiten", response_class=HTMLResponse)
-async def alarm_edit_modal(
+def alarm_edit_modal(
     incident_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
@@ -620,7 +620,7 @@ async def alarm_dispatch_vehicles(
 
 
 @router.post("/einsatz/{incident_id}/alarm/fahrzeuge-ueberspringen", response_class=HTMLResponse)
-async def alarm_skip_vehicles(
+def alarm_skip_vehicles(
     incident_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
@@ -633,7 +633,7 @@ async def alarm_skip_vehicles(
 
 
 @router.post("/einsatz/{incident_id}/alarm/ki-aufgaben-neu", response_class=HTMLResponse)
-async def alarm_regenerate_ki(
+def alarm_regenerate_ki(
     incident_id: int, request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -802,7 +802,7 @@ _CARD_KIND_MODEL: dict[str, tuple[type[Any], str, str]] = {
 
 
 @router.get("/einsatz/{incident_id}/karte/{kind}/{uid}", response_class=HTMLResponse)
-async def board_card_fragment(
+def board_card_fragment(
     incident_id: int, kind: str, uid: int, request: Request, db: Session = Depends(get_db)
 ):
     """Einzelne Board-Karte als Fragment für gezielten HTMX-Swap (statt reload_board)."""
@@ -826,7 +826,7 @@ async def board_card_fragment(
 
 
 @router.get("/einsatz/{incident_id}/spalte/{column_id}/inhalt", response_class=HTMLResponse)
-async def board_column_content_fragment(
+def board_column_content_fragment(
     incident_id: int, column_id: int, request: Request, db: Session = Depends(get_db)
 ):
     """Karteninhalt einer Spalte (innerHTML von #zone-{column_id})."""
@@ -863,7 +863,7 @@ async def board_column_content_fragment(
 
 
 @router.get("/einsatz/{incident_id}/spalte/{column_id}", response_class=HTMLResponse)
-async def board_column_fragment(
+def board_column_fragment(
     incident_id: int, column_id: int, request: Request, db: Session = Depends(get_db)
 ):
     """Ganze Kanban-Spalte (Header + Kartenkörper) als Fragment."""
@@ -900,7 +900,7 @@ async def board_column_fragment(
 
 
 @router.get("/einsatz/{incident_id}/kanban", response_class=HTMLResponse)
-async def board_kanban_fragment(
+def board_kanban_fragment(
     incident_id: int, request: Request, db: Session = Depends(get_db)
 ):
     """Alle Kanban-Spalten (innerHTML von #kanban) — für Struktur-Änderungen
@@ -934,7 +934,7 @@ async def board_kanban_fragment(
 
 
 @router.get("/einsatz/{incident_id}/kopfleiste", response_class=HTMLResponse)
-async def board_kopfleiste_fragment(
+def board_kopfleiste_fragment(
     incident_id: int, request: Request, db: Session = Depends(get_db)
 ):
     """Alarm-Badge, Adresse, Lage-Ticker (Header+Sidebar) und EL-vor-Ort-Box als
@@ -962,7 +962,7 @@ async def board_kopfleiste_fragment(
 
 
 @router.get("/einsatz/{incident_id}/info", response_class=HTMLResponse)
-async def incident_info(incident_id: int, request: Request, db: Session = Depends(get_db)):
+def incident_info(incident_id: int, request: Request, db: Session = Depends(get_db)):
     """Einsatzinformation: vorgeschaltete Übersicht mit Karte, Objektinfo (inkl.
     Dokumenten), Ausrückordnung und nächsten Hydranten. Prominenter Absprung ins Board."""
     user = getattr(request.state, "user", None)
@@ -1466,7 +1466,7 @@ async def incident_dashboard_fragment(
 
 
 @router.get("/dashboard/aktuell", response_class=HTMLResponse)
-async def dashboard_latest(request: Request, db: Session = Depends(get_db)):
+def dashboard_latest(request: Request, db: Session = Depends(get_db)):
     """Permanent-Link: leitet immer auf das Dashboard des neuesten aktiven Einsatzes."""
     user = getattr(request.state, "user", None)
     if not user:
@@ -1727,7 +1727,7 @@ async def assign_task(
 # ── Fahrzeug hinzufügen (Inline-Wizard) ───────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/fahrzeug-vorschlaege")
-async def vehicle_suggestions(
+def vehicle_suggestions(
     incident_id: int, request: Request, db: Session = Depends(get_db),
     q: str = "",
 ):
@@ -2318,7 +2318,7 @@ def _einsatzinfo_qr_url(request: Request, incident, user, db: Session) -> str:
 
 
 @router.get("/einsatz/{incident_id}/qr", response_class=HTMLResponse)
-async def get_qr_code(incident_id: int, request: Request, db: Session = Depends(get_db)):
+def get_qr_code(incident_id: int, request: Request, db: Session = Depends(get_db)):
     from app.services.qr_service import generate_qr_datauri
 
     user = getattr(request.state, "user", None)
@@ -2334,7 +2334,7 @@ async def get_qr_code(incident_id: int, request: Request, db: Session = Depends(
 
 
 @router.get("/einsatz/{incident_id}/qr/print", response_class=HTMLResponse)
-async def qr_print(incident_id: int, request: Request, db: Session = Depends(get_db)):
+def qr_print(incident_id: int, request: Request, db: Session = Depends(get_db)):
     """Druckoptimierte Seite mit großem QR-Code + Einsatz-Eckdaten.
     QR verweist auf die öffentliche Einsatzinformation (/alarm/{token})."""
     from app.services.qr_service import generate_qr_datauri
@@ -2383,7 +2383,7 @@ def _check_pin_cookie(request: Request) -> int | None:
 
 
 @router.post("/einsatz/{incident_id}/pin")
-async def set_incident_pin(
+def set_incident_pin(
     incident_id: int, request: Request,
     pin: str = Form(""),
     db: Session = Depends(get_db),
@@ -2402,7 +2402,7 @@ async def set_incident_pin(
 
 
 @router.get("/einsatz/{incident_id}/pin-zugang", response_class=HTMLResponse)
-async def pin_entry_page(incident_id: int, request: Request, db: Session = Depends(get_db)):
+def pin_entry_page(incident_id: int, request: Request, db: Session = Depends(get_db)):
     """Öffentliche PIN-Eingabeseite für Gäste – kein Login erforderlich."""
     incident = db.get(Incident, incident_id)
     if not incident or incident.status != "active" or not incident.access_pin_hash:
@@ -2419,7 +2419,7 @@ from app.core.rate_limit import limiter as _limiter  # noqa: E402
 
 @router.post("/einsatz/{incident_id}/pin-zugang", response_class=HTMLResponse)
 @(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
-async def pin_verify(
+def pin_verify(
     incident_id: int, request: Request,
     pin: str = Form(""),
     db: Session = Depends(get_db),
@@ -2440,7 +2440,7 @@ async def pin_verify(
 # ── Bildschirmschoner ─────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/screensaver", response_class=HTMLResponse)
-async def screensaver(incident_id: int, request: Request, db: Session = Depends(get_db)):
+def screensaver(incident_id: int, request: Request, db: Session = Depends(get_db)):
     """Bildschirmschoner-Modus: Logo, Uhrzeit, Alarmtext.
 
     Hält den Bildschirm über die native Wake-Lock-Bridge der Android-App aktiv
@@ -2514,7 +2514,7 @@ def incident_rsvp_summary(incident_id: int, request: Request, db: Session = Depe
 # ── Fahrzeug-Detail-Modal ─────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", response_class=HTMLResponse)
-async def vehicle_detail(
+def vehicle_detail(
     incident_id: int, vehicle_id: int, request: Request, db: Session = Depends(get_db)
 ):
     user = getattr(request.state, "user", None)
@@ -2587,7 +2587,7 @@ async def set_vehicle_unit_status(
 # ── Auftrags-Detail / Edit-Modal ──────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/aufgabe/{task_id}/detail", response_class=HTMLResponse)
-async def task_detail(
+def task_detail(
     incident_id: int, task_id: int, request: Request, db: Session = Depends(get_db)
 ):
     user = getattr(request.state, "user", None)
@@ -2610,7 +2610,7 @@ async def task_detail(
 # ── Meldungs-Detail / Edit-Modal ──────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/meldung/{message_id}/detail", response_class=HTMLResponse)
-async def message_detail(
+def message_detail(
     incident_id: int, message_id: int, request: Request, db: Session = Depends(get_db)
 ):
     user = getattr(request.state, "user", None)
@@ -2706,7 +2706,7 @@ async def assign_message(
 # ── Personen-Detail / Edit-Modal ──────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/person/{person_id}/detail", response_class=HTMLResponse)
-async def person_detail(
+def person_detail(
     incident_id: int, person_id: int, request: Request, db: Session = Depends(get_db)
 ):
     user = getattr(request.state, "user", None)
@@ -3108,7 +3108,7 @@ async def upload_message_media(
 
 
 @router.post("/einsatz/{incident_id}/meldung/{message_id}/medien/{media_id}/loeschen", response_class=HTMLResponse)
-async def delete_message_media(
+def delete_message_media(
     incident_id: int, message_id: int, media_id: int, request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
@@ -3166,7 +3166,7 @@ async def upload_person_media(
 
 
 @router.post("/einsatz/{incident_id}/person/{person_id}/medien/{media_id}/loeschen", response_class=HTMLResponse)
-async def delete_person_media(
+def delete_person_media(
     incident_id: int, person_id: int, media_id: int, request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
@@ -3308,7 +3308,7 @@ async def standalone_geocode(
 # ── Adresse & Koordinaten bearbeiten ─────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/adresse/bearbeiten", response_class=HTMLResponse)
-async def address_edit_modal(
+def address_edit_modal(
     incident_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
@@ -3424,7 +3424,7 @@ async def address_save(
 # ── Funkjournal ───────────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/funkjournal", response_class=HTMLResponse)
-async def funkjournal_page(
+def funkjournal_page(
     request: Request,
     incident_id: int,
     db: Session = Depends(get_db),
@@ -3464,7 +3464,7 @@ async def funkjournal_page(
 
 
 @router.get("/einsatz/{incident_id}/mannschaft", response_class=HTMLResponse)
-async def mannschaft_page(
+def mannschaft_page(
     request: Request,
     incident_id: int,
     db: Session = Depends(get_db),
@@ -3504,7 +3504,7 @@ async def mannschaft_page(
 
 
 @router.post("/einsatz/{incident_id}/funkjournal")
-async def funkjournal_add(
+def funkjournal_add(
     request: Request,
     incident_id: int,
     direction: str = Form(...),
@@ -3541,7 +3541,7 @@ async def funkjournal_add(
 
 
 @router.post("/einsatz/{incident_id}/funkjournal/{entry_id}/erledigt")
-async def funkjournal_toggle_handled(
+def funkjournal_toggle_handled(
     request: Request,
     incident_id: int,
     entry_id: int,
@@ -3563,7 +3563,7 @@ async def funkjournal_toggle_handled(
 
 
 @router.post("/einsatz/{incident_id}/funkjournal/{entry_id}/lage")
-async def funkjournal_toggle_lage(
+def funkjournal_toggle_lage(
     request: Request,
     incident_id: int,
     entry_id: int,

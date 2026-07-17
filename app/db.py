@@ -8,7 +8,10 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=300,
     pool_size=10,
-    max_overflow=20,
+    # Audit PR 7: DB-lastige Routen laufen als sync def im anyio-Threadpool
+    # (Default: 40 Threads). pool_size + max_overflow muss diese 40 abdecken,
+    # sonst blockieren Threads beim Warten auf eine Pool-Connection.
+    max_overflow=30,
 )
 
 

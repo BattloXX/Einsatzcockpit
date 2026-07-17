@@ -328,7 +328,7 @@ def _apply_sort(rows: list[_Row], *, sort: str, direction: str) -> list[_Row]:
 
 
 @router.get("/admin/medien", response_class=HTMLResponse)
-async def medienverwaltung(
+def medienverwaltung(
     request: Request,
     db: Session = Depends(get_db),
     org: int | None = Query(None),
@@ -402,7 +402,7 @@ async def medienverwaltung(
 
 
 @router.post("/admin/medien/{typ}/{media_id}/loeschen")
-async def medien_loeschen(
+def medien_loeschen(
     typ: str, media_id: int, request: Request, db: Session = Depends(get_db),
     _user=Depends(require_role("admin")),
 ):
@@ -413,7 +413,7 @@ async def medien_loeschen(
 
 
 @router.post("/admin/medien/bulk-loeschen")
-async def medien_bulk_loeschen(
+def medien_bulk_loeschen(
     request: Request, db: Session = Depends(get_db),
     keys: list[str] = Form(default_factory=list),
     _user=Depends(require_role("admin")),
