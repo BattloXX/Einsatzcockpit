@@ -23,6 +23,21 @@
 - Board-Cards (`.site-card`) haben `data-site-id` Attribute für gezieltes HTMX-Swap
 - WebSocket-Events steuern Live-Updates ohne Page-Reload
 
+## Pflicht: Tenant-Scoping bei Mutationen und Public-Routen
+
+Der Tenant-Listener (`app/core/tenant.py`) filtert **nur SELECTs** automatisch.
+
+- **Niemals `db.query(...).update()` / `.delete()` (Bulk) auf Tenant-Tabellen** –
+  diese Statements laufen UNGEFILTERT. Stattdessen: Objekte erst (gefiltert)
+  laden, dann mutieren. Falls Bulk unvermeidbar: expliziten
+  `.filter(Model.org_id == org_id)` setzen.
+- **Anonyme/öffentliche Endpunkte** (Token/QR/PIN/Signatur, SEC-11) laufen ganz
+  ohne Tenant-Filter und müssen selbst über ihre Beweiskette scopen (z. B.
+  `.filter(... == token.org_id)`).
+- **Jede neue Public-Route braucht einen Cross-Org-Test** in
+  `tests/test_public_tenant_isolation.py` (Muster dort: Token der Org A darf
+  keine Daten der Org B preisgeben).
+
 ## Pflicht: Sofortige Darstellung nach Eingabe (kein F5)
 
 **Jede Formular-Aktion muss das UI sofort aktualisieren – ohne manuelle Seitenaktualisierung.**
