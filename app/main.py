@@ -390,7 +390,7 @@ async def session_middleware(request: Request, call_next):
         session_data = unsign_session(token)
         if session_data:
             (user_id, is_qr, qr_incident_id, is_device, display_name,
-             qr_lage_id, is_remember) = session_data
+             qr_lage_id, is_remember, device_token_id) = session_data
             db = SessionLocal()
             set_tenant_context(db, None)
             try:
@@ -425,19 +425,25 @@ async def session_middleware(request: Request, call_next):
                     else:
                         user = None  # QR session without incident_id or lage_id → force re-login
                 elif user and is_device:
-                    # SEC-5: Device-Session-Widerruf. Das Session-Cookie speichert
-                    # keine device_token_id (10 Jahre gueltig, siehe
-                    # sign_session(device=True)) -- daher pruefen wir, ob der User
-                    # ueberhaupt noch ein NICHT widerrufenes Geraet hat. Schliesst
-                    # die Luecke fuer den Hauptfall (Geraet verloren -> Token
-                    # widerrufen -> Cookie soll sofort ungueltig werden). Bei
-                    # mehreren Geraeten je User bleibt die Pruefung grobkoernig,
-                    # solange das Cookie keinen Token-Bezug hat.
-                    has_active_device = db.query(DeviceToken).filter(
-                        DeviceToken.user_id == user_id,
-                        DeviceToken.revoked_at.is_(None),
-                    ).first() is not None
-                    if not has_active_device:
+                    # SEC-5 + Audit A4: Device-Session-Widerruf. Neue Cookies
+                    # tragen die device_token_id ("t") — der Widerruf GENAU
+                    # dieses Geraets beendet die Session sofort, auch wenn der
+                    # User weitere aktive Geraete hat. Bestandscookies ohne
+                    # Token-Bezug (vor PR 6 ausgestellt) fallen auf die
+                    # grobkoernige Pruefung "hat noch irgendein aktives
+                    # Geraet" zurueck.
+                    if device_token_id is not None:
+                        device_ok = db.query(DeviceToken).filter(
+                            DeviceToken.id == device_token_id,
+                            DeviceToken.user_id == user_id,
+                            DeviceToken.revoked_at.is_(None),
+                        ).first() is not None
+                    else:
+                        device_ok = db.query(DeviceToken).filter(
+                            DeviceToken.user_id == user_id,
+                            DeviceToken.revoked_at.is_(None),
+                        ).first() is not None
+                    if not device_ok:
                         user = None
                 elif user and not is_device:
                     # Regular session: refresh token to slide the inactivity window.

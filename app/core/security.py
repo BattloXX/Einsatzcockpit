@@ -139,6 +139,7 @@ def sign_session(
     incident_id: int | None = None,
     lage_id: int | None = None,
     display_name: str | None = None,
+    device_token_id: int | None = None,
 ) -> str:
     if qr:
         payload: dict | int = {"u": user_id, "qr": 1}
@@ -149,7 +150,12 @@ def sign_session(
         if display_name:
             payload["n"] = display_name  # type: ignore[index]
     elif device:
+        # SEC-5/Audit A4: Token-Bezug im Cookie, damit der Widerruf GENAU
+        # dieses Geräts die Session sofort beendet — auch wenn der User noch
+        # andere aktive Geräte hat.
         payload = {"u": user_id, "d": 1}
+        if device_token_id is not None:
+            payload["t"] = device_token_id
     elif remember:
         # "Login merken": längeres, gleitendes Fenster (siehe unsign_session).
         payload = {"u": user_id, "r": 1}
@@ -160,8 +166,14 @@ def sign_session(
 
 def unsign_session(
     token: str,
-) -> tuple[int, bool, int | None, bool, str | None, int | None, bool] | None:
-    """Returns (user_id, is_qr, qr_incident_id, is_device, display_name, qr_lage_id, is_remember) or None."""
+) -> tuple[int, bool, int | None, bool, str | None, int | None, bool, int | None] | None:
+    """Returns (user_id, is_qr, qr_incident_id, is_device, display_name, qr_lage_id,
+    is_remember, device_token_id) or None.
+
+    device_token_id ist None bei Nicht-Device-Sessions UND bei Device-Cookies
+    aus der Zeit vor der Token-Bindung (Audit A4) — die Middleware fällt dann
+    auf die grobkörnige "hat noch irgendein aktives Gerät"-Prüfung zurück.
+    """
     try:
         # Load without max_age so we can check expiry manually per session type.
         data, ts = _signer.loads(token, max_age=None, return_timestamp=True)
@@ -170,13 +182,13 @@ def unsign_session(
 
         if isinstance(data, dict) and data.get("d"):
             # Device session: no timeout whatsoever.
-            return (data["u"], False, None, True, None, None, False)
+            return (data["u"], False, None, True, None, None, False, data.get("t"))
 
         if isinstance(data, dict) and data.get("qr"):
             # QR session: enforce absolute max_age only (DB controls incident/lage validity).
             if age_s > settings.SESSION_MAX_AGE_SECONDS:
                 return None
-            return (data["u"], True, data.get("i"), False, data.get("n"), data.get("l"), False)
+            return (data["u"], True, data.get("i"), False, data.get("n"), data.get("l"), False, None)
 
         if isinstance(data, dict) and data.get("r"):
             # "Login merken": längeres, gleitendes Fenster. Die Middleware re-signt bei
@@ -185,7 +197,7 @@ def unsign_session(
                 return None
             if age_s > settings.SESSION_REMEMBER_INACTIVITY_SECONDS:
                 return None
-            return (data["u"], False, None, False, None, None, True)
+            return (data["u"], False, None, False, None, None, True, None)
 
         if isinstance(data, int):
             # Regular user session: enforce absolute max_age AND inactivity window.
@@ -195,7 +207,7 @@ def unsign_session(
                 return None
             if age_s > settings.SESSION_INACTIVITY_SECONDS:
                 return None
-            return (data, False, None, False, None, None, False)
+            return (data, False, None, False, None, None, False, None)
 
         return None
     except (BadSignature, SignatureExpired):
