@@ -247,7 +247,7 @@ def _nav_counts(lage_id: int, lage: MajorIncident, db: Session) -> dict:
 # ── Navigation: aktive Lage der Org ─────────────────────────────────────────
 
 @router.get("/lage", response_class=HTMLResponse)
-async def lage_overview(
+def lage_overview(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
@@ -293,7 +293,7 @@ async def lage_overview(
 # ── Lage manuell starten ─────────────────────────────────────────────────────
 
 @router.get("/lage/neu", response_class=HTMLResponse)
-async def lage_neu_form(
+def lage_neu_form(
     request: Request,
     _=Depends(require_role("incident_leader", "admin", "org_admin")),
 ):
@@ -676,7 +676,7 @@ async def site_prio_change(
 # ── Stellendetail (HTMX-Partial) ────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stellen/{site_id}", response_class=HTMLResponse)
-async def site_detail(
+def site_detail(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -735,7 +735,7 @@ async def site_detail(
 # ── Karten-Partial (Board-Karte) ────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stellen/{site_id}/card", response_class=HTMLResponse)
-async def site_card_partial(
+def site_card_partial(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -772,7 +772,7 @@ async def site_card_partial(
 # betroffen ist, muss der Client dafuer nicht wissen.
 
 @router.get("/lage/{lage_id}/phase/{phase}/inhalt", response_class=HTMLResponse)
-async def phase_column_partial(
+def phase_column_partial(
     request: Request,
     lage_id: int,
     phase: str,
@@ -809,7 +809,7 @@ async def phase_column_partial(
 # _kopfleiste_oob.html beim Einsatz-Board.
 
 @router.get("/lage/{lage_id}/kopf", response_class=HTMLResponse)
-async def lage_kopf_oob(
+def lage_kopf_oob(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -1114,7 +1114,7 @@ async def site_einheit_abziehen(
 # ── Einzeldruck (Einsatzstelle) ─────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stellen/{site_id}/druck", response_class=HTMLResponse)
-async def site_druck(
+def site_druck(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1338,7 +1338,7 @@ async def site_edit(
 # ── Koordinaten per Pin setzen ───────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stellen/{site_id}/pin", response_class=HTMLResponse)
-async def site_pin_form(
+def site_pin_form(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1463,7 +1463,7 @@ async def site_media_upload(
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/medien/{media_id}/loeschen")
-async def site_media_delete(
+def site_media_delete(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1490,7 +1490,7 @@ async def site_media_delete(
 # ── Foto ausliefern ──────────────────────────────────────────────────────────
 
 @router.get("/lage-medien/{media_id}")
-async def lage_media_serve(
+def lage_media_serve(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1515,7 +1515,7 @@ async def lage_media_serve(
 
 
 @router.get("/lage-medien/thumb/{media_id}")
-async def lage_media_thumb(
+def lage_media_thumb(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1611,7 +1611,7 @@ def _generate_lage_qr(request: Request, lage_id: int, user_id: int) -> tuple[str
 
 
 @router.get("/lage/{lage_id}/bearbeiten", response_class=HTMLResponse)
-async def lage_bearbeiten_form(
+def lage_bearbeiten_form(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -1684,7 +1684,7 @@ async def lage_wiederoeffnen(
 # ── Lage-QR-Zugang ────────────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/qr", response_class=HTMLResponse)
-async def lage_qr_page(
+def lage_qr_page(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -1703,7 +1703,7 @@ async def lage_qr_page(
 
 
 @router.get("/lage/{lage_id}/qr-login", response_class=HTMLResponse)
-async def lage_qr_login(
+def lage_qr_login(
     request: Request,
     lage_id: int,
     token: str,
@@ -1752,7 +1752,7 @@ async def lage_qr_login(
 
 
 @router.post("/lage/{lage_id}/qr-login", response_class=HTMLResponse)
-async def lage_qr_login_post(
+def lage_qr_login_post(
     request: Request,
     lage_id: int,
     token: str,
@@ -1801,7 +1801,7 @@ async def lage_qr_login_post(
 # ── Dashboard ────────────────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/dashboard", response_class=HTMLResponse)
-async def lage_dashboard(
+def lage_dashboard(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -1917,7 +1917,7 @@ async def lage_dashboard(
 # ── Stab ─────────────────────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stab", response_class=HTMLResponse)
-async def lage_stab(
+def lage_stab(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -1959,7 +1959,7 @@ async def lage_stab(
 
 
 @router.post("/lage/{lage_id}/stab/zuweisen")
-async def stab_assign(
+def stab_assign(
     request: Request,
     lage_id: int,
     function: str = Form(...),
@@ -1989,7 +1989,7 @@ async def stab_assign(
 
 
 @router.post("/lage/{lage_id}/stab/{asgn_id}/freigeben")
-async def stab_release(
+def stab_release(
     request: Request,
     lage_id: int,
     asgn_id: int,
@@ -2064,7 +2064,7 @@ async def lage_journal_add(
 
 
 @router.get("/lage/{lage_id}/journal/{entry_id}/medien/{media_id}/bild")
-async def lage_journal_media_image(
+def lage_journal_media_image(
     request: Request,
     lage_id: int,
     entry_id: int,
@@ -2087,7 +2087,7 @@ async def lage_journal_media_image(
 
 
 @router.post("/lage/{lage_id}/journal/{entry_id}/loeschen")
-async def lage_journal_delete(
+def lage_journal_delete(
     request: Request,
     lage_id: int,
     entry_id: int,
@@ -2112,7 +2112,7 @@ async def lage_journal_delete(
 
 
 @router.post("/lage/{lage_id}/journal/{entry_id}/medien/{media_id}/loeschen")
-async def journal_media_delete(
+def journal_media_delete(
     request: Request,
     lage_id: int,
     entry_id: int,
@@ -2138,7 +2138,7 @@ async def journal_media_delete(
 
 
 @router.get("/lage/{lage_id}/journal/{entry_id}/detail", response_class=HTMLResponse)
-async def lage_journal_entry_detail(
+def lage_journal_entry_detail(
     request: Request,
     lage_id: int,
     entry_id: int,
@@ -2165,7 +2165,7 @@ async def lage_journal_entry_detail(
 
 
 @router.get("/lage/{lage_id}/journal/{entry_id}/druck", response_class=HTMLResponse)
-async def lage_journal_entry_druck(
+def lage_journal_entry_druck(
     request: Request,
     lage_id: int,
     entry_id: int,
@@ -2238,7 +2238,7 @@ async def cross_marker_create(
 
 
 @router.get("/lage/{lage_id}/uebergreifend/board-col", response_class=HTMLResponse)
-async def cross_marker_board_col(
+def cross_marker_board_col(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -2315,7 +2315,7 @@ async def cross_marker_update(
 
 
 @router.get("/lage/{lage_id}/uebergreifend/{mid}/pin-picker", response_class=HTMLResponse)
-async def cross_marker_pin_picker(
+def cross_marker_pin_picker(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2392,7 +2392,7 @@ async def cross_marker_delete(
 
 
 @router.get("/lage/{lage_id}/uebergreifend/{mid}/panel", response_class=HTMLResponse)
-async def cross_marker_panel(
+def cross_marker_panel(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2417,7 +2417,7 @@ async def cross_marker_panel(
 
 
 @router.get("/lage/{lage_id}/uebergreifend/{mid}/druck", response_class=HTMLResponse)
-async def cross_marker_druck(
+def cross_marker_druck(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2463,7 +2463,7 @@ async def cross_marker_log_add(
 
 
 @router.post("/lage/{lage_id}/uebergreifend/{mid}/log/{eid}/loeschen")
-async def cross_marker_log_delete(
+def cross_marker_log_delete(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2512,7 +2512,7 @@ async def cross_marker_media_upload(
 
 
 @router.get("/lage/{lage_id}/uebergreifend/{mid}/medien/{media_id}/bild")
-async def cross_marker_media_serve(
+def cross_marker_media_serve(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2535,7 +2535,7 @@ async def cross_marker_media_serve(
 
 
 @router.post("/lage/{lage_id}/uebergreifend/{mid}/medien/{media_id}/loeschen")
-async def cross_marker_media_delete(
+def cross_marker_media_delete(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2556,7 +2556,7 @@ async def cross_marker_media_delete(
 
 
 @router.get("/lage/{lage_id}/karte-cross-markers")
-async def lage_karte_cross_markers(
+def lage_karte_cross_markers(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -2598,7 +2598,7 @@ def _fj_context(lage_id: int, lage, db: Session) -> dict:
 
 
 @router.get("/lage/{lage_id}/funkjournal/rows", response_class=HTMLResponse)
-async def funkjournal_rows(
+def funkjournal_rows(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -2617,7 +2617,7 @@ async def funkjournal_rows(
 
 
 @router.get("/lage/{lage_id}/funkjournal", response_class=HTMLResponse)
-async def lage_funkjournal(
+def lage_funkjournal(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -2641,7 +2641,7 @@ async def lage_funkjournal(
 
 
 @router.post("/lage/{lage_id}/funkjournal")
-async def funkjournal_add(
+def funkjournal_add(
     request: Request,
     lage_id: int,
     direction: str = Form(...),
@@ -2691,7 +2691,7 @@ async def funkjournal_add(
 
 
 @router.get("/lage/{lage_id}/meldungen/qr")
-async def meldungen_qr(
+def meldungen_qr(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -2721,7 +2721,7 @@ async def meldungen_qr(
 
 
 @router.post("/lage/{lage_id}/funkjournal/{entry_id}/erledigt")
-async def funkjournal_handled(
+def funkjournal_handled(
     request: Request,
     lage_id: int,
     entry_id: int,
@@ -2782,7 +2782,7 @@ def _cleanup_pending_verifications() -> None:
 # ── Bürgermeldeportal – öffentliche Seiten (kein Auth) ───────────────────────
 
 @router.get("/melden/{token}", response_class=HTMLResponse)
-async def buerger_portal(
+def buerger_portal(
     request: Request,
     token: str,
     db: Session = Depends(get_db),
@@ -2925,7 +2925,7 @@ async def buerger_submit(
 
 
 @router.get("/melden/{token}/verify/{verify_token}", response_class=HTMLResponse)
-async def buerger_verify_get(
+def buerger_verify_get(
     request: Request,
     token: str,
     verify_token: str,
@@ -2948,7 +2948,7 @@ async def buerger_verify_get(
 
 
 @router.post("/melden/{token}/verify/{verify_token}")
-async def buerger_verify_post(
+def buerger_verify_post(
     request: Request,
     token: str,
     verify_token: str,
@@ -3010,7 +3010,7 @@ async def buerger_verify_post(
 # ── Bürgermeldungen verwalten (Auth) ─────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/meldungen", response_class=HTMLResponse)
-async def meldungen_list(
+def meldungen_list(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -3048,7 +3048,7 @@ async def meldungen_list(
 
 
 @router.post("/lage/{lage_id}/meldungen/token")
-async def meldungen_token_gen(
+def meldungen_token_gen(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -3068,7 +3068,7 @@ async def meldungen_token_gen(
 
 
 @router.get("/lage/{lage_id}/meldungen/{report_id}/foto")
-async def meldung_foto(
+def meldung_foto(
     request: Request,
     lage_id: int,
     report_id: int,
@@ -3189,7 +3189,7 @@ async def meldung_annehmen(
 
 
 @router.post("/lage/{lage_id}/meldungen/{report_id}/ablehnen")
-async def meldung_ablehnen(
+def meldung_ablehnen(
     request: Request,
     lage_id: int,
     report_id: int,
@@ -3372,7 +3372,7 @@ async def lage_pressemeldung(
 # ── Zeitreise ────────────────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/zeitreise", response_class=HTMLResponse)
-async def lage_zeitreise(
+def lage_zeitreise(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -3506,7 +3506,7 @@ def _cross_to_json(m: CrossSiteMarker) -> dict:
 
 
 @router.get("/lage/{lage_id}/druck", response_class=HTMLResponse)
-async def lage_druck(
+def lage_druck(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -3597,7 +3597,7 @@ def build_bericht_context(db: Session, lage) -> dict:
 
 
 @router.get("/lage/{lage_id}/druck/bericht", response_class=HTMLResponse)
-async def lage_druck_bericht(
+def lage_druck_bericht(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -3668,7 +3668,7 @@ def build_stellen_multi_context(db: Session, lage, ids: str, cross_ids: str) -> 
 
 
 @router.get("/lage/{lage_id}/druck/stellen", response_class=HTMLResponse)
-async def lage_druck_stellen(
+def lage_druck_stellen(
     request: Request,
     lage_id: int,
     ids: str = Query(""),
@@ -3714,7 +3714,7 @@ def _is_htmx(request: Request) -> bool:
 
 
 @router.get("/lage/{lage_id}/sektoren", response_class=HTMLResponse)
-async def sektoren_view(
+def sektoren_view(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -3736,7 +3736,7 @@ async def sektoren_view(
 
 
 @router.post("/lage/{lage_id}/sektoren")
-async def sektor_create(
+def sektor_create(
     request: Request,
     lage_id: int,
     name: str = Form(...),
@@ -3770,7 +3770,7 @@ async def sektor_create(
 
 
 @router.post("/lage/{lage_id}/sektoren/{sektor_id}/bearbeiten")
-async def sektor_edit(
+def sektor_edit(
     request: Request,
     lage_id: int,
     sektor_id: int,
@@ -3800,7 +3800,7 @@ async def sektor_edit(
 
 
 @router.post("/lage/{lage_id}/sektoren/{sektor_id}/loeschen")
-async def sektor_delete(
+def sektor_delete(
     request: Request,
     lage_id: int,
     sektor_id: int,
@@ -3934,7 +3934,7 @@ async def sektor_geometry_delete(
 # ── Fahrzeugpositionen (Karten-API) ───────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/fahrzeuge/positionen")
-async def vehicle_positions(
+def vehicle_positions(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -4080,7 +4080,7 @@ async def vehicle_manual_pin(
 # ── Lagekarte ────────────────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/karte", response_class=HTMLResponse)
-async def lage_karte(
+def lage_karte(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -4253,7 +4253,7 @@ def build_karte_context(db: Session, lage, min_lat: float, min_lng: float,
 
 
 @router.get("/lage/{lage_id}/karte/druck", response_class=HTMLResponse)
-async def lage_karte_druck(
+def lage_karte_druck(
     request: Request,
     lage_id: int,
     min_lat: float = Query(...),
@@ -4272,7 +4272,7 @@ async def lage_karte_druck(
 
 
 @router.get("/lage/{lage_id}/karte-sektoren")
-async def lage_karte_sektoren(
+def lage_karte_sektoren(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -4295,7 +4295,7 @@ async def lage_karte_sektoren(
 
 
 @router.get("/lage/{lage_id}/karte-sites")
-async def lage_karte_sites(
+def lage_karte_sites(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -4363,7 +4363,7 @@ def _sync_einheit_pool(
 # ── Ressourcenübersicht ───────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/ressourcen", response_class=HTMLResponse)
-async def lage_ressourcen(
+def lage_ressourcen(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -4434,7 +4434,7 @@ async def lage_ressourcen(
 # ── Ressourcen-Journal ───────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/ressourcen/journal", response_class=HTMLResponse)
-async def lage_ressourcen_journal(
+def lage_ressourcen_journal(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -4462,7 +4462,7 @@ async def lage_ressourcen_journal(
 
 
 @router.get("/lage/{lage_id}/ressourcen/kraefteuebersicht", response_class=HTMLResponse)
-async def lage_ressourcen_kraefteuebersicht(
+def lage_ressourcen_kraefteuebersicht(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -4489,7 +4489,7 @@ async def lage_ressourcen_kraefteuebersicht(
 
 
 @router.get("/lage/{lage_id}/ressourcen/planung", response_class=HTMLResponse)
-async def lage_ressourcen_planung(
+def lage_ressourcen_planung(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -4788,7 +4788,7 @@ async def lage_einheit_delete(
 # ── Protokoll-Export ──────────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/protokoll.txt")
-async def lage_protokoll_export(
+def lage_protokoll_export(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),

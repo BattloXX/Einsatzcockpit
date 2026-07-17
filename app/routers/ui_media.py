@@ -33,7 +33,7 @@ def _user_may_access_incident(user: User, incident: Incident) -> bool:
 
 
 @router.get("/medien", response_class=HTMLResponse)
-async def media_gallery(
+def media_gallery(
     request: Request,
     db: Session = Depends(get_db),
     incident_id: int | None = Query(None),
@@ -156,7 +156,7 @@ def _serve_thumb(user, media, db):
 
 
 @router.get("/medien/datei/{media_id}")
-async def serve_media_file(media_id: int, request: Request, db: Session = Depends(get_db),
+def serve_media_file(media_id: int, request: Request, db: Session = Depends(get_db),
                            download: int = Query(0)):
     user = getattr(request.state, "user", None)
     if not user:
@@ -165,7 +165,7 @@ async def serve_media_file(media_id: int, request: Request, db: Session = Depend
 
 
 @router.get("/medien/thumb/{media_id}")
-async def serve_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
+def serve_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)
@@ -173,7 +173,7 @@ async def serve_media_thumb(media_id: int, request: Request, db: Session = Depen
 
 
 @router.get("/medien/meldung/datei/{media_id}")
-async def serve_message_media_file(media_id: int, request: Request, db: Session = Depends(get_db),
+def serve_message_media_file(media_id: int, request: Request, db: Session = Depends(get_db),
                                    download: int = Query(0)):
     user = getattr(request.state, "user", None)
     if not user:
@@ -182,7 +182,7 @@ async def serve_message_media_file(media_id: int, request: Request, db: Session 
 
 
 @router.get("/medien/meldung/thumb/{media_id}")
-async def serve_message_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
+def serve_message_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)
@@ -190,7 +190,7 @@ async def serve_message_media_thumb(media_id: int, request: Request, db: Session
 
 
 @router.get("/medien/person/datei/{media_id}")
-async def serve_person_media_file(media_id: int, request: Request, db: Session = Depends(get_db),
+def serve_person_media_file(media_id: int, request: Request, db: Session = Depends(get_db),
                                   download: int = Query(0)):
     user = getattr(request.state, "user", None)
     if not user:
@@ -199,7 +199,7 @@ async def serve_person_media_file(media_id: int, request: Request, db: Session =
 
 
 @router.get("/medien/person/thumb/{media_id}")
-async def serve_person_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
+def serve_person_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)
@@ -207,7 +207,7 @@ async def serve_person_media_thumb(media_id: int, request: Request, db: Session 
 
 
 @router.post("/medien/datei/{media_id}/loeschen")
-async def gallery_delete_task_media(media_id: int, request: Request, db: Session = Depends(get_db)):
+def gallery_delete_task_media(media_id: int, request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)

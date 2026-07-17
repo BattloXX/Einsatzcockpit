@@ -228,7 +228,7 @@ async def save_ai_report(incident_id: int, request: Request, db: Session = Depen
 
 
 @router.post("/archiv/{incident_id}/loeschen")
-async def delete_incident(incident_id: int, request: Request, db: Session = Depends(get_db)):
+def delete_incident(incident_id: int, request: Request, db: Session = Depends(get_db)):
     """Löscht einen Einsatz endgültig. Nur system_admin."""
     import shutil
     from pathlib import Path
