@@ -505,6 +505,50 @@ async def lagefuehrung_wind(
     })
 
 
+@router.get("/einsatz/{incident_id}/lagefuehrung/ausbreitung.json")
+async def lagefuehrung_ausbreitung(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+    lat: float | None = None,
+    lng: float | None = None,
+    laenge: int = 300,
+    halbwinkel: int = 25,
+):
+    """Downwind-Ausbreitungskegel (GeoJSON-Polygon) am Quellpunkt, windbezogen.
+
+    Ohne lat/lng wird der Einsatzort verwendet. Die Windrichtung kommt aus dem
+    weather_service; die Ausbreitung erfolgt in die Gegenrichtung (wind + 180).
+    """
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+
+    q_lat = lat if lat is not None else incident.lat
+    q_lng = lng if lng is not None else incident.lng
+    if q_lat is None or q_lng is None:
+        return JSONResponse({})
+
+    from app.services import ausbreitung_service, weather_service
+
+    wind_from = None
+    current = await weather_service.get_current(q_lat, q_lng, org_id=incident.primary_org_id)
+    if current:
+        wind_from = current.wind_direction_deg
+    richtung = ausbreitung_service.ausbreitungsrichtung(wind_from)
+    laenge_m = max(10, min(int(laenge), 20000))
+    geometry = ausbreitung_service.plume_polygon(
+        q_lat, q_lng, richtung, laenge_m, halbwinkel_deg=float(halbwinkel))
+    return JSONResponse({
+        "geometry": geometry,
+        "richtung_deg": round(richtung, 1),
+        "wind_direction_deg": wind_from,
+        "laenge_m": laenge_m,
+        "wind_bekannt": wind_from is not None,
+    })
+
+
 # ── Chronologie ──────────────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/events.json")
