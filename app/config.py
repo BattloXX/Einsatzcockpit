@@ -217,10 +217,6 @@ class Settings(BaseSettings):
     # Leer → Fallback auf SHA256("fernet-v1:" + SECRET_KEY) [abwärtskompatibel].
     FERNET_KEY: str = ""
 
-    # TEMPORAER: EUS-Datenmigration (app/routers/api_import.py). Leer = Endpunkt
-    # fail-closed deaktiviert. Nach Abschluss der Migration Router+Key entfernen.
-    IMPORT_API_KEY: str = ""
-
     # LIS/IPR-Anbindung (Intergraph Leitstelleninformationssystem)
     LIS_ENABLED: bool = True         # globaler Kill-Switch
     LIS_POLL_INTERVAL_S: int = 30    # Loop-Intervall

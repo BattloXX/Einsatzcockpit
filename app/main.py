@@ -21,7 +21,6 @@ from app.models.incident import Incident, IncidentToken
 from app.models.major_incident import LageToken, MajorIncident, MajorIncidentStatus
 from app.models.user import DeviceToken, Role, User
 from app.routers import (
-    api_import,
     api_v1,
     api_weather,
     auth,
@@ -562,8 +561,6 @@ app.include_router(ui_password_reset.router)
 app.include_router(ui_pin_login.router)
 app.include_router(api_v1.router)
 app.include_router(api_weather.router)
-# TEMPORAER: EUS-Datenmigration — nach Abschluss entfernen (siehe app/routers/api_import.py)
-app.include_router(api_import.router)
 app.include_router(device_api.router)
 app.include_router(gateway_api.router)
 app.include_router(lagekarte_api.router)
