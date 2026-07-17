@@ -63,12 +63,18 @@ def test_poll_all_orgs_ruft_nur_orgs_mit_konfigurierten_stationen_ab(monkeypatch
 
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
 
     import app.db as appdb
     from app.core.tenant import set_tenant_context
     from app.models.master import FireDept, OrgSettings
 
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    # StaticPool: _poll_all_orgs laedt die Org-Liste seit Audit-PR 4 via
+    # asyncio.to_thread — der Default-Pool fuer sqlite:///:memory: ist
+    # thread-lokal und saehe im Worker-Thread eine LEERE Datenbank.
+    engine = create_engine("sqlite:///:memory:",
+                           connect_args={"check_same_thread": False},
+                           poolclass=StaticPool)
     appdb.Base.metadata.create_all(bind=engine)
     TestSession = sessionmaker(bind=engine)
     monkeypatch.setattr(appdb, "SessionLocal", TestSession)

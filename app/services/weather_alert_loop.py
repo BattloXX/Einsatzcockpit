@@ -8,6 +8,8 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
+from app.services.loop_utils import iteration_watch
+
 logger = logging.getLogger("einsatzleiter.weather_alert_loop")
 
 
@@ -21,7 +23,8 @@ async def weather_alert_loop() -> None:
     while True:
         try:
             await asyncio.sleep(settings.WEATHER_ALERT_INTERVAL_S)
-            await _run_all_orgs()
+            with iteration_watch(logger, "weather_alert_loop", settings.WEATHER_ALERT_INTERVAL_S):
+                await _run_all_orgs()
         except asyncio.CancelledError:
             logger.info("weather_alert_loop beendet")
             break
@@ -31,21 +34,24 @@ async def weather_alert_loop() -> None:
 
 async def _run_all_orgs() -> None:
     from app.config import settings
-    from app.core.tenant import set_tenant_context
-    from app.db import SessionLocal
-    from app.models.master import OrgSettings
 
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        # Alle Orgs mit Wetter-Integration aktiv (NULL = global True)
-        orgs = [
-            o for o in db.query(OrgSettings).all()
-            if o.weather_enabled is not False
-            and settings.WEATHER_ENABLED
-        ]
-    finally:
-        db.close()
+    def _lade_orgs() -> list:
+        from app.core.tenant import set_tenant_context
+        from app.db import SessionLocal
+        from app.models.master import OrgSettings
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            # Alle Orgs mit Wetter-Integration aktiv (NULL = global True)
+            return [
+                o for o in db.query(OrgSettings).all()
+                if o.weather_enabled is not False
+                and settings.WEATHER_ENABLED
+            ]
+        finally:
+            db.close()
+
+    orgs = await asyncio.to_thread(_lade_orgs)
 
     base_url = (settings.PUBLIC_BASE_URL or settings.APP_BASE_URL or "").rstrip("/")
     for org_settings in orgs:

@@ -100,7 +100,8 @@ async def _notify_due(item: dict) -> None:
         logger.exception("task_reminder: WS-Broadcast für Einsatz %s fehlgeschlagen", incident_id)
 
     if leader_user_id:
-        try:
+        # DB + pywebpush (synchrones HTTP!) in den Threadpool (Audit B2)
+        def _push() -> None:
             from app.services.push_service import notify_user
             db2 = SessionLocal()
             set_tenant_context(db2, None)
@@ -114,6 +115,9 @@ async def _notify_due(item: dict) -> None:
                 )
             finally:
                 db2.close()
+
+        try:
+            await asyncio.to_thread(_push)
         except Exception:
             logger.exception("task_reminder: Push-Fallback fehlgeschlagen")
 
@@ -129,14 +133,18 @@ async def _check_objekt_revisionen() -> None:
     from app.services.broadcast import broadcast_org
     from app.services.objekt_service import pruefe_revision_erinnerungen
 
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        faellig = pruefe_revision_erinnerungen(db)
-        if faellig:
-            db.commit()
-    finally:
-        db.close()
+    def _pruefe() -> list[dict]:
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            faellig = pruefe_revision_erinnerungen(db)
+            if faellig:
+                db.commit()
+            return faellig
+        finally:
+            db.close()
+
+    faellig = await asyncio.to_thread(_pruefe)
 
     for item in faellig:
         if not item.get("org_id"):
@@ -153,20 +161,27 @@ async def _check_objekt_revisionen() -> None:
             logger.exception("task_reminder: Objekt-Revisions-Broadcast fehlgeschlagen")
 
 
+def _check_due_in_new_session() -> list[dict]:
+    """DB-Arbeit für den Threadpool (Audit B2): Session lebt komplett im Worker-Thread."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        return _check_due_messages_sync(db)
+    finally:
+        db.close()
+
+
 async def task_reminder_loop() -> None:
+    from app.services.loop_utils import iteration_watch
     logger.info("task_reminder_loop gestartet")
     while True:
         try:
             await asyncio.sleep(30)
-            db = SessionLocal()
-            set_tenant_context(db, None)
-            try:
-                due = _check_due_messages_sync(db)
-            finally:
-                db.close()
-            for item in due:
-                await _notify_due(item)
-            await _check_objekt_revisionen()
+            with iteration_watch(logger, "task_reminder_loop", 30):
+                due = await asyncio.to_thread(_check_due_in_new_session)
+                for item in due:
+                    await _notify_due(item)
+                await _check_objekt_revisionen()
         except asyncio.CancelledError:
             logger.info("task_reminder_loop beendet")
             break

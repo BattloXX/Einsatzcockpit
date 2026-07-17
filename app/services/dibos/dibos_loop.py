@@ -15,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from app.services.loop_utils import iteration_watch
+
 logger = logging.getLogger("einsatzleiter.dibos.loop")
 
 _DEFAULT_INTERVAL_S = 20
@@ -31,7 +33,8 @@ async def dibos_poll_loop() -> None:
     while True:
         try:
             await asyncio.sleep(interval)
-            await _run_all_orgs()
+            with iteration_watch(logger, "dibos_poll_loop", interval):
+                await _run_all_orgs()
         except asyncio.CancelledError:
             logger.info("dibos_poll_loop beendet")
             break
@@ -40,28 +43,31 @@ async def dibos_poll_loop() -> None:
 
 
 async def _run_all_orgs() -> None:
-    from app.core.tenant import set_tenant_context
-    from app.db import SessionLocal
-    from app.models.dibos import OrgDibosConfig
-    from app.models.master import FireDept
+    def _lade_paare() -> list[tuple[int, int]]:
+        from app.core.tenant import set_tenant_context
+        from app.db import SessionLocal
+        from app.models.dibos import OrgDibosConfig
+        from app.models.master import FireDept
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            configs = (
+                db.query(OrgDibosConfig)
+                .filter(OrgDibosConfig.enabled == True)  # noqa: E712
+                .filter(OrgDibosConfig.auto_trace_on_event == True)  # noqa: E712
+                .all()
+            )
+            # (org, config) Paare vorab auflösen, bevor die Session je Org neu geöffnet wird
+            pairs = []
+            for cfg in configs:
+                org = db.get(FireDept, cfg.org_id)
+                if org:
+                    pairs.append((org.id, cfg.id))
+            return pairs
+        finally:
+            db.close()
 
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        configs = (
-            db.query(OrgDibosConfig)
-            .filter(OrgDibosConfig.enabled == True)  # noqa: E712
-            .filter(OrgDibosConfig.auto_trace_on_event == True)  # noqa: E712
-            .all()
-        )
-        # (org, config) Paare vorab auflösen, bevor die Session je Org neu geöffnet wird
-        pairs = []
-        for cfg in configs:
-            org = db.get(FireDept, cfg.org_id)
-            if org:
-                pairs.append((org.id, cfg.id))
-    finally:
-        db.close()
+    pairs = await asyncio.to_thread(_lade_paare)
 
     for org_id, config_id in pairs:
         try:

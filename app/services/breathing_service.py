@@ -270,33 +270,42 @@ async def _breathing_watchdog_loop() -> None:
     # verhindert dauerhaftes Re-Senden ohne Zustandsänderung
     _sent: dict[int, set[str]] = {}
 
+    def _collect_new_warnings() -> list[tuple[int, int, str]]:
+        """DB-Scan im Threadpool (Audit B2); liefert (incident_id, troop_id, kind).
+
+        Aktualisiert _sent direkt — unkritisch, da der Loop die Aufrufe strikt
+        sequenziell absetzt (kein paralleler Zugriff auf das Dict).
+        """
+        from app.core.tenant import set_tenant_context
+        events: list[tuple[int, int, str]] = []
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            active_incidents = db.query(Incident).filter(Incident.status == "active").all()
+            for incident in active_incidents:
+                db.refresh(incident, ["breathing_troops"])
+                for troop in incident.breathing_troops:
+                    if troop.status not in ("im_einsatz", "rueckzug"):
+                        _sent.pop(troop.id, None)
+                        continue
+                    active_warnings = set(check_troop_warnings(troop))
+                    prev_warnings = _sent.get(troop.id, set())
+                    for kind in active_warnings - prev_warnings:
+                        events.append((incident.id, troop.id, kind))
+                    _sent[troop.id] = active_warnings
+        finally:
+            db.close()
+        return events
+
     while True:
         try:
             await asyncio.sleep(5)
-            from app.core.tenant import set_tenant_context
-            db = SessionLocal()
-            set_tenant_context(db, None)
-            try:
-                active_incidents = db.query(Incident).filter(Incident.status == "active").all()
-                for incident in active_incidents:
-                    db.refresh(incident, ["breathing_troops"])
-                    for troop in incident.breathing_troops:
-                        if troop.status not in ("im_einsatz", "rueckzug"):
-                            _sent.pop(troop.id, None)
-                            continue
-                        active_warnings = set(check_troop_warnings(troop))
-                        prev_warnings = _sent.get(troop.id, set())
-                        new_warnings = active_warnings - prev_warnings
-                        _ = prev_warnings - active_warnings
-                        for kind in new_warnings:
-                            await manager.broadcast(incident.id, {
-                                "type": "troop_warning",
-                                "troop_id": troop.id,
-                                "kind": kind,
-                            })
-                        _sent[troop.id] = active_warnings
-            finally:
-                db.close()
+            for incident_id, troop_id, kind in await asyncio.to_thread(_collect_new_warnings):
+                await manager.broadcast(incident_id, {
+                    "type": "troop_warning",
+                    "troop_id": troop_id,
+                    "kind": kind,
+                })
         except asyncio.CancelledError:
             raise
         except Exception:

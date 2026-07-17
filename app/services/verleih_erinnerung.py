@@ -19,17 +19,18 @@ logger = logging.getLogger("einsatzleiter.verleih_erinnerung")
 
 
 async def verleih_erinnerung_loop() -> None:
+    from app.services.loop_utils import iteration_watch
     while True:
         await asyncio.sleep(60)
         try:
-            await _check_fällige_erinnerungen()
+            with iteration_watch(logger, "verleih_erinnerung_loop", 60):
+                await _check_fällige_erinnerungen()
         except Exception:
             logger.exception("Fehler im Verleih-Erinnerungs-Loop")
 
 
-async def _check_fällige_erinnerungen() -> None:
-    from app.services.sms_service import send_sms
-
+def _lade_faellige() -> list[dict]:
+    """DB-Arbeit für den Threadpool (Audit B2): fällige Erinnerungen als plaine Dicts."""
     with SessionLocal() as db:
         set_tenant_context(db, None)  # system_admin-Modus: alle Orgs
         now = datetime.now(UTC)
@@ -43,19 +44,39 @@ async def _check_fällige_erinnerungen() -> None:
             )
             .all()
         )
+        return [
+            {
+                "id": a.id,
+                "org_id": a.org_id,
+                "telefon": a.telefon,
+                "text": svc.get_sms_erinnerung_text(db, a.org_id, a),  # type: ignore[arg-type]
+            }
+            for a in faellige
+        ]
 
-        for ausleihe in faellige:
-            try:
-                text = svc.get_sms_erinnerung_text(db, ausleihe.org_id, ausleihe)  # type: ignore[arg-type]
-                ok = await send_sms(ausleihe.org_id, ausleihe.telefon, text)  # type: ignore[arg-type]
-                if ok:
-                    ausleihe.erinnerung_gesendet_at = datetime.now(UTC)
-                    db.commit()
-                    logger.info(
-                        "Erinnerungs-SMS gesendet: Ausleihe %s, Org %s",
-                        ausleihe.id, ausleihe.org_id,
-                    )
-                else:
-                    logger.warning("Erinnerungs-SMS fehlgeschlagen: Ausleihe %s", ausleihe.id)
-            except Exception:
-                logger.exception("Fehler bei Erinnerungs-SMS für Ausleihe %s", ausleihe.id)
+
+def _markiere_gesendet(ausleihe_id: int) -> None:
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        ausleihe = db.get(VerleihAusleihe, ausleihe_id)
+        if ausleihe is not None and ausleihe.erinnerung_gesendet_at is None:
+            ausleihe.erinnerung_gesendet_at = datetime.now(UTC)
+            db.commit()
+
+
+async def _check_fällige_erinnerungen() -> None:
+    from app.services.sms_service import send_sms
+
+    for item in await asyncio.to_thread(_lade_faellige):
+        try:
+            ok = await send_sms(item["org_id"], item["telefon"], item["text"])
+            if ok:
+                await asyncio.to_thread(_markiere_gesendet, item["id"])
+                logger.info(
+                    "Erinnerungs-SMS gesendet: Ausleihe %s, Org %s",
+                    item["id"], item["org_id"],
+                )
+            else:
+                logger.warning("Erinnerungs-SMS fehlgeschlagen: Ausleihe %s", item["id"])
+        except Exception:
+            logger.exception("Fehler bei Erinnerungs-SMS für Ausleihe %s", item["id"])

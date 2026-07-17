@@ -130,19 +130,26 @@ def _check_incidents_sync(db) -> list[tuple[int, int]]:
     return to_warn
 
 
+def _check_incidents_in_new_session() -> list[tuple[int, int]]:
+    """DB-Arbeit für den Threadpool (Audit B2): Session lebt komplett im Worker-Thread."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        return _check_incidents_sync(db)
+    finally:
+        db.close()
+
+
 async def autoclose_loop() -> None:
+    from app.services.loop_utils import iteration_watch
     logger.info("autoclose_loop gestartet")
     while True:
         try:
             await asyncio.sleep(60)
-            db = SessionLocal()
-            set_tenant_context(db, None)
-            try:
-                to_warn = _check_incidents_sync(db)
-            finally:
-                db.close()
-            for incident_id, grace_minutes in to_warn:
-                await _send_warning(incident_id, grace_minutes)
+            with iteration_watch(logger, "autoclose_loop", 60):
+                to_warn = await asyncio.to_thread(_check_incidents_in_new_session)
+                for incident_id, grace_minutes in to_warn:
+                    await _send_warning(incident_id, grace_minutes)
         except asyncio.CancelledError:
             logger.info("autoclose_loop beendet")
             break
