@@ -87,6 +87,22 @@
               <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-wind">🧭 Windrichtung</button>
               <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-snapshot">📸 Momentaufnahme</button>
             </div>
+            {% if request.state.nachschlagewerke_enabled %}
+            <details class="lft-evak" style="margin-top:8px;">
+              <summary class="btn btn--ghost btn--sm" style="display:inline-block;">☣️ Evakuierungsradius</summary>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center;">
+                <button type="button" class="btn btn--ghost btn--xs" id="lft-evak-klein">Klein (50 m)</button>
+                <button type="button" class="btn btn--ghost btn--xs" id="lft-evak-gross">Groß (100 m)</button>
+                <button type="button" class="btn btn--ghost btn--xs" id="lft-evak-brand">Tank/Brand (100/800 m)</button>
+                <span style="display:inline-flex;gap:4px;align-items:center;">
+                  <input type="number" id="lft-evak-radius" class="form-input" min="1" max="10000"
+                         placeholder="m" style="width:80px;padding:4px 6px;">
+                  <button type="button" class="btn btn--ghost btn--xs" id="lft-evak-custom">Eigener</button>
+                </span>
+              </div>
+              <small class="form-hint">Preset wählen, dann auf die Karte klicken. ERG-2020-Richtwerte.</small>
+            </details>
+            {% endif %}
           </div>
 
           <details class="lft-fahrzeuge" open>

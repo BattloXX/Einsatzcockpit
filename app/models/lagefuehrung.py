@@ -37,6 +37,9 @@ LAGEFUEHRUNG_FEATURE_TYPEN = (
     "taktisches_zeichen",
     "meldung",
     "distanz",
+    # Nachschlagewerke: Gefahren-Overlays (Punkt-Geometrie + props.zonen bzw. props.plume)
+    "gefahrenradius",
+    "ausbreitung",
 )
 
 

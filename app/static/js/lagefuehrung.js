@@ -513,6 +513,10 @@
           if (f.typ === "distanz" && f.props && f.props.kind === "kreis") {
             return L.circle(latlng, { radius: f.props.distanz_m || 0, color: "#6b7280", weight: 2, dashArray: "6 4", fillOpacity: 0.04 });
           }
+          if (f.typ === "gefahrenradius" && f.props) {
+            var gfarbe = f.props.farbe || "#dc2626";
+            return L.circle(latlng, { radius: f.props.radius_m || 0, color: gfarbe, weight: 2, fillColor: gfarbe, fillOpacity: 0.12 });
+          }
           return L.marker(latlng, { icon: markerFeatureIcon(f) });
         }
       });
@@ -586,6 +590,10 @@
           if (f.typ === "text") { return L.marker(latlng, { icon: divIcon("", [0, 0]) }); }
           if (f.typ === "distanz" && f.props && f.props.kind === "kreis") {
             return L.circle(latlng, { radius: f.props.distanz_m || 0, color: "#6b7280", weight: 2, dashArray: "6 4", fillOpacity: 0.04 });
+          }
+          if (f.typ === "gefahrenradius" && f.props) {
+            var gfarbe = f.props.farbe || "#dc2626";
+            return L.circle(latlng, { radius: f.props.radius_m || 0, color: gfarbe, weight: 2, fillColor: gfarbe, fillOpacity: 0.12 });
           }
           return L.marker(latlng, { icon: markerFeatureIcon(f) });
         }
@@ -983,6 +991,18 @@
           layer_gruppe: "zeichnung"
         });
         disarmPlacement();
+      } else if (p.kind === "gefahrenradius") {
+        var gLng = latlng.lng, gLat = latlng.lat;
+        (p.data.zonen || []).forEach(function (z) {
+          createFeature({
+            typ: "gefahrenradius",
+            label: z.label + " " + z.radius_m + " m",
+            geometry: { type: "Point", coordinates: [gLng, gLat] },
+            props: { radius_m: z.radius_m, farbe: z.farbe, label: z.label, rolle: z.rolle, preset: p.data.preset || null },
+            layer_gruppe: "zeichnung"
+          });
+        });
+        disarmPlacement();
       } else if (p.kind === "fahrzeug-pin") {
         disarmPlacement();
         fetchJson(apiBase + "/vehicles/" + p.data.id + "/pin", {
@@ -1027,6 +1047,33 @@
             var rot = (w && w.wind_direction_deg != null) ? Math.round((w.wind_direction_deg + 180) % 360) : 0;
             armPlacement("wind", { rotation: rot });
           }).catch(function () { armPlacement("wind", { rotation: 0 }); });
+        });
+      }
+
+      // Evakuierungsradius (Nachschlagewerke): tabellenbasierte ERG-2020-Presets.
+      // Zonen als eigenstaendige gefahrenradius-Kreis-Features (Persistenz/Sync/Druck geerbt).
+      var EVAK_PRESETS = {
+        klein: [{ rolle: "sperr", radius_m: 50, farbe: "#dc2626", label: "Sofort-Sperrbereich" }],
+        gross: [{ rolle: "sperr", radius_m: 100, farbe: "#dc2626", label: "Sofort-Sperrbereich" }],
+        brand: [
+          { rolle: "evak", radius_m: 800, farbe: "#f59e0b", label: "Evakuierungs-/Warnbereich" },
+          { rolle: "sperr", radius_m: 100, farbe: "#dc2626", label: "Sofort-Sperrbereich" }
+        ]
+      };
+      function armEvak(preset) { armPlacement("gefahrenradius", { zonen: EVAK_PRESETS[preset], preset: preset }); }
+      var btnEvakKlein = document.getElementById("lft-evak-klein");
+      if (btnEvakKlein) { btnEvakKlein.addEventListener("click", function () { armEvak("klein"); }); }
+      var btnEvakGross = document.getElementById("lft-evak-gross");
+      if (btnEvakGross) { btnEvakGross.addEventListener("click", function () { armEvak("gross"); }); }
+      var btnEvakBrand = document.getElementById("lft-evak-brand");
+      if (btnEvakBrand) { btnEvakBrand.addEventListener("click", function () { armEvak("brand"); }); }
+      var btnEvakCustom = document.getElementById("lft-evak-custom");
+      if (btnEvakCustom) {
+        btnEvakCustom.addEventListener("click", function () {
+          var inp = document.getElementById("lft-evak-radius");
+          var r = inp ? parseInt(inp.value, 10) : 0;
+          if (!r || r <= 0) { alert("Bitte einen Radius in Metern eingeben."); return; }
+          armPlacement("gefahrenradius", { preset: null, zonen: [{ rolle: "sperr", radius_m: r, farbe: "#dc2626", label: "Sperrbereich" }] });
         });
       }
 
