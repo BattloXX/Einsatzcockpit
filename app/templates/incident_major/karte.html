@@ -445,7 +445,7 @@
   </div>
   <div id="pin-address-row" style="font-size:.72rem;color:var(--text-muted);margin-bottom:8px;"></div>
   <div style="display:flex;gap:8px;margin-top:12px;">
-    <button onclick="document.getElementById('pin-modal').close()" class="btn btn--ghost btn--sm">Abbrechen</button>
+    <button data-ec-action="close-dialog" data-ec-dialog="pin-modal" class="btn btn--ghost btn--sm">Abbrechen</button>
     <button onclick="savePinSite()" class="btn btn--primary btn--sm">Anlegen</button>
   </div>
 </dialog>

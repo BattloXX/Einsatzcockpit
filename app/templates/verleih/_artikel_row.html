@@ -29,7 +29,7 @@
   </td>
   <td>{{ a.lagerbestand if a.lagerbestand is not none else '&ndash;' }}</td>
   <td style="white-space:nowrap;">
-    <button class="btn btn--ghost btn--xs" onclick="document.getElementById('editArtikelModal-{{ a.id }}').showModal()">Bearbeiten</button>
+    <button class="btn btn--ghost btn--xs" data-ec-action="open-dialog" data-ec-dialog="editArtikelModal-{{ a.id }}">Bearbeiten</button>
     {% if not a.ist_mengenartikel %}
     <button class="btn btn--ghost btn--xs"
             hx-post="/admin/verleih-artikel/{{ a.id }}/status-toggle"

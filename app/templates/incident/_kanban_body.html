@@ -9,7 +9,7 @@
 {% if can_edit %}
 <div style="display:flex; flex-direction:column; gap:6px; padding-top:2px; flex-shrink:0;">
   <button class="kanban-add-col" type="button"
-          onclick="document.getElementById('addColumnDialog').showModal()"
+          data-ec-action="open-dialog" data-ec-dialog="addColumnDialog"
           title="Neuen Abschnitt/Spalte hinzufügen">+</button>
 </div>
 {% endif %}

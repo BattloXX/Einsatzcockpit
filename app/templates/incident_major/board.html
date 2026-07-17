@@ -226,7 +226,7 @@
   {% endif %}
 
   {% if can_edit and lage.status.value == 'active' %}
-  <button onclick="document.getElementById('neuStelleDialog').showModal()"
+  <button data-ec-action="open-dialog" data-ec-dialog="neuStelleDialog"
           class="btn btn--primary btn--sm">+ Einsatzstelle</button>
   {% endif %}
 
@@ -365,7 +365,7 @@
   <div class="modal__content" style="min-width:min(480px,95vw);">
     <div class="modal__header">
       <h3 class="modal__title">Einsatzstelle anlegen</h3>
-      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form hx-post="/lage/{{ lage.id }}/stellen/neu" hx-swap="none"
           hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); this.reset(); } else { alert('Fehler beim Anlegen: ' + (event.detail.xhr.responseText || 'unbekannter Fehler')); }">
@@ -393,7 +393,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Anlegen</button>
       </div>
     </form>
@@ -407,7 +407,7 @@
   <div class="modal__content" style="min-width:min(460px,95vw);">
     <div class="modal__header">
       <h3 class="modal__title">Übergreifende Meldung</h3>
-      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form hx-post="/lage/{{ lage.id }}/uebergreifend"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
@@ -462,7 +462,7 @@
         <input type="hidden" name="lng" id="meldung-lng">
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Anlegen</button>
       </div>
     </form>

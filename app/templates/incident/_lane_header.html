@@ -31,13 +31,13 @@
           </button>
           {% elif col.column_kind == 'rescued' %}
           <button class="kanban-col__add-btn kanban-col__add-btn--person" type="button"
-                  onclick="document.getElementById('personWizard').showModal()"
+                  data-ec-action="open-dialog" data-ec-dialog="personWizard"
                   title="Gerettete Person erfassen">
             <span class="kanban-col__add-label">+ Person</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
           </button>
           {% elif col.column_kind == 'messages' %}
           <button class="kanban-col__add-btn" type="button"
-                  onclick="document.getElementById('quickAddMsgDialog').showModal()"
+                  data-ec-action="open-dialog" data-ec-dialog="quickAddMsgDialog"
                   title="Meldung anlegen">
             <span class="kanban-col__add-label">+ Meldung</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
           </button>

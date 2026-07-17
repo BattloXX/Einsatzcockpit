@@ -191,7 +191,7 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         {% if can_edit %}
         <button type="button" class="btn btn--primary btn--sm"
-                onclick="document.getElementById('mannschaft-dialog').showModal()">+ Teilnehmer</button>
+                data-ec-action="open-dialog" data-ec-dialog="mannschaft-dialog">+ Teilnehmer</button>
         {% endif %}
         <a id="teilnahme-druck-link" href="/teilnahme/einsatz/{{ incident.id }}/druck" target="_blank" class="btn btn--ghost btn--sm">🖨 Drucken</a>
         <button type="button" id="teilnahme-pdf-link" class="btn btn--ghost btn--sm"

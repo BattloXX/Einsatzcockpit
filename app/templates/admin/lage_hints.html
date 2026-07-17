@@ -11,7 +11,7 @@
       <h1>Lage-Hinweise</h1>
       <p class="page-header__sub">Hinweis anlegen, dann Alarmstichwörter zuweisen. Ohne Zuweisung erscheint ein Hinweis bei jedem Alarmstichwort.</p>
     </div>
-    <button class="btn btn--primary" onclick="document.getElementById('newHintModal').showModal()">+ Hinweis</button>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newHintModal">+ Hinweis</button>
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
@@ -183,7 +183,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neuer Lage-Hinweis</h3>
-      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form method="post" action="/admin/lage-hinweise/neu">
       <div class="modal__body">
@@ -194,7 +194,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Anlegen</button>
       </div>
     </form>
@@ -206,7 +206,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Lage-Hinweis bearbeiten</h3>
-      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form method="post" id="editHintForm">
       <div class="modal__body">
@@ -216,7 +216,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>

@@ -34,7 +34,7 @@
   {% if can_edit %}
   <div class="sk-card__footer">
     <button class="btn btn--ghost btn--sm"
-            onclick="document.getElementById('edit-{{ sector.id }}').showModal()">✏️ Bearbeiten</button>
+            data-ec-action="open-dialog" data-ec-dialog="edit-{{ sector.id }}">✏️ Bearbeiten</button>
     <form hx-post="/lage/{{ lage.id }}/sektoren/{{ sector.id }}/loeschen"
           hx-target="#sektorenGrid" hx-swap="innerHTML"
           hx-confirm="Abschnitt {{ sector.name }} löschen?" style="margin:0;">
@@ -70,7 +70,7 @@
         </div>
       </div>
       <div style="display:flex;gap:6px;margin-top:10px;">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost btn--sm">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost btn--sm">Abbrechen</button>
         <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
       </div>
     </form>

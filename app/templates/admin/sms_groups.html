@@ -11,7 +11,7 @@
       <p class="page-header__sub">Benannte Empfaengergruppen verwalten (werden fuer SMS-Versand, Benachrichtigungen und andere Funktionen verwendet).</p>
     </div>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn--secondary" onclick="document.getElementById('gruppenImportModal').showModal()">Excel importieren</button>
+      <button class="btn btn--secondary" data-ec-action="open-dialog" data-ec-dialog="gruppenImportModal">Excel importieren</button>
     </div>
   </div>
 
@@ -164,7 +164,7 @@
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="modal__header">
       <h3>Mitglieder aus Excel importieren</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">x</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
     </div>
     <div class="modal__body">
       <div class="form-group">
@@ -195,7 +195,7 @@
       </ul>
     </div>
     <div class="modal__footer">
-      <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+      <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
       <button type="submit" class="btn btn--primary">Importieren</button>
     </div>
   </form>

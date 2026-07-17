@@ -4,7 +4,7 @@
 <div class="page-content">
   <div class="page-header">
     <div><h1>Qualifikationen</h1></div>
-    <button class="btn btn--primary" onclick="document.getElementById('newQualModal').showModal()">+ Qualifikation</button>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newQualModal">+ Qualifikation</button>
   </div>
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
   {% if request.query_params.get('error') == 'in_use' %}
@@ -46,7 +46,7 @@
 <dialog class="modal" id="newQualModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Neue Qualifikation</h3>
-      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button></div>
     <form method="post" action="/admin/qualifikationen/neu">
       <div class="modal__body">
         <div class="form-group"><label class="form-label">Code (z.B. AGT)</label>
@@ -63,7 +63,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Anlegen</button>
       </div>
     </form>
@@ -73,7 +73,7 @@
 <dialog class="modal" id="editQualModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Qualifikation bearbeiten</h3>
-      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button></div>
     <form method="post" id="editQualForm">
       <div class="modal__body">
         <div class="form-group"><label class="form-label">Code</label>
@@ -89,7 +89,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>

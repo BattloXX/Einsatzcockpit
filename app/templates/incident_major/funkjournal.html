@@ -237,7 +237,7 @@
   <div class="modal__content" style="min-width:min(440px,95vw);">
     <div class="modal__header">
       <h3 class="modal__title">Lagemeldung erfassen</h3>
-      <button aria-label="Schließen" type="button" onclick="document.getElementById('fjLmDialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="fjLmDialog" class="modal__close">×</button>
     </div>
     <form id="fjLmForm" hx-swap="none"
           hx-sync="this:drop"
@@ -251,7 +251,7 @@
         <p class="form-hint" style="margin-top:6px;">Setzt den Lagemeldungs-Timer zurück und schließt den Auftrag.</p>
       </div>
       <div class="modal__footer">
-        <button type="button" class="btn btn--ghost" onclick="document.getElementById('fjLmDialog').close()">Abbrechen</button>
+        <button type="button" class="btn btn--ghost" data-ec-action="close-dialog" data-ec-dialog="fjLmDialog">Abbrechen</button>
         <button type="submit" class="btn btn--primary">
           Lagemeldung speichern
           <span id="fjLm-spin" class="htmx-indicator" style="font-size:.75rem;"> …</span>

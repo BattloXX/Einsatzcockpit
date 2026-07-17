@@ -125,7 +125,7 @@
   <h2>Atemschutzüberwachung – {{ incident.alarm_type_code }} #{{ incident.id }}</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     {% if can_edit is not defined or can_edit %}
-    <button class="btn btn--primary" onclick="document.getElementById('newTroopModal').showModal()">+ Trupp anlegen</button>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newTroopModal">+ Trupp anlegen</button>
     {% endif %}
   </div>
 </div>

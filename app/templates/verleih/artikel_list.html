@@ -24,7 +24,7 @@
           <span x-show="selected.size === 0">alle</span>
         </button>
       </div>
-      <button class="btn btn--primary" onclick="document.getElementById('newArtikelModal').showModal()">+ Artikel anlegen</button>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newArtikelModal">+ Artikel anlegen</button>
     </div>
   </div>
 
@@ -85,7 +85,7 @@
         </td>
         <td>{{ a.lagerbestand if a.lagerbestand is not none else '&ndash;' }}</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn--ghost btn--xs" onclick="document.getElementById('editArtikelModal-{{ a.id }}').showModal()">Bearbeiten</button>
+          <button class="btn btn--ghost btn--xs" data-ec-action="open-dialog" data-ec-dialog="editArtikelModal-{{ a.id }}">Bearbeiten</button>
           {% if not a.ist_mengenartikel %}
           <button class="btn btn--ghost btn--xs"
                   hx-post="/admin/verleih-artikel/{{ a.id }}/status-toggle"
@@ -116,7 +116,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neuer Artikel</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">x</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
     </div>
     <form method="post" action="/admin/verleih-artikel/neu">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -152,7 +152,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Anlegen</button>
       </div>
     </form>
@@ -165,7 +165,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Artikel bearbeiten</h3>
-      <button type="button" onclick="this.closest('dialog').close()" class="modal__close">x</button>
+      <button type="button" data-ec-action="close-dialog" class="modal__close">x</button>
     </div>
     <form hx-post="/admin/verleih-artikel/{{ a.id }}/bearbeiten"
           hx-target="#artikel-row-{{ a.id }}"
@@ -204,7 +204,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>

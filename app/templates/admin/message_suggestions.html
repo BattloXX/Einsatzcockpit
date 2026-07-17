@@ -11,7 +11,7 @@
       <h1>Meldungsvorlagen</h1>
       <p class="page-header__sub">Vorlage anlegen, dann Alarmstichwörter zuweisen und sortieren.</p>
     </div>
-    <button class="btn btn--primary" onclick="document.getElementById('newMsgModal').showModal()">+ Vorlage</button>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newMsgModal">+ Vorlage</button>
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
@@ -173,7 +173,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neue Meldungsvorlage</h3>
-      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form method="post" action="/admin/meldungsvorlagen/neu">
       <div class="modal__body">
@@ -184,7 +184,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Anlegen</button>
       </div>
     </form>
@@ -196,7 +196,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Meldungsvorlage bearbeiten</h3>
-      <button aria-label="Schließen" type="button" onclick="this.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
     <form method="post" id="editMsgForm">
       <div class="modal__body">
@@ -206,7 +206,7 @@
         </div>
       </div>
       <div class="modal__footer">
-        <button type="button" onclick="this.closest('dialog').close()" class="btn btn--ghost">Abbrechen</button>
+        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
         <button type="submit" class="btn btn--primary">Speichern</button>
       </div>
     </form>
