@@ -54,6 +54,7 @@ from app.routers import (
     ui_major_incident,
     ui_media,
     ui_medienverwaltung,
+    ui_nachschlagewerke,
     ui_objekt,
     ui_objekt_dokumente,
     ui_org_mail,
@@ -624,6 +625,7 @@ app.include_router(ui_termin.router)
 app.include_router(ui_uas.router)
 app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
+app.include_router(ui_nachschlagewerke.router)
 app.include_router(ui_wasserstelle.router)
 app.include_router(ui_gateway.router)
 app.include_router(ui_druck.router)

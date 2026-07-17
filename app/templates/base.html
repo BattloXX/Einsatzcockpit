@@ -51,7 +51,7 @@
       <span class="test-system-badge">TEST SYSTEM</span>
       {% endif %}
     </div>
-    {% set _doku_active = '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path or request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') or request.url.path.startswith('/atemschutz-pruefung') or request.url.path.startswith('/uas') or request.url.path.startswith('/objekte') or '/statistik' in request.url.path %}
+    {% set _doku_active = '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path or request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') or request.url.path.startswith('/atemschutz-pruefung') or request.url.path.startswith('/uas') or request.url.path.startswith('/objekte') or request.url.path.startswith('/nachschlagewerke') or '/statistik' in request.url.path %}
     <div class="topnav__links">
       <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">🎛 Konsole</a>
       <a href="/lage" class="nav-link {% if request.url.path.startswith('/lage') %}active{% endif %}">🚨 Lage</a>
@@ -76,6 +76,9 @@
           {% endif %}
           {% if request.state.objekt_enabled %}
           <a href="/objekte/" class="{% if request.url.path.startswith('/objekte') %}active{% endif %}">🏢 Objekte</a>
+          {% endif %}
+          {% if request.state.nachschlagewerke_enabled %}
+          <a href="/nachschlagewerke/" class="{% if request.url.path.startswith('/nachschlagewerke') %}active{% endif %}">📚 Nachschlagewerke</a>
           {% endif %}
           <a href="/statistik" class="{% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
         </div>
@@ -205,6 +208,9 @@
       {% endif %}
       {% if request.state.objekt_enabled %}
       <a href="/objekte/" class="mobile-menu__link {% if request.url.path.startswith('/objekte') %}active{% endif %}">🏢 Objekte</a>
+      {% endif %}
+      {% if request.state.nachschlagewerke_enabled %}
+      <a href="/nachschlagewerke/" class="mobile-menu__link {% if request.url.path.startswith('/nachschlagewerke') %}active{% endif %}">📚 Nachschlagewerke</a>
       {% endif %}
       <a href="/statistik" class="mobile-menu__link {% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
     </nav>
