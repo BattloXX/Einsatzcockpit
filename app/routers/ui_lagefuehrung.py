@@ -515,11 +515,17 @@ async def lagefuehrung_ausbreitung(
     lng: float | None = None,
     laenge: int = 300,
     halbwinkel: int = 25,
+    modell: str = "kegel",
+    quellstaerke: float = 10.0,
+    stabilitaet: str = "D",
+    grenzwert: float = 1.0,
 ):
-    """Downwind-Ausbreitungskegel (GeoJSON-Polygon) am Quellpunkt, windbezogen.
+    """Ausbreitungs-Overlay (GeoJSON-Polygon) am Quellpunkt, windbezogen.
 
-    Ohne lat/lng wird der Einsatzort verwendet. Die Windrichtung kommt aus dem
-    weather_service; die Ausbreitung erfolgt in die Gegenrichtung (wind + 180).
+    modell="kegel" (Phase 1, tabellenbasiert) oder "gauss" (Phase 2, Gausssche
+    Fahne mit Quellstaerke [g/s], Stabilitaetsklasse und Grenzwert [mg/m3]).
+    Ohne lat/lng wird der Einsatzort verwendet. Windrichtung/-geschwindigkeit
+    kommen aus dem weather_service; Ausbreitung in Gegenrichtung (wind + 180).
     """
     user = _current_user_or_401(request)
     incident = _incident_or_404(incident_id, db)
@@ -533,15 +539,37 @@ async def lagefuehrung_ausbreitung(
     from app.services import ausbreitung_service, weather_service
 
     wind_from = None
+    wind_speed = None
     current = await weather_service.get_current(q_lat, q_lng, org_id=incident.primary_org_id)
     if current:
         wind_from = current.wind_direction_deg
+        wind_speed = current.wind_speed_ms
     richtung = ausbreitung_service.ausbreitungsrichtung(wind_from)
+
+    if modell == "gauss":
+        u = wind_speed if (wind_speed and wind_speed > 0) else 2.0
+        geometry = ausbreitung_service.gauss_footprint(
+            q_lat, q_lng, richtung,
+            quellstaerke_g_s=max(0.0, float(quellstaerke)),
+            windgeschw_ms=float(u),
+            stabilitaet=stabilitaet if stabilitaet in ausbreitung_service.STABILITAETSKLASSEN else "D",
+            grenzwert_mg_m3=max(0.0001, float(grenzwert)),
+        )
+        return JSONResponse({
+            "geometry": geometry,
+            "modell": "gauss",
+            "richtung_deg": round(richtung, 1),
+            "wind_direction_deg": wind_from,
+            "wind_speed_ms": wind_speed,
+            "wind_bekannt": wind_from is not None,
+        })
+
     laenge_m = max(10, min(int(laenge), 20000))
     geometry = ausbreitung_service.plume_polygon(
         q_lat, q_lng, richtung, laenge_m, halbwinkel_deg=float(halbwinkel))
     return JSONResponse({
         "geometry": geometry,
+        "modell": "kegel",
         "richtung_deg": round(richtung, 1),
         "wind_direction_deg": wind_from,
         "laenge_m": laenge_m,
