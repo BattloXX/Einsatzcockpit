@@ -139,6 +139,12 @@ class Settings(BaseSettings):
     # Quelle des vollstaendigen Gefahrgut-Datensatzes (;-getrennte CSV, dl-de).
     # Leer = kein Download, es bleibt beim gebuendelten Seed (offline nutzbar).
     NACHSCHLAGEWERK_GEFAHRGUT_URL: str = ""
+    # On-demand-Quelle fuer Rettungsdatenblaetter (PDF), URL-Template mit Platzhaltern
+    # {hersteller} und {modell} (bereits urlsafe eingesetzt). Leer = kein Abruf,
+    # nur Deep-Links auf externe Freigabe-Quellen (Euro Rescue). Rechtlich: keine
+    # Massen-Spiegelung, nur Einzelabruf bei Bedarf.
+    NACHSCHLAGEWERK_RETTUNGSKARTEN_URL_TEMPLATE: str = ""
+    NACHSCHLAGEWERK_RETTUNGSKARTEN_MAX_BYTES: int = 25 * 1024 * 1024  # 25 MB je PDF
 
     # KI-Integration (Anthropic Claude)
     ANTHROPIC_API_KEY: str = ""
