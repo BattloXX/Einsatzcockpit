@@ -13,9 +13,13 @@ unter der **Datenlizenz Deutschland – Namensnennung – Version 2.0 (dl-de/by-
 
 ## Hinweis
 
-Die hier mitgelieferte CSV ist ein **kleiner, redaktioneller Auszug** häufiger ADR-Stoffe,
-damit die Funktion sofort läuft. Für den Produktivbetrieb die **vollständige BAM-CSV**
-(`BAM-Gefahrgutdaten.csv`, `;`-getrennt) von OffeneDaten.de / BAM beziehen und diese Datei
-ersetzen. Der Parser (`app/services/gefahrgut_service.py`) ordnet die Spalten tolerant über
-die Kopfzeile zu (UN-Nummer, Benennung/Stoffname, Klasse, Klassifizierungscode,
-Gefahrnummer/Kemler, Verpackungsgruppe).
+Die hier mitgelieferte CSV ist ein **kleiner, redaktioneller Auszug** häufiger ADR-Stoffe
+(**Seed**), damit die Funktion offline sofort läuft. Der Parser
+(`app/services/gefahrgut_service.py`) ordnet die Spalten tolerant über die Kopfzeile zu
+(UN-Nummer, Benennung/Stoffname, Klasse, Klassifizierungscode, Gefahrnummer/Kemler,
+Verpackungsgruppe).
+
+**Vorrang der gesyncten Datei:** Liegt unter `NACHSCHLAGEWERK_DATA_DIR/bam_gefahrgut.csv`
+(Standard `app_storage/nachschlagewerk/`) die vollständige, per täglichem Sync bezogene
+BAM/ADR-Datei, wird diese statt des Seeds verwendet (siehe `gefahrgut_service._csv_pfad()`).
+Dieser Seed hier wird dabei **nicht** überschrieben und bleibt Offline-Fallback.

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Gefahrgut – Nachschlagewerke – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>☣️ Gefahrgut</h1>
+      <p class="text-muted">Suche nach UN-Nummer oder Stoffname – ERI-Karte mit Sofortmaßnahmen</p>
+    </div>
+    <div><a href="/nachschlagewerke/" class="btn btn--ghost">← Nachschlagewerke</a></div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-bottom:16px;">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label" for="gg-q">UN-Nummer oder Stoffname</label>
+      <input type="search" id="gg-q" name="q" class="form-input" value="{{ q }}"
+             placeholder="z. B. 1203 oder Benzin" autocomplete="off" autofocus
+             hx-get="/nachschlagewerke/gefahrgut/treffer"
+             hx-trigger="input changed delay:250ms, search"
+             hx-target="#gg-treffer" hx-swap="innerHTML"
+             hx-indicator="#gg-spinner">
+      <small class="form-hint">Tippen genügt – Treffer erscheinen automatisch.
+        <span id="gg-spinner" class="htmx-indicator">Suche …</span></small>
+    </div>
+  </div>
+
+  <div id="gg-treffer">
+    {% include "nachschlagewerke/_gefahrgut_treffer.html" %}
+  </div>
+</div>
+{% endblock %}

@@ -15,8 +15,32 @@ from pathlib import Path
 
 logger = logging.getLogger("einsatzleiter.gefahrgut")
 
-_CSV_PFAD = Path(__file__).resolve().parent.parent / "data" / "bam_gefahrgut.csv"
+# Gebuendelter Seed (redaktioneller Auszug, immer vorhanden).
+_SEED_CSV_PFAD = Path(__file__).resolve().parent.parent / "data" / "bam_gefahrgut.csv"
 _DATEN: dict[str, dict] | None = None
+
+
+def _csv_pfad() -> Path:
+    """Aktive Datenquelle: gesyncte Datei (NACHSCHLAGEWERK_DATA_DIR) vor Seed.
+
+    Der taegliche Sync-Loop (PR 2) legt den vollstaendigen BAM/ADR-Datensatz unter
+    NACHSCHLAGEWERK_DATA_DIR/bam_gefahrgut.csv ab. Existiert er, hat er Vorrang;
+    sonst greift der gebuendelte Seed (offline immer nutzbar).
+    """
+    try:
+        from app.config import settings
+        gesynct = Path(settings.NACHSCHLAGEWERK_DATA_DIR) / "bam_gefahrgut.csv"
+        if gesynct.exists():
+            return gesynct
+    except Exception:
+        pass
+    return _SEED_CSV_PFAD
+
+
+def invalidate_cache() -> None:
+    """Verwirft den geladenen Datensatz (nach einem Sync neu einlesen)."""
+    global _DATEN
+    _DATEN = None
 
 
 def _norm_un(un: str | None) -> str:
@@ -25,6 +49,14 @@ def _norm_un(un: str | None) -> str:
         return ""
     ziffern = re.sub(r"\D", "", str(un))
     return ziffern.lstrip("0") or ziffern
+
+
+def _norm_name(text: str | None) -> str:
+    """Normiert einen Stoffnamen fuer die Substring-Suche (case-/umlaut-tolerant)."""
+    s = (text or "").casefold()
+    for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+        s = s.replace(a, b)
+    return s
 
 
 def _finde_spalte(header: list[str], *schluessel: str) -> int:
@@ -43,12 +75,13 @@ def _lade_daten() -> dict[str, dict]:
     if _DATEN is not None:
         return _DATEN
     daten: dict[str, dict] = {}
-    if not _CSV_PFAD.exists():
-        logger.info("Gefahrgut-CSV nicht vorhanden (%s) — Anreicherung deaktiviert", _CSV_PFAD)
+    pfad = _csv_pfad()
+    if not pfad.exists():
+        logger.info("Gefahrgut-CSV nicht vorhanden (%s) — Anreicherung deaktiviert", pfad)
         _DATEN = daten
         return daten
     try:
-        with _CSV_PFAD.open(encoding="utf-8-sig", newline="") as fh:
+        with pfad.open(encoding="utf-8-sig", newline="") as fh:
             reader = csv.reader(fh, delimiter=";")
             header = next(reader, [])
             idx_un = _finde_spalte(header, "un")
@@ -149,3 +182,46 @@ def generierte_links(
             "url": f"https://www.dgg.bam.de/dgginfo/search/query?value=UN{key}&partialWord=false",
         })
     return links
+
+
+def _als_eintrag(felder: dict) -> dict:
+    """Ergaenzt einen CSV-Datensatz um Anzeige-/Link-Felder fuer die Suche/ERI-Ansicht."""
+    un = felder.get("un_nummer")
+    return {
+        **felder,
+        "un_vierstellig": _un_vierstellig(un),
+        "links": generierte_links(un, felder.get("stoffname"), felder.get("gefahrnummer")),
+    }
+
+
+def eintrag_un(un: str | None) -> dict | None:
+    """Vollstaendiger ERI-Eintrag zu einer UN-Nummer (inkl. Links) oder None."""
+    felder = lookup_un(un)
+    return _als_eintrag(felder) if felder else None
+
+
+def suche(query: str | None, limit: int = 30) -> list[dict]:
+    """Freie Suche nach UN-Nummer ODER Stoffname.
+
+    - Rein numerische Eingabe (optional mit "UN"-Praefix) -> Praefix-Treffer auf
+      der normierten UN-Nummer, kuerzeste zuerst.
+    - Sonst -> Substring-Treffer im Stoffnamen (case-/umlaut-tolerant), alphabetisch.
+
+    Jeder Treffer enthaelt zusaetzlich un_vierstellig + Deep-Links (ERICard/BAM).
+    """
+    q = (query or "").strip()
+    if not q:
+        return []
+    daten = _lade_daten()
+
+    if re.fullmatch(r"(?i:un)?[\s\-]*\d+", q):
+        praefix = _norm_un(q)
+        treffer = [f for k, f in daten.items() if k.startswith(praefix)]
+        treffer.sort(key=lambda f: (len(_norm_un(f.get("un_nummer"))),
+                                    _norm_un(f.get("un_nummer"))))
+    else:
+        nq = _norm_name(q)
+        treffer = [f for f in daten.values() if nq in _norm_name(f.get("stoffname"))]
+        treffer.sort(key=lambda f: _norm_name(f.get("stoffname")))
+
+    return [_als_eintrag(f) for f in treffer[:max(0, limit)]]

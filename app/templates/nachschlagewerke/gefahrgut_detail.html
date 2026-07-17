@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}UN {{ eintrag.un_vierstellig }} – Gefahrgut – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>☣️ UN {{ eintrag.un_vierstellig }}</h1>
+      <p class="text-muted">{{ eintrag.stoffname or "Stoffname unbekannt" }}</p>
+    </div>
+    <div><a href="/nachschlagewerke/gefahrgut" class="btn btn--ghost">← Suche</a></div>
+  </div>
+
+  <div class="card" style="padding:18px;margin-bottom:16px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <span class="badge-pill badge-pill--red">UN {{ eintrag.un_vierstellig }}</span>
+      {% if eintrag.gefahrnummer %}<span class="badge-pill badge-pill--amber" title="Gefahrnummer (Kemler)">GN {{ eintrag.gefahrnummer }}</span>{% endif %}
+      {% if eintrag.klasse %}<span class="badge-pill badge-pill--gray">Klasse {{ eintrag.klasse }}</span>{% endif %}
+      {% if eintrag.klassifizierungscode %}<span class="badge-pill badge-pill--gray">Code {{ eintrag.klassifizierungscode }}</span>{% endif %}
+      {% if eintrag.verpackungsgruppe %}<span class="badge-pill badge-pill--gray">VG {{ eintrag.verpackungsgruppe }}</span>{% endif %}
+    </div>
+
+    <dl style="display:grid;grid-template-columns:auto 1fr;gap:8px 18px;margin:0;">
+      <dt class="text-muted">Stoffname</dt><dd style="margin:0;"><strong>{{ eintrag.stoffname or "—" }}</strong></dd>
+      <dt class="text-muted">UN-Nummer</dt><dd style="margin:0;">{{ eintrag.un_vierstellig }}</dd>
+      <dt class="text-muted">Gefahrklasse</dt><dd style="margin:0;">{{ eintrag.klasse or "—" }}</dd>
+      <dt class="text-muted">Klassifizierungscode</dt><dd style="margin:0;">{{ eintrag.klassifizierungscode or "—" }}</dd>
+      <dt class="text-muted">Gefahrnummer (Kemler)</dt><dd style="margin:0;">{{ eintrag.gefahrnummer or "—" }}</dd>
+      <dt class="text-muted">Verpackungsgruppe</dt><dd style="margin:0;">{{ eintrag.verpackungsgruppe or "—" }}</dd>
+    </dl>
+  </div>
+
+  {% if eintrag.links %}
+  <div class="card" style="padding:18px;">
+    <h2 style="margin:0 0 6px;font-size:1.05rem;">ERI-Karte &amp; Nachschlagewerke</h2>
+    <p class="text-muted" style="margin:0 0 12px;">Sofortmaßnahmen, Eigenschaften und Schutzmaßnahmen
+      (ERICard = einsatztaktische Interventionskarte).</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      {% for l in eintrag.links %}
+      <a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--secondary">🔗 {{ l.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
