@@ -14,18 +14,21 @@
     <div class="form-group" style="margin:0;">
       <label class="form-label" for="gg-q">UN-Nummer oder Stoffname</label>
       <input type="search" id="gg-q" name="q" class="form-input" value="{{ q }}"
-             placeholder="z. B. 1203 oder Benzin" autocomplete="off" autofocus
-             hx-get="/nachschlagewerke/gefahrgut/treffer"
-             hx-trigger="input changed delay:250ms, search"
-             hx-target="#gg-treffer" hx-swap="innerHTML"
-             hx-indicator="#gg-spinner">
-      <small class="form-hint">Tippen genügt – Treffer erscheinen automatisch.
-        <span id="gg-spinner" class="htmx-indicator">Suche …</span></small>
+             placeholder="z. B. 1203 oder Benzin" autocomplete="off" autofocus>
+      <small class="form-hint">Tippen genügt – Treffer erscheinen automatisch. Offline verfügbar.</small>
     </div>
   </div>
 
   <div id="gg-treffer">
     {% include "nachschlagewerke/_gefahrgut_treffer.html" %}
   </div>
+
+  <noscript>
+    <p class="text-muted">Für die Live-Suche ist JavaScript nötig. Ohne JavaScript:
+      <a href="/nachschlagewerke/gefahrgut?q=1203">Beispiel UN 1203</a>.</p>
+  </noscript>
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/nachschlagewerke.js" defer></script>
 {% endblock %}

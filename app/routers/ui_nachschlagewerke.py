@@ -68,6 +68,20 @@ def gefahrgut_seite(
     })
 
 
+@router.get("/gefahrgut/index.json")
+def gefahrgut_index_json(
+    request: Request,
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_nachschlagewerke_enabled),
+):
+    """Kompletter Datensatz fuer die Offline-Suche im Browser (vom SW gecacht)."""
+    eintraege = gefahrgut_service.alle_eintraege()
+    return JSONResponse(
+        {"anzahl": len(eintraege), "eintraege": eintraege},
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 @router.get("/gefahrgut/treffer", response_class=HTMLResponse)
 def gefahrgut_treffer(
     request: Request,

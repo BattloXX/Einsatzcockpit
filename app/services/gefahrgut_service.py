@@ -200,6 +200,13 @@ def eintrag_un(un: str | None) -> dict | None:
     return _als_eintrag(felder) if felder else None
 
 
+def alle_eintraege() -> list[dict]:
+    """Alle Eintraege (inkl. Links) — Basis fuer den Offline-Index (index.json)."""
+    eintraege = [_als_eintrag(f) for f in _lade_daten().values()]
+    eintraege.sort(key=lambda e: _norm_un(e.get("un_nummer")).zfill(6))
+    return eintraege
+
+
 def suche(query: str | None, limit: int = 30) -> list[dict]:
     """Freie Suche nach UN-Nummer ODER Stoffname.
 
