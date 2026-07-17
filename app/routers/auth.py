@@ -187,7 +187,7 @@ async def device_login(request: Request, token: str, db: Session = Depends(get_d
                 payload={"device_token_id": dt.id, "label": dt.label})
     db.commit()
 
-    session_token = sign_session(user.id, device=True)
+    session_token = sign_session(user.id, device=True, device_token_id=dt.id)
     redirect = RedirectResponse("/", status_code=302)
     redirect.set_cookie(
         "session",
@@ -239,7 +239,7 @@ async def device_login_pin_submit(request: Request, pin: str = Form(...), db: Se
                          "gateway_paired": raw_gateway_token is not None})
     db.commit()
 
-    session_token = sign_session(user.id, device=True)
+    session_token = sign_session(user.id, device=True, device_token_id=dt.id)
     response = templates.TemplateResponse(request, "auth/geraet_login_pin_done.html", {
         "raw_token": raw_token,
         "raw_gateway_token": raw_gateway_token,
