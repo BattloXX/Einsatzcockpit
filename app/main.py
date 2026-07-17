@@ -368,9 +368,21 @@ class _QrUser:
         return getattr(self._user, name)
 
 
+# Statische Auslieferung braucht keinen Benutzer: ohne diesen Skip löst JEDER
+# Asset-Request mit Session-Cookie einen User-Lookup (+ Rollen) in der DB aus
+# (Audit B3). /sw.js und /favicon.ico sind zwar Routen, nutzen den User aber
+# ebenfalls nicht.
+_SESSION_SKIP_PREFIXES = ("/static/", "/.well-known/")
+_SESSION_SKIP_PATHS = ("/sw.js", "/favicon.ico")
+
+
 # Session middleware – inject request.state.user + sliding-window token refresh
 @app.middleware("http")
 async def session_middleware(request: Request, call_next):
+    _path = request.url.path
+    if _path.startswith(_SESSION_SKIP_PREFIXES) or _path in _SESSION_SKIP_PATHS:
+        return await call_next(request)
+
     token = request.cookies.get("session")
     request.state.user = None
     request.state.display_name = None

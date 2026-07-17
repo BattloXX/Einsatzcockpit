@@ -16,73 +16,48 @@ from app.core.audit import write_audit
 from app.core.tenant import set_tenant_context
 from app.db import get_db
 
+# System-Flag-Key in SystemSettings → request.state-Attribut. Die Semantik je
+# Modul ist identisch zu den *_effective_enabled-Helfern der Services
+# (effektiv = System-Flag "true" AND Org-Flag) — hier nur gebündelt, damit pro
+# Request 2 Queries statt bis zu 10 anfallen (Audit B4).
+_SYSTEM_FLAG_KEYS = ("uas_module_enabled", "objekt_module_enabled",
+                     "gateway_module_enabled", "lagefuehrung_modul_aktiv")
 
-def _set_uas_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
-    """Setzt request.state.uas_module_enabled fail-safe (nie crashen)."""
+
+def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session) -> None:
+    """Setzt alle Modul-Flags auf request.state fail-safe (nie crashen).
+
+    Bündelt die früheren sechs _set_*_state-Helfer: EIN OrgSettings-Load plus
+    EIN SystemSettings-Load (key IN (...)) statt je Modul eigener Queries.
+    Bei Fehlern bleiben die in _resolve_current_org gesetzten Defaults (False).
+    """
+    if org_id is None:
+        return
     try:
-        from app.services.uas_service import uas_effective_enabled
-        request.state.uas_module_enabled = uas_effective_enabled(org_id, db)
-    except Exception:
-        request.state.uas_module_enabled = False
-
-
-def _set_objekt_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
-    """Setzt request.state.objekt_enabled fail-safe (nie crashen)."""
-    try:
-        from app.services.objekt_service import objekt_effective_enabled
-        request.state.objekt_enabled = objekt_effective_enabled(org_id, db)
-    except Exception:
-        request.state.objekt_enabled = False
-
-
-def _set_gateway_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
-    """Setzt request.state.gateway_enabled fail-safe (nie crashen)."""
-    try:
-        from app.services.gateway_service import gateway_effective_enabled
-        request.state.gateway_enabled = gateway_effective_enabled(org_id, db)
-    except Exception:
-        request.state.gateway_enabled = False
-
-
-def _set_fahrtenbuch_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
-    """Setzt request.state.fahrtenbuch_modul_aktiv fail-safe (nie crashen)."""
-    try:
-        from app.models.master import OrgSettings
+        from app.models.master import OrgSettings, SystemSettings
         org_s = (
             db.query(OrgSettings)
             .filter(OrgSettings.org_id == org_id)
             .execution_options(include_all_tenants=True)
             .first()
-            if org_id else None
         )
+        rows = db.query(SystemSettings).filter(SystemSettings.key.in_(_SYSTEM_FLAG_KEYS)).all()
+        sys_on = {r.key for r in rows if r.value == "true"}
+
+        request.state.uas_module_enabled = bool(
+            "uas_module_enabled" in sys_on and org_s and org_s.uas_module_enabled)
+        request.state.objekt_enabled = bool(
+            "objekt_module_enabled" in sys_on and org_s and org_s.objekt_module_enabled)
+        request.state.gateway_enabled = bool(
+            "gateway_module_enabled" in sys_on and org_s and org_s.gateway_module_enabled)
+        request.state.lagefuehrung_modul_aktiv = bool(
+            "lagefuehrung_modul_aktiv" in sys_on and org_s and org_s.lagefuehrung_modul_aktiv)
+        # Rein org-gesteuerte Module (kein System-Flag):
         request.state.fahrtenbuch_modul_aktiv = bool(org_s and org_s.fahrtenbuch_modul_aktiv)
+        request.state.atemschutz_pruefung_modul_aktiv = bool(
+            org_s and org_s.atemschutz_pruefung_modul_aktiv)
     except Exception:
-        request.state.fahrtenbuch_modul_aktiv = False
-
-
-def _set_atemschutz_pruefung_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
-    """Setzt request.state.atemschutz_pruefung_modul_aktiv fail-safe (nie crashen)."""
-    try:
-        from app.models.master import OrgSettings
-        org_s = (
-            db.query(OrgSettings)
-            .filter(OrgSettings.org_id == org_id)
-            .execution_options(include_all_tenants=True)
-            .first()
-            if org_id else None
-        )
-        request.state.atemschutz_pruefung_modul_aktiv = bool(org_s and org_s.atemschutz_pruefung_modul_aktiv)
-    except Exception:
-        request.state.atemschutz_pruefung_modul_aktiv = False
-
-
-def _set_lagefuehrung_state(request: HTTPConnection, org_id: int | None, db: Session) -> None:
-    """Setzt request.state.lagefuehrung_modul_aktiv fail-safe (nie crashen)."""
-    try:
-        from app.services.lagefuehrung_service import lagefuehrung_effective_enabled
-        request.state.lagefuehrung_modul_aktiv = lagefuehrung_effective_enabled(org_id, db)
-    except Exception:
-        request.state.lagefuehrung_modul_aktiv = False
+        pass
 
 
 def _resolve_current_org(
@@ -135,24 +110,14 @@ def _resolve_current_org(
                 ip=request.client.host if request.client else None,
             )
             set_tenant_context(db, org_id)
-            _set_uas_state(request, org_id, db)
-            _set_objekt_state(request, org_id, db)
-            _set_gateway_state(request, org_id, db)
-            _set_fahrtenbuch_state(request, org_id, db)
-            _set_atemschutz_pruefung_state(request, org_id, db)
-            _set_lagefuehrung_state(request, org_id, db)
+            _set_module_states(request, org_id, db)
             return org_id
         set_tenant_context(db, None)
         return None
 
     org_id = user.org_id
     set_tenant_context(db, org_id)
-    _set_uas_state(request, org_id, db)
-    _set_objekt_state(request, org_id, db)
-    _set_gateway_state(request, org_id, db)
-    _set_fahrtenbuch_state(request, org_id, db)
-    _set_atemschutz_pruefung_state(request, org_id, db)
-    _set_lagefuehrung_state(request, org_id, db)
+    _set_module_states(request, org_id, db)
     return org_id
 
 
