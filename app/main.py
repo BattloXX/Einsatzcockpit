@@ -1,7 +1,6 @@
 """FastAPI application – Einsatzcockpit (Multi-Org) v2.0.0."""
 import asyncio
 import logging
-import os as _os
 import secrets as _secrets
 from contextlib import asynccontextmanager
 
@@ -10,6 +9,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as _StarletteHTTPException
 
 from app.config import settings, validate_startup_secrets
@@ -305,9 +305,15 @@ def _bootstrap_admin() -> None:
             logger.warning("  Passwort:  %s", password)
             logger.warning("Beim nächsten Login bitte Passwort ändern.")
             logger.warning("=" * 70)
-    except Exception:
-        # Another worker may have seeded concurrently — safe to ignore
+    except IntegrityError:
+        # Another worker seeded concurrently — benign race, safe to ignore
         db.rollback()
+        logger.debug("Bootstrap-Seed: paralleler Worker war schneller (IntegrityError)")
+    except Exception:
+        # C1: Echte Seed-/Bootstrap-Fehler (z. B. Migrationsstand) dürfen nicht
+        # still verschwinden — der Start läuft weiter, aber der Fehler muss ins Log.
+        db.rollback()
+        logger.exception("Bootstrap-Admin/Seed fehlgeschlagen")
     finally:
         db.close()
 
@@ -536,17 +542,20 @@ if limiter is not None:
 
 # Proxy-Header-Middleware: setzt request.client.host auf die echte Client-IP aus
 # X-Forwarded-For, damit Rate-Limits pro Angreifer greifen und nicht alle Clients
-# dieselbe Proxy-IP teilen. Nur aktivieren wenn ein vertrauenswürdiger Reverse-
-# Proxy vorgelagert ist (Nginx, Traefik …) — sonst ist XFF fälschbar.
-# Steuerung über Env-Variable TRUST_PROXY_HEADERS (true/false, default true).
+# dieselbe Proxy-IP teilen. SEC-12: XFF wird nur noch akzeptiert, wenn die
+# Verbindung selbst von einer vertrauten Proxy-IP kommt (TRUSTED_PROXY_IPS,
+# Default localhost — nginx läuft laut deploy/nginx-snippet.conf auf demselben
+# Host). Vorher galt trusted_hosts="*": Wer den App-Port direkt erreichte,
+# konnte sich per gefälschtem XFF-Header eine beliebige Client-IP geben
+# (Rate-Limit-Bypass, falsche Audit-IPs).
 # WICHTIG: Muss NACH SlowAPIMiddleware registriert werden (Starlette macht die
 # zuletzt registrierte Middleware zur äußersten) — sonst sieht SlowAPI noch die
 # Proxy-IP statt der echten Client-IP aus X-Forwarded-For (SEC-4).
-if _os.environ.get("TRUST_PROXY_HEADERS", "true").lower() == "true":
+if settings.TRUST_PROXY_HEADERS:
     try:
-        from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: F401
         from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+        _proxy_ips = [ip.strip() for ip in settings.TRUSTED_PROXY_IPS.split(",") if ip.strip()]
+        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_proxy_ips or "127.0.0.1")
     except ImportError:
         logger.warning(
             "ProxyHeadersMiddleware nicht verfügbar — Rate-Limits arbeiten mit Proxy-IP. "

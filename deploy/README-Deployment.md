@@ -66,6 +66,15 @@ systemctl status einsatzleiter
 journalctl -u einsatzleiter -f
 ```
 
+## Reverse-Proxy und Client-IPs
+
+Die App akzeptiert `X-Forwarded-For`/`-Proto` nur von den in `TRUSTED_PROXY_IPS`
+gelisteten Adressen (Default `127.0.0.1,::1` — passt zum nginx-Snippet, das auf
+demselben Host auf `127.0.0.1:8092` proxied). Läuft nginx/Traefik auf einem
+**anderen** Host, dessen IP in `TRUSTED_PROXY_IPS` eintragen. Läuft die App
+ganz ohne Reverse-Proxy, `TRUST_PROXY_HEADERS=false` setzen — sonst könnten
+Clients ihre IP für Rate-Limits und Audit-Logs fälschen.
+
 ## Updates
 
 ```bash
