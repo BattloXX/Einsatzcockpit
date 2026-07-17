@@ -2,11 +2,15 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v5';
+const CACHE = 'ec-v6';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
 const OBJEKT_CACHE = 'ec-objekt-v1';
+// Nachschlagewerke: Gefahrgut-Offline-Index (network-first) + unveraenderliche
+// Rettungskarten-PDFs (cache-first, /nachschlagewerk-cache/). App-Updates
+// loeschen ihn nicht (Offline-Bestand bleibt erhalten).
+const NW_CACHE = 'ec-nachschlagewerk-v1';
 const PRECACHE = [
   '/',
   '/static/css/app.css',
@@ -27,7 +31,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE && k !== BOARD_CACHE && k !== OBJEKT_CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE && k !== BOARD_CACHE && k !== OBJEKT_CACHE && k !== NW_CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -75,6 +79,40 @@ self.addEventListener('fetch', e => {
         })
         .catch(() => caches.match(e.request, { cacheName: BOARD_CACHE })
           || new Response('{"hydranten":[],"stand":null}', { headers: { 'Content-Type': 'application/json' } }))
+    );
+    return;
+  }
+
+  // Gefahrgut-Offline-Index — network-first, letzte Antwort in NW_CACHE (offline nutzbar)
+  if (url.pathname === '/nachschlagewerke/gefahrgut/index.json') {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(NW_CACHE).then(c => c.put(e.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request, { cacheName: NW_CACHE })
+          || new Response('{"anzahl":0,"eintraege":[]}', { headers: { 'Content-Type': 'application/json' } }))
+    );
+    return;
+  }
+
+  // Rettungskarten-PDFs (unveraenderliche UUID-Pfade) — cache-first aus NW_CACHE,
+  // Netz als Fallback. Nach erstem Aufruf offline verfuegbar (PR 5).
+  if (url.pathname.startsWith('/nachschlagewerk-cache/')) {
+    e.respondWith(
+      caches.open(NW_CACHE).then(cache =>
+        cache.match(e.request).then(cached => {
+          if (cached) return cached;
+          return fetch(e.request).then(res => {
+            if (res.ok) cache.put(e.request, res.clone());
+            return res;
+          });
+        })
+      )
     );
     return;
   }
