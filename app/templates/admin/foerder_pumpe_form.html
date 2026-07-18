@@ -125,28 +125,32 @@
         Punkte werden nach Q sortiert; H sollte mit steigendem Q fallen.
       </p>
 
+      <style>
+        .kl-stage-hdr { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+        .kl-stage-hdr .kl-rpm { flex:1 1 120px; min-width:110px; max-width:200px; }
+        .kl-tbl { width:100%; font-size:.85rem; table-layout:fixed; border-collapse:collapse; }
+        .kl-tbl th, .kl-tbl td { padding:3px 4px; text-align:left; }
+        .kl-tbl th:last-child, .kl-tbl td:last-child { width:40px; text-align:center; }
+        .kl-tbl input.form-input { width:100%; min-width:0; box-sizing:border-box; }
+      </style>
       <template x-for="(stage, si) in stages" :key="si">
         <div style="border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div class="kl-stage-hdr">
             <label class="form-label" style="margin:0;">Drehzahlstufe</label>
-            <input type="text" class="form-input" style="width:160px;" x-model="stage.rpm" placeholder="2000 oder nenn">
+            <input type="text" class="form-input kl-rpm" x-model="stage.rpm" placeholder="2000 oder nenn">
             <button type="button" class="btn btn--ghost btn--xs" style="margin-left:auto;"
                     @click="removeStage(si)">Stufe entfernen</button>
           </div>
-          <table style="width:100%;font-size:.85rem;">
+          <table class="kl-tbl">
             <thead>
-              <tr>
-                <th style="text-align:left;padding:2px 6px;">Q [l/min]</th>
-                <th style="text-align:left;padding:2px 6px;">H [m]</th>
-                <th style="width:40px;"></th>
-              </tr>
+              <tr><th>Q [l/min]</th><th>H [m]</th><th></th></tr>
             </thead>
             <tbody>
               <template x-for="(pt, pi) in stage.points" :key="pi">
                 <tr>
-                  <td style="padding:2px 6px;"><input type="text" class="form-input" x-model="pt.q" style="width:120px;"></td>
-                  <td style="padding:2px 6px;"><input type="text" class="form-input" x-model="pt.h" style="width:120px;"></td>
-                  <td style="padding:2px 6px;"><button type="button" class="btn btn--ghost btn--xs" @click="removePoint(si, pi)">×</button></td>
+                  <td><input type="text" inputmode="decimal" class="form-input" x-model="pt.q"></td>
+                  <td><input type="text" inputmode="decimal" class="form-input" x-model="pt.h"></td>
+                  <td><button type="button" class="btn btn--ghost btn--xs" @click="removePoint(si, pi)">×</button></td>
                 </tr>
               </template>
             </tbody>
