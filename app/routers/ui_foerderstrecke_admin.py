@@ -312,7 +312,7 @@ def _pumpe_speichern(
         }, status_code=400)
 
     neu = p is None
-    if neu:
+    if p is None:
         p = FoerderPumpenTyp(org_id=user.org_id, quelle=QUELLE_MANUELL, erstellt_von_id=user.id)
         db.add(p)
     p.name = name.strip()[:150]
@@ -322,7 +322,8 @@ def _pumpe_speichern(
     p.saug_anschluss_dn = _i(saug_anschluss_dn)
     p.saug_parallel_max = max(1, _i(saug_parallel_max) or 1)
     p.max_ansaughoehe_m = _f(max_ansaughoehe_m) or 7.5
-    p.min_eingangsdruck_bar = _f(min_eingangsdruck_bar) if _f(min_eingangsdruck_bar) is not None else 1.5
+    _min_ein = _f(min_eingangsdruck_bar)
+    p.min_eingangsdruck_bar = _min_ein if _min_ein is not None else 1.5
     p.max_ausgangsdruck_bar = _f(max_ausgangsdruck_bar)
     p.tank_l = _i(tank_l)
     p.hinweise = hinweise.strip() or None
@@ -604,7 +605,7 @@ def kalibrierung_berechnen(
     _guard: None = Depends(require_foerderstrecke_enabled),
 ):
     from app.services.foerderstrecke_kalibrier_service import erzeuge_vorschlaege
-    neue = erzeuge_vorschlaege(db, user.org_id)
+    neue = erzeuge_vorschlaege(db, user.org_id)  # type: ignore[arg-type]
     db.commit()
     return RedirectResponse(f"/admin/foerderkalibrierung?vorschlaege={len(neue)}", status_code=303)
 

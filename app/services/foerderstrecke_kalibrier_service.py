@@ -81,6 +81,8 @@ def erzeuge_vorschlaege(db: Session, org_id: int) -> list[FoerderKalibrierVorsch
     )
     nach_typ: dict[int, list[FoerderMessung]] = {}
     for m in messungen:
+        if m.schlauch_typ_id is None:
+            continue
         nach_typ.setdefault(m.schlauch_typ_id, []).append(m)
 
     # Frische Queue: bestehende offene Vorschläge dieser Org entfernen

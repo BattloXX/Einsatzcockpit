@@ -57,7 +57,8 @@ PUMPEN_VORLAGEN: dict[str, dict[str, Any]] = {
     },
     "ts_1600_fox3": {
         "name": "TS 1600 (Rosenbauer FOX 3)",
-        "beschreibung": "Tragkraftspritze ~167 kg · 1–2× B-75 Druck, A-110 Saug · flache Kennlinie → ideal als Verstärkerpumpe.",
+        "beschreibung": "Tragkraftspritze ~167 kg · 1–2× B-75 Druck, A-110 Saug · "
+                        "flache Kennlinie → ideal als Verstärkerpumpe.",
         "felder": {
             # FOX 3 bei 3 m Saughöhe: 1000→15 bar, 1600→10 bar, 2000→3 bar; Schließdruck ~16,5 bar
             "kennlinien": {"nenn": [[0, 165], [1000, 150], [1600, 100], [2000, 30]]},

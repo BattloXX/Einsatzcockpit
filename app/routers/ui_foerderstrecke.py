@@ -232,7 +232,7 @@ async def berechnen(
 ):
     daten = await request.json()
     param = daten.get("parameter") or {}
-    ansaug, stationen, material_abschnitte = _baue_eingabe(daten, db, user.org_id)
+    ansaug, stationen, material_abschnitte = _baue_eingabe(daten, db, user.org_id)  # type: ignore[arg-type]
     if not stationen:
         return JSONResponse({"machbar": False, "warnungen": ["Keine Pumpenstation gesetzt."],
                              "q_max_l_min": 0, "druckprofil": [], "stationswerte": [],

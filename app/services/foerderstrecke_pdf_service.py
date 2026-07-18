@@ -107,19 +107,22 @@ def berechne_gespeicherte_strecke(strecke: Foerderstrecke, db) -> dict:
             })
 
     param = strecke.parameter or {}
-    ergebnis = engine.berechne_modus_a(
-        ansaug, stationen, ziel_druck_bar=0.0,
-        armaturen_zuschlag=float(param.get("armaturen_zuschlag") or 0.05),
-        hochpunkt_min_bar=float(param.get("hochpunkt_min_bar") or engine.HOCHPUNKT_MIN_BAR),
-    ) if stationen else {"q_max_l_min": 0, "machbar": False, "druckprofil": [],
-                         "stationswerte": [], "warnungen": ["Keine Stationen"], "engpass": None}
-    material = engine.materialbilanz(material_abschnitte, ergebnis["q_max_l_min"])
+    if stationen:
+        ergebnis: dict = engine.berechne_modus_a(
+            ansaug, stationen, ziel_druck_bar=0.0,
+            armaturen_zuschlag=float(param.get("armaturen_zuschlag") or 0.05),
+            hochpunkt_min_bar=float(param.get("hochpunkt_min_bar") or engine.HOCHPUNKT_MIN_BAR),
+        )
+    else:
+        ergebnis = {"q_max_l_min": 0, "machbar": False, "druckprofil": [],
+                    "stationswerte": [], "warnungen": ["Keine Stationen"], "engpass": None}
+    material = engine.materialbilanz(material_abschnitte, float(ergebnis["q_max_l_min"]))
 
     marken, s = [], 0.0
-    for st in stationen:
-        marken.append({"s_m": s, "label": st.name})
-        if st.abschnitt_danach:
-            s += st.abschnitt_danach.laenge_m
+    for ps in stationen:
+        marken.append({"s_m": s, "label": ps.name})
+        if ps.abschnitt_danach:
+            s += ps.abschnitt_danach.laenge_m
     grenzen = [st.abschnitt_danach.max_betriebsdruck_bar for st in stationen
                if st.abschnitt_danach and st.abschnitt_danach.max_betriebsdruck_bar]
     svg = foerderprofil_svg(ergebnis["druckprofil"], hoehenprofil=full_profil,

@@ -76,10 +76,10 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     sys_settings = {s.key: s.value for s in db.query(SystemSettings).all()} if is_sysadmin else {}
     from app.models.weather import WeatherStation
+    from app.services.foerderstrecke_service import foerderstrecke_system_enabled
     from app.services.gateway_service import gateway_system_enabled as _gateway_system_enabled
     from app.services.lagefuehrung_service import lagefuehrung_system_enabled
     from app.services.nachschlagewerk_service import nachschlagewerke_system_enabled
-    from app.services.foerderstrecke_service import foerderstrecke_system_enabled
     from app.services.objekt_service import objekt_system_enabled
     from app.services.uas_service import uas_system_enabled
     weather_stations = (

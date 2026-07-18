@@ -243,10 +243,10 @@ class Foerderstrecke(TenantScoped, Base):
     aktualisiert_von_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
 
-    stationen: Mapped[list["FoerderStation"]] = relationship(
+    stationen: Mapped[list[FoerderStation]] = relationship(
         back_populates="strecke", cascade="all, delete-orphan",
         order_by="FoerderStation.strang_nr, FoerderStation.sort")
-    ergebnisse: Mapped[list["FoerderErgebnis"]] = relationship(
+    ergebnisse: Mapped[list[FoerderErgebnis]] = relationship(
         back_populates="strecke", cascade="all, delete-orphan",
         order_by="FoerderErgebnis.berechnet_am")
 
@@ -301,7 +301,7 @@ class FoerderStation(TenantScoped, Base):
     wasserstelle_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("wasserstelle.id", ondelete="SET NULL"), nullable=True)
 
-    strecke: Mapped["Foerderstrecke"] = relationship(back_populates="stationen")
+    strecke: Mapped[Foerderstrecke] = relationship(back_populates="stationen")
 
     @property
     def typ_label(self) -> str:
@@ -327,7 +327,7 @@ class FoerderErgebnis(TenantScoped, Base):
     material_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     warnungen_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    strecke: Mapped["Foerderstrecke"] = relationship(back_populates="ergebnisse")
+    strecke: Mapped[Foerderstrecke] = relationship(back_populates="ergebnisse")
 
     @property
     def stationswerte(self) -> list:
