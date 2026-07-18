@@ -57,6 +57,7 @@ from app.routers import (
     ui_nachschlagewerke,
     ui_objekt,
     ui_objekt_dokumente,
+    ui_org_backup,
     ui_org_mail,
     ui_password_reset,
     ui_pin_login,
@@ -603,6 +604,7 @@ app.include_router(ui_incident.router)
 app.include_router(ui_lagefuehrung.router)
 app.include_router(ui_invitation.router)
 app.include_router(ui_backup.router)
+app.include_router(ui_org_backup.router)
 app.include_router(ui_major_incident.router)
 app.include_router(ui_gsl_staff.router)
 app.include_router(ui_lagedokument.router)

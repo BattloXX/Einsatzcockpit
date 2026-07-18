@@ -1,0 +1,55 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Datensicherung{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Datensicherung'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>Datensicherung</h1>
+    <p class="page-header__sub">Alle Daten dieser Organisation als Archiv sichern (Einsätze, Mannschaft, Objekte inkl. Dokumente/Fotos, Konfiguration)</p>
+  </div>
+</div>
+
+{% if is_sysadmin and all_orgs %}
+<section class="card mb-4">
+  <div class="card-body" style="padding:16px 20px;">
+    <label style="font-weight:600;margin-bottom:6px;display:block;">Organisation wählen:</label>
+    <select class="form-control" style="max-width:320px"
+            onchange="location.href='/admin/org-backup?org_id='+this.value">
+      <option value="">-- bitte wählen --</option>
+      {% for o in all_orgs %}
+      <option value="{{ o.id }}" {% if org and org.id == o.id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</section>
+{% endif %}
+
+{% if not org_backup_enabled %}
+<div class="alert alert--error mb-4">Die Datensicherung ist systemweit deaktiviert (ORG_BACKUP_ENABLED=false).</div>
+{% elif not org %}
+<div class="alert alert--info mb-4">Bitte zuerst eine Organisation auswählen.</div>
+{% else %}
+
+<section class="card mb-4">
+  <div class="card-body" style="padding:20px;">
+    <h2 style="margin-top:0;">Archiv herunterladen</h2>
+    <p>Erzeugt ein vollständiges, nur diese Organisation umfassendes Archiv (ZIP) und
+       lädt es herunter. Enthalten: strukturierte Daten (JSON) und die zugehörigen
+       Mediendateien; ausgenommen sind server-gebundene Geheimnisse (SSO-/Mail-Secrets,
+       API-Keys, Tokens).</p>
+    <a class="btn btn--primary"
+       href="/admin/org-backup/export.zip{% if is_sysadmin and org %}?org_id={{ org.id }}{% endif %}">
+      💾 Archiv herunterladen
+    </a>
+    <p class="page-header__sub" style="margin-top:14px;">
+      <strong>Datenschutz:</strong> Das Archiv enthält personenbezogene Daten (Mannschaft,
+      Einsätze). Bewahren Sie es zugriffsbeschränkt auf. Ein automatischer Push an ein
+      selbst konfiguriertes Ziel und die Wiederherstellung folgen in Kürze.
+    </p>
+  </div>
+</section>
+
+{% endif %}
+{% endblock %}
