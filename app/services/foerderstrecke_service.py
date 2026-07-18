@@ -17,6 +17,7 @@ Effektive Aktivierung: System-Flag (SystemSettings key "foerderstrecke_module_en
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -203,6 +204,47 @@ def verfuegbare_saughoehe_m(
         - reib_m
         - npshr_m
     )
+
+
+def materialbilanz(abschnitte: list[dict], q_l_min: float, *, reserve: float = 0.10) -> dict:
+    """Aggregiert Schlauchbedarf, Leitungsvolumen und Füllzeit über alle Abschnitte.
+
+    `abschnitte`: je Abschnitt {kuerzel, laenge_m, n_parallel, element_laenge_m,
+    wasserinhalt_l_m}. `reserve` schlägt auf die Stückzahl auf (Buchten/Ersatz).
+
+    Rückgabe: {schlaeuche: [{kuerzel, meter, meter_mit_reserve, elemente, vorrat_m?}],
+    wasservolumen_l, fuellzeit_min}.
+    """
+    je_typ: dict[str, dict] = {}
+    volumen_l = 0.0
+    for a in abschnitte:
+        kuerzel = a.get("kuerzel") or f"{a.get('durchmesser_mm', '?')} mm"
+        laenge = float(a.get("laenge_m") or 0.0)
+        n = max(1, int(a.get("n_parallel") or 1))
+        el = float(a.get("element_laenge_m") or 20.0)
+        wpm = float(a.get("wasserinhalt_l_m") or 0.0)
+        meter = laenge * n
+        eintrag = je_typ.setdefault(kuerzel, {
+            "kuerzel": kuerzel, "meter": 0.0, "element_laenge_m": el,
+        })
+        eintrag["meter"] += meter
+        volumen_l += meter * wpm
+    schlaeuche = []
+    for e in je_typ.values():
+        meter_reserve = e["meter"] * (1.0 + reserve)
+        el = e["element_laenge_m"] or 20.0
+        schlaeuche.append({
+            "kuerzel": e["kuerzel"],
+            "meter": round(e["meter"], 1),
+            "meter_mit_reserve": round(meter_reserve, 1),
+            "elemente": int(math.ceil(meter_reserve / el)) if el > 0 else None,
+        })
+    fuellzeit_min = round(volumen_l / q_l_min, 1) if q_l_min and q_l_min > 0 else None
+    return {
+        "schlaeuche": sorted(schlaeuche, key=lambda s: s["kuerzel"]),
+        "wasservolumen_l": round(volumen_l, 0),
+        "fuellzeit_min": fuellzeit_min,
+    }
 
 
 def behaelter_standzeit_min(volumen_l: float, q_zulauf_l_min: float, q_ablauf_l_min: float) -> float | None:

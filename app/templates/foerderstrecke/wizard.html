@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% block title %}Förderstrecken-Planer{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
+<style>
+.fs-shell { display:grid; grid-template-columns: 320px 1fr; gap:14px; padding:14px; align-items:start; }
+.fs-map { height:420px; border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+.fs-panel { background:var(--surface-mid); border:1px solid var(--border); border-radius:8px; padding:14px; }
+.fs-station { border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:8px; }
+.fs-ampel { display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+.fs-q { font-size:2rem; font-weight:700; }
+.fs-warn { color:#b45309; font-size:.85rem; }
+.fs-warn--rot { color:#b91c1c; }
+.fs-field { display:flex; flex-direction:column; gap:2px; margin-bottom:8px; }
+.fs-field label { font-size:.78rem; color:var(--text-muted); }
+.fs-row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.fs-tbl { width:100%; border-collapse:collapse; font-size:.82rem; }
+.fs-tbl th, .fs-tbl td { border-bottom:1px solid var(--border); padding:4px 6px; text-align:left; }
+@media (max-width:900px){ .fs-shell{ grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="foerderPlaner()" x-init="init()">
+  <div class="page-header" style="padding:14px 14px 0;">
+    <div>
+      <h1>🚰 Förderstrecken-Planer</h1>
+      <p class="page-header__sub">Löschwasserförderung über lange Wegstrecke berechnen</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="btn btn--secondary" href="/admin/foerderpumpen">🧵 Geräte verwalten</a>
+    </div>
+  </div>
+
+  <div class="fs-shell">
+    <!-- ── Linke Spalte: gespeicherte Strecken + Ansaug + Stationen ── -->
+    <div>
+      <div class="fs-panel" style="margin-bottom:12px;">
+        <div class="fs-field">
+          <label>Bezeichnung</label>
+          <input class="form-input" x-model="name" placeholder="z. B. Versorgung Objekt X aus der Ach">
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn--primary btn--sm" @click="berechnen()" :disabled="rechnet">Berechnen</button>
+          <button class="btn btn--secondary btn--sm" @click="speichern()">Speichern</button>
+        </div>
+      </div>
+
+      <div class="fs-panel" style="margin-bottom:12px;">
+        <h3 style="margin:0 0 8px;font-size:.95rem;">Ansaugpunkt</h3>
+        <div class="fs-row2">
+          <div class="fs-field"><label>Seehöhe [m]</label><input class="form-input" type="number" x-model.number="ansaug.seehoehe_m"></div>
+          <div class="fs-field"><label>Geod. Saughöhe [m]</label><input class="form-input" type="number" step="0.1" x-model.number="ansaug.geodaetische_saughoehe_m"></div>
+        </div>
+        <div class="fs-row2">
+          <div class="fs-field"><label>Saug k-Wert</label><input class="form-input" type="number" step="0.01" x-model.number="ansaug.saug_k"></div>
+          <div class="fs-field"><label>Saugleitungen parallel</label><input class="form-input" type="number" min="1" x-model.number="ansaug.saug_n_parallel"></div>
+        </div>
+      </div>
+
+      <div class="fs-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h3 style="margin:0;font-size:.95rem;">Stationen</h3>
+          <button class="btn btn--ghost btn--xs" @click="addStation()">＋ Station</button>
+        </div>
+        <template x-for="(st, i) in stationen" :key="i">
+          <div class="fs-station">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <strong x-text="'Station ' + (i+1)"></strong>
+              <button class="btn btn--ghost btn--xs" @click="removeStation(i)">×</button>
+            </div>
+            <div class="fs-field">
+              <label>Typ</label>
+              <select class="form-select" x-model="st.typ">
+                {% for code, label in station_typen.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="fs-field">
+              <label>Pumpe</label>
+              <select class="form-select" x-model.number="st.pumpen_typ_id" @change="st.rpm=firstRpm(st.pumpen_typ_id)">
+                <option :value="null">— wählen —</option>
+                <template x-for="p in pumpen" :key="p.id"><option :value="p.id" x-text="p.name"></option></template>
+              </select>
+            </div>
+            <div class="fs-field" x-show="rpmOptions(st.pumpen_typ_id).length > 1">
+              <label>Drehzahlstufe</label>
+              <select class="form-select" x-model="st.rpm">
+                <template x-for="r in rpmOptions(st.pumpen_typ_id)" :key="r"><option :value="r" x-text="r"></option></template>
+              </select>
+            </div>
+            <div class="fs-field" x-show="st.typ==='puffer' || st.typ==='uebergabe'">
+              <label>Behältervolumen [l]</label>
+              <input class="form-input" type="number" x-model.number="st.behaelter_volumen_l">
+            </div>
+            <hr style="border:none;border-top:1px solid var(--border);margin:6px 0;">
+            <div class="fs-field">
+              <label>Leitung danach — Schlauch</label>
+              <select class="form-select" x-model.number="st.abschnitt.schlauch_typ_id">
+                <option :value="null">— (letzte Station: kein Abschnitt) —</option>
+                <template x-for="s in schlaeuche" :key="s.id"><option :value="s.id" x-text="s.kuerzel"></option></template>
+              </select>
+            </div>
+            <div class="fs-row2">
+              <div class="fs-field"><label>Länge [m]</label><input class="form-input" type="number" x-model.number="st.abschnitt.laenge_m"></div>
+              <div class="fs-field"><label>Leitungen parallel</label><input class="form-input" type="number" min="1" x-model.number="st.abschnitt.n_parallel"></div>
+            </div>
+            <div class="fs-field"><label>Höhendifferenz [m] (+ bergauf)</label><input class="form-input" type="number" step="0.1" x-model.number="st.abschnitt.delta_hoehe_m"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── Rechte Spalte: Karte + Ergebnis ── -->
+    <div>
+      <div id="fs-map" class="fs-map"></div>
+      <p class="text-muted" style="font-size:.78rem;margin:6px 0 12px;">
+        Route auf der Karte zeichnen (Linien-Werkzeug) → Gesamtlänge und Höhenprofil werden
+        übernommen. Die Länge wird gleichmäßig auf die Abschnitte verteilt (danach je Abschnitt anpassbar).
+      </p>
+
+      <div class="fs-panel" x-show="ergebnis" x-cloak>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span>
+            <span class="fs-ampel" :style="'background:'+ampelFarbe()"></span>
+            <span class="fs-q" x-text="ergebnis ? (ergebnis.q_max_l_min.toLocaleString('de-DE') + ' l/min') : ''"></span>
+          </span>
+          <span class="text-muted" x-show="ergebnis && ergebnis.engpass" x-text="ergebnis && ergebnis.engpass ? ('Engpass: '+ergebnis.engpass.name) : ''"></span>
+        </div>
+
+        <div x-html="ergebnis ? ergebnis.svg : ''" style="margin:12px 0;overflow-x:auto;"></div>
+
+        <template x-if="ergebnis && ergebnis.warnungen && ergebnis.warnungen.length">
+          <ul style="margin:8px 0;padding-left:18px;">
+            <template x-for="(w, wi) in ergebnis.warnungen" :key="wi">
+              <li class="fs-warn" :class="w.indexOf('Abriss')>=0 || w.indexOf('Hochpunkt')>=0 ? 'fs-warn--rot' : ''" x-text="w"></li>
+            </template>
+          </ul>
+        </template>
+
+        <template x-if="ergebnis && ergebnis.stationswerte && ergebnis.stationswerte.length">
+          <table class="fs-tbl">
+            <thead><tr><th>Station</th><th>Typ</th><th>p aus [bar]</th><th>p ein [bar]</th><th>DBV [bar]</th></tr></thead>
+            <tbody>
+              <template x-for="(sw, si) in ergebnis.stationswerte" :key="si">
+                <tr>
+                  <td x-text="sw.name || ('Station '+(si+1))"></td>
+                  <td x-text="sw.typ"></td>
+                  <td x-text="sw.p_aus_bar"></td>
+                  <td x-text="sw.p_ein_bar ?? '–'"></td>
+                  <td x-text="sw.dbv_bar ?? '–'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </template>
+
+        <template x-if="ergebnis && ergebnis.material && ergebnis.material.schlaeuche">
+          <div style="margin-top:10px;font-size:.85rem;">
+            <strong>Material:</strong>
+            <template x-for="(m, mi) in ergebnis.material.schlaeuche" :key="mi">
+              <span x-text="m.kuerzel + ': ' + m.meter_mit_reserve + ' m (' + m.elemente + ' Stk) · '"></span>
+            </template>
+            <span x-show="ergebnis.material.fuellzeit_min" x-text="'Füllzeit ~' + (ergebnis && ergebnis.material.fuellzeit_min) + ' min'"></span>
+          </div>
+        </template>
+      </div>
+
+      <!-- Gespeicherte Strecken -->
+      <div class="fs-panel" style="margin-top:12px;" x-show="strecken.length">
+        <h3 style="margin:0 0 8px;font-size:.95rem;">Gespeicherte Strecken</h3>
+        <table class="fs-tbl">
+          <tbody>
+            {% for s in strecken %}
+            <tr>
+              <td><a href="/foerderstrecke/{{ s.id }}">{{ s.name }}</a></td>
+              <td>{{ status_labels.get(s.status, s.status) }}</td>
+              <td style="text-align:right;">
+                <form method="post" action="/foerderstrecke/{{ s.id }}/loeschen" style="display:inline;" onsubmit="return confirm('Strecke löschen?');">
+                  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                  <button class="btn btn--ghost btn--xs">Löschen</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/leaflet-geoman.min.js"></script>
+<script>
+const FS_PUMPEN = {{ pumpen_json | safe }};
+const FS_SCHLAEUCHE = {{ schlaeuche_json | safe }};
+const FS_STRECKEN = {{ strecken|length }};
+const FS_LADE = {% if lade_strecke_id %}{{ lade_strecke_json | safe }}{% else %}null{% endif %};
+const FS_CSRF = "{{ request.state.csrf_token }}";
+
+function foerderPlaner() {
+  return {
+    name: FS_LADE ? FS_LADE.name : "",
+    pumpen: FS_PUMPEN,
+    schlaeuche: FS_SCHLAEUCHE,
+    strecken: Array({{ strecken|length }}),
+    ladeId: FS_LADE ? FS_LADE.id : null,
+    ansaug: (FS_LADE && FS_LADE.ansaug && Object.keys(FS_LADE.ansaug).length)
+      ? Object.assign({seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23, saug_n_parallel:1}, FS_LADE.ansaug)
+      : {seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23, saug_n_parallel:1},
+    stationen: [],
+    zielDruck: 0,
+    parameter: {armaturen_zuschlag:0.05, hochpunkt_min_bar:0.5, reserve:0.10},
+    routeCoords: null,
+    hoehenprofil: null,
+    ergebnis: null,
+    rechnet: false,
+
+    init() {
+      if (FS_LADE && FS_LADE.stationen && FS_LADE.stationen.length) {
+        this.stationen = FS_LADE.stationen.map(s => ({
+          typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm,
+          behaelter_volumen_l: s.behaelter_volumen_l,
+          abschnitt: { schlauch_typ_id: s.schlauch_typ_id, n_parallel: s.druck_parallel || 1,
+                       laenge_m: 0, delta_hoehe_m: 0 }
+        }));
+        if (FS_LADE.hoehenprofil) this.hoehenprofil = FS_LADE.hoehenprofil;
+      } else {
+        this.addStation("quellpumpe");
+      }
+      this.initMap();
+    },
+
+    pumpe(id) { return this.pumpen.find(p => p.id === id) || null; },
+    rpmOptions(id) { const p = this.pumpe(id); return p ? p.drehzahlstufen : []; },
+    firstRpm(id) { const o = this.rpmOptions(id); return o.length ? o[0] : null; },
+
+    addStation(typ) {
+      this.stationen.push({
+        typ: typ || (this.stationen.length ? "verstaerker" : "quellpumpe"),
+        pumpen_typ_id: null, rpm: null, behaelter_volumen_l: null,
+        abschnitt: { schlauch_typ_id: null, n_parallel: 1, laenge_m: 0, delta_hoehe_m: 0 }
+      });
+    },
+    removeStation(i) { this.stationen.splice(i, 1); if (!this.stationen.length) this.addStation("quellpumpe"); },
+
+    payload() {
+      return {
+        name: this.name, id: this.ladeId,
+        ansaug: this.ansaug, ziel_druck_bar: this.zielDruck, parameter: this.parameter,
+        hoehenprofil: this.hoehenprofil,
+        route_geojson: this.routeCoords ? {type:"LineString", coordinates: this.routeCoords.map(c=>[c[1],c[0]])} : null,
+        stationen: this.stationen.map(s => ({
+          typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm,
+          behaelter_volumen_l: s.behaelter_volumen_l,
+          abschnitt: {
+            schlauch_typ_id: s.abschnitt.schlauch_typ_id,
+            n_parallel: s.abschnitt.n_parallel, laenge_m: s.abschnitt.laenge_m,
+            delta_hoehe_m: s.abschnitt.delta_hoehe_m
+          }
+        }))
+      };
+    },
+
+    async berechnen() {
+      this.rechnet = true;
+      try {
+        const r = await fetch("/foerderstrecke/berechnen", {
+          method: "POST", headers: {"Content-Type":"application/json","X-CSRF-Token":FS_CSRF},
+          body: JSON.stringify(this.payload())
+        });
+        this.ergebnis = await r.json();
+      } catch (e) { alert("Berechnung fehlgeschlagen: " + e); }
+      this.rechnet = false;
+    },
+
+    async speichern() {
+      const body = this.payload();
+      if (this.ergebnis) body.ergebnis = this.ergebnis;
+      const r = await fetch("/foerderstrecke/speichern", {
+        method: "POST", headers: {"Content-Type":"application/json","X-CSRF-Token":FS_CSRF},
+        body: JSON.stringify(body)
+      });
+      const res = await r.json();
+      if (res.id) { this.ladeId = res.id; alert("Gespeichert: " + res.name); }
+    },
+
+    ampelFarbe() {
+      if (!this.ergebnis) return "#9ca3af";
+      const rot = (this.ergebnis.warnungen || []).some(w => w.indexOf("Abriss")>=0 || w.indexOf("Hochpunkt")>=0);
+      if (!this.ergebnis.machbar || rot) return "#dc2626";
+      if ((this.ergebnis.warnungen || []).length) return "#f59e0b";
+      return "#16a34a";
+    },
+
+    // ── Karte ──
+    initMap() {
+      const el = document.getElementById("fs-map");
+      if (!el || typeof L === "undefined") return;
+      const karte = L.map(el).setView([47.47, 9.75], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(karte);
+      karte.pm.addControls({position:"topleft", drawPolyline:true, drawMarker:false,
+        drawCircle:false, drawRectangle:false, drawPolygon:false, drawCircleMarker:false,
+        drawText:false, editMode:true, dragMode:false, cutPolygon:false, removalMode:true});
+      const self = this;
+      karte.on("pm:create", e => {
+        if (e.shape !== "Line") return;
+        self.uebernehmeRoute(e.layer);
+        e.layer.on("pm:edit", () => self.uebernehmeRoute(e.layer));
+      });
+    },
+
+    async uebernehmeRoute(layer) {
+      const latlngs = layer.getLatLngs();
+      this.routeCoords = latlngs.map(p => [p.lat, p.lng]);
+      // Gesamtlänge (Haversine)
+      let laenge = 0;
+      for (let i=0;i<latlngs.length-1;i++) laenge += latlngs[i].distanceTo(latlngs[i+1]);
+      // Länge gleichmäßig auf Abschnitte (Stationen mit Leitung) verteilen
+      const mitLeitung = this.stationen.filter((s,i)=> i < this.stationen.length-1 || this.stationen.length===1);
+      const n = Math.max(1, this.stationen.length - 1) || 1;
+      const proAbschnitt = laenge / (this.stationen.length > 1 ? this.stationen.length - 1 : 1);
+      this.stationen.forEach((s, i) => {
+        if (i < this.stationen.length - 1) s.abschnitt.laenge_m = Math.round(proAbschnitt);
+      });
+      // Höhenprofil abrufen
+      try {
+        const r = await fetch("/foerderstrecke/hoehenprofil", {
+          method:"POST", headers:{"Content-Type":"application/json","X-CSRF-Token":FS_CSRF},
+          body: JSON.stringify({route: this.routeCoords})
+        });
+        const hp = await r.json();
+        if (hp.stuetzpunkte && hp.stuetzpunkte.length) {
+          this.hoehenprofil = hp.stuetzpunkte.map(p => [p.s_m, p.hoehe_m]).filter(p => p[1] != null);
+          this.verteileHoehen();
+        }
+      } catch (e) { /* Höhenprofil optional */ }
+    },
+
+    verteileHoehen() {
+      // Höhendifferenz je Abschnitt aus dem Profil (Anfang/Ende) grob ableiten
+      if (!this.hoehenprofil || this.hoehenprofil.length < 2) return;
+      const total = this.hoehenprofil[this.hoehenprofil.length-1][0] || 1;
+      let s0 = 0;
+      this.stationen.forEach((st, i) => {
+        if (i >= this.stationen.length - 1) return;
+        const s1 = s0 + (st.abschnitt.laenge_m || 0);
+        const h0 = this.hoeheBei(s0), h1 = this.hoeheBei(s1);
+        if (h0 != null && h1 != null) st.abschnitt.delta_hoehe_m = Math.round((h1 - h0) * 10) / 10;
+        s0 = s1;
+      });
+    },
+    hoeheBei(s) {
+      if (!this.hoehenprofil) return null;
+      let best = null, bd = Infinity;
+      for (const p of this.hoehenprofil) { const d = Math.abs(p[0]-s); if (d<bd){bd=d;best=p[1];} }
+      return best;
+    }
+  };
+}
+</script>
+{% endblock %}
