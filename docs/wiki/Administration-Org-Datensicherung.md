@@ -117,11 +117,12 @@ Ein gemeinsames Protokoll für beide Ablageorte, adressiert über eine **Drive-I
 
 | Bereich | Umsetzung |
 |---------|-----------|
-| Modell | `OrgBackupConfig` (Ziel + Zeitplan, Fernet-Secrets), Migration 0166 |
-| Export | `app/services/org_export_service.py` (generischer FK-Collector, Secret-Redaktion) + `org_export_media.py` |
+| Modell | `OrgBackupConfig` (Ziel + Zeitplan + Bereiche + Graph, Fernet-Secrets); Migrationen `0166` (Basis), `0167` (`include_areas`), `0168` (Graph-Felder) |
+| Export | `app/services/org_export_service.py` (generischer FK-Collector, Secret-Redaktion, Bereiche `AREA_ROOTS`) + `org_export_media.py` |
 | Push/Zeitplan | `app/services/org_backup_loop.py` (reuse `remote_backup_service`) |
-| Restore | `app/services/org_import_service.py` (ID-Remapping, Fixup, Medien) |
-| UI | `app/routers/ui_org_backup.py` (`/admin/org-backup`) |
+| Off-Site-Ziele | `app/services/remote_backup_service.py` (SFTP/SCP/rsync/FTP/FTPS/rclone + Retention `prune_remote`) und `graph_backup_service.py` (SharePoint/OneDrive) |
+| Restore | `app/services/org_import_service.py` (ID-Remapping, Fixup, Medien; `replace=True` = In-place mit Sicherheits-Autobackup) |
+| UI | `app/routers/ui_org_backup.py` (`/admin/org-backup`, Restore `/admin/org-backup/restore`) |
 
 ---
 
