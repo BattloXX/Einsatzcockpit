@@ -2,7 +2,7 @@
 
 Digitales Einsatzleiter-Werkzeug für österreichische Feuerwehren — Multi-User, Multi-Organisations-fähig, Echtzeit.
 
-**Version:** 3.4.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
+**Version:** 3.5.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
 
 ## Was ist das?
 
@@ -34,6 +34,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - PWA für Offline-Betrieb, Web-Push-Benachrichtigungen
 - QR-Code-Schnellzugriff für zustoßende Einsatzkräfte
 - KI-Assistent (Auftragsvorschläge, Lagebild, Auto-Priorisierung) via Anthropic Claude — opt-in
+- Datenbank-Backup & Disaster-Recovery: automatisierte Dumps beider DBs + Medien, wöchentlich getestete Restore-Probe, Off-Site-Upload (SFTP/SCP/rsync/FTPS/rclone), DR-Runbook
 - Rate-Limiting per IP und API-Key (slowapi)
 
 ## Inhaltsverzeichnis
