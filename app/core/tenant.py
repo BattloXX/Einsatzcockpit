@@ -131,6 +131,15 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "objekt_seite_ki_vorschlag",
     # Wasserstellen-/Löschwasser-Stammdaten (TenantScoped via Mixin)
     "wasserstelle",
+    # Förderstrecken-Planer Gerätekatalog (TenantScoped via Mixin)
+    "foerder_pumpen_typ",
+    "foerder_schlauch_typ",
+    # Förderstrecken-Planer Persistenz (TenantScoped via Mixin)
+    "foerderstrecke",
+    "foerder_station",
+    "foerder_ergebnis",
+    "foerder_messung",
+    "foerder_kalibrier_vorschlag",
     # Print & Alarm Gateway (ECPG) – TenantScoped via Mixin
     "gateway",
     "printer",

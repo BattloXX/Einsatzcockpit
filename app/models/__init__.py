@@ -150,6 +150,16 @@ from app.models.verleih import (
     VerleihStueckliste,
     VerleihStuecklistePosition,
 )
+from app.models.foerderstrecke import (
+    FoerderErgebnis,
+    FoerderKalibrierVorschlag,
+    FoerderMessung,
+    FoerderPumpenTyp,
+    FoerderSchlauchTyp,
+    FoerderStation,
+    Foerderstrecke,
+)
+from app.models.hoehen_cache import HoehenCache
 from app.models.wasserstelle import Wasserstelle
 from app.models.weather import WeatherDashboardToken, WeatherReading, WeatherStation
 from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherAlertState
@@ -194,6 +204,10 @@ __all__ = [
     "ObjektDokument", "ObjektDokumentSeite", "ObjektKartenObjekt", "ObjektEinsatz",
     "ObjektSymbol", "AlarmInfoscreenToken", "InfoscreenUrl", "ObjektSeiteKiVorschlag",
     "Wasserstelle",
+    "FoerderPumpenTyp", "FoerderSchlauchTyp",
+    "Foerderstrecke", "FoerderStation", "FoerderErgebnis",
+    "FoerderMessung", "FoerderKalibrierVorschlag",
+    "HoehenCache",
     "Gateway", "Printer", "PrintJob", "AlarmIngest", "PrintRule",
     "UASDevice", "UASPilot", "UASFlugbewegung", "UASWartung",
     "UASEinsatz", "UASEinsatzRolleEintrag", "UASFlug", "UASCheckliste",

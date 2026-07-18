@@ -381,6 +381,10 @@ class OrgSettings(Base):
     # Objektverwaltung: je Org aktivierbar, effektiv = SystemSettings-Key
     # "objekt_module_enabled" == "true" AND dieser Wert (Muster UAS).
     objekt_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Förderstrecken-Planer: je Org aktivierbar, effektiv = SystemSettings-Key
+    # "foerderstrecke_module_enabled" == "true" AND dieser Wert (Muster UAS).
+    foerderstrecke_module_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False)
     # Nachschlagewerke (Gefahrgut-Suche, Rettungsdatenblaetter, Karten-Overlays):
     # effektiv = SystemSettings-Key "nachschlagewerke_module_enabled" == "true"
     # AND dieser Wert (Muster UAS/Objekt/Gateway).

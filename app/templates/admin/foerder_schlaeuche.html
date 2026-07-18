@@ -1,0 +1,178 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Schläuche – Förderstrecke – Admin{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+
+  <div class="page-header">
+    <div>
+      <h1>🧵 Schläuche (Förderstrecke)</h1>
+      <p class="page-header__sub">
+        {{ schlaeuche|length }} Schlauchtyp{{ '' if schlaeuche|length == 1 else 'en' }} im Katalog dieser Organisation
+      </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="btn btn--secondary" href="/admin/foerderpumpen">🚰 Pumpen</a>
+      <button type="button" class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="schlauchNeuModal">＋ Eigener Schlauch</button>
+    </div>
+  </div>
+
+  {% if request.query_params.get('fehler') %}
+  <div class="alert alert--error">⚠️ Eingabe unvollständig oder ungültig (Kürzel, Durchmesser &gt; 0, k-Wert ≥ 0 erforderlich).</div>
+  {% endif %}
+
+  {# ── Vorlagen-Leiste ── #}
+  <div class="card" style="padding:14px;margin-bottom:14px;">
+    <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:8px;">📋 Aus Vorlage übernehmen (editierbare Kopie):</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      {% for key, v in vorlagen.items() %}
+      <form method="post" action="/admin/foerderschlaeuche/aus-vorlage/{{ key }}">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn btn--ghost btn--sm" title="{{ v.beschreibung }}">{{ v.name }}</button>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if not schlaeuche %}
+  <div class="card" style="padding:28px;text-align:center;color:var(--text-muted);">
+    Noch keine Schläuche. Lege einen eigenen an oder übernimm eine Vorlage.
+  </div>
+  {% else %}
+  <table class="table-admin table-admin--cards">
+    <thead>
+      <tr>
+        <th>Kürzel</th>
+        <th style="text-align:right;">Ø (mm)</th>
+        <th style="text-align:right;">k-Wert</th>
+        <th style="text-align:right;">Element</th>
+        <th style="text-align:right;">Betriebsdruck</th>
+        <th style="text-align:right;">Wasser/m</th>
+        <th style="text-align:right;">Vorrat</th>
+        <th>Aktionen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in schlaeuche %}
+      <tr>
+        <td data-label="Kürzel"><strong>{{ s.kuerzel }}</strong>
+          {% if s.quelle == 'vorlage' %}<span class="badge-pill badge-pill--gray">Vorlage</span>{% endif %}
+        </td>
+        <td data-label="Ø" style="text-align:right;">{{ s.durchmesser_mm }}</td>
+        <td data-label="k-Wert" style="text-align:right;font-variant-numeric:tabular-nums;">{{ s.k_verlust }}</td>
+        <td data-label="Element" style="text-align:right;">{{ s.element_laenge_m }} m</td>
+        <td data-label="Betriebsdruck" style="text-align:right;">{% if s.max_betriebsdruck_bar %}{{ s.max_betriebsdruck_bar }} bar{% else %}<span class="text-muted">–</span>{% endif %}</td>
+        <td data-label="Wasser/m" style="text-align:right;">{% if s.wasserinhalt_l_m %}{{ s.wasserinhalt_l_m }} l{% else %}<span class="text-muted">–</span>{% endif %}</td>
+        <td data-label="Vorrat" style="text-align:right;">{% if s.vorrat_m %}{{ s.vorrat_m }} m{% else %}<span class="text-muted">–</span>{% endif %}</td>
+        <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn btn--ghost btn--xs" data-ec-action="open-dialog" data-ec-dialog="schlauchEdit{{ s.id }}">Bearbeiten</button>
+          <form method="post" action="/admin/foerderschlaeuche/{{ s.id }}/loeschen" style="display:inline;"
+                onsubmit="return confirm('Diesen Schlauchtyp wirklich löschen?');">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--ghost btn--xs">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+{# ── Modal: Neuer Schlauch ── #}
+<dialog class="modal" id="schlauchNeuModal">
+  <form method="post" action="/admin/foerderschlaeuche/neu" class="modal__content">
+    <div class="modal__header">
+      <h3>Neuer Schlauchtyp</h3>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Kürzel</label>
+          <input type="text" name="kuerzel" class="form-input" required maxlength="30" placeholder="B-75">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Durchmesser (mm)</label>
+          <input type="number" name="durchmesser_mm" class="form-input" required min="1" placeholder="75">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">k-Wert (bar/100 m @ 1000 l/min)</label>
+          <input type="text" name="k_verlust" class="form-input" required placeholder="1.56">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Elementlänge (m)</label>
+          <input type="number" name="element_laenge_m" class="form-input" min="1" value="20">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Max. Betriebsdruck (bar, optional)</label>
+          <input type="text" name="max_betriebsdruck_bar" class="form-input" placeholder="16">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Vorrat (m, optional)</label>
+          <input type="number" name="vorrat_m" class="form-input" min="0" placeholder="600">
+        </div>
+      </div>
+      <p class="text-muted" style="font-size:.78rem;margin:0;">Wasserinhalt je Meter wird automatisch aus dem Durchmesser berechnet.</p>
+    </div>
+    <div class="modal__footer">
+      <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
+      <button type="submit" class="btn btn--primary">Anlegen</button>
+    </div>
+  </form>
+</dialog>
+
+{# ── Modals: Schlauch bearbeiten (je Zeile) ── #}
+{% for s in schlaeuche %}
+<dialog class="modal" id="schlauchEdit{{ s.id }}">
+  <form method="post" action="/admin/foerderschlaeuche/{{ s.id }}/bearbeiten" class="modal__content">
+    <div class="modal__header">
+      <h3>Schlauch bearbeiten: {{ s.kuerzel }}</h3>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Kürzel</label>
+          <input type="text" name="kuerzel" class="form-input" required maxlength="30" value="{{ s.kuerzel }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Durchmesser (mm)</label>
+          <input type="number" name="durchmesser_mm" class="form-input" required min="1" value="{{ s.durchmesser_mm }}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">k-Wert (bar/100 m @ 1000 l/min)</label>
+          <input type="text" name="k_verlust" class="form-input" required value="{{ s.k_verlust }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Elementlänge (m)</label>
+          <input type="number" name="element_laenge_m" class="form-input" min="1" value="{{ s.element_laenge_m }}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Max. Betriebsdruck (bar, optional)</label>
+          <input type="text" name="max_betriebsdruck_bar" class="form-input" value="{{ s.max_betriebsdruck_bar if s.max_betriebsdruck_bar is not none else '' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Vorrat (m, optional)</label>
+          <input type="number" name="vorrat_m" class="form-input" min="0" value="{{ s.vorrat_m if s.vorrat_m is not none else '' }}">
+        </div>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </div>
+  </form>
+</dialog>
+{% endfor %}
+{% endblock %}

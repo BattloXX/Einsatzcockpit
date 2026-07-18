@@ -65,6 +65,7 @@ from app.routers import (
     ui_push,
     ui_settings,
     ui_sms,
+    ui_foerderstrecke_admin,
     ui_sso,
     ui_stats,
     ui_sysadmin,
@@ -641,6 +642,7 @@ app.include_router(ui_objekt_dokumente.router)
 app.include_router(ui_nachschlagewerke.router)
 app.include_router(ui_nachschlagewerke.cache_router)
 app.include_router(ui_wasserstelle.router)
+app.include_router(ui_foerderstrecke_admin.router)
 app.include_router(ui_gateway.router)
 app.include_router(ui_druck.router)
 app.include_router(ui_infoscreen_alarm.router)

@@ -1,0 +1,42 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Pumpen-Vorlagen – Förderstrecke – Admin{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+
+  <div class="page-header">
+    <div>
+      <h1>📋 Pumpen-Vorlagen</h1>
+      <p class="page-header__sub">Vorlage übernehmen → editierbare Kopie in deinem Katalog</p>
+    </div>
+    <a class="btn btn--secondary" href="/admin/foerderpumpen">← Zurück zu meinen Pumpen</a>
+  </div>
+
+  <p class="text-muted" style="font-size:.85rem;margin-top:-4px;max-width:760px;">
+    Diese Vorlagen sind Startpunkte mit vorbefüllten Kennlinien. „Übernehmen" legt eine
+    Kopie in deiner Organisation an und öffnet sie direkt zum Anpassen — die Vorlage selbst
+    bleibt unverändert. Kennlinienwerte vor Produktivnutzung bzw. über einen Nassbewerb kalibrieren.
+  </p>
+
+  <div class="card-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;">
+    {% for key, v in vorlagen.items() %}
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+      <div>
+        <h3 style="margin:0 0 4px;font-size:1.02rem;">{{ v.name }}</h3>
+        <p class="text-muted" style="font-size:.82rem;margin:0;">{{ v.beschreibung }}</p>
+      </div>
+      <div style="font-size:.8rem;color:var(--text-muted);">
+        {% set f = v.felder %}
+        Druck {{ f.druck_anschluss_dn }} mm ×{{ f.druck_parallel_max }} ·
+        Saug {{ f.saug_anschluss_dn }} mm ×{{ f.saug_parallel_max }}
+        {% if f.tank_l %}· Tank {{ f.tank_l }} l{% endif %}
+      </div>
+      <form method="post" action="/admin/foerderpumpen/aus-vorlage/{{ key }}" style="margin-top:auto;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn btn--primary btn--sm" style="width:100%;">Übernehmen &amp; anpassen</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

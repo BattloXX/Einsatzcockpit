@@ -12,7 +12,8 @@
      or _p.startswith('/gateway') %}
   {% set active_group = 'verwaltung' %}
 {% elif '/admin/gruppen' in _p or '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p
-       or '/admin/teams-alarmierung' in _p or '/admin/wasserstellen' in _p %}
+       or '/admin/teams-alarmierung' in _p or '/admin/wasserstellen' in _p
+       or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p %}
   {% set active_group = 'stammdaten' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
@@ -246,6 +247,13 @@
                {{ tip('Löschwasser-Stammdaten: Hydranten, Saugstellen, Löschteiche — pflegen und aus CSV importieren') }}>
               <span class="admin-nav__icon">🚰</span>Wasserstellen
             </a>
+            {% if request.state.foerderstrecke_enabled %}
+            <a href="/admin/foerderpumpen"
+               class="admin-nav__item {% if '/admin/foerderpumpen' in request.url.path or '/admin/foerderschlaeuche' in request.url.path %}is-active{% endif %}"
+               {{ tip('Förderstrecke: eigene Pumpen (mit Kennlinie) und Schläuche verwalten, Vorlagen wie TS 1600/TS 1200 übernehmen') }}>
+              <span class="admin-nav__icon">🧵</span>Förderstrecke-Geräte
+            </a>
+            {% endif %}
             <a href="/admin/einsatzinfo-sms"
                class="admin-nav__item {% if '/admin/einsatzinfo-sms' in request.url.path %}is-active{% endif %}"
                {{ tip('SMS-Einsatzinfo: automatischer Versand bei Alarm, Verteiler je Stichwort') }}>
