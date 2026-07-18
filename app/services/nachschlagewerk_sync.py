@@ -197,24 +197,52 @@ async def sync_gefahrgut() -> bool:
     return True
 
 
+async def sync_rettungskarten_katalog() -> int:
+    """Synchronisiert den Euro-Rescue-Rettungskarten-Katalog (DB) in einem Thread.
+
+    Reine Katalog-Metadaten (kein PDF-Download hier). Best-effort: Fehler werden im
+    Service geloggt, der bestehende Katalog bleibt bei Problemen unangetastet.
+    """
+    from app.db import SessionLocal
+    from app.services import rettungskarten_katalog_service as rkk
+
+    def _lauf() -> int:
+        db = SessionLocal()
+        try:
+            return rkk.sync_katalog(db)
+        finally:
+            db.close()
+
+    return await asyncio.to_thread(_lauf)
+
+
 async def nachschlagewerk_sync_loop() -> None:
-    """Taeglicher Loop (03:00 Europe/Vienna): synchronisiert den Gefahrgut-Datensatz."""
+    """Taeglicher Loop (03:00 Europe/Vienna): Gefahrgut-Datensatz + Rettungskarten-Katalog."""
     if not settings.NACHSCHLAGEWERK_SYNC_ENABLED:
         logger.info("Nachschlagewerk-Sync deaktiviert (NACHSCHLAGEWERK_SYNC_ENABLED=false).")
         return
-    if not (settings.NACHSCHLAGEWERK_GEFAHRGUT_URL or "").strip():
-        logger.info("Nachschlagewerk-Sync: keine Quell-URL - Loop startet nicht.")
+    gefahrgut_url = (settings.NACHSCHLAGEWERK_GEFAHRGUT_URL or "").strip()
+    katalog_url = (settings.NACHSCHLAGEWERK_RETTUNGSKARTEN_KATALOG_URL or "").strip()
+    if not gefahrgut_url and not katalog_url:
+        logger.info("Nachschlagewerk-Sync: keine Quell-URLs - Loop startet nicht.")
         return
+
+    async def _sync_alle() -> None:
+        if gefahrgut_url:
+            await sync_gefahrgut()
+        if katalog_url:
+            await sync_rettungskarten_katalog()
+
     # Beim Start einmal synchronisieren (frischer Datenstand ohne bis 03:00 zu warten).
     try:
-        await sync_gefahrgut()
+        await _sync_alle()
     except Exception:
         logger.exception("Nachschlagewerk-Sync: initialer Lauf fehlgeschlagen")
     while True:
         try:
             await asyncio.sleep(_seconds_until_next(_SYNC_HOUR, _SYNC_MINUTE))
             with iteration_watch(logger, "nachschlagewerk_sync_loop", 3600):
-                await sync_gefahrgut()
+                await _sync_alle()
         except asyncio.CancelledError:
             break
         except Exception:

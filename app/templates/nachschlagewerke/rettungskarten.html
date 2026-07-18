@@ -10,35 +10,26 @@
     <div><a href="/nachschlagewerke/" class="btn btn--ghost">← Nachschlagewerke</a></div>
   </div>
 
+  <!-- Katalog-Livesuche (Euro NCAP / CTIF Euro Rescue) -->
   <div class="card" style="padding:16px;margin-bottom:16px;">
-    <form hx-post="/nachschlagewerke/rettungskarten/suchen"
-          hx-target="#rk-result" hx-swap="innerHTML"
-          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div class="form-group" style="margin:0;">
-        <label class="form-label" for="rk-h">Hersteller</label>
-        <input type="text" id="rk-h" name="hersteller" class="form-input" placeholder="z. B. VW" required>
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label class="form-label" for="rk-m">Modell</label>
-        <input type="text" id="rk-m" name="modell" class="form-input" placeholder="z. B. Golf VII" required>
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label class="form-label" for="rk-b">Baujahr (ab)</label>
-        <input type="number" id="rk-b" name="baujahr_von" class="form-input" min="1950" max="2100" placeholder="optional">
-      </div>
-      <div class="form-group" style="margin:0;">
-        <button type="submit" class="btn btn--primary btn--full">🔎 Suchen &amp; laden</button>
-      </div>
-    </form>
-    <small class="form-hint" style="margin-top:8px;display:block;">Beim ersten Aufruf wird die Karte
-      geladen und gespeichert – danach offline verfügbar.</small>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label" for="rk-q">Fahrzeug suchen (Hersteller / Modell)</label>
+      <input type="search" id="rk-q" class="form-input" placeholder="z. B. VW Golf, Tesla Model 3, Audi e-tron"
+             autocomplete="off" autofocus
+             data-katalog-anzahl="{{ katalog_anzahl }}">
+      <small class="form-hint" id="rk-hint">Tippen genügt – Treffer erscheinen automatisch.
+        Beim ersten Öffnen wird die Karte gespeichert und ist danach offline verfügbar.</small>
+    </div>
   </div>
 
-  <div id="rk-result"></div>
+  <div id="rk-katalog-treffer"></div>
+
+  <noscript>
+    <p class="text-muted">Für die Live-Suche ist JavaScript nötig.</p>
+  </noscript>
 
   {% if gecacht %}
-  <h2 style="font-size:1.05rem;margin:20px 0 10px;">Bereits verfügbar (offline)</h2>
+  <h2 style="font-size:1.05rem;margin:20px 0 10px;">Bereits gespeichert (offline verfügbar)</h2>
   <div style="display:flex;flex-direction:column;gap:8px;">
     {% for e in gecacht %}
     <div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -52,5 +43,37 @@
     {% endfor %}
   </div>
   {% endif %}
+
+  <!-- Fallback: Direktabruf / externe Freigabe-Quelle fuer Modelle ausserhalb des Katalogs -->
+  <details class="card" style="padding:0;margin-top:20px;">
+    <summary style="padding:14px 16px;cursor:pointer;font-weight:600;">
+      Modell nicht im Katalog? Direktabruf &amp; externe Quellen</summary>
+    <div style="padding:0 16px 16px;">
+      <form hx-post="/nachschlagewerke/rettungskarten/suchen"
+            hx-target="#rk-result" hx-swap="innerHTML"
+            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label" for="rk-h">Hersteller</label>
+          <input type="text" id="rk-h" name="hersteller" class="form-input" placeholder="z. B. VW" required>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label" for="rk-m">Modell</label>
+          <input type="text" id="rk-m" name="modell" class="form-input" placeholder="z. B. Golf VII" required>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label" for="rk-b">Baujahr (ab)</label>
+          <input type="number" id="rk-b" name="baujahr_von" class="form-input" min="1950" max="2100" placeholder="optional">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <button type="submit" class="btn btn--primary btn--full">🔎 Suchen &amp; laden</button>
+        </div>
+      </form>
+      <div id="rk-result" style="margin-top:12px;"></div>
+    </div>
+  </details>
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/rettungskarten_katalog.js" defer></script>
 {% endblock %}

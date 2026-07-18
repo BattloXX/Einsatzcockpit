@@ -29,12 +29,13 @@ Erst wenn **beide** Schalter aktiv sind, erscheint der Menüpunkt **„📚 Nach
 | Variable | Bedeutung | Default |
 |----------|-----------|---------|
 | `NACHSCHLAGEWERK_DATA_DIR` | Persistentes Verzeichnis für gesyncte/gecachte Daten (außerhalb des read-only Repos) | `app_storage/nachschlagewerk` |
-| `NACHSCHLAGEWERK_SYNC_ENABLED` | Täglicher Gefahrgut-Sync (03:00 Europe/Vienna) | `true` |
+| `NACHSCHLAGEWERK_SYNC_ENABLED` | Täglicher Sync (03:00 Europe/Vienna) für Gefahrgut **und** Rettungskarten-Katalog | `true` |
 | `NACHSCHLAGEWERK_GEFAHRGUT_URL` | Quelle des vollständigen `;`-getrennten Gefahrgut-Datensatzes | *(leer → Seed)* |
-| `NACHSCHLAGEWERK_RETTUNGSKARTEN_URL_TEMPLATE` | On-demand-Quelle für Rettungskarten-PDFs, mit `{hersteller}`/`{modell}` | *(leer → nur Deep-Links)* |
+| `NACHSCHLAGEWERK_RETTUNGSKARTEN_KATALOG_URL` | JSON-Katalog-API verfügbarer Rettungskarten (Euro NCAP / CTIF „Euro Rescue") | `https://api.rescue.euroncap.com/euro-rescue/variants` |
+| `NACHSCHLAGEWERK_RETTUNGSKARTEN_URL_TEMPLATE` | Zusätzliche On-demand-Quelle für Direktabruf, mit `{hersteller}`/`{modell}` | *(leer → nur Katalog/Deep-Links)* |
 | `NACHSCHLAGEWERK_RETTUNGSKARTEN_MAX_BYTES` | Max. PDF-Größe je Rettungskarte | `26214400` (25 MB) |
 
-> Ohne gesetzte URLs ist das Modul **sofort nutzbar**: Gefahrgut läuft gegen den mitgelieferten Seed-Datensatz, Rettungskarten zeigen Deep-Links auf offizielle Freigabe-Quellen.
+> Ohne zusätzliche Konfiguration ist das Modul **sofort nutzbar**: Gefahrgut läuft gegen den mitgelieferten Seed-Datensatz, und der Rettungskarten-Katalog wird beim Start automatisch aus der frei bereitgestellten Euro-Rescue-API (>2000 Modelle) synchronisiert. `NACHSCHLAGEWERK_RETTUNGSKARTEN_KATALOG_URL` leeren, um den Katalog-Sync abzuschalten.
 
 ---
 
@@ -73,35 +74,51 @@ Der Sync übernimmt einen neuen Stand nur, wenn er **≥ 50 gültige UN-Zeilen**
 
 ---
 
-## Rettungsdatenblätter (`NACHSCHLAGEWERK_RETTUNGSKARTEN_URL_TEMPLATE`)
+## Rettungsdatenblätter
 
-Rettungskarten (ADAC / Euro Rescue / Hersteller) sind **urheberrechtlich geschützt** — ein automatisches Massen-Spiegeln verstößt gegen deren Nutzungsbedingungen. Das Modul arbeitet daher **on-demand**: beim ersten Aufruf zu einem Modell wird **eine** Karte geladen und lokal gecacht (danach offline verfügbar). Es gibt **keine** frei abrufbare Modell-→-PDF-Schnittstelle von Euro Rescue/ACEA (Euro Rescue ist eine App).
+### Modell-Katalog (Euro NCAP / CTIF „Euro Rescue") — Standard
 
-### Vorschläge
+Euro NCAP stellt gemeinsam mit CTIF alle Rettungsblätter **frei für Einsatzkräfte** bereit
+(*„Free Downloadable Rescue Information for First Responders"*) — inklusive einer **offenen
+JSON-Katalog-API** mit **>2000 Fahrzeugen** und **direkten (überwiegend deutschen) Rettungsblatt-PDFs**.
 
-**Empfohlen (rechtlich sauber, Standard):** Template **leer lassen**. Dann zeigt die Suche **Deep-Links** auf offizielle Freigabe-Quellen (Euro Rescue, Herstellerseiten) — kein Hosting, keine Rechtsfragen, aber auch kein Offline-Cache.
+Das Modul **synchronisiert daraus täglich nur das Verzeichnis** (Hersteller/Modell/Baujahr/Antrieb
++ PDF-Link je Modell — keine Massen-Spiegelung der Dokumente) in die Tabelle
+`rettungskarten_katalog`. Einsatzkräfte suchen dann **offlinefähig** nach Hersteller/Modell
+(clientseitig über einen gecachten Index) und öffnen die passende Karte. **Erst beim Öffnen**
+wird das PDF on-demand geladen und lokal gecacht — danach offline verfügbar.
 
-**Für echten Offline-Betrieb (mit eigener, lizenzierter Sammlung):** Offiziell bezogene/lizenzierte PDFs (z. B. ADAC für Mitglieder, Herstellerdownloads) auf **eigenem Webspace** nach einem Namensschema ablegen und das Template daraufsetzen:
+- Ablauf: **Suchen → „📄 Öffnen"** → PDF wird geladen, gespeichert und geöffnet (deutsche Karte
+  bevorzugt, sonst englische). Marken-Kürzel wie „VW" finden „Volkswagen".
+- Steuerung: `NACHSCHLAGEWERK_RETTUNGSKARTEN_KATALOG_URL` (Default = Euro-Rescue-API); leeren
+  schaltet den Katalog-Sync ab. Sync im täglichen Nachschlagewerk-Loop (03:00, Start-Sync sofort).
+- Auslieferung des PDFs unter `/nachschlagewerk-cache/rettungskarten/{id}/original.pdf`
+  (unveränderliche URL → Offline-Cache, Bucket `ec-nachschlagewerk-v1`).
+
+### Zusätzlicher Direktabruf (`NACHSCHLAGEWERK_RETTUNGSKARTEN_URL_TEMPLATE`) — optional
+
+Für Modelle **außerhalb** des Katalogs oder eine **eigene, lizenzierte Sammlung**: ein
+URL-Template mit `{hersteller}`/`{modell}` (URL-sicher eingesetzt) auf **eigenem Webspace** setzen.
+Der einklappbare „Direktabruf"-Bereich der Seite lädt dann daraus on-demand und cacht ebenfalls.
 
 ```env
 NACHSCHLAGEWERK_RETTUNGSKARTEN_URL_TEMPLATE=https://einsatzcockpit.com/static/rettungskarten/{hersteller}_{modell}.pdf
 ```
 
-`{hersteller}` und `{modell}` werden URL-sicher eingesetzt (Leerzeichen → `+`). Beim ersten Aufruf holt das Modul die passende Datei aus **eurem** Bestand und cacht sie — legal, weil selbst beschafft, und trotzdem automatisch.
+> **Nicht** ADAC/Hersteller automatisiert abgreifen — das verletzt deren Nutzungsbedingungen. Der
+> Euro-Rescue-Katalog ist ausdrücklich frei für Einsatzkräfte und daher unbedenklich.
 
-> **Nicht** ADAC/Euro Rescue automatisiert abgreifen — das verletzt deren Nutzungsbedingungen. Auslieferung im Tool läuft unter `/nachschlagewerk-cache/rettungskarten/{id}/original.pdf` (unveränderliche URL → Offline-Cache).
-
-**Bezugsquellen / Deep-Links:**
+**Weitere Bezugsquellen / Deep-Links (Fallback):**
+- Euro Rescue (Euro NCAP/CTIF): <https://rescue.euroncap.com/> · App Stores
 - ADAC Rettungskarten: <https://www.adac.de/rund-ums-fahrzeug/unfall-schaden-panne/rettungskarte/>
 - ÖAMTC Rettungskarte: <https://www.oeamtc.at/>
-- Euro Rescue (Euro NCAP/CTIF, App): App Stores
 
 ---
 
 ## Offline-Funktion
 
 - **Gefahrgut:** der komplette Datensatz wird als `GET /nachschlagewerke/gefahrgut/index.json` bereitgestellt und vom **Service Worker** gecacht (Bucket `ec-nachschlagewerk-v1`). Die Suche läuft clientseitig — **auch ohne Netz**.
-- **Rettungskarten:** bereits einmal geöffnete PDFs liegen im selben Cache-Bucket (cache-first) und sind danach offline verfügbar.
+- **Rettungskarten-Katalog:** `GET /nachschlagewerke/rettungskarten/katalog.json` wird ebenfalls vom Service Worker gecacht → **Modellsuche auch ohne Netz**. Bereits einmal geöffnete PDFs liegen im selben Cache-Bucket (cache-first) und sind danach offline verfügbar.
 - **Kartenkacheln** bleiben online (unverändertes Verhalten).
 
 App-Updates löschen diesen Offline-Bestand **nicht**.
@@ -114,8 +131,9 @@ App-Updates löschen diesen Offline-Bestand **nicht**.
 |---------|-----------|
 | Feature-Flag | `SystemSettings.nachschlagewerke_module_enabled` AND `OrgSettings.nachschlagewerke_module_enabled` |
 | Gefahrgut-Suche | `app/services/gefahrgut_service.py` (`suche`, `eintrag_un`, `alle_eintraege`) |
-| Täglicher Sync | `app/services/nachschlagewerk_sync.py` (Loop 03:00, atomarer Ersatz) |
-| Rettungskarten | Model `RettungsdatenblattCache`, `app/services/rettungskarten_service.py` |
+| Täglicher Sync | `app/services/nachschlagewerk_sync.py` (Loop 03:00: Gefahrgut-CSV + Rettungskarten-Katalog) |
+| Rettungskarten-Katalog | Model `RettungskartenKatalog` (Migration `0169`), `app/services/rettungskarten_katalog_service.py` (Sync/Suche), JS `static/js/rettungskarten_katalog.js` (Offline-Suche) |
+| Rettungskarten-PDF (on-demand) | Model `RettungsdatenblattCache`, `app/services/rettungskarten_service.py` (`hole_aus_katalog`, `finde_oder_hole`) |
 | Karten-Overlays | LagefuehrungFeature-Typen `gefahrenradius` / `ausbreitung`; `evakuierung_service.py`, `ausbreitung_service.py` |
 
 Technischer Plan: `docs/plans/nachschlagewerke-plan.md`.

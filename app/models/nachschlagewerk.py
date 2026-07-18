@@ -56,3 +56,46 @@ class RettungsdatenblattCache(Base):
                 spanne += f"-{self.baujahr_bis}"
             teile.append(f"({spanne})")
         return " ".join(t for t in teile if t)
+
+
+class RettungskartenKatalog(Base):
+    """Suchbarer Katalog verfuegbarer Rettungskarten (Euro NCAP / CTIF "Euro Rescue").
+
+    Reines Verzeichnis (Metadaten + direkter PDF-Link je Modell) — KEINE Spiegelung:
+    das eigentliche PDF wird erst beim Oeffnen on-demand in RettungsdatenblattCache
+    geladen und dann offline (SW cache-first) vorgehalten. Taeglich per Sync befuellt;
+    `quelle_id` ist die stabile Euro-Rescue-Variant-ID (Upsert-Schluessel).
+    """
+    __tablename__ = "rettungskarten_katalog"
+    __table_args__ = (
+        UniqueConstraint("quelle_id", name="uq_rkk_quelle_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    quelle_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    hersteller: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    modell: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
+    karosserie: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    baujahr_von: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    baujahr_bis: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tueren: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    antrieb: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
+    # Direkter Rettungsblatt-PDF-Link (bevorzugt deutsch) + Sprachkuerzel
+    pdf_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    pdf_sprache: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    bild_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    aktualisiert_am: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    @property
+    def anzeige_name(self) -> str:
+        teile = [self.hersteller, self.modell]
+        if self.karosserie:
+            teile.append(self.karosserie)
+        if self.baujahr_von:
+            spanne = str(self.baujahr_von)
+            if self.baujahr_bis and self.baujahr_bis != self.baujahr_von:
+                spanne += f"-{self.baujahr_bis}"
+            teile.append(f"({spanne})")
+        return " ".join(t for t in teile if t)

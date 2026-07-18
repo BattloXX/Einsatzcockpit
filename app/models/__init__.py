@@ -77,7 +77,7 @@ from app.models.master import (
     VehicleMaster,
 )
 from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
-from app.models.nachschlagewerk import RettungsdatenblattCache
+from app.models.nachschlagewerk import RettungsdatenblattCache, RettungskartenKatalog
 from app.models.objekt import (
     AlarmInfoscreenToken,
     GefahrenKatalog,
@@ -187,6 +187,7 @@ __all__ = [
     "FahrtKategorie", "FahrtStatus", "FahrtErfassungsweg",
     "Termin", "Funktion", "Teilnahme",
     "RettungsdatenblattCache",
+    "RettungskartenKatalog",
     "Objekt", "ObjektKategorie", "ObjektZusatzadresse", "ObjektBMA", "ObjektChange",
     "GefahrenKatalog", "ObjektGefahr", "MerkmalKatalog", "ObjektMerkmal",
     "ObjektAuswahl", "ObjektKontakt", "ObjektWohnanlage",

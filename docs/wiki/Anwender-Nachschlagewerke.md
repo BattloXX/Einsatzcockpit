@@ -40,10 +40,16 @@ Aufruf über **📖 Dokumentation → 📚 Nachschlagewerke** (Desktop und mobil
 ## Rettungsdatenblatt (Fahrzeug) finden
 
 1. **Nachschlagewerke → Rettungsdatenblätter** öffnen
-2. **Hersteller** und **Modell** eingeben (optional Baujahr), **„🔎 Suchen & laden"**
-3. Ergebnis:
-   - **Gefunden/geladen:** Button **„📄 Rettungsdatenblatt öffnen"** — die Karte ist ab jetzt auch **offline** verfügbar und erscheint unter **„Bereits verfügbar (offline)"**
-   - **Nicht automatisch verfügbar:** es werden **Links** auf offizielle Quellen (Euro Rescue u. a.) angezeigt
+2. Ins Suchfeld **Hersteller und/oder Modell** tippen (z. B. „VW Golf", „Tesla", „Audi e-tron").
+   Treffer erscheinen **sofort** aus dem Katalog von **Euro Rescue** (Euro NCAP/CTIF, >2000 Fahrzeuge).
+   Die Suche funktioniert auch **ohne Netz**, sobald die Seite einmal geladen war.
+3. Beim passenden Fahrzeug auf **„📄 Öffnen"** — die Karte (bevorzugt **deutsch**) wird geladen,
+   gespeichert und geöffnet. Ab jetzt ist sie **offline** verfügbar und erscheint unter
+   **„Bereits gespeichert (offline verfügbar)"**.
+
+> **Modell nicht dabei?** Unten **„Modell nicht im Katalog? Direktabruf & externe Quellen"**
+> aufklappen: dort Hersteller/Modell/Baujahr eingeben und (falls konfiguriert) direkt laden oder
+> **Links** auf offizielle Quellen (Euro Rescue, ADAC …) folgen.
 
 > Ob Karten automatisch geladen werden, hängt von der Konfiguration eurer Organisation ab (siehe [Administration](Administration-Nachschlagewerke)). Ohne hinterlegte Quelle stehen nur die Deep-Links bereit.
 
@@ -81,7 +87,7 @@ Zeichnet die windbezogene Ausbreitungsfläche (der Wind „bläst" die Fahne vom
 
 ## Offline nutzen
 
-- Die **Gefahrgut-Suche** funktioniert ohne Netz, sobald die Seite einmal geladen wurde.
+- Die **Gefahrgut-Suche** und die **Rettungskarten-Modellsuche** funktionieren ohne Netz, sobald die Seite einmal geladen wurde.
 - **Bereits geöffnete Rettungskarten** bleiben offline abrufbar.
 - Die **Karten-Overlays** werden im Einsatz gespeichert und stehen wie alle Lagekarten-Elemente offline zur Verfügung.
 - **Kartenkacheln** (Hintergrundkarte) benötigen weiterhin Internet.
