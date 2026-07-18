@@ -81,6 +81,8 @@ def run_org_backup_sync(cfg_id: int) -> str:
             ziel = export_org(db, cfg.org_id, tmp, include_media=cfg.include_media)
             with rbs.org_remote_config(cfg) as remote:
                 rbs.upload(remote, [ziel], tmp)
+                # Alte Push-Archive am Ziel aufraeumen (behaelt keep_count neueste).
+                rbs.prune_remote(remote, f"org-backup-{cfg.org_id}-", cfg.keep_count)
             cfg.last_status = "ok"
             cfg.last_error = None
         except Exception as exc:  # noqa: BLE001 — Fehler am Datensatz vermerken

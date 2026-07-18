@@ -15,6 +15,7 @@ from __future__ import annotations
 import ftplib
 import logging
 import os
+import shlex
 import subprocess
 import tempfile
 from collections.abc import Callable, Iterator, Sequence
@@ -284,3 +285,115 @@ def neueste_je_praefix(backup_dir: Path, praefixe: Sequence[str]) -> list[Path]:
         if kandidaten:
             treffer.append(kandidaten[-1])
     return treffer
+
+
+# ── Remote-Retention (alte Push-Archive am Ziel aufraeumen) ───────────────────
+
+def waehle_zu_loeschen(namen: Sequence[str], keep: int) -> list[str]:
+    """Waehlt die ueberzaehligen (aeltesten) Remote-Dateien aus.
+
+    Die Archiv-Namen tragen einen sortierbaren UTC-Zeitstempel, daher genuegt
+    lexikografisches Sortieren = chronologisch; die `keep` neuesten bleiben.
+    """
+    if keep <= 0:
+        return []
+    sortiert = sorted(namen)
+    ueberzaehlig = len(sortiert) - keep
+    return sortiert[:ueberzaehlig] if ueberzaehlig > 0 else []
+
+
+def _ssh_host(cfg: RemoteConfig) -> str:
+    return f"{cfg.user}@{cfg.host}" if cfg.user else cfg.host
+
+
+def _remote_liste(cfg: RemoteConfig, praefix: str, runner: Runner,
+                  ftp_factory: Callable[[], ftplib.FTP] | None) -> list[str]:
+    """Listet die Remote-Dateinamen (Basenamen) mit gegebenem Praefix."""
+    if cfg.protocol in FTP_PROTOKOLLE:
+        if ftp_factory is None:
+            ftp_factory = ftplib.FTP_TLS if cfg.protocol == "ftps" else ftplib.FTP
+        ftp = ftp_factory()
+        try:
+            ftp.connect(cfg.host, cfg.port or 21)
+            ftp.login(cfg.user, cfg.password)
+            if cfg.protocol == "ftps" and isinstance(ftp, ftplib.FTP_TLS):
+                ftp.prot_p()
+            if cfg.path:
+                ftp.cwd(cfg.path)
+            namen = [Path(n).name for n in ftp.nlst()]
+        finally:
+            try:
+                ftp.quit()
+            except Exception:  # noqa: BLE001
+                ftp.close()
+        return [n for n in namen if n.startswith(praefix)]
+
+    if cfg.protocol == "rclone":
+        argv = [cfg.rclone_bin, "lsf", f"{cfg.rclone_remote}{cfg.path}"]
+    else:  # sftp/scp/rsync -> ssh
+        pfad = cfg.path or "."
+        argv = ["ssh", *_ssh_optionen(cfg), _ssh_host(cfg), f"ls -1 {shlex.quote(pfad)}"]
+    res = runner(argv, capture_output=True)
+    if res.returncode != 0:
+        return []
+    out = res.stdout.decode("utf-8", "ignore") if isinstance(res.stdout, bytes) else (res.stdout or "")
+    return [Path(z.strip()).name for z in out.splitlines()
+            if z.strip() and Path(z.strip()).name.startswith(praefix)]
+
+
+def _remote_delete(cfg: RemoteConfig, namen: Sequence[str], runner: Runner,
+                   ftp_factory: Callable[[], ftplib.FTP] | None) -> None:
+    if not namen:
+        return
+    if cfg.protocol in FTP_PROTOKOLLE:
+        if ftp_factory is None:
+            ftp_factory = ftplib.FTP_TLS if cfg.protocol == "ftps" else ftplib.FTP
+        ftp = ftp_factory()
+        try:
+            ftp.connect(cfg.host, cfg.port or 21)
+            ftp.login(cfg.user, cfg.password)
+            if cfg.protocol == "ftps" and isinstance(ftp, ftplib.FTP_TLS):
+                ftp.prot_p()
+            if cfg.path:
+                ftp.cwd(cfg.path)
+            for n in namen:
+                ftp.delete(n)
+        finally:
+            try:
+                ftp.quit()
+            except Exception:  # noqa: BLE001
+                ftp.close()
+        return
+
+    if cfg.protocol == "rclone":
+        for n in namen:
+            runner([cfg.rclone_bin, "deletefile", f"{cfg.rclone_remote}{cfg.path}/{n}"],
+                   capture_output=True)
+        return
+
+    # sftp/scp/rsync -> ssh rm
+    pfad = cfg.path or "."
+    ziele = " ".join(shlex.quote(f"{pfad}/{n}") for n in namen)
+    runner(["ssh", *_ssh_optionen(cfg), _ssh_host(cfg), f"rm -f {ziele}"], capture_output=True)
+
+
+def prune_remote(
+    cfg: RemoteConfig,
+    praefix: str,
+    keep: int,
+    runner: Runner = subprocess.run,
+    ftp_factory: Callable[[], ftplib.FTP] | None = None,
+) -> list[str]:
+    """Loescht am Remote-Ziel die ueberzaehligen Archive (behaelt die `keep` neuesten).
+
+    Best-effort: gibt die geloeschten Namen zurueck; Fehler werden geloggt, nicht geworfen.
+    """
+    try:
+        namen = _remote_liste(cfg, praefix, runner, ftp_factory)
+        weg = waehle_zu_loeschen(namen, keep)
+        if weg:
+            _remote_delete(cfg, weg, runner, ftp_factory)
+        return weg
+    except Exception:  # noqa: BLE001 — Retention darf den Backup-Lauf nie abbrechen
+        logger.warning("Remote-Retention fehlgeschlagen (%s)", cfg.ziel_beschreibung())
+        return []

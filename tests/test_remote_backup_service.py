@@ -207,3 +207,68 @@ def test_backup_upload_deaktiviert(monkeypatch):
     from app.config import settings
     monkeypatch.setattr(settings, "BACKUP_REMOTE_ENABLED", False)
     assert cli.backup_upload() == 1
+
+
+# ── Remote-Retention ──────────────────────────────────────────────────────────
+
+def test_waehle_zu_loeschen():
+    namen = [f"org-backup-1-2026071{i}-000000Z.zip" for i in range(1, 6)]  # 5 Stueck
+    weg = rbs.waehle_zu_loeschen(namen, keep=2)
+    assert weg == [
+        "org-backup-1-20260711-000000Z.zip",
+        "org-backup-1-20260712-000000Z.zip",
+        "org-backup-1-20260713-000000Z.zip",
+    ]
+    assert rbs.waehle_zu_loeschen(namen, keep=0) == []
+    assert rbs.waehle_zu_loeschen(namen[:1], keep=5) == []
+
+
+def test_prune_remote_ftp(tmp_path):
+    fake = MagicMock()
+    fake.nlst.return_value = [f"org-backup-7-2026071{i}-000000Z.zip" for i in range(1, 5)] + ["fremd.txt"]
+    cfg = _cfg(protocol="ftp", host="ftp.example.test", user="ec", password="pw", key="", path="/up")
+    weg = rbs.prune_remote(cfg, "org-backup-7-", keep=2, ftp_factory=lambda: fake)
+    assert weg == [
+        "org-backup-7-20260711-000000Z.zip",
+        "org-backup-7-20260712-000000Z.zip",
+    ]
+    geloescht = {c.args[0] for c in fake.delete.call_args_list}
+    assert geloescht == set(weg)
+
+
+def test_prune_remote_rclone():
+    calls = []
+
+    def runner(argv, **kw):
+        calls.append(argv)
+        if argv[:2] == ["rclone", "lsf"]:
+            listing = "\n".join(f"org-backup-3-2026071{i}-000000Z.zip" for i in range(1, 5))
+            return SimpleNamespace(returncode=0, stdout=listing.encode())
+        return SimpleNamespace(returncode=0, stdout=b"")
+
+    cfg = _cfg(protocol="rclone", rclone_remote="offsite:", path="ec", host="")
+    weg = rbs.prune_remote(cfg, "org-backup-3-", keep=1, runner=runner)
+    assert weg == [f"org-backup-3-2026071{i}-000000Z.zip" for i in range(1, 4)]
+    geloescht = [a for a in calls if a[:2] == ["rclone", "deletefile"]]
+    assert len(geloescht) == 3
+    assert "offsite:ec/org-backup-3-20260711-000000Z.zip" in geloescht[0]
+
+
+def test_prune_remote_ssh():
+    calls = []
+
+    def runner(argv, **kw):
+        calls.append(argv)
+        if any("ls -1" in a for a in argv):
+            listing = "\n".join(f"org-backup-9-2026071{i}-000000Z.zip" for i in range(1, 5))
+            return SimpleNamespace(returncode=0, stdout=listing.encode())
+        return SimpleNamespace(returncode=0, stdout=b"")
+
+    cfg = _cfg(protocol="sftp", path="/backups/ec")
+    weg = rbs.prune_remote(cfg, "org-backup-9-", keep=2, runner=runner)
+    assert weg == [
+        "org-backup-9-20260711-000000Z.zip",
+        "org-backup-9-20260712-000000Z.zip",
+    ]
+    rm_cmd = [a for a in calls if any(str(x).startswith("rm -f") for x in a)]
+    assert rm_cmd and "/backups/ec/org-backup-9-20260711-000000Z.zip" in rm_cmd[0][-1]
