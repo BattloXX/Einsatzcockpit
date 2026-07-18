@@ -74,7 +74,9 @@ def test_anzeige_name_und_hat_pdf():
 
 def test_deep_links_immer_erzeugbar():
     links = rks.deep_links("VW", "Golf")
-    assert links and "eurorescue" in links[0]["url"]
+    urls = " ".join(link["url"] for link in links)
+    assert links and "euroncap" in urls and "adac" in urls
+    assert "eurorescue.org" not in urls  # tote Domain darf nicht zurueckkehren
 
 
 # ── Cache-Lookup ──────────────────────────────────────────────────────────────

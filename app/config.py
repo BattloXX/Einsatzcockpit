@@ -145,6 +145,12 @@ class Settings(BaseSettings):
     # Massen-Spiegelung, nur Einzelabruf bei Bedarf.
     NACHSCHLAGEWERK_RETTUNGSKARTEN_URL_TEMPLATE: str = ""
     NACHSCHLAGEWERK_RETTUNGSKARTEN_MAX_BYTES: int = 25 * 1024 * 1024  # 25 MB je PDF
+    # Katalog verfuegbarer Rettungskarten (Euro NCAP / CTIF "Euro Rescue"): offene,
+    # fuer Einsatzkraefte frei bereitgestellte JSON-Katalog-API mit >2000 Modellen
+    # inkl. direkter (deutscher) Rettungsblatt-PDFs. Taeglich gesynct (Metadaten +
+    # PDF-Link); die PDFs werden erst beim Oeffnen on-demand offline gecacht.
+    # Leer = kein Katalog-Sync (es bleibt bei Einzelabruf/Deep-Links).
+    NACHSCHLAGEWERK_RETTUNGSKARTEN_KATALOG_URL: str = "https://api.rescue.euroncap.com/euro-rescue/variants"
 
     # KI-Integration (Anthropic Claude)
     ANTHROPIC_API_KEY: str = ""

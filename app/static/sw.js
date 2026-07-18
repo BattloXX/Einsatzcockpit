@@ -100,6 +100,23 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // Rettungskarten-Katalog-Index — network-first, letzte Antwort in NW_CACHE (offline suchbar)
+  if (url.pathname === '/nachschlagewerke/rettungskarten/katalog.json') {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(NW_CACHE).then(c => c.put(e.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request, { cacheName: NW_CACHE })
+          || new Response('{"anzahl":0,"eintraege":[]}', { headers: { 'Content-Type': 'application/json' } }))
+    );
+    return;
+  }
+
   // Rettungskarten-PDFs (unveraenderliche UUID-Pfade) — cache-first aus NW_CACHE,
   // Netz als Fallback. Nach erstem Aufruf offline verfuegbar (PR 5).
   if (url.pathname.startsWith('/nachschlagewerk-cache/')) {

@@ -45,15 +45,18 @@ def _norm(text: str | None) -> str:
 
 
 def deep_links(hersteller: str, modell: str) -> list[dict]:
-    """Immer erzeugbare Deep-Links auf externe Freigabe-Quellen (kein Hosting)."""
-    q = quote_plus(f"{_norm(hersteller)} {_norm(modell)}".strip())
-    links: list[dict] = []
-    if q:
-        links.append({
-            "label": "Euro Rescue (ACEA)",
-            "url": f"https://www.eurorescue.org/?s={q}",
-        })
-    return links
+    """Immer erzeugbare Deep-Links auf externe Freigabe-Quellen (kein Hosting).
+
+    Euro Rescue (Euro NCAP/CTIF) und ADAC sind SPAs/Landingpages ohne stabile
+    Suchparameter, daher wird auf die offiziellen Einstiegsseiten verlinkt.
+    """
+    if not (_norm(hersteller) or _norm(modell)):
+        return []
+    return [
+        {"label": "Euro Rescue (Euro NCAP/CTIF)", "url": "https://rescue.euroncap.com/"},
+        {"label": "ADAC Rettungskarten",
+         "url": "https://www.adac.de/rund-ums-fahrzeug/unfall-schaden-panne/rettungskarte/"},
+    ]
 
 
 def suche(db: Session, q: str, limit: int = 30) -> list[RettungsdatenblattCache]:
@@ -108,6 +111,66 @@ def _speichere_pdf(daten: bytes) -> tuple[str, str]:
     return (str(rel_dir / "original.pdf").replace("\\", "/"), sha)
 
 
+def _hole_und_cache(
+    db: Session,
+    hersteller: str,
+    modell: str,
+    url: str,
+    baujahr_von: int | None = None,
+    baujahr_bis: int | None = None,
+    kraftstoff: str | None = None,
+) -> RettungsdatenblattCache | None:
+    """Laedt das PDF unter `url`, validiert und legt es im Cache ab (oder None)."""
+    try:
+        with httpx.Client(
+            headers={"User-Agent": "Einsatzcockpit/2.x (+https://einsatzcockpit.com)"},
+            timeout=_HTTP_TIMEOUT_S,
+            follow_redirects=True,
+        ) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            daten = resp.content
+    except httpx.TimeoutException:
+        logger.warning("Rettungskarten: Timeout beim Abruf von %s", url)
+        return None
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Rettungskarten: HTTP %s von %s", exc.response.status_code, url)
+        return None
+    except Exception:
+        logger.exception("Rettungskarten: Abruf fehlgeschlagen (%s)", url)
+        return None
+
+    if not daten or not daten.startswith(_PDF_MAGIC):
+        logger.warning("Rettungskarten: Antwort ist kein PDF (%s)", url)
+        return None
+    if len(daten) > settings.NACHSCHLAGEWERK_RETTUNGSKARTEN_MAX_BYTES:
+        logger.warning("Rettungskarten: PDF zu gross (%d Bytes, %s)", len(daten), url)
+        return None
+
+    try:
+        rel_pfad, sha = _speichere_pdf(daten)
+    except Exception:
+        logger.exception("Rettungskarten: Speichern fehlgeschlagen (%s %s)", hersteller, modell)
+        return None
+
+    eintrag = RettungsdatenblattCache(
+        hersteller=hersteller,
+        modell=modell,
+        baujahr_von=baujahr_von,
+        baujahr_bis=baujahr_bis,
+        kraftstoff=_norm(kraftstoff) or None,
+        quelle=url,
+        pfad=rel_pfad,
+        bytes=len(daten),
+        sha256=sha,
+    )
+    db.add(eintrag)
+    db.commit()
+    db.refresh(eintrag)
+    logger.info("Rettungskarten: %s %s gecacht (%d Bytes).", hersteller, modell, len(daten))
+    return eintrag
+
+
 def finde_oder_hole(
     db: Session,
     hersteller: str,
@@ -136,51 +199,28 @@ def finde_oder_hole(
                     hersteller, modell)
         return (None, links)
 
-    try:
-        with httpx.Client(
-            headers={"User-Agent": "Einsatzcockpit/2.x (+https://einsatzcockpit.com)"},
-            timeout=_HTTP_TIMEOUT_S,
-            follow_redirects=True,
-        ) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            daten = resp.content
-    except httpx.TimeoutException:
-        logger.warning("Rettungskarten: Timeout beim Abruf von %s", url)
-        return (None, links)
-    except httpx.HTTPStatusError as exc:
-        logger.warning("Rettungskarten: HTTP %s von %s", exc.response.status_code, url)
-        return (None, links)
-    except Exception:
-        logger.exception("Rettungskarten: Abruf fehlgeschlagen (%s)", url)
-        return (None, links)
-
-    if not daten or not daten.startswith(_PDF_MAGIC):
-        logger.warning("Rettungskarten: Antwort ist kein PDF (%s)", url)
-        return (None, links)
-    if len(daten) > settings.NACHSCHLAGEWERK_RETTUNGSKARTEN_MAX_BYTES:
-        logger.warning("Rettungskarten: PDF zu gross (%d Bytes, %s)", len(daten), url)
-        return (None, links)
-
-    try:
-        rel_pfad, sha = _speichere_pdf(daten)
-    except Exception:
-        logger.exception("Rettungskarten: Speichern fehlgeschlagen (%s %s)", hersteller, modell)
-        return (None, links)
-
-    eintrag = RettungsdatenblattCache(
-        hersteller=hersteller,
-        modell=modell,
-        baujahr_von=baujahr_von,
-        baujahr_bis=baujahr_bis,
-        kraftstoff=_norm(kraftstoff) or None,
-        quelle=url,
-        pfad=rel_pfad,
-        bytes=len(daten),
-        sha256=sha,
-    )
-    db.add(eintrag)
-    db.commit()
-    db.refresh(eintrag)
-    logger.info("Rettungskarten: %s %s gecacht (%d Bytes).", hersteller, modell, len(daten))
+    eintrag = _hole_und_cache(db, hersteller, modell, url,
+                              baujahr_von=baujahr_von, baujahr_bis=baujahr_bis,
+                              kraftstoff=kraftstoff)
     return (eintrag, links)
+
+
+def hole_aus_katalog(db: Session, katalog) -> RettungsdatenblattCache | None:
+    """Oeffnet einen Katalog-Eintrag: Cache-Treffer liefern oder das PDF des
+    hinterlegten Links laden und offline cachen.
+
+    `katalog` ist eine RettungskartenKatalog-Zeile (mit pdf_url). Rueckgabe der
+    (ggf. neu erzeugten) Cache-Zeile oder None, wenn kein PDF beschafft werden konnte.
+    """
+    hersteller, modell = _norm(katalog.hersteller), _norm(katalog.modell)
+    if not hersteller or not modell:
+        return None
+    treffer = finde(db, hersteller, modell, katalog.baujahr_von)
+    if treffer is not None:
+        return treffer
+    if not (katalog.pdf_url or "").strip():
+        return None
+    return _hole_und_cache(
+        db, hersteller, modell, katalog.pdf_url.strip(),
+        baujahr_von=katalog.baujahr_von, baujahr_bis=katalog.baujahr_bis,
+        kraftstoff=katalog.antrieb)

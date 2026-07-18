@@ -14,7 +14,8 @@ Sammel-Strategie (generisch statt 120-Zeilen-Handliste):
    automatisch und vollstaendig erfasst.
 
 EXCLUDE (nie je Org exportiert): globale/geteilte Kataloge (fire_dept, role,
-qualification, seed_template, system_settings, rettungsdatenblatt_cache) und
+qualification, seed_template, system_settings, rettungsdatenblatt_cache,
+rettungskarten_katalog) und
 fluechtige/geraetegebundene Sicherheits-Artefakte (Tokens, Sessions, Push/Device).
 Fernet-verschluesselte `*_enc`-Spalten werden redigiert (mit dem Server-Key
 verschluesselt -> off-instance unbrauchbar, sensibel).
@@ -41,7 +42,8 @@ _SCOPE_COLUMNS = ("org_id", "dept_id", "primary_org_id")
 # Globale/geteilte Kataloge: gehoeren nicht zu EINER Org.
 _GLOBAL_TABLES = frozenset({
     "fire_dept", "role", "qualification", "seed_template",
-    "system_settings", "rettungsdatenblatt_cache", "alembic_version",
+    "system_settings", "rettungsdatenblatt_cache", "rettungskarten_katalog",
+    "alembic_version",
 })
 
 # Fluechtige/geraetegebundene Sicherheits-Artefakte: kein Bestandteil eines

@@ -16,14 +16,23 @@ Tenant-Tabellen. Lesend fuer alle angemeldeten Nutzer der Org.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+)
 from sqlalchemy.orm import Session
 
 from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.user import User
-from app.services import gefahrgut_service, rettungskarten_service
+from app.services import (
+    gefahrgut_service,
+    rettungskarten_katalog_service,
+    rettungskarten_service,
+)
 
 router = APIRouter(prefix="/nachschlagewerke", tags=["nachschlagewerke"])
 # Zweiter Router OHNE /nachschlagewerke-Praefix: die PDF-Auslieferung liegt unter
@@ -141,11 +150,52 @@ def rettungskarten_seite(
     user: User = Depends(require_role(*_LESE_ROLLEN)),
     _guard: None = Depends(require_nachschlagewerke_enabled),
 ):
-    """Rettungsdatenblatt-Suche (Hersteller/Modell) + Liste der bereits gecachten."""
+    """Rettungsdatenblatt-Suche (Katalog + On-demand) + Liste der bereits gecachten."""
     return templates.TemplateResponse(request, "nachschlagewerke/rettungskarten.html", {
         "user": user,
         "gecacht": rettungskarten_service.suche(db, ""),
+        "katalog_anzahl": rettungskarten_katalog_service.anzahl(db),
     })
+
+
+@router.get("/rettungskarten/katalog.json")
+def rettungskarten_katalog_json(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_nachschlagewerke_enabled),
+):
+    """Kompletter Rettungskarten-Katalog fuer die Offline-Suche im Browser (SW-gecacht)."""
+    eintraege = rettungskarten_katalog_service.alle_als_dicts(db)
+    return JSONResponse(
+        {"anzahl": len(eintraege), "eintraege": eintraege},
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/rettungskarten/katalog/{kid:int}/oeffnen")
+def rettungskarten_katalog_oeffnen(
+    request: Request,
+    kid: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_nachschlagewerke_enabled),
+):
+    """Oeffnet eine Katalog-Karte: PDF on-demand cachen -> auf die (offline-faehige)
+    Cache-URL weiterleiten; Fallback auf den externen Link, wenn der Abruf scheitert."""
+    from app.models.nachschlagewerk import RettungskartenKatalog
+    eintrag = db.get(RettungskartenKatalog, kid)
+    if eintrag is None:
+        raise HTTPException(status_code=404, detail="Katalog-Eintrag nicht gefunden")
+    cache = rettungskarten_service.hole_aus_katalog(db, eintrag)
+    if cache is not None and cache.hat_pdf:
+        return RedirectResponse(
+            f"/nachschlagewerk-cache/rettungskarten/{cache.id}/original.pdf", status_code=303)
+    externe_url = (eintrag.pdf_url or "").strip()
+    if externe_url:
+        # Cachen fehlgeschlagen (z. B. offline) -> direkt zur Quelle.
+        return RedirectResponse(externe_url, status_code=303)
+    raise HTTPException(status_code=404, detail="Kein Rettungsblatt verfuegbar")
 
 
 @router.post("/rettungskarten/suchen", response_class=HTMLResponse)
