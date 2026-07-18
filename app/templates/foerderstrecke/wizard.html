@@ -118,10 +118,21 @@
 
     <!-- ── Rechte Spalte: Karte + Ergebnis ── -->
     <div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+        <button type="button" class="btn btn--secondary btn--sm" @click="meinStandort()">📍 Mein Standort</button>
+        <button type="button" class="btn btn--sm"
+                :class="aufnahmeLaeuft ? 'btn--primary' : 'btn--secondary'"
+                @click="aufnahmeToggle()"
+                x-text="aufnahmeLaeuft ? '⏹ Aufnahme stoppen' : '⏺ Weg aufzeichnen'"></button>
+        <span x-show="aufnahmeLaeuft" class="text-muted" style="font-size:.78rem;align-self:center;">
+          GPS läuft – Strecke ablaufen …
+        </span>
+      </div>
       <div id="fs-map" class="fs-map"></div>
       <p class="text-muted" style="font-size:.78rem;margin:6px 0 12px;">
-        Route auf der Karte zeichnen (Linien-Werkzeug) → Gesamtlänge und Höhenprofil werden
-        übernommen. Die Länge wird gleichmäßig auf die Abschnitte verteilt (danach je Abschnitt anpassbar).
+        Route auf der Karte zeichnen (Linien-Werkzeug), <strong>📍 Mein Standort</strong> zum Zentrieren,
+        oder <strong>⏺ Weg aufzeichnen</strong> und die Strecke ablaufen (GPS). Gesamtlänge und Höhenprofil
+        werden übernommen und gleichmäßig auf die Abschnitte verteilt (danach je Abschnitt anpassbar).
       </p>
 
       <div class="fs-panel" x-show="ergebnis" x-cloak>
@@ -225,6 +236,12 @@ function foerderPlaner() {
     hoehenprofil: null,
     ergebnis: null,
     rechnet: false,
+    karte: null,
+    aufnahmeLaeuft: false,
+    _watchId: null,
+    _aufnahmePunkte: [],
+    _aufnahmeLayer: null,
+    _standortMarker: null,
 
     init() {
       if (FS_LADE && FS_LADE.stationen && FS_LADE.stationen.length) {
@@ -316,6 +333,7 @@ function foerderPlaner() {
       const el = document.getElementById("fs-map");
       if (!el || typeof L === "undefined") return;
       const karte = L.map(el).setView([47.47, 9.75], 13);
+      this.karte = karte;
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(karte);
       karte.pm.addControls({position:"topleft", drawPolyline:true, drawMarker:false,
@@ -324,13 +342,59 @@ function foerderPlaner() {
       const self = this;
       karte.on("pm:create", e => {
         if (e.shape !== "Line") return;
-        self.uebernehmeRoute(e.layer);
-        e.layer.on("pm:edit", () => self.uebernehmeRoute(e.layer));
+        self.uebernehmeRouteVonLatLngs(e.layer.getLatLngs());
+        e.layer.on("pm:edit", () => self.uebernehmeRouteVonLatLngs(e.layer.getLatLngs()));
       });
     },
 
-    async uebernehmeRoute(layer) {
-      const latlngs = layer.getLatLngs();
+    // Zentriert die Karte auf den aktuellen Gerätestandort (Geolocation).
+    meinStandort() {
+      if (!navigator.geolocation) { alert("Standortabfrage wird vom Gerät/Browser nicht unterstützt."); return; }
+      navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        if (this.karte) this.karte.setView([lat, lng], 17);
+        if (this._standortMarker) { this._standortMarker.setLatLng([lat, lng]); }
+        else if (this.karte) { this._standortMarker = L.circleMarker([lat, lng],
+          {radius:7, color:"#2563eb", fillColor:"#2563eb", fillOpacity:0.8})
+          .addTo(this.karte).bindPopup("Mein Standort"); }
+      }, err => alert("Standort nicht verfügbar: " + err.message),
+         {enableHighAccuracy:true, timeout:10000, maximumAge:5000});
+    },
+
+    // Weg beim Ablaufen per GPS aufzeichnen (watchPosition) → wird zur Route.
+    aufnahmeToggle() {
+      if (this.aufnahmeLaeuft) { this.aufnahmeStop(); return; }
+      if (!navigator.geolocation) { alert("Standortabfrage wird vom Gerät/Browser nicht unterstützt."); return; }
+      if (!this.karte) return;
+      this._aufnahmePunkte = [];
+      if (this._aufnahmeLayer) { this.karte.removeLayer(this._aufnahmeLayer); }
+      this._aufnahmeLayer = L.polyline([], {color:"#dc2626", weight:4}).addTo(this.karte);
+      const self = this;
+      this._watchId = navigator.geolocation.watchPosition(pos => {
+        const p = [pos.coords.latitude, pos.coords.longitude];
+        const last = self._aufnahmePunkte[self._aufnahmePunkte.length - 1];
+        // Nur Punkte mit >3 m Abstand aufnehmen (GPS-Rauschen dämpfen)
+        if (!last || L.latLng(last).distanceTo(L.latLng(p)) > 3) {
+          self._aufnahmePunkte.push(p);
+          self._aufnahmeLayer.setLatLngs(self._aufnahmePunkte);
+          self.karte.panTo(p);
+        }
+      }, err => { alert("Standort/Aufnahme: " + err.message); self.aufnahmeStop(); },
+         {enableHighAccuracy:true, timeout:15000, maximumAge:1000});
+      this.aufnahmeLaeuft = true;
+    },
+
+    aufnahmeStop() {
+      if (this._watchId != null) { navigator.geolocation.clearWatch(this._watchId); this._watchId = null; }
+      this.aufnahmeLaeuft = false;
+      if (this._aufnahmePunkte.length >= 2) {
+        this.uebernehmeRouteVonLatLngs(this._aufnahmePunkte.map(p => L.latLng(p[0], p[1])));
+      } else {
+        alert("Zu wenige GPS-Punkte aufgezeichnet (Empfang prüfen).");
+      }
+    },
+
+    async uebernehmeRouteVonLatLngs(latlngs) {
       this.routeCoords = latlngs.map(p => [p.lat, p.lng]);
       // Gesamtlänge (Haversine)
       let laenge = 0;
