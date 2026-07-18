@@ -143,13 +143,18 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
         <button type="button" class="btn btn--secondary btn--sm" @click="meinStandort()">📍 Mein Standort</button>
         <button type="button" class="btn btn--sm"
+                :class="platziereModus ? 'btn--primary' : 'btn--secondary'"
+                @click="platziereToggle()"
+                x-text="platziereModus ? '✓ Pumpen setzen (aktiv)' : '🚩 Pumpe auf Karte setzen'"></button>
+        <button type="button" class="btn btn--sm"
                 :class="aufnahmeLaeuft ? 'btn--primary' : 'btn--secondary'"
                 @click="aufnahmeToggle()"
                 x-text="aufnahmeLaeuft ? '⏹ Aufnahme stoppen' : '⏺ Weg aufzeichnen'"></button>
-        <span x-show="aufnahmeLaeuft" class="text-muted" style="font-size:.78rem;align-self:center;">
-          GPS läuft – Strecke ablaufen …
-        </span>
       </div>
+      <p x-show="platziereModus" class="text-muted" style="font-size:.78rem;margin:0 0 6px;color:#2563eb;">
+        In die Karte tippen setzt eine Pumpe. Marker ziehen verschiebt sie – die Abschnittslängen
+        und das Höhenprofil werden automatisch in die Felder zurückgeschrieben.
+      </p>
       <div id="fs-map" class="fs-map"></div>
       <p class="text-muted" style="font-size:.78rem;margin:6px 0 12px;">
         Route auf der Karte zeichnen (Linien-Werkzeug), <strong>📍 Mein Standort</strong> zum Zentrieren,
@@ -263,16 +268,19 @@ function foerderPlaner() {
     rechnet: false,
     karte: null,
     aufnahmeLaeuft: false,
+    platziereModus: false,
     _watchId: null,
     _aufnahmePunkte: [],
     _aufnahmeLayer: null,
     _standortMarker: null,
+    _stationMarkers: [],
 
     init() {
       if (FS_LADE && FS_LADE.stationen && FS_LADE.stationen.length) {
         this.stationen = FS_LADE.stationen.map(s => ({
           typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm,
           behaelter_volumen_l: s.behaelter_volumen_l,
+          lat: s.lat, lng: s.lng,
           abschnitt: { schlauch_typ_id: s.schlauch_typ_id, n_parallel: s.druck_parallel || 1,
                        laenge_m: s.abschnitt_laenge_m || 0, delta_hoehe_m: s.abschnitt_delta_hoehe_m || 0 }
         }));
@@ -294,7 +302,12 @@ function foerderPlaner() {
         abschnitt: { schlauch_typ_id: null, n_parallel: 1, laenge_m: 0, delta_hoehe_m: 0 }
       });
     },
-    removeStation(i) { this.stationen.splice(i, 1); if (!this.stationen.length) this.addStation("quellpumpe"); },
+    removeStation(i) {
+      this.stationen.splice(i, 1);
+      if (!this.stationen.length) this.addStation("quellpumpe");
+      this.syncStationMarkers();
+      this.stationsGeometrieAktualisieren();
+    },
 
     payload() {
       return {
@@ -346,7 +359,7 @@ function foerderPlaner() {
                          n_parallel: s.abschnitt.n_parallel, laenge_m: s.abschnitt.laenge_m,
                          delta_hoehe_m: s.abschnitt.delta_hoehe_m }
           }));
-          this.zeichneStandorte(res.standorte);
+          this.syncStationMarkers();
           let msg = (res.machbar ? "✅ " : "⚠️ ") + res.n_gesamt + " Pumpen (1 Quelle + "
             + res.n_relais + " Relais) bei " + res.ziel_q_l_min + " l/min.";
           if (res.warnungen && res.warnungen.length) msg += "\n\n" + res.warnungen.join("\n");
@@ -427,6 +440,74 @@ function foerderPlaner() {
         self.uebernehmeRouteVonLatLngs(e.layer.getLatLngs());
         e.layer.on("pm:edit", () => self.uebernehmeRouteVonLatLngs(e.layer.getLatLngs()));
       });
+      // Klick auf die Karte setzt im Platzier-Modus eine Pumpe
+      karte.on("click", e => { if (self.platziereModus) self.stationAusKlick(e.latlng); });
+      // vorhandene Stationen (z. B. geladene Strecke) als Marker zeigen
+      this.syncStationMarkers();
+    },
+
+    // ── Pumpenstandorte auf der Karte ──
+    platziereToggle() {
+      this.platziereModus = !this.platziereModus;
+      if (this.platziereModus && this.aufnahmeLaeuft) this.aufnahmeStop();
+    },
+
+    stationAusKlick(latlng) {
+      const idx = this.stationen.length;
+      this.stationen.push({
+        typ: idx === 0 ? "quellpumpe" : "verstaerker",
+        pumpen_typ_id: null, rpm: null, behaelter_volumen_l: null,
+        lat: latlng.lat, lng: latlng.lng,
+        abschnitt: { schlauch_typ_id: null, n_parallel: 1, laenge_m: 0, delta_hoehe_m: 0 }
+      });
+      this.syncStationMarkers();
+      this.stationsGeometrieAktualisieren();
+    },
+
+    syncStationMarkers() {
+      if (!this.karte || typeof L === "undefined") return;
+      (this._stationMarkers || []).forEach(m => this.karte.removeLayer(m));
+      this._stationMarkers = [];
+      const self = this;
+      this.stationen.forEach((st, i) => {
+        if (st.lat == null || st.lng == null) return;
+        const m = L.marker([st.lat, st.lng], { draggable: true }).addTo(this.karte);
+        m.bindTooltip("P" + (i + 1), { permanent: true, direction: "top", offset: [0, -8] });
+        m.on("dragend", () => {
+          const ll = m.getLatLng();
+          st.lat = ll.lat; st.lng = ll.lng;
+          self.stationsGeometrieAktualisieren();
+        });
+        this._stationMarkers.push(m);
+      });
+    },
+
+    async stationsGeometrieAktualisieren() {
+      const punkte = this.stationen.filter(s => s.lat != null && s.lng != null);
+      if (punkte.length < 1) return;
+      // Route = Reihenfolge der Pumpen (Pumpe → Pumpe → … → Auslass)
+      this.routeCoords = punkte.map(s => [s.lat, s.lng]);
+      // Abschnittslängen (Luftlinie zur Folgestation) in die Felder zurückschreiben
+      for (let i = 0; i < this.stationen.length - 1; i++) {
+        const a = this.stationen[i], b = this.stationen[i + 1];
+        if (a && a.lat != null && b && b.lat != null) {
+          a.abschnitt.laenge_m = Math.round(L.latLng(a.lat, a.lng).distanceTo(L.latLng(b.lat, b.lng)));
+        }
+      }
+      // Höhenprofil für die Pumpenfolge holen → Höhendifferenz je Abschnitt zurückschreiben
+      if (this.routeCoords.length >= 2) {
+        try {
+          const r = await fetch("/foerderstrecke/hoehenprofil", {
+            method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": FS_CSRF },
+            body: JSON.stringify({ route: this.routeCoords })
+          });
+          const hp = await r.json();
+          if (hp.stuetzpunkte && hp.stuetzpunkte.length) {
+            this.hoehenprofil = hp.stuetzpunkte.map(p => [p.s_m, p.hoehe_m]).filter(p => p[1] != null);
+            this.verteileHoehen();
+          }
+        } catch (e) { /* Höhenprofil optional */ }
+      }
     },
 
     // Zentriert die Karte auf den aktuellen Gerätestandort (Geolocation).
