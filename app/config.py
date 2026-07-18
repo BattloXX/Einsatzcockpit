@@ -255,6 +255,33 @@ class Settings(BaseSettings):
     # verworfen; darf NIEMALS gleich der Produktions-DB sein (harte Pruefung im Code).
     BACKUP_RESTORE_TEST_DB: str = "einsatzleiter_restore_test"
 
+    # Off-Site-Upload der Backups (app/services/remote_backup_service.py).
+    # Laeuft nach jedem `app.cli backup` automatisch, wenn aktiviert; separat per
+    # `app.cli backup-upload` testbar. Erfuellt die 3-2-1-Regel (zweiter Ort).
+    BACKUP_REMOTE_ENABLED: bool = False
+    # Protokoll: sftp | scp | rsync | ftp | ftps | rclone
+    #  - sftp/scp/rsync: SSH-basiert, Key-Auth empfohlen (BACKUP_REMOTE_KEY), sicher.
+    #  - ftps: FTP ueber TLS (verschluesselt). ftp: UNVERSCHLUESSELT (nur im LAN nutzen!).
+    #  - rclone: Catch-all fuer S3/WebDAV/Backblaze/Google Drive u.v.m. (rclone-Remote).
+    BACKUP_REMOTE_PROTOCOL: str = "sftp"
+    BACKUP_REMOTE_HOST: str = ""
+    BACKUP_REMOTE_PORT: int = 0              # 0 = Protokoll-Standard (22/21)
+    BACKUP_REMOTE_USER: str = ""
+    BACKUP_REMOTE_PASSWORD: str = ""         # nur FTP/FTPS (SSH nutzt Key)
+    BACKUP_REMOTE_KEY: str = ""              # Pfad zum privaten SSH-Key (sftp/scp/rsync)
+    BACKUP_REMOTE_PATH: str = ""             # Zielverzeichnis auf der Gegenstelle
+    # SSH-Hostkey-Pruefung: accept-new (TOFU, Standard) | yes (strikt, known_hosts noetig) | no
+    BACKUP_REMOTE_SSH_STRICT: str = "accept-new"
+    # rclone: Remote-Name inkl. Doppelpunkt, z. B. "offsite:" oder "s3:bucket".
+    BACKUP_REMOTE_RCLONE_REMOTE: str = ""
+    # Binaries (ggf. absoluter Pfad).
+    BACKUP_REMOTE_SCP_BIN: str = "scp"
+    BACKUP_REMOTE_SFTP_BIN: str = "sftp"
+    BACKUP_REMOTE_RSYNC_BIN: str = "rsync"
+    BACKUP_REMOTE_RCLONE_BIN: str = "rclone"
+    # Nur die neuesten Dumps je Typ hochladen (True) statt aller im BACKUP_DIR (False).
+    BACKUP_REMOTE_ONLY_LATEST: bool = True
+
     # Fernet-Verschlüsselung (Client Secrets, KI-API-Keys)
     # Eigener Key für Datenverschlüsselung; unabhängig von SECRET_KEY rotierbar.
     # Generieren: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

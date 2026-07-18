@@ -177,21 +177,65 @@ journalctl -u einsatzleiter -f
 
 ---
 
-## 7. Offsite-Spiegelung (empfohlen)
+## 7. Offsite-Upload (eingebaut)
 
-Beispiel: nach jedem Backup eine verschlüsselte Kopie zu einem Offsite-Ziel schieben
-(als zusätzlicher `ExecStartPost=` in `ec-backup.service` oder eigener Timer):
+Das Backup lädt die frisch erzeugten Dumps **automatisch** an eine Gegenstelle, sobald
+`BACKUP_REMOTE_ENABLED=true` gesetzt ist — direkt am Ende jedes `app.cli backup`-Laufs
+(also auch über den täglichen Timer). Unterstützte Protokolle:
 
-```bash
-rclone sync /home/clp-einsatz/htdocs/einsatzleiter/app_storage/backups \
-       offsite:einsatzcockpit-backups --transfers 2
+| Protokoll | Transport | Auth | Hinweis |
+|-----------|-----------|------|---------|
+| `sftp` | SSH | **SSH-Key** | empfohlen, verschlüsselt |
+| `scp` | SSH | SSH-Key | verschlüsselt |
+| `rsync` | SSH | SSH-Key | verschlüsselt, `--partial` (Wiederaufnahme) |
+| `ftps` | FTP+TLS | Passwort | verschlüsselt |
+| `ftp` | FTP | Passwort | **unverschlüsselt — nur im LAN** |
+| `rclone` | rclone-Remote | rclone-Config | Catch-all: S3, Backblaze B2, WebDAV, Google Drive … |
+
+Konfiguration in der `.env` (Ausschnitt, vollständige Liste in `.env.example`):
+
+```env
+BACKUP_REMOTE_ENABLED=true
+BACKUP_REMOTE_PROTOCOL=sftp
+BACKUP_REMOTE_HOST=backup.example.org
+BACKUP_REMOTE_USER=ec-backup
+BACKUP_REMOTE_KEY=/home/clp-einsatz/.ssh/id_ed25519      # SSH-Key ohne Passphrase (für Automatik)
+BACKUP_REMOTE_PATH=/srv/einsatzcockpit-backups
 ```
 
-> Die Dumps sind **unverschlüsselt** und enthalten personenbezogene Daten
-> (Mitglieder, Telefonnummern, Einsatzdaten). Das Backup-Verzeichnis und das
-> Offsite-Ziel daher **zugriffsbeschränkt** halten (Dateirechte `700`, verschlüsseltes
-> Volume bzw. serverseitige Verschlüsselung beim Offsite-Provider). Bei erhöhtem
-> Schutzbedarf `rclone crypt` oder GPG vor dem Upload verwenden.
+**Passwörter/Keys erscheinen nie in der Prozessliste:** SSH-Protokolle nutzen Key-Auth
+(`BatchMode=yes`, kein interaktiver Prompt), FTP/FTPS die Zugangsdaten über das Protokoll,
+nicht die Kommandozeile.
+
+Manuell auslösen / Remote-Konfiguration testen (ohne neuen Dump):
+
+```bash
+python -m app.cli backup-upload          # nur die neuesten Dumps je Typ
+python -m app.cli backup-upload --all    # alle Backups im BACKUP_DIR
+```
+
+**Einrichtung SSH-Key** (einmalig, für sftp/scp/rsync):
+
+```bash
+su - clp-einsatz
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ''        # ohne Passphrase → automatikfähig
+ssh-copy-id -i ~/.ssh/id_ed25519 ec-backup@backup.example.org
+# Ersten Verbindungsaufbau einmal bestätigen ODER known_hosts vorbefüllen; dann ggf.
+# BACKUP_REMOTE_SSH_STRICT=yes setzen (strikte Hostkey-Prüfung).
+```
+
+> **rclone** deckt Cloud-Ziele ab: `rclone config` einrichten, dann
+> `BACKUP_REMOTE_PROTOCOL=rclone` und `BACKUP_REMOTE_RCLONE_REMOTE=offsite:` (bzw.
+> `s3:bucket`) setzen. Der Upload läuft als `rclone copy <BACKUP_DIR> <remote:pfad>`.
+
+> **Datenschutz:** Die Dumps sind **unverschlüsselt** und enthalten personenbezogene Daten
+> (Mitglieder, Telefonnummern, Einsatzdaten). Gegenstelle und Übertragung
+> **zugriffsbeschränkt** halten: ein verschlüsseltes Protokoll wählen (sftp/scp/rsync/ftps,
+> **nicht** ftp über offene Netze), das Zielverzeichnis auf `700` beschränken und bei
+> erhöhtem Schutzbedarf serverseitige Verschlüsselung bzw. `rclone crypt` nutzen.
+
+Ein fehlgeschlagener Upload setzt den Backup-Exit-Code auf ≠ 0 (der lokale Dump bleibt
+erhalten) — so schlägt das Monitoring an, wenn die Offsite-Kopie ausbleibt.
 
 ---
 
