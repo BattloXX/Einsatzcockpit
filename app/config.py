@@ -282,6 +282,14 @@ class Settings(BaseSettings):
     # Nur die neuesten Dumps je Typ hochladen (True) statt aller im BACKUP_DIR (False).
     BACKUP_REMOTE_ONLY_LATEST: bool = True
 
+    # Self-Service-Backup je Organisation (app/services/org_export_service.py +
+    # org_backup_loop.py). Globaler Kill-Switch; je Org zusaetzlich in org_backup_config.
+    ORG_BACKUP_ENABLED: bool = True
+    # Groessenlimit je Org-Export-Archiv (Schutz vor Ueberlast; 0 = unbegrenzt).
+    ORG_BACKUP_MAX_BYTES: int = 2 * 1024 * 1024 * 1024   # 2 GB
+    # Loop-Intervall (Sekunden), in dem faellige Org-Backups geprueft werden.
+    ORG_BACKUP_LOOP_INTERVAL_S: int = 900
+
     # Fernet-Verschlüsselung (Client Secrets, KI-API-Keys)
     # Eigener Key für Datenverschlüsselung; unabhängig von SECRET_KEY rotierbar.
     # Generieren: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

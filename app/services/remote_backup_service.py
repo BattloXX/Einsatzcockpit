@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import ftplib
 import logging
+import os
 import subprocess
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -220,6 +222,58 @@ def config_aus_settings() -> RemoteConfig:
         rsync_bin=settings.BACKUP_REMOTE_RSYNC_BIN,
         rclone_bin=settings.BACKUP_REMOTE_RCLONE_BIN,
     )
+
+
+def config_aus_org(cfg_row: object, key_path: str = "") -> RemoteConfig:
+    """Baut die RemoteConfig aus einer OrgBackupConfig-Zeile (Self-Service je Org).
+
+    Das Passwort wird entschluesselt; ein privater SSH-Key (ssh_key_enc) wird NICHT
+    hier verarbeitet, sondern vom Aufrufer via org_remote_config() in eine temporaere
+    Datei materialisiert und als key_path uebergeben.
+    """
+    from app.core.crypto import decrypt_secret
+    passwort = ""
+    pw_enc = getattr(cfg_row, "password_enc", None)
+    if pw_enc:
+        passwort = decrypt_secret(pw_enc)
+    return RemoteConfig(
+        protocol=(getattr(cfg_row, "protocol", "sftp") or "sftp").strip().lower(),
+        host=(getattr(cfg_row, "host", "") or "").strip(),
+        port=getattr(cfg_row, "port", 0) or 0,
+        user=(getattr(cfg_row, "username", "") or "").strip(),
+        password=passwort,
+        key=key_path,
+        path=(getattr(cfg_row, "remote_path", "") or "").strip(),
+        ssh_strict=(getattr(cfg_row, "ssh_strict", "accept-new") or "accept-new").strip(),
+        rclone_remote=(getattr(cfg_row, "rclone_remote", "") or "").strip(),
+    )
+
+
+@contextmanager
+def org_remote_config(cfg_row: object) -> Iterator[RemoteConfig]:
+    """Context-Manager: liefert eine einsatzbereite RemoteConfig einer Org.
+
+    Materialisiert einen ggf. hinterlegten SSH-Key (ssh_key_enc) in eine temporaere
+    Datei mit Rechten 0600 und raeumt sie danach wieder ab.
+    """
+    from app.core.crypto import decrypt_secret
+    key_enc = getattr(cfg_row, "ssh_key_enc", None)
+    key_datei: Path | None = None
+    try:
+        if key_enc:
+            key_text = decrypt_secret(key_enc)
+            fd, name = tempfile.mkstemp(prefix=".orgkey_", suffix=".pem")
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(key_text if key_text.endswith("\n") else key_text + "\n")
+            key_datei = Path(name)
+            try:
+                os.chmod(key_datei, 0o600)
+            except OSError:
+                pass
+        yield config_aus_org(cfg_row, key_path=str(key_datei) if key_datei else "")
+    finally:
+        if key_datei is not None:
+            key_datei.unlink(missing_ok=True)
 
 
 def neueste_je_praefix(backup_dir: Path, praefixe: Sequence[str]) -> list[Path]:
