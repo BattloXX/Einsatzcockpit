@@ -81,6 +81,7 @@ DOKUMENTARTEN = {
     "gefahrgutdatenblatt": "Gefahrgutdatenblatt",
     "lageplan": "Lageplan",
     "objektinformation": "Objektinformation",
+    "foerderstrecke": "Einsatzplan Wasserförderung",
 }
 
 # Verarbeitungsstatus eines hochgeladenen Dokuments

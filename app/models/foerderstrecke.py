@@ -291,6 +291,9 @@ class FoerderStation(TenantScoped, Base):
     druck_parallel: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     schlauch_typ_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("foerder_schlauch_typ.id", ondelete="SET NULL"), nullable=True)
+    # Geometrie des Abschnitts hinter dieser Station (für Neuberechnung/PDF)
+    abschnitt_laenge_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    abschnitt_delta_hoehe_m: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     saug_parallel: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     behaelter_volumen_l: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # nur typ=uebergabe: Abgangsstränge (Anzahl + Schlauchtyp je Strang) als JSON
@@ -393,3 +396,29 @@ class FoerderKalibrierVorschlag(TenantScoped, Base):
     entschieden_von_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     entschieden_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class FoerderMaschinistToken(TenantScoped, Base):
+    """Login-freier Token für die Maschinisten-Zettel-Seite einer Strecke (Muster LagekarteToken).
+
+    Nur der SHA-256-Hash wird gespeichert; der Klartext-Token wird einmalig beim Anlegen
+    angezeigt. Die öffentliche Route scopet ausschließlich über token.org_id (SEC-11).
+    """
+
+    __tablename__ = "foerder_maschinist_token"
+    __table_args__ = (
+        Index("ix_foerder_maschinist_token_hash", "token_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    strecke_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("foerderstrecke.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    widerrufen_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    zuletzt_genutzt_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    @property
+    def is_active(self) -> bool:
+        return self.widerrufen_am is None

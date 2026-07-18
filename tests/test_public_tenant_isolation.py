@@ -135,3 +135,63 @@ def test_fahrtenbuch_token_zeigt_nur_eigene_fahrzeuge(client):
 def test_fahrtenbuch_unbekannter_token_404(client):
     r = client.get("/f/voellig-unbekannter-token")
     assert r.status_code == 404
+
+
+# ── Förderstrecken-Maschinisten-Zettel ohne Login (/m/foerderstrecke/{token}) ──
+
+FS_TOKEN_A = "iso-fs-token-org-a"
+FS_TOKEN_B = "iso-fs-token-org-b"
+FS_NAME_A = "ISO-Foerderstrecke-A"
+FS_NAME_B = "ISO-GEHEIM-Foerderstrecke-B"
+
+
+def _setup_fs_tokens() -> int:
+    """Je eine Strecke + Maschinisten-Token in Org A und Org B (idempotent)."""
+    import hashlib
+
+    from app.models.foerderstrecke import (
+        FoerderMaschinistToken,
+        FoerderStation,
+        Foerderstrecke,
+    )
+    org_b_id = _setup_zwei_orgs()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        def _ensure(org_id, name, token):
+            vorhanden = db.query(FoerderMaschinistToken).filter(
+                FoerderMaschinistToken.token_hash == hashlib.sha256(token.encode()).hexdigest()
+            ).first()
+            if vorhanden:
+                return
+            s = Foerderstrecke(org_id=org_id, name=name,
+                               ansaug_json='{"seehoehe_m":430,"geodaetische_saughoehe_m":2}')
+            db.add(s); db.flush()
+            db.add(FoerderStation(org_id=org_id, strecke_id=s.id, sort=0, typ="quellpumpe",
+                                  lat=47.4, lng=9.7))
+            db.add(FoerderMaschinistToken(org_id=org_id, strecke_id=s.id,
+                                          token_hash=hashlib.sha256(token.encode()).hexdigest()))
+        _ensure(ORG_A, FS_NAME_A, FS_TOKEN_A)
+        _ensure(org_b_id, FS_NAME_B, FS_TOKEN_B)
+        db.commit()
+        return org_b_id
+    finally:
+        db.close()
+
+
+def test_foerderstrecke_token_zeigt_nur_eigene_org(client):
+    _setup_fs_tokens()
+
+    r_a = client.get(f"/m/foerderstrecke/{FS_TOKEN_A}")
+    assert r_a.status_code == 200
+    assert FS_NAME_A in r_a.text
+    assert FS_NAME_B not in r_a.text            # Strecke der Org B unsichtbar für Token A
+
+    r_b = client.get(f"/m/foerderstrecke/{FS_TOKEN_B}")
+    assert r_b.status_code == 200
+    assert FS_NAME_B in r_b.text
+    assert FS_NAME_A not in r_b.text
+
+
+def test_foerderstrecke_unbekannter_token_404(client):
+    assert client.get("/m/foerderstrecke/voellig-unbekannter-token").status_code == 404

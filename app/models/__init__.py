@@ -153,6 +153,7 @@ from app.models.verleih import (
 from app.models.foerderstrecke import (
     FoerderErgebnis,
     FoerderKalibrierVorschlag,
+    FoerderMaschinistToken,
     FoerderMessung,
     FoerderPumpenTyp,
     FoerderSchlauchTyp,
@@ -206,7 +207,7 @@ __all__ = [
     "Wasserstelle",
     "FoerderPumpenTyp", "FoerderSchlauchTyp",
     "Foerderstrecke", "FoerderStation", "FoerderErgebnis",
-    "FoerderMessung", "FoerderKalibrierVorschlag",
+    "FoerderMessung", "FoerderKalibrierVorschlag", "FoerderMaschinistToken",
     "HoehenCache",
     "Gateway", "Printer", "PrintJob", "AlarmIngest", "PrintRule",
     "UASDevice", "UASPilot", "UASFlugbewegung", "UASWartung",
