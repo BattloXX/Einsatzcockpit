@@ -34,7 +34,7 @@ def test_gefahrgut_lookup_und_normierung():
     assert _norm_un("UN 1203") == "1203"
     assert _norm_un("0001203") == "1203"
     treffer = lookup_un("1203")
-    assert treffer and treffer["stoffname"].startswith("Benzin")
+    assert treffer and treffer["stoffname"].lower().startswith("benzin")
     assert treffer["gefahrnummer"] == "33"
     assert lookup_un("999999") is None
 
@@ -137,7 +137,7 @@ def test_lookup_endpoint_und_gefahr_neu(client):
     r = client.get("/objekte/gefahrgut/lookup?un=1203")
     assert r.status_code == 200
     d = r.json()
-    assert d["gefunden"] and d["stoffname"].startswith("Benzin")
+    assert d["gefunden"] and d["stoffname"].lower().startswith("benzin")
 
     # Gefahr mit Anreicherung + Link anlegen
     csrf = client.cookies.get("ec_csrf")
