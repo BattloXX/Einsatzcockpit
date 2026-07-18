@@ -27,6 +27,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - UAS/Drohnen-Modul gemäß RL-UAS LFV Vorarlberg 2024 (Flugbuch, Checklisten, PDF, DSGVO)
 - Objektverwaltung: Einsatzunterlagen zu BMA-Objekten und Wohnanlagen — Gefahren (mit Links + Gefahrgut-DB-Anreicherung per UN-Nummer), Schlüsselsafe, Melderpläne mit PDF-Zerlegung und **Volltextsuche (OCR)**, Objekt-Lagekarte, Alarm-Matching mit **Objektgefahren-Board-Spalte**, Objektblatt-Druck; pflegbare Kataloge/Auswahllisten und Karten-Symbole (Bild-Upload)
 - Alarm-Infoscreen für Wandmonitore: URL-Rotation je Monitor (Matrix), Wetter, Großschadenslage-Sonderansicht, RSVP-Anzeige, dauerhaft kopierbare Monitor-URLs
+- Nachschlagewerke: offlinefähige Gefahrgut-Suche (UN-Nummer/Stoffname → ERI-Karte, täglicher BAM/ADR-Sync), Rettungsdatenblätter (on-demand + Cache) und Karten-Overlays (Evakuierungsradius, windbezogene Ausbreitung inkl. Gauß-Modell)
 - SSO via Microsoft Entra ID (JIT-Provisioning, Gruppen-Mapping, PKCE/OIDC)
 - Mail-Versand je Organisation: eigener SMTP-Server und/oder Office 365 / Microsoft Graph, mit automatischer Fallback-Kette
 - Geräteverleih für Großschadenslagen (Artikel, Stücklisten, Barcode-Scan, SMS)
@@ -79,6 +80,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Drohne / UAS](Anwender-Drohne-UAS) | BOS-Drohneneinsatz: starten, Flugbuch, Checklisten, Notfall, Medien, PDF |
 | [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
 | [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
+| [Nachschlagewerke](Anwender-Nachschlagewerke) | Gefahrgut nach UN-Nummer/Stoffname, Rettungsdatenblätter, Evakuierungsradius & Ausbreitung — offlinefähig |
 
 ### Administration
 | Seite | Beschreibung |
@@ -100,6 +102,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
 | [Teams-Alarmierung](Administration-Teams-Alarmierung) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
+| [Nachschlagewerke](Administration-Nachschlagewerke) | Modul aktivieren (System+Org), Gefahrgut-Datenquelle (BAM/ADR), Rettungskarten-URL, Offline-Funktion |
 | [Print & Alarm Gateway](Administration-Print-Alarm-Gateway) | Modul aktivieren (System+Org), Gateways koppeln, Drucker & Discovery, Druckregeln (Automatikdruck), manueller Druck |
 
 ### Entwickler
