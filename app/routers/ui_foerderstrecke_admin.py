@@ -515,3 +515,132 @@ def schlauch_loeschen(
     db.delete(s)
     db.commit()
     return RedirectResponse("/admin/foerderschlaeuche", status_code=303)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Kalibrierung: Messungen erfassen + Vorschläge reviewen (PR 7-UI)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/admin/foerderkalibrierung", response_class=HTMLResponse)
+def kalibrierung_seite(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    from app.models.foerderstrecke import (
+        KALIBRIER_OFFEN,
+        FoerderKalibrierVorschlag,
+        FoerderMessung,
+    )
+    messungen = (db.query(FoerderMessung).filter(FoerderMessung.org_id == user.org_id)
+                 .order_by(FoerderMessung.datum.desc()).limit(100).all())
+    vorschlaege = (db.query(FoerderKalibrierVorschlag)
+                   .filter(FoerderKalibrierVorschlag.org_id == user.org_id,
+                           FoerderKalibrierVorschlag.status == KALIBRIER_OFFEN)
+                   .order_by(FoerderKalibrierVorschlag.erstellt_am.desc()).all())
+    schlaeuche = (db.query(FoerderSchlauchTyp)
+                  .filter(FoerderSchlauchTyp.org_id == user.org_id, FoerderSchlauchTyp.aktiv.is_(True))
+                  .order_by(FoerderSchlauchTyp.durchmesser_mm.desc()).all())
+    schlauch_map = {s.id: s.kuerzel for s in schlaeuche}
+    return templates.TemplateResponse(request, "admin/foerder_kalibrierung.html", {
+        "user": user, "messungen": messungen, "vorschlaege": vorschlaege,
+        "schlaeuche": schlaeuche, "schlauch_map": schlauch_map,
+    })
+
+
+@router.post("/admin/foerderkalibrierung/messung")
+def messung_neu(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+    schlauch_typ_id: str = Form(""),
+    q_gemessen_l_min: str = Form(""),
+    laenge_m: str = Form(""),
+    n_parallel: str = Form("1"),
+    delta_hoehe_m: str = Form("0"),
+    p_aus_bar: str = Form(""),
+    p_ein_folge_bar: str = Form(""),
+    notiz: str = Form(""),
+):
+    from app.models.foerderstrecke import FoerderMessung
+    sid = _i(schlauch_typ_id)
+    if sid:
+        s = db.get(FoerderSchlauchTyp, sid)
+        if s is None or s.org_id != user.org_id:
+            raise HTTPException(400, "Unbekannter Schlauchtyp")
+    db.add(FoerderMessung(
+        org_id=user.org_id, schlauch_typ_id=sid,
+        q_gemessen_l_min=_f(q_gemessen_l_min), laenge_m=_f(laenge_m),
+        n_parallel=max(1, _i(n_parallel) or 1), delta_hoehe_m=_f(delta_hoehe_m) or 0.0,
+        p_aus_bar=_f(p_aus_bar), p_ein_folge_bar=_f(p_ein_folge_bar),
+        notiz=notiz.strip() or None, erstellt_von_id=user.id,
+    ))
+    db.commit()
+    return RedirectResponse("/admin/foerderkalibrierung", status_code=303)
+
+
+@router.post("/admin/foerderkalibrierung/messung/{mid}/loeschen")
+def messung_loeschen(
+    mid: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    from app.models.foerderstrecke import FoerderMessung
+    m = db.get(FoerderMessung, mid)
+    if m is None or m.org_id != user.org_id:
+        raise HTTPException(404, "Messung nicht gefunden")
+    db.delete(m)
+    db.commit()
+    return RedirectResponse("/admin/foerderkalibrierung", status_code=303)
+
+
+@router.post("/admin/foerderkalibrierung/berechnen")
+def kalibrierung_berechnen(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    from app.services.foerderstrecke_kalibrier_service import erzeuge_vorschlaege
+    neue = erzeuge_vorschlaege(db, user.org_id)
+    db.commit()
+    return RedirectResponse(f"/admin/foerderkalibrierung?vorschlaege={len(neue)}", status_code=303)
+
+
+@router.post("/admin/foerderkalibrierung/vorschlag/{vid}/uebernehmen")
+def vorschlag_uebernehmen_route(
+    vid: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    from app.models.foerderstrecke import FoerderKalibrierVorschlag
+    from app.services.foerderstrecke_kalibrier_service import vorschlag_uebernehmen
+    v = db.get(FoerderKalibrierVorschlag, vid)
+    if v is None or v.org_id != user.org_id:
+        raise HTTPException(404, "Vorschlag nicht gefunden")
+    if vorschlag_uebernehmen(db, v, user.id):
+        write_audit(db, "foerder_kalibrierung.uebernommen", org_id=user.org_id, user_id=user.id,
+                    entity_type="foerder_schlauch_typ", entity_id=v.schlauch_typ_id,
+                    payload={"k_neu": v.k_neu})
+    db.commit()
+    return RedirectResponse("/admin/foerderkalibrierung", status_code=303)
+
+
+@router.post("/admin/foerderkalibrierung/vorschlag/{vid}/verwerfen")
+def vorschlag_verwerfen_route(
+    vid: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    from app.models.foerderstrecke import FoerderKalibrierVorschlag
+    from app.services.foerderstrecke_kalibrier_service import vorschlag_verwerfen
+    v = db.get(FoerderKalibrierVorschlag, vid)
+    if v is None or v.org_id != user.org_id:
+        raise HTTPException(404, "Vorschlag nicht gefunden")
+    vorschlag_verwerfen(db, v, user.id)
+    db.commit()
+    return RedirectResponse("/admin/foerderkalibrierung", status_code=303)

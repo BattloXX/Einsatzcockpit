@@ -253,6 +253,11 @@
                {{ tip('Förderstrecke: eigene Pumpen (mit Kennlinie) und Schläuche verwalten, Vorlagen wie TS 1600/TS 1200 übernehmen') }}>
               <span class="admin-nav__icon">🧵</span>Förderstrecke-Geräte
             </a>
+            <a href="/admin/foerderkalibrierung"
+               class="admin-nav__item {% if '/admin/foerderkalibrierung' in request.url.path %}is-active{% endif %}"
+               {{ tip('Förderstrecke: Übungsmessungen erfassen und daraus korrigierte Schlauch-k-Werte vorschlagen (Review)') }}>
+              <span class="admin-nav__icon">🎯</span>Förderstrecke-Kalibrierung
+            </a>
             {% endif %}
             <a href="/admin/einsatzinfo-sms"
                class="admin-nav__item {% if '/admin/einsatzinfo-sms' in request.url.path %}is-active{% endif %}"
