@@ -177,6 +177,8 @@
               <td><a href="/foerderstrecke/{{ s.id }}">{{ s.name }}</a></td>
               <td>{{ status_labels.get(s.status, s.status) }}</td>
               <td style="text-align:right;">
+                <a class="btn btn--ghost btn--xs" href="/foerderstrecke/{{ s.id }}/pdf" target="_blank">PDF</a>
+                <button type="button" class="btn btn--ghost btn--xs" @click="maschinistenLink({{ s.id }})">🔗 Zettel</button>
                 <form method="post" action="/foerderstrecke/{{ s.id }}/loeschen" style="display:inline;" onsubmit="return confirm('Strecke löschen?');">
                   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                   <button class="btn btn--ghost btn--xs">Löschen</button>
@@ -226,7 +228,7 @@ function foerderPlaner() {
           typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm,
           behaelter_volumen_l: s.behaelter_volumen_l,
           abschnitt: { schlauch_typ_id: s.schlauch_typ_id, n_parallel: s.druck_parallel || 1,
-                       laenge_m: 0, delta_hoehe_m: 0 }
+                       laenge_m: s.abschnitt_laenge_m || 0, delta_hoehe_m: s.abschnitt_delta_hoehe_m || 0 }
         }));
         if (FS_LADE.hoehenprofil) this.hoehenprofil = FS_LADE.hoehenprofil;
       } else {
@@ -287,6 +289,14 @@ function foerderPlaner() {
       });
       const res = await r.json();
       if (res.id) { this.ladeId = res.id; alert("Gespeichert: " + res.name); }
+    },
+
+    async maschinistenLink(id) {
+      const r = await fetch("/foerderstrecke/" + id + "/maschinisten-token", {
+        method: "POST", headers: {"X-CSRF-Token": FS_CSRF}
+      });
+      const res = await r.json();
+      if (res.url) { window.prompt("Maschinisten-Zettel (login-frei) — Link kopieren:", res.url); }
     },
 
     ampelFarbe() {

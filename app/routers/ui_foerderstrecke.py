@@ -8,7 +8,9 @@ Höhenprofil-SVG zurück. `/hoehenprofil` liefert Geländehöhen für die gezeic
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -23,6 +25,7 @@ from app.models.foerderstrecke import (
     STATION_TYPEN,
     STRECKE_STATUS,
     STRECKE_STATUS_ENTWURF,
+    FoerderMaschinistToken,
     FoerderPumpenTyp,
     FoerderSchlauchTyp,
     FoerderStation,
@@ -296,6 +299,8 @@ async def speichern(
             pumpen_typ_id=st.get("pumpen_typ_id"), rpm=st.get("rpm"),
             druck_parallel=int(ab.get("n_parallel") or 1),
             schlauch_typ_id=ab.get("schlauch_typ_id"),
+            abschnitt_laenge_m=ab.get("laenge_m"),
+            abschnitt_delta_hoehe_m=float(ab.get("delta_hoehe_m") or 0.0),
             saug_parallel=int(st.get("saug_parallel") or 1),
             behaelter_volumen_l=st.get("behaelter_volumen_l"),
         ))
@@ -347,8 +352,31 @@ def _strecke_json(s: Foerderstrecke) -> str:
             "rpm": st.rpm, "druck_parallel": st.druck_parallel,
             "schlauch_typ_id": st.schlauch_typ_id, "saug_parallel": st.saug_parallel,
             "behaelter_volumen_l": st.behaelter_volumen_l,
+            "abschnitt_laenge_m": st.abschnitt_laenge_m,
+            "abschnitt_delta_hoehe_m": st.abschnitt_delta_hoehe_m,
         } for st in s.stationen],
     })
+
+
+@router.get("/{sid}/pdf")
+def pdf(
+    sid: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    from fastapi.responses import Response
+
+    from app.services.foerderstrecke_pdf_service import render_foerderstrecke_pdf
+    strecke = db.get(Foerderstrecke, sid)
+    if strecke is None or strecke.org_id != user.org_id:
+        raise HTTPException(404, "Strecke nicht gefunden")
+    org = getattr(user, "org", None)
+    pdf_bytes = render_foerderstrecke_pdf(strecke, org, db, base_url=str(request.base_url))
+    dateiname = f"Wasserfoerderung_{strecke.name[:40]}.pdf".replace(" ", "_")
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{dateiname}"'})
 
 
 @router.post("/{sid}/status")
@@ -387,3 +415,82 @@ def loeschen(
     db.delete(strecke)
     db.commit()
     return RedirectResponse("/foerderstrecke/", status_code=303)
+
+
+def _hash_token(plain: str) -> str:
+    return hashlib.sha256(plain.encode("utf-8")).hexdigest()
+
+
+@router.post("/{sid}/maschinisten-token")
+def maschinisten_token_erzeugen(
+    sid: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    """Erzeugt (oder erneuert) den login-freien Maschinisten-Token einer Strecke.
+
+    Der Klartext wird nur hier einmalig zurückgegeben (nur der Hash wird gespeichert).
+    """
+    strecke = db.get(Foerderstrecke, sid)
+    if strecke is None or strecke.org_id != user.org_id:
+        raise HTTPException(404, "Strecke nicht gefunden")
+    # bestehende aktive Tokens widerrufen (frischer Link)
+    for alt in (db.query(FoerderMaschinistToken)
+                .filter(FoerderMaschinistToken.strecke_id == strecke.id,
+                        FoerderMaschinistToken.org_id == user.org_id,
+                        FoerderMaschinistToken.widerrufen_am.is_(None)).all()):
+        alt.widerrufen_am = datetime.now(UTC)
+    plain = secrets.token_urlsafe(24)
+    db.add(FoerderMaschinistToken(org_id=user.org_id, strecke_id=strecke.id,
+                                  token_hash=_hash_token(plain)))
+    write_audit(db, "foerderstrecke.token_erzeugt", org_id=user.org_id, user_id=user.id,
+                entity_type="foerderstrecke", entity_id=strecke.id)
+    db.commit()
+    basis = str(request.base_url).rstrip("/")
+    return JSONResponse({"url": f"{basis}/m/foerderstrecke/{plain}"})
+
+
+# ── Öffentliche, login-freie Maschinisten-Seite (SEC-11: scopet über Token) ───────
+
+public_router = APIRouter(tags=["foerderstrecke-public"])
+
+
+@public_router.get("/m/foerderstrecke/{token}", response_class=HTMLResponse)
+def maschinisten_seite(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Login-freie Maschinisten-Zettel-Seite. Scopet ausschließlich über den Token."""
+    from app.services.foerderstrecke_pdf_service import berechne_gespeicherte_strecke
+
+    row = (
+        db.query(FoerderMaschinistToken)
+        .filter(FoerderMaschinistToken.token_hash == _hash_token(token))
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if row is None or not row.is_active:
+        raise HTTPException(404, "Nicht gefunden")
+    # Strecke ausschließlich innerhalb der Token-Org laden (SEC-11)
+    strecke = (
+        db.query(Foerderstrecke)
+        .filter(Foerderstrecke.id == row.strecke_id, Foerderstrecke.org_id == row.org_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if strecke is None:
+        raise HTTPException(404, "Nicht gefunden")
+    row.zuletzt_genutzt_am = datetime.now(UTC)
+    db.commit()
+
+    daten = berechne_gespeicherte_strecke(strecke, db)
+    return templates.TemplateResponse(request, "foerderstrecke/maschinist.html", {
+        "strecke": strecke,
+        "stationswerte": daten["stationswerte"],
+        "stationen_info": daten["stationen_info"],
+        "q_max_l_min": daten["ergebnis"]["q_max_l_min"],
+        "warnungen": daten["ergebnis"]["warnungen"],
+    })

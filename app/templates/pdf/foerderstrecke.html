@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 1.4cm 1.2cm; }
+  body { font-family: "DejaVu Sans", Arial, sans-serif; color: #111; font-size: 10.5px; }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  h2 { font-size: 12px; margin: 14px 0 5px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+  .kopf { display: flex; justify-content: space-between; align-items: flex-start; }
+  .meta { color: #555; font-size: 9.5px; }
+  .q { font-size: 22px; font-weight: bold; }
+  .ampel { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:5px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  th, td { border: 1px solid #ccc; padding: 3px 5px; text-align: left; font-size: 9.5px; }
+  th { background: #f1f1f1; }
+  .warn { color: #b45309; }
+  .warn-rot { color: #b91c1c; }
+  .muted { color: #666; }
+  img.karte { width: 100%; max-height: 240px; object-fit: cover; border: 1px solid #ccc; }
+  .svgbox svg { width: 100%; height: auto; }
+</style>
+</head>
+<body>
+  <div class="kopf">
+    <div>
+      <h1>Einsatzplan Wasserförderung</h1>
+      <div class="meta">
+        {{ strecke.name }} · Status: {{ strecke.status_label }}
+        {% if org %} · {{ org.name }}{% endif %}
+      </div>
+    </div>
+    <div class="meta" style="text-align:right;">
+      Erstellt: {{ erstellt_str }}
+    </div>
+  </div>
+
+  <h2>Ergebnis</h2>
+  {% set rot = ergebnis.warnungen and (ergebnis.warnungen | select('search', 'Abriss') | list or ergebnis.warnungen | select('search', 'Hochpunkt') | list) %}
+  <p>
+    <span class="ampel" style="background: {% if not ergebnis.machbar or rot %}#dc2626{% elif ergebnis.warnungen %}#f59e0b{% else %}#16a34a{% endif %};"></span>
+    <span class="q">{{ '{:,}'.format(ergebnis.q_max_l_min | int).replace(',', '.') }} l/min</span>
+    {% if ergebnis.engpass and ergebnis.engpass.name %}
+    <span class="muted">— Engpass: {{ ergebnis.engpass.name }} ({{ ergebnis.engpass.q_max_l_min | int }} l/min)</span>
+    {% endif %}
+  </p>
+
+  {% if karte_png %}
+  <img class="karte" src="{{ karte_png }}" alt="Kartenausschnitt">
+  {% endif %}
+
+  <h2>Höhenprofil &amp; Drucklinie</h2>
+  <div class="svgbox">{{ svg | safe }}</div>
+
+  <h2>Stationen &amp; Maschinisten-Sollwerte</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Gerät / Typ</th><th>Koordinaten</th>
+        <th>p aus [bar]</th><th>p ein Folge [bar]</th><th>DBV [bar]</th><th>Funkrufname</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sw in stationswerte %}
+      {% set info = stationen_info[loop.index0] if stationen_info|length > loop.index0 else {} %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ sw.name or info.name or '—' }}<br><span class="muted">{{ info.typ_label or sw.typ }}</span></td>
+        <td class="muted">{% if info.lat and info.lng %}{{ '%.5f'|format(info.lat) }}, {{ '%.5f'|format(info.lng) }}{% else %}—{% endif %}</td>
+        <td>{{ sw.p_aus_bar if sw.p_aus_bar is not none else '—' }}</td>
+        <td>{{ sw.p_ein_folge_bar if sw.get('p_ein_folge_bar') is not none else '—' }}</td>
+        <td>{{ sw.dbv_bar if sw.dbv_bar is not none else '—' }}</td>
+        <td>&nbsp;</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Material &amp; Logistik</h2>
+  <table>
+    <thead><tr><th>Schlauch</th><th>Meter (inkl. Reserve)</th><th>Stück</th></tr></thead>
+    <tbody>
+      {% for m in material.schlaeuche %}
+      <tr><td>{{ m.kuerzel }}</td><td>{{ m.meter_mit_reserve }} m</td><td>{{ m.elemente }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">
+    Leitungsvolumen ~{{ material.wasservolumen_l | int }} l
+    {% if material.fuellzeit_min %} · Füllzeit „Wasser marsch bis Wasser da" ~{{ material.fuellzeit_min }} min{% endif %}
+  </p>
+
+  {% if ergebnis.warnungen %}
+  <h2>Hinweise &amp; Warnungen</h2>
+  <ul>
+    {% for w in ergebnis.warnungen %}
+    <li class="{{ 'warn-rot' if ('Abriss' in w or 'Hochpunkt' in w) else 'warn' }}">{{ w }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <p class="muted" style="margin-top:14px; font-size:8.5px;">
+    Planungswerte — im Einsatz laufend gegen die tatsächlichen Drücke abgleichen. Eingangsdruck jeder
+    Folgepumpe ≥ 1,5 bar, DBV = Eingangsdruck Folgepumpe + 0,5 bar.
+  </p>
+</body>
+</html>

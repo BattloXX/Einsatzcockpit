@@ -197,6 +197,7 @@ STANDARD_AUSWAHL: dict[str, list[tuple[str, str | None, str]]] = {
         ("gefahrgutdatenblatt", None, "Gefahrgutdatenblatt"),
         ("lageplan", None, "Lageplan"),
         ("objektinformation", None, "Objektinformation"),
+        ("foerderstrecke", None, "Einsatzplan Wasserförderung"),
     ],
     AUSWAHL_PIKTOGRAMM: [
         ("ex", "💥", "EX-Bereich"),

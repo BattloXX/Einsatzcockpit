@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Maschinisten-Zettel — {{ strecke.name }}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+  header { background: #b71c1c; color: #fff; padding: 14px 16px; }
+  header h1 { margin: 0; font-size: 1.1rem; }
+  header .sub { font-size: .82rem; opacity: .9; }
+  .wrap { padding: 14px; max-width: 720px; margin: 0 auto; }
+  .q { font-size: 1.6rem; font-weight: 700; margin: 6px 0 14px; }
+  .karte { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .karte h2 { margin: 0 0 8px; font-size: 1rem; }
+  .werte { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .wert { background: #0b1220; border-radius: 8px; padding: 8px 10px; }
+  .wert .l { font-size: .72rem; color: #94a3b8; }
+  .wert .v { font-size: 1.3rem; font-weight: 700; }
+  .nachbar { font-size: .82rem; color: #cbd5e1; margin-top: 8px; }
+  a.btn { display: inline-block; background: #2563eb; color: #fff; text-decoration: none;
+          padding: 6px 12px; border-radius: 8px; font-size: .85rem; margin-top: 8px; }
+  .warn { color: #fca5a5; font-size: .82rem; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🚰 Maschinisten-Zettel</h1>
+    <div class="sub">{{ strecke.name }} · Status: {{ strecke.status_label }}</div>
+  </header>
+  <div class="wrap">
+    <div class="q">Förderziel: {{ '{:,}'.format(q_max_l_min | int).replace(',', '.') }} l/min</div>
+
+    {% for sw in stationswerte %}
+    {% set info = stationen_info[loop.index0] if stationen_info|length > loop.index0 else {} %}
+    <div class="karte">
+      <h2>Station {{ loop.index }} — {{ sw.name or info.name or info.typ_label }}</h2>
+      <div class="werte">
+        <div class="wert"><div class="l">Ausgangsdruck SOLL</div><div class="v">{{ sw.p_aus_bar if sw.p_aus_bar is not none else '—' }} bar</div></div>
+        <div class="wert"><div class="l">Eingangsdruck Folgepumpe</div><div class="v">{{ sw.get('p_ein_folge_bar') if sw.get('p_ein_folge_bar') is not none else '—' }} bar</div></div>
+        <div class="wert"><div class="l">DBV-Einstellung</div><div class="v">{{ sw.dbv_bar if sw.dbv_bar is not none else '—' }} bar</div></div>
+        <div class="wert"><div class="l">Eingangsdruck (an dieser Pumpe)</div><div class="v">{{ sw.p_ein_bar if sw.p_ein_bar is not none else '—' }} bar</div></div>
+      </div>
+      {% if info.lat and info.lng %}
+      <a class="btn" href="https://www.openstreetmap.org/?mlat={{ info.lat }}&mlon={{ info.lng }}#map=17/{{ info.lat }}/{{ info.lng }}" target="_blank">📍 Standort auf Karte</a>
+      {% endif %}
+      <div class="nachbar">
+        {% if loop.index0 > 0 %}◀ Vorher: {{ stationswerte[loop.index0-1].name or ('Station ' ~ loop.index0) }}{% endif %}
+        {% if not loop.last %} · Nächste: {{ stationswerte[loop.index0+1].name or ('Station ' ~ (loop.index+1)) }} ▶{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if warnungen %}
+    <div class="karte">
+      <h2>Hinweise</h2>
+      {% for w in warnungen %}<div class="warn">⚠️ {{ w }}</div>{% endfor %}
+    </div>
+    {% endif %}
+
+    <p style="font-size:.75rem;color:#64748b;">Eingangsdruck jeder Folgepumpe ≥ 1,5 bar halten · DBV = Eingangsdruck Folgepumpe + 0,5 bar. Planwerte — laufend gegen die tatsächlichen Drücke abgleichen.</p>
+  </div>
+</body>
+</html>

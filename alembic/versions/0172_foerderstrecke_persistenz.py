@@ -66,6 +66,8 @@ def upgrade() -> None:
             rpm                 VARCHAR(20)  NULL,
             druck_parallel      INT          NOT NULL DEFAULT 1,
             schlauch_typ_id     BIGINT       NULL,
+            abschnitt_laenge_m  DOUBLE       NULL,
+            abschnitt_delta_hoehe_m DOUBLE   NOT NULL DEFAULT 0,
             saug_parallel       INT          NOT NULL DEFAULT 1,
             behaelter_volumen_l INT          NULL,
             abgang_straenge     TEXT         NULL,
