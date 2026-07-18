@@ -55,22 +55,36 @@ def berechne_gespeicherte_strecke(strecke: Foerderstrecke, db) -> dict:
         saug_n_parallel=int(a.get("saug_n_parallel") or 1),
         saugleitung_laenge_m=float(a.get("saugleitung_laenge_m") or 0.0),
         max_ansaughoehe_m=float(a.get("max_ansaughoehe_m") or 7.5),
+        saug_scheitel_m=float(a.get("saug_scheitel_m") or 0.0),
     )
+    full_profil = json.loads(strecke.hoehenprofil_json) if strecke.hoehenprofil_json else None
     stationen_orm = sorted(strecke.stationen, key=lambda s: (s.strang_nr, s.sort))
     stationen: list[engine.PumpenStation] = []
     material_abschnitte: list[dict] = []
     info: list[dict] = []
+    s_kumuliert = 0.0
     for st in stationen_orm:
         kl, meta = _kennlinie_der_station(st, db)
         schlauch = db.get(FoerderSchlauchTyp, st.schlauch_typ_id) if st.schlauch_typ_id else None
         laenge = float(st.abschnitt_laenge_m or 0.0)
+        # Zwischengelände (Damm etc.) aus dem gespeicherten Gesamtprofil je Abschnitt
+        stuetz = None
+        delta = float(st.abschnitt_delta_hoehe_m or 0.0)
+        if full_profil and laenge > 0:
+            aus_profil = engine.abschnitt_hoehen_stuetzpunkte(
+                full_profil, s_kumuliert, s_kumuliert + laenge)
+            if aus_profil:
+                stuetz = aus_profil
+                delta = aus_profil[-1]
         abschnitt = engine.Abschnitt(
             schlauch_k=float(schlauch.k_verlust) if schlauch else 0.0,
             laenge_m=laenge,
             n_parallel=int(st.druck_parallel or 1),
-            delta_hoehe_m=float(st.abschnitt_delta_hoehe_m or 0.0),
+            delta_hoehe_m=delta,
             max_betriebsdruck_bar=schlauch.max_betriebsdruck_bar if schlauch else None,
+            hoehen_stuetzpunkte=stuetz,
         ) if laenge > 0 else None
+        s_kumuliert += laenge
         stationen.append(engine.PumpenStation(
             kennlinie=kl, typ=st.typ,
             max_ausgangsdruck_bar=meta.get("max_ausgangsdruck_bar"),
@@ -106,10 +120,9 @@ def berechne_gespeicherte_strecke(strecke: Foerderstrecke, db) -> dict:
         marken.append({"s_m": s, "label": st.name})
         if st.abschnitt_danach:
             s += st.abschnitt_danach.laenge_m
-    hoehenprofil = json.loads(strecke.hoehenprofil_json) if strecke.hoehenprofil_json else None
     grenzen = [st.abschnitt_danach.max_betriebsdruck_bar for st in stationen
                if st.abschnitt_danach and st.abschnitt_danach.max_betriebsdruck_bar]
-    svg = foerderprofil_svg(ergebnis["druckprofil"], hoehenprofil=hoehenprofil,
+    svg = foerderprofil_svg(ergebnis["druckprofil"], hoehenprofil=full_profil,
                             p_max_bar=min(grenzen) if grenzen else None, stationen=marken,
                             titel=strecke.name)
     return {"ergebnis": ergebnis, "material": material, "svg": svg,

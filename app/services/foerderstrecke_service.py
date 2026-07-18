@@ -261,6 +261,41 @@ def behaelter_standzeit_min(volumen_l: float, q_zulauf_l_min: float, q_ablauf_l_
 
 # ── Strecken-Datenstrukturen ──────────────────────────────────────────────────
 
+def abschnitt_hoehen_stuetzpunkte(
+    full_profil: list, s_start_m: float, s_end_m: float, segment_m: float = SEGMENT_M,
+) -> list[float] | None:
+    """Extrahiert für einen Abschnitt [s_start, s_end] das relative Höhenprofil.
+
+    `full_profil`: Gesamt-Höhenprofil der Route als Liste [s_m, hoehe_m] (absolut).
+    Rückgabe: Liste von Höhen **relativ zur Abschnitts-Starthöhe** (erster Wert 0),
+    je `segment_m` abgetastet — so gehen Zwischen-Hochpunkte (z. B. ein Damm) in die
+    segmentweise Drucklinie/Hochpunkt-Prüfung ein, nicht nur Anfang und Ende.
+    None, wenn kein verwertbares Profil vorliegt.
+    """
+    if not full_profil or s_end_m <= s_start_m:
+        return None
+    pts = [(float(s), float(h)) for s, h in full_profil if h is not None]
+    if len(pts) < 2:
+        return None
+    pts.sort(key=lambda p: p[0])
+
+    def h_at(s: float) -> float:
+        if s <= pts[0][0]:
+            return pts[0][1]
+        if s >= pts[-1][0]:
+            return pts[-1][1]
+        for (s1, h1), (s2, h2) in zip(pts, pts[1:]):
+            if s1 <= s <= s2:
+                t = (s - s1) / (s2 - s1) if s2 > s1 else 0.0
+                return h1 + t * (h2 - h1)
+        return pts[-1][1]
+
+    h0 = h_at(s_start_m)
+    laenge = s_end_m - s_start_m
+    n = max(1, int(round(laenge / segment_m)))
+    return [round(h_at(s_start_m + i / n * laenge) - h0, 2) for i in range(n + 1)]
+
+
 @dataclass
 class Ansaugpunkt:
     seehoehe_m: float = 430.0
@@ -270,6 +305,15 @@ class Ansaugpunkt:
     saugleitung_laenge_m: float = 0.0
     max_ansaughoehe_m: float = 7.5
     npshr_m: float = 0.0
+    # Höchster Punkt der Saugleitung über dem Wasserspiegel (z. B. über einen Damm
+    # gesaugt). Bindet die Saughöhe wie ein Heber: maßgeblich ist der Scheitel, nicht
+    # die (evtl. tiefere) Pumpenhöhe. 0 = kein Zwischenscheitel.
+    saug_scheitel_m: float = 0.0
+
+    @property
+    def effektive_saughoehe_m(self) -> float:
+        """Für die Saugbilanz maßgebliche Höhe = max(Pumpenhöhe, Saugleitungs-Scheitel)."""
+        return max(self.geodaetische_saughoehe_m, self.saug_scheitel_m or 0.0)
 
 
 @dataclass
@@ -357,15 +401,21 @@ def _auswertung_bei_q(
     druckprofil: list[tuple[float, float]] = []
     stationswerte: list[dict] = []
 
-    # Saugseite der Quellpumpe
+    # Saugseite der Quellpumpe — maßgeblich ist der höchste Punkt der Saugleitung
+    # (Scheitel über einen Damm bindet wie ein Heber), nicht nur die Pumpenhöhe.
+    saughoehe = ansaug.effektive_saughoehe_m
     reserve = verfuegbare_saughoehe_m(
-        ansaug.seehoehe_m, ansaug.geodaetische_saughoehe_m, ansaug.saug_k, q_l_min,
+        ansaug.seehoehe_m, saughoehe, ansaug.saug_k, q_l_min,
         ansaug.saugleitung_laenge_m, ansaug.saug_n_parallel, ansaug.npshr_m)
-    if ansaug.geodaetische_saughoehe_m > ansaug.max_ansaughoehe_m:
+    if saughoehe > ansaug.max_ansaughoehe_m:
         machbar = False
+        scheitel_hinweis = (
+            f" (Scheitel Saugleitung {ansaug.saug_scheitel_m:.1f} m)"
+            if ansaug.saug_scheitel_m and ansaug.saug_scheitel_m > ansaug.geodaetische_saughoehe_m
+            else "")
         warnungen.append(
-            f"Geodätische Saughöhe {ansaug.geodaetische_saughoehe_m:.1f} m über "
-            f"Grenze {ansaug.max_ansaughoehe_m:.1f} m.")
+            f"Maßgebliche Saughöhe {saughoehe:.1f} m über Grenze "
+            f"{ansaug.max_ansaughoehe_m:.1f} m{scheitel_hinweis}.")
     if reserve < 0:
         machbar = False
         warnungen.append(f"Saughöhen-Bilanz negativ (Reserve {reserve:.1f} m) bei {q_l_min:.0f} l/min.")
