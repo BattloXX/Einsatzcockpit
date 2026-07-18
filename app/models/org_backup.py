@@ -49,6 +49,9 @@ class OrgBackupConfig(Base):
     weekday: Mapped[int | None] = mapped_column(Integer, nullable=True)        # 0=Mo .. 6=So (weekly)
     keep_count: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
     include_media: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Partielles Backup: Komma-Liste gewaehlter Bereiche (org_export_service.AREA_ROOTS).
+    # NULL = vollstaendig; "" = nur Kern/Stammdaten. Kern-Tabellen sind immer enthalten.
+    include_areas: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ── Letzter Lauf (Statusanzeige/Monitoring) ──────────────────────────────────
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -62,6 +62,74 @@ _EXTRA_LINKS: dict[str, list[tuple[str, str]]] = {
 }
 
 
+# Umschaltbare Backup-Bereiche (partielles Backup). Root-Tabellen, die in KEINEM
+# Bereich stehen, sind "Kern" (Stammdaten/Konfig/Nutzer/Audit) und immer enthalten.
+AREA_ROOTS: dict[str, set[str]] = {
+    "einsaetze": {
+        "incident", "incident_org", "teams_card_post", "lis_synced_object",
+        "atemschutz_pruefung", "atemschutz_pruef_benachrichtigung",
+        "lagefuehrung_feature", "lagefuehrung_event", "lagefuehrung_berechtigung",
+        "lagefuehrung_snapshot",
+    },
+    "gsl": {
+        "major_incident", "incident_site", "gsl_staff_role", "gsl_staff_assignment",
+        "lage_dokument", "cross_site_marker", "cross_marker_media", "site_media",
+        "lage_journal_media", "vehicle_position",
+    },
+    "objekte": {
+        "objekt", "objekt_auswahl", "objekt_bma", "objekt_change", "objekt_dokument",
+        "objekt_dokument_seite", "objekt_einsatz", "objekt_gefahr", "objekt_karten_objekt",
+        "objekt_kategorie", "objekt_kontakt", "objekt_merkmal", "objekt_seite_ki_vorschlag",
+        "objekt_symbol", "objekt_wohnanlage", "objekt_zusatzadresse",
+        "gefahren_katalog", "merkmal_katalog", "infoscreen_url",
+    },
+    "fahrtenbuch": {"fahrt", "fahrt_benachrichtigung", "fahrt_media", "fahrtzweck", "zielort"},
+    "uas": {
+        "uas_checkliste", "uas_device", "uas_einsatz", "uas_einsatz_rolle", "uas_ereignis",
+        "uas_flug", "uas_flugbewegung", "uas_kartenobjekt", "uas_medien", "uas_pilot", "uas_wartung",
+    },
+    "verleih": {
+        "verleih_artikel", "verleih_ausleihe", "verleih_foto", "verleih_geraetetyp",
+        "verleih_position", "verleih_stueckliste",
+    },
+    "wetter": {"weather_alert_log", "weather_alert_rule", "weather_alert_state", "weather_station"},
+    "teilnahme": {"termin", "funktion", "teilnahme"},
+    "mannschaft": {"member"},
+    "sms": {"sms_einsatzinfo_recipient", "sms_forward_rule", "sms_group", "sms_inbox", "sms_log"},
+}
+
+AREA_LABELS: dict[str, str] = {
+    "einsaetze": "Einsätze / Archiv / Lageführung",
+    "gsl": "Großschadenslage (GSL)",
+    "objekte": "Objektverwaltung",
+    "fahrtenbuch": "Fahrtenbuch",
+    "uas": "Drohnen (UAS)",
+    "verleih": "Geräteverleih",
+    "wetter": "Wetterstation / -warnungen",
+    "teilnahme": "Teilnehmerlisten",
+    "mannschaft": "Mannschaft",
+    "sms": "SMS-Gruppen / -Log",
+}
+
+_ALLE_AREA_TABELLEN: set[str] = set().union(*AREA_ROOTS.values())
+
+
+def areas_aus_string(s: str | None) -> set[str] | None:
+    """Parst die gespeicherte Bereichsauswahl. None -> alle (kein partielles Backup)."""
+    if s is None:
+        return None
+    return {a for a in (x.strip() for x in s.split(",")) if a}
+
+
+def _root_erlaubt(tname: str, areas: set[str] | None) -> bool:
+    """True, wenn diese Root-Tabelle exportiert werden soll (Kern immer, sonst je Bereich)."""
+    if areas is None:
+        return True
+    if tname not in _ALLE_AREA_TABELLEN:
+        return True  # Kern (Stammdaten/Konfig) — immer enthalten
+    return any(tname in AREA_ROOTS[a] for a in areas)
+
+
 def _pk_columns(table: Table) -> list:
     return list(table.primary_key.columns)
 
@@ -101,11 +169,12 @@ def _json_wert(v):
     return str(v)
 
 
-def collect_ids(db: Session, org_id: int) -> dict[str, set]:
+def collect_ids(db: Session, org_id: int, areas: set[str] | None = None) -> dict[str, set]:
     """Sammelt je Single-PK-Tabelle die zu exportierenden Primaerschluessel.
 
-    Assoziationstabellen (zusammengesetzter PK) werden hier NICHT gesammelt; sie
-    sind Blaetter und werden beim Schreiben ueber ihre FKs gefiltert.
+    areas=None -> vollstaendig; sonst nur Kern-Tabellen + die gewaehlten Bereiche
+    (partielles Backup). Assoziationstabellen (zusammengesetzter PK) werden hier NICHT
+    gesammelt; sie sind Blaetter und werden beim Schreiben ueber ihre FKs gefiltert.
     """
     md = Base.metadata
     rules = scope_rules()
@@ -113,6 +182,8 @@ def collect_ids(db: Session, org_id: int) -> dict[str, set]:
 
     # 1. Roots
     for tname, col in rules.items():
+        if not _root_erlaubt(tname, areas):
+            continue
         table = md.tables[tname]
         pk = _single_pk(table)
         if pk is None:
@@ -123,7 +194,7 @@ def collect_ids(db: Session, org_id: int) -> dict[str, set]:
     # Incident zusaetzlich ueber Kollaboration (incident_org)
     inc = md.tables.get("incident")
     io = md.tables.get("incident_org")
-    if inc is not None and io is not None:
+    if inc is not None and io is not None and _root_erlaubt("incident", areas):
         extra = db.execute(
             select(inc.c.id).where(
                 inc.c.id.in_(select(io.c.incident_id).where(io.c.org_id == org_id))
@@ -193,9 +264,11 @@ def _serialisiere_tabelle(db: Session, table: Table, collected: dict[str, set]) 
     return zeilen
 
 
-def export_org(db: Session, org_id: int, out_dir: Path, include_media: bool = True) -> Path:
-    """Exportiert alle Daten (+ optional Medien) einer Org als ZIP; gibt den Pfad zurueck.
+def export_org(db: Session, org_id: int, out_dir: Path, include_media: bool = True,
+               areas: set[str] | None = None) -> Path:
+    """Exportiert die Daten (+ optional Medien) einer Org als ZIP; gibt den Pfad zurueck.
 
+    areas=None -> vollstaendig; sonst partielles Backup (Kern + gewaehlte Bereiche).
     Voraussetzung: der Aufrufer hat set_tenant_context(db, None) gesetzt (System-Modus),
     damit die explizite Org-Filterung hier nicht mit dem Tenant-Listener kollidiert.
     """
@@ -203,7 +276,7 @@ def export_org(db: Session, org_id: int, out_dir: Path, include_media: bool = Tr
     from app.routers.ui_backup import _build_export as _config_export
 
     md = Base.metadata
-    collected = collect_ids(db, org_id)
+    collected = collect_ids(db, org_id, areas)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%SZ")
@@ -242,6 +315,7 @@ def export_org(db: Session, org_id: int, out_dir: Path, include_media: bool = Tr
             "media_count": len(medien_pfade),
             "redacted_columns": "*_enc",
             "excluded_tables": sorted(EXCLUDE_TABLES),
+            "areas": sorted(areas) if areas is not None else "all",
         }
         zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
 

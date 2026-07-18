@@ -115,3 +115,40 @@ def test_medien_referenzen_zusammengesetzt():
 
 def test_medien_referenzen_unbekannte_tabelle():
     assert oem.medien_referenzen("member", [{"id": 1}]) == []
+
+
+# ── Partielles Backup (Bereiche) ──────────────────────────────────────────────
+
+def test_area_roots_sind_echte_roots():
+    rules = oes.scope_rules()
+    for area, tabellen in oes.AREA_ROOTS.items():
+        for t in tabellen:
+            assert t in rules, f"AREA_ROOTS[{area}] enthaelt Nicht-Root {t}"
+
+
+def test_areas_aus_string():
+    assert oes.areas_aus_string(None) is None            # vollstaendig
+    assert oes.areas_aus_string("") == set()              # nur Kern
+    assert oes.areas_aus_string("objekte, mannschaft") == {"objekte", "mannschaft"}
+
+
+def test_partieller_export_laesst_bereich_weg(db, tmp_path):
+    a = _org(db, "Partial Org")
+    db.add(Member(org_id=a.id, lastname="Mann", firstname="M"))
+    from app.models.objekt import Objekt
+    db.add(Objekt(org_id=a.id, nummer="P-1", name="Haus P"))
+    db.commit()
+
+    # Nur Mannschaft -> Objekt fehlt, Member da
+    ziel = oes.export_org(db, a.id, tmp_path, include_media=False, areas={"mannschaft"})
+    with zipfile.ZipFile(ziel) as zf:
+        namen = set(zf.namelist())
+        manifest = json.loads(zf.read("manifest.json"))
+    assert "data/member.jsonl" in namen
+    assert "data/objekt.jsonl" not in namen
+    assert manifest["areas"] == ["mannschaft"]
+
+    # Vollstaendig -> Objekt enthalten
+    ziel2 = oes.export_org(db, a.id, tmp_path, include_media=False, areas=None)
+    with zipfile.ZipFile(ziel2) as zf:
+        assert "data/objekt.jsonl" in set(zf.namelist())
