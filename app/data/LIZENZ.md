@@ -13,11 +13,21 @@ unter der **Datenlizenz Deutschland – Namensnennung – Version 2.0 (dl-de/by-
 
 ## Hinweis
 
-Die hier mitgelieferte CSV ist ein **kleiner, redaktioneller Auszug** häufiger ADR-Stoffe
-(**Seed**), damit die Funktion offline sofort läuft. Der Parser
-(`app/services/gefahrgut_service.py`) ordnet die Spalten tolerant über die Kopfzeile zu
-(UN-Nummer, Benennung/Stoffname, Klasse, Klassifizierungscode, Gefahrnummer/Kemler,
-Verpackungsgruppe).
+Die hier mitgelieferte CSV ist der **vollständige ADR-Stoffbestand** (2347 UN-Nummern),
+aufbereitet aus dem **Gefahrgutdatenservice der BAM** (ADR im UN-Nummern-System,
+Datei `ADR25_csv.txt`, Stand 2026-07). Damit läuft die Offline-Suche sofort ohne Sync.
+Je UN-Nummer wird die erste Spezifikation übernommen; Stoffnamen sind die amtlichen
+ADR-Benennungen (Großschreibung wie auf der Kennzeichnung), ggf. um die Spezifikation
+ergänzt (z. B. „AMMONIUMPIKRAT, trocken").
+
+Der Parser (`app/services/gefahrgut_service.py`) ordnet die Spalten tolerant über die
+Kopfzeile zu (UN-Nummer, Benennung/Stoffname, Klasse, Klassifizierungscode,
+Gefahrnummer/Kemler, Verpackungsgruppe) und erkennt sowohl dieses kompakte `;`-Seed-Format
+als auch das rohe BAM-Datenservice-Format (TAB-getrennt, Spalten `S_UNNR`/`S_NAME`/… ,
+auch als ZIP mit `ADR25_csv.txt`), das der tägliche Sync direkt verarbeitet.
+
+Bezug der Rohdaten: <https://tes.bam.de/datenbank-gefahrgut/produkte/gefahrgutdatenservice>
+(ADR, UN-Nummern-System, ZIP). Kostenlos seit 23.07.2025, dl-de/by-2.0.
 
 **Vorrang der gesyncten Datei:** Liegt unter `NACHSCHLAGEWERK_DATA_DIR/bam_gefahrgut.csv`
 (Standard `app_storage/nachschlagewerk/`) die vollständige, per täglichem Sync bezogene

@@ -57,13 +57,14 @@ def _seconds_until_next(hour: int, minute: int) -> float:
 
 def _valide_csv(text: str) -> int:
     """Prueft die heruntergeladene CSV; gibt die Zahl gueltiger UN-Zeilen zurueck (0 = ungueltig)."""
-    if not text or ";" not in text:
+    if not text:
         return 0
-    reader = csv.reader(io.StringIO(text), delimiter=";")
+    delim = gefahrgut_service._detect_delimiter(text)
+    reader = csv.reader(io.StringIO(text), delimiter=delim)
     header = next(reader, [])
-    if gefahrgut_service._finde_spalte(header, "un") < 0:
+    idx_un = gefahrgut_service._finde_spalte(header, "unnr", "unnummer", "un")
+    if idx_un < 0:
         return 0
-    idx_un = gefahrgut_service._finde_spalte(header, "un")
     n = 0
     for row in reader:
         if idx_un < len(row) and gefahrgut_service._norm_un(row[idx_un]):
@@ -89,20 +90,24 @@ def _ist_zip(rohdaten: bytes) -> bool:
 def _extrahiere_csv(rohdaten: bytes) -> str | None:
     """Liefert den CSV-Text aus der Antwort.
 
-    - Direkte CSV -> dekodieren.
-    - ZIP (z. B. BAM-Download mit BAM-Gefahrgutdaten.csv + -status.csv) -> das
-      .csv-Member mit den MEISTEN gueltigen UN-Zeilen waehlen (das ist die
-      Gefahrgutdaten-Datei, nicht die Status-Datei).
+    - Direkte CSV/TXT -> dekodieren.
+    - ZIP -> das Tabellen-Member mit den MEISTEN gueltigen UN-Zeilen waehlen.
+      Deckt beide BAM-Auslieferungen ab: den Open-Data-Download (.csv, z. B.
+      BAM-Gefahrgutdaten.csv + -status.csv) und den Datenservice (ADR25_csv.txt
+      im Ordner + viele Sondervorschriften-.TXT). "csv"-benannte Member zuerst,
+      danach frueher Abbruch, sobald die Datentabelle klar erkannt ist.
     """
     if not _ist_zip(rohdaten):
         return _decode(rohdaten)
     try:
         with zipfile.ZipFile(io.BytesIO(rohdaten)) as zf:
+            kandidaten = [n for n in zf.namelist()
+                          if n.lower().endswith((".csv", ".txt"))]
+            kandidaten.sort(
+                key=lambda n: 0 if "csv" in n.rsplit("/", 1)[-1].lower() else 1)
             beste_text: str | None = None
             beste_zahl = 0
-            for name in zf.namelist():
-                if not name.lower().endswith(".csv"):
-                    continue
+            for name in kandidaten:
                 try:
                     text = _decode(zf.read(name))
                 except Exception:
@@ -111,6 +116,8 @@ def _extrahiere_csv(rohdaten: bytes) -> str | None:
                 if zahl > beste_zahl:
                     beste_zahl = zahl
                     beste_text = text
+                    if zahl >= 500:  # eindeutig die Gefahrgut-Tabelle -> Rest sparen
+                        break
             if beste_text is None:
                 logger.warning("Gefahrgut-Sync: ZIP enthaelt keine gueltige Gefahrgut-CSV.")
             return beste_text

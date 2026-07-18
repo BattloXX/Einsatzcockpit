@@ -69,6 +69,23 @@ def _finde_spalte(header: list[str], *schluessel: str) -> int:
     return -1
 
 
+def _detect_delimiter(text: str) -> str:
+    """Trennzeichen der Kopfzeile erkennen: TAB (BAM-Datenservice) oder ; (Seed)."""
+    erste = text.split("\n", 1)[0]
+    return "\t" if erste.count("\t") > erste.count(";") else ";"
+
+
+def _lies_text(pfad: Path) -> str:
+    """Liest eine CSV tolerant ein (BAM liefert cp1252, Seed/Sync schreiben UTF-8)."""
+    roh = pfad.read_bytes()
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return roh.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return roh.decode("utf-8", errors="ignore")
+
+
 def _lade_daten() -> dict[str, dict]:
     """Lädt die CSV lazy in ein dict {norm_un: felder}. Robust gegen fehlende Datei."""
     global _DATEN
@@ -81,38 +98,55 @@ def _lade_daten() -> dict[str, dict]:
         _DATEN = daten
         return daten
     try:
-        with pfad.open(encoding="utf-8-sig", newline="") as fh:
-            reader = csv.reader(fh, delimiter=";")
-            header = next(reader, [])
-            idx_un = _finde_spalte(header, "un")
-            idx_name = _finde_spalte(header, "benennung", "stoff", "bezeichnung", "name")
-            idx_klasse = _finde_spalte(header, "klasse")
-            idx_code = _finde_spalte(header, "klassifiz", "code")
-            idx_gnr = _finde_spalte(header, "gefahrnummer", "kemler", "gefahrnr")
-            idx_vg = _finde_spalte(header, "verpack")
-            if idx_un < 0:
-                logger.warning("Gefahrgut-CSV ohne UN-Spalte — Anreicherung deaktiviert")
-                _DATEN = daten
-                return daten
+        text = _lies_text(pfad)
+        delim = _detect_delimiter(text)
+        reader = csv.reader(text.splitlines(), delimiter=delim)
+        header = next(reader, [])
+        # BAM-Datenservice nutzt S_-Codes (S_UNNR/S_NAME/S_GEFAHRNR ...), der Seed
+        # sprechende Koepfe. _finde_spalte trifft beide ueber Schluesselwoerter.
+        idx_un = _finde_spalte(header, "unnr", "unnummer", "un")
+        idx_vorsilbe = _finde_spalte(header, "vorsilbe")
+        idx_name = _finde_spalte(header, "benennung", "stoff", "bezeichnung", "name")
+        idx_spez = _finde_spalte(header, "spezifikation")
+        idx_klasse = _finde_spalte(header, "klasse")
+        idx_code = _finde_spalte(header, "klassifiz", "code")
+        idx_gnr = _finde_spalte(header, "gefahrnummer", "kemler", "gefahrnr")
+        # "vp_grup" (BAM S_VP_GRUPPE) vor "verpack" (Seed) — sonst wuerde die
+        # BAM-Verpackungsanweisung (S_VERPACKUNGSANW1) faelschlich getroffen.
+        idx_vg = _finde_spalte(header, "vp_grup", "verpackungsgruppe", "verpack")
+        if idx_un < 0:
+            logger.warning("Gefahrgut-CSV ohne UN-Spalte — Anreicherung deaktiviert")
+            _DATEN = daten
+            return daten
 
-            def _get(row: list[str], i: int) -> str | None:
-                if 0 <= i < len(row):
-                    wert = row[i].strip()
-                    return wert or None
-                return None
+        def _get(row: list[str], i: int) -> str | None:
+            if 0 <= i < len(row):
+                wert = row[i].strip()
+                return wert or None
+            return None
 
-            for row in reader:
-                key = _norm_un(_get(row, idx_un))
-                if not key:
-                    continue
-                daten[key] = {
-                    "un_nummer": (_get(row, idx_un) or "").strip(),
-                    "stoffname": _get(row, idx_name),
-                    "klasse": _get(row, idx_klasse),
-                    "klassifizierungscode": _get(row, idx_code),
-                    "gefahrnummer": _get(row, idx_gnr),
-                    "verpackungsgruppe": _get(row, idx_vg),
-                }
+        def _name(row: list[str]) -> str | None:
+            """Stoffname aus Vorsilbe + Benennung (+ Spezifikation), soweit vorhanden."""
+            teile = [w for w in (_get(row, idx_vorsilbe), _get(row, idx_name)) if w]
+            basis = " ".join(teile)
+            spez = _get(row, idx_spez)
+            if spez:
+                basis = f"{basis}, {spez}" if basis else spez
+            return basis or None
+
+        for row in reader:
+            key = _norm_un(_get(row, idx_un))
+            # BAM fuehrt je UN mehrere Zeilen (Spezifikationen) — erste behalten.
+            if not key or key in daten:
+                continue
+            daten[key] = {
+                "un_nummer": (_get(row, idx_un) or "").strip(),
+                "stoffname": _name(row),
+                "klasse": _get(row, idx_klasse),
+                "klassifizierungscode": _get(row, idx_code),
+                "gefahrnummer": _get(row, idx_gnr),
+                "verpackungsgruppe": _get(row, idx_vg),
+            }
     except Exception:
         logger.exception("Gefahrgut-CSV konnte nicht gelesen werden")
     _DATEN = daten

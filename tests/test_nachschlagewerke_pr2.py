@@ -162,3 +162,41 @@ def test_sync_uebernimmt_zip(monkeypatch, tmp_path):
 def test_decode_cp1252_umlaute():
     roh = "un_nummer;stoffname\n1017;Chlor \xe4tzend\n".encode("cp1252")
     assert "ätzend" in sync._decode(roh)
+
+
+# ── BAM-Datenservice: TAB-Format + .txt-Member zwischen Sondervorschriften ────
+
+def _bam_tab(n_rows: int) -> str:
+    kopf = "S_UNNR\tN_LFDNR\tS_NAME\tS_KLASSE\tS_KLASSIFIZIERUNGSCODE\tS_VP_GRUPPE\tS_GEFAHRNR"
+    zeilen = [f"{1000 + i}\t1\tTeststoff {i}\t3\tF1\tII\t33" for i in range(n_rows)]
+    return "\r\n".join([kopf, *zeilen]) + "\r\n"
+
+
+def test_valide_csv_tab_bam():
+    # TAB-getrennt mit S_UNNR wird erkannt (kein Semikolon noetig).
+    assert sync._valide_csv(_bam_tab(60)) == 60
+
+
+def test_extrahiere_csv_bam_datenservice_zip():
+    # ZIP wie der BAM-Datenservice: Datentabelle als _csv.txt im Ordner,
+    # dazwischen viele Sondervorschriften-.TXT ohne UN-Spalte.
+    members = {
+        "Strassenverkehr (ADR)/Sondervorschriften/D_ADR_16.TXT": "Freitext ohne Tabelle.\n",
+        "Strassenverkehr (ADR)/Sondervorschriften/D_ADR_105.TXT": "Noch ein Hinweis.\n",
+        "Strassenverkehr (ADR)/ADR25_csv.txt": _bam_tab(70),
+    }
+    text = sync._extrahiere_csv(_zip_bytes(members))
+    assert text is not None and sync._valide_csv(text) == 70
+
+
+def test_sync_uebernimmt_bam_txt_zip(monkeypatch, tmp_path):
+    monkeypatch.setattr(sync.settings, "NACHSCHLAGEWERK_GEFAHRGUT_URL", "https://example.test/adr.zip")
+    monkeypatch.setattr(sync.settings, "NACHSCHLAGEWERK_DATA_DIR", str(tmp_path))
+    payload = _zip_bytes({
+        "ADR/Sondervorschriften/D_ADR_16.TXT": "Freitext.\n",
+        "ADR/ADR25_csv.txt": _bam_tab(60),
+    })
+    monkeypatch.setattr(sync.httpx, "AsyncClient",
+                        lambda **kw: _FakeClient(_FakeResp(payload)))
+    assert asyncio.run(sync.sync_gefahrgut()) is True
+    assert gg.suche("1000")
