@@ -36,7 +36,7 @@ logger = logging.getLogger("einsatzleiter.org_backup")
 
 router = APIRouter(prefix="/admin")
 
-_PROTOKOLLE = ("sftp", "scp", "rsync", "ftp", "ftps", "rclone")
+_PROTOKOLLE = ("sftp", "scp", "rsync", "ftp", "ftps", "rclone", "graph")
 
 
 def _lade_config(db: Session, org_id: int) -> OrgBackupConfig | None:
@@ -165,6 +165,12 @@ async def org_backup_save(
     keep_count: int = Form(7),
     include_media: str = Form(""),
     areas: list[str] = Form(default=[]),
+    graph_tenant_id: str = Form(""),
+    graph_client_id: str = Form(""),
+    graph_client_secret: str = Form(""),
+    graph_drive_id: str = Form(""),
+    graph_folder: str = Form(""),
+    clear_graph_secret: str = Form(""),
 ):
     from app.services.org_export_service import AREA_ROOTS
     user = request.state.user
@@ -191,6 +197,14 @@ async def org_backup_save(
     cfg.keep_count = max(1, keep_count)
     cfg.include_media = include_media == "1"
     cfg.include_areas = ",".join(gewaehlt)  # "" = nur Kern; alle gewaehlt = vollstaendig
+    cfg.graph_tenant_id = graph_tenant_id.strip() or None
+    cfg.graph_client_id = graph_client_id.strip() or None
+    cfg.graph_drive_id = graph_drive_id.strip() or None
+    cfg.graph_folder = graph_folder.strip() or None
+    if graph_client_secret:
+        cfg.graph_client_secret_enc = encrypt_secret(graph_client_secret)
+    elif clear_graph_secret == "1":
+        cfg.graph_client_secret_enc = None
     # Secrets nur bei neuer Eingabe ueberschreiben; leeres Feld laesst Bestand unberuehrt.
     if password:
         cfg.password_enc = encrypt_secret(password)
