@@ -83,6 +83,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
 | [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
 | [Nachschlagewerke](Anwender-Nachschlagewerke) | Gefahrgut nach UN-Nummer/Stoffname, Rettungsdatenblätter, Evakuierungsradius & Ausbreitung — offlinefähig |
+| [Förderstrecken-Planer](Anwender-Foerderstrecken-Planer) | Löschwasserförderung lange Wegstrecke: Q-Berechnung, Druckprofil mit Hochpunkt-Prüfung, Maschinisten-Sollwerte, Material, PDF & Zettel-Link |
 
 ### Administration
 | Seite | Beschreibung |
@@ -107,6 +108,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
 | [Nachschlagewerke](Administration-Nachschlagewerke) | Modul aktivieren (System+Org), Gefahrgut-Datenquelle (BAM/ADR), Rettungskarten-URL, Offline-Funktion |
 | [Print & Alarm Gateway](Administration-Print-Alarm-Gateway) | Modul aktivieren (System+Org), Gateways koppeln, Drucker & Discovery, Druckregeln (Automatikdruck), manueller Druck |
+| [Förderstrecken-Planer](Administration-Foerderstrecken-Planer) | Modul aktivieren (System+Org), Pumpen/Schläuche mit Kennlinien (Vorlagen TS 1600/TS 1200), Kalibrierung über Übungsmessungen, PDF & Maschinisten-Token |
 
 ### Entwickler
 | Seite | Beschreibung |

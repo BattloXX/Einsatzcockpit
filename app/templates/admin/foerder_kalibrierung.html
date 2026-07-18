@@ -1,0 +1,116 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Kalibrierung – Förderstrecke – Admin{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>🎯 Kalibrierung</h1>
+      <p class="page-header__sub">Schlauch-k-Werte aus Übungsmessungen verbessern</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="btn btn--secondary" href="/admin/foerderschlaeuche">🧵 Schläuche</a>
+      <form method="post" action="/admin/foerderkalibrierung/berechnen">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--primary">Kalibrierung berechnen</button>
+      </form>
+    </div>
+  </div>
+
+  {% if request.query_params.get('vorschlaege') is not none %}
+  <div class="alert alert--success">{{ request.query_params.get('vorschlaege') }} neue(r) Vorschlag/Vorschläge erzeugt.</div>
+  {% endif %}
+
+  {# ── Review-Queue ── #}
+  {% if vorschlaege %}
+  <div class="card" style="padding:16px;margin-bottom:14px;border-left:4px solid #7c3aed;">
+    <h3 style="margin:0 0 8px;">Vorschläge (Review)</h3>
+    <p class="text-muted" style="font-size:.82rem;margin:0 0 10px;">
+      Vorschläge werden nie automatisch übernommen — zum Korrigieren: verwerfen und neu messen.
+    </p>
+    <table class="table-admin table-admin--cards">
+      <thead><tr><th>Schlauch</th><th>k alt</th><th>k neu</th><th>Messungen</th><th>Begründung</th><th>Aktionen</th></tr></thead>
+      <tbody>
+        {% for v in vorschlaege %}
+        <tr>
+          <td>{{ schlauch_map.get(v.schlauch_typ_id, v.schlauch_typ_id) }}</td>
+          <td>{{ '%.3f'|format(v.k_alt) if v.k_alt is not none else '–' }}</td>
+          <td><strong>{{ '%.3f'|format(v.k_neu) }}</strong></td>
+          <td>{{ v.n_messungen }}</td>
+          <td style="font-size:.8rem;">{{ v.begruendung }}</td>
+          <td style="display:flex;gap:6px;flex-wrap:wrap;">
+            <form method="post" action="/admin/foerderkalibrierung/vorschlag/{{ v.id }}/uebernehmen">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button class="btn btn--primary btn--xs">✓ Übernehmen</button>
+            </form>
+            <form method="post" action="/admin/foerderkalibrierung/vorschlag/{{ v.id }}/verwerfen">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button class="btn btn--ghost btn--xs">Verwerfen</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# ── Messung erfassen ── #}
+  <div class="card" style="padding:16px;margin-bottom:14px;">
+    <h3 style="margin:0 0 8px;">Messung erfassen</h3>
+    <form method="post" action="/admin/foerderkalibrierung/messung">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Schlauch</label>
+          <select name="schlauch_typ_id" class="form-select" required>
+            <option value="">— wählen —</option>
+            {% for s in schlaeuche %}<option value="{{ s.id }}">{{ s.kuerzel }} (k={{ s.k_verlust }})</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Q gemessen [l/min]</label><input name="q_gemessen_l_min" class="form-input" type="number" required></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Leitungslänge [m]</label><input name="laenge_m" class="form-input" type="number" required></div>
+        <div class="form-group"><label class="form-label">Leitungen parallel</label><input name="n_parallel" class="form-input" type="number" min="1" value="1"></div>
+        <div class="form-group"><label class="form-label">Höhendifferenz [m]</label><input name="delta_hoehe_m" class="form-input" type="number" step="0.1" value="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Druck aus (Pumpe) [bar]</label><input name="p_aus_bar" class="form-input" type="number" step="0.1" required></div>
+        <div class="form-group"><label class="form-label">Druck ein (Folgepumpe) [bar]</label><input name="p_ein_folge_bar" class="form-input" type="number" step="0.1" required></div>
+      </div>
+      <div class="form-group"><label class="form-label">Notiz</label><input name="notiz" class="form-input" placeholder="Nassbewerb 2026, Schlauch Charge …"></div>
+      <button class="btn btn--primary btn--sm">Messung speichern</button>
+    </form>
+  </div>
+
+  {# ── Messungen ── #}
+  {% if messungen %}
+  <table class="table-admin table-admin--cards">
+    <thead><tr><th>Datum</th><th>Schlauch</th><th>Q</th><th>Länge</th><th>‖</th><th>Δh</th><th>p aus</th><th>p ein</th><th></th></tr></thead>
+    <tbody>
+      {% for m in messungen %}
+      <tr>
+        <td>{{ (m.datum|local_datetime) if m.datum else '' }}</td>
+        <td>{{ schlauch_map.get(m.schlauch_typ_id, '–') }}</td>
+        <td>{{ m.q_gemessen_l_min }}</td>
+        <td>{{ m.laenge_m }} m</td>
+        <td>{{ m.n_parallel }}</td>
+        <td>{{ m.delta_hoehe_m }}</td>
+        <td>{{ m.p_aus_bar }}</td>
+        <td>{{ m.p_ein_folge_bar }}</td>
+        <td>
+          <form method="post" action="/admin/foerderkalibrierung/messung/{{ m.id }}/loeschen" onsubmit="return confirm('Messung löschen?');">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button class="btn btn--ghost btn--xs">×</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="card" style="padding:20px;text-align:center;color:var(--text-muted);">Noch keine Messungen erfasst.</div>
+  {% endif %}
+</div>
+{% endblock %}

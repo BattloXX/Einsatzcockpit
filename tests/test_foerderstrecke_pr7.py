@@ -134,3 +134,101 @@ def test_verwerfen_laesst_k_unveraendert(db_ctx):
     assert vorschlag_verwerfen(db, v, user_id=None) is True
     assert schlauch.k_verlust == 2.0            # unverändert
     assert v.status == KALIBRIER_VERWORFEN
+
+
+# ── Kalibrierung UI (HTTP) ───────────────────────────────────────────────────
+
+from app.core.security import hash_password  # noqa: E402
+from app.db import SessionLocal  # noqa: E402
+from app.models.master import FireDept, OrgSettings, SystemSettings  # noqa: E402
+from app.models.user import Role, User, UserRole  # noqa: E402
+
+
+def _login(client, username, password):
+    client.get("/login")
+    csrf = client.cookies.get("ec_csrf")
+    return client.post("/login", data={"username": username, "password": password, "_csrf": csrf},
+                       follow_redirects=False)
+
+
+def _rolle_db(db, code):
+    role = db.query(Role).filter(Role.code == code).first()
+    if role is None:
+        role = Role(code=code, name=code); db.add(role); db.flush()
+    return role
+
+
+def _setup_kalib(username):
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        org = db.query(FireDept).first()
+        user = User(username=username, password_hash=hash_password("Test1234!"),
+                    display_name="Kal", org_id=org.id, active=True)
+        db.add(user); db.flush()
+        db.add(UserRole(user_id=user.id, role_id=_rolle_db(db, "org_admin").id))
+        sys_row = db.get(SystemSettings, "foerderstrecke_module_enabled")
+        if sys_row is None:
+            db.add(SystemSettings(key="foerderstrecke_module_enabled", value="true"))
+        else:
+            sys_row.value = "true"
+        os_row = db.query(OrgSettings).filter_by(org_id=org.id).first()
+        if os_row is None:
+            os_row = OrgSettings(org_id=org.id); db.add(os_row)
+        os_row.foerderstrecke_module_enabled = True
+        s = FoerderSchlauchTyp(org_id=org.id, kuerzel="B-75", durchmesser_mm=75, k_verlust=2.0)
+        db.add(s); db.commit()
+        return org.id, s.id
+    finally:
+        db.close()
+
+
+@pytest.fixture(autouse=True)
+def _no_login_ratelimit():
+    from app.core.rate_limit import limiter
+    if limiter is None:
+        yield
+        return
+    prev = limiter.enabled; limiter.enabled = False
+    try:
+        yield
+    finally:
+        limiter.enabled = prev
+
+
+def test_kalibrierung_ui_flow(client):
+    org_id, sid = _setup_kalib("kalib_ui")
+    _login(client, "kalib_ui", "Test1234!")
+    client.get("/admin/foerderkalibrierung")
+    csrf = client.cookies.get("ec_csrf")
+
+    # Drei Messungen erfassen, die einen k~1.56 nahelegen (aktuell 2.0)
+    from app.services.foerderstrecke_service import reibungsverlust_bar
+    for q, laenge in [(800, 100), (600, 200), (1000, 150)]:
+        reib = reibungsverlust_bar(1.56, q, laenge)
+        client.post("/admin/foerderkalibrierung/messung", data={
+            "_csrf": csrf, "schlauch_typ_id": sid, "q_gemessen_l_min": q, "laenge_m": laenge,
+            "n_parallel": 1, "delta_hoehe_m": 0, "p_aus_bar": 8.0, "p_ein_folge_bar": round(8.0 - reib, 3),
+        }, follow_redirects=False)
+
+    # Kalibrierung berechnen → Vorschlag erzeugt
+    client.post("/admin/foerderkalibrierung/berechnen", data={"_csrf": csrf}, follow_redirects=False)
+    from app.models.foerderstrecke import FoerderKalibrierVorschlag
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        v = db.query(FoerderKalibrierVorschlag).filter(
+            FoerderKalibrierVorschlag.org_id == org_id).first()
+        assert v is not None
+        assert abs(v.k_neu - 1.56) < 0.05
+        vid = v.id
+    finally:
+        db.close()
+
+    # Übernehmen → Schlauch-k aktualisiert
+    client.post(f"/admin/foerderkalibrierung/vorschlag/{vid}/uebernehmen", data={"_csrf": csrf},
+                follow_redirects=False)
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        s = db.get(FoerderSchlauchTyp, sid)
+        assert abs(s.k_verlust - 1.56) < 0.05
+    finally:
+        db.close()
