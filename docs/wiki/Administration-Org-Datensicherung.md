@@ -53,14 +53,30 @@ Unter **„Automatische Sicherung"** ein Ziel eintragen, testen und einen Zeitpl
 | `ftps` | FTP + TLS | Passwort |
 | `ftp` | FTP | Passwort — **unverschlüsselt, nur im LAN** |
 | `rclone` | rclone-Remote | rclone-Config (S3, WebDAV, Backblaze, Google Drive …) |
+| `graph` | **Microsoft 365** | Azure-App (App-only), Ziel per **Drive-ID** (SharePoint-Dokumentbibliothek ODER OneDrive) |
 
 - **Zeitplan:** täglich (ab Stunde, UTC) oder wöchentlich (Wochentag + Stunde). Ein
   Hintergrund-Loop schiebt fällige Sicherungen automatisch, höchstens einmal pro Tag.
+- **Umfang (partielles Backup):** je Bereich (Einsätze, GSL, Objekte, Fahrtenbuch, UAS,
+  Verleih, Wetter, Teilnahme, Mannschaft, SMS) ab-/anwählbar. **Stammdaten und Konfiguration
+  sind immer enthalten.** Gilt für Download und Push.
+- **Aufbewahrung (Remote-Retention):** nach jedem Push werden am Ziel die ältesten Archive
+  über `Aufbewahrung` (keep) hinaus automatisch gelöscht.
 - **Verbindung testen:** lädt eine kleine Probe-Datei hoch.
 - **Jetzt sichern:** erstellt sofort ein Archiv und überträgt es.
-- Zugangsdaten (Passwort / SSH-Key) werden **Fernet-verschlüsselt** gespeichert; ein leeres
-  Feld beim Speichern lässt das bestehende Secret unangetastet.
+- Zugangsdaten (Passwort / SSH-Key / Graph-Secret) werden **Fernet-verschlüsselt** gespeichert;
+  ein leeres Feld beim Speichern lässt das bestehende Secret unangetastet.
 - Der Status des letzten Laufs (OK/Fehler) wird angezeigt.
+
+### Microsoft 365 (SharePoint / OneDrive)
+
+Ein gemeinsames Protokoll für beide Ablageorte, adressiert über eine **Drive-ID**:
+
+1. Azure-App-Registrierung (App-only/Client-Credentials) mit Application-Permission
+   `Sites.ReadWrite.All` (SharePoint) bzw. `Files.ReadWrite.All` (OneDrive), admin-consented.
+2. **Tenant-ID, Client-ID, Client-Secret** und die **Drive-ID** des Ziels (Dokumentbibliothek
+   der SharePoint-Site bzw. OneDrive-Drive) + Zielordner eintragen.
+3. Upload läuft als Graph-Upload-Session (beliebige Dateigröße), Retention über Graph-Listen/Löschen.
 
 > Ziel und Übertragung liegen in der Verantwortung der Organisation. Ein verschlüsseltes
 > Protokoll wählen (nicht `ftp` über offene Netze) und das Zielverzeichnis zugriffsbeschränkt
@@ -73,13 +89,17 @@ Unter **„Automatische Sicherung"** ein Ziel eintragen, testen und einen Zeitpl
 **Admin → Datensicherung → „Archiv wiederherstellen…"** (`/admin/org-backup/restore`):
 
 1. Archiv hochladen → ohne Bestätigung erscheint eine **Vorschau** (Quell-Org, Tabellen, Anzahl).
-2. Mit **„Wiederherstellung bestätigen"** wird eine **neue Organisation** angelegt und das Archiv
-   dort importiert. Alle Datensätze erhalten **neue IDs** (ID-Remapping), Fremdschlüssel werden
-   umgeschrieben, Medien zurückgelegt. **Bestehende Organisationen bleiben unverändert.**
+2. Modus **„neue Organisation"**: legt eine neue Org an und importiert das Archiv. Alle
+   Datensätze erhalten **neue IDs** (ID-Remapping), Fremdschlüssel werden umgeschrieben, Medien
+   zurückgelegt. Bestehende Organisationen bleiben unverändert.
+3. Modus **„bestehende ersetzen"** (In-place): ersetzt eine gewählte Org. **Vor** dem Ersetzen
+   wird automatisch ein **Sicherheits-Backup** der Ziel-Org erstellt, dann werden alle ihre Daten
+   gelöscht und durch den Archiv-Stand ersetzt. Erfordert Ziel-Org-Auswahl **und** eine explizite
+   zweite Bestätigung.
 
-> Ein In-place-Restore (eine laufende Org überschreibt sich selbst) ist bewusst **nicht**
-> vorgesehen — er würde Datenverlust riskieren. Für Portabilität/DR wird immer in eine neue Org
-> importiert.
+> **Achtung:** Der Ersetzen-Modus ist destruktiv (löscht die bestehenden Daten der Ziel-Org).
+> Das automatische Sicherheits-Backup (Pre-Image) liegt im Server-Backup-Verzeichnis unter
+> `org-safety/` und wird in der Ergebnismeldung genannt.
 
 ---
 

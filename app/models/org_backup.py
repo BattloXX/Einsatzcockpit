@@ -42,6 +42,12 @@ class OrgBackupConfig(Base):
     remote_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ssh_strict: Mapped[str] = mapped_column(String(20), nullable=False, default="accept-new")
     rclone_remote: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Microsoft Graph (SharePoint/OneDrive) — Protokoll "graph"
+    graph_tenant_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    graph_client_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    graph_client_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # Fernet
+    graph_drive_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    graph_folder: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # ── Zeitplan (DB = UTC) ──────────────────────────────────────────────────────
     schedule: Mapped[str] = mapped_column(String(10), nullable=False, default="daily")  # daily|weekly
@@ -70,6 +76,9 @@ class OrgBackupConfig(Base):
         """Genug Angaben fuer einen Push? (rclone braucht ein Remote, sonst Host.)"""
         if self.protocol == "rclone":
             return bool(self.rclone_remote)
+        if self.protocol == "graph":
+            return bool(self.graph_tenant_id and self.graph_client_id
+                        and self.graph_client_secret_enc and self.graph_drive_id)
         if not self.host:
             return False
         if self.protocol in ("ftp", "ftps"):

@@ -130,6 +130,22 @@
         {% if cfg and cfg.ssh_key_enc %}<label style="font-weight:400"><input type="checkbox" name="clear_key" value="1"> Key löschen</label>{% endif %}
       </div>
 
+      <details style="margin-top:12px;" {% if cfg and cfg.protocol == 'graph' %}open{% endif %}>
+        <summary style="cursor:pointer;font-weight:600;">Microsoft 365 (SharePoint / OneDrive) — nur für Protokoll „graph"</summary>
+        <p class="page-header__sub" style="margin:6px 0;">Azure-App (App-only) mit Berechtigung <code>Sites.ReadWrite.All</code> (SharePoint) bzw. <code>Files.ReadWrite.All</code> (OneDrive). Ziel wird über die <strong>Drive-ID</strong> adressiert (SharePoint-Dokumentbibliothek ODER OneDrive-Drive).</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><label>Tenant-ID</label><input class="form-control" name="graph_tenant_id" value="{{ cfg.graph_tenant_id or '' if cfg else '' }}"></div>
+          <div><label>Client-ID</label><input class="form-control" name="graph_client_id" value="{{ cfg.graph_client_id or '' if cfg else '' }}"></div>
+          <div>
+            <label>Client-Secret{% if cfg and cfg.graph_client_secret_enc %} — gesetzt{% endif %}</label>
+            <input class="form-control" type="password" name="graph_client_secret" autocomplete="new-password" placeholder="{% if cfg and cfg.graph_client_secret_enc %}unverändert lassen{% endif %}">
+            {% if cfg and cfg.graph_client_secret_enc %}<label style="font-weight:400"><input type="checkbox" name="clear_graph_secret" value="1"> löschen</label>{% endif %}
+          </div>
+          <div><label>Drive-ID</label><input class="form-control" name="graph_drive_id" value="{{ cfg.graph_drive_id or '' if cfg else '' }}"></div>
+          <div><label>Ordner (im Drive)</label><input class="form-control" name="graph_folder" value="{{ cfg.graph_folder or '' if cfg else '' }}" placeholder="Backups/Einsatzcockpit"></div>
+        </div>
+      </details>
+
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px;">
         <div>
           <label>Zeitplan</label>

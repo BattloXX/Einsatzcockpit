@@ -27,7 +27,7 @@ logger = logging.getLogger("einsatzleiter.backup.remote")
 
 SSH_PROTOKOLLE = ("sftp", "scp", "rsync")
 FTP_PROTOKOLLE = ("ftp", "ftps")
-ALLE_PROTOKOLLE = (*SSH_PROTOKOLLE, *FTP_PROTOKOLLE, "rclone")
+ALLE_PROTOKOLLE = (*SSH_PROTOKOLLE, *FTP_PROTOKOLLE, "rclone", "graph")
 
 
 @dataclass(frozen=True)
@@ -45,13 +45,27 @@ class RemoteConfig:
     sftp_bin: str = "sftp"
     rsync_bin: str = "rsync"
     rclone_bin: str = "rclone"
+    # Microsoft Graph (SharePoint/OneDrive) — Protokoll "graph"
+    graph_tenant: str = ""
+    graph_client: str = ""
+    graph_secret: str = ""
+    graph_drive_id: str = ""
+    graph_folder: str = ""
 
     def ziel_beschreibung(self) -> str:
         """Menschenlesbares Ziel fuer Logs (ohne Geheimnisse)."""
         if self.protocol == "rclone":
             return f"rclone {self.rclone_remote}{self.path}"
+        if self.protocol == "graph":
+            return f"graph drive {self.graph_drive_id}/{self.graph_folder}"
         wer = f"{self.user}@" if self.user else ""
         return f"{self.protocol}://{wer}{self.host}:{self.port or '-'}{self.path or '/'}"
+
+    def graph_ziel(self):
+        from app.services.graph_backup_service import GraphZiel
+        return GraphZiel(tenant=self.graph_tenant, client_id=self.graph_client,
+                         secret=self.graph_secret, drive_id=self.graph_drive_id,
+                         folder=self.graph_folder)
 
 
 def config_pruefen(cfg: RemoteConfig) -> None:
@@ -62,6 +76,13 @@ def config_pruefen(cfg: RemoteConfig) -> None:
     if cfg.protocol == "rclone":
         if not cfg.rclone_remote:
             raise ValueError("rclone: BACKUP_REMOTE_RCLONE_REMOTE fehlt (z. B. 'offsite:').")
+        return
+    if cfg.protocol == "graph":
+        fehlend = [n for n, v in (("Tenant", cfg.graph_tenant), ("Client-ID", cfg.graph_client),
+                                  ("Secret", cfg.graph_secret), ("Drive-ID", cfg.graph_drive_id))
+                   if not v]
+        if fehlend:
+            raise ValueError("graph: fehlende Angaben: " + ", ".join(fehlend))
         return
     if not cfg.host:
         raise ValueError(f"{cfg.protocol}: BACKUP_REMOTE_HOST fehlt.")
@@ -166,6 +187,13 @@ def upload(
     if cfg.protocol == "ftp":
         logger.warning("Remote-Upload: FTP ist UNVERSCHLUESSELT — ftps/sftp bevorzugen.")
 
+    if cfg.protocol == "graph":
+        from app.services import graph_backup_service as gbs
+        ziel = cfg.graph_ziel()
+        for d in dateien:
+            gbs.upload(ziel, Path(d))
+        return
+
     if cfg.protocol in FTP_PROTOKOLLE:
         ftp_upload(cfg, dateien, ftp_factory)
         return
@@ -237,6 +265,10 @@ def config_aus_org(cfg_row: object, key_path: str = "") -> RemoteConfig:
     pw_enc = getattr(cfg_row, "password_enc", None)
     if pw_enc:
         passwort = decrypt_secret(pw_enc)
+    graph_secret = ""
+    gs_enc = getattr(cfg_row, "graph_client_secret_enc", None)
+    if gs_enc:
+        graph_secret = decrypt_secret(gs_enc)
     return RemoteConfig(
         protocol=(getattr(cfg_row, "protocol", "sftp") or "sftp").strip().lower(),
         host=(getattr(cfg_row, "host", "") or "").strip(),
@@ -247,6 +279,11 @@ def config_aus_org(cfg_row: object, key_path: str = "") -> RemoteConfig:
         path=(getattr(cfg_row, "remote_path", "") or "").strip(),
         ssh_strict=(getattr(cfg_row, "ssh_strict", "accept-new") or "accept-new").strip(),
         rclone_remote=(getattr(cfg_row, "rclone_remote", "") or "").strip(),
+        graph_tenant=(getattr(cfg_row, "graph_tenant_id", "") or "").strip(),
+        graph_client=(getattr(cfg_row, "graph_client_id", "") or "").strip(),
+        graph_secret=graph_secret,
+        graph_drive_id=(getattr(cfg_row, "graph_drive_id", "") or "").strip(),
+        graph_folder=(getattr(cfg_row, "graph_folder", "") or "").strip(),
     )
 
 
@@ -309,6 +346,9 @@ def _ssh_host(cfg: RemoteConfig) -> str:
 def _remote_liste(cfg: RemoteConfig, praefix: str, runner: Runner,
                   ftp_factory: Callable[[], ftplib.FTP] | None) -> list[str]:
     """Listet die Remote-Dateinamen (Basenamen) mit gegebenem Praefix."""
+    if cfg.protocol == "graph":
+        from app.services import graph_backup_service as gbs
+        return gbs.liste(cfg.graph_ziel(), praefix)
     if cfg.protocol in FTP_PROTOKOLLE:
         if ftp_factory is None:
             ftp_factory = ftplib.FTP_TLS if cfg.protocol == "ftps" else ftplib.FTP
@@ -344,6 +384,12 @@ def _remote_liste(cfg: RemoteConfig, praefix: str, runner: Runner,
 def _remote_delete(cfg: RemoteConfig, namen: Sequence[str], runner: Runner,
                    ftp_factory: Callable[[], ftplib.FTP] | None) -> None:
     if not namen:
+        return
+    if cfg.protocol == "graph":
+        from app.services import graph_backup_service as gbs
+        ziel = cfg.graph_ziel()
+        for n in namen:
+            gbs.loesche(ziel, n)
         return
     if cfg.protocol in FTP_PROTOKOLLE:
         if ftp_factory is None:
