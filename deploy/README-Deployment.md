@@ -87,6 +87,30 @@ alembic upgrade head
 sudo systemctl restart einsatzleiter
 ```
 
+## Backup & Disaster-Recovery
+
+Automatisierte DB-+Medien-Dumps mit getesteter Restore-Probe (Details:
+[Wiki-Runbook](../../wiki/Betrieb-Backup-und-Disaster-Recovery)):
+
+```bash
+# Als root: Backup- und Restore-Test-Timer installieren
+cp deploy/backup/ec-backup.service deploy/backup/ec-backup.timer /etc/systemd/system/
+cp deploy/backup/ec-restore-test.service deploy/backup/ec-restore-test.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now ec-backup.timer ec-restore-test.timer
+systemctl list-timers 'ec-*'
+
+# Manuell
+su - clp-einsatz && cd /home/clp-einsatz/htdocs/einsatzleiter && source .venv/bin/activate
+python -m app.cli backup          # beide DBs + Medien nach BACKUP_DIR
+python -m app.cli restore-test    # neuesten Dump testweise einspielen + verifizieren
+```
+
+Die Restore-Probe braucht `CREATE`/`DROP` auf die Wegwerf-DB
+(`einsatzleiter_restore_test`) — einmalig als DB-root gewähren (siehe Runbook).
+Die `.env` (v. a. `FERNET_KEY`) **getrennt** sichern — ohne sie sind verschlüsselte
+Secrets nach einem Restore unlesbar.
+
 ## VAPID-Keys generieren (für Web Push)
 
 ```bash

@@ -240,6 +240,21 @@ class Settings(BaseSettings):
     ABFLUSS_POLL_ENABLED: bool = True
     ABFLUSS_POLL_INTERVAL_S: int = 600       # Loop-Intervall (10 min, = abfluss_service._FETCH_TTL_S)
 
+    # Datenbank-Backup + Restore-Probe (app/services/backup_service.py, app.cli backup)
+    # Zielverzeichnis der Dumps (persistent, ausserhalb des Repos; im DR-Runbook
+    # zusaetzlich an einen zweiten Ort spiegeln — 3-2-1-Regel).
+    BACKUP_DIR: str = "app_storage/backups"
+    # Aufbewahrung: so viele der neuesten Dumps je Datenbank/Medien behalten.
+    BACKUP_KEEP_DAILY: int = 14
+    # Medien (app_storage) mitsichern (Einsatzfotos, Objektdokumente, Nachschlagewerke).
+    BACKUP_INCLUDE_MEDIA: bool = True
+    # Binaries (ggf. absoluter Pfad ueber ENV). MariaDB 10.11 liefert mariadb/mariadb-dump.
+    BACKUP_DUMP_BIN: str = "mariadb-dump"
+    BACKUP_CLIENT_BIN: str = "mariadb"
+    # Wegwerf-DB fuer die Restore-Probe. Wird bei jedem Lauf neu angelegt und danach
+    # verworfen; darf NIEMALS gleich der Produktions-DB sein (harte Pruefung im Code).
+    BACKUP_RESTORE_TEST_DB: str = "einsatzleiter_restore_test"
+
     # Fernet-Verschlüsselung (Client Secrets, KI-API-Keys)
     # Eigener Key für Datenverschlüsselung; unabhängig von SECRET_KEY rotierbar.
     # Generieren: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

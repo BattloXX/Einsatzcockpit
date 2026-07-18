@@ -1,0 +1,20 @@
+[Unit]
+Description=Einsatzcockpit Datenbank- und Medien-Backup
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=oneshot
+User=clp-einsatz
+Group=clp-einsatz
+WorkingDirectory=/home/clp-einsatz/htdocs/einsatzleiter
+EnvironmentFile=/home/clp-einsatz/htdocs/einsatzleiter/.env
+# mariadb-dump/mariadb muessen im PATH liegen (MariaDB-Client-Paket).
+ExecStart=/home/clp-einsatz/htdocs/einsatzleiter/.venv/bin/python -m app.cli backup
+# Exit != 0 markiert die Unit als failed -> per OnFailure/Monitoring alarmierbar.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+[Install]
+WantedBy=multi-user.target
