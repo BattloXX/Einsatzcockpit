@@ -8,18 +8,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 from starlette.responses import FileResponse
 
 from app.core.crypto import encrypt_secret
-from app.core.permissions import is_system_admin, require_role, same_org_or_system_admin
+from app.core.permissions import (
+    is_system_admin,
+    require_role,
+    require_system_admin,
+    same_org_or_system_admin,
+)
 from app.core.templating import templates
 from app.core.tenant import set_tenant_context
 from app.db import get_db
@@ -229,3 +235,90 @@ async def org_backup_run_now(
         return _redirect(user, effective, "run_incomplete")
     status = await asyncio.to_thread(run_org_backup_sync, cfg.id)
     return _redirect(user, effective, "run_ok" if status == "ok" else "run_error")
+
+
+# ── Restore (nur system_admin) ────────────────────────────────────────────────
+
+def _unique_slug(db: Session, name: str) -> str:
+    basis = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "restore"
+    slug, n = basis, 1
+    while db.query(FireDept).filter(FireDept.slug == slug).first():
+        slug = f"{basis}-{n}"
+        n += 1
+    return slug
+
+
+def _restore_in_thread(zip_path: str, org_name: str) -> dict:
+    from app.core.tenant import set_tenant_context as _ctx
+    from app.db import SessionLocal
+    from app.services.org_import_service import import_org
+    db = SessionLocal()
+    _ctx(db, None)
+    try:
+        org = FireDept(slug=_unique_slug(db, org_name), name=org_name)
+        db.add(org)
+        db.flush()
+        summary = import_org(db, Path(zip_path), org.id)
+        return {**summary, "org_name": org.name, "slug": org.slug}
+    finally:
+        db.close()
+
+
+@router.get("/org-backup/restore", response_class=HTMLResponse)
+async def org_restore_page(
+    request: Request,
+    _=Depends(require_system_admin),
+):
+    return templates.TemplateResponse(request, "admin/org_restore.html", {
+        "user": request.state.user, "preview": None, "summary": None, "error": None,
+    })
+
+
+@router.post("/org-backup/restore", response_class=HTMLResponse)
+async def org_restore_apply(
+    request: Request,
+    _=Depends(require_system_admin),
+    archiv: UploadFile = File(...),
+    neue_org_name: str = Form(""),
+    confirm: str = Form(""),
+):
+    from app.config import settings
+    from app.services.org_import_service import read_manifest
+
+    if not settings.ORG_BACKUP_ENABLED:
+        raise HTTPException(404)
+
+    rohdaten = await archiv.read()
+    if settings.ORG_BACKUP_MAX_BYTES and len(rohdaten) > settings.ORG_BACKUP_MAX_BYTES:
+        raise HTTPException(413, "Archiv zu gross")
+
+    tmp = Path(tempfile.mkdtemp(prefix="orgrestore_"))
+    zpath = tmp / "archiv.zip"
+    zpath.write_bytes(rohdaten)
+
+    def _ctx(**extra):
+        return {"user": request.state.user, "preview": None, "summary": None, "error": None, **extra}
+
+    try:
+        manifest = read_manifest(zpath)
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        return templates.TemplateResponse(request, "admin/org_restore.html",
+                                          _ctx(error="Ungueltiges oder beschaedigtes Archiv."))
+
+    if confirm != "1":
+        # Vorschau (Dry-Run): Manifest anzeigen, noch nichts importieren.
+        shutil.rmtree(tmp, ignore_errors=True)
+        return templates.TemplateResponse(request, "admin/org_restore.html", _ctx(preview=manifest))
+
+    name = neue_org_name.strip() or f"Restore Org {manifest.get('org_id')}"
+    try:
+        summary = await asyncio.to_thread(_restore_in_thread, str(zpath), name)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Org-Restore fehlgeschlagen")
+        return templates.TemplateResponse(request, "admin/org_restore.html",
+                                          _ctx(error=f"Import fehlgeschlagen: {exc}"))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    return templates.TemplateResponse(request, "admin/org_restore.html", _ctx(summary=summary))
