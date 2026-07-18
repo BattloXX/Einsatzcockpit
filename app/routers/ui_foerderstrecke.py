@@ -172,7 +172,12 @@ def _baue_eingabe(daten: dict, db: Session, org_id: int):
         saugleitung_laenge_m=float(a.get("saugleitung_laenge_m") or 0.0),
         max_ansaughoehe_m=float(a.get("max_ansaughoehe_m") or 7.5),
         npshr_m=float(a.get("npshr_m") or 0.0),
+        saug_scheitel_m=float(a.get("saug_scheitel_m") or 0.0),
     )
+    # Gesamt-Höhenprofil der Route [[s_m, hoehe_m], …]: liefert je Abschnitt das
+    # tatsächliche Zwischengelände (Damm etc.) für die segmentweise Drucklinie.
+    full_profil = daten.get("hoehenprofil")
+    s_kumuliert = 0.0
     stationen: list[engine.PumpenStation] = []
     material_abschnitte: list[dict] = []
     for st in (daten.get("stationen") or []):
@@ -181,14 +186,25 @@ def _baue_eingabe(daten: dict, db: Session, org_id: int):
         schlauch = _schlauch_daten(abschnitt_roh, db, org_id)
         n_par = int(abschnitt_roh.get("n_parallel") or 1)
         laenge = float(abschnitt_roh.get("laenge_m") or 0.0)
+        # Höhenprofil des Abschnitts: bevorzugt aus dem Gesamtprofil (echtes Gelände),
+        # sonst der vom Client gelieferte Stützpunkt-Fallback.
+        stuetz = abschnitt_roh.get("hoehen_stuetzpunkte")
+        delta = float(abschnitt_roh.get("delta_hoehe_m") or 0.0)
+        if full_profil and laenge > 0:
+            aus_profil = engine.abschnitt_hoehen_stuetzpunkte(
+                full_profil, s_kumuliert, s_kumuliert + laenge)
+            if aus_profil:
+                stuetz = aus_profil
+                delta = aus_profil[-1]     # Endhöhe = letzter Stützpunkt (konsistent)
         abschnitt = engine.Abschnitt(
             schlauch_k=float(schlauch["k_verlust"]),
             laenge_m=laenge,
             n_parallel=n_par,
-            delta_hoehe_m=float(abschnitt_roh.get("delta_hoehe_m") or 0.0),
+            delta_hoehe_m=delta,
             max_betriebsdruck_bar=schlauch.get("max_betriebsdruck_bar"),
-            hoehen_stuetzpunkte=abschnitt_roh.get("hoehen_stuetzpunkte"),
+            hoehen_stuetzpunkte=stuetz,
         )
+        s_kumuliert += laenge
         stationen.append(engine.PumpenStation(
             kennlinie=kl,
             typ=st.get("typ") or "verstaerker",

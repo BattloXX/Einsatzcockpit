@@ -58,6 +58,10 @@
           <div class="fs-field"><label>Saug k-Wert</label><input class="form-input" type="number" step="0.01" x-model.number="ansaug.saug_k"></div>
           <div class="fs-field"><label>Saugleitungen parallel</label><input class="form-input" type="number" min="1" x-model.number="ansaug.saug_n_parallel"></div>
         </div>
+        <div class="fs-field">
+          <label>Scheitel Saugleitung über Wasserspiegel [m] (optional, z. B. über Damm)</label>
+          <input class="form-input" type="number" step="0.1" x-model.number="ansaug.saug_scheitel_m" placeholder="0">
+        </div>
       </div>
 
       <div class="fs-panel">
@@ -212,8 +216,8 @@ function foerderPlaner() {
     strecken: Array({{ strecken|length }}),
     ladeId: FS_LADE ? FS_LADE.id : null,
     ansaug: (FS_LADE && FS_LADE.ansaug && Object.keys(FS_LADE.ansaug).length)
-      ? Object.assign({seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23, saug_n_parallel:1}, FS_LADE.ansaug)
-      : {seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23, saug_n_parallel:1},
+      ? Object.assign({seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23, saug_n_parallel:1, saug_scheitel_m:0}, FS_LADE.ansaug)
+      : {seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23, saug_n_parallel:1, saug_scheitel_m:0},
     stationen: [],
     zielDruck: 0,
     parameter: {armaturen_zuschlag:0.05, hochpunkt_min_bar:0.5, reserve:0.10},
