@@ -1,0 +1,12 @@
+[Unit]
+Description=Taegliches Einsatzcockpit-Backup (02:30)
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+# Verpasste Laeufe (Server war aus) beim naechsten Boot nachholen.
+Persistent=true
+# Streut die Last, falls mehrere Timer gleichzeitig feuern.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

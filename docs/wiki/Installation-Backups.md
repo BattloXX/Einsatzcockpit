@@ -2,70 +2,58 @@
 
 ← [Zurück zur Startseite](Home)
 
-## Automatische Datenbank-Dumps (CloudPanel)
+> **Vollständiges Verfahren inkl. getesteter Restore-Probe und Disaster-Recovery:**
+> [Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery). Diese Seite ist die
+> Kurzanleitung.
 
-CloudPanel bietet integrierte Backups. Einrichten unter:  
-**Settings** → **Backup** → tägliche Sicherung aktivieren.
+## Empfohlen: eingebautes Backup-Tooling
 
-Manueller Dump:
-```bash
-mysqldump -u einsatzleiter -p einsatzleiter \
-    --single-transaction \
-    --routines \
-    --triggers \
-    > /home/clp-einsatz/backups/einsatzleiter_$(date +%Y%m%d_%H%M%S).sql
-```
-
-## Backup-Verzeichnis anlegen
+Das Tool bringt Backup und **getestete Restore-Probe** mit — beide DBs
+(`einsatzleiter` + `einsatzleiter_weather`) plus die Medien unter `app_storage`:
 
 ```bash
-mkdir -p /home/clp-einsatz/backups
-chmod 700 /home/clp-einsatz/backups
+su - clp-einsatz
+cd /home/clp-einsatz/htdocs/einsatzleiter
+source .venv/bin/activate
+
+python -m app.cli backup          # Dumps beider DBs + Medien nach BACKUP_DIR (mit Retention)
+python -m app.cli restore-test    # spielt den neuesten Dump testweise ein und verifiziert ihn
 ```
 
-## Cron-Job für stündliche Sicherung
+Passwörter kommen über die `.env`/Umgebung (`MYSQL_PWD`), **nie** auf der Kommandozeile
+(sonst in der Prozessliste sichtbar). Alte Backups werden gemäß `BACKUP_KEEP_DAILY`
+automatisch entfernt.
+
+## Automatisierung (systemd-Timer)
 
 ```bash
-crontab -e
+# Als root
+cp deploy/backup/ec-backup.service deploy/backup/ec-backup.timer /etc/systemd/system/
+cp deploy/backup/ec-restore-test.service deploy/backup/ec-restore-test.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now ec-backup.timer ec-restore-test.timer
+systemctl list-timers 'ec-*'
 ```
 
-```cron
-# Stündlicher DB-Dump (behalte die letzten 72 Stunden):
-0 * * * * mysqldump -u einsatzleiter -pPASSWORT einsatzleiter \
-    --single-transaction > /home/clp-einsatz/backups/hourly_$(date +\%Y\%m\%d_\%H).sql
-# Alte Dumps löschen (älter als 3 Tage):
-30 * * * * find /home/clp-einsatz/backups -name "hourly_*.sql" -mtime +3 -delete
-```
-
-## Backup wiederherstellen
-
-```bash
-# Alle Tabellen sichern (falls was schiefgeht):
-mysqldump -u einsatzleiter -p einsatzleiter > vor_restore.sql
-
-# Wiederherstellen:
-mysql -u einsatzleiter -p einsatzleiter < /home/clp-einsatz/backups/einsatzleiter_20260522_030000.sql
-```
+Tägliches Backup 02:30, wöchentliche Restore-Probe So 04:00. (Alternativ bietet
+CloudPanel unter **Settings → Backup** eigene, dateibasierte Sicherungen.)
 
 ## Was wird gesichert?
 
-| Was | Warum |
-|-----|-------|
-| MariaDB-Datenbank | Alle Einsätze, Mitglieder, Konfiguration |
-| `.env`-Datei | Secrets, VAPID-Keys (extra sichern!) |
-| `app/static/img/` | Falls eigene Logos hochgeladen |
+| Was | Vom Tool | Hinweis |
+|-----|----------|---------|
+| MariaDB `einsatzleiter` (+ `_weather`) | ✅ | konsistenter `mariadb-dump`, gzip |
+| Medien `app_storage/` | ✅ | Einsatzfotos, Objektdokumente, Nachschlagewerke |
+| `.env` (Secrets, `FERNET_KEY`) | ❌ | **extra sichern** — sonst SSO-/KI-/Mail-Secrets nach Restore unlesbar |
+| Betriebssystem / nginx / TLS | ❌ | CloudPanel + `deploy/nginx-snippet.conf` |
 
 Die Codebasis ist via Git versioniert und muss nicht gesondert gesichert werden.
 
-## Offsite-Backup
+## Offsite
 
-Für eine zweite Sicherung außerhalb des Servers:
-
-```bash
-# Beispiel: rsync auf NAS im Feuerwehrgebäude:
-rsync -av /home/clp-einsatz/backups/ \
-    user@nas.feuerwehr-wolfurt.local:/backups/einsatzleiter/
-```
+3-2-1-Regel: mindestens eine Kopie außerhalb des Servers. Details und Sicherheitshinweise
+(die Dumps sind unverschlüsselt und enthalten personenbezogene Daten) im
+[DR-Runbook, Abschnitt 7](Betrieb-Backup-und-Disaster-Recovery).
 
 ---
 

@@ -62,6 +62,7 @@ Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, di
 | **Teams-Alarmierung** | Vollständige Alarm-Karte (Stichwort, Adresse, OSM-Kartenbild, Google-Maps-Link, No-Login-Alarmübersicht) bei jeder Einsatzanlage (API/LIS/manuell), getrennte Ziele für Echtalarm/Übung; einfacher Webhook-Modus (kein Azure nötig) + separat schaltbare Bot-Erweiterung mit Zusage/Absage direkt in Teams (Abgleich per Mannschaftsregister-E-Mail); Zu-/Absage-Zähler am Einsatz-Board (Desktop) |
 | **KI-Assistent (✨)** | Auftragsvorschläge, Lage-Ticker-Hinweise, Lagebild und automatische Priorisierung via Anthropic Claude; opt-in pro Org |
 | **Org-Konfig-Backup** | JSON-Export/Import der Org-Konfiguration inkl. Dry-Run-Diff |
+| **Datenbank-Backup & Disaster-Recovery** | Automatisierte `mariadb-dump`-Sicherung beider DBs + Medien (`app.cli backup`, systemd-Timer, Retention); **wöchentlich getestete Restore-Probe** in eine Wegwerf-DB; dokumentiertes DR-Runbook mit RPO/RTO ([Wiki](https://github.com/BattloXX/Einsatzcockpit/wiki/Betrieb-Backup-und-Disaster-Recovery)) |
 | **System-Admin-Konsole** | Per-Org KPI-Übersicht mit Schnellzugriff für Systemadministratoren |
 | **Auto-Schließen** | Inaktive Einsätze werden nach konfigurierbarer Zeit automatisch geschlossen (systemweit und pro Org) |
 | **Wetterdaten-Integration** | Echtzeit-Nowcast (15-min), Ist-Werte, +6/+12/+24h-Vorhersage und Unwetterwarnungen; Kachelmann Plus-API als Primärquelle mit GeoSphere Austria/ZAMG-Ergänzung und Open-Meteo-Fallback; Sturm- und Waldbrand-Szenario-Indikatoren; Radar-Overlay (RainViewer) auf der Lagekarte; globale `/wetter`-Seite; opt-out je Org |
@@ -1065,5 +1066,6 @@ app_storage/incident_media/  Medien-Dateien (Auth-geschützt, nicht im Repo)
 
 ## Lizenz
 
-MIT License — Freiwillige Feuerwehr Wolfurt  
-Nutzung für alle österreichischen Feuerwehren ausdrücklich erwünscht.
+**GNU Lesser General Public License v2.1 (LGPL-2.1)** — Freiwillige Feuerwehr Wolfurt.
+Volltext siehe [`LICENSE`](LICENSE). Nutzung für alle österreichischen Feuerwehren
+ausdrücklich erwünscht.

@@ -48,6 +48,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [NGINX-Reverse-Proxy](Installation-NGINX-Reverse-Proxy) | CloudPanel-Vhost, WebSocket-Upgrade, TLS |
 | [Erst-Setup](Installation-Erst-Setup) | Admin-User, API-Key, Stammdaten prüfen |
 | [Backups](Installation-Backups) | Datenbank-Dumps, Audit-Log-Sicherung |
+| [Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery) | Automatische Dumps, getestete Restore-Probe, DR-Runbook (RPO/RTO) |
 | [Updates](Installation-Updates) | git pull / In-App ZIP-Update, Migrationen, Neustart |
 | [SMS-Gateway](Installation-SMS-Gateway) | Android-Gateway-App einrichten: APK, Geräte-Login-QR, Akku-Optimierung |
 | [Print & Alarm Gateway](Installation-Print-Alarm-Gateway) | Lokalen Docker-Container koppeln: Pairing-Code, W&T-Alarmleitung, Netzwerkdrucker |

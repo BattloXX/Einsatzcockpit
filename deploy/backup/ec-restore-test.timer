@@ -1,0 +1,11 @@
+[Unit]
+Description=Woechentliche Einsatzcockpit-Restore-Probe (So 04:00)
+
+[Timer]
+# Sonntags 04:00, nach dem naechtlichen Backup.
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
