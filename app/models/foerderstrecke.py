@@ -223,8 +223,10 @@ class Foerderstrecke(TenantScoped, Base):
         BigInteger, ForeignKey("objekt.id", ondelete="SET NULL"), nullable=True)
     incident_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True)
+    # major_incident.id ist Integer (INT) — FK-Spalte muss denselben Typ haben,
+    # sonst MySQL errno 150 (Foreign key constraint is incorrectly formed).
     lage_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("major_incident.id", ondelete="SET NULL"), nullable=True)
+        Integer, ForeignKey("major_incident.id", ondelete="SET NULL"), nullable=True)
 
     # GeoJSON der Route (LineString) sowie Anker- und Parameterdaten als JSON-Text
     route_geojson: Mapped[str | None] = mapped_column(Text, nullable=True)
