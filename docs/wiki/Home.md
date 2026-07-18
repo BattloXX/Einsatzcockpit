@@ -103,6 +103,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
 | [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
 | [Teams-Alarmierung](Administration-Teams-Alarmierung) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
+| [Datensicherung (Org, Self-Service)](Administration-Org-Datensicherung) | Eigene Org-Daten als Archiv herunterladen oder geplant an ein eigenes Ziel senden (SFTP/FTP/rclone); Restore in neue Org (Sysadmin) |
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
 | [Nachschlagewerke](Administration-Nachschlagewerke) | Modul aktivieren (System+Org), Gefahrgut-Datenquelle (BAM/ADR), Rettungskarten-URL, Offline-Funktion |
 | [Print & Alarm Gateway](Administration-Print-Alarm-Gateway) | Modul aktivieren (System+Org), Gateways koppeln, Drucker & Discovery, Druckregeln (Automatikdruck), manueller Druck |
