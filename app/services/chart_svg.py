@@ -255,3 +255,191 @@ def build_bericht_charts(daten: dict) -> dict[str, str]:
         "maschinisten": svg_maschinisten,
         "je_fahrzeug": svg_je_fahrzeug,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Förderstrecken-Höhen-/Druckprofil (PR 4)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _fmt_dist(s_m: float, s_max: float) -> str:
+    """Distanzbeschriftung: m unter 1 km, sonst km mit einer Nachkommastelle."""
+    if s_max >= 1000:
+        return f"{s_m / 1000:.1f} km".replace(".", ",")
+    return f"{int(round(s_m))} m"
+
+
+def _kommazahl(v: float) -> str:
+    return str(v).replace(".", ",")
+
+
+def foerderprofil_svg(
+    druckprofil: list,
+    *,
+    hoehenprofil: list | None = None,
+    p_min_bar: float = 1.5,
+    p_max_bar: float | None = None,
+    hochpunkt_min_bar: float = 0.5,
+    stationen: list | None = None,
+    width: int = 1000,
+    height: int = 420,
+    titel: str | None = None,
+) -> str:
+    """Höhenprofil mit hydraulischer Drucklinie als eigenständiges SVG (dep-frei).
+
+    - `druckprofil`: Liste (s_m, p_bar) entlang der Strecke.
+    - `hoehenprofil`: optionale Liste (s_m, gelaende_hoehe_m) -> graue Geländefläche
+      (eigene rechte Achse in m).
+    - `p_min_bar`: Grenzlinie Mindest-Eingangsdruck (Standard 1,5 bar, gestrichelt).
+    - `p_max_bar`: optionale Grenzlinie max. Betriebsdruck (rot gestrichelt).
+    - `hochpunkt_min_bar`: unter diesem Druck rote Abriss-Marker.
+    - `stationen`: optionale Liste {s_m, label} -> vertikale Stationsmarken.
+    """
+    druck = [(float(s), float(p)) for s, p in (druckprofil or [])]
+    if not druck:
+        return (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+            f'viewBox="0 0 {width} {height}" role="img">'
+            f'<rect width="{width}" height="{height}" fill="#fff"/>'
+            f'<text x="{width/2}" y="{height/2}" text-anchor="middle" '
+            f'font-family="sans-serif" font-size="14" fill="#6b7280">'
+            f'Keine Berechnungsdaten</text></svg>'
+        )
+
+    ml, mr, mt, mb = 56, 58, (34 if titel else 18), 46
+    plot_w = width - ml - mr
+    plot_h = height - mt - mb
+
+    s_vals = [s for s, _ in druck]
+    if hoehenprofil:
+        s_vals += [float(s) for s, _ in hoehenprofil]
+    s_max = max(s_vals) or 1.0
+
+    p_axis_max = _nice_max(max([p for _, p in druck] + [p_min_bar, p_max_bar or 0.0, 2.0]))
+
+    def x_of(s: float) -> float:
+        return ml + (s / s_max) * plot_w
+
+    def y_of_p(p: float) -> float:
+        return mt + plot_h - (max(0.0, p) / p_axis_max) * plot_h
+
+    parts: list[str] = []
+    parts.append(
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" role="img" font-family="sans-serif">'
+    )
+    parts.append(f'<rect width="{width}" height="{height}" fill="#ffffff"/>')
+    if titel:
+        parts.append(
+            f'<text x="{ml}" y="20" font-size="14" font-weight="600" fill="#111827">{_esc(titel)}</text>'
+        )
+
+    parts.append(
+        f'<rect x="{ml}" y="{mt}" width="{plot_w}" height="{plot_h}" fill="#fafafa" stroke="#e5e7eb"/>'
+    )
+
+    # Geländefläche (rechte Achse, Meter)
+    if hoehenprofil:
+        h_pts = [(float(s), float(h)) for s, h in hoehenprofil if h is not None]
+        if h_pts:
+            h_min = min(h for _, h in h_pts)
+            h_max = max(h for _, h in h_pts)
+            spanne = (h_max - h_min) or 1.0
+
+            def y_of_h(h: float) -> float:
+                band = plot_h * 0.55
+                return mt + plot_h - ((h - h_min) / spanne) * band
+
+            pkte = " ".join(f"{x_of(s):.1f},{y_of_h(h):.1f}" for s, h in h_pts)
+            flaeche = f"{ml:.1f},{mt + plot_h:.1f} " + pkte + f" {ml + plot_w:.1f},{mt + plot_h:.1f}"
+            parts.append(f'<polygon points="{flaeche}" fill="#9ca3af" fill-opacity="0.22"/>')
+            parts.append(f'<polyline points="{pkte}" fill="none" stroke="#9ca3af" stroke-width="1"/>')
+            parts.append(
+                f'<text x="{ml + plot_w + 6}" y="{mt + plot_h}" font-size="10" fill="#6b7280">'
+                f'{int(round(h_min))} m</text>'
+            )
+            parts.append(
+                f'<text x="{ml + plot_w + 6}" y="{mt + plot_h - plot_h*0.55 + 8}" font-size="10" '
+                f'fill="#6b7280">{int(round(h_max))} m</text>'
+            )
+
+    # Y-Achse (Druck, bar) + Gitter
+    schritte = 4
+    for i in range(schritte + 1):
+        p = p_axis_max * i / schritte
+        y = y_of_p(p)
+        parts.append(f'<line x1="{ml}" y1="{y:.1f}" x2="{ml + plot_w}" y2="{y:.1f}" stroke="#eee"/>')
+        parts.append(
+            f'<text x="{ml - 6}" y="{y + 3:.1f}" text-anchor="end" font-size="10" fill="#6b7280">'
+            f'{p:.0f}</text>'
+        )
+    parts.append(
+        f'<text x="12" y="{mt + plot_h/2}" font-size="11" fill="#374151" '
+        f'transform="rotate(-90 12 {mt + plot_h/2})" text-anchor="middle">Druck [bar]</text>'
+    )
+
+    # X-Achse (Distanz)
+    for i in range(6):
+        s = s_max * i / 5
+        x = x_of(s)
+        parts.append(
+            f'<text x="{x:.1f}" y="{mt + plot_h + 16}" text-anchor="middle" font-size="10" '
+            f'fill="#6b7280">{_esc(_fmt_dist(s, s_max))}</text>'
+        )
+    parts.append(
+        f'<text x="{ml + plot_w/2}" y="{height - 6}" text-anchor="middle" font-size="11" '
+        f'fill="#374151">Strecke</text>'
+    )
+
+    # Grenzlinien
+    y_pmin = y_of_p(p_min_bar)
+    parts.append(
+        f'<line x1="{ml}" y1="{y_pmin:.1f}" x2="{ml + plot_w}" y2="{y_pmin:.1f}" '
+        f'stroke="#f59e0b" stroke-width="1" stroke-dasharray="5 3"/>'
+    )
+    parts.append(
+        f'<text x="{ml + plot_w - 4}" y="{y_pmin - 4:.1f}" text-anchor="end" font-size="10" '
+        f'fill="#b45309">Min {_kommazahl(p_min_bar)} bar</text>'
+    )
+    if p_max_bar is not None:
+        y_pmax = y_of_p(p_max_bar)
+        parts.append(
+            f'<line x1="{ml}" y1="{y_pmax:.1f}" x2="{ml + plot_w}" y2="{y_pmax:.1f}" '
+            f'stroke="#dc2626" stroke-width="1" stroke-dasharray="5 3"/>'
+        )
+        parts.append(
+            f'<text x="{ml + plot_w - 4}" y="{y_pmax - 4:.1f}" text-anchor="end" font-size="10" '
+            f'fill="#b91c1c">Max {_kommazahl(p_max_bar)} bar</text>'
+        )
+
+    # Stationsmarken
+    for st in (stationen or []):
+        s = float(st.get("s_m", 0.0))
+        x = x_of(s)
+        parts.append(
+            f'<line x1="{x:.1f}" y1="{mt}" x2="{x:.1f}" y2="{mt + plot_h}" stroke="#1877f2" '
+            f'stroke-width="1" stroke-dasharray="2 3" stroke-opacity="0.6"/>'
+        )
+        parts.append(
+            f'<polygon points="{x-4:.1f},{mt} {x+4:.1f},{mt} {x:.1f},{mt+7}" fill="#1877f2"/>'
+        )
+        label = st.get("label")
+        if label:
+            parts.append(
+                f'<text x="{x:.1f}" y="{mt - 3}" text-anchor="middle" font-size="9" '
+                f'fill="#1e40af">{_esc(_truncate(str(label), 14))}</text>'
+            )
+
+    # Drucklinie
+    linie = " ".join(f"{x_of(s):.1f},{y_of_p(p):.1f}" for s, p in druck)
+    parts.append(f'<polyline points="{linie}" fill="none" stroke="#1877f2" stroke-width="2.5"/>')
+
+    # Hochpunkt-/Abriss-Marker
+    for s, p in druck:
+        if p < hochpunkt_min_bar:
+            parts.append(
+                f'<circle cx="{x_of(s):.1f}" cy="{y_of_p(p):.1f}" r="4" fill="#dc2626" '
+                f'stroke="#fff" stroke-width="1"/>'
+            )
+
+    parts.append("</svg>")
+    return "".join(parts)
