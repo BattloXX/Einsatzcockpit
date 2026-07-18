@@ -276,23 +276,45 @@ def _restore_in_thread(zip_path: str, org_name: str) -> dict:
         db.close()
 
 
+def _restore_inplace_in_thread(zip_path: str, ziel_org_id: int) -> dict:
+    from app.core.tenant import set_tenant_context as _ctx
+    from app.db import SessionLocal
+    from app.services.org_import_service import import_org
+    db = SessionLocal()
+    _ctx(db, None)
+    try:
+        org = db.get(FireDept, ziel_org_id)
+        summary = import_org(db, Path(zip_path), ziel_org_id, replace=True)
+        return {**summary, "org_name": org.name if org else str(ziel_org_id),
+                "slug": org.slug if org else ""}
+    finally:
+        db.close()
+
+
 @router.get("/org-backup/restore", response_class=HTMLResponse)
 async def org_restore_page(
     request: Request,
+    db: Session = Depends(get_db),
     _=Depends(require_system_admin),
 ):
+    all_orgs = db.query(FireDept).order_by(FireDept.name).all()
     return templates.TemplateResponse(request, "admin/org_restore.html", {
         "user": request.state.user, "preview": None, "summary": None, "error": None,
+        "all_orgs": all_orgs,
     })
 
 
 @router.post("/org-backup/restore", response_class=HTMLResponse)
 async def org_restore_apply(
     request: Request,
+    db: Session = Depends(get_db),
     _=Depends(require_system_admin),
     archiv: UploadFile = File(...),
+    modus: str = Form("new"),
     neue_org_name: str = Form(""),
+    ziel_org_id: int | None = Form(None),
     confirm: str = Form(""),
+    confirm_replace: str = Form(""),
 ):
     from app.config import settings
     from app.services.org_import_service import read_manifest
@@ -309,7 +331,9 @@ async def org_restore_apply(
     zpath.write_bytes(rohdaten)
 
     def _ctx(**extra):
-        return {"user": request.state.user, "preview": None, "summary": None, "error": None, **extra}
+        base = {"user": request.state.user, "preview": None, "summary": None, "error": None,
+                "all_orgs": db.query(FireDept).order_by(FireDept.name).all()}
+        return {**base, **extra}
 
     try:
         manifest = read_manifest(zpath)
@@ -323,9 +347,16 @@ async def org_restore_apply(
         shutil.rmtree(tmp, ignore_errors=True)
         return templates.TemplateResponse(request, "admin/org_restore.html", _ctx(preview=manifest))
 
-    name = neue_org_name.strip() or f"Restore Org {manifest.get('org_id')}"
     try:
-        summary = await asyncio.to_thread(_restore_in_thread, str(zpath), name)
+        if modus == "replace":
+            if not ziel_org_id or confirm_replace != "1":
+                shutil.rmtree(tmp, ignore_errors=True)
+                return templates.TemplateResponse(request, "admin/org_restore.html",
+                    _ctx(error="Ersetzen erfordert eine Ziel-Organisation UND die Bestaetigung."))
+            summary = await asyncio.to_thread(_restore_inplace_in_thread, str(zpath), ziel_org_id)
+        else:
+            name = neue_org_name.strip() or f"Restore Org {manifest.get('org_id')}"
+            summary = await asyncio.to_thread(_restore_in_thread, str(zpath), name)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Org-Restore fehlgeschlagen")
         return templates.TemplateResponse(request, "admin/org_restore.html",

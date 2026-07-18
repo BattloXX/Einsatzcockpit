@@ -19,9 +19,14 @@
 <section class="card mb-4">
   <div class="card-body" style="padding:20px;">
     <h2 style="margin-top:0;">✓ Wiederherstellung abgeschlossen</h2>
-    <p>Neue Organisation <strong>{{ summary.org_name }}</strong> (ID {{ summary.org_id }}, Slug <code>{{ summary.slug }}</code>)
-       aus Quell-Org {{ summary.source_org_id }} — <strong>{{ summary.rows_total }}</strong> Datensätze,
-       <strong>{{ summary.media_restored }}</strong> Mediendateien.</p>
+    <p>
+      {% if summary.replaced %}Organisation <strong>{{ summary.org_name }}</strong> (ID {{ summary.org_id }}) <strong>ersetzt</strong>{% else %}Neue Organisation <strong>{{ summary.org_name }}</strong> (ID {{ summary.org_id }}, Slug <code>{{ summary.slug }}</code>) angelegt{% endif %}
+      aus Quell-Org {{ summary.source_org_id }} — <strong>{{ summary.rows_total }}</strong> Datensätze,
+      <strong>{{ summary.media_restored }}</strong> Mediendateien.
+    </p>
+    {% if summary.replaced and summary.safety_backup %}
+    <p class="page-header__sub">Sicherheits-Autobackup vor dem Ersetzen: <code>{{ summary.safety_backup }}</code></p>
+    {% endif %}
     <a class="btn" href="/admin/org-backup/restore">Weitere Wiederherstellung</a>
   </div>
 </section>
@@ -54,10 +59,35 @@
         <label>Archiv-Datei (ZIP)</label>
         <input class="form-control" type="file" name="archiv" accept=".zip" required>
       </div>
+      <div style="margin:12px 0;">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+          <input type="radio" name="modus" value="new" checked onclick="document.getElementById('replace-box').style.display='none'">
+          In eine <strong>neue</strong> Organisation importieren
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:4px;">
+          <input type="radio" name="modus" value="replace" onclick="document.getElementById('replace-box').style.display='block'">
+          Eine <strong>bestehende</strong> Organisation <strong style="color:#b91c1c">ersetzen</strong> (löscht deren Daten)
+        </label>
+      </div>
+
       <div style="margin-bottom:12px;">
-        <label>Name der neuen Organisation</label>
+        <label>Name der neuen Organisation (Modus „neu")</label>
         <input class="form-control" name="neue_org_name" placeholder="z. B. Wiederherstellung FF Musterdorf">
       </div>
+
+      <div id="replace-box" style="display:none;border:1px solid #b91c1c;border-radius:8px;padding:12px;margin-bottom:12px;">
+        <label>Ziel-Organisation (wird ERSETZT)</label>
+        <select class="form-control" name="ziel_org_id">
+          <option value="">-- wählen --</option>
+          {% for o in all_orgs %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}
+        </select>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:400;">
+          <input type="checkbox" name="confirm_replace" value="1">
+          <strong style="color:#b91c1c">Ja, alle bestehenden Daten dieser Organisation löschen und ersetzen.</strong>
+        </label>
+        <p class="page-header__sub" style="margin:6px 0 0;">Vor dem Ersetzen wird automatisch ein Sicherheits-Backup der Ziel-Org erstellt.</p>
+      </div>
+
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
         <input type="checkbox" name="confirm" value="1">
         <strong>Wiederherstellung bestätigen</strong> (ohne Haken: nur Vorschau)

@@ -120,6 +120,52 @@ def test_roundtrip_export_import(quelle_und_medien, tmp_path):
     assert (Path(settings.OBJEKT_MEDIA_DIR) / ids["media_rel"]).is_file()
 
 
+def test_inplace_replace_setzt_org_auf_archivstand(tmp_path, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "BACKUP_DIR", str(tmp_path / "safety"))
+    tag = uuid.uuid4().hex[:8]
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    a = FireDept(slug=f"ip-{tag}", name=f"IP {tag}")
+    db.add(a)
+    db.flush()
+    db.add(Member(org_id=a.id, lastname=f"Keep{tag}", firstname="1"))
+    db.commit()
+    aid = a.id
+    db.close()
+
+    # Snapshot exportieren (Stand: nur "Keep")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    snap = export_org(db, aid, tmp_path)
+    db.close()
+
+    # Nachtraeglich ein zweites Mitglied hinzufuegen
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    db.add(Member(org_id=aid, lastname=f"Later{tag}", firstname="2"))
+    db.commit()
+    db.close()
+
+    # In-place-Ersetzen mit dem Snapshot
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    summary = import_org(db, snap, aid, replace=True)
+    db.close()
+    assert summary["replaced"] is True
+    assert summary["safety_backup"]  # Sicherheits-Autobackup wurde erstellt
+
+    # Ergebnis: nur noch "Keep" (das spaeter hinzugefuegte "Later" ist weg)
+    db = SessionLocal()
+    set_tenant_context(db, aid)
+    try:
+        namen = {m.lastname for m in db.query(Member).all()}
+        assert namen == {f"Keep{tag}"}
+    finally:
+        db.close()
+
+
 def test_import_falsche_version(tmp_path):
     import json
     import zipfile

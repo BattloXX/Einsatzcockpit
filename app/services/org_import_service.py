@@ -16,7 +16,10 @@ Ablauf:
    gueltigen Zielpfade zurueckgelegt.
 
 Sicherheit: Import ist eine system_admin-Operation (Ziel-Org-Anlage + org-uebergreifende
-Platzierung). In-place-Restore ueber eine laufende Org ist bewusst NICHT vorgesehen.
+Platzierung). Modus:
+- Neue Org (Standard): Archiv in eine frische Org importieren.
+- In-place (replace=True): bestehende Org ersetzen — VORHER ein Sicherheits-Autobackup
+  (Pre-Image), dann alle Org-Daten loeschen und durch den Archiv-Stand ersetzen.
 """
 from __future__ import annotations
 
@@ -36,7 +39,9 @@ from app.services.org_export_service import (
     _EXTRA_LINKS,
     EXCLUDE_TABLES,
     FORMAT_VERSION,
+    _fk_bedingungen,
     _single_pk,
+    collect_ids,
 )
 
 logger = logging.getLogger("einsatzleiter.org_import")
@@ -97,8 +102,43 @@ def _fk_checks(db: Session, on: bool) -> None:
         db.execute(sa.text(f"SET FOREIGN_KEY_CHECKS={1 if on else 0}"))
 
 
-def import_org(db: Session, zip_path: Path, ziel_org_id: int) -> dict:
-    """Importiert das Archiv in ziel_org_id (mit ID-Remapping). Gibt eine Zusammenfassung."""
+def _safety_backup(db: Session, org_id: int) -> str | None:
+    """Sicherheits-Vollexport der Ziel-Org VOR einem Ersetzen (Pre-Image). Best-effort."""
+    from app.config import settings
+    from app.services.org_export_service import export_org
+    try:
+        ziel = Path(settings.BACKUP_DIR) / "org-safety"
+        return str(export_org(db, org_id, ziel, include_media=True))
+    except Exception:  # noqa: BLE001 — Sicherung darf den Restore nicht verhindern, nur warnen
+        logger.exception("Sicherheits-Autobackup vor Ersetzen fehlgeschlagen (org %s)", org_id)
+        return None
+
+
+def _delete_org_data(db: Session, org_id: int) -> None:
+    """Loescht ALLE tenant-gescopten Daten der Org (Kind vor Eltern), FK-Checks aus."""
+    md = Base.metadata
+    collected = collect_ids(db, org_id)  # exakt dieselbe Scoping-Logik wie der Export
+    for table in reversed(md.sorted_tables):
+        if table.name in EXCLUDE_TABLES:
+            continue
+        pk = _single_pk(table)
+        if pk is not None:
+            ids = collected.get(table.name)
+            if ids:
+                db.execute(table.delete().where(pk.in_(ids)))
+        else:
+            conds = _fk_bedingungen(table, collected)
+            if conds:
+                db.execute(table.delete().where(sa.or_(*conds)))
+
+
+def import_org(db: Session, zip_path: Path, ziel_org_id: int, replace: bool = False) -> dict:
+    """Importiert das Archiv in ziel_org_id (mit ID-Remapping). Gibt eine Zusammenfassung.
+
+    replace=True: In-place-Restore — vorher ein Sicherheits-Autobackup, dann werden ALLE
+    bestehenden Daten der Ziel-Org geloescht und durch den Archiv-Stand ersetzt.
+    """
+    safety_pfad = _safety_backup(db, ziel_org_id) if replace else None
     md = Base.metadata
     with zipfile.ZipFile(zip_path) as zf:
         manifest = json.loads(zf.read("manifest.json"))
@@ -121,6 +161,8 @@ def import_org(db: Session, zip_path: Path, ziel_org_id: int) -> dict:
 
         _fk_checks(db, False)
         try:
+            if replace:
+                _delete_org_data(db, ziel_org_id)
             for table in tabellen:
                 pkcol = _single_pk(table)
                 pkname = pkcol.name if pkcol is not None else None
@@ -187,6 +229,8 @@ def import_org(db: Session, zip_path: Path, ziel_org_id: int) -> dict:
         "tables": counts,
         "rows_total": sum(counts.values()),
         "media_restored": media_count,
+        "replaced": replace,
+        "safety_backup": safety_pfad,
     }
 
 
