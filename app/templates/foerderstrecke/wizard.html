@@ -114,6 +114,28 @@
           </div>
         </template>
       </div>
+
+      <!-- ── Standort-Assistent (Modus B) ── -->
+      <div class="fs-panel" style="margin-top:12px;border-left:3px solid #7c3aed;">
+        <h3 style="margin:0 0 6px;font-size:.95rem;">🎯 Pumpenstandorte vorschlagen</h3>
+        <p class="text-muted" style="font-size:.78rem;margin:0 0 8px;">
+          Route zeichnen/ablaufen, Ziel-Fördermenge + Relaispumpe wählen → berechnet, wie viele
+          Pumpen wo stehen müssen (Quellpumpe + Schlauch aus Station 1).
+        </p>
+        <div class="fs-row2">
+          <div class="fs-field"><label>Ziel-Fördermenge [l/min]</label><input class="form-input" type="number" min="1" x-model.number="zielQ"></div>
+          <div class="fs-field">
+            <label>Relaispumpe</label>
+            <select class="form-select" x-model.number="relaisPumpeId">
+              <option :value="null">— wählen —</option>
+              <template x-for="p in pumpen" :key="p.id"><option :value="p.id" x-text="p.name"></option></template>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn--primary btn--sm" @click="standorteVorschlagen()" :disabled="rechnet" style="width:100%;">
+          Standorte vorschlagen &amp; berechnen
+        </button>
+      </div>
     </div>
 
     <!-- ── Rechte Spalte: Karte + Ergebnis ── -->
@@ -232,6 +254,9 @@ function foerderPlaner() {
     stationen: [],
     zielDruck: 0,
     parameter: {armaturen_zuschlag:0.05, hochpunkt_min_bar:0.5, reserve:0.10},
+    relaisPumpeId: null,
+    zielQ: 2000,
+    _standortMarkers: [],
     routeCoords: null,
     hoehenprofil: null,
     ergebnis: null,
@@ -280,6 +305,7 @@ function foerderPlaner() {
         stationen: this.stationen.map(s => ({
           typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm,
           behaelter_volumen_l: s.behaelter_volumen_l,
+          lat: s.lat ?? null, lng: s.lng ?? null,
           abschnitt: {
             schlauch_typ_id: s.abschnitt.schlauch_typ_id,
             n_parallel: s.abschnitt.n_parallel, laenge_m: s.abschnitt.laenge_m,
@@ -287,6 +313,62 @@ function foerderPlaner() {
           }
         }))
       };
+    },
+
+    async standorteVorschlagen() {
+      if (!this.routeCoords || this.routeCoords.length < 2) {
+        alert("Bitte zuerst die Route auf der Karte zeichnen oder per GPS ablaufen."); return;
+      }
+      const q0 = this.stationen[0];
+      if (!q0 || !q0.pumpen_typ_id) { alert("Bitte in Station 1 die Quellpumpe wählen."); return; }
+      if (!q0.abschnitt.schlauch_typ_id) { alert("Bitte in Station 1 den Schlauchtyp wählen."); return; }
+      if (!this.relaisPumpeId) { alert("Bitte eine Relaispumpe wählen."); return; }
+      this.rechnet = true;
+      try {
+        const r = await fetch("/foerderstrecke/standort-vorschlag", {
+          method: "POST", headers: {"Content-Type":"application/json","X-CSRF-Token":FS_CSRF},
+          body: JSON.stringify({
+            route: this.routeCoords, hoehenprofil: this.hoehenprofil, ansaug: this.ansaug,
+            ziel_q_l_min: this.zielQ,
+            quelle_pumpe_id: q0.pumpen_typ_id, quelle_rpm: q0.rpm,
+            relais_pumpe_id: this.relaisPumpeId, relais_rpm: this.firstRpm(this.relaisPumpeId),
+            schlauch_typ_id: q0.abschnitt.schlauch_typ_id,
+            n_parallel: q0.abschnitt.n_parallel || 1
+          })
+        });
+        if (!r.ok) { alert("Vorschlag fehlgeschlagen (" + r.status + ")."); this.rechnet = false; return; }
+        const res = await r.json();
+        if (res.stationen && res.stationen.length) {
+          this.stationen = res.stationen.map(s => ({
+            typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm, behaelter_volumen_l: null,
+            lat: s.lat, lng: s.lng,
+            abschnitt: { schlauch_typ_id: s.abschnitt.schlauch_typ_id,
+                         n_parallel: s.abschnitt.n_parallel, laenge_m: s.abschnitt.laenge_m,
+                         delta_hoehe_m: s.abschnitt.delta_hoehe_m }
+          }));
+          this.zeichneStandorte(res.standorte);
+          let msg = (res.machbar ? "✅ " : "⚠️ ") + res.n_gesamt + " Pumpen (1 Quelle + "
+            + res.n_relais + " Relais) bei " + res.ziel_q_l_min + " l/min.";
+          if (res.warnungen && res.warnungen.length) msg += "\n\n" + res.warnungen.join("\n");
+          alert(msg);
+          this.berechnen();
+        } else { alert("Kein Vorschlag möglich."); }
+      } catch (e) { alert("Vorschlag fehlgeschlagen: " + e); }
+      this.rechnet = false;
+    },
+
+    zeichneStandorte(standorte) {
+      if (!this.karte) return;
+      (this._standortMarkers || []).forEach(m => this.karte.removeLayer(m));
+      this._standortMarkers = [];
+      (standorte || []).forEach((st, i) => {
+        if (st.lat == null || st.lng == null) return;
+        const farbe = st.typ === "quellpumpe" ? "#16a34a" : "#7c3aed";
+        const m = L.circleMarker([st.lat, st.lng], {radius:8, color:farbe, fillColor:farbe, fillOpacity:0.85})
+          .addTo(this.karte)
+          .bindPopup((st.typ === "quellpumpe" ? "Quellpumpe" : ("Relais " + i)) + " · p aus " + st.p_aus_bar + " bar");
+        this._standortMarkers.push(m);
+      });
     },
 
     async berechnen() {

@@ -549,3 +549,132 @@ def berechne_modus_a(
         "warnungen": warnungen,
         "engpass": {"index": engpass_idx, "name": engpass_st.name, "q_max_l_min": q_engpass},
     }
+
+
+def _hoehe_relativ(hoehenprofil: list | None, s_m: float, s0_h: float) -> float:
+    """Geländehöhe bei s relativ zur Starthöhe s0_h (0, wenn kein Profil)."""
+    if not hoehenprofil:
+        return 0.0
+    pts = sorted(([float(s), float(h)] for s, h in hoehenprofil if h is not None), key=lambda p: p[0])
+    if not pts:
+        return 0.0
+    if s_m <= pts[0][0]:
+        return pts[0][1] - s0_h
+    if s_m >= pts[-1][0]:
+        return pts[-1][1] - s0_h
+    for (s1, h1), (s2, h2) in zip(pts, pts[1:]):
+        if s1 <= s_m <= s2:
+            t = (s_m - s1) / (s2 - s1) if s2 > s1 else 0.0
+            return (h1 + t * (h2 - h1)) - s0_h
+    return pts[-1][1] - s0_h
+
+
+def standort_vorschlag(
+    laenge_m: float, quelle_kennlinie: list, relais_kennlinie: list, schlauch_k: float,
+    ziel_q_l_min: float, *, n_parallel: int = 1, hoehenprofil: list | None = None,
+    ansaug: Ansaugpunkt | None = None, p_min_ein: float = DEFAULT_MIN_EINGANGSDRUCK_BAR,
+    ziel_druck_bar: float = 0.0, max_ausgang_quelle: float | None = None,
+    max_ausgang_relais: float | None = None, armaturen_zuschlag: float = 0.05,
+    segment_m: float = SEGMENT_M,
+) -> dict:
+    """Modus B: empfiehlt Pumpenstandorte entlang der Route für eine Ziel-Fördermenge.
+
+    Greedy: die Quellpumpe steht bei s=0; der Druck wird segmentweise (inkl. echtem
+    Zwischengelände aus `hoehenprofil`) nach vorn integriert. Fällt der Druck vor dem
+    nächsten Segment unter `p_min_ein`, wird an der aktuellen Stelle eine Relaispumpe
+    gesetzt (Druck = deren Ausgangsdruck). So wird die minimal nötige Pumpenzahl und
+    ihre Position ermittelt.
+
+    Rückgabe: {machbar, standorte:[{s_m, typ, p_aus_bar}], n_relais, n_gesamt,
+    ziel_q_l_min, p_auslass_bar, warnungen}.
+    """
+    warnungen: list[str] = []
+    if ziel_q_l_min <= 0 or laenge_m <= 0:
+        return {"machbar": False, "standorte": [], "n_relais": 0, "n_gesamt": 0,
+                "ziel_q_l_min": ziel_q_l_min, "p_auslass_bar": 0.0,
+                "warnungen": ["Ziel-Fördermenge und Streckenlänge müssen > 0 sein."]}
+
+    # Kann die Pumpe die Ziel-Q überhaupt liefern?
+    for name, kl in (("Quellpumpe", quelle_kennlinie), ("Relaispumpe", relais_kennlinie)):
+        if kl and ziel_q_l_min > kennlinie_max_q(kl):
+            warnungen.append(
+                f"{name}: Ziel-Q {ziel_q_l_min:.0f} l/min über Kennlinien-Maximum "
+                f"{kennlinie_max_q(kl):.0f} l/min — Ziel-Q senken oder stärkere Pumpe.")
+
+    # Saugseite der Quellpumpe
+    if ansaug is not None:
+        saughoehe = ansaug.effektive_saughoehe_m
+        reserve = verfuegbare_saughoehe_m(
+            ansaug.seehoehe_m, saughoehe, ansaug.saug_k, ziel_q_l_min,
+            ansaug.saugleitung_laenge_m, ansaug.saug_n_parallel, ansaug.npshr_m)
+        if saughoehe > ansaug.max_ansaughoehe_m or reserve < 0:
+            warnungen.append(
+                f"Saugseite bei {ziel_q_l_min:.0f} l/min grenzwertig "
+                f"(maßgebliche Saughöhe {saughoehe:.1f} m).")
+
+    def p_aus(kl: list, maxaus: float | None) -> float:
+        h = interpoliere_hoehe(kl, ziel_q_l_min) or 0.0
+        p = h / METER_PRO_BAR
+        return min(p, maxaus) if maxaus is not None else p
+
+    p_aus_q = p_aus(quelle_kennlinie, max_ausgang_quelle)
+    p_aus_r = p_aus(relais_kennlinie, max_ausgang_relais)
+
+    s0_h = 0.0
+    if hoehenprofil:
+        pts = sorted(([float(s), float(h)] for s, h in hoehenprofil if h is not None), key=lambda p: p[0])
+        if pts:
+            s0_h = pts[0][1]
+
+    standorte: list[dict] = [{"s_m": 0.0, "typ": "quellpumpe", "p_aus_bar": round(p_aus_q, 2)}]
+    p = p_aus_q
+    reib_voll = reibungsverlust_bar(schlauch_k, ziel_q_l_min, segment_m, n_parallel, armaturen_zuschlag)
+    machbar = True
+    s = 0.0
+    letzter_pump_s = 0.0
+    sicherung = 0
+    max_iter = int(laenge_m / max(segment_m, 1.0)) + 10_000
+    while s < laenge_m - 1e-6 and sicherung < max_iter:
+        sicherung += 1
+        seg = min(segment_m, laenge_m - s)
+        reib = reib_voll * (seg / segment_m)
+        dh = _hoehe_relativ(hoehenprofil, s + seg, s0_h) - _hoehe_relativ(hoehenprofil, s, s0_h)
+        p_next = p - reib - hoehenverlust_bar(dh)
+        if p_next < p_min_ein:
+            # Relaispumpe an der aktuellen Stelle nötig
+            if s <= letzter_pump_s + 1e-6:
+                machbar = False
+                warnungen.append(
+                    f"Bei km {s/1000:.2f} kommt die Relaispumpe bei {ziel_q_l_min:.0f} l/min "
+                    f"nicht über den nächsten Abschnitt (zu steil/zu lang) — Ziel-Q senken, "
+                    f"Leitung(en) ergänzen oder stärkere Pumpe.")
+                break
+            standorte.append({"s_m": round(s, 1), "typ": "verstaerker", "p_aus_bar": round(p_aus_r, 2)})
+            letzter_pump_s = s
+            p = p_aus_r
+            p_next = p - reib - hoehenverlust_bar(dh)
+            if p_next < p_min_ein:
+                machbar = False
+                warnungen.append(
+                    f"Bei km {s/1000:.2f}: selbst eine frische Relaispumpe schafft das "
+                    f"nächste Segment nicht (Damm/Steigung zu groß bei {ziel_q_l_min:.0f} l/min).")
+                break
+        p = p_next
+        s += seg
+
+    if machbar and p < ziel_druck_bar:
+        machbar = False
+        warnungen.append(
+            f"Auslassdruck {p:.1f} bar < Ziel {ziel_druck_bar:.1f} bar — weitere Pumpe "
+            f"oder mehr Parallelleitungen nötig.")
+
+    n_relais = sum(1 for st in standorte if st["typ"] == "verstaerker")
+    return {
+        "machbar": machbar,
+        "standorte": standorte,
+        "n_relais": n_relais,
+        "n_gesamt": len(standorte),
+        "ziel_q_l_min": ziel_q_l_min,
+        "p_auslass_bar": round(p, 2),
+        "warnungen": warnungen,
+    }
