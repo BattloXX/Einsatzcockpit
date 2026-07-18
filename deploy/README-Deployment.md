@@ -111,6 +111,11 @@ Die Restore-Probe braucht `CREATE`/`DROP` auf die Wegwerf-DB
 Die `.env` (v. a. `FERNET_KEY`) **getrennt** sichern — ohne sie sind verschlüsselte
 Secrets nach einem Restore unlesbar.
 
+**Off-Site (3-2-1):** `BACKUP_REMOTE_ENABLED=true` schiebt die Dumps nach jedem Lauf
+automatisch an eine Gegenstelle (SFTP/SCP/rsync/FTPS/rclone, Key-Auth). Konfiguration
+in der `.env` (`BACKUP_REMOTE_*`), Test mit `python -m app.cli backup-upload` —
+Details im Runbook, Abschnitt 7.
+
 ## VAPID-Keys generieren (für Web Push)
 
 ```bash

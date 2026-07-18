@@ -49,11 +49,23 @@ CloudPanel unter **Settings → Backup** eigene, dateibasierte Sicherungen.)
 
 Die Codebasis ist via Git versioniert und muss nicht gesondert gesichert werden.
 
-## Offsite
+## Off-Site (3-2-1)
 
-3-2-1-Regel: mindestens eine Kopie außerhalb des Servers. Details und Sicherheitshinweise
-(die Dumps sind unverschlüsselt und enthalten personenbezogene Daten) im
-[DR-Runbook, Abschnitt 7](Betrieb-Backup-und-Disaster-Recovery).
+Der Backup-Job kann die Dumps **automatisch** an eine Gegenstelle schieben
+(SFTP/SCP/rsync/FTPS/rclone). In der `.env` aktivieren:
+
+```env
+BACKUP_REMOTE_ENABLED=true
+BACKUP_REMOTE_PROTOCOL=sftp
+BACKUP_REMOTE_HOST=backup.example.org
+BACKUP_REMOTE_USER=ec-backup
+BACKUP_REMOTE_KEY=/home/clp-einsatz/.ssh/id_ed25519
+BACKUP_REMOTE_PATH=/srv/einsatzcockpit-backups
+```
+
+Testen: `python -m app.cli backup-upload`. Details, rclone-Cloud-Ziele und
+Sicherheitshinweise (die Dumps sind unverschlüsselt und enthalten personenbezogene
+Daten) im [DR-Runbook, Abschnitt 7](Betrieb-Backup-und-Disaster-Recovery).
 
 ---
 

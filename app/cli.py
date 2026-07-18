@@ -169,11 +169,13 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> in
         dbs.append(("einsatzleiter_weather", settings.WEATHER_DATABASE_URL))
 
     fehler = 0
+    erzeugt: list[Path] = []
     for label, url in dbs:
         ziel = out / bs.dump_dateiname(label, jetzt)
         try:
             groesse = _dump_db(bs.parse_database_url(url), ziel, settings.BACKUP_DUMP_BIN)
             print(f"✓ DB-Dump {label}: {ziel.name} ({groesse // 1024} KB)")
+            erzeugt.append(ziel)
             bs.prune_backups(out, label, behalten)
         except Exception as exc:  # noqa: BLE001 — Sammelbetrieb, Rest weiterversuchen
             fehler += 1
@@ -186,6 +188,7 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> in
             try:
                 groesse = _tar_medien(ziel, medien_root, out)
                 print(f"✓ Medien-Archiv: {ziel.name} ({groesse // 1024} KB)")
+                erzeugt.append(ziel)
                 bs.prune_backups(out, "medien", behalten)
             except Exception as exc:  # noqa: BLE001
                 fehler += 1
@@ -193,11 +196,61 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> in
         else:
             print(f"• Medien-Verzeichnis {medien_root} fehlt — uebersprungen")
 
+    # Off-Site-Upload (3-2-1): frisch erzeugte Dumps an die Gegenstelle schieben.
+    if settings.BACKUP_REMOTE_ENABLED and erzeugt:
+        if _remote_upload(erzeugt, out) != 0:
+            fehler += 1
+
     if fehler:
         print(f"Backup mit {fehler} Fehler(n) beendet.", file=sys.stderr)
     else:
         print(f"Backup vollstaendig nach {out}.")
     return 1 if fehler else 0
+
+
+def _remote_upload(dateien: list[Path], backup_dir: Path) -> int:
+    """Laedt die uebergebenen Backups an das konfigurierte Remote-Ziel. 0 = ok."""
+    from app.services import remote_backup_service as rbs
+    cfg = rbs.config_aus_settings()
+    try:
+        rbs.config_pruefen(cfg)
+    except ValueError as exc:
+        print(f"✗ Remote-Upload-Konfiguration ungueltig: {exc}", file=sys.stderr)
+        return 1
+    try:
+        rbs.upload(cfg, dateien, backup_dir)
+        print(f"✓ Off-Site-Upload ({len(dateien)} Datei(en)) → {cfg.ziel_beschreibung()}")
+        return 0
+    except Exception as exc:  # noqa: BLE001 — Off-Site-Fehler sichtbar machen
+        print(f"✗ Off-Site-Upload fehlgeschlagen ({cfg.ziel_beschreibung()}): {exc}",
+              file=sys.stderr)
+        return 1
+
+
+def backup_upload(alle: bool = False) -> int:
+    """Laedt vorhandene Backups aus BACKUP_DIR an das Remote-Ziel (ohne neuen Dump).
+
+    Standard: nur die neuesten Dumps je Typ. Mit alle=True das ganze Verzeichnis.
+    Dient auch dem Testen der Remote-Konfiguration.
+    """
+    from app.config import settings
+    from app.services import remote_backup_service as rbs
+
+    if not settings.BACKUP_REMOTE_ENABLED:
+        print("• BACKUP_REMOTE_ENABLED=false — Remote-Upload ist deaktiviert.", file=sys.stderr)
+        return 1
+    out = Path(settings.BACKUP_DIR)
+    if not out.is_dir():
+        print(f"✗ Backup-Verzeichnis {out} fehlt.", file=sys.stderr)
+        return 1
+    if alle or not settings.BACKUP_REMOTE_ONLY_LATEST:
+        dateien = sorted(p for p in out.glob("*") if p.is_file())
+    else:
+        dateien = rbs.neueste_je_praefix(out, ("einsatzleiter", "einsatzleiter_weather", "medien"))
+    if not dateien and rbs.config_aus_settings().protocol != "rclone":
+        print(f"✗ Keine Backups in {out} gefunden.", file=sys.stderr)
+        return 1
+    return _remote_upload(dateien, out)
 
 
 def restore_test(scratch_db: str = "") -> int:
@@ -292,6 +345,9 @@ def main() -> None:
     p_rtest = sub.add_parser("restore-test", help="Restore-Probe des neuesten Haupt-Dumps")
     p_rtest.add_argument("--scratch-db", default="", help="Name der Wegwerf-DB (Default: BACKUP_RESTORE_TEST_DB)")
 
+    p_upload = sub.add_parser("backup-upload", help="Vorhandene Backups an das Remote-Ziel laden")
+    p_upload.add_argument("--all", action="store_true", help="Alle Backups statt nur der neuesten je Typ")
+
     args = parser.parse_args()
     if args.command == "create-admin":
         create_admin(args.username, args.password, args.display_name)
@@ -305,6 +361,8 @@ def main() -> None:
         sys.exit(run_backup(args.out, args.keep, 0 if args.no_media else -1))
     elif args.command == "restore-test":
         sys.exit(restore_test(args.scratch_db))
+    elif args.command == "backup-upload":
+        sys.exit(backup_upload(args.all))
     else:
         parser.print_help()
         sys.exit(1)
