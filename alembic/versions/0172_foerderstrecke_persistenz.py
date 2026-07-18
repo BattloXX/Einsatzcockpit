@@ -25,7 +25,7 @@ def upgrade() -> None:
             status              VARCHAR(20)  NOT NULL DEFAULT 'entwurf',
             objekt_id           BIGINT       NULL,
             incident_id         BIGINT       NULL,
-            lage_id             BIGINT       NULL,
+            lage_id             INT          NULL,
             route_geojson       TEXT         NULL,
             ansaug_json         TEXT         NULL,
             auslass_json        TEXT         NULL,
