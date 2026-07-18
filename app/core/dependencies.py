@@ -22,7 +22,7 @@ from app.db import get_db
 # Request 2 Queries statt bis zu 10 anfallen (Audit B4).
 _SYSTEM_FLAG_KEYS = ("uas_module_enabled", "objekt_module_enabled",
                      "gateway_module_enabled", "lagefuehrung_modul_aktiv",
-                     "nachschlagewerke_module_enabled")
+                     "nachschlagewerke_module_enabled", "foerderstrecke_module_enabled")
 
 
 def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session) -> None:
@@ -56,6 +56,9 @@ def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session)
             "gateway_module_enabled" in sys_on and org_s and org_s.gateway_module_enabled)
         request.state.lagefuehrung_modul_aktiv = bool(
             "lagefuehrung_modul_aktiv" in sys_on and org_s and org_s.lagefuehrung_modul_aktiv)
+        request.state.foerderstrecke_enabled = bool(
+            "foerderstrecke_module_enabled" in sys_on
+            and org_s and org_s.foerderstrecke_module_enabled)
         # Rein org-gesteuerte Module (kein System-Flag):
         request.state.fahrtenbuch_modul_aktiv = bool(org_s and org_s.fahrtenbuch_modul_aktiv)
         request.state.atemschutz_pruefung_modul_aktiv = bool(
@@ -84,6 +87,7 @@ def _resolve_current_org(
     request.state.fahrtenbuch_modul_aktiv = False
     request.state.atemschutz_pruefung_modul_aktiv = False
     request.state.lagefuehrung_modul_aktiv = False
+    request.state.foerderstrecke_enabled = False
 
     user = getattr(request.state, "user", None)
     if user is None:

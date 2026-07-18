@@ -194,6 +194,16 @@ class Settings(BaseSettings):
     # Eigene Wasserstellen-Stammdaten haben Vorrang; OSM-Hydranten näher als dieser
     # Wert an einer eigenen Wasserstelle werden ausgeblendet (kein Doppelbild).
     WASSERSTELLE_OSM_DEDUPE_M: int = 25
+
+    # ── Höhen-Service (Förderstrecken-Planer, PR 3) ──────────────────────────
+    # Primär: Open-Meteo Elevation API (frei, batch-fähig). Höhenservice Österreich
+    # (geoland.at) als optionale, präzisere Primärquelle konfigurierbar; leer = nur Open-Meteo.
+    HOEHEN_AT_URL: str = ""                    # z. B. geoland.at-Höhenabfrage; leer = deaktiviert
+    HOEHEN_OPENMETEO_URL: str = "https://api.open-meteo.com/v1/elevation"
+    HOEHEN_TIMEOUT_SECONDS: float = 8.0
+    HOEHEN_BATCH_MAX: int = 100               # max. Punkte je HTTP-Abfrage
+    HOEHEN_CACHE_TTL_SECONDS: int = 86400      # In-Memory-Cache (Höhen ändern sich nicht)
+    HOEHEN_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
     # Gefahren der Nachbarobjekte im Umkreis des Einsatzobjekts (Einsatzinfo-Karte)
     NACHBAR_GEFAHR_RADIUS_M: int = 400
 

@@ -1,0 +1,91 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Pumpen – Förderstrecke – Admin{% endblock %}
+
+{% block admin_content %}
+<div class="page-content">
+
+  <div class="page-header">
+    <div>
+      <h1>🚰 Pumpen (Förderstrecke)</h1>
+      <p class="page-header__sub">
+        {{ pumpen|length }} Pumpentyp{{ '' if pumpen|length == 1 else 'en' }} im Katalog dieser Organisation
+      </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="btn btn--secondary" href="/admin/foerderschlaeuche">🧵 Schläuche</a>
+      <a class="btn btn--secondary" href="/admin/foerderpumpen/vorlagen">📋 Aus Vorlage</a>
+      <a class="btn btn--primary" href="/admin/foerderpumpen/neu">＋ Eigene Pumpe</a>
+    </div>
+  </div>
+
+  <p class="text-muted" style="font-size:.85rem;margin-top:-4px;max-width:760px;">
+    Lege eigene Pumpen an und konfiguriere die Kennlinie selbst, oder starte von einer
+    Vorlage (TS 1600, TS 1200, HLP 16.000/8.000, Fremdpumpe) und passe sie an. Vorlagen
+    werden beim Übernehmen zu einer frei editierbaren Kopie deiner Organisation.
+  </p>
+
+  {% if not pumpen %}
+  <div class="card" style="padding:28px;text-align:center;color:var(--text-muted);">
+    Noch keine Pumpen. Lege eine <a href="/admin/foerderpumpen/neu">eigene Pumpe</a> an
+    oder übernimm eine <a href="/admin/foerderpumpen/vorlagen">Vorlage</a>.
+  </div>
+  {% else %}
+  <table class="table-admin table-admin--cards">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Kennlinie</th>
+        <th>Druck / Saug</th>
+        <th style="text-align:right;">Ansaughöhe</th>
+        <th>Tank</th>
+        <th>Herkunft</th>
+        <th>Aktionen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in pumpen %}
+      <tr>
+        <td data-label="Name">
+          <strong>{{ p.name }}</strong>
+          {% if not p.aktiv %}<span class="badge-pill badge-pill--gray">inaktiv</span>{% endif %}
+          {% if p.hinweise %}<div class="text-muted" style="font-size:.78rem;max-width:340px;">{{ p.hinweise }}</div>{% endif %}
+        </td>
+        <td data-label="Kennlinie">
+          {% set stufen = p.drehzahlstufen %}
+          {% if stufen %}
+            <span class="badge-pill badge-pill--green">{{ stufen|length }} Stufe{{ '' if stufen|length == 1 else 'n' }}</span>
+            <div class="text-muted" style="font-size:.78rem;">{{ stufen|join(', ') }}</div>
+          {% else %}
+            <span class="badge-pill badge-pill--red">keine</span>
+          {% endif %}
+        </td>
+        <td data-label="Druck / Saug" style="font-size:.82rem;">
+          Druck {{ p.druck_anschluss_dn or '?' }} mm ×{{ p.druck_parallel_max }}<br>
+          Saug {{ p.saug_anschluss_dn or '?' }} mm ×{{ p.saug_parallel_max }}
+        </td>
+        <td data-label="Ansaughöhe" style="text-align:right;font-variant-numeric:tabular-nums;">
+          {{ '%.1f'|format(p.max_ansaughoehe_m) }} m
+        </td>
+        <td data-label="Tank">{% if p.tank_l %}{{ p.tank_l }} l{% else %}<span class="text-muted">–</span>{% endif %}</td>
+        <td data-label="Herkunft">
+          {% if p.quelle == 'vorlage' %}
+          <span class="badge-pill badge-pill--gray">aus Vorlage</span>
+          {% else %}
+          <span class="badge-pill badge-pill--gray">manuell</span>
+          {% endif %}
+        </td>
+        <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
+          <a class="btn btn--ghost btn--xs" href="/admin/foerderpumpen/{{ p.id }}/bearbeiten">Bearbeiten</a>
+          <form method="post" action="/admin/foerderpumpen/{{ p.id }}/loeschen" style="display:inline;"
+                onsubmit="return confirm('Diese Pumpe wirklich löschen?');">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--ghost btn--xs">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

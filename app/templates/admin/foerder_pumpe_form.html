@@ -1,0 +1,196 @@
+{% extends "admin/_layout.html" %}
+{% block title %}{{ 'Pumpe bearbeiten' if pumpe else 'Neue Pumpe' }} – Förderstrecke – Admin{% endblock %}
+
+{% set init_json = form.get('kennlinien_json') or (pumpe.kennlinien_json if pumpe else None) or '{}' %}
+{% set action = ('/admin/foerderpumpen/' ~ pumpe.id ~ '/bearbeiten') if pumpe else '/admin/foerderpumpen/neu' %}
+{% macro val(feld, modell_attr) -%}
+{{ form.get(feld) if form.get(feld) is not none else (modell_attr if modell_attr is not none else '') }}
+{%- endmacro %}
+
+{% block admin_content %}
+<div class="page-content">
+
+  <div class="page-header">
+    <div>
+      <h1>{{ 'Pumpe bearbeiten' if pumpe else 'Neue Pumpe' }}</h1>
+      {% if pumpe and pumpe.quelle == 'vorlage' and pumpe.vorlage_key %}
+      <p class="page-header__sub">Basiert auf Vorlage <code>{{ pumpe.vorlage_key }}</code> — frei anpassbar</p>
+      {% endif %}
+    </div>
+    <a class="btn btn--secondary" href="/admin/foerderpumpen">← Zurück</a>
+  </div>
+
+  {% if fehler %}
+  <div class="alert alert--error">
+    <strong>Bitte korrigieren:</strong>
+    <ul style="margin:.4rem 0 0;padding-left:1.1rem;">
+      {% for f in fehler %}<li>{{ f }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# Kennlinien-Init für den Editor (rohes JSON, nicht HTML-escapen) #}
+  <script type="application/json" id="kennlinienInit">{{ init_json | safe }}</script>
+
+  <form method="post" action="{{ action }}" x-data="pumpeForm()" @submit="serialize()">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="kennlinien_json" id="kennlinienHidden">
+    {# verbrauch/npshr werden aktuell nur durchgereicht (Rohwert erhalten) #}
+    <input type="hidden" name="verbrauch_json" value="{{ form.get('verbrauch_json') if form.get('verbrauch_json') is not none else (pumpe.verbrauch_json if pumpe else '') }}">
+    <input type="hidden" name="npshr_json" value="{{ form.get('npshr_json') if form.get('npshr_json') is not none else (pumpe.npshr_json if pumpe else '') }}">
+
+    <div class="card" style="padding:18px;margin-bottom:14px;">
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        <input type="text" name="name" class="form-input" required maxlength="150"
+               value="{{ form.get('name') if form.get('name') is not none else (pumpe.name if pumpe else '') }}"
+               placeholder="z. B. TS 1600 (FOX 3)">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Druckabgang Nennweite (mm)</label>
+          <input type="number" name="druck_anschluss_dn" class="form-input" min="0"
+                 value="{{ form.get('druck_anschluss_dn') if form.get('druck_anschluss_dn') is not none else (pumpe.druck_anschluss_dn if pumpe else '') }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Druckabgänge max. parallel</label>
+          <input type="number" name="druck_parallel_max" class="form-input" min="1"
+                 value="{{ form.get('druck_parallel_max') if form.get('druck_parallel_max') is not none else (pumpe.druck_parallel_max if pumpe else 1) }}">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Sauganschluss Nennweite (mm)</label>
+          <input type="number" name="saug_anschluss_dn" class="form-input" min="0"
+                 value="{{ form.get('saug_anschluss_dn') if form.get('saug_anschluss_dn') is not none else (pumpe.saug_anschluss_dn if pumpe else '') }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sauganschlüsse max. parallel</label>
+          <input type="number" name="saug_parallel_max" class="form-input" min="1"
+                 value="{{ form.get('saug_parallel_max') if form.get('saug_parallel_max') is not none else (pumpe.saug_parallel_max if pumpe else 1) }}">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Max. Ansaughöhe (m)</label>
+          <input type="text" name="max_ansaughoehe_m" class="form-input"
+                 value="{{ form.get('max_ansaughoehe_m') if form.get('max_ansaughoehe_m') is not none else (pumpe.max_ansaughoehe_m if pumpe else '7.5') }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Min. Eingangsdruck (bar)</label>
+          <input type="text" name="min_eingangsdruck_bar" class="form-input"
+                 value="{{ form.get('min_eingangsdruck_bar') if form.get('min_eingangsdruck_bar') is not none else (pumpe.min_eingangsdruck_bar if pumpe else '1.5') }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Max. Ausgangsdruck (bar, optional)</label>
+          <input type="text" name="max_ausgangsdruck_bar" class="form-input"
+                 value="{{ form.get('max_ausgangsdruck_bar') if form.get('max_ausgangsdruck_bar') is not none else (pumpe.max_ausgangsdruck_bar if (pumpe and pumpe.max_ausgangsdruck_bar is not none) else '') }}">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tankinhalt (l, optional)</label>
+          <input type="number" name="tank_l" class="form-input" min="0"
+                 value="{{ form.get('tank_l') if form.get('tank_l') is not none else (pumpe.tank_l if (pumpe and pumpe.tank_l is not none) else '') }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Verlastet auf Fahrzeug (optional)</label>
+          <select name="vehicle_id" class="form-select">
+            <option value="">— keines —</option>
+            {% set sel_vid = form.get('vehicle_id') if form.get('vehicle_id') is not none else (pumpe.vehicle_id if pumpe else none) %}
+            {% for v in vehicles %}
+            <option value="{{ v.id }}" {% if sel_vid and sel_vid|string == v.id|string %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Hinweise (optional)</label>
+        <textarea name="hinweise" class="form-input" rows="2"
+                  placeholder="z. B. nur mit WLF zustellbar; Kennlinie kalibrieren">{{ form.get('hinweise') if form.get('hinweise') is not none else (pumpe.hinweise if pumpe else '') }}</textarea>
+      </div>
+    </div>
+
+    {# ── Kennlinien-Editor ── #}
+    <div class="card" style="padding:18px;margin-bottom:14px;">
+      <h3 style="margin:0 0 4px;font-size:1rem;">Kennlinie(n)</h3>
+      <p class="text-muted" style="font-size:.82rem;margin:0 0 12px;">
+        Je Drehzahlstufe (rpm oder Bezeichnung wie <code>nenn</code>) eine Punktliste
+        Fördermenge Q [l/min] → Förderhöhe H [m]. H entspricht ≈ 10·Druck [bar].
+        Punkte werden nach Q sortiert; H sollte mit steigendem Q fallen.
+      </p>
+
+      <template x-for="(stage, si) in stages" :key="si">
+        <div style="border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <label class="form-label" style="margin:0;">Drehzahlstufe</label>
+            <input type="text" class="form-input" style="width:160px;" x-model="stage.rpm" placeholder="2000 oder nenn">
+            <button type="button" class="btn btn--ghost btn--xs" style="margin-left:auto;"
+                    @click="removeStage(si)">Stufe entfernen</button>
+          </div>
+          <table style="width:100%;font-size:.85rem;">
+            <thead>
+              <tr>
+                <th style="text-align:left;padding:2px 6px;">Q [l/min]</th>
+                <th style="text-align:left;padding:2px 6px;">H [m]</th>
+                <th style="width:40px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(pt, pi) in stage.points" :key="pi">
+                <tr>
+                  <td style="padding:2px 6px;"><input type="text" class="form-input" x-model="pt.q" style="width:120px;"></td>
+                  <td style="padding:2px 6px;"><input type="text" class="form-input" x-model="pt.h" style="width:120px;"></td>
+                  <td style="padding:2px 6px;"><button type="button" class="btn btn--ghost btn--xs" @click="removePoint(si, pi)">×</button></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <button type="button" class="btn btn--ghost btn--xs" style="margin-top:6px;" @click="addPoint(si)">＋ Punkt</button>
+        </div>
+      </template>
+
+      <button type="button" class="btn btn--secondary btn--sm" @click="addStage()">＋ Drehzahlstufe</button>
+    </div>
+
+    <div style="display:flex;gap:8px;">
+      <button type="submit" class="btn btn--primary">Speichern</button>
+      <a class="btn btn--ghost" href="/admin/foerderpumpen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+
+<script>
+function pumpeForm() {
+  var init = {};
+  try { init = JSON.parse(document.getElementById('kennlinienInit').textContent || '{}'); } catch (e) { init = {}; }
+  var stages = Object.keys(init).map(function (rpm) {
+    return { rpm: rpm, points: (init[rpm] || []).map(function (p) { return { q: p[0], h: p[1] }; }) };
+  });
+  if (stages.length === 0) { stages = [{ rpm: '', points: [{ q: '', h: '' }] }]; }
+  return {
+    stages: stages,
+    addStage: function () { this.stages.push({ rpm: '', points: [{ q: '', h: '' }] }); },
+    removeStage: function (i) { this.stages.splice(i, 1); if (this.stages.length === 0) { this.addStage(); } },
+    addPoint: function (si) { this.stages[si].points.push({ q: '', h: '' }); },
+    removePoint: function (si, pi) { this.stages[si].points.splice(pi, 1); if (this.stages[si].points.length === 0) { this.addPoint(si); } },
+    serialize: function () {
+      var obj = {};
+      this.stages.forEach(function (s) {
+        var key = (s.rpm || '').toString().trim() || 'nenn';
+        var pts = s.points
+          .filter(function (p) { return String(p.q).trim() !== '' || String(p.h).trim() !== ''; })
+          .map(function (p) { return [p.q, p.h]; });
+        if (pts.length) { obj[key] = pts; }
+      });
+      document.getElementById('kennlinienHidden').value = JSON.stringify(obj);
+    }
+  };
+}
+</script>
+{% endblock %}
