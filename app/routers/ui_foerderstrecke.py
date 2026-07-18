@@ -271,6 +271,124 @@ async def berechnen(
     return JSONResponse({**ergebnis, "material": material, "svg": svg})
 
 
+# ── Modus B: Pumpenstandorte vorschlagen ──────────────────────────────────────
+
+def _route_laenge_m(route: list) -> float:
+    from app.services.hoehen_service import haversine_m
+    laenge = 0.0
+    for i in range(len(route) - 1):
+        laenge += haversine_m(route[i][0], route[i][1], route[i + 1][0], route[i + 1][1])
+    return laenge
+
+
+def _punkt_bei_s(route: list, s_ziel: float) -> list | None:
+    """Koordinate [lat, lng] an der Bogenlänge s entlang der Route (Haversine)."""
+    from app.services.hoehen_service import haversine_m
+    if not route:
+        return None
+    if len(route) == 1 or s_ziel <= 0:
+        return [route[0][0], route[0][1]]
+    acc = 0.0
+    for i in range(len(route) - 1):
+        d = haversine_m(route[i][0], route[i][1], route[i + 1][0], route[i + 1][1])
+        if acc + d >= s_ziel:
+            t = (s_ziel - acc) / d if d > 0 else 0.0
+            return [route[i][0] + t * (route[i + 1][0] - route[i][0]),
+                    route[i][1] + t * (route[i + 1][1] - route[i][1])]
+        acc += d
+    return [route[-1][0], route[-1][1]]
+
+
+@router.post("/standort-vorschlag")
+async def standort_vorschlag(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    """Empfiehlt Pumpenstandorte (Modus B) für eine Ziel-Fördermenge entlang der Route.
+
+    Nutzt die gewählte Quellpumpe + eine Relaispumpe (aus dem Katalog) und liefert eine
+    fertige Stationenliste (mit Koordinaten) zurück, die der Wizard übernimmt.
+    """
+    daten = await request.json()
+    route = [[float(p[0]), float(p[1])] for p in (daten.get("route") or []) if len(p) >= 2]
+    if len(route) < 2:
+        raise HTTPException(400, "Route mit mindestens 2 Punkten erforderlich.")
+    laenge = _route_laenge_m(route)
+
+    quelle = _pumpe_oder_400(daten.get("quelle_pumpe_id"), db, user.org_id)  # type: ignore[arg-type]
+    relais = _pumpe_oder_400(daten.get("relais_pumpe_id"), db, user.org_id)  # type: ignore[arg-type]
+    schlauch = db.get(FoerderSchlauchTyp, int(daten["schlauch_typ_id"])) if daten.get("schlauch_typ_id") else None
+    if schlauch is None or schlauch.org_id != user.org_id:
+        raise HTTPException(400, "Schlauchtyp erforderlich.")
+    n_par = int(daten.get("n_parallel") or 1)
+    quelle_rpm = str(daten.get("quelle_rpm") or "")
+    relais_rpm = str(daten.get("relais_rpm") or "")
+
+    a = daten.get("ansaug") or {}
+    ansaug = engine.Ansaugpunkt(
+        seehoehe_m=float(a.get("seehoehe_m") or 430.0),
+        geodaetische_saughoehe_m=float(a.get("geodaetische_saughoehe_m") or 3.0),
+        saug_k=float(a.get("saug_k") or 0.23),
+        saug_n_parallel=int(a.get("saug_n_parallel") or 1),
+        max_ansaughoehe_m=float(a.get("max_ansaughoehe_m") or 7.5),
+        saug_scheitel_m=float(a.get("saug_scheitel_m") or 0.0),
+    )
+
+    ergebnis = engine.standort_vorschlag(
+        laenge, _kennlinie_stufe(quelle, quelle_rpm), _kennlinie_stufe(relais, relais_rpm),
+        schlauch.k_verlust, float(daten.get("ziel_q_l_min") or 0.0),
+        n_parallel=n_par, hoehenprofil=daten.get("hoehenprofil"), ansaug=ansaug,
+        max_ausgang_quelle=quelle.max_ausgangsdruck_bar, max_ausgang_relais=relais.max_ausgangsdruck_bar,
+    )
+
+    # Standorte → Koordinaten + fertige Stationenliste (Abschnitt bis zur Folgestation/Auslass)
+    full_profil = daten.get("hoehenprofil")
+    standorte = ergebnis["standorte"]
+    stationen_out = []
+    for i, st in enumerate(standorte):
+        s_start = st["s_m"]
+        s_end = standorte[i + 1]["s_m"] if i + 1 < len(standorte) else laenge
+        koord = _punkt_bei_s(route, s_start) or [None, None]
+        st["lat"], st["lng"] = koord[0], koord[1]
+        ab_laenge = round(s_end - s_start, 1)
+        delta = 0.0
+        if full_profil and ab_laenge > 0:
+            stz = engine.abschnitt_hoehen_stuetzpunkte(full_profil, s_start, s_end)
+            if stz:
+                delta = stz[-1]
+        ist_quelle = st["typ"] == "quellpumpe"
+        stationen_out.append({
+            "typ": st["typ"],
+            "pumpen_typ_id": quelle.id if ist_quelle else relais.id,
+            "rpm": quelle_rpm if ist_quelle else relais_rpm,
+            "lat": koord[0], "lng": koord[1],
+            "abschnitt": {"schlauch_typ_id": schlauch.id, "n_parallel": n_par,
+                          "laenge_m": ab_laenge, "delta_hoehe_m": delta},
+        })
+
+    return JSONResponse({**ergebnis, "laenge_m": round(laenge, 1), "stationen": stationen_out})
+
+
+def _pumpe_oder_400(pid, db: Session, org_id: int) -> FoerderPumpenTyp:
+    if not pid:
+        raise HTTPException(400, "Pumpe erforderlich.")
+    p = db.get(FoerderPumpenTyp, int(pid))
+    if p is None or p.org_id != org_id:
+        raise HTTPException(400, "Unbekannte Pumpe.")
+    return p
+
+
+def _kennlinie_stufe(pumpe: FoerderPumpenTyp, rpm: str) -> list:
+    kl = pumpe.kennlinien
+    if rpm and rpm in kl:
+        return list(kl[rpm])
+    if pumpe.drehzahlstufen:
+        return list(kl.get(pumpe.drehzahlstufen[0]) or [])
+    return []
+
+
 # ── Persistenz (PR 5-UI): Speichern / Laden / Status / Löschen ────────────────
 
 @router.post("/speichern")
