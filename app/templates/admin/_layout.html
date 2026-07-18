@@ -373,6 +373,11 @@
                {{ tip('Eigener SMTP-Server und/oder Office 365 / Microsoft Graph je Organisation') }}>
               <span class="admin-nav__icon">✉️</span>Mail-Versand
             </a>
+            <a href="/admin/org-backup"
+               class="admin-nav__item {% if '/admin/org-backup' in request.url.path %}is-active{% endif %}"
+               {{ tip('Alle Org-Daten als Archiv sichern (Download / Remote-Ziel)') }}>
+              <span class="admin-nav__icon">💾</span>Datensicherung
+            </a>
             {% if is_sysadmin %}
             <a href="/admin/ki-prompts"
                class="admin-nav__item {% if '/admin/ki-prompts' in request.url.path %}is-active{% endif %}"
@@ -403,11 +408,6 @@
                class="admin-nav__item {% if '/admin/backup' in request.url.path %}is-active{% endif %}"
                {{ tip('Stammdaten als JSON sichern oder wiederherstellen') }}>
               <span class="admin-nav__icon">📦</span>Backup
-            </a>
-            <a href="/admin/org-backup"
-               class="admin-nav__item {% if '/admin/org-backup' in request.url.path %}is-active{% endif %}"
-               {{ tip('Alle Org-Daten als Archiv sichern (Download / Remote)') }}>
-              <span class="admin-nav__icon">💾</span>Datensicherung
             </a>
             <a href="/admin/organisations"
                class="admin-nav__item {% if '/admin/organisations' in request.url.path %}is-active{% endif %}"
