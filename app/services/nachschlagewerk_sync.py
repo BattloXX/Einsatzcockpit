@@ -17,6 +17,7 @@ import io
 import logging
 import os
 import tempfile
+import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -70,6 +71,54 @@ def _valide_csv(text: str) -> int:
     return n
 
 
+def _decode(rohdaten: bytes) -> str:
+    """Dekodiert CSV-Bytes tolerant (BAM liefert je nach Datei UTF-8 oder Windows-1252)."""
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return rohdaten.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return rohdaten.decode("utf-8", errors="ignore")
+
+
+def _ist_zip(rohdaten: bytes) -> bool:
+    """ZIP-Magic-Bytes (PK\\x03\\x04, auch leere/gespannte Archive PK\\x05/\\x07)."""
+    return rohdaten[:2] == b"PK" and len(rohdaten) > 4
+
+
+def _extrahiere_csv(rohdaten: bytes) -> str | None:
+    """Liefert den CSV-Text aus der Antwort.
+
+    - Direkte CSV -> dekodieren.
+    - ZIP (z. B. BAM-Download mit BAM-Gefahrgutdaten.csv + -status.csv) -> das
+      .csv-Member mit den MEISTEN gueltigen UN-Zeilen waehlen (das ist die
+      Gefahrgutdaten-Datei, nicht die Status-Datei).
+    """
+    if not _ist_zip(rohdaten):
+        return _decode(rohdaten)
+    try:
+        with zipfile.ZipFile(io.BytesIO(rohdaten)) as zf:
+            beste_text: str | None = None
+            beste_zahl = 0
+            for name in zf.namelist():
+                if not name.lower().endswith(".csv"):
+                    continue
+                try:
+                    text = _decode(zf.read(name))
+                except Exception:
+                    continue
+                zahl = _valide_csv(text)
+                if zahl > beste_zahl:
+                    beste_zahl = zahl
+                    beste_text = text
+            if beste_text is None:
+                logger.warning("Gefahrgut-Sync: ZIP enthaelt keine gueltige Gefahrgut-CSV.")
+            return beste_text
+    except zipfile.BadZipFile:
+        logger.warning("Gefahrgut-Sync: Antwort sieht wie ZIP aus, ist aber kaputt.")
+        return None
+
+
 def _atomar_schreiben(text: str) -> Path:
     """Schreibt text atomar nach _ziel_pfad() (tmp -> os.replace im selben Verzeichnis)."""
     ziel = _ziel_pfad()
@@ -89,8 +138,10 @@ def _atomar_schreiben(text: str) -> Path:
 
 
 async def sync_gefahrgut() -> bool:
-    """Laedt die Gefahrgut-CSV und ersetzt den lokalen Datensatz atomar.
+    """Laedt die Gefahrgut-CSV (oder ZIP) und ersetzt den lokalen Datensatz atomar.
 
+    Direkte `;`-CSV wird unveraendert uebernommen; ein ZIP (z. B. der BAM-Download
+    mit BAM-Gefahrgutdaten.csv) wird entpackt und das passende CSV-Member gewaehlt.
     Rueckgabe True bei erfolgreicher Uebernahme, sonst False (Datenstand bleibt).
     """
     url = (settings.NACHSCHLAGEWERK_GEFAHRGUT_URL or "").strip()
@@ -105,7 +156,7 @@ async def sync_gefahrgut() -> bool:
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-            text = resp.text
+            rohdaten = resp.content
     except httpx.TimeoutException:
         logger.warning("Gefahrgut-Sync: Timeout beim Abruf von %s", url)
         return False
@@ -114,6 +165,11 @@ async def sync_gefahrgut() -> bool:
         return False
     except Exception:
         logger.exception("Gefahrgut-Sync: Abruf fehlgeschlagen (%s)", url)
+        return False
+
+    text = _extrahiere_csv(rohdaten)
+    if text is None:
+        logger.warning("Gefahrgut-Sync: keine verwertbare CSV in der Antwort (%s).", url)
         return False
 
     n = _valide_csv(text)

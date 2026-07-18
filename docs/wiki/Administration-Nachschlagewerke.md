@@ -44,25 +44,30 @@ Der mitgelieferte Seed (`app/data/bam_gefahrgut.csv`) ist ein kleiner redaktione
 
 **Format:** die BAM liefert `BAM-Gefahrgutdaten.csv` — **`;`-getrennt**, Spaltennamen in der ersten Zeile. Der Parser ordnet die Spalten **tolerant** über Schlüsselwörter zu (UN-Nummer, Benennung/Stoffname, Klasse, Klassifizierungscode, Gefahrnummer/Kemler, Verpackungsgruppe).
 
+Der Sync akzeptiert **sowohl eine direkte `;`-CSV als auch ein ZIP**: Enthält die Antwort ein ZIP (z. B. der BAM-Download mit `BAM-Gefahrgutdaten.csv` + `BAM-Gefahrgutstatus.csv`), wird es automatisch entpackt und das **richtige** CSV-Member erkannt (das mit den meisten gültigen UN-Zeilen — also die Gefahrgutdaten, nicht die Status-Datei). Zeichensätze UTF-8 und Windows-1252 werden automatisch erkannt.
+
 ### Vorschläge
 
-**Empfohlen (voll automatisch, kein manueller Aufwand):**
-Die BAM stellt die Daten als **ZIP** bereit — der Sync erwartet aber eine **direkte `;`-CSV**. Daher die entpackte `BAM-Gefahrgutdaten.csv` **einmalig auf eigenem Webspace ablegen** und die URL dorthin setzen:
+**Empfohlen (voll automatisch, kein manueller Aufwand):** direkt die BAM-**ZIP-URL** setzen — Entpacken übernimmt der Sync:
+
+```env
+NACHSCHLAGEWERK_GEFAHRGUT_URL=https://www.dgg.bam.de/.../BAM-Gefahrgutdaten.zip
+```
+
+> Die exakte, aktuelle Download-URL des ZIP auf der BAM-Seite (siehe unten) übernehmen — sie ändert sich gelegentlich.
+
+**Alternative (eigener Spiegel):** die entpackte CSV auf eigenem Webspace ablegen und daraufsetzen — nützlich, wenn die BAM-Direkt-URL nicht dauerhaft stabil ist:
 
 ```env
 NACHSCHLAGEWERK_GEFAHRGUT_URL=https://einsatzcockpit.com/static/data/bam_gefahrgut.csv
 ```
 
-Der tägliche Loop lädt dann automatisch die aktuelle Datei; ein Aktualisieren dieser einen Datei (BAM aktualisiert wenige Male im Jahr) genügt.
-
-**Bezugsquellen für die CSV:**
+**Bezugsquellen:**
 - BAM-Datenservice (ADR im BAM-Nummern-System): <https://www.dgg.bam.de/de/produkte/datenservice/testdaten_download/>
 - Web-App zur Kontrolle einzelner UN-Nummern: <https://www.dgg.bam.de/dgginfo/>
 - Offene-Daten-Spiegel: <https://offenedaten.de/dataset/gefahrgut>
 
-> **Prüfschritt:** Nach dem ersten Ablegen einmal `1203` (Benzin) und `Chlor` suchen. Kommen Treffer mit korrekter Klasse/Kemler, passt die Spaltenzuordnung. Falls nicht: Spaltenüberschriften der BAM-CSV mit den o. g. Schlüsselwörtern abgleichen.
->
-> **Alternative (Codeerweiterung):** Soll direkt die BAM-**ZIP-URL** gesetzt werden können, muss der Sync um ein Entpacken erweitert werden — auf Wunsch umsetzbar.
+> **Prüfschritt:** Nach dem ersten Sync einmal `1203` (Benzin) und `Chlor` suchen. Kommen Treffer mit korrekter Klasse/Kemler, passt die Spaltenzuordnung. Falls nicht: Spaltenüberschriften der BAM-CSV mit den o. g. Schlüsselwörtern abgleichen.
 
 Der Sync übernimmt einen neuen Stand nur, wenn er **≥ 50 gültige UN-Zeilen** enthält (Schutz gegen kaputte Downloads), und ersetzt die lokale Datei **atomar**.
 
