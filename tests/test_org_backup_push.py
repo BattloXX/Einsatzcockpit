@@ -83,7 +83,7 @@ def _reload(cfg_id: int) -> OrgBackupConfig:
 def test_run_sync_ok(monkeypatch):
     cid = _config("push-ok")
 
-    def fake_export(db, org_id, out_dir, include_media=True):
+    def fake_export(db, org_id, out_dir, include_media=True, areas=None):
         p = Path(out_dir) / "org-backup.zip"
         p.write_bytes(b"zip")
         return p
@@ -102,7 +102,7 @@ def test_run_sync_ok(monkeypatch):
 def test_run_sync_error_wird_vermerkt(monkeypatch):
     cid = _config("push-err")
 
-    def fake_export(db, org_id, out_dir, include_media=True):
+    def fake_export(db, org_id, out_dir, include_media=True, areas=None):
         p = Path(out_dir) / "org-backup.zip"
         p.write_bytes(b"zip")
         return p
@@ -183,7 +183,7 @@ def test_run_now_route(client, monkeypatch):
         "remote_path": "ec", "schedule": "daily", "hour": "3", "keep_count": "5",
     }, follow_redirects=False)
 
-    def fake_export(db, org_id, out_dir, include_media=True):
+    def fake_export(db, org_id, out_dir, include_media=True, areas=None):
         p = Path(out_dir) / "org-backup.zip"
         p.write_bytes(b"zip")
         return p

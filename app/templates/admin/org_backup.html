@@ -152,6 +152,20 @@
         </div>
       </div>
 
+      <div style="margin-top:16px;">
+        <label style="font-weight:600;">Umfang (partielles Backup)</label>
+        <p class="page-header__sub" style="margin:4px 0 8px;">Stammdaten und Konfiguration sind immer enthalten. Abgewählte Bereiche werden nicht gesichert.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
+          {% for key, label in area_labels.items() %}
+          <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+            <input type="checkbox" name="areas" value="{{ key }}"
+                   {% if gewaehlte_areas is none or key in gewaehlte_areas %}checked{% endif %}>
+            {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
       <label style="display:flex;align-items:center;gap:8px;margin-top:14px;">
         <input type="checkbox" name="include_media" value="1" {% if not cfg or cfg.include_media %}checked{% endif %}>
         Mediendateien (Fotos/Dokumente) einschließen

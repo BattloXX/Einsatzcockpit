@@ -59,12 +59,14 @@ async def org_backup_page(
     org_id: int | None = None,
 ):
     from app.config import settings
+    from app.services.org_export_service import AREA_LABELS, areas_aus_string
     user = request.state.user
     is_sysadmin = is_system_admin(user)
     effective = _effective_org_id(user, org_id)
     org = db.get(FireDept, effective) if effective else None
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     cfg = _lade_config(db, effective) if effective else None
+    gewaehlte_areas = areas_aus_string(cfg.include_areas) if cfg else None
     return templates.TemplateResponse(request, "admin/org_backup.html", {
         "user": user,
         "org": org,
@@ -73,6 +75,8 @@ async def org_backup_page(
         "org_backup_enabled": settings.ORG_BACKUP_ENABLED,
         "cfg": cfg,
         "protokolle": _PROTOKOLLE,
+        "area_labels": AREA_LABELS,
+        "gewaehlte_areas": gewaehlte_areas,   # None = alle
         "flash": request.query_params.get("flash"),
     })
 
@@ -100,10 +104,14 @@ async def org_backup_export(
     org = db.get(FireDept, effective)
     slug = (org.slug if org and org.slug else str(effective))
 
+    from app.services.org_export_service import areas_aus_string
+    cfg = _lade_config(db, effective)
+    areas = areas_aus_string(cfg.include_areas) if cfg else None
+
     tmp = Path(tempfile.mkdtemp(prefix="orgbackup_"))
     set_tenant_context(db, None)  # System-Modus: export_org filtert selbst explizit
     try:
-        ziel = export_org(db, effective, tmp, include_media=True)
+        ziel = export_org(db, effective, tmp, include_media=True, areas=areas)
     except Exception:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
@@ -156,11 +164,14 @@ async def org_backup_save(
     weekday: int | None = Form(None),
     keep_count: int = Form(7),
     include_media: str = Form(""),
+    areas: list[str] = Form(default=[]),
 ):
+    from app.services.org_export_service import AREA_ROOTS
     user = request.state.user
     effective = _guard(user, target_org_id)
     if protocol not in _PROTOKOLLE:
         raise HTTPException(400, "Ungueltiges Protokoll")
+    gewaehlt = sorted(a for a in areas if a in AREA_ROOTS)
 
     cfg = _lade_config(db, effective)
     if cfg is None:
@@ -179,6 +190,7 @@ async def org_backup_save(
     cfg.weekday = weekday if (cfg.schedule == "weekly" and weekday is not None) else None
     cfg.keep_count = max(1, keep_count)
     cfg.include_media = include_media == "1"
+    cfg.include_areas = ",".join(gewaehlt)  # "" = nur Kern; alle gewaehlt = vollstaendig
     # Secrets nur bei neuer Eingabe ueberschreiben; leeres Feld laesst Bestand unberuehrt.
     if password:
         cfg.password_enc = encrypt_secret(password)
