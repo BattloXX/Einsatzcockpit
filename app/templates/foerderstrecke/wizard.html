@@ -23,7 +23,7 @@
 {% endblock %}
 
 {% block content %}
-<div x-data="foerderPlaner()" x-init="init()">
+<div x-data="foerderPlaner()">
   <div class="page-header" style="padding:14px 14px 0;">
     <div>
       <h1>🚰 Förderstrecken-Planer</h1>
@@ -453,13 +453,19 @@ function foerderPlaner() {
     },
 
     stationAusKlick(latlng) {
-      const idx = this.stationen.length;
-      this.stationen.push({
-        typ: idx === 0 ? "quellpumpe" : "verstaerker",
-        pumpen_typ_id: null, rpm: null, behaelter_volumen_l: null,
-        lat: latlng.lat, lng: latlng.lng,
-        abschnitt: { schlauch_typ_id: null, n_parallel: 1, laenge_m: 0, delta_hoehe_m: 0 }
-      });
+      // Erste noch nicht verortete Station (z. B. die leere Quellpumpe) übernimmt den
+      // Klickpunkt; sonst wird eine neue Verstärkerstation angehängt.
+      const leer = this.stationen.find(s => s.lat == null && s.lng == null);
+      if (leer) {
+        leer.lat = latlng.lat; leer.lng = latlng.lng;
+      } else {
+        this.stationen.push({
+          typ: "verstaerker",
+          pumpen_typ_id: null, rpm: null, behaelter_volumen_l: null,
+          lat: latlng.lat, lng: latlng.lng,
+          abschnitt: { schlauch_typ_id: null, n_parallel: 1, laenge_m: 0, delta_hoehe_m: 0 }
+        });
+      }
       this.syncStationMarkers();
       this.stationsGeometrieAktualisieren();
     },
