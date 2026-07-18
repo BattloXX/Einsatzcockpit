@@ -250,6 +250,10 @@ async def lifespan(app: FastAPI):
     from app.services.nachschlagewerk_sync import nachschlagewerk_sync_loop
     nachschlagewerk_sync_task = asyncio.create_task(nachschlagewerk_sync_loop())
 
+    # Background-Loop für geplante Org-Backups (Push ans je Org konfigurierte Ziel)
+    from app.services.org_backup_loop import org_backup_loop
+    org_backup_task = asyncio.create_task(org_backup_loop())
+
     try:
         yield
     finally:
@@ -269,10 +273,12 @@ async def lifespan(app: FastAPI):
         dibos_task.cancel()
         dibos_trace_retention_task.cancel()
         nachschlagewerk_sync_task.cancel()
+        org_backup_task.cancel()
         for t in (autoclose_task, watchdog_task, reminder_task, lagemeldung_task, verleih_task,
                   weather_retention_task, vehicle_position_retention_task, weather_alert_task,
                   abfluss_poll_task, lis_task, lis_capture_retention_task,
-                  dibos_task, dibos_trace_retention_task, nachschlagewerk_sync_task):
+                  dibos_task, dibos_trace_retention_task, nachschlagewerk_sync_task,
+                  org_backup_task):
             try:
                 await t
             except (asyncio.CancelledError, Exception):
