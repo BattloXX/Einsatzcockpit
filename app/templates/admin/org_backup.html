@@ -54,6 +54,9 @@
        href="/admin/org-backup/export.zip{% if is_sysadmin and org %}?org_id={{ org.id }}{% endif %}">
       💾 Archiv herunterladen
     </a>
+    {% if is_sysadmin %}
+    <a class="btn" href="/admin/org-backup/restore" style="margin-left:8px;">♻️ Archiv wiederherstellen…</a>
+    {% endif %}
   </div>
 </section>
 

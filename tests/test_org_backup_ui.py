@@ -16,8 +16,9 @@ def _login(client, username, password):
     client.cookies.clear()
     client.get("/login")
     csrf = client.cookies.get("ec_csrf")
-    return client.post("/login", data={"username": username, "password": password, "_csrf": csrf},
-                       follow_redirects=False)
+    client.post("/login", data={"username": username, "password": password, "_csrf": csrf},
+                follow_redirects=False)
+    return client.cookies.get("ec_csrf")
 
 
 def _rolle(db, code):
@@ -116,3 +117,56 @@ def test_kill_switch_deaktiviert_download(client, monkeypatch):
     _login(client, "orgbk_off_user", "Test1234!")
     r = client.get("/admin/org-backup/export.zip")
     assert r.status_code == 404
+
+
+def test_restore_seite_nur_sysadmin(client):
+    _admin("restore_orgadm", ORG_A)  # org_admin
+    _login(client, "restore_orgadm", "Test1234!")
+    assert client.get("/admin/org-backup/restore").status_code == 403
+    _admin("restore_sysadm", ORG_A, rolle="system_admin")
+    _login(client, "restore_sysadm", "Test1234!")
+    assert client.get("/admin/org-backup/restore").status_code == 200
+
+
+def test_restore_upload_roundtrip(client, tmp_path):
+    import uuid
+
+    from app.services.org_export_service import export_org
+    tag = uuid.uuid4().hex[:6]
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    a = FireDept(slug=f"ui-rt-{tag}", name=f"UI RT {tag}")
+    db.add(a)
+    db.flush()
+    db.add(Member(org_id=a.id, lastname=f"Rt{tag}", firstname="X"))
+    db.commit()
+    aid = a.id
+    db.close()
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    z = export_org(db, aid, tmp_path)
+    db.close()
+    archiv = z.read_bytes()
+
+    _admin(f"restore_up_{tag}", ORG_A, rolle="system_admin")
+    csrf = _login(client, f"restore_up_{tag}", "Test1234!")
+    r = client.post(
+        "/admin/org-backup/restore",
+        data={"_csrf": csrf, "neue_org_name": f"Restored {tag}", "confirm": "1"},
+        files={"archiv": ("a.zip", archiv, "application/zip")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert "abgeschlossen" in r.text
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        neu = db.query(FireDept).filter(FireDept.name == f"Restored {tag}").first()
+        assert neu is not None
+        set_tenant_context(db, neu.id)
+        assert db.query(Member).filter(Member.lastname == f"Rt{tag}").count() == 1
+    finally:
+        db.close()
