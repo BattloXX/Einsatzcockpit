@@ -45,25 +45,49 @@
           <label>Bezeichnung</label>
           <input class="form-input" x-model="name" placeholder="z. B. Versorgung Objekt X aus der Ach">
         </div>
+        <div class="fs-field" x-show="lagen && lagen.length">
+          <label>Mit Einsatz/Lage verbinden (erscheint dort als Auftrag)</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select class="form-select" x-model.number="lageId" style="flex:1;">
+              <option :value="null">— keine —</option>
+              <template x-for="l in lagen" :key="l.id">
+                <option :value="l.id" x-text="l.name + (l.status==='standby' ? ' (Standby)' : '')"></option>
+              </template>
+            </select>
+            <a class="btn btn--ghost btn--xs" x-show="lageId" :href="'/lage/' + lageId" title="Zur Lage wechseln">Lage ▸</a>
+          </div>
+        </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn--primary btn--sm" @click="berechnen()" :disabled="rechnet">Berechnen</button>
           <button class="btn btn--secondary btn--sm" @click="speichern()">Speichern</button>
+          <button class="btn btn--ghost btn--sm" @click="zuruecksetzen()" title="Strecke/Route zurücksetzen, Pumpen-Konfiguration behalten">↺ Zurücksetzen</button>
         </div>
+        <p x-show="gespeichertHinweis" x-cloak class="text-muted" style="font-size:.75rem;margin:6px 0 0;color:#16a34a;" x-text="gespeichertHinweis"></p>
       </div>
 
       <div class="fs-panel" style="margin-bottom:12px;">
-        <h3 style="margin:0 0 8px;font-size:.95rem;">Ansaugpunkt</h3>
-        <div class="fs-row2">
-          <div class="fs-field"><label>Seehöhe [m]</label><input class="form-input" type="number" x-model.number="ansaug.seehoehe_m"></div>
-          <div class="fs-field"><label>Geod. Saughöhe [m]</label><input class="form-input" type="number" step="0.1" x-model.number="ansaug.geodaetische_saughoehe_m"></div>
+        <h3 style="margin:0 0 8px;font-size:.95rem;">Ansaugpunkt / 1. Pumpe</h3>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;margin-bottom:8px;">
+          <input type="checkbox" x-model="ansaug.druckspeisung">
+          Druckgespeist (Hydrant/Netz statt offener Saugstelle)
+        </label>
+        <div class="fs-field" x-show="ansaug.druckspeisung" x-cloak>
+          <label>Eingangsdruck an der 1. Pumpe [bar] (z. B. Hydrant-Vordruck)</label>
+          <input class="form-input" type="number" step="0.1" min="0" x-model.number="ansaug.eingangsdruck_bar" placeholder="z. B. 4.0">
         </div>
-        <div class="fs-row2">
-          <div class="fs-field"><label>Saug k-Wert</label><input class="form-input" type="number" step="0.01" x-model.number="ansaug.saug_k"></div>
-          <div class="fs-field"><label>Saugleitungen parallel</label><input class="form-input" type="number" min="1" x-model.number="ansaug.saug_n_parallel"></div>
-        </div>
-        <div class="fs-field">
-          <label>Scheitel Saugleitung über Wasserspiegel [m] (optional, z. B. über Damm)</label>
-          <input class="form-input" type="number" step="0.1" x-model.number="ansaug.saug_scheitel_m" placeholder="0">
+        <div x-show="!ansaug.druckspeisung" x-cloak>
+          <div class="fs-row2">
+            <div class="fs-field"><label>Seehöhe [m]</label><input class="form-input" type="number" x-model.number="ansaug.seehoehe_m"></div>
+            <div class="fs-field"><label>Geod. Saughöhe [m]</label><input class="form-input" type="number" step="0.1" x-model.number="ansaug.geodaetische_saughoehe_m"></div>
+          </div>
+          <div class="fs-row2">
+            <div class="fs-field"><label>Saug k-Wert</label><input class="form-input" type="number" step="0.01" x-model.number="ansaug.saug_k"></div>
+            <div class="fs-field"><label>Saugleitungen parallel</label><input class="form-input" type="number" min="1" x-model.number="ansaug.saug_n_parallel"></div>
+          </div>
+          <div class="fs-field">
+            <label>Scheitel Saugleitung über Wasserspiegel [m] (optional, z. B. über Damm)</label>
+            <input class="form-input" type="number" step="0.1" x-model.number="ansaug.saug_scheitel_m" placeholder="0">
+          </div>
         </div>
       </div>
 
@@ -313,18 +337,24 @@ const FS_PUMPEN = {{ pumpen_json | safe }};
 const FS_SCHLAEUCHE = {{ schlaeuche_json | safe }};
 const FS_STRECKEN = {{ strecken|length }};
 const FS_LADE = {% if lade_strecke_id %}{{ lade_strecke_json | safe }}{% else %}null{% endif %};
+const FS_LAGEN = {{ lagen | tojson }};
+const FS_PRELINK_LAGE = {% if prelink_lage_id %}{{ prelink_lage_id }}{% else %}null{% endif %};
 const FS_CSRF = "{{ request.state.csrf_token }}";
+const FS_ANSAUG_DEFAULT = {seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23,
+                           saug_n_parallel:1, saug_scheitel_m:0, druckspeisung:false, eingangsdruck_bar:null};
 
 function foerderPlaner() {
   return {
     name: FS_LADE ? FS_LADE.name : "",
     pumpen: FS_PUMPEN,
     schlaeuche: FS_SCHLAEUCHE,
+    lagen: FS_LAGEN,
+    lageId: FS_LADE ? (FS_LADE.lage_id || null) : (FS_PRELINK_LAGE || null),
     strecken: Array({{ strecken|length }}),
     ladeId: FS_LADE ? FS_LADE.id : null,
     ansaug: (FS_LADE && FS_LADE.ansaug && Object.keys(FS_LADE.ansaug).length)
-      ? Object.assign({seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23, saug_n_parallel:1, saug_scheitel_m:0}, FS_LADE.ansaug)
-      : {seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23, saug_n_parallel:1, saug_scheitel_m:0},
+      ? Object.assign({}, FS_ANSAUG_DEFAULT, FS_LADE.ansaug)
+      : Object.assign({}, FS_ANSAUG_DEFAULT),
     stationen: [],
     zielDruck: 0,
     parameter: {armaturen_zuschlag:0.05, hochpunkt_min_bar:0.5, reserve:0.10},
@@ -345,6 +375,8 @@ function foerderPlaner() {
     routeLaeuft: false,
     autoPumpen: true,
     standortHinweis: null,
+    gespeichertHinweis: "",
+    _autosaveTimer: null,
     _watchId: null,
     _aufnahmePunkte: [],
     _aufnahmeLayer: null,
@@ -378,7 +410,88 @@ function foerderPlaner() {
       } else {
         this.addStation("quellpumpe");
       }
+      // F5-Schutz: ungespeicherten Entwurf derselben Strecke wiederherstellen
+      this.restoreDraft();
       this.initMap();
+      // regelmäßig + beim Verlassen den Arbeitsstand lokal sichern (kein F5-Datenverlust)
+      this._autosaveTimer = setInterval(() => this.saveDraft(), 4000);
+      window.addEventListener("beforeunload", () => this.saveDraft());
+    },
+
+    // ── F5-/Neuladen-Schutz: Entwurf im localStorage ──
+    _draftKey() { return "fs_draft_v1"; },
+    saveDraft() {
+      try {
+        const d = this.payload();
+        d._ladeId = this.ladeId ?? null;
+        d._ergebnis = this.ergebnis || null;
+        d._ziel = this.ziel || null;
+        d._routeGezeichnet = this.routeGezeichnet;
+        d._relaisPumpeId = this.relaisPumpeId ?? null;
+        d._zielQ = this.zielQ;
+        d._ts = Date.now();
+        // s_m je Station mitsichern (payload enthält es nicht)
+        d._s_m = this.stationen.map(s => s.s_m ?? null);
+        localStorage.setItem(this._draftKey(), JSON.stringify(d));
+      } catch (e) { /* localStorage optional */ }
+    },
+    restoreDraft() {
+      let d = null;
+      try { d = JSON.parse(localStorage.getItem(this._draftKey()) || "null"); } catch (e) { d = null; }
+      if (!d) return;
+      // nur wiederherstellen, wenn der Entwurf zur aktuell geladenen Strecke passt
+      const aktuell = FS_LADE ? FS_LADE.id : null;
+      if ((d._ladeId ?? null) !== (aktuell ?? null)) return;
+      // veraltete Entwürfe (> 12 h) ignorieren
+      if (d._ts && (Date.now() - d._ts) > 12 * 3600 * 1000) { this.verwerfeDraft(); return; }
+      if (d.name != null) this.name = d.name;
+      if (d.ansaug) this.ansaug = Object.assign({}, FS_ANSAUG_DEFAULT, d.ansaug);
+      if (d.lage_id != null) this.lageId = d.lage_id;
+      if (d._relaisPumpeId != null) this.relaisPumpeId = d._relaisPumpeId;
+      if (d._zielQ != null) this.zielQ = d._zielQ;
+      if (d.hoehenprofil) this.hoehenprofil = d.hoehenprofil;
+      if (d._ziel) this.ziel = d._ziel;
+      this.routeGezeichnet = !!d._routeGezeichnet;
+      if (d.route_geojson && d.route_geojson.coordinates) {
+        this.routeCoords = d.route_geojson.coordinates.filter(c => c && c.length >= 2).map(c => [c[1], c[0]]);
+      }
+      if (Array.isArray(d.stationen) && d.stationen.length) {
+        this.stationen = d.stationen.map((s, i) => ({
+          typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm,
+          behaelter_volumen_l: s.behaelter_volumen_l,
+          lat: s.lat, lng: s.lng, s_m: (d._s_m && d._s_m[i] != null) ? d._s_m[i] : null,
+          abschnitt: Object.assign({ schlauch_typ_id: null, n_parallel: 1, laenge_m: 0, delta_hoehe_m: 0 }, s.abschnitt || {})
+        }));
+      }
+      if (d._ergebnis) this.ergebnis = d._ergebnis;
+      this.gespeichertHinweis = "Ungespeicherter Stand wiederhergestellt (F5-Schutz).";
+      setTimeout(() => { this.gespeichertHinweis = ""; }, 4000);
+    },
+    verwerfeDraft() { try { localStorage.removeItem(this._draftKey()); } catch (e) {} },
+
+    // ── Zurücksetzen: Route/Positionen leeren, Pumpen-Konfiguration behalten ──
+    zuruecksetzen() {
+      if (!confirm("Strecke zurücksetzen? Route, Standorte und Berechnung werden geleert – die Pumpen-Konfiguration (Typ, Drehzahl, Schlauch) bleibt erhalten.")) return;
+      // Kartenlayer entfernen
+      (this._stationMarkers || []).forEach(m => this.karte && this.karte.removeLayer(m));
+      this._stationMarkers = [];
+      if (this._routeLayer) { this.karte && this.karte.removeLayer(this._routeLayer); this._routeLayer = null; }
+      if (this._zielMarker) { this.karte && this.karte.removeLayer(this._zielMarker); this._zielMarker = null; }
+      if (this._startMarker) { this.karte && this.karte.removeLayer(this._startMarker); this._startMarker = null; }
+      // Pumpen-Konfiguration behalten, nur Geometrie/Ergebnis zurücksetzen
+      this.stationen.forEach(st => {
+        st.lat = null; st.lng = null; st.s_m = null;
+        st.abschnitt.laenge_m = 0; st.abschnitt.delta_hoehe_m = 0;
+      });
+      this.routeCoords = null;
+      this.routeGezeichnet = false;
+      this.ziel = null;
+      this.hoehenprofil = null;
+      this.ergebnis = null;
+      this.standortHinweis = null;
+      this._routePickAbbrechen();
+      this.gespeichertHinweis = "Zurückgesetzt – Pumpen-Konfiguration erhalten.";
+      setTimeout(() => { this.gespeichertHinweis = ""; }, 3000);
     },
 
     pumpe(id) { return this.pumpen.find(p => p.id === id) || null; },
@@ -401,7 +514,7 @@ function foerderPlaner() {
 
     payload() {
       return {
-        name: this.name, id: this.ladeId,
+        name: this.name, id: this.ladeId, lage_id: this.lageId || null,
         ansaug: this.ansaug, ziel_druck_bar: this.zielDruck, parameter: this.parameter,
         hoehenprofil: this.hoehenprofil,
         auslass: (this.ziel && this.ziel.lat != null) ? {lat: this.ziel.lat, lng: this.ziel.lng} : null,
@@ -521,7 +634,16 @@ function foerderPlaner() {
         body: JSON.stringify(body)
       });
       const res = await r.json();
-      if (res.id) { this.ladeId = res.id; alert("Gespeichert: " + res.name); }
+      if (res.id) {
+        this.ladeId = res.id;
+        // URL auf die gespeicherte Strecke setzen → F5 lädt sie wieder (weiterbearbeitbar)
+        try { history.replaceState(null, "", "/foerderstrecke/" + res.id); } catch (e) {}
+        this.saveDraft();   // Entwurf an die neue ladeId binden
+        this.gespeichertHinweis = "Gespeichert: " + res.name + " · weiter bearbeitbar, F5-sicher.";
+        setTimeout(() => { this.gespeichertHinweis = ""; }, 4000);
+      } else {
+        this.gespeichertHinweis = "Speichern fehlgeschlagen.";
+      }
     },
 
     async maschinistenLink(id) {

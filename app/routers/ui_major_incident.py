@@ -406,6 +406,25 @@ def lage_board(
     _org_lat = getattr(_org, "fallback_lat", None) or 47.41
     _org_lng = getattr(_org, "fallback_lng", None) or 9.74
 
+    # Verknüpfte Förderstrecken (Wasserversorgung) — nur wenn das Modul aktiv ist
+    foerderstrecken: list = []
+    foerder_enabled = False
+    foerder_status_labels: dict = {}
+    try:
+        from app.models.foerderstrecke import STRECKE_STATUS, Foerderstrecke
+        from app.services.foerderstrecke_service import foerderstrecke_effective_enabled
+        if foerderstrecke_effective_enabled(lage.org_id, db):
+            foerder_enabled = True
+            foerder_status_labels = STRECKE_STATUS
+            foerderstrecken = (
+                db.query(Foerderstrecke)
+                .filter(Foerderstrecke.org_id == lage.org_id, Foerderstrecke.lage_id == lage.id)
+                .order_by(Foerderstrecke.aktualisiert_am.desc())
+                .all()
+            )
+    except Exception:  # Modul optional — Board darf nie daran scheitern
+        foerderstrecken, foerder_enabled = [], False
+
     return templates.TemplateResponse(request, "incident_major/board.html", {
         "user": user,
         "lage": lage,
@@ -434,6 +453,9 @@ def lage_board(
         "weather_enabled": _weather_enabled,
         "org_lat": _org_lat,
         "org_lng": _org_lng,
+        "foerderstrecken": foerderstrecken,
+        "foerder_enabled": foerder_enabled,
+        "foerder_status_labels": foerder_status_labels,
     })
 
 

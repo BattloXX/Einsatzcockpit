@@ -259,6 +259,43 @@
   </details>
   {% endif %}
 
+  {# ── Förderstrecken / Wasserversorgung (Modul, wenn aktiv) ── #}
+  {% if foerder_enabled %}
+  <details id="foerder-details" {% if foerderstrecken %}open{% endif %}
+           style="border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;">
+    <summary style="padding:4px 14px;cursor:pointer;font-size:.75rem;color:var(--text-muted);
+                    user-select:none;list-style:none;display:flex;align-items:center;gap:6px;">
+      <span>▸</span><span>🚰 Wasserförderung / Förderstrecken</span>
+      {% if foerderstrecken %}<span class="lage-phasechip__n">{{ foerderstrecken|length }}</span>{% endif %}
+    </summary>
+    <div style="padding:8px 14px;display:flex;flex-direction:column;gap:6px;">
+      {% for fs in foerderstrecken %}
+      <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;
+                  border:1px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--surface-mid);">
+        <div style="min-width:0;">
+          <strong style="font-size:.9rem;">🚰 {{ fs.name }}</strong>
+          <span style="font-size:.72rem;color:var(--text-muted);">· Auftrag Wasserversorgung
+            · {{ foerder_status_labels.get(fs.status, fs.status) }}</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <a class="btn btn--primary btn--xs" href="/foerderstrecke/{{ fs.id }}">Öffnen ▸</a>
+          <a class="btn btn--ghost btn--xs" href="/foerderstrecke/{{ fs.id }}/pdf" target="_blank">PDF</a>
+        </div>
+      </div>
+      {% else %}
+      <p style="font-size:.78rem;color:var(--text-muted);margin:0;">
+        Noch keine Förderstrecke mit dieser Lage verbunden.
+      </p>
+      {% endfor %}
+      <div>
+        <a class="btn btn--secondary btn--xs" href="/foerderstrecke/?lage_id={{ lage.id }}">
+          ＋ Neue Förderstrecke für diese Lage
+        </a>
+      </div>
+    </div>
+  </details>
+  {% endif %}
+
   <!-- ── Phasen-Board ── -->
   {% set phase_colors = {
     'eingegangen': '#6b7280',

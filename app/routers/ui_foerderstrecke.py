@@ -45,6 +45,7 @@ router = APIRouter(prefix="/foerderstrecke", tags=["foerderstrecke"])
 @router.get("/", response_class=HTMLResponse)
 def wizard(
     request: Request,
+    lage_id: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("recorder")),
     _guard: None = Depends(require_foerderstrecke_enabled),
@@ -75,7 +76,25 @@ def wizard(
         "pumpen_json": _pumpen_json(pumpen),
         "schlaeuche_json": _schlaeuche_json(schlaeuche),
         "lade_strecke_id": None,
+        "lagen": _aktive_lagen(db, user.org_id),
+        "prelink_lage_id": lage_id,
     })
+
+
+def _aktive_lagen(db: Session, org_id: int) -> list[dict]:
+    """Aktive/Standby-Lagen der Org für das Verknüpfen einer Förderstrecke (Auftrag)."""
+    try:
+        from app.models.major_incident import MajorIncident, MajorIncidentStatus
+        rows = (
+            db.query(MajorIncident)
+            .filter(MajorIncident.org_id == org_id,
+                    MajorIncident.status != MajorIncidentStatus.closed)
+            .order_by(MajorIncident.created_at.desc())
+            .all()
+        )
+        return [{"id": r.id, "name": r.name, "status": str(r.status)} for r in rows]
+    except Exception:
+        return []
 
 
 def _pumpen_json(pumpen: list[FoerderPumpenTyp]) -> str:
@@ -186,6 +205,23 @@ def _schlauch_daten(payload: dict, db: Session, org_id: int) -> dict:
             "max_betriebsdruck_bar": payload.get("max_betriebsdruck_bar")}
 
 
+def _eingangsdruck(ansaug: dict) -> float | None:
+    """Vordruck der ersten Pumpe (Hydrant/Netz) aus dem Ansaug-Dict, sonst None.
+
+    Nur bei aktivierter Druckspeisung (`druckspeisung`==true) und gültigem Wert; leere
+    Eingabe/0 ohne Aktivierung → None (offene Saugstelle).
+    """
+    if not ansaug.get("druckspeisung"):
+        return None
+    wert = ansaug.get("eingangsdruck_bar")
+    if wert in (None, ""):
+        return None
+    try:
+        return float(wert)
+    except (TypeError, ValueError):
+        return None
+
+
 def _baue_eingabe(daten: dict, db: Session, org_id: int):
     """Baut Engine-Eingaben + Material-Abschnitte aus dem Wizard-Payload."""
     a = daten.get("ansaug") or {}
@@ -198,6 +234,7 @@ def _baue_eingabe(daten: dict, db: Session, org_id: int):
         max_ansaughoehe_m=float(a.get("max_ansaughoehe_m") or 7.5),
         npshr_m=float(a.get("npshr_m") or 0.0),
         saug_scheitel_m=float(a.get("saug_scheitel_m") or 0.0),
+        eingangsdruck_bar=_eingangsdruck(a),
     )
     # Gesamt-Höhenprofil der Route [[s_m, hoehe_m], …]: liefert je Abschnitt das
     # tatsächliche Zwischengelände (Damm etc.) für die segmentweise Drucklinie.
@@ -359,6 +396,7 @@ async def standort_vorschlag(
         saug_n_parallel=int(a.get("saug_n_parallel") or 1),
         max_ansaughoehe_m=float(a.get("max_ansaughoehe_m") or 7.5),
         saug_scheitel_m=float(a.get("saug_scheitel_m") or 0.0),
+        eingangsdruck_bar=_eingangsdruck(a),
     )
 
     ergebnis = engine.standort_vorschlag(
@@ -495,12 +533,14 @@ def laden(
         "pumpen_json": _pumpen_json(pumpen), "schlaeuche_json": _schlaeuche_json(schlaeuche),
         "lade_strecke_id": strecke.id,
         "lade_strecke_json": _strecke_json(strecke),
+        "lagen": _aktive_lagen(db, user.org_id),
+        "prelink_lage_id": None,
     })
 
 
 def _strecke_json(s: Foerderstrecke) -> str:
     return json.dumps({
-        "id": s.id, "name": s.name, "status": s.status,
+        "id": s.id, "name": s.name, "status": s.status, "lage_id": s.lage_id,
         "route_geojson": json.loads(s.route_geojson) if s.route_geojson else None,
         "ansaug": s.ansaug, "auslass": s.auslass,
         "hoehenprofil": json.loads(s.hoehenprofil_json) if s.hoehenprofil_json else None,

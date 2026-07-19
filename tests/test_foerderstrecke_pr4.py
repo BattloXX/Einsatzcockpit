@@ -221,3 +221,63 @@ def test_speichern_und_laden(client):
     r2 = client.get(f"/foerderstrecke/{sid_saved}")
     assert r2.status_code == 200
     assert "Meine Strecke" in r2.text
+
+
+def test_berechnen_druckspeisung_hydrant(client):
+    """Druckgespeiste erste Pumpe (Hydrant): Vordruck wird berücksichtigt."""
+    _setup("fs_ui_hydrant", module_on=True)
+    _login(client, "fs_ui_hydrant", "Test1234!")
+    csrf = _csrf(client)
+    payload = {
+        "ansaug": {"druckspeisung": True, "eingangsdruck_bar": 4.0},
+        "stationen": [{
+            "typ": "quellpumpe",
+            "kennlinie": [[0, 53], [8000, 42], [16000, 18]],
+            "abschnitt": {"schlauch_k": 0.049, "laenge_m": 400, "n_parallel": 2, "delta_hoehe_m": 0},
+        }],
+    }
+    r = client.post("/foerderstrecke/berechnen", json=payload, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200, r.text[:300]
+    d = r.json()
+    assert d["machbar"] is True
+    assert d["stationswerte"][0]["p_ein_bar"] == 4.0     # Vordruck als Eingangsdruck
+
+
+def test_speichern_mit_lage_verknuepfung(client):
+    """Förderstrecke lässt sich mit einer Lage verbinden (lage_id persistiert + geladen)."""
+    from app.models.major_incident import MajorIncident, MajorIncidentStatus
+
+    org_id, pid, sid = _setup("fs_ui_lage", module_on=True)
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        lage = MajorIncident(org_id=org_id, name="Hochwasser Testbach",
+                             status=MajorIncidentStatus.active)
+        db.add(lage); db.commit()
+        lage_id = lage.id
+    finally:
+        db.close()
+
+    _login(client, "fs_ui_lage", "Test1234!")
+    csrf = _csrf(client)
+    payload = {
+        "name": "Versorgung Testbach", "lage_id": lage_id,
+        "ansaug": {"seehoehe_m": 430, "geodaetische_saughoehe_m": 2},
+        "stationen": [{"typ": "quellpumpe", "pumpen_typ_id": pid, "rpm": "2000",
+                       "abschnitt": {"schlauch_typ_id": sid, "laenge_m": 400}}],
+    }
+    r = client.post("/foerderstrecke/speichern", json=payload, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200, r.text[:300]
+    strecke_id = r.json()["id"]
+
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        s = db.get(Foerderstrecke, strecke_id)
+        assert s.lage_id == lage_id
+    finally:
+        db.close()
+
+    # Lage-Board zeigt die verknüpfte Förderstrecke als Auftrag mit Link
+    r2 = client.get(f"/lage/{lage_id}")
+    assert r2.status_code == 200
+    assert "Versorgung Testbach" in r2.text
+    assert f"/foerderstrecke/{strecke_id}" in r2.text
