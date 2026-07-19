@@ -212,3 +212,42 @@ def test_druckspeisung_ueberspringt_saughoehen_check():
     res = berechne_modus_a(hydrant, [quelle])
     assert res["machbar"] is True
     assert not any("Saughöhe" in w for w in res["warnungen"])
+
+
+def test_verstaerker_addiert_eingangsdruck_geschlossene_reihe():
+    """Verstärker (geschlossene Reihe): Ausgangsdruck = Eingangsdruck + Pumpendruck.
+
+    Regression: früher zeigte die 2. Pumpe einen Ausgangsdruck < Eingangsdruck
+    (Pumpe „baute keinen Druck auf"), weil der Vordruck nicht addiert wurde.
+    """
+    q = [[0, 53], [8300, 42], [16000, 18]]      # starke Quellpumpe
+    r = [[0, 37], [3300, 31], [8300, 10]]       # Verstärker
+    st = [
+        PumpenStation(kennlinie=q, typ="quellpumpe", name="Q",
+                      abschnitt_danach=Abschnitt(schlauch_k=K_F150, laenge_m=75)),
+        PumpenStation(kennlinie=r, typ="verstaerker", name="V",
+                      abschnitt_danach=Abschnitt(schlauch_k=K_F150, laenge_m=400)),
+    ]
+    res = berechne_modus_a(Ansaugpunkt(seehoehe_m=430, geodaetische_saughoehe_m=3), st)
+    v = res["stationswerte"][1]
+    assert v["p_ein_bar"] is not None and v["p_aus_bar"] is not None
+    # Ausgangsdruck der Verstärkerpumpe liegt ÜBER ihrem Eingangsdruck
+    assert v["p_aus_bar"] > v["p_ein_bar"]
+    # letzte Pumpe mit Leitung „hinten raus": Druck am Verteiler/Ziel wird ausgewiesen
+    assert "p_auslass_bar" in v
+
+
+def test_puffer_bricht_druck_kein_vordruck_addiert():
+    """Puffer (offener Behälter): Eingangsdruck wird NICHT addiert (Behälter bricht Druck)."""
+    q = [[0, 53], [8300, 42], [16000, 18]]
+    p = [[0, 37], [3300, 31], [8300, 10]]
+    st = [
+        PumpenStation(kennlinie=q, typ="quellpumpe", name="Q",
+                      abschnitt_danach=Abschnitt(schlauch_k=K_F150, laenge_m=75)),
+        PumpenStation(kennlinie=p, typ="puffer", name="P",
+                      abschnitt_danach=Abschnitt(schlauch_k=K_F150, laenge_m=400)),
+    ]
+    res = berechne_modus_a(Ansaugpunkt(seehoehe_m=430, geodaetische_saughoehe_m=3), st)
+    puffer = res["stationswerte"][1]
+    # Ausgangsdruck entspricht der Kennlinie (Vordruck nicht aufaddiert) → <= 3.7 bar (H<=37 m)
+    assert puffer["p_aus_bar"] <= 3.71
