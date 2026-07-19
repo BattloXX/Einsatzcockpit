@@ -57,7 +57,13 @@
       <h2>Station {{ loop.index }} — {{ sw.name or info.name or info.typ_label }}</h2>
       <div class="werte">
         <div class="wert"><div class="l">Ausgangsdruck SOLL</div><div class="v">{{ sw.p_aus_bar if sw.p_aus_bar is not none else '—' }} bar</div></div>
-        <div class="wert"><div class="l">Eingangsdruck Folgepumpe</div><div class="v">{{ sw.get('p_ein_folge_bar') if sw.get('p_ein_folge_bar') is not none else '—' }} bar</div></div>
+        {% if sw.get('p_ein_folge_bar') is not none %}
+        <div class="wert"><div class="l">Eingangsdruck Folgepumpe</div><div class="v">{{ sw.p_ein_folge_bar }} bar</div></div>
+        {% elif sw.get('p_auslass_bar') is not none %}
+        <div class="wert"><div class="l">Druck am Verteiler/Ziel</div><div class="v">{{ sw.p_auslass_bar }} bar</div></div>
+        {% else %}
+        <div class="wert"><div class="l">Eingangsdruck Folgepumpe</div><div class="v">— bar</div></div>
+        {% endif %}
         <div class="wert"><div class="l">DBV-Einstellung</div><div class="v">{{ sw.dbv_bar if sw.dbv_bar is not none else '—' }} bar</div></div>
         <div class="wert"><div class="l">Eingangsdruck (an dieser Pumpe)</div><div class="v">{{ sw.p_ein_bar if sw.p_ein_bar is not none else '—' }} bar</div></div>
       </div>

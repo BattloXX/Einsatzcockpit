@@ -441,8 +441,17 @@ def _auswertung_bei_q(
     # erste Pumpe mit dem Hydranten-/Netz-Vordruck.
     p_ein_aktuell: float | None = ansaug.eingangsdruck_bar if ansaug.ist_druckspeisung else None
     for i, station in enumerate(stationen):
-        # Vordruck nur an der ERSTEN Pumpe aufaddieren (Hydrant/Netz speist den Eingang).
-        vordruck = (ansaug.eingangsdruck_bar or 0.0) if (i == 0 and ansaug.ist_druckspeisung) else 0.0
+        # Vordruck (Eingangsdruck), der sich auf den Pumpendruck aufaddiert:
+        #  - 1. Pumpe: Hydrant-/Netz-Vordruck bei Druckspeisung, sonst 0 (offene Saugstelle).
+        #  - Verstärker (geschlossene Schaltreihe): der Eingangsdruck aus der Vorstrecke wird
+        #    durchgereicht und addiert sich (p_aus = p_ein + Förderdruck der Pumpe).
+        #  - Puffer/Übergabe (offener Behälter): der Behälter bricht den Druck → Pumpe startet bei 0.
+        if i == 0:
+            vordruck = (ansaug.eingangsdruck_bar or 0.0) if ansaug.ist_druckspeisung else 0.0
+        elif station.typ == "verstaerker" and p_ein_aktuell is not None:
+            vordruck = p_ein_aktuell
+        else:
+            vordruck = 0.0
         p_aus = _pumpe_p_aus(station, q_l_min, vordruck)
         werte = {
             "index": i, "name": station.name, "typ": station.typ,
@@ -483,6 +492,8 @@ def _auswertung_bei_q(
         # Eingangsdruck der Folgestation / Auslass
         ist_letzte = (i == len(stationen) - 1)
         if ist_letzte:
+            # Letzte Pumpe mit Leitung „hinten raus": Druck, der am Verteiler/Ziel ankommt.
+            werte["p_auslass_bar"] = round(p_ende, 2)
             if p_ende < ziel_druck_bar:
                 machbar = False
                 warnungen.append(
