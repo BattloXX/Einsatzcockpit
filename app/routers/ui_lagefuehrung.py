@@ -183,6 +183,26 @@ async def lagefuehrung_seite(
         db.query(LagefuehrungBerechtigung).filter(LagefuehrungBerechtigung.incident_id == incident_id).all()
     ]
 
+    # Verknüpfte Förderstrecken (Wasserförderung) — als Aufträge auf der Lageführung
+    foerderstrecken: list = []
+    foerder_enabled = False
+    foerder_status_labels: dict = {}
+    try:
+        from app.models.foerderstrecke import STRECKE_STATUS, Foerderstrecke
+        from app.services.foerderstrecke_service import foerderstrecke_effective_enabled
+        if incident.primary_org_id and foerderstrecke_effective_enabled(incident.primary_org_id, db):
+            foerder_enabled = True
+            foerder_status_labels = STRECKE_STATUS
+            foerderstrecken = (
+                db.query(Foerderstrecke)
+                .filter(Foerderstrecke.org_id == incident.primary_org_id,
+                        Foerderstrecke.incident_id == incident_id)
+                .order_by(Foerderstrecke.aktualisiert_am.desc())
+                .all()
+            )
+    except Exception:  # Modul optional — Lageführung darf nie daran scheitern
+        foerderstrecken, foerder_enabled = [], False
+
     return templates.TemplateResponse(request, "incident/lagefuehrung.html", {
         "user": user,
         "incident": incident,
@@ -192,6 +212,9 @@ async def lagefuehrung_seite(
         "fuehrer_name": fuehrer_name,
         "granted_user_ids": granted_user_ids,
         "objekt_enabled": bool(getattr(request.state, "objekt_enabled", False)),
+        "foerderstrecken": foerderstrecken,
+        "foerder_enabled": foerder_enabled,
+        "foerder_status_labels": foerder_status_labels,
     })
 
 

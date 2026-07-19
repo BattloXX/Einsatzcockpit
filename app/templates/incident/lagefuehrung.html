@@ -61,6 +61,31 @@
           <label><input type="checkbox" id="lft-layer-beschriftung" checked> 🏷️ Beschriftungen</label>
         </div>
 
+        {% if foerder_enabled %}
+        <div class="lft-werkzeuge" style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">
+          <label class="form-label">🚰 Wasserförderung / Förderstrecken</label>
+          {% for fs in foerderstrecken %}
+          <div style="border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:6px;">
+            <div style="font-size:.85rem;font-weight:600;">🚰 {{ fs.name }}</div>
+            <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:4px;">
+              Auftrag Wasserversorgung · {{ foerder_status_labels.get(fs.status, fs.status) }}
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <a class="btn btn--primary btn--xs" href="/foerderstrecke/{{ fs.id }}">Öffnen ▸</a>
+              <a class="btn btn--ghost btn--xs" href="/foerderstrecke/{{ fs.id }}/pdf" target="_blank">PDF</a>
+            </div>
+          </div>
+          {% else %}
+          <p style="font-size:.75rem;color:var(--text-muted);margin:0 0 6px;">
+            Noch keine Förderstrecke mit diesem Einsatz verbunden.
+          </p>
+          {% endfor %}
+          <a class="btn btn--secondary btn--xs" href="/foerderstrecke/?incident_id={{ incident.id }}">
+            ＋ Neue Förderstrecke für diesen Einsatz
+          </a>
+        </div>
+        {% endif %}
+
         <div class="lft-basislayer">
           <label class="form-label">Basiskarte</label>
           <select id="lft-baselayer-select" class="form-input">

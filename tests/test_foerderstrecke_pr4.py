@@ -243,46 +243,6 @@ def test_berechnen_druckspeisung_hydrant(client):
     assert d["stationswerte"][0]["p_ein_bar"] == 4.0     # Vordruck als Eingangsdruck
 
 
-def test_speichern_mit_lage_verknuepfung(client):
-    """Förderstrecke lässt sich mit einer Lage verbinden (lage_id persistiert + geladen)."""
-    from app.models.major_incident import MajorIncident, MajorIncidentStatus
-
-    org_id, pid, sid = _setup("fs_ui_lage", module_on=True)
-    db = SessionLocal(); set_tenant_context(db, None)
-    try:
-        lage = MajorIncident(org_id=org_id, name="Hochwasser Testbach",
-                             status=MajorIncidentStatus.active)
-        db.add(lage); db.commit()
-        lage_id = lage.id
-    finally:
-        db.close()
-
-    _login(client, "fs_ui_lage", "Test1234!")
-    csrf = _csrf(client)
-    payload = {
-        "name": "Versorgung Testbach", "lage_id": lage_id,
-        "ansaug": {"seehoehe_m": 430, "geodaetische_saughoehe_m": 2},
-        "stationen": [{"typ": "quellpumpe", "pumpen_typ_id": pid, "rpm": "2000",
-                       "abschnitt": {"schlauch_typ_id": sid, "laenge_m": 400}}],
-    }
-    r = client.post("/foerderstrecke/speichern", json=payload, headers={"X-CSRF-Token": csrf})
-    assert r.status_code == 200, r.text[:300]
-    strecke_id = r.json()["id"]
-
-    db = SessionLocal(); set_tenant_context(db, None)
-    try:
-        s = db.get(Foerderstrecke, strecke_id)
-        assert s.lage_id == lage_id
-    finally:
-        db.close()
-
-    # Lage-Board zeigt die verknüpfte Förderstrecke als Auftrag mit Link
-    r2 = client.get(f"/lage/{lage_id}")
-    assert r2.status_code == 200
-    assert "Versorgung Testbach" in r2.text
-    assert f"/foerderstrecke/{strecke_id}" in r2.text
-
-
 def test_wasserstellen_layer_json(client):
     """Wasserstellen-Layer liefert aktive Stellen der Org mit Koordinaten."""
     from app.models.wasserstelle import Wasserstelle
@@ -365,3 +325,53 @@ def _punkt_nahe_segment(lat, lng, a, b, tol=1e-4):
     t = max(0.0, min(1.0, (px * bx + py * by) / seg2))
     d = math.hypot(px - t * bx, py - t * by)
     return d < 5.0     # < 5 m vom Segment
+
+
+def test_foerderstrecke_erscheint_als_auftrag_auf_lagefuehrung(client):
+    """Mit einem Einsatz verbundene Förderstrecke erscheint auf der Lageführung als Auftrag."""
+    from app.models.incident import Incident
+    from app.models.master import OrgSettings, SystemSettings
+
+    org_id, pid, sid = _setup("fs_ui_einsatz", module_on=True)
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        # Lageführungs-Modul aktivieren (Seite ist sonst 404)
+        sys_row = db.get(SystemSettings, "lagefuehrung_modul_aktiv")
+        if sys_row is None:
+            db.add(SystemSettings(key="lagefuehrung_modul_aktiv", value="true"))
+        else:
+            sys_row.value = "true"
+        os_row = db.query(OrgSettings).filter_by(org_id=org_id).first()
+        if os_row is None:
+            os_row = OrgSettings(org_id=org_id); db.add(os_row)
+        os_row.lagefuehrung_modul_aktiv = True
+        incident = Incident(primary_org_id=org_id, alarm_type_code="T1", status="active",
+                            lat=47.47, lng=9.75)
+        db.add(incident); db.commit()
+        incident_id = incident.id
+    finally:
+        db.close()
+
+    _login(client, "fs_ui_einsatz", "Test1234!")
+    csrf = _csrf(client)
+    payload = {
+        "name": "Versorgung Einsatz X", "incident_id": incident_id,
+        "ansaug": {"seehoehe_m": 430, "geodaetische_saughoehe_m": 2},
+        "stationen": [{"typ": "quellpumpe", "pumpen_typ_id": pid, "rpm": "2000",
+                       "abschnitt": {"schlauch_typ_id": sid, "laenge_m": 400}}],
+    }
+    r = client.post("/foerderstrecke/speichern", json=payload, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200, r.text[:300]
+    strecke_id = r.json()["id"]
+
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        assert db.get(Foerderstrecke, strecke_id).incident_id == incident_id
+    finally:
+        db.close()
+
+    # Lageführungs-Seite zeigt die verknüpfte Förderstrecke als Auftrag mit Link
+    r2 = client.get(f"/einsatz/{incident_id}/lagefuehrung")
+    assert r2.status_code == 200, r2.text[:300]
+    assert "Versorgung Einsatz X" in r2.text
+    assert f"/foerderstrecke/{strecke_id}" in r2.text
