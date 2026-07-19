@@ -211,6 +211,9 @@ class Settings(BaseSettings):
     ROUTING_PROFILE: str = "driving"           # OSRM-Profil (driving/walking/cycling)
     ROUTING_TIMEOUT_SECONDS: float = 8.0
     ROUTING_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
+    # Vereinfachung der Routen-Geometrie (Douglas-Peucker) in Metern: weniger Stützpunkte
+    # → die Förderleitung lässt sich mit wenigen Griffen verschieben (0 = keine Vereinfachung).
+    ROUTING_SIMPLIFY_TOLERANCE_M: float = 25.0
     # Gefahren der Nachbarobjekte im Umkreis des Einsatzobjekts (Einsatzinfo-Karte)
     NACHBAR_GEFAHR_RADIUS_M: int = 400
 
