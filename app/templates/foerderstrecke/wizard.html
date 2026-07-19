@@ -754,11 +754,10 @@ function foerderPlaner() {
     },
 
     // Zeichnet die Förderleitung als Linie + Start-/Endmarkierung auf die Karte.
+    // Der Linien-Layer wird beibehalten (setLatLngs) statt neu erzeugt, damit eine
+    // laufende Geoman-Bearbeitung nicht abbricht und der pm:edit-Handler erhalten bleibt.
     zeichneRoute() {
       if (!this.karte || typeof L === "undefined") return;
-      if (this._routeLayer) { this.karte.removeLayer(this._routeLayer); this._routeLayer = null; }
-      // routeCoords ist die Förderleitung (gezeichnet/aufgezeichnet); Fallback auf die
-      // Pumpenfolge, solange noch keine Leitung gezeichnet wurde.
       let pts = (this.routeCoords && this.routeCoords.length >= 2)
         ? this.routeCoords.map(c => [c[0], c[1]])
         : this.stationen.filter(s => s.lat != null && s.lng != null).map(s => [s.lat, s.lng]);
@@ -769,9 +768,33 @@ function foerderPlaner() {
         }
       }
       if (pts.length >= 2) {
-        this._routeLayer = L.polyline(pts, { color: "#2563eb", weight: 5, opacity: 0.85 }).addTo(this.karte);
+        if (this._routeLayer) {
+          this._routeLayer.setLatLngs(pts);
+        } else {
+          this._routeLayer = L.polyline(pts, { color: "#2563eb", weight: 5, opacity: 0.85 }).addTo(this.karte);
+          // Verschieben/Bearbeiten der Leitung (Geoman) → Änderung übernehmen
+          this._routeLayer.on("pm:edit", () => this.routeAusLayer());
+        }
+      } else if (this._routeLayer) {
+        this.karte.removeLayer(this._routeLayer); this._routeLayer = null;
       }
       this.syncStartEndMarker();
+    },
+
+    // Übernimmt eine im Editier-/Verschiebe-Modus geänderte Leitung zurück in die Daten.
+    async routeAusLayer() {
+      if (!this._routeLayer) return;
+      const ll = this._routeLayer.getLatLngs();
+      this.routeCoords = ll.map(p => [p.lat, p.lng]);
+      this.routeGezeichnet = this.routeCoords.length >= 2;
+      // Pumpen erneut auf die verschobene Leitung projizieren, Längen/Höhen neu berechnen
+      this.stationen.forEach(st => {
+        if (st.lat != null && st.lng != null) {
+          const pr = this._projiziere(st.lat, st.lng);
+          if (pr) { st.s_m = pr.s; st.lat = pr.point[0]; st.lng = pr.point[1]; }
+        }
+      });
+      await this.stationsGeometrieAktualisieren();
     },
 
     // Start (💧 Wasserentnahme) und Ende (🎯 Verteiler) der Förderleitung markieren.
@@ -840,6 +863,30 @@ function foerderPlaner() {
         }
       }
       return best;
+    },
+    // Douglas-Peucker-Vereinfachung [[lat,lng],…] in Metern (Endpunkte bleiben);
+    // hält die Zahl der Stützpunkte klein → Leitung leicht verschiebbar.
+    _perpDistM(p, a, b) {
+      const kx = Math.cos(a[0] * Math.PI / 180) * 111320, ky = 110574;
+      const px = (p[1] - a[1]) * kx, py = (p[0] - a[0]) * ky;
+      const bx = (b[1] - a[1]) * kx, by = (b[0] - a[0]) * ky;
+      const seg2 = bx * bx + by * by;
+      if (seg2 === 0) return Math.hypot(px, py);
+      const t = Math.max(0, Math.min(1, (px * bx + py * by) / seg2));
+      return Math.hypot(px - t * bx, py - t * by);
+    },
+    _vereinfachen(coords, tol) {
+      if (tol <= 0 || coords.length < 3) return coords;
+      let dmax = 0, idx = 0;
+      for (let i = 1; i < coords.length - 1; i++) {
+        const d = this._perpDistM(coords[i], coords[0], coords[coords.length - 1]);
+        if (d > dmax) { dmax = d; idx = i; }
+      }
+      if (dmax > tol) {
+        return this._vereinfachen(coords.slice(0, idx + 1), tol)
+          .slice(0, -1).concat(this._vereinfachen(coords.slice(idx), tol));
+      }
+      return [coords[0], coords[coords.length - 1]];
     },
     sortStationenNachS() {
       this.stationen.sort((a, b) => {
@@ -971,7 +1018,8 @@ function foerderPlaner() {
 
     async uebernehmeRouteVonLatLngs(latlngs) {
       // Die gezeichnete/aufgezeichnete Linie IST die Förderleitung (maßgeblich).
-      this.routeCoords = latlngs.map(p => [p.lat, p.lng]);
+      // Dichte Spuren (v. a. GPS) ausdünnen → wenige, gut verschiebbare Stützpunkte.
+      this.routeCoords = this._vereinfachen(latlngs.map(p => [p.lat, p.lng]), 10);
       this.routeGezeichnet = this.routeCoords.length >= 2;
       // vorhandene Pumpen auf die (neue) Leitung projizieren → s_m aktualisieren
       if (this.routeGezeichnet) {
