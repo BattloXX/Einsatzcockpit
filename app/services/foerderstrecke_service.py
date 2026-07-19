@@ -237,7 +237,8 @@ def materialbilanz(abschnitte: list[dict], q_l_min: float, *, reserve: float = 0
             "kuerzel": e["kuerzel"],
             "meter": round(e["meter"], 1),
             "meter_mit_reserve": round(meter_reserve, 1),
-            "elemente": int(math.ceil(meter_reserve / el)) if el > 0 else None,
+            # Epsilon gegen Float-Ungenauigkeit (z. B. 900·1,1 = 990,0000001 → 34 statt 33)
+            "elemente": int(math.ceil(meter_reserve / el - 1e-9)) if el > 0 else None,
         })
     fuellzeit_min = round(volumen_l / q_l_min, 1) if q_l_min and q_l_min > 0 else None
     return {
