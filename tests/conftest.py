@@ -11,6 +11,14 @@ os.environ.setdefault("DEBUG", "true")
 # SQLite für alle Tests erzwingen – verhindert, dass Fixtures und Client
 # auf unterschiedliche Datenbanken schreiben/lesen.
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+# Nachschlagewerk-Sync im Test hart deaktivieren: der lifespan-Loop synchronisiert
+# beim Start SOFORT gegen die echte Euro-Rescue-Katalog-API (synchroner httpx-Call in
+# einem to_thread-Worker). In jedem TestClient-Startup blockierte dieser Netz-Call den
+# Default-Executor-Thread bis zum Timeout (~5 s), was den Client-Teardown pro Test um
+# ~5 s verzögerte (Gesamtlaufzeit CI > 1 h) und die fremde Produktiv-API bei jedem
+# Testlauf beschoss. Die Sync-Logik selbst wird in test_rettungskarten_katalog.py
+# direkt (mit gemocktem _hole_rohdaten) getestet – der Loop wird hier nicht gebraucht.
+os.environ["NACHSCHLAGEWERK_SYNC_ENABLED"] = "false"
 
 from app.core.tenant import set_tenant_context
 from app.db import Base, get_db
