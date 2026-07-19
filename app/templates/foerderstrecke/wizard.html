@@ -574,7 +574,16 @@ function foerderPlaner() {
           this.rechnet = false; return;
         }
         const res = await r.json();
-        if (res.stationen && res.stationen.length) {
+        const zeilen = (res.warnungen || []).slice();
+        if (!res.machbar) {
+          // Nicht machbar → KEINE (evtl. sinnlose) Pumpen auf die Karte setzen; nur klar warnen.
+          this.standortHinweis = {
+            machbar: false,
+            titel: "Pumpleistung reicht nicht für " + (res.ziel_q_l_min || this.zielQ).toLocaleString("de-DE")
+              + " l/min — Ziel-Menge senken, Parallelleitung(en) oder stärkere Pumpe",
+            zeilen: zeilen.length ? zeilen : ["Mit dieser Pumpe/Fördermenge ist die Strecke nicht durchgängig versorgbar."]
+          };
+        } else if (res.stationen && res.stationen.length) {
           this.stationen = res.stationen.map(s => ({
             typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm, behaelter_volumen_l: null,
             lat: s.lat, lng: s.lng, s_m: null,
@@ -592,22 +601,16 @@ function foerderPlaner() {
             }
           });
           this.stationsGeometrieAktualisieren();
-          // Persistenter Hinweis: benötigte Pumpenzahl + Warnung bei zu geringer Leistung
-          const zeilen = [
-            res.n_gesamt + " Pumpen nötig: 1 Quellpumpe + " + res.n_relais + " Verstärker/Relais "
-              + "bei " + (res.ziel_q_l_min || this.zielQ).toLocaleString("de-DE") + " l/min."
-          ].concat(res.warnungen || []);
           this.standortHinweis = {
-            machbar: !!res.machbar,
-            titel: res.machbar
-              ? ("Pumpen optimal gesetzt — " + res.n_gesamt + " Pumpen reichen für die Strecke")
-              : "Pumpleistung reicht nicht — zusätzliche/stärkere Pumpen nötig",
-            zeilen
+            machbar: true,
+            titel: "Pumpen optimal gesetzt — " + res.n_gesamt + " Pumpen (1 Quelle + "
+              + res.n_relais + " Verstärker) reichen für die Strecke",
+            zeilen: [res.n_gesamt + " Pumpen bei "
+              + (res.ziel_q_l_min || this.zielQ).toLocaleString("de-DE") + " l/min."].concat(zeilen)
           };
           this.berechnen();
         } else {
-          this.standortHinweis = { machbar: false, titel: "Kein Vorschlag möglich",
-            zeilen: (res.warnungen || []) };
+          this.standortHinweis = { machbar: false, titel: "Kein Vorschlag möglich", zeilen };
         }
       } catch (e) {
         this.standortHinweis = { machbar: false, titel: "Vorschlag fehlgeschlagen", zeilen: ["" + e] };

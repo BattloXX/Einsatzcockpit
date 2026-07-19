@@ -661,24 +661,27 @@ def standort_vorschlag(
         dh = _hoehe_relativ(hoehenprofil, s + seg, s0_h) - _hoehe_relativ(hoehenprofil, s, s0_h)
         p_next = p - reib - hoehenverlust_bar(dh)
         if p_next < p_min_ein:
-            # Relaispumpe an der aktuellen Stelle nötig
-            if s <= letzter_pump_s + 1e-6:
+            # Relaispumpe an der aktuellen Stelle nötig — aber nur setzen, wenn eine FRISCHE
+            # Relaispumpe den nächsten Abschnitt auch wirklich schafft. Sonst wäre die Pumpe
+            # sinnlos (bunched) → als nicht machbar melden statt eine nutzlose Pumpe zu setzen.
+            p_frisch = p_aus_r - reib - hoehenverlust_bar(dh)
+            if p_frisch < p_min_ein or s <= letzter_pump_s + 1e-6:
                 machbar = False
-                warnungen.append(
-                    f"Bei km {s/1000:.2f} kommt die Relaispumpe bei {ziel_q_l_min:.0f} l/min "
-                    f"nicht über den nächsten Abschnitt (zu steil/zu lang) — Ziel-Q senken, "
-                    f"Leitung(en) ergänzen oder stärkere Pumpe.")
+                if p_aus_r < p_min_ein:
+                    warnungen.append(
+                        f"Relaispumpe liefert bei {ziel_q_l_min:.0f} l/min nur {p_aus_r:.1f} bar "
+                        f"(< {p_min_ein:.1f} bar Mindest-Eingangsdruck) — für diese Fördermenge "
+                        f"ungeeignet: Ziel-Q senken, Parallelleitung(en) ergänzen oder stärkere Pumpe.")
+                else:
+                    warnungen.append(
+                        f"Bei km {s/1000:.2f} schafft auch eine frische Relaispumpe den nächsten "
+                        f"Abschnitt nicht (zu steil/zu lang bei {ziel_q_l_min:.0f} l/min) — Ziel-Q "
+                        f"senken, Leitung(en) ergänzen oder stärkere Pumpe.")
                 break
             standorte.append({"s_m": round(s, 1), "typ": "verstaerker", "p_aus_bar": round(p_aus_r, 2)})
             letzter_pump_s = s
             p = p_aus_r
-            p_next = p - reib - hoehenverlust_bar(dh)
-            if p_next < p_min_ein:
-                machbar = False
-                warnungen.append(
-                    f"Bei km {s/1000:.2f}: selbst eine frische Relaispumpe schafft das "
-                    f"nächste Segment nicht (Damm/Steigung zu groß bei {ziel_q_l_min:.0f} l/min).")
-                break
+            p_next = p_frisch
         p = p_next
         s += seg
 
