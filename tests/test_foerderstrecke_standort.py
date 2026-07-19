@@ -44,6 +44,19 @@ def test_zu_hohe_q_fuer_b75_nicht_machbar():
     assert res["warnungen"]
 
 
+def test_schwache_relaispumpe_setzt_keine_sinnlose_pumpe():
+    # Starke Quellpumpe, aber Relaispumpe liefert bei der Ziel-Fördermenge nur ~1 bar
+    # (< 1,5 bar Mindest-Eingangsdruck). Früher wurde trotzdem eine gebündelte, nutzlose
+    # Relaispumpe dicht hinter der Quellpumpe gesetzt (Standort „macht keinen Sinn").
+    quelle = [[0, 53], [8000, 42], [16000, 18]]        # stark
+    relais = [[0, 15], [8000, 11], [16000, 5]]         # schwach: H(8000)=11 m = 1,1 bar
+    res = standort_vorschlag(900, quelle, relais, K_F150, 8000, n_parallel=1)
+    assert res["machbar"] is False
+    assert res["n_relais"] == 0                         # KEINE sinnlose Verstärkerpumpe
+    assert res["n_gesamt"] == 1                         # nur die Quellpumpe
+    assert any("Relaispumpe liefert" in w for w in res["warnungen"])
+
+
 def test_steiler_damm_mit_vielen_relais_oder_unmoeglich():
     # +100 m in einem 25-m-Segment (Wand) → nicht überwindbar
     profil = [[0, 400], [100, 400], [125, 500], [500, 500]]
