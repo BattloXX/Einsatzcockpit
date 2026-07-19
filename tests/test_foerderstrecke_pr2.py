@@ -182,3 +182,33 @@ def test_modus_a_hochpunkt_warnung():
     res = berechne_modus_a(ansaug, [quelle])
     # Entweder Q stark reduziert oder Hochpunkt-Warnung vorhanden
     assert any("Hochpunkt" in w or "Auslass" in w for w in res["warnungen"]) or res["q_max_l_min"] < 1600
+
+
+def test_druckspeisung_hydrant_addiert_vordruck():
+    """Erste Pumpe am Hydranten: Vordruck wird addiert, Saughöhen-Bilanz entfällt."""
+    quelle = PumpenStation(kennlinie=KL_HLP16, typ="quellpumpe", name="HLP",
+                           abschnitt_danach=Abschnitt(schlauch_k=K_F150, laenge_m=200))
+    offen = Ansaugpunkt(seehoehe_m=430, geodaetische_saughoehe_m=3.0)
+    hydrant = Ansaugpunkt(seehoehe_m=430, eingangsdruck_bar=4.0)
+    assert hydrant.ist_druckspeisung and not offen.ist_druckspeisung
+
+    r_offen = berechne_modus_a(offen, [quelle])
+    r_hyd = berechne_modus_a(hydrant, [quelle])
+    # Eingangsdruck der 1. Pumpe wird als Vordruck angezeigt
+    assert r_hyd["stationswerte"][0]["p_ein_bar"] == 4.0
+    assert r_offen["stationswerte"][0]["p_ein_bar"] is None
+    # Vordruck hebt Ausgangsdruck/Fördermenge (bei sonst gleicher Konfiguration)
+    assert r_hyd["stationswerte"][0]["p_aus_bar"] > r_offen["stationswerte"][0]["p_aus_bar"]
+    assert r_hyd["q_max_l_min"] >= r_offen["q_max_l_min"]
+
+
+def test_druckspeisung_ueberspringt_saughoehen_check():
+    """Bei Druckspeisung ist eine (sonst unmögliche) hohe Saughöhe egal."""
+    quelle = PumpenStation(kennlinie=KL_HLP16, typ="quellpumpe",
+                           abschnitt_danach=Abschnitt(schlauch_k=K_F150, laenge_m=200))
+    # geodätische Saughöhe 9 m > 7,5 m Grenze — offen unmöglich, druckgespeist irrelevant
+    hydrant = Ansaugpunkt(seehoehe_m=430, geodaetische_saughoehe_m=9.0,
+                          max_ansaughoehe_m=7.5, eingangsdruck_bar=3.0)
+    res = berechne_modus_a(hydrant, [quelle])
+    assert res["machbar"] is True
+    assert not any("Saughöhe" in w for w in res["warnungen"])

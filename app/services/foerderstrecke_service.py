@@ -310,6 +310,15 @@ class Ansaugpunkt:
     # gesaugt). Bindet die Saughöhe wie ein Heber: maßgeblich ist der Scheitel, nicht
     # die (evtl. tiefere) Pumpenhöhe. 0 = kein Zwischenscheitel.
     saug_scheitel_m: float = 0.0
+    # Vordruck am Eingang der ersten Pumpe (z. B. Speisung aus einem Hydranten/Netz oder
+    # einer Vorpumpe). Ist er gesetzt, entfällt die Saughöhen-Bilanz (Druckspeisung) und
+    # der Vordruck wird zum Ausgangsdruck der ersten Pumpe addiert. None = offene Saugstelle.
+    eingangsdruck_bar: float | None = None
+
+    @property
+    def ist_druckspeisung(self) -> bool:
+        """True, wenn die erste Pumpe druckgespeist wird (Hydrant/Netz), statt zu saugen."""
+        return self.eingangsdruck_bar is not None
 
     @property
     def effektive_saughoehe_m(self) -> float:
@@ -340,10 +349,14 @@ class PumpenStation:
     abschnitt_danach: Abschnitt | None = None
 
 
-def _pumpe_p_aus(station: PumpenStation, q_l_min: float) -> float:
-    """Ausgangsdruck einer Station bei Q: min(H(Q)/10, max_ausgangsdruck)."""
+def _pumpe_p_aus(station: PumpenStation, q_l_min: float, vordruck_bar: float = 0.0) -> float:
+    """Ausgangsdruck einer Station bei Q: min(vordruck + H(Q)/10, max_ausgangsdruck).
+
+    `vordruck_bar` ist ein positiver Eingangsdruck (z. B. Hydrant an der ersten Pumpe), der
+    sich auf den Pumpendruck aufaddiert. Standard 0 (offene Saugstelle).
+    """
     h = interpoliere_hoehe(station.kennlinie, q_l_min) or 0.0
-    p = h / METER_PRO_BAR
+    p = vordruck_bar + h / METER_PRO_BAR
     if station.max_ausgangsdruck_bar is not None:
         p = min(p, station.max_ausgangsdruck_bar)
     return p
@@ -402,29 +415,35 @@ def _auswertung_bei_q(
     druckprofil: list[tuple[float, float]] = []
     stationswerte: list[dict] = []
 
-    # Saugseite der Quellpumpe — maßgeblich ist der höchste Punkt der Saugleitung
-    # (Scheitel über einen Damm bindet wie ein Heber), nicht nur die Pumpenhöhe.
-    saughoehe = ansaug.effektive_saughoehe_m
-    reserve = verfuegbare_saughoehe_m(
-        ansaug.seehoehe_m, saughoehe, ansaug.saug_k, q_l_min,
-        ansaug.saugleitung_laenge_m, ansaug.saug_n_parallel, ansaug.npshr_m)
-    if saughoehe > ansaug.max_ansaughoehe_m:
-        machbar = False
-        scheitel_hinweis = (
-            f" (Scheitel Saugleitung {ansaug.saug_scheitel_m:.1f} m)"
-            if ansaug.saug_scheitel_m and ansaug.saug_scheitel_m > ansaug.geodaetische_saughoehe_m
-            else "")
-        warnungen.append(
-            f"Maßgebliche Saughöhe {saughoehe:.1f} m über Grenze "
-            f"{ansaug.max_ansaughoehe_m:.1f} m{scheitel_hinweis}.")
-    if reserve < 0:
-        machbar = False
-        warnungen.append(f"Saughöhen-Bilanz negativ (Reserve {reserve:.1f} m) bei {q_l_min:.0f} l/min.")
+    # Saugseite der Quellpumpe — bei Druckspeisung (Hydrant/Netz) entfällt die Saughöhen-
+    # Bilanz; sonst ist der höchste Punkt der Saugleitung maßgeblich (Scheitel bindet wie
+    # ein Heber), nicht nur die Pumpenhöhe.
+    if not ansaug.ist_druckspeisung:
+        saughoehe = ansaug.effektive_saughoehe_m
+        reserve = verfuegbare_saughoehe_m(
+            ansaug.seehoehe_m, saughoehe, ansaug.saug_k, q_l_min,
+            ansaug.saugleitung_laenge_m, ansaug.saug_n_parallel, ansaug.npshr_m)
+        if saughoehe > ansaug.max_ansaughoehe_m:
+            machbar = False
+            scheitel_hinweis = (
+                f" (Scheitel Saugleitung {ansaug.saug_scheitel_m:.1f} m)"
+                if ansaug.saug_scheitel_m and ansaug.saug_scheitel_m > ansaug.geodaetische_saughoehe_m
+                else "")
+            warnungen.append(
+                f"Maßgebliche Saughöhe {saughoehe:.1f} m über Grenze "
+                f"{ansaug.max_ansaughoehe_m:.1f} m{scheitel_hinweis}.")
+        if reserve < 0:
+            machbar = False
+            warnungen.append(f"Saughöhen-Bilanz negativ (Reserve {reserve:.1f} m) bei {q_l_min:.0f} l/min.")
 
     s = 0.0
-    p_ein_aktuell: float | None = None   # Eingangsdruck der aktuellen Station (aus Vorstrecke)
+    # Eingangsdruck der aktuellen Station (aus Vorstrecke); bei Druckspeisung startet die
+    # erste Pumpe mit dem Hydranten-/Netz-Vordruck.
+    p_ein_aktuell: float | None = ansaug.eingangsdruck_bar if ansaug.ist_druckspeisung else None
     for i, station in enumerate(stationen):
-        p_aus = _pumpe_p_aus(station, q_l_min)
+        # Vordruck nur an der ERSTEN Pumpe aufaddieren (Hydrant/Netz speist den Eingang).
+        vordruck = ansaug.eingangsdruck_bar if (i == 0 and ansaug.ist_druckspeisung) else 0.0
+        p_aus = _pumpe_p_aus(station, q_l_min, vordruck)
         werte = {
             "index": i, "name": station.name, "typ": station.typ,
             "p_aus_bar": round(p_aus, 2),
