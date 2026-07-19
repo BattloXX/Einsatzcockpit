@@ -187,6 +187,10 @@
                 @click="zielToggle()"
                 x-text="zielModus ? '✓ Ziel setzen (aktiv)' : '🎯 Ziel/Verteiler setzen'"></button>
         <button type="button" class="btn btn--ghost btn--sm" x-show="ziel && !routeGezeichnet" @click="zielEntfernen()">Ziel löschen</button>
+        <button type="button" class="btn btn--sm"
+                :class="wasserstellenAn ? 'btn--primary' : 'btn--secondary'"
+                @click="wasserstellenToggle()"
+                x-text="wasserstellenAn ? '✓ Wasserstellen (an)' : '💧 Wasserstellen'"></button>
       </div>
       <p x-show="routeModus" class="text-muted" style="font-size:.78rem;margin:0 0 6px;color:#16a34a;">
         <span x-show="!_routeStart"><strong>① Startpunkt</strong> (Wasserentnahme) auf die Karte tippen.</span>
@@ -387,6 +391,9 @@ function foerderPlaner() {
     _routeLayer: null,
     _routeStart: null,
     _routePickMarker: null,
+    wasserstellenAn: false,
+    _wasserstellenLayer: null,
+    _wasserstellenGeladen: false,
 
     init() {
       if (FS_LADE && FS_LADE.stationen && FS_LADE.stationen.length) {
@@ -575,7 +582,15 @@ function foerderPlaner() {
                          n_parallel: s.abschnitt.n_parallel, laenge_m: s.abschnitt.laenge_m,
                          delta_hoehe_m: s.abschnitt.delta_hoehe_m }
           }));
-          // Vorgeschlagene Pumpen auf die Förderleitung einrasten (s_m, Längen, Marker)
+          // Die Förderleitung bleibt maßgeblich: vorgeschlagene Pumpen liegen auf der
+          // Route und werden darauf eingerastet (nie die Route durch eine Pumpengerade ersetzen).
+          if (this.routeCoords && this.routeCoords.length >= 2) this.routeGezeichnet = true;
+          this.stationen.forEach(st => {
+            if (st.lat != null && st.lng != null) {
+              const pr = this._projiziere(st.lat, st.lng);
+              if (pr) { st.s_m = pr.s; st.lat = pr.point[0]; st.lng = pr.point[1]; }
+            }
+          });
           this.stationsGeometrieAktualisieren();
           // Persistenter Hinweis: benötigte Pumpenzahl + Warnung bei zu geringer Leistung
           const zeilen = [
@@ -598,20 +613,6 @@ function foerderPlaner() {
         this.standortHinweis = { machbar: false, titel: "Vorschlag fehlgeschlagen", zeilen: ["" + e] };
       }
       this.rechnet = false;
-    },
-
-    zeichneStandorte(standorte) {
-      if (!this.karte) return;
-      (this._standortMarkers || []).forEach(m => this.karte.removeLayer(m));
-      this._standortMarkers = [];
-      (standorte || []).forEach((st, i) => {
-        if (st.lat == null || st.lng == null) return;
-        const farbe = st.typ === "quellpumpe" ? "#16a34a" : "#7c3aed";
-        const m = L.circleMarker([st.lat, st.lng], {radius:8, color:farbe, fillColor:farbe, fillOpacity:0.85})
-          .addTo(this.karte)
-          .bindPopup((st.typ === "quellpumpe" ? "Quellpumpe" : ("Relais " + i)) + " · p aus " + st.p_aus_bar + " bar");
-        this._standortMarkers.push(m);
-      });
     },
 
     async berechnen() {
@@ -1100,6 +1101,52 @@ function foerderPlaner() {
           .addTo(this.karte).bindPopup("Mein Standort"); }
       }, err => alert("Standort nicht verfügbar: " + err.message),
          {enableHighAccuracy:true, timeout:10000, maximumAge:5000});
+    },
+
+    // ── Wasserstellen-Layer (ein-/ausblendbar) ──
+    async wasserstellenToggle() {
+      this.wasserstellenAn = !this.wasserstellenAn;
+      if (!this.wasserstellenAn) {
+        if (this._wasserstellenLayer) this.karte.removeLayer(this._wasserstellenLayer);
+        return;
+      }
+      if (!this._wasserstellenGeladen) await this.ladeWasserstellen();
+      if (this._wasserstellenLayer && this.karte) this._wasserstellenLayer.addTo(this.karte);
+    },
+    async ladeWasserstellen() {
+      try {
+        const r = await fetch("/foerderstrecke/wasserstellen.json");
+        const res = await r.json();
+        const gruppe = L.layerGroup();
+        // Farbe nach Kategorie (icon_kat/typ): Hydrant blau, offenes Wasser türkis, Relais violett
+        const farbe = (w) => {
+          const k = (w.icon_kat || w.typ || "").toLowerCase();
+          if (k.indexOf("hydrant") >= 0) return "#2563eb";
+          if (k.indexOf("relais") >= 0) return "#7c3aed";
+          if (k.indexOf("saug") >= 0 || k.indexOf("offen") >= 0 || k.indexOf("teich") >= 0
+              || k.indexOf("bach") >= 0 || k.indexOf("see") >= 0) return "#0d9488";
+          return "#0ea5e9";
+        };
+        (res.wasserstellen || []).forEach(w => {
+          if (w.lat == null || w.lng == null) return;
+          const c = farbe(w);
+          const m = L.circleMarker([w.lat, w.lng],
+            {radius:6, color:"#fff", weight:1.5, fillColor:c, fillOpacity:0.95});
+          let html = "<strong>💧 " + (w.bezeichnung || w.typ_label || "Wasserstelle") + "</strong>";
+          if (w.typ_label) html += "<br>" + w.typ_label;
+          if (w.ergiebigkeit_l_min) html += "<br>Ergiebigkeit: " + w.ergiebigkeit_l_min.toLocaleString("de-DE") + " l/min";
+          if (w.status_label) html += "<br>Status: " + w.status_label;
+          if (w.hinweis) html += "<br><span style=\"color:#94a3b8;\">" + w.hinweis + "</span>";
+          m.bindPopup(html);
+          gruppe.addLayer(m);
+        });
+        this._wasserstellenLayer = gruppe;
+        this._wasserstellenGeladen = true;
+        if ((res.wasserstellen || []).length === 0) {
+          this.gespeichertHinweis = "Keine Wasserstellen hinterlegt (unter Verwaltung → Wasserstellen pflegen).";
+          setTimeout(() => { this.gespeichertHinweis = ""; }, 4000);
+        }
+      } catch (e) { alert("Wasserstellen konnten nicht geladen werden: " + e); }
     },
 
     // Weg beim Ablaufen per GPS aufzeichnen (watchPosition) → wird zur Route.

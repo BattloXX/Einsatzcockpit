@@ -281,3 +281,69 @@ def test_speichern_mit_lage_verknuepfung(client):
     assert r2.status_code == 200
     assert "Versorgung Testbach" in r2.text
     assert f"/foerderstrecke/{strecke_id}" in r2.text
+
+
+def test_wasserstellen_layer_json(client):
+    """Wasserstellen-Layer liefert aktive Stellen der Org mit Koordinaten."""
+    from app.models.wasserstelle import Wasserstelle
+
+    org_id, _pid, _sid = _setup("fs_ui_ws", module_on=True)
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        db.add(Wasserstelle(org_id=org_id, bezeichnung="Hydrant Dorfplatz", typ="hydrant",
+                            lat=47.47, lng=9.75, quelle="manuell", status="bereit", aktiv=True))
+        db.add(Wasserstelle(org_id=org_id, bezeichnung="Ohne Koordinaten", typ="hydrant",
+                            quelle="manuell", status="bereit", aktiv=True))
+        db.add(Wasserstelle(org_id=org_id, bezeichnung="Inaktiv", typ="hydrant",
+                            lat=47.48, lng=9.76, quelle="manuell", status="bereit", aktiv=False))
+        db.commit()
+    finally:
+        db.close()
+
+    _login(client, "fs_ui_ws", "Test1234!")
+    r = client.get("/foerderstrecke/wasserstellen.json")
+    assert r.status_code == 200
+    ws = r.json()["wasserstellen"]
+    namen = [w["bezeichnung"] for w in ws]
+    assert "Hydrant Dorfplatz" in namen
+    assert "Ohne Koordinaten" not in namen      # ohne lat/lng ausgefiltert
+    assert "Inaktiv" not in namen               # inaktiv ausgefiltert
+
+
+def test_standort_vorschlag_liegt_auf_route(client):
+    """Vorgeschlagene Pumpenstandorte liegen auf der Förderleitung (nicht daneben)."""
+    _, pid, sid = _setup("fs_ui_onroute", module_on=True)
+    _login(client, "fs_ui_onroute", "Test1234!")
+    csrf = _csrf(client)
+    # L-förmige Route: nach Osten, dann nach Norden
+    route = [[47.47, 9.75], [47.47, 9.775], [47.48, 9.775]]
+    payload = {
+        "route": route, "ziel_q_l_min": 800,
+        "ansaug": {"seehoehe_m": 430, "geodaetische_saughoehe_m": 2},
+        "quelle_pumpe_id": pid, "quelle_rpm": "2000",
+        "relais_pumpe_id": pid, "relais_rpm": "2000",
+        "schlauch_typ_id": sid, "n_parallel": 2,
+    }
+    r = client.post("/foerderstrecke/standort-vorschlag", json=payload, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200, r.text[:300]
+    stationen = r.json()["stationen"]
+    assert stationen
+    # jeder Standort liegt (nahezu) auf einem Segment der Route
+    for st in stationen:
+        auf_route = any(_punkt_nahe_segment(st["lat"], st["lng"], route[i], route[i + 1])
+                        for i in range(len(route) - 1))
+        assert auf_route, f"Standort {st['lat']},{st['lng']} liegt nicht auf der Route"
+
+
+def _punkt_nahe_segment(lat, lng, a, b, tol=1e-4):
+    import math
+    kx = math.cos(math.radians(a[0])) * 111320.0
+    ky = 110574.0
+    px, py = (lng - a[1]) * kx, (lat - a[0]) * ky
+    bx, by = (b[1] - a[1]) * kx, (b[0] - a[0]) * ky
+    seg2 = bx * bx + by * by
+    if seg2 == 0:
+        return math.hypot(px, py) < tol * ky
+    t = max(0.0, min(1.0, (px * bx + py * by) / seg2))
+    d = math.hypot(px - t * bx, py - t * by)
+    return d < 5.0     # < 5 m vom Segment

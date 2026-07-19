@@ -442,7 +442,7 @@ def _auswertung_bei_q(
     p_ein_aktuell: float | None = ansaug.eingangsdruck_bar if ansaug.ist_druckspeisung else None
     for i, station in enumerate(stationen):
         # Vordruck nur an der ERSTEN Pumpe aufaddieren (Hydrant/Netz speist den Eingang).
-        vordruck = ansaug.eingangsdruck_bar if (i == 0 and ansaug.ist_druckspeisung) else 0.0
+        vordruck = (ansaug.eingangsdruck_bar or 0.0) if (i == 0 and ansaug.ist_druckspeisung) else 0.0
         p_aus = _pumpe_p_aus(station, q_l_min, vordruck)
         werte = {
             "index": i, "name": station.name, "typ": station.typ,

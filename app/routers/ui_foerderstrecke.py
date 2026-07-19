@@ -81,7 +81,7 @@ def wizard(
     })
 
 
-def _aktive_lagen(db: Session, org_id: int) -> list[dict]:
+def _aktive_lagen(db: Session, org_id: int | None) -> list[dict]:
     """Aktive/Standby-Lagen der Org für das Verknüpfen einer Förderstrecke (Auftrag)."""
     try:
         from app.models.major_incident import MajorIncident, MajorIncidentStatus
@@ -132,6 +132,32 @@ async def hoehenprofil(
         return JSONResponse({"stuetzpunkte": [], "quelle": "keine", "grob": False})
     res = await hp(route, segment_m=float(daten.get("segment_m") or 25.0), db=db)
     return JSONResponse(res)
+
+
+# ── Wasserstellen als (ein-/ausblendbarer) Karten-Layer ───────────────────────
+
+@router.get("/wasserstellen.json")
+def wasserstellen_layer(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    """Aktive Wasserstellen der Org (mit Koordinaten) für den Förderstrecken-Kartenlayer."""
+    from app.models.wasserstelle import Wasserstelle
+    rows = (
+        db.query(Wasserstelle)
+        .filter(Wasserstelle.org_id == user.org_id, Wasserstelle.aktiv.is_(True),
+                Wasserstelle.lat.isnot(None), Wasserstelle.lng.isnot(None))
+        .order_by(Wasserstelle.typ, Wasserstelle.bezeichnung)
+        .all()
+    )
+    return JSONResponse({"wasserstellen": [
+        {"id": w.id, "bezeichnung": w.bezeichnung, "typ": w.typ, "typ_label": w.typ_label,
+         "icon_kat": w.icon_kat, "lat": w.lat, "lng": w.lng, "hinweis": w.hinweis,
+         "ergiebigkeit_l_min": w.ergiebigkeit_l_min, "status": w.status,
+         "status_label": w.status_label}
+        for w in rows
+    ]})
 
 
 # ── Straßen-Routing (Start→Ende der Förderleitung entlang der Straße) ──────────
@@ -214,7 +240,7 @@ def _eingangsdruck(ansaug: dict) -> float | None:
     if not ansaug.get("druckspeisung"):
         return None
     wert = ansaug.get("eingangsdruck_bar")
-    if wert in (None, ""):
+    if wert is None or wert == "":
         return None
     try:
         return float(wert)
