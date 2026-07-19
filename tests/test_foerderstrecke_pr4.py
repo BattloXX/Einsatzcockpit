@@ -288,26 +288,44 @@ def test_wasserstellen_layer_json(client):
     from app.models.wasserstelle import Wasserstelle
 
     org_id, _pid, _sid = _setup("fs_ui_ws", module_on=True)
+    ids = []
     db = SessionLocal(); set_tenant_context(db, None)
     try:
-        db.add(Wasserstelle(org_id=org_id, bezeichnung="Hydrant Dorfplatz", typ="hydrant",
-                            lat=47.47, lng=9.75, quelle="manuell", status="bereit", aktiv=True))
-        db.add(Wasserstelle(org_id=org_id, bezeichnung="Ohne Koordinaten", typ="hydrant",
-                            quelle="manuell", status="bereit", aktiv=True))
-        db.add(Wasserstelle(org_id=org_id, bezeichnung="Inaktiv", typ="hydrant",
-                            lat=47.48, lng=9.76, quelle="manuell", status="bereit", aktiv=False))
+        # weit weg von Wolfurt, damit andere (radiusbasierte) Tests nicht verfälscht werden
+        rows = [
+            Wasserstelle(org_id=org_id, bezeichnung="FS-Test Hydrant", typ="hydrant",
+                         lat=49.9, lng=14.9, quelle="manuell", status="bereit", aktiv=True),
+            Wasserstelle(org_id=org_id, bezeichnung="FS-Test ohne Koord", typ="hydrant",
+                         quelle="manuell", status="bereit", aktiv=True),
+            Wasserstelle(org_id=org_id, bezeichnung="FS-Test inaktiv", typ="hydrant",
+                         lat=49.91, lng=14.91, quelle="manuell", status="bereit", aktiv=False),
+        ]
+        for w in rows:
+            db.add(w)
         db.commit()
+        ids = [w.id for w in rows]
     finally:
         db.close()
 
-    _login(client, "fs_ui_ws", "Test1234!")
-    r = client.get("/foerderstrecke/wasserstellen.json")
-    assert r.status_code == 200
-    ws = r.json()["wasserstellen"]
-    namen = [w["bezeichnung"] for w in ws]
-    assert "Hydrant Dorfplatz" in namen
-    assert "Ohne Koordinaten" not in namen      # ohne lat/lng ausgefiltert
-    assert "Inaktiv" not in namen               # inaktiv ausgefiltert
+    try:
+        _login(client, "fs_ui_ws", "Test1234!")
+        r = client.get("/foerderstrecke/wasserstellen.json")
+        assert r.status_code == 200
+        namen = [w["bezeichnung"] for w in r.json()["wasserstellen"]]
+        assert "FS-Test Hydrant" in namen
+        assert "FS-Test ohne Koord" not in namen    # ohne lat/lng ausgefiltert
+        assert "FS-Test inaktiv" not in namen        # inaktiv ausgefiltert
+    finally:
+        # Session-DB wird nicht je Test zurückgerollt → eigene Testdaten wieder entfernen
+        db = SessionLocal(); set_tenant_context(db, None)
+        try:
+            for wid in ids:
+                obj = db.get(Wasserstelle, wid)
+                if obj is not None:
+                    db.delete(obj)
+            db.commit()
+        finally:
+            db.close()
 
 
 def test_standort_vorschlag_liegt_auf_route(client):
