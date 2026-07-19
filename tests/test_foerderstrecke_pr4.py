@@ -31,6 +31,15 @@ def test_materialbilanz():
     assert m["fuellzeit_min"] is not None
 
 
+def test_materialbilanz_float_grenzfall():
+    # 900 · 1,1 = 990,0000001 (Float) darf NICHT auf 34 aufrunden
+    m = materialbilanz(
+        [{"kuerzel": "F-150", "laenge_m": 300, "n_parallel": 3, "element_laenge_m": 30}],
+        q_l_min=12000, reserve=0.10)
+    assert m["schlaeuche"][0]["meter_mit_reserve"] == 990.0
+    assert m["schlaeuche"][0]["elemente"] == 33
+
+
 def test_profil_svg_grenzen_und_hochpunkt():
     svg = foerderprofil_svg([(0, 5.3), (500, 2.0), (1000, 0.3)], p_max_bar=15,
                             hochpunkt_min_bar=0.5, titel="X")
