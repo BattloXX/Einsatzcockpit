@@ -43,7 +43,7 @@ _SCOPE_COLUMNS = ("org_id", "dept_id", "primary_org_id")
 _GLOBAL_TABLES = frozenset({
     "fire_dept", "role", "qualification", "seed_template",
     "system_settings", "rettungsdatenblatt_cache", "rettungskarten_katalog",
-    "alembic_version",
+    "hoehen_cache", "alembic_version",
 })
 
 # Fluechtige/geraetegebundene Sicherheits-Artefakte: kein Bestandteil eines

@@ -91,6 +91,7 @@ def test_dokumentarten_taxonomie():
     assert set(DOKUMENTARTEN) == {
         "bma_datenblatt", "bma_melderplan", "brandschutzplan",
         "gefahrgutdatenblatt", "lageplan", "objektinformation",
+        "foerderstrecke",
     }
 
 

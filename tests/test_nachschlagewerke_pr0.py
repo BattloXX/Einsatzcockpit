@@ -68,16 +68,11 @@ def test_effective_true_when_both_on():
 
 def test_router_registered():
     from app.main import app
+    from tests.conftest import all_app_paths
 
-    def _paths(routes):
-        out = set()
-        for r in routes:
-            p = getattr(r, "path", None)
-            if p:
-                out.add(p)
-        return out
-
-    assert "/nachschlagewerke/" in _paths(app.routes)
+    # all_app_paths flacht `_IncludedRouter`-Wrapper ab (neuere FastAPI/Starlette
+    # haengen Sub-Router nicht mehr flach in app.routes -- s. conftest.flatten_routes).
+    assert "/nachschlagewerke/" in all_app_paths(app)
 
 
 def test_guard_404_when_disabled():
