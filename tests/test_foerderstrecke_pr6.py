@@ -124,3 +124,63 @@ def test_ungueltiger_token_404(client):
 def test_dokumentart_registriert():
     from app.models.objekt import DOKUMENTARTEN
     assert DOKUMENTARTEN.get("foerderstrecke") == "Einsatzplan Wasserförderung"
+
+
+def test_karte_route_und_marker_zeigt_alle_pumpen_und_ziel():
+    """Kartenbild-Daten enthalten Wegstrecke + jede Pumpe (Farbe je Typ) + Ziel/Auslass."""
+    import json
+
+    from app.services import foerderstrecke_pdf_service as pdf
+
+    class _Strecke:
+        route_geojson = json.dumps({
+            "type": "LineString",
+            "coordinates": [[9.75, 47.47], [9.76, 47.48], [9.77, 47.49]],  # [lng, lat]
+        })
+        auslass = {"lat": 47.49, "lng": 9.77}
+
+    info = [
+        {"lat": 47.47, "lng": 9.75, "typ": "quellpumpe"},
+        {"lat": 47.48, "lng": 9.76, "typ": "verstaerker"},
+    ]
+    route, marker = pdf._karte_route_und_marker(_Strecke(), info)
+
+    # Wegstrecke als [lat, lng] mit allen Stützpunkten (nicht nur der erste Punkt)
+    assert route[0] == (47.47, 9.75) and len(route) == 3
+    # beide Pumpen + Ziel als Marker, farblich unterscheidbar
+    assert [m["color"] for m in marker] == ["#16a34a", "#7c3aed", "#ea580c"]
+
+
+def test_karte_fallback_ohne_route_geojson():
+    """Ohne gespeicherten Wegverlauf entsteht die Linie aus der Pumpenfolge."""
+    from app.services import foerderstrecke_pdf_service as pdf
+
+    class _Strecke:
+        route_geojson = None
+        auslass = {}
+
+    info = [
+        {"lat": 47.47, "lng": 9.75, "typ": "quellpumpe"},
+        {"lat": 47.48, "lng": 9.76, "typ": "verstaerker"},
+    ]
+    route, marker = pdf._karte_route_und_marker(_Strecke(), info)
+    assert route == [(47.47, 9.75), (47.48, 9.76)]
+    assert len(marker) == 2
+
+
+def test_route_laenge_aus_geojson_und_fallback():
+    """Gesamtlänge entlang der Förderleitung: aus route_geojson, sonst Summe der Abschnitte."""
+    import json
+
+    from app.services.foerderstrecke_pdf_service import _route_laenge_m
+
+    class _MitWeg:
+        route_geojson = json.dumps({"type": "LineString",
+                                    "coordinates": [[9.75, 47.47], [9.76, 47.47]]})
+
+    class _OhneWeg:
+        route_geojson = None
+
+    laenge = _route_laenge_m(_MitWeg(), 0.0)
+    assert 700 < laenge < 800   # ~752 m auf dieser Breite
+    assert _route_laenge_m(_OhneWeg(), 1234.6) == 1235

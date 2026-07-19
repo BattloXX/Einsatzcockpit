@@ -46,18 +46,29 @@
   </p>
 
   {% if karte_png %}
-  <img class="karte" src="{{ karte_png }}" alt="Kartenausschnitt">
+  <img class="karte" src="{{ karte_png }}" alt="Wegstrecke mit Pumpenstandorten">
+  <p class="muted" style="font-size:8.5px; margin:3px 0 0;">
+    <span style="color:#16a34a;">●</span> Quellpumpe &nbsp;
+    <span style="color:#7c3aed;">●</span> Verstärker/Relais &nbsp;
+    <span style="color:#ea580c;">●</span> Ziel/Verteiler &nbsp;
+    <span style="color:#2563eb;">▬</span> Wegstrecke
+  </p>
   {% endif %}
 
   <h2>Höhenprofil &amp; Drucklinie</h2>
   <div class="svgbox">{{ svg | safe }}</div>
 
   <h2>Stationen &amp; Maschinisten-Sollwerte</h2>
+  {% if gesamt_laenge_m %}
+  <p class="muted" style="margin:0 0 4px;"><strong>Förderleitung gesamt:</strong>
+    {{ '{:,}'.format(gesamt_laenge_m | int).replace(',', '.') }} m
+    (💧 Wasserentnahme → 🎯 Verteiler)</p>
+  {% endif %}
   <table>
     <thead>
       <tr>
         <th>#</th><th>Gerät / Typ</th><th>Koordinaten</th>
-        <th>p aus [bar]</th><th>p ein Folge [bar]</th><th>DBV [bar]</th><th>Funkrufname</th>
+        <th>p aus [bar]</th><th>p ein Folge [bar]</th><th>DBV [bar]</th><th>Leitung danach</th><th>Funkrufname</th>
       </tr>
     </thead>
     <tbody>
@@ -70,6 +81,7 @@
         <td>{{ sw.p_aus_bar if sw.p_aus_bar is not none else '—' }}</td>
         <td>{{ sw.p_ein_folge_bar if sw.get('p_ein_folge_bar') is not none else '—' }}</td>
         <td>{{ sw.dbv_bar if sw.dbv_bar is not none else '—' }}</td>
+        <td>{% if info.laenge_m %}{{ info.laenge_m | int }} m{% else %}—{% endif %}</td>
         <td>&nbsp;</td>
       </tr>
       {% endfor %}

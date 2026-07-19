@@ -95,7 +95,8 @@ def berechne_gespeicherte_strecke(strecke: Foerderstrecke, db) -> dict:
             abschnitt_danach=abschnitt,
         ))
         info.append({
-            "name": meta.get("name") or "", "typ_label": STATION_TYPEN.get(st.typ, st.typ),
+            "name": meta.get("name") or "", "typ": st.typ,
+            "typ_label": STATION_TYPEN.get(st.typ, st.typ),
             "lat": st.lat, "lng": st.lng, "schlauch": schlauch.kuerzel if schlauch else None,
             "laenge_m": laenge, "n_parallel": st.druck_parallel,
         })
@@ -129,24 +130,90 @@ def berechne_gespeicherte_strecke(strecke: Foerderstrecke, db) -> dict:
                             p_max_bar=min(grenzen) if grenzen else None, stationen=marken,
                             titel=strecke.name)
     return {"ergebnis": ergebnis, "material": material, "svg": svg,
-            "stationen_info": info, "stationswerte": ergebnis["stationswerte"]}
+            "stationen_info": info, "stationswerte": ergebnis["stationswerte"],
+            "gesamt_laenge_m": _route_laenge_m(strecke, s_kumuliert)}
+
+
+def _route_laenge_m(strecke: Foerderstrecke, fallback_m: float) -> float:
+    """Gesamtlänge der Förderleitung: bevorzugt aus dem gezeichneten Weg (route_geojson),
+    sonst die Summe der Abschnittslängen (Pumpe → Pumpe → Ziel)."""
+    if strecke.route_geojson:
+        try:
+            gj = json.loads(strecke.route_geojson)
+            coords = gj.get("coordinates") if isinstance(gj, dict) else None
+            pts = [(float(c[1]), float(c[0])) for c in (coords or []) if len(c) >= 2]
+            if len(pts) >= 2:
+                from app.services.hoehen_service import haversine_m
+                return round(sum(haversine_m(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1])
+                                 for i in range(len(pts) - 1)))
+        except (ValueError, TypeError, KeyError):
+            pass
+    return round(fallback_m)
+
+
+# Markerfarben je Stationstyp (Kartenbild): Quelle grün, Relais violett, Ziel orange.
+_MARKER_FARBEN = {"quellpumpe": "#16a34a"}
+_MARKER_FARBE_RELAIS = "#7c3aed"
+_MARKER_FARBE_ZIEL = "#ea580c"
+
+
+def _karte_route_und_marker(strecke: Foerderstrecke, stationen_info: list[dict]):
+    """Baut (route, marker) für das Kartenbild aus Strecke + angereicherten Stationen.
+
+    route: Wegstrecken-Linie [(lat, lng), …] — bevorzugt das gespeicherte
+    route_geojson (tatsächlich gezeichneter Weg), sonst die Pumpenfolge.
+    marker: Pumpenstandorte (nach Typ eingefärbt) + optionaler Ziel-/Auslasspunkt.
+    """
+    marker: list[dict] = []
+    for i in stationen_info:
+        if i.get("lat") is None or i.get("lng") is None:
+            continue
+        marker.append({"lat": i["lat"], "lng": i["lng"],
+                       "color": _MARKER_FARBEN.get(i.get("typ"), _MARKER_FARBE_RELAIS)})
+    auslass = strecke.auslass or {}
+    if auslass.get("lat") is not None and auslass.get("lng") is not None:
+        marker.append({"lat": auslass["lat"], "lng": auslass["lng"],
+                       "color": _MARKER_FARBE_ZIEL, "radius": 11})
+
+    route: list[tuple[float, float]] = []
+    if strecke.route_geojson:
+        try:
+            gj = json.loads(strecke.route_geojson)
+            coords = gj.get("coordinates") if isinstance(gj, dict) else None
+            # GeoJSON-Koordinaten sind [lng, lat]
+            route = [(float(c[1]), float(c[0])) for c in (coords or []) if len(c) >= 2]
+        except (ValueError, TypeError, KeyError):
+            route = []
+    if len(route) < 2:
+        # Fallback: Linie über die Pumpenfolge (+ Ziel)
+        route = [(m["lat"], m["lng"]) for m in marker]
+    return route, marker
+
+
+def karte_png_datauri(strecke: Foerderstrecke, stationen_info: list[dict]) -> str | None:
+    """Rendert das Strecken-Kartenbild als data:-URI (Wegstrecke + alle Pumpen + Ziel).
+
+    Gibt None zurück, wenn keine Koordinaten vorliegen oder das Tile-Rendering
+    fehlschlägt (Karte ist ein optionaler Baustein von PDF/Maschinisten-Zettel).
+    """
+    route, marker = _karte_route_und_marker(strecke, stationen_info)
+    if not marker and len(route) < 2:
+        return None
+    try:
+        import base64
+
+        from app.services.staticmap_service import render_route_map_png
+        png = render_route_map_png(route if len(route) >= 2 else None, marker)
+        return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+    except Exception as exc:  # Netz/Tiles nicht verfügbar → ohne Karte
+        logger.info("Förderstrecke-Kartenbild nicht gerendert: %s", exc)
+        return None
 
 
 def render_foerderstrecke_pdf(strecke: Foerderstrecke, org, db, base_url: str = "") -> bytes:
     daten = berechne_gespeicherte_strecke(strecke, db)
-    # Kartenausschnitt (optional, Netz): Ansaugpunkt oder erste Station
-    karte_png = None
-    ansaug = strecke.ansaug or {}
-    lat = ansaug.get("lat") or next((i["lat"] for i in daten["stationen_info"] if i["lat"]), None)
-    lng = ansaug.get("lng") or next((i["lng"] for i in daten["stationen_info"] if i["lng"]), None)
-    if lat and lng:
-        try:
-            from app.services.staticmap_service import render_incident_map_png
-            png = render_incident_map_png(float(lat), float(lng))
-            import base64
-            karte_png = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
-        except Exception as exc:  # Netz/Tiles nicht verfügbar → ohne Karte
-            logger.info("Förderstrecke-PDF ohne Kartenbild: %s", exc)
+    # Kartenausschnitt (optional, Netz): Wegstrecke + alle Pumpenstandorte + Ziel
+    karte_png = karte_png_datauri(strecke, daten["stationen_info"])
 
     from app.core.timezones import format_local_datetime
     erstellt_str = format_local_datetime(datetime.now(UTC), org)
@@ -155,6 +222,7 @@ def render_foerderstrecke_pdf(strecke: Foerderstrecke, org, db, base_url: str = 
         strecke=strecke, org=org, erstellt_str=erstellt_str, base_url=base_url,
         ergebnis=daten["ergebnis"], material=daten["material"], svg=daten["svg"],
         stationen_info=daten["stationen_info"], stationswerte=daten["stationswerte"],
+        gesamt_laenge_m=daten["gesamt_laenge_m"],
         karte_png=karte_png,
     )
     try:

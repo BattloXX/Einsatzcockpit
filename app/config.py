@@ -204,6 +204,13 @@ class Settings(BaseSettings):
     HOEHEN_BATCH_MAX: int = 100               # max. Punkte je HTTP-Abfrage
     HOEHEN_CACHE_TTL_SECONDS: int = 86400      # In-Memory-Cache (Höhen ändern sich nicht)
     HOEHEN_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
+    # Straßen-Routing für den Förderstrecken-Planer (Start→Ende der Förderleitung entlang
+    # der Straße). OSRM-Instanz (öffentlicher Demo-Server als Default; für Produktion eigene
+    # Instanz konfigurieren). Leer = Routing deaktiviert (nur manuelles Zeichnen).
+    ROUTING_OSRM_URL: str = "https://router.project-osrm.org"
+    ROUTING_PROFILE: str = "driving"           # OSRM-Profil (driving/walking/cycling)
+    ROUTING_TIMEOUT_SECONDS: float = 8.0
+    ROUTING_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
     # Gefahren der Nachbarobjekte im Umkreis des Einsatzobjekts (Einsatzinfo-Karte)
     NACHBAR_GEFAHR_RADIUS_M: int = 400
 
