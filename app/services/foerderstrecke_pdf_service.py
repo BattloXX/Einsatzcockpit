@@ -42,13 +42,25 @@ def _kennlinie_der_station(st, db) -> tuple[list, dict]:
     }
 
 
+def _ansaug_eingangsdruck(a: dict) -> float | None:
+    """Vordruck (Hydrant/Netz) aus dem gespeicherten Ansaug-Dict, sonst None."""
+    if not a.get("druckspeisung"):
+        return None
+    wert = a.get("eingangsdruck_bar")
+    if wert is None or wert == "":
+        return None
+    try:
+        return float(wert)
+    except (TypeError, ValueError):
+        return None
+
+
 def berechne_gespeicherte_strecke(strecke: Foerderstrecke, db) -> dict:
     """Baut Engine-Eingaben aus den ORM-Stationen und rechnet Modus A.
 
     Rückgabe: {ergebnis, material, svg, stationen_info (angereichert)}.
     """
     a = strecke.ansaug or {}
-    _eingang = a.get("eingangsdruck_bar")
     ansaug = engine.Ansaugpunkt(
         seehoehe_m=float(a.get("seehoehe_m") or 430.0),
         geodaetische_saughoehe_m=float(a.get("geodaetische_saughoehe_m") or 3.0),
@@ -57,7 +69,7 @@ def berechne_gespeicherte_strecke(strecke: Foerderstrecke, db) -> dict:
         saugleitung_laenge_m=float(a.get("saugleitung_laenge_m") or 0.0),
         max_ansaughoehe_m=float(a.get("max_ansaughoehe_m") or 7.5),
         saug_scheitel_m=float(a.get("saug_scheitel_m") or 0.0),
-        eingangsdruck_bar=(float(_eingang) if a.get("druckspeisung") and _eingang not in (None, "") else None),
+        eingangsdruck_bar=_ansaug_eingangsdruck(a),
     )
     full_profil = json.loads(strecke.hoehenprofil_json) if strecke.hoehenprofil_json else None
     stationen_orm = sorted(strecke.stationen, key=lambda s: (s.strang_nr, s.sort))
@@ -171,7 +183,7 @@ def _karte_route_und_marker(strecke: Foerderstrecke, stationen_info: list[dict])
         if i.get("lat") is None or i.get("lng") is None:
             continue
         marker.append({"lat": i["lat"], "lng": i["lng"],
-                       "color": _MARKER_FARBEN.get(i.get("typ"), _MARKER_FARBE_RELAIS)})
+                       "color": _MARKER_FARBEN.get(str(i.get("typ")), _MARKER_FARBE_RELAIS)})
     auslass = strecke.auslass or {}
     if auslass.get("lat") is not None and auslass.get("lng") is not None:
         marker.append({"lat": auslass["lat"], "lng": auslass["lng"],
