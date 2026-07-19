@@ -115,6 +115,31 @@ async def hoehenprofil(
     return JSONResponse(res)
 
 
+# ── Straßen-Routing (Start→Ende der Förderleitung entlang der Straße) ──────────
+
+@router.post("/strassenroute")
+async def strassenroute(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("recorder")),
+    _guard: None = Depends(require_foerderstrecke_enabled),
+):
+    """Sucht eine straßenfolgende Route über die übergebenen Wegpunkte (Start, [Vias], Ende).
+
+    Rückgabe {coords:[[lat,lng],…], laenge_m}. `ok:false`, wenn kein Routing möglich —
+    der Client fällt dann auf die Luftlinie zurück (manuelles Zeichnen bleibt maßgeblich).
+    """
+    from app.services.routing_service import strassen_route
+    daten = await request.json()
+    punkte = [(float(p[0]), float(p[1])) for p in (daten.get("punkte") or []) if len(p) >= 2]
+    if len(punkte) < 2:
+        raise HTTPException(400, "Start- und Endpunkt erforderlich.")
+    res = await strassen_route(punkte)
+    if res is None:
+        return JSONResponse({"ok": False})
+    return JSONResponse({"ok": True, **res})
+
+
 # ── Live-Berechnung ───────────────────────────────────────────────────────────
 
 def _pump_kennlinie(payload: dict, db: Session, org_id: int) -> tuple[list, dict]:
@@ -598,7 +623,10 @@ def maschinisten_seite(
     db: Session = Depends(get_db),
 ):
     """Login-freie Maschinisten-Zettel-Seite. Scopet ausschließlich über den Token."""
-    from app.services.foerderstrecke_pdf_service import berechne_gespeicherte_strecke
+    from app.services.foerderstrecke_pdf_service import (
+        berechne_gespeicherte_strecke,
+        karte_png_datauri,
+    )
 
     row = (
         db.query(FoerderMaschinistToken)
@@ -627,4 +655,6 @@ def maschinisten_seite(
         "stationen_info": daten["stationen_info"],
         "q_max_l_min": daten["ergebnis"]["q_max_l_min"],
         "warnungen": daten["ergebnis"]["warnungen"],
+        "gesamt_laenge_m": daten["gesamt_laenge_m"],
+        "karte_png": karte_png_datauri(strecke, daten["stationen_info"]),
     })

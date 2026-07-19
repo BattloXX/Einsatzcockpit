@@ -6,7 +6,10 @@
 <link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
 <style>
 .fs-shell { display:grid; grid-template-columns: 320px 1fr; gap:14px; padding:14px; align-items:start; }
-.fs-map { height:420px; border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+/* position+z-index+isolation → eigener Stacking-Context: Leaflet-Panes/Controls
+   (z-index bis 1000) bleiben unter dem Nav-Dropdown (das Menü lag sonst hinter der Karte). */
+.fs-map { height:420px; border-radius:8px; overflow:hidden; border:1px solid var(--border);
+          position:relative; z-index:0; isolation:isolate; }
 .fs-panel { background:var(--surface-mid); border:1px solid var(--border); border-radius:8px; padding:14px; }
 .fs-station { border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:8px; }
 .fs-ampel { display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:6px; vertical-align:middle; }
@@ -141,6 +144,10 @@
     <!-- ── Rechte Spalte: Karte + Ergebnis ── -->
     <div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+        <button type="button" class="btn btn--sm"
+                :class="routeModus ? 'btn--primary' : 'btn--secondary'"
+                @click="routeToggle()" :disabled="routeLaeuft"
+                x-text="routeLaeuft ? '… Route wird gesucht' : (routeModus ? (_routeStart ? '② Endpunkt tippen' : '① Startpunkt tippen') : '🛣️ Strecke: Start → Ende')"></button>
         <button type="button" class="btn btn--secondary btn--sm" @click="meinStandort()">📍 Mein Standort</button>
         <button type="button" class="btn btn--sm"
                 :class="platziereModus ? 'btn--primary' : 'btn--secondary'"
@@ -150,17 +157,79 @@
                 :class="aufnahmeLaeuft ? 'btn--primary' : 'btn--secondary'"
                 @click="aufnahmeToggle()"
                 x-text="aufnahmeLaeuft ? '⏹ Aufnahme stoppen' : '⏺ Weg aufzeichnen'"></button>
+        <button type="button" class="btn btn--sm"
+                x-show="!routeGezeichnet"
+                :class="zielModus ? 'btn--primary' : 'btn--secondary'"
+                @click="zielToggle()"
+                x-text="zielModus ? '✓ Ziel setzen (aktiv)' : '🎯 Ziel/Verteiler setzen'"></button>
+        <button type="button" class="btn btn--ghost btn--sm" x-show="ziel && !routeGezeichnet" @click="zielEntfernen()">Ziel löschen</button>
       </div>
+      <p x-show="routeModus" class="text-muted" style="font-size:.78rem;margin:0 0 6px;color:#16a34a;">
+        <span x-show="!_routeStart"><strong>① Startpunkt</strong> (Wasserentnahme) auf die Karte tippen.</span>
+        <span x-show="_routeStart"><strong>② Endpunkt</strong> (Verteiler/Brandobjekt) tippen – die Förderleitung
+        wird <strong>entlang der Straße</strong> gesucht.</span>
+        Danach lassen sich die Pumpen automatisch optimal setzen. Für Wiese/Feld ohne Straße:
+        stattdessen mit dem Linien-Werkzeug (oben links) frei zeichnen.
+      </p>
+      <label x-show="routeModus" style="display:flex;align-items:center;gap:6px;font-size:.78rem;margin:0 0 6px;">
+        <input type="checkbox" x-model="autoPumpen"> Pumpen nach dem Routing automatisch optimal setzen
+      </label>
       <p x-show="platziereModus" class="text-muted" style="font-size:.78rem;margin:0 0 6px;color:#2563eb;">
-        In die Karte tippen setzt eine Pumpe. Marker ziehen verschiebt sie – die Abschnittslängen
-        und das Höhenprofil werden automatisch in die Felder zurückgeschrieben.
+        <template x-if="routeGezeichnet">
+          <span>In die Karte tippen setzt eine Pumpe – sie <strong>rastet auf die Förderleitung</strong> ein.
+          Marker ziehen verschiebt sie entlang der Leitung. Abschnittslängen (entlang der Strecke) und
+          Höhenprofil werden automatisch zurückgeschrieben.</span>
+        </template>
+        <template x-if="!routeGezeichnet">
+          <span>In die Karte tippen setzt eine Pumpe. Tipp: erst die <strong>Förderleitung zeichnen</strong>
+          (Linien-Werkzeug oben links) – dann rasten die Pumpen auf die Leitung ein und Start/Ende werden markiert.</span>
+        </template>
+      </p>
+      <p x-show="zielModus" class="text-muted" style="font-size:.78rem;margin:0 0 6px;color:#ea580c;">
+        In die Karte tippen setzt den Ziel-/Verteilerpunkt (Brandobjekt). Die letzte Pumpe bekommt
+        dadurch ihre Leitung „hinten raus" – Länge und Höhendifferenz werden automatisch berechnet.
       </p>
       <div id="fs-map" class="fs-map"></div>
-      <p class="text-muted" style="font-size:.78rem;margin:6px 0 12px;">
-        Route auf der Karte zeichnen (Linien-Werkzeug), <strong>📍 Mein Standort</strong> zum Zentrieren,
-        oder <strong>⏺ Weg aufzeichnen</strong> und die Strecke ablaufen (GPS). Gesamtlänge und Höhenprofil
-        werden übernommen und gleichmäßig auf die Abschnitte verteilt (danach je Abschnitt anpassbar).
+      <p class="text-muted" style="font-size:.78rem;margin:6px 0 8px;">
+        <strong>Förderleitung zeichnen</strong> (Linien-Werkzeug oben links) oder <strong>⏺ Weg aufzeichnen</strong>
+        (GPS ablaufen). Die gezeichnete Linie <strong>ist</strong> die Förderleitung – 💧 Start (Wasserentnahme)
+        und 🎯 Ende (Verteiler) werden markiert. Pumpen mit <strong>🚩 Pumpe auf Karte setzen</strong> auf die
+        Leitung setzen; Längen werden entlang der Strecke gemessen.
       </p>
+
+      <!-- Hinweis Pumpenplatzierung / Pumpleistung -->
+      <template x-if="standortHinweis">
+        <div class="fs-panel" x-cloak style="margin-bottom:12px;border-left:4px solid;"
+             :style="'border-left-color:' + (standortHinweis.machbar ? '#16a34a' : '#dc2626')">
+          <div style="font-weight:700;" x-text="(standortHinweis.machbar ? '✅ ' : '⚠️ ') + standortHinweis.titel"></div>
+          <template x-if="standortHinweis.zeilen && standortHinweis.zeilen.length">
+            <ul style="margin:6px 0 0;padding-left:18px;font-size:.85rem;">
+              <template x-for="(z, zi) in standortHinweis.zeilen" :key="zi">
+                <li :class="standortHinweis.machbar ? 'fs-warn' : 'fs-warn fs-warn--rot'" x-text="z"></li>
+              </template>
+            </ul>
+          </template>
+        </div>
+      </template>
+
+      <!-- Streckenlängen entlang der Förderleitung -->
+      <div class="fs-panel" x-show="routeGezeichnet && streckenInfo().total > 0" x-cloak style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;">
+          <strong style="font-size:.95rem;">Förderleitung</strong>
+          <span style="font-size:1.1rem;font-weight:700;" x-text="'Gesamtlänge: ' + streckenInfo().total.toLocaleString('de-DE') + ' m'"></span>
+        </div>
+        <table class="fs-tbl" x-show="streckenInfo().segmente.length" style="margin-top:6px;">
+          <thead><tr><th>Abschnitt</th><th style="text-align:right;">Länge entlang Strecke</th></tr></thead>
+          <tbody>
+            <template x-for="(seg, sj) in streckenInfo().segmente" :key="sj">
+              <tr>
+                <td x-text="seg.von + ' → ' + seg.bis"></td>
+                <td style="text-align:right;" x-text="seg.laenge.toLocaleString('de-DE') + ' m'"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
 
       <div class="fs-panel" x-show="ergebnis" x-cloak>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -269,22 +338,43 @@ function foerderPlaner() {
     karte: null,
     aufnahmeLaeuft: false,
     platziereModus: false,
+    zielModus: false,
+    ziel: null,
+    routeGezeichnet: false,
+    routeModus: false,
+    routeLaeuft: false,
+    autoPumpen: true,
+    standortHinweis: null,
     _watchId: null,
     _aufnahmePunkte: [],
     _aufnahmeLayer: null,
     _standortMarker: null,
     _stationMarkers: [],
+    _zielMarker: null,
+    _startMarker: null,
+    _routeLayer: null,
+    _routeStart: null,
+    _routePickMarker: null,
 
     init() {
       if (FS_LADE && FS_LADE.stationen && FS_LADE.stationen.length) {
         this.stationen = FS_LADE.stationen.map(s => ({
           typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm,
           behaelter_volumen_l: s.behaelter_volumen_l,
-          lat: s.lat, lng: s.lng,
+          lat: s.lat, lng: s.lng, s_m: null,
           abschnitt: { schlauch_typ_id: s.schlauch_typ_id, n_parallel: s.druck_parallel || 1,
                        laenge_m: s.abschnitt_laenge_m || 0, delta_hoehe_m: s.abschnitt_delta_hoehe_m || 0 }
         }));
         if (FS_LADE.hoehenprofil) this.hoehenprofil = FS_LADE.hoehenprofil;
+        if (FS_LADE.auslass && FS_LADE.auslass.lat != null && FS_LADE.auslass.lng != null) {
+          this.ziel = { lat: FS_LADE.auslass.lat, lng: FS_LADE.auslass.lng };
+        }
+        // Gespeicherter Wegverlauf = die Förderleitung (maßgeblich)
+        if (FS_LADE.route_geojson && FS_LADE.route_geojson.coordinates) {
+          const rc = FS_LADE.route_geojson.coordinates
+            .filter(c => c && c.length >= 2).map(c => [c[1], c[0]]);   // GeoJSON [lng,lat] → [lat,lng]
+          if (rc.length >= 2) { this.routeCoords = rc; this.routeGezeichnet = true; }
+        }
       } else {
         this.addStation("quellpumpe");
       }
@@ -298,7 +388,7 @@ function foerderPlaner() {
     addStation(typ) {
       this.stationen.push({
         typ: typ || (this.stationen.length ? "verstaerker" : "quellpumpe"),
-        pumpen_typ_id: null, rpm: null, behaelter_volumen_l: null,
+        pumpen_typ_id: null, rpm: null, behaelter_volumen_l: null, s_m: null,
         abschnitt: { schlauch_typ_id: null, n_parallel: 1, laenge_m: 0, delta_hoehe_m: 0 }
       });
     },
@@ -314,6 +404,7 @@ function foerderPlaner() {
         name: this.name, id: this.ladeId,
         ansaug: this.ansaug, ziel_druck_bar: this.zielDruck, parameter: this.parameter,
         hoehenprofil: this.hoehenprofil,
+        auslass: (this.ziel && this.ziel.lat != null) ? {lat: this.ziel.lat, lng: this.ziel.lng} : null,
         route_geojson: this.routeCoords ? {type:"LineString", coordinates: this.routeCoords.map(c=>[c[1],c[0]])} : null,
         stationen: this.stationen.map(s => ({
           typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm,
@@ -330,12 +421,21 @@ function foerderPlaner() {
 
     async standorteVorschlagen() {
       if (!this.routeCoords || this.routeCoords.length < 2) {
-        alert("Bitte zuerst die Route auf der Karte zeichnen oder per GPS ablaufen."); return;
+        this.standortHinweis = { machbar: false, titel: "Noch keine Förderleitung",
+          zeilen: ["Zuerst 🛣️ Start→Ende routen oder die Leitung zeichnen/ablaufen."] };
+        return;
       }
+      // benötigte Konfiguration: Quellpumpe (Station 1) + Schlauch + Relaispumpe
       const q0 = this.stationen[0];
-      if (!q0 || !q0.pumpen_typ_id) { alert("Bitte in Station 1 die Quellpumpe wählen."); return; }
-      if (!q0.abschnitt.schlauch_typ_id) { alert("Bitte in Station 1 den Schlauchtyp wählen."); return; }
-      if (!this.relaisPumpeId) { alert("Bitte eine Relaispumpe wählen."); return; }
+      const fehlt = [];
+      if (!q0 || !q0.pumpen_typ_id) fehlt.push("Quellpumpe (Station 1) wählen");
+      if (!q0 || !q0.abschnitt.schlauch_typ_id) fehlt.push("Schlauchtyp (Station 1) wählen");
+      if (!this.relaisPumpeId) fehlt.push("Relaispumpe im Panel Pumpenstandorte vorschlagen wählen");
+      if (fehlt.length) {
+        this.standortHinweis = { machbar: false,
+          titel: "Für die automatische Pumpenplatzierung fehlt noch:", zeilen: fehlt };
+        return;
+      }
       this.rechnet = true;
       try {
         const r = await fetch("/foerderstrecke/standort-vorschlag", {
@@ -349,24 +449,41 @@ function foerderPlaner() {
             n_parallel: q0.abschnitt.n_parallel || 1
           })
         });
-        if (!r.ok) { alert("Vorschlag fehlgeschlagen (" + r.status + ")."); this.rechnet = false; return; }
+        if (!r.ok) {
+          this.standortHinweis = { machbar: false, titel: "Vorschlag fehlgeschlagen (" + r.status + ")", zeilen: [] };
+          this.rechnet = false; return;
+        }
         const res = await r.json();
         if (res.stationen && res.stationen.length) {
           this.stationen = res.stationen.map(s => ({
             typ: s.typ, pumpen_typ_id: s.pumpen_typ_id, rpm: s.rpm, behaelter_volumen_l: null,
-            lat: s.lat, lng: s.lng,
+            lat: s.lat, lng: s.lng, s_m: null,
             abschnitt: { schlauch_typ_id: s.abschnitt.schlauch_typ_id,
                          n_parallel: s.abschnitt.n_parallel, laenge_m: s.abschnitt.laenge_m,
                          delta_hoehe_m: s.abschnitt.delta_hoehe_m }
           }));
-          this.syncStationMarkers();
-          let msg = (res.machbar ? "✅ " : "⚠️ ") + res.n_gesamt + " Pumpen (1 Quelle + "
-            + res.n_relais + " Relais) bei " + res.ziel_q_l_min + " l/min.";
-          if (res.warnungen && res.warnungen.length) msg += "\n\n" + res.warnungen.join("\n");
-          alert(msg);
+          // Vorgeschlagene Pumpen auf die Förderleitung einrasten (s_m, Längen, Marker)
+          this.stationsGeometrieAktualisieren();
+          // Persistenter Hinweis: benötigte Pumpenzahl + Warnung bei zu geringer Leistung
+          const zeilen = [
+            res.n_gesamt + " Pumpen nötig: 1 Quellpumpe + " + res.n_relais + " Verstärker/Relais "
+              + "bei " + (res.ziel_q_l_min || this.zielQ).toLocaleString("de-DE") + " l/min."
+          ].concat(res.warnungen || []);
+          this.standortHinweis = {
+            machbar: !!res.machbar,
+            titel: res.machbar
+              ? ("Pumpen optimal gesetzt — " + res.n_gesamt + " Pumpen reichen für die Strecke")
+              : "Pumpleistung reicht nicht — zusätzliche/stärkere Pumpen nötig",
+            zeilen
+          };
           this.berechnen();
-        } else { alert("Kein Vorschlag möglich."); }
-      } catch (e) { alert("Vorschlag fehlgeschlagen: " + e); }
+        } else {
+          this.standortHinweis = { machbar: false, titel: "Kein Vorschlag möglich",
+            zeilen: (res.warnungen || []) };
+        }
+      } catch (e) {
+        this.standortHinweis = { machbar: false, titel: "Vorschlag fehlgeschlagen", zeilen: ["" + e] };
+      }
       this.rechnet = false;
     },
 
@@ -427,6 +544,14 @@ function foerderPlaner() {
     initMap() {
       const el = document.getElementById("fs-map");
       if (!el || typeof L === "undefined") return;
+      // Standard-Markericon auf die lokal ausgelieferten Grafiken zeigen (sonst
+      // sucht Leaflet die PNGs am falschen Pfad → Pumpenmarker bleiben unsichtbar).
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconUrl: "/static/img/leaflet/marker-icon.png",
+        iconRetinaUrl: "/static/img/leaflet/marker-icon-2x.png",
+        shadowUrl: "/static/img/leaflet/marker-shadow.png",
+      });
       const karte = L.map(el).setView([47.47, 9.75], 13);
       this.karte = karte;
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -437,36 +562,168 @@ function foerderPlaner() {
       const self = this;
       karte.on("pm:create", e => {
         if (e.shape !== "Line") return;
-        self.uebernehmeRouteVonLatLngs(e.layer.getLatLngs());
-        e.layer.on("pm:edit", () => self.uebernehmeRouteVonLatLngs(e.layer.getLatLngs()));
+        const latlngs = e.layer.getLatLngs();
+        // Geoman-Zeichenlayer entfernen – die Förderleitung wird als eigene, gestylte
+        // Linie (aus routeCoords) gerendert (sonst läge eine Doppellinie auf der Karte).
+        self.karte.removeLayer(e.layer);
+        self.uebernehmeRouteVonLatLngs(latlngs);
       });
-      // Klick auf die Karte setzt im Platzier-Modus eine Pumpe
-      karte.on("click", e => { if (self.platziereModus) self.stationAusKlick(e.latlng); });
-      // vorhandene Stationen (z. B. geladene Strecke) als Marker zeigen
+      // Klick auf die Karte: Route-Modus setzt Start/Ende, Ziel-Modus den Verteiler,
+      // Platzier-Modus eine Pumpe.
+      karte.on("click", e => {
+        if (self.routeModus) { self.routeKlick(e.latlng); }
+        else if (self.zielModus) { self.zielAusKlick(e.latlng); }
+        else if (self.platziereModus) { self.stationAusKlick(e.latlng); }
+      });
+      // vorhandene Stationen + Förderleitung (z. B. geladene Strecke) zeigen
+      if (this.routeGezeichnet) {
+        // geladene Pumpen auf die Leitung projizieren → s_m + Abschnittslängen entlang Strecke
+        this.stationen.forEach(st => {
+          if (st.lat != null && st.lng != null) {
+            const pr = this._projiziere(st.lat, st.lng);
+            if (pr) { st.s_m = pr.s; }
+          }
+        });
+        this.sortStationenNachS();
+        // Abschnittslängen entlang der Strecke konsistent halten (auch für Altdaten)
+        const total = this.routeLaengeM();
+        this.stationen.forEach((st, i) => {
+          if (st.s_m == null) return;
+          const next = this.stationen[i + 1];
+          const endS = (next && next.s_m != null) ? next.s_m : total;
+          st.abschnitt.laenge_m = Math.max(0, Math.round(endS - st.s_m));
+        });
+      }
       this.syncStationMarkers();
+      this.zeichneRoute();
+      this.passeKarteAn();
+    },
+
+    // ── Strecke Start → Ende (Straßen-Routing) ──
+    routeToggle() {
+      this.routeModus = !this.routeModus;
+      if (this.routeModus) {
+        this.platziereModus = false; this.zielModus = false;
+        if (this.aufnahmeLaeuft) this.aufnahmeStop();
+      }
+      this._routeStart = null;
+      if (this._routePickMarker) { this.karte.removeLayer(this._routePickMarker); this._routePickMarker = null; }
+    },
+    routeKlick(latlng) {
+      if (!this._routeStart) {
+        // erster Klick = Startpunkt (Wasserentnahme)
+        this._routeStart = { lat: latlng.lat, lng: latlng.lng };
+        const icon = L.divIcon({ html: "<div style=\"font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));\">💧</div>",
+          className: "", iconSize: null, iconAnchor: [10, 20] });
+        this._routePickMarker = L.marker([latlng.lat, latlng.lng], { icon }).addTo(this.karte)
+          .bindTooltip("Start", { direction: "top", offset: [0, -14] });
+        return;
+      }
+      // zweiter Klick = Endpunkt → Route entlang der Straße suchen
+      const start = this._routeStart, ende = { lat: latlng.lat, lng: latlng.lng };
+      this._routeStart = null;
+      if (this._routePickMarker) { this.karte.removeLayer(this._routePickMarker); this._routePickMarker = null; }
+      this.routeModus = false;
+      this.strasseRouten(start, ende);
+    },
+    async strasseRouten(start, ende) {
+      this.routeLaeuft = true;
+      let coords = null;
+      try {
+        const r = await fetch("/foerderstrecke/strassenroute", {
+          method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": FS_CSRF },
+          body: JSON.stringify({ punkte: [[start.lat, start.lng], [ende.lat, ende.lng]] })
+        });
+        const res = await r.json();
+        if (res.ok && res.coords && res.coords.length >= 2) coords = res.coords;
+      } catch (e) { /* Fallback unten */ }
+      if (!coords) {
+        // Kein Straßen-Routing möglich → Luftlinie Start→Ende
+        coords = [[start.lat, start.lng], [ende.lat, ende.lng]];
+        this.standortHinweis = { machbar: false, titel: "Straßen-Routing nicht verfügbar",
+          zeilen: ["Es wurde die Luftlinie Start→Ende verwendet. Bei Bedarf die Leitung mit dem Linien-Werkzeug frei nachzeichnen."] };
+      }
+      this.routeCoords = coords;
+      this.routeGezeichnet = true;
+      // vorhandene Pumpen (falls schon platziert) auf die neue Leitung projizieren
+      this.stationen.forEach(st => {
+        if (st.lat != null && st.lng != null) {
+          const pr = this._projiziere(st.lat, st.lng);
+          if (pr) { st.s_m = pr.s; st.lat = pr.point[0]; st.lng = pr.point[1]; }
+        }
+      });
+      await this.stationsGeometrieAktualisieren();
+      this.passeKarteAn();
+      this.routeLaeuft = false;
+      // Pumpen automatisch optimal setzen (Modus B), wenn konfiguriert
+      if (this.autoPumpen) await this.standorteVorschlagen();
+    },
+
+    _routePickAbbrechen() {
+      this._routeStart = null;
+      if (this._routePickMarker) { this.karte.removeLayer(this._routePickMarker); this._routePickMarker = null; }
     },
 
     // ── Pumpenstandorte auf der Karte ──
     platziereToggle() {
       this.platziereModus = !this.platziereModus;
-      if (this.platziereModus && this.aufnahmeLaeuft) this.aufnahmeStop();
+      if (this.platziereModus) { this.routeModus = false; this.zielModus = false; this._routePickAbbrechen(); if (this.aufnahmeLaeuft) this.aufnahmeStop(); }
+    },
+
+    // ── Ziel/Verteiler (letzte Pumpe → Leitung „hinten raus") ──
+    zielToggle() {
+      this.zielModus = !this.zielModus;
+      if (this.zielModus) { this.platziereModus = false; this.routeModus = false; this._routePickAbbrechen(); if (this.aufnahmeLaeuft) this.aufnahmeStop(); }
+    },
+    zielAusKlick(latlng) {
+      this.ziel = { lat: latlng.lat, lng: latlng.lng };
+      this.syncZielMarker();
+      this.stationsGeometrieAktualisieren();
+    },
+    zielEntfernen() {
+      this.ziel = null;
+      if (this._zielMarker) { this.karte.removeLayer(this._zielMarker); this._zielMarker = null; }
+      // letzte Pumpe hat ohne Zielpunkt keinen automatisch berechneten Abschnitt mehr
+      this.stationsGeometrieAktualisieren();
+    },
+    syncZielMarker() {
+      if (!this.karte || typeof L === "undefined") return;
+      if (this._zielMarker) { this.karte.removeLayer(this._zielMarker); this._zielMarker = null; }
+      if (!this.ziel || this.ziel.lat == null) return;
+      const self = this;
+      const icon = L.divIcon({ html: "<div style=\"font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));\">🎯</div>",
+        className: "", iconSize: null, iconAnchor: [11, 22] });
+      const m = L.marker([this.ziel.lat, this.ziel.lng], { draggable: true, icon }).addTo(this.karte);
+      m.bindTooltip("Ziel/Verteiler", { permanent: false, direction: "top", offset: [0, -16] });
+      m.on("dragend", () => {
+        const ll = m.getLatLng();
+        self.ziel.lat = ll.lat; self.ziel.lng = ll.lng;
+        self.stationsGeometrieAktualisieren();
+      });
+      this._zielMarker = m;
     },
 
     stationAusKlick(latlng) {
-      // Erste noch nicht verortete Station (z. B. die leere Quellpumpe) übernimmt den
-      // Klickpunkt; sonst wird eine neue Verstärkerstation angehängt.
+      // Pumpe rastet auf die Förderleitung ein (nächster Punkt auf der Linie), sofern
+      // eine Leitung gezeichnet ist. Sonst wird der Klickpunkt direkt übernommen.
+      let lat = latlng.lat, lng = latlng.lng, s_m = null;
+      if (this.routeGezeichnet) {
+        const pr = this._projiziere(lat, lng);
+        if (pr) { lat = pr.point[0]; lng = pr.point[1]; s_m = pr.s; }
+      }
+      // Erste noch nicht verortete Station (z. B. die leere Quellpumpe) übernimmt den Punkt;
+      // sonst wird eine neue Verstärkerstation angehängt.
       const leer = this.stationen.find(s => s.lat == null && s.lng == null);
       if (leer) {
-        leer.lat = latlng.lat; leer.lng = latlng.lng;
+        leer.lat = lat; leer.lng = lng; leer.s_m = s_m;
       } else {
         this.stationen.push({
           typ: "verstaerker",
           pumpen_typ_id: null, rpm: null, behaelter_volumen_l: null,
-          lat: latlng.lat, lng: latlng.lng,
+          lat, lng, s_m,
           abschnitt: { schlauch_typ_id: null, n_parallel: 1, laenge_m: 0, delta_hoehe_m: 0 }
         });
       }
-      this.syncStationMarkers();
       this.stationsGeometrieAktualisieren();
     },
 
@@ -481,27 +738,173 @@ function foerderPlaner() {
         m.bindTooltip("P" + (i + 1), { permanent: true, direction: "top", offset: [0, -8] });
         m.on("dragend", () => {
           const ll = m.getLatLng();
-          st.lat = ll.lat; st.lng = ll.lng;
+          // Auf die Förderleitung einrasten (falls gezeichnet)
+          if (self.routeGezeichnet) {
+            const pr = self._projiziere(ll.lat, ll.lng);
+            if (pr) { st.lat = pr.point[0]; st.lng = pr.point[1]; st.s_m = pr.s; }
+            else { st.lat = ll.lat; st.lng = ll.lng; }
+          } else {
+            st.lat = ll.lat; st.lng = ll.lng;
+          }
           self.stationsGeometrieAktualisieren();
         });
         this._stationMarkers.push(m);
       });
+      this.zeichneRoute();
+    },
+
+    // Zeichnet die Förderleitung als Linie + Start-/Endmarkierung auf die Karte.
+    zeichneRoute() {
+      if (!this.karte || typeof L === "undefined") return;
+      if (this._routeLayer) { this.karte.removeLayer(this._routeLayer); this._routeLayer = null; }
+      // routeCoords ist die Förderleitung (gezeichnet/aufgezeichnet); Fallback auf die
+      // Pumpenfolge, solange noch keine Leitung gezeichnet wurde.
+      let pts = (this.routeCoords && this.routeCoords.length >= 2)
+        ? this.routeCoords.map(c => [c[0], c[1]])
+        : this.stationen.filter(s => s.lat != null && s.lng != null).map(s => [s.lat, s.lng]);
+      if (!this.routeGezeichnet && this.ziel && this.ziel.lat != null) {
+        const last = pts[pts.length - 1];
+        if (!last || Math.abs(last[0] - this.ziel.lat) > 1e-7 || Math.abs(last[1] - this.ziel.lng) > 1e-7) {
+          pts.push([this.ziel.lat, this.ziel.lng]);
+        }
+      }
+      if (pts.length >= 2) {
+        this._routeLayer = L.polyline(pts, { color: "#2563eb", weight: 5, opacity: 0.85 }).addTo(this.karte);
+      }
+      this.syncStartEndMarker();
+    },
+
+    // Start (💧 Wasserentnahme) und Ende (🎯 Verteiler) der Förderleitung markieren.
+    syncStartEndMarker() {
+      if (!this.karte || typeof L === "undefined") return;
+      if (this._startMarker) { this.karte.removeLayer(this._startMarker); this._startMarker = null; }
+      if (this.routeGezeichnet && this.routeCoords && this.routeCoords.length >= 2) {
+        const a = this.routeCoords[0];
+        const icon = L.divIcon({ html: "<div style=\"font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));\">💧</div>",
+          className: "", iconSize: null, iconAnchor: [10, 20] });
+        this._startMarker = L.marker([a[0], a[1]], { icon }).addTo(this.karte)
+          .bindTooltip("Start / Wasserentnahme", { direction: "top", offset: [0, -14] });
+        // Ende der Leitung = Ziel/Verteiler
+        const e = this.routeCoords[this.routeCoords.length - 1];
+        this.ziel = { lat: e[0], lng: e[1] };
+      }
+      this.syncZielMarker();
+    },
+
+    // Zoomt die Karte auf Förderleitung + Pumpen (beim Laden/Neuzeichnen).
+    passeKarteAn() {
+      if (!this.karte || typeof L === "undefined") return;
+      const pts = this.stationen.filter(s => s.lat != null && s.lng != null).map(s => [s.lat, s.lng]);
+      if (this.ziel && this.ziel.lat != null) pts.push([this.ziel.lat, this.ziel.lng]);
+      if (this.routeCoords) this.routeCoords.forEach(c => { if (c && c.length >= 2) pts.push([c[0], c[1]]); });
+      if (pts.length === 1) { this.karte.setView(pts[0], 16); }
+      else if (pts.length >= 2) { this.karte.fitBounds(L.latLngBounds(pts).pad(0.2)); }
+    },
+
+    // ── Geometrie entlang der Förderleitung ──
+    _distM(a, b) { return L.latLng(a[0], a[1]).distanceTo(L.latLng(b[0], b[1])); },
+    _routeKumuliert() {
+      const cum = [0];
+      for (let i = 1; i < this.routeCoords.length; i++) {
+        cum.push(cum[i - 1] + this._distM(this.routeCoords[i - 1], this.routeCoords[i]));
+      }
+      return cum;
+    },
+    routeLaengeM() {
+      if (!this.routeCoords || this.routeCoords.length < 2) return 0;
+      const cum = this._routeKumuliert();
+      return cum[cum.length - 1];
+    },
+    // Nächster Punkt auf der Förderleitung zu (lat,lng): {s, point:[lat,lng], d}
+    _projiziere(lat, lng) {
+      const rc = this.routeCoords;
+      if (!rc || rc.length < 2) return null;
+      const lat0 = rc[0][0];
+      const kx = Math.cos(lat0 * Math.PI / 180) * 111320, ky = 110574;
+      const px = lng * kx, py = lat * ky;
+      const cum = this._routeKumuliert();
+      let best = { d: Infinity, s: 0, point: [lat, lng] };
+      for (let i = 0; i < rc.length - 1; i++) {
+        const ax = rc[i][1] * kx, ay = rc[i][0] * ky;
+        const bx = rc[i + 1][1] * kx, by = rc[i + 1][0] * ky;
+        const dx = bx - ax, dy = by - ay;
+        const len2 = dx * dx + dy * dy;
+        let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+        t = Math.max(0, Math.min(1, t));
+        const cx = ax + t * dx, cy = ay + t * dy;
+        const d = Math.hypot(px - cx, py - cy);
+        if (d < best.d) {
+          const segLen = cum[i + 1] - cum[i];
+          best = { d, s: cum[i] + t * segLen,
+                   point: [rc[i][0] + t * (rc[i + 1][0] - rc[i][0]), rc[i][1] + t * (rc[i + 1][1] - rc[i][1])] };
+        }
+      }
+      return best;
+    },
+    sortStationenNachS() {
+      this.stationen.sort((a, b) => {
+        const sa = a.s_m == null ? Infinity : a.s_m;
+        const sb = b.s_m == null ? Infinity : b.s_m;
+        return sa - sb;
+      });
+    },
+    // Zusammenfassung Gesamtlänge + Abschnitte entlang der Förderleitung (für die Anzeige)
+    streckenInfo() {
+      const total = Math.round(this.routeLaengeM());
+      const segmente = [];
+      if (this.routeGezeichnet) {
+        const platz = this.stationen.filter(s => s.s_m != null).slice().sort((a, b) => a.s_m - b.s_m);
+        if (platz.length) {
+          if (platz[0].s_m > 1) segmente.push({ von: "💧 Start", bis: "P1", laenge: Math.round(platz[0].s_m) });
+          for (let i = 0; i < platz.length; i++) {
+            const endS = (i < platz.length - 1) ? platz[i + 1].s_m : total;
+            segmente.push({ von: "P" + (i + 1), bis: (i < platz.length - 1) ? "P" + (i + 2) : "🎯 Ziel",
+                            laenge: Math.max(0, Math.round(endS - platz[i].s_m)) });
+          }
+        }
+      }
+      return { total, segmente };
     },
 
     async stationsGeometrieAktualisieren() {
-      const punkte = this.stationen.filter(s => s.lat != null && s.lng != null);
-      if (punkte.length < 1) return;
-      // Route = Reihenfolge der Pumpen (Pumpe → Pumpe → … → Auslass)
-      this.routeCoords = punkte.map(s => [s.lat, s.lng]);
-      // Abschnittslängen (Luftlinie zur Folgestation) in die Felder zurückschreiben
-      for (let i = 0; i < this.stationen.length - 1; i++) {
-        const a = this.stationen[i], b = this.stationen[i + 1];
-        if (a && a.lat != null && b && b.lat != null) {
-          a.abschnitt.laenge_m = Math.round(L.latLng(a.lat, a.lng).distanceTo(L.latLng(b.lat, b.lng)));
+      if (this.routeGezeichnet && this.routeCoords && this.routeCoords.length >= 2) {
+        // ── Route-first: Pumpen liegen auf der Förderleitung, Längen entlang der Strecke ──
+        const total = this.routeLaengeM();
+        this.stationen.forEach(st => {
+          if (st.lat != null && st.lng != null && st.s_m == null) {
+            const pr = this._projiziere(st.lat, st.lng);
+            if (pr) { st.s_m = pr.s; st.lat = pr.point[0]; st.lng = pr.point[1]; }
+          }
+        });
+        this.sortStationenNachS();
+        // Abschnitt hinter jeder Pumpe = Strecke bis zur nächsten Pumpe bzw. bis zum Ziel
+        this.stationen.forEach((st, i) => {
+          if (st.s_m == null) return;
+          const next = this.stationen[i + 1];
+          const endS = (next && next.s_m != null) ? next.s_m : total;
+          st.abschnitt.laenge_m = Math.max(0, Math.round(endS - st.s_m));
+        });
+        this.syncStationMarkers();      // ruft zeichneRoute() → Start/Ende + Ziel
+      } else {
+        // ── Legacy: ohne gezeichnete Leitung definieren die Pumpen die Linie (+ optionales Ziel) ──
+        const punkte = this.stationen.filter(s => s.lat != null && s.lng != null);
+        if (punkte.length < 1) return;
+        this.routeCoords = punkte.map(s => [s.lat, s.lng]);
+        if (this.ziel && this.ziel.lat != null) this.routeCoords.push([this.ziel.lat, this.ziel.lng]);
+        for (let i = 0; i < this.stationen.length - 1; i++) {
+          const a = this.stationen[i], b = this.stationen[i + 1];
+          if (a && a.lat != null && b && b.lat != null) {
+            a.abschnitt.laenge_m = Math.round(this._distM([a.lat, a.lng], [b.lat, b.lng]));
+          }
         }
+        const letzte = this.stationen[this.stationen.length - 1];
+        if (this.ziel && this.ziel.lat != null && letzte && letzte.lat != null) {
+          letzte.abschnitt.laenge_m = Math.round(this._distM([letzte.lat, letzte.lng], [this.ziel.lat, this.ziel.lng]));
+        }
+        this.syncStationMarkers();
       }
-      // Höhenprofil für die Pumpenfolge holen → Höhendifferenz je Abschnitt zurückschreiben
-      if (this.routeCoords.length >= 2) {
+      // Höhenprofil der Förderleitung holen → Höhendifferenz je Abschnitt zurückschreiben
+      if (this.routeCoords && this.routeCoords.length >= 2) {
         try {
           const r = await fetch("/foerderstrecke/hoehenprofil", {
             method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": FS_CSRF },
@@ -535,6 +938,7 @@ function foerderPlaner() {
       if (this.aufnahmeLaeuft) { this.aufnahmeStop(); return; }
       if (!navigator.geolocation) { alert("Standortabfrage wird vom Gerät/Browser nicht unterstützt."); return; }
       if (!this.karte) return;
+      this.routeModus = false; this.platziereModus = false; this.zielModus = false;
       this._aufnahmePunkte = [];
       if (this._aufnahmeLayer) { this.karte.removeLayer(this._aufnahmeLayer); }
       this._aufnahmeLayer = L.polyline([], {color:"#dc2626", weight:4}).addTo(this.karte);
@@ -557,6 +961,8 @@ function foerderPlaner() {
       if (this._watchId != null) { navigator.geolocation.clearWatch(this._watchId); this._watchId = null; }
       this.aufnahmeLaeuft = false;
       if (this._aufnahmePunkte.length >= 2) {
+        // Rote Aufnahmespur entfernen – die Förderleitung wird als eigene Linie gerendert.
+        if (this._aufnahmeLayer) { this.karte.removeLayer(this._aufnahmeLayer); this._aufnahmeLayer = null; }
         this.uebernehmeRouteVonLatLngs(this._aufnahmePunkte.map(p => L.latLng(p[0], p[1])));
       } else {
         alert("Zu wenige GPS-Punkte aufgezeichnet (Empfang prüfen).");
@@ -564,38 +970,43 @@ function foerderPlaner() {
     },
 
     async uebernehmeRouteVonLatLngs(latlngs) {
+      // Die gezeichnete/aufgezeichnete Linie IST die Förderleitung (maßgeblich).
       this.routeCoords = latlngs.map(p => [p.lat, p.lng]);
-      // Gesamtlänge (Haversine)
-      let laenge = 0;
-      for (let i=0;i<latlngs.length-1;i++) laenge += latlngs[i].distanceTo(latlngs[i+1]);
-      // Länge gleichmäßig auf Abschnitte (Stationen mit Leitung) verteilen
-      const mitLeitung = this.stationen.filter((s,i)=> i < this.stationen.length-1 || this.stationen.length===1);
-      const n = Math.max(1, this.stationen.length - 1) || 1;
-      const proAbschnitt = laenge / (this.stationen.length > 1 ? this.stationen.length - 1 : 1);
-      this.stationen.forEach((s, i) => {
-        if (i < this.stationen.length - 1) s.abschnitt.laenge_m = Math.round(proAbschnitt);
-      });
-      // Höhenprofil abrufen
-      try {
-        const r = await fetch("/foerderstrecke/hoehenprofil", {
-          method:"POST", headers:{"Content-Type":"application/json","X-CSRF-Token":FS_CSRF},
-          body: JSON.stringify({route: this.routeCoords})
+      this.routeGezeichnet = this.routeCoords.length >= 2;
+      // vorhandene Pumpen auf die (neue) Leitung projizieren → s_m aktualisieren
+      if (this.routeGezeichnet) {
+        this.stationen.forEach(st => {
+          if (st.lat != null && st.lng != null) {
+            const pr = this._projiziere(st.lat, st.lng);
+            if (pr) { st.s_m = pr.s; st.lat = pr.point[0]; st.lng = pr.point[1]; }
+          }
         });
-        const hp = await r.json();
-        if (hp.stuetzpunkte && hp.stuetzpunkte.length) {
-          this.hoehenprofil = hp.stuetzpunkte.map(p => [p.s_m, p.hoehe_m]).filter(p => p[1] != null);
-          this.verteileHoehen();
-        }
-      } catch (e) { /* Höhenprofil optional */ }
+      }
+      // Abschnittslängen (entlang der Strecke) + Start/Ende/Höhenprofil neu berechnen
+      await this.stationsGeometrieAktualisieren();
+      this.passeKarteAn();
     },
 
     verteileHoehen() {
-      // Höhendifferenz je Abschnitt aus dem Profil (Anfang/Ende) grob ableiten
       if (!this.hoehenprofil || this.hoehenprofil.length < 2) return;
-      const total = this.hoehenprofil[this.hoehenprofil.length-1][0] || 1;
+      if (this.routeGezeichnet && this.routeCoords && this.routeCoords.length >= 2) {
+        // Route-first: Höhendifferenz je Abschnitt aus den echten s-Positionen entlang der Leitung
+        const total = this.routeLaengeM();
+        this.stationen.forEach((st, i) => {
+          if (st.s_m == null) return;
+          const next = this.stationen[i + 1];
+          const endS = (next && next.s_m != null) ? next.s_m : total;
+          const h0 = this.hoeheBei(st.s_m), h1 = this.hoeheBei(endS);
+          if (h0 != null && h1 != null) st.abschnitt.delta_hoehe_m = Math.round((h1 - h0) * 10) / 10;
+        });
+        return;
+      }
+      // Legacy: kumulierte Abschnittslängen (Zwischenabschnitte immer, letzter nur mit Ziel)
+      const hatZiel = !!(this.ziel && this.ziel.lat != null);
       let s0 = 0;
       this.stationen.forEach((st, i) => {
-        if (i >= this.stationen.length - 1) return;
+        const istLetzte = (i >= this.stationen.length - 1);
+        if (istLetzte && !hatZiel) return;
         const s1 = s0 + (st.abschnitt.laenge_m || 0);
         const h0 = this.hoeheBei(s0), h1 = this.hoeheBei(s1);
         if (h0 != null && h1 != null) st.abschnitt.delta_hoehe_m = Math.round((h1 - h0) * 10) / 10;

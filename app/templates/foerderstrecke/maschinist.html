@@ -20,6 +20,10 @@
   .wert .l { font-size: .72rem; color: #94a3b8; }
   .wert .v { font-size: 1.3rem; font-weight: 700; }
   .nachbar { font-size: .82rem; color: #cbd5e1; margin-top: 8px; }
+  .streckenkarte { width: 100%; border-radius: 10px; border: 1px solid #334155; margin-bottom: 12px; display: block; }
+  .kartenlegende { font-size: .72rem; color: #94a3b8; margin: -6px 0 12px; }
+  .kartenlegende span { margin-right: 10px; white-space: nowrap; }
+  .kartenlegende b { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:3px; vertical-align:middle; }
   a.btn { display: inline-block; background: #2563eb; color: #fff; text-decoration: none;
           padding: 6px 12px; border-radius: 8px; font-size: .85rem; margin-top: 8px; }
   .warn { color: #fca5a5; font-size: .82rem; }
@@ -32,6 +36,20 @@
   </header>
   <div class="wrap">
     <div class="q">Förderziel: {{ '{:,}'.format(q_max_l_min | int).replace(',', '.') }} l/min</div>
+    {% if gesamt_laenge_m %}
+    <div style="font-size:.9rem;color:#cbd5e1;margin:-8px 0 12px;">Förderleitung gesamt:
+      <strong>{{ '{:,}'.format(gesamt_laenge_m | int).replace(',', '.') }} m</strong> · 💧 Wasserentnahme → 🎯 Verteiler</div>
+    {% endif %}
+
+    {% if karte_png %}
+    <img class="streckenkarte" src="{{ karte_png }}" alt="Wegstrecke mit Pumpenstandorten">
+    <div class="kartenlegende">
+      <span><b style="background:#16a34a;"></b>Quellpumpe</span>
+      <span><b style="background:#7c3aed;"></b>Verstärker/Relais</span>
+      <span><b style="background:#ea580c;"></b>Ziel/Verteiler</span>
+      <span><b style="background:#2563eb;"></b>Wegstrecke</span>
+    </div>
+    {% endif %}
 
     {% for sw in stationswerte %}
     {% set info = stationen_info[loop.index0] if stationen_info|length > loop.index0 else {} %}
@@ -45,6 +63,9 @@
       </div>
       {% if info.lat and info.lng %}
       <a class="btn" href="https://www.openstreetmap.org/?mlat={{ info.lat }}&mlon={{ info.lng }}#map=17/{{ info.lat }}/{{ info.lng }}" target="_blank">📍 Standort auf Karte</a>
+      {% endif %}
+      {% if info.laenge_m %}
+      <div class="nachbar">🧵 Leitung danach: <strong>{{ info.laenge_m | int }} m</strong>{% if info.schlauch %} ({{ info.schlauch }}){% endif %}</div>
       {% endif %}
       <div class="nachbar">
         {% if loop.index0 > 0 %}◀ Vorher: {{ stationswerte[loop.index0-1].name or ('Station ' ~ loop.index0) }}{% endif %}
