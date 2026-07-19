@@ -45,7 +45,7 @@ router = APIRouter(prefix="/foerderstrecke", tags=["foerderstrecke"])
 @router.get("/", response_class=HTMLResponse)
 def wizard(
     request: Request,
-    lage_id: int | None = None,
+    incident_id: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("recorder")),
     _guard: None = Depends(require_foerderstrecke_enabled),
@@ -76,23 +76,28 @@ def wizard(
         "pumpen_json": _pumpen_json(pumpen),
         "schlaeuche_json": _schlaeuche_json(schlaeuche),
         "lade_strecke_id": None,
-        "lagen": _aktive_lagen(db, user.org_id),
-        "prelink_lage_id": lage_id,
+        "einsaetze": _aktive_einsaetze(db, user.org_id),
+        "prelink_incident_id": incident_id,
     })
 
 
-def _aktive_lagen(db: Session, org_id: int | None) -> list[dict]:
-    """Aktive/Standby-Lagen der Org für das Verknüpfen einer Förderstrecke (Auftrag)."""
+def _aktive_einsaetze(db: Session, org_id: int | None) -> list[dict]:
+    """Offene Einsätze der Org für das Verknüpfen einer Förderstrecke (Auftrag)."""
     try:
-        from app.models.major_incident import MajorIncident, MajorIncidentStatus
+        from app.models.incident import Incident
         rows = (
-            db.query(MajorIncident)
-            .filter(MajorIncident.org_id == org_id,
-                    MajorIncident.status != MajorIncidentStatus.closed)
-            .order_by(MajorIncident.created_at.desc())
+            db.query(Incident)
+            .filter(Incident.primary_org_id == org_id, Incident.status == "active")
+            .order_by(Incident.started_at.desc())
+            .limit(50)
             .all()
         )
-        return [{"id": r.id, "name": r.name, "status": str(r.status)} for r in rows]
+        out = []
+        for r in rows:
+            bez = " ".join(x for x in [r.address_street, r.address_no] if x) or r.reason or ""
+            label = f"#{r.nummer or r.id}" + (f" · {bez}" if bez else "") + f" · {r.alarm_type_code}"
+            out.append({"id": r.id, "name": label})
+        return out
     except Exception:
         return []
 
@@ -508,7 +513,6 @@ async def speichern(
     strecke.parameter_json = json.dumps(daten.get("parameter")) if daten.get("parameter") else None
     strecke.objekt_id = daten.get("objekt_id")
     strecke.incident_id = daten.get("incident_id")
-    strecke.lage_id = daten.get("lage_id")
     strecke.aktualisiert_von_id = user.id
     db.flush()
 
@@ -559,14 +563,15 @@ def laden(
         "pumpen_json": _pumpen_json(pumpen), "schlaeuche_json": _schlaeuche_json(schlaeuche),
         "lade_strecke_id": strecke.id,
         "lade_strecke_json": _strecke_json(strecke),
-        "lagen": _aktive_lagen(db, user.org_id),
-        "prelink_lage_id": None,
+        "einsaetze": _aktive_einsaetze(db, user.org_id),
+        "prelink_incident_id": None,
     })
 
 
 def _strecke_json(s: Foerderstrecke) -> str:
     return json.dumps({
-        "id": s.id, "name": s.name, "status": s.status, "lage_id": s.lage_id,
+        "id": s.id, "name": s.name, "status": s.status,
+        "incident_id": s.incident_id,
         "route_geojson": json.loads(s.route_geojson) if s.route_geojson else None,
         "ansaug": s.ansaug, "auslass": s.auslass,
         "hoehenprofil": json.loads(s.hoehenprofil_json) if s.hoehenprofil_json else None,

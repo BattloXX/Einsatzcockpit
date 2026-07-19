@@ -45,16 +45,16 @@
           <label>Bezeichnung</label>
           <input class="form-input" x-model="name" placeholder="z. B. Versorgung Objekt X aus der Ach">
         </div>
-        <div class="fs-field" x-show="lagen && lagen.length">
-          <label>Mit Einsatz/Lage verbinden (erscheint dort als Auftrag)</label>
+        <div class="fs-field" x-show="einsaetze && einsaetze.length">
+          <label>Mit Einsatz verbinden (erscheint dort als Auftrag)</label>
           <div style="display:flex;gap:6px;align-items:center;">
-            <select class="form-select" x-model.number="lageId" style="flex:1;">
-              <option :value="null">— keine —</option>
-              <template x-for="l in lagen" :key="l.id">
-                <option :value="l.id" x-text="l.name + (l.status==='standby' ? ' (Standby)' : '')"></option>
+            <select class="form-select" x-model.number="incidentId" style="flex:1;">
+              <option :value="null">— kein —</option>
+              <template x-for="e in einsaetze" :key="e.id">
+                <option :value="e.id" x-text="e.name"></option>
               </template>
             </select>
-            <a class="btn btn--ghost btn--xs" x-show="lageId" :href="'/lage/' + lageId" title="Zur Lage wechseln">Lage ▸</a>
+            <a class="btn btn--ghost btn--xs" x-show="incidentId" :href="'/einsatz/' + incidentId + '/lagefuehrung'" title="Zur Lageführung des Einsatzes">Einsatz ▸</a>
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -341,8 +341,8 @@ const FS_PUMPEN = {{ pumpen_json | safe }};
 const FS_SCHLAEUCHE = {{ schlaeuche_json | safe }};
 const FS_STRECKEN = {{ strecken|length }};
 const FS_LADE = {% if lade_strecke_id %}{{ lade_strecke_json | safe }}{% else %}null{% endif %};
-const FS_LAGEN = {{ lagen | tojson }};
-const FS_PRELINK_LAGE = {% if prelink_lage_id %}{{ prelink_lage_id }}{% else %}null{% endif %};
+const FS_EINSAETZE = {{ einsaetze | tojson }};
+const FS_PRELINK_INCIDENT = {% if prelink_incident_id %}{{ prelink_incident_id }}{% else %}null{% endif %};
 const FS_CSRF = "{{ request.state.csrf_token }}";
 const FS_ANSAUG_DEFAULT = {seehoehe_m:430, geodaetische_saughoehe_m:3, saug_k:0.23,
                            saug_n_parallel:1, saug_scheitel_m:0, druckspeisung:false, eingangsdruck_bar:null};
@@ -352,8 +352,8 @@ function foerderPlaner() {
     name: FS_LADE ? FS_LADE.name : "",
     pumpen: FS_PUMPEN,
     schlaeuche: FS_SCHLAEUCHE,
-    lagen: FS_LAGEN,
-    lageId: FS_LADE ? (FS_LADE.lage_id || null) : (FS_PRELINK_LAGE || null),
+    einsaetze: FS_EINSAETZE,
+    incidentId: FS_LADE ? (FS_LADE.incident_id || null) : (FS_PRELINK_INCIDENT || null),
     strecken: Array({{ strecken|length }}),
     ladeId: FS_LADE ? FS_LADE.id : null,
     ansaug: (FS_LADE && FS_LADE.ansaug && Object.keys(FS_LADE.ansaug).length)
@@ -453,7 +453,7 @@ function foerderPlaner() {
       if (d._ts && (Date.now() - d._ts) > 12 * 3600 * 1000) { this.verwerfeDraft(); return; }
       if (d.name != null) this.name = d.name;
       if (d.ansaug) this.ansaug = Object.assign({}, FS_ANSAUG_DEFAULT, d.ansaug);
-      if (d.lage_id != null) this.lageId = d.lage_id;
+      if (d.incident_id != null) this.incidentId = d.incident_id;
       if (d._relaisPumpeId != null) this.relaisPumpeId = d._relaisPumpeId;
       if (d._zielQ != null) this.zielQ = d._zielQ;
       if (d.hoehenprofil) this.hoehenprofil = d.hoehenprofil;
@@ -521,7 +521,7 @@ function foerderPlaner() {
 
     payload() {
       return {
-        name: this.name, id: this.ladeId, lage_id: this.lageId || null,
+        name: this.name, id: this.ladeId, incident_id: this.incidentId || null,
         ansaug: this.ansaug, ziel_druck_bar: this.zielDruck, parameter: this.parameter,
         hoehenprofil: this.hoehenprofil,
         auslass: (this.ziel && this.ziel.lat != null) ? {lat: this.ziel.lat, lng: this.ziel.lng} : null,
