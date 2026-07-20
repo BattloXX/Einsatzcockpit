@@ -225,7 +225,9 @@ async def lagefuehrung_seite(
 # Karte, Legende der verwendeten Zeichen und Zeitstempel (Nutzer-Vorgabe).
 
 _LFT_DRUCK_VALID_FMTS = {"A4 portrait", "A4 landscape", "A3 portrait", "A3 landscape"}
-_LFT_DRUCK_VALID_LAYERS = {"einsatzort", "fahrzeuge", "objekt", "wasserstellen", "zeichnung", "beschriftung"}
+_LFT_DRUCK_VALID_LAYERS = {
+    "einsatzort", "fahrzeuge", "objekt", "wasserstellen", "foerderstrecke", "zeichnung", "beschriftung",
+}
 
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/karte/druck", response_class=HTMLResponse)
@@ -493,6 +495,57 @@ async def lagefuehrung_wasserstellen(
         radius_m=settings.HYDRANT_RADIUS_EINSATZINFO_M,
     )
     return JSONResponse(stellen)
+
+
+# ── Auto-Layer: Förderstrecke ────────────────────────────────────────────────────
+
+@router.get("/einsatz/{incident_id}/lagefuehrung/foerderstrecken.json")
+async def lagefuehrung_foerderstrecken(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_lagefuehrung_enabled),
+):
+    """Mit dem Einsatz verknüpfte Förderstrecken (Route + Pumpenstandorte) als Kartenlayer."""
+    user = _current_user_or_401(request)
+    incident = _incident_or_404(incident_id, db)
+    _check_access(user, incident)
+
+    if not incident.primary_org_id:
+        return JSONResponse([])
+
+    from app.models.foerderstrecke import STATION_TYPEN, Foerderstrecke
+    from app.services.foerderstrecke_service import foerderstrecke_effective_enabled
+
+    if not foerderstrecke_effective_enabled(incident.primary_org_id, db):
+        return JSONResponse([])
+
+    strecken = (
+        db.query(Foerderstrecke)
+        .filter(Foerderstrecke.org_id == incident.primary_org_id,
+                Foerderstrecke.incident_id == incident_id)
+        .all()
+    )
+    out = []
+    for s in strecken:
+        route = None
+        if s.route_geojson:
+            try:
+                coords = (json.loads(s.route_geojson) or {}).get("coordinates")
+            except (TypeError, ValueError):
+                coords = None
+            if coords:
+                route = [[c[1], c[0]] for c in coords if c and len(c) >= 2]
+        stationen = [{
+            "lat": st.lat, "lng": st.lng, "typ": st.typ,
+            "typ_label": STATION_TYPEN.get(st.typ, st.typ),
+        } for st in s.stationen if st.lat is not None and st.lng is not None]
+        out.append({
+            "id": s.id, "name": s.name, "status": s.status,
+            "route": route, "stationen": stationen,
+            "url": f"/foerderstrecke/{s.id}",
+        })
+    return JSONResponse(out)
 
 
 # ── Windrichtung (Phase 3, F-Wind): GeoSphere-Vorbelegung für das Windrichtung-Symbol ──

@@ -48,6 +48,7 @@ Rechte vergeben: In der Präsenzliste neben einem Nutzer auf **Editor machen** /
 | **🚒 Fahrzeuge** | Alle disponierten Fahrzeuge mit Live-GPS (sofern vorhanden), taktischem Zeichen (aus der Fahrzeugverwaltung gepflegt, sonst generisches Fahrzeug-Symbol) und Statusfarbring; Fahrzeuge ohne GPS lassen sich in der Fahrzeuge-Liste per **📍 Platzieren** manuell auf die Karte pinnen |
 | **🏢 Objekt** | Das mit dem Einsatz verknüpfte Objekt: Klick öffnet ein Popup mit Adresse und BMA-Nummer direkt unter dem Namen, Gefahren (Piktogramm, UN-Nummer, Stoffname), Informationen, Anfahrtsweg und Kontakten (inkl. Telefonnummern); zusätzlich werden die in der [Objekt-Lagekarte](Anwender-Objekte) hinterlegten **Zufahrten und Sammelplätze** (und weitere Kartenobjekte wie Hydranten, Zugänge, FSD/BMZ-Standorte) mit demselben Kürzel-Symbol wie im Objektmodul eingeblendet — Linien (z. B. Zufahrten) gestrichelt, Punkte als kleines Symbol-Badge |
 | **💧 Wasserstellen** | Hydranten/Löschwasserentnahmestellen aus den Wasserstellen-Stammdaten in der Nähe |
+| **🚰 Förderstrecke** | Route und Pumpenstandorte aller mit diesem Einsatz verknüpften [Förderstrecken](Anwender-Foerderstrecken-Planer) — nur sichtbar, wenn das Förderstrecken-Modul für die Org aktiv ist |
 | **✏️ Zeichnungen** | Manuell gesetzte Elemente (Zeichenwerkzeuge + taktische Zeichen) |
 | **🏷️ Beschriftungen** | Blendet alle Labels (Fahrzeugnamen, Symbol-Beschriftungen, Distanzangaben, Objekt-Kartenobjekte) ein/aus, ohne die Elemente selbst auszublenden |
 
@@ -121,4 +122,5 @@ Auf Smartphones (≤ 760 px Breite) ist die Karte vollflächig sichtbar; Layer- 
 
 - [Lagekarte.info](Anwender-Lagekarte) — externe Alternative/Ergänzung per GeoJSON-Feed
 - [Objekte](Anwender-Objekte) — Pflege von Gefahren, Kontakten, Zufahrten und Sammelplätzen, die auf der Lageführungskarte erscheinen
+- [Förderstrecken-Planer](Anwender-Foerderstrecken-Planer) — Route/Pumpenstandorte einer mit dem Einsatz verknüpften Förderstrecke erscheinen hier als eigener Kartenlayer
 - [Wetter-Integration](Anwender-Wetter) — Datenquelle für die Windrichtungs-Vorbelegung

@@ -72,4 +72,29 @@ Ziel-Fördermenge vorgeben → der Planer schlägt Pumpenanzahl/-standorte vor u
 wenn der eigene Gerätepark nicht reicht. *(In Vorbereitung — aktuell steht Modus A
 „was schaffen wir?" zur Verfügung.)*
 
+---
+
+## 6. Mit einem Einsatz verbinden
+
+Über **Mit Einsatz verbinden** (linkes Panel) lässt sich die Strecke einem laufenden
+Einsatz zuordnen. Damit:
+
+- erscheint der Einsatzort als 📍-Marker auf der Karte des Planers,
+- erscheint die Förderstrecke in der Lageführung des Einsatzes als Auftrag
+  (Sidebar-Tab „Layer") mit Direktlink, PDF und Status,
+- erscheint die geplante **Route inkl. Pumpenstandorte** dort zusätzlich als eigener,
+  ein-/ausblendbarer Kartenlayer **🚰 Förderstrecke** — sichtbar für alle Nutzer der
+  [Lageführung](Anwender-Lagefuehrung), inklusive WYSIWYG-Kartendruck.
+
+Die Verknüpfung lässt sich jederzeit im Dropdown ändern oder auf „— kein —" zurücksetzen.
+
+---
+
+## 7. Karte vergrößern
+
+Der Button **⤢ Karte vergrößern** neben den Kartenwerkzeugen schaltet die Karte auf ein
+bildschirmfüllendes Overlay um (z. B. für präzises Zeichnen am Tablet) — alle Werkzeuge
+(Routing, Zeichnen, Pumpe setzen) bleiben dabei bedienbar. **⤡ Verkleinern** oder `Esc`
+kehrt zur normalen Ansicht zurück.
+
 Siehe auch: [Administration](Administration-Foerderstrecken-Planer) für Geräte-Pflege und Kalibrierung.

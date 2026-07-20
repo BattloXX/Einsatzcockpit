@@ -113,6 +113,94 @@ def test_wasserstellen_json_leer_ohne_koordinaten(client):
     assert r.json() == []
 
 
+# ── Förderstrecke-Layer ───────────────────────────────────────────────────────────
+
+def _foerderstrecke_modul_an(org_id=ORG_ID):
+    from app.services.foerderstrecke_service import SYSTEM_FLAG_KEY as FS_SYSTEM_FLAG_KEY
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        sys_row = db.get(SystemSettings, FS_SYSTEM_FLAG_KEY)
+        if sys_row is None:
+            db.add(SystemSettings(key=FS_SYSTEM_FLAG_KEY, value="true"))
+        else:
+            sys_row.value = "true"
+        os_row = db.query(OrgSettings).filter_by(org_id=org_id).first()
+        if os_row is None:
+            os_row = OrgSettings(org_id=org_id)
+            db.add(os_row)
+        os_row.foerderstrecke_module_enabled = True
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_foerderstrecken_json_liefert_route_und_stationen(client):
+    from app.models.foerderstrecke import Foerderstrecke, FoerderStation
+
+    _, incident_id = _setup("lft3_fs_user")
+    _foerderstrecke_modul_an()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        strecke = Foerderstrecke(org_id=ORG_ID, name="Versorgung Ach", status="freigegeben",
+                                 incident_id=incident_id,
+                                 route_geojson='{"type":"LineString","coordinates":[[9.75,47.46],[9.752,47.462]]}')
+        db.add(strecke)
+        db.flush()
+        db.add(FoerderStation(org_id=ORG_ID, strecke_id=strecke.id, sort=0, typ="quellpumpe",
+                              lat=47.46, lng=9.75))
+        db.commit()
+    finally:
+        db.close()
+
+    _login(client, "lft3_fs_user", "Test1234!")
+    r = client.get(f"/einsatz/{incident_id}/lagefuehrung/foerderstrecken.json")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["name"] == "Versorgung Ach"
+    assert data[0]["route"] == [[47.46, 9.75], [47.462, 9.752]]
+    assert data[0]["stationen"] == [{"lat": 47.46, "lng": 9.75, "typ": "quellpumpe",
+                                     "typ_label": "Quellpumpe (Ansaugung)"}]
+
+
+def test_foerderstrecken_json_leer_wenn_modul_aus(client):
+    from app.models.foerderstrecke import Foerderstrecke
+
+    _, incident_id = _setup("lft3_fs_aus_user")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        # Org-Flag explizit AUS setzen (nicht nur Default), da ORG_ID von anderen
+        # Tests in dieser Datei ggf. bereits mit foerderstrecke_module_enabled=True
+        # zurückgelassen wurde (DB wird nicht je Test zurückgerollt).
+        os_row = db.query(OrgSettings).filter_by(org_id=ORG_ID).first()
+        if os_row is None:
+            os_row = OrgSettings(org_id=ORG_ID)
+            db.add(os_row)
+        os_row.foerderstrecke_module_enabled = False
+        db.add(Foerderstrecke(org_id=ORG_ID, name="Sollte nicht erscheinen",
+                              status="freigegeben", incident_id=incident_id))
+        db.commit()
+    finally:
+        db.close()
+
+    _login(client, "lft3_fs_aus_user", "Test1234!")
+    r = client.get(f"/einsatz/{incident_id}/lagefuehrung/foerderstrecken.json")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_foerderstrecken_json_leer_ohne_verknuepfung(client):
+    _, incident_id = _setup("lft3_fs_leer_user")
+    _foerderstrecke_modul_an()
+    _login(client, "lft3_fs_leer_user", "Test1234!")
+    r = client.get(f"/einsatz/{incident_id}/lagefuehrung/foerderstrecken.json")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
 # ── Manuelles Fahrzeug-Pinning (auch ohne Koordinaten) ───────────────────────────
 
 def test_vehicle_ohne_position_erscheint_in_liste_ohne_koordinate(client):

@@ -204,6 +204,25 @@
     }).catch(function () {}));
   }
 
+  if (hasLayer.foerderstrecke) {
+    fetches.push(fetch(apiBase + '/foerderstrecken.json').then(function (r) { return r.json(); }).then(function (liste) {
+      (liste || []).forEach(function (s) {
+        var name = s.name || 'Förderstrecke';
+        if (s.route && s.route.length >= 2) {
+          var line = L.polyline(s.route, { color: '#2563eb', weight: 5, opacity: 0.75 }).addTo(map);
+          bindLabel(line, escapeHtml(name));
+        }
+        (s.stationen || []).forEach(function (st) {
+          if (st.lat == null || st.lng == null) { return; }
+          var m = L.circleMarker([st.lat, st.lng], {
+            radius: 8, color: '#1d4ed8', weight: 2, fillColor: '#fff', fillOpacity: 1
+          }).addTo(map);
+          bindLabel(m, escapeHtml((st.typ_label || 'Pumpe') + ' · ' + name));
+        });
+      });
+    }).catch(function () {}));
+  }
+
   if (hasLayer.zeichnung) {
     fetches.push(fetch(apiBase + '/features.json').then(function (r) { return r.json(); }).then(function (liste) {
       (liste || []).forEach(function (f) {

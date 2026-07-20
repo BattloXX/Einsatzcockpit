@@ -1,5 +1,5 @@
 /* Lageführung-Lagekarte: Leaflet + Geoman-Editor mit Auto-Layern (Einsatzort,
- * Fahrzeuge, Objekt), manuellen Zeichnungen, taktischen Zeichen, Meldungsmarkern,
+ * Fahrzeuge, Objekt, Wasserstellen, Förderstrecke), manuellen Zeichnungen, taktischen Zeichen, Meldungsmarkern,
  * Distanzwerkzeugen, Multi-User-Presence/Soft-Locks und Rechtevergabe (Phase 1+2).
  *
  * initLagefuehrungKarte({ elementId, incidentId, incidentLat, incidentLng,
@@ -132,6 +132,7 @@
     var layerFahrzeuge = L.layerGroup().addTo(karte);
     var layerObjekt = L.layerGroup().addTo(karte);
     var layerWasserstellen = L.layerGroup().addTo(karte);
+    var layerFoerderstrecke = L.layerGroup().addTo(karte);
     var layerZeichnung = L.layerGroup().addTo(karte);
     // Punkt-Marker der hinterlegten Objekt-Kartenobjekte (Zufahrten/Sammelplaetze/...),
     // fuer den Beschriftungen-Toggle separat gehalten (s. u.).
@@ -148,6 +149,7 @@
     bindToggle("lft-layer-fahrzeuge", layerFahrzeuge);
     bindToggle("lft-layer-objekt", layerObjekt);
     bindToggle("lft-layer-wasserstellen", layerWasserstellen);
+    bindToggle("lft-layer-foerderstrecke", layerFoerderstrecke);
     bindToggle("lft-layer-zeichnung", layerZeichnung);
 
     // "Beschriftungen" ist kein eigener L.layerGroup (die Labels sind permanente Tooltips,
@@ -350,6 +352,30 @@
       }).catch(function () {});
     }
     ladeWasserstellen();
+
+    // ── Auto-Layer: Förderstrecke (Route + Pumpenstandorte verknüpfter Wasserförderung,
+    // statisch je Ladung — Endpoint liefert [], wenn Modul aus oder keine Strecke verknüpft) ──
+    function ladeFoerderstrecken() {
+      fetchJson(apiBase + "/foerderstrecken.json").then(function (liste) {
+        (liste || []).forEach(function (s) {
+          var name = s.name || "Förderstrecke";
+          if (s.route && s.route.length >= 2) {
+            L.polyline(s.route, { color: "#2563eb", weight: 5, opacity: 0.75 })
+              .addTo(layerFoerderstrecke)
+              .bindTooltip(escapeHtml(name));
+          }
+          (s.stationen || []).forEach(function (st) {
+            if (st.lat == null || st.lng == null) { return; }
+            L.circleMarker([st.lat, st.lng], {
+              radius: 8, color: "#1d4ed8", weight: 2, fillColor: "#fff", fillOpacity: 1
+            })
+              .addTo(layerFoerderstrecke)
+              .bindTooltip(escapeHtml((st.typ_label || "Pumpe") + " · " + name));
+          });
+        });
+      }).catch(function () {});
+    }
+    ladeFoerderstrecken();
 
     // ── Manuelle Features: Zeichnungen, taktische Zeichen, Meldungen, Distanz ───
     var featureLayers = {}; // feature.id -> Leaflet-Layer
@@ -667,7 +693,7 @@
     // Layern (inkl. Beschriftungen-Zustand) — kein separater Bericht/Journal.
     var DRUCK_LAYER_CHECKBOX_IDS = [
       "lft-layer-einsatzort", "lft-layer-fahrzeuge", "lft-layer-objekt",
-      "lft-layer-wasserstellen", "lft-layer-zeichnung", "lft-layer-beschriftung"
+      "lft-layer-wasserstellen", "lft-layer-foerderstrecke", "lft-layer-zeichnung", "lft-layer-beschriftung"
     ];
 
     // QuickPrint (Konzept Kap. 2.2, lagekarte.info-Verhalten): Papierformat,
@@ -725,6 +751,7 @@
           ["lft-layer-fahrzeuge", "fahrzeuge"],
           ["lft-layer-objekt", "objekt"],
           ["lft-layer-wasserstellen", "wasserstellen"],
+          ["lft-layer-foerderstrecke", "foerderstrecke"],
           ["lft-layer-zeichnung", "zeichnung"],
           ["lft-layer-beschriftung", "beschriftung"],
         ].forEach(function (pair) {
