@@ -47,14 +47,14 @@ def _allowed_origin_host() -> str | None:
 def _csrf_cookie_attrs() -> str:
     """SameSite/Secure-Attribute des CSRF-Cookies.
 
-    Ist die Iframe-Einbettung aktiv (FAHRTENBUCH_FRAME_ANCESTORS gesetzt) UND laufen
+    Ist die Iframe-Einbettung aktiv (TRUSTED_FRAME_ANCESTORS gesetzt) UND laufen
     Cookies ohnehin nur über HTTPS (COOKIE_SECURE), muss das Cookie
     ``SameSite=None; Secure`` sein – sonst wird es im Cross-Site-Iframe nicht gesendet
     und das Double-Submit (Cookie == Formfeld) schlägt fehl. ``Partitioned`` (CHIPS)
     macht es zusätzlich robust gegen das Blockieren von Third-Party-Cookies.
     Ohne Einbettung/HTTPS bleibt es beim strengeren ``SameSite=Lax``.
     """
-    embedding = bool((settings.FAHRTENBUCH_FRAME_ANCESTORS or "").strip())
+    embedding = bool((settings.TRUSTED_FRAME_ANCESTORS or "").strip())
     if embedding and settings.COOKIE_SECURE:
         return "; SameSite=None; Secure; Partitioned"
     return "; SameSite=Lax" + ("; Secure" if settings.COOKIE_SECURE else "")
