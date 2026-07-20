@@ -76,13 +76,19 @@ def wizard(
         "pumpen_json": _pumpen_json(pumpen),
         "schlaeuche_json": _schlaeuche_json(schlaeuche),
         "lade_strecke_id": None,
-        "einsaetze": _aktive_einsaetze(db, user.org_id),
+        "einsaetze": _aktive_einsaetze(db, user.org_id, ensure_id=incident_id),
         "prelink_incident_id": incident_id,
     })
 
 
-def _aktive_einsaetze(db: Session, org_id: int | None) -> list[dict]:
-    """Offene Einsätze der Org für das Verknüpfen einer Förderstrecke (Auftrag)."""
+def _aktive_einsaetze(db: Session, org_id: int | None, ensure_id: int | None = None) -> list[dict]:
+    """Offene Einsätze der Org für das Verknüpfen einer Förderstrecke (Auftrag).
+
+    `ensure_id` wird immer mit aufgenommen (auch wenn der Einsatz bereits
+    geschlossen oder außerhalb der Top-50 ist), damit ein bereits verknüpfter
+    Einsatz sowohl in der Auswahl als auch als Kartenmarker (Einsatzpunkt)
+    korrekt angezeigt wird.
+    """
     try:
         from app.models.incident import Incident
         rows = (
@@ -92,11 +98,19 @@ def _aktive_einsaetze(db: Session, org_id: int | None) -> list[dict]:
             .limit(50)
             .all()
         )
+        if ensure_id and ensure_id not in {r.id for r in rows}:
+            zusatz = (
+                db.query(Incident)
+                .filter(Incident.id == ensure_id, Incident.primary_org_id == org_id)
+                .first()
+            )
+            if zusatz is not None:
+                rows.append(zusatz)
         out = []
         for r in rows:
             bez = " ".join(x for x in [r.address_street, r.address_no] if x) or r.reason or ""
             label = f"#{r.nummer or r.id}" + (f" · {bez}" if bez else "") + f" · {r.alarm_type_code}"
-            out.append({"id": r.id, "name": label})
+            out.append({"id": r.id, "name": label, "lat": r.lat, "lng": r.lng})
         return out
     except Exception:
         return []
@@ -563,7 +577,7 @@ def laden(
         "pumpen_json": _pumpen_json(pumpen), "schlaeuche_json": _schlaeuche_json(schlaeuche),
         "lade_strecke_id": strecke.id,
         "lade_strecke_json": _strecke_json(strecke),
-        "einsaetze": _aktive_einsaetze(db, user.org_id),
+        "einsaetze": _aktive_einsaetze(db, user.org_id, ensure_id=strecke.incident_id),
         "prelink_incident_id": None,
     })
 
