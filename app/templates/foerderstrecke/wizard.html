@@ -22,11 +22,18 @@
 .fs-tbl { width:100%; border-collapse:collapse; font-size:.82rem; }
 .fs-tbl th, .fs-tbl td { border-bottom:1px solid var(--border); padding:4px 6px; text-align:left; }
 @media (max-width:900px){ .fs-shell{ grid-template-columns:1fr; } }
+/* Karten-Box: normal inline, im Groß-Modus bildschirmfüllendes Overlay */
+.fs-mapbox { display:flex; flex-direction:column; gap:6px; }
+.fs-mapbox--gross {
+  position:fixed; inset:0; z-index:2000;      /* bewusst über Nav – echtes Vollbild */
+  background:var(--surface-mid); padding:10px; margin:0; overflow:auto;
+}
+.fs-mapbox--gross .fs-map { height:auto; flex:1 1 auto; min-height:0; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div x-data="foerderPlaner()">
+<div x-data="foerderPlaner()" @keydown.escape.window="kartenKleiner()">
   <div class="page-header" style="padding:14px 14px 0;">
     <div>
       <h1>🚰 Förderstrecken-Planer</h1>
@@ -167,6 +174,7 @@
 
     <!-- ── Rechte Spalte: Karte + Ergebnis ── -->
     <div>
+      <div class="fs-mapbox" :class="{ 'fs-mapbox--gross': kartenGross }">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
         <button type="button" class="btn btn--sm"
                 :class="routeModus ? 'btn--primary' : 'btn--secondary'"
@@ -191,6 +199,10 @@
                 :class="wasserstellenAn ? 'btn--primary' : 'btn--secondary'"
                 @click="wasserstellenToggle()"
                 x-text="wasserstellenAn ? '✓ Wasserstellen (an)' : '💧 Wasserstellen'"></button>
+        <button type="button" class="btn btn--sm"
+                :class="kartenGross ? 'btn--primary' : 'btn--secondary'"
+                @click="kartenGrossToggle()"
+                x-text="kartenGross ? '⤡ Verkleinern' : '⤢ Karte vergrößern'"></button>
       </div>
       <p x-show="routeModus" class="text-muted" style="font-size:.78rem;margin:0 0 6px;color:#16a34a;">
         <span x-show="!_routeStart"><strong>① Startpunkt</strong> (Wasserentnahme) auf die Karte tippen.</span>
@@ -224,6 +236,7 @@
         und 🎯 Ende (Verteiler) werden markiert. Pumpen mit <strong>🚩 Pumpe auf Karte setzen</strong> auf die
         Leitung setzen; Längen werden entlang der Strecke gemessen.
       </p>
+      </div>
 
       <!-- Hinweis Pumpenplatzierung / Pumpleistung -->
       <template x-if="standortHinweis">
@@ -370,6 +383,7 @@ function foerderPlaner() {
     ergebnis: null,
     rechnet: false,
     karte: null,
+    kartenGross: false,
     aufnahmeLaeuft: false,
     platziereModus: false,
     zielModus: false,
@@ -665,6 +679,20 @@ function foerderPlaner() {
       if ((this.ergebnis.warnungen || []).length) return "#f59e0b";
       return "#16a34a";
     },
+
+    // ── Karte vergrößern/verkleinern (In-Page-Vollbild) ──
+    kartenGrossToggle() {
+      this.kartenGross = !this.kartenGross;
+      try { document.body.style.overflow = this.kartenGross ? "hidden" : ""; } catch (e) {}
+      // Leaflet muss nach Container-Resize neu vermessen (sonst graue/verschobene Kacheln)
+      this.$nextTick(() => {
+        if (!this.karte) return;
+        this.karte.invalidateSize();
+        setTimeout(() => this.karte && this.karte.invalidateSize(), 120);
+        setTimeout(() => this.karte && this.karte.invalidateSize(), 350);
+      });
+    },
+    kartenKleiner() { if (this.kartenGross) this.kartenGrossToggle(); },
 
     // ── Karte ──
     initMap() {
