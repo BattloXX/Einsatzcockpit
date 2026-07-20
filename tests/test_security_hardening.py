@@ -154,7 +154,9 @@ def _security_headers_for(path: str):
     return asyncio.run(mw.dispatch(Request(scope), _call_next)).headers
 
 
-def test_alarm_infoscreen_csp_erlaubt_https_iframes():
+def test_alarm_infoscreen_csp_erlaubt_https_iframes(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
     h = _security_headers_for("/infoscreen/alarm/tok")
     csp = h["content-security-policy"]
     # ';' entscheidend: die Default-CSP 'https://embed.windy.com' enthaelt sonst
@@ -164,7 +166,11 @@ def test_alarm_infoscreen_csp_erlaubt_https_iframes():
     assert h["x-frame-options"] == "SAMEORIGIN"
 
 
-def test_default_route_csp_bleibt_streng():
+def test_default_route_csp_ohne_konfiguration_bleibt_streng(monkeypatch):
+    """Ohne konfigurierte TRUSTED_FRAME_ANCESTORS bleiben normale Routen strikt
+    (kein Framing, auch nicht same-origin) — der Notausschalter fürs Fremd-Framing."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
     h = _security_headers_for("/login")
     csp = h["content-security-policy"]
     assert "frame-src 'self' https://embed.windy.com" in csp
@@ -173,26 +179,20 @@ def test_default_route_csp_bleibt_streng():
     assert h["x-frame-options"] == "DENY"
 
 
-def test_fahrtenbuch_iframe_erlaubt_externe_origin(monkeypatch):
-    """Fahrtenbuch-Seiten sind auf der konfigurierten externen Origin einbettbar:
-    CSP frame-ancestors enthält die Origin und X-Frame-Options wird NICHT gesetzt
-    (kann keine fremde Origin erlauben)."""
+def test_trusted_frame_ancestors_erlaubt_alle_routen(monkeypatch):
+    """Sind TRUSTED_FRAME_ANCESTORS konfiguriert, ist JEDE Route (nicht nur
+    Fahrtenbuch) auf diesen externen Origins einbettbar: CSP frame-ancestors
+    enthält 'self' + die Origins, X-Frame-Options wird NICHT gesetzt (kann
+    keine fremde Origin erlauben)."""
     from app.config import settings
-    monkeypatch.setattr(settings, "FAHRTENBUCH_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at")
-    for path in ("/verwaltung/fahrten", "/fahrtenbuch/neu", "/f/abc123"):
+    monkeypatch.setattr(
+        settings, "TRUSTED_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at https://*.fwwo.at",
+    )
+    for path in ("/login", "/verwaltung/fahrten", "/fahrtenbuch/neu", "/f/abc123", "/board", "/admin/settings"):
         h = _security_headers_for(path)
         csp = h["content-security-policy"]
-        assert "frame-ancestors 'self' https://feuerwehr.wolfurt.at" in csp
+        assert "frame-ancestors 'self' https://feuerwehr.wolfurt.at https://*.fwwo.at" in csp
         assert "x-frame-options" not in h
-
-
-def test_fahrtenbuch_iframe_default_wenn_nicht_konfiguriert(monkeypatch):
-    """Ohne konfigurierte Origins bleibt das Fahrtenbuch streng (kein Fremd-Framing)."""
-    from app.config import settings
-    monkeypatch.setattr(settings, "FAHRTENBUCH_FRAME_ANCESTORS", "")
-    h = _security_headers_for("/verwaltung/fahrten")
-    assert "frame-ancestors 'none'" in h["content-security-policy"]
-    assert h["x-frame-options"] == "DENY"
 
 
 def test_csrf_cookie_samesite_none_bei_embedding(monkeypatch):
@@ -200,7 +200,7 @@ def test_csrf_cookie_samesite_none_bei_embedding(monkeypatch):
     damit das Cookie im Cross-Site-Iframe gesendet wird (sonst Double-Submit-Fehler)."""
     from app.config import settings
     from app.middleware import csrf
-    monkeypatch.setattr(settings, "FAHRTENBUCH_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at")
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at")
     monkeypatch.setattr(settings, "COOKIE_SECURE", True)
     attrs = csrf._csrf_cookie_attrs()
     assert "SameSite=None" in attrs
@@ -210,7 +210,7 @@ def test_csrf_cookie_samesite_none_bei_embedding(monkeypatch):
 def test_csrf_cookie_samesite_lax_ohne_embedding(monkeypatch):
     from app.config import settings
     from app.middleware import csrf
-    monkeypatch.setattr(settings, "FAHRTENBUCH_FRAME_ANCESTORS", "")
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
     monkeypatch.setattr(settings, "COOKIE_SECURE", True)
     attrs = csrf._csrf_cookie_attrs()
     assert "SameSite=Lax" in attrs

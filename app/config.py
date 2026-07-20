@@ -62,10 +62,12 @@ class Settings(BaseSettings):
     TRUST_PROXY_HEADERS: bool = True
     TRUSTED_PROXY_IPS: str = "127.0.0.1,::1"
 
-    # Fahrtenbuch per <iframe> auf externen (vertrauenswürdigen) Seiten einbettbar machen.
-    # Leerzeichen-getrennte Liste erlaubter Eltern-Origins (CSP frame-ancestors), z.B.
-    # "https://feuerwehr.wolfurt.at". Leer = Einbettung nur same-origin.
-    FAHRTENBUCH_FRAME_ANCESTORS: str = "https://feuerwehr.wolfurt.at"
+    # Die gesamte App per <iframe> auf externen (vertrauenswürdigen) Seiten einbettbar
+    # machen (z. B. Wetter-/Dashboard-Kacheln auf eus.fwwo.at, Fahrtenbuch auf
+    # feuerwehr.wolfurt.at). Leerzeichen-getrennte Liste erlaubter Eltern-Origins
+    # (CSP frame-ancestors, Wildcard-Subdomain wie "https://*.fwwo.at" erlaubt).
+    # Leer = Einbettung nur same-origin (strikter Fallback, DENY für alle übrigen Routen).
+    TRUSTED_FRAME_ANCESTORS: str = "https://feuerwehr.wolfurt.at https://*.fwwo.at"
 
     VAPID_PRIVATE_KEY: str = ""
     VAPID_PUBLIC_KEY: str = ""

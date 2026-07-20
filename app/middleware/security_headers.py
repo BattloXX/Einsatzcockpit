@@ -4,7 +4,9 @@ Setzt restriktive Default-Header für alle HTTP-Antworten:
 - Content-Security-Policy (Self + Data-URLs für QR-PNGs; HTMX/Alpine sind self-hosted)
 - X-Content-Type-Options: nosniff
 - X-Frame-Options: DENY (Ausnahmen: /einsatz/*/qr/print + /medien/.../datei/* → SAMEORIGIN,
-  damit der In-App-Media-Viewer PDFs/Videos im <iframe> einbetten kann)
+  damit der In-App-Media-Viewer PDFs/Videos im <iframe> einbetten kann; ist
+  TRUSTED_FRAME_ANCESTORS konfiguriert, wird X-Frame-Options global nicht gesetzt,
+  siehe unten)
 - Referrer-Policy: same-origin
 - Permissions-Policy
 - Strict-Transport-Security (nur bei HTTPS)
@@ -33,24 +35,17 @@ _CSP_BASE = (
     "base-uri 'self'; "
     "form-action 'self'"
 )
-_CSP_DEFAULT = _CSP_BASE + "; frame-ancestors 'none'"
-# Fuer Routen, die per <iframe>/<video> im eigenen UI eingebettet werden:
-_CSP_SAMEORIGIN_FRAME = _CSP_BASE + "; frame-ancestors 'self'"
 # Alarm-/GSL-Wandmonitor (/infoscreen/alarm/…): bettet die admin-konfigurierte
 # Idle-URL-Rotation (fremde HTTPS-Seiten) per <iframe> ein. Die Default-CSP
 # erlaubt in frame-src nur 'self' + windy → der Rotations-Iframe wurde vom
 # Browser blockiert (Vorfall 2026-07-06). Da der Monitor ein interner, vertrauens-
-# wuerdiger Wandbildschirm ist, wird frame-src auf beliebige HTTPS-Origins
-# geoeffnet. frame-ancestors 'self' erlaubt zugleich die Monitor-Matrix-Einbettung.
-_CSP_ALARM_INFOSCREEN = (
-    _CSP_BASE.replace(
-        "frame-src 'self' https://embed.windy.com",
-        "frame-src 'self' https:",
-    )
-    + "; frame-ancestors 'self'"
+# wuerdiger Wandbildschirm ist, wird frame-src auf beliebige HTTPS-Origins geoeffnet.
+_CSP_ALARM_INFOSCREEN_BASE = _CSP_BASE.replace(
+    "frame-src 'self' https://embed.windy.com",
+    "frame-src 'self' https:",
 )
 # Wetter-Infoscreen: standalone FullHD-Seite mit Tailwind CDN (Fonts sind lokal, siehe fonts.css)
-_CSP_INFOSCREEN = (
+_CSP_INFOSCREEN_BASE = (
     "default-src 'self'; "
     "img-src 'self' data: blob:; "
     "style-src 'self' 'unsafe-inline'; "
@@ -60,8 +55,7 @@ _CSP_INFOSCREEN = (
     "frame-src https://embed.windy.com; "
     "object-src 'none'; "
     "base-uri 'self'; "
-    "form-action 'none'; "
-    "frame-ancestors 'self'"
+    "form-action 'none'"
 )
 
 
@@ -75,24 +69,23 @@ def _is_embeddable_route(path: str) -> bool:
     return False
 
 
-# Fahrtenbuch-Seiten dürfen (falls konfiguriert) auf externen, vertrauenswürdigen
-# Websites per <iframe> eingebettet werden – z.B. dem Feuerwehr-Intern-Bereich.
-_FAHRTENBUCH_FRAME_PREFIXES = (
-    "/fahrtenbuch",            # Erfassungsformular + HTMX-Partials
-    "/f/",                     # Token-/QR-Erfassung (öffentlich)
-    "/verwaltung/fahrten",     # Fahrtenbuch-Verwaltung
-    "/admin/fahrtenbuch",      # Stammdaten (Zwecke/Zielorte/Fahrzeuge/Token/Einstellungen)
-    "/statistik/fahrtenbuch",  # Fahrtenbuch-Statistik
-)
-
-
-def _is_fahrtenbuch_route(path: str) -> bool:
-    return any(path == p or path.startswith(p) for p in _FAHRTENBUCH_FRAME_PREFIXES)
-
-
-def _fahrtenbuch_frame_ancestors() -> str:
+def _trusted_frame_ancestors() -> str:
     """Liefert die konfigurierten externen Eltern-Origins (leerzeichen-getrennt), oder ""."""
-    return " ".join((settings.FAHRTENBUCH_FRAME_ANCESTORS or "").split())
+    return " ".join((settings.TRUSTED_FRAME_ANCESTORS or "").split())
+
+
+def _frame_ancestors_directive(*, self_allowed: bool, trusted: str) -> str:
+    """CSP frame-ancestors für eine Antwort.
+
+    Sind externe Origins konfiguriert (`trusted`), dürfen sie die Seite IMMER
+    zusätzlich zu 'self' einbetten (App-weit, nicht auf einzelne Routen
+    beschränkt) — 'none' entfällt dann, da CSP 'none' nicht mit anderen Quellen
+    kombinierbar ist. Ohne Konfiguration bleibt es beim bisherigen, strikteren
+    Verhalten je Routen-Kategorie (self_allowed).
+    """
+    if trusted:
+        return "frame-ancestors 'self' " + trusted
+    return "frame-ancestors 'self'" if self_allowed else "frame-ancestors 'none'"
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -103,19 +96,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         embeddable = _is_embeddable_route(path)
         infoscreen = path.startswith("/wetter/infoscreen/")
         alarm_infoscreen = path.startswith("/infoscreen/alarm/")
-        # Fahrtenbuch auf externen Seiten einbettbar, sofern Eltern-Origins konfiguriert sind.
-        fb_ancestors = _fahrtenbuch_frame_ancestors() if _is_fahrtenbuch_route(path) else ""
+        trusted = _trusted_frame_ancestors()
 
         if infoscreen:
-            csp = _CSP_INFOSCREEN
+            csp_base = _CSP_INFOSCREEN_BASE
+            self_allowed = True
         elif alarm_infoscreen:
-            csp = _CSP_ALARM_INFOSCREEN
-        elif fb_ancestors:
-            csp = _CSP_BASE + f"; frame-ancestors 'self' {fb_ancestors}"
+            csp_base = _CSP_ALARM_INFOSCREEN_BASE
+            self_allowed = True
         elif embeddable:
-            csp = _CSP_SAMEORIGIN_FRAME
+            csp_base = _CSP_BASE
+            self_allowed = True
         else:
-            csp = _CSP_DEFAULT
+            csp_base = _CSP_BASE
+            self_allowed = False
+
+        csp = csp_base + "; " + _frame_ancestors_directive(self_allowed=self_allowed, trusted=trusted)
 
         # CSP überschreibt frame-ancestors → eigener X-Frame-Options als Fallback
         response.headers.setdefault("Content-Security-Policy", csp)
@@ -126,17 +122,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "geolocation=(), microphone=(self), camera=(self), payment=()",
         )
 
-        # Wandmonitor darf same-origin eingebettet werden (Monitor-Matrix) und
-        # setzt darum SAMEORIGIN — konsistent mit frame-ancestors 'self', statt
-        # eines widerspruechlichen DENY (das mit einem evtl. vom Reverse-Proxy
-        # gesetzten SAMEORIGIN zu "DENY, SAMEORIGIN" kombiniert wuerde).
-        if fb_ancestors:
+        if trusted:
             # X-Frame-Options kann keine fremde Origin erlauben (ALLOW-FROM ist tot).
             # Deshalb hier KEIN X-Frame-Options setzen – moderne Browser richten sich
             # nach CSP frame-ancestors. Ein evtl. vom Reverse-Proxy (nginx) gesetztes
-            # X-Frame-Options muss dort separat für diese Pfade entfernt werden.
+            # X-Frame-Options muss dort separat entfernt werden.
             pass
-        elif embeddable or alarm_infoscreen:
+        elif self_allowed:
             response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         else:
             response.headers.setdefault("X-Frame-Options", "DENY")
