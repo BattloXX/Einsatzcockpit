@@ -55,7 +55,7 @@
         <div class="fs-field" x-show="einsaetze && einsaetze.length">
           <label>Mit Einsatz verbinden (erscheint dort als Auftrag)</label>
           <div style="display:flex;gap:6px;align-items:center;">
-            <select class="form-select" x-model.number="incidentId" style="flex:1;">
+            <select class="form-select" x-model.number="incidentId" @change="syncEinsatzMarker(); passeKarteAn();" style="flex:1;">
               <option :value="null">— kein —</option>
               <template x-for="e in einsaetze" :key="e.id">
                 <option :value="e.id" x-text="e.name"></option>
@@ -402,6 +402,7 @@ function foerderPlaner() {
     _stationMarkers: [],
     _zielMarker: null,
     _startMarker: null,
+    _einsatzMarker: null,
     _routeLayer: null,
     _routeStart: null,
     _routePickMarker: null,
@@ -750,7 +751,20 @@ function foerderPlaner() {
       }
       this.syncStationMarkers();
       this.zeichneRoute();
+      this.syncEinsatzMarker();
       this.passeKarteAn();
+    },
+
+    // Zeigt den Einsatzort (verknüpfter Einsatz) als Marker auf der Karte.
+    syncEinsatzMarker() {
+      if (!this.karte || typeof L === "undefined") return;
+      if (this._einsatzMarker) { this.karte.removeLayer(this._einsatzMarker); this._einsatzMarker = null; }
+      const einsatz = this.einsaetze.find(e => e.id === this.incidentId);
+      if (!einsatz || einsatz.lat == null || einsatz.lng == null) return;
+      const icon = L.divIcon({ html: "<div style=\"font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));\">📍</div>",
+        className: "", iconSize: null, iconAnchor: [11, 22] });
+      this._einsatzMarker = L.marker([einsatz.lat, einsatz.lng], { icon }).addTo(this.karte)
+        .bindTooltip("Einsatzort", { direction: "top", offset: [0, -16] });
     },
 
     // ── Strecke Start → Ende (Straßen-Routing) ──
@@ -974,6 +988,8 @@ function foerderPlaner() {
       const pts = this.stationen.filter(s => s.lat != null && s.lng != null).map(s => [s.lat, s.lng]);
       if (this.ziel && this.ziel.lat != null) pts.push([this.ziel.lat, this.ziel.lng]);
       if (this.routeCoords) this.routeCoords.forEach(c => { if (c && c.length >= 2) pts.push([c[0], c[1]]); });
+      const einsatz = this.einsaetze.find(e => e.id === this.incidentId);
+      if (einsatz && einsatz.lat != null && einsatz.lng != null) pts.push([einsatz.lat, einsatz.lng]);
       if (pts.length === 1) { this.karte.setView(pts[0], 16); }
       else if (pts.length >= 2) { this.karte.fitBounds(L.latLngBounds(pts).pad(0.2)); }
     },

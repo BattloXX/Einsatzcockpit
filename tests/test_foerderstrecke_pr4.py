@@ -1,4 +1,6 @@
 """PR 4: Karten-Wizard + Live-Berechnung + Profil-SVG + Persistenz-Routen."""
+import json
+
 import pytest
 
 from app.core.security import hash_password
@@ -13,7 +15,6 @@ from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.user import Role, User, UserRole
 from app.services.chart_svg import foerderprofil_svg
 from app.services.foerderstrecke_service import materialbilanz
-
 
 # ── Pure: Materialbilanz + SVG ───────────────────────────────────────────────
 
@@ -375,3 +376,78 @@ def test_foerderstrecke_erscheint_als_auftrag_auf_lagefuehrung(client):
     assert r2.status_code == 200, r2.text[:300]
     assert "Versorgung Einsatz X" in r2.text
     assert f"/foerderstrecke/{strecke_id}" in r2.text
+
+
+def _fs_einsaetze_json(html: str) -> list:
+    """Extrahiert das eingebettete FS_EINSAETZE-JSON aus dem Wizard-HTML."""
+    import re
+    m = re.search(r"const FS_EINSAETZE = (\[.*?\]);", html)
+    assert m, "FS_EINSAETZE nicht im Wizard-HTML gefunden"
+    return json.loads(m.group(1))
+
+
+def test_wizard_zeigt_einsatzkoordinaten_fuer_kartenmarker(client):
+    """Beim Verlinken eines Einsatzes (Vorbelegung per ?incident_id=) liefert der Wizard
+    dessen lat/lng mit, damit das Frontend den Einsatzort als Marker setzen kann."""
+    from app.models.incident import Incident
+
+    org_id, _pid, _sid = _setup("fs_ui_marker1", module_on=True)
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        incident = Incident(primary_org_id=org_id, alarm_type_code="T1", status="active",
+                            lat=47.49, lng=9.74)
+        db.add(incident); db.commit()
+        incident_id = incident.id
+    finally:
+        db.close()
+
+    _login(client, "fs_ui_marker1", "Test1234!")
+    r = client.get(f"/foerderstrecke/?incident_id={incident_id}")
+    assert r.status_code == 200
+    einsaetze = _fs_einsaetze_json(r.text)
+    treffer = next((e for e in einsaetze if e["id"] == incident_id), None)
+    assert treffer is not None, "verlinkter Einsatz fehlt in FS_EINSAETZE"
+    assert treffer["lat"] == 47.49 and treffer["lng"] == 9.74
+
+
+def test_wizard_zeigt_einsatzkoordinaten_auch_wenn_einsatz_geschlossen(client):
+    """Eine gespeicherte Förderstrecke bleibt mit ihrem Einsatzort-Marker auffindbar,
+    auch nachdem der verknüpfte Einsatz geschlossen wurde (nicht mehr in den aktiven
+    Top-50) — `ensure_id` in _aktive_einsaetze holt ihn trotzdem in die Liste."""
+    from app.models.incident import Incident
+
+    org_id, pid, sid = _setup("fs_ui_marker2", module_on=True)
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        incident = Incident(primary_org_id=org_id, alarm_type_code="T1", status="active",
+                            lat=47.5, lng=9.8)
+        db.add(incident); db.commit()
+        incident_id = incident.id
+    finally:
+        db.close()
+
+    _login(client, "fs_ui_marker2", "Test1234!")
+    csrf = _csrf(client)
+    payload = {
+        "name": "Strecke mit geschlossenem Einsatz", "incident_id": incident_id,
+        "ansaug": {"seehoehe_m": 430, "geodaetische_saughoehe_m": 2},
+        "stationen": [{"typ": "quellpumpe", "pumpen_typ_id": pid, "rpm": "2000",
+                       "abschnitt": {"schlauch_typ_id": sid, "laenge_m": 400}}],
+    }
+    r = client.post("/foerderstrecke/speichern", json=payload, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200, r.text[:300]
+    strecke_id = r.json()["id"]
+
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        db.get(Incident, incident_id).status = "closed"
+        db.commit()
+    finally:
+        db.close()
+
+    r2 = client.get(f"/foerderstrecke/{strecke_id}")
+    assert r2.status_code == 200
+    einsaetze = _fs_einsaetze_json(r2.text)
+    treffer = next((e for e in einsaetze if e["id"] == incident_id), None)
+    assert treffer is not None, "geschlossener, aber verknüpfter Einsatz fehlt in FS_EINSAETZE"
+    assert treffer["lat"] == 47.5 and treffer["lng"] == 9.8
