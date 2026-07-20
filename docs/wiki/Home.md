@@ -2,7 +2,7 @@
 
 Digitales Einsatzleiter-Werkzeug für österreichische Feuerwehren — Multi-User, Multi-Organisations-fähig, Echtzeit.
 
-**Version:** 3.5.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
+**Version:** 3.6.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
 
 ## Was ist das?
 
@@ -36,6 +36,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - KI-Assistent (Auftragsvorschläge, Lagebild, Auto-Priorisierung) via Anthropic Claude — opt-in
 - Datenbank-Backup & Disaster-Recovery: automatisierte Dumps beider DBs + Medien, wöchentlich getestete Restore-Probe, Off-Site-Upload (SFTP/SCP/rsync/FTPS/rclone), DR-Runbook
 - Rate-Limiting per IP und API-Key (slowapi)
+- Förderstrecken-Planer: Löschwasserförderung über lange Wegstrecke berechnen (Vollbild-Kartenmodus, automatischer Pumpenstandort-Vorschlag), optional mit Einsatz verknüpft (Einsatzort-Marker, eigener Kartenlayer in der Lageführung)
 
 ## Inhaltsverzeichnis
 

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     APP_PORT: int = 8092
     APP_BASE_URL: str = "http://localhost:8092"
     PUBLIC_BASE_URL: str = ""  # Für Mail-Links; leer = falls leer APP_BASE_URL verwenden
-    APP_VERSION: str = "3.5.0"
+    APP_VERSION: str = "3.6.0"
     DEBUG: bool = False
     TEST_SYSTEM: bool = False
 
