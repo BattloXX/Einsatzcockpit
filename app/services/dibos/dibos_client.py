@@ -206,10 +206,21 @@ class DibosClient:
 # GetCurrentRadios-Antworten), nicht aus einer Dokumentation abgeleitet.
 
 def parse_events(events: list[dict]) -> list[dict]:
+    """Reduziert ein rohes DIBOS-Event auf lesbare Felder.
+
+    Erweitert 2026-07-21 (Vorfall f26006436, Wolfurt Unterlinden 23 — LIS-Feed
+    speiste bis dahin einen Großteil der im Mitschnitt vorhandenen Felder gar
+    nicht ein, u.a. den vollständigen Einsatzort, Einsatzcode/Diagnose, BMA-Nr.
+    und das Meldungsprotokoll): NUR additiv, bestehende Schlüssel (inkl.
+    "targets" als reine String-Liste) bleiben unverändert, damit vorhandene
+    Konsumenten (latest.json, admin/_dibos_live.html) unverändert weiterlaufen.
+    Neue Felder ergänzen bei Bedarf um Details, statt Bestehendes zu ersetzen.
+    """
     parsed = []
     for e in events:
         callers = e.get("callerList") or []
         targets = e.get("targetList") or []
+        comments = e.get("comments") or []
         parsed.append({
             "eventNumber": e.get("eventNumber"),
             "ag": e.get("ag"),
@@ -223,11 +234,60 @@ def parse_events(events: list[dict]) -> list[dict]:
                 for c in callers if isinstance(c, dict)
             ],
             "targets": [t.get("target") for t in targets if isinstance(t, dict)],
+            # ── Neu: Einsatzcode/Diagnose, BMA-Nr., Gesamtstatus ────────────
+            "tycod": e.get("tycod"),
+            "subTycod": e.get("subTycod"),
+            "diagnose": e.get("diagnose"),
+            "bmaNo": e.get("bmaNo"),
+            "status": e.get("status"),
+            "statusText": e.get("statusText"),
+            "statusTime": e.get("statusTime"),
+            # ── Neu: vollständiger Einsatzort (bisher komplett verworfen) ───
+            "location": {
+                "city": e.get("locationCity"),
+                "district": e.get("locationDistrict"),
+                "cityPart": e.get("locationCityPart"),
+                "street": e.get("locationStreet"),
+                "streetNo": e.get("locationStreetNo"),
+                "zipCode": e.get("locationZipCode"),
+                "object": e.get("locationObject"),
+                "longitude": e.get("locationLongitude"),
+                "latitude": e.get("locationLatitude"),
+            },
+            # ── Neu: Ziel-Details (Typ/Anzahl), "targets" oben bleibt unverändert ──
+            "targetsDetailed": [
+                {
+                    "target": t.get("target"),
+                    "targetType": t.get("targetType"),
+                    "targetCount": t.get("targetCount"),
+                    "description": t.get("description"),
+                }
+                for t in targets if isinstance(t, dict)
+            ],
+            # ── Neu: Meldungs-/Kommentarprotokoll (Einheitenvorschlag, Dispose-
+            # Meldungen, LWZ_Respond-Link etc.) ─────────────────────────────
+            "comments": [
+                {
+                    "id": c.get("id"),
+                    "text": c.get("comment"),
+                    "isInternal": c.get("isInternal"),
+                    "messageType": c.get("messageType"),
+                    "creationDate": c.get("creationDate"),
+                    "creationPerson": c.get("creationPerson"),
+                }
+                for c in comments if isinstance(c, dict)
+            ],
         })
     return parsed
 
 
 def parse_units(units: list[dict]) -> list[dict]:
+    """Reduziert ein rohes DIBOS-Unit-Objekt auf lesbare Felder.
+
+    Erweitert 2026-07-21 um die Fahrzeug-Statuszeiten (al/s1..s8/ueb/eta) —
+    bisher komplett verworfen, obwohl im Mitschnitt vorhanden (z.B. für eine
+    Anfahrt-Timeline im Einsatz). Additiv, bestehende Schlüssel unverändert.
+    """
     return [
         {
             "unid": u.get("unid"),
@@ -238,6 +298,21 @@ def parse_units(units: list[dict]) -> list[dict]:
             "longitude": u.get("longitude"),
             "latitude": u.get("latitude"),
             "eventNumber": u.get("eventNumber"),
+            "station": u.get("station"),
+            "ag": u.get("ag"),
+            "statusTimes": {
+                "al": u.get("al"),
+                "s1": u.get("s1"),
+                "s2": u.get("s2"),
+                "s3": u.get("s3"),
+                "s4": u.get("s4"),
+                "s5": u.get("s5"),
+                "s6": u.get("s6"),
+                "s7": u.get("s7"),
+                "s8": u.get("s8"),
+                "ueb": u.get("ueb"),
+                "eta": u.get("eta"),
+            },
         }
         for u in units
     ]

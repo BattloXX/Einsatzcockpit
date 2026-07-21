@@ -36,31 +36,45 @@ def find_matching_incident(
     city: str | None,
     started_at: datetime | None,
     lis_operation_id: str | None = None,
+    lis_operation_number: str | None = None,
+    house_no: str | None = None,
     report_text: str | None = None,
     window_hours: int = DEFAULT_WINDOW_HOURS,
 ) -> Incident | None:
     """Findet einen bereits vorhandenen aktiven Incident, der zu einer LIS-Operation passt.
 
-    Drei Verknüpfungswege (der Reihe nach versucht):
+    Vier Verknüpfungswege (der Reihe nach versucht):
     1) Direkter Treffer über eine bereits gemerkte lis_operation_id — schnellster,
        eindeutiger Pfad, wird bei jedem Sync-Durchlauf zuerst versucht.
-    2) Heuristik über Alarmstichwort (alarm_type_code) + normalisierte Adresse
-       (Straße/Ort), eingeschränkt auf ein Zeitfenster von window_hours um
-       started_at. Der freie Einsatzgrund-/Meldungstext wird hier NICHT
-       verglichen — zwei Quellen (z.B. Alarmierungs-Rohtext vs. LIS) formulieren
-       denselben Alarm oft unterschiedlich (Vorfall 2026-07-11: Einsätze #200/#201
-       an derselben Adresse mit identischem Stichwort blieben getrennt, weil ihr
-       Meldungstext nach Normalisierung nicht exakt gleich war). Stichwort +
-       Adresse gelten als ausreichend eindeutig für denselben Einsatz.
-    3) Fallback, NUR wenn (2) keinen Treffer liefert: Teilstring-Match des
+    2) Direkter Treffer über die stabile Leitstellen-Einsatznummer
+       (lis_operation_number, z.B. "f26006436") — bewusst UNABHÄNGIG vom Status
+       (auch geschlossene Einsätze), weil die LIS-GUID (Operation.Id) sich
+       zwischen zwei Polls ändern kann, während die Einsatznummer stabil bleibt
+       (Vorfall 2026-07-21: Einsatz f26006436 wurde doppelt angelegt — Ursache
+       war u.a., dass GUID-Änderungen bzw. Auto-Close+Reopen mit neuer GUID nur
+       gegen AKTIVE Kandidaten prüften; die Einsatznummer selbst floss bisher
+       gar nicht ins Matching ein, obwohl sie dafür der zuverlässigste Schlüssel
+       wäre). Nur relevant, wenn lis_operation_number mitgegeben wird — andere
+       Aufrufer (api_v1.py, serial_alarm_service.py) kennen keine LIS-Nummer und
+       lassen dieses Argument weg, dann wird diese Stufe übersprungen.
+    3) Heuristik über Alarmstichwort (alarm_type_code) + normalisierte Adresse
+       (Straße/Hausnummer/Ort), eingeschränkt auf ein Zeitfenster von
+       window_hours um started_at. Der freie Einsatzgrund-/Meldungstext wird
+       hier NICHT verglichen — zwei Quellen (z.B. Alarmierungs-Rohtext vs. LIS)
+       formulieren denselben Alarm oft unterschiedlich (Vorfall 2026-07-11:
+       Einsätze #200/#201 an derselben Adresse mit identischem Stichwort
+       blieben getrennt, weil ihr Meldungstext nach Normalisierung nicht exakt
+       gleich war). Stichwort + Adresse gelten als ausreichend eindeutig für
+       denselben Einsatz.
+    4) Fallback, NUR wenn (3) keinen Treffer liefert: Teilstring-Match des
        Straßennamens der einen Seite im freien report_text der anderen Seite
        (Vorfall 2026-07-14: der lokale Pager-Text-Parser des seriellen Gateways
        scheiterte an einem zusätzlichen Ortsteil-/Rufnamen-Präfix
        ("bregenz VORKLOSTER untere burggräflergasse…", "_drehleiter r2 lauterach
        fellentorstraße…") und lieferte leere Adressfelder — die Operation kam
-       vom LIS mit korrekter Adresse, matchte aber nicht, weil (2) eine
+       vom LIS mit korrekter Adresse, matchte aber nicht, weil (3) eine
        strukturierte Adresse auf BEIDEN Seiten braucht. Absichtlich NUR ein
-       Fallback (nicht Teil von (2)) UND zusätzlich hart darauf beschränkt, dass
+       Fallback (nicht Teil von (3)) UND zusätzlich hart darauf beschränkt, dass
        mindestens eine der beiden Seiten tatsächlich KEINE strukturierte Adresse
        hat (siehe target_address/cand_address_norm-Prüfung im Code): an
        Sturmtagen können mehrere echte, unterschiedliche Einsätze mit demselben
@@ -69,9 +83,10 @@ def find_matching_incident(
        diesen Fallback dadurch nie, selbst wenn ein Straßenname zufällig im
        Meldungstext des jeweils anderen vorkäme.
 
-    Es werden ausschließlich AKTIVE Einsätze der Org verglichen — abgeschlossene
-    Einsätze scheiden aus (reduziert False-Positives bei wiederkehrenden Alarmen
-    an derselben Adresse, z.B. BMA-Fehlalarme).
+    Ab Stufe 3 werden ausschließlich AKTIVE Einsätze der Org verglichen —
+    abgeschlossene Einsätze scheiden dort aus (reduziert False-Positives bei
+    wiederkehrenden Alarmen an derselben Adresse, z.B. BMA-Fehlalarme). Stufe 2
+    (Einsatznummer) ist die einzige Ausnahme, siehe oben.
     """
     if lis_operation_id:
         by_id = (
@@ -84,6 +99,18 @@ def find_matching_incident(
         )
         if by_id:
             return by_id
+
+    if lis_operation_number:
+        by_number = (
+            db.query(Incident)
+            .filter(
+                Incident.primary_org_id == org_id,
+                Incident.lis_operation_number == lis_operation_number,
+            )
+            .first()
+        )
+        if by_number:
+            return by_number
 
     candidates = (
         db.query(Incident)
@@ -101,12 +128,21 @@ def find_matching_incident(
         return abs(_as_aware(started_at) - _as_aware(candidate.started_at)) <= timedelta(hours=window_hours)
 
     target_address = normalize_address(street, city)
+    target_house = _normalize_text(house_no) if house_no else ""
     if target_address:
         for candidate in candidates:
             if not _within_window(candidate):
                 continue
-            if normalize_address(candidate.address_street, candidate.address_city) == target_address:
-                return candidate
+            if normalize_address(candidate.address_street, candidate.address_city) != target_address:
+                continue
+            # Hausnummer nur als Ausschlusskriterium nutzen, wenn BEIDE Seiten
+            # eine haben — fehlt sie auf einer Seite, bleibt es bei der reinen
+            # Straße/Ort-Übereinstimmung (Rückwärtskompatibilität, house_no ist
+            # bei den meisten Aufrufern gar nicht bekannt).
+            cand_house = _normalize_text(candidate.address_no) if candidate.address_no else ""
+            if target_house and cand_house and target_house != cand_house:
+                continue
+            return candidate
 
     own_street_norm = _normalize_text(street)
     own_report_norm = _normalize_text(report_text)

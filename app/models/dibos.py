@@ -39,6 +39,14 @@ class OrgDibosConfig(Base):
     auto_trace_on_event: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     auto_trace_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
 
+    # Explizites Opt-in: reichert einen per Einsatznummer (Incident.lis_operation_number)
+    # gefundenen, AKTIVEN Einsatz mit Zusatzinfos aus GetCurrentEvents/GetCurrentUnits an
+    # (Einsatzort, Einsatzcode/Diagnose, BMA-Nr., Meldungsprotokoll, Fahrzeug-Statuszeiten
+    # — siehe app/services/dibos/dibos_enrich.py). Default False, damit DIBOS für
+    # bestehende Orgs weiterhin ein reines Tracing/Diagnose-Feature bleibt, bis eine Org
+    # das bewusst aktiviert.
+    enrich_incidents: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     # Zugangsdaten: zwei getrennte Konten (siehe dibos_client.py)
     # 1) Gateway-Konto (HTTP-Basic, vom Betreiber vergeben, unabhängig von der Org)
     gateway_user: Mapped[str | None] = mapped_column(String(100), nullable=True)

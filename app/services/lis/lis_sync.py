@@ -10,6 +10,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.timezones import org_tz
@@ -157,38 +158,62 @@ def _parse_operation(op: dict, org: FireDept | None) -> dict:
 
 
 # ── Einsatz verbinden/anlegen ────────────────────────────────────────────────
+def _reopen_if_auto_closed(db: Session, org: FireDept, candidate, parsed: dict) -> None:
+    """Wiedereröffnet einen gefundenen Kandidaten, falls er nur durch unseren
+    eigenen LIS-Auto-Close geschlossen war und die Operation wieder aktiv ist.
+
+    Gilt für BEIDE Fundwege in _get_or_link_incident() (direkter lis_operation_id-
+    Treffer UND Fund über find_matching_incident(), z.B. via Einsatznummer nach
+    einem GUID-Wechsel) — sonst bliebe ein per Einsatznummer wiedergefundener,
+    automatisch geschlossener Einsatz fälschlich geschlossen, obwohl die
+    LIS-Operation längst wieder läuft (siehe lis_auto_close_locked-Doku am
+    Incident-Modell).
+    """
+    if (
+        candidate.status == "closed"
+        and candidate.closed_via_lis_auto
+        and not candidate.lis_auto_close_locked
+        and not parsed.get("is_closed")
+    ):
+        from app.services.incident_service import reopen_incident
+        reopen_incident(db, candidate, user_id=None)
+        candidate.lis_auto_close_locked = True
+        db.flush()
+        logger.info(
+            "Einsatz %s automatisch wiedereröffnet (LIS-Operation %s wieder aktiv, Org %s) — "
+            "künftig nur noch manueller Abschluss möglich",
+            candidate.id, parsed["lis_operation_id"], org.id,
+        )
+
+
+def _find_by_lis_operation_id(db: Session, org_id: int, lis_operation_id: str | None):
+    """Direkter Tier-1-Treffer über die gemerkte lis_operation_id.
+
+    Eigene Funktion (statt Inline-Query), damit der Race-Pfad in
+    _get_or_link_incident() gezielt testbar ist: der zweite Aufruf (nach einem
+    IntegrityError beim eigenen Insert) MUSS den zwischenzeitlich von einer
+    anderen Transaktion committeten Einsatz frisch aus der DB lesen — nicht aus
+    einem evtl. veralteten Identity-Map-Zustand der eigenen Session.
+    """
+    if not lis_operation_id:
+        return None
+    from app.models.incident import Incident
+    return (
+        db.query(Incident)
+        .filter(Incident.primary_org_id == org_id, Incident.lis_operation_id == lis_operation_id)
+        .first()
+    )
+
+
 def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
     """Gibt (incident, created) zurück. created=True, wenn der Einsatz zuerst über
     LIS geliefert wurde (kein passender API-Einsatz vorhanden war)."""
-    from app.models.incident import Incident
-
-    existing = (
-        db.query(Incident)
-        .filter(Incident.primary_org_id == org.id, Incident.lis_operation_id == parsed["lis_operation_id"])
-        .first()
-    )
+    existing = _find_by_lis_operation_id(db, org.id, parsed["lis_operation_id"])
     if existing:
-        # Die Operation ist wieder aktiv (sonst würde sync_operation() für sie nicht laufen) —
-        # war der Einsatz nur durch unseren eigenen Auto-Close geschlossen (nicht manuell),
-        # wiedereröffnen. lis_auto_close_locked verhindert danach jeden weiteren automatischen
-        # Abschluss dieses Einsatzes — nur noch ein manueller Abschluss im Einsatzcockpit zählt.
         # NICHT wiedereröffnen, wenn die Operation selbst bereits beendet ist (Backfill
-        # historischer/geschlossener Operationen liefert diese Operation mit gesetzter EndTime).
-        if (
-            existing.status == "closed"
-            and existing.closed_via_lis_auto
-            and not existing.lis_auto_close_locked
-            and not parsed.get("is_closed")
-        ):
-            from app.services.incident_service import reopen_incident
-            reopen_incident(db, existing, user_id=None)
-            existing.lis_auto_close_locked = True
-            db.flush()
-            logger.info(
-                "Einsatz %s automatisch wiedereröffnet (LIS-Operation %s wieder aktiv, Org %s) — "
-                "künftig nur noch manueller Abschluss möglich",
-                existing.id, parsed["lis_operation_id"], org.id,
-            )
+        # historischer/geschlossener Operationen liefert diese Operation mit gesetzter EndTime)
+        # — das übernimmt _reopen_if_auto_closed() intern über parsed["is_closed"].
+        _reopen_if_auto_closed(db, org, existing, parsed)
         return existing, False
 
     match = find_matching_incident(
@@ -196,13 +221,19 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         alarm_type_code=parsed["alarm_type_code"],
         street=parsed["street"],
         city=parsed["city"],
+        house_no=parsed["house_no"],
         started_at=parsed["started_at"],
         report_text=parsed["report_text"],
+        lis_operation_number=parsed["lis_operation_number"],
     )
     if match:
         match.lis_operation_id = parsed["lis_operation_id"]
         match.lis_operation_number = parsed["lis_operation_number"]
         db.flush()
+        # Fund über die Einsatznummer (Tier 2) kann auch einen bereits geschlossenen
+        # Einsatz treffen, dessen GUID sich seit dem Auto-Close geändert hat — auch
+        # hier wiedereröffnen, sonst bleibt er trotz wieder aktiver LIS-Operation zu.
+        _reopen_if_auto_closed(db, org, match, parsed)
         logger.info(
             "LIS-Operation %s mit vorhandenem Einsatz %s verknüpft (Org %s)",
             parsed["lis_operation_id"], match.id, org.id,
@@ -227,7 +258,28 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
     )
     incident.lis_operation_id = parsed["lis_operation_id"]
     incident.lis_operation_number = parsed["lis_operation_number"]
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Race: ein zweiter, gleichzeitig laufender Sync (Hintergrund-Loop und/oder
+        # "Verbindung testen"-Button, siehe Modul-Docstring) hat dieselbe
+        # lis_operation_id zwischen unserer Prüfung oben und diesem Flush bereits
+        # committet (uq_incident_org_lis_operation_id, siehe models/incident.py).
+        # Statt eines doppelten Einsatzes: eigenen (noch uncommitteten) Anlage-
+        # Versuch verwerfen und den bereits gewonnenen Einsatz übernehmen — der
+        # aufrufende sync_organization()-Loop committet ohnehin erst je Operation
+        # (kein weiterer, in dieser Operation bereits geflushter Stand geht dabei
+        # verloren, siehe dort).
+        db.rollback()
+        winner = _find_by_lis_operation_id(db, org.id, parsed["lis_operation_id"])
+        if winner:
+            logger.info(
+                "Race beim Anlegen von Einsatz für LIS-Operation %s (Org %s) — "
+                "bereits von einem parallelen Sync angelegt, übernehme diesen (%s)",
+                parsed["lis_operation_id"], org.id, winner.id,
+            )
+            return winner, False
+        raise
     if parsed.get("lat") is not None and parsed.get("lng") is not None:
         logger.info(
             "Einsatz %s aus LIS-Operation %s neu angelegt (Org %s) — Koordinaten aus LIS "

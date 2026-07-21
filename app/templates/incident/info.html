@@ -144,6 +144,13 @@
           {% if incident.address_street %}{{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}{% else %}<span>Ohne Adresse</span>{% endif %}
           {% if incident.started_at %} · seit {{ incident.started_at|local_time }} Uhr{% endif %}
         </div>
+        {% if incident.dibos_bma_no or incident.dibos_diagnose or incident.dibos_event_comment %}
+        <div class="text-muted" style="font-size:.85rem;" title="Aus DIBOS-EventHub übernommen">
+          {% if incident.dibos_bma_no %}<span class="badge-pill badge-pill--gray">BMA {{ incident.dibos_bma_no }}</span>{% endif %}
+          {% if incident.dibos_diagnose %} · {{ incident.dibos_diagnose }}{% endif %}
+          {% if incident.dibos_event_comment %} · {{ incident.dibos_event_comment }}{% endif %}
+        </div>
+        {% endif %}
       </div>
       <div x-data="rsvpWidget({{ incident.id }})" x-init="init()" x-show="(zusagen + absagen) > 0" x-cloak
            style="display:flex;gap:6px;align-items:center;" title="Rückmeldungen (Zu-/Absagen)">

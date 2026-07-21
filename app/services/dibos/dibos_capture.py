@@ -77,10 +77,15 @@ class ExchangeRecorder:
     Von der Netzwerklogik entkoppelt und daher ohne echten DIBOS-Zugang testbar.
     """
 
-    def __init__(self, out_dir: Path, org_id: int, run_id: str):
+    def __init__(self, out_dir: Path, org_id: int, run_id: str, enrich_incidents: bool = False):
         self.out_dir = out_dir
         self.org_id = org_id
         self.run_id = run_id
+        # Org-Opt-in (OrgDibosConfig.enrich_incidents): reichert während dieses
+        # Traces laufend bestehende, aktive Einsätze mit DIBOS-Zusatzinfos an
+        # (siehe dibos_enrich.py + _capture_once()). Default False — ändert
+        # nichts am reinen Tracing-Verhalten bestehender Aufrufer/Tests.
+        self.enrich_incidents = enrich_incidents
         self.seq = 0
         self.exchanges: list[dict] = []
         self.latest: dict = {"updated_at": None}
@@ -172,6 +177,13 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
     GetElvisNotification) den restlichen Poll-Zyklus nicht verhindert. client.*
     ruft intern on_exchange=recorder.record für uns auf — hier wird nur noch der
     Live-Snapshot am Ende des Zyklus geschrieben.
+
+    Läuft dieser Trace mit enrich_incidents=True (Org-Opt-in), wird nach einem
+    erfolgreichen GetCurrentEvents zusätzlich app.services.dibos.dibos_enrich
+    aufgerufen — läuft für die GESAMTE Trace-Dauer (also i.d.R. den ganzen
+    Einsatz) mit, nicht nur einmalig wie der leichte Erkennungs-Loop
+    (dibos_loop.py, der nach Trace-Start keine weiteren GetCurrentEvents mehr
+    abfragt, siehe dort is_trace_running()-Guard).
     """
     for coro_factory, label in (
         (client.get_current_events, "GetCurrentEvents"),
@@ -181,10 +193,32 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
         (client.get_elvis_notification, "GetElvisNotification"),
     ):
         try:
-            await coro_factory()
+            result = await coro_factory()
         except DibosClientError:
             logger.exception("DIBOS-Trace: %s fehlgeschlagen (Org %s)", label, recorder.org_id)
+            continue
+        if label == "GetCurrentEvents" and recorder.enrich_incidents and result:
+            await _enrich_and_broadcast(recorder.org_id, result)
     recorder.write_latest()
+
+
+async def _enrich_and_broadcast(org_id: int, raw_events: list[dict]) -> None:
+    """Reichert an (in einem Thread, da synchron/DB-blockierend) und broadcastet
+    pro tatsächlich geänderten Einsatz — Fehler dürfen den Trace-Poll nie abbrechen."""
+    try:
+        from app.services.dibos.dibos_enrich import enrich_events_for_org
+        changed_ids = await asyncio.to_thread(enrich_events_for_org, org_id, raw_events)
+    except Exception:
+        logger.exception("DIBOS-Trace: Einsatzanreicherung fehlgeschlagen (Org %s)", org_id)
+        return
+    if not changed_ids:
+        return
+    from app.services.broadcast import manager
+    for incident_id in changed_ids:
+        try:
+            await manager.broadcast(incident_id, {"type": "dibos_sync", "reload_board": True})
+        except Exception:
+            logger.exception("DIBOS-Trace: Broadcast für Einsatz %s fehlgeschlagen", incident_id)
 
 
 async def capture_traffic(
@@ -284,12 +318,13 @@ async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str
         gateway_password = decrypt_secret(config.gateway_password_enc)
         service_user = config.service_user
         service_password = decrypt_secret(config.service_password_enc)
+        enrich_incidents = config.enrich_incidents
     finally:
         db.close()
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out_dir = trace_run_dir(org_id, run_id)
-    recorder = ExchangeRecorder(out_dir, org_id, run_id)
+    recorder = ExchangeRecorder(out_dir, org_id, run_id, enrich_incidents=enrich_incidents)
     client = DibosClient(
         base_url, gateway_user, gateway_password, service_user, service_password,
         host=host, ag=ag, on_exchange=recorder.record,
