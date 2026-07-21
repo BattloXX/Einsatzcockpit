@@ -49,11 +49,24 @@
     <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
       DIBOS EventHub ist eine eigenständige, einfachere Schnittstelle als LIS/IPR (siehe
       <a href="/admin/lis">LIS-Anbindung</a>) — die Antworten sind JSON statt SOAP-XML. Diese
-      Seite liest AUSSCHLIESSLICH mit: es werden keine Einsätze/Fahrzeuge in dieser Org
-      angelegt oder verändert, nur Rohdaten aufgezeichnet und eine lesbare Live-Ansicht
-      bereitgestellt. Es gibt zwei getrennte Zugangsdaten: ein vom Betreiber vergebenes
-      Gateway-Konto (HTTP-Basic) und das eigene Org-Servicekonto (im SOAP-Header übertragen).
+      Seite liest primär mit: es wird NIE ein Einsatz angelegt. Optional (Schalter unten,
+      Default aus) kann ein bereits bestehender, aktiver Einsatz um Zusatzinfos ergänzt
+      werden (Einsatzort, Einsatzcode/Diagnose, BMA-Nr., Meldungsprotokoll) — siehe
+      <a href="/admin/dibos/einsaetze{% if is_sysadmin and org %}?org_id={{ org.id }}{% endif %}">Einsatz-Infos</a>.
+      Es gibt zwei getrennte Zugangsdaten: ein vom Betreiber vergebenes Gateway-Konto
+      (HTTP-Basic) und das eigene Org-Servicekonto (im SOAP-Header übertragen).
     </p>
+  </div>
+</section>
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Einsatz-Infos</h2></div>
+  <div class="card-body" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6;max-width:640px">
+      Übersicht je Einsatz, was DIBOS zusätzlich beigetragen hat (Einsatzcode/Diagnose, BMA-Nr.,
+      Kommentar, Anzahl übernommener Meldungen) — unabhängig davon, ob gerade eine Aufzeichnung läuft.
+    </p>
+    <a href="/admin/dibos/einsaetze{% if is_sysadmin and org %}?org_id={{ org.id }}{% endif %}" class="btn btn--secondary">Einsatz-Infos anzeigen</a>
   </div>
 </section>
 

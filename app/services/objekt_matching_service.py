@@ -221,8 +221,15 @@ def match_incident(db: Session, incident: Incident, *, nur_geo: bool = False) ->
             logger.exception("Gefahren-Meldungen fehlgeschlagen (Objekt %d)", objekt.id)
 
     if not nur_geo:
-        # ── Stufe 1: BMA-/RFL-Nummer im Alarmtext ──
+        # ── Stufe 1: BMA-/RFL-Nummer im Alarmtext ODER direkt aus DIBOS ──
+        # incident.dibos_bma_no (siehe dibos_enrich.py) ist bereits eine saubere
+        # Nummer aus dem DIBOS-EventHub-Feed (kein Alarmtext-Regex nötig) — einfach
+        # mit in die zu prüfenden Nummern aufnehmen, dann greift dieselbe Stufe-1-
+        # Logik unabhängig davon, ob die Nummer per Text-Regex oder direkt aus
+        # DIBOS kam.
         nummern = finde_bma_nummern(incident.report_text) + finde_bma_nummern(incident.reason)
+        if incident.dibos_bma_no:
+            nummern.append(incident.dibos_bma_no)
         if nummern:
             bma_index: dict[str, Objekt] = {}
             for o in objekte:
