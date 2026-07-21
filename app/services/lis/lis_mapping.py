@@ -150,6 +150,42 @@ _PUNCT_RE = re.compile(r"[.,;:!?\"'`´()\[\]{}/\\<>|-]+")
 # Einsatz F14 Kesselstraße 42 wurde trotz Objekt-Treffer nicht automatisch verknuepft).
 _UMLAUT_MAP = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
 
+# Straßen-Abkürzungen auf eine einheitliche Langform normalisieren: "Musterstr."
+# (Punkt bereits von _PUNCT_RE entfernt → Token "musterstr") und "Musterstraße"/
+# "Musterstrasse" (nach Umlaut-Mapping bereits "musterstrasse") müssen als
+# dieselbe Adresse gelten — sonst verfehlt Stufe 2 von find_matching_incident()
+# zwei Quellen, die dieselbe Straße unterschiedlich abkürzen (Verdacht aus
+# Vorfall 2026-07-21, doppelt angelegter Einsatz f26006436 Wolfurt Unterlinden
+# 23 — dort war die Straße zwar in allen Polls gleich geschrieben, aber die
+# Adress-Normalisierung selbst hatte bis hierhin keinerlei Abkürzungsbehandlung,
+# ein reales Risiko bei anderen Einsätzen). Per-Token-Suffix-Ersetzung (nicht
+# Wortgrenzen-Regex!), weil Abkürzungen ohne Leerzeichen an den Straßennamen
+# angehängt sind ("musterstr", nicht "muster str"). "Gasse"/"g" bewusst NICHT
+# abgekürzt behandelt: ein alleinstehendes "g"-Suffix ist nicht von einem
+# bereits ausgeschriebenen "…weg" unterscheidbar (beide enden auf "g") und
+# hätte ein hohes Fehlmatch-Risiko.
+_STREET_SUFFIX_MAP = (
+    # (Abkürzung, Langform) — längere zuerst, sonst wird "strasse" fälschlich
+    # als "str" + "asse"-Rest erkannt.
+    ("strasse", "strasse"),
+    ("str", "strasse"),
+    ("platz", "platz"),
+    ("pl", "platz"),
+)
+_MIN_ABBR_PREFIX_LEN = 3  # verhindert, dass z.B. "Pl" allein (Ortsteil?) umgeschrieben wird
+
+
+def _expand_street_abbreviations(text: str) -> str:
+    tokens = text.split(" ")
+    out = []
+    for token in tokens:
+        for abbr, full in _STREET_SUFFIX_MAP:
+            if token.endswith(abbr) and len(token) - len(abbr) >= _MIN_ABBR_PREFIX_LEN:
+                token = token[: -len(abbr)] + full
+                break
+        out.append(token)
+    return " ".join(out)
+
 
 def _normalize_text(value: str | None) -> str:
     if not value:
@@ -161,8 +197,20 @@ def _normalize_text(value: str | None) -> str:
     return text.strip()
 
 
-def normalize_address(street: str | None, city: str | None) -> str:
-    return _normalize_text(f"{street or ''} {city or ''}")
+def normalize_address(street: str | None, city: str | None, house_no: str | None = None) -> str:
+    """Normalisierte Adresse für den Matching-Vergleich.
+
+    `house_no` ist optional (Default None → altes Verhalten, nur Straße+Ort)
+    für Rückwärtskompatibilität mit bestehenden Aufrufern (api_v1.py,
+    serial_alarm_service.py, objekt_matching_service.py), die keine
+    Hausnummer übergeben. Wird sie mitgegeben, fließt sie MIT ein, damit z.B.
+    "Unterlinden 23" nicht fälschlich mit "Unterlinden 5" matcht.
+    """
+    base = _normalize_text(f"{street or ''} {city or ''}")
+    base = _expand_street_abbreviations(base)
+    if house_no:
+        base = f"{base} {_normalize_text(house_no)}"
+    return base
 
 
 # ── .NET-Default-Datum ("0001-01-01T00:00:00") → None ────────────────────────

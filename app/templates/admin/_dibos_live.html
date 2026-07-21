@@ -15,14 +15,19 @@
   <table class="table-admin" style="font-size:.8rem;margin-bottom:14px">
     <thead>
       <tr>
-        <th>Nummer</th><th>Stichwort</th><th>Kommentar</th><th>Alarmiert</th><th>Anrufer</th><th>Ziele</th>
+        <th>Nummer</th><th>Stichwort</th><th>Einsatzort</th><th>Kommentar</th><th>Alarmiert</th><th>Anrufer</th><th>Ziele</th>
       </tr>
     </thead>
     <tbody>
       {% for e in latest.events %}
       <tr>
         <td>{{ e.eventNumber }}</td>
-        <td>{{ e.tycodDescription }}</td>
+        <td>{{ e.tycodDescription }}{% if e.bmaNo %} (BMA {{ e.bmaNo }}){% endif %}</td>
+        <td>
+          {% if e.location and e.location.street %}
+            {{ e.location.street }} {{ e.location.streetNo or '' }}{% if e.location.city %}, {{ e.location.city }}{% endif %}
+          {% else %}-{% endif %}
+        </td>
         <td>{{ e.eventComment }}</td>
         <td>{{ e.dispatched or e.created }}</td>
         <td>

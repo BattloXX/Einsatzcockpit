@@ -104,6 +104,7 @@ async def dibos_settings_save(
     poll_interval_seconds: int = Form(20),
     auto_trace_on_event: str = Form(""),
     auto_trace_duration_minutes: int = Form(120),
+    enrich_incidents: str = Form(""),
     gateway_user: str = Form(""),
     gateway_password: str = Form(""),
     gateway_secret_changed: str = Form(""),   # "1" = neues Gateway-Passwort vorhanden
@@ -124,6 +125,7 @@ async def dibos_settings_save(
     cfg.poll_interval_seconds = max(10, poll_interval_seconds or 20)
     cfg.auto_trace_on_event = auto_trace_on_event == "1"
     cfg.auto_trace_duration_minutes = max(5, auto_trace_duration_minutes or 120)
+    cfg.enrich_incidents = enrich_incidents == "1"
     cfg.gateway_user = gateway_user.strip() or None
     cfg.service_user = service_user.strip() or None
     cfg.updated_at = datetime.now(UTC)

@@ -224,6 +224,127 @@ def test_repeated_lis_sync_is_idempotent_no_duplicate():
         db.close()
 
 
+# ── Regression 2026-07-21: Einsatz f26006436 wurde doppelt angelegt ──────────
+# Robuster Fix: Einsatznummer als zusätzliche Matching-Stufe, DB-Unique-Guard
+# gegen Races, Wiedereröffnung auch beim Fund über die Einsatznummer.
+
+def test_get_or_link_incident_matches_by_operation_number_when_guid_changes():
+    """Ändert sich die LIS-GUID (Operation.Id) zwischen zwei Polls für dieselbe
+    Einsatznummer (z.B. weil die Operation zwischenzeitlich neu angelegt wurde),
+    darf trotzdem KEIN zweiter Einsatz entstehen — die stabile Einsatznummer
+    (lis_operation_number) muss den vorhandenen Einsatz finden."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        parsed_v1 = _parsed(lis_operation_id="guid-alt", lis_operation_number="f26006436")
+        incident1, created1 = lis_sync._get_or_link_incident(db, org, parsed_v1)
+
+        parsed_v2 = _parsed(lis_operation_id="guid-neu", lis_operation_number="f26006436")
+        incident2, created2 = lis_sync._get_or_link_incident(db, org, parsed_v2)
+
+        assert created1 is True
+        assert created2 is False
+        assert incident1.id == incident2.id
+        # Die GUID wird auf die neu gelieferte aktualisiert (Tier-1-Treffer beim
+        # nächsten Poll soll wieder direkt greifen, nicht erneut über die Nummer).
+        assert incident2.lis_operation_id == "guid-neu"
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_get_or_link_incident_reopens_when_found_via_operation_number():
+    """Ein per Auto-Close geschlossener Einsatz, dessen LIS-Operation mit neuer
+    GUID (aber gleicher Einsatznummer) wieder aktiv wird, muss wiedereröffnet
+    werden — nicht nur die GUID neu verknüpft, während er fälschlich zu bleibt."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        parsed_v1 = _parsed(lis_operation_id="guid-alt-2", lis_operation_number="f26006999")
+        incident, _ = lis_sync._get_or_link_incident(db, org, parsed_v1)
+        from app.services.incident_service import close_incident
+        close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
+        assert incident.status == "closed"
+
+        parsed_v2 = _parsed(lis_operation_id="guid-neu-2", lis_operation_number="f26006999")
+        reopened, created = lis_sync._get_or_link_incident(db, org, parsed_v2)
+
+        assert created is False
+        assert reopened.id == incident.id
+        assert reopened.status == "active"
+        assert reopened.lis_auto_close_locked is True
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_get_or_link_incident_recovers_from_integrity_error_race():
+    """Simuliert eine echte Race-Situation zwischen zwei 'gleichzeitigen' Syncs
+    (z.B. Hintergrund-Poll und der 'Verbindung testen'-Button): Session A prüft
+    (noch nichts vorhanden — weder über die GUID noch über Stichwort/Adresse/
+    Einsatznummer), bevor Session B fertig anlegt und committet. Session A weiß
+    davon nichts und versucht trotzdem, denselben Einsatz frisch anzulegen — der
+    DB-Unique-Constraint (uq_incident_org_lis_operation_id) muss dabei einen
+    IntegrityError auslösen, den _get_or_link_incident abfängt, statt einen
+    doppelten Einsatz zu committen (Vorfall 2026-07-21, f26006436).
+
+    Tier 1 (lis_operation_id) UND find_matching_incident() (Tier 2 Einsatznummer,
+    Tier 3 Adresse) werden für Session A gezielt auf 'kein Treffer' gepatcht —
+    sonst würde bereits eine der beiden (durch die eigenen Fixes dieser Änderung
+    neu robusteren) Vorstufen greifen und der eigentliche DB-Race-Pfad würde nie
+    erreicht. Genau das reproduziert den Ausgangszustand vor diesem Fix, in dem
+    keine der Stufen den bereits committeten Einsatz fand."""
+    import app.services.lis.lis_sync as lis_sync_module
+
+    db_a = _session()
+    db_b = _session()
+    try:
+        org_a = db_a.get(FireDept, ORG_ID)
+        org_b = db_b.get(FireDept, ORG_ID)
+        parsed = _parsed(lis_operation_id="lis-op-race", lis_operation_number="f26099999")
+
+        # Session B gewinnt das Rennen zuerst und committet vollständig.
+        winner, created = lis_sync._get_or_link_incident(db_b, org_b, parsed)
+        db_b.commit()
+        assert created is True
+
+        # Session A hat ihre eigene Tier-1/2/3-Prüfung bereits VOR B's Commit
+        # durchgeführt (kein Treffer) — simuliert durch Patchen beider Fundwege
+        # auf 'None' für den regulären Aufruf; die Recovery nach IntegrityError
+        # (zweiter Aufruf von _find_by_lis_operation_id) fragt wieder echt die DB.
+        real_lookup = lis_sync_module._find_by_lis_operation_id
+        real_matcher = lis_sync_module.find_matching_incident
+        calls = {"n": 0}
+
+        def _patched_lookup(db, org_id, lis_operation_id):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None
+            return real_lookup(db, org_id, lis_operation_id)
+
+        lis_sync_module._find_by_lis_operation_id = _patched_lookup
+        lis_sync_module.find_matching_incident = lambda *a, **kw: None
+        try:
+            incident_a, created_a = lis_sync._get_or_link_incident(db_a, org_a, parsed)
+        finally:
+            lis_sync_module._find_by_lis_operation_id = real_lookup
+            lis_sync_module.find_matching_incident = real_matcher
+
+        assert created_a is False
+        assert incident_a.id == winner.id
+        assert (
+            db_a.query(Incident)
+            .filter(Incident.primary_org_id == ORG_ID, Incident.lis_operation_id == "lis-op-race")
+            .count()
+            == 1
+        )
+    finally:
+        db_a.rollback()
+        db_a.close()
+        db_b.rollback()
+        db_b.close()
+
+
 # ── Meldungen (JOURNAL) vs. Aufträge (TASK) ─────────────────────────────────
 
 def _journal_task(task_id="lis-task-journal", description="Info an alle") -> dict:

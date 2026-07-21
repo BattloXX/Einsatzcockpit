@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -39,7 +39,14 @@ class Incident(Base):
     __tablename__ = "incident"
     __table_args__ = (
         UniqueConstraint("primary_org_id", "external_key", name="uq_incident_org_ext_key"),
-        Index("ix_incident_org_lis_op", "primary_org_id", "lis_operation_id"),
+        # Verhindert auf DB-Ebene, dass dieselbe LIS-Operation zweimal als Einsatz
+        # angelegt wird (Vorfall 2026-07-21, doppelt angelegter Einsatz f26006436) —
+        # bisher nur ein normaler (nicht-eindeutiger) Index, die Eindeutigkeit war
+        # ausschließlich in der Anwendungslogik (_get_or_link_incident) durchgesetzt
+        # und damit anfällig für Races zwischen Hintergrund-Poll und manuellem
+        # Sync ("Verbindung testen"). NULL-Werte zählen für MySQL/SQLite je einzeln
+        # als eindeutig (keine Kollision zwischen Einsätzen ohne LIS-Anbindung).
+        UniqueConstraint("primary_org_id", "lis_operation_id", name="uq_incident_org_lis_operation_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -95,6 +102,14 @@ class Incident(Base):
     # Anrufer/Melder aus dem Alarm-Webhook (Name/Telefon) — nur Anzeige, keine LIS-Quelle.
     caller_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     caller_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # DIBOS-EventHub-Anreicherung (Org-Opt-in, siehe OrgDibosConfig.enrich_incidents +
+    # app/services/dibos/dibos_enrich.py): Einsatzcode/Diagnose/BMA-Nr./Meldungstext aus
+    # GetCurrentEvents, per Einsatznummer (lis_operation_number) zugeordnet. Reine
+    # Zusatzanzeige, nie Teil des Matchings/Dedup — nur Anzeige im Alarm-Header.
+    dibos_tycod: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    dibos_diagnose: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    dibos_bma_no: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    dibos_event_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Hydranten-/Löschwasser-Momentaufnahme (OSM/OSMHydrant) als JSON-Liste + Abrufzeit.
     # Dient als Offline-Fallback, wenn Overpass am Einsatzort nicht erreichbar ist.
     hydranten_json: Mapped[str | None] = mapped_column(Text, nullable=True)
