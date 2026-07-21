@@ -221,6 +221,7 @@ def parse_events(events: list[dict]) -> list[dict]:
         callers = e.get("callerList") or []
         targets = e.get("targetList") or []
         comments = e.get("comments") or []
+        person_responses = e.get("personResponseList") or []
         parsed.append({
             "eventNumber": e.get("eventNumber"),
             "ag": e.get("ag"),
@@ -276,6 +277,24 @@ def parse_events(events: list[dict]) -> list[dict]:
                     "creationPerson": c.get("creationPerson"),
                 }
                 for c in comments if isinstance(c, dict)
+            ],
+            # ── Neu: Personenrückmeldungen (Zu-/Absagen, siehe
+            # LWZEventHub_Personenrueckmeldung.md) — nicht append-only, "id" ist
+            # der stabile Datensatz-Schlüssel pro Person+Einsatz, "changeDate"
+            # der Versionsanker bei Statuswechseln (siehe dibos_enrich.py).
+            "personResponses": [
+                {
+                    "id": p.get("id"),
+                    "person": p.get("person"),
+                    "status": p.get("status"),
+                    "responseTime": p.get("responseTime"),
+                    "department": p.get("department"),
+                    "departmentSybos": p.get("departmentSybos"),
+                    "idSybos": p.get("idSybos"),
+                    "idDibos": p.get("idDibos"),
+                    "changeDate": p.get("changeDate"),
+                }
+                for p in person_responses if isinstance(p, dict)
             ],
         })
     return parsed

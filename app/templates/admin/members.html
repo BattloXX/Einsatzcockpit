@@ -153,13 +153,15 @@
     <div class="modal__body">
       <p style="margin-bottom:8px;font-size:.85rem;color:var(--text-muted);">
         Excel-Datei (.xlsx) mit den Spalten <strong>Vorname</strong> und <strong>Zuname/Nachname</strong>
-        sowie optional <strong>Telefon</strong>, <strong>E-Mail</strong> und <strong>Bezeichnung</strong>.
+        sowie optional <strong>Telefon</strong>, <strong>E-Mail</strong>, <strong>Bezeichnung</strong>
+        und <strong>syBOS-ID</strong>.
       </p>
       <ul style="margin:0 0 12px 0;padding-left:18px;font-size:.82rem;color:var(--text-muted);line-height:1.7;">
         <li><strong>Neue Mitglieder</strong> werden angelegt.</li>
-        <li><strong>Bestehende Mitglieder</strong> (gleicher Name) werden aktualisiert: Telefon und E-Mail werden überschrieben, sofern in der Datei vorhanden.</li>
+        <li><strong>Bestehende Mitglieder</strong> (gleicher Name) werden aktualisiert: Telefon, E-Mail und syBOS-ID werden überschrieben, sofern in der Datei vorhanden.</li>
         <li><strong>Einsatzfunktionen-Liste</strong> (Bezeichnung = z. B. „Maschinist", „Atemschutz"): Qualifikationen werden additiv ergänzt – nie gelöscht.</li>
         <li><strong>Adressliste</strong> (Bezeichnung = „Aktiv"): Nur Kontaktdaten werden aktualisiert, Qualifikationen bleiben unverändert.</li>
+        <li><strong>syBOS-ID</strong> (Spalte „syBOS-ID" der Adressliste): verknüpft DIBOS-Personenrückmeldungen (Zu-/Absagen) automatisch mit dem Mitglied.</li>
         <li>Beide Listen können nacheinander importiert werden – ohne Konflikte.</li>
       </ul>
       <div class="form-group">

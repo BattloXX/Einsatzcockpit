@@ -90,6 +90,87 @@ def dibos_settings_page(
     })
 
 
+# ── GET /admin/dibos/einsaetze ───────────────────────────────────────────────
+# Eigene Infoseite: zeigt je Einsatz, was die DIBOS-Anreicherung (dibos_enrich.py,
+# Org-Opt-in enrich_incidents) tatsächlich beigetragen hat — Einsatzcode/Diagnose,
+# BMA-Nr., DIBOS-Kommentar, Anzahl übernommener Meldungen. Gleiche Berechtigung
+# wie die Einstellungsseite selbst (org_admin sieht nur bereits ohnehin
+# zugängliche Einsatzdaten der eigenen Org, keine zusätzliche PII).
+@router.get("/dibos/einsaetze", response_class=HTMLResponse)
+def dibos_einsaetze_page(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    org_id: int | None = None,
+):
+    from sqlalchemy import func, or_
+
+    from app.core.permissions import has_role
+    from app.models.incident import Incident
+    from app.models.lis import LisSyncedObject
+
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = _get_org_id(user, org_id)
+    all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
+
+    org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
+    config = (
+        db.query(OrgDibosConfig).filter(OrgDibosConfig.org_id == effective_org_id).first()
+        if effective_org_id else None
+    )
+
+    _EINSATZ_LIMIT = 100
+    einsaetze = []
+    truncated = False
+    if effective_org_id:
+        incidents = (
+            db.query(Incident)
+            .filter(
+                Incident.primary_org_id == effective_org_id,
+                or_(
+                    Incident.dibos_tycod.isnot(None),
+                    Incident.dibos_diagnose.isnot(None),
+                    Incident.dibos_bma_no.isnot(None),
+                    Incident.dibos_event_comment.isnot(None),
+                ),
+            )
+            .execution_options(include_all_tenants=True)
+            .order_by(Incident.started_at.desc())
+            .limit(_EINSATZ_LIMIT + 1)
+            .all()
+        )
+        truncated = len(incidents) > _EINSATZ_LIMIT
+        incidents = incidents[:_EINSATZ_LIMIT]
+
+        incident_ids = [i.id for i in incidents]
+        comment_counts: dict[int, int] = {}
+        if incident_ids:
+            comment_counts = dict(
+                db.query(LisSyncedObject.incident_id, func.count(LisSyncedObject.id))
+                .filter(
+                    LisSyncedObject.obj_type == "dibos_comment",
+                    LisSyncedObject.incident_id.in_(incident_ids),
+                )
+                .group_by(LisSyncedObject.incident_id)
+                .all()
+            )
+        einsaetze = [
+            {"incident": i, "dibos_message_count": comment_counts.get(i.id, 0)}
+            for i in incidents
+        ]
+
+    return templates.TemplateResponse(request, "admin/dibos_einsaetze.html", {
+        "user": user,
+        "org": org,
+        "config": config,
+        "is_sysadmin": is_sysadmin,
+        "all_orgs": all_orgs,
+        "einsaetze": einsaetze,
+        "einsatz_limit": _EINSATZ_LIMIT,
+        "truncated": truncated,
+    })
+
+
 # ── POST /admin/dibos/save ──────────────────────────────────────────────────
 @router.post("/dibos/save")
 async def dibos_settings_save(

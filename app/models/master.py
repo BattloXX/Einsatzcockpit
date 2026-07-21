@@ -165,6 +165,11 @@ class Member(TenantScoped, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     ist_gruppenkommandant: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # syBOS-Personen-ID (Mitglieder-Excel-Import, Spalte "syBOS-ID") — stabiler
+    # Schlüssel, um DIBOS-EventHub-Personenrückmeldungen (personResponseList[].idSybos)
+    # einem echten Mitglied zuzuordnen (siehe app/services/dibos/dibos_enrich.py).
+    # Nur für sybos-angebundene Dienststellen befüllt, daher nullable.
+    sybos_id: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
 
     org: Mapped[FireDept | None] = relationship(back_populates="members", foreign_keys="Member.org_id")
     qualifications: Mapped[list[MemberQualification]] = relationship(

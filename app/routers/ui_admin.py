@@ -599,7 +599,9 @@ async def import_members_excel(
 
     Erwartete Spalten (Groß-/Kleinschreibung egal):
       Nachname / Lastname, Vorname / Firstname,
-      Telefon / Phone (optional), E-Mail / Email (optional)
+      Telefon / Phone (optional), E-Mail / Email (optional),
+      syBOS-ID (optional — verknüpft DIBOS-Personenrückmeldungen mit dem Mitglied,
+      siehe app/services/dibos/dibos_enrich.py)
     """
     import io as _io
     try:
@@ -623,6 +625,7 @@ async def import_members_excel(
                           "mobil nummer 1", "mobiltelefon", "telefonnummer"}
     _EMAIL_ALIASES     = {"e-mail", "email", "mail", "e-mail 1", "e mail"}
     _ROLE_ALIASES      = {"bezeichnung", "funktion", "rolle"}
+    _SYBOS_ALIASES     = {"sybos-id", "sybos id", "sybosid", "sybos", "sybos-nr", "sybos nr"}
     _ROLE_TO_QUALI = [
         ("gruppenkommandant", "GK"),
         ("zugskommandant",    "ZK"),
@@ -654,6 +657,8 @@ async def import_members_excel(
             col_map.setdefault("email", i)
         elif h in _ROLE_ALIASES:
             col_map.setdefault("role", i)
+        elif h in _SYBOS_ALIASES:
+            col_map.setdefault("sybos_id", i)
 
     if "lastname" not in col_map or "firstname" not in col_map:
         found = ", ".join('"' + h + '"' for h in headers[:8] if h)
@@ -694,6 +699,8 @@ async def import_members_excel(
             email = str(row[col_map["email"]] if _em else "").strip().lower() or None
             _ro = "role" in col_map and col_map["role"] < len(row) and row[col_map["role"]]
             role_raw = str(row[col_map["role"]] if _ro else "").strip().lower()
+            _sy = "sybos_id" in col_map and col_map["sybos_id"] < len(row) and row[col_map["sybos_id"]]
+            sybos_id = str(row[col_map["sybos_id"]] if _sy else "").strip() or None
             # Match existing (same name in same org) → update; else create
             existing = db.query(Member).filter(
                 Member.org_id == user.org_id,
@@ -705,12 +712,14 @@ async def import_members_excel(
                     existing.phone = phone
                 if email:
                     existing.email = email
+                if sybos_id:
+                    existing.sybos_id = sybos_id
                 existing.active = True
                 member = existing
                 updated += 1
             else:
                 member = Member(lastname=lastname, firstname=firstname, phone=phone, email=email,
-                                org_id=user.org_id, active=True)
+                                sybos_id=sybos_id, org_id=user.org_id, active=True)
                 db.add(member)
                 db.flush()  # get member.id
                 created += 1

@@ -155,6 +155,114 @@ def test_trace_start_status_and_live_view(monkeypatch):
     assert "Noch kein Live-Snapshot" in r.text
 
 
+# ── /admin/dibos/einsaetze: Einsatz-Infos-Seite ─────────────────────────────
+
+def test_einsaetze_page_loads_empty_when_no_dibos_data():
+    """Eigene, frisch angelegte Org (statt der gemeinsam genutzten ORG_ID=1):
+    andere Testdateien (test_dibos_enrich.py) legen unter ORG_ID=1 Einsätze mit
+    dibos_*-Feldern an, was die "leer"-Erwartung hier sonst je nach Testreihenfolge
+    brechen würde (dieselbe Klasse Cross-File-Kollision wie bei den Objekt-BMA-
+    Tests, siehe test_dibos_enrich.py-Kommentar dort)."""
+    system_admin_id = _setup_system_admin("dibos_einsaetze_empty_user")
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        from app.models.master import FireDept
+        org = FireDept(slug="dibos-einsaetze-empty", name="DIBOS-Einsaetze-Test (leer)",
+                       color="#336699", bos="Feuerwehr")
+        db.add(org)
+        db.flush()
+        org_id = org.id
+        db.commit()
+    finally:
+        db.close()
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "dibos_einsaetze_empty_user", "Test1234!")
+
+    r = client.get("/admin/dibos/einsaetze", params={"org_id": org_id})
+    assert r.status_code == 200
+    assert "Einsatz-Infos" in r.text
+    assert "Noch kein Einsatz mit DIBOS-Zusatzinfos gefunden." in r.text
+    assert "Noch kein Einsatz mit DIBOS-Zusatzinfos gefunden." in r.text
+
+
+def test_einsaetze_page_lists_incident_with_dibos_fields():
+    _setup_system_admin("dibos_einsaetze_list_user")
+
+    from datetime import UTC, datetime
+
+    from app.core.tenant import set_tenant_context as _stc
+    from app.models.incident import Incident
+    from app.models.lis import LisSyncedObject
+    from app.services.incident_service import create_incident
+
+    db = SessionLocal()
+    _stc(db, ORG_ID)
+    try:
+        incident = create_incident(
+            db, alarm_type_code="T2", primary_org_id=ORG_ID,
+            address_street="Unterlinden", address_no="23", address_city="Wolfurt",
+            started_at=datetime(2026, 7, 21, 17, 27, tzinfo=UTC),
+        )
+        incident.lis_operation_number = "f26006436-admininfo"
+        incident.dibos_tycod = "t2"
+        incident.dibos_diagnose = "Testdiagnose"
+        incident.dibos_bma_no = "009401"
+        incident.dibos_event_comment = "[Türöffnung] med. Notfall hinter verschlossener Türe"
+        db.add(LisSyncedObject(org_id=ORG_ID, obj_type="dibos_comment", lis_id="1", incident_id=incident.id))
+        db.add(LisSyncedObject(org_id=ORG_ID, obj_type="dibos_comment", lis_id="2", incident_id=incident.id))
+        db.commit()
+        incident_id = incident.id
+    finally:
+        db.close()
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "dibos_einsaetze_list_user", "Test1234!")
+
+    r = client.get("/admin/dibos/einsaetze", params={"org_id": ORG_ID})
+    assert r.status_code == 200
+    assert "f26006436-admininfo" in r.text
+    assert "Testdiagnose" in r.text
+    assert "009401" in r.text
+    assert "Unterlinden" in r.text
+    assert f"/einsatz/{incident_id}/info" in r.text
+    assert 'badge-pill--gray">2<' in r.text  # Meldungen-Zähler (2 LisSyncedObject-Einträge)
+
+
+def test_einsaetze_page_reachable_by_org_admin_not_only_system_admin():
+    """Gleiche Berechtigungsstufe wie die Einstellungsseite selbst (org_admin) —
+    zeigt nur ohnehin schon zugängliche Einsatzdaten der eigenen Org, keine
+    zusätzliche PII wie die system_admin-only Diagnose-Sektion."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = User(username="dibos_einsaetze_org_admin", password_hash=hash_password("Test1234!"),
+                    display_name="Nur Org-Admin", org_id=ORG_ID, active=True)
+        db.add(user)
+        db.flush()
+        db.add(UserRole(user_id=user.id, role_id=_rolle(db, "org_admin").id))
+        db.commit()
+    finally:
+        db.close()
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "dibos_einsaetze_org_admin", "Test1234!")
+
+    r = client.get("/admin/dibos/einsaetze")
+    assert r.status_code == 200
+
+
 def test_org_admin_without_system_admin_cannot_reach_trace_routes():
     """Die Diagnose-/Trace-Routen sind bewusst strenger gegated (require_system_admin)
     als das Config-Formular (require_role org_admin/admin) - Personenbezug in den

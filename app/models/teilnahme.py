@@ -77,6 +77,13 @@ class Teilnahme(TenantScoped, Base):
             "org_id", "bezug_typ", "bezug_id", "mitglied_id",
             name="uq_teilnahme_mitglied",
         ),
+        # DIBOS-Personenrückmeldung (personResponseList[].id) als zusätzlicher,
+        # von mitglied_id UNABHÄNGIGER Upsert-Schlüssel — nötig, weil eine
+        # Rückmeldung ohne Mitglied-Zuordnung (kein sybos_id-Match, siehe
+        # dibos_enrich.py) mitglied_id=NULL hat und die Constraint oben (NULL
+        # zählt in MySQL/SQLite je einzeln als eindeutig) sonst bei jedem Poll
+        # eine neue Teilnahme-Zeile für dieselbe Person anlegen würde.
+        UniqueConstraint("org_id", "dibos_response_id", name="uq_teilnahme_dibos_response"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -100,7 +107,10 @@ class Teilnahme(TenantScoped, Base):
     # die erst nachträglich (tatsächliche Teilnahme) gepflegt werden. NULL = keine Antwort.
     rsvp_status: Mapped[str | None] = mapped_column(Enum("zugesagt", "abgesagt"), nullable=True)
     rsvp_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    rsvp_source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # z.B. "teams"
+    rsvp_source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # z.B. "teams", "dibos"
+    # DIBOS-EventHub: LWZ-Rückmelde-ID (personResponseList[].id) — stabiler Upsert-
+    # Schlüssel für Personenrückmeldungen ohne Mitglied-Zuordnung, siehe __table_args__.
+    dibos_response_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     hinzugefuegt_von: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )

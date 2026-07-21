@@ -1,0 +1,98 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}DIBOS: Einsatz-Infos{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'DIBOS / Elvis-Anbindung', 'href': '/admin/dibos'}, {'label': 'Einsatz-Infos'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>DIBOS: Einsatz-Infos</h1>
+    <p class="page-header__sub">Je Einsatz, was die DIBOS-Anreicherung zusätzlich beigetragen hat &mdash; Einsatzcode/Diagnose, BMA-Nr., Kommentar und übernommene Meldungen</p>
+  </div>
+  <a href="/admin/dibos{% if is_sysadmin and org %}?org_id={{ org.id }}{% endif %}" class="btn btn--ghost">&larr; Zur Schnittstelleneinstellung</a>
+</div>
+
+{% if is_sysadmin and all_orgs %}
+<section class="card mb-4">
+  <div class="card-body" style="padding:16px 20px">
+    <label style="font-weight:600;margin-bottom:6px;display:block">Organisation:</label>
+    <select class="form-control" style="max-width:320px"
+            onchange="location.href='/admin/dibos/einsaetze?org_id='+this.value">
+      <option value="">-- bitte wählen --</option>
+      {% for o in all_orgs %}
+      <option value="{{ o.id }}" {% if org and org.id == o.id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</section>
+{% endif %}
+
+{% if not org %}
+<div class="alert alert--info">Bitte eine Organisation auswählen.</div>
+{% else %}
+
+{% if config and not config.enrich_incidents %}
+<div class="alert alert--warn mb-4">
+  Die Einsatz-Anreicherung ist für diese Organisation aktuell <strong>deaktiviert</strong>
+  (Schalter "Laufenden Einsatz mit DIBOS-Infos anreichern" in den
+  <a href="/admin/dibos{% if is_sysadmin %}?org_id={{ org.id }}{% endif %}">Schnittstelleneinstellungen</a>).
+  Die Liste unten zeigt weiterhin bereits vorhandene, früher übernommene Daten.
+</div>
+{% endif %}
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Einsätze mit DIBOS-Daten{% if einsaetze %} ({{ einsaetze|length }}{% if truncated %}+{% endif %}){% endif %}</h2></div>
+  <div class="card-body" style="padding:16px 20px">
+    {% if truncated %}
+    <p class="form-hint" style="margin:0 0 12px">Zeigt die neuesten {{ einsatz_limit }} Einsätze mit DIBOS-Daten; ältere sind nicht aufgeführt.</p>
+    {% endif %}
+    {% if not einsaetze %}
+    <p class="text-muted" style="margin:0">Noch kein Einsatz mit DIBOS-Zusatzinfos gefunden.</p>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table class="table-admin table-admin--cards" style="font-size:.85rem">
+      <thead>
+        <tr>
+          <th>Datum</th><th>Einsatznummer</th><th>Stichwort</th><th>Adresse</th>
+          <th>DIBOS-Code</th><th>Diagnose</th><th>BMA-Nr.</th><th>DIBOS-Kommentar</th>
+          <th>Meldungen</th><th>Status</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in einsaetze %}
+        {% set i = row.incident %}
+        <tr>
+          <td data-label="Datum">{{ (i.started_at|local).strftime('%d.%m.%Y %H:%M') if i.started_at else '—' }}</td>
+          <td data-label="Einsatznummer">{{ i.lis_operation_number or '—' }}</td>
+          <td data-label="Stichwort">{{ i.alarm_type_code }}</td>
+          <td data-label="Adresse">
+            {% if i.address_street %}{{ i.address_street }} {{ i.address_no or '' }}{% if i.address_city %}, {{ i.address_city }}{% endif %}{% else %}—{% endif %}
+          </td>
+          <td data-label="DIBOS-Code">{{ i.dibos_tycod or '—' }}</td>
+          <td data-label="Diagnose">{{ i.dibos_diagnose or '—' }}</td>
+          <td data-label="BMA-Nr.">{{ i.dibos_bma_no or '—' }}</td>
+          <td data-label="DIBOS-Kommentar" style="max-width:280px">
+            {% if i.dibos_event_comment %}<span title="{{ i.dibos_event_comment }}">{{ i.dibos_event_comment[:60] }}{% if i.dibos_event_comment|length > 60 %}…{% endif %}</span>{% else %}—{% endif %}
+          </td>
+          <td data-label="Meldungen">
+            {% if row.dibos_message_count %}<span class="badge-pill badge-pill--gray">{{ row.dibos_message_count }}</span>{% else %}—{% endif %}
+          </td>
+          <td data-label="Status">
+            {% if i.status == 'active' %}
+              <span class="badge-pill badge-pill--red">aktiv</span>
+            {% else %}
+              <span class="badge-pill badge-pill--gray">{{ i.status }}</span>
+            {% endif %}
+          </td>
+          <td data-label=""><a href="/einsatz/{{ i.id }}/info" {{ tip('Einsatzinformation öffnen') }}>Öffnen ↗</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% endif %}
+{% endblock %}
