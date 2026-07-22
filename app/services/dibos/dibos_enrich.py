@@ -9,7 +9,13 @@ und das sichtbare Meldungsprotokoll.
 Rein additiv/anreichernd — legt NIE einen Einsatz an, setzt NIE eine
 lis_operation_id/-number und beeinflusst das Dedup-Matching (lis_matching.py)
 in keiner Weise. Läuft nur, wenn eine Org das explizit aktiviert hat
-(enrich_incidents=True), siehe dibos_loop.py::_check_org(). Fahrzeug-Status
+(enrich_incidents=True) — UNABHÄNGIG von einer laufenden Voll-Aufzeichnung
+(auto_trace_on_event): der leichte Erkennungs-Loop (dibos_loop.py::_check_org())
+ruft enrich_and_broadcast() direkt auf einem einfachen GetCurrentEvents-Poll
+auf, ohne Rohdaten aufzuzeichnen — spart Speicherlast, wenn nur die Anreicherung
+gewünscht ist. Läuft zusätzlich eine Voll-Aufzeichnung, übernimmt deren eigener
+Poll-Zyklus (dibos_capture.py::_capture_once()) die Anreicherung, damit
+GetCurrentEvents nicht doppelt abgefragt wird. Fahrzeug-Status
 (S4/S5) wird bewusst NICHT hier gespiegelt — das liefert für Orgs mit LIS/IPR-
 Anbindung bereits lis_sync._sync_vehicle_status() aus einer autoritativen
 Quelle; ein zweiter, DIBOS-basierter Schreiber auf dieselben Felder würde nur
@@ -27,6 +33,7 @@ Teilnahme nötig ist — siehe _sync_person_responses() unten.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import UTC, datetime
@@ -432,3 +439,37 @@ def enrich_events_for_org(org_id: int, raw_events: list[dict]) -> dict:
     finally:
         db.close()
     return {"changed_ids": changed_ids, "rsvp_changed_ids": rsvp_changed_ids}
+
+
+async def enrich_and_broadcast(org_id: int, raw_events: list[dict]) -> None:
+    """Reichert an (in einem Thread, da synchron/DB-blockierend) und broadcastet
+    pro tatsächlich geänderten Einsatz — Fehler dürfen den aufrufenden Poll nie
+    abbrechen. Gemeinsamer Einstiegspunkt für BEIDE DIBOS-Aufrufer:
+    dibos_capture.py::_capture_once() (während einer laufenden Voll-Aufzeichnung)
+    UND dibos_loop.py::_check_org() (leichter Poll, KEINE Voll-Aufzeichnung nötig
+    — reduziert die Speicherlast, da keine Rohdaten auf Platte geschrieben werden).
+
+    Zwei Broadcast-Typen: "dibos_sync" (voller Board-Reload) für jeden geänderten
+    Einsatz, zusätzlich das gezielte "rsvp:changed" (nur Zu-/Absage-Widget neu
+    laden, siehe app.js) für Einsätze mit neuen Personenrückmeldungen.
+    """
+    try:
+        result = await asyncio.to_thread(enrich_events_for_org, org_id, raw_events)
+    except Exception:
+        logger.exception("DIBOS-Einsatzanreicherung fehlgeschlagen (Org %s)", org_id)
+        return
+    changed_ids = result.get("changed_ids") or []
+    rsvp_changed_ids = result.get("rsvp_changed_ids") or []
+    if not changed_ids and not rsvp_changed_ids:
+        return
+    from app.services.broadcast import manager
+    for incident_id in changed_ids:
+        try:
+            await manager.broadcast(incident_id, {"type": "dibos_sync", "reload_board": True})
+        except Exception:
+            logger.exception("DIBOS-Broadcast für Einsatz %s fehlgeschlagen", incident_id)
+    for incident_id in rsvp_changed_ids:
+        try:
+            await manager.broadcast(incident_id, {"type": "rsvp:changed"})
+        except Exception:
+            logger.exception("DIBOS-RSVP-Broadcast für Einsatz %s fehlgeschlagen", incident_id)

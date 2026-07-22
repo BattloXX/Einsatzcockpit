@@ -454,7 +454,7 @@ async def admin_index(request: Request, db: Session = Depends(get_db),
 async def edit_member(
     member_id: int, request: Request,
     lastname: str = Form(...), firstname: str = Form(...),
-    phone: str = Form(""), email: str = Form(""),
+    phone: str = Form(""), email: str = Form(""), sybos_id: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     m = db.get(Member, member_id)
@@ -465,6 +465,7 @@ async def edit_member(
         m.firstname = firstname
         m.phone = phone or None
         m.email = email or None
+        m.sybos_id = sybos_id or None
         write_audit(db, "admin.member.edited", user_id=request.state.user.id,
                     entity_type="member", entity_id=member_id)
         db.commit()
@@ -701,13 +702,27 @@ async def import_members_excel(
             role_raw = str(row[col_map["role"]] if _ro else "").strip().lower()
             _sy = "sybos_id" in col_map and col_map["sybos_id"] < len(row) and row[col_map["sybos_id"]]
             sybos_id = str(row[col_map["sybos_id"]] if _sy else "").strip() or None
-            # Match existing (same name in same org) → update; else create
-            existing = db.query(Member).filter(
-                Member.org_id == user.org_id,
-                Member.lastname == lastname,
-                Member.firstname == firstname,
-            ).first()
+            # Matching-Key: syBOS-ID hat Vorrang vor dem Namen, sofern vorhanden UND
+            # bereits einem Mitglied zugeordnet — bleibt so auch bei Namens- ODER
+            # E-Mail-Änderungen in einer neu eingespielten Liste stabil zugeordnet
+            # (die syBOS-ID selbst ändert sich bei einer Person nicht). Ohne
+            # syBOS-ID-Treffer greift wie bisher der Namensabgleich.
+            existing = None
+            if sybos_id:
+                existing = db.query(Member).filter(
+                    Member.org_id == user.org_id, Member.sybos_id == sybos_id,
+                ).first()
+            if existing is None:
+                existing = db.query(Member).filter(
+                    Member.org_id == user.org_id,
+                    Member.lastname == lastname,
+                    Member.firstname == firstname,
+                ).first()
             if existing:
+                # Name kann sich geändert haben (z.B. Heirat) — bei syBOS-ID-Match
+                # wird er deshalb IMMER übernommen, nicht nur bei Namensgleichheit.
+                existing.lastname = lastname
+                existing.firstname = firstname
                 if phone:
                     existing.phone = phone
                 if email:

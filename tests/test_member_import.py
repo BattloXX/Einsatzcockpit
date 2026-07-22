@@ -171,3 +171,145 @@ def test_import_without_sybos_column_leaves_sybos_id_empty():
         assert member.sybos_id is None
     finally:
         db.close()
+
+
+def test_import_matches_by_sybos_id_when_name_changes():
+    """Namensänderung (z.B. Heirat) in einer neu eingespielten Liste: die syBOS-ID
+    bleibt stabil und muss den bestehenden Datensatz finden statt einen zweiten
+    Namensdatensatz anzulegen."""
+    _setup_admin("mitglieder_import_namensaenderung")
+    client = TestClient(app)
+    _login(client, "mitglieder_import_namensaenderung", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    xlsx1 = _xlsx_bytes(
+        ["Vorname", "Zuname", "syBOS-ID"],
+        [["Anna", "Vorname-ImportTest", "77001"]],
+    )
+    r1 = client.post(
+        "/admin/mitglieder/excel-import",
+        files={"file": ("liste1.xlsx", xlsx1,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"_csrf": csrf}, follow_redirects=False,
+    )
+    assert r1.status_code == 303
+    assert "imported=1" in r1.headers["location"]
+
+    # Zweiter Import: gleiche syBOS-ID, aber GEÄNDERTER Nachname
+    xlsx2 = _xlsx_bytes(
+        ["Vorname", "Zuname", "syBOS-ID"],
+        [["Anna", "Nachname-ImportTest", "77001"]],
+    )
+    r2 = client.post(
+        "/admin/mitglieder/excel-import",
+        files={"file": ("liste2.xlsx", xlsx2,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"_csrf": csrf}, follow_redirects=False,
+    )
+    assert r2.status_code == 303
+    assert "updated=1" in r2.headers["location"]
+    assert "imported=0" in r2.headers["location"]  # kein zweiter Datensatz
+
+    db = SessionLocal()
+    set_tenant_context(db, ORG_ID)
+    try:
+        members = db.query(Member).filter(Member.org_id == ORG_ID, Member.sybos_id == "77001").all()
+        assert len(members) == 1
+        assert members[0].lastname == "Nachname-ImportTest"
+        assert members[0].firstname == "Anna"
+    finally:
+        db.close()
+
+
+def test_import_matches_by_sybos_id_when_email_changes():
+    """E-Mail-Änderung in einer neu eingespielten Liste wird über die syBOS-ID
+    demselben Mitglied zugeordnet (statt eines Namensabgleichs)."""
+    _setup_admin("mitglieder_import_mailaenderung")
+    client = TestClient(app)
+    _login(client, "mitglieder_import_mailaenderung", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    xlsx1 = _xlsx_bytes(
+        ["Vorname", "Zuname", "E-Mail", "syBOS-ID"],
+        [["Bernd", "Mailtest-ImportTest", "alt@example.at", "77002"]],
+    )
+    r1 = client.post(
+        "/admin/mitglieder/excel-import",
+        files={"file": ("liste1.xlsx", xlsx1,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"_csrf": csrf}, follow_redirects=False,
+    )
+    assert r1.status_code == 303
+
+    xlsx2 = _xlsx_bytes(
+        ["Vorname", "Zuname", "E-Mail", "syBOS-ID"],
+        [["Bernd", "Mailtest-ImportTest", "neu@example.at", "77002"]],
+    )
+    r2 = client.post(
+        "/admin/mitglieder/excel-import",
+        files={"file": ("liste2.xlsx", xlsx2,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"_csrf": csrf}, follow_redirects=False,
+    )
+    assert r2.status_code == 303
+    assert "updated=1" in r2.headers["location"]
+
+    db = SessionLocal()
+    set_tenant_context(db, ORG_ID)
+    try:
+        members = db.query(Member).filter(Member.org_id == ORG_ID, Member.sybos_id == "77002").all()
+        assert len(members) == 1
+        assert members[0].email == "neu@example.at"
+    finally:
+        db.close()
+
+
+def test_edit_member_route_saves_sybos_id():
+    _setup_admin("mitglieder_edit_sybos")
+    client = TestClient(app)
+    _login(client, "mitglieder_edit_sybos", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    db = SessionLocal()
+    set_tenant_context(db, ORG_ID)
+    try:
+        member = Member(org_id=ORG_ID, firstname="Edit", lastname="SybosTest")
+        db.add(member)
+        db.commit()
+        member_id = member.id
+    finally:
+        db.close()
+
+    r = client.post(
+        f"/admin/mitglieder/{member_id}/edit",
+        data={"_csrf": csrf, "lastname": "SybosTest", "firstname": "Edit", "sybos_id": "77003"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+    db = SessionLocal()
+    set_tenant_context(db, ORG_ID)
+    try:
+        refreshed = db.get(Member, member_id)
+        assert refreshed.sybos_id == "77003"
+    finally:
+        db.close()
+
+
+def test_members_list_page_shows_sybos_id_column():
+    _setup_admin("mitglieder_list_sybos")
+    client = TestClient(app)
+    _login(client, "mitglieder_list_sybos", "Test1234!")
+
+    db = SessionLocal()
+    set_tenant_context(db, ORG_ID)
+    try:
+        db.add(Member(org_id=ORG_ID, firstname="Liste", lastname="SybosAnzeigeTest", sybos_id="77004"))
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.get("/admin/mitglieder")
+    assert r.status_code == 200
+    assert "syBOS-ID" in r.text
+    assert "77004" in r.text
