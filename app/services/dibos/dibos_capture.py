@@ -185,11 +185,11 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
     Live-Snapshot am Ende des Zyklus geschrieben.
 
     Läuft dieser Trace mit enrich_incidents=True (Org-Opt-in), wird nach einem
-    erfolgreichen GetCurrentEvents zusätzlich app.services.dibos.dibos_enrich
+    erfolgreichen GetCurrentEvents zusätzlich dibos_enrich.enrich_and_broadcast()
     aufgerufen — läuft für die GESAMTE Trace-Dauer (also i.d.R. den ganzen
-    Einsatz) mit, nicht nur einmalig wie der leichte Erkennungs-Loop
-    (dibos_loop.py, der nach Trace-Start keine weiteren GetCurrentEvents mehr
-    abfragt, siehe dort is_trace_running()-Guard).
+    Einsatz) mit. Ohne laufenden Trace übernimmt derselbe Aufruf aus dem
+    leichten Erkennungs-Loop (dibos_loop.py::_check_org()) die Anreicherung —
+    siehe dort und den Modul-Docstring von dibos_enrich.py.
     """
     for coro_factory, label in (
         (client.get_current_events, "GetCurrentEvents"),
@@ -204,39 +204,9 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
             logger.exception("DIBOS-Trace: %s fehlgeschlagen (Org %s)", label, recorder.org_id)
             continue
         if label == "GetCurrentEvents" and recorder.enrich_incidents and result:
-            await _enrich_and_broadcast(recorder.org_id, result)
+            from app.services.dibos.dibos_enrich import enrich_and_broadcast
+            await enrich_and_broadcast(recorder.org_id, result)
     recorder.write_latest()
-
-
-async def _enrich_and_broadcast(org_id: int, raw_events: list[dict]) -> None:
-    """Reichert an (in einem Thread, da synchron/DB-blockierend) und broadcastet
-    pro tatsächlich geänderten Einsatz — Fehler dürfen den Trace-Poll nie abbrechen.
-
-    Zwei Broadcast-Typen: "dibos_sync" (voller Board-Reload) für jeden geänderten
-    Einsatz, zusätzlich das gezielte "rsvp:changed" (nur Zu-/Absage-Widget neu
-    laden, siehe app.js) für Einsätze mit neuen Personenrückmeldungen.
-    """
-    try:
-        from app.services.dibos.dibos_enrich import enrich_events_for_org
-        result = await asyncio.to_thread(enrich_events_for_org, org_id, raw_events)
-    except Exception:
-        logger.exception("DIBOS-Trace: Einsatzanreicherung fehlgeschlagen (Org %s)", org_id)
-        return
-    changed_ids = result.get("changed_ids") or []
-    rsvp_changed_ids = result.get("rsvp_changed_ids") or []
-    if not changed_ids and not rsvp_changed_ids:
-        return
-    from app.services.broadcast import manager
-    for incident_id in changed_ids:
-        try:
-            await manager.broadcast(incident_id, {"type": "dibos_sync", "reload_board": True})
-        except Exception:
-            logger.exception("DIBOS-Trace: Broadcast für Einsatz %s fehlgeschlagen", incident_id)
-    for incident_id in rsvp_changed_ids:
-        try:
-            await manager.broadcast(incident_id, {"type": "rsvp:changed"})
-        except Exception:
-            logger.exception("DIBOS-Trace: RSVP-Broadcast für Einsatz %s fehlgeschlagen", incident_id)
 
 
 async def capture_traffic(

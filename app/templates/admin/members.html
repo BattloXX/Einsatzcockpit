@@ -56,7 +56,7 @@
   <!-- Filter + Sort-Steuerung -->
   <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:12px 0;">
     <input type="search" id="memberFilter"
-           placeholder="🔎 Suchen: Name, Telefon, E-Mail oder Qualifikation (z. B. AGT)"
+           placeholder="🔎 Suchen: Name, Telefon, E-Mail, syBOS-ID oder Qualifikation (z. B. AGT)"
            class="form-input" style="flex:1; min-width:260px; max-width:520px;"
            oninput="applyMemberFilter()">
     <select id="memberStatusFilter" class="form-select" style="width:160px;" onchange="applyMemberFilter()">
@@ -83,6 +83,7 @@
         <th>Qualifikationen</th>
         <th class="sortable" data-sort="phone" onclick="sortMembers('phone')">Telefon <span class="sort-ind"></span></th>
         <th class="sortable" data-sort="email" onclick="sortMembers('email')">E-Mail <span class="sort-ind"></span></th>
+        <th class="sortable" data-sort="sybos" onclick="sortMembers('sybos')">syBOS-ID <span class="sort-ind"></span></th>
         <th class="sortable" data-sort="status" onclick="sortMembers('status')">Status <span class="sort-ind"></span></th>
         <th>Aktionen</th>
       </tr>
@@ -94,6 +95,7 @@
       <tr data-name="{{ (m.full_name or '')|e }}"
           data-phone="{{ (m.phone or '')|e }}"
           data-email="{{ (m.email or '')|e }}"
+          data-sybos="{{ (m.sybos_id or '')|e }}"
           data-quals="{{ _quals|e }}"
           data-status="{{ 'active' if m.active else 'inactive' }}">
         <td data-label=""><input type="checkbox" class="member-select" value="{{ m.id }}" onchange="updateBulkBar()"></td>
@@ -108,13 +110,14 @@
         </td>
         <td data-label="Telefon">{% if m.phone %}<a href="tel:{{ m.phone }}">{{ m.phone }}</a>{% else %}–{% endif %}</td>
         <td data-label="E-Mail">{% if m.email %}<a href="mailto:{{ m.email }}">{{ m.email }}</a>{% else %}–{% endif %}</td>
+        <td data-label="syBOS-ID">{{ m.sybos_id or '–' }}</td>
         <td data-label="Status">
           {% if m.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
           {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}
         </td>
         <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn--ghost btn--xs"
-                  onclick="openEditMember({{ m.id }}, '{{ m.lastname|replace("'","\\'")|e }}', '{{ m.firstname|replace("'","\\'")|e }}', '{{ m.phone or "" }}', '{{ m.email or "" }}')">
+                  onclick="openEditMember({{ m.id }}, '{{ m.lastname|replace("'","\\'")|e }}', '{{ m.firstname|replace("'","\\'")|e }}', '{{ m.phone or "" }}', '{{ m.email or "" }}', '{{ m.sybos_id or "" }}')">
             Bearbeiten
           </button>
           <button class="btn btn--ghost btn--xs"
@@ -129,7 +132,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="text-center text-muted">Keine Mitglieder.</td></tr>
+      <tr><td colspan="8" class="text-center text-muted">Keine Mitglieder.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -234,6 +237,11 @@
           <div class="form-group"><label class="form-label">E-Mail</label>
             <input type="email" name="email" id="em_email" class="form-input"></div>
         </div>
+        <div class="form-group">
+          <label class="form-label">syBOS-ID</label>
+          <input type="text" name="sybos_id" id="em_sybos_id" class="form-input">
+          <p class="form-hint" style="margin:4px 0 0 0">Verknüpft DIBOS-Personenrückmeldungen (Zu-/Absagen) automatisch mit diesem Mitglied.</p>
+        </div>
       </div>
       <div class="modal__footer">
         <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
@@ -278,11 +286,12 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function openEditMember(id, lastname, firstname, phone, email) {
+function openEditMember(id, lastname, firstname, phone, email, sybosId) {
   document.getElementById('em_lastname').value = lastname;
   document.getElementById('em_firstname').value = firstname;
   document.getElementById('em_phone').value = phone;
   document.getElementById('em_email').value = email;
+  document.getElementById('em_sybos_id').value = sybosId || '';
   document.getElementById('editMemberForm').action = `/admin/mitglieder/${id}/edit`;
   document.getElementById('editMemberModal').showModal();
 }
@@ -328,6 +337,7 @@ function applyMemberFilter() {
       (tr.dataset.name  || '').toLowerCase().includes(q) ||
       (tr.dataset.phone || '').toLowerCase().includes(q) ||
       (tr.dataset.email || '').toLowerCase().includes(q) ||
+      (tr.dataset.sybos || '').toLowerCase().includes(q) ||
       (tr.dataset.quals || '').toLowerCase().includes(q)
     );
     const matchesStatus = status === 'all' || tr.dataset.status === status;
