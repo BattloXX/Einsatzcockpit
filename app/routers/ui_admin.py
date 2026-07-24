@@ -34,6 +34,7 @@ from app.models.user import (
     ApiKey,
     AuditLog,
     DeviceToken,
+    FcmToken,
     PushLog,
     PushSubscription,
     Role,
@@ -2487,24 +2488,35 @@ async def push_notifications_page(
     _=Depends(require_role("admin")),
 ):
     user = request.state.user
+    from sqlalchemy import or_
     from sqlalchemy.orm import joinedload
 
     from app.services.push_service import _push_cfg
     cfg = _push_cfg(db)
     is_sysadmin = has_role(user, "system_admin")
 
+    # "Abonnenten" umfasst BEIDE Sendewege (siehe push_service.py): Web-Push
+    # (PushSubscription, VAPID) für Browser/PWA UND FCM (FcmToken) für die
+    # native Android-App, deren WebView keinen Web-Push (PushManager) kennt.
+    # Nur einen der beiden zu zählen/anzuzeigen würde die tatsächliche
+    # Reichweite unterschätzen und native-App-Nutzer aus der Empfänger-Auswahl
+    # ausschließen.
     sub_q = db.query(PushSubscription)
+    fcm_q = db.query(FcmToken)
     users_q = (
         db.query(User)
-        .join(PushSubscription, PushSubscription.user_id == User.id)
+        .outerjoin(PushSubscription, PushSubscription.user_id == User.id)
+        .outerjoin(FcmToken, FcmToken.user_id == User.id)
+        .filter(or_(PushSubscription.id.isnot(None), FcmToken.id.isnot(None)))
         .distinct()
     )
     if not is_sysadmin and user.org_id:
         org_user_ids = db.query(User.id).filter(User.org_id == user.org_id)
         sub_q = sub_q.filter(PushSubscription.user_id.in_(org_user_ids))
+        fcm_q = fcm_q.filter(FcmToken.user_id.in_(org_user_ids))
         users_q = users_q.filter(User.org_id == user.org_id)
 
-    sub_count = sub_q.count()
+    sub_count = sub_q.count() + fcm_q.count()
     users_with_subs = users_q.order_by(User.display_name).all()
     push_logs = (
         db.query(PushLog)
@@ -2512,6 +2524,17 @@ async def push_notifications_page(
         .order_by(PushLog.sent_at.desc())
         .limit(30)
         .all()
+    )
+    # Native-App-Erkennung (server-seitig, siehe app/main.py::session_middleware):
+    # die Android-App hat keinen ServiceWorker/PushManager (WebView-Limitierung),
+    # Push läuft dort stattdessen über FCM (native-bridge.js::_registerFcmToken(),
+    # ausgelöst bei jedem App-Start) — der Web-Push-Selbstcheck unten würde sonst
+    # fälschlich "nicht unterstützt" anzeigen, obwohl dieses Gerät ggf. längst per
+    # FCM erreichbar ist.
+    is_native_app = bool(request.state.is_native_app)
+    has_fcm_token = (
+        is_native_app
+        and db.query(FcmToken.id).filter(FcmToken.user_id == user.id).first() is not None
     )
     return templates.TemplateResponse(request, "admin/push_notifications.html", {
         "user": user,
@@ -2521,6 +2544,8 @@ async def push_notifications_page(
         "push_logs": push_logs,
         "sent": request.query_params.get("sent"),
         "error": request.query_params.get("error"),
+        "is_native_app": is_native_app,
+        "has_fcm_token": has_fcm_token,
     })
 
 
