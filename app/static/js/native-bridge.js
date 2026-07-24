@@ -78,35 +78,51 @@
   }
 
   // ─── FCM-Token registrieren ─────────────────────────────────────────────────
-  async function _registerFcmToken() {
-    if (!_isNative()) return;
-    try {
-      const { PushNotifications } = window.Capacitor.Plugins;
-      if (!PushNotifications) return;
+  // Wird nicht nur beim App-Start, sondern auch bei jedem Resume/Online-Event
+  // erneut versucht (siehe _init unten) - falls die Benachrichtigungs-Berechtigung
+  // beim ersten Versuch noch nicht erteilt war (z.B. verweigert, dann nachtraeglich
+  // in den Android-Einstellungen erlaubt), gab es bisher KEINEN Retry und das Geraet
+  // blieb dauerhaft "Inaktiv", bis die App komplett neu gestartet wurde.
+  let _fcmRegistered = false;
+  let _fcmRegisterPromise = null;
 
-      const perm = await PushNotifications.requestPermissions();
-      if (perm.receive !== 'granted') return;
+  function _registerFcmToken() {
+    if (!_isNative() || _fcmRegistered) return Promise.resolve();
+    if (_fcmRegisterPromise) return _fcmRegisterPromise;
 
-      await PushNotifications.register();
-      PushNotifications.addListener('registration', async (reg) => {
-        try {
-          await fetch('/api/v1/device/fcm-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ token: reg.value, platform: 'android' }),
-          });
-        } catch (e) {
-          console.warn('[ELNative] FCM-Token-Registrierung fehlgeschlagen:', e);
-        }
-      });
+    _fcmRegisterPromise = (async () => {
+      try {
+        const { PushNotifications } = window.Capacitor.Plugins;
+        if (!PushNotifications) return;
 
-      PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-        const url = action?.notification?.data?.url;
-        if (url) window.location.href = url;
-      });
-    } catch (e) {
-      console.warn('[ELNative] PushNotifications Fehler:', e);
-    }
+        const perm = await PushNotifications.requestPermissions();
+        if (perm.receive !== 'granted') return; // naechster Retry beim naechsten Resume/Online
+
+        await PushNotifications.register();
+        PushNotifications.addListener('registration', async (reg) => {
+          try {
+            await fetch('/api/v1/device/fcm-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+              body: JSON.stringify({ token: reg.value, platform: 'android' }),
+            });
+            _fcmRegistered = true;
+          } catch (e) {
+            console.warn('[ELNative] FCM-Token-Registrierung fehlgeschlagen:', e);
+          }
+        });
+
+        PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+          const url = action?.notification?.data?.url;
+          if (url) window.location.href = url;
+        });
+      } catch (e) {
+        console.warn('[ELNative] PushNotifications Fehler:', e);
+      } finally {
+        _fcmRegisterPromise = null;
+      }
+    })();
+    return _fcmRegisterPromise;
   }
 
   // ─── Keep-Awake ─────────────────────────────────────────────────────────────
@@ -314,11 +330,18 @@
     _startDutyPoll();
 
     // Sofort neu pollen wenn Netzwerk wiederkehrt (z. B. nach Tunnelausfahrt)
-    window.addEventListener('online', () => { if (_isNative()) _pollDutyState(); });
+    window.addEventListener('online', () => {
+      if (_isNative()) { _pollDutyState(); _registerFcmToken(); }
+    });
 
-    // Sofort neu pollen wenn App aus dem Hintergrund kommt
+    // Sofort neu pollen wenn App aus dem Hintergrund kommt - deckt auch den Fall
+    // ab, dass die Benachrichtigungs-Berechtigung waehrend die App im Hintergrund
+    // war nachtraeglich in den Android-Einstellungen erteilt wurde.
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && _isNative()) _pollDutyState();
+      if (document.visibilityState === 'visible' && _isNative()) {
+        _pollDutyState();
+        _registerFcmToken();
+      }
     });
   }
 
