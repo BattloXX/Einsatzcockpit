@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.permissions import can_access_incident, has_role
+from app.core.permissions import can_access_incident, has_role, is_system_admin
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentVehicle
@@ -239,7 +239,7 @@ def delete_incident(incident_id: int, request: Request, db: Session = Depends(ge
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
-    if not has_role(user, "system_admin"):
+    if not is_system_admin(user):
         raise HTTPException(403, detail="Nur Systemadministratoren können Einsätze löschen.")
 
     incident = _load_incident_with_orgs(incident_id, db)

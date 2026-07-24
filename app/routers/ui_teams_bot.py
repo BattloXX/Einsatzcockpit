@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
-from app.core.permissions import has_role, require_role
+from app.core.permissions import is_system_admin, require_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import AlarmType, FireDept
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/admin")
 
 
 def _get_org_id(user: User, target_org_id: int | None = None) -> int | None:
-    if has_role(user, "system_admin") and target_org_id:
+    if is_system_admin(user) and target_org_id:
         return target_org_id
     return user.org_id
 
@@ -51,7 +51,7 @@ def teams_alarm_settings_page(
     user: User = Depends(require_role("org_admin", "admin")),
     org_id: int | None = None,
 ):
-    is_sysadmin = has_role(user, "system_admin")
+    is_sysadmin = is_system_admin(user)
     effective_org_id = _get_org_id(user, org_id)
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
 
@@ -106,6 +106,8 @@ async def teams_alarm_settings_save(
     effective_org_id = _get_org_id(user, target_org_id)
     if not effective_org_id:
         return RedirectResponse("/admin/teams-alarmierung?flash=error_no_org", status_code=302)
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
 
     cfg = _get_or_create_config(db, effective_org_id)
 
@@ -155,6 +157,8 @@ async def teams_alarm_settings_save_stichworte(
     effective_org_id = _get_org_id(user, target_org_id)
     if not effective_org_id:
         return RedirectResponse("/admin/teams-alarmierung?flash=error_no_org", status_code=302)
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
 
     form = await request.form()
     # Checkbox-Werte, nie Datei-Uploads -- isinstance-Guard narrowt str | UploadFile auf str.
@@ -188,6 +192,8 @@ async def teams_alarm_binding_delete(
     target_org_id: int | None = Form(None),
 ):
     effective_org_id = _get_org_id(user, target_org_id)
+    if effective_org_id and not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
     binding = db.get(TeamsChannelBinding, binding_id)
     if binding and binding.org_id == effective_org_id:
         db.delete(binding)
@@ -211,6 +217,8 @@ async def teams_alarm_test_send(
     target: str = Form("alarm"),  # "alarm" | "uebung"
 ):
     effective_org_id = _get_org_id(user, target_org_id)
+    if effective_org_id and not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
     cfg = (
         db.query(TeamsAlarmConfig).filter(TeamsAlarmConfig.org_id == effective_org_id).first()
         if effective_org_id else None
