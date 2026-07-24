@@ -251,3 +251,20 @@ def test_visible_incidents_no_org_user_sees_nothing(db, two_orgs):
     user_no_org = _FakeUser(None)
     results = _visible_incidents_q(db, user_no_org).all()
     assert len(results) == 0
+
+
+def test_visible_incidents_org_admin_does_not_see_other_org(db, two_orgs):
+    """Regressionstest: has_role(user, "system_admin") unionierte frueher pauschal
+    mit {"admin","org_admin"}, wodurch ein org_admin faelschlich wie ein
+    system_admin behandelt wurde und _visible_incidents_q ungefiltert lieferte."""
+    from app.routers.ui_incident import _visible_incidents_q
+    org_a, org_b = two_orgs
+
+    db.add(Incident(primary_org_id=org_a.id, alarm_type_code="T1", status="active"))
+    db.add(Incident(primary_org_id=org_b.id, alarm_type_code="T2", status="active"))
+    db.flush()
+
+    org_admin = _FakeUser(org_a.id, roles=("org_admin",))
+    results = _visible_incidents_q(db, org_admin).all()
+    assert len(results) == 1
+    assert results[0].primary_org_id == org_a.id

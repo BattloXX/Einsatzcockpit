@@ -40,6 +40,10 @@ def require_role(*roles: str) -> Callable:
         # system_admin bypasses all role checks
         if "system_admin" in user_roles:
             return user
+        if set(roles) == {"system_admin"}:
+            # Exklusiver system_admin-Check bereits oben verneint - admin/org_admin
+            # duerfen hier NICHT ueber die generelle Rollen-Union durchrutschen.
+            raise HTTPException(status_code=403, detail="Nur Systemadministratoren haben Zugriff")
         if not user_roles.intersection(set(roles) | {"admin", "org_admin"}):
             limited_roles = {"recorder", "readonly"}
             if user_roles and user_roles.issubset(limited_roles):
@@ -66,6 +70,10 @@ def has_role(user, *roles: str) -> bool:
     user_roles = {r.code for r in user.roles}
     if "system_admin" in user_roles:
         return True
+    if set(roles) == {"system_admin"}:
+        # Exklusiver system_admin-Check bereits oben verneint - admin/org_admin
+        # duerfen hier NICHT ueber die generelle Rollen-Union durchrutschen.
+        return False
     return bool(user_roles.intersection(set(roles) | {"admin", "org_admin"}))
 
 

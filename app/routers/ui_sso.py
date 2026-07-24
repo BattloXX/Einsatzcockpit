@@ -4,13 +4,13 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
-from app.core.permissions import require_role
+from app.core.permissions import is_system_admin, require_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import FireDept
@@ -26,8 +26,7 @@ _GUID_RE = re.compile(
 
 
 def _get_org_id(user: User, target_org_id: int | None = None) -> int | None:
-    from app.core.permissions import has_role
-    if has_role(user, "system_admin") and target_org_id:
+    if is_system_admin(user) and target_org_id:
         return target_org_id
     return user.org_id
 
@@ -55,8 +54,7 @@ def sso_settings_page(
     user: User = Depends(require_role("org_admin", "admin")),
     org_id: int | None = None,
 ):
-    from app.core.permissions import has_role
-    is_sysadmin = has_role(user, "system_admin")
+    is_sysadmin = is_system_admin(user)
     effective_org_id = _get_org_id(user, org_id)
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
 
@@ -109,6 +107,8 @@ async def sso_settings_save(
     effective_org_id = _get_org_id(user, target_org_id)
     if not effective_org_id:
         return RedirectResponse("/admin/sso?flash=error_no_org", status_code=302)
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
 
     # F-01: authority_base Whitelist-Validierung
     try:
@@ -169,6 +169,8 @@ async def sso_test_connection(
     target_org_id: int | None = Form(None),
 ):
     effective_org_id = _get_org_id(user, target_org_id)
+    if effective_org_id and not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
     cfg = db.query(OrgSsoConfig).filter(OrgSsoConfig.org_id == effective_org_id).first() if effective_org_id else None
     if not cfg or not cfg.tenant_id:
         return JSONResponse({"ok": False, "message": "Keine Konfiguration vorhanden."})
@@ -204,6 +206,8 @@ async def sso_group_map_add(
     effective_org_id = _get_org_id(user, target_org_id)
     if not effective_org_id:
         return HTMLResponse("<p class='text-error'>Keine Organisation.</p>", status_code=400)
+    if not same_org_or_system_admin(user, effective_org_id):
+        return HTMLResponse("<p class='text-error'>Keine Berechtigung für diese Organisation.</p>", status_code=403)
 
     entra_group_id = entra_group_id.strip()
     if not _GUID_RE.match(entra_group_id):
@@ -236,6 +240,8 @@ async def sso_group_map_delete(
     target_org_id: int | None = Form(None),
 ):
     effective_org_id = _get_org_id(user, target_org_id)
+    if effective_org_id and not same_org_or_system_admin(user, effective_org_id):
+        return HTMLResponse("", status_code=403)
     mapping = db.get(OrgSsoGroupMap, map_id)
     if not mapping:
         return HTMLResponse("", status_code=200)

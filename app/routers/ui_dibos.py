@@ -7,13 +7,18 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
-from app.core.permissions import require_role, require_system_admin
+from app.core.permissions import (
+    is_system_admin,
+    require_role,
+    require_system_admin,
+    same_org_or_system_admin,
+)
 from app.core.templating import templates
 from app.db import get_db
 from app.models.dibos import OrgDibosConfig
@@ -24,8 +29,7 @@ router = APIRouter(prefix="/admin")
 
 
 def _get_org_id(user: User, target_org_id: int | None = None) -> int | None:
-    from app.core.permissions import has_role
-    if has_role(user, "system_admin") and target_org_id:
+    if is_system_admin(user) and target_org_id:
         return target_org_id
     return user.org_id
 
@@ -58,8 +62,7 @@ def dibos_settings_page(
     user: User = Depends(require_role("org_admin", "admin")),
     org_id: int | None = None,
 ):
-    from app.core.permissions import has_role
-    is_sysadmin = has_role(user, "system_admin")
+    is_sysadmin = is_system_admin(user)
     effective_org_id = _get_org_id(user, org_id)
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
 
@@ -105,11 +108,10 @@ def dibos_einsaetze_page(
 ):
     from sqlalchemy import func, or_
 
-    from app.core.permissions import has_role
     from app.models.incident import Incident
     from app.models.lis import LisSyncedObject
 
-    is_sysadmin = has_role(user, "system_admin")
+    is_sysadmin = is_system_admin(user)
     effective_org_id = _get_org_id(user, org_id)
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
 
@@ -196,6 +198,8 @@ async def dibos_settings_save(
     effective_org_id = _get_org_id(user, target_org_id)
     if not effective_org_id:
         return RedirectResponse("/admin/dibos?flash=error_no_org", status_code=302)
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
 
     cfg = _get_or_create_config(db, effective_org_id)
 
@@ -245,6 +249,8 @@ async def dibos_test_connection(
     target_org_id: int | None = Form(None),
 ):
     effective_org_id = _get_org_id(user, target_org_id)
+    if effective_org_id and not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
     cfg = (
         db.query(OrgDibosConfig).filter(OrgDibosConfig.org_id == effective_org_id).first()
         if effective_org_id else None
