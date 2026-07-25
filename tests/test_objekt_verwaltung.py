@@ -104,6 +104,27 @@ def test_detail_zeigt_tabs(client):
     assert 'hx-trigger="objekt-tab-karte from:body once"' in r.text
 
 
+def test_liste_filter_leere_select_werte_fuehren_nicht_zu_422(client):
+    """Regressionstest: das Filterformular sendet bei "Alle" ein leeres
+    value="" statt kategorie/merkmal wegzulassen - int|None-Parameter wuerden
+    das als ungueltigen Integer ablehnen (422) statt als "kein Filter"."""
+    _setup_objekt("verw_filter_user", nummer=4720)
+    _login(client, "verw_filter_user", "Test1234!")
+
+    r = client.get("/objekte/?kategorie=&merkmal=&status=&revision=")
+    assert r.status_code == 200, r.text[:500]
+
+
+def test_liste_filter_mit_numerischer_kategorie_und_merkmal(client):
+    """Ein echter numerischer Filterwert muss weiterhin normal funktionieren
+    (kein Regressionsverlust durch die str->int-Umstellung)."""
+    _setup_objekt("verw_filter_kat_user", nummer=4721)
+    _login(client, "verw_filter_kat_user", "Test1234!")
+
+    r = client.get("/objekte/?kategorie=999999&merkmal=999999")
+    assert r.status_code == 200, r.text[:500]
+
+
 def test_karte_tab_editierbar_fuer_verwalter(client):
     _, obj_id = _setup_objekt("verw_karte_user", nummer=4712)
     _login(client, "verw_karte_user", "Test1234!")

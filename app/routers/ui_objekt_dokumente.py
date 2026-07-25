@@ -959,9 +959,15 @@ def ki_stammdaten_vorschlag_uebernehmen(
     vorschlag = _stammdaten_vorschlag_oder_404(db, objekt.id, vorschlag_id)
     _stammdaten_vorschlag_uebernehmen(db, vorschlag, user)
     db.commit()
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request, "objekt/_dokumente.html", _galerie_context(request, db, user, objekt)
     )
+    # Uebernahme kann Stammdaten/Gefahren/BMA/Merkmale aendern, die in der
+    # Uebersicht angezeigt werden (anderer Tab, laedt sonst nur einmal beim
+    # Seitenaufruf) - per HX-Trigger dort ein Neuladen anstossen (CLAUDE.md:
+    # "Jede Formular-Aktion muss das UI sofort aktualisieren").
+    response.headers["HX-Trigger"] = "objekt-stammdaten-changed"
+    return response
 
 
 @router.post("/objekte/{objekt_id}/dokumente/ki-review-stammdaten/{vorschlag_id}/verwerfen",

@@ -164,11 +164,17 @@ def objekt_liste(
     _guard: None = Depends(require_objekt_enabled),
     q: str = "",
     status: str = "",
-    kategorie: int | None = None,
+    kategorie: str = "",
     revision: str = "",
-    merkmal: int | None = None,
+    merkmal: str = "",
 ):
     from sqlalchemy import ColumnElement, or_
+
+    # <select>-Formular sendet bei "Alle" ein leeres value="" statt den Parameter
+    # wegzulassen - int|None wuerde das nicht als None behandeln, sondern einen
+    # 422 werfen (Vorfall: Filtern in der Objektverwaltung schlug fehl).
+    kategorie_id = int(kategorie) if kategorie.strip().isdigit() else None
+    merkmal_id = int(merkmal) if merkmal.strip().isdigit() else None
 
     query = (
         db.query(Objekt)
@@ -197,14 +203,14 @@ def objekt_liste(
         query = query.filter(or_(*filters))
     if status:
         query = query.filter(Objekt.status == status)
-    if kategorie:
-        query = query.filter(Objekt.kategorie_id == kategorie)
+    if kategorie_id:
+        query = query.filter(Objekt.kategorie_id == kategorie_id)
     if revision == "faellig":
         query = query.filter(Objekt.revision_datum.isnot(None), Objekt.revision_datum <= date.today())
-    if merkmal:
+    if merkmal_id:
         query = query.filter(
             Objekt.id.in_(
-                db.query(ObjektMerkmal.objekt_id).filter(ObjektMerkmal.merkmal_id == merkmal)
+                db.query(ObjektMerkmal.objekt_id).filter(ObjektMerkmal.merkmal_id == merkmal_id)
             )
         )
 
@@ -235,9 +241,9 @@ def objekt_liste(
         "status_labels": OBJEKT_STATUS_LABELS,
         "filter_q": q,
         "filter_status": status,
-        "filter_kategorie": kategorie,
+        "filter_kategorie": kategorie_id,
         "filter_revision": revision,
-        "filter_merkmal": merkmal,
+        "filter_merkmal": merkmal_id,
         "ist_verwalter": verwalter,
         "heute": date.today(),
     })

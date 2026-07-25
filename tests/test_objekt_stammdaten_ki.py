@@ -512,3 +512,109 @@ def test_pr_registrierung():
     pfade = {r.path for r in router.routes}
     assert "/objekte/{objekt_id}/dokumente/ki-review-stammdaten/{vorschlag_id}/uebernehmen" in pfade
     assert "/objekte/{objekt_id}/dokumente/ki-review-stammdaten/{vorschlag_id}/verwerfen" in pfade
+
+
+# ── Echter HTTP-Roundtrip (Login + POST + CSRF) - deckt Dinge ab, die ein
+# direkter Funktionsaufruf (siehe oben) NICHT prueft: Rollen-Dependency,
+# CSRF-Middleware, Routing. Nutzt die GETEILTE Test-DB (app.db.SessionLocal),
+# wie tests/test_objekt_verwaltung.py, nicht die isolierte stammdaten_db-Engine. ─
+
+def _login_http(client, username, password):
+    client.get("/login")
+    csrf = client.cookies.get("ec_csrf")
+    return client.post("/login", data={"username": username, "password": password, "_csrf": csrf},
+                       follow_redirects=False)
+
+
+def test_ki_stammdaten_vorschlag_uebernehmen_http_roundtrip(client, tmp_path, monkeypatch):
+    """Echter Klick-Roundtrip: Login -> POST auf den Uebernehmen-Endpoint mit
+    CSRF -> Gefahr (samt neu anzulegendem Katalogeintrag) muss in einer
+    FRISCHEN DB-Session sichtbar sein."""
+    import uuid
+
+    from app.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "OBJEKT_MEDIA_DIR", str(tmp_path / "objekt_media"))
+
+    from app.core.security import hash_password
+    from app.db import SessionLocal
+    from app.models.master import FireDept, SystemSettings
+    from app.models.user import Role, User, UserRole
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org = FireDept(slug=f"http-uebernahme-{uuid.uuid4().hex[:8]}", name="HTTP-Uebernahme-Org",
+                       color="#123456", bos="Feuerwehr")
+        db.add(org)
+        db.flush()
+        db.add(OrgSettings(org_id=org.id, objekt_module_enabled=True))
+        sys_row = db.get(SystemSettings, "objekt_module_enabled")
+        if sys_row is None:
+            db.add(SystemSettings(key="objekt_module_enabled", value="true"))
+        else:
+            sys_row.value = "true"
+
+        role = db.query(Role).filter(Role.code == "objekt_verwalter").first()
+        if role is None:
+            role = Role(code="objekt_verwalter", name="objekt_verwalter")
+            db.add(role)
+            db.flush()
+        user = User(username="http_uebernahme_user", password_hash=hash_password("Test1234!"),
+                    display_name="HTTP Uebernahme Test", org_id=org.id, active=True)
+        db.add(user)
+        db.flush()
+        db.add(UserRole(user_id=user.id, role_id=role.id))
+
+        objekt = Objekt(org_id=org.id, nummer=1, name="HTTP-Uebernahme-Objekt",
+                        status=OBJEKT_STATUS_FREIGEGEBEN)
+        db.add(objekt)
+        db.flush()
+        dokument = ObjektDokument(org_id=org.id, objekt_id=objekt.id,
+                                  dateiname_original="bsp.pdf", pfad="x/t/original.pdf",
+                                  seitenzahl=1, status="fertig")
+        db.add(dokument)
+        db.flush()
+        seite = ObjektDokumentSeite(org_id=org.id, objekt_id=objekt.id,
+                                    dokument_id=dokument.id, seiten_nr=4)
+        db.add(seite)
+        db.flush()
+        # "pv" hat fuer diese frische Org bewusst NOCH KEINEN Katalogeintrag -
+        # prueft den "bisher unbekannte Kategorie anlegen"-Pfad per HTTP.
+        vorschlag = ObjektStammdatenVorschlag(
+            org_id=org.id, objekt_id=objekt.id, seite_id=seite.id,
+            gefahren_json='[{"piktogramm_typ": "pv", "name": null, "detail": "Dachflaeche komplett belegt"}]',
+            status=KI_VORSCHLAG_OFFEN,
+        )
+        db.add(vorschlag)
+        db.commit()
+        objekt_id, vorschlag_id = objekt.id, vorschlag.id
+    finally:
+        db.close()
+
+    _login_http(client, "http_uebernahme_user", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(
+        f"/objekte/{objekt_id}/dokumente/ki-review-stammdaten/{vorschlag_id}/uebernehmen",
+        data={"_csrf": csrf},
+    )
+    assert r.status_code == 200, r.text[:500]
+    # Ohne diesen Header bleibt die Uebersicht (Gefahren/BMA/Stammdaten-Sektion,
+    # anderer Tab) stehen - sah fuer den Anwender wie "Uebernahme hat nicht
+    # funktioniert" aus, obwohl die Daten korrekt gespeichert wurden.
+    assert r.headers.get("hx-trigger") == "objekt-stammdaten-changed"
+
+    db2 = SessionLocal()
+    set_tenant_context(db2, None)
+    try:
+        objekt = db2.get(Objekt, objekt_id)
+        gefahren_typen = [g.gefahr.piktogramm_typ for g in objekt.gefahren]
+        assert gefahren_typen == ["pv"], f"ObjektGefahr wurde nicht angelegt (gefunden: {gefahren_typen})"
+        katalog = db2.query(GefahrenKatalog).filter(
+            GefahrenKatalog.org_id == objekt.org_id, GefahrenKatalog.piktogramm_typ == "pv"
+        ).first()
+        assert katalog is not None, "GefahrenKatalog-Eintrag fuer 'pv' wurde nicht angelegt"
+
+        vorschlag = db2.get(ObjektStammdatenVorschlag, vorschlag_id)
+        assert vorschlag.status == KI_VORSCHLAG_UEBERNOMMEN
+    finally:
+        db2.close()
