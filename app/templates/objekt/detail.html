@@ -83,19 +83,23 @@
     </nav>
 
     <div style="display:flex;flex-direction:column;gap:16px;min-width:0;">
-      <section id="abschnitt-stammdaten" hx-get="/objekte/{{ objekt.id }}/stammdaten" hx-trigger="load" hx-swap="innerHTML">
+      <section id="abschnitt-stammdaten" hx-get="/objekte/{{ objekt.id }}/stammdaten"
+               hx-trigger="load, objekt-stammdaten-changed from:body" hx-swap="innerHTML">
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Stammdaten …</span></div>
       </section>
 
-      <section id="abschnitt-gefahren" hx-get="/objekte/{{ objekt.id }}/gefahren" hx-trigger="load" hx-swap="innerHTML">
+      <section id="abschnitt-gefahren" hx-get="/objekte/{{ objekt.id }}/gefahren"
+               hx-trigger="load, objekt-stammdaten-changed from:body" hx-swap="innerHTML">
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Gefahren …</span></div>
       </section>
 
-      <section id="abschnitt-bma" hx-get="/objekte/{{ objekt.id }}/bma" hx-trigger="load" hx-swap="innerHTML">
+      <section id="abschnitt-bma" hx-get="/objekte/{{ objekt.id }}/bma"
+               hx-trigger="load, objekt-stammdaten-changed from:body" hx-swap="innerHTML">
         <div class="card" style="padding:16px;"><span class="text-muted">Lade BMA-Daten …</span></div>
       </section>
 
-      <section id="abschnitt-merkmale" hx-get="/objekte/{{ objekt.id }}/merkmale" hx-trigger="load" hx-swap="innerHTML">
+      <section id="abschnitt-merkmale" hx-get="/objekte/{{ objekt.id }}/merkmale"
+               hx-trigger="load, objekt-stammdaten-changed from:body" hx-swap="innerHTML">
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Merkmale …</span></div>
       </section>
 
