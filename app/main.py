@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException as _StarletteHTTPException
 
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
-from app.core.security import unsign_session
+from app.core.security import unsign_native_link_token, unsign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentToken
@@ -491,6 +491,27 @@ async def session_middleware(request: Request, call_next):
                 logger.exception("session_middleware: User-Lookup fehlgeschlagen")
             finally:
                 db.close()
+
+    # Native-App-Datei-Handoff: kein Cookie-Zugriff im Custom Tab moeglich, daher
+    # Fallback auf ein kurzlebiges, exakt pfadgebundenes ?nt=-Token (siehe
+    # sign_native_link_token / /api/v1/device/native-link). Greift nur, wenn die
+    # normale Cookie-Session nichts geliefert hat, und authentifiziert
+    # ausschliesslich DIESEN einen Request - keine generelle Session/Cookie.
+    if request.state.user is None:
+        nt = request.query_params.get("nt")
+        if nt:
+            nt_result = unsign_native_link_token(nt)
+            if nt_result and nt_result[0] == request.url.path:
+                db = SessionLocal()
+                set_tenant_context(db, None)
+                try:
+                    request.state.user = db.query(User).filter(
+                        User.id == nt_result[1], User.active == True,  # noqa: E712
+                    ).first()
+                except Exception:
+                    logger.exception("session_middleware: nt-Token User-Lookup fehlgeschlagen")
+                finally:
+                    db.close()
 
     response = await call_next(request)
 

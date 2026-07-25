@@ -125,6 +125,49 @@
     return _fcmRegisterPromise;
   }
 
+  // ─── URLs oeffnen (PDFs etc.) ────────────────────────────────────────────────
+  // Android-WebView hat KEINEN eingebauten PDF-Viewer (anders als Chrome) - PDFs
+  // (Objektblatt, Brandschutzplaene, Dokumentseiten...) muessen daher an einen
+  // Custom Tab (@capacitor/browser) uebergeben werden. Custom Tabs teilen sich
+  // aber NICHT den Cookie-Jar der App-WebView, weshalb die URL zuerst gegen
+  // /api/v1/device/native-link getauscht wird (kurzlebiges, pfadgebundenes Token,
+  // siehe app/core/security.py::sign_native_link_token).
+  async function openUrl(url) {
+    if (!_isNative()) { window.open(url, '_blank', 'noopener'); return; }
+    try {
+      const { Browser } = window.Capacitor.Plugins;
+      if (!Browser) { window.open(url, '_blank', 'noopener'); return; }
+      let target = url;
+      // Nur fuer Same-Origin-Pfade (relative URLs) ein Handoff-Token anfordern -
+      // externe/absolute URLs (z.B. fremde Teams-Webhook-Test-Links) unveraendert weiterreichen.
+      if (url.startsWith('/')) {
+        try {
+          const r = await fetch('/api/v1/device/native-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ path: url }),
+          });
+          if (r.ok) { const d = await r.json(); target = d.url; }
+        } catch (e) { console.warn('[ELNative] native-link Fehler:', e); }
+      }
+      await Browser.open({ url: target });
+    } catch (e) {
+      console.warn('[ELNative] openUrl Fehler:', e);
+      window.open(url, '_blank', 'noopener');
+    }
+  }
+
+  // Bestehende "target=_blank"-Links (z.B. Objekt-Dokumente-Liste) faenden im
+  // WebView sonst still ins Leere - global abfangen statt jede Stelle einzeln
+  // umzubauen.
+  document.addEventListener('click', function (ev) {
+    if (!_isNative()) return;
+    const a = ev.target.closest && ev.target.closest('a[target="_blank"]');
+    if (!a || !a.href) return;
+    ev.preventDefault();
+    openUrl(a.href);
+  }, true);
+
   // ─── Keep-Awake ─────────────────────────────────────────────────────────────
   function keepAwake(on) {
     if (!_isNative()) {
@@ -358,6 +401,7 @@
     startLocation,
     stopLocation,
     scanQr,
+    openUrl,
     setBatterySaver(on) { _setBatterySaver(on); },
     get batterySaverActive() { return _batterySaver; },
     get isTracking() { return _isTracking; },
