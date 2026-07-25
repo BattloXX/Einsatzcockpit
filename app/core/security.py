@@ -130,6 +130,31 @@ def unsign_fahrt_foto_token(token: str) -> tuple[int, int] | None:
         return None
 
 
+# ── Native-App-Datei-Handoff: kurzlebiges, pfadgebundenes Auth-Token ───────────
+# Capacitor-Custom-Tabs (@capacitor/browser) teilen sich NICHT den Cookie-Jar
+# der App-WebView - eine per Browser.open() geoeffnete authentifizierte URL
+# (z.B. ein Objektblatt-PDF) traefe dort sonst auf die Login-Seite, weil
+# Android-WebView keinen eingebauten PDF-Viewer hat und PDFs deshalb an den
+# Custom Tab uebergeben werden muessen (siehe native-bridge.js::openUrl()).
+# Bewusst sehr kurzlebig UND exakt auf EINEN Pfad gebunden (kein genereller
+# Session-Ersatz): der Custom Tab loest die URL binnen Sekunden auf.
+_native_link_signer = URLSafeTimedSerializer(settings.SECRET_KEY, salt="native-link")
+NATIVE_LINK_TOKEN_MAX_AGE = 120  # 2 min
+
+
+def sign_native_link_token(path: str, user_id: int) -> str:
+    return _native_link_signer.dumps({"p": path, "u": user_id})
+
+
+def unsign_native_link_token(token: str) -> tuple[str, int] | None:
+    """Returns (path, user_id) or None (ungültig/abgelaufen/manipuliert)."""
+    try:
+        data = _native_link_signer.loads(token, max_age=NATIVE_LINK_TOKEN_MAX_AGE)
+        return (data["p"], data["u"])
+    except (BadSignature, SignatureExpired, KeyError, TypeError):
+        return None
+
+
 def sign_session(
     user_id: int,
     *,

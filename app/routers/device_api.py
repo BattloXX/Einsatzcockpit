@@ -4,11 +4,13 @@ Diese Endpoints werden von der nativen Android-App (Capacitor) aufgerufen.
 Auth über bestehende Session-Cookies (Device-Login via /geraet-login).
 """
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.core.security import sign_native_link_token
 from app.db import get_db
 from app.models.user import DeviceToken, FcmToken
 
@@ -79,6 +81,33 @@ async def unregister_fcm_token(request: Request, db: Session = Depends(get_db)):
         ).delete()
         db.commit()
     return JSONResponse({"ok": True})
+
+
+# ── Native-Link-Handoff (Custom-Tab-Auth für PDFs) ────────────────────────────
+
+@router.post("/native-link")
+async def create_native_link(request: Request):
+    """Mint ein kurzlebiges, pfadgebundenes Token für die Uebergabe einer
+    authentifizierten URL an einen Capacitor-Custom-Tab (@capacitor/browser),
+    der die Session-Cookies der App-WebView nicht teilt. Siehe
+    native-bridge.js::openUrl() und unsign_native_link_token in main.py.
+
+    Nur relative Same-Origin-Pfade erlaubt (kein Scheme/Host/"//") - verhindert
+    Open-Redirect/SSRF ueber ein manipuliertes 'path'.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+    data = await request.json()
+    path = (data.get("path") or "").strip()
+    parsed = urlsplit(path)
+    if not path.startswith("/") or path.startswith("//") or parsed.scheme or parsed.netloc:
+        raise HTTPException(status_code=400, detail="Ungültiger Pfad")
+
+    token = sign_native_link_token(parsed.path, user.id)
+    sep = "&" if "?" in path else "?"
+    url = f"{str(request.base_url).rstrip('/')}{path}{sep}nt={token}"
+    return JSONResponse({"url": url})
 
 
 # ── Standort ──────────────────────────────────────────────────────────────────
