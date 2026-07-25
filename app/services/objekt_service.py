@@ -181,33 +181,37 @@ def fehlende_kartensymbole(objekt: Objekt) -> list[dict]:
     vorschlaege: list[dict] = []
 
     if objekt.bma is not None:
-        for typ, wert, label in (
+        for bma_typ, wert, label in (
             ("bmz", objekt.bma.bmz_standort, "BMZ (Brandmelderzentrale)"),
             ("fbf", objekt.bma.fbf_standort, "FBF (Feuerwehr-Bedienfeld)"),
         ):
-            if wert and typ not in vorhandene_typen:
-                vorschlaege.append({"typ": typ, "label": label, "hinweis": wert})
+            if wert and bma_typ not in vorhandene_typen:
+                vorschlaege.append({"typ": bma_typ, "label": label, "hinweis": wert})
         if objekt.bma.schluesselsafe_vorhanden and "fsd" not in vorhandene_typen:
             vorschlaege.append({
                 "typ": "fsd", "label": OBJEKT_SYMBOL_TYPEN.get("fsd", "FSD / Schlüsselsafe"),
                 "hinweis": objekt.bma.schluesselsafe_standort or "",
             })
 
-    for eintrag in objekt.gefahren:
-        typ = _GEFAHR_SYMBOL_TYP.get(eintrag.gefahr.piktogramm_typ) if eintrag.gefahr else None
-        if typ and typ not in vorhandene_typen:
+    for gefahr_eintrag in objekt.gefahren:
+        gefahr_typ = (
+            _GEFAHR_SYMBOL_TYP.get(gefahr_eintrag.gefahr.piktogramm_typ) if gefahr_eintrag.gefahr else None
+        )
+        if gefahr_typ and gefahr_typ not in vorhandene_typen:
             vorschlaege.append({
-                "typ": typ, "label": OBJEKT_SYMBOL_TYPEN.get(typ, typ),
-                "hinweis": eintrag.detail or (eintrag.gefahr.name if eintrag.gefahr else ""),
+                "typ": gefahr_typ, "label": OBJEKT_SYMBOL_TYPEN.get(gefahr_typ, gefahr_typ),
+                "hinweis": gefahr_eintrag.detail or (gefahr_eintrag.gefahr.name if gefahr_eintrag.gefahr else ""),
             })
-            vorhandene_typen.add(typ)  # mehrere Gefahren gleichen Typs nur einmal vorschlagen
+            vorhandene_typen.add(gefahr_typ)  # mehrere Gefahren gleichen Typs nur einmal vorschlagen
 
-    for eintrag in objekt.merkmale:
-        code = eintrag.merkmal.code if eintrag.merkmal else None
-        typ = _MERKMAL_SYMBOL_TYP.get(code) if code else None
-        if typ and typ not in vorhandene_typen:
-            vorschlaege.append({"typ": typ, "label": OBJEKT_SYMBOL_TYPEN.get(typ, typ), "hinweis": ""})
-            vorhandene_typen.add(typ)
+    for merkmal_eintrag in objekt.merkmale:
+        code = merkmal_eintrag.merkmal.code if merkmal_eintrag.merkmal else None
+        merkmal_typ = _MERKMAL_SYMBOL_TYP.get(code) if code else None
+        if merkmal_typ and merkmal_typ not in vorhandene_typen:
+            vorschlaege.append({
+                "typ": merkmal_typ, "label": OBJEKT_SYMBOL_TYPEN.get(merkmal_typ, merkmal_typ), "hinweis": "",
+            })
+            vorhandene_typen.add(merkmal_typ)
 
     return vorschlaege
 
