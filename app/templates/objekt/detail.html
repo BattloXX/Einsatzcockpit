@@ -58,6 +58,17 @@
     </div>
   </div>
 
+  {% if plan_hinweis %}
+  <div class="alert alert--success" x-data="{ zu: true }" x-show="zu" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+    <span>
+      {% if plan_hinweis == 'neu' %}📄 Neues Objekt aus Brandschutzplan-Upload angelegt (Entwurf) — die KI-Analyse läuft im Hintergrund und ergänzt Gefahren/BMA/Merkmale automatisch, sobald sie fertig ist.
+      {% else %}📄 Objekt um hochgeladenen Brandschutzplan ergänzt — die KI-Analyse läuft im Hintergrund weiter (siehe Dokumente-Tab).
+      {% endif %}
+    </span>
+    <button type="button" class="btn btn--ghost btn--xs" @click="zu = false">✕</button>
+  </div>
+  {% endif %}
+
   <nav class="objekt-tabs">
     <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'uebersicht' }"
             @click="tab = 'uebersicht'">Übersicht</button>
