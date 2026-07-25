@@ -810,7 +810,7 @@ def _gefahr_katalog_holen_oder_anlegen(db: Session, objekt, eintrag: dict):
     vermeiden, statt eine IntegrityError zu riskieren."""
     from app.models.objekt import GEFAHR_PIKTOGRAMME, GefahrenKatalog
 
-    typ = eintrag.get("piktogramm_typ")
+    typ = eintrag.get("piktogramm_typ", "sonstig")
     gefahr = (
         db.query(GefahrenKatalog)
         .filter(
