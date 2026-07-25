@@ -564,6 +564,103 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
     }
 
 
+# ── Brandschutzplan-Upload ohne Objekt-Vorauswahl ─────────────────────────────
+# Die KI liest Name/Adresse/BMA-Nummer aus dem Dokument, BEVOR es gespeichert
+# wird, und loest damit das Ziel-Objekt auf (bestehendes ergaenzen oder neues
+# anlegen) - siehe app/services/objekt_plan_upload_service.py fuer die
+# Begruendung des "Identify-first"-Ansatzes.
+#
+# WICHTIG: muss VOR "/{objekt_id}" registriert sein. "/{objekt_id}" hat KEINEN
+# expliziten :int-Pfad-Konverter im Routen-String - Starlette matcht den Pfad
+# rein stringbasiert (jedes Segment passt), die int-Typpruefung von objekt_id
+# passiert erst danach bei der Parametervalidierung. Ohne diese Reihenfolge
+# wuerde "/objekte/dokument-upload" faelschlich von "/{objekt_id}" abgefangen
+# und mit 422 (ungueltiger Integer "dokument-upload") abgelehnt, statt hier
+# anzukommen.
+
+@router.get("/dokument-upload", response_class=HTMLResponse)
+def dokument_upload_form(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    from app.services.objekt_ki_service import ki_klassifikation_enabled
+    return templates.TemplateResponse(request, "objekt/dokument_upload.html", {
+        "user": user,
+        "ki_enabled": ki_klassifikation_enabled(user.org_id, db),
+    })
+
+
+@router.post("/dokument-upload", response_class=HTMLResponse)
+async def dokument_upload_verarbeiten(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    datei: UploadFile = File(...),
+):
+    from app.services.objekt_dokument_service import store_dokument_upload, verarbeite_dokument
+    from app.services.objekt_ki_service import analysiere_unklassifizierte_seiten, ki_klassifikation_enabled
+    from app.services.objekt_plan_upload_service import (
+        erstelle_objekt_aus_identitaet,
+        finde_passendes_objekt,
+        identifiziere_objekt,
+    )
+
+    org_id = user.org_id
+    if org_id is None or not ki_klassifikation_enabled(org_id, db):
+        return templates.TemplateResponse(request, "objekt/dokument_upload.html", {
+            "user": user,
+            "ki_enabled": False,
+            "fehler": "KI-Klassifikation ist für diese Organisation nicht aktiviert — "
+                      "ohne KI kann das Objekt nicht automatisch erkannt werden.",
+        })
+
+    data = await datei.read()
+    identitaet = await identifiziere_objekt(data, datei.filename or "dokument.pdf", org_id)
+    # store_dokument_upload liest die Datei gleich nochmal komplett - ohne seek(0)
+    # waere der Stream leer und es gaebe faelschlich "Leere Datei".
+    await datei.seek(0)
+
+    objekt = finde_passendes_objekt(db, org_id, identitaet)
+    neu_erstellt = objekt is None
+    if objekt is None:
+        objekt = erstelle_objekt_aus_identitaet(db, user, identitaet)
+
+    try:
+        dokument = await store_dokument_upload(datei, objekt, user, db)
+    except HTTPException as exc:
+        # Verwirft ein evtl. gerade erst per db.flush() angelegtes Entwurf-Objekt
+        # mit - kein Karteileichen-Objekt, wenn die Datei selbst ungueltig ist.
+        db.rollback()
+        return templates.TemplateResponse(request, "objekt/dokument_upload.html", {
+            "user": user,
+            "ki_enabled": True,
+            "fehler": f"{datei.filename}: {exc.detail}",
+        })
+
+    write_objekt_change(db, objekt.id, objekt.org_id, "dokumente", "dokument_upload",
+                        before=None, after="1 Datei (Upload ohne Objekt-Auswahl)", user_id=user.id)
+    write_audit(db, "objekt.dokument_uploaded", org_id=user.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=objekt.id,
+                payload={"anzahl": 1, "neu_erstellt": neu_erstellt, "quelle": identitaet.get("quelle")})
+    db.commit()
+
+    background_tasks.add_task(verarbeite_dokument, dokument.id)
+    # Laeuft komplett automatisch weiter - kein manueller "KI-Vorschläge"-Klick
+    # noetig (anders als beim bestehenden Upload MIT Objekt-Auswahl, bewusst so
+    # belassen). BackgroundTasks laufen sequenziell nach der Antwort, daher ist
+    # verarbeite_dokument (Seiten muessen existieren) hier garantiert zuerst fertig.
+    background_tasks.add_task(analysiere_unklassifizierte_seiten, objekt.id)
+    if neu_erstellt and (objekt.strasse or objekt.ort):
+        background_tasks.add_task(_geocode_objekt, objekt.id, objekt.strasse, objekt.hausnummer, objekt.ort)
+
+    plan_status = "neu" if neu_erstellt else "ergaenzt"
+    return RedirectResponse(f"/objekte/{objekt.id}?plan={plan_status}", status_code=303)
+
+
 @router.get("/{objekt_id}", response_class=HTMLResponse)
 def objekt_detail(
     objekt_id: int,
@@ -571,11 +668,14 @@ def objekt_detail(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
+    plan: str = "",
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    return templates.TemplateResponse(
-        request, "objekt/detail.html", _detail_context(request, db, user, objekt)
-    )
+    ctx = _detail_context(request, db, user, objekt)
+    # Banner nach Redirect vom objektlosen Brandschutzplan-Upload
+    # (ui_objekt_dokumente.py::dokument_upload_verarbeiten): "neu" | "ergaenzt".
+    ctx["plan_hinweis"] = plan if plan in ("neu", "ergaenzt") else ""
+    return templates.TemplateResponse(request, "objekt/detail.html", ctx)
 
 
 # ── Abschnitt: Stammdaten (HTMX-Inline-Edit) ──────────────────────────────────
