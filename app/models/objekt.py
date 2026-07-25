@@ -695,6 +695,77 @@ class ObjektSeiteKiVorschlag(TenantScoped, Base):
     seite: Mapped[ObjektDokumentSeite] = relationship()
 
 
+class ObjektStammdatenVorschlag(TenantScoped, Base):
+    """KI-Extraktionsvorschlag aus einer 'objektinformation'-Seite (z. B. der
+    Objektbeschreibungs-Tabelle eines Brandschutzplans) - Review-Queue, nie
+    Auto-Apply (gleiches Prinzip wie ObjektSeiteKiVorschlag). Bündelt Felder für
+    drei Ziele: Objekt.informationen (Freitext), ObjektBMA (strukturierte
+    Standorte) und ObjektGefahr/ObjektMerkmal (Katalog-Zuordnung per Code)."""
+    __tablename__ = "objekt_stammdaten_vorschlag"
+    __table_args__ = (Index("ix_objekt_stammdaten_vorschlag_org_status", "org_id", "status"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    objekt_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=False
+    )
+    seite_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("objekt_dokument_seite.id", ondelete="CASCADE"), nullable=False
+    )
+    # Freitext-Ergänzung für Objekt.informationen (Gebäudeklasse, Geschosse,
+    # Fluchtniveau, Stiegen, Sprinkler-/Gaslöschanlagen-Standort, ...) - alles,
+    # was keine eigene Spalte hat.
+    informationen_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Direkte Übernahme in ObjektBMA (nur befüllte Felder werden übernommen)
+    bma_nummer: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    bmz_standort: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    fbf_standort: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    laufkarten_ablageort: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    schluesselsafe_standort: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Gefahren als JSON-Liste [{"piktogramm_typ": "gas", "detail": "...",
+    # "name": "..."}] - piktogramm_typ steuert das Rendering (fixe Icon-Palette,
+    # GEFAHR_PIKTOGRAMME), "name" ist nur relevant, wenn die Org fuer diesen Typ
+    # noch KEINEN Katalogeintrag hat (dann wird er beim Uebernehmen neu angelegt -
+    # "bisher unbekannte Kategorie").
+    gefahren_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Merkmale als JSON-Liste [{"code": "sprinkler"|null, "name": "..."}] -
+    # code aus STANDARD_MERKMALE fuer bekannte Merkmale, code=null + name fuer ein
+    # bisher unbekanntes/individuelles Merkmal (wird beim Uebernehmen als neuer,
+    # codeloser Katalogeintrag angelegt, siehe MerkmalKatalog "bei Eigenanlagen").
+    merkmale_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    begruendung: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Status: offen / uebernommen / verworfen
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=KI_VORSCHLAG_OFFEN)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    entschieden_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    entschieden_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    objekt: Mapped[Objekt] = relationship()
+    seite: Mapped[ObjektDokumentSeite] = relationship()
+
+    @property
+    def gefahren(self) -> list[dict]:
+        if not self.gefahren_json:
+            return []
+        try:
+            werte = json.loads(self.gefahren_json)
+        except (ValueError, TypeError):
+            return []
+        return [w for w in werte if isinstance(w, dict) and w.get("piktogramm_typ")]
+
+    @property
+    def merkmale(self) -> list[dict]:
+        if not self.merkmale_json:
+            return []
+        try:
+            werte = json.loads(self.merkmale_json)
+        except (ValueError, TypeError):
+            return []
+        return [w for w in werte if isinstance(w, dict) and (w.get("code") or w.get("name"))]
+
+
 class AlarmInfoscreenToken(TenantScoped, Base):
     """Zugangs-Token fuer den oeffentlichen Alarm-Infoscreen (Wandmonitor).
 

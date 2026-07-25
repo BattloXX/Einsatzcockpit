@@ -6,6 +6,19 @@
     {% endif %}
   </div>
 
+  {% if ist_verwalter and fehlende_kartensymbole %}
+  <div class="alert alert--success" style="margin-bottom:12px;">
+    <strong>{{ fehlende_kartensymbole|length }} Kartensymbol{{ 'e' if fehlende_kartensymbole|length != 1 else '' }} aus den Stammdaten noch nicht platziert:</strong>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+      {% for v in fehlende_kartensymbole %}
+      <button type="button" class="btn btn--ghost btn--xs oks-fehlend-chip" data-typ="{{ v.typ }}"
+              title="{{ v.hinweis }}">📍 {{ v.label }}</button>
+      {% endfor %}
+    </div>
+    <p class="form-hint" style="margin:6px 0 0;">Chip anklicken wählt das passende Symbol in der Palette aus - danach auf die Karte klicken zum Platzieren.</p>
+  </div>
+  {% endif %}
+
   {% if ist_verwalter %}
   <div class="objekt-karte-layout">
     <aside class="card" style="padding:12px;">
@@ -51,6 +64,18 @@
         link.href = href;
         document.head.appendChild(link);
       }
+
+      {% if ist_verwalter %}
+      // Hinweis-Chips ("noch nicht platziert") waehlen per Klick das passende
+      // Symbol in der Palette aus (simuliert Klick auf den Palette-Button -
+      // die eigentliche Auswahllogik lebt in objekt_karte.js).
+      document.querySelectorAll(".oks-fehlend-chip").forEach(function (chip) {
+        chip.addEventListener("click", function () {
+          var btn = document.querySelector('.oks-palette__eintrag[data-typ="' + chip.dataset.typ + '"]');
+          if (btn) { btn.click(); btn.scrollIntoView({block: "nearest"}); }
+        });
+      });
+      {% endif %}
 
       var karte = null;
       function init() {

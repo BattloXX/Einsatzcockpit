@@ -153,6 +153,65 @@ def berechne_vollstaendigkeit(
     return {"prozent": prozent, "erfuellt": erfuellt, "fehlend": fehlend}
 
 
+# Zuordnung Stammdaten-Feld/-Katalogtyp -> Kartensymbol (nur eindeutige 1:1-Treffer;
+# mehrdeutige Merkmale wie "tiefgarage" ohne exaktes Symbol werden bewusst NICHT
+# vorgeschlagen, um Fehlplatzierungen/falsche Symbolwahl zu vermeiden).
+_GEFAHR_SYMBOL_TYP = {
+    "ex": "gefahr_ex", "gas": "gefahr_gas", "chemie": "gefahr_chemie",
+    "hochspannung": "gefahr_strom", "pv": "gefahr_pv",
+}
+_MERKMAL_SYMBOL_TYP = {
+    "brandschutzplan": "bsp", "dlk_stellplatz": "dlk_stellplatz",
+    "objektfunk": "objektfunk", "sammelplatz": "sammelplatz",
+}
+
+
+def fehlende_kartensymbole(objekt: Objekt) -> list[dict]:
+    """Stammdaten (BMA/Gefahren/Merkmale), zu denen es laut OBJEKT_SYMBOL_TYPEN
+    ein passendes Kartensymbol gibt, das am Objekt aber noch nicht gesetzt ist.
+
+    Reiner Hinweis fuer die Lagekarte, KEINE automatische Platzierung - die
+    genaue Position (Grundriss-Koordinate) laesst sich aus Text-Stammdaten
+    nicht zuverlaessig ermitteln, das muss der Sachbearbeiter per Drag&Drop
+    auf der Karte setzen.
+    """
+    from app.models.objekt import OBJEKT_SYMBOL_TYPEN
+
+    vorhandene_typen = {k.typ for k in objekt.karten_objekte}
+    vorschlaege: list[dict] = []
+
+    if objekt.bma is not None:
+        for typ, wert, label in (
+            ("bmz", objekt.bma.bmz_standort, "BMZ (Brandmelderzentrale)"),
+            ("fbf", objekt.bma.fbf_standort, "FBF (Feuerwehr-Bedienfeld)"),
+        ):
+            if wert and typ not in vorhandene_typen:
+                vorschlaege.append({"typ": typ, "label": label, "hinweis": wert})
+        if objekt.bma.schluesselsafe_vorhanden and "fsd" not in vorhandene_typen:
+            vorschlaege.append({
+                "typ": "fsd", "label": OBJEKT_SYMBOL_TYPEN.get("fsd", "FSD / Schlüsselsafe"),
+                "hinweis": objekt.bma.schluesselsafe_standort or "",
+            })
+
+    for eintrag in objekt.gefahren:
+        typ = _GEFAHR_SYMBOL_TYP.get(eintrag.gefahr.piktogramm_typ) if eintrag.gefahr else None
+        if typ and typ not in vorhandene_typen:
+            vorschlaege.append({
+                "typ": typ, "label": OBJEKT_SYMBOL_TYPEN.get(typ, typ),
+                "hinweis": eintrag.detail or (eintrag.gefahr.name if eintrag.gefahr else ""),
+            })
+            vorhandene_typen.add(typ)  # mehrere Gefahren gleichen Typs nur einmal vorschlagen
+
+    for eintrag in objekt.merkmale:
+        code = eintrag.merkmal.code if eintrag.merkmal else None
+        typ = _MERKMAL_SYMBOL_TYP.get(code) if code else None
+        if typ and typ not in vorhandene_typen:
+            vorschlaege.append({"typ": typ, "label": OBJEKT_SYMBOL_TYPEN.get(typ, typ), "hinweis": ""})
+            vorhandene_typen.add(typ)
+
+    return vorschlaege
+
+
 # Standard-Kataloge fuer neue Orgs (identisch zu den Migration-0124/0125-Seeds)
 STANDARD_KATEGORIEN = [
     "Gewerbe/Industrie", "Wohnanlage", "Öffentliches Gebäude", "Landwirtschaft", "Sonderobjekt",

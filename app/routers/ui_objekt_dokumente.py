@@ -18,6 +18,7 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.objekt import (
     AUSWAHL_DOKUMENTART,
+    GEFAHR_PIKTOGRAMME,
     Objekt,
     ObjektDokument,
     ObjektDokumentSeite,
@@ -32,7 +33,7 @@ from app.services.objekt_dokument_service import (
     store_dokument_upload,
     verarbeite_dokument,
 )
-from app.services.objekt_service import lade_auswahl, write_objekt_change
+from app.services.objekt_service import STANDARD_MERKMALE, lade_auswahl, write_objekt_change
 
 router = APIRouter(tags=["objekt-dokumente"])
 
@@ -128,8 +129,22 @@ def _galerie_context(
         .all()
     )
 
+    from app.models.objekt import ObjektStammdatenVorschlag
+    stammdaten_vorschlaege = (
+        db.query(ObjektStammdatenVorschlag)
+        .filter(
+            ObjektStammdatenVorschlag.objekt_id == objekt.id,
+            ObjektStammdatenVorschlag.status == KI_VORSCHLAG_OFFEN,
+        )
+        .order_by(ObjektStammdatenVorschlag.id)
+        .all()
+    )
+
     return {
         "ki_vorschlaege": ki_vorschlaege,
+        "stammdaten_vorschlaege": stammdaten_vorschlaege,
+        "gefahr_piktogramme": GEFAHR_PIKTOGRAMME,
+        "merkmal_labels": {code: name for code, name, _icon in STANDARD_MERKMALE},
         "ki_enabled": ki_klassifikation_enabled(objekt.org_id, db),
         "user": user,
         "objekt": objekt,
@@ -764,6 +779,207 @@ def ki_vorschlaege_alle_uebernehmen(
     )
     for vorschlag in offene:
         _vorschlag_uebernehmen(db, vorschlag, user)
+    db.commit()
+    return templates.TemplateResponse(
+        request, "objekt/_dokumente.html", _galerie_context(request, db, user, objekt)
+    )
+
+
+# ── KI-Stammdaten-Review (Objektbeschreibungs-Extraktion) ─────────────────────
+
+def _stammdaten_vorschlag_oder_404(db: Session, objekt_id: int, vorschlag_id: int):
+    from app.models.objekt import ObjektStammdatenVorschlag
+    vorschlag = (
+        db.query(ObjektStammdatenVorschlag)
+        .filter(
+            ObjektStammdatenVorschlag.id == vorschlag_id,
+            ObjektStammdatenVorschlag.objekt_id == objekt_id,
+        )
+        .first()
+    )
+    if vorschlag is None:
+        raise HTTPException(status_code=404, detail="Vorschlag nicht gefunden")
+    return vorschlag
+
+
+def _gefahr_katalog_holen_oder_anlegen(db: Session, objekt, eintrag: dict):
+    """Findet den Katalogeintrag fuer piktogramm_typ, legt bei Bedarf einen neuen
+    an (bisher unbekannte Kategorie fuer diese Org - ausdruecklich erwuenscht,
+    siehe _system_prompt_stammdaten). Sucht zusaetzlich per Name, um einen
+    UniqueConstraint(org_id, name)-Konflikt bei einem KI-Namensvorschlag zu
+    vermeiden, statt eine IntegrityError zu riskieren."""
+    from app.models.objekt import GEFAHR_PIKTOGRAMME, GefahrenKatalog
+
+    typ = eintrag.get("piktogramm_typ")
+    gefahr = (
+        db.query(GefahrenKatalog)
+        .filter(
+            GefahrenKatalog.org_id == objekt.org_id,
+            GefahrenKatalog.piktogramm_typ == typ,
+            GefahrenKatalog.aktiv.is_(True),
+        )
+        .first()
+    )
+    if gefahr is not None:
+        return gefahr
+
+    name = eintrag.get("name") or GEFAHR_PIKTOGRAMME.get(typ, typ).split(" ", 1)[-1]
+    namensgleich = (
+        db.query(GefahrenKatalog)
+        .filter(GefahrenKatalog.org_id == objekt.org_id, GefahrenKatalog.name == name)
+        .first()
+    )
+    if namensgleich is not None:
+        return namensgleich
+
+    gefahr = GefahrenKatalog(org_id=objekt.org_id, name=name, piktogramm_typ=typ, aktiv=True)
+    db.add(gefahr)
+    db.flush()
+    return gefahr
+
+
+def _merkmal_katalog_holen_oder_anlegen(db: Session, objekt, eintrag: dict):
+    """Findet den Katalogeintrag per Code, sonst per Name; legt bei Bedarf ein
+    neues, codeloses Merkmal an (individuelle/objektspezifische Besonderheit,
+    siehe MerkmalKatalog "bei Eigenanlagen")."""
+    from app.models.objekt import MerkmalKatalog
+
+    code = eintrag.get("code")
+    if code:
+        return (
+            db.query(MerkmalKatalog)
+            .filter(
+                MerkmalKatalog.org_id == objekt.org_id,
+                MerkmalKatalog.code == code,
+                MerkmalKatalog.aktiv.is_(True),
+            )
+            .first()
+        )
+
+    name = eintrag.get("name")
+    if not name:
+        return None
+    merkmal = (
+        db.query(MerkmalKatalog)
+        .filter(MerkmalKatalog.org_id == objekt.org_id, MerkmalKatalog.name == name)
+        .first()
+    )
+    if merkmal is not None:
+        return merkmal
+    merkmal = MerkmalKatalog(org_id=objekt.org_id, code=None, name=name, aktiv=True)
+    db.add(merkmal)
+    db.flush()
+    return merkmal
+
+
+def _stammdaten_vorschlag_uebernehmen(db: Session, vorschlag, user: User) -> None:
+    """Uebernimmt einen Stammdaten-Vorschlag in Objekt/ObjektBMA/ObjektGefahr/
+    ObjektMerkmal. Fehlt der passende Katalogeintrag (bisher unbekannte
+    Gefahren-Kategorie/Merkmal), wird er neu angelegt statt den Vorschlag zu
+    verwerfen. Bereits vorhandene Gefahren/Merkmale werden defensiv erneut
+    geprueft (keine Dubletten, auch wenn sich der Objekt-Stand seit der
+    Vorschlags-Erstellung geaendert hat)."""
+    from app.models.objekt import KI_VORSCHLAG_UEBERNOMMEN, Objekt, ObjektBMA, ObjektGefahr, ObjektMerkmal
+
+    objekt = db.get(Objekt, vorschlag.objekt_id)
+    if objekt is None:
+        return
+
+    if vorschlag.informationen_text:
+        bestehend = (objekt.informationen or "").strip()
+        if vorschlag.informationen_text not in bestehend:
+            objekt.informationen = (
+                (bestehend + "\n\n" if bestehend else "") + vorschlag.informationen_text
+            )[:20000]
+
+    bma_felder = {
+        "bma_nummer": vorschlag.bma_nummer,
+        "bmz_standort": vorschlag.bmz_standort,
+        "fbf_standort": vorschlag.fbf_standort,
+        "laufkarten_ablageort": vorschlag.laufkarten_ablageort,
+        "schluesselsafe_standort": vorschlag.schluesselsafe_standort,
+    }
+    if any(bma_felder.values()):
+        bma = objekt.bma
+        if bma is None:
+            bma = ObjektBMA(org_id=objekt.org_id, objekt_id=objekt.id)
+            db.add(bma)
+            objekt.bma = bma
+        for feld, wert in bma_felder.items():
+            # Bestehende Werte nie stillschweigend ueberschreiben - nur leere Felder befuellen.
+            if wert and not getattr(bma, feld):
+                setattr(bma, feld, wert)
+        if vorschlag.schluesselsafe_standort and not bma.schluesselsafe_vorhanden:
+            bma.schluesselsafe_vorhanden = True
+
+    bestehende_gefahr_typen = {g.gefahr.piktogramm_typ for g in objekt.gefahren if g.gefahr}
+    for eintrag in vorschlag.gefahren:
+        if eintrag.get("piktogramm_typ") in bestehende_gefahr_typen:
+            continue  # defensiv: seit Vorschlags-Erstellung bereits erfasst
+        gefahr = _gefahr_katalog_holen_oder_anlegen(db, objekt, eintrag)
+        if gefahr is None:
+            continue
+        db.add(ObjektGefahr(
+            org_id=objekt.org_id, objekt_id=objekt.id, gefahr_id=gefahr.id,
+            detail=eintrag.get("detail") or None,
+        ))
+        bestehende_gefahr_typen.add(eintrag.get("piktogramm_typ"))
+
+    bestehende_merkmal_ids = {m.merkmal_id for m in objekt.merkmale}
+    bestehende_merkmal_codes = {m.merkmal.code for m in objekt.merkmale if m.merkmal and m.merkmal.code}
+    for eintrag in vorschlag.merkmale:
+        if eintrag.get("code") and eintrag["code"] in bestehende_merkmal_codes:
+            continue  # defensiv: seit Vorschlags-Erstellung bereits erfasst
+        merkmal = _merkmal_katalog_holen_oder_anlegen(db, objekt, eintrag)
+        if merkmal is None or merkmal.id in bestehende_merkmal_ids:
+            continue
+        db.add(ObjektMerkmal(org_id=objekt.org_id, objekt_id=objekt.id, merkmal_id=merkmal.id))
+        bestehende_merkmal_ids.add(merkmal.id)
+
+    vorschlag.status = KI_VORSCHLAG_UEBERNOMMEN
+    vorschlag.entschieden_von_id = user.id
+    vorschlag.entschieden_am = datetime.now(UTC)
+    write_objekt_change(
+        db, objekt.id, objekt.org_id, "stammdaten", "ki_stammdaten_uebernommen",
+        before=None, after=vorschlag.begruendung or "KI-Stammdaten übernommen", user_id=user.id,
+    )
+
+
+@router.post("/objekte/{objekt_id}/dokumente/ki-review-stammdaten/{vorschlag_id}/uebernehmen",
+             response_class=HTMLResponse)
+def ki_stammdaten_vorschlag_uebernehmen(
+    objekt_id: int,
+    vorschlag_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    vorschlag = _stammdaten_vorschlag_oder_404(db, objekt.id, vorschlag_id)
+    _stammdaten_vorschlag_uebernehmen(db, vorschlag, user)
+    db.commit()
+    return templates.TemplateResponse(
+        request, "objekt/_dokumente.html", _galerie_context(request, db, user, objekt)
+    )
+
+
+@router.post("/objekte/{objekt_id}/dokumente/ki-review-stammdaten/{vorschlag_id}/verwerfen",
+             response_class=HTMLResponse)
+def ki_stammdaten_vorschlag_verwerfen(
+    objekt_id: int,
+    vorschlag_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    from app.models.objekt import KI_VORSCHLAG_VERWORFEN
+    objekt = _objekt_or_404(db, objekt_id, user)
+    vorschlag = _stammdaten_vorschlag_oder_404(db, objekt.id, vorschlag_id)
+    vorschlag.status = KI_VORSCHLAG_VERWORFEN
+    vorschlag.entschieden_von_id = user.id
+    vorschlag.entschieden_am = datetime.now(UTC)
     db.commit()
     return templates.TemplateResponse(
         request, "objekt/_dokumente.html", _galerie_context(request, db, user, objekt)

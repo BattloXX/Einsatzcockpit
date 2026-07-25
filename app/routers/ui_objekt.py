@@ -56,6 +56,7 @@ from app.models.user import User
 from app.services.objekt_service import (
     aktualisiere_felder,
     berechne_vollstaendigkeit,
+    fehlende_kartensymbole,
     gefahr_links,
     lade_auswahl,
     naechste_nummer,
@@ -552,6 +553,7 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
             gefahren_count=len(objekt.gefahren),
             dokument_count=dokument_count,
         ),
+        "fehlende_kartensymbole": fehlende_kartensymbole(objekt),
         "ist_verwalter": is_objekt_verwalter(user),
     }
 
