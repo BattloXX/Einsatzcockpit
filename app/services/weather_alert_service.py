@@ -466,7 +466,12 @@ def _eval_tauwetter(rule, pic: WeatherPicture) -> RuleResult:
         return RuleResult("akut",
                           f"Tauwetter: T {temp:.1f} °C, Pegel steigend",
                           {"temp_c": temp, "pegel_trend": pic.pegel_trend})
-    if t_now is not None and t_24h is not None and (t_24h - t_now) >= anstieg_k and t_24h > 0:
+    if (t_now is not None and t_24h is not None
+            and t_now <= 0.0 and (t_24h - t_now) >= anstieg_k and t_24h > 0):
+        # t_now <= 0.0: es muss vorher gefroren haben - sonst gibt es nichts
+        # zum Tauen (siehe Doku "nach Kälteperiode"). Ohne diese Prüfung würde
+        # z.B. ein Anstieg von 15°C auf 23°C im Hochsommer faelschlich als
+        # Tauwetter-Vorwarnung gemeldet.
         return RuleResult("vorwarnung",
                           f"Tauwetter-Prognose: T-Anstieg {t_24h - t_now:.1f} K in ≤24 h",
                           {"temp_now_c": t_now, "temp_24h_c": t_24h,

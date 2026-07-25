@@ -311,6 +311,19 @@ def test_tauwetter_vorwarnung():
     assert r.state == "vorwarnung"
 
 
+def test_tauwetter_kein_frost_vorher_keine_vorwarnung():
+    """Regressionstest: ein Temperaturanstieg allein ist kein Tauwetter - es muss
+    vorher gefroren haben (siehe Doku "nach Kälteperiode"). Ohne Frost-Check
+    wuerde ein sommerlicher Anstieg von 15 auf 23 °C (8 K, > 0 °C) faelschlich
+    eine Tauwetter-Vorwarnung ausloesen."""
+    f6  = FakeForecastHorizon(hours=6,  temperature_c=15.0)
+    f24 = FakeForecastHorizon(hours=24, temperature_c=23.0)
+    fc = FakeForecastResult(horizons=[f6, f24])
+    pic = empty_pic(forecast=fc)
+    r = evaluate_rule(FakeRule("tauwetter"), pic)
+    assert r.state == "none"
+
+
 # ── Downburst ─────────────────────────────────────────────────────────────────
 
 def test_downburst_akut():
