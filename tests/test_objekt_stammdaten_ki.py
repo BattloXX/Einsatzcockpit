@@ -272,6 +272,103 @@ def test_analysiere_seite_andere_dokumentart_erzeugt_keinen_stammdaten_vorschlag
     ).first() is None
 
 
+# ── analysiere_unklassifizierte_seiten: nutzt intern app.db.SessionLocal
+# (Background-Task-Muster), daher auf der GETEILTEN Test-DB statt der
+# isolierten stammdaten_db-Engine (die waere fuer diese Funktion unsichtbar). ─
+
+@pytest.fixture()
+def nachhol_setup(tmp_path, monkeypatch):
+    from app.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "OBJEKT_MEDIA_DIR", str(tmp_path / "objekt_media"))
+
+    import uuid
+
+    from app.db import SessionLocal
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    # Eindeutiger Slug: laeuft auf der GETEILTEN Test-DB (siehe Kommentar oben),
+    # Zeilen aus anderen Testfaellen bleiben dort bestehen.
+    org = FireDept(slug=f"nachhol-org-{uuid.uuid4().hex[:8]}", name="Nachhol Org",
+                   color="#00ff00", bos="Feuerwehr")
+    db.add(org)
+    db.flush()
+    db.add(OrgSettings(org_id=org.id, objekt_ki_klassifikation_enabled=True))
+    objekt = Objekt(org_id=org.id, nummer=1, name="Nachhol-Testobjekt",
+                    status=OBJEKT_STATUS_FREIGEGEBEN)
+    db.add(objekt)
+    db.flush()
+    dokument = ObjektDokument(org_id=org.id, objekt_id=objekt.id,
+                              dateiname_original="bsp.pdf", pfad="x/t/original.pdf",
+                              seitenzahl=1, status="fertig")
+    db.add(dokument)
+    db.flush()
+    seite = ObjektDokumentSeite(org_id=org.id, objekt_id=objekt.id,
+                                dokument_id=dokument.id, seiten_nr=4)
+    db.add(seite)
+    db.commit()
+    _bild_datei(seite, tmp_path)
+    db.commit()
+
+    yield db, org, objekt, seite
+    db.close()
+
+
+def test_analysiere_unklassifizierte_seiten_holt_bereits_klassifizierte_objektinformation_nach(
+    nachhol_setup,
+):
+    """Regressionstest: eine Seite, die BEREITS als "objektinformation"
+    klassifiziert ist (z. B. weil ihr Klassifikations-Vorschlag schon vor
+    Einfuehrung der Stammdaten-Extraktion angenommen wurde), wuerde vom
+    "unklassifiziert"-Filter fuer immer ausgeschlossen - ohne den
+    Nachhol-Schritt wuerde ein erneuter Klick auf "KI-Vorschläge" nie einen
+    Stammdaten-/Gefahren-Vorschlag fuer sie erzeugen."""
+    from app.services import objekt_ki_service
+    db, org, objekt, seite = nachhol_setup
+    seite.dokumentart = "objektinformation"  # bereits klassifiziert, VOR dem Update
+    db.commit()
+
+    async def fake_vision(system, user, images, **kw):
+        return ('{"bmz_standort": "BE1, UG (Feuerwehrzugang 1)", '
+                '"gefahren": [{"piktogramm_typ": "gas", "name": null, "detail": "Sauerstofftank 2300l"}], '
+                '"begruendung": "Objektbeschreibung Seite 4"}')
+
+    with patch("app.services.ai_service.is_enabled", return_value=True), \
+         patch("app.services.ai_service.complete_vision", side_effect=fake_vision):
+        anzahl = asyncio.run(objekt_ki_service.analysiere_unklassifizierte_seiten(objekt.id))
+
+    assert anzahl == 1
+    stammdaten = db.query(ObjektStammdatenVorschlag).filter(
+        ObjektStammdatenVorschlag.seite_id == seite.id
+    ).first()
+    assert stammdaten is not None
+    assert stammdaten.bmz_standort == "BE1, UG (Feuerwehrzugang 1)"
+    assert stammdaten.gefahren == [{"piktogramm_typ": "gas", "name": None, "detail": "Sauerstofftank 2300l"}]
+
+
+def test_analysiere_unklassifizierte_seiten_wiederholt_bereits_entschiedene_stammdaten_nicht(
+    nachhol_setup,
+):
+    """Wurde ein Stammdaten-Vorschlag fuer eine Seite schon einmal entschieden
+    (verworfen/uebernommen), soll der Nachhol-Schritt sie nicht erneut anfassen -
+    keine Dauer-Nachfrage fuer bereits gepruefte Seiten."""
+    from app.services import objekt_ki_service
+    db, org, objekt, seite = nachhol_setup
+    seite.dokumentart = "objektinformation"
+    db.add(ObjektStammdatenVorschlag(
+        org_id=org.id, objekt_id=objekt.id, seite_id=seite.id,
+        status=KI_VORSCHLAG_UEBERNOMMEN,
+    ))
+    db.commit()
+
+    async def fake_vision(system, user, images, **kw):
+        raise AssertionError("complete_vision haette nicht aufgerufen werden duerfen")
+
+    with patch("app.services.ai_service.is_enabled", return_value=True), \
+         patch("app.services.ai_service.complete_vision", side_effect=fake_vision):
+        anzahl = asyncio.run(objekt_ki_service.analysiere_unklassifizierte_seiten(objekt.id))
+    assert anzahl == 0
+
+
 def test_stammdaten_vorschlag_uebernehmen_befuellt_objekt_bma_gefahr_merkmal(stammdaten_db):
     from app.routers.ui_objekt_dokumente import _stammdaten_vorschlag_uebernehmen
     db, org, objekt, seite = stammdaten_db

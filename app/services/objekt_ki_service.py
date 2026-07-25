@@ -91,14 +91,9 @@ def _parse_antwort(text: str, erlaubte_codes: set[str]) -> dict | None:
     }
 
 
-async def analysiere_seite(seite: ObjektDokumentSeite, db: Session) -> ObjektSeiteKiVorschlag | None:
-    """Erzeugt einen KI-Vorschlag fuer eine Seite (nutzt das Thumbnail-/Hi-Res-Bild).
-
-    Gibt None zurueck bei fehlendem Rendering, KI-Fehler oder ungueltiger
-    Antwort. Vorhandene offene Vorschlaege der Seite werden ersetzt.
-    Caller committet.
-    """
-    from app.services.ai_service import AIServiceError, complete_vision
+def _lade_bild_fuer_ki(seite: ObjektDokumentSeite) -> bytes | None:
+    """Laedt das Seiten-Rendering und verkleinert es auf max. ~1024px
+    (Tokenkosten). None, wenn (noch) kein Rendering existiert."""
     from app.services.objekt_dokument_service import absolute_pfad
 
     bild_pfad = seite.bild_pfad or seite.thumb_pfad
@@ -109,7 +104,6 @@ async def analysiere_seite(seite: ObjektDokumentSeite, db: Session) -> ObjektSei
         return None
 
     bild = pfad.read_bytes()
-    # Tokenkosten begrenzen: auf max. ~1024 px verkleinern
     try:
         import io as _io
 
@@ -124,6 +118,21 @@ async def analysiere_seite(seite: ObjektDokumentSeite, db: Session) -> ObjektSei
             bild = buf.getvalue()
     except Exception:
         pass
+    return bild
+
+
+async def analysiere_seite(seite: ObjektDokumentSeite, db: Session) -> ObjektSeiteKiVorschlag | None:
+    """Erzeugt einen KI-Vorschlag fuer eine Seite (nutzt das Thumbnail-/Hi-Res-Bild).
+
+    Gibt None zurueck bei fehlendem Rendering, KI-Fehler oder ungueltiger
+    Antwort. Vorhandene offene Vorschlaege der Seite werden ersetzt.
+    Caller committet.
+    """
+    from app.services.ai_service import AIServiceError, complete_vision
+
+    bild = _lade_bild_fuer_ki(seite)
+    if bild is None:
+        return None
 
     from app.services.objekt_service import lade_auswahl
     dokumentarten = lade_auswahl(db, seite.org_id, "dokumentart")
@@ -350,10 +359,33 @@ async def analysiere_objektbeschreibung(
     return vorschlag
 
 
-async def analysiere_unklassifizierte_seiten(objekt_id: int, *, limit: int = 20) -> int:
-    """Background-Task: erzeugt Vorschlaege fuer unklassifizierte Seiten eines Objekts.
+async def analysiere_objektbeschreibung_fuer_seite(
+    seite: ObjektDokumentSeite, db: Session,
+) -> ObjektStammdatenVorschlag | None:
+    """Wie analysiere_objektbeschreibung(), laedt Bild/Volltext aber selbst
+    (Aufruf unabhaengig von analysiere_seite()). Fuer bereits als
+    "objektinformation" klassifizierte Seiten, die noch keinen
+    Stammdaten-Vorschlag haben - z. B. weil sie schon vor Einfuehrung dieser
+    Erweiterung klassifiziert wurden (die Dokumentart-Klassifikation selbst
+    laeuft nicht erneut, dafuer bleibt die bestehende Seiten-Klassifikation
+    unangetastet)."""
+    bild = _lade_bild_fuer_ki(seite)
+    if bild is None:
+        return None
+    seiten_text = (seite.volltext or "").strip()
+    return await analysiere_objektbeschreibung(seite, db, bild=bild, seiten_text=seiten_text)
 
-    Gibt die Anzahl erzeugter Vorschlaege zurueck. Eigene Session, Opt-in-Gate.
+
+async def analysiere_unklassifizierte_seiten(objekt_id: int, *, limit: int = 20) -> int:
+    """Background-Task: erzeugt Vorschlaege fuer unklassifizierte Seiten eines Objekts
+    UND holt die Stammdaten-Extraktion fuer bereits als "objektinformation"
+    klassifizierte Seiten nach, die noch nie einen Stammdaten-Vorschlag hatten
+    (z. B. Seiten, die schon vor Einfuehrung dieser Erweiterung klassifiziert
+    wurden - ohne diesen Nachhol-Schritt wuerde der "KI-Vorschläge"-Button fuer
+    sie fuer immer nur die alte Klassifikation wiederholen).
+
+    Gibt die Anzahl erzeugter Vorschlaege (beider Art) zurueck. Eigene Session,
+    Opt-in-Gate.
     """
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -372,11 +404,26 @@ async def analysiere_unklassifizierte_seiten(objekt_id: int, *, limit: int = 20)
             .limit(limit)
             .all()
         )
-        if not seiten:
+        nachzuholen = (
+            db.query(ObjektDokumentSeite)
+            .filter(
+                ObjektDokumentSeite.objekt_id == objekt_id,
+                ObjektDokumentSeite.dokumentart == "objektinformation",
+                ~ObjektDokumentSeite.id.in_(
+                    db.query(ObjektStammdatenVorschlag.seite_id)
+                    .filter(ObjektStammdatenVorschlag.objekt_id == objekt_id)
+                ),
+            )
+            .order_by(ObjektDokumentSeite.dokument_id, ObjektDokumentSeite.seiten_nr)
+            .limit(limit)
+            .all()
+        )
+        if not seiten and not nachzuholen:
             return 0
-        if not ki_klassifikation_enabled(seiten[0].org_id, db):
+        org_id = (seiten[0] if seiten else nachzuholen[0]).org_id
+        if not ki_klassifikation_enabled(org_id, db):
             return 0
-        # Seiten mit bereits offenem Vorschlag ueberspringen
+        # Seiten mit bereits offenem Klassifikations-Vorschlag ueberspringen
         offene = {
             v.seite_id
             for v in db.query(ObjektSeiteKiVorschlag)
@@ -391,6 +438,10 @@ async def analysiere_unklassifizierte_seiten(objekt_id: int, *, limit: int = 20)
                 continue
             vorschlag = await analysiere_seite(seite, db)
             if vorschlag is not None:
+                erzeugt += 1
+        for seite in nachzuholen:
+            stammdaten_vorschlag = await analysiere_objektbeschreibung_fuer_seite(seite, db)
+            if stammdaten_vorschlag is not None:
                 erzeugt += 1
         if erzeugt:
             db.commit()
