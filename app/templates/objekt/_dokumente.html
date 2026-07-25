@@ -70,6 +70,54 @@
   </div>
   {% endif %}
 
+  {% if ist_verwalter and stammdaten_vorschlaege %}
+  <div class="card" style="padding:12px;margin-bottom:14px;border-left:4px solid #34d399;">
+    <strong>🧾 KI-Stammdaten-Vorschläge aus Objektbeschreibung ({{ stammdaten_vorschlaege|length }})</strong>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+      {% for v in stammdaten_vorschlaege %}
+      <div style="border:1px solid var(--border);border-radius:8px;padding:10px;">
+        <div style="display:flex;gap:10px;align-items:flex-start;">
+          {% if v.seite and v.seite.thumb_pfad %}
+          <img src="/objekt-medien/seite/{{ v.seite_id }}/thumb" alt="" style="width:56px;border-radius:4px;background:#fff;">
+          {% endif %}
+          <div style="flex:1;min-width:0;font-size:0.9em;">
+            {% if v.informationen_text %}<div><strong>Objekt-Infos:</strong> {{ v.informationen_text }}</div>{% endif %}
+            {% if v.bmz_standort %}<div><strong>BMZ-Standort:</strong> {{ v.bmz_standort }}</div>{% endif %}
+            {% if v.fbf_standort %}<div><strong>FBF-Standort:</strong> {{ v.fbf_standort }}</div>{% endif %}
+            {% if v.laufkarten_ablageort %}<div><strong>Laufkarten:</strong> {{ v.laufkarten_ablageort }}</div>{% endif %}
+            {% if v.schluesselsafe_standort %}<div><strong>Schlüsselsafe:</strong> {{ v.schluesselsafe_standort }}</div>{% endif %}
+            {% if v.gefahren %}
+            <div><strong>Gefahren:</strong>
+              {% for g in v.gefahren %}{{ g.name or gefahr_piktogramme.get(g.piktogramm_typ, g.piktogramm_typ) }}{% if g.detail %} ({{ g.detail }}){% endif %}{% if g.name %} <span class="text-muted">· neue Kategorie</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+            </div>
+            {% endif %}
+            {% if v.merkmale %}
+            <div><strong>Merkmale:</strong>
+              {% for m in v.merkmale %}{{ merkmal_labels.get(m.code, m.name) }}{% if not m.code %} <span class="text-muted">· neues Merkmal</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+            </div>
+            {% endif %}
+            {% if v.begruendung %}<div class="text-muted" style="font-size:0.85em;margin-top:4px;">{{ v.begruendung }}</div>{% endif %}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review-stammdaten/{{ v.id }}/uebernehmen"
+                hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--primary btn--xs">✓ Übernehmen</button>
+          </form>
+          <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review-stammdaten/{{ v.id }}/verwerfen"
+                hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--ghost btn--xs">Verwerfen</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="form-hint" style="margin:8px 0 0;">Ergänzt Objekt-Infos/BMA-Standorte/Gefahren/Merkmale — wird nie automatisch übernommen.</p>
+  </div>
+  {% endif %}
+
   {% if in_verarbeitung %}
   <div class="alert alert--success" style="display:flex;align-items:center;gap:8px;"
        hx-get="/objekte/{{ objekt.id }}/dokumente" hx-trigger="every 3s"

@@ -129,6 +129,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "alarm_infoscreen_token",
     "infoscreen_url",
     "objekt_seite_ki_vorschlag",
+    "objekt_stammdaten_vorschlag",
     # Wasserstellen-/Löschwasser-Stammdaten (TenantScoped via Mixin)
     "wasserstelle",
     # Förderstrecken-Planer Gerätekatalog (TenantScoped via Mixin)
