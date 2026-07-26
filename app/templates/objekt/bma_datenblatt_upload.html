@@ -11,6 +11,23 @@
   <div class="alert alert--danger" style="margin-bottom:16px;">{{ fehler }}</div>
   {% endif %}
 
+  {% if ergebnisse %}
+  <div class="card" style="padding:20px;margin-bottom:20px;">
+    <h2 style="margin-top:0;font-size:1rem;">Ergebnis ({{ ergebnisse|length }} Datei(en))</h2>
+    {% for e in ergebnisse %}
+    <div style="padding:8px 0;{% if not loop.last %}border-bottom:1px solid var(--color-border);{% endif %}">
+      <strong>{{ e.dateiname }}</strong>
+      {% if e.ok %}
+      <span style="color:var(--color-success);">&#10003;</span> {{ e.meldung }}
+      {% if e.objekt_id %} — <a href="/objekte/{{ e.objekt_id }}">Objekt ansehen</a>{% endif %}
+      {% else %}
+      <span style="color:var(--color-danger);">&#10007;</span> {{ e.meldung }}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <div class="card" style="padding:20px;">
     <p class="text-muted" style="margin-top:0;">
       Kein Objekt auswählen nötig — die Anlagenbezeichnung, Adresse, RFL-Aufschaltung und
@@ -20,11 +37,15 @@
       Zielobjekt bereits freigegeben, landet die Änderung als Vorschlag in der Warteliste statt
       direkt übernommen zu werden.
     </p>
+    <p class="text-muted" style="margin:0 0 12px 0;">
+      Mehrere Datenblätter (auch unterschiedlicher Anlagen) können auf einmal ausgewählt werden —
+      jedes wird einzeln und unabhängig verarbeitet.
+    </p>
     <form method="post" action="/objekte/bma-import/datenblatt-upload" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group">
-        <label class="form-label">Datenblatt-PDF *</label>
-        <input type="file" name="datei" class="form-input" accept="application/pdf" required>
+        <label class="form-label">Datenblatt-PDF(s) *</label>
+        <input type="file" name="dateien" class="form-input" accept="application/pdf" multiple required>
       </div>
       <button type="submit" class="btn btn--primary">Hochladen &amp; übernehmen</button>
     </form>

@@ -435,11 +435,12 @@ def test_datenblatt_upload_legt_neues_objekt_an():
     r = client.post(
         "/objekte/bma-import/datenblatt-upload",
         data={"_csrf": csrf},
-        files={"datei": ("BMA_Datenblatt_9201.pdf", pdf_bytes, "application/pdf")},
+        files=[("dateien", ("BMA_Datenblatt_9201.pdf", pdf_bytes, "application/pdf"))],
         follow_redirects=False,
     )
-    assert r.status_code == 303, r.text[:300]
-    assert "bma_datenblatt=neu_angelegt" in r.headers["location"]
+    assert r.status_code == 200, r.text[:300]  # Ergebnis-Uebersicht statt Redirect (Mehrfach-Upload-faehig)
+    assert "BMA_Datenblatt_9201.pdf" in r.text
+    assert "Neues Objekt angelegt" in r.text
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -458,6 +459,121 @@ def test_datenblatt_upload_legt_neues_objekt_an():
         db.close()
 
 
+def test_datenblatt_upload_mehrere_dateien_werden_einzeln_verarbeitet():
+    """Zwei Datenblaetter unterschiedlicher Anlagen in EINEM Request - beide muessen
+    unabhaengig voneinander ein eigenes Objekt anlegen, keins darf das andere
+    beeinflussen oder verhindern.
+
+    Eigene, von _DATENBLATT_ZEILEN (BMA 9201) verschiedene BMA-Nummern: die
+    geteilte Home-Org (ORG_ID=1) wird zwischen Tests dieser Datei NICHT
+    zurueckgesetzt (Muster: test_incident_duplicate_guard.py-Kommentar zu
+    session-scoped DBs) - eine wiederverwendete BMA-Nummer wuerde hier faelschlich
+    auf den bereits von test_datenblatt_upload_legt_neues_objekt_an angelegten
+    BmaImportSatz treffen ("unveraendert" statt "neu_angelegt")."""
+    _setup_admin("bma_pdf_mehrfach_user", rollen=("org_admin", "objekt_verwalter"))
+
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "bma_pdf_mehrfach_user", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    erste_anlage = [
+        "BMA 9210",
+        "Firma Mehrfach A",
+        "1. Angaben zur Brandmeldeanlage",
+        "Standort: Firma Mehrfach A Anlagedatum: 01.01.2020 00:00:00",
+        "Straße: Erster Weg 1 PLZ/Ort: 6900 Bregenz",
+        "Telefon Beruf: +43 5574 11111",
+        "Aufschaltung RFL:Nein",
+    ]
+    zweite_anlage = [
+        "BMA 9211",
+        "Firma Mehrfach B",
+        "1. Angaben zur Brandmeldeanlage",
+        "Standort: Firma Mehrfach B Anlagedatum: 01.01.2020 00:00:00",
+        "Straße: Zweiter Weg 2 PLZ/Ort: 6900 Bregenz",
+        "Telefon Beruf: +43 5574 22222",
+        "Aufschaltung RFL:Nein",
+    ]
+
+    r = client.post(
+        "/objekte/bma-import/datenblatt-upload",
+        data={"_csrf": csrf},
+        files=[
+            ("dateien", ("BMA_9210.pdf", _test_pdf_datenblatt(erste_anlage), "application/pdf")),
+            ("dateien", ("BMA_9211.pdf", _test_pdf_datenblatt(zweite_anlage), "application/pdf")),
+        ],
+        follow_redirects=False,
+    )
+    assert r.status_code == 200, r.text[:300]
+    assert "BMA_9210.pdf" in r.text
+    assert "BMA_9211.pdf" in r.text
+    assert r.text.count("Neues Objekt angelegt") == 2
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt1 = db.query(Objekt).filter(
+            Objekt.org_id == ORG_ID, Objekt.name == "Firma Mehrfach A",
+        ).first()
+        objekt2 = db.query(Objekt).filter(
+            Objekt.org_id == ORG_ID, Objekt.name == "Firma Mehrfach B",
+        ).first()
+        assert objekt1 is not None and objekt2 is not None
+        assert objekt1.id != objekt2.id
+        assert objekt1.bma.bma_nummer == "9210"
+        assert objekt2.bma.bma_nummer == "9211"
+    finally:
+        db.close()
+
+
+def test_datenblatt_upload_ein_fehler_verhindert_nicht_die_anderen_dateien():
+    """Eine kaputte Datei mitten in einem Mehrfach-Upload darf die restlichen
+    gueltigen Dateien nicht verhindern. Eigene BMA-Nummer (9212, siehe Docstring
+    des vorigen Tests zur Begruendung)."""
+    _setup_admin("bma_pdf_teilfehler_user", rollen=("org_admin", "objekt_verwalter"))
+
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "bma_pdf_teilfehler_user", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    gueltige_anlage = [
+        "BMA 9212",
+        "Firma Teilfehler",
+        "1. Angaben zur Brandmeldeanlage",
+        "Standort: Firma Teilfehler Anlagedatum: 01.01.2020 00:00:00",
+        "Straße: Dritter Weg 3 PLZ/Ort: 6900 Bregenz",
+        "Telefon Beruf: +43 5574 33333",
+        "Aufschaltung RFL:Nein",
+    ]
+
+    r = client.post(
+        "/objekte/bma-import/datenblatt-upload",
+        data={"_csrf": csrf},
+        files=[
+            ("dateien", ("kaputt.pdf", _test_pdf_datenblatt(["Kein gueltiges Datenblatt"]), "application/pdf")),
+            ("dateien", ("gueltig.pdf", _test_pdf_datenblatt(gueltige_anlage), "application/pdf")),
+        ],
+        follow_redirects=False,
+    )
+    assert r.status_code == 200, r.text[:300]
+    assert "kaputt.pdf" in r.text and "BMA-Nummer" in r.text
+    assert "gueltig.pdf" in r.text and "Neues Objekt angelegt" in r.text
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.query(Objekt).filter(
+            Objekt.org_id == ORG_ID, Objekt.name == "Firma Teilfehler",
+        ).first()
+        assert objekt is not None  # die gueltige Datei wurde trotz der kaputten verarbeitet
+    finally:
+        db.close()
+
+
 def test_datenblatt_upload_ohne_bma_nummer_zeigt_fehler():
     _setup_admin("bma_pdf_kein_bma_user", rollen=("org_admin", "objekt_verwalter"))
 
@@ -471,10 +587,10 @@ def test_datenblatt_upload_ohne_bma_nummer_zeigt_fehler():
     r = client.post(
         "/objekte/bma-import/datenblatt-upload",
         data={"_csrf": csrf},
-        files={"datei": ("kaputt.pdf", pdf_bytes, "application/pdf")},
+        files=[("dateien", ("kaputt.pdf", pdf_bytes, "application/pdf"))],
         follow_redirects=False,
     )
-    assert r.status_code == 200  # kein Redirect - Formular mit Fehlermeldung erneut angezeigt
+    assert r.status_code == 200
     assert "BMA-Nummer" in r.text
 
 
@@ -490,7 +606,7 @@ def test_datenblatt_upload_lehnt_nicht_pdf_datei_ab():
     r = client.post(
         "/objekte/bma-import/datenblatt-upload",
         data={"_csrf": csrf},
-        files={"datei": ("notiz.txt", b"Das ist kein PDF", "text/plain")},
+        files=[("dateien", ("notiz.txt", b"Das ist kein PDF", "text/plain"))],
         follow_redirects=False,
     )
     assert r.status_code == 200

@@ -708,6 +708,46 @@ async def dokument_upload_verarbeiten(
     return RedirectResponse(f"/objekte/{objekt.id}?plan={plan_status}", status_code=303)
 
 
+# ── Globales Aenderungsprotokoll (alle Objekte) ─────────────────────────────
+# WICHTIG: muss VOR "/{objekt_id}" registriert sein (siehe Begruendung beim
+# Brandschutzplan-Upload oben) - sonst wuerde "/objekte/changelog" faelschlich
+# von "/{objekt_id}" abgefangen und mit 422 (ungueltiger Integer "changelog") abgelehnt.
+
+@router.get("/changelog", response_class=HTMLResponse)
+def objekt_changelog(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Uebergreifendes Aenderungsprotokoll ueber ALLE Objekte der Org - Gegenstueck
+    zu protokoll_partial() (nur ein einzelnes Objekt). Nuetzlich z.B. um nach einem
+    BMA-Datenblatt-Mehrfach-Upload (mehrere Objekte auf einmal) auf einen Blick zu
+    sehen, was sich ueberall veraendert hat, ohne jedes Objekt einzeln zu oeffnen."""
+    changes = (
+        db.query(ObjektChange)
+        .order_by(ObjektChange.erstellt_am.desc(), ObjektChange.id.desc())
+        .limit(200)
+        .all()
+    )
+    objekt_ids = {c.objekt_id for c in changes}
+    user_ids = {c.user_id for c in changes if c.user_id}
+    objekte: dict[int, Objekt] = {}
+    if objekt_ids:
+        for o in db.query(Objekt).filter(Objekt.id.in_(objekt_ids)).all():
+            objekte[o.id] = o
+    benutzer: dict[int, User] = {}
+    if user_ids:
+        for u in db.query(User).filter(User.id.in_(user_ids)).all():
+            benutzer[u.id] = u
+    return templates.TemplateResponse(request, "objekt/changelog.html", {
+        "user": user,
+        "changes": changes,
+        "objekte": objekte,
+        "benutzer": benutzer,
+    })
+
+
 @router.get("/{objekt_id}", response_class=HTMLResponse)
 def objekt_detail(
     objekt_id: int,

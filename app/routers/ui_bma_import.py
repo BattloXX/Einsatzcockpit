@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -30,6 +31,7 @@ from app.models.user import User
 from app.routers.ui_objekt import require_objekt_enabled
 
 router = APIRouter(tags=["bma-import"])
+logger = logging.getLogger("einsatzleiter.bma_import.ui")
 
 
 # ── Admin-Konfiguration (Muster: ui_dibos.py) ────────────────────────────────
@@ -288,14 +290,30 @@ def bma_datenblatt_upload_form(
     return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {"user": user})
 
 
+_ERGEBNIS_LABEL = {
+    "neu_angelegt": "Neues Objekt angelegt",
+    "aktualisiert": "Bestehendes Objekt aktualisiert",
+    "vorschlag": "Als Vorschlag in die Warteliste gestellt (Objekt bereits freigegeben)",
+    "unveraendert": "Keine Änderung (Stand bereits übernommen)",
+    "uebersprungen": "Übersprungen (kein Objekt zugeordnet oder archiviert)",
+}
+
+
 @router.post("/objekte/bma-import/datenblatt-upload", response_class=HTMLResponse)
 async def bma_datenblatt_upload_verarbeiten(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
-    datei: UploadFile = File(...),
+    dateien: list[UploadFile] = File(...),
 ):
+    """Verarbeitet ein oder mehrere Datenblatt-PDFs UNABHAENGIG voneinander - jede
+    Datei betrifft i.d.R. eine andere Anlage (eigene BMA-Nummer, eigenes
+    Zielobjekt), ein Fehler bei einer Datei darf die anderen nicht verhindern
+    (Muster: ui_objekt_dokumente.py::dokumente_upload, dort ebenfalls
+    list[UploadFile] + Fehler-Sammelliste statt Abbruch bei der ersten Datei).
+    Pro Datei ein Savepoint, damit ein unerwarteter Fehler bei EINER Datei nicht
+    die bereits erfolgreich verarbeiteten anderen Dateien mit zurückrollt."""
     from app.config import settings
     from app.services.bma_import.bma_pdf_parser import parse_datenblatt_pdf
     from app.services.bma_import.bma_sync import verarbeite_pdf_anlage
@@ -306,50 +324,67 @@ async def bma_datenblatt_upload_verarbeiten(
         return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
             "user": user, "fehler": "Keiner Organisation zugeordnet.",
         })
-
-    data = await datei.read()
-    if not data:
-        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
-            "user": user, "fehler": "Leere Datei.",
-        })
-    if len(data) > settings.OBJEKT_PDF_MAX_BYTES:
-        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
-            "user": user,
-            "fehler": f"Datei zu groß (max. {settings.OBJEKT_PDF_MAX_BYTES // (1024 * 1024)} MB).",
-        })
-    if _detect_mime(data) != "application/pdf":
-        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
-            "user": user, "fehler": "Nur PDF-Dateien werden unterstützt.",
-        })
-
-    try:
-        geparst = parse_datenblatt_pdf(data)
-    except ValueError as exc:
-        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
-            "user": user, "fehler": f"{datei.filename}: {exc}",
-        })
-
-    cfg = _get_or_create_config(db, org_id)
     org = db.query(FireDept).filter(FireDept.id == org_id).first()
     if org is None:
         return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
             "user": user, "fehler": "Organisation nicht gefunden.",
         })
-    satz, ergebnis = verarbeite_pdf_anlage(db, org, cfg, geparst["anlage"], geparst["kontakte"], user)
-    write_audit(
-        db, "bma_import.pdf_datenblatt_hochgeladen", org_id=org_id, user_id=user.id,
-        entity_type="bma_import_satz", entity_id=satz.id,
-        payload={"bma_nummer": geparst["anlage"].get("bma_nummer"), "ergebnis": ergebnis},
-    )
-    db.commit()
+    cfg = _get_or_create_config(db, org_id)
 
-    if ergebnis in ("neu_angelegt", "aktualisiert") and satz.objekt_id:
-        return RedirectResponse(f"/objekte/{satz.objekt_id}?bma_datenblatt={ergebnis}", status_code=303)
-    # 'vorschlag'/'unveraendert'/'uebersprungen' (bzw. kein auto_anlegen ohne
-    # Treffer) - der Satz ist bereits angelegt/aktualisiert und erscheint in der
-    # Review-Queue selbst (Vorschlaege bzw. Nicht zugeordnet), falls er dort
-    # Aufmerksamkeit braucht.
-    return RedirectResponse("/objekte/bma-import?flash=pdf_verarbeitet", status_code=302)
+    ergebnisse: list[dict] = []
+    for datei in dateien:
+        dateiname = datei.filename or "Datenblatt.pdf"
+        data = await datei.read()
+        if not data:
+            ergebnisse.append({"dateiname": dateiname, "ok": False, "meldung": "Leere Datei.", "objekt_id": None})
+            continue
+        if len(data) > settings.OBJEKT_PDF_MAX_BYTES:
+            ergebnisse.append({
+                "dateiname": dateiname, "ok": False,
+                "meldung": f"Datei zu groß (max. {settings.OBJEKT_PDF_MAX_BYTES // (1024 * 1024)} MB).",
+                "objekt_id": None,
+            })
+            continue
+        if _detect_mime(data) != "application/pdf":
+            ergebnisse.append({
+                "dateiname": dateiname, "ok": False,
+                "meldung": "Nur PDF-Dateien werden unterstützt.", "objekt_id": None,
+            })
+            continue
+        try:
+            geparst = parse_datenblatt_pdf(data)
+        except ValueError as exc:
+            ergebnisse.append({"dateiname": dateiname, "ok": False, "meldung": str(exc), "objekt_id": None})
+            continue
+
+        try:
+            with db.begin_nested():
+                satz, ergebnis = verarbeite_pdf_anlage(
+                    db, org, cfg, geparst["anlage"], geparst["kontakte"], user,
+                )
+        except Exception:
+            logger.exception("BMA-Datenblatt-Upload: Verarbeitung fehlgeschlagen (%s)", dateiname)
+            ergebnisse.append({
+                "dateiname": dateiname, "ok": False,
+                "meldung": "Unerwarteter Fehler bei der Verarbeitung.", "objekt_id": None,
+            })
+            continue
+
+        write_audit(
+            db, "bma_import.pdf_datenblatt_hochgeladen", org_id=org_id, user_id=user.id,
+            entity_type="bma_import_satz", entity_id=satz.id,
+            payload={"bma_nummer": geparst["anlage"].get("bma_nummer"), "ergebnis": ergebnis},
+        )
+        ergebnisse.append({
+            "dateiname": dateiname, "ok": True,
+            "meldung": _ERGEBNIS_LABEL.get(ergebnis, ergebnis),
+            "objekt_id": satz.objekt_id,
+        })
+
+    db.commit()
+    return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
+        "user": user, "ergebnisse": ergebnisse,
+    })
 
 
 def _satz_or_404(db: Session, satz_id: int, user: User) -> BmaImportSatz:
