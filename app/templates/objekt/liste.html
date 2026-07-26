@@ -131,6 +131,14 @@
         <label class="checkbox-label"><input type="checkbox" name="mit_anhang" value="1"> inkl. „Bei Einsatz drucken"-Anhänge</label>
         <button type="submit" class="btn btn--primary">🖨 Mappe drucken</button>
       </form>
+      {% if ist_verwalter %}
+      <form method="post" action="/objekte/bulk-freigeben"
+            @submit="if (!confirm('Ausgewählte Entwurf-Objekte (' + auswahl.length + ') freigeben? Sie werden damit produktiv (Matching, Sync, Einsatzansicht).')) $event.preventDefault()">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="objekt_ids" :value="auswahl.join(',')">
+        <button type="submit" class="btn btn--primary">✓ Freigeben</button>
+      </form>
+      {% endif %}
       {% if is_admin %}
       <form method="post" action="/objekte/bulk-loeschen"
             @submit="if (!confirm('Ausgewählte Objekte (' + auswahl.length + ') unwiderruflich löschen? Alle Daten inkl. Dokumente gehen verloren.')) $event.preventDefault()">

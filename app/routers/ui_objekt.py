@@ -34,7 +34,9 @@ from app.models.objekt import (
     AUSWAHL_KONTAKTART,
     AUSWAHL_PIKTOGRAMM,
     OBJEKT_STATUS_ENTWURF,
+    OBJEKT_STATUS_FREIGEGEBEN,
     OBJEKT_STATUS_LABELS,
+    OBJEKT_STATUS_UEBERARBEITUNG,
     SYMBOL_STILE,
     GefahrenKatalog,
     MerkmalKatalog,
@@ -56,12 +58,17 @@ from app.models.user import User
 from app.services.objekt_service import (
     aktualisiere_felder,
     berechne_vollstaendigkeit,
+    erstelle_arbeitskopie,
     fehlende_kartensymbole,
     gefahr_links,
+    hole_arbeitskopie,
     lade_auswahl,
     naechste_nummer,
+    nur_produktiv,
     status_uebergang_erlaubt,
     telefone_zu_json,
+    uebernimm_arbeitskopie,
+    verwirf_arbeitskopie,
     write_objekt_change,
 )
 
@@ -110,6 +117,27 @@ def _objekt_or_404(db: Session, objekt_id: int, user: User) -> Objekt:
     if objekt.status == OBJEKT_STATUS_ENTWURF and not is_objekt_verwalter(user):
         raise HTTPException(status_code=404, detail="Objekt nicht gefunden")
     return objekt
+
+
+def _objekt_arbeitsstand(db: Session, objekt_id: int, user: User, request: Request) -> Objekt:
+    """Wie _objekt_or_404, liefert aber fuer objekt_verwalter transparent die offene
+    Arbeitskopie statt des produktiven Objekts, solange eine existiert - die einzige Stelle,
+    an der Bearbeitungsrouten (Stammdaten/BMA/Gefahren/Merkmale/Kontakte/Wohnanlage/Karte)
+    zwischen "produktivem Objekt" und "Arbeitskopie" unterscheiden muessen. Alle Kindzeilen
+    werden ueber objekt.id angelegt/gesucht - Schreibrouten wirken dadurch automatisch auf
+    die Kopie, ohne selbst etwas ueber Arbeitskopien zu wissen.
+
+    URL bleibt immer /objekte/{produktive_id}/... - die Kopie hat keine eigene, nach aussen
+    sichtbare URL. `?fassung=produktiv` erzwingt (fuer Verwalter) die produktive Ansicht,
+    z. B. zum Vergleichen waehrend eine Ueberarbeitung laeuft.
+    """
+    basis = _objekt_or_404(db, objekt_id, user)
+    if not is_objekt_verwalter(user):
+        return basis
+    if request.query_params.get("fassung") == "produktiv":
+        return basis
+    kopie = hole_arbeitskopie(db, basis)
+    return kopie if kopie is not None else basis
 
 
 def _kategorien(db: Session, nur_aktive: bool = True) -> list[ObjektKategorie]:
@@ -177,7 +205,7 @@ def objekt_liste(
     kategorie_id = int(kategorie) if kategorie.strip().isdigit() else None
     merkmal_id = int(merkmal) if merkmal.strip().isdigit() else None
 
-    query = (
+    query = nur_produktiv(
         db.query(Objekt)
         .options(
             selectinload(Objekt.bma),
@@ -526,7 +554,7 @@ def kategorie_loeschen(
     kat = db.query(ObjektKategorie).filter(ObjektKategorie.id == kategorie_id).first()
     if kat is None:
         raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")
-    verwendet = db.query(Objekt).filter(Objekt.kategorie_id == kat.id).first()
+    verwendet = nur_produktiv(db.query(Objekt)).filter(Objekt.kategorie_id == kat.id).first()
     if verwendet:
         return RedirectResponse(url="/objekte/kataloge?error=in_use", status_code=303)
     db.delete(kat)
@@ -540,20 +568,31 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
     from sqlalchemy import func as _func
 
     from app.models.objekt import ObjektDokumentSeite
+
+    # Dokumente haengen IMMER an der produktiven Zeile (out of scope fuer die
+    # Arbeitskopie-Versionierung, siehe objekt.py) - bei einer Arbeitskopie (objekt.id
+    # ist dann die Kopie) muss ueber entwurf_von_id auf die Basis-id gezaehlt werden,
+    # sonst zeigt der Dokumente-Tab faelschlich 0 Dokumente waehrend der Ueberarbeitung.
+    produktiv_objekt_id = objekt.entwurf_von_id or objekt.id
     dokument_count = (
         db.query(_func.count(ObjektDokumentSeite.id))
-        .filter(ObjektDokumentSeite.objekt_id == objekt.id)
+        .filter(ObjektDokumentSeite.objekt_id == produktiv_objekt_id)
         .scalar()
     ) or 0
+    arbeitskopie = None
+    if objekt.entwurf_von_id is None and objekt.status == OBJEKT_STATUS_UEBERARBEITUNG:
+        arbeitskopie = hole_arbeitskopie(db, objekt)
 
     from app.models.bma_import import BmaImportSatz
     bma_import_satz = (
-        db.query(BmaImportSatz).filter(BmaImportSatz.objekt_id == objekt.id).first()
+        db.query(BmaImportSatz).filter(BmaImportSatz.objekt_id == produktiv_objekt_id).first()
     )
 
     return {
         "user": user,
         "objekt": objekt,
+        "produktiv_objekt_id": produktiv_objekt_id,
+        "arbeitskopie": arbeitskopie,
         "bma_import_satz": bma_import_satz,
         "kategorien": _kategorien(db),
         "status_labels": OBJEKT_STATUS_LABELS,
@@ -678,7 +717,13 @@ def objekt_detail(
     _guard: None = Depends(require_objekt_enabled),
     plan: str = "",
 ):
-    objekt = _objekt_or_404(db, objekt_id, user)
+    # _objekt_arbeitsstand: objekt_id ist die produktive id; existiert eine offene
+    # Arbeitskopie, wird sie fuer objekt_verwalter transparent statt der Basis geladen -
+    # alle hx-get/hx-post-URLs in detail.html werden aus dem zurueckgegebenen objekt.id
+    # gebaut, wirken dadurch automatisch auf die Kopie, ohne dass die einzelnen
+    # Abschnitts-Routen selbst etwas von Arbeitskopien wissen muessen. ?fassung=produktiv
+    # erzwingt die produktive Ansicht (Vergleich waehrend einer laufenden Ueberarbeitung).
+    objekt = _objekt_arbeitsstand(db, objekt_id, user, request)
     ctx = _detail_context(request, db, user, objekt)
     # Banner nach Redirect vom objektlosen Brandschutzplan-Upload
     # (ui_objekt_dokumente.py::dokument_upload_verarbeiten): "neu" | "ergaenzt".
@@ -991,6 +1036,16 @@ def status_wechseln(
     neuer_status: str = Form(...),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
+    if objekt.entwurf_von_id is not None:
+        # Arbeitskopien duerfen ihren Status nicht ueber diese generische Route aendern -
+        # sonst liesse sich eine Kopie direkt auf 'freigegeben' setzen und wuerde als
+        # zweites, unverknuepftes Objekt liegen bleiben (Merge/Verwerfen umgangen). Der
+        # einzige Weg ist POST /{id}/uebernehmen bzw. /verwerfen.
+        raise HTTPException(
+            status_code=400,
+            detail="Arbeitskopien haben keinen eigenen Status - ueber 'Freigeben' bzw. "
+                   "'Verwerfen' der Ueberarbeitung steuern",
+        )
     if neuer_status not in OBJEKT_STATUS_LABELS:
         raise HTTPException(status_code=400, detail="Unbekannter Status")
     if not status_uebergang_erlaubt(objekt.status, neuer_status):
@@ -1011,6 +1066,79 @@ def status_wechseln(
     return RedirectResponse(url=f"/objekte/{objekt.id}", status_code=303)
 
 
+# ── Arbeitskopie-Workflow (Ueberarbeiten / Uebernehmen / Verwerfen) ────────────
+
+@router.post("/{objekt_id}/ueberarbeiten")
+def objekt_ueberarbeiten(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Legt eine Arbeitskopie eines freigegebenen Objekts an. Das produktive Objekt bleibt
+    dabei inhaltlich unveraendert und weiterhin fuer Matching/Sync/Objektblatt aktiv - siehe
+    erstelle_arbeitskopie() in objekt_service.py."""
+    objekt = _objekt_or_404(db, objekt_id, user)
+    try:
+        kopie = erstelle_arbeitskopie(db, objekt, user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    write_audit(db, "objekt.arbeitskopie_erstellt", org_id=user.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=objekt.id,
+                payload={"kopie_id": kopie.id})
+    db.commit()
+    return RedirectResponse(url=f"/objekte/{objekt.id}", status_code=303)
+
+
+@router.post("/{objekt_id}/uebernehmen")
+def objekt_arbeitskopie_uebernehmen(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Uebernimmt die offene Arbeitskopie in das produktive Objekt (Merge) - siehe
+    uebernimm_arbeitskopie() in objekt_service.py. objekt_id ist immer die produktive id."""
+    basis = _objekt_or_404(db, objekt_id, user)
+    kopie = hole_arbeitskopie(db, basis)
+    if kopie is None:
+        raise HTTPException(status_code=400, detail="Keine offene Arbeitskopie vorhanden")
+    try:
+        uebernimm_arbeitskopie(db, kopie, user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    write_audit(db, "objekt.arbeitskopie_uebernommen", org_id=user.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=basis.id, payload={})
+    db.commit()
+    return RedirectResponse(url=f"/objekte/{basis.id}", status_code=303)
+
+
+@router.post("/{objekt_id}/verwerfen")
+def objekt_arbeitskopie_verwerfen(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Verwirft die offene Arbeitskopie ohne Uebernahme; die produktive Version bleibt
+    unveraendert. objekt_id ist immer die produktive id."""
+    basis = _objekt_or_404(db, objekt_id, user)
+    kopie = hole_arbeitskopie(db, basis)
+    if kopie is None:
+        raise HTTPException(status_code=400, detail="Keine offene Arbeitskopie vorhanden")
+    try:
+        verwirf_arbeitskopie(db, kopie, user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    write_audit(db, "objekt.arbeitskopie_verworfen", org_id=user.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=basis.id, payload={})
+    db.commit()
+    return RedirectResponse(url=f"/objekte/{basis.id}", status_code=303)
+
+
 # ── Objekt loeschen (org_admin/system_admin) ───────────────────────────────────
 
 def _loesche_objekt(db: Session, objekt: Objekt, user: User) -> None:
@@ -1019,6 +1147,18 @@ def _loesche_objekt(db: Session, objekt: Objekt, user: User) -> None:
     das Objekt selbst (Kind-Zeilen via DB-Kaskade). Commit macht der Aufrufer."""
     from app.models.objekt import ObjektDokument
     from app.services.objekt_dokument_service import delete_dokument
+
+    if objekt.entwurf_von_id is not None:
+        # Direktes Loeschen einer Arbeitskopie (statt ueber "Verwerfen") wuerde sonst die
+        # Basis dauerhaft auf 'in_ueberarbeitung' stehen lassen (kein Uebergang mehr zurueck
+        # zu 'freigegeben' in OBJEKT_STATUS_UEBERGAENGE) - ueber verwirf_arbeitskopie() geht
+        # die Basis sauber zurueck auf 'freigegeben'. Arbeitskopien haben keine eigenen
+        # Dokumente (out of scope, siehe objekt.py), der Dokumente-Pfad unten entfaellt.
+        verwirf_arbeitskopie(db, objekt, user.id)
+        write_audit(db, "objekt.arbeitskopie_geloescht", org_id=objekt.org_id, user_id=user.id,
+                    entity_type="objekt", entity_id=objekt.id,
+                    payload={"basis_objekt_id": objekt.entwurf_von_id})
+        return
 
     dokumente = (
         db.query(ObjektDokument)
@@ -1050,6 +1190,38 @@ def objekte_bulk_loeschen(
         if objekt is None:
             continue  # fremde Org (Tenant-Filter) oder bereits geloescht
         _loesche_objekt(db, objekt, user)
+    db.commit()
+    return RedirectResponse(url="/objekte/", status_code=303)
+
+
+@router.post("/bulk-freigeben")
+def objekte_bulk_freigeben(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    objekt_ids: str = Form(""),
+):
+    """Setzt mehrere Objekte aus der Listen-Auswahl von 'entwurf' auf 'freigegeben' -
+    der bewusst manuelle Migrationsweg fuer den heutigen Entwurfs-Bestand (keine
+    automatische Statusmigration, siehe docs/plans/objekt-arbeitskopie-plan.md).
+    Ignoriert Arbeitskopien und bereits freigegebene/archivierte Objekte."""
+    ids = [int(t) for t in objekt_ids.split(",") if t.strip().isdigit()]
+    anzahl = 0
+    for objekt_id in ids:
+        objekt = db.query(Objekt).filter(Objekt.id == objekt_id).first()
+        if objekt is None or objekt.entwurf_von_id is not None:
+            continue  # fremde Org (Tenant-Filter), bereits geloescht, oder Arbeitskopie
+        if not status_uebergang_erlaubt(objekt.status, OBJEKT_STATUS_FREIGEGEBEN):
+            continue
+        alt = objekt.status
+        objekt.status = OBJEKT_STATUS_FREIGEGEBEN
+        objekt.aktualisiert_von_id = user.id
+        write_objekt_change(db, objekt.id, objekt.org_id, "status", "status",
+                            before=alt, after=objekt.status, user_id=user.id)
+        anzahl += 1
+    write_audit(db, "objekt.bulk_freigegeben", org_id=user.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=None, payload={"anzahl": anzahl, "angefragt": len(ids)})
     db.commit()
     return RedirectResponse(url="/objekte/", status_code=303)
 
@@ -2147,7 +2319,7 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
     )
     verknuepfte_ids = {v.objekt_id for v in verknuepfungen}
     kandidaten = (
-        db.query(Objekt)
+        nur_produktiv(db.query(Objekt))
         .options(selectinload(Objekt.bma))
         .filter(Objekt.status.in_(("freigegeben", "in_ueberarbeitung")))
         .order_by(Objekt.nummer)

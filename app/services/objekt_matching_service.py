@@ -186,8 +186,13 @@ def match_incident(db: Session, incident: Incident, *, nur_geo: bool = False) ->
     if org_id is None:
         return []
 
+    from app.services.objekt_service import nur_produktiv
+
+    # nur_produktiv ist hier nur eine zweite Absicherung: Arbeitskopien stehen immer auf
+    # status='entwurf' (nicht in _MATCHBARE_STATUS), koennten also ohnehin nicht matchen.
+    # Explizit gesetzt, damit ein kuenftiger Statuswechsel an dieser Invariante nichts kippt.
     objekte = (
-        db.query(Objekt)
+        nur_produktiv(db.query(Objekt))
         .options(selectinload(Objekt.bma), selectinload(Objekt.zusatzadressen))
         .filter(Objekt.org_id == org_id, Objekt.status.in_(_MATCHBARE_STATUS))
         .execution_options(include_all_tenants=True)

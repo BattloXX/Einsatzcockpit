@@ -32,6 +32,12 @@ from app.core.tenant import TenantScoped
 from app.db import Base
 
 # Status-Workflow: Entwurf → Freigegeben ⇄ In Ueberarbeitung → Archiviert
+#
+# Arbeitskopie-Modell (siehe docs/plans/objekt-arbeitskopie-plan.md): "In Ueberarbeitung"
+# steht auf dem PRODUKTIVEN Objekt, waehrend an einer separaten Arbeitskopie
+# (Objekt.entwurf_von_id gesetzt) gearbeitet wird. Die produktive Zeile bleibt inhaltlich
+# unveraendert, bis die Arbeitskopie uebernommen (Merge) oder verworfen wird - siehe
+# erstelle_arbeitskopie/uebernimm_arbeitskopie/verwirf_arbeitskopie in objekt_service.py.
 OBJEKT_STATUS_ENTWURF = "entwurf"
 OBJEKT_STATUS_FREIGEGEBEN = "freigegeben"
 OBJEKT_STATUS_UEBERARBEITUNG = "in_ueberarbeitung"
@@ -44,13 +50,24 @@ OBJEKT_STATUS_LABELS = {
     OBJEKT_STATUS_ARCHIVIERT: "Archiviert",
 }
 
-# Erlaubte Statusuebergaenge (von → nach)
+# Erlaubte Statusuebergaenge (von → nach) ueber POST /status.
+# WICHTIG: in_ueberarbeitung → freigegeben ist HIER bewusst NICHT erlaubt - das produktive
+# Objekt darf waehrend einer offenen Arbeitskopie nicht "blind" (ohne Merge) freigegeben
+# werden. Der reguläre Weg ist uebernimm_arbeitskopie() ueber POST /{id}/uebernehmen.
 OBJEKT_STATUS_UEBERGAENGE: dict[str, set[str]] = {
     OBJEKT_STATUS_ENTWURF: {OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_ARCHIVIERT},
     OBJEKT_STATUS_FREIGEGEBEN: {OBJEKT_STATUS_UEBERARBEITUNG, OBJEKT_STATUS_ARCHIVIERT},
-    OBJEKT_STATUS_UEBERARBEITUNG: {OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_ARCHIVIERT},
+    OBJEKT_STATUS_UEBERARBEITUNG: {OBJEKT_STATUS_ARCHIVIERT},
     OBJEKT_STATUS_ARCHIVIERT: {OBJEKT_STATUS_UEBERARBEITUNG},
 }
+
+# Stammdaten-Felder, die beim Erstellen einer Arbeitskopie und beim Uebernehmen (Merge)
+# kopiert werden - bewusst eine explizite Liste statt __table__.columns, damit id, nummer,
+# org_id, status, entwurf_von_id, erstellt_*/aktualisiert_* NICHT versehentlich mitwandern.
+OBJEKT_KOPIERBARE_FELDER = (
+    "name", "vulgoname", "kategorie_id", "strasse", "hausnummer", "plz", "ort",
+    "lat", "lng", "informationen", "anfahrtsweg", "revision_datum",
+)
 
 # Piktogramm-Typen fuer den Gefahren-Katalog (steuern Chip-/Symbol-Rendering)
 GEFAHR_PIKTOGRAMME = {
@@ -134,6 +151,7 @@ class Objekt(TenantScoped, Base):
     __tablename__ = "objekt"
     __table_args__ = (
         UniqueConstraint("org_id", "nummer", name="uq_objekt_org_nummer"),
+        UniqueConstraint("entwurf_von_id", name="uq_objekt_entwurf_von"),
         Index("ix_objekt_org_name", "org_id", "name"),
         Index("ix_objekt_org_status", "org_id", "status"),
         Index("ix_objekt_org_revision", "org_id", "revision_datum"),
@@ -141,7 +159,10 @@ class Objekt(TenantScoped, Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # org_id via TenantScoped
-    nummer: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Nullable: Arbeitskopien (entwurf_von_id gesetzt) bekommen KEINE eigene Nummer -
+    # uq_objekt_org_nummer wuerde sie sonst mit dem produktiven Objekt kollidieren lassen.
+    # MySQL/SQLite behandeln mehrere NULLs in einem Unique-Index als verschieden.
+    nummer: Mapped[int | None] = mapped_column(Integer, nullable=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     vulgoname: Mapped[str | None] = mapped_column(String(200), nullable=True)
     kategorie_id: Mapped[int | None] = mapped_column(
@@ -156,6 +177,12 @@ class Objekt(TenantScoped, Base):
     informationen: Mapped[str | None] = mapped_column(Text, nullable=True)
     anfahrtsweg: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=OBJEKT_STATUS_ENTWURF)
+    # Self-FK: gesetzt ⟺ diese Zeile ist eine Arbeitskopie des referenzierten (produktiven)
+    # Objekts. ON DELETE CASCADE: wird das produktive Objekt geloescht, faellt die offene
+    # Arbeitskopie mit weg. Unique (s. __table_args__) erzwingt max. 1 offene Kopie je Objekt.
+    entwurf_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=True
+    )
     revision_datum: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Sent-Marker fuer Revisions-Erinnerung (Muster verleih_erinnerung)
     revision_erinnert_am: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -196,6 +223,15 @@ class Objekt(TenantScoped, Base):
         cascade="all, delete-orphan",
         order_by="ObjektKartenObjekt.sort",
     )
+    # Arbeitskopie-Beziehung (Self-FK ueber entwurf_von_id, s.o.). Nur die Richtung
+    # Kopie → Basis ist als Relationship modelliert; die umgekehrte Richtung (hat dieses
+    # produktive Objekt eine offene Arbeitskopie?) laeuft bewusst ueber eine explizite
+    # Query (objekt_service.hole_arbeitskopie), nicht ueber ein zweites Self-FK-Relationship
+    # mit remote()/back_populates - das kollidiert leicht mit dem Tenant-Listener bei
+    # Lazy-Loads. Muster: predecessor_id in major_incident.py (einseitige Self-FK-Relationship).
+    basis_objekt: Mapped[Objekt | None] = relationship(
+        remote_side="Objekt.id", foreign_keys=[entwurf_von_id],
+    )
 
     def hat_merkmal(self, code: str) -> bool:
         """True wenn dem Objekt ein Katalog-Merkmal mit diesem Code zugeordnet ist."""
@@ -203,8 +239,15 @@ class Objekt(TenantScoped, Base):
 
     @property
     def anzeige_nummer(self) -> str:
-        """Anzeige-Nummernformat, z. B. 'OBJ-0042'."""
-        return f"OBJ-{self.nummer:04d}"
+        """Anzeige-Nummernformat, z. B. 'OBJ-0042'.
+
+        Arbeitskopien haben keine eigene Nummer (nummer=None) - zeigt die Nummer des
+        produktiven Basis-Objekts.
+        """
+        nummer = self.nummer if self.nummer is not None else (
+            self.basis_objekt.nummer if self.basis_objekt else None
+        )
+        return f"OBJ-{nummer:04d}" if nummer is not None else "OBJ-????"
 
     @property
     def adresse_zeile(self) -> str:
