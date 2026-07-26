@@ -279,6 +279,7 @@ def _ersetze_kinddaten(db: Session, basis: Objekt, kopie: Objekt, *, user_id: in
     vorher = len(basis.zusatzadressen)
     for alte_adresse in list(basis.zusatzadressen):
         db.delete(alte_adresse)
+    db.flush()  # DELETE muss vor dem INSERT der Kopie durchsein, sonst evtl. UNIQUE-Kollision
     neue_adressen = [_kopiere_kindzeile(e, ObjektZusatzadresse, objekt_id=basis.id, org_id=basis.org_id)
                      for e in kopie.zusatzadressen]
     db.add_all(neue_adressen)
@@ -290,6 +291,7 @@ def _ersetze_kinddaten(db: Session, basis: Objekt, kopie: Objekt, *, user_id: in
     vorher = len(basis.gefahren)
     for alte_gefahr in list(basis.gefahren):
         db.delete(alte_gefahr)
+    db.flush()  # s.o.
     neue_gefahren = [_kopiere_kindzeile(e, ObjektGefahr, objekt_id=basis.id, org_id=basis.org_id)
                      for e in kopie.gefahren]
     db.add_all(neue_gefahren)
@@ -301,6 +303,11 @@ def _ersetze_kinddaten(db: Session, basis: Objekt, kopie: Objekt, *, user_id: in
     vorher = len(basis.merkmale)
     for altes_merkmal in list(basis.merkmale):
         db.delete(altes_merkmal)
+    db.flush()  # s.o. - ohne dieses Flush schlaegt uq_objekt_merkmal fehl, wenn dieselbe
+    # Merkmal-Zuordnung auf Basis UND Arbeitskopie existiert (Vorfall 2026-07-26, Objekt 1082:
+    # "Duplicate entry '1082-41' for key 'uq_objekt_merkmal'" - der INSERT der Kopie lief vor
+    # dem DELETE der alten Zeile, da SQLAlchemy die Reihenfolge zwischen unabhaengigen
+    # Delete-/Insert-Objekten ohne FK-Beziehung nicht danach ausrichtet).
     neue_merkmale = [_kopiere_kindzeile(e, ObjektMerkmal, objekt_id=basis.id, org_id=basis.org_id)
                      for e in kopie.merkmale]
     db.add_all(neue_merkmale)
@@ -349,6 +356,7 @@ def _ersetze_kinddaten(db: Session, basis: Objekt, kopie: Objekt, *, user_id: in
     vorher = len(basis.karten_objekte)
     for altes_kartenobjekt in list(basis.karten_objekte):
         db.delete(altes_kartenobjekt)
+    db.flush()  # DELETE muss vor dem INSERT der Kopie durchsein, sonst evtl. UNIQUE-Kollision
     neue_kartenobjekte = [_kopiere_kindzeile(e, ObjektKartenObjekt, objekt_id=basis.id, org_id=basis.org_id)
                           for e in kopie.karten_objekte]
     db.add_all(neue_kartenobjekte)

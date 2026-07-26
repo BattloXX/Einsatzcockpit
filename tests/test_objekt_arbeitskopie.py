@@ -227,6 +227,41 @@ def test_uebernimm_arbeitskopie_remappt_wohnanlage_kontakt(db, org):
     assert aktualisiert.wohnanlage.hausverwaltung_kontakt_id == hv_kontakt.id
 
 
+def test_uebernimm_arbeitskopie_erhaelt_merkmale_gefahren_zusatzadressen_kartenobjekte(db, org):
+    """Vorfall 2026-07-26 (Objekt 1082, Testserver): _ersetze_kinddaten() loeschte die
+    alten Zeilen von Zusatzadresse/Gefahr/Merkmal/Kartenobjekt, ohne vor dem Anlegen
+    der Kopien zu flushen (anders als beim BMA-/Wohnanlage-/Kontakte-Block, die das
+    bereits richtig machten) - auf MySQL (batched INSERT) lief der INSERT der Kopie
+    dem DELETE der alten Zeile davon und schlug mit "Duplicate entry ... for key
+    'uq_objekt_merkmal'" fehl (auf SQLite zufaellig nicht reproduzierbar, da die
+    Flush-Reihenfolge dort anders ausfaellt - deshalb hier eine reine Ergebnis-
+    Pruefung statt eines Versuchs, die Datenbank-spezifische Race exakt nachzustellen).
+    Bisher pruefte keine dieser Tests ueberhaupt, ob diese vier Kind-Tabellen die
+    Uebernahme ueberleben - nur bma/kontakte/wohnanlage waren abgedeckt."""
+    basis = _volles_objekt(db, org.id)
+    basis_id = basis.id
+    kopie = erstelle_arbeitskopie(db, basis, user_id=None)
+    db.commit()
+
+    aktualisiert = uebernimm_arbeitskopie(db, kopie, user_id=None)
+    db.commit()
+    db.refresh(aktualisiert)
+
+    assert aktualisiert.id == basis_id
+    assert len(aktualisiert.zusatzadressen) == 1
+    assert aktualisiert.zusatzadressen[0].bezeichnung == "Stiege 2"
+    assert len(aktualisiert.gefahren) == 1
+    assert aktualisiert.gefahren[0].detail == "Lager"
+    assert len(aktualisiert.merkmale) == 1
+    assert len(aktualisiert.karten_objekte) == 1
+
+    # Genau je eine Zeile in der DB - keine Dubletten, keine Karteileichen der Kopie.
+    assert db.query(ObjektZusatzadresse).filter(ObjektZusatzadresse.objekt_id == basis_id).count() == 1
+    assert db.query(ObjektGefahr).filter(ObjektGefahr.objekt_id == basis_id).count() == 1
+    assert db.query(ObjektMerkmal).filter(ObjektMerkmal.objekt_id == basis_id).count() == 1
+    assert db.query(ObjektKartenObjekt).filter(ObjektKartenObjekt.objekt_id == basis_id).count() == 1
+
+
 def test_uebernimm_ohne_offene_ueberarbeitung_lehnt_ab(db, org):
     basis = _volles_objekt(db, org.id)
     kopie = erstelle_arbeitskopie(db, basis, user_id=None)
