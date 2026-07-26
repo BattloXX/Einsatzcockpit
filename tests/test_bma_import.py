@@ -861,6 +861,172 @@ def test_sync_tenant_isolation(monkeypatch, sync_db):
     assert db.query(BmaImportLauf).filter(BmaImportLauf.org_id == org_b.id).count() == 0
 
 
+# ── verarbeite_pdf_anlage() (Datenblatt-PDF-Upload, Gegenstück zu _verarbeite_anlage,
+#    aber ohne BmaClient - Kontakte sind mit dem PDF bereits vollstaendig bekannt) ──
+
+from types import SimpleNamespace  # noqa: E402
+
+from app.services.bma_import.bma_pdf_parser import parse_datenblatt_text  # noqa: E402
+
+_ECHTES_DATENBLATT = """BMA 1238
+Böhler Fenster Wolfurt
+1. Angaben zur Brandmeldeanlage
+Standort: Böhler Fenster Wolfurt Anlagedatum: 19.02.2020 10:01:04
+Straße: Wiesenweg 33 PLZ/Ort: 6922 Wolfurt
+Telefon Beruf: +43 5574 74550 Fax Beruf: +43 5574 74550-20
+EMail Beruf: servicecenter@boehlerfenster.com
+Aufschaltung RFL:Ja - 17.10.2002
+Brandschutzbeauftragte(r)
+Name: Davit Stephanyan
+Telefon Beruf:+43 5574 74550314
+EMail Privat: d.stepanyan@armenischer-kv.at
+2. Alarmierung Feuerwehr
+Alarmierung der örtlichen Feuerwehr mit Stichwort F14 (Brandmeldeanlagen):
+Feuerwehr: FW - Wolfurt
+3. Verständigung
+BMA Alarmperson
+Name: Andreas Böhler
+Telefon Beruf:+43 5574 74550
+EMail Beruf:andreas.boehler@boehlerfenster.com
+"""
+
+
+def _pdf_system_user(org_id):
+    """Muster _verarbeite_anlage()'s system_user - erstelle_objekt_aus_identitaet()/
+    wende_anlage_auf_objekt_an() brauchen nur .org_id/.id, kein echtes User-Model noetig."""
+    return SimpleNamespace(org_id=org_id, id=42)
+
+
+def test_pdf_anlage_neue_anlage_legt_entwurf_objekt_und_kontakte_an(sync_db):
+    db, org_a, _ = sync_db
+    cfg = _config(org_a)
+    geparst = parse_datenblatt_text(_ECHTES_DATENBLATT)
+
+    satz, ergebnis = bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+
+    assert ergebnis == "neu_angelegt"
+    assert satz.extern_id == "pdf:1238"
+    assert satz.bma_nummer == "1238"
+    assert satz.zuordnung == BMA_ZUORDNUNG_AUTO
+
+    objekt = db.query(Objekt).filter(Objekt.org_id == org_a.id).one()
+    assert objekt.status == OBJEKT_STATUS_ENTWURF
+    assert objekt.name == "Böhler Fenster Wolfurt"
+    assert objekt.strasse == "Wiesenweg"
+    assert objekt.hausnummer == "33"
+    assert objekt.bma.bma_nummer == "1238"
+    assert objekt.bma.uebertragungseinrichtung == "RFL aufgeschaltet"
+
+    kontakte = db.query(ObjektKontakt).filter(ObjektKontakt.objekt_id == objekt.id).all()
+    assert len(kontakte) == 2
+    assert {k.art for k in kontakte} == {"brandschutzbeauftragter", "bma_alarmperson"}
+
+
+def test_pdf_anlage_zweiter_upload_ohne_aenderung_schreibt_nichts(sync_db):
+    db, org_a, _ = sync_db
+    cfg = _config(org_a)
+    geparst = parse_datenblatt_text(_ECHTES_DATENBLATT)
+    bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+    objekt = db.query(Objekt).filter(Objekt.org_id == org_a.id).one()
+    aktualisiert_am_vorher = objekt.aktualisiert_am
+
+    _, ergebnis = bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+
+    assert ergebnis == "unveraendert"
+    db.refresh(objekt)
+    assert objekt.aktualisiert_am == aktualisiert_am_vorher
+
+
+def test_pdf_anlage_erneuter_upload_mit_geaenderter_adresse_wird_uebernommen(sync_db):
+    db, org_a, _ = sync_db
+    cfg = _config(org_a)
+    geparst = parse_datenblatt_text(_ECHTES_DATENBLATT)
+    bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+
+    geaendert = parse_datenblatt_text(_ECHTES_DATENBLATT.replace("Wiesenweg 33", "Neue Straße 99"))
+    _, ergebnis = bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geaendert["anlage"], geaendert["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+
+    assert ergebnis == "aktualisiert"
+    objekt = db.query(Objekt).filter(Objekt.org_id == org_a.id).one()
+    assert objekt.strasse == "Neue Straße"
+    assert objekt.hausnummer == "99"
+
+
+def test_pdf_anlage_erneuter_upload_gleicher_bma_nummer_legt_kein_duplikat_an(sync_db):
+    """Zwei Uploads desselben Datenblatts (gleiche BMA-Nr. -> gleiche
+    extern_id 'pdf:1238') muessen denselben BmaImportSatz treffen statt ein
+    zweites Objekt anzulegen (UniqueConstraint org_id+extern_id sorgt fuer
+    den Upsert)."""
+    db, org_a, _ = sync_db
+    cfg = _config(org_a)
+    geparst = parse_datenblatt_text(_ECHTES_DATENBLATT)
+    bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+    bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+
+    assert db.query(Objekt).filter(Objekt.org_id == org_a.id).count() == 1
+    assert db.query(BmaImportSatz).filter(BmaImportSatz.org_id == org_a.id).count() == 1
+
+
+def test_pdf_anlage_freigegebenes_objekt_bleibt_vorschlag(sync_db):
+    db, org_a, _ = sync_db
+    objekt = Objekt(
+        org_id=org_a.id, nummer=1, name="Bestandsobjekt", status=OBJEKT_STATUS_FREIGEGEBEN,
+        strasse="Wiesenweg", hausnummer="33", plz="6922", ort="Wolfurt",
+    )
+    db.add(objekt)
+    db.flush()
+    db.add(ObjektBMA(org_id=org_a.id, objekt_id=objekt.id, bma_nummer="1238"))
+    db.commit()
+
+    cfg = _config(org_a)
+    geparst = parse_datenblatt_text(_ECHTES_DATENBLATT)
+    satz, ergebnis = bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+
+    assert ergebnis == "vorschlag"
+    db.refresh(objekt)
+    assert objekt.name == "Bestandsobjekt"  # unveraendert - nur Vorschlag, kein Auto-Apply
+    assert satz.objekt_id == objekt.id
+
+
+def test_pdf_anlage_ohne_auto_anlegen_und_ohne_treffer_bleibt_nicht_zugeordnet(sync_db):
+    db, org_a, _ = sync_db
+    cfg = _config(org_a, auto_anlegen=False)
+    geparst = parse_datenblatt_text(_ECHTES_DATENBLATT)
+    satz, ergebnis = bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+
+    assert ergebnis == "uebersprungen"
+    assert satz.objekt_id is None
+    assert satz.zuordnung == BMA_ZUORDNUNG_OFFEN
+    assert db.query(Objekt).filter(Objekt.org_id == org_a.id).count() == 0
+
+
 # ── PR 4: bma_loop.py (reine Zeitlogik, kein Netz/DB) ────────────────────────
 
 from app.services.bma_import.bma_loop import _ist_heute_faellig, _VIENNA_TZ  # noqa: E402

@@ -9,9 +9,14 @@
     </div>
     <div style="display:flex;gap:8px;">
       <a href="/objekte/" class="btn btn--ghost">&larr; Zurück zu Objekte</a>
+      <a href="/objekte/bma-import/datenblatt-upload" class="btn btn--ghost">📄 Datenblatt hochladen</a>
       <a href="/admin/bma-import" class="btn btn--ghost">Einstellungen</a>
     </div>
   </div>
+
+  {% if request.query_params.get('flash') == 'pdf_verarbeitet' %}
+  <div class="alert alert--success mb-4">Datenblatt verarbeitet — siehe ggf. unten in der Liste.</div>
+  {% endif %}
 
   <div id="bma-import-content">
   {% include "objekt/_bma_import_content.html" %}

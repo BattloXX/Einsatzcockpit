@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -268,6 +268,88 @@ def bma_import_queue_page(
     _guard: None = Depends(require_objekt_enabled),
 ):
     return templates.TemplateResponse(request, "objekt/bma_import.html", _queue_context(request, db, user))
+
+
+# ── Datenblatt-PDF-Upload (Alternative zur Live-Schnittstelle) ──────────────
+# Ein manuell hochgeladenes BMA-Datenblatt-PDF (z. B. vom Betreiber per E-Mail
+# erhalten) wird geparst (bma_pdf_parser.py) und durchlaeuft danach denselben
+# Zuordnungs-/Auto-Apply-Pfad wie eine live gescrapte Anlage (bma_sync.py::
+# verarbeite_pdf_anlage(), Gegenstueck zu _verarbeite_anlage()). Kein
+# Kollisionsrisiko mit den "/{satz_id}/..."-Routen unten (die haben zwei
+# Pfadsegmente nach dem Praefix, "datenblatt-upload" nur eins - anders als das
+# "/dokument-upload"-vs-"/{objekt_id}"-Problem in ui_objekt.py).
+
+@router.get("/objekte/bma-import/datenblatt-upload", response_class=HTMLResponse)
+def bma_datenblatt_upload_form(
+    request: Request,
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {"user": user})
+
+
+@router.post("/objekte/bma-import/datenblatt-upload", response_class=HTMLResponse)
+async def bma_datenblatt_upload_verarbeiten(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    datei: UploadFile = File(...),
+):
+    from app.config import settings
+    from app.services.bma_import.bma_pdf_parser import parse_datenblatt_pdf
+    from app.services.bma_import.bma_sync import verarbeite_pdf_anlage
+    from app.services.objekt_dokument_service import _detect_mime
+
+    org_id = user.org_id
+    if org_id is None:
+        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
+            "user": user, "fehler": "Keiner Organisation zugeordnet.",
+        })
+
+    data = await datei.read()
+    if not data:
+        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
+            "user": user, "fehler": "Leere Datei.",
+        })
+    if len(data) > settings.OBJEKT_PDF_MAX_BYTES:
+        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
+            "user": user,
+            "fehler": f"Datei zu groß (max. {settings.OBJEKT_PDF_MAX_BYTES // (1024 * 1024)} MB).",
+        })
+    if _detect_mime(data) != "application/pdf":
+        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
+            "user": user, "fehler": "Nur PDF-Dateien werden unterstützt.",
+        })
+
+    try:
+        geparst = parse_datenblatt_pdf(data)
+    except ValueError as exc:
+        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
+            "user": user, "fehler": f"{datei.filename}: {exc}",
+        })
+
+    cfg = _get_or_create_config(db, org_id)
+    org = db.query(FireDept).filter(FireDept.id == org_id).first()
+    if org is None:
+        return templates.TemplateResponse(request, "objekt/bma_datenblatt_upload.html", {
+            "user": user, "fehler": "Organisation nicht gefunden.",
+        })
+    satz, ergebnis = verarbeite_pdf_anlage(db, org, cfg, geparst["anlage"], geparst["kontakte"], user)
+    write_audit(
+        db, "bma_import.pdf_datenblatt_hochgeladen", org_id=org_id, user_id=user.id,
+        entity_type="bma_import_satz", entity_id=satz.id,
+        payload={"bma_nummer": geparst["anlage"].get("bma_nummer"), "ergebnis": ergebnis},
+    )
+    db.commit()
+
+    if ergebnis in ("neu_angelegt", "aktualisiert") and satz.objekt_id:
+        return RedirectResponse(f"/objekte/{satz.objekt_id}?bma_datenblatt={ergebnis}", status_code=303)
+    # 'vorschlag'/'unveraendert'/'uebersprungen' (bzw. kein auto_anlegen ohne
+    # Treffer) - der Satz ist bereits angelegt/aktualisiert und erscheint in der
+    # Review-Queue selbst (Vorschlaege bzw. Nicht zugeordnet), falls er dort
+    # Aufmerksamkeit braucht.
+    return RedirectResponse("/objekte/bma-import?flash=pdf_verarbeitet", status_code=302)
 
 
 def _satz_or_404(db: Session, satz_id: int, user: User) -> BmaImportSatz:

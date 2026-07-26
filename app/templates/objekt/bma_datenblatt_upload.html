@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}BMA-Datenblatt hochladen – {{ brand }}{% endblock %}
+{% block content %}
+<div class="page-content" style="max-width:720px;">
+  <div class="page-header">
+    <div><h1>📄 BMA-Datenblatt hochladen</h1></div>
+    <a href="/objekte/bma-import" class="btn btn--ghost">Zurück zur Vorschlags-Liste</a>
+  </div>
+
+  {% if fehler %}
+  <div class="alert alert--danger" style="margin-bottom:16px;">{{ fehler }}</div>
+  {% endif %}
+
+  <div class="card" style="padding:20px;">
+    <p class="text-muted" style="margin-top:0;">
+      Kein Objekt auswählen nötig — die Anlagenbezeichnung, Adresse, RFL-Aufschaltung und
+      Kontaktpersonen werden direkt aus dem Datenblatt-PDF gelesen (dieselbe Vorlage, die auch
+      die BMA-Webplattform der Landeswarnzentrale ausgibt) und wie beim automatischen Import
+      einem bestehenden Objekt zugeordnet oder als neues Entwurf-Objekt angelegt. Ist das
+      Zielobjekt bereits freigegeben, landet die Änderung als Vorschlag in der Warteliste statt
+      direkt übernommen zu werden.
+    </p>
+    <form method="post" action="/objekte/bma-import/datenblatt-upload" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group">
+        <label class="form-label">Datenblatt-PDF *</label>
+        <input type="file" name="datei" class="form-input" accept="application/pdf" required>
+      </div>
+      <button type="submit" class="btn btn--primary">Hochladen &amp; übernehmen</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

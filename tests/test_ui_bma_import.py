@@ -372,6 +372,143 @@ def test_objekt_anlegen_fuer_nicht_zugeordneten_satz():
         db.close()
 
 
+# ── /objekte/bma-import/datenblatt-upload ────────────────────────────────────
+
+def _test_pdf_datenblatt(zeilen: list[str]) -> bytes:
+    """Echtes Mini-PDF mit Textlayer via reportlab (Muster:
+    tests/test_objekt_plan_upload.py::_test_pdf_mit_text) - eine Zeile je
+    drawString-Aufruf, damit der zeilenbasierte bma_pdf_parser.py-Parser
+    dieselbe Struktur wie ein echtes Datenblatt vorfindet."""
+    import io
+
+    from reportlab.pdfgen import canvas
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(595, 842))
+    y = 780
+    for zeile in zeilen:
+        c.drawString(50, y, zeile)
+        y -= 16
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+_DATENBLATT_ZEILEN = [
+    "BMA 9201",
+    "Testfirma Datenblatt-Upload",
+    "1. Angaben zur Brandmeldeanlage",
+    "Standort: Testfirma Datenblatt-Upload Anlagedatum: 01.01.2020 00:00:00",
+    "Straße: Testweg 5 PLZ/Ort: 6900 Bregenz",
+    "Telefon Beruf: +43 5574 12345 Fax Beruf: +43 5574 12345-9",
+    "EMail Beruf: info@testfirma.at",
+    "Aufschaltung RFL:Ja - 01.01.2021",
+    "Brandschutzbeauftragte(r)",
+    "Name: Test Kontakt",
+    "Telefon Beruf:+43 664 1234567",
+    "EMail Beruf:test.kontakt@testfirma.at",
+]
+
+
+def test_datenblatt_upload_form_laedt():
+    _setup_admin("bma_pdf_form_user", rollen=("org_admin", "objekt_verwalter"))
+
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "bma_pdf_form_user", "Test1234!")
+
+    r = client.get("/objekte/bma-import/datenblatt-upload")
+    assert r.status_code == 200
+    assert "BMA-Datenblatt hochladen" in r.text
+
+
+def test_datenblatt_upload_legt_neues_objekt_an():
+    _setup_admin("bma_pdf_upload_user", rollen=("org_admin", "objekt_verwalter"))
+
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "bma_pdf_upload_user", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    pdf_bytes = _test_pdf_datenblatt(_DATENBLATT_ZEILEN)
+    r = client.post(
+        "/objekte/bma-import/datenblatt-upload",
+        data={"_csrf": csrf},
+        files={"datei": ("BMA_Datenblatt_9201.pdf", pdf_bytes, "application/pdf")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303, r.text[:300]
+    assert "bma_datenblatt=neu_angelegt" in r.headers["location"]
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.query(Objekt).filter(
+            Objekt.org_id == ORG_ID, Objekt.name == "Testfirma Datenblatt-Upload",
+        ).first()
+        assert objekt is not None
+        assert objekt.status == "entwurf"
+        assert objekt.strasse == "Testweg"
+        assert objekt.hausnummer == "5"
+        assert objekt.bma is not None
+        assert objekt.bma.bma_nummer == "9201"
+        assert objekt.bma.uebertragungseinrichtung == "RFL aufgeschaltet"
+    finally:
+        db.close()
+
+
+def test_datenblatt_upload_ohne_bma_nummer_zeigt_fehler():
+    _setup_admin("bma_pdf_kein_bma_user", rollen=("org_admin", "objekt_verwalter"))
+
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "bma_pdf_kein_bma_user", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    pdf_bytes = _test_pdf_datenblatt(["Kein gueltiges Datenblatt", "Zeile 2"])
+    r = client.post(
+        "/objekte/bma-import/datenblatt-upload",
+        data={"_csrf": csrf},
+        files={"datei": ("kaputt.pdf", pdf_bytes, "application/pdf")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200  # kein Redirect - Formular mit Fehlermeldung erneut angezeigt
+    assert "BMA-Nummer" in r.text
+
+
+def test_datenblatt_upload_lehnt_nicht_pdf_datei_ab():
+    _setup_admin("bma_pdf_falscher_typ_user", rollen=("org_admin", "objekt_verwalter"))
+
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "bma_pdf_falscher_typ_user", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    r = client.post(
+        "/objekte/bma-import/datenblatt-upload",
+        data={"_csrf": csrf},
+        files={"datei": ("notiz.txt", b"Das ist kein PDF", "text/plain")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert "Nur PDF-Dateien" in r.text
+
+
+def test_datenblatt_upload_nicht_erreichbar_fuer_reine_lesekraft():
+    _setup_admin("bma_pdf_no_role_user", rollen=("readonly",))
+
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "bma_pdf_no_role_user", "Test1234!")
+
+    r = client.get("/objekte/bma-import/datenblatt-upload")
+    assert r.status_code == 403
+
+
 def test_review_queue_nicht_erreichbar_fuer_reine_lesekraft():
     """require_role("objekt_verwalter") laesst org_admin/admin immer durch (siehe
     app/core/permissions.py::require_role) - eine reine "readonly"-Rolle aber nicht."""

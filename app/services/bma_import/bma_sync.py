@@ -343,6 +343,103 @@ async def _verarbeite_anlage(
     return "unveraendert"
 
 
+def verarbeite_pdf_anlage(
+    db: Session, org: FireDept, config: OrgBmaImportConfig, anlage: dict, kontakte: list[dict], user,
+) -> tuple[BmaImportSatz, str]:
+    """Verarbeitet eine einzelne, aus einem manuell hochgeladenen BMA-Datenblatt-
+    PDF geparste Anlage (siehe bma_pdf_parser.py) — Gegenstück zu
+    _verarbeite_anlage() fuer den Live-Sync, aber ohne BmaClient: die Kontakte
+    sind hier bereits vollstaendig aus dem PDF bekannt, ein soll_detail_holen-
+    Abruf (der dort eine Detailseite nachladen wuerde) entfaellt komplett.
+
+    Anders als beim Live-Sync gibt es hier einen echten, eingeloggten Nutzer
+    (den Admin, der die Datei hochgeladen hat) statt eines synthetischen
+    System-Users — wird direkt an erstelle_objekt_aus_identitaet()/
+    wende_anlage_auf_objekt_an() durchgereicht (bessere Zuordnung in
+    ObjektChange/write_audit als beim Hintergrund-Sync).
+
+    Gibt (satz, ergebnis) zurueck, ergebnis wie bei _verarbeite_anlage():
+    'neu_angelegt' | 'aktualisiert' | 'vorschlag' | 'uebersprungen' | 'unveraendert'.
+    Wirft nie durch ausser bei einem Programmierfehler — der Aufrufer
+    (ui_bma_import.py) laeuft in einer eigenen Transaktion und braucht hier
+    kein Savepoint/Retry (anders als sync_org_bma(), das viele Anlagen in
+    einem Lauf verarbeitet).
+    """
+    jetzt = datetime.now(UTC).replace(tzinfo=None)
+
+    satz = (
+        db.query(BmaImportSatz)
+        .filter(BmaImportSatz.org_id == org.id, BmaImportSatz.extern_id == anlage["extern_id"])
+        .first()
+    )
+    ist_neuer_satz = satz is None
+    if satz is None:
+        satz = BmaImportSatz(
+            org_id=org.id, extern_id=anlage["extern_id"], status=BMA_SATZ_AKTIV,
+            zuordnung=BMA_ZUORDNUNG_OFFEN, erst_gesehen_am=jetzt, zuletzt_gesehen_am=jetzt,
+        )
+        db.add(satz)
+        db.flush()
+
+    satz.zuletzt_gesehen_am = jetzt
+    satz.status = BMA_SATZ_AKTIV
+    satz.bma_nummer = anlage.get("bma_nummer")
+    satz.bezeichnung = anlage.get("bezeichnung")
+    satz.detail_geholt_am = jetzt  # Kontakte sind mit dem PDF bereits vollstaendig da
+
+    objekt: Objekt | None = None
+    if satz.objekt_id is not None:
+        objekt = (
+            db.query(Objekt)
+            .filter(Objekt.id == satz.objekt_id, Objekt.org_id == org.id)
+            .first()
+        )
+    if objekt is None:
+        identitaet = dict(_baue_identitaet(anlage), quelle="bma_pdf_upload")
+        objekt = finde_passendes_objekt(db, org.id, identitaet)
+        if objekt is not None:
+            satz.objekt_id = objekt.id
+            if satz.zuordnung == BMA_ZUORDNUNG_OFFEN:
+                satz.zuordnung = BMA_ZUORDNUNG_AUTO
+        elif config.auto_anlegen:
+            objekt = erstelle_objekt_aus_identitaet(db, user, identitaet)
+            db.flush()
+            satz.objekt_id = objekt.id
+            satz.zuordnung = BMA_ZUORDNUNG_AUTO
+        else:
+            satz.zuordnung = BMA_ZUORDNUNG_OFFEN
+
+    neue_rohdaten = {"anlage": anlage, "kontakte": kontakte}
+    neuer_json = json.dumps(neue_rohdaten, sort_keys=True, default=str, ensure_ascii=False)
+    neuer_hash = hashlib.sha256(neuer_json.encode("utf-8")).hexdigest()
+    satz.rohdaten_json = neuer_json
+    satz.quell_hash = neuer_hash
+
+    if objekt is None:
+        db.flush()
+        return satz, "uebersprungen"
+    if objekt.status == OBJEKT_STATUS_ARCHIVIERT:
+        db.flush()
+        return satz, "uebersprungen"
+    if objekt.status != OBJEKT_STATUS_ENTWURF:
+        # freigegeben / in_ueberarbeitung -> nur Queue, Objekt bleibt unangetastet.
+        db.flush()
+        if satz.bestaetigt_hash == neuer_hash:
+            return satz, "unveraendert"
+        return satz, "vorschlag"
+
+    # Auto-Apply: Objekt ist (noch) im Entwurf und gehoert damit vollstaendig dem Import.
+    geaenderte_felder, bma_geaendert, kontakte_geaendert = wende_anlage_auf_objekt_an(
+        db, objekt, anlage, kontakte, user_id=user.id if user else None,
+    )
+    db.flush()
+    if ist_neuer_satz:
+        return satz, "neu_angelegt"
+    if geaenderte_felder or bma_geaendert or kontakte_geaendert:
+        return satz, "aktualisiert"
+    return satz, "unveraendert"
+
+
 def baue_diff(satz: BmaImportSatz, objekt: Objekt | None) -> dict:
     """Vergleicht den zuletzt geparsten DIBOS-Stand (rohdaten_json) mit dem
     aktuellen Objektstand, fuer die Diff-Ansicht in der Review-Queue
