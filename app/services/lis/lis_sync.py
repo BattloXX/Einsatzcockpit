@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.timezones import org_tz
 from app.models.incident import IncidentColumn, IncidentLog, IncidentVehicle, Message, Task
 from app.models.lis import LisSyncedObject, OrgLisConfig
-from app.models.major_incident import IncidentSite, VehiclePosition
+from app.models.major_incident import VehiclePosition
 from app.models.master import FireDept, VehicleMaster
 from app.services.incident_service import _next_display_order, append_card, create_incident, set_unit_status
 from app.services.lis.lis_client import LisClient, LisClientError
@@ -30,6 +30,7 @@ from app.services.lis.lis_mapping import (
     unit_status_to_lis_prefix,
 )
 from app.services.lis.lis_matching import find_matching_incident
+from app.services.major_incident_service import incident_belongs_to_major_incident, incident_major_incident_id
 
 logger = logging.getLogger("einsatzleiter.lis.sync")
 
@@ -87,24 +88,6 @@ def _already_synced(db: Session, org_id: int, obj_type: str, lis_id: str) -> boo
         .first()
         is not None
     )
-
-
-def _incident_major_incident_id(db: Session, incident_id: int) -> int | None:
-    """Liefert die Lage-ID (Großschadenslage), falls dieser Einsatz dort als
-    Einsatzstelle geführt wird — sonst None."""
-    site = (
-        db.query(IncidentSite.major_incident_id)
-        .filter(IncidentSite.incident_id == incident_id)
-        .execution_options(include_all_tenants=True)
-        .first()
-    )
-    return site[0] if site else None
-
-
-def _incident_belongs_to_major_incident(db: Session, incident_id: int) -> bool:
-    """True wenn der Einsatz bereits als Einsatzstelle in eine Großschadenslage
-    übernommen wurde — dort werden Einsätze nur zusammengefasst, keine Meldungs-Cards."""
-    return _incident_major_incident_id(db, incident_id) is not None
 
 
 def _parse_operation_coords(op: dict, address: dict) -> tuple[float | None, float | None]:
@@ -242,7 +225,11 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
 
     # Koordinaten direkt aus der LIS-Operation übernehmen, falls mitgeliefert — dann
     # KEINE nachgelagerte Adressvalidierung/Geocoding nötig (siehe sync_operation()).
-    incident = create_incident(
+    # reject_near_duplicates bewusst NICHT gesetzt (Default False): find_matching_incident()
+    # oben hat bereits sorgfaeltig (Adresse + 3h-Fenster) geprueft und nichts gefunden - die
+    # zusaetzliche, groebere Pruefung in create_incident() wuerde diese Entscheidung nur mit
+    # einem schlechteren Treffer ueberstimmen koennen.
+    incident, _ = create_incident(
         db,
         alarm_type_code=parsed["alarm_type_code"],
         started_at=parsed["started_at"],
@@ -300,7 +287,7 @@ def _sync_vehicle_status(
     db: Session, org: FireDept, incident, units: list[dict],
     *, sync_external_units: bool = False, root_org_map: dict[str, str] | None = None,
 ) -> bool:
-    lage_id = _incident_major_incident_id(db, incident.id)
+    lage_id = incident_major_incident_id(db, incident.id)
     changed = False
 
     for unit in units:
@@ -513,7 +500,7 @@ def _sync_vehicle_location(
 
 # ── Meldungen (Type.Type=="JOURNAL" → Message-Cards, nur normaler Incident) ──
 def _sync_messages(db: Session, org: FireDept, incident, tasks: list[dict]) -> bool:
-    if _incident_belongs_to_major_incident(db, incident.id):
+    if incident_belongs_to_major_incident(db, incident.id):
         return False
 
     messages_col = (
@@ -568,7 +555,7 @@ def _sync_tasks(db: Session, org: FireDept, incident, tasks: list[dict]) -> bool
     Aufträge-Board (Task-Modell), NICHT als Message — analog zur manuellen
     Trennung Meldungen/Aufträge im UI (IncidentColumn "messages" vs. "tasks").
     """
-    if _incident_belongs_to_major_incident(db, incident.id):
+    if incident_belongs_to_major_incident(db, incident.id):
         return False
 
     tasks_col = (

@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings
-from app.models.teams_bot import TeamsAlarmConfig, TeamsChannelBinding
+from app.models.teams_bot import TeamsAlarmConfig, TeamsCardPost, TeamsChannelBinding
 from app.services.sms_dispatch_service import _DEFAULT_GSL_ALARM_TEXT
 from app.services.teams_card import build_gsl_alarm_card, build_incident_message_card
 
@@ -92,6 +93,30 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
     if alarm_type and not alarm_type.teams_alarm_enabled:
         return
 
+    # Großschadenslage: nur EINE Karte für die ganze Lage, nicht eine je zugeordnetem
+    # Einsatz (Org-Opt-in, siehe TeamsAlarmConfig.suppress_card_in_major_incident).
+    # major_incident_id bleibt None für Einsätze außerhalb einer Lage — dort ändert sich
+    # nichts (unverändertes bisheriges Verhalten).
+    major_incident_id = None
+    if cfg.suppress_card_in_major_incident:
+        from app.services.major_incident_service import incident_major_incident_id
+        major_incident_id = incident_major_incident_id(db, incident.id)
+        if major_incident_id is not None:
+            bereits_gesendet = (
+                db.query(TeamsCardPost)
+                .filter(
+                    TeamsCardPost.org_id == incident.primary_org_id,
+                    TeamsCardPost.major_incident_id == major_incident_id,
+                )
+                .first()
+            )
+            if bereits_gesendet is not None:
+                logger.info(
+                    "Teams-Alarmierung: Karte für Lage %s bereits gesendet — Einsatz %s übersprungen",
+                    major_incident_id, incident.id,
+                )
+                return
+
     # Koordinaten werden ggf. von einem parallel laufenden Background-Task (Geocoding,
     # eigene DB-Session) NACH dem Laden dieses `incident`-Objekts gesetzt — ohne Refresh
     # sieht build_incident_message_card() hier noch lat=lng=None (stale Identity-Map) und
@@ -122,6 +147,11 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
                 "Teams-Alarmierung: Bot-Versand fehlgeschlagen (Einsatz %s, Org %s)",
                 incident.id, incident.primary_org_id,
             )
+        # KEIN _record_card_post() hier: post_incident_card_via_bot() ist aktuell nur ein
+        # Platzhalter (siehe teams_bot_service.py-Docstring), der nie wirklich versendet —
+        # ein Protokolleintrag würde eine tatsächlich verschickte Karte vortäuschen. Sobald
+        # der echte Bot-Versand implementiert ist, muss er hier ebenfalls protokollieren
+        # (analog zum Webhook-Pfad unten), sonst greift die Lage-Sperre für den Bot-Pfad nie.
         return
 
     webhook_url = cfg.webhook_url_uebung if target == "uebung" else cfg.webhook_url_alarm
@@ -131,7 +161,32 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
             target, incident.primary_org_id,
         )
         return
-    await _post_via_webhook(webhook_url, incident, cfg, base_url=base_url, org=org)
+    sent = await _post_via_webhook(webhook_url, incident, cfg, base_url=base_url, org=org)
+    if sent and major_incident_id is not None:
+        _record_card_post(db, incident, target=target, conversation_id=webhook_url, major_incident_id=major_incident_id)
+
+
+def _record_card_post(
+    db: Session, incident: Incident, *, target: str, conversation_id: str, major_incident_id: int,
+) -> None:
+    """Protokolliert eine erfolgreich versendete Karte für die Lage-Sperre
+    (suppress_card_in_major_incident) — Savepoint, damit ein Race zwischen zwei
+    Einsätzen derselben Lage (beide finden noch keinen bereits_gesendet-Eintrag)
+    nur diesen einen Log-Eintrag verwirft, statt die aufrufende Transaktion zu
+    beschädigen (Muster: dibos_enrich._sync_dibos_comments())."""
+    try:
+        with db.begin_nested():
+            db.add(TeamsCardPost(
+                org_id=incident.primary_org_id, incident_id=incident.id, target=target,
+                conversation_id=conversation_id[:300], major_incident_id=major_incident_id,
+            ))
+            db.flush()
+    except IntegrityError:
+        logger.info(
+            "Teams-Alarmierung: Karte für Lage %s bereits von einem parallelen Versand "
+            "protokolliert (Einsatz %s) — kein doppelter Log-Eintrag nötig",
+            major_incident_id, incident.id,
+        )
 
 
 async def post_gsl_alarm_card(

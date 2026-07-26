@@ -324,6 +324,14 @@ class Settings(BaseSettings):
     # Leer → Fallback auf SHA256("fernet-v1:" + SECRET_KEY) [abwärtskompatibel].
     FERNET_KEY: str = ""
 
+    # Duplikat-Sperre bei fast zeitgleicher Einsatzanlage mit gleichem Stichwort
+    # (Vorfall: doppelt angelegte Einsaetze bei doppeltem Alarm-Push). Ausnahme:
+    # Stichworte mit AlarmType.triggers_major_incident=True (z. B. T9) — an
+    # Sturmtagen koennen mehrere echte Einsaetze mit gleichem Stichwort binnen
+    # Minuten auflaufen, siehe app/services/incident_service.py::create_incident().
+    INCIDENT_DUPLICATE_GUARD_ENABLED: bool = True    # globaler Kill-Switch
+    INCIDENT_DUPLICATE_GUARD_WINDOW_S: int = 90      # "fast zeitgleich"
+
     # LIS/IPR-Anbindung (Intergraph Leitstelleninformationssystem)
     LIS_ENABLED: bool = True         # globaler Kill-Switch
     LIS_POLL_INTERVAL_S: int = 30    # Loop-Intervall

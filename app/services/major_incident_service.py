@@ -21,6 +21,30 @@ from app.models.major_incident import (
 )
 
 
+def incident_major_incident_id(db: Session, incident_id: int) -> int | None:
+    """Liefert die Lage-ID (Großschadenslage), falls dieser Einsatz dort als
+    Einsatzstelle geführt wird — sonst None.
+
+    Verschoben aus lis_sync.py (dort ursprünglich privat als
+    _incident_major_incident_id) hierher, dem fachlich richtigen, LIS-
+    unabhängigen Ort — auch der Teams-Alarmierung (teams_alarm_service.py::
+    post_incident_card()) braucht dieselbe Zuordnung, um bei einer laufenden
+    Lage nur eine Karte statt einer je Einsatz zu senden."""
+    site = (
+        db.query(IncidentSite.major_incident_id)
+        .filter(IncidentSite.incident_id == incident_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    return site[0] if site else None
+
+
+def incident_belongs_to_major_incident(db: Session, incident_id: int) -> bool:
+    """True wenn der Einsatz bereits als Einsatzstelle in eine Großschadenslage
+    übernommen wurde — dort werden Einsätze nur zusammengefasst, keine Meldungs-Cards."""
+    return incident_major_incident_id(db, incident_id) is not None
+
+
 def get_active_lage(db: Session, org_id: int) -> MajorIncident | None:
     return (
         db.query(MajorIncident)

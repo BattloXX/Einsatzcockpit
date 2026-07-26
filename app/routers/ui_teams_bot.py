@@ -91,6 +91,7 @@ async def teams_alarm_settings_save(
     target_org_id: int | None = Form(None),
     enabled: str = Form(""),
     send_exercise: str = Form(""),
+    suppress_card_in_major_incident: str = Form(""),
     include_map: str = Form(""),
     include_gmaps_link: str = Form(""),
     include_qr_link: str = Form(""),
@@ -113,6 +114,7 @@ async def teams_alarm_settings_save(
 
     cfg.enabled = enabled == "1"
     cfg.send_exercise = send_exercise == "1"
+    cfg.suppress_card_in_major_incident = suppress_card_in_major_incident == "1"
     cfg.include_map = include_map == "1"
     cfg.include_gmaps_link = include_gmaps_link == "1"
     cfg.include_qr_link = include_qr_link == "1"

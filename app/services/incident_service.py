@@ -1,5 +1,5 @@
 """Core incident business logic – mirrors startIncident(), changeAlarm() from the HTML version."""
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -230,10 +230,26 @@ def create_incident(
     primary_org_id: int | None = None,
     api_key_id: int | None = None,
     ip: str | None = None,
-) -> Incident:
+    reject_near_duplicates: bool = False,
+) -> tuple[Incident, bool]:
+    """Legt einen Einsatz an. Gibt (incident, created) zurueck — created=False,
+    wenn `reject_near_duplicates` einen fast zeitgleichen Duplikat-Alarm mit
+    demselben Stichwort erkannt und stattdessen den bestehenden Einsatz
+    zurueckgegeben hat (siehe Pruefung unten).
+
+    `reject_near_duplicates` ist bewusst PRO AUFRUFER explizit zu setzen (Default
+    False): api_v1.py (Alarm-Webhook) und ui_incident.py (manuelle Anlage) haben
+    KEINEN eigenen Duplikat-Schutz und setzen es auf True. lis_sync.py und
+    serial_alarm_service.py pruefen VOR diesem Aufruf bereits sorgfaeltig ueber
+    find_matching_incident() (Adress-/Zeitfenster-Heuristik) — die hier zusaetzliche,
+    bewusst groebere Pruefung (kein Adressabgleich) wuerde deren praezisere
+    Entscheidung nur mit einem schlechteren Treffer ueberstimmen koennen, bleibt
+    fuer sie also aus (Default).
+    """
     import hashlib
     import secrets as _secrets
 
+    from app.config import settings
     from app.models.lagekarte import LagekarteToken
     from app.services.alarm_service import get_alarm_type_by_code as _get_alarm_type
 
@@ -242,6 +258,44 @@ def create_incident(
     if alarm is None:
         alarm_type_code = "T1"
         alarm = _get_alarm_type(db, resolved_org_id, "T1") if resolved_org_id else None
+
+    # Vorfall (wiederkehrend): fast zeitgleiche Alarme mit gleichem Stichwort legten
+    # zwei Einsaetze an (z. B. doppelter Push desselben Alarmierungssystems). Sturm-/
+    # Grossereignis-Stichworte (AlarmType.triggers_major_incident, z. B. T9) sind
+    # ausdruecklich ausgenommen: an Sturmtagen koennen mehrere ECHTE, unterschiedliche
+    # Einsaetze mit demselben Stichwort binnen Minuten auflaufen (siehe
+    # app/services/lis/lis_matching.py fuer dieselbe Ausnahme im LIS-Matching).
+    if (
+        reject_near_duplicates
+        and resolved_org_id
+        and settings.INCIDENT_DUPLICATE_GUARD_ENABLED
+        and not (alarm and alarm.triggers_major_incident)
+    ):
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+            seconds=settings.INCIDENT_DUPLICATE_GUARD_WINDOW_S
+        )
+        kandidat = (
+            db.query(Incident)
+            .filter(
+                Incident.primary_org_id == resolved_org_id,
+                Incident.status == "active",
+                Incident.alarm_type_code == alarm_type_code,
+                Incident.created_at >= cutoff,
+            )
+            .order_by(Incident.created_at.desc())
+            .first()
+        )
+        if kandidat is not None:
+            write_audit(
+                db, "incident.duplicate_rejected",
+                incident_id=kandidat.id, api_key_id=api_key_id, ip=ip,
+                payload={
+                    "alarm_type_code": alarm_type_code,
+                    "window_s": settings.INCIDENT_DUPLICATE_GUARD_WINDOW_S,
+                },
+            )
+            return kandidat, False
+
     raw_token = "lkw_" + _secrets.token_urlsafe(32)
 
     incident = Incident(
@@ -303,7 +357,7 @@ def create_incident(
             "primary_org_id": incident.primary_org_id,
         },
     )
-    return incident
+    return incident, True
 
 
 _CODE_KINDS: dict[str, str] = {

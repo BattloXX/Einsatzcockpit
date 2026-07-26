@@ -47,6 +47,15 @@ class OrgDibosConfig(Base):
     # das bewusst aktiviert.
     enrich_incidents: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Explizites Opt-in: legt einen neuen Einsatz an, wenn ein GetCurrentEvents-Event
+    # keinem bestehenden Einsatz zugeordnet werden kann (Matching: Leitstellennummer
+    # eventNumber, sonst Alarmstichwort+Adresse im Zeitfenster — siehe
+    # app/services/dibos/dibos_enrich.py::_get_or_create_incident_for_event()).
+    # Unabhaengig von enrich_incidents aktivierbar (wie auto_trace_on_event/
+    # enrich_incidents). Gedacht als Ersatz fuer die LIS/IPR-Anbindung, sobald diese
+    # abgeschaltet wird — bis dahin koennen beide parallel laufen.
+    create_incidents: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     # Zugangsdaten: zwei getrennte Konten (siehe dibos_client.py)
     # 1) Gateway-Konto (HTTP-Basic, vom Betreiber vergeben, unabhängig von der Org)
     gateway_user: Mapped[str | None] = mapped_column(String(100), nullable=True)

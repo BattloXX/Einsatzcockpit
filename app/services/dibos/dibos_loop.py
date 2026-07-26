@@ -1,7 +1,7 @@
 """Background-Loop für die DIBOS-EventHub-Auto-Erkennung (Poll-Intervall konfigurierbar).
 
 Fragt leichtgewichtig `Main/GetCurrentEvents` ab (die eigenen aktiven Einsätze
-der Org) und tut damit — je nach Org-Konfiguration — eines oder beides:
+der Org) und tut damit — je nach Org-Konfiguration — eines oder mehrere:
 
 1. auto_trace_on_event: startet, sobald die Liste nicht mehr leer ist, einen
    vollständigen Trace (dibos_capture.py::start_trace_for_org), der Rohdaten
@@ -13,6 +13,10 @@ der Org) und tut damit — je nach Org-Konfiguration — eines oder beides:
    Aktion, die dieser Loop selbst auslöst (delegiert an dibos_enrich.py) und
    spart die Speicherlast einer Voll-Aufzeichnung für Orgs, die nur die
    Anreicherung wollen.
+3. create_incidents: legt für ein Event ohne zuordenbaren Einsatz selbst einen
+   neuen an (ebenfalls über dibos_enrich.enrich_and_broadcast, Matching über
+   die Leitstellennummer) — Ersatz für die LIS/IPR-Anbindung, sobald diese
+   abgeschaltet wird. Unabhängig von enrich_incidents aktivierbar.
 
 Läuft bereits ein Trace für die Org, überlässt dieser Loop ihm das Polling +
 die Anreicherung (dessen eigener Poll-Zyklus deckt beides ab, siehe
@@ -65,15 +69,16 @@ async def _run_all_orgs() -> None:
         db = SessionLocal()
         set_tenant_context(db, None)
         try:
-            # Org braucht mindestens EINE der beiden Fähigkeiten, sonst gibt es für
-            # diesen Loop nichts zu tun (siehe Modul-Docstring: auto_trace_on_event
-            # UND/ODER enrich_incidents, unabhängig voneinander aktivierbar).
+            # Org braucht mindestens EINE der drei Fähigkeiten, sonst gibt es für
+            # diesen Loop nichts zu tun (siehe Modul-Docstring: auto_trace_on_event,
+            # enrich_incidents, create_incidents — unabhängig voneinander aktivierbar).
             configs = (
                 db.query(OrgDibosConfig)
                 .filter(OrgDibosConfig.enabled == True)  # noqa: E712
                 .filter(or_(
                     OrgDibosConfig.auto_trace_on_event == True,  # noqa: E712
                     OrgDibosConfig.enrich_incidents == True,  # noqa: E712
+                    OrgDibosConfig.create_incidents == True,  # noqa: E712
                 ))
                 .all()
             )
@@ -112,7 +117,8 @@ async def _check_org(org_id: int, config_id: int) -> None:
             return
         auto_trace_on_event = config.auto_trace_on_event
         enrich_incidents = config.enrich_incidents
-        if not auto_trace_on_event and not enrich_incidents:
+        create_incidents = config.create_incidents
+        if not auto_trace_on_event and not enrich_incidents and not create_incidents:
             return  # nichts, was dieser Loop für die Org tun müsste
         if is_trace_running(org_id):
             # Ein laufender Trace deckt GetCurrentEvents + (falls aktiviert) die
@@ -144,12 +150,12 @@ async def _check_org(org_id: int, config_id: int) -> None:
     if not events:
         return
 
-    # Anreicherung: unabhängig von auto_trace_on_event, direkt aus diesem
-    # leichten Poll — keine Voll-Aufzeichnung (und damit keine Rohdaten-Dateien
-    # auf Platte) nötig, wenn eine Org nur das will.
-    if enrich_incidents:
+    # Anreicherung/Einsatzanlage: unabhängig von auto_trace_on_event, direkt aus
+    # diesem leichten Poll — keine Voll-Aufzeichnung (und damit keine Rohdaten-
+    # Dateien auf Platte) nötig, wenn eine Org nur das will.
+    if enrich_incidents or create_incidents:
         from app.services.dibos.dibos_enrich import enrich_and_broadcast
-        await enrich_and_broadcast(org_id, events)
+        await enrich_and_broadcast(org_id, events, create_incidents=create_incidents)
 
     if auto_trace_on_event:
         logger.info(

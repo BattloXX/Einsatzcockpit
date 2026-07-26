@@ -105,7 +105,10 @@ def _create_or_link_incident(
         logger.info("Serieller Alarm mit vorhandenem Einsatz %s verknüpft (org %s)", match.id, org_id)
         return match, "merged"
 
-    incident = create_incident(
+    # reject_near_duplicates bewusst NICHT gesetzt (Default False): find_matching_incident()
+    # oben hat bereits sorgfaeltig geprueft und nichts gefunden - siehe lis_sync.py fuer
+    # dieselbe Begruendung.
+    incident, _ = create_incident(
         db,
         alarm_code,
         started_at=started_at,

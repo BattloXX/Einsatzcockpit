@@ -64,8 +64,14 @@ def test_create_incident_success(client, api_key):
 
 def test_create_incident_stores_caller_info(client, api_key):
     """Name/Telefon aus dem Alarm-Webhook landen auf caller_name/caller_phone —
-    Anzeige mit Wählfunktion im Alarm-Modal (Klick auf Alarmstichwort im Board)."""
-    payload = dict(PAYLOAD, Key="test-key-caller", Name="Max Mustermann", Telefon="+43 664 1234567")
+    Anzeige mit Wählfunktion im Alarm-Modal (Klick auf Alarmstichwort im Board).
+
+    Eigenes Stichwort (t2 statt t1): sonst faengt die Duplikat-Sperre (gleiches
+    Stichwort, gleiche Org, innerhalb weniger Sekunden) diesen Post faelschlich
+    als Duplikat von test_create_incident_success() ab (siehe
+    app/services/incident_service.py::create_incident()).
+    """
+    payload = dict(PAYLOAD, Key="test-key-caller", Stufe="t2", Name="Max Mustermann", Telefon="+43 664 1234567")
     r = client.post("/api/v1/einsatz", json=payload, headers={"X-API-Key": api_key})
     assert r.status_code == 200
     incident_id = r.json()["id"]
@@ -85,3 +91,65 @@ def test_list_active(client, api_key):
     r = client.get("/api/v1/einsatz/active", headers={"X-API-Key": api_key})
     assert r.status_code == 200
     assert isinstance(r.json(), list)
+
+
+# ── Duplikat-Sperre: fast zeitgleiche Alarme mit gleichem Stichwort, aber
+#    UNTERSCHIEDLICHEM Key (der eigentliche Vorfall - siehe
+#    app/services/incident_service.py::create_incident()) ──────────────────
+#
+# Eigene, frische Org + eigener API-Key statt der geteilten Home-Org/api_key-
+# Fixture: setup_db ist session-scoped (DB wird NICHT zwischen Tests
+# zurueckgesetzt) - mit der Home-Org wuerden bereits von anderen Tests in
+# dieser Datei angelegte T1-Einsaetze faelschlich als Duplikat-Kandidat
+# gefunden.
+
+@pytest.fixture
+def duplicate_guard_api_key(setup_db):
+    raw = generate_api_key()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        import uuid
+        org = FireDept(
+            slug=f"dup-guard-api-{uuid.uuid4().hex[:8]}", name="Duplikat-Sperre-Test-Org",
+            color="#654321", bos="Feuerwehr",
+        )
+        db.add(org)
+        db.flush()
+        key = ApiKey(key_hash=hash_api_key(raw), label="Test", org_id=org.id)
+        db.add(key)
+        db.commit()
+    finally:
+        db.close()
+    return raw
+
+
+def test_fast_zeitgleicher_alarm_mit_anderem_key_wird_nicht_doppelt_angelegt(
+    client, duplicate_guard_api_key,
+):
+    payload_1 = dict(PAYLOAD, Key="dup-guard-key-1", Uebung=False)
+    payload_2 = dict(PAYLOAD, Key="dup-guard-key-2", Uebung=False)
+
+    r1 = client.post("/api/v1/einsatz", json=payload_1, headers={"X-API-Key": duplicate_guard_api_key})
+    assert r1.status_code == 200
+    assert r1.json()["created"] is True
+    erster_id = r1.json()["id"]
+
+    r2 = client.post("/api/v1/einsatz", json=payload_2, headers={"X-API-Key": duplicate_guard_api_key})
+    assert r2.status_code == 200
+    assert r2.json()["created"] is False
+    assert r2.json()["id"] == erster_id
+    # external_key bleibt der des ZUERST angelegten Einsatzes - der zweite Post
+    # (anderer Key) wird nicht als eigener Einsatz gefuehrt.
+    assert r2.json()["external_key"] == "dup-guard-key-1"
+
+    from app.models.incident import Incident
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        anzahl = db.query(Incident).filter(Incident.external_key.in_(
+            ["dup-guard-key-1", "dup-guard-key-2"],
+        )).count()
+        assert anzahl == 1
+    finally:
+        db.close()

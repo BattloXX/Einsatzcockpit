@@ -230,7 +230,7 @@ def test_check_org_enriches_without_starting_trace_when_only_enrich_enabled(monk
 
     enrich_calls = []
 
-    async def fake_enrich_and_broadcast(org_id, raw_events):
+    async def fake_enrich_and_broadcast(org_id, raw_events, *, create_incidents=False):
         enrich_calls.append((org_id, raw_events))
 
     import app.services.dibos.dibos_enrich as dibos_enrich
@@ -255,7 +255,7 @@ def test_check_org_skips_enrichment_when_events_empty(monkeypatch):
 
     enrich_calls = []
 
-    async def fake_enrich_and_broadcast(org_id, raw_events):
+    async def fake_enrich_and_broadcast(org_id, raw_events, *, create_incidents=False):
         enrich_calls.append((org_id, raw_events))
 
     import app.services.dibos.dibos_enrich as dibos_enrich
@@ -309,7 +309,7 @@ def test_check_org_does_both_when_both_enabled(monkeypatch):
 
     enrich_calls = []
 
-    async def fake_enrich_and_broadcast(org_id, raw_events):
+    async def fake_enrich_and_broadcast(org_id, raw_events, *, create_incidents=False):
         enrich_calls.append((org_id, raw_events))
 
     import app.services.dibos.dibos_enrich as dibos_enrich

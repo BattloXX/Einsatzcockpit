@@ -68,6 +68,17 @@
         <p class="form-hint" style="margin:4px 0 0 0">Standardmäßig aus — Übungen lösen keine Teams-Karte aus, sofern nicht aktiviert.</p>
       </div>
 
+      <div class="form-group" style="margin:0">
+        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" name="suppress_card_in_major_incident" value="1"
+                 {% if config and config.suppress_card_in_major_incident %}checked{% endif %}
+                 class="toggle-checkbox">
+          <span class="toggle-switch"></span>
+          Bei Großschadenslage nur eine Karte senden
+        </label>
+        <p class="form-hint" style="margin:4px 0 0 0">Standardmäßig aus. Ist eine Lage bereits ausgerufen und ein weiterer Einsatz wird ihr zugeordnet, sendet Teams normalerweise trotzdem für jeden Einsatz eine eigene Karte. Mit dieser Option wird bei einer laufenden Großschadenslage nur eine Karte für die gesamte Lage verschickt, nicht je zugeordnetem Einsatz. Der separate Großschadenslage-Sonderalarm (bei Ausrufung der Lage) ist davon nicht betroffen.</p>
+      </div>
+
       <div style="display:flex;gap:20px;flex-wrap:wrap;">
         <label class="toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;">
           <input type="checkbox" name="include_map" value="1" {% if not config or config.include_map %}checked{% endif %}>

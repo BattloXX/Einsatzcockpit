@@ -105,7 +105,7 @@ def _make_incident_id(db, *, lis_operation_number=None, status=None, **create_kw
         started_at=datetime(2026, 7, 21, 17, 27, tzinfo=UTC),
     )
     defaults.update(create_kwargs)
-    incident = create_incident(db, **defaults)
+    incident, _ = create_incident(db, **defaults)
     if lis_operation_number is not None:
         incident.lis_operation_number = lis_operation_number
     if status is not None:

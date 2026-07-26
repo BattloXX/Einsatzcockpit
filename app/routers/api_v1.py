@@ -570,7 +570,7 @@ async def create_incident_api(
             "board_url": board_url,
         }
 
-    incident = create_incident(
+    incident, created_fresh = create_incident(
         db,
         alarm_type_code=alarm_type_code,
         started_at=started_at,
@@ -587,7 +587,26 @@ async def create_incident_api(
         primary_org_id=api_key.org_id,
         api_key_id=api_key.id,
         ip=request.client.host if request.client else None,
+        reject_near_duplicates=True,
     )
+
+    if not created_fresh:
+        # Fast zeitgleicher Duplikat-Alarm mit gleichem Stichwort erkannt (Audit-Eintrag
+        # "incident.duplicate_rejected" wurde bereits in create_incident() geschrieben) —
+        # bestehenden Einsatz zurueckgeben, keine zweite Alarmierung (SMS/Push/Teams/GSL)
+        # fuer dasselbe Ereignis auslösen.
+        board_token, board_url = _get_or_create_board_token(
+            db, incident.id, api_key.created_by_user_id, str(request.base_url)
+        )
+        db.commit()
+        return {
+            "id": incident.id,
+            "external_key": incident.external_key,
+            "url": f"/einsatz/{incident.id}",
+            "created": False,
+            "board_token": board_token,
+            "board_url": board_url,
+        }
 
     # Org-Standard-PIN auf neuen Einsatz übertragen
     if api_key.org_id:

@@ -47,6 +47,14 @@ class Incident(Base):
         # Sync ("Verbindung testen"). NULL-Werte zählen für MySQL/SQLite je einzeln
         # als eindeutig (keine Kollision zwischen Einsätzen ohne LIS-Anbindung).
         UniqueConstraint("primary_org_id", "lis_operation_id", name="uq_incident_org_lis_operation_id"),
+        # Analoger Schutz für die Leitstellennummer (lis_operation_number), seit DIBOS
+        # EventHub ebenfalls Einsätze anlegen kann (Migration 0182) — verhindert ein
+        # Race zwischen LIS-Sync und DIBOS-Erstellung für dieselbe Nummer. NULL-Werte
+        # zählen je einzeln als eindeutig (keine Kollision zwischen Einsätzen ohne
+        # DIBOS/LIS-Einsatznummer).
+        UniqueConstraint(
+            "primary_org_id", "lis_operation_number", name="uq_incident_org_lis_operation_number"
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

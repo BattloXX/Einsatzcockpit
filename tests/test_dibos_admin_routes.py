@@ -204,7 +204,7 @@ def test_einsaetze_page_lists_incident_with_dibos_fields():
     db = SessionLocal()
     _stc(db, ORG_ID)
     try:
-        incident = create_incident(
+        incident, _ = create_incident(
             db, alarm_type_code="T2", primary_org_id=ORG_ID,
             address_street="Unterlinden", address_no="23", address_city="Wolfurt",
             started_at=datetime(2026, 7, 21, 17, 27, tzinfo=UTC),

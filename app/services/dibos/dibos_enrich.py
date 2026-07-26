@@ -1,4 +1,5 @@
-"""DIBOS→Einsatz-Anreicherung (Org-Opt-in, siehe OrgDibosConfig.enrich_incidents).
+"""DIBOS→Einsatz-Anreicherung (Org-Opt-in, siehe OrgDibosConfig.enrich_incidents)
+und optionale Einsatzanlage (Org-Opt-in, siehe OrgDibosConfig.create_incidents).
 
 Ordnet GetCurrentEvents-Objekte über die stabile Einsatznummer (eventNumber ==
 Incident.lis_operation_number) einem bereits bestehenden, AKTIVEN Einsatz zu und
@@ -6,10 +7,15 @@ ergänzt ihn um Felder, die der LIS/IPR-Sync (lis_sync.py) nicht liefert: den
 vollständigen Einsatzort (Ortsteil/PLZ/Objekt), Einsatzcode/Diagnose, BMA-Nr.
 und das sichtbare Meldungsprotokoll.
 
-Rein additiv/anreichernd — legt NIE einen Einsatz an, setzt NIE eine
-lis_operation_id/-number und beeinflusst das Dedup-Matching (lis_matching.py)
-in keiner Weise. Läuft nur, wenn eine Org das explizit aktiviert hat
-(enrich_incidents=True) — UNABHÄNGIG von einer laufenden Voll-Aufzeichnung
+Standardmäßig rein additiv/anreichernd — setzt NIE eine lis_operation_id/-number
+und beeinflusst das Dedup-Matching (lis_matching.py) in keiner Weise, solange
+eine Org nur enrich_incidents aktiviert hat. Mit create_incidents=True (siehe
+_get_or_create_incident_for_event() unten, gedacht als Ersatz für die LIS/IPR-
+Anbindung, sobald diese abgeschaltet wird) legt DIBOS für ein Event ohne
+zuordenbaren Einsatz selbst einen neuen an — Matching über die Leitstellennummer
+(eventNumber), analog zu lis_sync.py::_get_or_link_incident(). Beide Opt-ins
+sind unabhängig voneinander aktivierbar. Läuft nur, wenn eine Org das explizit
+aktiviert hat — UNABHÄNGIG von einer laufenden Voll-Aufzeichnung
 (auto_trace_on_event): der leichte Erkennungs-Loop (dibos_loop.py::_check_org())
 ruft enrich_and_broadcast() direkt auf einem einfachen GetCurrentEvents-Poll
 auf, ohne Rohdaten aufzuzeichnen — spart Speicherlast, wenn nur die Anreicherung
@@ -99,6 +105,104 @@ def _parse_dibos_datetime(value: str | None, org) -> datetime | None:
         return dt.astimezone(UTC).replace(tzinfo=None)
     from app.core.timezones import org_tz
     return dt.replace(tzinfo=org_tz(org)).astimezone(UTC).replace(tzinfo=None)
+
+
+def _is_exercise_event(event: dict) -> bool:
+    """Erkennt einen Übungs-/Schulungseinsatz anhand von DIBOS-Freitextfeldern.
+
+    DIBOS hat kein eigenes Übungs-Flag (anders als der Freitext in
+    Operation.Type.Type bei LIS) — Keyword-Check auf tycodDescription/diagnose,
+    dieselbe Wortliste wie lis_mapping.py::is_exercise_operation()."""
+    from app.services.lis.lis_mapping import _EXERCISE_KEYWORDS
+    text = f"{event.get('tycodDescription') or ''} {event.get('diagnose') or ''}".strip().lower()
+    return any(keyword in text for keyword in _EXERCISE_KEYWORDS)
+
+
+def _get_or_create_incident_for_event(db: Session, org, org_id: int, event: dict):
+    """Analog zu lis_sync.py::_get_or_link_incident() für DIBOS-Events — Org-Opt-in
+    OrgDibosConfig.create_incidents. Gibt (incident, created) zurück, oder None,
+    wenn das Event keine Leitstellennummer hat (ohne die ist weder ein
+    zuverlässiges Matching noch eine spätere erneute Zuordnung möglich).
+
+    find_matching_incident() deckt dabei bereits zwei Fälle in einem Aufruf ab:
+    1) ein Einsatz mit genau dieser lis_operation_number existiert bereits
+       (unabhängig vom Status — auch ein bereits geschlossener zählt, siehe
+       Modul-Docstring dort), 2) sonst die adress-/zeitfensterbasierte
+       Heuristik über Alarmstichwort + Adresse (nur AKTIVE Einsätze). Erst wenn
+       beides nichts findet, wird ein neuer Einsatz angelegt.
+    """
+    event_number = event.get("eventNumber")
+    if not event_number:
+        return None
+
+    from app.models.incident import Incident
+    from app.services.lis.lis_mapping import map_stichwort
+    from app.services.lis.lis_matching import find_matching_incident
+
+    location = event.get("location") or {}
+    alarm_type_code = map_stichwort(event.get("tycod"))
+    started_at = _parse_dibos_datetime(event.get("created"), org)
+    report_text = event.get("eventComment") or event.get("diagnose")
+
+    match = find_matching_incident(
+        db, org_id,
+        alarm_type_code=alarm_type_code,
+        street=location.get("street"),
+        city=location.get("city"),
+        house_no=location.get("streetNo"),
+        started_at=started_at,
+        report_text=report_text,
+        lis_operation_number=event_number,
+    )
+    if match:
+        if match.lis_operation_number != event_number:
+            match.lis_operation_number = event_number
+            db.flush()
+        return match, False
+
+    from app.services.incident_service import create_incident
+    # reject_near_duplicates bewusst NICHT gesetzt (Default False): find_matching_incident()
+    # oben hat bereits sorgfaeltig (Leitstellennummer, dann Adresse+Zeitfenster) geprueft und
+    # nichts gefunden - Muster identisch zu lis_sync._get_or_link_incident().
+    incident, _ = create_incident(
+        db,
+        alarm_type_code=alarm_type_code,
+        started_at=started_at,
+        is_exercise=_is_exercise_event(event),
+        address_street=location.get("street"),
+        address_no=location.get("streetNo"),
+        address_city=location.get("city"),
+        lat=location.get("latitude"),
+        lng=location.get("longitude"),
+        report_text=report_text,
+        reason=event.get("tycodDescription"),
+        primary_org_id=org_id,
+    )
+    incident.lis_operation_number = event_number
+    try:
+        db.flush()
+    except IntegrityError:
+        # Race: ein zweiter, gleichzeitig laufender Poll (leichter Erkennungs-Loop und/oder
+        # laufendes Voll-Tracing, siehe dibos_loop.py/dibos_capture.py) hat dieselbe
+        # Leitstellennummer zwischen der obigen Prüfung und diesem Flush bereits committet
+        # (uq_incident_org_lis_operation_number, siehe models/incident.py) — Muster 1:1 aus
+        # lis_sync._get_or_link_incident().
+        db.rollback()
+        winner = (
+            db.query(Incident)
+            .filter(Incident.primary_org_id == org_id, Incident.lis_operation_number == event_number)
+            .first()
+        )
+        if winner:
+            logger.info(
+                "Race beim Anlegen von Einsatz für DIBOS-Event %s (Org %s) — "
+                "bereits von einem parallelen Poll angelegt, übernehme diesen (%s)",
+                event_number, org_id, winner.id,
+            )
+            return winner, False
+        raise
+    logger.info("Einsatz %s aus DIBOS-Event %s neu angelegt (Org %s)", incident.id, event_number, org_id)
+    return incident, True
 
 
 def _find_active_incident_by_event_number(db: Session, org_id: int, event_number: str | None):
@@ -392,18 +496,23 @@ def _sync_person_responses(db: Session, org_id: int, org, incident, person_respo
     return changed
 
 
-def enrich_events_for_org(org_id: int, raw_events: list[dict]) -> dict:
-    """Reichert aktive Einsätze der Org mit DIBOS-Zusatzinfos an.
+def enrich_events_for_org(org_id: int, raw_events: list[dict], *, create_incidents: bool = False) -> dict:
+    """Reichert aktive Einsätze der Org mit DIBOS-Zusatzinfos an — und legt,
+    wenn create_incidents=True (Org-Opt-in OrgDibosConfig.create_incidents),
+    für ein Event ohne passenden Einsatz einen neuen an (siehe
+    _get_or_create_incident_for_event()).
 
     Läuft synchron in einer eigenen DB-Session (aus dibos_loop.py per
     asyncio.to_thread aufgerufen) — parallel zum bestehenden LIS/IPR-Sync, ohne
     dessen Matching/Dedup zu berühren. Ein Fehler bricht nur den eigenen
     Anreicherungs-Durchlauf ab (Rollback + Log), nie den DIBOS-Poll selbst.
 
-    Gibt {"changed_ids": [...], "rsvp_changed_ids": [...]} zurück — Erstere für
-    den generellen Board-Reload-Broadcast, Letztere zusätzlich für den
-    gezielten "rsvp:changed"-Broadcast (Zu-/Absage-Widget), siehe
-    dibos_capture.py::_enrich_and_broadcast().
+    Gibt {"changed_ids": [...], "rsvp_changed_ids": [...], "created_ids": [...]}
+    zurück — Erstere für den generellen Board-Reload-Broadcast, "rsvp_changed_ids"
+    zusätzlich für den gezielten "rsvp:changed"-Broadcast (Zu-/Absage-Widget),
+    "created_ids" für die Einsatzinfo-Benachrichtigung (SMS/Push/Teams) neu
+    angelegter Einsätze — siehe enrich_and_broadcast() (die eigentliche
+    Benachrichtigung braucht `await` und läuft daher dort, nicht hier).
     """
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -413,10 +522,16 @@ def enrich_events_for_org(org_id: int, raw_events: list[dict]) -> dict:
     set_tenant_context(db, None)
     changed_ids: list[int] = []
     rsvp_changed_ids: list[int] = []
+    created_ids: list[int] = []
     try:
         org = db.get(FireDept, org_id)
         for event in parse_events(raw_events):
             incident = _find_active_incident_by_event_number(db, org_id, event.get("eventNumber"))
+            just_created = False
+            if not incident and create_incidents:
+                result = _get_or_create_incident_for_event(db, org, org_id, event)
+                if result is not None:
+                    incident, just_created = result
             if not incident:
                 continue
             changed = False
@@ -429,6 +544,21 @@ def enrich_events_for_org(org_id: int, raw_events: list[dict]) -> dict:
             changed |= rsvp_changed
             if rsvp_changed:
                 rsvp_changed_ids.append(incident.id)
+            if just_created:
+                if event.get("closed"):
+                    # Das Event war bei Anlage bereits abgeschlossen (z.B. Poll unmittelbar
+                    # vor Ende eingetroffen) — zur Dokumentation anlegen, aber KEINE
+                    # Alarmierung mehr auslösen, direkt schließen (Muster: lis_sync.py).
+                    from app.services.incident_service import close_incident
+                    close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
+                    db.flush()
+                    logger.info(
+                        "Einsatz %s aus bereits beendetem DIBOS-Event %s angelegt (Org %s) — "
+                        "keine Alarmierung, direkt geschlossen",
+                        incident.id, event.get("eventNumber"), org_id,
+                    )
+                else:
+                    created_ids.append(incident.id)
             if changed:
                 db.flush()
                 changed_ids.append(incident.id)
@@ -438,10 +568,10 @@ def enrich_events_for_org(org_id: int, raw_events: list[dict]) -> dict:
         logger.exception("DIBOS-Einsatzanreicherung für Org %s fehlgeschlagen", org_id)
     finally:
         db.close()
-    return {"changed_ids": changed_ids, "rsvp_changed_ids": rsvp_changed_ids}
+    return {"changed_ids": changed_ids, "rsvp_changed_ids": rsvp_changed_ids, "created_ids": created_ids}
 
 
-async def enrich_and_broadcast(org_id: int, raw_events: list[dict]) -> None:
+async def enrich_and_broadcast(org_id: int, raw_events: list[dict], *, create_incidents: bool = False) -> None:
     """Reichert an (in einem Thread, da synchron/DB-blockierend) und broadcastet
     pro tatsächlich geänderten Einsatz — Fehler dürfen den aufrufenden Poll nie
     abbrechen. Gemeinsamer Einstiegspunkt für BEIDE DIBOS-Aufrufer:
@@ -449,17 +579,62 @@ async def enrich_and_broadcast(org_id: int, raw_events: list[dict]) -> None:
     UND dibos_loop.py::_check_org() (leichter Poll, KEINE Voll-Aufzeichnung nötig
     — reduziert die Speicherlast, da keine Rohdaten auf Platte geschrieben werden).
 
-    Zwei Broadcast-Typen: "dibos_sync" (voller Board-Reload) für jeden geänderten
-    Einsatz, zusätzlich das gezielte "rsvp:changed" (nur Zu-/Absage-Widget neu
-    laden, siehe app.js) für Einsätze mit neuen Personenrückmeldungen.
+    create_incidents=True (Org-Opt-in) legt zusätzlich neue Einsätze für nicht
+    zuordenbare Events an (siehe enrich_events_for_org()) und löst für jeden neu
+    angelegten, noch nicht abgeschlossenen Einsatz dieselbe zentrale
+    Benachrichtigung wie API/manuelle Anlage/LIS-Sync aus (SMS/Push/Teams,
+    siehe incident_notify.py) — das braucht `await` und läuft daher hier, nicht
+    im Thread von enrich_events_for_org().
+
+    Drei Broadcast-/Benachrichtigungs-Typen: "dibos_sync" (voller Board-Reload)
+    für jeden geänderten Einsatz, "rsvp:changed" (nur Zu-/Absage-Widget neu
+    laden, siehe app.js) für Einsätze mit neuen Personenrückmeldungen, sowie
+    die Einsatzinfo-Benachrichtigung für neu angelegte Einsätze.
     """
     try:
-        result = await asyncio.to_thread(enrich_events_for_org, org_id, raw_events)
+        result = await asyncio.to_thread(
+            enrich_events_for_org, org_id, raw_events, create_incidents=create_incidents,
+        )
     except Exception:
         logger.exception("DIBOS-Einsatzanreicherung fehlgeschlagen (Org %s)", org_id)
         return
     changed_ids = result.get("changed_ids") or []
     rsvp_changed_ids = result.get("rsvp_changed_ids") or []
+    created_ids = result.get("created_ids") or []
+    if created_ids:
+        from app.config import settings
+        from app.core.tenant import set_tenant_context
+        from app.db import SessionLocal
+        from app.models.incident import Incident
+        from app.services.broadcast import broadcast_org
+        from app.services.incident_notify import notify_incident_created
+
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            for incident_id in created_ids:
+                incident = db.get(Incident, incident_id)
+                if incident is None:
+                    continue
+                try:
+                    await broadcast_org(org_id, {
+                        "type": "incident_created",
+                        "incident_id": incident.id,
+                        "url": f"/einsatz/{incident.id}/info",
+                        "title": f"Neuer Einsatz aus DIBOS: {incident.alarm_type_code}",
+                    })
+                except Exception:
+                    logger.exception("DIBOS-Board-Broadcast für neuen Einsatz %s fehlgeschlagen", incident.id)
+                try:
+                    await notify_incident_created(
+                        db, incident, org_id=org_id,
+                        base_url=settings.effective_public_base_url,
+                        background_tasks=None,
+                    )
+                except Exception:
+                    logger.exception("Einsatzinfo-Benachrichtigung für DIBOS-Einsatz %s fehlgeschlagen", incident.id)
+        finally:
+            db.close()
     if not changed_ids and not rsvp_changed_ids:
         return
     from app.services.broadcast import manager

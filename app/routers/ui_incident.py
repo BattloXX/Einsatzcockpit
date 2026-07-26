@@ -365,7 +365,7 @@ async def new_incident(
     except ValueError:
         pass
 
-    incident = create_incident(
+    incident, created_fresh = create_incident(
         db, alarm_type_code=alarm_type_code,
         address_street=address_street or None,
         address_no=address_no or None,
@@ -377,7 +377,15 @@ async def new_incident(
         incident_leader_user_id=user.id,
         primary_org_id=user.org_id,
         ip=request.client.host if request.client else None,
+        reject_near_duplicates=True,
     )
+
+    if not created_fresh:
+        # Fast zeitgleicher Duplikat-Alarm mit gleichem Stichwort erkannt (z. B.
+        # Doppel-Submit) — direkt zum bereits bestehenden Einsatz weiterleiten,
+        # keine zweite Alarmierung/Seiteneffekte fuer dasselbe Ereignis auslösen.
+        db.commit()
+        return RedirectResponse(url=f"/einsatz/{incident.id}", status_code=303)
 
     # Org-Standard-PIN auf neuen Einsatz übertragen
     if user.org_id:

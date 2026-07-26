@@ -38,6 +38,10 @@ class TeamsAlarmConfig(Base):
     # Übungseinsätze zusätzlich an Teams senden (gleiche Konvention wie
     # OrgSettings.einsatzinfo_sms_send_exercise).
     send_exercise: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Bei einer laufenden Großschadenslage nur EINE Karte für die Lage senden statt
+    # einer je zugeordnetem Einsatz (siehe teams_alarm_service.py::post_incident_card()).
+    # Default aus — ändert bestehendes Verhalten nicht, bis eine Org es aktiviert.
+    suppress_card_in_major_incident: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Einzeln schaltbare Karteninhalte
     include_map: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -95,8 +99,22 @@ class TeamsChannelBinding(Base):
 
 class TeamsCardPost(Base):
     """Protokoll gesendeter Teams-Alarmkarten je Einsatz — für den In-Place-Refresh bei
-    Zusage/Absage (Universal Actions) und zur Fehlersuche/Idempotenz."""
+    Zusage/Absage (Universal Actions) und zur Fehlersuche/Idempotenz.
+
+    major_incident_id (gesetzt, wenn der Einsatz bei Kartenversand einer laufenden
+    Großschadenslage zugeordnet war, siehe post_incident_card()) macht diese Tabelle
+    zusätzlich zum Dedup-Ledger für TeamsAlarmConfig.suppress_card_in_major_incident:
+    pro Lage wird höchstens eine Zeile mit gesetztem major_incident_id angelegt (siehe
+    uq_teams_card_post_org_major_incident) — weitere Einsätze derselben Lage finden
+    diese Zeile und werden übersprungen. Einsätze außerhalb einer Lage bzw. ohne
+    aktives suppress_card_in_major_incident bleiben unberührt (major_incident_id=NULL,
+    keine Zeile — unverändertes bisheriges Verhalten)."""
     __tablename__ = "teams_card_post"
+    __table_args__ = (
+        # NULL zählt je einzeln als eindeutig (SQLite/MySQL) — betrifft nur Einsätze in
+        # einer Lage, alle anderen Zeilen bleiben major_incident_id=NULL und unberührt.
+        UniqueConstraint("org_id", "major_incident_id", name="uq_teams_card_post_org_major_incident"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False)
@@ -106,6 +124,9 @@ class TeamsCardPost(Base):
     target: Mapped[str] = mapped_column(_TARGET_ENUM, nullable=False)
     conversation_id: Mapped[str] = mapped_column(String(300), nullable=False)
     activity_id: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    major_incident_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("major_incident.id", ondelete="CASCADE"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
