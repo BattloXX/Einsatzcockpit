@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -124,8 +124,12 @@ class TeamsCardPost(Base):
     target: Mapped[str] = mapped_column(_TARGET_ENUM, nullable=False)
     conversation_id: Mapped[str] = mapped_column(String(300), nullable=False)
     activity_id: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Integer (nicht BigInteger!) - major_incident.id ist ein einfaches Integer/INT,
+    # eine FK muss denselben Spaltentyp haben, sonst schlaegt ADD CONSTRAINT auf MySQL
+    # mit errno 150 "Foreign key constraint is incorrectly formed" fehl (Vorfall
+    # 2026-07-26, Migration 0183 auf dem Testserver).
     major_incident_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("major_incident.id", ondelete="CASCADE"), nullable=True
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 

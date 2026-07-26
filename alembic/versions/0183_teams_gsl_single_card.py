@@ -38,18 +38,32 @@ def _column_exists(conn, table: str, column: str) -> bool:
 
 
 def upgrade() -> None:
-    op.execute(text(
-        "ALTER TABLE `teams_alarm_config` ADD COLUMN `suppress_card_in_major_incident` "
-        "BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    op.execute(text(
-        "ALTER TABLE `teams_card_post` ADD COLUMN `major_incident_id` BIGINT NULL, "
-        "ADD CONSTRAINT `fk_teams_card_post_major_incident` FOREIGN KEY (`major_incident_id`) "
-        "REFERENCES `major_incident` (`id`) ON DELETE CASCADE"
-    ))
-
     conn = op.get_bind()
-    if conn.dialect.name != "mysql":
+    is_mysql = conn.dialect.name == "mysql"
+
+    # _column_exists()-Guards: robust gegen einen Retry nach einem zuvor teilweise
+    # fehlgeschlagenen Lauf (siehe Vorfall unten) - jede ALTER TABLE-Anweisung lief auf
+    # MySQL bereits als eigenes, atomares Statement, ein spaeterer Fehler in dieser
+    # Funktion darf einen frueher schon erfolgreich angelegten Spalten nicht erneut
+    # anzulegen versuchen ("Duplicate column name").
+    if not is_mysql or not _column_exists(conn, "teams_alarm_config", "suppress_card_in_major_incident"):
+        op.execute(text(
+            "ALTER TABLE `teams_alarm_config` ADD COLUMN `suppress_card_in_major_incident` "
+            "BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
+
+    if not is_mysql or not _column_exists(conn, "teams_card_post", "major_incident_id"):
+        # INT (nicht BIGINT!): major_incident.id ist ein einfaches Integer/INT - eine FK
+        # braucht denselben Spaltentyp, sonst schlaegt ADD CONSTRAINT auf MySQL mit
+        # errno 150 "Foreign key constraint is incorrectly formed" fehl (Vorfall
+        # 2026-07-26, urspruenglich faelschlich als BIGINT angelegt).
+        op.execute(text(
+            "ALTER TABLE `teams_card_post` ADD COLUMN `major_incident_id` INT NULL, "
+            "ADD CONSTRAINT `fk_teams_card_post_major_incident` FOREIGN KEY (`major_incident_id`) "
+            "REFERENCES `major_incident` (`id`) ON DELETE CASCADE"
+        ))
+
+    if not is_mysql:
         return
 
     if not _index_exists(conn, "teams_card_post", "uq_teams_card_post_org_major_incident"):
