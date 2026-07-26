@@ -15,10 +15,32 @@ from app.models.objekt import (
     AUSWAHL_DOKUMENTART,
     AUSWAHL_KONTAKTART,
     AUSWAHL_PIKTOGRAMM,
+    OBJEKT_KOPIERBARE_FELDER,
+    OBJEKT_STATUS_ENTWURF,
+    OBJEKT_STATUS_FREIGEGEBEN,
+    OBJEKT_STATUS_UEBERARBEITUNG,
     OBJEKT_STATUS_UEBERGAENGE,
     Objekt,
+    ObjektBMA,
     ObjektChange,
+    ObjektGefahr,
+    ObjektKartenObjekt,
+    ObjektKontakt,
+    ObjektMerkmal,
+    ObjektWohnanlage,
+    ObjektZusatzadresse,
 )
+
+
+def telefone_zu_json(telefone_raw: str) -> str | None:
+    """Serialisiert eine kommagetrennte Telefonliste zu JSON (ObjektKontakt.telefone_json).
+
+    Verschoben aus ui_objekt.py::_telefone_to_json (2026-07-26), damit der
+    BMA-Webplattform-Import (app/services/bma_import/bma_sync.py) dieselbe
+    Funktion nutzt wie das manuelle Kontaktformular.
+    """
+    nummern = [t.strip() for t in telefone_raw.replace(";", ",").split(",") if t.strip()]
+    return json.dumps(nummern, ensure_ascii=False) if nummern else None
 
 
 def objekt_system_enabled(db: Session) -> bool:
@@ -113,6 +135,278 @@ def aktualisiere_felder(
         objekt.aktualisiert_am = datetime.now(UTC)
         objekt.aktualisiert_von_id = user_id
     return geaendert
+
+
+# ── Arbeitskopie-Workflow ──────────────────────────────────────────────────────
+#
+# Ein freigegebenes Objekt bleibt waehrend einer Ueberarbeitung inhaltlich unveraendert
+# produktiv (Matching, Sync, Objektblatt, Einsatzansicht) - bearbeitet wird ausschliesslich
+# eine separate Arbeitskopie (eigene Objekt-Zeile, Objekt.entwurf_von_id gesetzt). Erst die
+# Uebernahme (Merge) schreibt die Aenderungen auf die produktive Zeile zurueck; die id des
+# produktiven Objekts bleibt dabei stabil (ObjektEinsatz/ObjektDokument/ObjektChange/
+# Medienpfade referenzieren sie unveraendert weiter). Siehe docs/plans/objekt-arbeitskopie-plan.md.
+
+
+def nur_produktiv(query):
+    """Haengt an eine Objekt-Query den Filter 'keine offene Arbeitskopie' an.
+
+    Arbeitskopien (Objekt.entwurf_von_id gesetzt) sind reine Bearbeitungsstaende und
+    duerfen NIE in Listen, Matching, Sync-Manifest, Auswahlfeldern oder Erinnerungen
+    auftauchen. Der Tenant-Listener (app/core/tenant.py) filtert nur nach org_id, nicht
+    danach - MUSS daher bei jeder Objekt-Query verwendet werden, die nicht ohnehin ueber
+    eine einzelne bekannte id filtert.
+    """
+    return query.filter(Objekt.entwurf_von_id.is_(None))
+
+
+def hole_arbeitskopie(db: Session, objekt: Objekt) -> Objekt | None:
+    """Laedt die offene Arbeitskopie eines produktiven Objekts, falls vorhanden."""
+    return (
+        db.query(Objekt)
+        .filter(Objekt.entwurf_von_id == objekt.id, Objekt.org_id == objekt.org_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+
+
+def _kopiere_kindzeile(quelle: Any, ziel_cls: type, *, objekt_id: int, org_id: int | None,
+                        exclude: tuple[str, ...] = ()) -> Any:
+    """Kopiert eine Kind-Zeile (BMA/Zusatzadresse/Gefahr/Merkmal/Kontakt/Wohnanlage/
+    Kartenobjekt) auf ein anderes Objekt. Kopiert generisch alle gemappten Spalten ausser
+    id/objekt_id/org_id (+ optionale weitere Ausschluesse, z. B. FKs die separat remappt
+    werden muessen) - so bricht das Kopieren nicht, wenn dem Modell spaeter ein Feld
+    hinzugefuegt wird.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    ausschluss = {"id", "objekt_id", "org_id", *exclude}
+    kwargs = {
+        spalte.key: getattr(quelle, spalte.key)
+        for spalte in sa_inspect(type(quelle)).mapper.column_attrs
+        if spalte.key not in ausschluss
+    }
+    kwargs["objekt_id"] = objekt_id
+    kwargs["org_id"] = org_id
+    return ziel_cls(**kwargs)
+
+
+def erstelle_arbeitskopie(db: Session, objekt: Objekt, user_id: int | None) -> Objekt:
+    """Legt eine Arbeitskopie eines freigegebenen Objekts an (tiefe Kopie aller
+    Stammdaten + Kinddaten: BMA, Zusatzadressen, Gefahren, Merkmale, Kontakte, Wohnanlage,
+    Lagekarten-Symbole). Das produktive Objekt wechselt auf 'in_ueberarbeitung', seine
+    DATEN bleiben dabei unveraendert. Caller committet.
+
+    Wirft ValueError, wenn das Objekt nicht freigegeben ist oder bereits eine offene
+    Arbeitskopie existiert (zusaetzlich zur DB-seitigen UNIQUE-Absicherung).
+    """
+    if objekt.status != OBJEKT_STATUS_FREIGEGEBEN:
+        raise ValueError("Nur freigegebene Objekte koennen ueberarbeitet werden")
+    if hole_arbeitskopie(db, objekt) is not None:
+        raise ValueError("Es existiert bereits eine offene Arbeitskopie fuer dieses Objekt")
+
+    kopie = Objekt(
+        org_id=objekt.org_id,
+        nummer=None,
+        status=OBJEKT_STATUS_ENTWURF,
+        entwurf_von_id=objekt.id,
+        erstellt_von_id=user_id,
+        aktualisiert_von_id=user_id,
+        **{feld: getattr(objekt, feld) for feld in OBJEKT_KOPIERBARE_FELDER},
+    )
+    db.add(kopie)
+    db.flush()  # kopie.id fuer die Kind-Fremdschluessel unten
+
+    if objekt.bma is not None:
+        kopie.bma = _kopiere_kindzeile(objekt.bma, ObjektBMA, objekt_id=kopie.id, org_id=kopie.org_id)
+
+    for adresse in objekt.zusatzadressen:
+        db.add(_kopiere_kindzeile(adresse, ObjektZusatzadresse, objekt_id=kopie.id, org_id=kopie.org_id))
+
+    for gefahr in objekt.gefahren:
+        db.add(_kopiere_kindzeile(gefahr, ObjektGefahr, objekt_id=kopie.id, org_id=kopie.org_id))
+
+    for merkmal in objekt.merkmale:
+        db.add(_kopiere_kindzeile(merkmal, ObjektMerkmal, objekt_id=kopie.id, org_id=kopie.org_id))
+
+    # Kontakte zuerst kopieren und die alt→neu-id merken - die Wohnanlage kann per
+    # hausverwaltung_kontakt_id auf einen Kontakt zeigen und muss remappt werden.
+    kontakt_map: dict[int, int] = {}
+    for kontakt in objekt.kontakte:
+        neuer_kontakt = _kopiere_kindzeile(kontakt, ObjektKontakt, objekt_id=kopie.id, org_id=kopie.org_id)
+        db.add(neuer_kontakt)
+        db.flush()
+        kontakt_map[kontakt.id] = neuer_kontakt.id
+
+    if objekt.wohnanlage is not None:
+        neue_wohnanlage = _kopiere_kindzeile(
+            objekt.wohnanlage, ObjektWohnanlage, objekt_id=kopie.id, org_id=kopie.org_id,
+            exclude=("hausverwaltung_kontakt_id",),
+        )
+        alte_kontakt_id = objekt.wohnanlage.hausverwaltung_kontakt_id
+        if alte_kontakt_id is not None and alte_kontakt_id in kontakt_map:
+            neue_wohnanlage.hausverwaltung_kontakt_id = kontakt_map[alte_kontakt_id]
+        kopie.wohnanlage = neue_wohnanlage
+
+    for karten_objekt in objekt.karten_objekte:
+        db.add(_kopiere_kindzeile(karten_objekt, ObjektKartenObjekt, objekt_id=kopie.id, org_id=kopie.org_id))
+
+    alt_status = objekt.status
+    objekt.status = OBJEKT_STATUS_UEBERARBEITUNG
+    objekt.aktualisiert_von_id = user_id
+    write_objekt_change(db, objekt.id, objekt.org_id, "status", "status",
+                        before=alt_status, after=objekt.status, user_id=user_id)
+    return kopie
+
+
+def _ersetze_kinddaten(db: Session, basis: Objekt, kopie: Objekt, *, user_id: int | None) -> None:
+    """Ersetzt alle Kind-Datensaetze der Basis 1:1 durch die der Arbeitskopie (Merge-
+    Schritt von uebernimm_arbeitskopie): alte Kinder loeschen, neue aus der Kopie anlegen.
+    Ein feldgenauer Diff waere hier unverhaeltnismaessig (Listen mit Sortierung/
+    Fremdschluesseln) - stattdessen EIN Sammel-Change-Eintrag je Bereich.
+    """
+    # BMA (1:1)
+    hatte_bma = basis.bma is not None
+    if basis.bma is not None:
+        db.delete(basis.bma)
+        db.flush()
+    hat_bma = kopie.bma is not None
+    if kopie.bma is not None:
+        basis.bma = _kopiere_kindzeile(kopie.bma, ObjektBMA, objekt_id=basis.id, org_id=basis.org_id)
+    if hatte_bma != hat_bma:
+        write_objekt_change(db, basis.id, basis.org_id, "bma", "vorhanden",
+                            before=hatte_bma, after=hat_bma, user_id=user_id)
+
+    # Zusatzadressen
+    vorher = len(basis.zusatzadressen)
+    for alte_adresse in list(basis.zusatzadressen):
+        db.delete(alte_adresse)
+    neue_adressen = [_kopiere_kindzeile(e, ObjektZusatzadresse, objekt_id=basis.id, org_id=basis.org_id)
+                     for e in kopie.zusatzadressen]
+    db.add_all(neue_adressen)
+    if vorher or neue_adressen:
+        write_objekt_change(db, basis.id, basis.org_id, "zusatzadressen", "anzahl",
+                            before=vorher, after=len(neue_adressen), user_id=user_id)
+
+    # Gefahren
+    vorher = len(basis.gefahren)
+    for alte_gefahr in list(basis.gefahren):
+        db.delete(alte_gefahr)
+    neue_gefahren = [_kopiere_kindzeile(e, ObjektGefahr, objekt_id=basis.id, org_id=basis.org_id)
+                     for e in kopie.gefahren]
+    db.add_all(neue_gefahren)
+    if vorher or neue_gefahren:
+        write_objekt_change(db, basis.id, basis.org_id, "gefahren", "anzahl",
+                            before=vorher, after=len(neue_gefahren), user_id=user_id)
+
+    # Merkmale
+    vorher = len(basis.merkmale)
+    for altes_merkmal in list(basis.merkmale):
+        db.delete(altes_merkmal)
+    neue_merkmale = [_kopiere_kindzeile(e, ObjektMerkmal, objekt_id=basis.id, org_id=basis.org_id)
+                     for e in kopie.merkmale]
+    db.add_all(neue_merkmale)
+    if vorher or neue_merkmale:
+        write_objekt_change(db, basis.id, basis.org_id, "merkmale", "anzahl",
+                            before=vorher, after=len(neue_merkmale), user_id=user_id)
+
+    # Wohnanlage muss VOR den Kontakten geloescht werden (haengt per FK an einem Kontakt);
+    # neu angelegt wird sie erst NACH den neuen Kontakten (Remap der Hausverwaltung).
+    hatte_wohnanlage = basis.wohnanlage is not None
+    if basis.wohnanlage is not None:
+        db.delete(basis.wohnanlage)
+        db.flush()
+
+    # Kontakte
+    vorher = len(basis.kontakte)
+    for alter_kontakt in list(basis.kontakte):
+        db.delete(alter_kontakt)
+    db.flush()
+    kontakt_map: dict[int, int] = {}
+    for kontakt_vorlage in kopie.kontakte:
+        neuer_kontakt = _kopiere_kindzeile(kontakt_vorlage, ObjektKontakt, objekt_id=basis.id, org_id=basis.org_id)
+        db.add(neuer_kontakt)
+        db.flush()
+        kontakt_map[kontakt_vorlage.id] = neuer_kontakt.id
+    if vorher or kontakt_map:
+        write_objekt_change(db, basis.id, basis.org_id, "kontakte", "anzahl",
+                            before=vorher, after=len(kontakt_map), user_id=user_id)
+
+    # Wohnanlage neu anlegen (nach den Kontakten - Remap der Hausverwaltung)
+    hat_wohnanlage = kopie.wohnanlage is not None
+    if kopie.wohnanlage is not None:
+        neue_wohnanlage = _kopiere_kindzeile(
+            kopie.wohnanlage, ObjektWohnanlage, objekt_id=basis.id, org_id=basis.org_id,
+            exclude=("hausverwaltung_kontakt_id",),
+        )
+        alte_kontakt_id = kopie.wohnanlage.hausverwaltung_kontakt_id
+        if alte_kontakt_id is not None and alte_kontakt_id in kontakt_map:
+            neue_wohnanlage.hausverwaltung_kontakt_id = kontakt_map[alte_kontakt_id]
+        basis.wohnanlage = neue_wohnanlage
+    if hatte_wohnanlage != hat_wohnanlage:
+        write_objekt_change(db, basis.id, basis.org_id, "wohnanlage", "vorhanden",
+                            before=hatte_wohnanlage, after=hat_wohnanlage, user_id=user_id)
+
+    # Lagekarten-Symbole
+    vorher = len(basis.karten_objekte)
+    for altes_kartenobjekt in list(basis.karten_objekte):
+        db.delete(altes_kartenobjekt)
+    neue_kartenobjekte = [_kopiere_kindzeile(e, ObjektKartenObjekt, objekt_id=basis.id, org_id=basis.org_id)
+                          for e in kopie.karten_objekte]
+    db.add_all(neue_kartenobjekte)
+    if vorher or neue_kartenobjekte:
+        write_objekt_change(db, basis.id, basis.org_id, "karte", "anzahl",
+                            before=vorher, after=len(neue_kartenobjekte), user_id=user_id)
+
+
+def uebernimm_arbeitskopie(db: Session, kopie: Objekt, user_id: int | None) -> Objekt:
+    """Uebernimmt eine Arbeitskopie in das produktive Basis-Objekt (Merge, eine
+    Transaktion): Stammdaten + Kinddaten werden auf die Basis zurueckgeschrieben, die
+    Basis-id bleibt stabil. Die Arbeitskopie wird anschliessend geloescht.
+    Gibt das aktualisierte Basis-Objekt zurueck. Caller committet.
+    """
+    basis = kopie.basis_objekt
+    if basis is None or basis.status != OBJEKT_STATUS_UEBERARBEITUNG:
+        raise ValueError("Arbeitskopie ohne gueltiges Basis-Objekt in Ueberarbeitung")
+
+    daten = {feld: getattr(kopie, feld) for feld in OBJEKT_KOPIERBARE_FELDER}
+    if daten.get("revision_datum") != basis.revision_datum:
+        daten["revision_erinnert_am"] = None
+    aktualisiere_felder(db, basis, daten, bereich="stammdaten", user_id=user_id)
+
+    _ersetze_kinddaten(db, basis, kopie, user_id=user_id)
+
+    # Bearbeitungshistorie der Kopie an die Basis umhaengen, damit sie erhalten bleibt.
+    db.query(ObjektChange).filter(
+        ObjektChange.objekt_id == kopie.id, ObjektChange.org_id == kopie.org_id,
+    ).update({ObjektChange.objekt_id: basis.id}, synchronize_session=False)
+
+    alt_status = basis.status
+    basis.status = OBJEKT_STATUS_FREIGEGEBEN
+    basis.aktualisiert_von_id = user_id
+    basis.aktualisiert_am = datetime.now(UTC)
+    write_objekt_change(db, basis.id, basis.org_id, "status", "status",
+                        before=alt_status, after=basis.status, user_id=user_id)
+
+    db.delete(kopie)
+    return basis
+
+
+def verwirf_arbeitskopie(db: Session, kopie: Objekt, user_id: int | None) -> Objekt:
+    """Verwirft eine Arbeitskopie ohne Uebernahme; die Basis bleibt unveraendert
+    freigegeben (ihre Daten wurden waehrend der Ueberarbeitung nie angetastet).
+    Caller committet.
+    """
+    basis = kopie.basis_objekt
+    if basis is None:
+        raise ValueError("Arbeitskopie ohne Basis-Objekt")
+
+    db.delete(kopie)
+    if basis.status == OBJEKT_STATUS_UEBERARBEITUNG:
+        alt_status = basis.status
+        basis.status = OBJEKT_STATUS_FREIGEGEBEN
+        basis.aktualisiert_von_id = user_id
+        write_objekt_change(db, basis.id, basis.org_id, "status", "status",
+                            before=alt_status, after=basis.status, user_id=user_id)
+    return basis
 
 
 def berechne_vollstaendigkeit(
@@ -423,8 +717,10 @@ def pruefe_revision_erinnerungen(db: Session) -> list[dict]:
     from app.models.objekt import OBJEKT_STATUS_ARCHIVIERT
 
     heute = _date.today()
+    # nur_produktiv: eine Arbeitskopie erbt beim Kopieren das revision_datum der Basis und
+    # wuerde sonst eine zweite (Karteileichen-)Erinnerung fuer dasselbe Objekt ausloesen.
     kandidaten = (
-        db.query(Objekt)
+        nur_produktiv(db.query(Objekt))
         .filter(
             Objekt.revision_datum.isnot(None),
             Objekt.revision_datum <= heute,
@@ -466,7 +762,7 @@ def build_sync_manifest(db: Session, org_id: int) -> dict:
     )
 
     objekte = (
-        db.query(Objekt)
+        nur_produktiv(db.query(Objekt))
         .filter(Objekt.org_id == org_id, Objekt.status == OBJEKT_STATUS_FREIGEGEBEN)
         .order_by(Objekt.nummer)
         .execution_options(include_all_tenants=True)

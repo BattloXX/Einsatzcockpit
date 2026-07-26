@@ -189,9 +189,13 @@ def finde_passendes_objekt(db: Session, org_id: int, identitaet: dict) -> Objekt
     echtes Duplikat-Objekt.
     """
     from app.services.objekt_matching_service import _norm_bma, _normalisierte_adresse
+    from app.services.objekt_service import nur_produktiv
 
+    # nur_produktiv: eine offene Arbeitskopie darf hier nie als Ziel gefunden werden - ein
+    # daran haengendes Dokument waere sonst out-of-scope fuer die Arbeitskopie-Versionierung
+    # (Dokumente bleiben an der produktiven Zeile) und ginge beim Verwerfen der Kopie verloren.
     objekte = (
-        db.query(Objekt)
+        nur_produktiv(db.query(Objekt))
         .options(selectinload(Objekt.bma), selectinload(Objekt.zusatzadressen))
         .filter(Objekt.org_id == org_id)
         .all()

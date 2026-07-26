@@ -152,6 +152,13 @@ def test_objekt_verwalter_role_defined():
 
 
 # ── Status-Workflow ───────────────────────────────────────────────────────────
+#
+# in_ueberarbeitung → freigegeben ist seit dem Arbeitskopie-Workflow (PR Objekt-
+# Arbeitskopie) NICHT mehr ueber status_uebergang_erlaubt() erlaubt: das produktive
+# Objekt darf waehrend einer offenen Arbeitskopie nicht "blind" per POST /status
+# freigegeben werden - der reguläre Weg ist uebernimm_arbeitskopie() (siehe
+# tests/test_objekt_arbeitskopie.py). Aus in_ueberarbeitung fuehrt nur noch
+# archiviert heraus.
 
 @pytest.mark.parametrize("von,nach,erlaubt", [
     (OBJEKT_STATUS_ENTWURF, OBJEKT_STATUS_FREIGEGEBEN, True),
@@ -159,7 +166,8 @@ def test_objekt_verwalter_role_defined():
     (OBJEKT_STATUS_ENTWURF, OBJEKT_STATUS_UEBERARBEITUNG, False),
     (OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_UEBERARBEITUNG, True),
     (OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_ENTWURF, False),
-    (OBJEKT_STATUS_UEBERARBEITUNG, OBJEKT_STATUS_FREIGEGEBEN, True),
+    (OBJEKT_STATUS_UEBERARBEITUNG, OBJEKT_STATUS_FREIGEGEBEN, False),
+    (OBJEKT_STATUS_UEBERARBEITUNG, OBJEKT_STATUS_ARCHIVIERT, True),
     (OBJEKT_STATUS_ARCHIVIERT, OBJEKT_STATUS_UEBERARBEITUNG, True),
     (OBJEKT_STATUS_ARCHIVIERT, OBJEKT_STATUS_FREIGEGEBEN, False),
 ])

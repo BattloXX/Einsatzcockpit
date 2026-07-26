@@ -81,6 +81,10 @@ dependencies = [
     # Stack wie JupyterLab-RTC, siehe app/services/lagedokument_collab.py
     "pycrdt>=0.14",
     "pycrdt-websocket>=0.16",
+    # BMA-Webplattform-Import (LWZ Vorarlberg): Kontaktpersonen stehen nur auf einer
+    # server-gerenderten HTML-Detailseite, die Anlagenliste selbst ist JSON (kein
+    # Parser noetig) - siehe app/services/bma_import/bma_parser.py
+    "beautifulsoup4>=4.12",
 ]
 
 [project.optional-dependencies]

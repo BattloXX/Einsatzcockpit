@@ -8,7 +8,8 @@
     <div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <h1 style="margin:0;">{{ objekt.anzeige_nummer }} · {{ objekt.name }}</h1>
-        {% if objekt.status == 'freigegeben' %}<span class="badge-pill badge-pill--green">{{ status_labels[objekt.status] }}</span>
+        {% if objekt.entwurf_von_id %}<span class="badge-pill badge-pill--amber">✎ Arbeitskopie</span>
+        {% elif objekt.status == 'freigegeben' %}<span class="badge-pill badge-pill--green">{{ status_labels[objekt.status] }}</span>
         {% elif objekt.status == 'entwurf' %}<span class="badge-pill badge-pill--gray">{{ status_labels[objekt.status] }}</span>
         {% elif objekt.status == 'archiviert' %}<span class="badge-pill badge-pill--gray">{{ status_labels[objekt.status] }}</span>
         {% else %}<span class="badge-pill badge-pill--amber">{{ status_labels[objekt.status] }}</span>{% endif %}
@@ -23,40 +24,68 @@
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       {% if ist_verwalter %}
-        {% if objekt.status == 'entwurf' or objekt.status == 'in_ueberarbeitung' %}
+        {% if objekt.entwurf_von_id %}
+        <!-- Arbeitskopie: Status wird nicht ueber /status gesteuert (dort blockiert),
+             sondern ueber Uebernehmen (Merge in die produktive Zeile) / Verwerfen. -->
+        <form method="post" action="/objekte/{{ produktiv_objekt_id }}/uebernehmen" style="display:inline;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn--primary">✓ Überarbeitung freigeben</button>
+        </form>
+        <form method="post" action="/objekte/{{ produktiv_objekt_id }}/verwerfen" style="display:inline;"
+              onsubmit="return confirm('Arbeitskopie verwerfen? Alle Änderungen seit der Überarbeitung gehen verloren, die freigegebene Version bleibt unverändert.')">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn--ghost">Verwerfen</button>
+        </form>
+        {% elif objekt.status == 'entwurf' %}
         <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="neuer_status" value="freigegeben">
           <button type="submit" class="btn btn--primary">✓ Freigeben</button>
         </form>
         {% elif objekt.status == 'freigegeben' %}
-        <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;">
+        <form method="post" action="/objekte/{{ objekt.id }}/ueberarbeiten" style="display:inline;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <input type="hidden" name="neuer_status" value="in_ueberarbeitung">
-          <button type="submit" class="btn btn--ghost">✎ In Überarbeitung</button>
+          <button type="submit" class="btn btn--ghost">✎ Überarbeiten</button>
         </form>
         {% endif %}
-        {% if objekt.status != 'archiviert' %}
-        <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;"
-              onsubmit="return confirm('Objekt archivieren?')">
-          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <input type="hidden" name="neuer_status" value="archiviert">
-          <button type="submit" class="btn btn--ghost">Archivieren</button>
-        </form>
-        {% else %}
-        <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;">
-          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <input type="hidden" name="neuer_status" value="in_ueberarbeitung">
-          <button type="submit" class="btn btn--ghost">Reaktivieren</button>
-        </form>
+        {% if not objekt.entwurf_von_id %}
+          {% if objekt.status != 'archiviert' %}
+          <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;"
+                onsubmit="return confirm('Objekt archivieren?')">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <input type="hidden" name="neuer_status" value="archiviert">
+            <button type="submit" class="btn btn--ghost">Archivieren</button>
+          </form>
+          {% else %}
+          <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <input type="hidden" name="neuer_status" value="in_ueberarbeitung">
+            <button type="submit" class="btn btn--ghost">Reaktivieren</button>
+          </form>
+          {% endif %}
         {% endif %}
       {% endif %}
       <button type="button" class="btn btn--ghost"
-              onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ objekt.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ objekt.id }}/objektblatt.pdf?anhang=1'})">🖨 Objektblatt (PDF)</button>
-      <a href="/objekte/{{ objekt.id }}/einsatz" class="btn btn--ghost">📱 Einsatzansicht</a>
+              onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ produktiv_objekt_id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ produktiv_objekt_id }}/objektblatt.pdf?anhang=1'})">🖨 Objektblatt (PDF)</button>
+      <a href="/objekte/{{ produktiv_objekt_id }}/einsatz" class="btn btn--ghost">📱 Einsatzansicht</a>
       <a href="/objekte/" class="btn btn--ghost">Zurück</a>
     </div>
   </div>
+
+  {% if objekt.entwurf_von_id %}
+  <div class="alert alert--info" style="margin-bottom:12px;">
+    ✎ Sie bearbeiten eine <strong>Arbeitskopie</strong>. Produktiv (Matching, Einsatzansicht,
+    Objektblatt) bleibt weiterhin die zuletzt freigegebene Version aktiv, bis diese
+    Überarbeitung freigegeben wird.
+    <a href="/objekte/{{ produktiv_objekt_id }}?fassung=produktiv">Produktive Version ansehen →</a>
+  </div>
+  {% elif arbeitskopie and ist_verwalter %}
+  <div class="alert alert--info" style="margin-bottom:12px;">
+    ℹ️ Für dieses Objekt läuft gerade eine Überarbeitung. Diese Ansicht zeigt den weiterhin
+    aktiven, produktiven Stand.
+    <a href="/objekte/{{ objekt.id }}">Zur Arbeitskopie wechseln →</a>
+  </div>
+  {% endif %}
 
   {% if plan_hinweis %}
   <div class="alert alert--success" x-data="{ zu: true }" x-show="zu" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
@@ -126,7 +155,7 @@
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Zugänge …</span></div>
       </section>
 
-      <section id="abschnitt-einsaetze" hx-get="/objekte/{{ objekt.id }}/einsaetze" hx-trigger="load" hx-swap="innerHTML">
+      <section id="abschnitt-einsaetze" hx-get="/objekte/{{ produktiv_objekt_id }}/einsaetze" hx-trigger="load" hx-swap="innerHTML">
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Einsätze …</span></div>
       </section>
 
@@ -137,7 +166,7 @@
       {% if is_admin %}
       <div class="card" style="padding:16px;border-color:var(--red,#b71921);">
         <h3 style="margin-top:0;">Gefahrenzone</h3>
-        <form method="post" action="/objekte/{{ objekt.id }}/loeschen"
+        <form method="post" action="/objekte/{{ produktiv_objekt_id }}/loeschen"
               onsubmit="return confirm('Objekt {{ objekt.anzeige_nummer }} unwiderruflich löschen? Alle Daten (BMA, Adressen, Protokoll) gehen verloren.')">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button type="submit" class="btn btn--danger">Objekt löschen</button>
@@ -158,7 +187,7 @@
 
   <!-- Tab: Dokumente (lazy bei erster Aktivierung geladen) -->
   <div x-show="tab === 'dokumente'" x-cloak>
-    <section id="abschnitt-dokumente" hx-get="/objekte/{{ objekt.id }}/dokumente"
+    <section id="abschnitt-dokumente" hx-get="/objekte/{{ produktiv_objekt_id }}/dokumente"
              hx-trigger="objekt-tab-dokumente from:body once" hx-swap="innerHTML">
       <div class="card" style="padding:16px;"><span class="text-muted">Lade Dokumente …</span></div>
     </section>

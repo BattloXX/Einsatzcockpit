@@ -61,6 +61,30 @@ sind ebenfalls löschgeschützt (nur deaktivieren).
 - **Karten-Symbole**: der Symbolkatalog der Objekt-Lagekarte — Kurztext/Emoji + Stil (Kasten, Dreieck,
   Pfeil, Hydrant, …) oder **eigenes Symbolbild hochladen** (SVG/PNG, bis 512 KB) mit Live-Vorschau
 
+## Status-Workflow & Arbeitskopie
+
+Ein Objekt durchläuft: **Entwurf** (frei bearbeitbar, für Nicht-Verwalter unsichtbar) →
+**Freigegeben** (produktiv: Matching, Objektblatt, Einsatzansicht, Android-Sync) →
+**Überarbeitung** → wieder Freigegeben.
+
+Klickt ein `objekt_verwalter` bei einem freigegebenen Objekt auf **„✎ Überarbeiten"**, wird
+eine **Arbeitskopie** angelegt (Stammdaten + BMA + Zusatzadressen + Gefahren + Merkmale +
+Kontakte + Wohnanlage + Lagekarten-Symbole). Die freigegebene Version bleibt dabei
+unverändert produktiv — Matching, Objektblatt und Einsatzansicht zeigen weiterhin den
+zuletzt freigegebenen Stand, während an der Kopie gearbeitet wird. Verwalter landen beim
+Öffnen des Objekts automatisch auf der Arbeitskopie (Banner „Sie bearbeiten eine
+Arbeitskopie …"); über `?fassung=produktiv` lässt sich der produktive Stand zum Vergleich
+ansehen. **„✓ Überarbeitung freigeben"** übernimmt die Kopie (Merge, die Objekt-ID bleibt
+stabil), **„Verwerfen"** wirft sie ohne Übernahme weg.
+
+Dokumente (Brandschutzpläne, BMA-Datenblätter, …) sind von der Arbeitskopie **nicht**
+betroffen — sie hängen immer an der produktiven Objekt-Zeile und werden sofort nach
+Upload/Klassifizierung angezeigt, unabhängig vom Stammdaten-Bearbeitungsstand.
+
+Da bestehende Objekte anfangs alle auf Entwurf stehen, gibt es in der Objektliste eine
+Sammelfreigabe (Objekte auswählen → **„✓ Freigeben"**) als bewusste, manuelle
+Migrationsaktion — kein automatischer Statuswechsel.
+
 ## Alarm-Matching
 
 Läuft automatisch bei jeder Einsatzanlage (Alarm-API, LIS-Sync, manuelle Anlage) im Hintergrund,
@@ -144,6 +168,60 @@ max. 20 Seiten je Lauf). Vorschläge landen in einer **Review-Liste** — übern
 alle übernehmen; **nie automatische Übernahme**. Token-Verbrauch zählt auf das normale
 KI-Monatskontingent der Org; Seitenbilder werden vor dem Versand auf ~1024 px verkleinert.
 
+## BMA-Webplattform-Import (Landeswarnzentrale Vorarlberg)
+
+Täglicher Abgleich der Brandmeldeanlagen-Liste der BMA-Webplattform
+(`dibos.lwz-vorarlberg.at/LWZ_BMA_Webplattform`) in die Objektverwaltung: BMA-Nummer,
+Bezeichnung, Adresse inkl. Koordinaten, RFL-Status sowie die Kontaktpersonen
+(Brandschutzbeauftragte(r), BMA Alarmperson). Konfiguration unter **/admin/bma-import**
+(Rolle `org_admin`), die Review-Queue unter **Objekte → 🔥 BMA-Import** (Rolle
+`objekt_verwalter`).
+
+### Zugangsdaten hinterlegen
+
+Der Portal-Login der BMA-Webplattform hat eine Anti-Roboter-Verifizierung und lässt sich
+deshalb **nicht automatisieren**. Stattdessen wird das Session-Cookie hinterlegt, das der
+Browser nach einer manuellen Anmeldung im DIBOS-Portal setzt:
+
+1. Im [DIBOS-Portal](https://dibos.lwz-vorarlberg.at/dibos-web/gui/) anmelden und die
+   Kachel „BMA Webplattform" öffnen (Anlagenliste muss sichtbar sein).
+2. Browser-Entwicklertools (F12) → *Anwendung/Application* → *Cookies* →
+   `dibos.lwz-vorarlberg.at`.
+3. Alle dort aufgelisteten Cookies als `name1=wert1; name2=wert2; ...` zusammenfügen und
+   unter „Session-Cookie" auf /admin/bma-import einfügen, speichern, „Verbindung testen".
+
+Wie lange eine hinterlegte Session gültig bleibt, ist nicht dokumentiert. Der
+**Keepalive-Ping** (Schalter in den Einstellungen, Default an) hält sie zwischen den
+täglichen Läufen aktiv. Läuft sie dennoch ab, zeigt der letzte Lauf
+„Session abgelaufen" — ein neues Cookie hinterlegen und erneut testen.
+
+### Schreibpolitik
+
+| Zielobjekt | Verhalten |
+|---|---|
+| Neu / bereits im Status „Entwurf" | Stammdaten, BMA-Block und Kontakte werden direkt übernommen |
+| Freigegeben / In Überarbeitung | Nur **Vorschlag** in der Review-Queue — das Objekt bleibt unverändert |
+| Archiviert | Übersprungen |
+
+Ein Vorschlag wird nie direkt auf ein freigegebenes Objekt geschrieben — „Übernehmen" in
+der Review-Queue erstellt eine Arbeitskopie, wendet die Änderungen dort an und gibt sie
+sofort wieder frei (derselbe Weg wie eine reguläre Überarbeitung). „Ignorieren" verwirft
+den Vorschlag; er erscheint erst wieder, wenn sich die Quelle erneut ändert. Anlagen ohne
+passendes Objekt erscheinen unter „Nicht zugeordnet" — dort lässt sich ein bestehendes
+Objekt manuell zuordnen oder direkt ein neues Entwurf-Objekt anlegen (unabhängig vom
+Schalter „Unbekannte Anlagen automatisch anlegen", der nur den automatischen Lauf steuert).
+
+Kontakte, die aus DIBOS importiert wurden, sind intern markiert und werden bei
+Änderungen aktualisiert statt dupliziert; **händisch angelegte Kontakte fasst der Import
+nie an.**
+
+### Grenzen
+
+Die BMA-Webplattform liefert real nur BMA-Nummer, Bezeichnung, Adresse/Koordinaten,
+RFL-Status und die Kontaktpersonen — Felder wie Schlüsselsafe, Steigleitung oder
+Objektfunk sind im Datenmodell der Plattform zwar vorhanden, werden dort aber nicht
+gepflegt und bleiben daher unbefüllt.
+
 ## Serverkonfiguration
 
 ```bash
@@ -173,6 +251,9 @@ Optionale `.env`-/SystemSettings-Parameter:
 | `OBJEKT_OCR_ENABLED` | `true` | OCR-Fallback (Tesseract) für Scan-PDFs ohne Textlayer |
 | `OBJEKT_OCR_LANG` | `deu+eng` | Tesseract-Sprachpakete für die OCR |
 | `OBJEKT_SYMBOL_MAX_BYTES` | 512 KB | Maximale Größe je hochgeladenem Karten-Symbolbild (SVG/PNG) |
+| `BMA_IMPORT_ENABLED` | `true` | Globaler Kill-Switch für den täglichen BMA-Webplattform-Import (siehe oben) |
+| `BMA_IMPORT_SYNC_HOUR` / `BMA_IMPORT_SYNC_MINUTE` | 3 / 30 | Default-Uhrzeit (Europe/Vienna), je Org unter /admin/bma-import überschreibbar |
+| `BMA_IMPORT_KEEPALIVE_INTERVAL_S` | 600 | Abstand der Keepalive-Pings fürs hinterlegte Session-Cookie |
 
 **Speicher-Quota:** Original + Einzelseiten + Renderings zählen auf die Org-Quota
 (≈ Faktor 1,5–2 der Originalgröße). Beim Löschen eines Dokuments wird der belegte Speicher

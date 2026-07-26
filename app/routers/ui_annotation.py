@@ -164,11 +164,12 @@ def uebernahme_objekte(
 ):
     """Objektliste fuer den Uebernahme-Dialog — mit dem Einsatz verknuepfte zuerst."""
     from app.models.objekt import Objekt, ObjektEinsatz
+    from app.services.objekt_service import nur_produktiv
     verknuepft = {
         r[0] for r in db.query(ObjektEinsatz.objekt_id)
         .filter(ObjektEinsatz.incident_id == incident_id).all()
     }
-    objekte = db.query(Objekt).filter(Objekt.org_id == user.org_id).all()
+    objekte = nur_produktiv(db.query(Objekt)).filter(Objekt.org_id == user.org_id).all()
     objekte.sort(key=lambda o: (0 if o.id in verknuepft else 1, (o.name or "").lower()))
     return {"objekte": [
         {"id": o.id, "name": f"{o.anzeige_nummer} {o.name}", "verknuepft": o.id in verknuepft}

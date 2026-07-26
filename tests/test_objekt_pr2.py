@@ -64,11 +64,11 @@ def test_kontakt_telefone_roundtrip():
 
 
 def test_telefone_to_json_parser():
-    from app.routers.ui_objekt import _telefone_to_json
-    assert _telefone_to_json("+43 5574 123, +43 664 456") == '["+43 5574 123", "+43 664 456"]'
-    assert _telefone_to_json("+43 5574 123; +43 664 456") == '["+43 5574 123", "+43 664 456"]'
-    assert _telefone_to_json("   ") is None
-    assert _telefone_to_json("") is None
+    from app.services.objekt_service import telefone_zu_json
+    assert telefone_zu_json("+43 5574 123, +43 664 456") == '["+43 5574 123", "+43 664 456"]'
+    assert telefone_zu_json("+43 5574 123; +43 664 456") == '["+43 5574 123", "+43 664 456"]'
+    assert telefone_zu_json("   ") is None
+    assert telefone_zu_json("") is None
 
 
 # ── In-Memory-DB ──────────────────────────────────────────────────────────────

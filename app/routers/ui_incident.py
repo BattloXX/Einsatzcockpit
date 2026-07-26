@@ -1177,8 +1177,9 @@ def incident_nachbar_gefahren(incident_id: int, request: Request, db: Session = 
     eigene_ids = {oe.objekt_id for oe in verknuepfungen}
     radius = settings.NACHBAR_GEFAHR_RADIUS_M
 
+    from app.services.objekt_service import nur_produktiv
     kandidaten = (
-        db.query(Objekt)
+        nur_produktiv(db.query(Objekt))
         .options(selectinload(Objekt.gefahren))
         .filter(
             Objekt.org_id == incident.primary_org_id,

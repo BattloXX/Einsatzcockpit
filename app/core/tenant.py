@@ -130,6 +130,9 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "infoscreen_url",
     "objekt_seite_ki_vorschlag",
     "objekt_stammdaten_vorschlag",
+    # BMA-Webplattform-Import (TenantScoped via Mixin)
+    "bma_import_satz",
+    "bma_import_lauf",
     # Wasserstellen-/Löschwasser-Stammdaten (TenantScoped via Mixin)
     "wasserstelle",
     # Förderstrecken-Planer Gerätekatalog (TenantScoped via Mixin)
