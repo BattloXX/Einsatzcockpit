@@ -61,6 +61,7 @@ from app.services.objekt_service import (
     lade_auswahl,
     naechste_nummer,
     status_uebergang_erlaubt,
+    telefone_zu_json,
     write_objekt_change,
 )
 
@@ -544,9 +545,16 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
         .filter(ObjektDokumentSeite.objekt_id == objekt.id)
         .scalar()
     ) or 0
+
+    from app.models.bma_import import BmaImportSatz
+    bma_import_satz = (
+        db.query(BmaImportSatz).filter(BmaImportSatz.objekt_id == objekt.id).first()
+    )
+
     return {
         "user": user,
         "objekt": objekt,
+        "bma_import_satz": bma_import_satz,
         "kategorien": _kategorien(db),
         "status_labels": OBJEKT_STATUS_LABELS,
         "gefahr_piktogramme": lade_auswahl(db, objekt.org_id, AUSWAHL_PIKTOGRAMM),
@@ -1286,11 +1294,8 @@ def merkmal_entfernen(
 
 
 # ── Abschnitt: Kontakte ────────────────────────────────────────────────────────
-
-def _telefone_to_json(telefone_raw: str) -> str | None:
-    import json as _json
-    nummern = [t.strip() for t in telefone_raw.replace(";", ",").split(",") if t.strip()]
-    return _json.dumps(nummern, ensure_ascii=False) if nummern else None
+# telefone_zu_json lebt in objekt_service.py (auch vom BMA-Webplattform-Import
+# genutzt, siehe app/services/bma_import/bma_sync.py).
 
 
 @router.get("/{objekt_id}/kontakte", response_class=HTMLResponse)
@@ -1331,7 +1336,7 @@ def kontakt_neu(
         objekt_id=objekt.id,
         art=art,
         name=name.strip(),
-        telefone_json=_telefone_to_json(telefone),
+        telefone_json=telefone_zu_json(telefone),
         email=email.strip() or None,
         erreichbarkeit=erreichbarkeit.strip() or None,
         sort=max_sort + 1,
@@ -1373,7 +1378,7 @@ def kontakt_speichern(
     daten = {
         "art": art,
         "name": name.strip(),
-        "telefone_json": _telefone_to_json(telefone),
+        "telefone_json": telefone_zu_json(telefone),
         "email": email.strip() or None,
         "erreichbarkeit": erreichbarkeit.strip() or None,
     }

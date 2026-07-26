@@ -465,6 +465,12 @@ class ObjektKontakt(TenantScoped, Base):
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     erreichbarkeit: Mapped[str | None] = mapped_column(String(200), nullable=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Externe Identitaet (siehe app/services/bma_import/): NULL = haendisch gepflegt,
+    # wird vom Import NIE angefasst. Gesetzt (z. B. extern_quelle="dibos_bma",
+    # extern_id="{personId}:{kontakttypId}") = dem Import gehoerend, darf von ihm
+    # aktualisiert/geloescht werden.
+    extern_quelle: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    extern_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     objekt: Mapped[Objekt] = relationship(back_populates="kontakte")
 

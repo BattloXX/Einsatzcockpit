@@ -37,6 +37,7 @@ from app.routers import (
     ui_atemschutz_pruefung,
     ui_atemschutz_pruefung_admin,
     ui_backup,
+    ui_bma_import,
     ui_breathing,
     ui_dibos,
     ui_druck,
@@ -248,6 +249,12 @@ async def lifespan(app: FastAPI):
     from app.services.dibos.dibos_capture import dibos_trace_retention_loop
     dibos_trace_retention_task = asyncio.create_task(dibos_trace_retention_loop())
 
+    # Background-Loops für den BMA-Webplattform-Import (Landeswarnzentrale Vorarlberg):
+    # täglicher Sync (Uhrzeit je Org konfigurierbar) + Keepalive-Ping fürs Session-Cookie
+    from app.services.bma_import.bma_loop import bma_import_keepalive_loop, bma_import_loop
+    bma_import_task = asyncio.create_task(bma_import_loop())
+    bma_import_keepalive_task = asyncio.create_task(bma_import_keepalive_loop())
+
     # Background-Loop für den täglichen Gefahrgut-Datensatz-Sync (Nachschlagewerke, 03:00)
     from app.services.nachschlagewerk_sync import nachschlagewerk_sync_loop
     nachschlagewerk_sync_task = asyncio.create_task(nachschlagewerk_sync_loop())
@@ -274,13 +281,15 @@ async def lifespan(app: FastAPI):
         lis_capture_retention_task.cancel()
         dibos_task.cancel()
         dibos_trace_retention_task.cancel()
+        bma_import_task.cancel()
+        bma_import_keepalive_task.cancel()
         nachschlagewerk_sync_task.cancel()
         org_backup_task.cancel()
         for t in (autoclose_task, watchdog_task, reminder_task, lagemeldung_task, verleih_task,
                   weather_retention_task, vehicle_position_retention_task, weather_alert_task,
                   abfluss_poll_task, lis_task, lis_capture_retention_task,
-                  dibos_task, dibos_trace_retention_task, nachschlagewerk_sync_task,
-                  org_backup_task):
+                  dibos_task, dibos_trace_retention_task, bma_import_task, bma_import_keepalive_task,
+                  nachschlagewerk_sync_task, org_backup_task):
             try:
                 await t
             except (asyncio.CancelledError, Exception):
@@ -659,6 +668,7 @@ app.include_router(ui_profile.router)
 app.include_router(ui_weather.router)
 app.include_router(ui_termin.router)
 app.include_router(ui_uas.router)
+app.include_router(ui_bma_import.router)
 app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
 app.include_router(ui_nachschlagewerke.router)

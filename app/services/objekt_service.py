@@ -21,6 +21,17 @@ from app.models.objekt import (
 )
 
 
+def telefone_zu_json(telefone_raw: str) -> str | None:
+    """Serialisiert eine kommagetrennte Telefonliste zu JSON (ObjektKontakt.telefone_json).
+
+    Verschoben aus ui_objekt.py::_telefone_to_json (2026-07-26), damit der
+    BMA-Webplattform-Import (app/services/bma_import/bma_sync.py) dieselbe
+    Funktion nutzt wie das manuelle Kontaktformular.
+    """
+    nummern = [t.strip() for t in telefone_raw.replace(";", ",").split(",") if t.strip()]
+    return json.dumps(nummern, ensure_ascii=False) if nummern else None
+
+
 def objekt_system_enabled(db: Session) -> bool:
     """Systemweiter Objekt-Flag aus SystemSettings. Fehlender Key → False."""
     from app.models.master import SystemSettings

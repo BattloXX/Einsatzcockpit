@@ -1,0 +1,137 @@
+<section class="card mb-4">
+  <div class="card-header"><h2>Offene Vorschläge ({{ vorschlaege|length }})</h2></div>
+  <div class="card-body" style="padding:16px 20px">
+    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0 0 14px 0;line-height:1.6">
+      Diese Objekte sind bereits freigegeben - Änderungen aus der BMA-Webplattform werden
+      deshalb nicht automatisch übernommen. "Übernehmen" erstellt eine Arbeitskopie, wendet
+      die Änderungen dort an und gibt sie sofort wieder frei.
+    </p>
+    {% if not vorschlaege %}
+    <p style="color:var(--color-text-muted);font-size:.85rem">Keine offenen Vorschläge.</p>
+    {% endif %}
+    {% for satz, objekt, diff in vorschlaege %}
+    <div class="card" style="padding:14px;margin-bottom:12px;background:var(--color-bg-subtle)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div>
+          <strong><a href="/objekte/{{ objekt.id }}">{{ objekt.name }}</a></strong>
+          <span class="text-muted" style="font-size:.85rem">BMA {{ satz.bma_nummer or '–' }}</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <form method="post" action="/objekte/bma-import/{{ satz.id }}/uebernehmen"
+                hx-post="/objekte/bma-import/{{ satz.id }}/uebernehmen"
+                hx-target="#bma-import-content" hx-swap="innerHTML"
+                hx-confirm="Vorschlag übernehmen? Es wird eine Arbeitskopie erstellt und sofort wieder freigegeben.">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--primary btn--sm">Übernehmen</button>
+          </form>
+          <form method="post" action="/objekte/bma-import/{{ satz.id }}/ignorieren"
+                hx-post="/objekte/bma-import/{{ satz.id }}/ignorieren"
+                hx-target="#bma-import-content" hx-swap="innerHTML"
+                hx-confirm="Diese Änderung ignorieren? Sie erscheint erst wieder, wenn sich die Quelle erneut ändert.">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--ghost btn--sm">Ignorieren</button>
+          </form>
+        </div>
+      </div>
+
+      {% if diff.felder %}
+      <table class="table" style="width:100%;margin-top:10px;font-size:.85rem">
+        <thead><tr><th>Feld</th><th>Aktuell</th><th>Aus DIBOS</th></tr></thead>
+        <tbody>
+          {% for f in diff.felder %}
+          <tr>
+            <td>{{ f.label }}</td>
+            <td>{{ f.aktuell or '–' }}</td>
+            <td><strong>{{ f.neu or '–' }}</strong></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if diff.kontakte %}
+      <div style="margin-top:10px;font-size:.85rem">
+        <strong>Kontakte aus DIBOS ({{ diff.kontakte|length }}):</strong>
+        <ul style="margin:6px 0 0 0;padding-left:20px">
+          {% for k in diff.kontakte %}
+          <li>{{ k.name }} <span class="text-muted">({{ k.rolle_quelle }})</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Nicht zugeordnet ({{ nicht_zugeordnet|length }})</h2></div>
+  <div class="card-body" style="padding:16px 20px">
+    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0 0 14px 0;line-height:1.6">
+      Für diese Anlagen konnte kein passendes Objekt gefunden werden (und die automatische
+      Neuanlage ist aus, oder der letzte Versuch ist fehlgeschlagen).
+    </p>
+    {% if not nicht_zugeordnet %}
+    <p style="color:var(--color-text-muted);font-size:.85rem">Keine nicht zugeordneten Anlagen.</p>
+    {% endif %}
+    {% for satz in nicht_zugeordnet %}
+    <div class="card" style="padding:14px;margin-bottom:12px;background:var(--color-bg-subtle)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <div>
+          <strong>{{ satz.bezeichnung or 'Unbenannte Anlage' }}</strong>
+          <span class="text-muted" style="font-size:.85rem">BMA {{ satz.bma_nummer or '–' }}</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <form method="post" action="/objekte/bma-import/{{ satz.id }}/zuordnen"
+                hx-post="/objekte/bma-import/{{ satz.id }}/zuordnen"
+                hx-target="#bma-import-content" hx-swap="innerHTML"
+                style="display:flex;gap:6px;align-items:center">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <select name="ziel_objekt_id" class="form-input" style="min-width:200px">
+              <option value="">Objekt wählen…</option>
+              {% for o in objekte_zur_auswahl %}
+              <option value="{{ o.id }}">{{ o.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn--ghost btn--sm">Zuordnen</button>
+          </form>
+          <form method="post" action="/objekte/bma-import/{{ satz.id }}/objekt-anlegen"
+                hx-post="/objekte/bma-import/{{ satz.id }}/objekt-anlegen"
+                hx-target="#bma-import-content" hx-swap="innerHTML"
+                hx-confirm="Neues Entwurf-Objekt für '{{ satz.bezeichnung or satz.bma_nummer }}' anlegen?">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" class="btn btn--primary btn--sm">Objekt anlegen</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Verschwunden ({{ verschwunden|length }})</h2></div>
+  <div class="card-body" style="padding:16px 20px">
+    <p style="font-size:.85rem;color:var(--color-text-muted);margin:0 0 14px 0;line-height:1.6">
+      Diese Anlagen sind nicht mehr in der BMA-Webplattform-Liste. Die zugehörigen Objekte
+      wurden NICHT automatisch gelöscht oder verändert.
+    </p>
+    {% if not verschwunden %}
+    <p style="color:var(--color-text-muted);font-size:.85rem">Keine verschwundenen Anlagen.</p>
+    {% endif %}
+    {% if verschwunden %}
+    <table class="table" style="width:100%;font-size:.85rem">
+      <thead><tr><th>Bezeichnung</th><th>BMA-Nr.</th><th>Zuletzt gesehen</th></tr></thead>
+      <tbody>
+        {% for satz in verschwunden %}
+        <tr>
+          <td>{% if satz.objekt_id %}<a href="/objekte/{{ satz.objekt_id }}">{{ satz.bezeichnung or 'Objekt' }}</a>{% else %}{{ satz.bezeichnung or '–' }}{% endif %}</td>
+          <td>{{ satz.bma_nummer or '–' }}</td>
+          <td>{{ satz.zuletzt_gesehen_am.strftime('%d.%m.%Y') if satz.zuletzt_gesehen_am else '–' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</section>
