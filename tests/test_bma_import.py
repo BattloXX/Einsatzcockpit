@@ -466,6 +466,23 @@ def test_hole_anlagen_http_fehler_ist_client_error(monkeypatch):
         asyncio.run(client.hole_anlagen())
 
 
+def test_hole_anlagen_unerwartetes_json_format_zeigt_body_ausschnitt(monkeypatch):
+    """Gueltiges JSON, aber ohne Data/Total (z.B. ein Fehlerobjekt der Plattform,
+    etwa bei fehlendem Anti-Forgery-Token) - die Fehlermeldung muss einen Body-
+    Ausschnitt enthalten, da es (anders als bei DIBOS, siehe dibos_capture.py)
+    keine Rohdaten-Aufzeichnung fuer BMA gibt und sich der Fehler sonst nicht
+    diagnostizieren laesst (Vorfall 2026-07-26: "unerwartetes Antwortformat"
+    ohne jeden weiteren Hinweis)."""
+    client = BmaClient("https://dibos.example.at/LWZ_BMA_Webplattform", "sid=abc")
+
+    async def fake_post(url, content=None, headers=None):
+        return _json_response(200, {"Message": "Ungueltige Anfrage"})
+
+    monkeypatch.setattr(client._client, "post", fake_post)
+    with pytest.raises(BmaClientError, match="Ungueltige Anfrage"):
+        asyncio.run(client.hole_anlagen())
+
+
 def test_hole_detail_html_ok(monkeypatch):
     client = BmaClient("https://dibos.example.at/LWZ_BMA_Webplattform", "sid=abc")
 

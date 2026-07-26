@@ -140,7 +140,19 @@ class BmaClient:
                 "(Session vermutlich abgelaufen)"
             ) from exc
         if not isinstance(daten, dict) or "Data" not in daten or "Total" not in daten:
-            raise BmaClientError("BMA-Webplattform (GetAllAlarmSystems): unerwartetes Antwortformat")
+            # Body-Anfang direkt in die Fehlermeldung (landet in BmaImportLauf.meldung bzw.
+            # der "Verbindung testen"-Antwort) - ohne das laesst sich diese Klasse Fehler
+            # nicht diagnostizieren, da es (anders als bei DIBOS, siehe dibos_capture.py)
+            # keine Rohdaten-Aufzeichnung fuer BMA gibt. Vollstaendiger Body zusaetzlich
+            # geloggt (Server-Log, nicht in der DB gespeichert).
+            logger.warning(
+                "BMA-Webplattform (GetAllAlarmSystems): unerwartetes Antwortformat (HTTP %s) - Body: %s",
+                resp.status_code, resp.text[:2000],
+            )
+            raise BmaClientError(
+                "BMA-Webplattform (GetAllAlarmSystems): unerwartetes Antwortformat "
+                f"(HTTP {resp.status_code}, Anfang: {resp.text[:200]!r})"
+            )
         return daten
 
     async def hole_anlagen(self, seiten_groesse: int = 200) -> list[dict]:
