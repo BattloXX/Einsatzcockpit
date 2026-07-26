@@ -56,9 +56,13 @@
     <ol style="font-size:.85rem;color:var(--color-text-muted);line-height:1.7;margin:10px 0 0 0;padding-left:20px">
       <li>Im DIBOS-Portal anmelden und die BMA-Webplattform oeffnen (Liste muss sichtbar sein).</li>
       <li>Browser-Entwicklertools oeffnen (F12) &rarr; Reiter <em>Anwendung/Application</em> &rarr; <em>Cookies</em> &rarr; <code>dibos.lwz-vorarlberg.at</code>.</li>
-      <li>Alle dort aufgelisteten Cookies als <code>name=wert; name2=wert2</code> in das Feld unten kopieren.</li>
+      <li>Alle Zeilen der Cookie-Tabelle markieren (erste Zeile anklicken, dann mit Umschalt+Klick die letzte Zeile dazu markieren, oder Strg/Cmd+A) und mit Strg/Cmd+C kopieren.</li>
+      <li>Direkt so als Tabelle in das Feld unten einfuegen (Strg/Cmd+V) &mdash; wird automatisch erkannt, keine Umformatierung noetig.</li>
       <li>Speichern, dann "Verbindung testen" klicken.</li>
     </ol>
+    <p style="font-size:.8rem;color:var(--color-text-muted);margin:8px 0 0 0;line-height:1.6">
+      Alternativ kann jedes Cookie auch von Hand als <code>name=wert; name2=wert2</code> eingetragen werden.
+    </p>
     <p style="font-size:.85rem;color:var(--color-text-muted);margin:10px 0 0 0;line-height:1.6">
       Die Session laeuft irgendwann ab (unklar, wie lange) - der Keepalive-Schalter unten
       haelt sie zwischen den taeglichen Laeufen aktiv. Laeuft sie dennoch ab, steht das
@@ -157,12 +161,14 @@
           </button>
         </div>
         <div id="cookie-secret-replace" style="display:none">
-          <textarea id="session_cookie" name="session_cookie" rows="3"
-                    class="form-input" autocomplete="off" placeholder="name1=wert1; name2=wert2; ..."></textarea>
+          <textarea id="session_cookie" name="session_cookie" rows="6"
+                    class="form-input" autocomplete="off"
+                    placeholder="Cookie-Tabelle aus den Browser-Entwicklertools hier einfuegen (Strg/Cmd+V) - oder von Hand: name1=wert1; name2=wert2; ..."></textarea>
         </div>
         {% else %}
-        <textarea id="session_cookie" name="session_cookie" rows="3"
-                  class="form-input" autocomplete="off" placeholder="name1=wert1; name2=wert2; ..."
+        <textarea id="session_cookie" name="session_cookie" rows="6"
+                  class="form-input" autocomplete="off"
+                  placeholder="Cookie-Tabelle aus den Browser-Entwicklertools hier einfuegen (Strg/Cmd+V) - oder von Hand: name1=wert1; name2=wert2; ..."
                   oninput="document.getElementById('session_secret_changed').value='1'"></textarea>
         {% endif %}
         <input type="hidden" id="session_secret_changed" name="session_secret_changed" value="{{ '0' if config and config.session_cookie_enc else '1' }}">

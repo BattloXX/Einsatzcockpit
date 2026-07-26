@@ -131,7 +131,8 @@ async def bma_import_settings_save(
     cfg.updated_at = datetime.now(UTC)
 
     if session_secret_changed == "1":
-        raw = session_cookie.strip()
+        from app.services.bma_import.bma_client import parse_cookie_paste
+        raw = parse_cookie_paste(session_cookie)
         if raw:
             cfg.session_cookie_enc = encrypt_secret(raw)
             cfg.session_gesetzt_am = datetime.now(UTC)

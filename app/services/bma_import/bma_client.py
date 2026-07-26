@@ -29,6 +29,47 @@ _DEFAULT_TIMEOUT_S = 20.0
 _USER_AGENT = "Einsatzcockpit/3.x (+https://einsatzcockpit.com; BMA-Import)"
 
 
+def parse_cookie_paste(raw: str) -> str:
+    """Baut aus dem im Admin-UI eingefügten Text einen fertigen `Cookie:`-Header-String.
+
+    Akzeptiert zwei Formate, auch gemischt in mehreren Zeilen:
+    1) Chrome-DevTools-Cookie-Tabelle (Anwendung/Application -> Cookies für
+       dibos.lwz-vorarlberg.at): Zeilen markieren und kopieren liefert Tab-
+       getrennte Spalten Name / Value / Domain / Path / Expires .../ Size /
+       HttpOnly / Secure / SameSite / ... - hier werden nur die ersten beiden
+       Spalten (Name, Value) je Zeile verwendet. Eine eventuelle Kopfzeile
+       ("Name<TAB>Value...") wird übersprungen.
+    2) Klassischer Cookie-Header von Hand: "name1=wert1; name2=wert2; ...".
+
+    `str.partition("=")` (nicht `split`) trennt nur am ERSTEN Gleichheitszeichen,
+    damit Werte, die selbst "=" enthalten (z.B. Base64-Padding wie bei
+    PORTALTOKEN), nicht abgeschnitten werden.
+    """
+    paare: list[tuple[str, str]] = []
+    for zeile in raw.splitlines():
+        zeile = zeile.strip()
+        if not zeile:
+            continue
+        if "\t" in zeile:
+            spalten = zeile.split("\t")
+            name = spalten[0].strip()
+            wert = spalten[1].strip() if len(spalten) > 1 else ""
+            if name.lower() == "name" and wert.lower() == "value":
+                continue  # Kopfzeile der DevTools-Tabelle
+            if name:
+                paare.append((name, wert))
+        else:
+            for teil in zeile.split(";"):
+                teil = teil.strip()
+                if not teil or "=" not in teil:
+                    continue
+                name, _, wert = teil.partition("=")
+                name = name.strip()
+                if name:
+                    paare.append((name, wert.strip()))
+    return "; ".join(f"{name}={wert}" for name, wert in paare)
+
+
 class BmaClientError(Exception):
     """Transport- oder Parsingfehler bei der Kommunikation mit der BMA-Webplattform."""
 
