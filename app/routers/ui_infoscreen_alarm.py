@@ -794,8 +794,36 @@ def einstellungen_speichern(
     settings_row.alarm_infoscreen_alarm_dauer_min = max(5, min(alarm_dauer_min, 720))
     settings_row.alarm_infoscreen_wetter_url = wetter_url.strip() or None
     settings_row.alarm_infoscreen_gsl_enabled = bool(gsl_enabled)
+
+    # Ruhezustand "Wetter" gewaehlt, aber keine Wetter-URL hinterlegt: bisher blieb
+    # das komplett stumm auf der Uhr haengen (Vorfall: Wetter im Ruhezustand wurde
+    # nicht dargestellt). Grund war ein manueller Zwischenschritt: die Wetter-URL
+    # enthaelt einen Dashboard-Token, der nur als Hash gespeichert wird (siehe
+    # WeatherDashboardToken, /admin/settings/wetter) und sich daher nicht
+    # nachtraeglich rekonstruieren laesst - er musste bisher separat erzeugt und
+    # hier von Hand eingefuegt werden. Jetzt automatisch: ein eigener Token wird
+    # serverseitig erzeugt und die URL direkt gesetzt, kein Copy-Paste-Schritt mehr
+    # noetig (Sicherheitseigenschaft bleibt gleich - der Token ist weiterhin nur
+    # als Hash in der DB, nicht im Klartext).
+    neuer_wetter_token = False
+    if idle_modus == "wetter" and not settings_row.alarm_infoscreen_wetter_url:
+        from app.config import settings as app_settings
+        from app.core.security import generate_weather_dashboard_token
+        from app.models.weather import WeatherDashboardToken
+
+        roh_token = generate_weather_dashboard_token()
+        db.add(WeatherDashboardToken(
+            token_hash=hash_api_key(roh_token), label="Alarm-Infoscreen (automatisch)",
+            org_id=user.org_id,
+        ))
+        basis_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
+        settings_row.alarm_infoscreen_wetter_url = f"{basis_url}/wetter/infoscreen/{roh_token}"
+        neuer_wetter_token = True
+        write_audit(db, "objekt.infoscreen_wetter_token_auto_erzeugt", org_id=user.org_id, user_id=user.id)
+
     db.commit()
-    return RedirectResponse(url="/infoscreen-alarm/verwaltung?saved=1", status_code=303)
+    flash = "saved_mit_neuem_wetter_token" if neuer_wetter_token else "saved"
+    return RedirectResponse(url=f"/infoscreen-alarm/verwaltung?{flash}=1", status_code=303)
 
 
 # ── Rotations-URLs (InfoscreenUrl) + Monitor-Matrix ────────────────────────────

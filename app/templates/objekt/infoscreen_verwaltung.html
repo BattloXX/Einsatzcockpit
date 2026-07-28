@@ -10,6 +10,13 @@
   </div>
 
   {% if request.query_params.get('saved') %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
+  {% if request.query_params.get('saved_mit_neuem_wetter_token') %}
+  <div class="alert alert--success">
+    Gespeichert — für den Ruhezustand „Wetter" wurde automatisch ein neuer Wetter-Dashboard-Token erzeugt und die
+    URL unten eingetragen (bisher musste das manuell unter <a href="/admin/settings/wetter">Wetter-Einstellungen</a>
+    erzeugt und hier eingefügt werden — das war vermutlich die Ursache, wenn im Ruhezustand statt Wetter nur die Uhr zu sehen war).
+  </div>
+  {% endif %}
 
   {% if neuer_token %}
   <div class="alert alert--success">
