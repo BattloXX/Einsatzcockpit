@@ -347,6 +347,33 @@ def test_parse_kontakte_leeres_zuletzt_aktualisiert_verschiebt_nichts():
     assert "Kontaktdaten bearbeiten" not in (kontakt.get("email") or "")
 
 
+def test_parse_kontakte_name_ueber_mehrere_textknoten_wird_nicht_abgeschnitten():
+    """Vorfall (Objekt 1057, Testserver): Kontaktnamen wie 'Christoph Leopold'
+    wurden auf 'Leopold' abgeschnitten. Ursache: card.get_text(separator="\\n")
+    fuegt zwischen JEDEM Textknoten einen Zeilenumbruch ein - liegt der Wert
+    (z.B. durch ein Icon/Span im Namens-Markup) auf mehrere Knoten verteilt vor,
+    lieferte die alte "nur die naechste Zeile ist der Wert"-Logik nur das erste
+    Fragment. Reproduziert hier mit einem Namen in zwei <b>-Tags."""
+    html = """
+    <div class="card">
+        <b class="text-success">BMA Alarmperson</b>
+        Name:
+        <b>Christoph</b> <b>Leopold</b>
+        Telefon Beruf:
+        <b>+43 5574 6829-375</b>
+        Zuletzt aktualisiert:
+        <b></b>
+        <a onclick="editContactData(555, 174, 3)">Kontaktdaten bearbeiten</a>
+        <a onclick="editPersonData(555, 174, 3)">Neue Person eintragen</a>
+        <a onclick="deletePersonData(555, 174, 3)">Person löschen</a>
+    </div>
+    """
+    kontakte = bma_parser.parse_kontakte(html)
+    assert len(kontakte) == 1
+    assert kontakte[0]["name"] == "Christoph Leopold"
+    assert kontakte[0]["telefone"] == ["Telefon beruflich: +43 5574 6829-375"]
+
+
 def test_parse_kontakte_mehrere_telefone_mit_label():
     kontakt = bma_parser.parse_kontakte(DETAIL_HTML)[1]
     assert kontakt["telefone"] == [

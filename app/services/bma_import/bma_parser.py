@@ -60,6 +60,12 @@ _TELEFON_PRAEFIXE = (
     ("pager", "Pager"),
 )
 
+# Feste Aktions-Link-Texte am Ende jeder Kontaktkarte (siehe Moduldoc) - zusaetzliche
+# Abbruchbedingung fuer die Mehrzeilen-Werterfassung unten, falls "Zuletzt
+# aktualisiert:" (der eigentliche, dokumentierte Abschluss-Marker) aus irgendeinem
+# Grund fehlt.
+_KONTAKT_AKTIONS_TEXTE = {"Kontaktdaten bearbeiten", "Neue Person eintragen", "Person löschen"}
+
 _EDIT_CONTACT_RE = re.compile(r"editContactData\(\s*(-?\d+|null)\s*,\s*(-?\d+|null)\s*,\s*(-?\d+|null)\s*\)")
 
 
@@ -164,16 +170,32 @@ def _parse_kontakt_karte(card) -> dict | None:
 
     zeilen = [z.strip() for z in card.get_text(separator="\n").split("\n") if z.strip()]
     felder: dict[str, str] = {}
-    for i, zeile in enumerate(zeilen):
-        feld = _KONTAKT_FELD_LABELS.get(zeile)
-        if feld is None or i + 1 >= len(zeilen):
+    i = 0
+    while i < len(zeilen):
+        feld = _KONTAKT_FELD_LABELS.get(zeilen[i])
+        if feld is None:
+            i += 1
             continue
-        wert = zeilen[i + 1]
-        # Ein "Wert", der selbst wie ein Label aussieht (endet auf ":"), gehoert
-        # nicht zu diesem Feld - das Feld wurde vom Template leer gelassen (siehe
-        # Moduldoc: nur "Zuletzt aktualisiert:" wird leer gerendert).
-        if not wert.endswith(":"):
-            felder[feld] = wert
+        # Der Wert kann durch verschachteltes Markup im Wert-Element (z. B. ein
+        # Icon/Span innerhalb des Namens) ueber MEHRERE Textknoten verteilt sein -
+        # separator="\n" oben fuegt zwischen JEDEM Textknoten einen Zeilenumbruch
+        # ein, auch innerhalb eines eigentlich zusammenhaengenden Werts. Deshalb
+        # alle Zeilen bis zum naechsten bekannten Label (erkennbar an einem
+        # nachgestellten ":") bzw. bis zu den festen Aktions-Links sammeln und mit
+        # Leerzeichen verbinden, statt blind nur die naechste Zeile zu nehmen
+        # (Vorfall: ein zweiteiliger Name wurde auf den letzten Teil abgeschnitten,
+        # z. B. "Christoph Leopold" -> "Leopold").
+        werte: list[str] = []
+        j = i + 1
+        while j < len(zeilen):
+            kandidat = zeilen[j]
+            if kandidat.endswith(":") or kandidat in _KONTAKT_AKTIONS_TEXTE:
+                break
+            werte.append(kandidat)
+            j += 1
+        if werte:
+            felder[feld] = " ".join(werte)
+        i = j
 
     telefone = [f"{praefix}: {felder[key]}" for key, praefix in _TELEFON_PRAEFIXE if felder.get(key)]
     email = felder.get("email_beruf") or felder.get("email_privat")
