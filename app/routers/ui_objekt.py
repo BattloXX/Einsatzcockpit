@@ -1627,6 +1627,19 @@ def kontakt_loeschen(
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "kontakt_geloescht",
                         before=kontakt.name, after=None, user_id=user.id)
+    if kontakt.extern_quelle:
+        # Ein importierter Kontakt wird hier manuell geloescht - der BMA-Sync haelt das
+        # Objekt sonst faelschlich fuer "bereits auf dem neuesten (bestaetigten) Stand"
+        # (bestaetigt_hash vergleicht nur den QUELL-Inhalt, nicht den Live-Zustand des
+        # Objekts) und importiert bei einem erneuten Abgleich/PDF-Upload NICHTS nach,
+        # obwohl das Objekt jetzt wieder von der Quelle abweicht (Vorfall Objekt 916:
+        # Kontakte manuell geloescht, PDF danach erneut hochgeladen, Ergebnis
+        # "unveraendert" statt eines neuen Vorschlags). Bestaetigung zuruecksetzen, damit
+        # der naechste Abgleich das als Aenderung erkennt.
+        from app.models.bma_import import BmaImportSatz
+        db.query(BmaImportSatz).filter(
+            BmaImportSatz.org_id == objekt.org_id, BmaImportSatz.objekt_id == objekt.id,
+        ).update({"bestaetigt_hash": None})
     db.delete(kontakt)
     db.commit()
     db.refresh(objekt)
