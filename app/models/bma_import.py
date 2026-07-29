@@ -119,6 +119,12 @@ class BmaImportSatz(TenantScoped, Base):
     # Stand, den ein Verwalter uebernommen oder ausdruecklich ignoriert hat - der
     # Satz erscheint erst wieder in der Queue, wenn sich quell_hash davon unterscheidet.
     bestaetigt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # True, sobald fuer diesen Satz mindestens einmal wende_anlage_auf_objekt_an() mit
+    # echten Kontakten gelaufen ist (Uebernehmen/Auto-Apply, NICHT Ignorieren). Gate fuer
+    # den Live-Abgleich in bma_sync.py::_passender_bestaetigter_stand() - ohne dieses Flag
+    # wuerde ein Objekt, dessen Vorschlag nie uebernommen wurde (0 Kontakte ist hier normal),
+    # bei jedem Abgleich faelschlich wieder als "Vorschlag" aufleben.
+    kontakte_uebernommen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     quell_change_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     detail_geholt_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Zuordnung: auto (automatisch gefunden/angelegt) / manuell / offen (kein Objekt)

@@ -1039,6 +1039,51 @@ def test_pdf_anlage_freigegebenes_objekt_bleibt_vorschlag(sync_db):
     assert satz.objekt_id == objekt.id
 
 
+def test_pdf_anlage_nach_manuellem_kontakt_loeschen_wird_wieder_vorschlag(sync_db):
+    """Vorfall Objekt 916/Hotel Sternen Wolfurt: bestaetigt_hash allein reicht nicht -
+    wurde ein importierter Kontakt inzwischen manuell geloescht, muss ein erneuter Upload
+    DESSELBEN (inhaltlich unveraenderten) PDFs trotzdem wieder als Vorschlag auftauchen,
+    nicht 'unveraendert' melden (sonst kommen die geloeschten Kontakte nie zurueck)."""
+    db, org_a, _ = sync_db
+    objekt = Objekt(
+        org_id=org_a.id, nummer=1, name="Bestandsobjekt", status=OBJEKT_STATUS_FREIGEGEBEN,
+        strasse="Wiesenweg", hausnummer="33", plz="6922", ort="Wolfurt",
+    )
+    db.add(objekt)
+    db.flush()
+    db.add(ObjektBMA(org_id=org_a.id, objekt_id=objekt.id, bma_nummer="1238"))
+    db.commit()
+
+    cfg = _config(org_a)
+    geparst = parse_datenblatt_text(_ECHTES_DATENBLATT)
+    satz, ergebnis = bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+    assert ergebnis == "vorschlag"
+
+    # Vorschlag "uebernehmen" (Muster ui_bma_import.py::bma_import_uebernehmen): laeuft ueber
+    # eine Arbeitskopie, die produktive Objekt-id bleibt dabei stabil (basis.id == objekt.id).
+    basis = bma_sync.uebernehme_vorschlag(db, satz, _pdf_system_user(org_a.id))
+    db.commit()
+    assert basis.id == objekt.id
+    kontakte_vorher = db.query(ObjektKontakt).filter(ObjektKontakt.objekt_id == basis.id).all()
+    assert len(kontakte_vorher) == 2
+
+    # Kontakte manuell geloescht (z. B. ueber den Loeschen-Button in der UI).
+    for k in kontakte_vorher:
+        db.delete(k)
+    db.commit()
+
+    # Erneuter Upload DERSELBEN PDF-Daten - Quelle unveraendert, Objekt aber nicht mehr.
+    _, ergebnis_erneut = bma_sync.verarbeite_pdf_anlage(
+        db, org_a, cfg, geparst["anlage"], geparst["kontakte"], _pdf_system_user(org_a.id),
+    )
+    db.commit()
+
+    assert ergebnis_erneut == "vorschlag"
+
+
 def test_pdf_anlage_ohne_auto_anlegen_und_ohne_treffer_bleibt_nicht_zugeordnet(sync_db):
     db, org_a, _ = sync_db
     cfg = _config(org_a, auto_anlegen=False)

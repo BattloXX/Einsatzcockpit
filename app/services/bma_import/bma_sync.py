@@ -128,6 +128,32 @@ def _kontakt_felder(kd: dict) -> dict:
     }
 
 
+def _bma_kontakte_ids_am_objekt(objekt: Objekt) -> set[str]:
+    """IDs der aktuell am Objekt vorhandenen, importierten (extern_quelle='dibos_bma')
+    Kontakte - siehe _passender_bestaetigter_stand() fuer die Verwendung."""
+    return {k.extern_id for k in objekt.kontakte if k.extern_quelle == "dibos_bma" and k.extern_id}
+
+
+def _passender_bestaetigter_stand(objekt: Objekt, kontakte: list[dict], satz: BmaImportSatz,
+                                  neuer_hash: str) -> bool:
+    """True, wenn der zuletzt bestaetigte Quell-Stand (bestaetigt_hash) NICHT NUR inhaltlich
+    unveraendert ist, sondern (falls die Kontakte damals tatsaechlich uebernommen wurden) das
+    Objekt sie auch noch traegt. bestaetigt_hash allein vergleicht nur die QUELLE (PDF/
+    Live-Sync-Antwort) - wird ein bereits importierter Kontakt danach manuell geloescht,
+    bleibt der Hash trotzdem gleich und ein erneuter Abgleich wuerde faelschlich "unveraendert"
+    melden, ohne die fehlenden Kontakte je wieder vorzuschlagen (Vorfall Objekt 916/Hotel
+    Sternen Wolfurt: Kontakte manuell geloescht, PDF erneut hochgeladen, keine Aenderung
+    erkannt). Der Live-Kontakte-Vergleich laeuft NUR, wenn kontakte_uebernommen gesetzt ist -
+    sonst wuerde ein nie uebernommener Vorschlag (0 Kontakte ist dort der Normalfall, siehe
+    "Ignorieren") bei jedem Abgleich faelschlich wieder aufleben."""
+    if satz.bestaetigt_hash != neuer_hash:
+        return False
+    if not satz.kontakte_uebernommen:
+        return True
+    erwartete_ids = {k["extern_id"] for k in kontakte if k.get("extern_id")}
+    return _bma_kontakte_ids_am_objekt(objekt) == erwartete_ids
+
+
 def _sync_kontakte(db: Session, objekt: Objekt, kontakte: list[dict], user_id: int | None) -> bool:
     """Gleicht die importierten Kontakte (extern_quelle='dibos_bma') mit objekt_kontakt
     ab. Haendisch gepflegte Kontakte (extern_quelle IS NULL) werden NIE angefasst.
@@ -322,7 +348,7 @@ async def _verarbeite_anlage(
     if objekt.status != OBJEKT_STATUS_ENTWURF:
         # freigegeben / in_ueberarbeitung -> nur Queue, Objekt bleibt unangetastet.
         db.flush()
-        if satz.bestaetigt_hash == neuer_hash:
+        if _passender_bestaetigter_stand(objekt, kontakte, satz, neuer_hash):
             return "unveraendert"
         return "vorschlag"
 
@@ -331,6 +357,8 @@ async def _verarbeite_anlage(
     geaenderte_felder, bma_geaendert, kontakte_geaendert = wende_anlage_auf_objekt_an(
         db, objekt, anlage, kontakte_fuer_apply, user_id=None,
     )
+    if kontakte_fuer_apply is not None:
+        satz.kontakte_uebernommen = True
 
     db.flush()
     if ist_neuer_satz:
@@ -424,7 +452,7 @@ def verarbeite_pdf_anlage(
     if objekt.status != OBJEKT_STATUS_ENTWURF:
         # freigegeben / in_ueberarbeitung -> nur Queue, Objekt bleibt unangetastet.
         db.flush()
-        if satz.bestaetigt_hash == neuer_hash:
+        if _passender_bestaetigter_stand(objekt, kontakte, satz, neuer_hash):
             return satz, "unveraendert"
         return satz, "vorschlag"
 
@@ -432,6 +460,7 @@ def verarbeite_pdf_anlage(
     geaenderte_felder, bma_geaendert, kontakte_geaendert = wende_anlage_auf_objekt_an(
         db, objekt, anlage, kontakte, user_id=user.id if user else None,
     )
+    satz.kontakte_uebernommen = True
     db.flush()
     if ist_neuer_satz:
         return satz, "neu_angelegt"
@@ -500,9 +529,19 @@ def uebernehme_vorschlag(db: Session, satz: BmaImportSatz, user) -> Objekt:
     kontakte = rohdaten.get("kontakte") or []
     wende_anlage_auf_objekt_an(db, ziel, anlage, kontakte, user_id=user.id)
     db.flush()
+    # _sync_kontakte() oben legt neue Kontakte per db.add(ObjektKontakt(objekt_id=ziel.id, ...))
+    # an (rohe FK-Zuweisung statt ziel.kontakte.append(...)) - die Relationship-Collection
+    # ziel.kontakte bleibt dadurch, falls schon vorher einmal gelesen (z. B. innerhalb von
+    # _sync_kontakte selbst, um bestehende Kontakte zu matchen), im Session-Cache auf dem
+    # ALTEN Stand haengen. uebernimm_arbeitskopie() liest ziel.kontakte gleich darauf erneut
+    # (_ersetze_kinddaten), OHNE expire() haetten die frisch importierten Kontakte den Merge
+    # auf die Basis nie erreicht und waeren auf der geloeschten Arbeitskopie verwaist
+    # (Vorfall Objekt 916/Hotel Sternen Wolfurt).
+    db.expire(ziel, ["kontakte"])
 
     basis = uebernimm_arbeitskopie(db, ziel, user.id)
     satz.bestaetigt_hash = satz.quell_hash
+    satz.kontakte_uebernommen = True
     write_audit(db, "bma_import.vorschlag_uebernommen", org_id=objekt.org_id, user_id=user.id,
                 entity_type="objekt", entity_id=basis.id, payload={"satz_id": satz.id})
     return basis
@@ -534,6 +573,7 @@ def lege_objekt_fuer_satz_an(db: Session, satz: BmaImportSatz, user) -> Objekt:
     satz.objekt_id = objekt.id
     satz.zuordnung = BMA_ZUORDNUNG_MANUELL
     satz.bestaetigt_hash = satz.quell_hash
+    satz.kontakte_uebernommen = True
     write_audit(db, "bma_import.objekt_manuell_angelegt", org_id=objekt.org_id, user_id=user.id,
                 entity_type="objekt", entity_id=objekt.id, payload={"satz_id": satz.id})
     return objekt
