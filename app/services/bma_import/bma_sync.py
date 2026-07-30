@@ -165,7 +165,9 @@ def wende_anlage_auf_objekt_an(db: Session, satz: BmaImportSatz, objekt: Objekt,
     _stelle_kontaktart_sicher(db, objekt.org_id)
     identitaet = _baue_identitaet(anlage)
     felder = {k: identitaet.get(k) for k in ("name", "strasse", "hausnummer", "plz", "ort") if identitaet.get(k)}
-    geaenderte_felder = aktualisiere_felder(db, objekt, felder, user_id=user_id)
+    geaenderte_felder = aktualisiere_felder(
+        db, objekt, felder, bereich="stammdaten", user_id=user_id,
+    )
     bma_geaendert = _sync_bma_block(db, objekt, anlage, user_id)
     kontakte_geaendert = _sync_kontakte(db, satz, objekt, kontakte, user_id)
     return geaenderte_felder, bma_geaendert, kontakte_geaendert
@@ -243,6 +245,9 @@ def uebernehme_vorschlag(db: Session, satz: BmaImportSatz, user) -> Objekt:
     ziel = basis if basis.status == OBJEKT_STATUS_ENTWURF else erstelle_arbeitskopie(db, basis, user.id)
     wende_anlage_auf_objekt_an(db, satz, ziel, rohdaten.get("anlage") or {}, rohdaten.get("kontakte") or [], user.id)
     if ziel is not basis:
+        # SessionLocal verwendet autoflush=False. Neue Kontakte muessen geschrieben
+        # sein, bevor die Collection invalidiert und fuer den Merge neu geladen wird.
+        db.flush()
         db.expire(ziel, ["kontakte"])
         uebernimm_arbeitskopie(db, ziel, user.id)
         db.expire(basis, ["kontakte"])

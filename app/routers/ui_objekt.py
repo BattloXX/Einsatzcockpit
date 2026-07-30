@@ -657,6 +657,7 @@ async def dokumente_upload_verarbeiten(
     ki_enabled = bool(org_id and ki_klassifikation_enabled(org_id, db))
     config = hole_oder_erstelle_config(db, org_id)
     ergebnisse, nacharbeiten = [], []
+    bma_queue_relevant = False
     for datei in dateien:
         name = datei.filename or "dokument.pdf"
         data = await datei.read()
@@ -676,6 +677,7 @@ async def dokumente_upload_verarbeiten(
                 neu = False
                 if datenblatt:
                     satz, status = verarbeite_pdf_anlage(db, org_id, config, parsed["anlage"], parsed["kontakte"], user)
+                    bma_queue_relevant = bma_queue_relevant or status in ("vorschlag", "offen")
                     objekt = db.get(Objekt, satz.objekt_id) if satz.objekt_id else None
                     if objekt is None:
                         # Reguläres Verlassen committet absichtlich den offenen Importsatz.
@@ -710,6 +712,7 @@ async def dokumente_upload_verarbeiten(
             background_tasks.add_task(_geocode_objekt, objekt_id, strasse, hausnummer, ort)
     return templates.TemplateResponse(request, "objekt/dokument_upload.html", {
         "user": user, "ki_enabled": ki_enabled, "ergebnisse": ergebnisse,
+        "bma_queue_relevant": bma_queue_relevant,
     })
 
 

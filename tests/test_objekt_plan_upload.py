@@ -7,7 +7,9 @@ ausgewaehlt werden (siehe Plan "Brandschutzplan-Upload ohne Objekt-Auswahl").
 """
 import asyncio
 import io
+import json
 import uuid
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -487,3 +489,86 @@ def test_dokument_upload_ohne_csrf_wird_abgelehnt(client, plan_upload_setup):
         files={"datei": ("bsp.pdf", _test_pdf_blank(), "application/pdf")},
     )
     assert r.status_code == 403
+
+
+def test_bma_vorschlag_uebernehmen_fuegt_fehlenden_kontakt_ein(client, plan_upload_setup):
+    """Regression: autoflush=False darf neue Kontakte vor dem Merge nicht verlieren."""
+    from app.db import SessionLocal
+    from app.models.bma_import import BMA_ZUORDNUNG_AUTO, BmaImportSatz
+    from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, ObjektKontakt
+
+    org_id, username = plan_upload_setup
+    extern_id = f"pdf:{uuid.uuid4().hex[:8]}"
+    kontakt_extern_id = f"{extern_id}:bma_alarmperson:max"
+    rohdaten = {
+        "anlage": {"extern_id": extern_id, "bezeichnung": "BMA Regression", "bma_nummer": "4711"},
+        "kontakte": [{"extern_id": kontakt_extern_id, "name": "Max Muster",
+                       "art": "bma_alarmperson", "telefone": ["+43 555 123"]}],
+    }
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = Objekt(org_id=org_id, nummer=1, name="BMA Regression",
+                        status=OBJEKT_STATUS_FREIGEGEBEN)
+        db.add(objekt)
+        db.flush()
+        satz = BmaImportSatz(org_id=org_id, extern_id=extern_id, objekt_id=objekt.id,
+                             rohdaten_json=json.dumps(rohdaten), quell_hash="neu",
+                             bestaetigt_hash=None, zuordnung=BMA_ZUORDNUNG_AUTO)
+        db.add(satz)
+        db.commit()
+        satz_id, objekt_id = satz.id, objekt.id
+    finally:
+        db.close()
+
+    _login_http(client, username, "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(f"/objekte/bma-import/{satz_id}/uebernehmen", data={"_csrf": csrf})
+    assert r.status_code == 200, r.text[:500]
+    assert "Keine offenen Vorschl" in r.text
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kontakt = db.query(ObjektKontakt).filter(
+            ObjektKontakt.objekt_id == objekt_id,
+            ObjektKontakt.extern_id == kontakt_extern_id,
+        ).one_or_none()
+        assert kontakt is not None
+        assert kontakt.name == "Max Muster"
+        assert db.get(BmaImportSatz, satz_id).bestaetigt_hash == "neu"
+    finally:
+        db.close()
+
+
+def test_bma_upload_vorschlag_verlinkt_ergebnisseite_mit_queue(client, plan_upload_setup):
+    from app.db import SessionLocal
+
+    org_id, username = plan_upload_setup
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = Objekt(org_id=org_id, nummer=1, name="BMA Upload-Link", status=OBJEKT_STATUS_ENTWURF)
+        db.add(objekt)
+        db.commit()
+        objekt_id = objekt.id
+    finally:
+        db.close()
+
+    _login_http(client, username, "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    parsed = {"anlage": {"extern_id": "pdf:link"}, "kontakte": []}
+    with patch("app.services.bma_import.bma_pdf_parser.ist_bma_datenblatt", return_value=True), \
+         patch("app.services.bma_import.bma_pdf_parser.parse_datenblatt_pdf", return_value=parsed), \
+         patch("app.services.bma_import.bma_sync.verarbeite_pdf_anlage",
+               return_value=(SimpleNamespace(objekt_id=objekt_id), "vorschlag")), \
+         patch("app.services.objekt_dokument_service.verarbeite_dokument"):
+        r = client.post(
+            "/objekte/dokument-upload", data={"_csrf": csrf},
+            files=[("dateien", ("bma.pdf", _test_pdf_blank(), "application/pdf"))],
+        )
+
+    assert r.status_code == 200, r.text[:500]
+    assert 'href="/objekte/bma-import"' in r.text
+    assert "BMA-Vorschl" in r.text
