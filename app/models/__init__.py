@@ -3,7 +3,7 @@ from app.models.atemschutz_pruefung import (
     AtemschutzPruefBenachrichtigung,
     AtemschutzPruefung,
 )
-from app.models.bma_import import BmaImportLauf, BmaImportSatz, OrgBmaImportConfig
+from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
 from app.models.dibos import OrgDibosConfig
 from app.models.fahrtenbuch import (
@@ -170,7 +170,7 @@ __all__ = [
     "OrgSsoConfig", "OrgSsoGroupMap",
     "OrgLisConfig", "LisSyncedObject",
     "OrgDibosConfig",
-    "OrgBmaImportConfig", "BmaImportSatz", "BmaImportLauf",
+    "OrgBmaImportConfig", "BmaImportSatz",
     "OrgSmtpConfig", "OrgO365MailConfig",
     "OrgBackupConfig",
     "TeamsAlarmConfig", "TeamsChannelBinding", "TeamsCardPost", "AlarmToken",

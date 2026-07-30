@@ -21,9 +21,7 @@ os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 os.environ["NACHSCHLAGEWERK_SYNC_ENABLED"] = "false"
 # BMA-Webplattform-Import: der Loop schlaeft zwar erst (kein Sofort-Sync wie beim
 # Nachschlagewerk-Sync oben), aber ohne diesen Schalter wuerde ein langsamer/
-# gehaengter CI-Lauf nach BMA_IMPORT_SYNC_INTERVAL_S trotzdem einen echten
 # Abruf gegen die BMA-Webplattform ausloesen - hart aus, analog.
-os.environ["BMA_IMPORT_ENABLED"] = "false"
 
 from app.core.tenant import set_tenant_context
 from app.db import Base, get_db

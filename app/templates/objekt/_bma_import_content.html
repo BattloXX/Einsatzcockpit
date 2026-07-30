@@ -2,7 +2,7 @@
   <div class="card-header"><h2>Offene Vorschläge ({{ vorschlaege|length }})</h2></div>
   <div class="card-body" style="padding:16px 20px">
     <p style="font-size:.85rem;color:var(--color-text-muted);margin:0 0 14px 0;line-height:1.6">
-      Diese Objekte sind bereits freigegeben - Änderungen aus der BMA-Webplattform werden
+      Diese Objekte sind bereits freigegeben - Änderungen aus hochgeladenen BMA-Datenblättern werden
       deshalb nicht automatisch übernommen. "Übernehmen" erstellt eine Arbeitskopie, wendet
       die Änderungen dort an und gibt sie sofort wieder frei.
     </p>
@@ -36,7 +36,7 @@
 
       {% if diff.felder %}
       <table class="table" style="width:100%;margin-top:10px;font-size:.85rem">
-        <thead><tr><th>Feld</th><th>Aktuell</th><th>Aus DIBOS</th></tr></thead>
+        <thead><tr><th>Feld</th><th>Aktuell</th><th>Aus Datenblatt</th></tr></thead>
         <tbody>
           {% for f in diff.felder %}
           <tr>
@@ -51,13 +51,22 @@
 
       {% if diff.kontakte %}
       <div style="margin-top:10px;font-size:.85rem">
-        <strong>Kontakte aus DIBOS ({{ diff.kontakte|length }}):</strong>
+        <strong>Kontakte aus Datenblatt ({{ diff.kontakte|length }}):</strong>
         <ul style="margin:6px 0 0 0;padding-left:20px">
           {% for k in diff.kontakte %}
           <li>{{ k.name }} <span class="text-muted">({{ k.rolle_quelle }})</span></li>
           {% endfor %}
         </ul>
       </div>
+      {% endif %}
+      {% if diff.grund == 'kontakte_fehlen' %}
+      <p class="text-muted" style="font-size:.85rem">Importierte Kontakte fehlen am Objekt.</p>
+      {% endif %}
+      {% if diff.kontakte_fehlend %}
+      <p><strong>Werden ergänzt ({{ diff.kontakte_fehlend|length }})</strong></p>
+      {% endif %}
+      {% if diff.kontakte_ueberzaehlig %}
+      <p><strong>Werden entfernt ({{ diff.kontakte_ueberzaehlig|length }})</strong></p>
       {% endif %}
     </div>
     {% endfor %}
@@ -113,7 +122,7 @@
   <div class="card-header"><h2>Verschwunden ({{ verschwunden|length }})</h2></div>
   <div class="card-body" style="padding:16px 20px">
     <p style="font-size:.85rem;color:var(--color-text-muted);margin:0 0 14px 0;line-height:1.6">
-      Diese Anlagen sind nicht mehr in der BMA-Webplattform-Liste. Die zugehörigen Objekte
+      Diese Anlagen wurden in einem früheren Datenstand als verschwunden markiert. Die zugehörigen Objekte
       wurden NICHT automatisch gelöscht oder verändert.
     </p>
     {% if not verschwunden %}

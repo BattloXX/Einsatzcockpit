@@ -11,6 +11,7 @@ Rollen:
 from __future__ import annotations
 
 from datetime import date, datetime
+from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -640,72 +641,76 @@ def dokument_upload_form(
 
 
 @router.post("/dokument-upload", response_class=HTMLResponse)
-async def dokument_upload_verarbeiten(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_role("objekt_verwalter")),
-    _guard: None = Depends(require_objekt_enabled),
-    datei: UploadFile = File(...),
+async def dokumente_upload_verarbeiten(
+    request: Request, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db), user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled), dateien: list[UploadFile] = File(...),
 ):
-    from app.services.objekt_dokument_service import store_dokument_upload, verarbeite_dokument
+    from app.config import settings
+    from app.services.bma_import.bma_pdf_parser import ist_bma_datenblatt, parse_datenblatt_pdf
+    from app.services.bma_import.bma_sync import hole_oder_erstelle_config, verarbeite_pdf_anlage
+    from app.services.objekt_dokument_service import _detect_mime, store_dokument_upload, verarbeite_dokument
     from app.services.objekt_ki_service import analysiere_unklassifizierte_seiten, ki_klassifikation_enabled
-    from app.services.objekt_plan_upload_service import (
-        erstelle_objekt_aus_identitaet,
-        finde_passendes_objekt,
-        identifiziere_objekt,
-    )
+    from app.services.objekt_plan_upload_service import erstelle_objekt_aus_identitaet, finde_passendes_objekt, identifiziere_objekt
 
     org_id = user.org_id
-    if org_id is None or not ki_klassifikation_enabled(org_id, db):
-        return templates.TemplateResponse(request, "objekt/dokument_upload.html", {
-            "user": user,
-            "ki_enabled": False,
-            "fehler": "KI-Klassifikation ist für diese Organisation nicht aktiviert — "
-                      "ohne KI kann das Objekt nicht automatisch erkannt werden.",
-        })
-
-    data = await datei.read()
-    identitaet = await identifiziere_objekt(data, datei.filename or "dokument.pdf", org_id)
-    # store_dokument_upload liest die Datei gleich nochmal komplett - ohne seek(0)
-    # waere der Stream leer und es gaebe faelschlich "Leere Datei".
-    await datei.seek(0)
-
-    objekt = finde_passendes_objekt(db, org_id, identitaet)
-    neu_erstellt = objekt is None
-    if objekt is None:
-        objekt = erstelle_objekt_aus_identitaet(db, user, identitaet)
-
-    try:
-        dokument = await store_dokument_upload(datei, objekt, user, db)
-    except HTTPException as exc:
-        # Verwirft ein evtl. gerade erst per db.flush() angelegtes Entwurf-Objekt
-        # mit - kein Karteileichen-Objekt, wenn die Datei selbst ungueltig ist.
-        db.rollback()
-        return templates.TemplateResponse(request, "objekt/dokument_upload.html", {
-            "user": user,
-            "ki_enabled": True,
-            "fehler": f"{datei.filename}: {exc.detail}",
-        })
-
-    write_objekt_change(db, objekt.id, objekt.org_id, "dokumente", "dokument_upload",
-                        before=None, after="1 Datei (Upload ohne Objekt-Auswahl)", user_id=user.id)
-    write_audit(db, "objekt.dokument_uploaded", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=objekt.id,
-                payload={"anzahl": 1, "neu_erstellt": neu_erstellt, "quelle": identitaet.get("quelle")})
+    ki_enabled = bool(org_id and ki_klassifikation_enabled(org_id, db))
+    config = hole_oder_erstelle_config(db, org_id)
+    ergebnisse, nacharbeiten = [], []
+    for datei in dateien:
+        name = datei.filename or "dokument.pdf"
+        data = await datei.read()
+        if not data or len(data) > settings.OBJEKT_PDF_MAX_BYTES or _detect_mime(data) != "application/pdf":
+            meldung = "Leere Datei" if not data else "Datei ist zu groß" if len(data) > settings.OBJEKT_PDF_MAX_BYTES else "Nur PDF-Dateien sind erlaubt"
+            ergebnisse.append({"dateiname": name, "ok": False, "meldung": meldung})
+            continue
+        datenblatt = ist_bma_datenblatt(data)
+        try:
+            parsed = parse_datenblatt_pdf(data) if datenblatt else None
+            if not datenblatt and not ki_enabled:
+                ergebnisse.append({"dateiname": name, "ok": False, "meldung": "Für diese Datei wird die KI-Klassifikation benötigt."})
+                continue
+            identitaet = None if datenblatt else await identifiziere_objekt(data, name, org_id)
+            await datei.seek(0)
+            with db.begin_nested():
+                neu = False
+                if datenblatt:
+                    satz, status = verarbeite_pdf_anlage(db, org_id, config, parsed["anlage"], parsed["kontakte"], user)
+                    objekt = db.get(Objekt, satz.objekt_id) if satz.objekt_id else None
+                    if objekt is None:
+                        # Reguläres Verlassen committet absichtlich den offenen Importsatz.
+                        ergebnisse.append({"dateiname": name, "ok": True, "meldung": "Manuelle Zuordnung in der BMA-Queue erforderlich"})
+                        continue
+                else:
+                    objekt = finde_passendes_objekt(db, org_id, identitaet)
+                    neu = objekt is None
+                    if objekt is None:
+                        objekt = erstelle_objekt_aus_identitaet(db, user, identitaet)
+                    status = "neu" if neu else "ergaenzt"
+                dokument = await store_dokument_upload(datei, objekt, user, db)
+                objekt_id, dokument_id = objekt.id, dokument.id
+                write_objekt_change(db, objekt_id, objekt.org_id, "dokumente", "dokument_upload",
+                                    before=None, after="1 Datei (Upload ohne Objekt-Auswahl)", user_id=user.id)
+                write_audit(db, "objekt.dokument_uploaded", org_id=org_id, user_id=user.id,
+                            entity_type="objekt", entity_id=objekt_id,
+                            payload={"anzahl": 1, "neu_erstellt": neu, "quelle": "bma_datenblatt" if datenblatt else identitaet.get("quelle")})
+                nacharbeiten.append((dokument_id, objekt_id, ki_enabled and not datenblatt,
+                                     objekt.strasse if neu else None, objekt.hausnummer if neu else None, objekt.ort if neu else None))
+                ergebnisse.append({"dateiname": name, "ok": True, "meldung": status,
+                                   "objekt_id": objekt_id, "dokument_id": dokument_id})
+        except (HTTPException, ValueError) as exc:
+            ergebnisse.append({"dateiname": name, "ok": False,
+                               "meldung": str(exc.detail if isinstance(exc, HTTPException) else exc)})
     db.commit()
-
-    background_tasks.add_task(verarbeite_dokument, dokument.id)
-    # Laeuft komplett automatisch weiter - kein manueller "KI-Vorschläge"-Klick
-    # noetig (anders als beim bestehenden Upload MIT Objekt-Auswahl, bewusst so
-    # belassen). BackgroundTasks laufen sequenziell nach der Antwort, daher ist
-    # verarbeite_dokument (Seiten muessen existieren) hier garantiert zuerst fertig.
-    background_tasks.add_task(analysiere_unklassifizierte_seiten, objekt.id)
-    if neu_erstellt and (objekt.strasse or objekt.ort):
-        background_tasks.add_task(_geocode_objekt, objekt.id, objekt.strasse, objekt.hausnummer, objekt.ort)
-
-    plan_status = "neu" if neu_erstellt else "ergaenzt"
-    return RedirectResponse(f"/objekte/{objekt.id}?plan={plan_status}", status_code=303)
+    for dokument_id, objekt_id, analyse, strasse, hausnummer, ort in nacharbeiten:
+        background_tasks.add_task(verarbeite_dokument, dokument_id)
+        if analyse:
+            background_tasks.add_task(analysiere_unklassifizierte_seiten, objekt_id)
+        if strasse or ort:
+            background_tasks.add_task(_geocode_objekt, objekt_id, strasse, hausnummer, ort)
+    return templates.TemplateResponse(request, "objekt/dokument_upload.html", {
+        "user": user, "ki_enabled": ki_enabled, "ergebnisse": ergebnisse,
+    })
 
 
 # ── Globales Aenderungsprotokoll (alle Objekte) ─────────────────────────────
@@ -1181,10 +1186,15 @@ def objekt_arbeitskopie_verwerfen(
 
 # ── Objekt loeschen (org_admin/system_admin) ───────────────────────────────────
 
-def _loesche_objekt(db: Session, objekt: Objekt, user: User) -> None:
+def _loesche_objekt(db: Session, objekt: Objekt, user: User) -> list[Path]:
     """Loescht ein Objekt vollstaendig: erst alle Dokumente ueber den Service
-    (Dateien auf Platte + Storage-Quota-Freigabe, siehe delete_dokument), dann
-    das Objekt selbst (Kind-Zeilen via DB-Kaskade). Commit macht der Aufrufer."""
+    (Storage-Quota-Freigabe, siehe delete_dokument), dann das Objekt selbst
+    (Kind-Zeilen via DB-Kaskade). Commit macht der Aufrufer.
+
+    Gibt die Dokument-Verzeichnisse zurueck, die der Aufrufer NACH einem erfolgreichen
+    db.commit() per raeume_dokument_verzeichnis_auf() von der Platte loeschen muss -
+    vorher waere ein Commit-Fehler nicht mehr rueckgaengig zu machen (siehe
+    delete_dokument())."""
     from app.models.objekt import ObjektDokument
     from app.services.objekt_dokument_service import delete_dokument
 
@@ -1198,39 +1208,45 @@ def _loesche_objekt(db: Session, objekt: Objekt, user: User) -> None:
         write_audit(db, "objekt.arbeitskopie_geloescht", org_id=objekt.org_id, user_id=user.id,
                     entity_type="objekt", entity_id=objekt.id,
                     payload={"basis_objekt_id": objekt.entwurf_von_id})
-        return
+        return []
 
     dokumente = (
         db.query(ObjektDokument)
         .filter(ObjektDokument.objekt_id == objekt.id)
         .all()
     )
-    for dokument in dokumente:
-        delete_dokument(dokument, db)
+    verzeichnisse = [delete_dokument(dokument, db) for dokument in dokumente]
 
     write_audit(db, "objekt.deleted", org_id=objekt.org_id, user_id=user.id,
                 entity_type="objekt", entity_id=objekt.id,
                 payload={"name": objekt.name, "nummer": objekt.nummer,
                          "dokumente_geloescht": len(dokumente)})
     db.delete(objekt)
+    return verzeichnisse
 
 
 @router.post("/bulk-loeschen")
 def objekte_bulk_loeschen(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_objekt_enabled),
     objekt_ids: str = Form(""),
 ):
     """Loescht mehrere Objekte aus der Listen-Auswahl (nur org_admin/system_admin)."""
+    from app.services.objekt_dokument_service import raeume_dokument_verzeichnis_auf
+
     ids = [int(t) for t in objekt_ids.split(",") if t.strip().isdigit()]
+    verzeichnisse: list[Path] = []
     for objekt_id in ids:
         objekt = db.query(Objekt).filter(Objekt.id == objekt_id).first()
         if objekt is None:
             continue  # fremde Org (Tenant-Filter) oder bereits geloescht
-        _loesche_objekt(db, objekt, user)
+        verzeichnisse.extend(_loesche_objekt(db, objekt, user))
     db.commit()
+    for verzeichnis in verzeichnisse:
+        background_tasks.add_task(raeume_dokument_verzeichnis_auf, verzeichnis)
     return RedirectResponse(url="/objekte/", status_code=303)
 
 
@@ -1270,13 +1286,18 @@ def objekte_bulk_freigeben(
 def objekt_loeschen(
     objekt_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_objekt_enabled),
 ):
+    from app.services.objekt_dokument_service import raeume_dokument_verzeichnis_auf
+
     objekt = _objekt_or_404(db, objekt_id, user)
-    _loesche_objekt(db, objekt, user)
+    verzeichnisse = _loesche_objekt(db, objekt, user)
     db.commit()
+    for verzeichnis in verzeichnisse:
+        background_tasks.add_task(raeume_dokument_verzeichnis_auf, verzeichnis)
     return RedirectResponse(url="/objekte/", status_code=303)
 
 
@@ -1627,19 +1648,7 @@ def kontakt_loeschen(
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "kontakt_geloescht",
                         before=kontakt.name, after=None, user_id=user.id)
-    if kontakt.extern_quelle:
-        # Ein importierter Kontakt wird hier manuell geloescht - der BMA-Sync haelt das
-        # Objekt sonst faelschlich fuer "bereits auf dem neuesten (bestaetigten) Stand"
-        # (bestaetigt_hash vergleicht nur den QUELL-Inhalt, nicht den Live-Zustand des
-        # Objekts) und importiert bei einem erneuten Abgleich/PDF-Upload NICHTS nach,
-        # obwohl das Objekt jetzt wieder von der Quelle abweicht (Vorfall Objekt 916:
-        # Kontakte manuell geloescht, PDF danach erneut hochgeladen, Ergebnis
-        # "unveraendert" statt eines neuen Vorschlags). Bestaetigung zuruecksetzen, damit
-        # der naechste Abgleich das als Aenderung erkennt.
-        from app.models.bma_import import BmaImportSatz
-        db.query(BmaImportSatz).filter(
-            BmaImportSatz.org_id == objekt.org_id, BmaImportSatz.objekt_id == objekt.id,
-        ).update({"bestaetigt_hash": None})
+    # ist_offener_vorschlag() vergleicht importierte Kontakte bei jedem Abgleich live.
     db.delete(kontakt)
     db.commit()
     db.refresh(objekt)

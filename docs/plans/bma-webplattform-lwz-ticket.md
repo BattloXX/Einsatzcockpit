@@ -1,4 +1,4 @@
-# LWZ-Ticket: Maschinenzugang für den BMA-Webplattform-Import
+# Verworfen 2026-07-30: LWZ-Ticket Maschinenzugang für den BMA-Webplattform-Import
 
 ## Hintergrund
 

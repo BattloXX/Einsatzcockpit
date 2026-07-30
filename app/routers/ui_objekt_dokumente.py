@@ -28,6 +28,7 @@ from app.routers.ui_objekt import _LESE_ROLLEN, _objekt_or_404, require_objekt_e
 from app.services.objekt_dokument_service import (
     absolute_pfad,
     delete_dokument,
+    raeume_dokument_verzeichnis_auf,
     reindex_objekt,
     sammel_pdf,
     store_dokument_upload,
@@ -383,6 +384,7 @@ def dokument_loeschen(
     objekt_id: int,
     dokument_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
@@ -400,8 +402,9 @@ def dokument_loeschen(
     write_audit(db, "objekt.dokument_deleted", org_id=user.org_id, user_id=user.id,
                 entity_type="objekt", entity_id=objekt.id,
                 payload={"dateiname": dokument.dateiname_original})
-    delete_dokument(dokument, db)
+    verzeichnis = delete_dokument(dokument, db)
     db.commit()
+    background_tasks.add_task(raeume_dokument_verzeichnis_auf, verzeichnis)
     return templates.TemplateResponse(
         request, "objekt/_dokumente.html",
         _galerie_context(request, db, user, objekt),

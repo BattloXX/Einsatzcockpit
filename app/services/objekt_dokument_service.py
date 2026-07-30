@@ -437,15 +437,28 @@ def sammel_pdf(seiten: list[ObjektDokumentSeite]) -> bytes:
     return buf.getvalue()
 
 
-def delete_dokument(dokument: ObjektDokument, db: Session) -> None:
-    """Loescht Dokument-Verzeichnis, gibt Quota frei, entfernt DB-Zeilen (Kaskade)."""
+def delete_dokument(dokument: ObjektDokument, db: Session) -> Path:
+    """Gibt Quota frei und entfernt die DB-Zeilen (Kaskade); loescht das Verzeichnis
+    auf der Platte NICHT sofort - siehe raeume_dokument_verzeichnis_auf().
+
+    Der Aufrufer MUSS das zurueckgegebene Verzeichnis erst NACH einem erfolgreichen
+    db.commit() aufraeumen (Muster: ui_archive.py::delete_incident). Wuerde stattdessen
+    zuerst geloescht, koennte ein spaeter fehlschlagender Commit die DB-Aenderung
+    zurueckrollen, waehrend die Dateien bereits unwiderruflich weg sind.
+    """
     org_id = dokument.org_id
     verzeichnis = absolute_pfad(dokument.pfad).parent
+    if org_id is not None and dokument.belegt_bytes > 0:
+        release_storage(db, org_id, dokument.belegt_bytes)
+    db.delete(dokument)
+    return verzeichnis
+
+
+def raeume_dokument_verzeichnis_auf(verzeichnis: Path) -> None:
+    """Loescht ein Dokument-Verzeichnis von der Platte - nur nach erfolgreichem
+    db.commit() aufrufen (siehe delete_dokument())."""
     try:
         if verzeichnis.exists():
             shutil.rmtree(verzeichnis)
     except OSError:
         logger.exception("Dokument-Verzeichnis nicht loeschbar: %s", verzeichnis)
-    if org_id is not None and dokument.belegt_bytes > 0:
-        release_storage(db, org_id, dokument.belegt_bytes)
-    db.delete(dokument)

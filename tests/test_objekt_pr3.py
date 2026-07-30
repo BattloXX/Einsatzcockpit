@@ -200,6 +200,7 @@ def test_delete_dokument_gibt_quota_frei(pr3_env):
     from app.services.objekt_dokument_service import (
         absolute_pfad,
         delete_dokument,
+        raeume_dokument_verzeichnis_auf,
         store_dokument_upload,
         verarbeite_dokument,
     )
@@ -213,8 +214,13 @@ def test_delete_dokument_gibt_quota_frei(pr3_env):
     verzeichnis = absolute_pfad(dokument.pfad).parent
     assert verzeichnis.exists()
 
-    delete_dokument(dokument, db)
+    # Dateien werden erst NACH dem Commit geloescht (siehe delete_dokument()-Doc) -
+    # so bleibt ein Commit-Fehler jederzeit folgenlos fuer bereits gespeicherte Dateien.
+    ergebnis_verzeichnis = delete_dokument(dokument, db)
+    assert ergebnis_verzeichnis == verzeichnis
+    assert verzeichnis.exists()  # noch nicht geloescht - Commit steht noch aus
     db.commit()
+    raeume_dokument_verzeichnis_auf(ergebnis_verzeichnis)
 
     assert not verzeichnis.exists()
     assert db.query(ObjektDokument).count() == 0
@@ -261,6 +267,7 @@ def test_objekt_loeschen_raeumt_dateien_und_quota(pr3_env):
     from app.routers.ui_objekt import _loesche_objekt
     from app.services.objekt_dokument_service import (
         absolute_pfad,
+        raeume_dokument_verzeichnis_auf,
         store_dokument_upload,
         verarbeite_dokument,
     )
@@ -277,8 +284,12 @@ def test_objekt_loeschen_raeumt_dateien_und_quota(pr3_env):
     assert usage is not None and usage.used_bytes > 0
 
     objekt_id = objekt.id
-    _loesche_objekt(db, objekt, SimpleNamespace(id=None))
+    verzeichnisse = _loesche_objekt(db, objekt, SimpleNamespace(id=None))
     db.commit()
+    # Dateiloeschung ist Sache des Aufrufers NACH dem Commit (siehe delete_dokument()-Doc) -
+    # die Route erledigt das ueber BackgroundTasks, hier direkt simuliert.
+    for pfad in verzeichnisse:
+        raeume_dokument_verzeichnis_auf(pfad)
 
     assert not verzeichnis.exists()
     db.expire_all()

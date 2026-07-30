@@ -1,40 +1,29 @@
 {% extends "base.html" %}
-{% block title %}Brandschutzplan hochladen – {{ brand }}{% endblock %}
+{% block title %}Objektunterlagen hochladen - {{ brand }}{% endblock %}
 {% block content %}
 <div class="page-content" style="max-width:720px;">
   <div class="page-header">
-    <div><h1>📄 Brandschutzplan hochladen</h1></div>
+    <div><h1>📄 Objektunterlagen hochladen</h1></div>
     <a href="/objekte/" class="btn btn--ghost">Zurück zur Liste</a>
   </div>
-
-  {% if fehler %}
-  <div class="alert alert--danger" style="margin-bottom:16px;">{{ fehler }}</div>
-  {% endif %}
-
-  {% if ki_enabled %}
   <div class="card" style="padding:20px;">
     <p class="text-muted" style="margin-top:0;">
-      Kein Objekt auswählen nötig — die KI liest Name, Adresse und ggf. die BMA-Nummer aus dem
-      Dokument und ordnet es automatisch einem bestehenden Objekt zu oder legt ein neues an.
-      Seiten-Analyse und Gefahren-/BMA-/Merkmale-Vorschläge laufen danach automatisch im
-      Hintergrund weiter.
+      BMA-Datenblätter werden direkt erkannt. Andere Brandschutzpläne werden
+      {% if ki_enabled %}mit KI einem Objekt zugeordnet{% else %}nur bei aktivierter KI-Klassifikation verarbeitet{% endif %}.
     </p>
     <form method="post" action="/objekte/dokument-upload" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group">
-        <label class="form-label">PDF-Datei *</label>
-        <input type="file" name="datei" class="form-input" accept="application/pdf" required>
+        <label class="form-label">PDF-Dateien *</label>
+        <input type="file" name="dateien" class="form-input" accept="application/pdf" multiple required>
       </div>
-      <button type="submit" class="btn btn--primary">Hochladen &amp; analysieren</button>
+      <button type="submit" class="btn btn--primary">Hochladen &amp; verarbeiten</button>
     </form>
   </div>
-  {% else %}
-  <div class="card" style="padding:20px;">
-    <p class="text-muted" style="margin:0;">
-      Dieser Upload-Weg benötigt die KI-Klassifikation der Objektverwaltung (ohne KI kann das
-      Objekt nicht automatisch erkannt werden). Bitte in den Objekt-Einstellungen aktivieren,
-      oder ein Dokument wie gewohnt direkt im Dokumente-Tab eines bestehenden Objekts hochladen.
-    </p>
+  {% if ergebnisse %}
+  <div class="card" style="padding:20px;margin-top:16px;">
+    <h2>Ergebnisse</h2>
+    <ul>{% for e in ergebnisse %}<li>{% if e.ok %}✓{% else %}✗{% endif %} {{ e.dateiname }}: {{ e.meldung }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
 </div>

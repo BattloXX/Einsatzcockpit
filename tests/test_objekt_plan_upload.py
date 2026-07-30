@@ -348,8 +348,8 @@ def test_dokument_upload_form_zeigt_hinweis_wenn_ki_deaktiviert(client, plan_upl
     _login_http(client, username, "Test1234!")
     r = client.get("/objekte/dokument-upload")
     assert r.status_code == 200
-    assert "benötigt die KI-Klassifikation" in r.text
-    assert "enctype" not in r.text  # Formular wird nicht gerendert
+    assert "aktivierter KI-Klassifikation" in r.text
+    assert "enctype" in r.text  # Datenblätter funktionieren auch ohne KI
 
 
 def test_dokument_upload_legt_neues_objekt_an(client, plan_upload_setup):
@@ -373,12 +373,13 @@ def test_dokument_upload_legt_neues_objekt_an(client, plan_upload_setup):
         r = client.post(
             "/objekte/dokument-upload",
             data={"_csrf": csrf},
-            files={"datei": ("Meusburger_BSP.pdf", pdf_bytes, "application/pdf")},
+            files=[("dateien", ("Meusburger_BSP.pdf", pdf_bytes, "application/pdf"))],
             follow_redirects=False,
         )
 
-    assert r.status_code == 303, r.text[:500]
-    assert "?plan=neu" in r.headers["location"]
+    assert r.status_code == 200, r.text[:500]
+    assert "Meusburger_BSP.pdf" in r.text
+    assert "neu" in r.text
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -426,12 +427,13 @@ def test_dokument_upload_ergaenzt_bestehendes_objekt_ueber_adresse(client, plan_
         r = client.post(
             "/objekte/dokument-upload",
             data={"_csrf": csrf},
-            files={"datei": ("bsp.pdf", _test_pdf_blank(), "application/pdf")},
+            files=[("dateien", ("bsp.pdf", _test_pdf_blank(), "application/pdf"))],
             follow_redirects=False,
         )
 
-    assert r.status_code == 303, r.text[:500]
-    assert f"/objekte/{bestehendes_id}?plan=ergaenzt" == r.headers["location"]
+    assert r.status_code == 200, r.text[:500]
+    assert "bsp.pdf" in r.text
+    assert "ergaenzt" in r.text
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -460,7 +462,7 @@ def test_dokument_upload_ungueltige_datei_hinterlaesst_kein_karteileichen_objekt
         r = client.post(
             "/objekte/dokument-upload",
             data={"_csrf": csrf},
-            files={"datei": ("kaputt.pdf", b"das ist kein PDF", "application/pdf")},
+            files=[("dateien", ("kaputt.pdf", b"das ist kein PDF", "application/pdf"))],
         )
 
     assert r.status_code == 200

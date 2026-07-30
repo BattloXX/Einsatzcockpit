@@ -9,7 +9,7 @@
   </div>
   {% if bma_import_satz %}
   <p class="text-muted" style="font-size:.8rem;margin:-4px 0 12px 0">
-    Aus DIBOS importiert (BMA {{ bma_import_satz.bma_nummer or '–' }}), zuletzt gesehen am
+      Aus BMA-Datenblatt übernommen (BMA {{ bma_import_satz.bma_nummer or '–' }}), zuletzt gesehen am
     {{ bma_import_satz.zuletzt_gesehen_am.strftime('%d.%m.%Y') if bma_import_satz.zuletzt_gesehen_am else '–' }}.
     {% if ist_verwalter %}<a href="/objekte/bma-import">Offene Vorschläge ansehen</a>{% endif %}
   </p>

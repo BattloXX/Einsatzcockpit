@@ -1,6 +1,6 @@
 """Tests für bma_pdf_parser.py: Parsen eines manuell hochgeladenen BMA-
 Datenblatt-PDFs (Landeswarnzentrale Vorarlberg) in dieselbe {"anlage":...,
-"kontakte":...}-Form wie die Live-Schnittstelle (bma_parser.py).
+"kontakte":...}-Form des Datenblatt-Imports.
 
 ECHTES_DATENBLATT ist der 1:1-Textlayer-Extrakt (pypdf) eines echten
 Datenblatts ("BMA 1238") — mit einer echten Datei verifiziert, dass pypdf hier
@@ -130,7 +130,7 @@ def test_kontakt_telefone_und_email():
 
 
 def test_kontakt_adresse_wird_nicht_uebernommen():
-    """Muster bma_parser.py::_parse_kontakt_karte() — Straße/PLZ-Ort der
+    """Straße/PLZ-Ort der
     Kontaktperson landen in keinem Zielfeld (kein ObjektKontakt-Adressfeld)."""
     kontakte = parse_datenblatt_text(ECHTES_DATENBLATT)["kontakte"]
     for k in kontakte:
@@ -143,7 +143,7 @@ def test_dieselbe_person_in_zwei_rollen_ergibt_zwei_kontakte_mit_eigener_extern_
     """Davit Stephanyan tritt als Brandschutzbeauftragter UND (impliziert durch
     Namensgleichheit im echten Datenblatt) potenziell nochmal auf - jede Rolle
     bekommt eine eigene extern_id, damit beide als getrennte ObjektKontakt-
-    Zeilen erhalten bleiben (Muster: bma_parser.py)."""
+    Zeilen erhalten bleiben."""
     kontakte = parse_datenblatt_text(ECHTES_DATENBLATT)["kontakte"]
     extern_ids = [k["extern_id"] for k in kontakte]
     assert len(extern_ids) == len(set(extern_ids))

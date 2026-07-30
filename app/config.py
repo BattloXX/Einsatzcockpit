@@ -343,12 +343,7 @@ class Settings(BaseSettings):
 
     # BMA-Webplattform-Import (Landeswarnzentrale Vorarlberg) - siehe app/services/bma_import/.
     # Taeglicher Lauf (Europe/Vienna), Muster: NACHSCHLAGEWERK_SYNC_ENABLED/nachschlagewerk_sync.py.
-    BMA_IMPORT_ENABLED: bool = True   # globaler Kill-Switch
-    BMA_IMPORT_SYNC_HOUR: int = 3     # Default-Uhrzeit, pro Org in OrgBmaImportConfig ueberschreibbar
-    BMA_IMPORT_SYNC_MINUTE: int = 30
     # Keepalive-Ping (haelt das hinterlegte Session-Cookie zwischen den taeglichen
-    # Laeufen aktiv), unabhaengig vom Sync-Intervall - siehe bma_loop.py.
-    BMA_IMPORT_KEEPALIVE_INTERVAL_S: int = 600
 
     # SSO / Microsoft Entra ID
     SSO_ENABLED: bool = True

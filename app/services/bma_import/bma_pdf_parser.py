@@ -1,6 +1,6 @@
 """Parst ein einzelnes BMA-Datenblatt-PDF (Landeswarnzentrale Vorarlberg,
 RFL-Aufschaltung, z.B. per E-Mail vom Betreiber erhalten) in dieselbe
-{"anlage": {...}, "kontakte": [...]}-Form wie bma_parser.py aus der Live-
+{"anlage": {...}, "kontakte": [...]}-Form des Datenblatt-Imports.
 Schnittstelle (parse_anlagen()/parse_kontakte()) — so kann ein manuell
 hochgeladenes Datenblatt exakt denselben Sync-/Review-Pfad durchlaufen wie ein
 per Web-Scrape geholter Datensatz (siehe bma_sync.py::verarbeite_pdf_anlage()).
@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import io
 import re
+import unicodedata
 
 # Bekannte Feld-Label aus dem Datenblatt (Reihenfolge fuer die Regex-Alternation
 # nach Laenge absteigend, damit z.B. "Tel.Mobil Privat:" nicht durch einen
@@ -71,7 +72,7 @@ _RFL_DATUM_RE = re.compile(r"(\d{2}\.\d{2}\.\d{4})")
 _AKTUALISIERT_RE = re.compile(r"Datenblatt zuletzt aktualisiert:\s*(\d{2}\.\d{2}\.\d{4})")
 _ABSCHNITT_RE = re.compile(r"^\d+\.\s")
 
-# 1:1 aus bma_parser.py::_KONTAKT_FELD_LABELS bzw. ROLLEN_MAPPING übernommen —
+# Feldlabels und Rollen des BMA-Datenblatts.
 # dieselben Label-Texte wie in den HTML-Kontaktkarten, da PDF und HTML-
 # Detailseite aus denselben Stammdaten gerendert werden.
 _KONTAKT_FELD_LABELS = {
@@ -95,6 +96,40 @@ _TELEFON_PRAEFIXE = (
     ("mobil_privat", "Mobil privat"),
     ("pager", "Pager"),
 )
+
+
+def namens_slug(name: str) -> str:
+    name = name.translate(str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"}))
+    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "-", name).strip("-")[:60] or "unbenannt"
+
+
+def baue_kontakt_extern_id(anlage_extern_id: str, art: str, name: str) -> str:
+    return f"{anlage_extern_id}:{art}:{namens_slug(name)}"
+
+
+def _mit_stabilen_ids(bloecke: list[dict], anlage_extern_id: str) -> list[dict]:
+    ergebnis, zaehler = [], {}
+    for block in bloecke:
+        kontakt = _baue_kontakt(block)
+        if kontakt is None:
+            continue
+        basis = baue_kontakt_extern_id(anlage_extern_id, kontakt["art"], kontakt["name"])
+        zaehler[basis] = zaehler.get(basis, 0) + 1
+        kontakt["extern_id"] = basis if zaehler[basis] == 1 else f"{basis}#{zaehler[basis]}"
+        ergebnis.append(kontakt)
+    return ergebnis
+
+
+def ist_bma_datenblatt(data: bytes) -> bool:
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(data))
+        text = reader.pages[0].extract_text() or ""
+        zeilen = [z.strip() for z in text.splitlines() if z.strip()]
+        return bool(zeilen and _BMA_NUMMER_RE.match(zeilen[0]))
+    except Exception:
+        return False
 
 
 def _zeile_in_felder(zeile: str) -> dict[str, str]:
@@ -137,14 +172,12 @@ def _extrahiere_kontaktbloecke(zeilen: list[str]) -> list[dict]:
     "BMA Alarmperson") zu einem Block."""
     bloecke: list[dict] = []
     aktuell: dict | None = None
-    zaehler = 0
     for zeile in zeilen:
         stripped = zeile.strip()
         if stripped in _ROLLEN_MAPPING:
             if aktuell is not None:
                 bloecke.append(aktuell)
-            zaehler += 1
-            aktuell = {"rolle_quelle": stripped, "art": _ROLLEN_MAPPING[stripped], "_id": zaehler}
+            aktuell = {"rolle_quelle": stripped, "art": _ROLLEN_MAPPING[stripped]}
             continue
         if aktuell is None:
             continue
@@ -155,7 +188,7 @@ def _extrahiere_kontaktbloecke(zeilen: list[str]) -> list[dict]:
                 aktuell[feldname] = wert
             # "Straße:"/"PLZ/Ort:" der Kontaktperson (nicht der Anlage) haben
             # kein Zielfeld in ObjektKontakt (siehe app/models/objekt.py) und
-            # werden hier bewusst NICHT übernommen — Muster bma_parser.py::
+            # werden hier bewusst NICHT übernommen.
             # _parse_kontakt_karte() ("Adresse wird nicht übernommen").
     if aktuell is not None:
         bloecke.append(aktuell)
@@ -170,7 +203,6 @@ def _baue_kontakt(block: dict) -> dict | None:
         f"{label}: {block[feld]}" for feld, label in _TELEFON_PRAEFIXE if block.get(feld)
     ]
     return {
-        "extern_id": f"pdf:{block['_id']}",
         "rolle_quelle": block["rolle_quelle"],
         "art": block["art"],
         "name": name,
@@ -280,7 +312,7 @@ def parse_datenblatt_text(text: str) -> dict:
         "datenblatt_aktualisiert_am": aktualisiert_match.group(1) if aktualisiert_match else None,
     }
 
-    kontakte = [k for k in (_baue_kontakt(b) for b in _extrahiere_kontaktbloecke(kontakt_zeilen)) if k]
+    kontakte = _mit_stabilen_ids(_extrahiere_kontaktbloecke(kontakt_zeilen), anlage["extern_id"])
 
     return {"anlage": anlage, "kontakte": kontakte}
 

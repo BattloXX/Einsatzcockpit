@@ -168,32 +168,13 @@ max. 20 Seiten je Lauf). Vorschläge landen in einer **Review-Liste** — übern
 alle übernehmen; **nie automatische Übernahme**. Token-Verbrauch zählt auf das normale
 KI-Monatskontingent der Org; Seitenbilder werden vor dem Versand auf ~1024 px verkleinert.
 
-## BMA-Webplattform-Import (Landeswarnzentrale Vorarlberg)
+## BMA-Datenblatt-Import
 
-Täglicher Abgleich der Brandmeldeanlagen-Liste der BMA-Webplattform
-(`dibos.lwz-vorarlberg.at/LWZ_BMA_Webplattform`) in die Objektverwaltung: BMA-Nummer,
-Bezeichnung, Adresse inkl. Koordinaten, RFL-Status sowie die Kontaktpersonen
-(Brandschutzbeauftragte(r), BMA Alarmperson). Konfiguration unter **/admin/bma-import**
-(Rolle `org_admin`), die Review-Queue unter **Objekte → 🔥 BMA-Import** (Rolle
-`objekt_verwalter`).
-
-### Zugangsdaten hinterlegen
-
-Der Portal-Login der BMA-Webplattform hat eine Anti-Roboter-Verifizierung und lässt sich
-deshalb **nicht automatisieren**. Stattdessen wird das Session-Cookie hinterlegt, das der
-Browser nach einer manuellen Anmeldung im DIBOS-Portal setzt:
-
-1. Im [DIBOS-Portal](https://dibos.lwz-vorarlberg.at/dibos-web/gui/) anmelden und die
-   Kachel „BMA Webplattform" öffnen (Anlagenliste muss sichtbar sein).
-2. Browser-Entwicklertools (F12) → *Anwendung/Application* → *Cookies* →
-   `dibos.lwz-vorarlberg.at`.
-3. Alle dort aufgelisteten Cookies als `name1=wert1; name2=wert2; ...` zusammenfügen und
-   unter „Session-Cookie" auf /admin/bma-import einfügen, speichern, „Verbindung testen".
-
-Wie lange eine hinterlegte Session gültig bleibt, ist nicht dokumentiert. Der
-**Keepalive-Ping** (Schalter in den Einstellungen, Default an) hält sie zwischen den
-täglichen Läufen aktiv. Läuft sie dennoch ab, zeigt der letzte Lauf
-„Session abgelaufen" — ein neues Cookie hinterlegen und erneut testen.
+Unter **Objekte → 📄 Unterlagen hochladen** können Brandschutzpläne und BMA-Datenblätter
+gemeinsam ausgewählt werden. BMA-Datenblätter werden anhand der ersten PDF-Seite erkannt,
+strukturiert gelesen und zusätzlich als Objektdokument gespeichert. Andere Unterlagen
+benötigen für die automatische Objektzuordnung die aktivierte KI-Klassifikation.
+Die Review-Queue bleibt unter **Objekte → 🔥 BMA-Vorschläge** erreichbar.
 
 ### Schreibpolitik
 
@@ -206,21 +187,20 @@ täglichen Läufen aktiv. Läuft sie dennoch ab, zeigt der letzte Lauf
 Ein Vorschlag wird nie direkt auf ein freigegebenes Objekt geschrieben — „Übernehmen" in
 der Review-Queue erstellt eine Arbeitskopie, wendet die Änderungen dort an und gibt sie
 sofort wieder frei (derselbe Weg wie eine reguläre Überarbeitung). „Ignorieren" verwirft
-den Vorschlag; er erscheint erst wieder, wenn sich die Quelle erneut ändert. Anlagen ohne
+den Vorschlag; er erscheint erst wieder, wenn sich die Quelle erneut ändert oder importierte
+Kontakte am Objekt fehlen. Anlagen ohne
 passendes Objekt erscheinen unter „Nicht zugeordnet" — dort lässt sich ein bestehendes
 Objekt manuell zuordnen oder direkt ein neues Entwurf-Objekt anlegen (unabhängig vom
-Schalter „Unbekannte Anlagen automatisch anlegen", der nur den automatischen Lauf steuert).
+automatische Neuanlage).
 
-Kontakte, die aus DIBOS importiert wurden, sind intern markiert und werden bei
+Kontakte aus BMA-Datenblättern sind intern markiert und werden bei
 Änderungen aktualisiert statt dupliziert; **händisch angelegte Kontakte fasst der Import
 nie an.**
 
 ### Grenzen
 
-Die BMA-Webplattform liefert real nur BMA-Nummer, Bezeichnung, Adresse/Koordinaten,
-RFL-Status und die Kontaktpersonen — Felder wie Schlüsselsafe, Steigleitung oder
-Objektfunk sind im Datenmodell der Plattform zwar vorhanden, werden dort aber nicht
-gepflegt und bleiben daher unbefüllt.
+Der Import übernimmt nur Felder, die im Datenblatt enthalten sind. Schlüsselsafe,
+Steigleitung und Objektfunk müssen weiterhin am Objekt gepflegt werden.
 
 ## Serverkonfiguration
 
@@ -251,9 +231,6 @@ Optionale `.env`-/SystemSettings-Parameter:
 | `OBJEKT_OCR_ENABLED` | `true` | OCR-Fallback (Tesseract) für Scan-PDFs ohne Textlayer |
 | `OBJEKT_OCR_LANG` | `deu+eng` | Tesseract-Sprachpakete für die OCR |
 | `OBJEKT_SYMBOL_MAX_BYTES` | 512 KB | Maximale Größe je hochgeladenem Karten-Symbolbild (SVG/PNG) |
-| `BMA_IMPORT_ENABLED` | `true` | Globaler Kill-Switch für den täglichen BMA-Webplattform-Import (siehe oben) |
-| `BMA_IMPORT_SYNC_HOUR` / `BMA_IMPORT_SYNC_MINUTE` | 3 / 30 | Default-Uhrzeit (Europe/Vienna), je Org unter /admin/bma-import überschreibbar |
-| `BMA_IMPORT_KEEPALIVE_INTERVAL_S` | 600 | Abstand der Keepalive-Pings fürs hinterlegte Session-Cookie |
 
 **Speicher-Quota:** Original + Einzelseiten + Renderings zählen auf die Org-Quota
 (≈ Faktor 1,5–2 der Originalgröße). Beim Löschen eines Dokuments wird der belegte Speicher
