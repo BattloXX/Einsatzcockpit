@@ -2,6 +2,10 @@
 
 ← [Zurück zur Startseite](Home)
 
+Das Gateway ist fuer den SMS-Versand optional, wenn eine Organisation EUS
+verwendet. Auswahl und Fallback sind unter
+[SMS-Versandweg administrieren](Administration-SMS-Versandweg) beschrieben.
+
 Der SMS-Versand/-Empfang läuft über die native **Einsatzcockpit-Android-App** (Repo [`BattloXX/Einsatzcockpit-Android`](https://github.com/BattloXX/Einsatzcockpit-Android)) auf einem beliebigen Android-Gerät mit SIM-Karte. Die App verbindet sich **ausgehend** per WebSocket mit der Haupt-App und versendet/empfängt SMS über die eingebaute `SmsManager`-API — kein separater Server, kein Modem, keine offenen Ports nötig.
 
 **Zweck:** SMS-Versand/-Empfang für die Telefonnummern-Verifizierung im Bürgerportal, [Einsatzinfo-SMS bei Alarm](Administration-SMS-Einsatzinfo), manuellen Versand an Gruppen/Mitglieder und die Weiterleitung eingehender SMS (Teams-Webhook, Gruppen, Mitglieder, Ad-hoc-Nummern).

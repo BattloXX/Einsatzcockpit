@@ -359,6 +359,12 @@ class Settings(BaseSettings):
     O365_MAIL_HTTP_TIMEOUT: int = 15
     O365_MAIL_TOKEN_MARGIN_S: int = 60  # Sicherheitsmarge vor Token-Ablauf im Cache
 
+    # SMS-Versand je Org ueber die EUS Message Send API - Alternative/Fallback zum
+    # SMS-Gateway-WebSocket (app/routers/ws.py::dispatch_sms).
+    EUS_SMS_ENABLED: bool = True
+    EUS_SMS_HTTP_TIMEOUT: int = 15
+    EUS_SMS_TOKEN_MARGIN_S: int = 60
+
     @property
     def effective_public_base_url(self) -> str:
         return self.PUBLIC_BASE_URL or self.APP_BASE_URL

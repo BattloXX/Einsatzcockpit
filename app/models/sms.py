@@ -98,6 +98,7 @@ class SmsLog(TenantScoped, Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     recipient_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     success_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
     triggered_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )

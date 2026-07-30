@@ -114,6 +114,7 @@ from app.models.objekt import (
 )
 from app.models.org_backup import OrgBackupConfig
 from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
+from app.models.org_sms import OrgSmsConfig
 from app.models.password_reset import PasswordResetToken
 from app.models.sms import (
     SmsEinsatzinfoRecipient,
@@ -171,7 +172,7 @@ __all__ = [
     "OrgLisConfig", "LisSyncedObject",
     "OrgDibosConfig",
     "OrgBmaImportConfig", "BmaImportSatz",
-    "OrgSmtpConfig", "OrgO365MailConfig",
+    "OrgSmtpConfig", "OrgO365MailConfig", "OrgSmsConfig",
     "OrgBackupConfig",
     "TeamsAlarmConfig", "TeamsChannelBinding", "TeamsCardPost", "AlarmToken",
     "User", "Role", "UserRole", "ApiKey", "AuditLog", "PushSubscription",

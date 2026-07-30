@@ -5,7 +5,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
@@ -13,6 +13,7 @@ from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import AlarmType, Member, OrgSettings
+from app.models.org_sms import OrgSmsConfig
 from app.models.sms import (
     SmsEinsatzinfoRecipient,
     SmsForwardRule,
@@ -44,6 +45,110 @@ def _sms_groups_for_org(db: Session, org_id: int) -> list[SmsGroup]:
         .order_by(SmsGroup.display_order, SmsGroup.name)
         .all()
     )
+
+
+def _get_or_create_sms_config(db: Session, org_id: int) -> OrgSmsConfig:
+    cfg = db.query(OrgSmsConfig).filter(OrgSmsConfig.org_id == org_id).first()
+    if not cfg:
+        cfg = OrgSmsConfig(
+            org_id=org_id, primary_provider="gateway", fallback_provider=None,
+            eus_enabled=False, eus_auth_mode="oauth", eus_timeout=15,
+            created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
+        )
+        db.add(cfg)
+        db.flush()
+    return cfg
+
+
+@router.get("/sms-provider", response_class=HTMLResponse)
+async def sms_provider_page(
+    request: Request, db: Session = Depends(get_db), _=Depends(require_role("admin")),
+):
+    user = request.state.user
+    org_id = _require_org(user)
+    cfg = db.query(OrgSmsConfig).filter(OrgSmsConfig.org_id == org_id).first()
+    return templates.TemplateResponse(request, "admin/sms_provider.html", {
+        "user": user, "config": cfg, "saved": request.query_params.get("saved"),
+        "error": request.query_params.get("error"),
+    })
+
+
+@router.post("/sms-provider/speichern")
+async def sms_provider_save(
+    request: Request,
+    primary_provider: str = Form("gateway"),
+    fallback_provider: str = Form(""),
+    eus_enabled: str = Form(""),
+    eus_base_url: str = Form(""),
+    eus_auth_mode: str = Form("oauth"),
+    eus_client_id: str = Form(""),
+    eus_client_secret: str = Form(""),
+    secret_changed: str = Form(""),
+    eus_timeout: int = Form(15),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    from app.core.crypto import encrypt_secret
+    from app.services.eus_sms_service import EusSmsError, invalidate_token_cache, normalize_base_url
+
+    user = request.state.user
+    org_id = _require_org(user)
+    providers = {"gateway", "eus"}
+    if primary_provider not in providers or fallback_provider not in providers | {""}:
+        return RedirectResponse("/admin/sms-provider?error=provider", status_code=303)
+    base_url = None
+    if eus_base_url.strip():
+        try:
+            base_url = normalize_base_url(eus_base_url)
+        except EusSmsError:
+            return RedirectResponse("/admin/sms-provider?error=base_url", status_code=303)
+    cfg = _get_or_create_sms_config(db, org_id)
+    cfg.primary_provider = primary_provider
+    cfg.fallback_provider = (
+        fallback_provider if fallback_provider and fallback_provider != primary_provider else None
+    )
+    cfg.eus_enabled = eus_enabled == "1"
+    cfg.eus_base_url = base_url
+    cfg.eus_auth_mode = eus_auth_mode if eus_auth_mode in {"oauth", "basic"} else "oauth"
+    cfg.eus_client_id = eus_client_id.strip() or None
+    cfg.eus_timeout = max(1, min(eus_timeout or 15, 120))
+    cfg.updated_at = datetime.now(UTC)
+    if secret_changed == "1" and eus_client_secret.strip():
+        cfg.eus_client_secret_enc = encrypt_secret(eus_client_secret.strip())
+        write_audit(db, "sms_provider.credentials_rotated", org_id=org_id, user_id=user.id)
+    invalidate_token_cache(org_id)
+    write_audit(db, "sms_provider.updated", org_id=org_id, user_id=user.id)
+    db.commit()
+    return RedirectResponse("/admin/sms-provider?saved=1", status_code=303)
+
+
+@router.post("/sms-provider/test")
+async def sms_provider_test(
+    request: Request, recipient: str = Form(""), db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    from app.services.eus_sms_service import EusSmsError, send_via_eus
+    from app.services.sms_service import resolve_sms_config
+
+    user = request.state.user
+    org_id = _require_org(user)
+    ctx = resolve_sms_config(org_id, db)
+    ok = False
+    message = "EUS ist nicht vollstaendig konfiguriert."
+    try:
+        if not recipient.strip():
+            raise EusSmsError("Keine Testnummer angegeben")
+        if ctx.eus is None:
+            raise EusSmsError(message)
+        await send_via_eus(ctx.eus, recipient.strip(), "Test-SMS von Einsatzcockpit")
+        ok = True
+        message = "Test-SMS wurde ueber EUS versendet."
+    except Exception as exc:  # noqa: BLE001
+        message = f"Fehler: {exc}"
+    write_audit(db, "sms_provider.test", org_id=org_id, user_id=user.id,
+                payload={"ok": ok, "error": None if ok else message[:300]})
+    db.commit()
+    return JSONResponse({"ok": ok, "message": message})
 
 
 def _active_members(db: Session, org_id: int) -> list[Member]:
@@ -545,7 +650,8 @@ async def sms_send_page(
     user = request.state.user
     org_id = _require_org(user)
 
-    from app.routers.ws import is_sms_gateway_connected
+    from app.services.sms_service import resolve_sms_config, sms_available
+    sms_ctx = resolve_sms_config(org_id, db)
     groups = _sms_groups_for_org(db, org_id)
     members = _active_members(db, org_id)
     sms_logs = (
@@ -560,7 +666,8 @@ async def sms_send_page(
         "groups": groups,
         "members": members,
         "sms_logs": sms_logs,
-        "gateway_connected": is_sms_gateway_connected(org_id),
+        "sms_provider_ready": sms_available(org_id, db),
+        "sms_provider_name": sms_ctx.chain[0].upper(),
         "sent": request.query_params.get("sent"),
         "error": request.query_params.get("error"),
     })
@@ -581,9 +688,10 @@ async def sms_send_execute(
     if not text:
         return RedirectResponse("/admin/sms-senden?error=empty", status_code=303)
 
-    from app.routers.ws import is_sms_gateway_connected
-    if not is_sms_gateway_connected(org_id):
-        return RedirectResponse("/admin/sms-senden?error=no_gateway", status_code=303)
+    from app.services.sms_service import resolve_sms_config, sms_available
+    if not sms_available(org_id, db):
+        return RedirectResponse("/admin/sms-senden?error=no_provider", status_code=303)
+    sms_ctx = resolve_sms_config(org_id, db)
 
     form = await request.form()
 
@@ -633,7 +741,7 @@ async def sms_send_execute(
     from app.services.sms_dispatch_service import send_bulk
 
     jobs = [(phone, text) for phone in phones]
-    total, success = await send_bulk(org_id, jobs)
+    total, success = await send_bulk(org_id, jobs, ctx=sms_ctx)
 
     # Protokollieren
     log_entry = SmsLog(
@@ -644,6 +752,7 @@ async def sms_send_execute(
         text=text,
         recipient_count=total,
         success_count=success,
+        provider=",".join(sorted(sms_ctx.providers_used)) or None,
         triggered_by_user_id=user.id,
     )
     db.add(log_entry)

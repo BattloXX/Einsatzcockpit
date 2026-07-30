@@ -2804,8 +2804,8 @@ def buerger_portal(
     org = db.get(FireDept, lage.org_id) if lage.org_id else None
     org_logo = (org.logo_path if org and org.logo_path else None) or "/static/img/Logo-rot.png"
 
-    from app.routers.ws import is_sms_gateway_connected
-    sms_available = bool(lage.org_id and is_sms_gateway_connected(lage.org_id))
+    from app.services.sms_service import sms_available as is_sms_available
+    sms_available = bool(lage.org_id and is_sms_available(lage.org_id, db))
 
     return templates.TemplateResponse(request, "incident_major/public_report.html", {
         "lage": lage,
@@ -2856,15 +2856,14 @@ async def buerger_submit(
     )
 
     # SMS-Verifizierung wenn Gateway verbunden
-    from app.routers.ws import is_sms_gateway_connected
-    from app.services.sms_service import send_sms
+    from app.services.sms_service import send_sms, sms_available
 
     org = db.get(FireDept, lage.org_id) if lage.org_id else None
     phone = reporter_contact.strip()
     org_name_str = org.name if org else "Feuerwehr"
 
-    gw_connected = bool(lage.org_id and is_sms_gateway_connected(lage.org_id))
-    logger.info("Bürger-Portal submit: org_id=%s gateway=%s phone=%s", lage.org_id, gw_connected, _mask_phone(phone))
+    gw_connected = bool(lage.org_id and sms_available(lage.org_id, db))
+    logger.info("Bürger-Portal submit: org_id=%s sms=%s phone=%s", lage.org_id, gw_connected, _mask_phone(phone))
 
     if gw_connected:
         _cleanup_pending_verifications()

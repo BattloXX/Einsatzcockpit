@@ -78,7 +78,7 @@ async def test_dispatch_gsl_alarm_sends_default_text_and_logs():
 
     sent_texts: list[str] = []
 
-    async def fake_send_bulk(org_id, jobs):
+    async def fake_send_bulk(org_id, jobs, ctx=None):
         for _, text in jobs:
             sent_texts.append(text)
         return len(jobs), len(jobs)
@@ -111,7 +111,7 @@ async def test_dispatch_gsl_alarm_custom_text_with_lage_placeholder():
 
     sent_texts: list[str] = []
 
-    async def fake_send_bulk(org_id, jobs):
+    async def fake_send_bulk(org_id, jobs, ctx=None):
         for _, text in jobs:
             sent_texts.append(text)
         return len(jobs), len(jobs)

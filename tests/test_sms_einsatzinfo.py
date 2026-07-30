@@ -275,6 +275,8 @@ async def test_dispatch_skips_no_gateway():
 @pytest.mark.asyncio
 async def test_dispatch_exercise_sends_when_configured():
     """Bei Uebung und send_exercise=True wird Text mit [UEBUNG]-Prafix gesendet."""
+    from app.models.master import AlarmType, OrgSettings
+    from app.models.org_sms import OrgSmsConfig
     from app.services import sms_dispatch_service as svc
 
     org_settings = MagicMock()
@@ -288,13 +290,23 @@ async def test_dispatch_exercise_sends_when_configured():
 
     member = _make_member(1, "+4366099999")
 
+    def _query_side_effect(model):
+        q = MagicMock()
+        if model is OrgSmsConfig:
+            q.filter.return_value.first.return_value = None
+        elif model is OrgSettings:
+            q.filter.return_value.first.return_value = org_settings
+        elif model is AlarmType:
+            q.filter.return_value.first.return_value = alarm_type
+        return q
+
     mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.side_effect = [org_settings, alarm_type]
+    mock_db.query.side_effect = _query_side_effect
     mock_db.get.return_value = MagicMock(timezone="Europe/Vienna")
 
     sent_texts: list[str] = []
 
-    async def fake_send_bulk(org_id, jobs):
+    async def fake_send_bulk(org_id, jobs, ctx=None):
         for _, text in jobs:
             sent_texts.append(text)
         return len(jobs), len(jobs)
@@ -327,7 +339,7 @@ async def test_send_bulk_counts_successes():
     call_results = [True, False, True]
     idx = {"i": 0}
 
-    async def fake_send_sms(org_id, to, text):
+    async def fake_send_sms(org_id, to, text, ctx=None):
         result = call_results[idx["i"]]
         idx["i"] += 1
         return result
@@ -345,7 +357,7 @@ async def test_send_bulk_handles_exception():
     """Ausnahmen beim einzelnen Versand blockieren nicht den Rest."""
     from app.services.sms_dispatch_service import send_bulk
 
-    async def boom_sms(org_id, to, text):
+    async def boom_sms(org_id, to, text, ctx=None):
         raise RuntimeError("Gateway-Fehler")
 
     with patch("app.services.sms_service.send_sms", side_effect=boom_sms):

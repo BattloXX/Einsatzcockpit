@@ -11,10 +11,10 @@
       <p class="page-header__sub">Manuelle SMS an Gruppen, einzelne Mitglieder oder eine Nummer senden.</p>
     </div>
     <div>
-      {% if gateway_connected %}
-      <span class="badge-pill badge-pill--green" style="font-size:.8rem;">&#x25cf; SMS-Gateway verbunden</span>
+      {% if sms_provider_ready %}
+      <span class="badge-pill badge-pill--green" style="font-size:.8rem;">&#x25cf; SMS-Provider {{ sms_provider_name }} bereit</span>
       {% else %}
-      <span class="badge-pill badge-pill--red" style="font-size:.8rem;">&#x25cf; SMS-Gateway nicht verbunden</span>
+      <span class="badge-pill badge-pill--red" style="font-size:.8rem;">&#x25cf; SMS-Versand nicht verfuegbar</span>
       {% endif %}
     </div>
   </div>
@@ -33,8 +33,8 @@
   {% if error == 'empty' %}
   <div class="alert alert--danger">Nachrichtentext darf nicht leer sein.</div>
   {% endif %}
-  {% if error == 'no_gateway' %}
-  <div class="alert alert--danger">Kein SMS-Gateway verbunden. Bitte Gateway-Geraet verbinden.</div>
+  {% if error == 'no_provider' %}
+  <div class="alert alert--danger">SMS-Versand derzeit nicht verfuegbar.</div>
   {% endif %}
   {% if error == 'no_recipients' %}
   <div class="alert alert--danger">Keine Empfaenger ausgewaehlt oder Empfaenger haben keine Telefonnummer.</div>
@@ -134,11 +134,11 @@
 
         <div style="margin-top:16px;">
           <button type="submit" class="btn btn--primary"
-                  {% if not gateway_connected %}disabled{% endif %}>
+                  {% if not sms_provider_ready %}disabled{% endif %}>
             SMS senden
           </button>
-          {% if not gateway_connected %}
-          <span class="text-muted" style="font-size:.85rem;margin-left:10px;">Gateway nicht verbunden</span>
+          {% if not sms_provider_ready %}
+          <span class="text-muted" style="font-size:.85rem;margin-left:10px;">SMS-Versand nicht verfuegbar</span>
           {% endif %}
         </div>
       </form>
@@ -152,7 +152,7 @@
           <li>Mitglieder ohne Telefonnummer erhalten keine SMS.</li>
           <li>Bei Gruppen und Mitglieder-Auswahl werden Duplikate (gleiche Nummer) automatisch eliminiert.</li>
           <li>Jeder Versand wird im Protokoll unten aufgezeichnet.</li>
-          <li>Das SMS-Gateway muss verbunden sein (Geraete-Login).</li>
+          <li>Ein konfigurierter SMS-Provider muss verfuegbar sein.</li>
         </ul>
       </div>
       <div class="chart-box">

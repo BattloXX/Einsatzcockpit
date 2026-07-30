@@ -1,0 +1,74 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}SMS-Versandweg - Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{"label": "SMS-Versandweg"}]) }}{% endblock %}
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header"><div><h1>SMS-Versandweg</h1>
+    <p class="page-header__sub">Primaeren Provider und optionalen Fallback festlegen.</p></div></div>
+  {% if saved %}<div class="alert alert--success">Konfiguration gespeichert.</div>{% endif %}
+  {% if error == "base_url" %}<div class="alert alert--danger">Die EUS-Serveradresse ist ungueltig.</div>{% endif %}
+  {% if error == "provider" %}<div class="alert alert--danger">Die Provider-Auswahl ist ungueltig.</div>{% endif %}
+  <form method="post" action="/admin/sms-provider/speichern" x-data="{ secretChanged: false }">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="secret_changed" :value="secretChanged ? '1' : ''">
+    <div class="chart-box" style="margin-bottom:20px;"><h3>Versandweg</h3>
+      <div class="form-group"><label class="form-label">Primaerer Provider</label>
+        <select class="form-input" name="primary_provider">
+          <option value="gateway" {% if not config or config.primary_provider == "gateway" %}selected{% endif %}>SMS-Gateway</option>
+          <option value="eus" {% if config and config.primary_provider == "eus" %}selected{% endif %}>EUS Message Send API</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Fallback-Provider</label>
+        <select class="form-input" name="fallback_provider">
+          <option value="" {% if not config or not config.fallback_provider %}selected{% endif %}>Kein Fallback (Standard)</option>
+          <option value="gateway" {% if config and config.fallback_provider == "gateway" %}selected{% endif %}>SMS-Gateway</option>
+          <option value="eus" {% if config and config.fallback_provider == "eus" %}selected{% endif %}>EUS Message Send API</option>
+        </select></div>
+      <div class="alert alert--info">EUS wird nur verwendet, wenn der Zugang vollstaendig ausgefuellt und aktiviert ist.</div>
+    </div>
+    <div class="chart-box" style="margin-bottom:20px;"><h3>EUS-Zugangsdaten</h3>
+      <label><input type="checkbox" name="eus_enabled" value="1" {% if config and config.eus_enabled %}checked{% endif %}> EUS aktivieren</label>
+      <div class="form-group"><label class="form-label">Serveradresse</label>
+        <input class="form-input" name="eus_base_url" type="url" value="{{ config.eus_base_url or '' if config else '' }}" placeholder="https://eus.example.at"></div>
+      <div class="form-group"><label class="form-label">Authentifizierung</label>
+        <label><input type="radio" name="eus_auth_mode" value="oauth" {% if not config or config.eus_auth_mode == "oauth" %}checked{% endif %}> OAuth 2.0 (empfohlen)</label>
+        <label><input type="radio" name="eus_auth_mode" value="basic" {% if config and config.eus_auth_mode == "basic" %}checked{% endif %}> Basic Auth</label></div>
+      <div class="form-group"><label class="form-label">Client ID</label>
+        <input class="form-input" name="eus_client_id" value="{{ config.eus_client_id or '' if config else '' }}"></div>
+      <div class="form-group"><label class="form-label">Client Secret</label>
+        <input class="form-input" name="eus_client_secret" type="password" placeholder="unveraendert" @input="secretChanged = true"></div>
+      <div class="form-group"><label class="form-label">Timeout (Sekunden)</label>
+        <input class="form-input" name="eus_timeout" type="number" min="1" max="120" value="{{ config.eus_timeout if config else 15 }}"></div>
+      <button class="btn btn--primary" type="submit">Speichern</button>
+    </div>
+  </form>
+  <div class="chart-box" style="margin-bottom:20px;"><h3>Verbindungstest</h3>
+    <div class="form-group">
+      <input class="form-input" type="tel" id="eus-test-recipient" placeholder="+43 660 1234567">
+      <button class="btn btn--secondary" type="button" onclick="einsatzcockpitEusSmsTest()">Test-SMS senden</button>
+    </div>
+    <div id="eus-test-result" style="margin-top:12px;"></div>
+  </div>
+  <div class="chart-box"><h3>Einrichtung im EUS</h3>
+    <p>Im EUS-Geraete-Login ein Geraetelogin vom Typ <code>MessageSendApi</code> anlegen.
+      Ueber das Schluesselsymbol Client ID und Client Secret kopieren. Das Secret ist nur einmal sichtbar.</p>
+  </div>
+</div>
+<script>
+function einsatzcockpitEusSmsTest() {
+  var result = document.getElementById("eus-test-result");
+  result.textContent = "Sende...";
+  var recipient = document.getElementById("eus-test-recipient").value;
+  var params = new URLSearchParams();
+  params.set("_csrf", "{{ request.state.csrf_token }}");
+  params.set("recipient", recipient);
+  fetch("/admin/sms-provider/test", { method: "POST", body: params })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      result.textContent = d.message;
+      result.style.color = d.ok ? "var(--color-success)" : "var(--color-danger)";
+    })
+    .catch(function () { result.textContent = "Fehler beim Testen."; });
+}
+</script>
+{% endblock %}

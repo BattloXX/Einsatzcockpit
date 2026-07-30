@@ -86,9 +86,9 @@ async def pin_login_submit(request: Request, phone: str = Form(...), db: Session
     if not match or not match.org_id or not match.phone:
         return redirect
 
-    from app.routers.ws import is_sms_gateway_connected
-    if not is_sms_gateway_connected(match.org_id):
-        logger.debug("PIN-Login: kein SMS-Gateway verbunden (org_id=%s)", match.org_id)
+    from app.services.sms_service import sms_available
+    if not sms_available(match.org_id, db):
+        logger.debug("PIN-Login: SMS-Versand nicht verfuegbar (org_id=%s)", match.org_id)
         return redirect
 
     # Alte offene PINs dieses Users entwerten (nur die zuletzt erzeugte gilt).

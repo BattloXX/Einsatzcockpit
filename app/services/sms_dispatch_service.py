@@ -123,19 +123,20 @@ def collect_einsatzinfo_recipients(
     return result
 
 
-async def send_bulk(org_id: int, jobs: list[tuple[str, str]]) -> tuple[int, int]:
+async def send_bulk(org_id: int, jobs: list[tuple[str, str]], ctx=None) -> tuple[int, int]:
     """Sendet SMS an mehrere Empfaenger sequentiell.
 
     jobs: Liste von (telefonnummer, text)-Tupeln.
     Rueckgabe: (anzahl_gesamt, anzahl_erfolgreich).
     """
-    from app.services.sms_service import send_sms
+    from app.services.sms_service import resolve_sms_config, send_sms
+    ctx = ctx or resolve_sms_config(org_id)
 
     total = len(jobs)
     success = 0
     for to, text in jobs:
         try:
-            ok = await send_sms(org_id, to, text)
+            ok = await send_sms(org_id, to, text, ctx=ctx)
             if ok:
                 success += 1
         except Exception as exc:
@@ -162,18 +163,18 @@ async def dispatch_einsatzinfo(
     Gates (kein Versand wenn):
       - einsatzinfo_sms_enabled == False
       - is_exercise == True UND einsatzinfo_sms_send_exercise == False
-      - Kein SMS-Gateway verbunden
+      - Kein SMS-Provider verfuegbar
       - Keine Empfaenger konfiguriert
     """
-    from app.routers.ws import is_sms_gateway_connected  # lazy: Kreisabhaengigkeit
-
-    if not is_sms_gateway_connected(org_id):
-        logger.debug("Kein SMS-Gateway verbunden (org_id=%d) — Einsatzinfo-SMS uebersprungen", org_id)
+    from app.services.sms_service import resolve_sms_config, sms_available
+    if not sms_available(org_id):
+        logger.debug("Kein SMS-Provider verfuegbar (org_id=%d) - Einsatzinfo-SMS uebersprungen", org_id)
         return
 
     db = SessionLocal()
     set_tenant_context(db, None)  # system-level: alle Orgs sichtbar fuer Subqueries
     try:
+        sms_ctx = resolve_sms_config(org_id, db)
         # Org-Einstellungen laden
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
         if not org_settings or not org_settings.einsatzinfo_sms_enabled:
@@ -240,7 +241,7 @@ async def dispatch_einsatzinfo(
 
         # Versenden
         jobs = [(phone, text) for phone in recipients]
-        total, success = await send_bulk(org_id, jobs)
+        total, success = await send_bulk(org_id, jobs, ctx=sms_ctx)
 
         # Protokollieren
         log_entry = SmsLog(
@@ -251,6 +252,7 @@ async def dispatch_einsatzinfo(
             text=text,
             recipient_count=total,
             success_count=success,
+            provider=",".join(sorted(sms_ctx.providers_used)) or None,
             triggered_by_user_id=triggered_by_user_id,
         )
         db.add(log_entry)
@@ -297,15 +299,15 @@ async def dispatch_gsl_alarm(
     Empfaenger: derselbe Basis-Verteiler wie bei der Einsatzinfo-SMS (alarm_type_id=None) —
     bewusst kein eigener Verteiler, da der Sonderalarm alle erreichen soll.
     """
-    from app.routers.ws import is_sms_gateway_connected  # lazy: Kreisabhaengigkeit
-
-    if not is_sms_gateway_connected(org_id):
-        logger.debug("Kein SMS-Gateway verbunden (org_id=%d) — GSL-Alarm-SMS uebersprungen", org_id)
+    from app.services.sms_service import resolve_sms_config, sms_available
+    if not sms_available(org_id):
+        logger.debug("Kein SMS-Provider verfuegbar (org_id=%d) - GSL-Alarm-SMS uebersprungen", org_id)
         return
 
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
+        sms_ctx = resolve_sms_config(org_id, db)
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
         if not org_settings or not org_settings.gsl_alarm_enabled:
             logger.debug("GSL-Alarm-SMS deaktiviert (org_id=%d) — uebersprungen", org_id)
@@ -326,12 +328,13 @@ async def dispatch_gsl_alarm(
             return
 
         jobs = [(phone, text_) for phone in recipients]
-        total, success = await send_bulk(org_id, jobs)
+        total, success = await send_bulk(org_id, jobs, ctx=sms_ctx)
 
         now = datetime.now(UTC)
         db.add(SmsLog(
             org_id=org_id, sent_at=now, source="gsl_alarm", alarm_type_code=None,
             text=text_, recipient_count=total, success_count=success,
+            provider=",".join(sorted(sms_ctx.providers_used)) or None,
             triggered_by_user_id=triggered_by_user_id,
         ))
         write_audit(
