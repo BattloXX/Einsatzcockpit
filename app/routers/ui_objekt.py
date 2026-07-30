@@ -651,9 +651,15 @@ async def dokumente_upload_verarbeiten(
     from app.services.bma_import.bma_sync import hole_oder_erstelle_config, verarbeite_pdf_anlage
     from app.services.objekt_dokument_service import _detect_mime, store_dokument_upload, verarbeite_dokument
     from app.services.objekt_ki_service import analysiere_unklassifizierte_seiten, ki_klassifikation_enabled
-    from app.services.objekt_plan_upload_service import erstelle_objekt_aus_identitaet, finde_passendes_objekt, identifiziere_objekt
+    from app.services.objekt_plan_upload_service import (
+        erstelle_objekt_aus_identitaet,
+        finde_passendes_objekt,
+        identifiziere_objekt,
+    )
 
     org_id = user.org_id
+    if org_id is None:
+        raise HTTPException(status_code=400, detail="Benutzer ist keiner Organisation zugeordnet")
     ki_enabled = bool(org_id and ki_klassifikation_enabled(org_id, db))
     config = hole_oder_erstelle_config(db, org_id)
     ergebnisse, nacharbeiten = [], []
@@ -662,42 +668,67 @@ async def dokumente_upload_verarbeiten(
         name = datei.filename or "dokument.pdf"
         data = await datei.read()
         if not data or len(data) > settings.OBJEKT_PDF_MAX_BYTES or _detect_mime(data) != "application/pdf":
-            meldung = "Leere Datei" if not data else "Datei ist zu groß" if len(data) > settings.OBJEKT_PDF_MAX_BYTES else "Nur PDF-Dateien sind erlaubt"
+            meldung = (
+                "Leere Datei" if not data
+                else "Datei ist zu groß" if len(data) > settings.OBJEKT_PDF_MAX_BYTES
+                else "Nur PDF-Dateien sind erlaubt"
+            )
             ergebnisse.append({"dateiname": name, "ok": False, "meldung": meldung})
             continue
         datenblatt = ist_bma_datenblatt(data)
         try:
             parsed = parse_datenblatt_pdf(data) if datenblatt else None
             if not datenblatt and not ki_enabled:
-                ergebnisse.append({"dateiname": name, "ok": False, "meldung": "Für diese Datei wird die KI-Klassifikation benötigt."})
+                ergebnisse.append({
+                    "dateiname": name,
+                    "ok": False,
+                    "meldung": "Für diese Datei wird die KI-Klassifikation benötigt.",
+                })
                 continue
             identitaet = None if datenblatt else await identifiziere_objekt(data, name, org_id)
             await datei.seek(0)
             with db.begin_nested():
                 neu = False
+                quelle: str | None
                 if datenblatt:
+                    if parsed is None:
+                        raise ValueError("BMA-Datenblatt konnte nicht gelesen werden")
                     satz, status = verarbeite_pdf_anlage(db, org_id, config, parsed["anlage"], parsed["kontakte"], user)
                     bma_queue_relevant = bma_queue_relevant or status in ("vorschlag", "offen")
                     objekt = db.get(Objekt, satz.objekt_id) if satz.objekt_id else None
                     if objekt is None:
                         # Reguläres Verlassen committet absichtlich den offenen Importsatz.
-                        ergebnisse.append({"dateiname": name, "ok": True, "meldung": "Manuelle Zuordnung in der BMA-Queue erforderlich"})
+                        ergebnisse.append({
+                            "dateiname": name,
+                            "ok": True,
+                            "meldung": "Manuelle Zuordnung in der BMA-Queue erforderlich",
+                        })
                         continue
+                    quelle = "bma_datenblatt"
                 else:
+                    if identitaet is None:
+                        raise ValueError("Objektidentität konnte nicht ermittelt werden")
                     objekt = finde_passendes_objekt(db, org_id, identitaet)
                     neu = objekt is None
                     if objekt is None:
                         objekt = erstelle_objekt_aus_identitaet(db, user, identitaet)
                     status = "neu" if neu else "ergaenzt"
+                    quelle = identitaet.get("quelle")
                 dokument = await store_dokument_upload(datei, objekt, user, db)
                 objekt_id, dokument_id = objekt.id, dokument.id
                 write_objekt_change(db, objekt_id, objekt.org_id, "dokumente", "dokument_upload",
                                     before=None, after="1 Datei (Upload ohne Objekt-Auswahl)", user_id=user.id)
                 write_audit(db, "objekt.dokument_uploaded", org_id=org_id, user_id=user.id,
                             entity_type="objekt", entity_id=objekt_id,
-                            payload={"anzahl": 1, "neu_erstellt": neu, "quelle": "bma_datenblatt" if datenblatt else identitaet.get("quelle")})
+                            payload={
+                                "anzahl": 1,
+                                "neu_erstellt": neu,
+                                "quelle": quelle,
+                            })
                 nacharbeiten.append((dokument_id, objekt_id, ki_enabled and not datenblatt,
-                                     objekt.strasse if neu else None, objekt.hausnummer if neu else None, objekt.ort if neu else None))
+                                     objekt.strasse if neu else None,
+                                     objekt.hausnummer if neu else None,
+                                     objekt.ort if neu else None))
                 ergebnisse.append({"dateiname": name, "ok": True, "meldung": status,
                                    "objekt_id": objekt_id, "dokument_id": dokument_id})
         except (HTTPException, ValueError) as exc:

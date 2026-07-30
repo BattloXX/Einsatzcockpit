@@ -53,6 +53,7 @@ from __future__ import annotations
 import io
 import re
 import unicodedata
+from typing import Any
 
 # Bekannte Feld-Label aus dem Datenblatt (Reihenfolge fuer die Regex-Alternation
 # nach Laenge absteigend, damit z.B. "Tel.Mobil Privat:" nicht durch einen
@@ -96,10 +97,13 @@ _TELEFON_PRAEFIXE = (
     ("mobil_privat", "Mobil privat"),
     ("pager", "Pager"),
 )
+_UMLAUT_TRANSLATION: dict[str, str | int | None] = {
+    "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss",
+}
 
 
 def namens_slug(name: str) -> str:
-    name = name.translate(str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"}))
+    name = name.translate(str.maketrans(_UMLAUT_TRANSLATION))
     name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
     return re.sub(r"[^a-z0-9]+", "-", name).strip("-")[:60] or "unbenannt"
 
@@ -109,7 +113,8 @@ def baue_kontakt_extern_id(anlage_extern_id: str, art: str, name: str) -> str:
 
 
 def _mit_stabilen_ids(bloecke: list[dict], anlage_extern_id: str) -> list[dict]:
-    ergebnis, zaehler = [], {}
+    ergebnis: list[dict] = []
+    zaehler: dict[str, int] = {}
     for block in bloecke:
         kontakt = _baue_kontakt(block)
         if kontakt is None:
@@ -289,8 +294,9 @@ def parse_datenblatt_text(text: str) -> dict:
 
     aktualisiert_match = _AKTUALISIERT_RE.search(text)
 
-    anlage = {
-        "extern_id": f"pdf:{bma_nummer}",
+    anlage_extern_id = f"pdf:{bma_nummer}"
+    anlage: dict[str, Any] = {
+        "extern_id": anlage_extern_id,
         "bma_nummer": bma_nummer,
         "bezeichnung": stammdaten.get("Standort:") or bezeichnung_kopf,
         "strasse": strasse,
@@ -312,7 +318,7 @@ def parse_datenblatt_text(text: str) -> dict:
         "datenblatt_aktualisiert_am": aktualisiert_match.group(1) if aktualisiert_match else None,
     }
 
-    kontakte = _mit_stabilen_ids(_extrahiere_kontaktbloecke(kontakt_zeilen), anlage["extern_id"])
+    kontakte = _mit_stabilen_ids(_extrahiere_kontaktbloecke(kontakt_zeilen), anlage_extern_id)
 
     return {"anlage": anlage, "kontakte": kontakte}
 

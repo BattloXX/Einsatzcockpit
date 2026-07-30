@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from types import SimpleNamespace
 
 from sqlalchemy.orm import Session
 
@@ -162,6 +161,8 @@ def _sync_bma_block(db: Session, objekt: Objekt, anlage: dict, user_id: int | No
 
 def wende_anlage_auf_objekt_an(db: Session, satz: BmaImportSatz, objekt: Objekt,
                                anlage: dict, kontakte: list[dict], user_id: int | None) -> tuple[list[str], bool, bool]:
+    if objekt.org_id is None:
+        raise ValueError("Zielobjekt hat keine Organisation")
     _stelle_kontaktart_sicher(db, objekt.org_id)
     identitaet = _baue_identitaet(anlage)
     felder = {k: identitaet.get(k) for k in ("name", "strasse", "hausnummer", "plz", "ort") if identitaet.get(k)}
@@ -196,7 +197,11 @@ def verarbeite_pdf_anlage(db: Session, org_id: int, config: OrgBmaImportConfig,
     satz.zuletzt_geaendert_am = jetzt
     db.flush()
 
-    objekt = db.get(Objekt, satz.objekt_id) if satz.objekt_id else finde_passendes_objekt(db, org_id, _baue_identitaet(anlage))
+    objekt = (
+        db.get(Objekt, satz.objekt_id)
+        if satz.objekt_id
+        else finde_passendes_objekt(db, org_id, _baue_identitaet(anlage))
+    )
     if objekt is None and config.auto_anlegen:
         objekt = erstelle_objekt_aus_identitaet(db, user, _baue_identitaet(anlage))
         satz.zuordnung = BMA_ZUORDNUNG_AUTO
@@ -237,12 +242,22 @@ def baue_diff(satz: BmaImportSatz, objekt: Objekt | None) -> dict:
 
 
 def uebernehme_vorschlag(db: Session, satz: BmaImportSatz, user) -> Objekt:
-    from app.services.objekt_service import erstelle_arbeitskopie, uebernimm_arbeitskopie
+    from app.services.objekt_service import erstelle_arbeitskopie, hole_arbeitskopie, uebernimm_arbeitskopie
     basis = db.get(Objekt, satz.objekt_id)
     if basis is None:
         raise ValueError("Kein Zielobjekt")
     rohdaten = json.loads(satz.rohdaten_json or "{}")
-    ziel = basis if basis.status == OBJEKT_STATUS_ENTWURF else erstelle_arbeitskopie(db, basis, user.id)
+    ziel: Objekt | None
+    if basis.status == OBJEKT_STATUS_ENTWURF:
+        ziel = basis
+    elif basis.status == OBJEKT_STATUS_UEBERARBEITUNG:
+        ziel = hole_arbeitskopie(db, basis)
+        if ziel is None:
+            raise ValueError("Objekt ist in Ueberarbeitung, aber die Arbeitskopie fehlt")
+    else:
+        ziel = erstelle_arbeitskopie(db, basis, user.id)
+    if ziel is None:  # Typ-Narrowing; der Ueberarbeitungsfall wirft oben bereits gezielt.
+        raise ValueError("Keine Arbeitskopie gefunden")
     wende_anlage_auf_objekt_an(db, satz, ziel, rohdaten.get("anlage") or {}, rohdaten.get("kontakte") or [], user.id)
     if ziel is not basis:
         # SessionLocal verwendet autoflush=False. Neue Kontakte muessen geschrieben

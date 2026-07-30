@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
-from app.models.user import User
 from app.models.bma_import import BMA_SATZ_AKTIV, BMA_ZUORDNUNG_OFFEN, BmaImportSatz
 from app.models.objekt import OBJEKT_STATUS_ARCHIVIERT, Objekt
+from app.models.user import User
 
 router = APIRouter()
 
@@ -26,14 +26,17 @@ def _queue_context(request: Request, db: Session, user: User) -> dict:
         Objekt.id.in_(objekt_ids)).all()} if objekt_ids else {}
     vorschlaege = []
     for satz in saetze:
-        objekt = objekte.get(satz.objekt_id)
+        objekt = objekte.get(satz.objekt_id) if satz.objekt_id is not None else None
         if ist_offener_vorschlag(satz, objekt):
             vorschlaege.append((satz, objekt, baue_diff(satz, objekt)))
     return {
         "request": request, "user": user, "vorschlaege": vorschlaege,
         "nicht_zugeordnet": [s for s in saetze if s.status == BMA_SATZ_AKTIV and s.zuordnung == BMA_ZUORDNUNG_OFFEN],
         "verschwunden": [],
-        "objekte_zur_auswahl": db.query(Objekt).filter(Objekt.status != OBJEKT_STATUS_ARCHIVIERT).order_by(Objekt.name).all(),
+        "objekte_zur_auswahl": db.query(Objekt)
+        .filter(Objekt.status != OBJEKT_STATUS_ARCHIVIERT)
+        .order_by(Objekt.name)
+        .all(),
     }
 
 

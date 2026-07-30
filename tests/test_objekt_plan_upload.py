@@ -541,6 +541,63 @@ def test_bma_vorschlag_uebernehmen_fuegt_fehlenden_kontakt_ein(client, plan_uplo
         db.close()
 
 
+def test_bma_vorschlag_uebernehmen_nutzt_vorhandene_arbeitskopie(client, plan_upload_setup):
+    """Queue-Eintraege bleiben auch waehrend einer laufenden Ueberarbeitung uebernehmbar."""
+    from app.db import SessionLocal
+    from app.models.bma_import import BMA_ZUORDNUNG_AUTO, BmaImportSatz
+    from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, ObjektKontakt
+    from app.models.user import User
+    from app.services.objekt_service import erstelle_arbeitskopie
+
+    org_id, username = plan_upload_setup
+    extern_id = f"pdf:{uuid.uuid4().hex[:8]}"
+    kontakt_extern_id = f"{extern_id}:bma_alarmperson:eva"
+    rohdaten = {
+        "anlage": {"extern_id": extern_id, "bezeichnung": "BMA aus Queue", "bma_nummer": "815"},
+        "kontakte": [{"extern_id": kontakt_extern_id, "name": "Eva Beispiel",
+                       "art": "bma_alarmperson", "telefone": ["+43 555 815"]}],
+    }
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = db.query(User).filter(User.username == username).one()
+        objekt = Objekt(org_id=org_id, nummer=1, name="Bereits in Bearbeitung",
+                        status=OBJEKT_STATUS_FREIGEGEBEN)
+        db.add(objekt)
+        db.flush()
+        kopie = erstelle_arbeitskopie(db, objekt, user.id)
+        kopie.informationen = "Manuelle Aenderung bleibt erhalten"
+        satz = BmaImportSatz(org_id=org_id, extern_id=extern_id, objekt_id=objekt.id,
+                             rohdaten_json=json.dumps(rohdaten), quell_hash="neu",
+                             bestaetigt_hash=None, zuordnung=BMA_ZUORDNUNG_AUTO)
+        db.add(satz)
+        db.commit()
+        satz_id, objekt_id, kopie_id = satz.id, objekt.id, kopie.id
+    finally:
+        db.close()
+
+    _login_http(client, username, "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(f"/objekte/bma-import/{satz_id}/uebernehmen", data={"_csrf": csrf})
+    assert r.status_code == 200, r.text[:500]
+    assert "Keine offenen Vorschl" in r.text
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.get(Objekt, objekt_id)
+        assert objekt.status == OBJEKT_STATUS_FREIGEGEBEN
+        assert objekt.name == "BMA aus Queue"
+        assert objekt.informationen == "Manuelle Aenderung bleibt erhalten"
+        assert db.get(Objekt, kopie_id) is None
+        assert db.query(ObjektKontakt).filter(
+            ObjektKontakt.objekt_id == objekt_id,
+            ObjektKontakt.extern_id == kontakt_extern_id,
+        ).one_or_none() is not None
+    finally:
+        db.close()
+
+
 def test_bma_upload_vorschlag_verlinkt_ergebnisseite_mit_queue(client, plan_upload_setup):
     from app.db import SessionLocal
 
