@@ -493,6 +493,21 @@ async def session_middleware(request: Request, call_next):
                 request.state.qr_incident_id = qr_incident_id
                 request.state.qr_lage_id = qr_lage_id
                 request.state.is_device = is_device
+                fcm_token = request.query_params.get("fcm_token")
+                if user is not None and fcm_token:
+                    from app.services.push_service import upsert_fcm_token
+
+                    upsert_fcm_token(
+                        db,
+                        user_id=user.id,
+                        token=fcm_token,
+                        device_token_id=device_token_id if is_device else None,
+                    )
+                    # request.state.user bleibt nach db.close() in den Routen
+                    # in Gebrauch; der Commit darf dessen geladene Rollen nicht
+                    # ablaufen lassen.
+                    db.expire_on_commit = False
+                    db.commit()
             except Exception:
                 # Transienter DB-Fehler darf anonyme Routen nicht blockieren.
                 logger.exception("session_middleware: User-Lookup fehlgeschlagen")

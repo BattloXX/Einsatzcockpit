@@ -106,6 +106,23 @@ def test_login_mit_fcm_token_legt_token_ohne_device_id_an(client, setup_db):
         db.close()
 
 
+def test_session_request_mit_fcm_token_legt_token_fuer_user_an(client, setup_db):
+    user_id = _make_user("fcm_session_handoff")
+    assert _post_login(client, "fcm_session_handoff", "").status_code == 302
+
+    response = client.get("/", params={"fcm_token": "fcm-session-handoff"})
+    assert response.status_code == 200
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.query(FcmToken).filter_by(token="fcm-session-handoff").one()
+        assert row.user_id == user_id
+        assert row.device_token_id is None
+    finally:
+        db.close()
+
+
 def test_fcm_token_wird_bei_erneutem_login_aktualisiert_nicht_dupliziert(client, setup_db):
     first_user_id = _make_user("fcm_upsert_first")
     second_user_id = _make_user("fcm_upsert_second")
