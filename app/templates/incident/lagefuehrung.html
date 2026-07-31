@@ -3,6 +3,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
 <link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
+<link rel="stylesheet" href="/static/css/MarkerCluster.Default.css">
 {% endblock %}
 {% block content %}
 <div class="page-content">
@@ -43,13 +44,13 @@
   <div class="objekt-karte-layout lft-karte-layout">
     <button type="button" id="lft-sidebar-toggle" class="lft-sidebar-toggle" aria-expanded="false" aria-controls="lft-sidebar">🧰 Werkzeuge</button>
     <aside class="card lft-sidebar" id="lft-sidebar" style="padding:12px;">
-      <div class="lft-tabs">
-        <button type="button" class="lft-tab lft-tab--aktiv" data-lft-tab="layer">Layer</button>
-        <button type="button" class="lft-tab" id="lft-tab-taktik" data-lft-tab="taktik"
+      <div class="lft-tabs" role="tablist">
+        <button type="button" class="lft-tab lft-tab--aktiv" id="lft-tab-layer" data-lft-tab="layer" role="tab" aria-selected="true" aria-controls="lft-panel-layer" tabindex="0">Layer</button>
+        <button type="button" class="lft-tab" role="tab" aria-selected="false" aria-controls="lft-panel-taktik" tabindex="-1" id="lft-tab-taktik" data-lft-tab="taktik"
                 {% if not can_edit %}hidden{% endif %}>Taktik</button>
       </div>
 
-      <div class="lft-tab-panel" data-lft-panel="layer">
+      <div class="lft-tab-panel" id="lft-panel-layer" data-lft-panel="layer" role="tabpanel" aria-labelledby="lft-tab-layer">
         <div class="lft-layer-gruppe">
           <label><input type="checkbox" id="lft-layer-einsatzort" checked> 📍 Einsatzort</label>
           <label><input type="checkbox" id="lft-layer-fahrzeuge" checked> 🚒 Fahrzeuge</label>
@@ -96,6 +97,7 @@
             <option value="ortho">Orthofoto (basemap.at)</option>
           </select>
         </div>
+        <p id="lft-karte-status" class="lft-karte-status">Fahrzeugpositionen werden geladen ...</p>
 
         <div class="lft-werkzeuge">
           <label class="form-label">Lage-Replay</label>
@@ -182,17 +184,30 @@
         </details>
       </div>
 
-      <div class="lft-tab-panel" data-lft-panel="taktik" hidden>
-        <div class="lft-tz-subtabs">
-          <button type="button" class="lft-tz-subtab lft-tz-subtab--aktiv" data-lft-tzsub="symbole">Symbole</button>
-          <button type="button" class="lft-tz-subtab" data-lft-tzsub="flaechen">Flächen</button>
+      <div class="lft-tab-panel" id="lft-panel-taktik" data-lft-panel="taktik" role="tabpanel" aria-labelledby="lft-tab-taktik" hidden>
+        <div class="lft-tz-subtabs" role="tablist">
+          <button type="button" class="lft-tz-subtab lft-tz-subtab--aktiv" id="lft-tz-tab-symbole" data-lft-tzsub="symbole" role="tab" aria-selected="true" aria-controls="lft-tz-picker" tabindex="0">Symbole</button>
+          <button type="button" class="lft-tz-subtab" id="lft-tz-tab-flaechen" data-lft-tzsub="flaechen" role="tab" aria-selected="false" aria-controls="lft-flaechen-picker" tabindex="-1">Flächen</button>
         </div>
-        <div id="lft-tz-picker" class="lft-tz-picker" data-lft-tzsub-panel="symbole"></div>
-        <div id="lft-flaechen-picker" class="lft-tz-picker" data-lft-tzsub-panel="flaechen" hidden></div>
+        <div id="lft-tz-picker" class="lft-tz-picker" data-lft-tzsub-panel="symbole" role="tabpanel" aria-labelledby="lft-tz-tab-symbole"></div>
+        <div id="lft-flaechen-picker" class="lft-tz-picker" data-lft-tzsub-panel="flaechen" role="tabpanel" aria-labelledby="lft-tz-tab-flaechen" hidden></div>
       </div>
     </aside>
     <div class="lft-karte-wrap">
       <div id="lft-karte" class="objekt-karte-canvas card"></div>
+      <div class="lft-karte-aktionen">
+        <button type="button" id="lft-karte-gesamtlage" class="btn btn--ghost btn--sm">Gesamtlage</button>
+        <button type="button" id="lft-karte-einsatzort" class="btn btn--ghost btn--sm">Einsatzort</button>
+        <span id="lft-fallback-hinweis" class="lft-fallback-hinweis" hidden>Keine Einsatzort-Koordinate vorhanden</span>
+      </div>
+      <div id="lft-platzierung-leiste" class="lft-platzierung-leiste" role="status" aria-live="polite" hidden>
+        <span id="lft-platzierung-text"></span>
+        <button type="button" id="lft-platzierung-abbrechen" class="btn btn--ghost btn--sm">Abbrechen (Esc)</button>
+      </div>
+      <details id="lft-legende" class="lft-legende" hidden>
+        <summary>Legende</summary>
+        <div id="lft-legende-inhalt" class="lft-legende__inhalt"></div>
+      </details>
       <div id="lft-replay-panel" class="lft-replay-panel" hidden>
         <div class="lft-replay-panel__zeile">
           <span>⏱ Replay</span>
@@ -204,6 +219,10 @@
           <input type="range" id="lft-replay-slider" class="lft-replay-panel__slider" min="0" max="0" value="0">
         </div>
       </div>
+      <div id="lft-karte-lade" class="lft-karte-lade" role="status" aria-live="polite">
+        <span class="lft-karte-lade__spinner" aria-hidden="true"></span>
+        Karte wird geladen ...
+      </div>
     </div>
   </div>
 </div>
@@ -211,6 +230,7 @@
 {% block scripts %}
 <script src="/static/js/leaflet.min.js"></script>
 <script src="/static/js/leaflet-geoman.min.js"></script>
+<script src="/static/js/leaflet.markercluster.js"></script>
 <script src="/static/js/lagefuehrung.js?v={{ ASSET_VERSION }}"></script>
 <script>
   initLagefuehrungKarte({

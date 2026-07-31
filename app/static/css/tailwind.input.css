@@ -44,6 +44,8 @@
   --orange:   #e67e22;
   --danger:   #d83030;
   --blue:     #1877f2;
+  --accent-light: #93c5fd;
+  --accent-light-bg: rgba(147,197,253,.15);
 
   /* Legacy-Aliasse fuer bestehende Klassen-Regeln */
   --bg:        var(--surface);
@@ -1679,11 +1681,11 @@ button.htmx-request,
 
 /* ── Objektverwaltung (PR4): Lagekarte + Symbole ────────────────────────── */
 .objekt-karte-layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }
-.objekt-karte-canvas { height: calc(100vh - 220px); min-height: 420px; border-radius: 8px; overflow: hidden; }
+.objekt-karte-canvas { height: calc(100vh - 220px); height: calc(100dvh - 220px); min-height: 420px; border-radius: 8px; overflow: hidden; }
 .objekt-karte-canvas--klein { height: 380px; min-height: 380px; }
 @media (max-width: 760px) {
   .objekt-karte-layout { grid-template-columns: 1fr; }
-  .objekt-karte-canvas { height: 60vh; }
+  .objekt-karte-canvas { height: 60vh; height: 60dvh; }
 }
 .oks-palette { display: flex; flex-direction: column; gap: 4px; max-height: calc(100vh - 380px); overflow-y: auto; }
 .oks-palette__eintrag {
@@ -1798,12 +1800,16 @@ button.htmx-request,
   cursor: pointer;
   font-family: inherit;
 }
-.lft-tab--aktiv { background: rgba(147, 197, 253, .15); color: #93c5fd; }
+.lft-tab--aktiv { background: var(--accent-light-bg); color: var(--accent-light); }
 .lft-tab-panel { display: flex; flex-direction: column; gap: 14px; }
 .lft-tab-panel[hidden] { display: none; }
 .lft-layer-gruppe { display: flex; flex-direction: column; gap: 6px; }
 .lft-layer-gruppe label { display: flex; align-items: center; gap: 8px; font-size: .82rem; cursor: pointer; }
 .lft-basislayer { display: flex; flex-direction: column; gap: 4px; }
+.lft-karte-status { margin: 0; font-size: .72rem; color: var(--text-muted); }
+.lft-karte-status--fehler { color: var(--red-light); }
+.lft-fahrzeuge__stand { font-size: .68rem; color: var(--text-muted); white-space: nowrap; }
+.lft-fahrzeuge__stand--veraltet { color: var(--red-light); font-weight: 600; }
 .lft-chronologie { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px; }
 .lft-chronologie__title { font-size: .78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; cursor: pointer; user-select: none; }
 .lft-chronologie__liste {
@@ -1839,7 +1845,7 @@ button.htmx-request,
 .lft-objekt-icon { position: relative; display: inline-block; }
 .lft-objekt-icon__warn {
   position: absolute; top: -6px; right: -9px;
-  background: #e53e3e; color: #fff; border-radius: 50%;
+  background: var(--red-light); color: #fff; border-radius: 50%;
   width: 15px; height: 15px; font-size: 10px; line-height: 15px; text-align: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
 }
@@ -1939,7 +1945,7 @@ button.htmx-request,
   background: rgba(255, 255, 255, .08);
   border: 1px solid var(--border);
 }
-.lft-presence__chip--self { border-color: #93c5fd; color: #93c5fd; }
+.lft-presence__chip--self { border-color: var(--accent-light); color: var(--accent-light); }
 .lft-presence__grant {
   font-size: .68rem;
   border: none;
@@ -2009,6 +2015,39 @@ button.htmx-request,
 
 /* ── Lageführung Phase 3: Lage-Replay, Momentaufnahme-Chronologie ─────────── */
 .lft-karte-wrap { position: relative; }
+.lft-karte-aktionen { position:absolute;top:12px;right:12px;z-index:500;display:flex;gap:6px;align-items:center;flex-wrap:wrap; }
+.lft-fallback-hinweis { padding:4px 8px;border-radius:6px;background:rgba(20,20,20,.88);color:#fff;font-size:.72rem; }
+.lft-platzierung-leiste { position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:520;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:rgba(20,20,20,.92);color:#fff; }
+.lft-platzierung-leiste[hidden] { display:none; }
+.lft-werkzeug--aktiv { outline:2px solid var(--accent-light);outline-offset:2px;background:var(--accent-light-bg); }
+.lft-legende { position:absolute;right:12px;bottom:12px;z-index:490;max-width:220px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:rgba(20,20,20,.9);color:#fff;font-size:.75rem; }
+.lft-legende[hidden] { display:none; }
+.lft-legende summary { cursor:pointer;font-weight:600; }
+.lft-legende__inhalt { display:flex;flex-direction:column;gap:5px;margin-top:6px; }
+.lft-legende__item { display:flex;align-items:center;gap:7px; }
+.lft-legende__item img { width:24px;height:24px;background:#fff;border-radius:3px; }
+.lft-legende__swatch { width:18px;height:18px;border:2px solid;border-radius:4px;flex-shrink:0; }
+.lft-karte-lade {
+  position: absolute;
+  inset: 0;
+  z-index: 510;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 8px;
+  background: rgba(20, 20, 20,.72);
+  color: #fff;
+}
+.lft-karte-lade[hidden] { display: none; }
+.lft-karte-lade__spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(255,255,255,.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
 .lft-replay-panel {
   position: absolute;
   left: 12px;
@@ -2044,7 +2083,7 @@ button.htmx-request,
   border: 1px solid var(--border);
   flex-shrink: 0;
 }
-.lft-chronologie__snapshot:hover { color: #93c5fd; }
+.lft-chronologie__snapshot:hover { color: var(--accent-light); }
 
 /* ── Lageführung: Flächen-Palette (Taktik-Subtabs), Text-Werkzeug, Beschriftungsfeld ── */
 .lft-tz-subtabs { display: flex; gap: 6px; margin-bottom: 8px; }
@@ -2059,7 +2098,7 @@ button.htmx-request,
   cursor: pointer;
   font-family: inherit;
 }
-.lft-tz-subtab--aktiv { background: rgba(147, 197, 253, .15); color: #93c5fd; }
+.lft-tz-subtab--aktiv { background: var(--accent-light-bg); color: var(--accent-light); }
 [data-lft-tzsub-panel][hidden] { display: none; }
 
 .lft-flaechen-picker__grid { display: flex; flex-direction: column; gap: 6px; }
@@ -2116,6 +2155,8 @@ button.htmx-request,
 @media (max-width: 760px) {
   .lft-banner { flex-direction: column; align-items: flex-start; }
   .lft-tz-picker__grid { grid-template-columns: 1fr; }
+  .lft-platzierung-leiste { left:8px;right:8px;transform:none;flex-wrap:wrap; }
+  .lft-karte-aktionen { top:8px;right:8px;left:8px; }
 }
 
 /* ── Mobile: Werkzeuge (Layer/Taktik) als Bottom-Sheet (Konzept Kap. 5.2) ─────
@@ -2128,7 +2169,9 @@ button.htmx-request,
 .lft-sidebar-toggle { display: none; }
 @media (max-width: 760px) {
   .lft-karte-layout { position: relative; }
-  .lft-karte-layout .objekt-karte-canvas { height: calc(100vh - 260px); min-height: 320px; }
+  .lft-karte-layout .objekt-karte-canvas { height: calc(100vh - 260px); height: calc(100dvh - 260px); min-height: 320px; }
+  .lft-tz-picker__item, .lft-tz-subtab, .lft-tab, .lft-flaechen-picker__item,
+  .lft-fahrzeuge__item .btn--xs { min-height:44px; }
   .lft-karte-layout .lft-sidebar {
     position: fixed;
     left: 0;

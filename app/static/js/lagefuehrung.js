@@ -40,6 +40,32 @@
     });
   }
 
+  function showToast(msg, type) {
+    type = ["info", "warn", "error"].indexOf(type) !== -1 ? type : "info";
+    var el = document.querySelector('[x-data="appState()"]');
+    if (el && window.Alpine) {
+      Alpine.$data(el).addToast(msg, type);
+      return;
+    }
+    console.warn(msg);
+  }
+
+  function fehlerText(err, fallback) {
+    if (err && err.status === 409 && err.message) { return err.message; }
+    if (err && err.status === 403) { return "Keine Berechtigung fuer diese Aktion."; }
+    return fallback + (err && err.message ? " (" + err.message + ")" : "");
+  }
+
+  function relativZeit(isoString) {
+    if (!isoString) { return "kein Positionsstand"; }
+    var sekunden = Math.max(0, Math.floor((Date.now() - new Date(isoString).getTime()) / 1000));
+    if (sekunden < 10) { return "gerade eben"; }
+    if (sekunden < 60) { return "vor " + sekunden + " s"; }
+    if (sekunden < 3600) { return "vor " + Math.floor(sekunden / 60) + " Min"; }
+    if (sekunden < 86400) { return "vor " + Math.floor(sekunden / 3600) + " Std"; }
+    return new Date(isoString).toLocaleString("de-AT");
+  }
+
   function divIcon(html, anchor) {
     return L.divIcon({ html: html, className: "lft-divicon", iconSize: null, iconAnchor: anchor });
   }
@@ -48,10 +74,10 @@
   // manuell hinzugefügte Fahrzeuge) zeigt jedes Fahrzeug das generische
   // "feuerwehrfahrzeug"-Symbol. Statusfarbe bleibt als Ring um das Symbol sichtbar.
   var VEHICLE_ICON_FALLBACK = "feuerwehrfahrzeug";
-  function vehicleIcon(color, zeichenKey) {
+  function vehicleIcon(color, zeichenKey, label) {
     var key = zeichenKey || VEHICLE_ICON_FALLBACK;
     return divIcon(
-      '<div class="lft-vehicle-tz" style="border-color:' + color + '"><img src="' + tzIconUrl(key) + '" alt=""></div>',
+      '<div class="lft-vehicle-tz" title="' + escapeHtml(label || "Fahrzeug") + '" style="border-color:' + color + '"><img src="' + tzIconUrl(key) + '" alt="' + escapeHtml(label || "Fahrzeug") + '"></div>',
       [16, 16]
     );
   }
@@ -74,6 +100,50 @@
 
   window.initLagefuehrungKarte = function (opts) {
     var apiBase = "/einsatz/" + opts.incidentId + "/lagefuehrung";
+    var tzManifestPromise = fetchJson("/static/tz/tz-manifest.json").catch(function () { return null; });
+    var karteStatus = document.getElementById("lft-karte-status");
+    var karteLade = document.getElementById("lft-karte-lade");
+    var initialLadevorgaenge = 2;
+    var legendeRaf = null;
+    function planeLegendeUpdate() {
+      if (legendeRaf != null) { return; }
+      legendeRaf = requestAnimationFrame(function () { legendeRaf = null; renderLiveLegende(); });
+    }
+    function initialLadenFertig() {
+      initialLadevorgaenge -= 1;
+      if (initialLadevorgaenge <= 0 && karteLade) { karteLade.hidden = true; }
+    }
+    function renderLiveLegende() {
+      var details = document.getElementById("lft-legende");
+      var inhalt = document.getElementById("lft-legende-inhalt");
+      if (!details || !inhalt) { return; }
+      var symbolKeys = {};
+      var flaechenKeys = {};
+      letzteFahrzeuge.forEach(function (v) { if (v.zeichen_key) { symbolKeys[v.zeichen_key] = true; } });
+      Object.keys(featureLayers).forEach(function (id) {
+        var f = featureLayers[id].lft_feature;
+        if (!f) { return; }
+        if (f.zeichen_key) { symbolKeys[f.zeichen_key] = true; }
+        if (f.props && f.props.flaeche_key) { flaechenKeys[f.props.flaeche_key] = true; }
+      });
+      tzManifestPromise.then(function (manifest) {
+        var items = [];
+        if (!manifest) { details.hidden = true; return; }
+        (manifest.symbole || []).forEach(function (s) {
+          if (symbolKeys[s.id]) { items.push('<div class="lft-legende__item"><img src="' + s.datei + '" alt=""><span>' + escapeHtml(s.name) + "</span></div>"); }
+        });
+        (manifest.flaechen || []).forEach(function (f) {
+          if (flaechenKeys[f.id]) {
+            items.push('<div class="lft-legende__item"><span class="lft-legende__swatch" style="background:' +
+              escapeHtml(f.hatchColor || f.stroke) + ";border-color:" + escapeHtml(f.stroke) + '"></span><span>' +
+              escapeHtml(f.name) + "</span></div>");
+          }
+        });
+        inhalt.innerHTML = items.join("");
+        details.hidden = replayAktiv || !items.length;
+      });
+    }
+    setTimeout(function () { if (karteLade) { karteLade.hidden = true; } }, 8000);
     var karte = L.map(opts.elementId, { zoomControl: true });
 
     var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -85,10 +155,15 @@
     );
     osm.addTo(karte);
 
-    if (opts.incidentLat != null && opts.incidentLng != null) {
+    var hatEinsatzortKoordinate = opts.incidentLat != null && opts.incidentLng != null;
+    if (hatEinsatzortKoordinate) {
       karte.setView([opts.incidentLat, opts.incidentLng], 16);
     } else {
       karte.setView([47.35, 9.75], 13);
+      var fallbackHinweis = document.getElementById("lft-fallback-hinweis");
+      var einsatzortBtn = document.getElementById("lft-karte-einsatzort");
+      if (fallbackHinweis) { fallbackHinweis.hidden = false; }
+      if (einsatzortBtn) { einsatzortBtn.disabled = true; }
     }
 
     var baselayerSelect = document.getElementById("lft-baselayer-select");
@@ -102,12 +177,34 @@
     // ── Sidebar-Tabs (Layer / Taktik) ────────────────────────────────────────
     document.querySelectorAll("[data-lft-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        document.querySelectorAll("[data-lft-tab]").forEach(function (b) { b.classList.remove("lft-tab--aktiv"); });
+        document.querySelectorAll("[data-lft-tab]").forEach(function (b) {
+          b.classList.remove("lft-tab--aktiv");
+          b.setAttribute("aria-selected", "false");
+          b.tabIndex = -1;
+        });
         btn.classList.add("lft-tab--aktiv");
+        btn.setAttribute("aria-selected", "true");
+        btn.tabIndex = 0;
         var tab = btn.getAttribute("data-lft-tab");
         document.querySelectorAll("[data-lft-panel]").forEach(function (panel) {
           panel.hidden = panel.getAttribute("data-lft-panel") !== tab;
         });
+      });
+    });
+    document.querySelectorAll('[role="tablist"]').forEach(function (tablist) {
+      tablist.addEventListener("keydown", function (ev) {
+        if (["ArrowLeft", "ArrowRight", "Home", "End"].indexOf(ev.key) === -1) { return; }
+        var tabs = Array.prototype.filter.call(tablist.querySelectorAll('[role="tab"]'), function (tab) {
+          return !tab.hidden;
+        });
+        if (!tabs.length) { return; }
+        var index = tabs.indexOf(document.activeElement);
+        if (ev.key === "Home") { index = 0; }
+        else if (ev.key === "End") { index = tabs.length - 1; }
+        else { index = (index + (ev.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length; }
+        ev.preventDefault();
+        tabs[index].focus();
+        tabs[index].click();
       });
     });
 
@@ -119,21 +216,39 @@
     // die Karte wie im Konzept beschrieben vollflächig sichtbar bleibt).
     var sidebarToggle = document.getElementById("lft-sidebar-toggle");
     var sidebar = document.getElementById("lft-sidebar");
+    function setSidebarOffen(offen) {
+      if (!sidebarToggle || !sidebar) { return; }
+      sidebar.classList.toggle("lft-sidebar--offen", offen);
+      sidebarToggle.setAttribute("aria-expanded", offen ? "true" : "false");
+      sidebarToggle.textContent = offen ? "✕ Schließen" : "🧰 Werkzeuge";
+      setTimeout(function () { karte.invalidateSize(); }, 280);
+    }
     if (sidebarToggle && sidebar) {
       sidebarToggle.addEventListener("click", function () {
-        var offen = sidebar.classList.toggle("lft-sidebar--offen");
-        sidebarToggle.setAttribute("aria-expanded", offen ? "true" : "false");
-        sidebarToggle.textContent = offen ? "✕ Schließen" : "🧰 Werkzeuge";
+        setSidebarOffen(!sidebar.classList.contains("lft-sidebar--offen"));
       });
     }
+    var resizeTimer = null;
+    function planeInvalidateSize() {
+      if (resizeTimer) { clearTimeout(resizeTimer); }
+      resizeTimer = setTimeout(function () { karte.invalidateSize(); }, 150);
+    }
+    window.addEventListener("resize", planeInvalidateSize);
+    window.addEventListener("orientationchange", planeInvalidateSize);
 
     // ── Layer-Gruppen ────────────────────────────────────────────────────────
     var layerEinsatzort = L.layerGroup().addTo(karte);
     var layerFahrzeuge = L.layerGroup().addTo(karte);
     var layerObjekt = L.layerGroup().addTo(karte);
-    var layerWasserstellen = L.layerGroup().addTo(karte);
+    var clusterOptionen = {
+      animate: false, showCoverageOnHover: false, spiderfyOnMaxZoom: true,
+      disableClusteringAtZoom: 18, maxClusterRadius: 50
+    };
+    var clusterObjektpunkte = L.markerClusterGroup(clusterOptionen).addTo(layerObjekt);
+    var layerWasserstellen = L.markerClusterGroup(clusterOptionen).addTo(karte);
     var layerFoerderstrecke = L.layerGroup().addTo(karte);
     var layerZeichnung = L.layerGroup().addTo(karte);
+    // Fahrzeuge, Foerderstrecken und Zeichnungen bleiben einsatzkritisch direkt sichtbar.
     // Punkt-Marker der hinterlegten Objekt-Kartenobjekte (Zufahrten/Sammelplaetze/...),
     // fuer den Beschriftungen-Toggle separat gehalten (s. u.).
     var objektKartenLayers = [];
@@ -152,12 +267,46 @@
     bindToggle("lft-layer-foerderstrecke", layerFoerderstrecke);
     bindToggle("lft-layer-zeichnung", layerZeichnung);
 
+    function sammleAktiveBounds() {
+      var bounds = L.latLngBounds([]);
+      [layerEinsatzort, layerFahrzeuge, layerObjekt, layerWasserstellen, layerFoerderstrecke,
+        replayAktiv ? layerReplay : layerZeichnung].forEach(function (gruppe) {
+        if (!karte.hasLayer(gruppe)) { return; }
+        gruppe.eachLayer(function (layer) {
+          if (layer.getLatLng) { bounds.extend(layer.getLatLng()); }
+          else if (layer.getBounds) { bounds.extend(layer.getBounds()); }
+          else if (layer.eachLayer) {
+            layer.eachLayer(function (child) {
+              if (child.getLatLng) { bounds.extend(child.getLatLng()); }
+              else if (child.getBounds) { bounds.extend(child.getBounds()); }
+            });
+          }
+        });
+      });
+      return bounds;
+    }
+    var gesamtlageBtn = document.getElementById("lft-karte-gesamtlage");
+    if (gesamtlageBtn) {
+      gesamtlageBtn.addEventListener("click", function () {
+        var bounds = sammleAktiveBounds();
+        if (!bounds.isValid()) { showToast("Keine Kartenobjekte zum Einpassen vorhanden.", "info"); return; }
+        karte.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+      });
+    }
+    var einsatzortAktionsBtn = document.getElementById("lft-karte-einsatzort");
+    if (einsatzortAktionsBtn) {
+      einsatzortAktionsBtn.addEventListener("click", function () {
+        if (hatEinsatzortKoordinate) { karte.flyTo([opts.incidentLat, opts.incidentLng], 16); }
+      });
+    }
+
     // "Beschriftungen" ist kein eigener L.layerGroup (die Labels sind permanente Tooltips,
     // direkt an die jeweiligen Feature-Layer gebunden — Zeichnungen/Zeichen/Distanzen), daher
     // eigene Sichtbarkeits-Steuerung statt addLayer/removeLayer: beim Rendern wird der
     // Tooltip immer gebunden, aber sofort geschlossen/geöffnet je nach aktuellem Zustand.
     var beschriftungenSichtbar = true;
     function applyLabelVisibility(layer) {
+      if (!layer._map) { return; }
       var tt = layer.getTooltip && layer.getTooltip();
       if (!tt || !tt.options.permanent) { return; }
       if (beschriftungenSichtbar) { layer.openTooltip(); } else { layer.closeTooltip(); }
@@ -184,6 +333,25 @@
     // geplottet, erscheinen aber in der Fahrzeuge-Sidebar mit "Platzieren"-Button
     // (manuelle Position, Muster GSL vehicle_manual_pin).
     var vehicleMarkers = {};
+    var letzteFahrzeuge = [];
+    var fahrzeugeFehlerAktiv = false;
+    var fahrzeugeStandTs = null;
+    var POSITION_SOURCE_LABELS = {
+      manual: "Manuell gesetzt",
+      lis: "Leitstellen-Import",
+      gps: "GPS",
+      telematik: "Telematik"
+    };
+    function aktualisiereFahrzeugeStatus() {
+      if (!karteStatus) { return; }
+      if (fahrzeugeFehlerAktiv) {
+        karteStatus.textContent = "Fahrzeugpositionen konnten nicht aktualisiert werden.";
+        karteStatus.classList.add("lft-karte-status--fehler");
+      } else {
+        karteStatus.textContent = "Fahrzeugpositionen: " + relativZeit(fahrzeugeStandTs);
+        karteStatus.classList.remove("lft-karte-status--fehler");
+      }
+    }
     function renderFahrzeugeListe(liste) {
       var el = document.getElementById("lft-fahrzeuge-liste");
       if (!el) { return; }
@@ -194,6 +362,13 @@
         var text = document.createElement("span");
         text.textContent = (v.label || "Fahrzeug") + " · " + v.unit_status;
         li.appendChild(text);
+        var stand = document.createElement("span");
+        stand.className = "lft-fahrzeuge__stand";
+        var alterMs = v.position_at ? Date.now() - new Date(v.position_at).getTime() : Infinity;
+        if (alterMs > 15 * 60 * 1000) { stand.classList.add("lft-fahrzeuge__stand--veraltet"); }
+        stand.textContent = relativZeit(v.position_at);
+        stand.title = POSITION_SOURCE_LABELS[v.position_source] || v.position_source || "Quelle unbekannt";
+        li.appendChild(stand);
         // Immer platzierbar/verschiebbar — auch wenn bereits eine (ggf. veraltete oder aus
         // einem anderen Einsatz übernommene) Position vorliegt, da GPS-Positionen je
         // Fahrzeug org-weit zuletzt-gemeldet korrelieren und nicht zwingend zu diesem
@@ -214,19 +389,24 @@
       });
     }
     function ladeFahrzeuge() {
-      fetchJson(apiBase + "/vehicles.json").then(function (liste) {
+      return fetchJson(apiBase + "/vehicles.json").then(function (liste) {
+        letzteFahrzeuge = liste || [];
+        planeLegendeUpdate();
+        fahrzeugeStandTs = new Date().toISOString();
+        fahrzeugeFehlerAktiv = false;
+        aktualisiereFahrzeugeStatus();
         renderFahrzeugeListe(liste);
         var seen = {};
         (liste || []).forEach(function (v) {
           if (v.lat == null || v.lng == null) { return; }
           seen[v.id] = true;
-          var label = (v.label || "Fahrzeug") + " · " + v.unit_status;
+          var label = (v.label || "Fahrzeug") + " · " + v.unit_status + " · " + relativZeit(v.position_at);
           if (vehicleMarkers[v.id]) {
             vehicleMarkers[v.id].setLatLng([v.lat, v.lng]);
-            vehicleMarkers[v.id].setIcon(vehicleIcon(v.color, v.zeichen_key));
+            vehicleMarkers[v.id].setIcon(vehicleIcon(v.color, v.zeichen_key, v.label));
             vehicleMarkers[v.id].setTooltipContent(label);
           } else {
-            vehicleMarkers[v.id] = L.marker([v.lat, v.lng], { icon: vehicleIcon(v.color, v.zeichen_key) })
+            vehicleMarkers[v.id] = L.marker([v.lat, v.lng], { icon: vehicleIcon(v.color, v.zeichen_key, v.label) })
               .addTo(layerFahrzeuge)
               .bindTooltip(label);
           }
@@ -234,10 +414,20 @@
         Object.keys(vehicleMarkers).forEach(function (id) {
           if (!seen[id]) { layerFahrzeuge.removeLayer(vehicleMarkers[id]); delete vehicleMarkers[id]; }
         });
-      }).catch(function () { /* still show what we have */ });
+      }).catch(function (err) {
+        if (!fahrzeugeFehlerAktiv) {
+          showToast(fehlerText(err, "Fahrzeugpositionen konnten nicht geladen werden."), "warn");
+        }
+        fahrzeugeFehlerAktiv = true;
+        aktualisiereFahrzeugeStatus();
+      });
     }
-    ladeFahrzeuge();
+    ladeFahrzeuge().finally(initialLadenFertig);
     setInterval(ladeFahrzeuge, 15000);
+    setInterval(function () {
+      aktualisiereFahrzeugeStatus();
+      renderFahrzeugeListe(letzteFahrzeuge);
+    }, 5000);
 
     // ── Auto-Layer: Objekt ───────────────────────────────────────────────────
     // Zeigt nicht nur das Objekt-Symbol, sondern die am Objekt gepflegten Infos
@@ -316,7 +506,7 @@
       var marker = L.marker([k.lat, k.lng], { icon: divIcon(kartenobjektIconHtml(k), [13, 13]) });
       var label = k.label || k.typ_label;
       if (label) { marker.bindTooltip(label, { permanent: true, direction: "top", className: "lft-kobj-label" }); }
-      marker.addTo(layerObjekt);
+      marker.addTo(clusterObjektpunkte);
       applyLabelVisibility(marker);
       objektKartenLayers.push(marker);
     }
@@ -328,7 +518,7 @@
             .bindPopup(objektPopupHtml(o));
           (o.kartenobjekte || []).forEach(renderKartenobjekt);
         });
-      }).catch(function () {});
+      }).catch(function (err) { showToast(fehlerText(err, "Objekte konnten nicht geladen werden."), "warn"); });
     }
 
     // ── Auto-Layer: Wasserstellen (Löschwasser-Stammdaten, statisch je Ladung) ──
@@ -349,7 +539,7 @@
             .addTo(layerWasserstellen)
             .bindTooltip(escapeHtml(label));
         });
-      }).catch(function () {});
+      }).catch(function (err) { showToast(fehlerText(err, "Wasserstellen konnten nicht geladen werden."), "warn"); });
     }
     ladeWasserstellen();
 
@@ -373,7 +563,7 @@
               .bindTooltip(escapeHtml((st.typ_label || "Pumpe") + " · " + name));
           });
         });
-      }).catch(function () {});
+      }).catch(function (err) { showToast(fehlerText(err, "Foerderstrecken konnten nicht geladen werden."), "warn"); });
     }
     ladeFoerderstrecken();
 
@@ -447,7 +637,10 @@
         }).then(function (updated) {
           layer.lft_feature = updated;
           ladeChronologie();
-        }).catch(function () { ladeFeatures(); });
+        }).catch(function (err) {
+          showToast(fehlerText(err, "Element konnte nicht verschoben werden."), "error");
+          ladeFeatures();
+        });
       });
     }
 
@@ -459,7 +652,8 @@
     function tzFeatureIcon(f) {
       var rot = f.rotation || 0;
       var scale = f.scale || 1;
-      var html = '<img src="' + tzIconUrl(f.zeichen_key) + '" alt="" ' +
+      var name = f.label || f.zeichen_key || "Taktisches Zeichen";
+      var html = '<img src="' + tzIconUrl(f.zeichen_key) + '" alt="' + escapeHtml(name) + '" title="' + escapeHtml(name) + '" ' +
         'style="width:32px;height:32px;transform:rotate(' + rot + 'deg) scale(' + scale + ');transform-origin:center center;">';
       return divIcon(html, [16, 16]);
     }
@@ -507,7 +701,10 @@
           body: JSON.stringify(patch)
         }).then(function (updated) {
           renderFeature(updated);
-        }).catch(function () { ladeFeatures(); });
+        }).catch(function (err) {
+          showToast(fehlerText(err, "Element konnte nicht gespeichert werden."), "error");
+          ladeFeatures();
+        });
       }
       el.addEventListener("click", function (ev) {
         var btn = ev.target.closest("button");
@@ -572,18 +769,21 @@
       applyLockVisual(layer, f);
       applyLabelVisibility(layer);
       featureLayers[f.id] = layer;
+      planeLegendeUpdate();
     }
 
     function ladeFeatures() {
-      fetchJson(apiBase + "/features.json").then(function (liste) {
+      return fetchJson(apiBase + "/features.json").then(function (liste) {
         var seen = {};
         (liste || []).forEach(function (f) { seen[f.id] = true; renderFeature(f); });
         Object.keys(featureLayers).forEach(function (id) {
           if (!seen[id]) { layerZeichnung.removeLayer(featureLayers[id]); delete featureLayers[id]; }
         });
-      }).catch(function () {});
+      }).catch(function (err) {
+        showToast(fehlerText(err, "Zeichnungen konnten nicht geladen werden."), "warn");
+      });
     }
-    ladeFeatures();
+    ladeFeatures().finally(initialLadenFertig);
 
     // ── Lage-Replay (Phase 3, F-Replay): Vor-/Zurückspulen auf Basis der Chronologie ──
     // Rekonstruiert den Kartenzustand zu einem beliebigen Zeitpunkt ausschließlich aus den
@@ -595,10 +795,14 @@
     var replayAktiv = false;
     var replayEvents = null; // aufsteigend sortiert
     var replayTimer = null;
+    var replayCache = { index: -1, state: {} };
+    var replayRaf = null;
+    var replayGeplanterIndex = null;
 
     function replayStateAt(index) {
-      var state = {}; // feature_id -> voller Feature-Snapshot (dict) oder entfernt bei delete
-      for (var i = 0; i <= index; i++) {
+      if (index < replayCache.index) { replayCache = { index: -1, state: {} }; }
+      var state = replayCache.state;
+      for (var i = replayCache.index + 1; i <= index; i++) {
         var e = replayEvents[i];
         if (e.ref_typ !== "feature" || e.ref_id == null) { continue; }
         if ((e.event_typ === "feature.created" || e.event_typ === "feature.updated") && e.payload) {
@@ -607,7 +811,16 @@
           delete state[e.ref_id];
         }
       }
+      replayCache.index = index;
       return state;
+    }
+    function planeReplayRender(index) {
+      replayGeplanterIndex = index;
+      if (replayRaf != null) { return; }
+      replayRaf = requestAnimationFrame(function () {
+        replayRaf = null;
+        renderReplayAt(replayGeplanterIndex);
+      });
     }
 
     function renderReplayFeature(f) {
@@ -661,9 +874,10 @@
     }
 
     function enterReplay() {
+      replayCache = { index: -1, state: {} };
       fetchJson(apiBase + "/events.json?limit=2000").then(function (liste) {
         replayEvents = (liste || []).slice().reverse();
-        if (!replayEvents.length) { alert("Keine Chronologie-Einträge vorhanden."); return; }
+        if (!replayEvents.length) { showToast("Keine Chronologie-Eintraege vorhanden.", "info"); return; }
         replayAktiv = true;
         karte.removeLayer(layerZeichnung);
         layerReplay.addTo(karte);
@@ -674,18 +888,21 @@
         }
         var panel = document.getElementById("lft-replay-panel");
         if (panel) { panel.hidden = false; }
+        planeLegendeUpdate();
         renderReplayAt(replayEvents.length - 1);
-      }).catch(function () { alert("Chronologie konnte nicht geladen werden."); });
+      }).catch(function (err) { showToast(fehlerText(err, "Chronologie konnte nicht geladen werden."), "error"); });
     }
 
     function exitReplay() {
       replayAktiv = false;
       stopReplayPlayback();
+      if (replayRaf != null) { cancelAnimationFrame(replayRaf); replayRaf = null; }
       karte.removeLayer(layerReplay);
       layerZeichnung.addTo(karte);
       if (opts.editierbar && karte.pm) { enableDrawTools(); }
       var panel = document.getElementById("lft-replay-panel");
       if (panel) { panel.hidden = true; }
+      planeLegendeUpdate();
     }
 
     // ── Druck: WYSIWYG-Kartendruck (Muster GSL-Lagekarte) ────────────────────
@@ -776,7 +993,7 @@
     if (replaySliderEl) {
       replaySliderEl.addEventListener("input", function () {
         stopReplayPlayback();
-        renderReplayAt(parseInt(replaySliderEl.value, 10));
+        planeReplayRender(parseInt(replaySliderEl.value, 10));
       });
     }
     var replayPlayBtn = document.getElementById("lft-replay-play");
@@ -802,8 +1019,8 @@
       }).then(function (f) {
         renderFeature(f);
         ladeChronologie();
-      }).catch(function () {
-        alert("Element konnte nicht gespeichert werden.");
+      }).catch(function (err) {
+        showToast(fehlerText(err, "Element konnte nicht gespeichert werden."), "error");
       });
     }
 
@@ -832,7 +1049,7 @@
           }
           el.appendChild(li);
         });
-      }).catch(function () {});
+      }).catch(function (err) { showToast(fehlerText(err, "Chronologie konnte nicht geladen werden."), "warn"); });
     }
     ladeChronologie();
 
@@ -892,8 +1109,12 @@
         headers: { "X-CSRF-Token": opts.csrfToken }
       }).then(function () {
         delete featureLayers[f.id];
+        planeLegendeUpdate();
         ladeChronologie();
-      }).catch(function () { ladeFeatures(); });
+      }).catch(function (err) {
+        showToast(fehlerText(err, "Element konnte nicht geloescht werden."), "error");
+        ladeFeatures();
+      });
     });
 
     if (opts.editierbar && karte.pm) {
@@ -902,14 +1123,54 @@
 
     // ── Taktische Zeichen: Palette + Platzierungsmodus ───────────────────────
     var pendingPlacement = null; // {kind, data, points:[]}
+    var placementButton = null;
+    var layerPlatzierungVorschau = L.layerGroup().addTo(karte);
 
-    function armPlacement(kind, data) {
+    function updatePlacementUi() {
+      var leiste = document.getElementById("lft-platzierung-leiste");
+      var text = document.getElementById("lft-platzierung-text");
+      if (!leiste || !text) { return; }
+      leiste.hidden = !pendingPlacement;
+      if (!pendingPlacement) { text.textContent = ""; return; }
+      if (pendingPlacement.kind === "distanzlinie" || pendingPlacement.kind === "distanzkreis") {
+        var name = pendingPlacement.kind === "distanzlinie" ? "Distanzlinie" : "Distanzkreis";
+        text.textContent = name + ": Punkt " + (pendingPlacement.points.length + 1) + " von 2 - " +
+          (pendingPlacement.points.length ? "Endpunkt waehlen" : "Startpunkt waehlen");
+      } else {
+        text.textContent = "Position auf der Karte waehlen";
+      }
+    }
+    function onPlacementMove(e) {
+      if (!pendingPlacement || !pendingPlacement.points.length) { return; }
+      layerPlatzierungVorschau.clearLayers();
+      var start = pendingPlacement.points[0];
+      var meter = Math.round(haversineMeters(start, e.latlng));
+      L.circleMarker(start, { radius: 4 }).addTo(layerPlatzierungVorschau);
+      if (pendingPlacement.kind === "distanzlinie") {
+        L.polyline([start, e.latlng], { color: "#6b7280", dashArray: "6 4" })
+          .bindTooltip(meter + " m", { permanent: true }).addTo(layerPlatzierungVorschau);
+      } else {
+        L.circle(start, { radius: meter, color: "#6b7280", dashArray: "6 4" })
+          .bindTooltip(meter + " m", { permanent: true }).addTo(layerPlatzierungVorschau);
+      }
+    }
+    function armPlacement(kind, data, srcEl) {
+      if (pendingPlacement) { disarmPlacement(); }
       pendingPlacement = { kind: kind, data: data || {}, points: [] };
+      placementButton = srcEl || document.activeElement;
+      if (placementButton && placementButton.classList) { placementButton.classList.add("lft-werkzeug--aktiv"); }
       karte.getContainer().style.cursor = "crosshair";
+      updatePlacementUi();
+      if (window.matchMedia("(max-width:760px)").matches) { setSidebarOffen(false); }
     }
     function disarmPlacement() {
+      if (placementButton && placementButton.classList) { placementButton.classList.remove("lft-werkzeug--aktiv"); }
+      placementButton = null;
       pendingPlacement = null;
+      layerPlatzierungVorschau.clearLayers();
+      karte.off("mousemove", onPlacementMove);
       karte.getContainer().style.cursor = "";
+      updatePlacementUi();
     }
 
     function openMeldungForm(latlng) {
@@ -987,6 +1248,8 @@
         openTextForm(latlng);
       } else if (p.kind === "distanzlinie") {
         p.points.push(latlng);
+        updatePlacementUi();
+        if (p.points.length === 1) { karte.on("mousemove", onPlacementMove); }
         if (p.points.length === 2) {
           var distanzLinie = Math.round(haversineMeters(p.points[0], p.points[1]));
           createFeature({
@@ -1002,6 +1265,8 @@
         }
       } else if (p.kind === "distanzkreis") {
         p.points.push(latlng);
+        updatePlacementUi();
+        if (p.points.length === 1) { karte.on("mousemove", onPlacementMove); }
         if (p.points.length === 2) {
           var radius = Math.round(haversineMeters(p.points[0], p.points[1]));
           createFeature({
@@ -1049,7 +1314,7 @@
         fetchJson(url)
           .then(function (r) {
             if (!r || !r.geometry || !r.geometry.coordinates || !r.geometry.coordinates[0] || !r.geometry.coordinates[0].length) {
-              alert("Ausbreitung konnte nicht berechnet werden (Koordinaten/Wind fehlen oder kein Bereich ueber Grenzwert).");
+              showToast("Ausbreitung konnte nicht berechnet werden (Koordinaten/Wind fehlen oder kein Bereich ueber Grenzwert).", "warn");
               return;
             }
             var hinweis = r.wind_bekannt ? "" : " (kein Wind - Richtung Nord)";
@@ -1064,7 +1329,7 @@
               layer_gruppe: "zeichnung"
             });
           })
-          .catch(function () { alert("Ausbreitung konnte nicht berechnet werden."); });
+          .catch(function (err) { showToast(fehlerText(err, "Ausbreitung konnte nicht berechnet werden."), "error"); });
       } else if (p.kind === "fahrzeug-pin") {
         disarmPlacement();
         fetchJson(apiBase + "/vehicles/" + p.data.id + "/pin", {
@@ -1074,8 +1339,8 @@
         }).then(function () {
           ladeFahrzeuge();
           ladeChronologie();
-        }).catch(function () {
-          alert("Fahrzeug konnte nicht platziert werden.");
+        }).catch(function (err) {
+          showToast(fehlerText(err, "Fahrzeug konnte nicht platziert werden."), "error");
         });
       }
     }
@@ -1083,6 +1348,20 @@
     karte.on("click", function (e) {
       if (!pendingPlacement || replayAktiv) { return; }
       handlePlacementClick(e.latlng);
+    });
+    var platzierungAbbrechen = document.getElementById("lft-platzierung-abbrechen");
+    if (platzierungAbbrechen) { platzierungAbbrechen.addEventListener("click", disarmPlacement); }
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Escape") { return; }
+      if (pendingPlacement) { disarmPlacement(); return; }
+      if (pendingFlaecheStyle) {
+        pendingFlaecheStyle = null;
+        if (karte.pm) { karte.pm.disableDraw(); }
+        return;
+      }
+      if (!/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) && sidebar && sidebar.classList.contains("lft-sidebar--offen")) {
+        setSidebarOffen(false);
+      }
     });
 
     // Werkzeug-Buttons/Taktik-Picker/Fahrzeugsuche werden IMMER initialisiert
@@ -1107,8 +1386,8 @@
         btnWind.addEventListener("click", function () {
           fetchJson(apiBase + "/wind.json").then(function (w) {
             var rot = (w && w.wind_direction_deg != null) ? Math.round((w.wind_direction_deg + 180) % 360) : 0;
-            armPlacement("wind", { rotation: rot });
-          }).catch(function () { armPlacement("wind", { rotation: 0 }); });
+            armPlacement("wind", { rotation: rot }, btnWind);
+          }).catch(function () { armPlacement("wind", { rotation: 0 }, btnWind); });
         });
       }
 
@@ -1134,7 +1413,7 @@
         btnEvakCustom.addEventListener("click", function () {
           var inp = document.getElementById("lft-evak-radius");
           var r = inp ? parseInt(inp.value, 10) : 0;
-          if (!r || r <= 0) { alert("Bitte einen Radius in Metern eingeben."); return; }
+          if (!r || r <= 0) { showToast("Bitte einen Radius in Metern eingeben.", "warn"); return; }
           armPlacement("gefahrenradius", { preset: null, zonen: [{ rolle: "sperr", radius_m: r, farbe: "#dc2626", label: "Sperrbereich" }] });
         });
       }
@@ -1178,9 +1457,9 @@
           }).then(function () {
             btnSnapshot.disabled = false;
             ladeChronologie();
-          }).catch(function () {
+          }).catch(function (err) {
             btnSnapshot.disabled = false;
-            alert("Momentaufnahme konnte nicht erstellt werden.");
+            showToast(fehlerText(err, "Momentaufnahme konnte nicht erstellt werden."), "error");
           });
         });
       }
@@ -1188,16 +1467,23 @@
       var tzPickerEl = document.getElementById("lft-tz-picker");
       var flaechenPickerEl = document.getElementById("lft-flaechen-picker");
       if (tzPickerEl) {
-        fetch("/static/tz/tz-manifest.json").then(function (r) { return r.json(); }).then(function (m) {
+        tzManifestPromise.then(function (m) {
+          if (!m) { showToast("Symbolkatalog konnte nicht geladen werden.", "warn"); return; }
           renderTzPicker(tzPickerEl, m.symbole || []);
           if (flaechenPickerEl) { renderFlaechenPicker(flaechenPickerEl, m.flaechen || []); }
-        }).catch(function () {});
+        });
       }
 
       document.querySelectorAll("[data-lft-tzsub]").forEach(function (btn) {
         btn.addEventListener("click", function () {
-          document.querySelectorAll("[data-lft-tzsub]").forEach(function (b) { b.classList.remove("lft-tz-subtab--aktiv"); });
+          document.querySelectorAll("[data-lft-tzsub]").forEach(function (b) {
+            b.classList.remove("lft-tz-subtab--aktiv");
+            b.setAttribute("aria-selected", "false");
+            b.tabIndex = -1;
+          });
           btn.classList.add("lft-tz-subtab--aktiv");
+          btn.setAttribute("aria-selected", "true");
+          btn.tabIndex = 0;
           var sub = btn.getAttribute("data-lft-tzsub");
           document.querySelectorAll("[data-lft-tzsub-panel]").forEach(function (panel) {
             panel.hidden = panel.getAttribute("data-lft-tzsub-panel") !== sub;
@@ -1256,7 +1542,9 @@
                 resultsEl.appendChild(row);
               });
               resultsEl.hidden = false;
-            }).catch(function () {});
+            }).catch(function (err) {
+              showToast(fehlerText(err, "Fahrzeugvorschlaege konnten nicht geladen werden."), "warn");
+            });
         }, 250);
       });
       document.addEventListener("click", function (ev) {
@@ -1359,7 +1647,9 @@
             fetchJson(apiBase + "/berechtigung/" + uid, {
               method: granted ? "DELETE" : "POST",
               headers: { "X-CSRF-Token": opts.csrfToken }
-            }).catch(function () {});
+            }).catch(function (err) {
+              showToast(fehlerText(err, "Berechtigung konnte nicht geaendert werden."), "error");
+            });
           });
           chip.appendChild(btn);
         }
@@ -1414,9 +1704,21 @@
         try { data = JSON.parse(ev.data); } catch (e) { return; }
         if (!data || typeof data.type !== "string") { return; }
 
-        if (data.type.indexOf("lagefuehrung.feature.") === 0 &&
-          ["lagefuehrung.feature.created", "lagefuehrung.feature.updated", "lagefuehrung.feature.deleted"].indexOf(data.type) !== -1) {
-          ladeFeatures();
+        if (data.type === "lagefuehrung.feature.created" || data.type === "lagefuehrung.feature.updated") {
+          if (data.feature) {
+            if (editingFeatureId !== data.feature.id) { renderFeature(data.feature); }
+          } else {
+            ladeFeatures();
+          }
+          ladeChronologie();
+        } else if (data.type === "lagefuehrung.feature.deleted") {
+          if (data.feature_id != null) {
+            if (featureLayers[data.feature_id]) { layerZeichnung.removeLayer(featureLayers[data.feature_id]); }
+            delete featureLayers[data.feature_id];
+            planeLegendeUpdate();
+          } else {
+            ladeFeatures();
+          }
           ladeChronologie();
         } else if (data.type === "lagefuehrung.chronologie_changed") {
           ladeChronologie();
