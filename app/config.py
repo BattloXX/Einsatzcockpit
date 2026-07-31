@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     APP_PORT: int = 8092
     APP_BASE_URL: str = "http://localhost:8092"
     PUBLIC_BASE_URL: str = ""  # Für Mail-Links; leer = falls leer APP_BASE_URL verwenden
+    # Teams rendert das Kartenbild beim Scrollen durch die Kanalhistorie erneut.
+    ALARM_MAP_TTL_DAYS: int = 365
+    # Die oeffentliche No-Login-Seite zeigt mehr Daten und laeuft frueher ab.
+    ALARM_LINK_TTL_DAYS: int = 30
     APP_VERSION: str = "3.7.0"
     DEBUG: bool = False
     TEST_SYSTEM: bool = False

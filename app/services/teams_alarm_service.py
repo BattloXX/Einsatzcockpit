@@ -122,7 +122,7 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
     # sieht build_incident_message_card() hier noch lat=lng=None (stale Identity-Map) und
     # Kartenbild/Google-Maps-Button fehlen in der Karte, obwohl die Koordinaten längst in
     # der DB stehen (beobachtet 2026-07-05, Testeinsatz F3 "Flotzbachstraße 18").
-    db.refresh(incident, attribute_names=["lat", "lng"])
+    db.refresh(incident, attribute_names=["lat", "lng", "lis_operation_number"])
 
     # Kartenbild/Links müssen für Teams öffentlich erreichbar sein → ggf. PUBLIC_BASE_URL.
     base_url = _card_base_url(base_url)

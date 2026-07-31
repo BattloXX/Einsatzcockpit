@@ -452,6 +452,7 @@ def infoscreen_daten(
                 "stichwort_label": stichwort_label,
                 "adresse": adresse,
                 "meldung": incident.report_text or incident.reason or "",
+                "leitstelle_nr": incident.lis_operation_number,
                 "beginn": incident.started_at.isoformat() + "Z" if incident.started_at else None,
                 "lat": incident.lat,
                 "lng": incident.lng,

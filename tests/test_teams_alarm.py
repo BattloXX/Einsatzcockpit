@@ -81,6 +81,40 @@ def test_build_incident_message_card_includes_all_bausteine_by_default():
     assert action_titles[0].endswith("Einsatzinformation")
 
 
+def test_identische_meldung_und_einsatzgrund_erscheinen_nur_einmal():
+    text = _body_texts(build_incident_message_card(
+        _incident(report_text="Verkehrsunfall"), _cfg(), base_url="https://example.com"))
+    assert text.count("**Meldung:**") == 1
+    assert "**Einsatzgrund:**" not in text
+
+
+def test_abweichender_einsatzgrund_bleibt_erhalten():
+    text = _body_texts(build_incident_message_card(
+        _incident(report_text="Pkw gegen Baum", reason="Verkehrsunfall"),
+        _cfg(), base_url="https://example.com"))
+    assert "**Meldung:** Pkw gegen Baum" in text
+    assert "**Einsatzgrund:** Verkehrsunfall" in text
+
+
+def test_nur_einsatzgrund_ohne_report_text_erzeugt_eine_meldungszeile():
+    text = _body_texts(build_incident_message_card(
+        _incident(report_text=None), _cfg(), base_url="https://example.com"))
+    assert text.count("**Meldung:**") == 1
+    assert "**Einsatzgrund:**" not in text
+
+
+def test_leitstellennummer_steht_in_der_karte():
+    text = _body_texts(build_incident_message_card(
+        _incident(lis_operation_number="f26001234"), _cfg(), base_url="https://example.com"))
+    assert "**Leitstellennummer:** f26001234" in text
+
+
+def test_leitstellennummer_fehlt_ohne_nummer():
+    text = _body_texts(build_incident_message_card(
+        _incident(lis_operation_number=None), _cfg(), base_url="https://example.com"))
+    assert "Leitstellennummer" not in text
+
+
 def test_build_incident_message_card_respects_include_toggles():
     incident = _incident()
     cfg = _cfg(include_map=False, include_gmaps_link=False, include_qr_link=False,

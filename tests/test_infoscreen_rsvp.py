@@ -37,7 +37,8 @@ def is_db():
     db.add(AlarmInfoscreenToken(org_id=org.id, token_hash=hash_api_key("rsvp-token"),
                                 name="Monitor", aktiv=True))
     inc = Incident(primary_org_id=org.id, alarm_type_code="F14", status="active",
-                   report_text="Test", started_at=datetime.now(UTC).replace(tzinfo=None))
+                   report_text="Test", lis_operation_number="f26001234",
+                   started_at=datetime.now(UTC).replace(tzinfo=None))
     db.add(inc)
     db.flush()
     for name, status in [("A", "zugesagt"), ("B", "zugesagt"), ("C", "abgesagt")]:
@@ -53,6 +54,7 @@ def test_infoscreen_payload_enthaelt_rsvp(is_db):
     db, org, inc = is_db
     daten = infoscreen_daten("rsvp-token", request=None, db=db)  # type: ignore[arg-type]
     assert daten["modus"] == "alarm"
+    assert daten["incident"]["leitstelle_nr"] == "f26001234"
     rsvp = daten["incident"]["rsvp"]
     assert rsvp["zusagen"] == 2
     assert rsvp["absagen"] == 1

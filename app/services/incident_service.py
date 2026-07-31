@@ -330,6 +330,7 @@ def create_incident(
         incident_id=incident.id,
         token_hash=hashlib.sha256(_alarm_raw_token.encode()).hexdigest(),
         created_at=_now(),
+        expires_at=_now() + timedelta(days=settings.ALARM_MAP_TTL_DAYS),
     ))
 
     if resolved_org_id:
@@ -609,13 +610,8 @@ def close_incident(
         LagekarteToken.einsatz_id == incident.id,
         LagekarteToken.revoked_at.is_(None),
     ).update({"revoked_at": now}, synchronize_session=False)
-    # Revoke den öffentlichen Alarm-Token (Teams-Karte, QR-Link) — nach Abschluss nicht
-    # mehr sinnvoll erreichbar
-    from app.models.teams_bot import AlarmToken
-    db.query(AlarmToken).filter(
-        AlarmToken.incident_id == incident.id,
-        AlarmToken.revoked_at.is_(None),
-    ).update({"revoked_at": now}, synchronize_session=False)
+    # Alarm-Tokens werden beim Abschluss nicht widerrufen: Kartenbild und Einsatzinfo
+    # bleiben gemaess expires_at bzw. Seiten-Frist erreichbar. revoked_at ist ein Not-Aus.
     db.flush()
     write_audit(db, "incident.closed", incident_id=incident.id, user_id=user_id)
     return incident

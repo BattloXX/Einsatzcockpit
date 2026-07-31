@@ -139,7 +139,7 @@ class AlarmToken(Base):
     (`/alarm/{token}`) und das Kartenbild (`/api/v1/teams/map/{token}.png`).
 
     Muster: LagekarteToken — sha256-Hash, ein Token je Einsatz, automatisch erzeugt in
-    create_incident() und revoked in close_incident(). Bewusst getrennt von IncidentToken
+    create_incident() und zeitlich begrenzt. Bewusst getrennt von IncidentToken
     (das bindet an einen echten Account) und von LagekarteToken (anderer Scope: GeoJSON-Feed).
     """
     __tablename__ = "alarm_token"
@@ -151,9 +151,15 @@ class AlarmToken(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     incident: Mapped[object] = relationship("Incident", foreign_keys=[incident_id])
 
     @property
     def is_active(self) -> bool:
-        return self.revoked_at is None
+        return self.gueltig()
+
+    def gueltig(self, *, jetzt: datetime | None = None) -> bool:
+        """Harte Obergrenze fuer alle Token-Routen; Widerruf bleibt als Not-Aus."""
+        jetzt = jetzt or datetime.now(UTC).replace(tzinfo=None)
+        return self.revoked_at is None and (self.expires_at is None or self.expires_at > jetzt)

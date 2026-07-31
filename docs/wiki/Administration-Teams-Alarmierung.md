@@ -127,6 +127,7 @@ Namensliste. Auf Mobilgeräten wird dieser Bereich der Kopfzeile grundsätzlich 
 |---|---|
 | Testkarte kommt nicht an | Webhook-URL falsch/abgelaufen — in Teams einen neuen Connector anlegen und URL erneuern |
 | Karte kommt an, aber ohne Kartenbild | „Kartenbild einbetten" deaktiviert, oder der Einsatz hat noch keine Koordinaten (Geocoding läuft asynchron im Hintergrund) |
+| Ein altes Kartenbild oder der Einsatzinfo-Link ist nicht mehr erreichbar | Alarm-Tokens laufen ab: Kartenbilder nach 365 Tagen (`ALARM_MAP_TTL_DAYS`), die Einsatzinfo-Seite 30 Tage ab Alarmierung (`ALARM_LINK_TTL_DAYS`) |
 | Übungen lösen keine Karte aus | „Übungseinsätze auch senden" ist aus (Standardeinstellung) |
 | Zusage/Absage wird nicht erkannt (erweiterter Modus) | E-Mail-Adresse der antwortenden Person ist nicht im Mannschaftsregister hinterlegt |
 | Keine Kanalbindung erfasst (erweiterter Modus) | Bot wurde dem Ziel-Kanal noch nicht hinzugefügt, oder die Bot-Anbindung ist serverseitig noch nicht freigeschaltet (siehe Hinweis oben) |

@@ -8,12 +8,15 @@ nicht blockiert.
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 
 logger = logging.getLogger("einsatzleiter.staticmap")
 
 # OSM-Tile-Nutzungsrichtlinie verlangt einen aussagekräftigen User-Agent (kein Default-Client).
 _USER_AGENT = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
 _MARKER_COLOR = "#d42225"  # Marken-Rot
+_RENDER_CACHE: OrderedDict[tuple[float, float, int, tuple[int, int]], bytes] = OrderedDict()
+_RENDER_CACHE_MAXSIZE = 128
 
 
 def render_incident_map_png(
@@ -21,10 +24,17 @@ def render_incident_map_png(
 ) -> bytes:
     """Rendert ein PNG-Kartenausschnitt um (lat, lng) mit einem roten Marker.
 
+    Wiederholte Koordinaten werden gecacht, weil die OSM-Tile-Nutzungsrichtlinie
+    wiederholtes Nachladen derselben Tiles untersagt und Ausfaelle abgefedert werden.
     Wirft bei Netzwerk-/Tile-Fehlern die zugrunde liegende Exception weiter — Aufrufer
     sollen das Kartenbild als optionalen Baustein behandeln (Karte ohne Bild versenden,
     statt den ganzen Alarm-Versand scheitern zu lassen).
     """
+    schluessel = (round(lat, 5), round(lng, 5), zoom, size)
+    if schluessel in _RENDER_CACHE:
+        _RENDER_CACHE.move_to_end(schluessel)
+        return _RENDER_CACHE[schluessel]
+
     import io
 
     from staticmap import CircleMarker, StaticMap
@@ -40,7 +50,12 @@ def render_incident_map_png(
 
     buf = io.BytesIO()
     image.save(buf, format="PNG")
-    return buf.getvalue()
+    png = buf.getvalue()
+    _RENDER_CACHE[schluessel] = png
+    _RENDER_CACHE.move_to_end(schluessel)
+    if len(_RENDER_CACHE) > _RENDER_CACHE_MAXSIZE:
+        _RENDER_CACHE.popitem(last=False)
+    return png
 
 
 def render_route_map_png(

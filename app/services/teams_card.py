@@ -44,10 +44,13 @@ def build_incident_message_card(
     address = _combined_address(incident)
 
     lines = [f"**Adresse:** {address}" if address else "**Adresse:** –"]
-    if incident.report_text:
-        lines.append(f"**Meldung:** {incident.report_text}")
-    if incident.reason:
+    meldung = incident.report_text or incident.reason
+    if meldung:
+        lines.append(f"**Meldung:** {meldung}")
+    if incident.reason and incident.reason.strip() != (meldung or "").strip():
         lines.append(f"**Einsatzgrund:** {incident.reason}")
+    if incident.lis_operation_number:
+        lines.append(f"**Leitstellennummer:** {incident.lis_operation_number}")
     if incident.started_at:
         lines.append(f"**Zeit:** {format_local_datetime(incident.started_at, org)} Uhr")
 

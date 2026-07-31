@@ -45,3 +45,23 @@ def test_render_incident_map_png_respects_size(monkeypatch):
     png = render_incident_map_png(47.4739, 9.7350, zoom=14, size=(320, 180))
     img = Image.open(io.BytesIO(png))
     assert img.size == (320, 180)
+
+
+def test_identische_koordinaten_laden_tiles_nur_einmal(monkeypatch):
+    from app.services import staticmap_service
+
+    staticmap_service._RENDER_CACHE.clear()
+    aufrufe = 0
+    tile_bytes = _fake_tile_png()
+
+    def fake_get(url, **kwargs):
+        nonlocal aufrufe
+        aufrufe += 1
+        return _FakeTileResponse(tile_bytes)
+
+    monkeypatch.setattr("requests.get", fake_get)
+    staticmap_service.render_incident_map_png(47.48, 9.74, zoom=14, size=(300, 200))
+    erste_aufrufe = aufrufe
+    staticmap_service.render_incident_map_png(47.48, 9.74, zoom=14, size=(300, 200))
+    assert erste_aufrufe > 0
+    assert aufrufe == erste_aufrufe

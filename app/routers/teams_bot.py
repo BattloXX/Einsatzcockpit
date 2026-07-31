@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -31,10 +32,21 @@ def _hash_token(plain: str) -> str:
     return hashlib.sha256(plain.encode()).hexdigest()
 
 
-def _resolve_alarm_token(db: Session, plain: str) -> tuple[AlarmToken, Incident]:
+def _resolve_alarm_token(
+    db: Session, plain: str, *, zweck: str = "seite",
+) -> tuple[AlarmToken, Incident]:
+    """Loest Alarm-Tokens fuer die kuerzere Seite oder das langlebige Bild auf."""
+    from app.config import settings
+
     token_hash = _hash_token(plain)
     token = db.query(AlarmToken).filter(AlarmToken.token_hash == token_hash).first()
-    if token is None or not token.is_active:
+    jetzt = datetime.now(UTC).replace(tzinfo=None)
+    if token is None or not token.gueltig(jetzt=jetzt):
+        raise HTTPException(status_code=404, detail="Link ungültig oder abgelaufen")
+    if (
+        zweck == "seite"
+        and token.created_at + timedelta(days=settings.ALARM_LINK_TTL_DAYS) < jetzt
+    ):
         raise HTTPException(status_code=404, detail="Link ungültig oder abgelaufen")
     incident = db.get(Incident, token.incident_id)
     if incident is None:
@@ -96,7 +108,7 @@ async def alarm_hydranten(token: str, db: Session = Depends(get_db)):
 
 @router.get("/api/v1/teams/map/{token}.png")
 async def alarm_map_png(token: str, db: Session = Depends(get_db)):
-    _tok, incident = _resolve_alarm_token(db, token)
+    _tok, incident = _resolve_alarm_token(db, token, zweck="bild")
     if incident.lat is None or incident.lng is None:
         raise HTTPException(status_code=404, detail="Keine Koordinaten für diesen Einsatz")
 
@@ -109,7 +121,10 @@ async def alarm_map_png(token: str, db: Session = Depends(get_db)):
         logger.exception("Kartenbild konnte nicht gerendert werden (Einsatz %s)", incident.id)
         raise HTTPException(status_code=502, detail="Kartenbild derzeit nicht verfügbar")
 
-    return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})
+    return Response(
+        content=png, media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 # ── Schadensfoto (No-Login, wird von Teams-Servern per URL geladen) ─────────────
