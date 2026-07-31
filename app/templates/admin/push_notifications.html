@@ -68,6 +68,17 @@
         Die native App nutzt Firebase Cloud Messaging (FCM) statt Web-Push, da die Android-WebView-Komponente
         keinen Service-Worker-Push (PushManager) unterstützt.
       </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+        <button type="button" class="btn btn--secondary" onclick="registerNativePush()">
+          Push jetzt registrieren
+        </button>
+        {% if has_fcm_token %}
+        <button type="button" class="btn btn--secondary" onclick="testNativePush()">
+          Test senden
+        </button>
+        {% endif %}
+      </div>
+      <div id="nativePushResult" style="display:none;margin-top:12px;"></div>
     </div>
     {% else %}
     <div id="pushStatusArea" style="min-height:36px;">
@@ -245,6 +256,64 @@ function toggleUserSelect() {
   const radio = document.querySelector('input[name="target"][value="user"]');
   const sel = document.getElementById('userSelect');
   sel.disabled = !radio.checked;
+}
+
+function showNativePushResult(ok, badgeText, message) {
+  const resultDiv = document.getElementById('nativePushResult');
+  if (!resultDiv) return;
+  resultDiv.style.display = 'block';
+  resultDiv.textContent = '';
+  const badge = document.createElement('span');
+  badge.className = ok
+    ? 'badge-pill badge-pill--green'
+    : 'badge-pill badge-pill--red';
+  badge.style.cssText = 'font-size:.8rem;margin-right:6px;';
+  badge.textContent = badgeText;
+  resultDiv.appendChild(badge);
+  const msg = document.createElement('span');
+  msg.style.fontSize = '.85rem';
+  msg.textContent = message;
+  resultDiv.appendChild(msg);
+}
+
+async function registerNativePush() {
+  if (!window.ELNative || !window.ELNative.registerPush) {
+    showNativePushResult(false, '✗ Nicht verfügbar', 'Bitte App aktualisieren');
+    return;
+  }
+  showNativePushResult(true, '… Registrierung', 'Push-Benachrichtigungen werden registriert.');
+  try {
+    const result = await window.ELNative.registerPush();
+    if (result.ok) {
+      showNativePushResult(true, '✓ Aktiv', 'Registrierung erfolgreich. Seite wird neu geladen.');
+      window.location.reload();
+    } else {
+      showNativePushResult(false, '✗ Fehler', result.error || 'Unbekannter Fehler');
+    }
+  } catch (e) {
+    showNativePushResult(false, '✗ Fehler', 'Registrierung fehlgeschlagen: ' + e.message);
+  }
+}
+
+async function testNativePush() {
+  if (!window.ELNative || !window.ELNative.registerPush) {
+    showNativePushResult(false, '✗ Nicht verfügbar', 'Bitte App aktualisieren');
+    return;
+  }
+  showNativePushResult(true, '… Sende', 'Test-Push wird gesendet.');
+  try {
+    const res = await fetch('/push/test-fcm', { method: 'POST' });
+    const json = await res.json();
+    showNativePushResult(
+      json.ok,
+      json.ok ? '✓ Gesendet' : '✗ Fehler',
+      json.ok
+        ? 'Test-Push wurde gesendet — Benachrichtigung sollte erscheinen.'
+        : (json.error || 'Unbekannter Fehler')
+    );
+  } catch (e) {
+    showNativePushResult(false, '✗ Fehler', 'Netzwerkfehler: ' + e.message);
+  }
 }
 
 async function testPush() {

@@ -87,32 +87,47 @@
   let _fcmRegisterPromise = null;
 
   function _registerFcmToken() {
-    if (!_isNative() || _fcmRegistered) return Promise.resolve();
+    if (!_isNative()) return Promise.resolve({ ok: false, error: 'Native App nicht erkannt' });
+    if (_fcmRegistered) return Promise.resolve({ ok: true });
     if (_fcmRegisterPromise) return _fcmRegisterPromise;
 
-    _fcmRegisterPromise = (async () => {
+    let registerPromise;
+    registerPromise = (async () => {
       try {
         const { PushNotifications } = window.Capacitor.Plugins;
-        if (!PushNotifications) return;
+        if (!PushNotifications) {
+          return { ok: false, error: 'PushNotifications-Plugin nicht verfügbar' };
+        }
 
         const perm = await PushNotifications.requestPermissions();
-        if (perm.receive !== 'granted') return; // naechster Retry beim naechsten Resume/Online
+        if (perm.receive !== 'granted') {
+          return { ok: false, error: 'Benachrichtigungs-Berechtigung wurde nicht erteilt' };
+        }
 
-        PushNotifications.addListener('registration', async (reg) => {
-          try {
-            const res = await fetch('/api/v1/device/fcm-token', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-              body: JSON.stringify({ token: reg.value, platform: 'android' }),
-            });
-            if (res.ok) { _fcmRegistered = true; }
-            else { console.warn('[ELNative] FCM-Token-Registrierung: HTTP', res.status); }
-          } catch (e) {
-            console.warn('[ELNative] FCM-Token-Registrierung fehlgeschlagen:', e);
-          }
-        });
-        PushNotifications.addListener('registrationError', (err) => {
-          console.warn('[ELNative] PushNotifications registrationError:', err);
+        const registrationResult = new Promise((resolve) => {
+          PushNotifications.addListener('registration', async (reg) => {
+            try {
+              const res = await fetch('/api/v1/device/fcm-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ token: reg.value, platform: 'android' }),
+              });
+              if (res.ok) {
+                _fcmRegistered = true;
+                resolve({ ok: true });
+              } else {
+                console.warn('[ELNative] FCM-Token-Registrierung: HTTP', res.status);
+                resolve({ ok: false, error: 'FCM-Token konnte nicht gespeichert werden (HTTP ' + res.status + ')' });
+              }
+            } catch (e) {
+              console.warn('[ELNative] FCM-Token-Registrierung fehlgeschlagen:', e);
+              resolve({ ok: false, error: 'FCM-Token-Registrierung fehlgeschlagen: ' + e.message });
+            }
+          });
+          PushNotifications.addListener('registrationError', (err) => {
+            console.warn('[ELNative] PushNotifications registrationError:', err);
+            resolve({ ok: false, error: 'Native Push-Registrierung fehlgeschlagen' });
+          });
         });
         PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
           const url = action?.notification?.data?.url;
@@ -120,13 +135,31 @@
         });
 
         await PushNotifications.register();
+        // Timeout: ohne diesen bleibt registrationResult ewig offen, wenn weder
+        // 'registration' noch 'registrationError' feuern (z.B. Capacitor-Bridge
+        // auf dieser Remote-Seite unzuverlaessig, siehe main.py:413-421) - das
+        // wuerde _fcmRegisterPromise dauerhaft belegt lassen und damit auch
+        // JEDEN kuenftigen automatischen Retry (online/visibilitychange) blockieren.
+        return await Promise.race([
+          registrationResult,
+          new Promise((resolve) => setTimeout(
+            () => resolve({ ok: false, error: 'Zeitüberschreitung bei der Registrierung' }), 8000)),
+        ]);
       } catch (e) {
         console.warn('[ELNative] PushNotifications Fehler:', e);
+        return { ok: false, error: 'PushNotifications-Fehler: ' + e.message };
       } finally {
-        _fcmRegisterPromise = null;
+        if (_fcmRegisterPromise === registerPromise) _fcmRegisterPromise = null;
       }
     })();
+    _fcmRegisterPromise = registerPromise;
     return _fcmRegisterPromise;
+  }
+
+  async function registerPush() {
+    _fcmRegistered = false;
+    _fcmRegisterPromise = null;
+    return _registerFcmToken();
   }
 
   // ─── URLs oeffnen (PDFs etc.) ────────────────────────────────────────────────
@@ -406,6 +439,7 @@
     stopLocation,
     scanQr,
     openUrl,
+    registerPush,
     setBatterySaver(on) { _setBatterySaver(on); },
     get batterySaverActive() { return _batterySaver; },
     get isTracking() { return _isTracking; },

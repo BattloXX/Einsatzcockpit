@@ -123,3 +123,40 @@ async def test_push(request: Request, db: Session = Depends(get_db)):
         else:
             detail = f"{err_type} – Details im Server-Log"
         return JSONResponse({"ok": False, "error": detail})
+
+
+@router.post("/test-fcm")
+async def test_push_fcm(request: Request, db: Session = Depends(get_db)):
+    """Sendet eine FCM-Testbenachrichtigung an DIESES Gerät (native Android-App)."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return JSONResponse({"ok": False, "error": "Nicht eingeloggt"}, status_code=401)
+
+    from app.models.user import FcmToken
+    q = db.query(FcmToken).filter(FcmToken.user_id == user.id)
+    device_token_id = request.state.device_token_id if request.state.is_device else None
+    if device_token_id is not None:
+        q = q.filter(FcmToken.device_token_id == device_token_id)
+    token_row = q.order_by(FcmToken.last_used_at.desc()).first()
+    if not token_row:
+        return JSONResponse({
+            "ok": False,
+            "error": "Kein FCM-Token für dieses Gerät registriert",
+        })
+
+    from app.services.push_service import send_fcm
+    ok = send_fcm(
+        token_row,
+        "Test-Push",
+        "Wenn du das siehst, funktioniert FCM!",
+        url="/admin/push-nachrichten",
+    )
+    if not ok:
+        return JSONResponse({
+            "ok": False,
+            "error": (
+                "FCM-Versand fehlgeschlagen - Details im Server-Log "
+                "(evtl. FCM nicht konfiguriert)"
+            ),
+        })
+    return JSONResponse({"ok": True})
