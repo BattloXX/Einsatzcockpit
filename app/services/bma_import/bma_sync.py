@@ -84,7 +84,7 @@ def _gehoert_zu_satz(kontakt: ObjektKontakt, praefix: str) -> bool:
     """Gehoert diese Kontaktzeile dem Datenblatt mit diesem Praefix? Der Doppelpunkt
     im Praefix verhindert, dass 'pdf:123' auch 'pdf:1238:...' faengt."""
     return (kontakt.extern_quelle == "dibos_bma"
-            and bool(kontakt.extern_id) and kontakt.extern_id.startswith(praefix))
+            and kontakt.extern_id is not None and kontakt.extern_id.startswith(praefix))
 
 
 def _personen_schluessel(art: str | None, name: str | None) -> tuple[str, str]:
@@ -122,7 +122,11 @@ def _adoptionskandidaten(objekt: Objekt,
 
 def _importierte_kontakt_ids(satz: BmaImportSatz, objekt: Objekt) -> set[str]:
     praefix = _kontakt_praefix(satz)
-    return {k.extern_id for k in objekt.kontakte if _gehoert_zu_satz(k, praefix)}
+    return {
+        k.extern_id
+        for k in objekt.kontakte
+        if k.extern_id is not None and _gehoert_zu_satz(k, praefix)
+    }
 
 
 def kontakt_abweichung(satz: BmaImportSatz, objekt: Objekt) -> tuple[list[dict], list[str]]:
