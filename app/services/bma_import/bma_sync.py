@@ -151,7 +151,11 @@ def ist_offener_vorschlag(satz: BmaImportSatz, objekt: Objekt | None) -> bool:
 def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
                     kontakte: list[dict], user_id: int | None) -> bool:
     praefix = _kontakt_praefix(satz)
-    bestehende = {k.extern_id: k for k in objekt.kontakte if _gehoert_zu_satz(k, praefix)}
+    bestehende = {
+        k.extern_id: k
+        for k in objekt.kontakte
+        if k.extern_id is not None and _gehoert_zu_satz(k, praefix)
+    }
     adoptierbar = _adoptionskandidaten(objekt, bestehende)
     vergeben: set[int] = set()  # bereits zugeordnete Zeilen - jede Zeile nur EINMAL
     gesehen: set[str] = set()
@@ -171,7 +175,10 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
                 vergeben.add(id(kontakt))
                 # Alten Schluessel entfernen, SONST raeumt die Loeschschleife unten
                 # die gerade re-gekeyte Zeile wieder weg (sie steht nicht in gesehen).
-                bestehende.pop(kontakt.extern_id, None)
+                # extern_id kann bei einem haendisch gepflegten Kandidaten None sein -
+                # ein solcher Schluessel stand ohnehin nie in bestehende (dict[str, ...]).
+                if kontakt.extern_id is not None:
+                    bestehende.pop(kontakt.extern_id, None)
                 kontakt.extern_quelle, kontakt.extern_id = "dibos_bma", extern_id
                 bestehende[extern_id] = kontakt
                 geaendert = True
