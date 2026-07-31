@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.security import sign_native_link_token
 from app.db import get_db
 from app.models.user import DeviceToken, FcmToken
+from app.services import push_service
 
 router = APIRouter(prefix="/api/v1/device", tags=["device"])
 
@@ -41,24 +42,14 @@ async def register_fcm_token(request: Request, db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(status_code=400, detail="token fehlt")
 
-    now = datetime.now(UTC)
     device_token = _get_device_token(user.id, db)
-
-    # Upsert: vorhandenen Token updaten oder neuen anlegen
-    existing = db.query(FcmToken).filter(FcmToken.token == token).first()
-    if existing:
-        existing.user_id = user.id
-        existing.device_token_id = device_token.id if device_token else None
-        existing.last_used_at = now
-    else:
-        db.add(FcmToken(
-            user_id=user.id,
-            device_token_id=device_token.id if device_token else None,
-            token=token,
-            platform=platform,
-            created_at=now,
-            last_used_at=now,
-        ))
+    push_service.upsert_fcm_token(
+        db,
+        user_id=user.id,
+        token=token,
+        platform=platform,
+        device_token_id=device_token.id if device_token else None,
+    )
     db.commit()
     return JSONResponse({"ok": True})
 

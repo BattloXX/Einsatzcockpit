@@ -59,10 +59,12 @@ def _safe_next(next_url: str | None) -> str:
 
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, next: str = ""):
+async def login_page(request: Request, next: str = "", fcm_token: str = ""):
     if getattr(request.state, "user", None):
         return RedirectResponse(_safe_next(next), status_code=302)
-    return templates.TemplateResponse(request, "login.html", {"error": None, "next": next})
+    return templates.TemplateResponse(
+        request, "login.html", {"error": None, "next": next, "fcm_token": fcm_token}
+    )
 
 
 @router.post("/login")
@@ -74,6 +76,7 @@ async def login(
     password: str = Form(...),
     next: str = Form(""),
     remember: str = Form(""),
+    fcm_token: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """Login mit Account-Lockout (Phase 7).
@@ -92,7 +95,7 @@ async def login(
         # (verhindert Username-Enumeration über Timing).
         verify_password(password, _get_dummy_password_hash())
         return templates.TemplateResponse(
-            request, "login.html", {"error": generic_error, "next": next},
+            request, "login.html", {"error": generic_error, "next": next, "fcm_token": fcm_token},
             status_code=401,
         )
 
@@ -121,7 +124,7 @@ async def login(
             return templates.TemplateResponse(
                 request, "login.html",
                 {"error": "Account ist aktuell gesperrt. Bitte später erneut versuchen.",
-                 "next": next},
+                 "next": next, "fcm_token": fcm_token},
                 status_code=401,
             )
         # Lockout abgelaufen – zurücksetzen
@@ -141,7 +144,7 @@ async def login(
                         payload={"failed_count": user.failed_login_count})
         db.commit()
         return templates.TemplateResponse(
-            request, "login.html", {"error": generic_error, "next": next},
+            request, "login.html", {"error": generic_error, "next": next, "fcm_token": fcm_token},
             status_code=401,
         )
 
@@ -151,6 +154,9 @@ async def login(
     user.locked_until = None
     write_audit(db, "auth.login", user_id=user.id,
                 ip=request.client.host if request.client else None)
+    if fcm_token:
+        from app.services.push_service import upsert_fcm_token
+        upsert_fcm_token(db, user_id=user.id, token=fcm_token)
     db.commit()
 
     # "Login merken": längeres, gleitendes Session-Fenster (7 Tage Inaktivität,
@@ -166,7 +172,12 @@ async def login(
 
 
 @router.get("/geraet-login")
-async def device_login(request: Request, token: str, db: Session = Depends(get_db)):
+async def device_login(
+    request: Request,
+    token: str,
+    fcm_token: str | None = None,
+    db: Session = Depends(get_db),
+):
     """Token-basierter Auto-Login für registrierte Geräte."""
     token_hash = hash_api_key(token)
     dt = db.query(DeviceToken).filter(
@@ -185,6 +196,9 @@ async def device_login(request: Request, token: str, db: Session = Depends(get_d
     write_audit(db, "auth.device_login", user_id=user.id,
                 ip=request.client.host if request.client else None,
                 payload={"device_token_id": dt.id, "label": dt.label})
+    if fcm_token:
+        from app.services.push_service import upsert_fcm_token
+        upsert_fcm_token(db, user_id=user.id, token=fcm_token, device_token_id=dt.id)
     db.commit()
 
     session_token = sign_session(user.id, device=True, device_token_id=dt.id)

@@ -9,10 +9,13 @@ tatsächliche Reichweite und schließt native-App-Nutzer aus der Empfänger-List
 """
 import re
 
-from app.core.security import hash_password
+from fastapi.testclient import TestClient
+
+from app.core.security import hash_api_key, hash_password, sign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.user import FcmToken, PushSubscription, Role, User, UserRole
+from app.main import app
+from app.models.user import DeviceToken, FcmToken, PushSubscription, Role, User, UserRole
 
 ORG_ID = 1  # FF Wolfurt (seeded)
 
@@ -53,8 +56,6 @@ def test_native_app_without_fcm_token_shows_inactive_not_unsupported():
     """Kein Web-Push-Selbstcheck (der würde immer 'nicht unterstützt' zeigen) —
     stattdessen serverseitiger FCM-Status, hier: noch keine Registrierung."""
     _setup_admin("push_native_no_fcm")
-    from fastapi.testclient import TestClient
-    from app.main import app
     client = TestClient(app)
     _login(client, "push_native_no_fcm", "Test1234!")
 
@@ -66,8 +67,6 @@ def test_native_app_without_fcm_token_shows_inactive_not_unsupported():
 
 def test_native_app_with_fcm_token_shows_active():
     _setup_admin("push_native_with_fcm")
-    from fastapi.testclient import TestClient
-    from app.main import app
     client = TestClient(app)
     _login(client, "push_native_with_fcm", "Test1234!")
 
@@ -86,12 +85,55 @@ def test_native_app_with_fcm_token_shows_active():
     assert "über die native App (FCM) aktiviert" in r.text
 
 
+def test_native_app_fcm_status_is_scoped_to_current_device():
+    user_id = _setup_admin("push_native_device_scope")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        registered = DeviceToken(
+            user_id=user_id,
+            token_hash=hash_api_key("push-device-registered"),
+            label="Registriertes Gerät",
+        )
+        inactive = DeviceToken(
+            user_id=user_id,
+            token_hash=hash_api_key("push-device-inactive"),
+            label="Inaktives Gerät",
+        )
+        db.add_all([registered, inactive])
+        db.flush()
+        db.add(FcmToken(
+            user_id=user_id,
+            device_token_id=registered.id,
+            token="fcm-token-device-scoped",
+            platform="android",
+        ))
+        db.commit()
+        registered_id = registered.id
+        inactive_id = inactive.id
+    finally:
+        db.close()
+
+    client = TestClient(app)
+    client.cookies.set(
+        "session", sign_session(user_id, device=True, device_token_id=registered_id)
+    )
+    active = client.get("/admin/push-nachrichten", params={"native": "1"})
+    assert active.status_code == 200
+    assert "über die native App (FCM) aktiviert" in active.text
+
+    client.cookies.set(
+        "session", sign_session(user_id, device=True, device_token_id=inactive_id)
+    )
+    inactive_response = client.get("/admin/push-nachrichten", params={"native": "1"})
+    assert inactive_response.status_code == 200
+    assert "Noch keine FCM-Registrierung" in inactive_response.text
+
+
 def test_non_native_browser_keeps_client_side_status_check():
     """Ohne native-App-Erkennung bleibt der bisherige Browser-Selbstcheck
     (JS prüft serviceWorker/PushManager) unverändert aktiv."""
     _setup_admin("push_browser_user")
-    from fastapi.testclient import TestClient
-    from app.main import app
     client = TestClient(app)
     _login(client, "push_browser_user", "Test1234!")
 
@@ -137,8 +179,6 @@ def test_subscriber_count_includes_fcm_tokens():
     finally:
         db.close()
 
-    from fastapi.testclient import TestClient
-    from app.main import app
     client = TestClient(app)
     _login(client, "push_count_user", "Test1234!")
 

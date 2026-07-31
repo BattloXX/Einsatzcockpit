@@ -10,6 +10,7 @@ Pfad konfiguriert ist. PWA-Nutzer erhalten weiterhin Web-Push über VAPID.
 """
 import json
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -26,11 +27,12 @@ _fcm_app: Any = None
 # Push erneut zu importieren und den vollen Traceback zu loggen (Log-Flut auf
 # Prod beobachtet 2026-07-06). Web-Push/VAPID laeuft davon unberuehrt weiter.
 _fcm_unavailable: bool = False
+_fcm_unconfigured_warned: bool = False
 
 
 def _get_fcm_app(cfg: dict | None = None):
     """Gibt eine initialisierte firebase_admin.App zurück oder None wenn FCM nicht konfiguriert."""
-    global _fcm_app, _fcm_unavailable
+    global _fcm_app, _fcm_unavailable, _fcm_unconfigured_warned
     if _fcm_app is not None:
         return _fcm_app
     if _fcm_unavailable:
@@ -39,6 +41,12 @@ def _get_fcm_app(cfg: dict | None = None):
     fcm_project_id = cfg.get("fcm_project_id", settings.FCM_PROJECT_ID) if cfg else settings.FCM_PROJECT_ID
     fcm_creds = cfg.get("fcm_credentials_path", settings.FCM_CREDENTIALS_PATH) if cfg else settings.FCM_CREDENTIALS_PATH
     if not fcm_enabled or not fcm_project_id or not fcm_creds:
+        if not _fcm_unconfigured_warned:
+            _fcm_unconfigured_warned = True
+            log.warning(
+                "FCM ist nicht konfiguriert (fcm_enabled/fcm_project_id/fcm_credentials_path) "
+                "- native Android-Pushes werden nicht verschickt."
+            )
         return None
     try:
         import firebase_admin  # type: ignore
@@ -83,6 +91,36 @@ def send_fcm(fcm_token_row: FcmToken, title: str, body: str, url: str | None = N
     except Exception as exc:
         log.warning("FCM fehlgeschlagen für Token %s: %s", fcm_token_row.id, exc)
         return False
+
+
+def upsert_fcm_token(
+    db: Session,
+    *,
+    user_id: int,
+    token: str,
+    platform: str = "android",
+    device_token_id: int | None = None,
+) -> bool:
+    """Legt einen FCM-Token an oder aktualisiert ihn, ohne selbst zu committen."""
+    token = (token or "").strip()[:512]
+    if not token:
+        return False
+    now = datetime.now(UTC)
+    existing = db.query(FcmToken).filter(FcmToken.token == token).first()
+    if existing:
+        existing.user_id = user_id
+        existing.device_token_id = device_token_id
+        existing.last_used_at = now
+    else:
+        db.add(FcmToken(
+            user_id=user_id,
+            device_token_id=device_token_id,
+            token=token,
+            platform=platform[:20],
+            created_at=now,
+            last_used_at=now,
+        ))
+    return True
 
 
 def _push_cfg(db: Session | None) -> dict[str, Any]:

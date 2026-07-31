@@ -98,24 +98,28 @@
         const perm = await PushNotifications.requestPermissions();
         if (perm.receive !== 'granted') return; // naechster Retry beim naechsten Resume/Online
 
-        await PushNotifications.register();
         PushNotifications.addListener('registration', async (reg) => {
           try {
-            await fetch('/api/v1/device/fcm-token', {
+            const res = await fetch('/api/v1/device/fcm-token', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
               body: JSON.stringify({ token: reg.value, platform: 'android' }),
             });
-            _fcmRegistered = true;
+            if (res.ok) { _fcmRegistered = true; }
+            else { console.warn('[ELNative] FCM-Token-Registrierung: HTTP', res.status); }
           } catch (e) {
             console.warn('[ELNative] FCM-Token-Registrierung fehlgeschlagen:', e);
           }
         });
-
+        PushNotifications.addListener('registrationError', (err) => {
+          console.warn('[ELNative] PushNotifications registrationError:', err);
+        });
         PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
           const url = action?.notification?.data?.url;
           if (url) window.location.href = url;
         });
+
+        await PushNotifications.register();
       } catch (e) {
         console.warn('[ELNative] PushNotifications Fehler:', e);
       } finally {

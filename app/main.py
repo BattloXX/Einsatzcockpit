@@ -407,6 +407,7 @@ async def session_middleware(request: Request, call_next):
     request.state.qr_incident_id = None
     request.state.qr_lage_id = None
     request.state.is_device = False
+    request.state.device_token_id = None
     _refresh_user_id: int | None = None  # set for non-QR sessions to trigger cookie refresh
     _refresh_remember: bool = False      # "Login merken" – längeres, gleitendes Fenster
 
@@ -481,6 +482,8 @@ async def session_middleware(request: Request, call_next):
                         ).first() is not None
                     if not device_ok:
                         user = None
+                    else:
+                        request.state.device_token_id = device_token_id
                 elif user and not is_device:
                     # Regular session: refresh token to slide the inactivity window.
                     _refresh_user_id = user_id

@@ -50,6 +50,7 @@
       <form method="post" action="/login" class="login-form">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="next" value="{{ next|default('') }}">
+        <input type="hidden" name="fcm_token" value="{{ fcm_token|default('') }}">
         <div class="form-group">
           <label for="username">Benutzername</label>
           <input type="text" id="username" name="username" required

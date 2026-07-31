@@ -2532,10 +2532,11 @@ async def push_notifications_page(
     # fälschlich "nicht unterstützt" anzeigen, obwohl dieses Gerät ggf. längst per
     # FCM erreichbar ist.
     is_native_app = bool(request.state.is_native_app)
-    has_fcm_token = (
-        is_native_app
-        and db.query(FcmToken.id).filter(FcmToken.user_id == user.id).first() is not None
-    )
+    fcm_status_q = db.query(FcmToken.id).filter(FcmToken.user_id == user.id)
+    current_device_id = request.state.device_token_id if request.state.is_device else None
+    if current_device_id is not None:
+        fcm_status_q = fcm_status_q.filter(FcmToken.device_token_id == current_device_id)
+    has_fcm_token = is_native_app and fcm_status_q.first() is not None
     return templates.TemplateResponse(request, "admin/push_notifications.html", {
         "user": user,
         "sub_count": sub_count,
