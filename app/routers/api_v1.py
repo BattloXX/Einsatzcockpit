@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -92,6 +93,16 @@ class AlarmPayload(BaseModel):
                      examples=["A-2025-04711"])
     Nummer: int | None = Field(None, ge=0, le=999_999_999,
                                 description="Externe Einsatznummer.", examples=[4711])
+    Leitstellennummer: str | None = Field(
+        None, max_length=40,
+        description=(
+            "Stabile Leitstellen-Einsatznummer (z. B. 'fu26303655'). Dient als "
+            "Matching-Schlüssel gegen bereits per LIS/DIBOS angelegte Einsätze "
+            "(Incident.lis_operation_number) — verhindert doppelte Einsätze, wenn "
+            "derselbe Alarm sowohl über EUS als auch über LIS/DIBOS eintrifft."
+        ),
+        examples=["fu26303655"],
+    )
     AlarmDatumZeit: str | None = Field(
         None, max_length=50, description="ISO-8601 Datum/Zeit der Alarmierung.",
         examples=["2026-05-24T18:42:00+02:00"],
@@ -529,11 +540,14 @@ async def create_incident_api(
         except (ValueError, ZoneInfoNotFoundError):
             started_at = None
 
-    # LIS/IPR-Verknüpfung: falls dieser Einsatz bereits zuvor über LIS geliefert und
-    # angelegt wurde (kein external_key vorhanden), wird ihm hier der external_key
-    # nachgetragen statt einen doppelten Einsatz anzulegen. Matching über Alarmstichwort
-    # + Adresse innerhalb eines Zeitfensters (keine Leitstellennummer in der Push-API
-    # verfügbar) — siehe app.services.lis.lis_matching.
+    # LIS/DIBOS-Verknüpfung: falls dieser Einsatz bereits zuvor über LIS/DIBOS geliefert
+    # und angelegt wurde (kein external_key vorhanden), wird ihm hier der external_key
+    # nachgetragen statt einen doppelten Einsatz anzulegen. Seit EUS die stabile
+    # Leitstellennummer mitliefert (Payload-Feld `Leitstellennummer`), matched zuerst
+    # find_matching_incident() darüber direkt gegen Incident.lis_operation_number
+    # (Tier 2, unabhängig vom Status); erst danach greift die Alarmstichwort+Adresse-
+    # Heuristik (Tier 3/4) als Fallback für Einsätze ohne bekannte Nummer — siehe
+    # app.services.lis.lis_matching.
     linked_from_lis: Incident | None = None
     if api_key.org_id:
         from app.services.lis.lis_matching import find_matching_incident
@@ -543,18 +557,33 @@ async def create_incident_api(
             street=payload.Strasse,
             city=payload.Ort,
             started_at=started_at,
+            lis_operation_number=payload.Leitstellennummer,
         )
-        if candidate and candidate.lis_operation_id and not candidate.external_key:
+        # lis_operation_id (LIS/IPR) ODER lis_operation_number (DIBOS-Direktanlage,
+        # siehe dibos_enrich.py::_get_or_create_incident_for_event) markieren einen
+        # Kandidaten als von LIS/DIBOS stammend — nur solche dürfen hier verknüpft
+        # werden, kein rein manuell angelegter Einsatz.
+        if candidate and not candidate.external_key and (
+            candidate.lis_operation_id or candidate.lis_operation_number
+        ):
             linked_from_lis = candidate
 
     if linked_from_lis:
         linked_from_lis.external_key = payload.Key
         if payload.Nummer is not None:
             linked_from_lis.nummer = payload.Nummer
+        # Nummer nur nachtragen, wenn sie am Kandidaten noch fehlt — ein bereits
+        # gesetzter Wert stammt von LIS/DIBOS und ist die verlässlichere Quelle,
+        # nie überschreiben.
+        if payload.Leitstellennummer and not linked_from_lis.lis_operation_number:
+            linked_from_lis.lis_operation_number = payload.Leitstellennummer
         if payload.Name:
             linked_from_lis.caller_name = payload.Name
         if payload.Telefon:
             linked_from_lis.caller_phone = payload.Telefon
+        # Koordinaten kommen ausschließlich aus LIS/DIBOS (Geocoding oder deren
+        # eigene Koordinaten) — EUS liefert keine Lat/Lng und darf hier auch beim
+        # Verknüpfen keine Koordinatenfelder anfassen.
         write_audit(db, "api.incident.linked_lis", api_key_id=api_key.id,
                     incident_id=linked_from_lis.id, ip=request.client.host if request.client else None)
         board_token, board_url = _get_or_create_board_token(
@@ -589,6 +618,49 @@ async def create_incident_api(
         ip=request.client.host if request.client else None,
         reject_near_duplicates=True,
     )
+
+    if created_fresh and payload.Leitstellennummer:
+        # Nummer am neuen Einsatz vormerken, damit ein später eintreffender LIS/DIBOS-
+        # Datensatz für dieselbe Leitstellennummer diesen Einsatz wiederfindet statt
+        # ihn doppelt anzulegen (siehe find_matching_incident() Tier 2). Race gegen
+        # einen parallel laufenden LIS/DIBOS-Sync für dieselbe Nummer ist möglich —
+        # gleiches Muster wie dibos_enrich._get_or_create_incident_for_event().
+        incident.lis_operation_number = payload.Leitstellennummer
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            winner = (
+                db.query(Incident)
+                .filter(
+                    Incident.primary_org_id == api_key.org_id,
+                    Incident.lis_operation_number == payload.Leitstellennummer,
+                )
+                .first()
+            )
+            if winner:
+                winner.external_key = payload.Key
+                if payload.Nummer is not None:
+                    winner.nummer = payload.Nummer
+                if payload.Name:
+                    winner.caller_name = payload.Name
+                if payload.Telefon:
+                    winner.caller_phone = payload.Telefon
+                write_audit(db, "api.incident.linked_lis", api_key_id=api_key.id,
+                            incident_id=winner.id, ip=request.client.host if request.client else None)
+                board_token, board_url = _get_or_create_board_token(
+                    db, winner.id, api_key.created_by_user_id, str(request.base_url)
+                )
+                db.commit()
+                return {
+                    "id": winner.id,
+                    "external_key": winner.external_key,
+                    "url": f"/einsatz/{winner.id}",
+                    "created": False,
+                    "board_token": board_token,
+                    "board_url": board_url,
+                }
+            raise
 
     if not created_fresh:
         # Fast zeitgleicher Duplikat-Alarm mit gleichem Stichwort erkannt (Audit-Eintrag

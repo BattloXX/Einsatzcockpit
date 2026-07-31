@@ -47,6 +47,7 @@ Content-Type: application/json
   "Ort": "Wolfurt",
   "Strasse": "Senderstraße",
   "HausNr": "34",
+  "Leitstellennummer": "fu26303655",
   "Uebung": false
 }
 ```
@@ -57,6 +58,7 @@ Content-Type: application/json
 |------|-----|---------|-------------|-------------|
 | `Key` | string | ja | 1–200 Zeichen, Strip, kein reines Whitespace | Idempotenz-Schlüssel |
 | `Nummer` | integer | nein | ≥ 0 | Einsatznummer aus Alarmierungssystem |
+| `Leitstellennummer` | string | nein | max. 40 Zeichen | Stabile Leitstellen-Einsatznummer (z. B. `fu26303655`). Matching-Schlüssel gegen bereits per LIS/DIBOS angelegte Einsätze (`Incident.lis_operation_number`) — verhindert doppelte Einsätze, wenn derselbe Alarm über mehrere Wege eintrifft. Koordinaten werden dabei nie über diesen Weg gesetzt/überschrieben — die kommen ausschließlich aus LIS/DIBOS bzw. dem eigenen Geocoding. |
 | `AlarmDatumZeit` | ISO-8601 | nein | | Zeitpunkt des Alarms |
 | `Zeitzone` | string (IANA) | nein | | Zeitzone für naive `AlarmDatumZeit` |
 | `Stufe` | string | nein | max. 10 Zeichen, wird uppercase normalisiert | Alarmstufe (t1–t9, f1–f4) → F3 |

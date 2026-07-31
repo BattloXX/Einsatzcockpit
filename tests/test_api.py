@@ -153,3 +153,100 @@ def test_fast_zeitgleicher_alarm_mit_anderem_key_wird_nicht_doppelt_angelegt(
         assert anzahl == 1
     finally:
         db.close()
+
+
+# ── Leitstellennummer (EUS): stabiler Matching-Schlüssel gegen bereits per
+#    LIS/DIBOS angelegte Einsätze (Incident.lis_operation_number) ───────────
+#
+# Eigene, frische Org (siehe Begründung bei duplicate_guard_api_key oben).
+
+@pytest.fixture
+def leitstellennummer_api_key(setup_db):
+    raw = generate_api_key()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        import uuid
+        org = FireDept(
+            slug=f"lsz-api-{uuid.uuid4().hex[:8]}", name="Leitstellennummer-Test-Org",
+            color="#123456", bos="Feuerwehr",
+        )
+        db.add(org)
+        db.flush()
+        key = ApiKey(key_hash=hash_api_key(raw), label="Test", org_id=org.id)
+        db.add(key)
+        db.commit()
+        org_id = org.id
+    finally:
+        db.close()
+    return raw, org_id
+
+
+def test_leitstellennummer_stored_on_new_incident(client, leitstellennummer_api_key):
+    api_key, _org_id = leitstellennummer_api_key
+    payload = dict(PAYLOAD, Key="lsz-key-neu", Leitstellennummer="fu26303655")
+    r = client.post("/api/v1/einsatz", json=payload, headers={"X-API-Key": api_key})
+    assert r.status_code == 200
+    assert r.json()["created"] is True
+    incident_id = r.json()["id"]
+
+    from app.models.incident import Incident
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = db.get(Incident, incident_id)
+        assert incident.lis_operation_number == "fu26303655"
+    finally:
+        db.close()
+
+
+def test_leitstellennummer_links_existing_dibos_incident_ohne_duplikat(client, leitstellennummer_api_key):
+    """Ein per DIBOS angelegter Einsatz (lis_operation_number gesetzt, kein
+    lis_operation_id, kein external_key) darf nicht doppelt angelegt werden, wenn
+    derselbe Alarm zusätzlich über EUS mit derselben Leitstellennummer eintrifft —
+    stattdessen wird der bestehende Einsatz verknüpft (external_key nachgetragen).
+    Koordinaten (hier simuliert wie von DIBOS geliefert) dürfen dabei NICHT
+    überschrieben werden — EUS liefert selbst keine Koordinaten."""
+    api_key, org_id = leitstellennummer_api_key
+
+    from app.models.incident import Incident
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        bestehend = Incident(
+            alarm_type_code="T1",
+            status="active",
+            primary_org_id=org_id,
+            address_street="Andere Straße",
+            address_city="Andereort",
+            lis_operation_number="fu26303655",
+            lat=47.4925,
+            lng=9.7503,
+        )
+        db.add(bestehend)
+        db.commit()
+        bestehend_id = bestehend.id
+    finally:
+        db.close()
+
+    payload = dict(PAYLOAD, Key="lsz-key-verknuepft", Leitstellennummer="fu26303655")
+    r = client.post("/api/v1/einsatz", json=payload, headers={"X-API-Key": api_key})
+    assert r.status_code == 200
+    assert r.json()["created"] is False
+    assert r.json()["id"] == bestehend_id
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = db.get(Incident, bestehend_id)
+        assert incident.external_key == "lsz-key-verknuepft"
+        assert incident.lat == 47.4925
+        assert incident.lng == 9.7503
+
+        anzahl = db.query(Incident).filter(
+            Incident.primary_org_id == org_id,
+            Incident.lis_operation_number == "fu26303655",
+        ).count()
+        assert anzahl == 1
+    finally:
+        db.close()
