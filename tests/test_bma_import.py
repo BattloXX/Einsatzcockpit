@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from app.models.bma_import import BmaImportSatz
 from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, Objekt, ObjektKontakt
 from app.services.bma_import.bma_sync import (
+    _adoptionskandidaten,
     ignoriere_vorschlag,
     ist_offener_vorschlag,
     kontakt_abweichung,
@@ -53,3 +54,17 @@ def test_entwurf_ist_nie_queue_vorschlag():
     objekt = _objekt()
     objekt.status = "entwurf"
     assert ist_offener_vorschlag(_satz(), objekt) is False
+
+
+def test_adoptionskandidaten_ignorieren_fremdes_datenblatt():
+    hand = ObjektKontakt(org_id=1, extern_quelle=None, extern_id=None,
+                         name="Max", art="bma_alarmperson")
+    eigen = ObjektKontakt(org_id=1, extern_quelle="dibos_bma",
+                          extern_id="pdf:1:bma_alarmperson:eva",
+                          name="Eva", art="bma_alarmperson")
+    fremd = ObjektKontakt(org_id=1, extern_quelle="dibos_bma",
+                          extern_id="pdf:2:bma_alarmperson:tom",
+                          name="Tom", art="bma_alarmperson")
+    kandidaten = _adoptionskandidaten(_objekt([hand, eigen, fremd]), {eigen.extern_id: eigen})
+
+    assert set(kandidaten.values()) == {hand, eigen}

@@ -326,6 +326,8 @@ def _ersetze_kinddaten(db: Session, basis: Objekt, kopie: Objekt, *, user_id: in
     vorher = len(basis.kontakte)
     for alter_kontakt in list(basis.kontakte):
         db.delete(alter_kontakt)
+    # DELETE muss vor dem INSERT durchsein, sonst kollidieren gleiche Import-IDs
+    # mit uq_objekt_kontakt_extern (dieselbe Absicherung wie bei uq_objekt_merkmal).
     db.flush()
     kontakt_map: dict[int, int] = {}
     for kontakt_vorlage in kopie.kontakte:

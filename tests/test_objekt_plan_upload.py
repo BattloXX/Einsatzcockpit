@@ -59,6 +59,35 @@ def _test_pdf_mit_text(text: str) -> bytes:
     return buf.getvalue()
 
 
+def _test_datenblatt_pdf(bma_nummer: str = "91332", name: str = "Max Muster") -> bytes:
+    """Synthetisches BMA-Datenblatt mit ASCII-Textlayer fuer den echten Parserpfad."""
+    from reportlab.pdfgen import canvas
+    zeilen = [
+        f"BMA {bma_nummer}",
+        "BMA Testbetrieb",
+        "1. Angaben zur Brandmeldeanlage",
+        "Standort: BMA Testbetrieb Anlagedatum: 01.01.2026 10:00:00",
+        "Aufschaltung RFL:Ja - 01.01.2026",
+        "2. Alarmierung Feuerwehr",
+        "Alarmierung der oertlichen Feuerwehr mit Stichwort F14",
+        "Feuerwehr: FW - Test",
+        "3. Verstaendigung",
+        "BMA Alarmperson",
+        f"Name: {name}",
+        "Telefon Beruf:+43 555 123",
+        "Datenblatt zuletzt aktualisiert: 01.01.2026",
+    ]
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(595, 842))
+    y = 800
+    for zeile in zeilen:
+        c.drawString(40, y, zeile)
+        y -= 18
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
 # ── Reine Parser-/Helfer-Funktionen ───────────────────────────────────────────
 
 def test_parse_identitaet_gueltig():
@@ -489,6 +518,82 @@ def test_dokument_upload_ohne_csrf_wird_abgelehnt(client, plan_upload_setup):
         files={"datei": ("bsp.pdf", _test_pdf_blank(), "application/pdf")},
     )
     assert r.status_code == 403
+
+
+def test_datenblatt_zweimal_im_selben_upload_erzeugt_keine_doppelten_kontakte(client, plan_upload_setup):
+    from app.db import SessionLocal
+    from app.models.objekt import ObjektKontakt
+
+    org_id, username = plan_upload_setup
+    _login_http(client, username, "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+    bma_nummer = f"9{uuid.uuid4().int % 100000:05d}"
+    pdf = _test_datenblatt_pdf(bma_nummer)
+
+    r = client.post(
+        "/objekte/dokument-upload",
+        data={"_csrf": csrf},
+        files=[("dateien", ("datenblatt-a.pdf", pdf, "application/pdf")),
+               ("dateien", ("datenblatt-b.pdf", pdf, "application/pdf"))],
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 200, r.text[:500]
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kontakt = db.query(ObjektKontakt).filter(
+            ObjektKontakt.org_id == org_id,
+            ObjektKontakt.extern_id == f"pdf:{bma_nummer}:bma_alarmperson:max-muster",
+        ).one_or_none()
+        assert kontakt is not None
+    finally:
+        db.close()
+
+
+def test_datenblatt_upload_adoptiert_haendischen_kontakt(client, plan_upload_setup):
+    from app.db import SessionLocal
+    from app.models.objekt import ObjektKontakt
+
+    org_id, username = plan_upload_setup
+    bma_nummer = f"8{uuid.uuid4().int % 100000:05d}"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = Objekt(org_id=org_id, nummer=1, name="BMA Testbetrieb",
+                        status=OBJEKT_STATUS_ENTWURF)
+        db.add(objekt)
+        db.flush()
+        db.add(ObjektBMA(org_id=org_id, objekt_id=objekt.id, bma_nummer=bma_nummer))
+        db.add(ObjektKontakt(org_id=org_id, objekt_id=objekt.id, art="bma_alarmperson",
+                             name="Max Muster", erreichbarkeit="Mo-Fr 8-17", sort=1))
+        db.commit()
+        objekt_id = objekt.id
+    finally:
+        db.close()
+
+    _login_http(client, username, "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(
+        "/objekte/dokument-upload",
+        data={"_csrf": csrf},
+        files=[("dateien", ("datenblatt.pdf", _test_datenblatt_pdf(bma_nummer), "application/pdf"))],
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 200, r.text[:500]
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kontakt = db.query(ObjektKontakt).filter(
+            ObjektKontakt.objekt_id == objekt_id,
+            ObjektKontakt.extern_id == f"pdf:{bma_nummer}:bma_alarmperson:max-muster",
+        ).one_or_none()
+        assert kontakt is not None
+        assert kontakt.erreichbarkeit == "Mo-Fr 8-17"
+        assert kontakt.extern_quelle == "dibos_bma"
+    finally:
+        db.close()
 
 
 def test_bma_vorschlag_uebernehmen_fuegt_fehlenden_kontakt_ein(client, plan_upload_setup):

@@ -27,6 +27,7 @@ from app.models.objekt import (
     ObjektBMA,
     ObjektKontakt,
 )
+from app.services.bma_import.bma_pdf_parser import namens_slug
 from app.services.objekt_plan_upload_service import erstelle_objekt_aus_identitaet, finde_passendes_objekt
 from app.services.objekt_service import aktualisiere_felder, telefone_zu_json, write_objekt_change
 
@@ -79,10 +80,49 @@ def _kontakt_praefix(satz: BmaImportSatz) -> str:
     return f"{satz.extern_id}:"
 
 
+def _gehoert_zu_satz(kontakt: ObjektKontakt, praefix: str) -> bool:
+    """Gehoert diese Kontaktzeile dem Datenblatt mit diesem Praefix? Der Doppelpunkt
+    im Praefix verhindert, dass 'pdf:123' auch 'pdf:1238:...' faengt."""
+    return (kontakt.extern_quelle == "dibos_bma"
+            and bool(kontakt.extern_id) and kontakt.extern_id.startswith(praefix))
+
+
+def _personen_schluessel(art: str | None, name: str | None) -> tuple[str, str]:
+    """Adoptionsschluessel Rolle+Name. namens_slug ist derselbe Normalisierer, den
+    bma_pdf_parser fuer die extern_id benutzt - so matcht 'Andreas Böhler' aus der
+    Handpflege auf 'Andreas Boehler' aus dem PDF."""
+    return (art or "sonstig", namens_slug(name or ""))
+
+
+def _adoptionskandidaten(objekt: Objekt,
+                          bestehende: dict[str, ObjektKontakt]) -> dict[tuple[str, str], ObjektKontakt]:
+    """Zeilen, die dieselbe Person meinen koennten, aber nicht (mehr) unter der
+    aktuellen extern_id haengen. Ohne diese Zuordnung legt der Import fuer jede
+    solche Person eine ZWEITE Zeile an - genau das ist der Duplikat-Bug:
+
+      * extern_quelle IS NULL - haendisch gepflegt ODER von Migration 0186 ent-eignet
+        (dort Zeile 52). In Produktion der Massenfall.
+      * gleicher Satz-Praefix, aber alte extern_id - der Kollisionszaehler aus
+        _mit_stabilen_ids() hat sich verschoben. Re-Key statt delete+insert erhaelt
+        die Zeilen-id (ObjektWohnanlage.hausverwaltung_kontakt_id zeigt evtl. darauf)
+        und die haendisch gepflegte erreichbarkeit.
+
+    NICHT adoptiert werden Zeilen eines ANDEREN Datenblatts (extern_quelle
+    'dibos_bma' mit fremdem Praefix): zwei Datenblaetter an einem Objekt verwalten
+    bewusst disjunkte Kontaktmengen (siehe _importierte_kontakt_ids).
+    Bei mehreren Treffern gewinnt der erste - die Collection ist nach sort geordnet.
+    """
+    kandidaten: dict[tuple[str, str], ObjektKontakt] = {}
+    for kontakt in objekt.kontakte:
+        if kontakt.extern_quelle is not None and kontakt.extern_id not in bestehende:
+            continue  # gehoert einem fremden Datenblatt - unantastbar
+        kandidaten.setdefault(_personen_schluessel(kontakt.art, kontakt.name), kontakt)
+    return kandidaten
+
+
 def _importierte_kontakt_ids(satz: BmaImportSatz, objekt: Objekt) -> set[str]:
     praefix = _kontakt_praefix(satz)
-    return {k.extern_id for k in objekt.kontakte
-            if k.extern_quelle == "dibos_bma" and k.extern_id and k.extern_id.startswith(praefix)}
+    return {k.extern_id for k in objekt.kontakte if _gehoert_zu_satz(k, praefix)}
 
 
 def kontakt_abweichung(satz: BmaImportSatz, objekt: Objekt) -> tuple[list[dict], list[str]]:
@@ -107,8 +147,9 @@ def ist_offener_vorschlag(satz: BmaImportSatz, objekt: Objekt | None) -> bool:
 def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
                     kontakte: list[dict], user_id: int | None) -> bool:
     praefix = _kontakt_praefix(satz)
-    bestehende = {k.extern_id: k for k in objekt.kontakte
-                  if k.extern_quelle == "dibos_bma" and k.extern_id and k.extern_id.startswith(praefix)}
+    bestehende = {k.extern_id: k for k in objekt.kontakte if _gehoert_zu_satz(k, praefix)}
+    adoptierbar = _adoptionskandidaten(objekt, bestehende)
+    vergeben: set[int] = set()  # bereits zugeordnete Zeilen - jede Zeile nur EINMAL
     gesehen: set[str] = set()
     geaendert = False
     naechster_sort = max((k.sort for k in objekt.kontakte), default=0) + 1
@@ -120,21 +161,50 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
         felder = _kontakt_felder(daten)
         kontakt = bestehende.get(extern_id)
         if kontakt is None:
-            db.add(ObjektKontakt(org_id=objekt.org_id, objekt_id=objekt.id,
-                                 extern_quelle="dibos_bma", extern_id=extern_id,
-                                 sort=naechster_sort, **felder))
+            kandidat = adoptierbar.get(_personen_schluessel(felder["art"], felder["name"]))
+            if kandidat is not None and id(kandidat) not in vergeben:
+                kontakt = kandidat
+                vergeben.add(id(kontakt))
+                # Alten Schluessel entfernen, SONST raeumt die Loeschschleife unten
+                # die gerade re-gekeyte Zeile wieder weg (sie steht nicht in gesehen).
+                bestehende.pop(kontakt.extern_id, None)
+                kontakt.extern_quelle, kontakt.extern_id = "dibos_bma", extern_id
+                bestehende[extern_id] = kontakt
+                geaendert = True
+                # sort bleibt bewusst stehen: die Reihenfolge der Kontaktkarten ist
+                # haendische Pflege, die der Import nicht umsortieren soll.
+        if kontakt is None:
+            kontakt = ObjektKontakt(org_id=objekt.org_id, extern_quelle="dibos_bma",
+                                    extern_id=extern_id, sort=naechster_sort, **felder)
+            # An die geladene Collection haengen statt db.add(): SessionLocal laeuft mit
+            # autoflush=False (app/db.py:63) und ein Mehrfach-Upload teilt sich EINE
+            # Session (ui_objekt.py::dokumente_upload_verarbeiten, ein begin_nested je
+            # Datei, ein commit ganz am Schluss). Mit db.add() bliebe objekt.kontakte
+            # unveraendert - der zweite Durchlauf saehe einen veralteten Stand und legte
+            # jeden Kontakt ein zweites Mal an.
+            objekt.kontakte.append(kontakt)
+            bestehende[extern_id] = kontakt  # doppelte extern_id in EINER Liste -> Update
             naechster_sort += 1
             geaendert = True
-        else:
-            for feld, wert in felder.items():
-                if getattr(kontakt, feld) != wert:
-                    setattr(kontakt, feld, wert)
-                    geaendert = True
-    for extern_id, kontakt in bestehende.items():
+        for feld, wert in felder.items():
+            # erreichbarkeit steht bewusst NICHT in _kontakt_felder: das Datenblatt
+            # kennt das Feld nicht, die Handpflege darf es behalten.
+            if getattr(kontakt, feld) != wert:
+                setattr(kontakt, feld, wert)
+                geaendert = True
+    for extern_id, kontakt in list(bestehende.items()):
         if extern_id not in gesehen:
-            db.delete(kontakt)
+            # remove() statt db.delete(): delete-orphan (models/objekt.py:216) loescht
+            # die Zeile beim Flush UND haelt objekt.kontakte in-memory korrekt - dasselbe
+            # Argument wie beim append() oben, nur andersherum.
+            objekt.kontakte.remove(kontakt)
             geaendert = True
     if geaendert:
+        # Schreiben, bevor die naechste Datei desselben Requests dieselbe Collection
+        # anfasst: trennt INSERT und DELETE in getrennte Flushes und haelt damit auch
+        # uq_objekt_kontakt_extern sauber, falls eine spaetere Datei eine gerade
+        # geloeschte extern_id wieder mitbringt.
+        db.flush()
         write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "bma_import_sync",
                             before=None, after=f"{len(kontakte)} Kontakt(e) aus BMA-Datenblatt",
                             user_id=user_id)

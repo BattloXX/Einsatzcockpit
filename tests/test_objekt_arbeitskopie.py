@@ -227,6 +227,29 @@ def test_uebernimm_arbeitskopie_remappt_wohnanlage_kontakt(db, org):
     assert aktualisiert.wohnanlage.hausverwaltung_kontakt_id == hv_kontakt.id
 
 
+def test_uebernimm_arbeitskopie_mit_importkontakten_verletzt_unique_nicht(db, org):
+    basis = _volles_objekt(db, org.id)
+    basis_hv = next(k for k in basis.kontakte if k.art == "hausverwaltung")
+    basis_hv.extern_quelle = "dibos_bma"
+    basis_hv.extern_id = "pdf:1332:hausverwaltung:hausverwaltung-gmbh"
+    db.commit()
+
+    kopie = erstelle_arbeitskopie(db, basis, user_id=None)
+    db.commit()
+    assert next(k for k in kopie.kontakte if k.art == "hausverwaltung").extern_id == basis_hv.extern_id
+
+    aktualisiert = uebernimm_arbeitskopie(db, kopie, user_id=None)
+    db.commit()
+    db.refresh(aktualisiert)
+
+    treffer = db.query(ObjektKontakt).filter(
+        ObjektKontakt.objekt_id == aktualisiert.id,
+        ObjektKontakt.extern_id == "pdf:1332:hausverwaltung:hausverwaltung-gmbh",
+    ).all()
+    assert len(treffer) == 1
+    assert aktualisiert.wohnanlage.hausverwaltung_kontakt_id in {k.id for k in aktualisiert.kontakte}
+
+
 def test_uebernimm_arbeitskopie_erhaelt_merkmale_gefahren_zusatzadressen_kartenobjekte(db, org):
     """Vorfall 2026-07-26 (Objekt 1082, Testserver): _ersetze_kinddaten() loeschte die
     alten Zeilen von Zusatzadresse/Gefahr/Merkmal/Kartenobjekt, ohne vor dem Anlegen

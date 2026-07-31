@@ -493,7 +493,18 @@ class ObjektMerkmal(TenantScoped, Base):
 class ObjektKontakt(TenantScoped, Base):
     """Ansprechpartner am Objekt (Brandschutzbeauftragter, Betreiber, ...)."""
     __tablename__ = "objekt_kontakt"
-    __table_args__ = (Index("ix_objekt_kontakt_org_objekt", "org_id", "objekt_id"),)
+    __table_args__ = (
+        Index("ix_objekt_kontakt_org_objekt", "org_id", "objekt_id"),
+        # War bisher nur in der DB (0181_bma_import.py:32-35), nicht im Modell -
+        # Drift nachgezogen, damit create_all (Tests) und MySQL dasselbe Schema haben.
+        Index("ix_objekt_kontakt_extern", "org_id", "extern_quelle", "extern_id"),
+        # Sicherheitsnetz gegen Doppel-Kontakte aus dem BMA-Import (siehe
+        # bma_import/bma_sync.py::_sync_kontakte). NULL zaehlt in MySQL wie in SQLite
+        # als verschieden -> haendisch gepflegte Zeilen (extern_quelle IS NULL) sind
+        # von der Regel nicht betroffen.
+        UniqueConstraint("org_id", "objekt_id", "extern_quelle", "extern_id",
+                         name="uq_objekt_kontakt_extern"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # org_id via TenantScoped
