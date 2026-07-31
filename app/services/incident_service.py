@@ -512,7 +512,6 @@ def _create_default_messages(db: Session, incident: Incident, alarm: AlarmType |
             continue
         due_at = None
         if incident.started_at and a.due_after_sec:
-            from datetime import timedelta
             started = incident.started_at if incident.started_at.tzinfo else incident.started_at.replace(tzinfo=UTC)
             due_at = started + timedelta(seconds=a.due_after_sec)
         db.add(Message(

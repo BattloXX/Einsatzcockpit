@@ -161,5 +161,10 @@ class AlarmToken(Base):
 
     def gueltig(self, *, jetzt: datetime | None = None) -> bool:
         """Harte Obergrenze fuer alle Token-Routen; Widerruf bleibt als Not-Aus."""
-        jetzt = jetzt or datetime.now(UTC).replace(tzinfo=None)
-        return self.revoked_at is None and (self.expires_at is None or self.expires_at > jetzt)
+        jetzt = jetzt or datetime.now(UTC)
+        ablauf = self.expires_at
+        if ablauf is not None and ablauf.tzinfo is None:
+            ablauf = ablauf.replace(tzinfo=UTC)
+        if jetzt.tzinfo is None:
+            jetzt = jetzt.replace(tzinfo=UTC)
+        return self.revoked_at is None and (ablauf is None or ablauf > jetzt)
