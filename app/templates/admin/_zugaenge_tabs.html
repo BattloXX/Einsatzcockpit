@@ -1,0 +1,7 @@
+{% from "_tabnav.html" import subtabnav %}
+{% set _fp = request.url.path %}
+{{ subtabnav([
+  {'label': 'Geräte-Login',     'href': '/admin/geraete-login',     'active': _fp.startswith('/admin/geraete-login')},
+  {'label': 'API-Keys',         'href': '/admin/api-keys',          'active': _fp.startswith('/admin/api-keys')},
+  {'label': 'Lagekarte-Tokens', 'href': '/admin/lagekarte-tokens',  'active': _fp.startswith('/admin/lagekarte-tokens')},
+]) }}

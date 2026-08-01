@@ -11,11 +11,14 @@
      or '/admin/sms-empfang' in _p or '/admin/einsatzinfo-sms' in _p
      or '/infoscreen-alarm' in _p
      or ('/admin/medien' in _p and not is_sysadmin)
+     or '/admin/verleih' in _p or '/admin/wasserstellen' in _p
+     or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p
+     or '/admin/foerderkalibrierung' in _p
      or _p.startswith('/gateway') %}
   {% set active_group = 'verwaltung' %}
-{% elif '/admin/gruppen' in _p or '/admin/wasserstellen' in _p
-       or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p
-       or '/admin/foerderkalibrierung' in _p %}
+{% elif '/admin/gruppen' in _p or '/admin/alarmtypen' in _p or '/admin/ausrueckordnung' in _p
+       or '/admin/auftragsvorlagen' in _p or '/admin/meldungsvorlagen' in _p
+       or '/admin/lage-hinweise' in _p or '/admin/default-meldungen' in _p %}
   {% set active_group = 'stammdaten' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
@@ -227,25 +230,26 @@
               <span class="admin-nav__icon">📋</span>Ausrückordnung
             </a>
             <a href="/admin/auftragsvorlagen"
-               class="admin-nav__item {% if '/admin/auftragsvorlagen' in request.url.path %}is-active{% endif %}"
-               {{ tip('Vor-konfigurierte Standardaufträge pro Alarmstichwort') }}>
-              <span class="admin-nav__icon">✅</span>Auftragsvorlagen
+               class="admin-nav__item {% if '/admin/auftragsvorlagen' in request.url.path or '/admin/meldungsvorlagen' in request.url.path or '/admin/lage-hinweise' in request.url.path or '/admin/default-meldungen' in request.url.path %}is-active{% endif %}"
+               {{ tip('Auftrags- und Meldungsvorlagen, Lage-Hinweise und automatische Default-Meldungen pro Alarmstichwort') }}>
+              <span class="admin-nav__icon">📑</span>Einsatzvorlagen
             </a>
-            <a href="/admin/meldungsvorlagen"
-               class="admin-nav__item {% if '/admin/meldungsvorlagen' in request.url.path %}is-active{% endif %}"
-               {{ tip('Vorschläge für Meldungen pro Alarmstichwort') }}>
-              <span class="admin-nav__icon">💬</span>Meldungsvorlagen
+          </div>
+        </div>
+
+        <!-- ── Verwaltung ────────────────────────────────────────────── -->
+        <button class="admin-nav__group-hdr" type="button" @click="toggle('verwaltung')">
+          <span>Verwaltung</span>
+          <span class="admin-nav__group-arrow" :class="groups.verwaltung && 'is-open'">›</span>
+        </button>
+        <div x-show="groups.verwaltung" x-transition.opacity.duration.120ms>
+          <div class="admin-nav__group-items">
+            <a href="/admin/benutzer"
+               class="admin-nav__item {% if '/admin/benutzer' in request.url.path %}is-active{% endif %}"
+               {{ tip('Login-Accounts, Rollen, Passwörter') }}>
+              <span class="admin-nav__icon">🔑</span>Benutzer
             </a>
-            <a href="/admin/lage-hinweise"
-               class="admin-nav__item {% if '/admin/lage-hinweise' in request.url.path %}is-active{% endif %}"
-               {{ tip('Rotierender Hinweistext über dem Board') }}>
-              <span class="admin-nav__icon">💡</span>Lage-Hinweise
-            </a>
-            <a href="/admin/default-meldungen"
-               class="admin-nav__item {% if '/admin/default-meldungen' in request.url.path %}is-active{% endif %}"
-               {{ tip('Automatische Erinnerungen pro Stichwort') }}>
-              <span class="admin-nav__icon">🔔</span>Default-Meldungen
-            </a>
+            <div class="admin-nav__subheading">Ausrüstung</div>
             <a href="/admin/verleih-artikel"
                class="admin-nav__item {% if '/admin/verleih' in request.url.path %}is-active{% endif %}"
                {{ tip('Geräteverleih Artikelstammdaten und Stücklisten') }}>
@@ -263,36 +267,11 @@
               <span class="admin-nav__icon">🧵</span>Förderstrecke
             </a>
             {% endif %}
-          </div>
-        </div>
-
-        <!-- ── Verwaltung ────────────────────────────────────────────── -->
-        <button class="admin-nav__group-hdr" type="button" @click="toggle('verwaltung')">
-          <span>Verwaltung</span>
-          <span class="admin-nav__group-arrow" :class="groups.verwaltung && 'is-open'">›</span>
-        </button>
-        <div x-show="groups.verwaltung" x-transition.opacity.duration.120ms>
-          <div class="admin-nav__group-items">
-            <a href="/admin/benutzer"
-               class="admin-nav__item {% if '/admin/benutzer' in request.url.path %}is-active{% endif %}"
-               {{ tip('Login-Accounts, Rollen, Passwörter') }}>
-              <span class="admin-nav__icon">🔑</span>Benutzer
-            </a>
             <div class="admin-nav__subheading">Zugänge und Tokens</div>
             <a href="/admin/geraete-login"
-               class="admin-nav__item {% if '/admin/geraete-login' in request.url.path %}is-active{% endif %}"
-               {{ tip('Token-URLs für Tablets und Anzeigegeräte') }}>
-              <span class="admin-nav__icon">📱</span>Geräte-Login
-            </a>
-            <a href="/admin/api-keys"
-               class="admin-nav__item {% if '/admin/api-keys' in request.url.path %}is-active{% endif %}"
-               {{ tip('Schnittstellen-Keys für externe Systeme') }}>
-              <span class="admin-nav__icon">🔐</span>API-Keys
-            </a>
-            <a href="/admin/lagekarte-tokens"
-               class="admin-nav__item {% if '/admin/lagekarte-tokens' in request.url.path %}is-active{% endif %}"
-               {{ tip('Read-only Tokens für lagekarte.info GeoJSON-Feed') }}>
-              <span class="admin-nav__icon">🗺️</span>Lagekarte-Tokens
+               class="admin-nav__item {% if '/admin/geraete-login' in request.url.path or '/admin/api-keys' in request.url.path or '/admin/lagekarte-tokens' in request.url.path %}is-active{% endif %}"
+               {{ tip('Geräte-Login-Token, API-Keys für externe Systeme und Lagekarte-Tokens verwalten') }}>
+              <span class="admin-nav__icon">🔐</span>Zugänge &amp; Tokens
             </a>
             <a href="/admin/push-nachrichten"
                class="admin-nav__item {% if '/admin/push-nachrichten' in request.url.path %}is-active{% endif %}"

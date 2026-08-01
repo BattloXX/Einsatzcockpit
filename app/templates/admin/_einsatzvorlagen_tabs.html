@@ -1,0 +1,8 @@
+{% from "_tabnav.html" import subtabnav %}
+{% set _fp = request.url.path %}
+{{ subtabnav([
+  {'label': 'Auftragsvorlagen',  'href': '/admin/auftragsvorlagen',  'active': _fp.startswith('/admin/auftragsvorlagen')},
+  {'label': 'Meldungsvorlagen',  'href': '/admin/meldungsvorlagen',  'active': _fp.startswith('/admin/meldungsvorlagen')},
+  {'label': 'Lage-Hinweise',     'href': '/admin/lage-hinweise',     'active': _fp.startswith('/admin/lage-hinweise')},
+  {'label': 'Default-Meldungen', 'href': '/admin/default-meldungen', 'active': _fp.startswith('/admin/default-meldungen')},
+]) }}

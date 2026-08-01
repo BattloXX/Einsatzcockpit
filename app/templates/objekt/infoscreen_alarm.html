@@ -95,8 +95,6 @@
     .is-wohnhinweis { border-color: var(--is-amber); background: rgba(251,191,36,.1); flex: none; }
     .is-wohnhinweis h2 { color: var(--is-amber); border-bottom-color: rgba(251,191,36,.3); }
     .is-wohnhinweis__text { font-size: 1.3rem; line-height: 1.35; white-space: pre-wrap; }
-    .is-meldung__text { font-size: 1.3rem; line-height: 1.35; white-space: pre-wrap; }
-
     #is-karte { flex: 1; border-radius: 10px; min-height: 240px; background: #111; }
     .leaflet-container { background: #1a2233; }
     .is-karte-legende { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-size: .85rem; color: var(--is-muted); }
@@ -109,17 +107,17 @@
       white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
 
     /* Fahrzeuge / Kräfte */
-    .is-fzg { display: flex; align-items: center; justify-content: space-between; gap: 10px;
-              padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--is-line);
-              border-radius: 10px; background: var(--is-surface-high); }
+    .is-fzg { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+              padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--is-line);
+              border-radius: 8px; background: var(--is-surface-high); }
     .is-fzg--extern { opacity: .82; }
-    .is-fzg__ident { display: flex; align-items: center; gap: 12px; min-width: 0; }
-    .is-fzg__icon { width: 46px; height: 46px; border-radius: 10px; flex: none; display: flex;
-                    align-items: center; justify-content: center; font-size: 1.7rem;
+    .is-fzg__ident { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+    .is-fzg__icon { width: 32px; height: 32px; border-radius: 8px; flex: none; display: flex;
+                    align-items: center; justify-content: center; font-size: 1.2rem;
                     background: var(--is-blue-deep); }
-    .is-fzg__txt { min-width: 0; }
-    .is-fzg__name { font-size: 1.25rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .is-fzg__sub { font-size: .9rem; color: var(--is-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .is-fzg__name { flex: 1; min-width: 0; font-size: 1.1rem; font-weight: 700;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .is-fzg__org { font-size: .85rem; font-weight: 400; color: var(--is-muted); }
     .is-fzg__status { text-align: right; flex: none; }
     .is-vs { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: .82rem;
              font-weight: 700; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
@@ -578,12 +576,12 @@
 
   function fahrzeugKarte(f) {
     var p = statusPille(f.status_code);
-    var sub = [f.typ, f.org].filter(Boolean).join(" · ");
+    var name = esc(f.rufname) + (f.org ? ' <span class="is-fzg__org">· ' + esc(f.org) + "</span>" : "");
     return '<div class="is-fzg' + (f.extern ? " is-fzg--extern" : "") + '">' +
       '<div class="is-fzg__ident">' +
       '<div class="is-fzg__icon">' + (f.extern ? "🚑" : "🚒") + "</div>" +
-      '<div class="is-fzg__txt"><div class="is-fzg__name">' + esc(f.rufname) + "</div>" +
-      (sub ? '<div class="is-fzg__sub">' + esc(sub) + "</div>" : "") + "</div></div>" +
+      '<div class="is-fzg__name">' + name + "</div>" +
+      "</div>" +
       '<div class="is-fzg__status"><span class="is-vs ' + p.cls + '">' + esc(p.txt) + "</span></div></div>";
   }
 
@@ -662,9 +660,7 @@
     alarmBeginn = inc.beginn ? new Date(inc.beginn).getTime() : null;
 
     // ── Alarm-Kopf (rot): Badge + Einsatzmeldung als Kopfzeile, Adresse, RSVP, Einsatzzeit ──
-    var kopfzeile = hatObjekt
-      ? (inc.meldung || inc.stichwort_label || inc.stichwort || "Alarm")
-      : (inc.stichwort_label || inc.stichwort || "Alarm");
+    var kopfzeile = inc.meldung || inc.stichwort_label || inc.stichwort || "Alarm";
     var html =
       '<div class="is-alarm">' +
       '<div class="is-alarm__kopf"><div>' +
@@ -733,10 +729,6 @@
 
     // ── Rechts: Kräfte im Einsatz + Rückmeldungen ──
     html += '<div class="is-col is-col--rechts">';
-    if (!hatObjekt && inc.meldung) {
-      html += '<div class="is-panel is-panel--scroll" style="max-height:34%;flex:none;">' +
-        '<h2>📄 Einsatzmeldung</h2><div class="is-meldung__text">' + esc(inc.meldung) + "</div></div>";
-    }
     html += '<div class="is-panel is-panel--grow is-panel--scroll">' +
       '<h2>🚒 Kräfte im Einsatz <span id="is-fahrzeuge-count">' + (fahrzeuge.length ? "(" + fahrzeuge.length + ")" : "") + "</span></h2>" +
       '<div id="is-fahrzeuge-liste">' + fahrzeugListeHtml(fahrzeuge) + "</div></div>" +
