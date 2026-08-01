@@ -193,7 +193,7 @@ async def sms_group_create(
     org_id = _require_org(user)
     name = name.strip()
     if not name:
-        return RedirectResponse("/admin/sms-gruppen?error=empty", status_code=303)
+        return RedirectResponse("/admin/gruppen?error=empty", status_code=303)
     grp = SmsGroup(
         org_id=org_id,
         name=name,

@@ -5,6 +5,7 @@
 
 {% block admin_content %}
 <div class="page-content">
+  {% include "admin/_sms_tabs.html" %}
   <div class="page-header">
     <div>
       <h1>SMS senden</h1>
@@ -162,8 +163,6 @@
           Einsatzinfo-Versand konfiguriert werden.
         </p>
         <a href="/admin/gruppen" class="btn btn--ghost btn--xs">Gruppen verwalten</a>
-        <a href="/admin/einsatzinfo-sms" class="btn btn--ghost btn--xs" style="margin-left:6px;">SMS-Einsatzinfo</a>
-        <a href="/admin/sms-empfang" class="btn btn--ghost btn--xs" style="margin-left:6px;">SMS-Empfang</a>
       </div>
     </div>
 

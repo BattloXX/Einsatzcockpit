@@ -4,6 +4,7 @@
 {% block admin_breadcrumb %}{{ breadcrumb([{"label": "SMS-Versandweg"}]) }}{% endblock %}
 {% block admin_content %}
 <div class="page-content">
+  {% include "admin/_sms_tabs.html" %}
   <div class="page-header"><div><h1>SMS-Versandweg</h1>
     <p class="page-header__sub">Primaeren Provider und optionalen Fallback festlegen.</p></div></div>
   {% if saved %}<div class="alert alert--success">Konfiguration gespeichert.</div>{% endif %}

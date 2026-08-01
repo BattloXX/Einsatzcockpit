@@ -7,11 +7,13 @@
 {% set _p = request.url.path %}
 {% if '/admin/geraete-login' in _p or '/admin/push' in _p or '/admin/benutzer' in _p
      or '/admin/api-keys' in _p or '/admin/lagekarte-tokens' in _p or '/admin/audit' in _p
-     or '/admin/sms-senden' in _p or '/infoscreen-alarm' in _p
+     or '/admin/sms-senden' in _p or '/admin/sms-provider' in _p
+     or '/admin/sms-empfang' in _p or '/admin/einsatzinfo-sms' in _p
+     or '/infoscreen-alarm' in _p
      or ('/admin/medien' in _p and not is_sysadmin)
      or _p.startswith('/gateway') %}
   {% set active_group = 'verwaltung' %}
-{% elif '/admin/gruppen' in _p or '/admin/sms-gruppen' in _p or '/admin/einsatzinfo-sms' in _p
+{% elif '/admin/gruppen' in _p
        or '/admin/teams-alarmierung' in _p or '/admin/wasserstellen' in _p
        or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p %}
   {% set active_group = 'stammdaten' %}
@@ -259,11 +261,6 @@
               <span class="admin-nav__icon">🎯</span>Förderstrecke-Kalibrierung
             </a>
             {% endif %}
-            <a href="/admin/einsatzinfo-sms"
-               class="admin-nav__item {% if '/admin/einsatzinfo-sms' in request.url.path %}is-active{% endif %}"
-               {{ tip('SMS-Einsatzinfo: automatischer Versand bei Alarm, Verteiler je Stichwort') }}>
-              <span class="admin-nav__icon">📨</span>SMS-Einsatzinfo
-            </a>
             <a href="/admin/teams-alarmierung"
                class="admin-nav__item {% if '/admin/teams-alarmierung' in request.url.path %}is-active{% endif %}"
                {{ tip('Vollständige Alarmierung als Teams-Karte: Webhook-Basis-Modus + optionale Bot-Erweiterung mit Zusage/Absage') }}>
@@ -320,19 +317,9 @@
             </a>
             {% endif %}
             <a href="/admin/sms-senden"
-               class="admin-nav__item {% if '/admin/sms-senden' in request.url.path %}is-active{% endif %}"
-               {{ tip('SMS manuell an Gruppen oder Mitglieder senden') }}>
-              <span class="admin-nav__icon">✉️</span>SMS senden
-            </a>
-            <a href="/admin/sms-provider"
-               class="admin-nav__item {% if '/admin/sms-provider' in request.url.path %}is-active{% endif %}"
-               {{ tip('Primaeren SMS-Provider und Fallback konfigurieren') }}>
-              <span class="admin-nav__icon">🔀</span>SMS-Versandweg
-            </a>
-            <a href="/admin/sms-empfang"
-               class="admin-nav__item {% if '/admin/sms-empfang' in request.url.path %}is-active{% endif %}"
-               {{ tip('Empfangene SMS protokollieren und automatisch an Teams/SMS weiterleiten') }}>
-              <span class="admin-nav__icon">📥</span>SMS-Empfang
+               class="admin-nav__item {% if '/admin/sms-senden' in request.url.path or '/admin/sms-provider' in request.url.path or '/admin/sms-empfang' in request.url.path or '/admin/einsatzinfo-sms' in request.url.path %}is-active{% endif %}"
+               {{ tip('SMS senden sowie Versandweg, Empfang und Einsatzinfo konfigurieren') }}>
+              <span class="admin-nav__icon">✉️</span>SMS
             </a>
             <a href="/infoscreen-alarm/verwaltung"
                class="admin-nav__item {% if '/infoscreen-alarm' in request.url.path %}is-active{% endif %}"

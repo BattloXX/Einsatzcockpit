@@ -2,7 +2,9 @@
 
 ← [Zurück zur Startseite](Home)
 
-Voraussetzung für alle Funktionen auf dieser Seite: eine verbundene [SMS-Gateway-Android-App](Installation-SMS-Gateway). Ohne verbundenes Gateway wird kein SMS-Versand ausgelöst.
+SMS kann entweder über eine verbundene [SMS-Gateway-Android-App](Installation-SMS-Gateway) oder über den konfigurierten EUS-Versandweg gesendet werden. EUS funktioniert unabhängig davon, ob ein Gateway verbunden ist.
+
+Die Seiten **SMS senden**, **SMS-Versandweg**, **SMS-Empfang** und **SMS-Einsatzinfo** sind unter einem gemeinsamen Menüpunkt **SMS** als vier Tabs erreichbar. Ihre bisherigen URLs `/admin/sms-senden`, `/admin/sms-provider`, `/admin/sms-empfang` und `/admin/einsatzinfo-sms` bleiben gültig.
 
 ---
 
@@ -35,10 +37,13 @@ Unter **Admin → Einsatzinfo-SMS** (`/admin/einsatzinfo-sms`):
 | `{einsatzgrund}` | Einsatzgrund |
 | `{datum}` | Datum der Alarmierung (TT.MM.JJJJ) |
 | `{zeit}` | Uhrzeit der Alarmierung (HH:MM) |
+| `{link}` | Öffentlicher Link zur Einsatzinformation ohne Anmeldung |
 
-Standard-Vorlage: `Einsatz {stichwort}: {adresse}. {meldung}`. Unbekannte Platzhalter werden stillschweigend durch einen leeren String ersetzt (kein Fehler bei Tippfehlern).
+Standard-Vorlage: `Einsatz {stichwort}: {adresse}. {meldung} {link}`. Unbekannte Platzhalter werden stillschweigend durch einen leeren String ersetzt (kein Fehler bei Tippfehlern).
 
 Der Versand läuft als Hintergrund-Task nach Einsatzanlage (egal ob über die API/Alarmierungssystem oder LIS) und protokolliert jeden Versand im SMS-Log (sichtbar unter **SMS senden**).
+
+Für Großschadenslagen gibt es zusätzlich einen eigenen GSL-Sonderalarm. Er wird unabhängig von der stichwortbezogenen Einsatzinfo über das Feature-Flag `gsl_alarm_enabled` aktiviert und verwendet den Basis-Verteiler.
 
 ---
 
@@ -67,7 +72,7 @@ Unter **Admin → SMS-Empfang** (`/admin/sms-empfang`):
 
 Der SMS-Versand/-Empfang läuft über die native Einsatzcockpit-Android-App (eigenes Repo `Einsatzcockpit-Android`), die sich über einen Token-authentifizierten WebSocket (`/ws/sms-gateway`) mit Einsatzcockpit verbindet und die SIM-Karte des Android-Geräts zum Senden/Empfangen nutzt (Foreground-Service, dauerhaft im Hintergrund) — siehe [SMS-Gateway einrichten](Installation-SMS-Gateway).
 
-Ist mehr als eine Gateway-Verbindung gleichzeitig aktiv, wählt der Versand automatisch die zuletzt verbundene/lebende Verbindung; getrennte Verbindungen werden bereinigt, ohne SMS doppelt zu versenden.
+Mehrere Gateways können gleichzeitig registriert und als Fallbacks verwendet werden. Unter **Admin → Geräte-Login → SMS-Gateways** wird ihre Priorität mit den Auf-/Ab-Pfeilen festgelegt; der SMS-Versand versucht die verbundenen Gateways in dieser Reihenfolge.
 
 ---
 

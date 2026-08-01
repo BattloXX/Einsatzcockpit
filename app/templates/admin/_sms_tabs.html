@@ -1,0 +1,8 @@
+{% from "_tabnav.html" import subtabnav %}
+{% set _fp = request.url.path %}
+{{ subtabnav([
+  {'label': 'SMS senden',      'href': '/admin/sms-senden',   'active': _fp == '/admin/sms-senden'},
+  {'label': 'SMS-Versandweg',  'href': '/admin/sms-provider',  'active': _fp == '/admin/sms-provider'},
+  {'label': 'SMS-Empfang',     'href': '/admin/sms-empfang',   'active': _fp == '/admin/sms-empfang'},
+  {'label': 'SMS-Einsatzinfo', 'href': '/admin/einsatzinfo-sms','active': _fp == '/admin/einsatzinfo-sms'},
+]) }}
