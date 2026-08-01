@@ -78,6 +78,10 @@
         </button>
         {% endif %}
       </div>
+      <p class="form-hint" style="margin:8px 0 0 0">
+        Falls die Registrierung hier fehlschlägt: In der App über das Menü zu "Über die App" wechseln und dort
+        "Push jetzt registrieren" antippen - das ist der zuverlässigere Weg.
+      </p>
       <div id="nativePushResult" style="display:none;margin-top:12px;"></div>
     </div>
     {% else %}
@@ -288,7 +292,10 @@ async function registerNativePush() {
       showNativePushResult(true, '✓ Aktiv', 'Registrierung erfolgreich. Seite wird neu geladen.');
       window.location.reload();
     } else {
-      showNativePushResult(false, '✗ Fehler', result.error || 'Unbekannter Fehler');
+      const errorMessage = result.error === 'Native App nicht erkannt'
+        ? result.error + ' - bitte stattdessen in der App über "Über die App" registrieren.'
+        : (result.error || 'Unbekannter Fehler');
+      showNativePushResult(false, '✗ Fehler', errorMessage);
     }
   } catch (e) {
     showNativePushResult(false, '✗ Fehler', 'Registrierung fehlgeschlagen: ' + e.message);
