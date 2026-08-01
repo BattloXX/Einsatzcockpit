@@ -229,6 +229,9 @@ class SmsGatewayToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Niedriger Wert = wird zuerst versucht (siehe ws.py::dispatch_sms). Neue Gateways
+    # starten gleichrangig (100); Admin ordnet sie per Auf/Ab-Pfeil.
+    priority: Mapped[int] = mapped_column(Integer, default=100, server_default="100")
 
     org: Mapped[FireDept | None] = relationship("FireDept", foreign_keys=[org_id], lazy="joined")
 

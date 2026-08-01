@@ -42,6 +42,7 @@ from app.models.user import (
     User,
     UserRole,
 )
+from app.routers.ws import connected_gateway_token_ids
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.push_service import notify_all as _push_notify_all
 from app.services.push_service import notify_org as _push_notify_org
@@ -2604,9 +2605,12 @@ async def device_tokens_list(
             db.query(SmsGatewayToken),
             user, SmsGatewayToken.org_id,
         )
-        .order_by(SmsGatewayToken.created_at.desc())
+        .order_by(SmsGatewayToken.priority.asc(), SmsGatewayToken.created_at.desc())
         .all()
     )
+    connected_gateway_ids = set().union(*(
+        connected_gateway_token_ids(org_id) for org_id in {gw.org_id for gw in gateway_tokens}
+    )) if gateway_tokens else set()
     roles = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if has_role(user, "system_admin") else []
     vehicles = (
@@ -2622,6 +2626,7 @@ async def device_tokens_list(
         "user": user,
         "tokens": tokens,
         "gateway_tokens": gateway_tokens,
+        "connected_gateway_ids": connected_gateway_ids,
         "roles": roles,
         "all_orgs": all_orgs,
         "vehicles": vehicles,
@@ -2813,9 +2818,12 @@ def _render_device_tokens_page(request, db, current_user, *, new_token=None, new
             db.query(SmsGatewayToken),
             current_user, SmsGatewayToken.org_id,
         )
-        .order_by(SmsGatewayToken.created_at.desc())
+        .order_by(SmsGatewayToken.priority.asc(), SmsGatewayToken.created_at.desc())
         .all()
     )
+    connected_gateway_ids = set().union(*(
+        connected_gateway_token_ids(org_id) for org_id in {gw.org_id for gw in gateway_tokens}
+    )) if gateway_tokens else set()
     roles_all = db.query(Role).all()
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if has_role(current_user, "system_admin") else []
     vehicles_all = (
@@ -2830,6 +2838,7 @@ def _render_device_tokens_page(request, db, current_user, *, new_token=None, new
         "user": current_user,
         "tokens": all_tokens,
         "gateway_tokens": gateway_tokens,
+        "connected_gateway_ids": connected_gateway_ids,
         "roles": roles_all,
         "all_orgs": all_orgs,
         "vehicles": vehicles_all,
@@ -2854,6 +2863,32 @@ def _assert_gateway_token_access(gw: SmsGatewayToken | None, current_user) -> No
         raise HTTPException(status_code=404)
     if not same_org_or_system_admin(current_user, gw.org_id):
         raise HTTPException(status_code=403)
+
+
+@router.post("/geraete-login/gateway/{token_id}/prioritaet")
+async def gateway_token_reorder(
+    token_id: int,
+    request: Request,
+    richtung: str = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    gw = db.get(SmsGatewayToken, token_id)
+    _assert_gateway_token_access(gw, request.state.user)
+    assert gw is not None
+    geschwister = (
+        db.query(SmsGatewayToken)
+        .filter(SmsGatewayToken.org_id == gw.org_id)
+        .order_by(SmsGatewayToken.priority.asc(), SmsGatewayToken.created_at.desc())
+        .all()
+    )
+    idx = geschwister.index(gw)
+    nachbar_idx = idx - 1 if richtung == "hoch" else idx + 1
+    if 0 <= nachbar_idx < len(geschwister):
+        nachbar = geschwister[nachbar_idx]
+        gw.priority, nachbar.priority = nachbar.priority, gw.priority
+        db.commit()
+    return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
 
 
 @router.post("/geraete-login/gateway/{token_id}/widerrufen")

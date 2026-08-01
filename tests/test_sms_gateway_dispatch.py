@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.security import hash_api_key
+from app.core.tenant import set_tenant_context
+from app.db import SessionLocal
+from app.models.user import SmsGatewayToken
+
 
 class _DeadWS:
     """Sendet wirft – simuliert eine tote/halboffene Verbindung."""
@@ -48,13 +53,13 @@ async def test_dispatch_prunes_dead_and_uses_live():
     live = _LiveWS(job_id)
     dead = _DeadWS()
     # dead zuletzt angehängt → "neueste" → wird zuerst versucht, dann verworfen
-    ws._sms_gateways[org_id] = [live, dead]
+    ws._sms_gateways[org_id] = [(1, live), (2, dead)]
     try:
         result = await ws.dispatch_sms(org_id, job_id, "+43660111", "hallo", timeout=2.0)
         assert result["ok"] is True
         assert live.sent, "lebende Verbindung hätte senden müssen"
-        assert dead not in ws._sms_gateways[org_id], "tote Verbindung muss entfernt sein"
-        assert live in ws._sms_gateways[org_id], "lebende Verbindung bleibt registriert"
+        assert (2, dead) not in ws._sms_gateways[org_id], "tote Verbindung muss entfernt sein"
+        assert (1, live) in ws._sms_gateways[org_id], "lebende Verbindung bleibt registriert"
     finally:
         ws._sms_gateways.pop(org_id, None)
         ws._sms_pending.pop(job_id, None)
@@ -64,7 +69,7 @@ async def test_dispatch_all_dead_raises_and_empties_registry():
     import app.routers.ws as ws
 
     org_id, job_id = 990002, "job-alldead"
-    ws._sms_gateways[org_id] = [_DeadWS(), _DeadWS()]
+    ws._sms_gateways[org_id] = [(1, _DeadWS()), (2, _DeadWS())]
     try:
         with pytest.raises(RuntimeError, match="Kein erreichbares"):
             await ws.dispatch_sms(org_id, job_id, "+43660222", "x")
@@ -81,14 +86,56 @@ async def test_dispatch_timeout_is_not_retried():
 
     org_id, job_id = 990003, "job-timeout"
     a, b = _SilentWS(), _SilentWS()
-    ws._sms_gateways[org_id] = [a, b]
+    ws._sms_gateways[org_id] = [(1, a), (2, b)]
     try:
         with pytest.raises(RuntimeError, match="Timeout"):
             await ws.dispatch_sms(org_id, job_id, "+43660333", "x", timeout=0.1)
         # Nur genau eine Verbindung kontaktiert
         assert len(a.sent) + len(b.sent) == 1
         # Beide Verbindungen bleiben registriert (kein Senden-Fehler → kein Pruning)
-        assert a in ws._sms_gateways[org_id] and b in ws._sms_gateways[org_id]
+        assert (1, a) in ws._sms_gateways[org_id] and (2, b) in ws._sms_gateways[org_id]
     finally:
         ws._sms_gateways.pop(org_id, None)
         ws._sms_pending.pop(job_id, None)
+
+
+async def test_dispatch_respects_configured_priority():
+    """Die konfigurierte Prioritaet gewinnt gegen die Verbindungsreihenfolge."""
+    import app.routers.ws as ws
+
+    org_id, job_id = 990004, "job-priority"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        bevorzugt = SmsGatewayToken(
+            label="Bevorzugt", token_hash=hash_api_key("priority-preferred"),
+            org_id=org_id, priority=10,
+        )
+        fallback = SmsGatewayToken(
+            label="Fallback", token_hash=hash_api_key("priority-fallback"),
+            org_id=org_id, priority=200,
+        )
+        db.add_all([bevorzugt, fallback])
+        db.commit()
+        db.refresh(bevorzugt)
+        db.refresh(fallback)
+
+        preferred_ws = _LiveWS(job_id)
+        fallback_ws = _SilentWS()
+        # Fallback zuletzt verbunden: ohne Prioritaet wuerde er zuerst angesprochen.
+        ws._sms_gateways[org_id] = [
+            (bevorzugt.id, preferred_ws),
+            (fallback.id, fallback_ws),
+        ]
+        result = await ws.dispatch_sms(org_id, job_id, "+43660444", "priorisiert", timeout=2.0)
+
+        assert result["ok"] is True
+        assert preferred_ws.sent
+        assert fallback_ws.sent == []
+    finally:
+        ws._sms_gateways.pop(org_id, None)
+        ws._sms_pending.pop(job_id, None)
+        for gateway in db.query(SmsGatewayToken).filter(SmsGatewayToken.org_id == org_id).all():
+            db.delete(gateway)
+        db.commit()
+        db.close()

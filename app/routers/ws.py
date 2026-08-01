@@ -31,11 +31,10 @@ logger = logging.getLogger("einsatzleiter.ws")
 router = APIRouter()
 
 # ── SMS-Gateway Registry ───────────────────────────────────────────────────────
-# org_id → aktive Gateway-WebSocket-Verbindungen, geordnet nach Verbindungszeit
-# (ältester zuerst, neuester zuletzt). dispatch_sms bevorzugt die neueste und
-# entfernt tote Sockets, damit doppelte/halboffene Verbindungen nicht den Versand
-# blockieren (siehe Android-Reconnect-Verhalten).
-_sms_gateways: dict[int, list[WebSocket]] = defaultdict(list)
+# org_id → (token_id, WebSocket)-Paare aktiver Gateway-Verbindungen. token_id wird
+# mitgefuehrt, damit dispatch_sms() nach SmsGatewayToken.priority sortieren kann statt
+# rein nach Verbindungszeit.
+_sms_gateways: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
 # job_id → asyncio.Future für sms.result-Rückmeldung
 _sms_pending: dict[str, asyncio.Future] = {}
 
@@ -328,7 +327,7 @@ async def sms_gateway_ws(websocket: WebSocket):
     _touch_sms_gateway_token(token_id)
 
     await websocket.accept()
-    _sms_gateways[org_id].append(websocket)
+    _sms_gateways[org_id].append((token_id, websocket))
     logger.info(
         "SMS-Gateway verbunden (org_id=%s, token_id=%s, aktive=%d)",
         org_id, token_id, len(_sms_gateways[org_id]),
@@ -383,17 +382,42 @@ def is_sms_gateway_connected(org_id: int) -> bool:
 
 def _discard_gateway(org_id: int, websocket: WebSocket) -> None:
     """Entfernt eine Gateway-Verbindung aus der Registry (idempotent)."""
+    gateways = _sms_gateways.get(org_id, [])
+    for entry in list(gateways):
+        if entry[1] is websocket:
+            gateways.remove(entry)
+
+
+_DEFAULT_GATEWAY_PRIORITY = 100
+
+
+def _load_gateway_priorities(org_id: int) -> dict[int, int]:
+    """Liefert token_id -> priority aller SMS-Gateway-Tokens dieser Organisation.
+
+    Fehlt eine token_id (z. B. geloescht oder Test ohne DB-Zeile), gilt die
+    Default-Prioritaet. Damit bleibt bei Gleichstand neueste Verbindung zuerst.
+    """
+    db = SessionLocal()
+    set_tenant_context(db, None)
     try:
-        _sms_gateways.get(org_id, []).remove(websocket)
-    except ValueError:
-        pass
+        rows = db.query(SmsGatewayToken.id, SmsGatewayToken.priority).filter(
+            SmsGatewayToken.org_id == org_id
+        ).all()
+        return {token_id: priority for token_id, priority in rows}
+    finally:
+        db.close()
+
+
+def connected_gateway_token_ids(org_id: int) -> set[int]:
+    """Token-IDs aller aktuell verbundenen SMS-Gateways fuer die Admin-Ansicht."""
+    return {token_id for token_id, _ in _sms_gateways.get(org_id, [])}
 
 
 async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: float = 15.0) -> dict:
     """Sendet einen SMS-Job an einen verbundenen Gateway und wartet auf das Ergebnis.
 
-    Bei mehreren registrierten Verbindungen (z. B. nach einem Client-Reconnect, der
-    eine halboffene Verbindung hinterlassen hat) wird die **neueste** zuerst versucht.
+    Mehrere registrierte Verbindungen werden nach SmsGatewayToken.priority versucht
+    (niedrigster Wert zuerst), bei Gleichstand neueste Verbindung zuerst.
     Schlägt das reine Senden fehl, gilt die Verbindung als tot: sie wird aus der
     Registry entfernt und die nächste Verbindung versucht. Ein *Timeout* (Senden
     erfolgreich, aber keine Antwort) wird hingegen NICHT erneut versucht, um doppelte
@@ -402,16 +426,18 @@ async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: fl
     Rückgabe: sms.result-Dict (ok, error, provider_response).
     Wirft RuntimeError wenn kein Gateway verbunden oder Timeout überschritten.
     """
-    gateways = list(_sms_gateways.get(org_id, []))
-    if not gateways:
+    entries = list(reversed(_sms_gateways.get(org_id, [])))
+    if not entries:
         raise RuntimeError(f"Kein SMS-Gateway für org_id={org_id} verbunden")
+
+    priorities = _load_gateway_priorities(org_id)
+    entries.sort(key=lambda entry: priorities.get(entry[0], _DEFAULT_GATEWAY_PRIORITY))
 
     payload = json.dumps({"type": "sms.send", "id": job_id, "to": to, "text": text}, ensure_ascii=False)
     loop = asyncio.get_event_loop()
     last_error: Exception | None = None
 
-    # Neueste Verbindung zuerst
-    for ws in reversed(gateways):
+    for _token_id, ws in entries:
         fut: asyncio.Future = loop.create_future()
         _sms_pending[job_id] = fut
         try:
