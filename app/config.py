@@ -192,6 +192,7 @@ class Settings(BaseSettings):
     HYDRANT_OVERPASS_URL: str = "https://overpass-api.de/api/interpreter"
     HYDRANT_RADIUS_M: int = 300               # Suchradius um den Einsatzort (Standard)
     HYDRANT_RADIUS_EINSATZINFO_M: int = 2000  # Erweiterter Radius für die Einsatzinfo-Karte
+    HYDRANT_RADIUS_INFOSCREEN_M: int = 800    # OSM-Umkreis für den Wandmonitor
     HYDRANT_TIMEOUT_SECONDS: float = 8.0
     HYDRANT_CACHE_TTL_SECONDS: int = 3600     # In-Memory-Cache je gerundeter Koordinate
     HYDRANT_MAX: int = 40                     # max. zurückgegebene Entnahmestellen (Standard)

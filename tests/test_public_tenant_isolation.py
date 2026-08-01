@@ -15,6 +15,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings, VehicleMaster
 from app.models.objekt import AlarmInfoscreenToken
+from app.models.wasserstelle import Wasserstelle
 
 ORG_A = 1  # FF Wolfurt (seeded)
 
@@ -88,6 +89,40 @@ def test_infoscreen_token_sieht_nur_eigene_org(client):
     assert r_b.status_code == 200
     assert r_b.json()["modus"] == "alarm"
     assert "Geheime Adresse der Org B" in r_b.text
+
+
+def test_infoscreen_hydranten_sind_tenant_isoliert(client, monkeypatch):
+    from app.config import settings
+
+    org_b_id = _setup_zwei_orgs()
+    monkeypatch.setattr(settings, "HYDRANT_ENABLED", False)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        geheim = "ISO-GEHEIME-WASSERSTELLE-B"
+        incident_a = Incident(
+            primary_org_id=ORG_A, alarm_type_code="B3", status="active",
+            address_street="Isolation Wasser A",
+            started_at=datetime.now(UTC).replace(tzinfo=None), lat=47.465, lng=9.750,
+        )
+        db.add(incident_a)
+        if not (db.query(Wasserstelle)
+                .execution_options(include_all_tenants=True)
+                .filter(Wasserstelle.org_id == org_b_id, Wasserstelle.bezeichnung == geheim)
+                .first()):
+            db.add(Wasserstelle(
+                org_id=org_b_id, bezeichnung=geheim, typ="loeschteich",
+                lat=47.4651, lng=9.7501, aktiv=True,
+            ))
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.get(f"/infoscreen/alarm/{RAW_TOKEN_A}/hydranten.json")
+    assert r.status_code == 200
+    assert geheim not in r.text
+    assert all(h["quelle"] != "stammdaten" or h["ref"] != geheim
+               for h in r.json()["hydranten"])
 
 
 def test_infoscreen_unbekannter_token_abgelehnt(client):

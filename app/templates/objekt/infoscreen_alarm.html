@@ -68,8 +68,9 @@
     .is-alarm__timer .cap { font-size: .8rem; letter-spacing: .16em; text-transform: uppercase; opacity: .8; }
     .is-alarm__timer .val { font-size: clamp(1.9rem, 2.6vw, 2.6rem); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
 
-    .is-alarm__body { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 14px;
-                      padding: 14px 20px; min-height: 0; }
+    .is-alarm__body { display: grid; gap: 14px; padding: 14px 20px; min-height: 0; }
+    .is-alarm__body--mit-objekt { grid-template-columns: 1fr 1.5fr 1fr; }
+    .is-alarm__body--ohne-objekt { grid-template-columns: 2fr 1fr; }
     .is-col { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
     .is-panel { border: 1px solid var(--is-line); border-radius: 12px; background: var(--is-surface);
                 padding: 16px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
@@ -94,12 +95,18 @@
     .is-wohnhinweis { border-color: var(--is-amber); background: rgba(251,191,36,.1); flex: none; }
     .is-wohnhinweis h2 { color: var(--is-amber); border-bottom-color: rgba(251,191,36,.3); }
     .is-wohnhinweis__text { font-size: 1.3rem; line-height: 1.35; white-space: pre-wrap; }
+    .is-meldung__text { font-size: 1.3rem; line-height: 1.35; white-space: pre-wrap; }
 
     #is-karte { flex: 1; border-radius: 10px; min-height: 240px; background: #111; }
     .leaflet-container { background: #1a2233; }
     .is-karte-legende { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-size: .85rem; color: var(--is-muted); }
     .is-karte-legende span { display: inline-flex; align-items: center; gap: 6px; }
+    .is-wasser-status { margin-top: 7px; font-size: .85rem; color: var(--is-muted); }
     .is-punkt { width: 13px; height: 13px; border-radius: 50%; display: inline-block; }
+    .is-wasser-marker { display: flex; flex-direction: column; align-items: center; }
+    .is-wasser-marker__label { margin-top: 2px; background: rgba(0,0,0,.7); color: #fff;
+      font-size: 11px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
+      white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
 
     /* Fahrzeuge / Kräfte */
     .is-fzg { display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -137,8 +144,8 @@
     .is-rsvp-tag--ab { background: #7f1d1d; color: #fecaca; }
 
     @media (max-width: 1200px) {
-      .is-alarm__body { grid-template-columns: 1fr 1.3fr; }
-      .is-col--rechts { grid-column: 1 / -1; }
+      .is-alarm__body--mit-objekt { grid-template-columns: 1fr 1.3fr; }
+      .is-alarm__body--mit-objekt .is-col--rechts { grid-column: 1 / -1; }
     }
 
     /* ── GSL-Dashboard (Großschadenslage-Wandmonitor) ── */
@@ -451,6 +458,8 @@
 
   function renderGsl(daten) {
     stopRotation();
+    if (karte) { karte.remove(); }
+    if (gslMap) { gslMap.remove(); }
     karte = null; gslMap = null; gslMarkerLayer = null;
     var g = daten.gsl || {};
     alarmBeginn = g.beginn ? new Date(g.beginn).getTime() : null;
@@ -507,6 +516,7 @@
 
   function renderRotation(urls) {
     stopRotation();
+    if (karte) { karte.remove(); }
     karte = null; alarmBeginn = null;
     var i = 0;
     function zeige() {
@@ -522,6 +532,7 @@
 
   function renderIdle(daten) {
     stopRotation();
+    if (karte) { karte.remove(); }
     karte = null; alarmBeginn = null;
     var leitstelle = document.getElementById("is-leitstelle");
     if (leitstelle) { leitstelle.style.display = "none"; }
@@ -641,6 +652,7 @@
     stopRotation();
     var inc = daten.incident;
     var o = daten.objekt;
+    var hatObjekt = !!o;
     var fahrzeuge = daten.fahrzeuge || [];
     var leitstelle = document.getElementById("is-leitstelle");
     if (leitstelle) {
@@ -650,7 +662,9 @@
     alarmBeginn = inc.beginn ? new Date(inc.beginn).getTime() : null;
 
     // ── Alarm-Kopf (rot): Badge + Einsatzmeldung als Kopfzeile, Adresse, RSVP, Einsatzzeit ──
-    var kopfzeile = inc.meldung || inc.stichwort_label || inc.stichwort || "Alarm";
+    var kopfzeile = hatObjekt
+      ? (inc.meldung || inc.stichwort_label || inc.stichwort || "Alarm")
+      : (inc.stichwort_label || inc.stichwort || "Alarm");
     var html =
       '<div class="is-alarm">' +
       '<div class="is-alarm__kopf"><div>' +
@@ -663,16 +677,17 @@
       '<div class="is-alarm__timer"><div class="cap">Einsatzzeit</div>' +
       '<div class="val" id="is-einsatzzeit">00:00</div></div>' +
       "</div>" +
-      '<div class="is-alarm__body">';
+      '<div class="is-alarm__body ' + (hatObjekt ? "is-alarm__body--mit-objekt" : "is-alarm__body--ohne-objekt") + '">';
 
     // ── Links: Objekt & Gefahren + BMA/Schlüssel ──
-    html += '<div class="is-col">';
-    html += '<div class="is-panel is-panel--grow is-panel--scroll"><h2>🏢 Objekt &amp; Gefahren</h2>';
-    if (o) {
+    if (hatObjekt) {
+      var hatGefahren = !!(o.gefahren && o.gefahren.length);
+      html += '<div class="is-col">';
+      html += '<div class="is-panel' + (hatGefahren ? " is-panel--grow is-panel--scroll" : "") + '"><h2>🏢 Objekt &amp; Gefahren</h2>';
       html += '<div class="is-objektname">' + esc((o.nummer ? o.nummer + " " : "") + o.name) +
         (o.vulgoname ? " <small>vlg. " + esc(o.vulgoname) + "</small>" : "") +
         (o.bestaetigt ? "" : ' <small>(Vorschlag)</small>') + "</div>";
-      if (o.gefahren && o.gefahren.length) {
+      if (hatGefahren) {
         html += o.gefahren.map(function (g) {
           return '<div class="is-gefahr"><span class="is-gefahr__pikto">' + esc(g.piktogramm || "⚠️") +
                  '</span><span>' + esc(g.name) +
@@ -684,30 +699,27 @@
       }
       html += "</div>";
       // BMA/Schlüssel
-      html += '<div class="is-panel"><h2>🔑 BMA &amp; Schlüssel</h2>';
+      var zeilen = [];
       if (o.bma) {
         var b = o.bma;
-        var zeilen = [
+        zeilen = [
           ["BMA-Nr.", b.bma_nummer], ["BMZ-Standort", b.bmz_standort],
           ["FBF-Standort", b.fbf_standort], ["Laufkarten", b.laufkarten_ablageort],
           ["FSD-Standort", b.fsd_standort], ["FSD-Inhalt", b.fsd_inhalt]
         ].filter(function (z) { return z[1]; });
-        html += zeilen.length
-          ? zeilen.map(function (z) { return '<div class="is-bma-zeile"><b>' + esc(z[0]) + "</b>" + esc(z[1]) + "</div>"; }).join("")
-          : '<div class="is-hinweis">Keine BMA-Details erfasst.</div>';
-      } else {
-        html += '<div class="is-hinweis">Keine BMA erfasst.</div>';
       }
-      html += "</div>";
+      if (zeilen.length) {
+        html += '<div class="is-panel"><h2>🔑 BMA &amp; Schlüssel</h2>' +
+          zeilen.map(function (z) { return '<div class="is-bma-zeile"><b>' + esc(z[0]) + "</b>" + esc(z[1]) + "</div>"; }).join("") +
+          "</div>";
+      }
       // Wohnanlagen-Hinweise (einsatztaktisch) — hervorgehoben
       if (o.wohnanlage_hinweise) {
         html += '<div class="is-panel is-wohnhinweis"><h2>🏠 Wohnanlage – Hinweise</h2>' +
           '<div class="is-wohnhinweis__text">' + esc(o.wohnanlage_hinweise) + "</div></div>";
       }
-    } else {
-      html += '<div class="is-hinweis">Kein Objekt verknüpft.</div></div>';
+      html += "</div>";  // /is-col links
     }
-    html += "</div>";  // /is-col links
 
     // ── Mitte: Lagekarte ──
     html += '<div class="is-col"><div class="is-panel is-panel--grow"><h2>🗺️ Lage &amp; Löschwasser</h2>' +
@@ -717,10 +729,15 @@
       '<span><span class="is-punkt" style="background:#dc2626;"></span>Überflurhydrant</span>' +
       '<span><span class="is-punkt" style="background:#2563eb;"></span>Unterflur</span>' +
       '<span><span class="is-punkt" style="background:#0d9488;"></span>Löschwasser</span>' +
-      "</div></div></div>";
+      '</div><div id="is-wasser-status" class="is-wasser-status"></div></div></div>';
 
     // ── Rechts: Kräfte im Einsatz + Rückmeldungen ──
-    html += '<div class="is-col is-col--rechts"><div class="is-panel is-panel--grow is-panel--scroll">' +
+    html += '<div class="is-col is-col--rechts">';
+    if (!hatObjekt && inc.meldung) {
+      html += '<div class="is-panel is-panel--scroll" style="max-height:34%;flex:none;">' +
+        '<h2>📄 Einsatzmeldung</h2><div class="is-meldung__text">' + esc(inc.meldung) + "</div></div>";
+    }
+    html += '<div class="is-panel is-panel--grow is-panel--scroll">' +
       '<h2>🚒 Kräfte im Einsatz <span id="is-fahrzeuge-count">' + (fahrzeuge.length ? "(" + fahrzeuge.length + ")" : "") + "</span></h2>" +
       '<div id="is-fahrzeuge-liste">' + fahrzeugListeHtml(fahrzeuge) + "</div></div>" +
       '<div id="is-rsvp-panel">' + rsvpPanelHtml(inc.rsvp) + "</div>";
@@ -733,6 +750,7 @@
   }
 
   function baueKarte(daten) {
+    if (karte) { karte.remove(); karte = null; }
     var o = daten.objekt;
     var inc = daten.incident;
     var lat = (o && o.lat != null) ? o.lat : inc.lat;
@@ -772,25 +790,60 @@
 
     // Hydranten / Löschwasser separat nachladen (async Overpass-Proxy)
     var HYD_TEXT = { ueberflur: "H", unterflur: "UH", loeschwasser: "≈" };
+    var HYD_LABEL = { ueberflur: "Überflurhydrant", unterflur: "Unterflurhydrant", loeschwasser: "Löschwasserstelle" };
+    function wasserKat(h) { return h.icon_kat || h.typ || "hydrant"; }
+    function wasserLabel(h) { return h.typ_label || HYD_LABEL[h.typ] || "Hydrant"; }
+    var status = document.getElementById("is-wasser-status");
     fetch("/infoscreen/alarm/" + encodeURIComponent(TOKEN) + "/hydranten.json")
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!karte) { return; }
+        var gezeichnet = [];
         (d.hydranten || []).forEach(function (h) {
           if (h.lat == null || h.lng == null) { return; }
-          var cls = "hydrant-icon hydrant-icon--" + (h.typ || "hydrant");
+          if (o && h.quelle === "objekt") { return; }
+          var index = gezeichnet.length;
+          var kat = wasserKat(h);
+          var cls = "hydrant-icon hydrant-icon--" + kat;
+          var iconHtml = '<div class="' + cls + '">' + (HYD_TEXT[kat] || "H") + "</div>";
+          if (index < 3) {
+            var beschriftung = wasserLabel(h);
+            if (h.ref) { beschriftung = h.ref; }
+            if (h.entfernung_m != null) { beschriftung += " - " + h.entfernung_m + " m"; }
+            iconHtml = '<div class="is-wasser-marker">' + iconHtml +
+              '<div class="is-wasser-marker__label">' + esc(beschriftung) + "</div></div>";
+          }
           L.marker([h.lat, h.lng], {
             icon: L.divIcon({
-              html: '<div class="' + cls + '">' + (HYD_TEXT[h.typ] || "H") + "</div>",
+              html: iconHtml,
               className: "hydrant-divicon", iconSize: null, iconAnchor: [11, 11]
             }),
             interactive: false
           }).addTo(karte);
-          bounds.push([h.lat, h.lng]);
+          gezeichnet.push(h);
+          if (index < 3) { bounds.push([h.lat, h.lng]); }
         });
+        if (lat == null && lng == null && d.zentrum && d.zentrum.lat != null && d.zentrum.lng != null) {
+          karte.setView([d.zentrum.lat, d.zentrum.lng], 14);
+          bounds.push([d.zentrum.lat, d.zentrum.lng]);
+        }
         if (bounds.length > 1) { karte.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 }); }
+        if (status) {
+          if (gezeichnet.length) {
+            var nahe = gezeichnet[0].entfernung_m;
+            status.textContent = gezeichnet.length + " Löschwasserstellen" +
+              (nahe != null ? " - nächste " + nahe + " m" : "");
+          } else {
+            status.textContent = d.aktiv === false
+              ? "Löschwasser-Layer deaktiviert"
+              : "Keine Löschwasserstellen im Umkreis";
+          }
+        }
       })
-      .catch(function () { /* Hydranten optional */ });
+      .catch(function () {
+        if (status) { status.textContent = "Löschwasser konnte nicht geladen werden"; }
+      });
+    setTimeout(function () { if (karte) { karte.invalidateSize(); } }, 200);
   }
 
   function aktualisieren() {

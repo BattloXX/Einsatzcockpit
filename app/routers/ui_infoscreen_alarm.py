@@ -562,11 +562,16 @@ async def infoscreen_hydranten(
         manuelle_objekt_hydranten,
         merge_hydranten,
     )
+    from app.services.wasserstelle_service import (
+        dedupe_osm_gegen_stammdaten,
+        lade_wasserstellen_im_umkreis,
+    )
 
     _, org = _token_org(db, token)
     settings_row = _org_settings(db, org.id)
-    if not settings.HYDRANT_ENABLED or (settings_row and not settings_row.hydrant_layer_enabled):
-        return {"hydranten": []}
+    osm_aktiv = settings.HYDRANT_ENABLED and (
+        settings_row is None or settings_row.hydrant_layer_enabled
+    )
 
     incident = (
         db.query(Incident)
@@ -575,7 +580,7 @@ async def infoscreen_hydranten(
         .first()
     )
     if incident is None:
-        return {"hydranten": []}
+        return {"hydranten": [], "zentrum": None, "aktiv": osm_aktiv}
 
     verknuepfung = (
         db.query(ObjektEinsatz)
@@ -589,9 +594,22 @@ async def infoscreen_hydranten(
     ref_lat = objekt.lat if objekt and objekt.lat is not None else incident.lat
     ref_lng = objekt.lng if objekt and objekt.lng is not None else incident.lng
     if ref_lat is None or ref_lng is None:
-        return {"hydranten": []}
+        return {"hydranten": [], "zentrum": None, "aktiv": osm_aktiv}
 
-    osm = await fetch_osm_hydranten(ref_lat, ref_lng)
+    stammdaten = lade_wasserstellen_im_umkreis(
+        db, org.id, ref_lat, ref_lng,
+        radius_m=settings.HYDRANT_RADIUS_EINSATZINFO_M,
+    )
+    osm: list = []
+    if osm_aktiv:
+        osm = await fetch_osm_hydranten(
+            ref_lat, ref_lng,
+            radius_m=settings.HYDRANT_RADIUS_INFOSCREEN_M,
+            max_results=settings.HYDRANT_MAX,
+        )
+        osm = dedupe_osm_gegen_stammdaten(
+            osm, stammdaten, schwelle_m=settings.WASSERSTELLE_OSM_DEDUPE_M
+        )
     manuell: list = []
     if objekt is not None:
         karten = (
@@ -602,7 +620,11 @@ async def infoscreen_hydranten(
             .all()
         )
         manuell = manuelle_objekt_hydranten(karten, ref_lat, ref_lng)
-    return {"hydranten": merge_hydranten(osm, manuell)}
+    return {
+        "hydranten": merge_hydranten(merge_hydranten(stammdaten, osm), manuell),
+        "zentrum": {"lat": ref_lat, "lng": ref_lng},
+        "aktiv": osm_aktiv,
+    }
 
 
 # In-Memory-Cache für den Wetter-Badge (org_id → (timestamp, daten)); TTL 10 min.
