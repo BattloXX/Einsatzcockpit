@@ -13,14 +13,14 @@
      or ('/admin/medien' in _p and not is_sysadmin)
      or _p.startswith('/gateway') %}
   {% set active_group = 'verwaltung' %}
-{% elif '/admin/gruppen' in _p
-       or '/admin/teams-alarmierung' in _p or '/admin/wasserstellen' in _p
+{% elif '/admin/gruppen' in _p or '/admin/wasserstellen' in _p
        or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p %}
   {% set active_group = 'stammdaten' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
        or '/admin/lis' in _p or '/admin/dibos' in _p or '/admin/mail' in _p
+       or '/admin/teams-alarmierung' in _p
        or ('/admin/medien' in _p and is_sysadmin)
        or _p == '/admin/settings/wetter' or _p.startswith('/admin/settings/wetter?') %}
   {% set active_group = 'einstellungen' %}
@@ -66,6 +66,11 @@
 .admin-nav__item:hover { background: rgba(255,255,255,.06); }
 .admin-nav__item.is-active { background: rgba(183,25,33,.15); color: var(--red-light, #f87171); }
 .admin-nav__icon { width: 22px; text-align: center; font-size: 1rem; flex-shrink: 0; }
+.admin-nav__subheading {
+  margin-top: 10px; padding: 0 12px;
+  font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-muted);
+}
 
 /* Collapsible group headers */
 .admin-nav__group-hdr {
@@ -209,6 +214,7 @@
                {{ tip('AGT, GK, MA u.a. — Codes für Mitglieder') }}>
               <span class="admin-nav__icon">🎖️</span>Qualifikationen
             </a>
+            <div class="admin-nav__subheading">Alarm-Reaktionen</div>
             <a href="/admin/alarmtypen"
                class="admin-nav__item {% if '/admin/alarmtypen' in request.url.path %}is-active{% endif %}"
                {{ tip('Bekannte Einsatzstichwörter und ihre Eigenschaften') }}>
@@ -261,11 +267,6 @@
               <span class="admin-nav__icon">🎯</span>Förderstrecke-Kalibrierung
             </a>
             {% endif %}
-            <a href="/admin/teams-alarmierung"
-               class="admin-nav__item {% if '/admin/teams-alarmierung' in request.url.path %}is-active{% endif %}"
-               {{ tip('Vollständige Alarmierung als Teams-Karte: Webhook-Basis-Modus + optionale Bot-Erweiterung mit Zusage/Absage') }}>
-              <span class="admin-nav__icon">💬</span>Teams-Einsatzinfo
-            </a>
           </div>
         </div>
 
@@ -281,15 +282,11 @@
                {{ tip('Login-Accounts, Rollen, Passwörter') }}>
               <span class="admin-nav__icon">🔑</span>Benutzer
             </a>
+            <div class="admin-nav__subheading">Zugänge und Tokens</div>
             <a href="/admin/geraete-login"
                class="admin-nav__item {% if '/admin/geraete-login' in request.url.path %}is-active{% endif %}"
                {{ tip('Token-URLs für Tablets und Anzeigegeräte') }}>
               <span class="admin-nav__icon">📱</span>Geräte-Login
-            </a>
-            <a href="/admin/push-nachrichten"
-               class="admin-nav__item {% if '/admin/push-nachrichten' in request.url.path %}is-active{% endif %}"
-               {{ tip('Manuelle Push-Nachrichten an alle oder einzelne Benutzer') }}>
-              <span class="admin-nav__icon">📣</span>Push-Nachrichten
             </a>
             <a href="/admin/api-keys"
                class="admin-nav__item {% if '/admin/api-keys' in request.url.path %}is-active{% endif %}"
@@ -300,6 +297,11 @@
                class="admin-nav__item {% if '/admin/lagekarte-tokens' in request.url.path %}is-active{% endif %}"
                {{ tip('Read-only Tokens für lagekarte.info GeoJSON-Feed') }}>
               <span class="admin-nav__icon">🗺️</span>Lagekarte-Tokens
+            </a>
+            <a href="/admin/push-nachrichten"
+               class="admin-nav__item {% if '/admin/push-nachrichten' in request.url.path %}is-active{% endif %}"
+               {{ tip('Manuelle Push-Nachrichten an alle oder einzelne Benutzer') }}>
+              <span class="admin-nav__icon">📣</span>Push-Nachrichten
             </a>
             <a href="/admin/audit"
                class="admin-nav__item {% if '/admin/audit' in request.url.path %}is-active{% endif %}"
@@ -358,6 +360,7 @@
                {{ tip('Eigene Wetterstation, Infoscreen-Dashboard-Link, Wetter aktivieren/deaktivieren') }}>
               <span class="admin-nav__icon">&#x1F321;&#xFE0F;</span>Wetter
             </a>
+            <div class="admin-nav__subheading">Schnittstellen</div>
             <a href="/admin/sso"
                class="admin-nav__item {% if '/admin/sso' in request.url.path %}is-active{% endif %}"
                {{ tip('Microsoft 365 / Entra ID Single Sign-On konfigurieren') }}>
@@ -377,6 +380,11 @@
                class="admin-nav__item {% if '/admin/mail' in request.url.path %}is-active{% endif %}"
                {{ tip('Eigener SMTP-Server und/oder Office 365 / Microsoft Graph je Organisation') }}>
               <span class="admin-nav__icon">✉️</span>Mail-Versand
+            </a>
+            <a href="/admin/teams-alarmierung"
+               class="admin-nav__item {% if '/admin/teams-alarmierung' in request.url.path %}is-active{% endif %}"
+               {{ tip('Vollständige Alarmierung als Teams-Karte: Webhook-Basis-Modus + optionale Bot-Erweiterung mit Zusage/Absage') }}>
+              <span class="admin-nav__icon">💬</span>Teams-Einsatzinfo
             </a>
             <a href="/admin/org-backup"
                class="admin-nav__item {% if '/admin/org-backup' in request.url.path %}is-active{% endif %}"
