@@ -551,6 +551,7 @@ class AlarmDispatchVehicle(Base):
         BigInteger, ForeignKey("vehicle_master.id", ondelete="CASCADE"), nullable=False
     )
     display_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_ausserorts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     alarm_type: Mapped[AlarmType] = relationship(lazy="joined")
     vehicle: Mapped[VehicleMaster] = relationship()

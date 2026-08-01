@@ -376,7 +376,11 @@ def infoscreen_daten(
         # (unit_status → S-Code: S4 zum Einsatzort, S5 am Einsatzort, S1 einsatzbereit).
         # Nachalarmierte Fahrzeuge außerhalb der AAO werden zusätzlich angehängt.
         from app.models.incident import IncidentVehicle
-        from app.models.master import AlarmDispatchVehicle, VehicleMaster
+        from app.models.master import VehicleMaster
+        from app.services.dispatch_order_service import (
+            resolve_dispatch_entries,
+            resolve_dispatch_is_ausserorts,
+        )
         from app.services.lis.lis_mapping import unit_status_to_lis_prefix
 
         iv_rows = (
@@ -393,14 +397,11 @@ def infoscreen_daten(
         # AAO des Stichworts (explizit gepflegt), sonst Erstausrückung (is_first_train)
         roster: list[VehicleMaster] = []
         if at_row is not None:
-            dispatch = (
-                db.query(AlarmDispatchVehicle)
-                .options(selectinload(AlarmDispatchVehicle.vehicle))
-                .filter(AlarmDispatchVehicle.alarm_type_id == at_row.id)
-                .order_by(AlarmDispatchVehicle.display_order)
-                .execution_options(include_all_tenants=True)
-                .all()
+            is_ausserorts = resolve_dispatch_is_ausserorts(
+                incident.address_city,
+                org.city,
             )
+            dispatch = resolve_dispatch_entries(db, at_row.id, is_ausserorts)
             roster = [d.vehicle for d in dispatch if d.vehicle and d.vehicle.active]
             if not roster:
                 q = (
@@ -451,7 +452,7 @@ def infoscreen_daten(
                 "stichwort": incident.alarm_type_code,
                 "stichwort_label": stichwort_label,
                 "adresse": adresse,
-                "meldung": incident.report_text or incident.reason or "",
+                "meldung": incident.reason or incident.report_text or "",
                 "leitstelle_nr": incident.lis_operation_number,
                 "beginn": incident.started_at.isoformat() + "Z" if incident.started_at else None,
                 "lat": incident.lat,

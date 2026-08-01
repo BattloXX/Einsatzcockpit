@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from app.core.tenant import set_tenant_context
 from app.models.incident import Incident, IncidentColumn, IncidentVehicle
 from app.models.lis import OrgLisConfig
-from app.models.master import AlarmType, FireDept, VehicleMaster
+from app.models.master import AlarmDispatchVehicle, AlarmType, FireDept, VehicleMaster
 from app.services import incident_service
 from app.services.lis import lis_sync
 from tests.conftest import TestingSession
@@ -18,16 +18,19 @@ from tests.conftest import TestingSession
 ORG_ID = 1  # FF Wolfurt
 
 
-def _session() -> "TestingSession":
+def _session() -> TestingSession:
     db = TestingSession()
     set_tenant_context(db, ORG_ID)
     return db
 
 
-def _make_incident_with_active_column(db, org_id: int = ORG_ID) -> Incident:
+def _make_incident_with_active_column(
+    db, org_id: int = ORG_ID, address_city: str | None = None,
+) -> Incident:
     incident = Incident(
         primary_org_id=org_id, alarm_type_code="T4", status="active",
         reason="Verkehrsunfall", started_at=datetime(2026, 7, 4, 10, 0, tzinfo=UTC),
+        address_city=address_city,
     )
     db.add(incident)
     db.flush()
@@ -45,6 +48,93 @@ def _make_wolfurt_vehicle(db, code: str = "RLF-DISP") -> VehicleMaster:
     db.add(vm)
     db.flush()
     return vm
+
+
+def _add_dispatch_entry(db, alarm, vehicle, *, is_ausserorts: bool) -> None:
+    db.add(AlarmDispatchVehicle(
+        alarm_type_id=alarm.id,
+        vehicle_master_id=vehicle.id,
+        display_order=0,
+        is_ausserorts=is_ausserorts,
+    ))
+    db.flush()
+
+
+def _dispatched_vehicle_ids(db, incident: Incident) -> set[int]:
+    return {
+        row.vehicle_master_id
+        for row in db.query(IncidentVehicle)
+        .filter(IncidentVehicle.incident_id == incident.id)
+        .all()
+    }
+
+
+def test_populate_vehicles_uses_ausserorts_dispatch_order():
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        org.city = "Wolfurt"
+        incident = _make_incident_with_active_column(db, address_city="Bregenz")
+        standard_vm = _make_wolfurt_vehicle(db, code="RLF-STANDARD-A")
+        ausserorts_vm = _make_wolfurt_vehicle(db, code="RLF-AUSSERORTS-A")
+        alarm = AlarmType(org_id=ORG_ID, code="DISPAUSS1", label="Test")
+        db.add(alarm)
+        db.flush()
+        _add_dispatch_entry(db, alarm, standard_vm, is_ausserorts=False)
+        _add_dispatch_entry(db, alarm, ausserorts_vm, is_ausserorts=True)
+
+        incident_service._populate_vehicles(db, incident, alarm)
+
+        assert _dispatched_vehicle_ids(db, incident) == {ausserorts_vm.id}
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_populate_vehicles_ausserorts_falls_back_to_standard_order():
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        org.city = "Wolfurt"
+        incident = _make_incident_with_active_column(db, address_city="Dornbirn")
+        standard_vm = _make_wolfurt_vehicle(db, code="RLF-STANDARD-B")
+        first_train_vm = _make_wolfurt_vehicle(db, code="RLF-FIRST-TRAIN-B")
+        first_train_vm.is_first_train = True
+        alarm = AlarmType(
+            org_id=ORG_ID, code="DISPAUSS2", label="Test", default_first_train_only=True,
+        )
+        db.add(alarm)
+        db.flush()
+        _add_dispatch_entry(db, alarm, standard_vm, is_ausserorts=False)
+
+        incident_service._populate_vehicles(db, incident, alarm)
+
+        assert _dispatched_vehicle_ids(db, incident) == {standard_vm.id}
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_populate_vehicles_local_city_uses_standard_order():
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        org.city = "Wolfurt"
+        incident = _make_incident_with_active_column(db, address_city=" wolfurt ")
+        standard_vm = _make_wolfurt_vehicle(db, code="RLF-STANDARD-C")
+        ausserorts_vm = _make_wolfurt_vehicle(db, code="RLF-AUSSERORTS-C")
+        alarm = AlarmType(org_id=ORG_ID, code="DISPAUSS3", label="Test")
+        db.add(alarm)
+        db.flush()
+        _add_dispatch_entry(db, alarm, standard_vm, is_ausserorts=False)
+        _add_dispatch_entry(db, alarm, ausserorts_vm, is_ausserorts=True)
+
+        incident_service._populate_vehicles(db, incident, alarm)
+
+        assert _dispatched_vehicle_ids(db, incident) == {standard_vm.id}
+    finally:
+        db.rollback()
+        db.close()
 
 
 def test_populate_vehicles_without_lis_places_directly_in_active():

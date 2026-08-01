@@ -339,6 +339,7 @@ async def new_incident(
     address_street: str = Form(""),
     address_no: str = Form(""),
     address_city: str = Form(""),
+    reason: str = Form(""),
     report_text: str = Form(""),
     is_exercise: bool = Form(False),
     lat: str = Form(""),
@@ -372,6 +373,7 @@ async def new_incident(
         address_city=address_city or None,
         lat=lat_f,
         lng=lng_f,
+        reason=reason or None,
         report_text=report_text or None,
         is_exercise=is_exercise,
         incident_leader_user_id=user.id,
@@ -558,14 +560,15 @@ def alarm_edit_modal(
 async def alarm_save(
     incident_id: int, request: Request,
     alarm_type_code: str = Form(...),
+    reason: str = Form(""),
     report_text: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
     incident = _incident_or_404(incident_id, db)
     incident.alarm_type_code = alarm_type_code
+    incident.reason = reason.strip() or None
     incident.report_text = report_text.strip() or None
-    incident.reason = None
     db.commit()
     await manager.broadcast(incident_id, {"type": "alarm_type_changed"})
     return templates.TemplateResponse(request, "incident/_alarm_confirm_fahrzeuge.html", {

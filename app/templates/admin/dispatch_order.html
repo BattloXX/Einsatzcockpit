@@ -14,6 +14,19 @@
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
 
+  <div class="dispatch-variant-tabs" role="group" aria-label="Ausrückordnungs-Variante">
+    <a href="/admin/ausrueckordnung?variant=standard"
+       class="btn {% if variant == 'standard' %}btn--primary{% else %}btn--ghost{% endif %}">Standort</a>
+    <a href="/admin/ausrueckordnung?variant=ausserorts"
+       class="btn {% if variant == 'ausserorts' %}btn--primary{% else %}btn--ghost{% endif %}">Ausserorts</a>
+  </div>
+  {% if variant == "ausserorts" %}
+  <p class="form-hint dispatch-variant-hint">
+    Gilt für Einsätze, deren Adresse nicht in {{ org.city or 'Wolfurt' }} liegt.
+    Ohne eigene Einträge wird die Standard-Ausrückordnung verwendet.
+  </p>
+  {% endif %}
+
   <!-- ── Matrix-Übersicht ─────────────────────────────────────────── -->
   <div style="overflow-x:auto; margin-bottom:24px;">
     <table class="table-admin" style="min-width:800px;">
@@ -29,7 +42,12 @@
       <tbody>
         {% for atype in alarm_types %}
         <tr>
-          <td><strong>{{ atype.code }}</strong>{% if atype.label %} <small>{{ atype.label }}</small>{% endif %}</td>
+          <td>
+            <strong>{{ atype.code }}</strong>{% if atype.label %} <small>{{ atype.label }}</small>{% endif %}
+            {% if variant == "standard" and atype.id in ausserorts_alarm_type_ids %}
+            <span class="dispatch-variant-badge">Ausserorts definiert</span>
+            {% endif %}
+          </td>
           {% set row_vehicles = dispatch_matrix.get(atype.code, []) %}
           {% for i in range(max_count) %}
           <td>
@@ -45,7 +63,7 @@
           </td>
           {% endfor %}
           <td>
-            <a href="/admin/ausrueckordnung?edit={{ atype.code }}"
+            <a href="/admin/ausrueckordnung?edit={{ atype.code }}&amp;variant={{ variant }}"
                class="btn btn--ghost btn--xs">Bearbeiten</a>
           </td>
         </tr>
@@ -63,8 +81,9 @@
     Haken setzen = Fahrzeug rückt aus. Per Drag-Drop am Handle (☰) die Reihenfolge ändern.
   </p>
 
-  <form method="post" action="/admin/ausrueckordnung/{{ edit_alarm.code }}"
+  <form method="post" action="/admin/ausrueckordnung/{{ edit_alarm.code }}?variant={{ variant }}"
         id="dispatchEditForm" style="max-width:680px;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <table class="table-admin" id="dispatchEditTable">
       <thead>
         <tr>
@@ -117,7 +136,9 @@
       <button type="submit" class="btn btn--primary" onclick="serializeDispatch()">
         Speichern
       </button>
-      <a href="/admin/ausrueckordnung" class="btn btn--ghost">Abbrechen</a>
+      <a href="/admin/ausrueckordnung?variant={{ variant }}" class="btn btn--ghost">Abbrechen</a>
+      <a href="/admin/ausrueckordnung/{{ edit_alarm.code }}/reset?variant={{ variant }}"
+         class="btn btn--ghost">Variante zurücksetzen</a>
     </div>
   </form>
 
@@ -166,6 +187,11 @@
 
 <style>
 .vehicle-pill { display:inline-block; white-space:nowrap; }
+.dispatch-variant-tabs { display:flex; gap:8px; margin-bottom:10px; }
+.dispatch-variant-hint { margin-bottom:16px; }
+.dispatch-variant-badge { display:block; width:max-content; margin-top:4px; padding:1px 5px;
+                          border-radius:4px; background:rgba(59,130,246,.16); color:#93c5fd;
+                          font-size:.65rem; font-weight:600; white-space:nowrap; }
 #dispatchEditTbody tr { transition: background .15s; }
 #dispatchEditTbody tr:hover { background: rgba(255,255,255,.04); }
 </style>

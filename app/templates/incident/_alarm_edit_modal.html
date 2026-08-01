@@ -59,10 +59,16 @@
       </select>
     </div>
 
+    <div class="form-group" style="margin-bottom:1rem">
+      <label class="form-label">Einsatzgrund</label>
+      <input type="text" name="reason" class="form-input"
+             placeholder="Kurzer Einsatzgrund, z. B. Verkehrsunfall" value="{{ incident.reason or '' }}">
+    </div>
+
     <div class="form-group" style="margin-bottom:1.5rem">
-      <label class="form-label">Einsatzgrund / Meldung</label>
+      <label class="form-label">Meldung</label>
       <textarea name="report_text" class="form-input" rows="3"
-                placeholder="Kurze Beschreibung des Einsatzes…">{{ (incident.reason or incident.report_text or '') }}</textarea>
+                placeholder="Weitere Angaben zur Meldung...">{{ incident.report_text or '' }}</textarea>
     </div>
 
     <div class="modal__footer">

@@ -21,7 +21,6 @@ from app.models.incident import (
     Task,
 )
 from app.models.master import (
-    AlarmDispatchVehicle,
     AlarmType,
     DefaultMessage,
     DefaultMessageAlarm,
@@ -418,14 +417,18 @@ def _populate_vehicles(db: Session, incident: Incident, alarm: AlarmType | None)
         return
 
     from app.models.master import FireDept
+    from app.services.dispatch_order_service import (
+        resolve_dispatch_entries,
+        resolve_dispatch_is_ausserorts,
+    )
 
     # Check if explicit dispatch order exists for this alarm type
-    dispatch_entries = (
-        db.query(AlarmDispatchVehicle)
-        .filter(AlarmDispatchVehicle.alarm_type_id == alarm.id)
-        .order_by(AlarmDispatchVehicle.display_order)
-        .all()
+    org = db.get(FireDept, incident.primary_org_id)
+    is_ausserorts = resolve_dispatch_is_ausserorts(
+        incident.address_city,
+        org.city if org else None,
     )
+    dispatch_entries = resolve_dispatch_entries(db, alarm.id, is_ausserorts)
 
     # Mit aktiver LIS-Anbindung übernimmt das LIS die Ankunftsmeldung (Status S4) —
     # die Ausrückordnung legt dann KEINE eigenen Fahrzeuge automatisch an, sie

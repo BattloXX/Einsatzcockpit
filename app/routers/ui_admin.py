@@ -1458,15 +1458,39 @@ async def delete_alarm_type(
 async def dispatch_order_list(request: Request, db: Session = Depends(get_db),
                               _=Depends(require_role("admin", "org_admin"))):
     user = request.state.user
+    variant = request.query_params.get("variant", "standard")
+    if variant not in {"standard", "ausserorts"}:
+        variant = "standard"
+    is_ausserorts = variant == "ausserorts"
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
     _vehicle_query = db.query(VehicleMaster).filter(VehicleMaster.active == True)  # noqa: E712
     if user.org_id:
         _vehicle_query = _vehicle_query.filter(VehicleMaster.dept_id == user.org_id)
     vehicles = _vehicle_query.order_by(VehicleMaster.display_order).all()
     alarm_type_by_id = {at.id: at for at in alarm_types}
-    dispatch_entries = db.query(AlarmDispatchVehicle).order_by(
-        AlarmDispatchVehicle.alarm_type_id, AlarmDispatchVehicle.display_order
-    ).all()
+    alarm_type_ids = [at.id for at in alarm_types]
+    dispatch_entries = (
+        db.query(AlarmDispatchVehicle)
+        .filter(
+            AlarmDispatchVehicle.alarm_type_id.in_(alarm_type_ids),
+            AlarmDispatchVehicle.is_ausserorts.is_(is_ausserorts),
+        )
+        .order_by(AlarmDispatchVehicle.alarm_type_id, AlarmDispatchVehicle.display_order)
+        .all()
+    ) if alarm_type_ids else []
+    ausserorts_alarm_type_ids = set()
+    if variant == "standard" and alarm_type_ids:
+        ausserorts_alarm_type_ids = {
+            alarm_type_id for (alarm_type_id,) in (
+                db.query(AlarmDispatchVehicle.alarm_type_id)
+                .filter(
+                    AlarmDispatchVehicle.alarm_type_id.in_(alarm_type_ids),
+                    AlarmDispatchVehicle.is_ausserorts.is_(True),
+                )
+                .distinct()
+                .all()
+            )
+        }
     # vehicle_master_id → VehicleMaster Lookup
     vehicle_by_id = {v.id: v for v in vehicles}
     # Matrix: code → geordnete VehicleMaster-Liste (für Übersicht)
@@ -1492,6 +1516,8 @@ async def dispatch_order_list(request: Request, db: Session = Depends(get_db),
         "user": request.state.user, "alarm_types": alarm_types, "vehicles": vehicles,
         "dispatch_matrix": dispatch_matrix, "max_count": max_count,
         "edit_alarm": edit_alarm, "edit_order": edit_order, "saved": saved,
+        "variant": variant, "org": user.org,
+        "ausserorts_alarm_type_ids": ausserorts_alarm_type_ids,
     })
 
 
@@ -1502,20 +1528,30 @@ async def save_dispatch_order(
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     user = request.state.user
+    variant = request.query_params.get("variant", "standard")
+    if variant not in {"standard", "ausserorts"}:
+        variant = "standard"
+    is_ausserorts = variant == "ausserorts"
     at = get_alarm_type_by_code(db, user.org_id, alarm_type_code)
     if not at:
-        return RedirectResponse("/admin/ausrueckordnung?error=not_found", status_code=303)
+        return RedirectResponse(
+            f"/admin/ausrueckordnung?error=not_found&variant={variant}", status_code=303,
+        )
     db.query(AlarmDispatchVehicle).filter(
-        AlarmDispatchVehicle.alarm_type_id == at.id
+        AlarmDispatchVehicle.alarm_type_id == at.id,
+        AlarmDispatchVehicle.is_ausserorts.is_(is_ausserorts),
     ).delete()
     for i, vid in enumerate(vehicle_ids):
         db.add(AlarmDispatchVehicle(
             alarm_type_id=at.id,
             vehicle_master_id=vid,
             display_order=i,
+            is_ausserorts=is_ausserorts,
         ))
     db.commit()
-    return RedirectResponse("/admin/ausrueckordnung?saved=1", status_code=303)
+    return RedirectResponse(
+        f"/admin/ausrueckordnung?saved=1&variant={variant}", status_code=303,
+    )
 
 
 @router.get("/ausrueckordnung/{alarm_type_code}/reset")
@@ -1524,13 +1560,20 @@ async def reset_dispatch_order(
     _=Depends(require_role("admin")),
 ):
     user = request.state.user
+    variant = request.query_params.get("variant", "standard")
+    if variant not in {"standard", "ausserorts"}:
+        variant = "standard"
+    is_ausserorts = variant == "ausserorts"
     at = get_alarm_type_by_code(db, user.org_id, alarm_type_code)
     if at:
         db.query(AlarmDispatchVehicle).filter(
-            AlarmDispatchVehicle.alarm_type_id == at.id
+            AlarmDispatchVehicle.alarm_type_id == at.id,
+            AlarmDispatchVehicle.is_ausserorts.is_(is_ausserorts),
         ).delete()
         db.commit()
-    return RedirectResponse("/admin/ausrueckordnung?saved=1", status_code=303)
+    return RedirectResponse(
+        f"/admin/ausrueckordnung?saved=1&variant={variant}", status_code=303,
+    )
 
 
 # ── Qualifikationen CRUD ──────────────────────────────────────────────────────
@@ -2144,6 +2187,7 @@ async def backup_json(request: Request, db: Session = Depends(get_db),
                 "alarm_type_code": e.alarm_type.code if e.alarm_type else None,
                 "vehicle_master_id": e.vehicle_master_id,
                 "display_order": e.display_order,
+                "is_ausserorts": e.is_ausserorts,
             }
             for e in db.query(AlarmDispatchVehicle)
             .order_by(AlarmDispatchVehicle.alarm_type_id, AlarmDispatchVehicle.display_order)
@@ -2322,6 +2366,7 @@ async def backup_restore(
                         alarm_type_id=_at_id,
                         vehicle_master_id=vid,
                         display_order=e.get("display_order", 0),
+                        is_ausserorts=bool(e.get("is_ausserorts", False)),
                     ))
             lines.append(f"Ausrückordnung: {len(data['alarm_dispatch'])} Einträge importiert")
 

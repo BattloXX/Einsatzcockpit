@@ -140,6 +140,9 @@
                    padding: 2px 9px; border-radius: 5px; flex: none; }
     .is-rsvp-tag--zu { background: #14532d; color: var(--is-green); }
     .is-rsvp-tag--ab { background: #7f1d1d; color: #fecaca; }
+    .is-col--rechts > .is-kraefte-panel { min-height: 35%; flex-shrink: 1; }
+    #is-rsvp-panel { max-height: 40%; flex-shrink: 2; min-height: 0; }
+    #is-rsvp-panel:empty { display: none; }
 
     @media (max-width: 1200px) {
       .is-alarm__body--mit-objekt { grid-template-columns: 1fr 1.3fr; }
@@ -626,16 +629,16 @@
 
   function rsvpPanelHtml(rsvp) {
     var namen = (rsvp && rsvp.namen) || [];
-    var rows = namen.length ? namen.map(function (r) {
+    if (namen.length === 0) { return ""; }
+    var rows = namen.map(function (r) {
       var zu = r.status === "zugesagt";
       return '<div class="is-rsvp-row"><span>' + (zu ? "✅" : "❌") + "</span>" +
         '<span class="is-rsvp-name">' + esc(r.name) + "</span>" +
         '<span class="is-rsvp-tag ' + (zu ? "is-rsvp-tag--zu" : "is-rsvp-tag--ab") + '">' +
         (zu ? "Zusage" : "Absage") + "</span></div>";
-    }).join("") : '<div class="is-hinweis">Noch keine Rückmeldungen.</div>';
-    return '<div class="is-panel is-panel--scroll" style="max-height:40%;">' +
-      '<h2>🙋 Rückmeldungen <span>(' + namen.length + ")</span></h2>" +
-      '<div id="is-rsvp-liste">' + rows + "</div></div>";
+    }).join("");
+    return '<h2>🙋 Rückmeldungen <span>(' + namen.length + ")</span></h2>" +
+      '<div id="is-rsvp-liste">' + rows + "</div>";
   }
 
   // Rückmeldungen (Kopfzähler + Namensliste) live nachziehen
@@ -729,10 +732,10 @@
 
     // ── Rechts: Kräfte im Einsatz + Rückmeldungen ──
     html += '<div class="is-col is-col--rechts">';
-    html += '<div class="is-panel is-panel--grow is-panel--scroll">' +
+    html += '<div class="is-panel is-panel--grow is-panel--scroll is-kraefte-panel">' +
       '<h2>🚒 Kräfte im Einsatz <span id="is-fahrzeuge-count">' + (fahrzeuge.length ? "(" + fahrzeuge.length + ")" : "") + "</span></h2>" +
       '<div id="is-fahrzeuge-liste">' + fahrzeugListeHtml(fahrzeuge) + "</div></div>" +
-      '<div id="is-rsvp-panel">' + rsvpPanelHtml(inc.rsvp) + "</div>";
+      '<div id="is-rsvp-panel" class="is-panel is-panel--scroll">' + rsvpPanelHtml(inc.rsvp) + "</div>";
     html += "</div>";
 
     html += "</div></div>";  // /body /alarm
