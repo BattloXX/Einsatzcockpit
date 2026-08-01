@@ -749,6 +749,24 @@
     baueKarte(daten);
   }
 
+  function fitUmAnker(karte, anker, punkte, opts) {
+    if (!anker) { return false; }
+    var dLat = 0, dLng = 0;
+    punkte.forEach(function (p) {
+      dLat = Math.max(dLat, Math.abs(p[0] - anker[0]));
+      dLng = Math.max(dLng, Math.abs(p[1] - anker[1]));
+    });
+    if (dLat === 0 && dLng === 0) {
+      karte.setView(anker, opts.maxZoom || 18);
+      return true;
+    }
+    karte.fitBounds([
+      [anker[0] - dLat, anker[1] - dLng],
+      [anker[0] + dLat, anker[1] + dLng]
+    ], opts);
+    return true;
+  }
+
   function baueKarte(daten) {
     if (karte) { karte.remove(); karte = null; }
     var o = daten.objekt;
@@ -762,10 +780,11 @@
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(karte);
 
     var bounds = [];
+    var anker = null;
     if (lat != null && lng != null) {
       karte.setView([lat, lng], 18);
       L.circleMarker([lat, lng], { radius: 11, color: "#fff", weight: 2, fillColor: "#d42225", fillOpacity: .85 }).addTo(karte);
-      bounds.push([lat, lng]);
+      anker = [lat, lng];
     } else {
       karte.setView([47.4652, 9.7503], 14);
     }
@@ -825,9 +844,12 @@
         });
         if (lat == null && lng == null && d.zentrum && d.zentrum.lat != null && d.zentrum.lng != null) {
           karte.setView([d.zentrum.lat, d.zentrum.lng], 14);
-          bounds.push([d.zentrum.lat, d.zentrum.lng]);
+          anker = [d.zentrum.lat, d.zentrum.lng];
         }
-        if (bounds.length > 1) { karte.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 }); }
+        karte.invalidateSize();
+        if (!fitUmAnker(karte, anker, bounds, { padding: [40, 40], maxZoom: 18 })) {
+          karte.setView([47.4652, 9.7503], 14);
+        }
         if (status) {
           if (gezeichnet.length) {
             var nahe = gezeichnet[0].entfernung_m;

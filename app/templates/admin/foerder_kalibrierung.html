@@ -3,13 +3,13 @@
 
 {% block admin_content %}
 <div class="page-content">
+  {% include "admin/_foerder_tabs.html" %}
   <div class="page-header">
     <div>
       <h1>🎯 Kalibrierung</h1>
       <p class="page-header__sub">Schlauch-k-Werte aus Übungsmessungen verbessern</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a class="btn btn--secondary" href="/admin/foerderschlaeuche">🧵 Schläuche</a>
       <form method="post" action="/admin/foerderkalibrierung/berechnen">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <button class="btn btn--primary">Kalibrierung berechnen</button>

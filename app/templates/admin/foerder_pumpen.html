@@ -3,6 +3,7 @@
 
 {% block admin_content %}
 <div class="page-content">
+  {% include "admin/_foerder_tabs.html" %}
 
   <div class="page-header">
     <div>
@@ -12,7 +13,6 @@
       </p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a class="btn btn--secondary" href="/admin/foerderschlaeuche">🧵 Schläuche</a>
       <a class="btn btn--secondary" href="/admin/foerderpumpen/vorlagen">📋 Aus Vorlage</a>
       <a class="btn btn--primary" href="/admin/foerderpumpen/neu">＋ Eigene Pumpe</a>
     </div>

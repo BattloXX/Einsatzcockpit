@@ -3,6 +3,7 @@
 
 {% block admin_content %}
 <div class="page-content">
+  {% include "admin/_foerder_tabs.html" %}
 
   <div class="page-header">
     <div>
@@ -12,7 +13,6 @@
       </p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a class="btn btn--secondary" href="/admin/foerderpumpen">🚰 Pumpen</a>
       <button type="button" class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="schlauchNeuModal">＋ Eigener Schlauch</button>
     </div>
   </div>

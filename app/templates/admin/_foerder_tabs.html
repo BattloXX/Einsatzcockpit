@@ -1,0 +1,7 @@
+{% from "_tabnav.html" import subtabnav %}
+{% set _fp = request.url.path %}
+{{ subtabnav([
+  {'label': 'Pumpen', 'href': '/admin/foerderpumpen', 'active': _fp.startswith('/admin/foerderpumpen')},
+  {'label': 'Schläuche', 'href': '/admin/foerderschlaeuche', 'active': _fp.startswith('/admin/foerderschlaeuche')},
+  {'label': 'Kalibrierung', 'href': '/admin/foerderkalibrierung', 'active': _fp.startswith('/admin/foerderkalibrierung')},
+]) }}

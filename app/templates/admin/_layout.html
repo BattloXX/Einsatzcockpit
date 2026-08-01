@@ -14,7 +14,8 @@
      or _p.startswith('/gateway') %}
   {% set active_group = 'verwaltung' %}
 {% elif '/admin/gruppen' in _p or '/admin/wasserstellen' in _p
-       or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p %}
+       or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p
+       or '/admin/foerderkalibrierung' in _p %}
   {% set active_group = 'stammdaten' %}
 {% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
@@ -257,14 +258,9 @@
             </a>
             {% if request.state.foerderstrecke_enabled %}
             <a href="/admin/foerderpumpen"
-               class="admin-nav__item {% if '/admin/foerderpumpen' in request.url.path or '/admin/foerderschlaeuche' in request.url.path %}is-active{% endif %}"
-               {{ tip('Förderstrecke: eigene Pumpen (mit Kennlinie) und Schläuche verwalten, Vorlagen wie TS 1600/TS 1200 übernehmen') }}>
-              <span class="admin-nav__icon">🧵</span>Förderstrecke-Geräte
-            </a>
-            <a href="/admin/foerderkalibrierung"
-               class="admin-nav__item {% if '/admin/foerderkalibrierung' in request.url.path %}is-active{% endif %}"
-               {{ tip('Förderstrecke: Übungsmessungen erfassen und daraus korrigierte Schlauch-k-Werte vorschlagen (Review)') }}>
-              <span class="admin-nav__icon">🎯</span>Förderstrecke-Kalibrierung
+               class="admin-nav__item {% if '/admin/foerderpumpen' in request.url.path or '/admin/foerderschlaeuche' in request.url.path or '/admin/foerderkalibrierung' in request.url.path %}is-active{% endif %}"
+               {{ tip('Förderstrecke: eigene Pumpen mit Kennlinie und Schläuche verwalten, Vorlagen wie TS 1600/TS 1200 übernehmen, Übungsmessungen kalibrieren') }}>
+              <span class="admin-nav__icon">🧵</span>Förderstrecke
             </a>
             {% endif %}
           </div>
