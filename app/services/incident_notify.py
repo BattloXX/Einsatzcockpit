@@ -101,7 +101,8 @@ async def notify_incident_created(
     if background_tasks is not None:
         if sms_args is not None:
             background_tasks.add_task(dispatch_einsatzinfo, *sms_args)
-        background_tasks.add_task(push_func, *push_args)
+        # Feste Gegenstelle zum Alarm-Channel der Android-App.
+        background_tasks.add_task(push_func, *push_args, channel_id="einsatz_alarm")
         if teams_args is not None:
             background_tasks.add_task(post_incident_card, *teams_args, base_url=base_url)
         return
@@ -113,7 +114,7 @@ async def notify_incident_created(
         except Exception:
             logger.exception("Einsatzinfo-SMS fehlgeschlagen (Einsatz %s)", incident.id)
     try:
-        await asyncio.to_thread(push_func, *push_args)
+        await asyncio.to_thread(push_func, *push_args, channel_id="einsatz_alarm")
     except Exception:
         logger.exception("Push-Benachrichtigung fehlgeschlagen (Einsatz %s)", incident.id)
     if teams_args is not None:

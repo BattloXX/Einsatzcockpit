@@ -73,7 +73,8 @@ def _get_fcm_app(cfg: dict | None = None):
         return None
 
 
-def send_fcm(fcm_token_row: FcmToken, title: str, body: str, url: str | None = None) -> bool:
+def send_fcm(fcm_token_row: FcmToken, title: str, body: str, url: str | None = None,
+             channel_id: str | None = None) -> bool:
     """Sendet eine FCM-Nachricht an ein einzelnes Gerät."""
     app = _get_fcm_app()
     if app is None:
@@ -83,7 +84,17 @@ def send_fcm(fcm_token_row: FcmToken, title: str, body: str, url: str | None = N
         message = messaging.Message(
             notification=messaging.Notification(title=title, body=body),
             data={"url": url or "/", "title": title, "body": body},
-            android=messaging.AndroidConfig(priority="high"),
+            android=(
+                messaging.AndroidConfig(
+                    priority="high",
+                    notification=messaging.AndroidNotification(
+                        channel_id=channel_id,
+                        sound="default",
+                        default_vibrate_timings=True,
+                    ),
+                )
+                if channel_id else messaging.AndroidConfig(priority="high")
+            ),
             token=fcm_token_row.token,
         )
         messaging.send(message)
@@ -222,16 +233,22 @@ def send_push(subscription: PushSubscription, title: str, body: str,
 
 
 def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
-                      url: str | None, cfg: dict | None = None) -> int:
+                      url: str | None, cfg: dict | None = None,
+                      channel_id: str | None = None) -> int:
     """Sendet FCM an alle registrierten Tokens der angegebenen User-IDs."""
     if _get_fcm_app(cfg) is None:
         return 0
     tokens = db.query(FcmToken).filter(FcmToken.user_id.in_(user_ids)).all() if user_ids else []
+    if channel_id:
+        return sum(
+            1 for t in tokens
+            if send_fcm(t, title, body, url, channel_id=channel_id)
+        )
     return sum(1 for t in tokens if send_fcm(t, title, body, url))
 
 
 def notify_all(db: Session, title: str, body: str, url: str | None = None,
-               source: str = "system") -> int:
+               source: str = "system", channel_id: str | None = None) -> int:
     cfg = _push_cfg(db)
     # Web-Push (VAPID)
     if cfg["enabled"]:
@@ -242,12 +259,13 @@ def notify_all(db: Session, title: str, body: str, url: str | None = None,
         wp_count = 0
     # FCM
     all_user_ids = {s.user_id for s in db.query(PushSubscription.user_id).distinct()}
-    fcm_extra = _notify_fcm_users(db, all_user_ids, title, body, url, cfg)
+    fcm_extra = _notify_fcm_users(db, all_user_ids, title, body, url, cfg, channel_id)
     return wp_count + fcm_extra
 
 
 def notify_org(db: Session, org_id: int, title: str, body: str,
-               url: str | None = None, source: str = "system") -> int:
+               url: str | None = None, source: str = "system",
+               channel_id: str | None = None) -> int:
     """Push nur an User der angegebenen Org (statt an alle)."""
     from app.models.user import User as _User
     cfg = _push_cfg(db)
@@ -263,7 +281,7 @@ def notify_org(db: Session, org_id: int, title: str, body: str,
     else:
         wp_count = 0
     org_user_ids = {r[0] for r in db.query(_User.id).filter(_User.org_id == org_id).all()}
-    fcm_extra = _notify_fcm_users(db, org_user_ids, title, body, url, cfg)
+    fcm_extra = _notify_fcm_users(db, org_user_ids, title, body, url, cfg, channel_id)
     return wp_count + fcm_extra
 
 
