@@ -43,9 +43,21 @@ def _get_fcm_app(cfg: dict | None = None):
     if not fcm_enabled or not fcm_project_id or not fcm_creds:
         if not _fcm_unconfigured_warned:
             _fcm_unconfigured_warned = True
+            # Einzeln benennen statt nur "irgendwas fehlt" -- fcm_enabled wird von der DB
+            # (Admin > System-Einstellungen) ueberschrieben, sobald dort JEMALS gespeichert
+            # wurde (auch mit "Inaktiv"), selbst wenn FCM_ENABLED=true in der .env steht.
+            # Das ist die haeufigste Ursache dieser Warnung trotz korrekt gesetzter .env.
+            missing = []
+            if not fcm_enabled:
+                missing.append("fcm_enabled=false (Admin > System-Einstellungen hat Vorrang vor .env!)")
+            if not fcm_project_id:
+                missing.append("fcm_project_id ist leer")
+            if not fcm_creds:
+                missing.append("fcm_credentials_path ist leer")
             log.warning(
-                "FCM ist nicht konfiguriert (fcm_enabled/fcm_project_id/fcm_credentials_path) "
-                "- native Android-Pushes werden nicht verschickt."
+                "FCM ist nicht konfiguriert - native Android-Pushes werden nicht verschickt. "
+                "Grund: %s",
+                "; ".join(missing),
             )
         return None
     try:
