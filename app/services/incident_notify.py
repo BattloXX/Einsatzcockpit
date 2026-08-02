@@ -17,8 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
-from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -70,12 +68,6 @@ async def notify_incident_created(
     push_body = address or incident.report_text or "Kein Ort angegeben"
     resolved_push_url = push_url or f"/einsatz/{incident.id}"
 
-    # Explizit lose typisiert (Any/Callable[..., int]) statt aus der ersten Zuweisung
-    # inferieren zu lassen -- notify_org (5 Args, org_id) und notify_all (4 Args, ohne
-    # org_id) haben unterschiedliche Signaturen, push_func/push_args werden aber je nach
-    # Zweig konsistent im jeweils passenden Paar gesetzt und weiter unten aufgerufen.
-    push_func: Callable[..., int]
-    push_args: tuple[Any, ...]
     if org_id:
         # Öffentlicher Einsatzinfo-Link (No-Login) für die SMS; request-loser Kontext →
         # settings.effective_public_base_url statt request.base_url.
@@ -89,12 +81,8 @@ async def notify_incident_created(
             incident.report_text, incident.reason, incident.is_exercise,
             triggered_by_user_id, info_link,
         )
-        push_args = (db, org_id, push_title, push_body, resolved_push_url)
-        push_func = notify_org
     else:
         sms_args = None  # Einsatzinfo-SMS ist org-gebunden — ohne Org kein Versand
-        push_args = (db, push_title, push_body, resolved_push_url)
-        push_func = notify_all
 
     teams_args = (db, incident) if base_url else None
 
@@ -102,7 +90,16 @@ async def notify_incident_created(
         if sms_args is not None:
             background_tasks.add_task(dispatch_einsatzinfo, *sms_args)
         # Feste Gegenstelle zum Alarm-Channel der Android-App.
-        background_tasks.add_task(push_func, *push_args, channel_id="einsatz_alarm")
+        if org_id:
+            background_tasks.add_task(
+                notify_org, db, org_id, push_title, push_body, resolved_push_url,
+                channel_id="einsatz_alarm",
+            )
+        else:
+            background_tasks.add_task(
+                notify_all, db, push_title, push_body, resolved_push_url,
+                channel_id="einsatz_alarm",
+            )
         if teams_args is not None:
             background_tasks.add_task(post_incident_card, *teams_args, base_url=base_url)
         return
@@ -114,7 +111,16 @@ async def notify_incident_created(
         except Exception:
             logger.exception("Einsatzinfo-SMS fehlgeschlagen (Einsatz %s)", incident.id)
     try:
-        await asyncio.to_thread(push_func, *push_args, channel_id="einsatz_alarm")
+        if org_id:
+            await asyncio.to_thread(
+                notify_org, db, org_id, push_title, push_body, resolved_push_url,
+                channel_id="einsatz_alarm",
+            )
+        else:
+            await asyncio.to_thread(
+                notify_all, db, push_title, push_body, resolved_push_url,
+                channel_id="einsatz_alarm",
+            )
     except Exception:
         logger.exception("Push-Benachrichtigung fehlgeschlagen (Einsatz %s)", incident.id)
     if teams_args is not None:

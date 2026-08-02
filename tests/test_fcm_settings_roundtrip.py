@@ -8,6 +8,7 @@ from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.main import app
+from app.models.master import SystemSettings
 from app.models.user import Role, User, UserRole
 from app.services import push_service
 
@@ -36,7 +37,38 @@ def _setup_system_admin(username: str) -> None:
         db.close()
 
 
-def test_fcm_settings_save_then_fresh_session_read(monkeypatch):
+def test_fcm_settings_save_then_fresh_session_read(monkeypatch, request):
+    # The suite intentionally shares one database for performance. Preserve the
+    # global settings changed through the real admin endpoint so this test does
+    # not enable FCM (with a fake credentials path) for every test that follows.
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        original_settings = {
+            key: (row.value if (row := db.get(SystemSettings, key)) else None)
+            for key in ("fcm_enabled", "fcm_project_id", "fcm_credentials_path")
+        }
+    finally:
+        db.close()
+
+    def restore_fcm_settings():
+        restore_db = SessionLocal()
+        set_tenant_context(restore_db, None)
+        try:
+            for key, value in original_settings.items():
+                row = restore_db.get(SystemSettings, key)
+                if value is None:
+                    if row is not None:
+                        restore_db.delete(row)
+                elif row is not None:
+                    row.value = value
+                else:
+                    restore_db.add(SystemSettings(key=key, value=value))
+            restore_db.commit()
+        finally:
+            restore_db.close()
+
+    request.addfinalizer(restore_fcm_settings)
     _setup_system_admin("fcm_settings_roundtrip_admin")
     client = TestClient(app)
     client.get("/login")

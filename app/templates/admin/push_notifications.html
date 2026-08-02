@@ -69,7 +69,7 @@
         keinen Service-Worker-Push (PushManager) unterstützt.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
-        <button type="button" class="btn btn--secondary" onclick="registerNativePush()">
+        <button type="button" id="registerNativePushButton" class="btn btn--secondary" onclick="registerNativePush()">
           Push jetzt registrieren
         </button>
         {% if has_fcm_token %}
@@ -289,8 +289,17 @@ async function registerNativePush() {
   try {
     const result = await window.ELNative.registerPush();
     if (result.ok) {
-      showNativePushResult(true, '✓ Aktiv', 'Registrierung erfolgreich. Seite wird neu geladen.');
-      window.location.reload();
+      // Do not reload this remote page. Capacitor's bridge is not reliably
+      // reinjected after a cross-origin WebView navigation and Android can end
+      // up showing an empty page even though the token was saved successfully.
+      showNativePushResult(true, '✓ Aktiv', 'Registrierung erfolgreich.');
+      const statusArea = document.getElementById('pushStatusArea');
+      if (statusArea) statusArea.dataset.pushRegistered = 'true';
+      const button = document.getElementById('registerNativePushButton');
+      if (button) {
+        button.textContent = '✓ Push registriert';
+        button.disabled = true;
+      }
     } else {
       const errorMessage = result.error === 'Native App nicht erkannt'
         ? result.error + ' - bitte stattdessen in der App über "Über die App" registrieren.'

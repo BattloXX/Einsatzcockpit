@@ -85,11 +85,15 @@ def test_fcm_push_sends_to_registered_token(monkeypatch):
     }
 
 
-def test_fcm_push_uses_database_settings_when_environment_is_empty(monkeypatch):
+def test_fcm_push_uses_database_settings_when_environment_is_empty(monkeypatch, request):
     user_id = _setup_user("fcm_test_database_settings")
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
+        original_settings = {
+            key: (row.value if (row := db.get(SystemSettings, key)) else None)
+            for key in ("fcm_enabled", "fcm_project_id", "fcm_credentials_path")
+        }
         db.add(FcmToken(user_id=user_id, token="fcm-db-settings-token", platform="android"))
         for key, value in {
             "fcm_enabled": "true",
@@ -104,6 +108,25 @@ def test_fcm_push_uses_database_settings_when_environment_is_empty(monkeypatch):
         db.commit()
     finally:
         db.close()
+
+    def restore_fcm_settings():
+        restore_db = SessionLocal()
+        set_tenant_context(restore_db, None)
+        try:
+            for key, value in original_settings.items():
+                row = restore_db.get(SystemSettings, key)
+                if value is None:
+                    if row is not None:
+                        restore_db.delete(row)
+                elif row is not None:
+                    row.value = value
+                else:
+                    restore_db.add(SystemSettings(key=key, value=value))
+            restore_db.commit()
+        finally:
+            restore_db.close()
+
+    request.addfinalizer(restore_fcm_settings)
 
     monkeypatch.setattr(push_service.settings, "FCM_ENABLED", False)
     monkeypatch.setattr(push_service.settings, "FCM_PROJECT_ID", "")

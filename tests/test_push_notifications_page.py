@@ -65,6 +65,23 @@ def test_native_app_without_fcm_token_shows_inactive_not_unsupported():
     assert "Noch keine FCM-Registrierung" in r.text
 
 
+def test_native_push_registration_updates_page_without_webview_reload():
+    """Success must stay on the working remote page; reloading can lose the
+    Capacitor bridge and leave Android's WebView blank."""
+    _setup_admin("push_native_no_reload")
+    client = TestClient(app)
+    _login(client, "push_native_no_reload", "Test1234!")
+
+    r = client.get("/admin/push-nachrichten", params={"native": "1"})
+    assert r.status_code == 200
+    assert 'id="registerNativePushButton"' in r.text
+    handler = r.text.split("async function registerNativePush()", 1)[1].split(
+        "async function testNativePush()", 1
+    )[0]
+    assert "window.location.reload()" not in handler
+    assert "button.disabled = true" in handler
+
+
 def test_native_app_with_fcm_token_shows_active():
     _setup_admin("push_native_with_fcm")
     client = TestClient(app)
