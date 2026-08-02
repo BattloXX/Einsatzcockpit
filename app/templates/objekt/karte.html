@@ -9,7 +9,7 @@
   <div class="page-header">
     <div>
       <h1>🗺️ Objekt-Lagekarte</h1>
-      <p class="text-muted">{{ objekt.anzeige_nummer }} · {{ objekt.name }} — Symbol in der Palette wählen, dann auf die Karte klicken. Marker sind verschiebbar.</p>
+      <p class="text-muted">{{ objekt.anzeige_nummer }} · {{ objekt.name }}{% if objekt.vulgoname %}<span style="font-size:0.85em;"> · {{ objekt.vulgoname }}</span>{% endif %} — Symbol in der Palette wählen, dann auf die Karte klicken. Marker sind verschiebbar.</p>
     </div>
     <a href="/objekte/{{ objekt.id }}" class="btn btn--ghost">← Zurück zum Objekt</a>
   </div>

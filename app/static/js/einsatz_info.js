@@ -273,6 +273,7 @@
       var dist = (o.entfernung_m != null) ? (o.entfernung_m + " m" + (o.richtung ? " " + o.richtung : "")) : "";
       html += '<div class="nachbar-gefahr-row" data-oid="' + o.objekt_id + '">'
         + '<div class="nachbar-gefahr-row__head"><strong>' + escapeHtml(o.name) + "</strong>"
+        + (o.vulgoname ? '<span class="text-muted" style="font-size:.85em;">' + escapeHtml(o.vulgoname) + "</span>" : "")
         + '<span class="text-muted" style="font-size:.78rem;">' + dist + "</span></div>"
         + '<div class="nachbar-gefahr-chips">' + chips + "</div></div>";
     });
@@ -298,6 +299,7 @@
             + (g.un_nummer ? " (UN " + escapeHtml(g.un_nummer) + ")" : "");
         }).join("<br>");
         m.bindPopup("<strong>⚠️ " + escapeHtml(o.name) + "</strong>"
+          + (o.vulgoname ? ' <span class="text-muted" style="font-size:.85em;">' + escapeHtml(o.vulgoname) + "</span>" : "")
           + (o.entfernung_m != null ? " <span>" + o.entfernung_m + " m</span>" : "")
           + "<br>" + chips);
         nachbarMarkerById[o.objekt_id] = m;

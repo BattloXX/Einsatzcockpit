@@ -259,6 +259,7 @@ def _load_incident_objekte(db, incident: Incident) -> list[dict]:
 
         ergebnis.append({
             "name": o.name,
+            "vulgoname": o.vulgoname,
             "nummer": o.anzeige_nummer,
             "adresse": adresse,
             "bma": (o.bma.bma_nummer if o.bma else None),

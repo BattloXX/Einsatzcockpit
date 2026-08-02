@@ -20,6 +20,7 @@
           <span>{{ c.erstellt_am|local_datetime }}</span>
           {% if o %}
           <a href="/objekte/{{ o.id }}">{{ o.name }}</a>
+          {% if o.vulgoname %}<span class="text-muted" style="font-size:0.85em;">{{ o.vulgoname }}</span>{% endif %}
           {% else %}
           <span class="text-muted">Objekt #{{ c.objekt_id }}</span>
           {% endif %}

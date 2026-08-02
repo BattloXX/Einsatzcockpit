@@ -182,7 +182,7 @@
         var m = L.marker([o.lat, o.lng], {
           icon: divIcon('<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));">🏢' + warn + '</div>', [14, 28])
         }).addTo(map);
-        bindLabel(m, escapeHtml(o.name || 'Objekt') + (o.gefahren && o.gefahren.length ? ' · ' + o.gefahren.map(function (g) { return g.piktogramm + ' ' + escapeHtml(g.name); }).join(', ') : ''));
+        bindLabel(m, escapeHtml(o.name || 'Objekt') + (o.vulgoname ? ' <small>' + escapeHtml(o.vulgoname) + '</small>' : '') + (o.gefahren && o.gefahren.length ? ' · ' + o.gefahren.map(function (g) { return g.piktogramm + ' ' + escapeHtml(g.name); }).join(', ') : ''));
       });
     }).catch(function () {}));
   }

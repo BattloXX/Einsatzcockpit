@@ -1226,6 +1226,7 @@ def incident_nachbar_gefahren(incident_id: int, request: Request, db: Session = 
         ergebnis.append({
             "objekt_id": o.id,
             "name": o.name,
+            "vulgoname": o.vulgoname,
             "lat": o.lat,
             "lng": o.lng,
             "entfernung_m": int(round(dist)),

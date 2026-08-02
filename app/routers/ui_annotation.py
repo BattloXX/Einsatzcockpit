@@ -172,7 +172,8 @@ def uebernahme_objekte(
     objekte = nur_produktiv(db.query(Objekt)).filter(Objekt.org_id == user.org_id).all()
     objekte.sort(key=lambda o: (0 if o.id in verknuepft else 1, (o.name or "").lower()))
     return {"objekte": [
-        {"id": o.id, "name": f"{o.anzeige_nummer} {o.name}", "verknuepft": o.id in verknuepft}
+        {"id": o.id, "name": f"{o.anzeige_nummer} {o.name}", "vulgoname": o.vulgoname,
+         "verknuepft": o.id in verknuepft}
         for o in objekte
     ]}
 

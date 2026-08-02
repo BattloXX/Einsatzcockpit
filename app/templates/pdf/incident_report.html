@@ -112,6 +112,7 @@
     <tr>
       <td>
         <span class="obj-name">{{ o.name }}{% if o.nummer %} <span style="color:#888;font-weight:400;">#{{ o.nummer }}</span>{% endif %}</span>
+        {% if o.vulgoname %}<div class="obj-meta">{{ o.vulgoname }}</div>{% endif %}
         {% if o.status == 'bestaetigt' %}<span class="obj-tag obj-tag--best">verknüpft</span>
         {% else %}<span class="obj-tag obj-tag--vor">Vorschlag{% if o.quelle == 'geo' and o.distanz_m is not none %} · {{ o.distanz_m }} m{% endif %}</span>{% endif %}
         {% if o.adresse %}<div class="obj-meta">{{ o.adresse }}</div>{% endif %}

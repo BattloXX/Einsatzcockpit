@@ -9,6 +9,7 @@
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
       <div style="min-width:0;">
         <strong>🏢 {{ o.name }}</strong>
+        {% if o.vulgoname %}<div class="text-muted" style="font-size:0.85em;">{{ o.vulgoname }}</div>{% endif %}
         <span class="text-muted" style="font-size:.85rem;"> {% if o.adresse_zeile %}{{ o.adresse_zeile }}{% endif %}{% if o.bma and o.bma.bma_nummer %}{% if o.adresse_zeile %} · {% endif %}🔥 BMA {{ o.bma.bma_nummer }}{% endif %}{% if o.adresse_zeile or (o.bma and o.bma.bma_nummer) %} · {% endif %}{{ o.anzeige_nummer }}</span>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
@@ -46,7 +47,7 @@
      Objekt verknuepft ist. Ohne Verknuepfung bleibt der Hinweistext "kein Objekt
      automatisch zugeordnet" gedruckt sichtbar (informativ). #}
   <div class="card{{ ' ei-noprint' if verknuepfungen else '' }}" style="padding:14px;"
-       x-data='{ q: "", kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, l: {{ (o.name ~ (" · " ~ o.adresse_zeile if o.adresse_zeile else ""))|tojson }}, t: {{ (o.name ~ " " ~ o.adresse_zeile ~ " " ~ (o.bma.bma_nummer if o.bma and o.bma.bma_nummer else "") ~ " " ~ o.anzeige_nummer)|lower|tojson }} }{{ "," if not loop.last }}{% endfor %}] }'>
+       x-data='{ q: "", kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, n: {{ o.name|tojson }}, v: {{ o.vulgoname|tojson }}, l: {{ ((" · " ~ o.adresse_zeile) if o.adresse_zeile else "")|tojson }}, t: {{ (o.name ~ " " ~ (o.vulgoname or "") ~ " " ~ o.adresse_zeile ~ " " ~ (o.bma.bma_nummer if o.bma and o.bma.bma_nummer else "") ~ " " ~ o.anzeige_nummer)|lower|tojson }} }{{ "," if not loop.last }}{% endfor %}] }'>
     <div style="font-weight:600;margin-bottom:6px;">
       {% if verknuepfungen %}Weiteres Objekt verknüpfen{% else %}🏢 Objekt manuell verknüpfen{% endif %}
     </div>
@@ -61,7 +62,10 @@
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="view" value="info">
           <input type="hidden" name="objekt_id" :value="k.id">
-          <button type="submit" class="btn btn--secondary btn--sm" style="width:100%;text-align:left;" x-text="'+ ' + k.l"></button>
+          <button type="submit" class="btn btn--secondary btn--sm" style="width:100%;text-align:left;display:block;">
+            <span x-text="'+ ' + k.n + k.l"></span>
+            <span x-show="k.v" class="text-muted" style="font-size:0.85em;display:block;" x-text="k.v"></span>
+          </button>
         </form>
       </template>
       <div x-show="kandidaten.filter(function (x) { return x.t.toLowerCase().indexOf(q.toLowerCase()) !== -1; }).length === 0"

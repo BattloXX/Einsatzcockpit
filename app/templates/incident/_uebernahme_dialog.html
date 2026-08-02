@@ -18,7 +18,7 @@
     }
   },
   close() { try { if (this.$refs.dlg.open) this.$refs.dlg.close(); } catch (e) {} },
-  get gefilterte() { const q = this.suche.toLowerCase().trim(); return this.objekte.filter(o => !q || o.name.toLowerCase().includes(q)); },
+  get gefilterte() { const q = this.suche.toLowerCase().trim(); return this.objekte.filter(o => !q || (o.name + ' ' + (o.vulgoname || '')).toLowerCase().includes(q)); },
   get gefilterteDok() { const q = this.dokSuche.toLowerCase().trim(); return q ? this.dokumente.filter(d => (d.name || '').toLowerCase().includes(q)) : this.dokumente; },
   async waehle(o) {
     this.obj = o; this.auswahl = []; this.dokumente = []; this.dokSuche = ''; this.laden = true;
@@ -53,6 +53,7 @@
               <template x-for="o in gefilterte" :key="o.id">
                 <button type="button" @click="waehle(o)" class="btn btn--ghost btn--sm" style="justify-content:flex-start;text-align:left;">
                   <span x-text="o.name"></span>
+                  <span x-show="o.vulgoname" class="text-muted" style="font-size:0.85em;" x-text="o.vulgoname"></span>
                   <span x-show="o.verknuepft" class="badge-pill badge-pill--green" style="margin-left:auto;font-size:.7em;">verknüpft</span>
                 </button>
               </template>
@@ -68,6 +69,7 @@
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
               <button type="button" @click="obj = null" class="btn btn--ghost btn--sm">← Objekte</button>
               <span style="font-weight:600;" x-text="obj.name"></span>
+              <span x-show="obj.vulgoname" class="text-muted" style="font-size:0.85em;" x-text="obj.vulgoname"></span>
               <input type="text" x-model="dokSuche" placeholder="Dokument suchen …" class="form-input form-input--sm"
                      style="margin-left:auto;max-width:220px;">
             </div>
