@@ -86,9 +86,9 @@ def _get_fcm_app(cfg: dict | None = None):
 
 
 def send_fcm(fcm_token_row: FcmToken, title: str, body: str, url: str | None = None,
-             channel_id: str | None = None) -> bool:
+             channel_id: str | None = None, cfg: dict | None = None) -> bool:
     """Sendet eine FCM-Nachricht an ein einzelnes Gerät."""
-    app = _get_fcm_app()
+    app = _get_fcm_app(cfg)
     if app is None:
         return False
     try:
@@ -254,9 +254,9 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
     if channel_id:
         return sum(
             1 for t in tokens
-            if send_fcm(t, title, body, url, channel_id=channel_id)
+            if send_fcm(t, title, body, url, channel_id=channel_id, cfg=cfg)
         )
-    return sum(1 for t in tokens if send_fcm(t, title, body, url))
+    return sum(1 for t in tokens if send_fcm(t, title, body, url, cfg=cfg))
 
 
 def notify_all(db: Session, title: str, body: str, url: str | None = None,

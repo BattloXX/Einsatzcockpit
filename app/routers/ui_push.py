@@ -144,12 +144,14 @@ async def test_push_fcm(request: Request, db: Session = Depends(get_db)):
             "error": "Kein FCM-Token für dieses Gerät registriert",
         })
 
-    from app.services.push_service import send_fcm
+    from app.services.push_service import _push_cfg, send_fcm
+    cfg = _push_cfg(db)
     ok = send_fcm(
         token_row,
         "Test-Push",
         "Wenn du das siehst, funktioniert FCM!",
         url="/admin/push-nachrichten",
+        cfg=cfg,
     )
     if not ok:
         return JSONResponse({
