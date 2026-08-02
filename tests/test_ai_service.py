@@ -6,8 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.models.master import AIRequestLog
 from app.services import ai_service
 from app.services.ai_service import AIServiceError, _strip_persons, is_enabled
+from tests.conftest import TestingSession
 
 # ── is_enabled ───────────────────────────────────────────────────────────────
 
@@ -103,6 +105,8 @@ def _make_mock_client(text: str) -> MagicMock:
     mock_content.text = text
     mock_response = MagicMock()
     mock_response.content = [mock_content]
+    mock_response.usage.input_tokens = 12
+    mock_response.usage.output_tokens = 7
     mock_client = MagicMock()
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     return mock_client
@@ -113,7 +117,7 @@ async def test_complete_returns_text(ai_enabled):
     mock_client = _make_mock_client("Einsatzverlauf: Brand in Halle 3.")
 
     with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
-        result = await ai_service.complete("System-Prompt", "User-Prompt")
+        result = await ai_service.complete("System-Prompt", "User-Prompt", feature="test")
 
     assert result == "Einsatzverlauf: Brand in Halle 3."
 
@@ -123,7 +127,7 @@ async def test_complete_uses_default_model(ai_enabled):
     mock_client = _make_mock_client("ok")
 
     with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
-        await ai_service.complete("sys", "user", fast=False)
+        await ai_service.complete("sys", "user", feature="test", fast=False)
 
     call_kwargs = mock_client.messages.create.call_args.kwargs
     assert call_kwargs["model"] == "claude-sonnet-4-6"
@@ -134,7 +138,7 @@ async def test_complete_uses_fast_model(ai_enabled):
     mock_client = _make_mock_client("schnell")
 
     with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
-        await ai_service.complete("sys", "user", fast=True)
+        await ai_service.complete("sys", "user", feature="test", fast=True)
 
     call_kwargs = mock_client.messages.create.call_args.kwargs
     assert call_kwargs["model"] == "claude-haiku-4-5-20251001"
@@ -145,7 +149,7 @@ async def test_complete_respects_custom_max_tokens(ai_enabled):
     mock_client = _make_mock_client("ok")
 
     with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
-        await ai_service.complete("sys", "user", max_tokens=500)
+        await ai_service.complete("sys", "user", feature="test", max_tokens=500)
 
     call_kwargs = mock_client.messages.create.call_args.kwargs
     assert call_kwargs["max_tokens"] == 500
@@ -157,7 +161,7 @@ async def test_complete_raises_when_disabled(monkeypatch):
     monkeypatch.setattr("app.services.ai_service.settings.ANTHROPIC_API_KEY", "")
 
     with pytest.raises(AIServiceError):
-        await ai_service.complete("sys", "user")
+        await ai_service.complete("sys", "user", feature="test")
 
 
 @pytest.mark.asyncio
@@ -166,14 +170,14 @@ async def test_complete_raises_when_no_key(monkeypatch):
     monkeypatch.setattr("app.services.ai_service.settings.ANTHROPIC_API_KEY", "")
 
     with pytest.raises(AIServiceError):
-        await ai_service.complete("sys", "user")
+        await ai_service.complete("sys", "user", feature="test")
 
 
 @pytest.mark.asyncio
 async def test_complete_timeout_raises_ai_service_error(ai_enabled):
     with patch("app.services.ai_service.asyncio.wait_for", side_effect=asyncio.TimeoutError):
         with pytest.raises(AIServiceError, match="Timeout"):
-            await ai_service.complete("sys", "user")
+            await ai_service.complete("sys", "user", feature="test")
 
 
 @pytest.mark.asyncio
@@ -189,7 +193,7 @@ async def test_complete_api_error_raises_ai_service_error(ai_enabled):
 
     with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
         with pytest.raises(AIServiceError):
-            await ai_service.complete("sys", "user")
+            await ai_service.complete("sys", "user", feature="test")
 
 
 @pytest.mark.asyncio
@@ -201,4 +205,44 @@ async def test_complete_empty_response_raises_ai_service_error(ai_enabled):
 
     with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
         with pytest.raises(AIServiceError, match="leer"):
-            await ai_service.complete("sys", "user")
+            await ai_service.complete("sys", "user", feature="test")
+
+
+@pytest.mark.asyncio
+async def test_complete_writes_success_log(ai_enabled):
+    db = TestingSession()
+    db.query(AIRequestLog).delete()
+    db.commit()
+    db.close()
+    mock_client = _make_mock_client("ok")
+
+    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+        await ai_service.complete("sys", "user", feature="report")
+
+    db = TestingSession()
+    row = db.query(AIRequestLog).one()
+    assert row.feature == "report"
+    assert row.model == "claude-sonnet-4-6"
+    assert (row.input_tokens, row.output_tokens, row.total_tokens) == (12, 7, 19)
+    assert row.success is True
+    db.close()
+
+
+@pytest.mark.asyncio
+async def test_complete_writes_failure_log(ai_enabled):
+    db = TestingSession()
+    db.query(AIRequestLog).delete()
+    db.commit()
+    db.close()
+
+    with patch("app.services.ai_service.asyncio.wait_for", side_effect=asyncio.TimeoutError):
+        with pytest.raises(AIServiceError):
+            await ai_service.complete("sys", "user", feature="suggest")
+
+    db = TestingSession()
+    row = db.query(AIRequestLog).one()
+    assert row.feature == "suggest"
+    assert row.success is False
+    assert (row.input_tokens, row.output_tokens, row.total_tokens) == (0, 0, 0)
+    assert "Timeout" in (row.error_message or "")
+    db.close()

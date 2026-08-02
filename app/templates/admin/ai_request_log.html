@@ -1,0 +1,34 @@
+{% extends "admin/_layout.html" %}
+{% block title %}KI-Anfragen-Log - Admin{% endblock %}
+{% block admin_content %}
+<div class="page-header">
+  <h2>KI-Anfragen-Log</h2>
+</div>
+<table class="table table--compact">
+  <thead>
+    <tr>
+      <th>Zeit</th>
+      {% if is_system_admin %}<th>Organisation</th>{% endif %}
+      <th>Funktion</th><th>Modell</th><th>Input</th><th>Output</th><th>Gesamt</th><th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in entries %}
+    <tr>
+      <td class="nowrap">{{ e.created_at|local_datetime }}</td>
+      {% if is_system_admin %}<td>{{ org_names.get(e.org_id, e.org_id or '-') }}</td>{% endif %}
+      <td>{{ feature_labels.get(e.feature, e.feature) }}</td>
+      <td>{{ e.model }}</td>
+      <td>{{ e.input_tokens }}</td><td>{{ e.output_tokens }}</td><td>{{ e.total_tokens }}</td>
+      <td>
+        {% if e.success %}<span class="badge badge--success">Erfolgreich</span>
+        {% else %}<span class="badge badge--danger">Fehler</span>{% if e.error_message %}<br><small>{{ e.error_message }}</small>{% endif %}
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="{% if is_system_admin %}8{% else %}7{% endif %}" class="text-center text-muted">Keine Eintraege.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -165,6 +165,7 @@ class Settings(BaseSettings):
     AI_MODEL_FAST: str = "claude-haiku-4-5-20251001"
     AI_MAX_TOKENS: int = 1500
     AI_TIMEOUT: int = 20
+    AI_LOG_RETENTION_DAYS: int = 60
 
     # Rate-Limits
     LOGIN_RATELIMIT: str = "10/minute"          # POST /login – IP-basiert

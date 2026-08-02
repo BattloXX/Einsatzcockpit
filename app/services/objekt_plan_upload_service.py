@@ -151,7 +151,7 @@ async def identifiziere_objekt(data: bytes, dateiname: str, org_id: int) -> dict
             antwort = await complete(
                 _system_prompt_identitaet(),
                 f"Text der ersten Seiten dieses Dokuments:\n\n{text[:6000]}",
-                fast=True, org_id=org_id,
+                feature="objekt_identifikation_text", fast=True, org_id=org_id,
             )
             geparst = _parse_identitaet(antwort)
             if geparst and geparst.get("name"):
@@ -163,7 +163,7 @@ async def identifiziere_objekt(data: bytes, dateiname: str, org_id: int) -> dict
             antwort = await complete_vision(
                 _system_prompt_identitaet(),
                 "Identifiziere das Objekt/den Betrieb dieses Dokuments.",
-                [bild], org_id=org_id,
+                [bild], feature="objekt_identifikation_vision", org_id=org_id,
             )
             geparst = _parse_identitaet(antwort)
             if geparst and geparst.get("name"):

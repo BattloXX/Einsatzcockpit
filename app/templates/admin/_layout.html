@@ -20,7 +20,7 @@
        or '/admin/auftragsvorlagen' in _p or '/admin/meldungsvorlagen' in _p
        or '/admin/lage-hinweise' in _p or '/admin/default-meldungen' in _p %}
   {% set active_group = 'stammdaten' %}
-{% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/system' in _p
+{% elif '/admin/settings' in _p or '/admin/ki-prompts' in _p or '/admin/ki-anfragen' in _p or '/admin/system' in _p
        or '/admin/seiten' in _p or '/admin/backup' in _p or '/admin/organisations' in _p
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
        or '/admin/lis' in _p or '/admin/dibos' in _p or '/admin/mail' in _p
@@ -365,6 +365,11 @@
                class="admin-nav__item {% if '/admin/org-backup' in request.url.path %}is-active{% endif %}"
                {{ tip('Alle Org-Daten als Archiv sichern (Download / Remote-Ziel)') }}>
               <span class="admin-nav__icon">💾</span>Datensicherung
+            </a>
+            <a href="/admin/ki-anfragen"
+               class="admin-nav__item {% if '/admin/ki-anfragen' in request.url.path %}is-active{% endif %}"
+               {{ tip('Tokenverbrauch und Fehler der KI-Anfragen anzeigen') }}>
+              <span class="admin-nav__icon">KI</span>KI-Anfragen-Log
             </a>
             {% if is_sysadmin %}
             <a href="/admin/ki-prompts"

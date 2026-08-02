@@ -13,6 +13,7 @@ import asyncio
 import json as _json
 import logging
 import re as _re
+import time
 from typing import Any
 
 from anthropic import APIError, AsyncAnthropic, AuthenticationError, RateLimitError
@@ -127,6 +128,34 @@ async def _record_token_usage(org_id: int, total_tokens: int, model: str) -> Non
         pass
 
 
+async def _record_ai_request(
+    *, feature: str, model: str, org_id: int | None, started_at: float,
+    success: bool, input_tokens: int = 0, output_tokens: int = 0,
+    error_message: str | None = None,
+) -> None:
+    """Persist one request best-effort without changing caller behavior."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.master import AIRequestLog
+    try:
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            db.add(AIRequestLog(
+                org_id=org_id, feature=feature[:50], model=model[:100],
+                input_tokens=input_tokens, output_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens,
+                duration_ms=max(0, round((time.perf_counter() - started_at) * 1000)),
+                success=success,
+                error_message=error_message[:500] if error_message else None,
+            ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("KI-Anfragen-Log konnte nicht geschrieben werden")
+
+
 _PERSON_KEYS: frozenset[str] = frozenset({
     "name", "member", "member_id", "commander", "commander_member_id",
     "commander_id", "leader", "leader_member", "incident_leader_user_id",
@@ -163,13 +192,14 @@ def _strip_persons(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-async def complete(
+async def _complete(
     system: str,
     user: str,
     *,
     fast: bool = False,
     max_tokens: int | None = None,
     org_id: int | None = None,
+    metrics: dict[str, Any] | None = None,
 ) -> str:
     """Call the Anthropic Messages API and return the text response.
 
@@ -178,6 +208,9 @@ async def complete(
     Raises AIServiceError on any provider failure, timeout, or quota exceeded.
     """
     platform_cfg = _get_ai_cfg()
+    model = platform_cfg["model_fast"] if fast else platform_cfg["model_default"]
+    if metrics is not None:
+        metrics["model"] = model
     if not platform_cfg["enabled"]:
         raise AIServiceError("KI-Dienst ist nicht aktiviert.")
 
@@ -208,7 +241,6 @@ async def complete(
     if not api_key:
         raise AIServiceError("KI-Dienst: kein API-Key konfiguriert.")
 
-    model = platform_cfg["model_fast"] if fast else platform_cfg["model_default"]
     tokens = max_tokens or platform_cfg["max_tokens"]
     client = AsyncAnthropic(api_key=api_key)
 
@@ -238,6 +270,10 @@ async def complete(
     if not response.content:
         raise AIServiceError("KI-Dienst hat eine leere Antwort geliefert.")
 
+    if metrics is not None:
+        metrics["input_tokens"] = response.usage.input_tokens
+        metrics["output_tokens"] = response.usage.output_tokens
+
     # Token-Verbrauch asynchron protokollieren
     if org_id is not None:
         try:
@@ -249,7 +285,7 @@ async def complete(
     return response.content[0].text  # type: ignore[union-attr]
 
 
-async def complete_vision(
+async def _complete_vision(
     system: str,
     user: str,
     images: list[bytes],
@@ -258,6 +294,7 @@ async def complete_vision(
     fast: bool = True,
     max_tokens: int | None = None,
     org_id: int | None = None,
+    metrics: dict[str, Any] | None = None,
 ) -> str:
     """Wie complete(), aber mit Bild-Bloecken (Vision) im User-Content.
 
@@ -269,6 +306,9 @@ async def complete_vision(
     import base64 as _base64
 
     platform_cfg = _get_ai_cfg()
+    model = platform_cfg["model_fast"] if fast else platform_cfg["model_default"]
+    if metrics is not None:
+        metrics["model"] = model
     if not platform_cfg["enabled"]:
         raise AIServiceError("KI-Dienst ist nicht aktiviert.")
 
@@ -310,7 +350,6 @@ async def complete_vision(
         })
     content.append({"type": "text", "text": user})
 
-    model = platform_cfg["model_fast"] if fast else platform_cfg["model_default"]
     tokens = max_tokens or platform_cfg["max_tokens"]
     client = AsyncAnthropic(api_key=api_key)
 
@@ -340,6 +379,10 @@ async def complete_vision(
     if not response.content:
         raise AIServiceError("KI-Dienst hat eine leere Antwort geliefert.")
 
+    if metrics is not None:
+        metrics["input_tokens"] = response.usage.input_tokens
+        metrics["output_tokens"] = response.usage.output_tokens
+
     if org_id is not None:
         try:
             total_tokens = response.usage.input_tokens + response.usage.output_tokens
@@ -348,6 +391,56 @@ async def complete_vision(
             pass
 
     return response.content[0].text  # type: ignore[union-attr]
+
+
+async def complete(
+    system: str, user: str, *, feature: str, fast: bool = False,
+    max_tokens: int | None = None, org_id: int | None = None,
+) -> str:
+    """Call Anthropic for text and persist exactly one request-log entry."""
+    started_at = time.perf_counter()
+    metrics: dict[str, Any] = {}
+    try:
+        result = await _complete(system, user, fast=fast, max_tokens=max_tokens, org_id=org_id, metrics=metrics)
+    except AIServiceError as exc:
+        await _record_ai_request(
+            feature=feature, model=str(metrics.get("model", "unbekannt")), org_id=org_id,
+            started_at=started_at, success=False, error_message=str(exc),
+        )
+        raise
+    await _record_ai_request(
+        feature=feature, model=str(metrics.get("model", "unbekannt")), org_id=org_id,
+        started_at=started_at, success=True,
+        input_tokens=int(metrics.get("input_tokens", 0)), output_tokens=int(metrics.get("output_tokens", 0)),
+    )
+    return result
+
+
+async def complete_vision(
+    system: str, user: str, images: list[bytes], *, feature: str,
+    media_type: str = "image/png", fast: bool = True,
+    max_tokens: int | None = None, org_id: int | None = None,
+) -> str:
+    """Call Anthropic with images and persist exactly one request-log entry."""
+    started_at = time.perf_counter()
+    metrics: dict[str, Any] = {}
+    try:
+        result = await _complete_vision(
+            system, user, images, media_type=media_type, fast=fast,
+            max_tokens=max_tokens, org_id=org_id, metrics=metrics,
+        )
+    except AIServiceError as exc:
+        await _record_ai_request(
+            feature=feature, model=str(metrics.get("model", "unbekannt")), org_id=org_id,
+            started_at=started_at, success=False, error_message=str(exc),
+        )
+        raise
+    await _record_ai_request(
+        feature=feature, model=str(metrics.get("model", "unbekannt")), org_id=org_id,
+        started_at=started_at, success=True,
+        input_tokens=int(metrics.get("input_tokens", 0)), output_tokens=int(metrics.get("output_tokens", 0)),
+    )
+    return result
 
 
 # ── Prompt-Bausteine ─────────────────────────────────────────────────────────
@@ -465,7 +558,7 @@ async def suggest_tasks(
     system = _assemble_prompt(_SUGGEST_FIXED_PREFIX, _SUGGEST_FIXED_SUFFIX, variable)
     user_msg = f"Alarmmeldung: {meldung}\nEinsatzart: {einsatzart}"
     try:
-        raw = await complete(system, user_msg, fast=True, max_tokens=600, org_id=org_id)
+        raw = await complete(system, user_msg, feature="suggest", fast=True, max_tokens=600, org_id=org_id)
     except AIServiceError:
         return []
 
@@ -517,7 +610,10 @@ async def rank_task_suggestions(
     numbered = "\n".join(f"{i}: {text}" for i, text in enumerate(vorlagen))
     user_msg = f"Einsatzart: {einsatzart}\nVerfügbare Auftragsvorlagen:\n{numbered}"
     try:
-        raw = await complete(_RANK_TASKS_SYSTEM, user_msg, fast=True, max_tokens=300, org_id=org_id)
+        raw = await complete(
+            _RANK_TASKS_SYSTEM, user_msg, feature="rank_tasks", fast=True,
+            max_tokens=300, org_id=org_id,
+        )
     except AIServiceError:
         return None
 
@@ -553,7 +649,7 @@ async def generate_report_draft(
     system = _assemble_prompt(_REPORT_FIXED_PREFIX, _REPORT_FIXED_SUFFIX, variable)
     safe_data = _strip_persons(incident_data)
     user_msg = f"Einsatzdaten (JSON):\n{_json.dumps(safe_data, ensure_ascii=False, indent=2)}"
-    return await complete(system, user_msg, org_id=org_id)
+    return await complete(system, user_msg, feature="report", org_id=org_id)
 
 
 async def generate_lage_hints(
@@ -564,7 +660,7 @@ async def generate_lage_hints(
     system = _assemble_prompt(_HINTS_FIXED_PREFIX, _HINTS_FIXED_SUFFIX, variable)
     user_msg = f"Alarmstichwort: {alarm_type}\nMeldung: {meldung}\nAdresse: {address}"
     try:
-        raw = await complete(system, user_msg, fast=True, max_tokens=400, org_id=org_id)
+        raw = await complete(system, user_msg, feature="hints", fast=True, max_tokens=400, org_id=org_id)
     except AIServiceError:
         return []
 
@@ -594,7 +690,7 @@ async def generate_situation_brief(
         f"Live-Einsatzdaten (JSON):\n"
         f"{_json.dumps(safe_context, ensure_ascii=False, indent=2)}"
     )
-    return await complete(system, user_msg, fast=True, max_tokens=600, org_id=org_id)
+    return await complete(system, user_msg, feature="situation", fast=True, max_tokens=600, org_id=org_id)
 
 
 _ERKUNDUNG_SYSTEM = """Du bist ein Einsatzassistent für die österreichische Feuerwehr.
@@ -623,7 +719,7 @@ async def analyze_site_reconnaissance(
         f"Erkundungsbericht:\n{erkundungstext}"
     )
     try:
-        raw = await complete(_ERKUNDUNG_SYSTEM, user_msg, fast=True, max_tokens=500, org_id=org_id)
+        raw = await complete(_ERKUNDUNG_SYSTEM, user_msg, feature="erkundung", fast=True, max_tokens=500, org_id=org_id)
     except AIServiceError:
         return {}
 
@@ -669,7 +765,10 @@ async def generate_site_bezeichnung(
     if einsatzgrund and einsatzgrund.strip() and einsatzgrund.strip() != meldung.strip():
         user_msg += f"\nEinsatzgrund: {einsatzgrund[:200]}"
     try:
-        result = await complete(_BEZEICHNUNG_SYSTEM, user_msg, fast=True, max_tokens=80, org_id=org_id)
+        result = await complete(
+            _BEZEICHNUNG_SYSTEM, user_msg, feature="bezeichnung", fast=True,
+            max_tokens=80, org_id=org_id,
+        )
         bezeichnung = result.strip()[:60]
         return bezeichnung if bezeichnung else None
     except AIServiceError:
@@ -686,6 +785,6 @@ async def generate_pressemeldung(
         f"{_json.dumps(safe_context, ensure_ascii=False, indent=2)}"
     )
     try:
-        return await complete(_PRESSE_SYSTEM, user_msg, fast=False, max_tokens=800, org_id=org_id)
+        return await complete(_PRESSE_SYSTEM, user_msg, feature="presse", fast=False, max_tokens=800, org_id=org_id)
     except AIServiceError:
         return ""

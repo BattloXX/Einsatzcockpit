@@ -8,16 +8,44 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.core.permissions import require_role
+from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
-from app.models.master import AIPromptVersion
+from app.models.master import AIPromptVersion, AIRequestLog, FireDept
 from app.services.ai_service import PROMPT_META
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 _MAX_VERSIONS = 10
 _VALID_KEYS = frozenset(PROMPT_META.keys())
+
+
+@router.get("/ki-anfragen", response_class=HTMLResponse)
+async def ai_request_log_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("system_admin", "org_admin")),
+):
+    user = request.state.user
+    is_system_admin = has_role(user, "system_admin")
+    query = db.query(AIRequestLog)
+    if not is_system_admin:
+        query = query.filter(AIRequestLog.org_id == user.org_id)
+    entries = query.order_by(AIRequestLog.created_at.desc()).limit(500).all()
+    org_names: dict[int, str] = {}
+    if is_system_admin:
+        org_ids = {entry.org_id for entry in entries if entry.org_id is not None}
+        if org_ids:
+            rows = db.query(FireDept.id, FireDept.name).filter(FireDept.id.in_(org_ids)).all()
+            org_names = {row[0]: row[1] for row in rows}
+    feature_labels = {key: meta["label"] for key, meta in PROMPT_META.items()}
+    return templates.TemplateResponse(request, "admin/ai_request_log.html", {
+        "user": user,
+        "entries": entries,
+        "is_system_admin": is_system_admin,
+        "org_names": org_names,
+        "feature_labels": feature_labels,
+    })
 
 
 def _next_version(db: Session, prompt_key: str, org_id: int) -> int:

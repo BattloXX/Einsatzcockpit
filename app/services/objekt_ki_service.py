@@ -152,6 +152,7 @@ async def analysiere_seite(seite: ObjektDokumentSeite, db: Session) -> ObjektSei
             _system_prompt(list(dokumentarten)),
             user_prompt,
             [bild],
+            feature="objekt_dokumentklassifizierung",
             org_id=seite.org_id,
         )
     except AIServiceError as exc:
@@ -327,7 +328,8 @@ async def analysiere_objektbeschreibung(
 
     try:
         antwort = await complete_vision(
-            _system_prompt_stammdaten(merkmal_codes), user_prompt, [bild], org_id=seite.org_id,
+            _system_prompt_stammdaten(merkmal_codes), user_prompt, [bild],
+            feature="objekt_stammdaten_extraktion", org_id=seite.org_id,
         )
     except AIServiceError as exc:
         logger.warning("KI-Stammdaten-Extraktion fehlgeschlagen (Seite %d): %s", seite.id, exc)

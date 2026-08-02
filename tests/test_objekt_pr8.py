@@ -65,7 +65,7 @@ def test_complete_vision_quota_ueberschritten():
                return_value={"ai_mode": "central", "ai_api_key_enc": None,
                              "ai_monthly_token_quota": 100, "ai_tokens_used_month": 100}):
         with pytest.raises(AIServiceError, match="Monatskontingent"):
-            asyncio.run(complete_vision("sys", "user", [b"png"], org_id=1))
+            asyncio.run(complete_vision("sys", "user", [b"png"], feature="test", org_id=1))
 
 
 def test_complete_vision_deaktiviert():
@@ -74,7 +74,7 @@ def test_complete_vision_deaktiviert():
                return_value={"enabled": False, "api_key": "", "model_fast": "m",
                              "model_default": "m", "max_tokens": 100, "timeout": 5}):
         with pytest.raises(AIServiceError, match="nicht aktiviert"):
-            asyncio.run(complete_vision("sys", "user", [b"png"], org_id=None))
+            asyncio.run(complete_vision("sys", "user", [b"png"], feature="test", org_id=None))
 
 
 # ── Opt-in-Gate + Review-Statusmaschine ───────────────────────────────────────

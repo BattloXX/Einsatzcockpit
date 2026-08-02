@@ -136,7 +136,7 @@ def test_identifiziere_objekt_nutzt_text_pfad_wenn_textlayer_vorhanden():
         "BRANDSCHUTZPLAN Meusburger Georg GmbH & Co KG Kesselstraße 42, 6960 Wolfurt " * 5
     )
 
-    async def fake_complete(system, user, *, fast=False, max_tokens=None, org_id=None):
+    async def fake_complete(system, user, *, feature, fast=False, max_tokens=None, org_id=None):
         assert "Meusburger" in user  # der extrahierte Text wurde tatsaechlich mitgeschickt
         return ('{"name": "Meusburger Georg GmbH & Co KG", "strasse": "Kesselstraße", '
                 '"hausnummer": "42", "plz": "6960", "ort": "Wolfurt", "bma_nummer": null}')
@@ -178,7 +178,7 @@ def test_identifiziere_objekt_duenner_textlayer_nutzt_vision_fallback():
     """Ohne brauchbaren Textlayer wird - falls Rendering verfuegbar - Vision genutzt."""
     data = _test_pdf_blank()
 
-    async def fake_vision(system, user, images, *, org_id=None):
+    async def fake_vision(system, user, images, *, feature=None, org_id=None):
         return '{"name": "Aus Bild erkannt", "strasse": null, "hausnummer": null, "plz": null, "ort": null, "bma_nummer": null}'
 
     with patch("app.services.ai_service.complete") as m_complete, \

@@ -70,6 +70,7 @@ from app.models.major_incident import (
     StaffFunction,
 )
 from app.models.master import (
+    AIRequestLog,
     AIPromptVersion,
     AlarmType,
     DefaultMessage,
@@ -177,7 +178,7 @@ __all__ = [
     "TeamsAlarmConfig", "TeamsChannelBinding", "TeamsCardPost", "AlarmToken",
     "User", "Role", "UserRole", "ApiKey", "AuditLog", "PushSubscription",
     "DeviceToken", "FcmToken", "PushLog", "SmsGatewayToken",
-    "FireDept", "VehicleMaster", "Member", "Qualification", "MemberQualification",
+    "FireDept", "AIRequestLog", "VehicleMaster", "Member", "Qualification", "MemberQualification",
     "AlarmType", "SeedTemplate", "AIPromptVersion", "OrgStorageUsage",
     "OrgInvitation", "OrgPartner",
     "TaskSuggestion", "TaskSuggestionAlarm",
