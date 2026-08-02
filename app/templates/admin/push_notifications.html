@@ -69,9 +69,10 @@
         keinen Service-Worker-Push (PushManager) unterstützt.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
-        <button type="button" id="registerNativePushButton" class="btn btn--secondary" onclick="registerNativePush()">
+        <a id="registerNativePushButton" class="btn btn--secondary"
+           href="https://localhost/about.html">
           Push jetzt registrieren
-        </button>
+        </a>
         {% if has_fcm_token %}
         <button type="button" class="btn btn--secondary" onclick="testNativePush()">
           Test senden
@@ -79,8 +80,8 @@
         {% endif %}
       </div>
       <p class="form-hint" style="margin:8px 0 0 0">
-        Falls die Registrierung hier fehlschlägt: In der App über das Menü zu "Über die App" wechseln und dort
-        "Push jetzt registrieren" antippen - das ist der zuverlässigere Weg.
+        Die Registrierung wird auf der lokal in der App gebündelten Seite "Über die App" ausgeführt,
+        auf der die Capacitor-Bridge zuverlässig verfügbar ist.
       </p>
       <div id="nativePushResult" style="display:none;margin-top:12px;"></div>
     </div>
@@ -278,37 +279,6 @@ function showNativePushResult(ok, badgeText, message) {
   msg.style.fontSize = '.85rem';
   msg.textContent = message;
   resultDiv.appendChild(msg);
-}
-
-async function registerNativePush() {
-  if (!window.ELNative || !window.ELNative.registerPush) {
-    showNativePushResult(false, '✗ Nicht verfügbar', 'Bitte App aktualisieren');
-    return;
-  }
-  showNativePushResult(true, '… Registrierung', 'Push-Benachrichtigungen werden registriert.');
-  try {
-    const result = await window.ELNative.registerPush();
-    if (result.ok) {
-      // Do not reload this remote page. Capacitor's bridge is not reliably
-      // reinjected after a cross-origin WebView navigation and Android can end
-      // up showing an empty page even though the token was saved successfully.
-      showNativePushResult(true, '✓ Aktiv', 'Registrierung erfolgreich.');
-      const statusArea = document.getElementById('pushStatusArea');
-      if (statusArea) statusArea.dataset.pushRegistered = 'true';
-      const button = document.getElementById('registerNativePushButton');
-      if (button) {
-        button.textContent = '✓ Push registriert';
-        button.disabled = true;
-      }
-    } else {
-      const errorMessage = result.error === 'Native App nicht erkannt'
-        ? result.error + ' - bitte stattdessen in der App über "Über die App" registrieren.'
-        : (result.error || 'Unbekannter Fehler');
-      showNativePushResult(false, '✗ Fehler', errorMessage);
-    }
-  } catch (e) {
-    showNativePushResult(false, '✗ Fehler', 'Registrierung fehlgeschlagen: ' + e.message);
-  }
 }
 
 async function testNativePush() {
