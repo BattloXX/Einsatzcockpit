@@ -25,6 +25,7 @@ eus_import_log.json
 migration_log.json
 
 .pytest_cache/
+.pytest_tmp/
 .mypy_cache/
 .ruff_cache/
 htmlcov/

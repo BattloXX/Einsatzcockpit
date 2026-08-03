@@ -70,8 +70,8 @@ from app.models.major_incident import (
     StaffFunction,
 )
 from app.models.master import (
-    AIRequestLog,
     AIPromptVersion,
+    AIRequestLog,
     AlarmType,
     DefaultMessage,
     DefaultMessageAlarm,
