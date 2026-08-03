@@ -14,6 +14,7 @@ from app.core.security import sign_native_link_token
 from app.db import get_db
 from app.models.user import DeviceToken, FcmToken
 from app.services import push_service
+from app.services.einsatz_live_service import build_live_state
 
 router = APIRouter(prefix="/api/v1/device", tags=["device"])
 
@@ -215,8 +216,16 @@ def get_duty_state(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
 
     device_token = _get_device_token(user.id, db)
+    server_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     if not device_token:
-        return JSONResponse({"duty_active": False, "incident_active": False})
+        return JSONResponse({
+            "duty_active": False,
+            "incident_active": False,
+            "should_track": False,
+            "server_time": server_time,
+            "incident_count": 0,
+            "incident": None,
+        })
 
     # Prüfen ob dem Fahrzeug ein aktiver Einsatz zugewiesen ist
     incident_active = False
@@ -241,8 +250,12 @@ def get_duty_state(request: Request, db: Session = Depends(get_db)):
                 MajorIncident.status == MajorIncidentStatus.active,
             ).first() is not None
 
+    live_incident, incident_count = build_live_state(db, user, device_token)
     return JSONResponse({
         "duty_active": device_token.duty_active,
         "incident_active": incident_active,
         "should_track": device_token.duty_active or incident_active,
+        "server_time": server_time,
+        "incident_count": incident_count,
+        "incident": live_incident,
     })
