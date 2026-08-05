@@ -202,7 +202,8 @@ def _log_push(db: Session, title: str, body: str, url: str | None,
 
 
 def send_push(subscription: PushSubscription, title: str, body: str,
-              url: str | None = None, db: Session | None = None) -> bool:
+              url: str | None = None, db: Session | None = None,
+              extra: dict | None = None) -> bool:
     cfg = _push_cfg(db)
     if not cfg["enabled"]:
         return False
@@ -210,7 +211,10 @@ def send_push(subscription: PushSubscription, title: str, body: str,
         return False
     try:
         from pywebpush import webpush
-        data = json.dumps({"title": title, "body": body, "url": url or "/"})
+        payload = {"title": title, "body": body, "url": url or "/"}
+        if extra:
+            payload.update(extra)
+        data = json.dumps(payload)
         webpush(
             subscription_info={"endpoint": subscription.endpoint,
                                 "keys": {"p256dh": subscription.p256dh, "auth": subscription.auth}},
@@ -295,6 +299,29 @@ def notify_org(db: Session, org_id: int, title: str, body: str,
     org_user_ids = {r[0] for r in db.query(_User.id).filter(_User.org_id == org_id).all()}
     fcm_extra = _notify_fcm_users(db, org_user_ids, title, body, url, cfg, channel_id)
     return wp_count + fcm_extra
+
+
+def notify_org_web(db: Session, org_id: int, title: str, body: str,
+                   url: str | None = None, *, extra: dict | None = None,
+                   source: str = "einsatz_live", log: bool = False) -> int:
+    """Web-Push nur an User der angegebenen Org, ohne FCM-Fan-out."""
+    from app.models.user import User as _User
+    cfg = _push_cfg(db)
+    if not cfg["enabled"]:
+        return 0
+    org_user_ids_subq = db.query(_User.id).filter(_User.org_id == org_id)
+    subs = (
+        db.query(PushSubscription)
+        .filter(PushSubscription.user_id.in_(org_user_ids_subq))
+        .all()
+    )
+    wp_count = sum(
+        1 for sub in subs
+        if send_push(sub, title, body, url, db=db, extra=extra)
+    )
+    if log:
+        _log_push(db, title, body, url, source, None, wp_count, len(subs))
+    return wp_count
 
 
 def notify_user(db: Session, user_id: int, title: str, body: str,

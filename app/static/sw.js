@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v7';
+const CACHE = 'ec-v8';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
@@ -246,19 +246,52 @@ self.addEventListener('push', e => {
   if (!e.data) return;
   let data;
   try { data = JSON.parse(e.data.text()); } catch { data = { title: 'FF Wolfurt', body: e.data.text() }; }
-  e.waitUntil(
-    self.registration.showNotification(data.title || 'FF Wolfurt', {
-      body: data.body || '',
-      icon: '/static/img/Logo-rot.png',
-      badge: '/static/img/badge.png',
-      data: { url: data.url || '/' },
-      requireInteraction: true,
-    })
-  );
+  const kind = data.kind || 'classic';
+  const opts = {
+    body: data.body || '',
+    icon: '/static/img/Logo-rot.png',
+    badge: '/static/img/badge.png',
+    data: { url: data.url || '/', kind, live: data.live },
+    requireInteraction: true,
+  };
+
+  if (kind === 'einsatz_live') {
+    opts.tag = data.tag;
+    opts.renotify = data.live && data.live.alert === true;
+    opts.silent = !opts.renotify;
+  } else if (kind === 'einsatz_live_end') {
+    opts.tag = data.tag;
+    opts.renotify = false;
+    opts.silent = true;
+    opts.requireInteraction = false;
+  }
+
+  let shown = self.registration.showNotification(data.title || 'Einsatzcockpit', opts);
+  if (kind === 'einsatz_live_end') {
+    shown = shown.then(() => new Promise(resolve => setTimeout(resolve, 8000)))
+      .then(() => self.registration.getNotifications({ tag: opts.tag })
+        .then(notifications => notifications.forEach(notification => notification.close()))
+        .catch(() => {}));
+  }
+  e.waitUntil(shown);
 });
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = e.notification.data?.url || '/';
-  e.waitUntil(clients.openWindow(url));
+  const targetUrl = e.notification.data?.url || '/';
+  const absoluteTargetUrl = new URL(targetUrl, self.location.origin).href;
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      const matchingClient = windowClients.find(c => {
+        try { return new URL(c.url).origin === self.location.origin; } catch { return false; }
+      });
+      if (!matchingClient) return clients.openWindow(targetUrl);
+      return matchingClient.focus().then(focusedClient => {
+        if (focusedClient.navigate && focusedClient.url !== absoluteTargetUrl) {
+          return focusedClient.navigate(targetUrl).catch(() => focusedClient);
+        }
+        return focusedClient;
+      });
+    })
+  );
 });
