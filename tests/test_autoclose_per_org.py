@@ -122,7 +122,7 @@ def test_check_skips_disabled_org(db, org):
     db.add(inc)
     db.flush()
 
-    to_warn = _check_incidents_sync(db)
+    to_warn, _closed = _check_incidents_sync(db)
     assert len(to_warn) == 0
 
 
@@ -137,7 +137,7 @@ def test_check_warns_after_default_threshold(db, org):
     db.add(inc)
     db.flush()
 
-    to_warn = _check_incidents_sync(db)
+    to_warn, _closed = _check_incidents_sync(db)
     assert len(to_warn) == 1
     assert to_warn[0][0] == inc.id
     assert to_warn[0][1] == 60  # default grace_minutes
@@ -158,7 +158,7 @@ def test_check_uses_org_after_hours_override(db, org):
     db.add(inc)
     db.flush()
 
-    to_warn = _check_incidents_sync(db)
+    to_warn, _closed = _check_incidents_sync(db)
     assert len(to_warn) == 0
 
 
@@ -176,7 +176,7 @@ def test_check_uses_org_grace_minutes_in_warning(db, org):
     db.add(inc)
     db.flush()
 
-    to_warn = _check_incidents_sync(db)
+    to_warn, _closed = _check_incidents_sync(db)
     assert len(to_warn) == 1
     assert to_warn[0][1] == 120  # org-specific grace_minutes in warning payload
 
@@ -248,5 +248,5 @@ def test_org_settings_cached_across_incidents(db, org):
     db.flush()
 
     # All three incidents are in the disabled org → no warnings
-    to_warn = _check_incidents_sync(db)
+    to_warn, _closed = _check_incidents_sync(db)
     assert len(to_warn) == 0

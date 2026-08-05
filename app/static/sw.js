@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v6';
+const CACHE = 'ec-v7';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
@@ -206,6 +206,39 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(e.request).catch(() => caches.match(e.request))
   );
+});
+
+function decodeBase64Url(value) {
+  const padding = '='.repeat((4 - value.length % 4) % 4);
+  const raw = atob((value + padding).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, char => char.charCodeAt(0));
+}
+
+self.addEventListener('pushsubscriptionchange', e => {
+  e.waitUntil((async () => {
+    let opts = e.oldSubscription?.options;
+    if (!opts?.userVisibleOnly || !opts?.applicationServerKey) {
+      const response = await fetch('/push/vapid-public-key', {
+        credentials: 'same-origin',
+      });
+      if (!response.ok) throw new Error('VAPID-Schluessel nicht verfuegbar');
+      const data = await response.json();
+      if (!data.publicKey) throw new Error('VAPID-Schluessel fehlt');
+      opts = {
+        userVisibleOnly: true,
+        applicationServerKey: decodeBase64Url(data.publicKey),
+      };
+    }
+
+    const subscription = await self.registration.pushManager.subscribe(opts);
+    const response = await fetch('/push/subscribe', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(subscription),
+    });
+    if (!response.ok) throw new Error('Push-Abo konnte nicht gespeichert werden');
+  })().catch(() => {}));
 });
 
 // Push notification handler

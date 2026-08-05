@@ -43,9 +43,21 @@ async def subscribe(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/unsubscribe")
 async def unsubscribe(request: Request, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response(status_code=401)
     data = await request.json()
     endpoint = data.get("endpoint", "")
-    db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).delete()
+    subscription = (
+        db.query(PushSubscription)
+        .filter(
+            PushSubscription.endpoint == endpoint,
+            PushSubscription.user_id == user.id,
+        )
+        .first()
+    )
+    if subscription:
+        db.delete(subscription)
     db.commit()
     return JSONResponse({"ok": True})
 

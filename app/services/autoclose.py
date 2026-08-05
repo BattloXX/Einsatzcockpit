@@ -74,14 +74,18 @@ async def _send_warning(incident_id: int, grace_minutes: int) -> None:
         logger.exception("autoclose: Broadcast für Einsatz %s fehlgeschlagen", incident_id)
 
 
-def _check_incidents_sync(db) -> list[tuple[int, int]]:
+def _check_incidents_sync(
+    db,
+) -> tuple[list[tuple[int, int]], list[tuple[int, int | None]]]:
     """Prüft alle aktiven Einsätze, iteriert je Org mit org-spezifischer Konfig.
 
-    Returns: Liste von (incident_id, grace_minutes) für WS-Broadcasts.
+    Returns: Warnungen (incident_id, grace_minutes) und Abschlüsse
+    (incident_id, org_id) für WS-Broadcasts.
     """
     global_cfg = _global_cfg(db)
     now = datetime.now(UTC)
     to_warn: list[tuple[int, int]] = []
+    closed: list[tuple[int, int | None]] = []
 
     active = db.query(Incident).filter(Incident.status == "active").all()
 
@@ -119,6 +123,7 @@ def _check_incidents_sync(db) -> list[tuple[int, int]]:
             try:
                 close_incident(db, inc, user_id=None)
                 db.commit()
+                closed.append((inc.id, org_id))
                 logger.info(
                     "autoclose: Einsatz %s automatisch geschlossen (org=%s, %sh + %smin)",
                     inc.id, org_id, cfg["after_hours"], cfg["grace_minutes"],
@@ -127,10 +132,11 @@ def _check_incidents_sync(db) -> list[tuple[int, int]]:
                 db.rollback()
                 logger.exception("autoclose: Fehler beim Schließen von Einsatz %s", inc.id)
 
-    return to_warn
+    return to_warn, closed
 
 
-def _check_incidents_in_new_session() -> list[tuple[int, int]]:
+def _check_incidents_in_new_session(
+) -> tuple[list[tuple[int, int]], list[tuple[int, int | None]]]:
     """DB-Arbeit für den Threadpool (Audit B2): Session lebt komplett im Worker-Thread."""
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -140,6 +146,16 @@ def _check_incidents_in_new_session() -> list[tuple[int, int]]:
         db.close()
 
 
+async def _broadcast_events(
+    to_warn: list[tuple[int, int]],
+    closed: list[tuple[int, int | None]],
+) -> None:
+    for incident_id, grace_minutes in to_warn:
+        await _send_warning(incident_id, grace_minutes)
+    for incident_id, _org_id in closed:
+        await manager.broadcast(incident_id, {"type": "incident_closed"})
+
+
 async def autoclose_loop() -> None:
     from app.services.loop_utils import iteration_watch
     logger.info("autoclose_loop gestartet")
@@ -147,9 +163,8 @@ async def autoclose_loop() -> None:
         try:
             await asyncio.sleep(60)
             with iteration_watch(logger, "autoclose_loop", 60):
-                to_warn = await asyncio.to_thread(_check_incidents_in_new_session)
-                for incident_id, grace_minutes in to_warn:
-                    await _send_warning(incident_id, grace_minutes)
+                to_warn, closed = await asyncio.to_thread(_check_incidents_in_new_session)
+                await _broadcast_events(to_warn, closed)
         except asyncio.CancelledError:
             logger.info("autoclose_loop beendet")
             break
