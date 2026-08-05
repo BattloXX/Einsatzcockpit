@@ -1,0 +1,27 @@
+<section class="ec-live" x-data="einsatzLiveBanner" x-show="visible" x-cloak aria-label="Aktiver Einsatz">
+  <div class="ec-live__content">
+    <div class="ec-live__details">
+      <a class="ec-live__alarm" :href="incident?.url || '/'">
+        <span x-show="incident?.is_exercise">[ÜBUNG] </span><span x-text="incident?.alarm_type_code"></span>
+      </a>
+      <span class="ec-live__address" x-text="incident?.address"></span>
+    </div>
+    <div class="ec-live__status">
+      <div class="ec-live__progress" role="progressbar" aria-valuemin="0"
+           :aria-valuemax="incident?.phase_count || 0"
+           :aria-valuenow="incident?.phase_index || 0"
+           :aria-valuetext="incident?.phase_label || ''">
+        <template x-for="segment in (incident?.phase_count || 0)" :key="segment">
+          <span class="ec-live__segment"
+                :class="{ 'ec-live__segment--active': segment <= (incident?.phase_index || 0) }"></span>
+        </template>
+      </div>
+      <span class="ec-live__phase" x-text="incident?.phase_label"></span>
+      <span class="ec-live__duration" x-text="duration"></span>
+    </div>
+    <a href="/" class="ec-live__more" x-show="incidentCount > 1"
+       x-text="'+' + (incidentCount - 1) + ' weitere'"></a>
+    <button type="button" class="ec-live__close" aria-label="Einsatzanzeige ausblenden"
+            @click="dismiss()">Ausblenden</button>
+  </div>
+</section>

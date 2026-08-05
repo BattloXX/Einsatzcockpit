@@ -60,6 +60,7 @@ document.addEventListener('alpine:init', () => {
     _connectGlobal() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const url = `${proto}://${location.host}/ws/global`;
+      window.__ecGlobalWsOpen = false;
       // Exponentielles Backoff + Jitter statt fix 3s, damit eine flackernde
       // Verbindung nicht in einer engen Reconnect-Schleife hängt.
       let reconnectAttempt = 0;
@@ -77,13 +78,21 @@ document.addEventListener('alpine:init', () => {
             const matchEv = new CustomEvent('objekt-match', { detail: ev, bubbles: true });
             document.body.dispatchEvent(matchEv);
           }
+          if (ev.type === 'einsatz_live') {
+            const liveEv = new CustomEvent('einsatz-live', { detail: ev, bubbles: true });
+            document.body.dispatchEvent(liveEv);
+          }
         };
         ws.onclose = () => {
+          window.__ecGlobalWsOpen = false;
           reconnectAttempt++;
           const backoff = Math.min(1000 * 2 ** reconnectAttempt, 15000);
           setTimeout(connect, backoff + Math.random() * 500);
         };
-        ws.onopen = () => { reconnectAttempt = 0; };
+        ws.onopen = () => {
+          window.__ecGlobalWsOpen = true;
+          reconnectAttempt = 0;
+        };
         this._ws = ws;
         setInterval(() => ws.readyState === 1 && ws.send('ping'), 30000);
       };
@@ -124,6 +133,113 @@ document.addEventListener('alpine:init', () => {
             });
           });
         }).catch(() => {});
+    },
+  }));
+
+  /* ─── Laufender Einsatz: globales In-App-Banner ────────────────── */
+  Alpine.data('einsatzLiveBanner', () => ({
+    incident: null,
+    incidentCount: 0,
+    duration: '0 min',
+    serverTimeSkew: 0,
+    dismissedIncidentId: null,
+    _durationTimer: null,
+    _pollTimer: null,
+    _liveHandler: null,
+    _visibilityHandler: null,
+    _onlineHandler: null,
+
+    get visible() {
+      return this.incident !== null && String(this.incident.id) !== this.dismissedIncidentId;
+    },
+
+    init() {
+      try { this.dismissedIncidentId = sessionStorage.getItem('ec-live-dismissed'); } catch (_) {}
+      this.fetchState();
+      this._durationTimer = setInterval(() => this.tick(), 1000);
+      this._pollTimer = setInterval(() => {
+        if (!window.__ecGlobalWsOpen) this.fetchState();
+      }, 60000);
+      this._liveHandler = (event) => this.applyUpdate(event.detail);
+      this._visibilityHandler = () => {
+        if (document.visibilityState === 'visible') this.fetchState();
+      };
+      this._onlineHandler = () => this.fetchState();
+      document.body.addEventListener('einsatz-live', this._liveHandler);
+      document.addEventListener('visibilitychange', this._visibilityHandler);
+      window.addEventListener('online', this._onlineHandler);
+    },
+
+    destroy() {
+      if (this._durationTimer) clearInterval(this._durationTimer);
+      if (this._pollTimer) clearInterval(this._pollTimer);
+      document.body.removeEventListener('einsatz-live', this._liveHandler);
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      window.removeEventListener('online', this._onlineHandler);
+    },
+
+    async fetchState() {
+      try {
+        const response = await fetch('/api/v1/live/state');
+        if (!response.ok) return;
+        this.applyState(await response.json());
+      } catch (_) {}
+    },
+
+    applyState(data) {
+      const serverTime = Date.parse(data.server_time);
+      if (!isNaN(serverTime)) this.serverTimeSkew = serverTime - Date.now();
+      this.incidentCount = data.incident_count || 0;
+      this.incident = data.incident || null;
+      this.tick();
+    },
+
+    applyUpdate(data) {
+      if (!data) return;
+      const serverTime = Date.parse(data.server_time);
+      if (!isNaN(serverTime)) this.serverTimeSkew = serverTime - Date.now();
+      if (Object.prototype.hasOwnProperty.call(data, 'incident_count')) {
+        this.incidentCount = data.incident_count || 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'incident')) {
+        if (data.incident === null) {
+          this.incident = null;
+        } else if (this.incident && this.incident.id === data.incident.id) {
+          this.incident = { ...this.incident, ...data.incident };
+        } else {
+          this.incident = data.incident;
+        }
+      } else {
+        const update = data.live || data;
+        const incidentId = update.id || update.incident_id;
+        if (incidentId) {
+          const normalized = { ...update, id: incidentId };
+          this.incident = this.incident && this.incident.id === incidentId
+            ? { ...this.incident, ...normalized }
+            : normalized;
+        }
+      }
+      this.tick();
+    },
+
+    tick() {
+      if (!this.incident?.started_at) { this.duration = '0 min'; return; }
+      const startedAt = Date.parse(this.incident.started_at);
+      if (isNaN(startedAt)) { this.duration = '0 min'; return; }
+      const elapsedMinutes = Math.max(0, Math.floor((Date.now() + this.serverTimeSkew - startedAt) / 60000));
+      if (elapsedMinutes < 60) {
+        this.duration = elapsedMinutes + ' min';
+        return;
+      }
+      const hours = Math.floor(elapsedMinutes / 60);
+      const minutes = String(elapsedMinutes % 60).padStart(2, '0');
+      this.duration = hours + ':' + minutes + ' h';
+    },
+
+    dismiss() {
+      if (!this.incident) return;
+      this.dismissedIncidentId = String(this.incident.id);
+      try { sessionStorage.setItem('ec-live-dismissed', this.dismissedIncidentId); } catch (_) {}
     },
   }));
 

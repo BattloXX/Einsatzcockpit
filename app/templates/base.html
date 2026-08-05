@@ -315,6 +315,10 @@
     </div>
   </div>
 
+  {% if user %}
+  {% include "_einsatz_live_banner.html" %}
+  {% endif %}
+
   <main class="main-content">
     {% block content %}{% endblock %}
   </main>
