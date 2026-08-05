@@ -763,6 +763,10 @@ async def _close_incidents_missing_from_lis(
             await manager.broadcast(incident.id, {"type": "incident_closed"})
         except Exception:
             logger.exception("LIS-Auto-Close: Broadcast für Einsatz %s fehlgeschlagen", incident.id)
+        from app.services.incident_live_notify import notify_incident_live
+        await notify_incident_live(
+            db, incident, org_id=org.id, reason="closed", background_tasks=None,
+        )
 
 
 # ── Ein Operation-Objekt vollständig verarbeiten ─────────────────────────────
@@ -906,6 +910,15 @@ async def sync_operation(
                     "LIS-Capture automatisch NICHT gestartet für Einsatz %s (Org %s): %s",
                     incident.id, org.id, exc,
                 )
+
+    if vehicles_changed and not created:
+        # Der Live-Push liest in einer eigenen Worker-Session; daher muessen die
+        # LIS-Statusaenderungen vor seiner Einplanung sichtbar committed sein.
+        db.commit()
+        from app.services.incident_live_notify import notify_incident_live
+        await notify_incident_live(
+            db, incident, org_id=org.id, reason="unit_status", background_tasks=None,
+        )
 
 
 # ── Backfill (historische Einsätze) ──────────────────────────────────────────

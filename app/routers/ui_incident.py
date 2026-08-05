@@ -2237,6 +2237,10 @@ async def close_incident_view(
     close_incident(db, incident, user_id=request.state.user.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "incident_closed"})
+    from app.services.incident_live_notify import notify_incident_live
+    await notify_incident_live(
+        db, incident, org_id=incident.primary_org_id, reason="closed", background_tasks=None,
+    )
     return RedirectResponse(f"/archiv/{incident_id}", status_code=303)
 
 
@@ -2259,6 +2263,10 @@ async def reopen_incident_view(
     reopen_incident(db, incident, user_id=user.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "incident_reopened"})
+    from app.services.incident_live_notify import notify_incident_live
+    await notify_incident_live(
+        db, incident, org_id=incident.primary_org_id, reason="reopened", background_tasks=None,
+    )
     return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
 
 
@@ -2594,6 +2602,12 @@ async def set_vehicle_unit_status(
     await manager.broadcast(incident_id, {
         "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
     })
+    incident = _incident_or_404(incident_id, db)
+    from app.services.incident_live_notify import notify_incident_live
+    await notify_incident_live(
+        db, incident, org_id=incident.primary_org_id, reason="unit_status",
+        background_tasks=background_tasks,
+    )
     return Response(status_code=204)
 
 
@@ -3223,6 +3237,9 @@ async def move_card_endpoint(
     if _entry:
         _entity_before = db.get(_entry[0], uid)
         source_column_id = getattr(_entity_before, "column_id", None) if _entity_before else None
+    vehicle_status_before = (
+        getattr(_entity_before, "unit_status", None) if kind == "vehicle" and _entry else None
+    )
 
     move_card(
         db, incident_id, kind, uid,
@@ -3245,6 +3262,7 @@ async def move_card_endpoint(
             pass
     db.commit()
     target_column_id = column_id
+    _entity_after = None
     if _entry:
         _entity_after = db.get(_entry[0], uid)
         if _entity_after is not None:
@@ -3253,6 +3271,15 @@ async def move_card_endpoint(
         "type": "card_moved", "kind": kind, "uid": uid,
         "column_id": target_column_id, "source_column_id": source_column_id,
     })
+    if kind == "vehicle" and _entity_after is not None:
+        vehicle_status_after = getattr(_entity_after, "unit_status", None)
+        if vehicle_status_after != vehicle_status_before:
+            incident = _incident_or_404(incident_id, db)
+            from app.services.incident_live_notify import notify_incident_live
+            await notify_incident_live(
+                db, incident, org_id=incident.primary_org_id, reason="unit_status",
+                background_tasks=background_tasks,
+            )
     return Response(status_code=204)
 
 

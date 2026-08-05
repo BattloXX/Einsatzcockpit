@@ -79,6 +79,9 @@ class Incident(Base):
     # 48h-Auto-Close-Lifecycle: Warnung versandt + Anzahl der "Offen halten"-Klicks
     autoclose_warn_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     autoclose_keepopen_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Persistenter, worker-uebergreifender Drosselzustand fuer Live-Web-Pushes.
+    live_push_phase: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    live_push_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Koordinaten (via Geocoding oder manueller PIN-Auswahl)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)

@@ -1586,6 +1586,13 @@ async def lage_beenden(
     await broadcast_lage(lage_id, {"type": "lage_closed", "reload_board": True})
     for iid in closed_incident_ids:
         await manager.broadcast(iid, {"type": "incident_closed"})
+        incident = db.get(_Incident, iid)
+        if incident is not None:
+            from app.services.incident_live_notify import notify_incident_live
+            await notify_incident_live(
+                db, incident, org_id=incident.primary_org_id,
+                reason="closed", background_tasks=None,
+            )
     # Alarm-Infoscreen: GSL-Sonderansicht ausblenden
     try:
         from app.services.broadcast import broadcast_org

@@ -152,8 +152,19 @@ async def _broadcast_events(
 ) -> None:
     for incident_id, grace_minutes in to_warn:
         await _send_warning(incident_id, grace_minutes)
-    for incident_id, _org_id in closed:
+    for incident_id, org_id in closed:
         await manager.broadcast(incident_id, {"type": "incident_closed"})
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            incident = db.get(Incident, incident_id)
+            if incident is not None:
+                from app.services.incident_live_notify import notify_incident_live
+                await notify_incident_live(
+                    db, incident, org_id=org_id, reason="closed", background_tasks=None,
+                )
+        finally:
+            db.close()
 
 
 async def autoclose_loop() -> None:

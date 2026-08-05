@@ -264,12 +264,15 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
 
 
 def notify_all(db: Session, title: str, body: str, url: str | None = None,
-               source: str = "system", channel_id: str | None = None) -> int:
+               source: str = "system", channel_id: str | None = None, *,
+               extra: dict | None = None) -> int:
     cfg = _push_cfg(db)
     # Web-Push (VAPID)
     if cfg["enabled"]:
         subs = db.query(PushSubscription).all()
-        wp_count = sum(1 for s in subs if send_push(s, title, body, url, db=db))
+        wp_count = sum(
+            1 for s in subs if send_push(s, title, body, url, db=db, extra=extra)
+        )
         _log_push(db, title, body, url, source, None, wp_count, len(subs))
     else:
         wp_count = 0
@@ -281,7 +284,7 @@ def notify_all(db: Session, title: str, body: str, url: str | None = None,
 
 def notify_org(db: Session, org_id: int, title: str, body: str,
                url: str | None = None, source: str = "system",
-               channel_id: str | None = None) -> int:
+               channel_id: str | None = None, *, extra: dict | None = None) -> int:
     """Push nur an User der angegebenen Org (statt an alle)."""
     from app.models.user import User as _User
     cfg = _push_cfg(db)
@@ -292,7 +295,9 @@ def notify_org(db: Session, org_id: int, title: str, body: str,
             .filter(PushSubscription.user_id.in_(org_user_ids_subq))
             .all()
         )
-        wp_count = sum(1 for s in subs if send_push(s, title, body, url, db=db))
+        wp_count = sum(
+            1 for s in subs if send_push(s, title, body, url, db=db, extra=extra)
+        )
         _log_push(db, title, body, url, source, None, wp_count, len(subs))
     else:
         wp_count = 0

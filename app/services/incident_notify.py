@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -68,6 +69,21 @@ async def notify_incident_created(
     push_body = address or incident.report_text or "Kein Ort angegeben"
     resolved_push_url = push_url or f"/einsatz/{incident.id}"
 
+    live_extra = None
+    try:
+        from app.services.einsatz_live_service import build_incident_live_payload
+        from app.services.incident_live_notify import _live_extra
+
+        live_payload = build_incident_live_payload(db, incident)
+        live_extra = _live_extra(live_payload, alert=True, kind="einsatz_live")
+        incident.live_push_phase = live_payload["phase_index"]
+        incident.live_push_at = datetime.now(UTC).replace(tzinfo=None)
+        db.commit()
+    except Exception:
+        # Eigenstaendig best effort: weder ein Test-/Alt-DB-Problem noch Live-Metadaten
+        # duerfen die bestehende Alarmierung ueber Web-Push/FCM verhindern.
+        logger.exception("Initialer Live-Status fehlgeschlagen (Einsatz %s)", incident.id)
+
     if org_id:
         # Öffentlicher Einsatzinfo-Link (No-Login) für die SMS; request-loser Kontext →
         # settings.effective_public_base_url statt request.base_url.
@@ -94,11 +110,13 @@ async def notify_incident_created(
             background_tasks.add_task(
                 notify_org, db, org_id, push_title, push_body, resolved_push_url,
                 channel_id="einsatz_alarm",
+                extra=live_extra,
             )
         else:
             background_tasks.add_task(
                 notify_all, db, push_title, push_body, resolved_push_url,
                 channel_id="einsatz_alarm",
+                extra=live_extra,
             )
         if teams_args is not None:
             background_tasks.add_task(post_incident_card, *teams_args, base_url=base_url)
@@ -115,11 +133,13 @@ async def notify_incident_created(
             await asyncio.to_thread(
                 notify_org, db, org_id, push_title, push_body, resolved_push_url,
                 channel_id="einsatz_alarm",
+                extra=live_extra,
             )
         else:
             await asyncio.to_thread(
                 notify_all, db, push_title, push_body, resolved_push_url,
                 channel_id="einsatz_alarm",
+                extra=live_extra,
             )
     except Exception:
         logger.exception("Push-Benachrichtigung fehlgeschlagen (Einsatz %s)", incident.id)
