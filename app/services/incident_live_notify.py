@@ -84,7 +84,11 @@ def _dispatch_live_push(incident_id: int, org_id: int | None, reason: str) -> No
     from app.services.einsatz_live_service import build_incident_live_payload
     from app.services.push_service import notify_org_web
 
-    if org_id is None:
+    if org_id is None or reason == "reopened":
+        # Wiedereroeffnung soll die Live-Anzeige synchron halten (WS-Broadcast oben
+        # in notify_incident_live laeuft unabhaengig davon immer), aber keinen neuen
+        # Push ausloesen -- das waere sonst eine Benachrichtigung fuer ein Ereignis,
+        # das kein neuer Alarm ist.
         return
     db = SessionLocal()
     set_tenant_context(db, None)

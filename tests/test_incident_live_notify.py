@@ -106,5 +106,29 @@ async def test_ws_broadcast_is_not_throttled(live_db, monkeypatch):
     assert all(event["type"] == "einsatz_live" for event in ws_events)
 
 
+@pytest.mark.asyncio
+async def test_reopened_broadcasts_but_never_pushes(live_db, monkeypatch):
+    db, incident = live_db
+    ws_events = []
+
+    async def fake_broadcast(_org_id, event):
+        ws_events.append(event)
+
+    monkeypatch.setattr(broadcast, "broadcast_org", fake_broadcast)
+    monkeypatch.setattr(
+        push_service, "notify_org_web",
+        lambda *a, **kw: pytest.fail("Wiedereroeffnung darf keinen Push ausloesen"),
+    )
+
+    await notify_incident_live(
+        db, incident, org_id=1, reason="reopened", background_tasks=None,
+    )
+
+    assert len(ws_events) == 1
+    assert ws_events[0]["type"] == "einsatz_live"
+
+    _dispatch_live_push(incident.id, 1, "reopened")
+
+
 async def _async_none():
     return None
