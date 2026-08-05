@@ -21,6 +21,7 @@ from app.models.incident import Incident, IncidentToken
 from app.models.major_incident import LageToken, MajorIncident, MajorIncidentStatus
 from app.models.user import DeviceToken, Role, User
 from app.routers import (
+    api_live,
     api_v1,
     api_weather,
     auth,
@@ -651,6 +652,7 @@ app.include_router(ui_pin_login.router)
 app.include_router(api_v1.router)
 app.include_router(api_weather.router)
 app.include_router(device_api.router)
+app.include_router(api_live.router)
 app.include_router(gateway_api.router)
 app.include_router(lagekarte_api.router)
 app.include_router(teams_bot.router)

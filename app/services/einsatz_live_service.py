@@ -77,20 +77,10 @@ def _select_incident(db: Session, user, device_token) -> Incident | None:
     return active.order_by(Incident.started_at.desc(), Incident.id.desc()).first()
 
 
-def build_live_state(db: Session, user, device_token) -> tuple[dict | None, int]:
-    """Baut den Live-Status und die Zahl aller sichtbaren aktiven Einsaetze."""
-    if not user or not user.org_id:
-        return None, 0
-
-    active = _active_incidents_q(db, user)
-    incident_count = active.count()
-    if not incident_count:
-        return None, 0
-
-    incident = _select_incident(db, user, device_token)
-    if not incident:
-        return None, incident_count
-
+def build_incident_live_payload(
+    db: Session, incident: Incident, device_token=None
+) -> dict:
+    """Baut den Live-Payload fuer einen ausgewaehlten Einsatz."""
     phase_index, phase_source = _derive_phase(db, incident, device_token)
     phase = PHASES[phase_index]
     unit_count = db.query(IncidentVehicle).filter(
@@ -110,4 +100,21 @@ def build_live_state(db: Session, user, device_token) -> tuple[dict | None, int]
         "phase_label": phase["phase_label"],
         "phase_source": phase_source,
         "unit_count": unit_count,
-    }, incident_count
+    }
+
+
+def build_live_state(db: Session, user, device_token) -> tuple[dict | None, int]:
+    """Baut den Live-Status und die Zahl aller sichtbaren aktiven Einsaetze."""
+    if not user or not user.org_id:
+        return None, 0
+
+    active = _active_incidents_q(db, user)
+    incident_count = active.count()
+    if not incident_count:
+        return None, 0
+
+    incident = _select_incident(db, user, device_token)
+    if not incident:
+        return None, incident_count
+
+    return build_incident_live_payload(db, incident, device_token), incident_count
