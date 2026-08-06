@@ -127,7 +127,7 @@ def _render_objektblatt(db, job: PrintJob, base_url: str) -> bytes:
     objekt = db.get(Objekt, job.objekt_id)
     if objekt is None:
         raise ArtifactError(f"Objekt {job.objekt_id} nicht gefunden")
-    org = objekt.org
+    org = _org(db, objekt.org_id)
     return render_objektblatt_pdf(objekt, org, base_url=base_url)
 
 

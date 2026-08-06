@@ -168,3 +168,25 @@ def test_pr7_routen():
     pfade = {r.path for r in router.routes}
     assert "/objekte/{objekt_id}/objektblatt.pdf" in pfade
     assert "/objekte/druck" in pfade
+
+
+def test_gateway_druckt_objektblatt(pr7_env):
+    """Regression: Gateway-Pfad (render_job_pdf) crashte bisher mit
+    AttributeError, weil _render_objektblatt objekt.org las - Objekt hat aber
+    keine org-Relationship, nur org_id (Prod-Vorfall 2026-07-14, Job 46)."""
+    from app.models.gateway import DOC_OBJEKTBLATT, Gateway, PrintJob
+    from app.services.print_artifact_service import render_job_pdf
+
+    db, org, objekt = pr7_env
+    gw = Gateway(org_id=org.id, name="Testgateway")
+    db.add(gw)
+    db.flush()
+    job = PrintJob(
+        org_id=org.id, gateway_id=gw.id, objekt_id=objekt.id,
+        document_type=DOC_OBJEKTBLATT, idempotency_key="test-objektblatt-1",
+    )
+    db.add(job)
+    db.commit()
+
+    pdf = render_job_pdf(db, job)
+    assert pdf[:5] == b"%PDF-"
