@@ -1,4 +1,5 @@
 """Nachschlagewerke PR 3: Offline-Index (index.json) + Service-Worker-Cache-Bucket."""
+import re
 from pathlib import Path
 
 from app.services import gefahrgut_service as gg
@@ -48,7 +49,8 @@ def test_sw_rettungskarten_prefix_cache_first():
 
 def test_sw_cache_version_erhoeht():
     # JS-Aenderung -> App-Shell-Cache-Version muss hochgezaehlt sein (mind. v6).
-    assert "const CACHE = 'ec-v6'" in _sw()
+    match = re.search(r"const CACHE = 'ec-v(\d+)'", _sw())
+    assert match and int(match.group(1)) >= 6
 
 
 def test_client_js_vorhanden():

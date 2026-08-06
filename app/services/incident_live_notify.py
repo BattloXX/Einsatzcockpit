@@ -71,7 +71,7 @@ def _claim_push(db: Session, incident: Incident, phase_index: int, reason: str) 
         .where(and_(*conditions))
         .values(live_push_phase=phase_index, live_push_at=now)
     )
-    if result.rowcount != 1:
+    if result.rowcount != 1:  # type: ignore[attr-defined]
         db.rollback()
         return False
     db.commit()
