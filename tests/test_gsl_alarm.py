@@ -4,6 +4,7 @@ Lage — unabhaengig von der stichwortbezogenen Einsatzinfo. Muster: test_sms_ei
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -28,7 +29,7 @@ async def test_dispatch_gsl_alarm_skips_when_disabled():
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
          patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.send_bulk", new_callable=AsyncMock) as mock_send:
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send:
         await svc.dispatch_gsl_alarm(org_id=1, lage_name="Lage Test", is_exercise=False)
         mock_send.assert_not_called()
 
@@ -38,7 +39,7 @@ async def test_dispatch_gsl_alarm_skips_no_gateway():
     from app.services import sms_dispatch_service as svc
 
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=False), \
-         patch("app.services.sms_dispatch_service.send_bulk", new_callable=AsyncMock) as mock_send, \
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send, \
          patch("app.services.sms_dispatch_service.SessionLocal") as mock_session:
         await svc.dispatch_gsl_alarm(org_id=1, lage_name="Lage Test", is_exercise=False)
         mock_send.assert_not_called()
@@ -59,7 +60,7 @@ async def test_dispatch_gsl_alarm_skips_exercise_when_not_configured():
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
          patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.send_bulk", new_callable=AsyncMock) as mock_send:
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send:
         await svc.dispatch_gsl_alarm(org_id=1, lage_name="Lage Test", is_exercise=True)
         mock_send.assert_not_called()
 
@@ -81,14 +82,15 @@ async def test_dispatch_gsl_alarm_sends_default_text_and_logs():
     async def fake_send_bulk(org_id, jobs, ctx=None):
         for _, text in jobs:
             sent_texts.append(text)
-        return len(jobs), len(jobs)
+        return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
+                for phone, _ in jobs]
 
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
          patch("app.services.sms_dispatch_service.set_tenant_context"), \
          patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients",
                return_value={"+4366099999": member}), \
-         patch("app.services.sms_dispatch_service.send_bulk", side_effect=fake_send_bulk), \
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk), \
          patch("app.services.sms_dispatch_service.write_audit"), \
          patch("app.services.sms_dispatch_service.SmsLog"):
         await svc.dispatch_gsl_alarm(org_id=1, lage_name="Lage Test", is_exercise=False)
@@ -114,14 +116,15 @@ async def test_dispatch_gsl_alarm_custom_text_with_lage_placeholder():
     async def fake_send_bulk(org_id, jobs, ctx=None):
         for _, text in jobs:
             sent_texts.append(text)
-        return len(jobs), len(jobs)
+        return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
+                for phone, _ in jobs]
 
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
          patch("app.services.sms_dispatch_service.set_tenant_context"), \
          patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients",
                return_value={"+4366099999": member}), \
-         patch("app.services.sms_dispatch_service.send_bulk", side_effect=fake_send_bulk), \
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk), \
          patch("app.services.sms_dispatch_service.write_audit"), \
          patch("app.services.sms_dispatch_service.SmsLog"):
         await svc.dispatch_gsl_alarm(org_id=1, lage_name="Waldbrand Bregenzerwald", is_exercise=True)

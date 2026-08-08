@@ -26,6 +26,8 @@ class OrgSmsConfig(Base):
     eus_client_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     eus_client_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     eus_timeout: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    log_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
+    log_retention_max_count: Mapped[int] = mapped_column(Integer, nullable=False, default=500)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)

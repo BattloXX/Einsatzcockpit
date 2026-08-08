@@ -182,6 +182,7 @@
           <th>Text</th>
           <th style="width:80px;">Stichwort</th>
           <th style="width:100px;text-align:right;">Versendet</th>
+          <th style="width:80px;"></th>
         </tr>
       </thead>
       <tbody>
@@ -211,6 +212,14 @@
             {% endif %}
             <span class="text-muted">/{{ entry.recipient_count }}</span>
           </td>
+          <td style="text-align:right;">
+            <button type="button" class="btn btn--ghost btn--xs"
+                    hx-get="/admin/sms-senden/{{ entry.id }}/details"
+                    hx-target="#smsLogDetailsContent" hx-swap="innerHTML"
+                    data-ec-action="open-dialog" data-ec-dialog="smsLogDetailsModal">
+              Details
+            </button>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -219,6 +228,12 @@
   {% else %}
   <p class="text-muted" style="margin-bottom:24px;">Noch keine SMS versendet.</p>
   {% endif %}
+
+  <dialog id="smsLogDetailsModal" class="modal">
+    <div class="modal__content" id="smsLogDetailsContent">
+      <div class="modal__body"><p class="text-muted">Details werden geladen...</p></div>
+    </div>
+  </dialog>
 
 </div>
 {% endblock %}

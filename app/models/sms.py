@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
@@ -106,6 +106,30 @@ class SmsLog(TenantScoped, Base):
     triggered_by: Mapped[User | None] = relationship(
         "User", foreign_keys=[triggered_by_user_id], lazy="joined"
     )
+    recipients: Mapped[list[SmsLogRecipient]] = relationship(
+        back_populates="sms_log", cascade="all, delete-orphan"
+    )
+
+
+class SmsLogRecipient(Base):
+    """Snapshot eines einzelnen Versandversuchs innerhalb eines SMS-Protokolls."""
+    __tablename__ = "sms_log_recipient"
+    __table_args__ = (Index("ix_sms_log_recipient_sms_log_id", "sms_log_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    sms_log_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("sms_log.id", ondelete="CASCADE"), nullable=False
+    )
+    member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    phone_number: Mapped[str] = mapped_column(String(30), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    sms_log: Mapped[SmsLog] = relationship(back_populates="recipients")
+    member: Mapped[Member | None] = relationship(lazy="joined")
 
 
 class SmsForwardRule(TenantScoped, Base):

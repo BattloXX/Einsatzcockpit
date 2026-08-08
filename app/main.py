@@ -221,6 +221,9 @@ async def lifespan(app: FastAPI):
     from app.services.ai_log_retention import ai_log_retention_loop
     ai_log_retention_task = asyncio.create_task(ai_log_retention_loop())
 
+    from app.services.sms_log_retention import sms_log_retention_loop
+    sms_log_retention_task = asyncio.create_task(sms_log_retention_loop())
+
     # Background-Loop für GPS-Positionshistorie-Retention (täglich 03:45)
     from app.services.vehicle_position_retention import vehicle_position_retention_loop
     vehicle_position_retention_task = asyncio.create_task(vehicle_position_retention_loop())
@@ -276,6 +279,7 @@ async def lifespan(app: FastAPI):
         verleih_task.cancel()
         weather_retention_task.cancel()
         ai_log_retention_task.cancel()
+        sms_log_retention_task.cancel()
         vehicle_position_retention_task.cancel()
         weather_alert_task.cancel()
         abfluss_poll_task.cancel()

@@ -23,6 +23,7 @@ from app.models.sms import (
     SmsGroupMember,
     SmsInbox,
     SmsLog,
+    SmsLogRecipient,
 )
 
 router = APIRouter(prefix="/admin")
@@ -85,6 +86,8 @@ async def sms_provider_save(
     eus_client_secret: str = Form(""),
     secret_changed: str = Form(""),
     eus_timeout: int = Form(15),
+    log_retention_days: int = Form(90),
+    log_retention_max_count: int = Form(500),
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -96,6 +99,8 @@ async def sms_provider_save(
     providers = {"gateway", "eus"}
     if primary_provider not in providers or fallback_provider not in providers | {""}:
         return RedirectResponse("/admin/sms-provider?error=provider", status_code=303)
+    if log_retention_days < 0 or log_retention_max_count < 0:
+        return RedirectResponse("/admin/sms-provider?error=retention", status_code=303)
     base_url = None
     if eus_base_url.strip():
         try:
@@ -112,6 +117,8 @@ async def sms_provider_save(
     cfg.eus_auth_mode = eus_auth_mode if eus_auth_mode in {"oauth", "basic"} else "oauth"
     cfg.eus_client_id = eus_client_id.strip() or None
     cfg.eus_timeout = max(1, min(eus_timeout or 15, 120))
+    cfg.log_retention_days = log_retention_days
+    cfg.log_retention_max_count = log_retention_max_count
     cfg.updated_at = datetime.now(UTC)
     if secret_changed == "1" and eus_client_secret.strip():
         cfg.eus_client_secret_enc = encrypt_secret(eus_client_secret.strip())
@@ -673,6 +680,35 @@ async def sms_send_page(
     })
 
 
+@router.get("/sms-senden/{log_id}/details", response_class=HTMLResponse)
+async def sms_send_details(
+    log_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    """Liefert die Empfaenger eines Protokolleintrags als HTMX-Partial."""
+    user = request.state.user
+    org_id = _require_org(user)
+    log_entry = (
+        db.query(SmsLog)
+        .filter(SmsLog.id == log_id, SmsLog.org_id == org_id)
+        .first()
+    )
+    if not log_entry:
+        raise HTTPException(status_code=404)
+    recipients = (
+        db.query(SmsLogRecipient)
+        .join(SmsLog, SmsLog.id == SmsLogRecipient.sms_log_id)
+        .filter(SmsLogRecipient.sms_log_id == log_id, SmsLog.org_id == org_id)
+        .order_by(SmsLogRecipient.sent_at, SmsLogRecipient.id)
+        .all()
+    )
+    return templates.TemplateResponse(request, "admin/_sms_log_details.html", {
+        "user": user, "log_entry": log_entry, "recipients": recipients,
+    })
+
+
 @router.post("/sms-senden/senden")
 async def sms_send_execute(
     request: Request,
@@ -699,13 +735,13 @@ async def sms_send_execute(
     import re as _re
     _strip_re = _re.compile(r"[\s\-\(\)]")
 
-    phones: dict[str, str] = {}  # normalisierte Nummer → Anzeigename
+    phones: dict[str, tuple[str | None, int | None]] = {}
 
     if target_type == "adhoc":
         adhoc_raw = (form.get("adhoc_number") or "").strip()  # type: ignore[union-attr]
         if adhoc_raw:
             norm = _strip_re.sub("", adhoc_raw)
-            phones[norm] = adhoc_raw
+            phones[norm] = (None, None)
     else:
         group_ids = [int(v) for k, v in form.multi_items() if k == "group_id"]  # type: ignore[arg-type]
         member_ids = [int(v) for k, v in form.multi_items() if k == "member_id"]  # type: ignore[arg-type]
@@ -721,7 +757,7 @@ async def sms_send_execute(
                     if m and m.active and m.phone:
                         norm = _strip_re.sub("", m.phone.strip())
                         if norm:
-                            phones[norm] = m.full_name
+                            phones[norm] = (m.full_name, m.id)
 
         # Einzelne Mitglieder
         if member_ids:
@@ -732,16 +768,18 @@ async def sms_send_execute(
                 if m.phone:
                     norm = _strip_re.sub("", m.phone.strip())
                     if norm:
-                        phones[norm] = m.full_name
+                        phones[norm] = (m.full_name, m.id)
 
     if not phones:
         return RedirectResponse("/admin/sms-senden?error=no_recipients", status_code=303)
 
     from app.core.audit import write_audit
-    from app.services.sms_dispatch_service import send_bulk
+    from app.services.sms_dispatch_service import send_bulk_detailed
 
     jobs = [(phone, text) for phone in phones]
-    total, success = await send_bulk(org_id, jobs, ctx=sms_ctx)
+    results = await send_bulk_detailed(org_id, jobs, ctx=sms_ctx)
+    total = len(results)
+    success = sum(result.success for result in results)
 
     # Protokollieren
     log_entry = SmsLog(
@@ -756,6 +794,18 @@ async def sms_send_execute(
         triggered_by_user_id=user.id,
     )
     db.add(log_entry)
+    db.flush()
+    db.add_all([
+        SmsLogRecipient(
+            sms_log_id=log_entry.id,
+            member_id=phones[result.phone_number][1],
+            phone_number=result.phone_number,
+            name=phones[result.phone_number][0],
+            success=result.success,
+            sent_at=result.sent_at,
+        )
+        for result in results
+    ])
     write_audit(db, "admin.sms.manual_send", org_id=org_id, user_id=user.id,
                 payload={"recipient_count": total, "success_count": success, "target_type": target_type})
     db.commit()

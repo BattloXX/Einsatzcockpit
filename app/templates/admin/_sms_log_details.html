@@ -1,0 +1,41 @@
+<div class="modal__header">
+  <h2>Versanddetails</h2>
+  <button type="button" class="modal__close" data-ec-action="close-dialog">x</button>
+</div>
+<div class="modal__body">
+  {% if recipients %}
+  <div style="overflow-x:auto;">
+    <table class="table-admin" style="min-width:560px;">
+      <thead>
+        <tr>
+          <th>Telefonnummer</th>
+          <th>Name</th>
+          <th>Zeitpunkt</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for recipient in recipients %}
+        <tr>
+          <td>{{ recipient.phone_number }}</td>
+          <td>{{ recipient.name or '-' }}</td>
+          <td style="white-space:nowrap;">{{ recipient.sent_at|local_datetime }}</td>
+          <td>
+            {% if recipient.success %}
+            <span style="color:var(--green-light, #4ade80);">Erfolgreich</span>
+            {% else %}
+            <span style="color:var(--red-light, #f87171);">Fehlgeschlagen</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Keine Detaildaten vorhanden (vor Einfuehrung dieser Funktion versendet).</p>
+  {% endif %}
+</div>
+<div class="modal__footer">
+  <button type="button" class="btn btn--ghost" data-ec-action="close-dialog">Schliessen</button>
+</div>

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -15,7 +16,7 @@ from app.core.audit import write_audit
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import AlarmType, FireDept, OrgSettings
-from app.models.sms import SmsEinsatzinfoRecipient, SmsLog
+from app.models.sms import SmsEinsatzinfoRecipient, SmsLog, SmsLogRecipient
 
 # app.routers.ws muss lazy importiert bleiben (Kreisabhaengigkeit)
 
@@ -123,25 +124,43 @@ def collect_einsatzinfo_recipients(
     return result
 
 
+@dataclass(frozen=True)
+class SmsSendResult:
+    phone_number: str
+    success: bool
+    sent_at: datetime
+
+
+async def send_bulk_detailed(
+    org_id: int, jobs: list[tuple[str, str]], ctx=None
+) -> list[SmsSendResult]:
+    """Sendet SMS sequentiell und liefert das Ergebnis jedes Versandversuchs."""
+    from app.services.sms_service import resolve_sms_config, send_sms
+    ctx = ctx or resolve_sms_config(org_id)
+
+    results = []
+    for to, text in jobs:
+        ok = False
+        try:
+            ok = bool(await send_sms(org_id, to, text, ctx=ctx))
+        except Exception as exc:
+            logger.warning("SMS-Versand fehlgeschlagen an %s: %s", to[-4:] + "****", exc)
+        results.append(SmsSendResult(
+            phone_number=to,
+            success=ok,
+            sent_at=datetime.now(UTC).replace(tzinfo=None),
+        ))
+    return results
+
+
 async def send_bulk(org_id: int, jobs: list[tuple[str, str]], ctx=None) -> tuple[int, int]:
     """Sendet SMS an mehrere Empfaenger sequentiell.
 
     jobs: Liste von (telefonnummer, text)-Tupeln.
     Rueckgabe: (anzahl_gesamt, anzahl_erfolgreich).
     """
-    from app.services.sms_service import resolve_sms_config, send_sms
-    ctx = ctx or resolve_sms_config(org_id)
-
-    total = len(jobs)
-    success = 0
-    for to, text in jobs:
-        try:
-            ok = await send_sms(org_id, to, text, ctx=ctx)
-            if ok:
-                success += 1
-        except Exception as exc:
-            logger.warning("SMS-Versand fehlgeschlagen an %s: %s", to[-4:] + "****", exc)
-    return total, success
+    results = await send_bulk_detailed(org_id, jobs, ctx=ctx)
+    return len(results), sum(result.success for result in results)
 
 
 async def dispatch_einsatzinfo(
@@ -241,7 +260,9 @@ async def dispatch_einsatzinfo(
 
         # Versenden
         jobs = [(phone, text) for phone in recipients]
-        total, success = await send_bulk(org_id, jobs, ctx=sms_ctx)
+        results = await send_bulk_detailed(org_id, jobs, ctx=sms_ctx)
+        total = len(results)
+        success = sum(result.success for result in results)
 
         # Protokollieren
         log_entry = SmsLog(
@@ -256,6 +277,16 @@ async def dispatch_einsatzinfo(
             triggered_by_user_id=triggered_by_user_id,
         )
         db.add(log_entry)
+        db.flush()
+        db.add_all([
+            SmsLogRecipient(
+                sms_log_id=log_entry.id, member_id=recipients[result.phone_number].id,
+                phone_number=result.phone_number,
+                name=recipients[result.phone_number].full_name,
+                success=result.success, sent_at=result.sent_at,
+            )
+            for result in results
+        ])
         write_audit(
             db, "sms.einsatzinfo_sent",
             org_id=org_id,
@@ -328,15 +359,28 @@ async def dispatch_gsl_alarm(
             return
 
         jobs = [(phone, text_) for phone in recipients]
-        total, success = await send_bulk(org_id, jobs, ctx=sms_ctx)
+        results = await send_bulk_detailed(org_id, jobs, ctx=sms_ctx)
+        total = len(results)
+        success = sum(result.success for result in results)
 
         now = datetime.now(UTC)
-        db.add(SmsLog(
+        log_entry = SmsLog(
             org_id=org_id, sent_at=now, source="gsl_alarm", alarm_type_code=None,
             text=text_, recipient_count=total, success_count=success,
             provider=",".join(sorted(sms_ctx.providers_used)) or None,
             triggered_by_user_id=triggered_by_user_id,
-        ))
+        )
+        db.add(log_entry)
+        db.flush()
+        db.add_all([
+            SmsLogRecipient(
+                sms_log_id=log_entry.id, member_id=recipients[result.phone_number].id,
+                phone_number=result.phone_number,
+                name=recipients[result.phone_number].full_name,
+                success=result.success, sent_at=result.sent_at,
+            )
+            for result in results
+        ])
         write_audit(
             db, "sms.gsl_alarm_sent", org_id=org_id, user_id=triggered_by_user_id,
             payload={"lage_name": lage_name, "recipient_count": total, "success_count": success,

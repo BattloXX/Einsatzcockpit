@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import os
-import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Test-Umgebungsvariablen vor App-Import setzen
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
@@ -216,7 +217,7 @@ async def test_dispatch_skips_when_disabled():
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
          patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.send_bulk", new_callable=AsyncMock) as mock_send, \
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send, \
          patch("app.services.sms_dispatch_service.write_audit"):
         await svc.dispatch_einsatzinfo(
             org_id=1, alarm_type_code="B2",
@@ -242,7 +243,7 @@ async def test_dispatch_skips_exercise_when_not_configured():
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
          patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.send_bulk", new_callable=AsyncMock) as mock_send, \
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send, \
          patch("app.services.sms_dispatch_service.write_audit"):
         await svc.dispatch_einsatzinfo(
             org_id=1, alarm_type_code="T1",
@@ -260,7 +261,7 @@ async def test_dispatch_skips_no_gateway():
 
     # Kein Gateway → fruehzeitiger Ausstieg, SessionLocal wird nicht aufgerufen
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=False), \
-         patch("app.services.sms_dispatch_service.send_bulk", new_callable=AsyncMock) as mock_send, \
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send, \
          patch("app.services.sms_dispatch_service.SessionLocal") as mock_session:
         await svc.dispatch_einsatzinfo(
             org_id=1, alarm_type_code="F1",
@@ -309,14 +310,15 @@ async def test_dispatch_exercise_sends_when_configured():
     async def fake_send_bulk(org_id, jobs, ctx=None):
         for _, text in jobs:
             sent_texts.append(text)
-        return len(jobs), len(jobs)
+        return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
+                for phone, _ in jobs]
 
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
          patch("app.services.sms_dispatch_service.set_tenant_context"), \
          patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients",
                return_value={"+4366099999": member}), \
-         patch("app.services.sms_dispatch_service.send_bulk", side_effect=fake_send_bulk), \
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk), \
          patch("app.services.sms_dispatch_service.write_audit"), \
          patch("app.services.sms_dispatch_service.SmsLog"):
         await svc.dispatch_einsatzinfo(
