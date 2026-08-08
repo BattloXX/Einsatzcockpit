@@ -23,6 +23,8 @@ from app.models.sms import SmsEinsatzinfoRecipient, SmsLog, SmsLogRecipient
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
+    from app.models.master import Member
+
 logger = logging.getLogger("einsatzleiter.sms_dispatch")
 
 # Standardvorlage fuer Einsatzinfo-SMS (Platzhalter in geschweiften Klammern)
@@ -75,7 +77,7 @@ def collect_einsatzinfo_recipients(
     db: Session,
     org_id: int,
     alarm_type_id: int | None,
-) -> dict[str, object]:
+) -> dict[str, Member]:
     """Sammelt alle Empfaenger fuer die Einsatzinfo-SMS.
 
     Gibt ein Dict {normalisierte_telefonnummer: Member} zurueck.
@@ -90,7 +92,7 @@ def collect_einsatzinfo_recipients(
     """
     from sqlalchemy import or_
 
-    result: dict[str, object] = {}
+    result: dict[str, Member] = {}
 
     # Alle Empfaenger-Eintraege fuer diese Org laden:
     # Basis-Verteiler (alarm_type_id IS NULL) + Stichwort-Verteiler
