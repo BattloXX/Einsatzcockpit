@@ -15,7 +15,7 @@
 
   <table class="table-admin table-admin--cards">
     <thead>
-      <tr><th>Code</th><th>Kategorie</th><th>Bezeichnung</th><th>Nur Erstausr.</th><th>Nachalarm.</th><th>Großschadenslage</th><th>Aktionen</th></tr>
+      <tr><th>Code</th><th>Kategorie</th><th>Bezeichnung</th><th>WordPress-Einsatzart</th><th>Nur Erstausr.</th><th>Nachalarm.</th><th>Großschadenslage</th><th>Aktionen</th></tr>
     </thead>
     <tbody>
       {% for at in alarm_types %}
@@ -23,12 +23,13 @@
         <td data-label="Code"><strong>{{ at.code }}</strong></td>
         <td data-label="Kategorie">{{ at.category }}</td>
         <td data-label="Bezeichnung">{{ at.label }}</td>
+        <td data-label="WordPress-Einsatzart">{{ at.wp_einsatzart or '–' }}</td>
         <td data-label="Nur Erstausr.">{% if at.default_first_train_only %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
         <td data-label="Nachalarm.">{% if at.notify_neighbors %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
         <td data-label="Großschadenslage">{% if at.triggers_major_incident %}<span class="badge-pill badge-pill--orange">Ja</span>{% else %}–{% endif %}</td>
         <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn--ghost btn--xs"
-                  onclick="openEditAt('{{ at.code }}', '{{ at.category }}', '{{ at.label|replace("'","\\'")|e }}', {{ at.default_first_train_only|lower }}, {{ at.notify_neighbors|lower }}, {{ at.triggers_major_incident|lower }})">
+                  onclick='openEditAt({{ at.code|tojson }}, {{ at.category|tojson }}, {{ at.label|tojson }}, {{ (at.wp_einsatzart or "")|tojson }}, {{ at.default_first_train_only|lower }}, {{ at.notify_neighbors|lower }}, {{ at.triggers_major_incident|lower }})'>
             Bearbeiten
           </button>
           <form method="post" action="/admin/alarmtypen/{{ at.code }}/loeschen" style="display:inline"
@@ -64,6 +65,11 @@
         <div class="form-group">
           <label class="form-label">Bezeichnung</label>
           <input type="text" name="label" class="form-input" maxlength="100">
+        </div>
+        <div class="form-group">
+          <label class="form-label">WordPress-Einsatzart</label>
+          <input type="text" name="wp_einsatzart" class="form-input" maxlength="30">
+          <p class="form-hint">Wert für die automatische Website-Beitragserstellung, z.B. Brandeinsatz</p>
         </div>
         <div class="form-group">
           <label><input type="checkbox" name="default_first_train_only" value="true"> Nur Erstausrückung</label>
@@ -103,6 +109,11 @@
           <input type="text" name="label" id="at_label" class="form-input" maxlength="100">
         </div>
         <div class="form-group">
+          <label class="form-label">WordPress-Einsatzart</label>
+          <input type="text" name="wp_einsatzart" id="at_wp_einsatzart" class="form-input" maxlength="30">
+          <p class="form-hint">Wert für die automatische Website-Beitragserstellung, z.B. Brandeinsatz</p>
+        </div>
+        <div class="form-group">
           <label><input type="checkbox" name="default_first_train_only" id="at_first_train" value="true"> Nur Erstausrückung</label>
         </div>
         <div class="form-group">
@@ -123,9 +134,10 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function openEditAt(code, category, label, firstTrain, neighbors, majorIncident) {
+function openEditAt(code, category, label, wpEinsatzart, firstTrain, neighbors, majorIncident) {
   document.getElementById('at_category').value = category;
   document.getElementById('at_label').value = label;
+  document.getElementById('at_wp_einsatzart').value = wpEinsatzart;
   document.getElementById('at_first_train').checked = firstTrain;
   document.getElementById('at_neighbors').checked = neighbors;
   document.getElementById('at_major_incident').checked = majorIncident;

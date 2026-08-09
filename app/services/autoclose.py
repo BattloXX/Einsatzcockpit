@@ -163,6 +163,13 @@ async def _broadcast_events(
                 await notify_incident_live(
                     db, incident, org_id=org_id, reason="closed", background_tasks=None,
                 )
+                try:
+                    from app.services.wordpress_report_service import post_incident_report
+                    await post_incident_report(db, incident)
+                except Exception:
+                    logger.exception(
+                        "autoclose: WordPress-Bericht fehlgeschlagen (Einsatz %s)", incident.id
+                    )
         finally:
             db.close()
 

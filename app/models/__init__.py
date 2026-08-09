@@ -129,6 +129,7 @@ from app.models.sms import (
 )
 from app.models.sso import OrgSsoConfig, OrgSsoGroupMap
 from app.models.teams_bot import AlarmToken, TeamsAlarmConfig, TeamsCardPost, TeamsChannelBinding
+from app.models.wordpress_report import WordPressReportConfig
 from app.models.teilnahme import Funktion, Teilnahme, Termin
 from app.models.uas import (
     UASCheckliste,
@@ -176,6 +177,7 @@ __all__ = [
     "OrgSmtpConfig", "OrgO365MailConfig", "OrgSmsConfig",
     "OrgBackupConfig",
     "TeamsAlarmConfig", "TeamsChannelBinding", "TeamsCardPost", "AlarmToken",
+    "WordPressReportConfig",
     "User", "Role", "UserRole", "ApiKey", "AuditLog", "PushSubscription",
     "DeviceToken", "FcmToken", "PushLog", "SmsGatewayToken",
     "FireDept", "AIRequestLog", "VehicleMaster", "Member", "Qualification", "MemberQualification",

@@ -361,6 +361,11 @@
                {{ tip('Vollständige Alarmierung als Teams-Karte: Webhook-Basis-Modus + optionale Bot-Erweiterung mit Zusage/Absage') }}>
               <span class="admin-nav__icon">💬</span>Teams-Einsatzinfo
             </a>
+            <a href="/admin/wordpress-berichte"
+               class="admin-nav__item {% if '/admin/wordpress-berichte' in request.url.path %}is-active{% endif %}"
+               {{ tip('Automatische Website-Entwürfe beim Abschluss eines Einsatzes konfigurieren') }}>
+              <span class="admin-nav__icon">🌐</span>WordPress-Berichte
+            </a>
             <a href="/admin/org-backup"
                class="admin-nav__item {% if '/admin/org-backup' in request.url.path %}is-active{% endif %}"
                {{ tip('Alle Org-Daten als Archiv sichern (Download / Remote-Ziel)') }}>

@@ -19,6 +19,23 @@
     <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
       <a href="/archiv/{{ incident.id }}/pdf" target="_blank" class="btn btn--primary btn--sm">📄 PDF</a>
       <a href="/einsatz/{{ incident.id }}/historie" class="btn btn--ghost btn--sm">🕐 Verlauf</a>
+      {% if can_edit and wp_report_available and incident.status == 'closed' %}
+      <div id="webseiten-bericht-result" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+        {% if incident.wp_report_post_id %}
+        <a href="{{ incident.wp_report_edit_url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--sm">&#x2197; Website-Entwurf öffnen</a>
+        <span style="color:var(--green);font-size:.85em;">Bereits erstellt - Entwurf wird nicht erneut angelegt oder überschrieben.</span>
+        {% else %}
+        <button class="btn btn--ghost btn--sm"
+                hx-post="/archiv/{{ incident.id }}/webseiten-bericht"
+                hx-target="#webseiten-bericht-result"
+                hx-swap="outerHTML"
+                hx-indicator="#webseiten-bericht-spinner">
+          &#x2197; Website-Entwurf erstellen
+        </button>
+        <span id="webseiten-bericht-spinner" class="htmx-indicator" style="font-size:.85em;color:var(--fg-muted);">Wird erstellt...</span>
+        {% endif %}
+      </div>
+      {% endif %}
       {% if incident.status == 'closed' and (user.is_system_admin or user.is_org_admin) %}
       <form method="post" action="/einsatz/{{ incident.id }}/wiedereroeffnen" style="display:contents"
             onsubmit="return confirm('Diesen Einsatz wieder eröffnen? Er wird erneut als aktiver Einsatz geführt.');">

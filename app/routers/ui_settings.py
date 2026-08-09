@@ -8,12 +8,19 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.config import settings as app_settings
-from app.core.permissions import has_role, require_role, require_system_admin
+from app.core.permissions import (
+    has_role,
+    is_system_admin,
+    require_role,
+    require_system_admin,
+    same_org_or_system_admin,
+)
 from app.core.templating import templates
 from app.core.timezones import common_timezones
 from app.db import get_db
 from app.models.master import BOS_VALUES, FireDept, OrgSettings, SeedTemplate, SystemSettings
 from app.models.user import User
+from app.models.wordpress_report import WordPressReportConfig
 from app.services.seed_service import apply_seed_profile, copy_default_prompts, list_profiles
 from app.services.update_service import (
     DEPLOYED_REF_KEY,
@@ -37,6 +44,78 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_LOGO_EXTS = {".png", ".jpg", ".jpeg", ".svg", ".webp"}
 ALLOWED_LOGO_MIME = {"image/png", "image/jpeg", "image/svg+xml", "image/webp"}
 MAX_LOGO_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+def _wordpress_effective_org_id(user: User, target_org_id: int | None = None) -> int | None:
+    if is_system_admin(user) and target_org_id:
+        return target_org_id
+    return user.org_id
+
+
+@router.get("/wordpress-berichte", response_class=HTMLResponse)
+def wordpress_report_settings_page(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    org_id: int | None = None,
+):
+    effective_org_id = _wordpress_effective_org_id(user, org_id)
+    sysadmin = is_system_admin(user)
+    org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
+    config = (
+        db.query(WordPressReportConfig)
+        .filter(WordPressReportConfig.org_id == effective_org_id)
+        .first()
+        if effective_org_id else None
+    )
+    return templates.TemplateResponse(request, "admin/settings_wordpress_report.html", {
+        "user": user,
+        "org": org,
+        "config": config,
+        "is_sysadmin": sysadmin,
+        "all_orgs": db.query(FireDept).order_by(FireDept.name).all() if sysadmin else [],
+        "flash": request.query_params.get("flash"),
+    })
+
+
+@router.post("/wordpress-berichte/save")
+def wordpress_report_settings_save(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+    enabled: str = Form(""),
+    webhook_url: str = Form(""),
+    webhook_token: str = Form(""),
+):
+    effective_org_id = _wordpress_effective_org_id(user, target_org_id)
+    if not effective_org_id:
+        return RedirectResponse("/admin/wordpress-berichte?flash=error_no_org", status_code=303)
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
+
+    clean_url = webhook_url.strip()
+    if clean_url and not clean_url.startswith("https://"):
+        suffix = f"&org_id={effective_org_id}" if is_system_admin(user) else ""
+        return RedirectResponse(
+            f"/admin/wordpress-berichte?flash=error_https{suffix}", status_code=303
+        )
+
+    config = db.query(WordPressReportConfig).filter(
+        WordPressReportConfig.org_id == effective_org_id
+    ).first()
+    if not config:
+        config = WordPressReportConfig(org_id=effective_org_id)
+        db.add(config)
+    config.enabled = enabled == "1"
+    config.webhook_url = clean_url or None
+    config.webhook_token = webhook_token.strip() or None
+    db.commit()
+
+    suffix = f"&org_id={effective_org_id}" if effective_org_id != user.org_id else ""
+    return RedirectResponse(
+        f"/admin/wordpress-berichte?flash=saved{suffix}", status_code=303
+    )
 
 
 def _validate_logo_bytes(data: bytes, ext: str) -> tuple[bool, str]:

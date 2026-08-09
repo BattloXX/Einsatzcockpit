@@ -1,0 +1,73 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}WordPress-Berichte{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'WordPress-Berichte'}]) }}{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>WordPress-Berichte</h1>
+    <p class="page-header__sub">Beim Einsatzabschluss automatisch einen Website-Entwurf erstellen</p>
+  </div>
+</div>
+
+{% if flash == 'saved' %}
+<div class="alert alert--success mb-4">Einstellungen gespeichert.</div>
+{% elif flash == 'error_https' %}
+<div class="alert alert--error mb-4">Die Webhook-URL muss mit https:// beginnen.</div>
+{% elif flash and flash.startswith('error') %}
+<div class="alert alert--error mb-4">Fehler beim Speichern.</div>
+{% endif %}
+
+{% if is_sysadmin and all_orgs %}
+<section class="card mb-4">
+  <div class="card-body" style="padding:16px 20px">
+    <label style="font-weight:600;margin-bottom:6px;display:block">Organisation:</label>
+    <select class="form-control" style="max-width:320px"
+            onchange="location.href='/admin/wordpress-berichte?org_id='+this.value">
+      <option value="">-- bitte wählen --</option>
+      {% for o in all_orgs %}
+      <option value="{{ o.id }}" {% if org and org.id == o.id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</section>
+{% endif %}
+
+{% if not org %}
+<div class="alert alert--info">Bitte eine Organisation auswählen.</div>
+{% else %}
+<form method="post" action="/admin/wordpress-berichte/save">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+  <section class="card mb-4">
+    <div class="card-header"><h2>Website-Anbindung</h2></div>
+    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+      <div class="form-group" style="margin:0">
+        <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" name="enabled" value="1"
+                 {% if config and config.enabled %}checked{% endif %} class="toggle-checkbox">
+          <span class="toggle-switch"></span>
+          Automatische Website-Beitragserstellung aktiviert
+        </label>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label for="webhook_url">Webhook-URL</label>
+        <input type="text" id="webhook_url" name="webhook_url" class="form-input"
+               value="{{ config.webhook_url or '' if config else '' }}"
+               placeholder="https://example.org/wp-content/themes/.../fw-einsatzbericht-api.php"
+               maxlength="500" autocomplete="off">
+        <p class="form-hint">Muss mit https:// beginnen.</p>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label for="webhook_token">Webhook-Token</label>
+        <input type="text" id="webhook_token" name="webhook_token" class="form-input"
+               value="{{ config.webhook_token or '' if config else '' }}"
+               maxlength="200" autocomplete="off">
+      </div>
+    </div>
+  </section>
+  <button type="submit" class="btn btn--primary">Einstellungen speichern</button>
+</form>
+{% endif %}
+{% endblock %}

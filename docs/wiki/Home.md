@@ -15,6 +15,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - SMS-Einsatzinfo bei Alarm sowie SMS-Empfang mit Weiterleitungsregeln (Teams, Gruppen, Mitglieder, Ad-hoc)
 - Print & Alarm Gateway: lokaler Docker-Container für seriellen Leitstellen-Alarm (→ Einsatzanlage) und Netzwerkdruck (Automatik-Druckregeln + manuell)
 - Teams-Alarmierung: vollständige Alarm-Karte (Kartenbild, Google-Maps-Link, No-Login-Alarmübersicht) bei jeder Einsatzanlage, optional mit Bot-Zusage/-Absage
+- WordPress-Berichte: beim Einsatzabschluss automatisch (oder per Button) einen Beitragsentwurf im Wehr-Blog anlegen — idempotent, nie automatisch veröffentlicht
 - Gesetzeskonforme Atemschutzüberwachung mit Rückzugsdruckberechnung
 - Mannschaftsregister mit Qualifikationen und Ablaufdaten
 - Archiv mit vollständigem Audit-Log und PDF-Export
@@ -105,6 +106,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
 | [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
 | [Teams-Alarmierung](Administration-Teams-Alarmierung) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
+| [WordPress-Berichte](Administration-WordPress-Berichte) | Beim Einsatzabschluss automatisch einen Beitragsentwurf im Wehr-Blog anlegen, Alarmarten- und Fahrzeug-Zuordnung |
 | [Push mit Firebase Cloud Messaging](Administration-Push-FCM) | Globale FCM-Konfiguration für Push-Nachrichten an die native Android-App |
 | [Datensicherung (Org, Self-Service)](Administration-Org-Datensicherung) | Eigene Org-Daten als Archiv herunterladen oder geplant an ein eigenes Ziel senden (SFTP/FTP/rclone); Restore in neue Org (Sysadmin) |
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |

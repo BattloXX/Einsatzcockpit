@@ -16,6 +16,7 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentVehicle
 from app.models.master import VehicleMaster
+from app.models.wordpress_report import WordPressReportConfig
 from app.services.ai_service import AIServiceError, generate_report_draft
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.pdf_service import render_incident_pdf
@@ -95,6 +96,7 @@ def _scoped_incidents_query(db: Session, user):
 
 
 _AI_ROLES = ("incident_leader", "recorder", "org_admin", "system_admin")
+_WP_REPORT_ROLES = ("incident_leader", "recorder", "org_admin", "system_admin")
 
 
 @router.get("/archiv", response_class=HTMLResponse)
@@ -140,6 +142,10 @@ def archive_detail(incident_id: int, request: Request, db: Session = Depends(get
         )
 
     can_edit = has_role(user, "incident_leader", "admin", "org_admin", "system_admin", "recorder")
+    wp_config = db.query(WordPressReportConfig).filter(
+        WordPressReportConfig.org_id == incident.primary_org_id
+    ).first()
+    wp_report_available = bool(wp_config and wp_config.enabled)
 
     from app.services.incident_service import combined_verlauf
     verlauf = combined_verlauf(db, incident_id, limit=500)
@@ -149,6 +155,7 @@ def archive_detail(incident_id: int, request: Request, db: Session = Depends(get
         "ai_enabled": ai_is_enabled(),
         "uas_einsatz": uas_einsatz,
         "can_edit": can_edit,
+        "wp_report_available": wp_report_available,
         "verlauf": verlauf,
     })
 
@@ -202,6 +209,33 @@ async def generate_ai_report(incident_id: int, request: Request, db: Session = D
 
     return templates.TemplateResponse(request, "archive/_ki_bericht.html", {
         "user": user, "incident": incident, "draft": draft,
+    })
+
+
+@router.post("/archiv/{incident_id}/webseiten-bericht", response_class=HTMLResponse)
+async def create_wordpress_report(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    if not has_role(user, *_WP_REPORT_ROLES):
+        raise HTTPException(403, detail="Keine Berechtigung")
+
+    incident = _load_incident_with_orgs(incident_id, db)
+    if not incident:
+        raise HTTPException(404)
+    if not can_access_incident(user, incident):
+        raise _deny_access(user, incident)
+
+    from app.core.audit import write_audit
+    from app.services.wordpress_report_service import post_incident_report
+
+    result = await post_incident_report(db, incident)
+    if result.success and not result.already_existed:
+        write_audit(db, "wordpress_report_created", user_id=user.id, incident_id=incident_id)
+        db.commit()
+
+    return templates.TemplateResponse(request, "archive/_webseiten_bericht.html", {
+        "user": user, "incident": incident, "result": result,
     })
 
 

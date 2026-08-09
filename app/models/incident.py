@@ -95,6 +95,8 @@ class Incident(Base):
     alarm_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # KI-generierter Verlaufsberichtsentwurf (Phase 1)
     ai_report_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
+    wp_report_post_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wp_report_edit_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # KI-generierte Lage-Hinweise als JSON-Array von Strings
     ai_lage_hints: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Bcrypt-Hash eines optionalen Gäste-PINs für QR-Zugang ohne Account

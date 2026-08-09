@@ -61,6 +61,16 @@ Im Einsatz-Archiv: **PDF herunterladen** → Browser lädt die Datei herunter.
 - Farbig (Status-Ampel-Farben bleiben erhalten)
 - Druckoptimiert
 
+## Website-Entwurf erstellen
+
+Ist für die Organisation die WordPress-Anbindung eingerichtet (siehe
+[WordPress-Berichte](Administration-WordPress-Berichte)), erscheint bei einem
+abgeschlossenen Einsatz (ab Rolle **Bearbeiter**) der Button **„Website-Entwurf
+erstellen"**. Damit wird — falls nicht ohnehin schon automatisch beim Abschließen
+geschehen — ein Beitragsentwurf im Wehr-Blog angelegt, den ein Redakteur dort nur noch
+mit Bild und Text ergänzen und veröffentlichen muss. Ein erneuter Klick legt **keinen**
+zweiten Entwurf an, sondern öffnet nur den Link zum bestehenden.
+
 ## Einsatz erneut öffnen (Admin)
 
 Falls ein abgeschlossener Einsatz nachbearbeitet werden muss:

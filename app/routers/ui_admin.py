@@ -1394,6 +1394,7 @@ async def alarm_types_list(request: Request, db: Session = Depends(get_db),
 async def create_alarm_type(
     request: Request,
     code: str = Form(...), category: str = Form("T"), label: str = Form(""),
+    wp_einsatzart: str = Form(""),
     default_first_train_only: str = Form(""), notify_neighbors: str = Form(""),
     triggers_major_incident: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
@@ -1406,6 +1407,7 @@ async def create_alarm_type(
     at = AlarmType(
         org_id=user.org_id,
         code=code, category=category, label=label,
+        wp_einsatzart=wp_einsatzart.strip() or None,
         default_first_train_only=bool(default_first_train_only),
         notify_neighbors=bool(notify_neighbors),
         triggers_major_incident=bool(triggers_major_incident),
@@ -1419,6 +1421,7 @@ async def create_alarm_type(
 async def edit_alarm_type(
     code: str, request: Request,
     category: str = Form("T"), label: str = Form(""),
+    wp_einsatzart: str = Form(""),
     default_first_train_only: str = Form(""), notify_neighbors: str = Form(""),
     triggers_major_incident: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
@@ -1428,6 +1431,7 @@ async def edit_alarm_type(
     if at:
         at.category = category
         at.label = label
+        at.wp_einsatzart = wp_einsatzart.strip() or None
         at.default_first_train_only = bool(default_first_train_only)
         at.notify_neighbors = bool(notify_neighbors)
         at.triggers_major_incident = bool(triggers_major_incident)
@@ -3161,4 +3165,3 @@ async def sms_gateway_status(request: Request, _=Depends(require_role("admin")))
         '<span style="color:var(--color-text-muted);font-size:.9rem;margin-left:10px;">'
         "Kein Gateway verbunden.</span>"
     )
-

@@ -2241,6 +2241,13 @@ async def close_incident_view(
     await notify_incident_live(
         db, incident, org_id=incident.primary_org_id, reason="closed", background_tasks=None,
     )
+    try:
+        from app.services.wordpress_report_service import post_incident_report
+        await post_incident_report(db, incident)
+    except Exception:
+        _log.exception(
+            "WordPress-Bericht beim Abschluss fehlgeschlagen (Einsatz %s)", incident.id
+        )
     return RedirectResponse(f"/archiv/{incident_id}", status_code=303)
 
 

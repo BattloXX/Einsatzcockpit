@@ -237,6 +237,7 @@ class AlarmType(TenantScoped, Base):
     einsatzinfo_sms_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Löst dieses Stichwort eine Teams-Alarmkarte aus? (siehe teams_alarm_service.post_incident_card())
     teams_alarm_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    wp_einsatzart: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
 
 class TaskSuggestion(TenantScoped, Base):
