@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.timezones import to_org_tz
 from app.models.incident import Incident
+from app.models.major_incident import IncidentSite, MajorIncident
 from app.models.master import AlarmType, FireDept
 from app.models.wordpress_report import WordPressReportConfig
 
@@ -45,15 +46,56 @@ async def post_incident_report(db: Session, incident: Incident) -> WordPressRepo
             already_existed=False,
         )
 
+    # Großschadenslage: nur EIN Bericht für die ganze Lage, nicht einer je Einsatzstelle.
+    # Ist dieser Einsatz einer Lage als Einsatzstelle zugeordnet und hat eine ANDERE
+    # Einsatzstelle derselben Lage bereits einen Bericht, wird dessen Post übernommen
+    # statt ein zweiter angelegt — kein Webhook-Aufruf in diesem Fall. Analoges Muster
+    # zu teams_alarm_service.py::post_incident_card() (TeamsAlarmConfig.
+    # suppress_card_in_major_incident), hier aber ohne Org-Opt-in: für Website-Entwürfe
+    # gibt es keinen plausiblen Grund, mehrere Beiträge für dieselbe Lage zu wollen.
+    major_incident_id = (
+        db.query(IncidentSite.major_incident_id)
+        .filter(IncidentSite.incident_id == incident.id)
+        .execution_options(include_all_tenants=True)
+        .scalar()
+    )
+    major_incident = None
+    if major_incident_id is not None:
+        sibling = (
+            db.query(Incident)
+            .join(IncidentSite, IncidentSite.incident_id == Incident.id)
+            .filter(
+                IncidentSite.major_incident_id == major_incident_id,
+                Incident.wp_report_post_id.isnot(None),
+            )
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
+        if sibling is not None:
+            incident.wp_report_post_id = sibling.wp_report_post_id
+            incident.wp_report_edit_url = sibling.wp_report_edit_url
+            db.commit()
+            return WordPressReportResult(
+                success=True,
+                post_id=sibling.wp_report_post_id,
+                edit_url=sibling.wp_report_edit_url,
+                error=None,
+                already_existed=True,
+            )
+        major_incident = db.get(MajorIncident, major_incident_id)
+
     org = db.query(FireDept).filter(FireDept.id == incident.primary_org_id).first()
     alarm_type = db.query(AlarmType).filter(
         AlarmType.org_id == incident.primary_org_id,
         AlarmType.code == incident.alarm_type_code,
     ).first()
 
+    lage_name = (major_incident.name or "").strip() if major_incident else ""
     reason = (incident.reason or "").strip()
     alarm_label = (alarm_type.label or "").strip() if alarm_type else ""
-    if reason:
+    if lage_name:
+        title = lage_name
+    elif reason:
         title = reason
     elif alarm_label:
         title = alarm_label

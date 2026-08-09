@@ -6,6 +6,7 @@ import pytest
 
 from app.core.tenant import set_tenant_context
 from app.models.incident import Incident, IncidentColumn, IncidentVehicle
+from app.models.major_incident import IncidentSite, MajorIncident
 from app.models.master import AlarmType, FireDept, VehicleMaster
 from app.models.wordpress_report import WordPressReportConfig
 from app.services.wordpress_report_service import post_incident_report
@@ -173,6 +174,55 @@ async def test_existing_post_is_first_guard_and_never_calls_httpx(monkeypatch):
         assert result.success is True
         assert result.already_existed is True
         assert result.post_id == 99
+    finally:
+        db.rollback()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_major_incident_only_posts_one_report_for_the_whole_lage(monkeypatch):
+    """Zwei Einsatzstellen derselben Großschadenslage dürfen nur EINEN
+    WordPress-Bericht erzeugen: die zweite Einsatzstelle übernimmt den Post der
+    ersten, statt einen zweiten HTTP-Aufruf auszulösen."""
+    _MockAsyncClient.calls = []
+    _MockAsyncClient.status_code = 201
+    monkeypatch.setattr(httpx, "AsyncClient", _MockAsyncClient)
+    db = _session()
+    try:
+        _configure(db)
+        org = db.get(FireDept, ORG_ID)
+        org.timezone = "Europe/Vienna"
+        lage = MajorIncident(org_id=ORG_ID, name="Sturmschäden Gemeindegebiet")
+        db.add(lage)
+        db.flush()
+
+        first = _incident(db, city="Wolfurt", reason="Baum auf Fahrbahn")
+        second = _incident(db, city="Wolfurt", reason="Dach abgedeckt")
+        db.add_all([
+            IncidentSite(major_incident_id=lage.id, org_id=ORG_ID, bezeichnung="Stelle 1", incident_id=first.id),
+            IncidentSite(major_incident_id=lage.id, org_id=ORG_ID, bezeichnung="Stelle 2", incident_id=second.id),
+        ])
+        db.flush()
+
+        result_first = await post_incident_report(db, first)
+        assert result_first.success is True
+        assert result_first.already_existed is False
+        assert len(_MockAsyncClient.calls) == 1
+        assert _MockAsyncClient.calls[0]["json"]["title"] == "Sturmschäden Gemeindegebiet"
+        assert first.wp_report_post_id == 4711
+
+        class _ForbiddenClient:
+            def __init__(self, *args, **kwargs):
+                raise AssertionError("HTTP must not be called for the second Einsatzstelle")
+
+        monkeypatch.setattr(httpx, "AsyncClient", _ForbiddenClient)
+
+        result_second = await post_incident_report(db, second)
+        assert result_second.success is True
+        assert result_second.already_existed is True
+        assert result_second.post_id == 4711
+        assert second.wp_report_post_id == 4711
+        assert second.wp_report_edit_url == first.wp_report_edit_url
     finally:
         db.rollback()
         db.close()

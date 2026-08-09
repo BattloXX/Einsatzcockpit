@@ -72,6 +72,17 @@ erneuten Schließen oder per Klick auf den Button — erkennt das und tut **nich
 bestehenden Link anzuzeigen. Es wird weder ein zweiter Beitrag angelegt, noch werden Titel
 oder Text eines bereits von einem Redakteur bearbeiteten Entwurfs überschrieben.
 
+## Großschadenslage: nur ein Bericht für die ganze Lage
+
+Ist ein Einsatz einer **Großschadenslage** als Einsatzstelle zugeordnet, entsteht **ein
+einziger** Website-Entwurf für die gesamte Lage — nicht einer je Einsatzstelle. Die zuerst
+abgeschlossene (oder zuerst per Button ausgelöste) Einsatzstelle legt den Entwurf an; alle
+weiteren Einsatzstellen derselben Lage übernehmen automatisch denselben Link, ohne einen
+eigenen Beitrag oder einen weiteren Webhook-Aufruf auszulösen. Der Beitragstitel ist in
+diesem Fall der Name der Großschadenslage, nicht der Einsatzgrund der einzelnen
+Einsatzstelle. Dieses Verhalten ist fest eingebaut (kein Schalter) — für Website-Entwürfe
+gibt es keinen sinnvollen Anwendungsfall für mehrere Beiträge zu ein und derselben Lage.
+
 ---
 
 ## Was übertragen wird
