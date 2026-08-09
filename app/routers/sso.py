@@ -1,6 +1,7 @@
 """SSO/Entra-ID-Router: /sso/{slug}/login + /sso/{slug}/callback + /sso/discover."""
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC, datetime
 
@@ -33,6 +34,7 @@ from app.services.sso_service import (
 )
 
 router = APIRouter()
+logger = logging.getLogger("einsatzleiter.sso")
 
 _flow_signer = URLSafeTimedSerializer(settings.SECRET_KEY, salt="sso-flow")
 _FLOW_COOKIE = "sso_flow"
@@ -155,19 +157,33 @@ async def sso_callback(
     ip = request.client.host if request.client else None
 
     if error:
+        logger.warning(
+            "SSO callback returned OAuth error: slug=%s error=%s description=%s",
+            slug, error, error_description,
+        )
         return RedirectResponse("/login?error=sso_failed", status_code=302)
 
     flow = _read_flow_cookie(request)
     if not flow or flow.get("s") != state or flow.get("slug") != slug:
+        logger.warning(
+            "SSO callback flow validation failed: slug=%s flow_present=%s state_matches=%s slug_matches=%s",
+            slug, bool(flow), bool(flow and flow.get("s") == state),
+            bool(flow and flow.get("slug") == slug),
+        )
         return RedirectResponse("/login?error=sso_failed", status_code=302)
 
     org, config = _load_sso_config(db, slug)
     if not org or not config or not config.enabled or not config.is_fully_configured:
+        logger.warning("SSO callback configuration unavailable or disabled: slug=%s", slug)
         return RedirectResponse("/login?error=sso_disabled", status_code=302)
 
     try:
         client_secret = decrypt_secret(config.client_secret_enc)  # type: ignore[arg-type]
     except Exception:
+        logger.exception(
+            "SSO client secret decryption failed: slug=%s tenant_id=%s",
+            slug, config.tenant_id,
+        )
         return RedirectResponse("/login?error=sso_failed", status_code=302)
 
     redirect_uri = f"{settings.effective_public_base_url}/sso/{slug}/callback"
@@ -192,6 +208,10 @@ async def sso_callback(
         access_token = token_resp.get("access_token", "")
         groups = await get_groups(claims, access_token)
     except SsoError as exc:
+        logger.warning(
+            "SSO callback denied: slug=%s tenant_id=%s code=%s message=%s",
+            slug, config.tenant_id, exc.code, exc.message,
+        )
         write_audit(db, "auth.sso.denied", org_id=org.id, ip=ip,
                     payload={"code": exc.code, "message": exc.message, "slug": slug})
         db.commit()
@@ -203,6 +223,10 @@ async def sso_callback(
     if config.allowed_domain_list:
         domain = email.split("@")[-1] if "@" in email else ""
         if domain not in config.allowed_domain_list:
+            logger.warning(
+                "SSO callback denied: slug=%s tenant_id=%s code=domain_not_allowed domain=%s",
+                slug, config.tenant_id, domain,
+            )
             write_audit(db, "auth.sso.denied", org_id=org.id, ip=ip,
                         payload={"code": "domain_not_allowed", "domain": domain})
             db.commit()
@@ -215,6 +239,10 @@ async def sso_callback(
         system_admin_role_id=system_admin_role.id if system_admin_role else None,
     )
     if role_ids is None:
+        logger.warning(
+            "SSO callback denied: slug=%s tenant_id=%s code=no_group_denied",
+            slug, config.tenant_id,
+        )
         write_audit(db, "auth.sso.denied", org_id=org.id, ip=ip,
                     payload={"code": "no_group_denied", "slug": slug})
         db.commit()
@@ -222,6 +250,7 @@ async def sso_callback(
 
     # F-04: Org-Aktivitätsprüfung VOR JIT-Provisioning
     if not org.is_active or org.deleted_at:
+        logger.warning("SSO callback denied: slug=%s code=org_inactive", slug)
         write_audit(db, "auth.sso.denied", org_id=org.id, ip=ip,
                     payload={"code": "org_inactive"})
         db.commit()
@@ -231,6 +260,10 @@ async def sso_callback(
     # F-11: leerer OID ist ungültig
     oid = claims.get("oid") or claims.get("sub")
     if not oid:
+        logger.warning(
+            "SSO callback denied: slug=%s tenant_id=%s code=idtoken_invalid reason=missing_oid",
+            slug, config.tenant_id,
+        )
         write_audit(db, "auth.sso.denied", org_id=org.id, ip=ip,
                     payload={"code": "idtoken_invalid", "reason": "missing_oid"})
         db.commit()
@@ -279,6 +312,10 @@ async def sso_callback(
         jit_provisioned = True
     else:
         if not user.active:
+            logger.warning(
+                "SSO callback denied: slug=%s tenant_id=%s code=user_inactive user_id=%s",
+                slug, config.tenant_id, user.id,
+            )
             write_audit(db, "auth.sso.denied", org_id=org.id, ip=ip,
                         payload={"code": "user_inactive", "user_id": user.id})
             db.commit()
@@ -314,6 +351,11 @@ async def sso_callback(
         write_audit(db, "auth.sso.jit_provision", org_id=org.id, user_id=user.id, ip=ip,
                     payload={"username": user.username})
     db.commit()
+
+    logger.info(
+        "SSO login successful: slug=%s tenant_id=%s user_id=%s jit_provisioned=%s",
+        slug, config.tenant_id, user.id, jit_provisioned,
+    )
 
     session_token = sign_session(user.id)
     redirect = RedirectResponse(_safe_next(flow.get("next")), status_code=302)

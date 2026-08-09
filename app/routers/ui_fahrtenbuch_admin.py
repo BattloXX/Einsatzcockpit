@@ -9,7 +9,12 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.audit import write_audit
-from app.core.permissions import is_fahrtenbuch_admin, is_system_admin, require_system_admin
+from app.core.permissions import (
+    can_view_fahrtenbuch,
+    is_fahrtenbuch_admin,
+    is_system_admin,
+    require_system_admin,
+)
 from app.core.templating import templates
 from app.core.tenant import set_tenant_context
 from app.core.timezones import local_date_to_utc
@@ -37,6 +42,15 @@ def _check_fahrtenbuch_admin(request: Request):
     return user
 
 
+def _check_fahrtenbuch_view(request: Request):
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Nicht angemeldet")
+    if not can_view_fahrtenbuch(user):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung")
+    return user
+
+
 def _fb_admin(request: Request, db: Session):
     """Prüft die Fahrtenbuch-Berechtigung und ermittelt die effektive Org.
 
@@ -58,6 +72,29 @@ def _fb_admin(request: Request, db: Session):
                 raise HTTPException(status_code=400, detail="Ungültiger org-Parameter")
         # Tenant-Context auf die effektive Org fixieren: bei ?org bereits gesetzt,
         # ohne ?org auf die eigene Org begrenzen (statt "alle Orgs sichtbar").
+        set_tenant_context(db, org_id)
+    org = (
+        db.query(FireDept)
+        .filter(FireDept.id == org_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organisation nicht gefunden")
+    return user, org_id, org
+
+
+def _fb_view(request: Request, db: Session):
+    """Prueft den Lesezugriff und ermittelt die effektive Fahrtenbuch-Org."""
+    user = _check_fahrtenbuch_view(request)
+    org_id = user.org_id
+    if is_system_admin(user):
+        org_param = request.query_params.get("org")
+        if org_param:
+            try:
+                org_id = int(org_param)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Ungültiger org-Parameter")
         set_tenant_context(db, org_id)
     org = (
         db.query(FireDept)
@@ -112,7 +149,7 @@ async def fahrten_liste(
     nur_statistikrelevant: bool = False,
     seite: int = 1,
 ):
-    user, org_id, org = _fb_admin(request, db)
+    user, org_id, org = _fb_view(request, db)
     q = (
         db.query(Fahrt)
         .filter(Fahrt.org_id == org_id)
@@ -188,7 +225,7 @@ async def fahrten_export(
     zweck_id: int = 0, status: str = "aktiv",
     nur_statistikrelevant: bool = False,
 ):
-    user, org_id, org = _fb_admin(request, db)
+    user, org_id, org = _fb_view(request, db)
     q = (
         db.query(Fahrt)
         .filter(Fahrt.org_id == org_id)
@@ -234,7 +271,7 @@ async def fahrten_export(
 
 @router.get("/verwaltung/fahrten/{fahrt_id}", response_class=HTMLResponse)
 async def fahrt_detail(request: Request, fahrt_id: int, db: Session = Depends(get_db)):
-    user, org_id, org = _fb_admin(request, db)
+    user, org_id, org = _fb_view(request, db)
     fahrt = (
         db.query(Fahrt)
         .filter(Fahrt.id == fahrt_id, Fahrt.org_id == org_id)
@@ -301,13 +338,13 @@ def _serve_fahrt_media(user, org_id: int, media_id: int, db: Session, *, thumb: 
 
 @router.get("/medien/fahrt/datei/{media_id}")
 async def serve_fahrt_media_datei(media_id: int, request: Request, db: Session = Depends(get_db)):
-    user, org_id, _org = _fb_admin(request, db)
+    user, org_id, _org = _fb_view(request, db)
     return _serve_fahrt_media(user, org_id, media_id, db, thumb=False)
 
 
 @router.get("/medien/fahrt/thumb/{media_id}")
 async def serve_fahrt_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
-    user, org_id, _org = _fb_admin(request, db)
+    user, org_id, _org = _fb_view(request, db)
     return _serve_fahrt_media(user, org_id, media_id, db, thumb=True)
 
 

@@ -115,6 +115,11 @@ def is_fahrtenbuch_admin(user) -> bool:
     return has_role(user, "fahrtenbuch_admin")
 
 
+def can_view_fahrtenbuch(user) -> bool:
+    """True if user can view Fahrtenbuch without necessarily managing it."""
+    return has_role(user, "fahrtenbuch_admin", "recorder")
+
+
 def is_objekt_verwalter(user) -> bool:
     """True if user can manage Objekte (org_admin, objekt_verwalter, or system_admin)."""
     return has_role(user, "objekt_verwalter")

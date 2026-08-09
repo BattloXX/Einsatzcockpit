@@ -203,7 +203,7 @@
           </table>
         </div>
         {% endif %}
-        {% if fahrt.status.value == 'aktiv' %}
+        {% if can_edit and fahrt.status.value == 'aktiv' %}
         <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/schaden-retry{{ org_q }}" style="margin-top:.75rem;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button type="submit" class="btn btn--ghost btn--sm">Erneut senden</button>

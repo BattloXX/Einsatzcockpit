@@ -517,6 +517,51 @@ def test_regular_admin_ignoriert_org_param(client: TestClient, db_session, org):
     assert "Clara Fremdorg" not in r.text
 
 
+def test_recorder_darf_fahrtenbuch_lesen(
+    client: TestClient, db_session, org, fahrzeug, zweck,
+):
+    """Bearbeiter duerfen Liste, Detail und Excel-Export lesen."""
+    fahrt = erstelle_fahrt(_basis_daten(org.id, fahrzeug.id, zweck.id), db_session)
+    db_session.commit()
+    _login(client, db_session, org, "fb_recorder_read", role_code="recorder")
+
+    assert client.get("/verwaltung/fahrten").status_code == 200
+    detail = client.get(f"/verwaltung/fahrten/{fahrt.id}")
+    assert detail.status_code == 200
+    assert "Erneut senden" not in detail.text
+    assert client.get("/verwaltung/fahrten/export.xlsx").status_code == 200
+
+
+def test_recorder_darf_fahrtenbuch_nicht_veraendern(
+    client: TestClient, db_session, org, fahrzeug, zweck,
+):
+    """Bearbeiter bleiben auf allen Verwaltungs- und Mutationsrouten gesperrt."""
+    fahrt = erstelle_fahrt(_basis_daten(org.id, fahrzeug.id, zweck.id), db_session)
+    db_session.commit()
+    _login(client, db_session, org, "fb_recorder_write", role_code="recorder")
+    csrf = client.cookies.get("ec_csrf")
+
+    responses = [
+        client.post(
+            f"/verwaltung/fahrten/{fahrt.id}/storno",
+            data={"_csrf": csrf, "grund": "Test"},
+            follow_redirects=False,
+        ),
+        client.post(
+            f"/verwaltung/fahrten/{fahrt.id}/korrektur",
+            data={"_csrf": csrf},
+            follow_redirects=False,
+        ),
+        client.post(
+            "/verwaltung/fahrten/loeschen",
+            data={"_csrf": csrf, "ids": str(fahrt.id)},
+            follow_redirects=False,
+        ),
+        client.get("/admin/fahrtenbuch/zwecke", follow_redirects=False),
+    ]
+    assert [response.status_code for response in responses] == [403, 403, 403, 403]
+
+
 def test_loeschen_route_verweigert_nicht_sysadmin(client: TestClient, db_session, org):
     """Fahrtenbuch-Admin (kein Sysadmin) darf nicht löschen → 403."""
     _login(client, db_session, org, "el_nichtsys", role_code="fahrtenbuch_admin")

@@ -164,7 +164,10 @@ async def exchange_code(
             err_desc = err_body.get("error_description") or err_body.get("error") or resp.text[:400]
         except Exception:
             err_desc = resp.text[:400]
-        logger.error("SSO token exchange failed: HTTP %s | %s", resp.status_code, err_desc)
+        logger.error(
+            "SSO token exchange failed: tenant_id=%s HTTP %s | %s",
+            tenant_id, resp.status_code, err_desc,
+        )
         raise SsoError("token_exchange_failed",
                         f"HTTP {resp.status_code}: {err_desc}")
     return resp.json()
@@ -186,6 +189,7 @@ async def validate_id_token(
     try:
         header = jwt.get_unverified_header(id_token)
     except JWTError as exc:
+        logger.warning("SSO id_token header invalid: tenant_id=%s", tenant_id, exc_info=True)
         raise SsoError("idtoken_invalid", f"id_token Header unlesbar: {exc}") from exc
 
     # kid-Miss → JWKS neu laden (Key-Rollover), Cache für diesen Tenant invalidieren
@@ -207,14 +211,21 @@ async def validate_id_token(
             options={"leeway": 60},
         )
     except ExpiredSignatureError as exc:
+        logger.warning("SSO id_token expired: tenant_id=%s", tenant_id, exc_info=True)
         raise SsoError("idtoken_invalid", "id_token abgelaufen") from exc
     except JWTError as exc:
+        logger.warning("SSO id_token invalid: tenant_id=%s", tenant_id, exc_info=True)
         raise SsoError("idtoken_invalid", f"id_token ungültig: {exc}") from exc
 
     if claims.get("nonce") != nonce:
+        logger.warning("SSO id_token nonce mismatch: tenant_id=%s", tenant_id)
         raise SsoError("idtoken_invalid", "Nonce stimmt nicht überein")
 
     if claims.get("tid") != tenant_id:
+        logger.warning(
+            "SSO tenant mismatch: tenant_id=%s token_tid=%s",
+            tenant_id, claims.get("tid"),
+        )
         raise SsoError("tenant_mismatch",
                         f"Tenant-ID im Token ({claims.get('tid')}) entspricht nicht der Konfiguration")
 
@@ -230,12 +241,12 @@ async def get_groups(claims: dict[str, Any], access_token: str) -> set[str]:
 
     # Overage: _claim_names enthält 'groups'
     if "_claim_names" in claims and "groups" in claims.get("_claim_names", {}):
-        return await _get_groups_via_graph(access_token)
+        return await _get_groups_via_graph(access_token, tenant_id=claims.get("tid"))
 
     return set()
 
 
-async def _get_groups_via_graph(access_token: str) -> set[str]:
+async def _get_groups_via_graph(access_token: str, *, tenant_id: str | None = None) -> set[str]:
     """Ruft Gruppen über Microsoft Graph ab (bei Overage)."""
     async with httpx.AsyncClient(timeout=settings.SSO_HTTP_TIMEOUT) as client:
         resp = await client.post(
@@ -244,6 +255,10 @@ async def _get_groups_via_graph(access_token: str) -> set[str]:
             json={"securityEnabledOnly": True},
         )
     if resp.status_code != 200:
+        logger.error(
+            "SSO Graph group lookup failed: tenant_id=%s HTTP %s",
+            tenant_id, resp.status_code,
+        )
         raise SsoError("graph_failed",
                         f"Gruppen per Graph nicht abrufbar: HTTP {resp.status_code}")
     data = resp.json()
