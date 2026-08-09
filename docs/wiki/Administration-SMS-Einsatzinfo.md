@@ -38,6 +38,7 @@ Unter **Admin → Einsatzinfo-SMS** (`/admin/einsatzinfo-sms`):
 | `{datum}` | Datum der Alarmierung (TT.MM.JJJJ) |
 | `{zeit}` | Uhrzeit der Alarmierung (HH:MM) |
 | `{link}` | Öffentlicher Link zur Einsatzinformation ohne Anmeldung |
+| `{leitstellennummer}` | Leitstellen-Einsatznummer, falls vorhanden (nicht Teil der Standard-Vorlage) |
 
 Standard-Vorlage: `Einsatz {stichwort}: {adresse}. {meldung} {link}`. Unbekannte Platzhalter werden stillschweigend durch einen leeren String ersetzt (kein Fehler bei Tippfehlern).
 

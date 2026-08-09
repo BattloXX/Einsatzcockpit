@@ -47,19 +47,29 @@ def test_create_incident_invalid_key(client):
     assert r.status_code == 401
 
 
-def test_create_incident_success(client, api_key):
+def test_create_incident_success(client, api_key, monkeypatch):
+    notify_calls = []
+
+    async def fake_notify(db, incident, **kwargs):
+        notify_calls.append(incident.id)
+
+    monkeypatch.setattr(
+        "app.services.incident_notify.notify_incident_created", fake_notify,
+    )
     r = client.post("/api/v1/einsatz", json=PAYLOAD, headers={"X-API-Key": api_key})
     assert r.status_code == 200
     data = r.json()
     assert data["created"] is True
     assert data["id"] > 0
     incident_id = data["id"]
+    assert notify_calls == [incident_id]
 
     # Idempotency: same Key again → created=False
     r2 = client.post("/api/v1/einsatz", json=PAYLOAD, headers={"X-API-Key": api_key})
     assert r2.status_code == 200
     assert r2.json()["created"] is False
     assert r2.json()["id"] == incident_id
+    assert notify_calls == [incident_id]
 
 
 def test_create_incident_stores_caller_info(client, api_key):

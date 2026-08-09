@@ -87,6 +87,32 @@ def test_event_ohne_passenden_incident_legt_neuen_an(org_id):
         db.close()
 
 
+@pytest.mark.asyncio
+async def test_neuer_incident_loest_benachrichtigung_aus(org_id, monkeypatch):
+    calls = []
+
+    async def fake_notify(db, incident, **kwargs):
+        calls.append((incident.id, kwargs["org_id"], kwargs["background_tasks"]))
+
+    async def fake_broadcast(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.incident_notify.notify_incident_created", fake_notify,
+    )
+    monkeypatch.setattr("app.services.broadcast.broadcast_org", fake_broadcast)
+
+    await dibos_enrich.enrich_and_broadcast(
+        org_id, [_event("f-neu-notify-001")], create_incidents=True,
+    )
+
+    assert len(calls) == 1
+    incident_id, notified_org_id, background_tasks = calls[0]
+    assert incident_id > 0
+    assert notified_org_id == org_id
+    assert background_tasks is None
+
+
 def test_zweiter_poll_gleiches_event_legt_nicht_zweimal_an(org_id):
     """Tier 1 (bereits per Einsatznummer aktiv verknüpft) greift beim zweiten Poll."""
     event = _event("f-neu-002")

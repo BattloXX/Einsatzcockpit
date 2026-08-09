@@ -26,7 +26,7 @@ def test_render_template_basic():
 
 def test_render_template_all_placeholders():
     from app.services.sms_dispatch_service import render_template
-    tpl = "{stichwort} {adresse} {ort} {meldung} {einsatzgrund} {datum} {zeit}"
+    tpl = "{stichwort} {adresse} {ort} {meldung} {einsatzgrund} {datum} {zeit} {leitstellennummer}"
     ctx = {
         "stichwort": "T1",
         "adresse": "Dorfstr. 5",
@@ -35,12 +35,14 @@ def test_render_template_all_placeholders():
         "einsatzgrund": "Unfall",
         "datum": "27.06.2026",
         "zeit": "14:30",
+        "leitstellennummer": "fu26303655",
     }
     result = render_template(tpl, ctx)
     assert "T1" in result
     assert "Dorfstr. 5" in result
     assert "27.06.2026" in result
     assert "14:30" in result
+    assert "fu26303655" in result
 
 
 def test_render_template_missing_key_is_empty():
@@ -60,6 +62,7 @@ def test_default_template_has_placeholders():
     tpl = default_einsatzinfo_template()
     assert "{stichwort}" in tpl
     assert "{adresse}" in tpl or "{meldung}" in tpl
+    assert "{leitstellennummer}" not in tpl
 
 
 # ── collect_einsatzinfo_recipients ─────────────────────────────────────────────
@@ -329,6 +332,63 @@ async def test_dispatch_exercise_sends_when_configured():
         )
 
     assert any("[UEBUNG]" in t for t in sent_texts), f"Kein [UEBUNG]-Prafix in: {sent_texts}"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_renders_leitstellennummer():
+    """Eine eigene Vorlage kann die Leitstellennummer opt-in ausgeben."""
+    from app.models.master import AlarmType, OrgSettings
+    from app.models.org_sms import OrgSmsConfig
+    from app.services import sms_dispatch_service as svc
+
+    org_settings = MagicMock()
+    org_settings.einsatzinfo_sms_enabled = True
+    org_settings.einsatzinfo_sms_send_exercise = False
+    org_settings.einsatzinfo_sms_template = (
+        "Einsatz {stichwort} Nr {leitstellennummer}: {adresse}"
+    )
+
+    alarm_type = MagicMock()
+    alarm_type.id = 42
+    alarm_type.einsatzinfo_sms_template = None
+    member = _make_member(1, "+4366099999")
+
+    def _query_side_effect(model):
+        q = MagicMock()
+        if model is OrgSmsConfig:
+            q.filter.return_value.first.return_value = None
+        elif model is OrgSettings:
+            q.filter.return_value.first.return_value = org_settings
+        elif model is AlarmType:
+            q.filter.return_value.first.return_value = alarm_type
+        return q
+
+    mock_db = MagicMock()
+    mock_db.query.side_effect = _query_side_effect
+    mock_db.get.return_value = MagicMock(timezone="Europe/Vienna")
+    sent_texts: list[str] = []
+
+    async def fake_send_bulk(org_id, jobs, ctx=None):
+        sent_texts.extend(text for _, text in jobs)
+        return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
+                for phone, _ in jobs]
+
+    with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
+         patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
+         patch("app.services.sms_dispatch_service.set_tenant_context"), \
+         patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients",
+               return_value={"+4366099999": member}), \
+         patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk), \
+         patch("app.services.sms_dispatch_service.write_audit"), \
+         patch("app.services.sms_dispatch_service.SmsLog"):
+        await svc.dispatch_einsatzinfo(
+            org_id=1, alarm_type_code="T1",
+            address="Hauptstr. 1", ort="Wolfurt",
+            meldung="Test", einsatzgrund=None,
+            is_exercise=False, leitstellennummer="fu26303655",
+        )
+
+    assert any("fu26303655" in text for text in sent_texts)
 
 
 # ── send_bulk ──────────────────────────────────────────────────────────────────

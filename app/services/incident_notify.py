@@ -95,7 +95,7 @@ async def notify_incident_created(
         sms_args = (
             org_id, incident.alarm_type_code, address, incident.address_city,
             incident.report_text, incident.reason, incident.is_exercise,
-            triggered_by_user_id, info_link,
+            triggered_by_user_id, info_link, incident.lis_operation_number,
         )
     else:
         sms_args = None  # Einsatzinfo-SMS ist org-gebunden — ohne Org kein Versand

@@ -57,6 +57,7 @@ def render_template(template: str, ctx: dict) -> str:
       {datum}       Datum der Alarmierung (TT.MM.JJJJ)
       {zeit}        Uhrzeit der Alarmierung (HH:MM)
       {link}        Öffentliche Einsatzinformation (No-Login-Link /alarm/{token})
+      {leitstellennummer} Leitstellen-Einsatznummer (falls vorhanden)
     """
     class _Safe(dict):
         def __missing__(self, key):
@@ -175,6 +176,7 @@ async def dispatch_einsatzinfo(
     is_exercise: bool,
     triggered_by_user_id: int | None = None,
     link: str = "",
+    leitstellennummer: str | None = None,
 ) -> None:
     """Versendet automatische Einsatzinfo-SMS nach Alarmeingang.
 
@@ -247,6 +249,7 @@ async def dispatch_einsatzinfo(
             "datum": local_now.strftime("%d.%m.%Y"),
             "zeit": local_now.strftime("%H:%M"),
             "link": link or "",
+            "leitstellennummer": leitstellennummer or "",
         }
         # .strip(): entfernt trailing Space, falls {link} leer ist (Altdaten ohne AlarmToken)
         text = (exercise_prefix + render_template(template, ctx)).strip()

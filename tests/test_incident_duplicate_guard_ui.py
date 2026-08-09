@@ -50,10 +50,18 @@ def _setup_incident_leader(username: str) -> int:
         db.close()
 
 
-def test_doppel_submit_legt_nur_einen_einsatz_an(client):
+def test_doppel_submit_legt_nur_einen_einsatz_an(client, monkeypatch):
     org_id = _setup_incident_leader("dup_guard_ui_user")
     _login(client, "dup_guard_ui_user", "Test1234!")
     csrf = client.cookies.get("ec_csrf")
+    notify_calls = []
+
+    async def fake_notify(db, incident, **kwargs):
+        notify_calls.append(incident.id)
+
+    monkeypatch.setattr(
+        "app.services.incident_notify.notify_incident_created", fake_notify,
+    )
 
     form = {
         "_csrf": csrf,
@@ -68,11 +76,13 @@ def test_doppel_submit_legt_nur_einen_einsatz_an(client):
     assert r1.status_code == 303
     erste_url = r1.headers["location"]
     erster_id = int(erste_url.rstrip("/").split("/")[-1])
+    assert notify_calls == [erster_id]
 
     r2 = client.post("/einsatz/neu", data=form, follow_redirects=False)
     assert r2.status_code == 303
     zweite_url = r2.headers["location"]
     assert zweite_url == erste_url  # redirected auf denselben, bereits bestehenden Einsatz
+    assert notify_calls == [erster_id]
 
     db = SessionLocal()
     set_tenant_context(db, None)
