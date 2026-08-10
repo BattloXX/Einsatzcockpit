@@ -109,7 +109,7 @@
         </label>
       </div>
       <div class="form-group form-group--checkbox" id="newIncRealConfirmation">
-        <label>
+        <label id="newIncRealConfirmationLabel">
           <input type="checkbox" name="confirm_real_incident" id="newIncConfirmReal" value="true">
           Ich bestätige: Dies ist ein echter Einsatz - SMS-, Teams- und Push-Benachrichtigungen werden jetzt an die Mannschaft ausgelöst.
         </label>
@@ -129,12 +129,14 @@
 (function() {
   const _newIncidentForm = document.getElementById('newIncidentForm');
   const _isExercise = document.getElementById('newIncIsExercise');
-  const _realConfirmation = document.getElementById('newIncRealConfirmation');
+  const _realConfirmationLabel = document.getElementById('newIncRealConfirmationLabel');
   const _confirmReal = document.getElementById('newIncConfirmReal');
 
   function updateRealIncidentConfirmation() {
-    _realConfirmation.hidden = _isExercise.checked;
-    if (_isExercise.checked) _confirmReal.checked = false;
+    const exercise = _isExercise.checked;
+    _confirmReal.disabled = exercise;
+    if (exercise) _confirmReal.checked = false;
+    _realConfirmationLabel.style.opacity = exercise ? '0.5' : '';
   }
 
   _isExercise.addEventListener('change', updateRealIncidentConfirmation);
