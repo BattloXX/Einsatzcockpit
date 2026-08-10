@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.core.tenant import set_tenant_context
 from app.models.fahrtenbuch import Fahrt, FahrtErfassungsweg, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
+from app.models.incident import Incident
 from app.models.master import Member, OrgSettings, VehicleMaster
 from app.models.user import Role, User, UserRole
 from app.services.fahrtenbuch_service import (
@@ -71,7 +72,8 @@ def zweck(db_session, org):
     if not z:
         z = Fahrtzweck(org_id=org.id, name="Testübung", kategorie=FahrtKategorie.uebung)
         db_session.add(z)
-        db_session.flush()
+    z.kategorie = FahrtKategorie.uebung
+    db_session.flush()
     return z
 
 
@@ -144,6 +146,16 @@ def test_km_pflicht_bei_erfasst_km(db_session, org, fahrzeug, zweck):
     assert exc.value.detail == "km_pflicht"
 
 
+def test_einsatz_pflicht_ohne_incident(db_session, org, fahrzeug, zweck):
+    zweck.kategorie = FahrtKategorie.einsatz
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    with pytest.raises(HTTPException) as exc:
+        erstelle_fahrt(daten, db_session)
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "einsatz_pflicht"
+
+
 def test_km_optional_wenn_nicht_erfasst(db_session, org, fahrzeug, zweck):
     """Fahrzeug ohne erfasst_km darf ohne km-Stand gespeichert werden."""
     fahrzeug.erfasst_km = False
@@ -175,6 +187,7 @@ def test_fahrttyp_aus_zweck(db_session, org, fahrzeug, zweck):
     zweck.kategorie = FahrtKategorie.einsatz
     db_session.flush()
     daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    daten["incident_id"] = 1
     fahrt = erstelle_fahrt(daten, db_session)
     assert fahrt.fahrttyp == FahrtKategorie.einsatz
 
@@ -264,6 +277,7 @@ def test_multi_org_isolation(db_session):
     z_a = db_session.query(Fahrtzweck).filter(Fahrtzweck.org_id == org_a.id).first()
     if not fz_a or not z_a:
         pytest.skip("Keine Fahrzeuge/Zwecke in Org A")
+    z_a.kategorie = FahrtKategorie.uebung
 
     daten_a = {
         "org_id": org_a.id, "fahrzeug_id": fz_a.id, "zweck_id": z_a.id,
@@ -369,6 +383,61 @@ def test_zweck_felder_zeigt_einsatzleiter_bei_zweck_flag(client: TestClient, db_
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
     assert r.status_code == 200
     assert 'name="einsatzleiter_name"' in r.text
+
+
+def test_zweck_felder_zeigt_einsaetze_der_letzten_drei_tage(
+    client: TestClient, db_session, org
+):
+    _login(client, db_session, org, "einsatz_drei_tage_tester")
+    z = Fahrtzweck(org_id=org.id, name="Einsatzfahrt", kategorie=FahrtKategorie.einsatz)
+    incident = Incident(
+        primary_org_id=org.id,
+        alarm_type_code="DREITAGE",
+        status="active",
+        started_at=datetime.now(UTC) + timedelta(seconds=1),
+    )
+    db_session.add_all([z, incident])
+    db_session.commit()
+
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
+
+    assert r.status_code == 200
+    assert "DREITAGE" in r.text
+    assert f'value="{incident.id}" selected' in r.text
+    assert 'name="incident_id"' in r.text
+    assert "required" in r.text
+
+
+def test_zweck_felder_zeigt_letzten_einsatz_als_fallback(
+    client: TestClient, db_session, org
+):
+    _login(client, db_session, org, "einsatz_fallback_tester")
+    vorhandene = (
+        db_session.query(Incident)
+        .filter(Incident.primary_org_id == org.id)
+        .execution_options(include_all_tenants=True)
+        .all()
+    )
+    for incident in vorhandene:
+        incident.started_at = datetime.now(UTC) - timedelta(days=30)
+    z = Fahrtzweck(org_id=org.id, name="Fallback-Einsatz", kategorie=FahrtKategorie.einsatz)
+    aelter = Incident(
+        primary_org_id=org.id, alarm_type_code="ALT20", status="closed",
+        started_at=datetime.now(UTC) - timedelta(days=20),
+    )
+    letzter = Incident(
+        primary_org_id=org.id, alarm_type_code="ALT10", status="closed",
+        started_at=datetime.now(UTC) - timedelta(days=10),
+    )
+    db_session.add_all([z, aelter, letzter])
+    db_session.commit()
+
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
+
+    assert r.status_code == 200
+    assert "ALT10" in r.text
+    assert "ALT20" not in r.text
+    assert f'value="{letzter.id}" selected' in r.text
 
 
 def test_zweck_felder_zeigt_einsatzleiter_bei_fahrzeug_flag(client: TestClient, db_session, org, fahrzeug):

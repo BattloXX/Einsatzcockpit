@@ -138,6 +138,9 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
     if not zweck:
         raise HTTPException(status_code=404, detail="Fahrtzweck nicht gefunden")
 
+    if zweck.kategorie == FahrtKategorie.einsatz and not daten.get("incident_id"):
+        raise HTTPException(status_code=422, detail="einsatz_pflicht")
+
     # Zähler-Plausibilität
     km_delta = None
     bh_delta = None

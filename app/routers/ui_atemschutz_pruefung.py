@@ -68,7 +68,7 @@ def _aktive_geraete(org_id: int, db: Session) -> list[AtemschutzGeraet]:
 
 def _recent_incidents(org_id: int, db: Session) -> list[Incident]:
     grenze = datetime.now(UTC) - timedelta(days=3)
-    return (
+    incidents = (
         db.query(Incident)
         .filter(Incident.primary_org_id == org_id, Incident.started_at >= grenze)
         .execution_options(include_all_tenants=True)
@@ -76,6 +76,16 @@ def _recent_incidents(org_id: int, db: Session) -> list[Incident]:
         .limit(20)
         .all()
     )
+    if incidents:
+        return incidents
+    letzter_incident = (
+        db.query(Incident)
+        .filter(Incident.primary_org_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .order_by(Incident.started_at.desc())
+        .first()
+    )
+    return [letzter_incident] if letzter_incident else []
 
 
 # ── Öffentlich (kein Login, token-basiert) ──────────────────────────────────
@@ -179,14 +189,20 @@ async def pruefung_speichern(
     incident_id: int | None = None
     incident_id_raw = _form_str("incident_id")
     if einsatz_art == "einsatz" and incident_id_raw:
+        try:
+            incident_id_form = int(incident_id_raw)
+        except ValueError:
+            incident_id_form = 0
         inc = (
             db.query(Incident)
-            .filter(Incident.id == int(incident_id_raw), Incident.primary_org_id == org_id)
+            .filter(Incident.id == incident_id_form, Incident.primary_org_id == org_id)
             .execution_options(include_all_tenants=True)
             .first()
         )
         if inc:
             incident_id = inc.id
+    if einsatz_art == "einsatz" and incident_id is None:
+        return _fehler_zurueck("Bitte einen Einsatz auswählen.")
 
     def _pflicht_int(key: str) -> int | None:
         raw = form.get(key)

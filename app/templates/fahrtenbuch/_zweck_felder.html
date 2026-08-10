@@ -80,16 +80,18 @@
 </div>
 {% endif %}
 
-{% if zweck.kategorie.value == 'einsatz' and incidents %}
+{% if zweck.kategorie.value == 'einsatz' %}
 <div class="form-group">
-  <label class="form-label" for="incident_id">Einsatz-Verknüpfung (optional)</label>
-  <select name="incident_id" id="incident_id" class="form-control">
-    <option value="">— keinen Einsatz verknüpfen —</option>
+  <label class="form-label" for="incident_id">Einsatz *</label>
+  <select name="incident_id" id="incident_id" class="form-control" required>
+    <option value="">— Einsatz wählen —</option>
     {% for inc in incidents %}
-    <option value="{{ inc.id }}">
+    <option value="{{ inc.id }}"{% if loop.first %} selected{% endif %}>
       {{ inc.alarm_type_code }} – {{ inc.started_at|local_datetime }}
       {% if inc.address_street %}– {{ inc.address_street }}{% endif %}
     </option>
+    {% else %}
+    <option value="" disabled>Kein Einsatz gefunden</option>
     {% endfor %}
   </select>
 </div>

@@ -7,12 +7,13 @@ defekt_info, ort_text). Dieser Endpoint hatte zuvor keine Testabdeckung -- diese
 deckt den kompletten Speicher-Pfad ab, um sicherzustellen, dass der Umbau das
 Verhalten nicht veraendert hat.
 """
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.atemschutz_pruefung import AtemschutzGeraet, AtemschutzPruefung
+from app.models.incident import Incident
 from app.models.user import Role, User, UserRole
 
 ORG_ID = 1  # FF Wolfurt (seeded)
@@ -112,3 +113,62 @@ def test_pruefung_speichern_ohne_geraet_zeigt_fehler():
     }, follow_redirects=False)
     assert r.status_code == 422
     assert "gültiges Atemschutzgerät" in r.text
+
+
+def test_pruefung_speichern_einsatz_ohne_incident_zeigt_fehler():
+    _, geraet_id = _setup("ap_einsatz_pflicht_user")
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    _login(client, "ap_einsatz_pflicht_user", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    r = client.post("/atemschutz-pruefung", data={
+        "_csrf": csrf,
+        "geraet_id": str(geraet_id),
+        "traeger_free_text": "Max Mustermann",
+        "eingesetzt_am": date.today().isoformat(),
+        "einsatz_art": "einsatz",
+    }, follow_redirects=False)
+
+    assert r.status_code == 422
+    assert "Bitte einen Einsatz auswählen." in r.text
+
+
+def test_recent_incidents_nutzt_drei_tage_und_fallback():
+    from app.routers.ui_atemschutz_pruefung import _recent_incidents
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        vorhandene = (
+            db.query(Incident)
+            .filter(Incident.primary_org_id == ORG_ID)
+            .execution_options(include_all_tenants=True)
+            .all()
+        )
+        for incident in vorhandene:
+            incident.started_at = datetime.now(UTC) - timedelta(days=30)
+        im_fenster = Incident(
+            primary_org_id=ORG_ID, alarm_type_code="AP3TAG", status="active",
+            started_at=datetime.now(UTC) - timedelta(days=2, hours=12),
+        )
+        db.add(im_fenster)
+        db.flush()
+        assert [inc.id for inc in _recent_incidents(ORG_ID, db)] == [im_fenster.id]
+
+        im_fenster.started_at = datetime.now(UTC) - timedelta(days=10)
+        aelter = Incident(
+            primary_org_id=ORG_ID, alarm_type_code="AP20TAG", status="closed",
+            started_at=datetime.now(UTC) - timedelta(days=20),
+        )
+        db.add(aelter)
+        db.flush()
+
+        assert [inc.id for inc in _recent_incidents(ORG_ID, db)] == [im_fenster.id]
+    finally:
+        db.rollback()
+        db.close()

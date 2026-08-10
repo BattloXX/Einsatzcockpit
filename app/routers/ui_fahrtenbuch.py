@@ -254,7 +254,7 @@ async def hx_zweck_felder(
 
     incidents = []
     if zweck and zweck.kategorie == FahrtKategorie.einsatz and org_id:
-        grenze = datetime.now(UTC) - timedelta(days=2)
+        grenze = datetime.now(UTC) - timedelta(days=3)
         incidents = (
             db.query(Incident)
             .filter(Incident.primary_org_id == org_id, Incident.started_at >= grenze)
@@ -263,6 +263,16 @@ async def hx_zweck_felder(
             .limit(20)
             .all()
         )
+        if not incidents:
+            letzter_incident = (
+                db.query(Incident)
+                .filter(Incident.primary_org_id == org_id)
+                .execution_options(include_all_tenants=True)
+                .order_by(Incident.started_at.desc())
+                .first()
+            )
+            if letzter_incident:
+                incidents = [letzter_incident]
 
     gk_members = []
     if zweck and zweck.verlangt_gruppenkommandant and org_id:
