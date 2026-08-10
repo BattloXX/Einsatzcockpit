@@ -34,6 +34,15 @@ Formular ausfüllen:
 - **Meldung**: Freitext aus dem Alarmierungssystem
 - **Als Übung markieren**: Übungseinsätze haben einen gelb/schwarzen Banner und zählen nicht in der Statistik
 
+**Sicherheitsabfrage bei echten Einsätzen:** Ist "Übung / Simulation" nicht angehakt,
+erscheint eine zusätzliche Checkbox „Ich bestätige: Dies ist ein echter Einsatz …" — ohne
+sie lässt sich das Formular nicht absenden. Beim Klick auf „Einsatz starten" folgt zusätzlich
+ein Bestätigungsdialog, der noch einmal ausdrücklich benennt, dass jetzt SMS-Einsatzinfo,
+Teams-Alarmierung und Push-Benachrichtigungen an die gesamte Mannschaft ausgelöst werden.
+Damit soll ein versehentliches Absenden (Vertipper, falsches Stichwort) nicht sofort einen
+echten Alarm an alle auslösen. Bei Übungseinsätzen entfällt diese Abfrage vollständig — dort
+ändert sich nichts.
+
 ## Erstausrückung vs. Vollalarm
 
 | Stichwort | Erstausrückung | Vollalarm |

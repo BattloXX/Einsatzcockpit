@@ -105,7 +105,13 @@
       </div>
       <div class="form-group form-group--checkbox">
         <label>
-          <input type="checkbox" name="is_exercise" value="true"> Übung / Simulation
+          <input type="checkbox" name="is_exercise" id="newIncIsExercise" value="true"> Übung / Simulation
+        </label>
+      </div>
+      <div class="form-group form-group--checkbox" id="newIncRealConfirmation">
+        <label>
+          <input type="checkbox" name="confirm_real_incident" id="newIncConfirmReal" value="true">
+          Ich bestätige: Dies ist ein echter Einsatz - SMS-, Teams- und Push-Benachrichtigungen werden jetzt an die Mannschaft ausgelöst.
         </label>
       </div>
     </div>
@@ -121,6 +127,36 @@
 <script>
 // Karten-Picker für "Neuer Einsatz"-Dialog
 (function() {
+  const _newIncidentForm = document.getElementById('newIncidentForm');
+  const _isExercise = document.getElementById('newIncIsExercise');
+  const _realConfirmation = document.getElementById('newIncRealConfirmation');
+  const _confirmReal = document.getElementById('newIncConfirmReal');
+
+  function updateRealIncidentConfirmation() {
+    _realConfirmation.hidden = _isExercise.checked;
+    if (_isExercise.checked) _confirmReal.checked = false;
+  }
+
+  _isExercise.addEventListener('change', updateRealIncidentConfirmation);
+  updateRealIncidentConfirmation();
+
+  _newIncidentForm.addEventListener('submit', function(event) {
+    if (_isExercise.checked) return;
+    if (!_confirmReal.checked) {
+      event.preventDefault();
+      alert('Bitte bestätigen Sie zuerst, dass dies ein echter Einsatz ist.');
+      _confirmReal.focus();
+      return;
+    }
+    if (!window.confirm(
+      'Achtung: Dieser Einsatz wird als ECHTER Einsatz angelegt. Dadurch werden ' +
+      'SMS-Einsatzinfo, Teams-Alarmierung und Push-Benachrichtigungen an die gesamte ' +
+      'Mannschaft ausgelöst. Wirklich fortfahren?'
+    )) {
+      event.preventDefault();
+    }
+  });
+
   let _map = null;
   let _marker = null;
   let _loading = false;
@@ -188,7 +224,7 @@
     }
   };
 
-  // MutationObserver: zuverlässiger als dialog „toggle"-Event (Safari-kompatibel)
+  // MutationObserver: zuverlässiger als dialog "toggle"-Event (Safari-kompatibel)
   const _modal = document.getElementById('newIncidentModal');
   new MutationObserver(function() {
     if (_modal.open) ensureLeaflet(function() { setTimeout(initNewIncidentMap, 100); });

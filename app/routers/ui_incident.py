@@ -342,11 +342,15 @@ async def new_incident(
     reason: str = Form(""),
     report_text: str = Form(""),
     is_exercise: bool = Form(False),
+    confirm_real_incident: bool = Form(False),
     lat: str = Form(""),
     lng: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
+    if not is_exercise and not confirm_real_incident:
+        raise HTTPException(400, detail="Bitte bestätigen, dass dies ein echter Einsatz ist.")
+
     from app.routers.api_v1 import _geocode_incident
 
     user = request.state.user
