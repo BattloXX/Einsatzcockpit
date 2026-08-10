@@ -129,7 +129,6 @@ from app.models.sms import (
 )
 from app.models.sso import OrgSsoConfig, OrgSsoGroupMap
 from app.models.teams_bot import AlarmToken, TeamsAlarmConfig, TeamsCardPost, TeamsChannelBinding
-from app.models.wordpress_report import WordPressReportConfig
 from app.models.teilnahme import Funktion, Teilnahme, Termin
 from app.models.uas import (
     UASCheckliste,
@@ -168,6 +167,7 @@ from app.models.verleih import (
 from app.models.wasserstelle import Wasserstelle
 from app.models.weather import WeatherDashboardToken, WeatherReading, WeatherStation
 from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherAlertState
+from app.models.wordpress_report import WordPressReportConfig
 
 __all__ = [
     "OrgSsoConfig", "OrgSsoGroupMap",
