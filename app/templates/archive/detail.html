@@ -22,8 +22,12 @@
       {% if can_edit and wp_report_available and incident.status == 'closed' %}
       <div id="webseiten-bericht-result" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
         {% if incident.wp_report_post_id %}
+        {% if incident.wp_report_edit_url %}
         <a href="{{ incident.wp_report_edit_url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--sm">&#x2197; Website-Entwurf öffnen</a>
         <span style="color:var(--green);font-size:.85em;">Bereits erstellt - Entwurf wird nicht erneut angelegt oder überschrieben.</span>
+        {% else %}
+        <span style="color:var(--red);font-size:.85em;">Entwurf wurde angelegt, aber der Bearbeitungslink fehlt - bitte im WordPress-Adminbereich manuell suchen.</span>
+        {% endif %}
         {% else %}
         <button class="btn btn--ghost btn--sm"
                 hx-post="/archiv/{{ incident.id }}/webseiten-bericht"

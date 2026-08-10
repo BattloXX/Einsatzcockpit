@@ -243,3 +243,33 @@ async def test_non_2xx_leaves_incident_retryable(monkeypatch):
     finally:
         db.rollback()
         db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response_json",
+    [
+        {"post_id": 4711},
+        {"post_id": 4711, "edit_url": None},
+        {"post_id": 4711, "edit_url": "   "},
+    ],
+    ids=["missing", "null", "empty"],
+)
+async def test_invalid_edit_url_leaves_incident_retryable(monkeypatch, response_json):
+    _MockAsyncClient.calls = []
+    _MockAsyncClient.status_code = 201
+    monkeypatch.setattr(_MockAsyncClient, "response_json", response_json)
+    monkeypatch.setattr(httpx, "AsyncClient", _MockAsyncClient)
+    db = _session()
+    try:
+        _configure(db)
+        incident = _incident(db, city="Wolfurt")
+
+        result = await post_incident_report(db, incident)
+
+        assert result.success is False
+        assert incident.wp_report_post_id is None
+        assert incident.wp_report_edit_url is None
+    finally:
+        db.rollback()
+        db.close()

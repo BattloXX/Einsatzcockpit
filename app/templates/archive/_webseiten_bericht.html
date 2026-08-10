@@ -1,10 +1,14 @@
 <div id="webseiten-bericht-result">
   {% if result.success %}
+  {% if result.edit_url %}
   <a href="{{ result.edit_url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--sm">&#x2197; Website-Entwurf öffnen</a>
   {% if result.already_existed %}
   <span style="color:var(--green);font-size:.85em;margin-left:.5rem;">Bereits erstellt - Entwurf wird nicht erneut angelegt oder überschrieben.</span>
   {% else %}
   <span style="color:var(--green);font-size:.85em;margin-left:.5rem;">Entwurf wurde auf der Website angelegt.</span>
+  {% endif %}
+  {% else %}
+  <p style="color:var(--red);margin:0;">Entwurf wurde angelegt, aber der Bearbeitungslink fehlt - bitte im WordPress-Adminbereich manuell suchen.</p>
   {% endif %}
   {% else %}
   <p style="color:var(--red);margin:0;">{{ result.error }}</p>

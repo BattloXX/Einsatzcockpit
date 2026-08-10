@@ -148,7 +148,7 @@ async def post_incident_report(db: Session, incident: Incident) -> WordPressRepo
         if not isinstance(post_id, int):
             raise ValueError("Antwort enthält keine gültige post_id")
         edit_url = data.get("edit_url")
-        if edit_url is not None and not isinstance(edit_url, str):
+        if not isinstance(edit_url, str) or not edit_url.strip():
             raise ValueError("Antwort enthält keine gültige edit_url")
     except Exception as exc:
         logger.error(
