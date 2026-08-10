@@ -719,7 +719,11 @@ dialog.media-viewer { max-width: 95vw; width: 95vw; max-height: 95dvh; height: 9
                  border-bottom: 1px solid var(--border); padding-bottom: 6px; }
 .detail-list { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: .88rem; }
 .detail-list dt { color: var(--text-muted); }
-.vehicle-row { display: flex; gap: 8px; padding: 3px 0; font-size: .88rem; }
+.vehicle-row { display: flex; gap: 8px 14px; padding: 7px 0; font-size: .88rem; align-items: baseline; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.vehicle-row:last-child { border-bottom: none; }
+.vehicle-main { display: flex; gap: 8px; min-width: 220px; }
+.vehicle-detail { color: var(--text-muted); font-size: .82rem; }
+.vehicle-detail strong { color: var(--on-surface); }
 .vehicle-code { font-weight: 700; font-family: 'JetBrains Mono', monospace; }
 .vehicle-dept { color: var(--text-muted); font-size: .82rem; }
 .task-row { padding: 3px 0; font-size: .88rem; display: flex; gap: 6px; align-items: center; }

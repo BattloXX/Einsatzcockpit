@@ -135,21 +135,22 @@
 
 <h2>Fahrzeuge</h2>
 <table>
-  <tr><th>Fahrzeug</th><th>Organisation</th><th>Spalte</th><th>Gruppenkommandant</th>{% if fahrten_km %}<th style="width:55pt;text-align:right;">km</th>{% endif %}</tr>
+  <tr><th>Fahrzeug</th><th>Organisation</th><th>Spalte</th><th>Fahrer</th><th>Gruppenkommandant</th><th style="width:55pt;text-align:right;">km</th></tr>
   {% for v in incident.vehicles %}
-  {% set _km_row = fahrten_km|selectattr('label','equalto',v.vehicle_master.display_label)|first if fahrten_km else none %}
   <tr>
     <td>{{ v.vehicle_master.display_label }}</td>
     <td>{{ v.vehicle_master.dept.name }}</td>
     <td>{{ v.column.title if v.column else '–' }}</td>
-    <td>{{ v.commander.full_name if v.commander else '–' }}</td>
-    {% if fahrten_km %}<td style="text-align:right;">{% if _km_row %}{{ _km_row.km }}{% else %}–{% endif %}</td>{% endif %}
+    <td>{{ v.fahrer.full_name if v.fahrer else (v.fahrer_name or '–') }}{% if v.fahrer2 or v.fahrer2_name %} / {{ v.fahrer2.full_name if v.fahrer2 else v.fahrer2_name }}{% endif %}</td>
+    <td>{{ v.commander.full_name if v.commander else (v.commander_name or '–') }}</td>
+    <td style="text-align:right;">{{ v.km_gefahren if v.km_gefahren is not none else '–' }}</td>
   </tr>
   {% endfor %}
-  {% if fahrten_km and fahrten_km|sum(attribute='km') > 0 %}
+  {% set km_gesamt = incident.vehicles|selectattr('km_gefahren', 'ne', none)|sum(attribute='km_gefahren') %}
+  {% if km_gesamt > 0 %}
   <tr>
-    <td colspan="4" style="font-weight:700;text-align:right;color:#555;">Gesamt km</td>
-    <td style="font-weight:700;text-align:right;">{{ fahrten_km|sum(attribute='km') }}</td>
+    <td colspan="5" style="font-weight:700;text-align:right;color:#555;">Gesamt km</td>
+    <td style="font-weight:700;text-align:right;">{{ km_gesamt }}</td>
   </tr>
   {% endif %}
 </table>

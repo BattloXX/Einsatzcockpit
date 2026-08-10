@@ -63,6 +63,7 @@
   <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'stammdaten'}" @click="tab = 'stammdaten'">Stammdaten</button>
   <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'fahrzeuge'}" @click="tab = 'fahrzeuge'">Fahrzeuge ({{ incident.vehicles|length }})</button>
   <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'mannschaft'}" @click="tab = 'mannschaft'">Mannschaft</button>
+  <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'atemschutzpruefungen'}" @click="tab = 'atemschutzpruefungen'">Atemschutzprüfungen ({{ incident.atemschutz_pruefungen|length }})</button>
   <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'bericht'}" @click="tab = 'bericht'">Bericht</button>
 </nav>
 <div class="detail-grid" style="margin-top:16px;">
@@ -82,10 +83,37 @@
     <h3>🚒 Fahrzeuge ({{ incident.vehicles|length }})</h3>
     {% for v in incident.vehicles %}
     <div class="vehicle-row">
-      <span class="vehicle-code">{{ v.vehicle_master.display_label }}</span>
-      <span class="vehicle-dept">{{ v.vehicle_master.dept.name }}</span>
+      <span class="vehicle-main"><span class="vehicle-code">{{ v.vehicle_master.display_label }}</span>
+      <span class="vehicle-dept">{{ v.vehicle_master.dept.name }}</span></span>
+      <span class="vehicle-detail"><strong>GK:</strong> {{ v.commander.full_name if v.commander else (v.commander_name or '–') }}</span>
+      <span class="vehicle-detail"><strong>Fahrer 1:</strong> {{ v.fahrer.full_name if v.fahrer else (v.fahrer_name or '–') }}</span>
+      {% if v.fahrer2 or v.fahrer2_name %}<span class="vehicle-detail"><strong>Fahrer 2:</strong> {{ v.fahrer2.full_name if v.fahrer2 else v.fahrer2_name }}</span>{% endif %}
+      <span class="vehicle-detail"><strong>km:</strong> {{ v.km_gefahren if v.km_gefahren is not none else '–' }}</span>
     </div>
     {% endfor %}
+  </div>
+
+  <div class="detail-box detail-box--full" data-tabgroup="atemschutzpruefungen" :class="{'is-active': tab === 'atemschutzpruefungen'}">
+    <h3>Atemschutzprüfungen</h3>
+    <div style="overflow-x:auto;">
+      <table class="table">
+        <thead><tr><th>Gerät</th><th>Atemschutzgeräteträger</th><th>Datum</th><th>Status</th><th>PDF</th></tr></thead>
+        <tbody>
+          {% for pruefung in incident.atemschutz_pruefungen %}
+          <tr>
+            <td>{{ pruefung.geraet.anzeige_label }}</td>
+            <td>{{ pruefung.traeger_name }}</td>
+            <td>{{ pruefung.eingesetzt_am.strftime('%d.%m.%Y') }}</td>
+            <td>{% if pruefung.alles_ok %}<span class="badge badge--success">in Ordnung</span>{% else %}<span class="badge badge--error">Mangel</span>{% endif %}</td>
+            <td><button type="button" class="btn btn--ghost btn--xs"
+              onclick="ecpgPrint({document_type:'as_pruefung', artifact_ref:'{{ pruefung.id }}', title:'Atemschutzprüfung drucken', localUrl:'/atemschutz-pruefung/{{ pruefung.id }}/pdf'})">📄 PDF</button></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted">Keine Atemschutzprüfungen vorhanden.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <div class="detail-box" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">

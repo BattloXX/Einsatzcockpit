@@ -232,6 +232,15 @@ class IncidentVehicle(Base):
         BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
     )
     commander_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    fahrer_member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    fahrer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    fahrer2_member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    fahrer2_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    km_gefahren: Mapped[int | None] = mapped_column(Integer, nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     org_color_override: Mapped[str | None] = mapped_column(String(7), nullable=True)
@@ -246,6 +255,8 @@ class IncidentVehicle(Base):
     column: Mapped[IncidentColumn] = relationship(back_populates="vehicles")
     vehicle_master: Mapped[VehicleMaster] = relationship(lazy="joined")
     commander: Mapped[Member | None] = relationship(foreign_keys=[commander_member_id], lazy="joined")
+    fahrer: Mapped[Member | None] = relationship(foreign_keys=[fahrer_member_id], lazy="joined")
+    fahrer2: Mapped[Member | None] = relationship(foreign_keys=[fahrer2_member_id], lazy="joined")
     assigned_tasks: Mapped[list[Task]] = relationship(
         back_populates="vehicle",
         primaryjoin="Task.vehicle_id==IncidentVehicle.id",

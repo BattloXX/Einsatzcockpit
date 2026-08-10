@@ -236,3 +236,64 @@ def test_pdf_no_ai_draft_section_when_empty(client):
     )
 
     assert "Einsatzverlauf (KI-Entwurf)" not in html
+
+
+def test_pdf_fahrzeug_enthaelt_fahrer_gk_und_direkte_km(client):
+    from types import SimpleNamespace
+
+    from app.core.templating import templates
+
+    vehicle = SimpleNamespace(
+        vehicle_master=SimpleNamespace(display_label="TLF-A 2000", dept=SimpleNamespace(name="FF Test")),
+        column=SimpleNamespace(title="Aktiv"),
+        fahrer=SimpleNamespace(full_name="Lena Lenker"), fahrer_name=None,
+        fahrer2=None, fahrer2_name="Gast Fahrer",
+        commander=None, commander_name="GK Freitext", km_gefahren=28,
+    )
+    incident = SimpleNamespace(
+        id=1, alarm_type_code="B2", is_exercise=False, address_street=None, address_no=None,
+        address_city=None, report_text=None, reason=None, started_at=None, closed_at=None,
+        nummer=None, ai_report_draft=None, leader_member=None, leader=None, vehicles=[vehicle],
+        tasks=[], messages=[], rescued_persons=[], breathing_troops=[], atemschutz_pruefungen=[], log_entries=[],
+    )
+    html = templates.env.get_template("pdf/incident_report.html").render(
+        incident=incident, teilnahmen=[], journal=[], objekte=[], now=None, base_url="",
+        user=SimpleNamespace(org=None), media_b64=lambda m: "", media_exists=lambda m: False,
+    )
+    assert "Lena Lenker / Gast Fahrer" in html
+    assert "GK Freitext" in html
+    assert ">28<" in html
+
+
+def test_archive_zeigt_fahrzeug_und_atemschutzgeraetetraeger(client):
+    from datetime import date
+    from types import SimpleNamespace
+
+    from app.core.templating import templates
+
+    vehicle = SimpleNamespace(
+        vehicle_master=SimpleNamespace(display_label="KDOF", dept=SimpleNamespace(name="FF Test")),
+        fahrer=None, fahrer_name="Fahrer Freitext", fahrer2=None, fahrer2_name=None,
+        commander=None, commander_name="GK Freitext", km_gefahren=11,
+    )
+    pruefung = SimpleNamespace(
+        id=7, geraet=SimpleNamespace(anzeige_label="PA 3"), traeger_name="Anna Atemschutz",
+        eingesetzt_am=date(2026, 8, 10), alles_ok=True,
+    )
+    incident = SimpleNamespace(
+        id=1, lis_operation_number=None, nummer="1", alarm_type_code="B2", is_exercise=False,
+        status="closed", wp_report_post_id=None, vehicles=[vehicle], atemschutz_pruefungen=[pruefung],
+        started_at=None, closed_at=None, address_street=None, address_no=None, address_city=None,
+        report_text=None, reason=None, tasks=[], rescued_persons=[], breathing_troops=[], ai_report_draft=None,
+    )
+    from starlette.requests import Request
+    request = Request({"type": "http", "method": "GET", "path": "/archiv/1", "headers": [], "query_string": b""})
+    request.state.csrf_token = "test"
+    html = templates.env.get_template("archive/detail.html").render(
+        request=request, incident=incident, user=SimpleNamespace(is_system_admin=False, is_org_admin=False),
+        can_edit=False, wp_report_available=False, ai_enabled=False, uas_einsatz=None, verlauf=[],
+    )
+    assert "Fahrer Freitext" in html
+    assert "GK Freitext" in html
+    assert "Anna Atemschutz" in html
+    assert "PA 3" in html

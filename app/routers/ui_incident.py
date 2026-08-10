@@ -50,6 +50,7 @@ from app.models.master import (
     FireDept,
     LageHint,
     LageHintAlarm,
+    Member,
     MemberQualification,
     OrgSettings,
     Qualification,
@@ -76,6 +77,7 @@ from app.services.incident_service import (
     delete_section_column,
     list_commander_candidates,
     list_el_candidates,
+    list_fahrer_candidates,
     list_section_leader_candidates,
     move_card,
     move_vehicle_to_column,
@@ -83,6 +85,8 @@ from app.services.incident_service import (
     reopen_incident,
     reorder_columns,
     set_commander,
+    set_fahrer,
+    set_km_gefahren,
     set_message_status,
     set_task_status,
     set_unit_status,
@@ -2560,6 +2564,7 @@ def vehicle_detail(
     org_ids = [incident.primary_org_id] + [io.org_id for io in (incident.collaborating_orgs or [])]
     org_ids = [oid for oid in org_ids if oid]
     commander_candidates = list_commander_candidates(db, org_ids)
+    fahrer_candidates = list_fahrer_candidates(db, org_ids)
 
     card_journal = get_card_journal(db, incident_id, "incident_vehicle", vehicle_id)
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
@@ -2567,7 +2572,7 @@ def vehicle_detail(
     vehicle_logs = _entity_logs(db, incident_id, "vehicle", vehicle_id)
     return templates.TemplateResponse(request, "incident/_vehicle_modal.html", {
         "user": user, "incident": incident, "vehicle": vehicle,
-        "members": commander_candidates, "card_journal": card_journal,
+        "members": commander_candidates, "fahrer_members": fahrer_candidates, "card_journal": card_journal,
         "can_edit": can_edit, "can_note": can_note, "unit_status_values": UNIT_STATUS_VALUES,
         "bos_values": BOS_VALUES, "entity_logs": vehicle_logs,
     })
@@ -2584,6 +2589,91 @@ async def set_vehicle_commander(
     if not vehicle:
         return Response(status_code=404)
     set_commander(db, vehicle, member_id or None, user_id=request.state.user.id)
+    db.commit()
+    await manager.broadcast(incident_id, {
+        "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
+    })
+    return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
+
+
+async def _set_vehicle_fahrer(
+    incident_id: int,
+    vehicle_id: int,
+    slot: int,
+    request: Request,
+    db: Session,
+    member_id: int | None = None,
+    full_name: str | None = None,
+) -> Response:
+    vehicle = db.get(IncidentVehicle, vehicle_id)
+    if not vehicle or vehicle.incident_id != incident_id:
+        return Response(status_code=404)
+    if member_id is not None and not db.query(Member).filter(Member.id == member_id, Member.active.is_(True)).first():
+        return Response(status_code=422)
+    set_fahrer(
+        db, vehicle, slot, member_id,
+        None if member_id is not None else full_name,
+        user_id=request.state.user.id,
+    )
+    db.commit()
+    await manager.broadcast(incident_id, {
+        "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
+    })
+    return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
+
+
+@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/fahrer1")
+async def set_vehicle_fahrer1(
+    incident_id: int, vehicle_id: int, request: Request,
+    member_id: int | None = Form(None), db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    return await _set_vehicle_fahrer(incident_id, vehicle_id, 1, request, db, member_id=member_id)
+
+
+@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/fahrer1-neu")
+async def set_vehicle_fahrer1_new(
+    incident_id: int, vehicle_id: int, request: Request,
+    full_name: str = Form(...), db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    if not full_name.strip():
+        return Response(status_code=422)
+    return await _set_vehicle_fahrer(incident_id, vehicle_id, 1, request, db, full_name=full_name)
+
+
+@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/fahrer2")
+async def set_vehicle_fahrer2(
+    incident_id: int, vehicle_id: int, request: Request,
+    member_id: int | None = Form(None), db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    return await _set_vehicle_fahrer(incident_id, vehicle_id, 2, request, db, member_id=member_id)
+
+
+@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/fahrer2-neu")
+async def set_vehicle_fahrer2_new(
+    incident_id: int, vehicle_id: int, request: Request,
+    full_name: str = Form(...), db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    if not full_name.strip():
+        return Response(status_code=422)
+    return await _set_vehicle_fahrer(incident_id, vehicle_id, 2, request, db, full_name=full_name)
+
+
+@router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/km")
+async def set_vehicle_km(
+    incident_id: int, vehicle_id: int, request: Request,
+    km_gefahren: int | None = Form(None), db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
+):
+    vehicle = db.get(IncidentVehicle, vehicle_id)
+    if not vehicle or vehicle.incident_id != incident_id:
+        return Response(status_code=404)
+    if km_gefahren is not None and km_gefahren < 0:
+        return Response(status_code=422)
+    set_km_gefahren(db, vehicle, km_gefahren, user_id=request.state.user.id)
     db.commit()
     await manager.broadcast(incident_id, {
         "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,

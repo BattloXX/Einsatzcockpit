@@ -121,16 +121,15 @@ _load_incident_fahrten_km = load_fahrten_km
 
 
 def _load_pdf_context(incident: Incident) -> tuple:
-    """Lädt Primary-Org, Teilnahmen, Fahrtenbuch-km und Verlauf in einer einzigen DB-Session.
+    """Lädt Primary-Org, Teilnahmen und Verlauf in einer einzigen DB-Session.
 
-    Gibt (primary_org, teilnahmen, fahrten_km, journal) zurück. ``journal`` kombiniert das
+    Gibt (primary_org, teilnahmen, journal, objekte) zurück. ``journal`` kombiniert das
     strukturierte Karten-Journal (IncidentChange) mit den Freitext-Notizen (IncidentLog) in
     chronologischer Reihenfolge, damit der Ausdruck denselben Verlauf zeigt wie Board und
     Karten-Journal (vorher enthielt der Ausdruck nur die Freitext-Notizen).
     """
     from sqlalchemy.orm import joinedload as _jl
 
-    from app.models.fahrtenbuch import Fahrt, FahrtStatus
     from app.models.master import VehicleMaster
     from app.models.teilnahme import Teilnahme
     from app.services.incident_service import combined_verlauf
@@ -158,34 +157,16 @@ def _load_pdf_context(incident: Incident) -> tuple:
             .all()
         )
 
-        fahrten = (
-            db.query(Fahrt)
-            .options(_jl(Fahrt.fahrzeug))
-            .filter(
-                Fahrt.incident_id == incident.id,
-                Fahrt.status == FahrtStatus.aktiv,
-            )
-            .all()
-        )
-        km_by: dict[int, dict] = {}
-        for f in fahrten:
-            if f.fahrzeug_id not in km_by:
-                label = f.fahrzeug.display_label if f.fahrzeug else f"Fahrzeug #{f.fahrzeug_id}"
-                km_by[f.fahrzeug_id] = {"label": label, "km": 0}
-            if f.km_delta:
-                km_by[f.fahrzeug_id]["km"] += f.km_delta
-        fahrten_km = [v for v in km_by.values() if v["km"] > 0]
-
         journal = list(reversed(combined_verlauf(db, incident.id)))
 
         # Verknüpfte Objekte inkl. statischer Objektkarte (solange die Session offen
         # ist – render_objekt_map_png greift auf objekt.karten_objekte zu).
         objekte = _load_incident_objekte(db, incident)
 
-        return primary_org, teilnahmen, fahrten_km, journal, objekte
+        return primary_org, teilnahmen, journal, objekte
     except Exception:
         logger.exception("PDF-Kontext laden fehlgeschlagen (Einsatz %s)", incident.id)
-        return None, [], [], [], []
+        return None, [], [], []
     finally:
         db.close()
 
@@ -274,14 +255,13 @@ def _load_incident_objekte(db, incident: Incident) -> list[dict]:
 
 def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
     template = templates.env.get_template("pdf/incident_report.html")
-    primary_org, teilnahmen, fahrten_km, journal, objekte = _load_pdf_context(incident)
+    primary_org, teilnahmen, journal, objekte = _load_pdf_context(incident)
     pseudo_user = SimpleNamespace(org=primary_org)
     teilnahmen.sort(key=lambda t: (t.funktion.sortierung if t.funktion else 9999, t.hinzugefuegt_am or 0))
 
     html_str = template.render(
         incident=incident,
         teilnahmen=teilnahmen,
-        fahrten_km=fahrten_km,
         journal=journal,
         objekte=objekte,
         now=datetime.now(UTC),
