@@ -435,6 +435,10 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
         else:
             token_label = "Org-Token"
 
+    incident_id_raw = form.get("incident_id", "").strip()
+    incident_nicht_zuordenbar = incident_id_raw == "keiner"
+    incident_id = int(incident_id_raw) if incident_id_raw and not incident_nicht_zuordenbar else None
+
     return {
         "org_id": org_id,
         "zeitpunkt": zeitpunkt,
@@ -460,7 +464,8 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
         "zielort_freitext": _str("zielort_freitext"),
         "zweck_id": _int("zweck_id"),
         "zweck_freitext": _str("zweck_freitext"),
-        "incident_id": _int("incident_id"),
+        "incident_id": incident_id,
+        "incident_nicht_zuordenbar": incident_nicht_zuordenbar,
         "ausbildner_member_id": _int("ausbildner_member_id"),
         "ausbildner_name": _str("ausbildner_name"),
         "gruppenkommandant_member_id": _int("gruppenkommandant_member_id"),

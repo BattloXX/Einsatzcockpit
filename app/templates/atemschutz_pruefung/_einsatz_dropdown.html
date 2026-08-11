@@ -5,12 +5,13 @@
     <option value="">— Einsatz wählen —</option>
     {% for inc in incidents %}
     <option value="{{ inc.id }}"{% if loop.first %} selected{% endif %}>
-      #{{ inc.id }} – {{ inc.alarm_type_code }}
+      {{ inc.alarm_type_code }}
       {%- if inc.address_street %} – {{ inc.address_street }} {{ inc.address_no or '' }}{% endif %}
-      ({{ inc.started_at|local_datetime }})
+      ({{ inc.started_at|local_datetime }}){% if inc.lis_operation_number %} – LSt-Nr. {{ inc.lis_operation_number }}{% endif %}
     </option>
     {% else %}
     <option value="" disabled>Kein Einsatz der letzten 3 Tage gefunden</option>
     {% endfor %}
+    <option value="keiner">Auf keinem Einsatz zuordenbar</option>
   </select>
 </div>

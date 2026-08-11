@@ -188,7 +188,8 @@ async def pruefung_speichern(
 
     incident_id: int | None = None
     incident_id_raw = _form_str("incident_id")
-    if einsatz_art == "einsatz" and incident_id_raw:
+    incident_nicht_zuordenbar = incident_id_raw == "keiner"
+    if einsatz_art == "einsatz" and incident_id_raw and not incident_nicht_zuordenbar:
         try:
             incident_id_form = int(incident_id_raw)
         except ValueError:
@@ -201,7 +202,7 @@ async def pruefung_speichern(
         )
         if inc:
             incident_id = inc.id
-    if einsatz_art == "einsatz" and incident_id is None:
+    if einsatz_art == "einsatz" and incident_id is None and not incident_nicht_zuordenbar:
         return _fehler_zurueck("Bitte einen Einsatz auswählen.")
 
     def _pflicht_int(key: str) -> int | None:

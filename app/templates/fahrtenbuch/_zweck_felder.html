@@ -1,6 +1,24 @@
 {# Dynamisch per HTMX geladen: zweck-spezifische Felder #}
 {% if zweck %}
 
+{% if zweck.kategorie.value == 'einsatz' %}
+<div class="form-group">
+  <label class="form-label" for="incident_id">Einsatz *</label>
+  <select name="incident_id" id="incident_id" class="form-control" required>
+    <option value="">— Einsatz wählen —</option>
+    {% for inc in incidents %}
+    <option value="{{ inc.id }}"{% if loop.first %} selected{% endif %}>
+      {{ inc.alarm_type_code }} – {{ inc.started_at|local_datetime }}
+      {% if inc.address_street %}– {{ inc.address_street }}{% endif %}{% if inc.lis_operation_number %} – LSt-Nr. {{ inc.lis_operation_number }}{% endif %}
+    </option>
+    {% else %}
+    <option value="" disabled>Kein Einsatz gefunden</option>
+    {% endfor %}
+    <option value="keiner">Auf keinem Einsatz zuordenbar</option>
+  </select>
+</div>
+{% endif %}
+
 {% if zweck.kategorie.value == 'sonstige' %}
 <div class="form-group">
   <label class="form-label" for="zweck_freitext">Zweck (Freitext)</label>
@@ -77,23 +95,6 @@
   </div>
   <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
   <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen. Kann leer bleiben.</p>
-</div>
-{% endif %}
-
-{% if zweck.kategorie.value == 'einsatz' %}
-<div class="form-group">
-  <label class="form-label" for="incident_id">Einsatz *</label>
-  <select name="incident_id" id="incident_id" class="form-control" required>
-    <option value="">— Einsatz wählen —</option>
-    {% for inc in incidents %}
-    <option value="{{ inc.id }}"{% if loop.first %} selected{% endif %}>
-      {{ inc.alarm_type_code }} – {{ inc.started_at|local_datetime }}
-      {% if inc.address_street %}– {{ inc.address_street }}{% endif %}
-    </option>
-    {% else %}
-    <option value="" disabled>Kein Einsatz gefunden</option>
-    {% endfor %}
-  </select>
 </div>
 {% endif %}
 
