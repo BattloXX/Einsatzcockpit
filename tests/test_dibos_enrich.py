@@ -35,7 +35,12 @@ def _session() -> "TestingSession":
     return db
 
 
-def _event(seed: int, bma_no: str | None = None, person_responses: list[dict] | None = None) -> dict:
+def _event(
+    seed: int,
+    bma_no: str | None = None,
+    person_responses: list[dict] | None = None,
+    caller_list: list[dict] | None = None,
+) -> dict:
     """Baut ein vollständiges Event (Schema aus dem echten Mitschnitt 2026-07-21,
     Einsatz f26006436) mit pro Test EINDEUTIGER eventNumber und Kommentar-IDs.
 
@@ -56,7 +61,9 @@ def _event(seed: int, bma_no: str | None = None, person_responses: list[dict] | 
         "locationCity": "WOLFURT", "locationCityPart": "WOLFURT-OT",
         "locationStreet": "UNTERLINDEN", "locationStreetNo": "23",
         "locationObject": "", "locationLongitude": 9.749971, "locationLatitude": 47.47214,
-        "callerList": [{"callerName": "PI Wolfurt", "callerNumber": ""}],
+        "callerList": caller_list
+        if caller_list is not None
+        else [{"callerName": "PI Wolfurt", "callerNumber": ""}],
         "targetList": [],
         "comments": [
             {
@@ -160,6 +167,61 @@ def test_enrich_sets_dibos_metadata_fields():
     assert refreshed.dibos_tycod == "t2"
     assert refreshed.dibos_event_comment == "[Türöffnung] med. Notfall hinter verschlossener Türe"
     assert refreshed.dibos_bma_no is None  # bmaNo war None im Event -> nicht gesetzt
+    check_db.close()
+
+
+def test_enrich_fills_caller_name_and_phone():
+    event = _event(
+        17,
+        caller_list=[{"callerName": "Max Mustermann", "callerNumber": "+43 664 123456"}],
+    )
+    db = _session()
+    incident_id = _make_incident_id(db, lis_operation_number=event["eventNumber"])
+    db.close()
+
+    dibos_enrich.enrich_events_for_org(ORG_ID, [event])
+
+    check_db = _session()
+    refreshed = check_db.get(Incident, incident_id)
+    assert refreshed.caller_name == "Max Mustermann"
+    assert refreshed.caller_phone == "+43 664 123456"
+    check_db.close()
+
+
+def test_enrich_does_not_overwrite_existing_caller_fields():
+    event = _event(
+        18,
+        caller_list=[{"callerName": "DIBOS Anrufer", "callerNumber": "+43 5574 999"}],
+    )
+    db = _session()
+    incident_id = _make_incident_id(db, lis_operation_number=event["eventNumber"])
+    incident = db.get(Incident, incident_id)
+    incident.caller_name = "Alarm-Webhook Anrufer"
+    incident.caller_phone = "+43 664 111"
+    db.commit()
+    db.close()
+
+    dibos_enrich.enrich_events_for_org(ORG_ID, [event])
+
+    check_db = _session()
+    refreshed = check_db.get(Incident, incident_id)
+    assert refreshed.caller_name == "Alarm-Webhook Anrufer"
+    assert refreshed.caller_phone == "+43 664 111"
+    check_db.close()
+
+
+def test_enrich_skips_caller_without_phone_number():
+    event = _event(19)
+    db = _session()
+    incident_id = _make_incident_id(db, lis_operation_number=event["eventNumber"])
+    db.close()
+
+    dibos_enrich.enrich_events_for_org(ORG_ID, [event])
+
+    check_db = _session()
+    refreshed = check_db.get(Incident, incident_id)
+    assert refreshed.caller_name is None
+    assert refreshed.caller_phone is None
     check_db.close()
 
 

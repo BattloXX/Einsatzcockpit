@@ -243,6 +243,23 @@ def _enrich_address(incident, location: dict) -> bool:
     return changed
 
 
+def _enrich_caller(incident, callers: list[dict]) -> bool:
+    """Ergänzt fehlende Anrufer-/Melderfelder — überschreibt NIE bereits
+    vorhandene Werte (z.B. vom Alarm-Webhook oder manueller Korrektur)."""
+    caller = next((item for item in callers if item.get("number")), None)
+    if caller is None:
+        return False
+
+    changed = False
+    if not incident.caller_name and caller.get("name"):
+        incident.caller_name = caller["name"]
+        changed = True
+    if not incident.caller_phone:
+        incident.caller_phone = caller["number"]
+        changed = True
+    return changed
+
+
 def _enrich_metadata(incident, event: dict) -> bool:
     """Aktualisiert die reinen DIBOS-Zusatzfelder (dibos_*) — diese kommen nur
     von hier, daher unbedenklich bei jedem Poll zu überschreiben (Idempotenz:
@@ -536,6 +553,7 @@ def enrich_events_for_org(org_id: int, raw_events: list[dict], *, create_inciden
                 continue
             changed = False
             changed |= _enrich_address(incident, event.get("location") or {})
+            changed |= _enrich_caller(incident, event.get("callers") or [])
             changed |= _enrich_metadata(incident, event)
             changed |= _sync_dibos_comments(db, org_id, incident, event.get("comments") or [])
             if event.get("bmaNo"):

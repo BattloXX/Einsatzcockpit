@@ -151,6 +151,14 @@
           {% if incident.dibos_event_comment %} · {{ incident.dibos_event_comment }}{% endif %}
         </div>
         {% endif %}
+        {% if incident.caller_name or incident.caller_phone %}
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;">
+          {% if incident.caller_name %}<span>👤 {{ incident.caller_name }}</span>{% endif %}
+          {% if incident.caller_phone %}
+          <a href="tel:{{ incident.caller_phone|replace(' ', '') }}" class="btn btn--primary objekt-einsatz-telbtn">📞 {{ incident.caller_phone }}</a>
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
       <div x-data="rsvpWidget({{ incident.id }})" x-init="init()" x-show="(zusagen + absagen) > 0" x-cloak
            style="display:flex;gap:6px;align-items:center;" title="Rückmeldungen (Zu-/Absagen)">
