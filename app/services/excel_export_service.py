@@ -120,8 +120,8 @@ def exportiere_einsatzstatistik(stats, von, bis, org) -> bytes:
     for label, value in (
         ("Echte Einsaetze", stats.total), ("Uebungen", stats.total_exercises),
         ("Brand", stats.fire_count), ("Technisch", stats.technical_count),
-        ("Sonstige", stats.other_count), ("Durchschnittsdauer (min)", stats.avg_duration_min),
-        ("Zeit bis erste Fahrzeug-Disposition (min)", stats.avg_time_to_first_vehicle_min),
+        ("Sonstige", stats.other_count), ("Median Dauer (min)", stats.avg_duration_min),
+        ("Median bis erste Fahrzeug-Disposition (min)", stats.avg_time_to_first_vehicle_min),
     ):
         overview.append([label, value if value is not None else ""])
 

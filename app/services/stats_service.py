@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from statistics import median
 from typing import Any
 
 from sqlalchemy import or_
@@ -65,7 +66,7 @@ def get_stats(
     )
     alarm_by_code = {a.code: a for a in alarm_rows}
     alarm_counts: dict[str, int] = {}
-    categories = {"B": 0, "T": 0, "other": 0}
+    categories = {"fire": 0, "technical": 0, "other": 0}
     durations: list[float] = []
     months: dict[str, int] = {}
     markers: list[dict[str, Any]] = []
@@ -73,7 +74,12 @@ def get_stats(
         alarm_counts[incident.alarm_type_code] = alarm_counts.get(incident.alarm_type_code, 0) + 1
         category = (alarm_by_code.get(incident.alarm_type_code).category
                     if alarm_by_code.get(incident.alarm_type_code) else "")
-        categories[category if category in ("B", "T") else "other"] += 1
+        if category in ("B", "F"):
+            categories["fire"] += 1
+        elif category == "T":
+            categories["technical"] += 1
+        else:
+            categories["other"] += 1
         month = to_org_tz(incident.started_at, org).strftime("%Y-%m")
         months[month] = months.get(month, 0) + 1
         if incident.closed_at and incident.closed_at >= incident.started_at:
@@ -145,10 +151,13 @@ def get_stats(
 
     return StatsResult(
         total=len(incidents), total_exercises=len(exercises),
-        fire_count=categories["B"], technical_count=categories["T"],
+        fire_count=categories["fire"], technical_count=categories["technical"],
         other_count=categories["other"],
-        avg_duration_min=round(sum(durations) / len(durations), 1) if durations else None,
-        avg_time_to_first_vehicle_min=round(sum(reaction) / len(reaction), 1) if reaction else None,
+        # Lifecycle auto-closes and retroactively assigned vehicles preserve valid but
+        # potentially days-late timestamps. The median keeps those records in the
+        # statistics without allowing that outlier class to dominate either KPI.
+        avg_duration_min=round(median(durations), 1) if durations else None,
+        avg_time_to_first_vehicle_min=round(median(reaction), 1) if reaction else None,
         by_month=[{"month": key, "count": months[key]} for key in sorted(months)],
         by_alarm_type=by_alarm_type,
         vehicle_usage=sorted(usage.values(), key=lambda item: (-item["count"], item["code"])),

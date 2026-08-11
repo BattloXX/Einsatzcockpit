@@ -8,7 +8,7 @@
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution: "&copy; OpenStreetMap"}).addTo(map);
       var group = window.L.markerClusterGroup ? L.markerClusterGroup() : L.layerGroup();
       markers.forEach(function (item) {
-        var color = item.category === "B" ? "#d42225" : (item.category === "T" ? "#1877f2" : "#687386");
+        var color = (item.category === "B" || item.category === "F") ? "#d42225" : (item.category === "T" ? "#1877f2" : "#687386");
         var icon = L.divIcon({className: "stats-marker", html: "<span style='background:" + color + "'></span>", iconSize: [18, 18]});
         L.marker([item.lat, item.lng], {icon: icon}).bindPopup((item.alarm_type_code || "") + "<br>" + (item.address || "")).addTo(group);
       });

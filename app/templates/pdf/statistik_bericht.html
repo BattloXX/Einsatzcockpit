@@ -21,8 +21,8 @@ td { padding: 5pt; border-bottom: 1px solid #ddd; }
   <div class="kpi"><div class="value">{{ stats.total }}</div>Einsaetze</div>
   <div class="kpi"><div class="value">{{ stats.fire_count }}</div>Brand</div>
   <div class="kpi"><div class="value">{{ stats.technical_count }}</div>Technisch</div>
-  <div class="kpi"><div class="value">{{ stats.avg_duration_min if stats.avg_duration_min is not none else '-' }}</div>Ø Dauer (min)</div>
-  <div class="kpi"><div class="value">{{ stats.avg_time_to_first_vehicle_min if stats.avg_time_to_first_vehicle_min is not none else '-' }}</div>Ø erste Disposition (min)</div>
+  <div class="kpi"><div class="value">{{ stats.avg_duration_min if stats.avg_duration_min is not none else '-' }}</div>Median Dauer (min)</div>
+  <div class="kpi"><div class="value">{{ stats.avg_time_to_first_vehicle_min if stats.avg_time_to_first_vehicle_min is not none else '-' }}</div>Median erste Disposition (min)</div>
 </div>
 <table><tr><td style="width:42%;vertical-align:top">{{ charts.distribution|safe }}</td><td style="width:58%;vertical-align:top">{{ charts.months|safe }}</td></tr></table>
 <h2>Alarmstichwoerter</h2>

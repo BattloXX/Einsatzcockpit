@@ -27,11 +27,11 @@ def test_stats_aggregates_and_reaction_time():
     db.add_all([org_a, org_b])
     db.flush()
     db.add_all([
-        AlarmType(org_id=org_a.id, code="B1", category="B", label="Brand"),
+        AlarmType(org_id=org_a.id, code="F1", category="F", label="Brand"),
         AlarmType(org_id=org_a.id, code="T1", category="T", label="Technisch"),
     ])
     started = datetime(2026, 3, 10, 8, 0)
-    fire = Incident(primary_org_id=org_a.id, alarm_type_code="B1", started_at=started,
+    fire = Incident(primary_org_id=org_a.id, alarm_type_code="F1", started_at=started,
                     closed_at=started + timedelta(minutes=60), is_exercise=False)
     technical = Incident(primary_org_id=org_a.id, alarm_type_code="T1", started_at=started,
                           is_exercise=False)
@@ -56,6 +56,7 @@ def test_stats_aggregates_and_reaction_time():
     assert stats.total_exercises == 1
     assert stats.fire_count == 1
     assert stats.technical_count == 1
+    assert stats.other_count == 0
     assert stats.avg_duration_min == 60
     assert stats.avg_time_to_first_vehicle_min == 7
     assert sum(row["count"] for row in stats.by_alarm_type) == stats.total
@@ -72,4 +73,41 @@ def test_stats_aggregates_and_reaction_time():
     assert workbook["Einsaetze"].max_row == stats.total + 1
     pdf = render_statistik_bericht_pdf(stats, org_a, started.date(), started.date())
     assert pdf.startswith(b"%PDF")
+    db.close()
+
+
+def test_stats_timestamp_kpis_use_median_for_delayed_records():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    set_tenant_context(db, None)
+    org = FireDept(slug="stats-median", name="Stats Median", timezone="Europe/Vienna")
+    db.add(org)
+    db.flush()
+    db.add(AlarmType(org_id=org.id, code="T1", category="T", label="Technisch"))
+
+    started = datetime(2026, 3, 10, 8, 0)
+    for index, (duration, dispatch) in enumerate([(30, 5), (60, 10), (6000, 5000)]):
+        incident = Incident(
+            primary_org_id=org.id, alarm_type_code="T1",
+            started_at=started + timedelta(minutes=index),
+            closed_at=started + timedelta(minutes=index + duration), is_exercise=False,
+        )
+        db.add(incident)
+        db.flush()
+        column = IncidentColumn(
+            incident_id=incident.id, code="active", title="Aktiv", column_kind="vehicles",
+        )
+        vehicle = VehicleMaster(dept_id=org.id, code=f"FZG{index}", name=f"Fahrzeug {index}")
+        db.add_all([column, vehicle])
+        db.flush()
+        db.add(IncidentVehicle(
+            incident_id=incident.id, column_id=column.id, vehicle_master_id=vehicle.id,
+            created_at=incident.started_at + timedelta(minutes=dispatch),
+        ))
+    db.commit()
+
+    stats = get_stats(db, org.id, started.date(), started.date(), user=None)
+    assert stats.avg_duration_min == 60
+    assert stats.avg_time_to_first_vehicle_min == 10
     db.close()

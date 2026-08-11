@@ -10,7 +10,7 @@
   <a class="btn btn--ghost" href="/statistik/bericht.pdf?von={{ von }}&bis={{ bis }}">PDF-Bericht</a>
 </form>
 <div class="kpi-grid stats-kpis">
-{% for value, label in [(stats.total, 'Einsaetze'), (stats.fire_count, 'Brand'), (stats.technical_count, 'Technisch'), (stats.avg_duration_min if stats.avg_duration_min is not none else '-', 'Ø Dauer (min)'), (stats.avg_time_to_first_vehicle_min if stats.avg_time_to_first_vehicle_min is not none else '-', 'Ø bis erste Disposition (min)')] %}
+{% for value, label in [(stats.total, 'Einsaetze'), (stats.fire_count, 'Brand'), (stats.technical_count, 'Technisch'), (stats.avg_duration_min if stats.avg_duration_min is not none else '-', 'Median Dauer (min)'), (stats.avg_time_to_first_vehicle_min if stats.avg_time_to_first_vehicle_min is not none else '-', 'Median bis erste Disposition (min)')] %}
 <div class="kpi-card"><div class="kpi-card__value">{{ value }}</div><div class="kpi-card__label">{{ label }}</div></div>{% endfor %}
 </div>
 <div class="stats-bento">
