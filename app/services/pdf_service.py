@@ -392,3 +392,23 @@ def render_fahrtenbuch_bericht_pdf(
         buf = io.BytesIO()
         pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
         return buf.getvalue()
+
+
+def render_statistik_bericht_pdf(stats, org, von, bis, base_url: str = "") -> bytes:
+    """Einsatzstatistik als druckbaren Zeitraumbericht."""
+    from app.services.chart_svg import build_statistik_charts
+    template = templates.env.get_template("pdf/statistik_bericht.html")
+    html_str = template.render(
+        stats=stats, charts=build_statistik_charts(stats), org=org, von=von, bis=bis,
+        now=datetime.now(UTC), base_url=base_url,
+    )
+    try:
+        from weasyprint import HTML
+        buf = io.BytesIO()
+        HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+        return buf.getvalue()
+    except OSError:
+        from xhtml2pdf import pisa
+        buf = io.BytesIO()
+        pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
+        return buf.getvalue()

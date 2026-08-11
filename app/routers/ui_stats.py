@@ -1,6 +1,8 @@
 """Statistik-Dashboard."""
+from datetime import date
+
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -30,49 +32,81 @@ def _apply_org_scope(q, user, db: Session):
     )
 
 
+def _parse_range(value: str, fallback: date) -> date:
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _stats_context(request: Request, db: Session, user, von: str, bis: str) -> dict:
+    from app.models.master import FireDept
+    from app.services.stats_service import default_range, get_stats
+
+    org = user.org or db.query(FireDept).filter(FireDept.id == user.org_id).first()
+    default_von, default_bis = default_range(org)
+    von_date = _parse_range(von, default_von)
+    bis_date = _parse_range(bis, default_bis)
+    if von_date > bis_date:
+        von_date, bis_date = bis_date, von_date
+    result = get_stats(db, user.org_id, von_date, bis_date, user=user)
+    return {
+        "user": user, "org": org, "stats": result,
+        "von": von_date, "bis": bis_date,
+        "fb_stats": _fahrtenbuch_stats(user.org_id, db) if user.org_id else None,
+    }
+
+
 @router.get("/statistik", response_class=HTMLResponse)
-async def stats(request: Request, db: Session = Depends(get_db)):
+async def stats(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
 
-    base = lambda q: _apply_org_scope(q, user, db)  # noqa: E731
+    return templates.TemplateResponse(
+        request, "stats/dashboard.html", _stats_context(request, db, user, von, bis)
+    )
 
-    # Total incidents (excluding exercises)
-    total = base(
-        db.query(func.count(Incident.id)).filter(Incident.is_exercise == False)  # noqa: E712
-    ).scalar()
-    total_exercises = base(
-        db.query(func.count(Incident.id)).filter(Incident.is_exercise == True)  # noqa: E712
-    ).scalar()
 
-    # Per alarm type
-    by_alarm = base(
-        db.query(Incident.alarm_type_code, func.count(Incident.id))
-        .filter(Incident.is_exercise == False)  # noqa: E712
-        .group_by(Incident.alarm_type_code)
-    ).all()
+@router.get("/statistik/inhalt", response_class=HTMLResponse)
+async def stats_content(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse(
+        request, "stats/_dashboard_content.html", _stats_context(request, db, user, von, bis)
+    )
 
-    # Per month (last 12 months)
-    by_month = base(
-        db.query(
-            func.date_format(Incident.started_at, "%Y-%m").label("month"),
-            func.count(Incident.id).label("count"),
-        )
-        .filter(Incident.is_exercise == False)  # noqa: E712
-        .group_by("month")
-        .order_by("month")
-        .limit(12)
-    ).all()
 
-    fb_stats = _fahrtenbuch_stats(user.org_id, db) if user.org_id else None
+@router.get("/statistik/export.xlsx")
+async def stats_export(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    context = _stats_context(request, db, user, von, bis)
+    from app.services.excel_export_service import exportiere_einsatzstatistik
+    content = exportiere_einsatzstatistik(
+        context["stats"], context["von"], context["bis"], context["org"]
+    )
+    org_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in context["org"].name)
+    filename = f"Einsatzstatistik_{org_name}_{context['von']}_{context['bis']}.xlsx"
+    return Response(content=content, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
-    return templates.TemplateResponse(request, "stats/dashboard.html", {
-        "user": user,
-        "total": total, "total_exercises": total_exercises,
-        "by_alarm": by_alarm, "by_month": by_month,
-        "fb_stats": fb_stats,
-    })
+
+@router.get("/statistik/bericht.pdf")
+async def stats_pdf(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    context = _stats_context(request, db, user, von, bis)
+    from app.services.pdf_service import render_statistik_bericht_pdf
+    content = render_statistik_bericht_pdf(
+        context["stats"], context["org"], context["von"], context["bis"],
+        base_url=str(request.base_url),
+    )
+    return Response(content=content, media_type="application/pdf",
+                    headers={"Content-Disposition": "inline; filename=Einsatzstatistik.pdf"})
 
 
 @router.get("/statistik/fahrtenbuch", response_class=HTMLResponse)

@@ -51,6 +51,7 @@ from app.routers import (
     ui_hilfe,
     ui_incident,
     ui_infoscreen_alarm,
+    ui_infoscreen_stats,
     ui_invitation,
     ui_lagedokument,
     ui_lagefuehrung,
@@ -709,6 +710,7 @@ app.include_router(ui_foerderstrecke.public_router)
 app.include_router(ui_gateway.router)
 app.include_router(ui_druck.router)
 app.include_router(ui_infoscreen_alarm.router)
+app.include_router(ui_infoscreen_stats.router)
 app.include_router(ui_verleih.router)
 app.include_router(ui_fahrtenbuch.router)
 app.include_router(ui_fahrtenbuch_admin.router)

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<style>
+@page { size: A4 landscape; margin: 12mm; }
+body { font-family: Arial, sans-serif; color: #20242b; font-size: 10pt; }
+header { background: #d42225; color: white; padding: 12pt; }
+h1 { margin: 0 0 4pt; } h2 { color: #d42225; margin-top: 16pt; }
+.kpis { display: table; width: 100%; margin: 12pt 0; table-layout: fixed; }
+.kpi { display: table-cell; border: 1px solid #ddd; padding: 10pt; text-align: center; }
+.value { font-size: 20pt; font-weight: bold; }
+table { width: 100%; border-collapse: collapse; }
+th { background: #333; color: white; text-align: left; padding: 5pt; }
+td { padding: 5pt; border-bottom: 1px solid #ddd; }
+</style>
+</head>
+<body>
+<header><h1>Einsatzstatistik</h1><div>{{ org.name }} | {{ von }} bis {{ bis }}</div></header>
+<div class="kpis">
+  <div class="kpi"><div class="value">{{ stats.total }}</div>Einsaetze</div>
+  <div class="kpi"><div class="value">{{ stats.fire_count }}</div>Brand</div>
+  <div class="kpi"><div class="value">{{ stats.technical_count }}</div>Technisch</div>
+  <div class="kpi"><div class="value">{{ stats.avg_duration_min if stats.avg_duration_min is not none else '-' }}</div>Ø Dauer (min)</div>
+  <div class="kpi"><div class="value">{{ stats.avg_time_to_first_vehicle_min if stats.avg_time_to_first_vehicle_min is not none else '-' }}</div>Ø erste Disposition (min)</div>
+</div>
+<table><tr><td style="width:42%;vertical-align:top">{{ charts.distribution|safe }}</td><td style="width:58%;vertical-align:top">{{ charts.months|safe }}</td></tr></table>
+<h2>Alarmstichwoerter</h2>
+<table><thead><tr><th>Code</th><th>Bezeichnung</th><th>Anzahl</th><th>Anteil</th></tr></thead><tbody>
+{% for row in stats.by_alarm_type %}<tr><td>{{ row.code }}</td><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.percent }} %</td></tr>{% endfor %}
+</tbody></table>
+<h2>Fahrzeugnutzung</h2>
+<table><thead><tr><th>Fahrzeug</th><th>Zuweisungen</th><th>km</th></tr></thead><tbody>
+{% for row in stats.vehicle_usage %}<tr><td>{{ row.code }} - {{ row.name }}</td><td>{{ row.count }}</td><td>{{ row.km }}</td></tr>{% endfor %}
+</tbody></table>
+</body></html>

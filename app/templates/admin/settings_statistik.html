@@ -1,0 +1,13 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Statistik-Infoscreen{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Statistik-Infoscreen'}]) }}{% endblock %}
+{% block admin_content %}
+<div class="page-header"><div><h1>Statistik-Infoscreen</h1><p class="page-header__sub">Oeffentlichen Wandmonitor verwalten</p></div></div>
+{% if is_sysadmin and all_orgs %}
+<section class="card mb-4"><div class="card-body"><select class="form-control" onchange="location.href='/admin/settings/statistik?org_id='+this.value">
+{% for item in all_orgs %}<option value="{{ item.id }}" {% if org and org.id == item.id %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+</select></div></section>
+{% endif %}
+{% include "admin/_settings_statistik_panel.html" %}
+{% endblock %}

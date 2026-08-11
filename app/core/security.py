@@ -64,6 +64,11 @@ def generate_weather_dashboard_token() -> str:
     return "wxdb_" + secrets.token_urlsafe(32)
 
 
+def generate_statistik_dashboard_token() -> str:
+    """Oeffentlicher Infoscreen-Token fuer das Statistik-Dashboard einer Org."""
+    return "stdb_" + secrets.token_urlsafe(32)
+
+
 def generate_gateway_token() -> str:
     """Langlebiges Device-Token für den Print & Alarm Gateway-Container (nach Pairing)."""
     return "ecpg_" + secrets.token_urlsafe(32)

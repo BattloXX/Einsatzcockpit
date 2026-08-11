@@ -837,6 +837,99 @@ async def weather_toggle(
     )
 
 
+def _stats_settings_context(request, db, user, org_id, **extra) -> dict:
+    from app.models.stats import StatistikDashboardToken
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = org_id if (is_sysadmin and org_id) else user.org_id
+    org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
+    org_settings = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+        if effective_org_id else None
+    )
+    tokens = (db.query(StatistikDashboardToken)
+              .filter(StatistikDashboardToken.org_id == effective_org_id)
+              .order_by(StatistikDashboardToken.created_at.desc()).all()) if effective_org_id else []
+    ctx = {
+        "user": user, "org": org, "org_settings": org_settings, "dashboard_tokens": tokens,
+        "is_sysadmin": is_sysadmin,
+        "all_orgs": db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else [],
+        "new_dashboard_token": None, "new_dashboard_token_label": None, "dashboard_qr": None,
+    }
+    ctx.update(extra)
+    if ctx.get("new_dashboard_token"):
+        base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
+        url = f"{base_url}/infoscreen/statistik/{ctx['new_dashboard_token']}"
+        ctx["new_dashboard_url"] = url
+        ctx["dashboard_qr"] = _generate_qr_datauri(url)
+    return ctx
+
+
+@router.get("/settings/statistik", response_class=HTMLResponse)
+def statistik_settings_page(request: Request, db=Depends(get_db),
+                             user: User = Depends(require_role("org_admin", "admin")),
+                             org_id: int | None = None):
+    return templates.TemplateResponse(request, "admin/settings_statistik.html",
+                                      _stats_settings_context(request, db, user, org_id))
+
+
+@router.post("/settings/statistik/infoscreen-toggle", response_class=HTMLResponse)
+async def statistik_toggle(request: Request, db=Depends(get_db),
+                           user: User = Depends(require_role("org_admin", "admin")),
+                           enabled_raw: str = Form(""), target_org_id: int | None = Form(None)):
+    is_sysadmin = has_role(user, "system_admin")
+    org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+    if not org_id:
+        raise HTTPException(status_code=400)
+    settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    if not settings_row:
+        settings_row = OrgSettings(org_id=org_id)
+        db.add(settings_row)
+    settings_row.statistik_infoscreen_enabled = bool(enabled_raw)
+    db.commit()
+    return templates.TemplateResponse(request, "admin/_settings_statistik_panel.html",
+                                      _stats_settings_context(request, db, user, org_id if is_sysadmin else None))
+
+
+@router.post("/settings/statistik/dashboard-token/neu", response_class=HTMLResponse)
+async def statistik_token_create(request: Request, db=Depends(get_db),
+                                 user: User = Depends(require_role("org_admin", "admin")),
+                                 label: str = Form(...), target_org_id: int | None = Form(None)):
+    from app.core.audit import write_audit
+    from app.core.security import generate_statistik_dashboard_token, hash_api_key
+    from app.models.stats import StatistikDashboardToken
+    is_sysadmin = has_role(user, "system_admin")
+    org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
+    if not org_id:
+        raise HTTPException(status_code=400)
+    raw = generate_statistik_dashboard_token()
+    label = label.strip() or "Unbenannt"
+    db.add(StatistikDashboardToken(token_hash=hash_api_key(raw), label=label, org_id=org_id))
+    write_audit(db, "admin.statistik_dashboard_token.created", user_id=user.id,
+                payload={"label": label, "org_id": org_id})
+    db.commit()
+    return templates.TemplateResponse(request, "admin/_settings_statistik_panel.html",
+        _stats_settings_context(request, db, user, org_id if is_sysadmin else None,
+                                new_dashboard_token=raw, new_dashboard_token_label=label))
+
+
+@router.post("/settings/statistik/dashboard-token/{token_id}/loeschen", response_class=HTMLResponse)
+async def statistik_token_delete(token_id: int, request: Request, db=Depends(get_db),
+                                 user: User = Depends(require_role("org_admin", "admin")),
+                                 target_org_id: int | None = Form(None)):
+    from app.core.audit import write_audit
+    from app.models.stats import StatistikDashboardToken
+    tok = db.get(StatistikDashboardToken, token_id)
+    if tok and same_org_or_system_admin(user, tok.org_id):
+        write_audit(db, "admin.statistik_dashboard_token.deleted", user_id=user.id,
+                    entity_type="statistik_dashboard_token", entity_id=token_id)
+        db.delete(tok)
+        db.commit()
+    is_sysadmin = has_role(user, "system_admin")
+    org_id = target_org_id if (is_sysadmin and target_org_id) else None
+    return templates.TemplateResponse(request, "admin/_settings_statistik_panel.html",
+                                      _stats_settings_context(request, db, user, org_id))
+
+
 # ── Infoscreen Darstellungszeitraum ──────────────────────────────────────────
 
 @router.post("/settings/wetter/infoscreen-hours", response_class=HTMLResponse)

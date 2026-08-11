@@ -1,81 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Statistik{% endblock %}
+{% block title %}Einsatzstatistik{% endblock %}
 {% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<link rel="stylesheet" href="/static/css/MarkerCluster.Default.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/leaflet.markercluster.js"></script>
 {% endblock %}
 {% block content %}
-<div class="page-header">
-  <h2>Statistik-Dashboard</h2>
-</div>
-<div class="kpi-grid">
-  <div class="kpi-card">
-    <div class="kpi-card__value">{{ total }}</div>
-    <div class="kpi-card__label">Einsätze gesamt</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-card__value">{{ total_exercises }}</div>
-    <div class="kpi-card__label">davon Übungen</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-card__value">{{ by_alarm|length }}</div>
-    <div class="kpi-card__label">Einsatztypen</div>
-  </div>
-</div>
-
-<div class="charts-grid">
-  <div class="chart-box">
-    <h3>Einsätze pro Monat</h3>
-    <canvas id="monthChart"></canvas>
-  </div>
-  <div class="chart-box">
-    <h3>Nach Alarmstichwort</h3>
-    <canvas id="alarmChart"></canvas>
-  </div>
-</div>
-{% if fb_stats %}
-<div class="kpi-grid" style="margin-top:1.5rem;">
-  <div class="kpi-card">
-    <div class="kpi-card__value">{{ fb_stats.total }}</div>
-    <div class="kpi-card__label">Fahrten gesamt</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-card__value">{{ fb_stats.einsatz }}</div>
-    <div class="kpi-card__label">Einsatzfahrten</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-card__value">{{ fb_stats.uebung }}</div>
-    <div class="kpi-card__label">Übungsfahrten</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-card__value">{{ fb_stats.km_sum }}</div>
-    <div class="kpi-card__label">km gesamt</div>
-  </div>
-</div>
-<div style="margin-top:.75rem;">
-  <a href="/statistik/fahrtenbuch" class="btn btn--ghost btn--sm">Fahrtenbuch-Statistik &rarr;</a>
-  <a href="/verwaltung/fahrten" class="btn btn--ghost btn--sm" style="margin-left:.5rem;">Fahrtenbuch-Verwaltung &rarr;</a>
-</div>
-{% endif %}
+<div class="page-header"><div><h1>Einsatzstatistik</h1><p class="page-header__sub">Auswertung fuer {{ org.name }}</p></div></div>
+<div id="stats-content">{% include "stats/_dashboard_content.html" %}</div>
 {% endblock %}
-
-{% block scripts %}
-<script>
-new Chart(document.getElementById('monthChart'), {
-  type: 'bar',
-  data: {
-    labels: {{ by_month|map(attribute=0)|list|tojson }},
-    datasets: [{ label: 'Einsätze', data: {{ by_month|map(attribute=1)|list|tojson }},
-      backgroundColor: '#d42225' }]
-  },
-  options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
-});
-new Chart(document.getElementById('alarmChart'), {
-  type: 'doughnut',
-  data: {
-    labels: {{ by_alarm|map(attribute=0)|list|tojson }},
-    datasets: [{ data: {{ by_alarm|map(attribute=1)|list|tojson }},
-      backgroundColor: ['#d42225','#1877f2','#8e44ad','#2e9d55','#e67e22','#00a6a6','#687386','#d83030','#18a957','#f2b02e','#555'] }]
-  }
-});
-</script>
-{% endblock %}
+{% block scripts %}<script src="/static/js/stats_karte.js"></script>{% endblock %}

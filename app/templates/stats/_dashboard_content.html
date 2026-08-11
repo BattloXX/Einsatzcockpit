@@ -1,0 +1,28 @@
+<div class="stats-dashboard">
+<form class="card stats-filter" hx-get="/statistik/inhalt" hx-target="#stats-content" hx-swap="innerHTML" hx-push-url="true">
+  <label>Von <input class="form-control" type="date" name="von" value="{{ von }}"></label>
+  <label>Bis <input class="form-control" type="date" name="bis" value="{{ bis }}"></label>
+  <button class="btn btn--primary" type="submit">Anwenden</button>
+  <button class="btn btn--ghost" type="button" onclick="var d=new Date();this.form.von.value=d.getFullYear()+'-01-01';this.form.bis.value=d.toISOString().slice(0,10);this.form.requestSubmit()">Dieses Jahr</button>
+  <button class="btn btn--ghost" type="button" onclick="var d=new Date(),v=new Date(d);v.setFullYear(v.getFullYear()-1);this.form.von.value=v.toISOString().slice(0,10);this.form.bis.value=d.toISOString().slice(0,10);this.form.requestSubmit()">Letzte 12 Monate</button>
+  <button class="btn btn--ghost" type="button" onclick="var d=new Date(),v=new Date(d.getFullYear(),d.getMonth()-1,1),b=new Date(d.getFullYear(),d.getMonth(),0);this.form.von.value=v.toISOString().slice(0,10);this.form.bis.value=b.toISOString().slice(0,10);this.form.requestSubmit()">Letzter Monat</button>
+  <a class="btn btn--ghost" href="/statistik/export.xlsx?von={{ von }}&bis={{ bis }}">Excel-Export</a>
+  <a class="btn btn--ghost" href="/statistik/bericht.pdf?von={{ von }}&bis={{ bis }}">PDF-Bericht</a>
+</form>
+<div class="kpi-grid stats-kpis">
+{% for value, label in [(stats.total, 'Einsaetze'), (stats.fire_count, 'Brand'), (stats.technical_count, 'Technisch'), (stats.avg_duration_min if stats.avg_duration_min is not none else '-', 'Ø Dauer (min)'), (stats.avg_time_to_first_vehicle_min if stats.avg_time_to_first_vehicle_min is not none else '-', 'Ø bis erste Disposition (min)')] %}
+<div class="kpi-card"><div class="kpi-card__value">{{ value }}</div><div class="kpi-card__label">{{ label }}</div></div>{% endfor %}
+</div>
+<div class="stats-bento">
+  <section class="chart-box stats-map-box"><h3>Einsatzorte</h3><div id="stats-map" class="stats-map"></div></section>
+  <section class="chart-box"><h3>Verteilung</h3><canvas id="stats-category-chart"></canvas></section>
+  <section class="chart-box"><h3>Einsaetze pro Monat</h3><canvas id="stats-month-chart"></canvas></section>
+  <section class="chart-box stats-vehicle-chart"><h3>Fahrzeugnutzung</h3><canvas id="stats-vehicle-chart"></canvas></section>
+</div>
+<script type="application/json" id="stats-map-data">{{ stats.map_markers|tojson }}</script>
+<script type="application/json" id="stats-chart-data">{{ {'categories': [stats.fire_count, stats.technical_count, stats.other_count], 'months': stats.by_month, 'vehicles': stats.vehicle_usage}|tojson }}</script>
+<div class="stats-vehicle-cards">{% for row in stats.vehicle_usage %}<article class="kpi-card"><strong>{{ row.code }}</strong><span>{{ row.count }} Einsaetze</span><span>{{ row.km }} km</span></article>{% endfor %}</div>
+<section class="chart-box"><h3>Stichwort-Drilldown</h3><table class="table table-admin--cards"><thead><tr><th>Code</th><th>Bezeichnung</th><th>Anzahl</th><th>Anteil</th></tr></thead><tbody>{% for row in stats.by_alarm_type %}<tr><td data-label="Code">{{ row.code }}</td><td data-label="Bezeichnung">{{ row.label }}</td><td data-label="Anzahl">{{ row.count }}</td><td data-label="Anteil">{{ row.percent }} %</td></tr>{% else %}<tr><td colspan="4">Keine Einsaetze im Zeitraum.</td></tr>{% endfor %}</tbody></table></section>
+<section class="chart-box"><h3>Letzte Einsaetze</h3><table class="table table-admin--cards"><thead><tr><th>Beginn</th><th>Nr.</th><th>Stichwort</th><th>Adresse</th></tr></thead><tbody>{% for incident in stats.recent_incidents %}<tr><td data-label="Beginn">{{ incident.started_at|local_datetime }}</td><td data-label="Nr.">{{ incident.nummer or '-' }}</td><td data-label="Stichwort">{{ incident.alarm_type_code }}</td><td data-label="Adresse">{{ incident.address_street or '' }} {{ incident.address_no or '' }}, {{ incident.address_city or '' }}</td></tr>{% else %}<tr><td colspan="4">Keine Einsaetze im Zeitraum.</td></tr>{% endfor %}</tbody></table></section>
+{% if fb_stats %}<section class="chart-box"><h3>Fahrtenbuch</h3><p>{{ fb_stats.total }} Fahrten, {{ fb_stats.km_sum }} km</p><a class="btn btn--ghost" href="/statistik/fahrtenbuch">Fahrtenbuch-Statistik</a> <a class="btn btn--ghost" href="/verwaltung/fahrten">Fahrtenbuch-Verwaltung</a></section>{% endif %}
+</div>

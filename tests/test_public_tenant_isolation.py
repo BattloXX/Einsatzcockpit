@@ -15,6 +15,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings, VehicleMaster
 from app.models.objekt import AlarmInfoscreenToken
+from app.models.stats import StatistikDashboardToken
 from app.models.wasserstelle import Wasserstelle
 
 ORG_A = 1  # FF Wolfurt (seeded)
@@ -24,6 +25,8 @@ RAW_TOKEN_B = "iso-test-infoscreen-token-org-b"
 FAB_TOKEN_A = "iso-test-fahrtenbuch-a"
 FAB_TOKEN_B = "iso-test-fahrtenbuch-b"
 FAHRZEUG_B_CODE = "ISO-GEHEIM-TLF-B"  # Formular rendert fz.code, nicht fz.name
+STATS_TOKEN_A = "iso-test-statistik-a"
+STATS_TOKEN_B = "iso-test-statistik-b"
 
 
 def _setup_zwei_orgs() -> int:
@@ -149,6 +152,66 @@ def test_infoscreen_gesperrter_token_401(client):
         assert r.status_code in (302, 401)
     finally:
         row.aktiv = True
+        db.commit()
+        db.close()
+
+
+# ── Statistik-Infoscreen (/infoscreen/statistik/{token}) ─────────────────────
+
+def _setup_statistik_tokens(org_b_id: int) -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        if not db.query(Incident).filter(
+            Incident.primary_org_id == org_b_id,
+            Incident.address_street == "Geheime Adresse der Org B",
+        ).first():
+            db.add(Incident(
+                primary_org_id=org_b_id, alarm_type_code="B3", status="active",
+                address_street="Geheime Adresse der Org B", address_no="42",
+                started_at=datetime.now(UTC).replace(tzinfo=None),
+            ))
+        for org_id, raw in ((ORG_A, STATS_TOKEN_A), (org_b_id, STATS_TOKEN_B)):
+            settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+            if settings_row is None:
+                settings_row = OrgSettings(org_id=org_id)
+                db.add(settings_row)
+            settings_row.statistik_infoscreen_enabled = True
+            if not db.query(StatistikDashboardToken).filter(
+                StatistikDashboardToken.token_hash == hash_api_key(raw)
+            ).first():
+                db.add(StatistikDashboardToken(org_id=org_id, token_hash=hash_api_key(raw), label="Test"))
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_statistik_infoscreen_token_sieht_keine_fremde_org(client):
+    org_b_id = _setup_zwei_orgs()
+    _setup_statistik_tokens(org_b_id)
+    response_a = client.get(f"/infoscreen/statistik/{STATS_TOKEN_A}")
+    assert response_a.status_code == 200
+    assert "Geheime Adresse der Org B" not in response_a.text
+    response_b = client.get(f"/infoscreen/statistik/{STATS_TOKEN_B}")
+    assert response_b.status_code == 200
+    assert "Geheime Adresse der Org B" in response_b.text
+
+
+def test_statistik_infoscreen_token_statuscodes(client):
+    org_b_id = _setup_zwei_orgs()
+    _setup_statistik_tokens(org_b_id)
+    unknown = client.get("/infoscreen/statistik/unbekannt", follow_redirects=False)
+    assert unknown.status_code in (302, 401)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == ORG_A).one()
+        settings_row.statistik_infoscreen_enabled = False
+        db.commit()
+        disabled = client.get(f"/infoscreen/statistik/{STATS_TOKEN_A}", follow_redirects=False)
+        assert disabled.status_code == 403
+    finally:
+        settings_row.statistik_infoscreen_enabled = True
         db.commit()
         db.close()
 

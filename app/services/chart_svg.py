@@ -257,6 +257,26 @@ def build_bericht_charts(daten: dict) -> dict[str, str]:
     }
 
 
+def build_statistik_charts(stats) -> dict[str, str]:
+    """Statische SVG-Diagramme fuer den Einsatzstatistik-PDF-Bericht."""
+    distribution = stacked_bar_svg(
+        ["Einsatzarten"],
+        [
+            {"name": "Brand", "color": "#d42225", "data": [stats.fire_count]},
+            {"name": "Technisch", "color": "#1877f2", "data": [stats.technical_count]},
+            {"name": "Sonstige", "color": "#687386", "data": [stats.other_count]},
+        ],
+        height=360, y_title="Einsaetze",
+    )
+    months = stacked_bar_svg(
+        [row["month"] for row in stats.by_month],
+        [{"name": "Einsaetze", "color": "#d42225",
+          "data": [row["count"] for row in stats.by_month]}],
+        height=420, y_title="Einsaetze",
+    )
+    return {"distribution": distribution, "months": months}
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Förderstrecken-Höhen-/Druckprofil (PR 4)
 # ══════════════════════════════════════════════════════════════════════════════

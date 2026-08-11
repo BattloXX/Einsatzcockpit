@@ -1,0 +1,18 @@
+<div id="statistik-settings-panel">
+{% if org %}
+<section class="card mb-4"><div class="card-header"><h2>Infoscreen</h2></div><div class="card-body">
+<form hx-post="/admin/settings/statistik/infoscreen-toggle" hx-target="#statistik-settings-panel" hx-swap="outerHTML">
+<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+<label class="toggle-label"><input type="checkbox" name="enabled_raw" value="1" {% if org_settings and org_settings.statistik_infoscreen_enabled %}checked{% endif %} onchange="this.form.requestSubmit()"> Statistik-Infoscreen aktiviert</label>
+</form></div></section>
+{% if new_dashboard_token %}<div class="alert alert--success"><strong>Token "{{ new_dashboard_token_label }}" wurde erzeugt. Diese URL wird nur einmal angezeigt.</strong>
+<textarea id="statsDashUrl" readonly class="form-control">{{ new_dashboard_url }}</textarea><button class="btn btn--sm" type="button" onclick="navigator.clipboard.writeText(document.getElementById('statsDashUrl').value)">URL kopieren</button>
+{% if dashboard_qr %}<img src="{{ dashboard_qr }}" alt="QR-Code" style="width:100px;height:100px">{% endif %}</div>{% endif %}
+<section class="card"><div class="card-header"><h2>Zugriffs-Tokens</h2></div><div class="card-body">
+<table class="table table-admin--cards"><thead><tr><th>Bezeichnung</th><th>Erstellt</th><th>Verwendet</th><th></th></tr></thead><tbody>
+{% for tok in dashboard_tokens %}<tr><td data-label="Bezeichnung">{{ tok.label }}</td><td data-label="Erstellt">{{ tok.created_at|local_datetime }}</td><td data-label="Verwendet">{{ tok.last_used_at|local_datetime if tok.last_used_at else 'noch nie' }}</td><td>
+<form hx-post="/admin/settings/statistik/dashboard-token/{{ tok.id }}/loeschen" hx-target="#statistik-settings-panel" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}<button class="btn btn--danger btn--sm">Loeschen</button></form>
+</td></tr>{% else %}<tr><td colspan="4">Noch keine Tokens.</td></tr>{% endfor %}</tbody></table>
+<form hx-post="/admin/settings/statistik/dashboard-token/neu" hx-target="#statistik-settings-panel" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}<label>Bezeichnung <input class="form-control" name="label" required></label><button class="btn btn--primary" type="submit">Token erzeugen</button></form>
+</div></section>{% endif %}
+</div>

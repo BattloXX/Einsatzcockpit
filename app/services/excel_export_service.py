@@ -103,6 +103,58 @@ def exportiere_fahrten(fahrten: list[Fahrt], org=None) -> bytes:
     return buf.getvalue()
 
 
+def exportiere_einsatzstatistik(stats, von, bis, org) -> bytes:
+    """Erstellt die gefilterte Einsatzstatistik als XLSX-Arbeitsmappe."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill
+    except ImportError:
+        raise RuntimeError("openpyxl ist nicht installiert. `pip install openpyxl` ausfuehren.")
+
+    wb = openpyxl.Workbook()
+    overview = wb.active
+    overview.title = "Uebersicht"
+    overview.append(["Einsatzstatistik", org.name])
+    overview.append(["Zeitraum", f"{von.isoformat()} bis {bis.isoformat()}"])
+    overview.append([])
+    for label, value in (
+        ("Echte Einsaetze", stats.total), ("Uebungen", stats.total_exercises),
+        ("Brand", stats.fire_count), ("Technisch", stats.technical_count),
+        ("Sonstige", stats.other_count), ("Durchschnittsdauer (min)", stats.avg_duration_min),
+        ("Zeit bis erste Fahrzeug-Disposition (min)", stats.avg_time_to_first_vehicle_min),
+    ):
+        overview.append([label, value if value is not None else ""])
+
+    incidents = wb.create_sheet("Einsaetze")
+    incidents.append(["Nummer", "Beginn", "Ende", "Stichwort", "Adresse"])
+    for incident in stats.incidents:
+        address = " ".join(filter(None, [incident.address_street, incident.address_no, incident.address_city]))
+        incidents.append([
+            incident.nummer or "", format_local_datetime(incident.started_at, org),
+            format_local_datetime(incident.closed_at, org), incident.alarm_type_code, address,
+        ])
+
+    vehicles = wb.create_sheet("Fahrzeugnutzung")
+    vehicles.append(["Fahrzeug", "Bezeichnung", "Zuweisungen", "Kilometer"])
+    for item in stats.vehicle_usage:
+        vehicles.append([item["code"], item["name"], item["count"], item["km"]])
+
+    fill = PatternFill("solid", fgColor="2D2D2D")
+    font = Font(bold=True, color="FFFFFF")
+    for ws in wb.worksheets:
+        for cell in ws[1]:
+            cell.fill = fill
+            cell.font = font
+        ws.freeze_panes = "A2"
+        for column in ws.columns:
+            width = min(45, max(12, max(len(str(cell.value or "")) for cell in column) + 2))
+            ws.column_dimensions[column[0].column_letter].width = width
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def exportiere_fahrzeug_links(fahrzeuge: list, org_token: str, base_url: str) -> bytes:
     """Excel mit allen Fahrzeugen inkl. direktem Fahrtenbuch-Link (QR-Deep-Link).
 

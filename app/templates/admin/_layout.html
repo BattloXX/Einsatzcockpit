@@ -335,6 +335,11 @@
                {{ tip('Eigene Wetterstation, Infoscreen-Dashboard-Link, Wetter aktivieren/deaktivieren') }}>
               <span class="admin-nav__icon">&#x1F321;&#xFE0F;</span>Wetter
             </a>
+            <a href="/admin/settings/statistik"
+               class="admin-nav__item {% if request.url.path.startswith('/admin/settings/statistik') %}is-active{% endif %}"
+               {{ tip('Statistik-Infoscreen aktivieren und Zugriffs-Tokens verwalten') }}>
+              <span class="admin-nav__icon">&#x1F4CA;</span>Statistik-Infoscreen
+            </a>
             <div class="admin-nav__subheading">Schnittstellen</div>
             <a href="/admin/sso"
                class="admin-nav__item {% if '/admin/sso' in request.url.path %}is-active{% endif %}"

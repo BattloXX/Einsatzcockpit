@@ -1,0 +1,75 @@
+from datetime import datetime, timedelta
+from io import BytesIO
+
+from sqlalchemy import BigInteger, create_engine
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.orm import sessionmaker
+
+from app.core.tenant import set_tenant_context
+from app.db import Base
+from app.models.incident import Incident, IncidentColumn, IncidentVehicle
+from app.models.master import AlarmType, FireDept, VehicleMaster
+from app.services.stats_service import get_stats
+
+
+@compiles(BigInteger, "sqlite")
+def _bigint_sqlite(element, compiler, **kw):
+    return "INTEGER"
+
+
+def test_stats_aggregates_and_reaction_time():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    set_tenant_context(db, None)
+    org_a = FireDept(slug="stats-service-a", name="Stats A", timezone="Europe/Vienna")
+    org_b = FireDept(slug="stats-service-b", name="Stats B", timezone="Europe/Vienna")
+    db.add_all([org_a, org_b])
+    db.flush()
+    db.add_all([
+        AlarmType(org_id=org_a.id, code="B1", category="B", label="Brand"),
+        AlarmType(org_id=org_a.id, code="T1", category="T", label="Technisch"),
+    ])
+    started = datetime(2026, 3, 10, 8, 0)
+    fire = Incident(primary_org_id=org_a.id, alarm_type_code="B1", started_at=started,
+                    closed_at=started + timedelta(minutes=60), is_exercise=False)
+    technical = Incident(primary_org_id=org_a.id, alarm_type_code="T1", started_at=started,
+                          is_exercise=False)
+    exercise = Incident(primary_org_id=org_a.id, alarm_type_code="B1", started_at=started,
+                        is_exercise=True)
+    outside = Incident(primary_org_id=org_a.id, alarm_type_code="B1",
+                       started_at=datetime(2025, 3, 10), is_exercise=False)
+    foreign = Incident(primary_org_id=org_b.id, alarm_type_code="B1", started_at=started,
+                       is_exercise=False)
+    db.add_all([fire, technical, exercise, outside, foreign])
+    db.flush()
+    column = IncidentColumn(incident_id=fire.id, code="active", title="Aktiv", column_kind="vehicles")
+    vehicle = VehicleMaster(dept_id=org_a.id, code="TLF", name="TLF")
+    db.add_all([column, vehicle])
+    db.flush()
+    db.add(IncidentVehicle(incident_id=fire.id, column_id=column.id, vehicle_master_id=vehicle.id,
+                           created_at=started + timedelta(minutes=7)))
+    db.commit()
+
+    stats = get_stats(db, org_a.id, started.date(), started.date(), user=None)
+    assert stats.total == 2
+    assert stats.total_exercises == 1
+    assert stats.fire_count == 1
+    assert stats.technical_count == 1
+    assert stats.avg_duration_min == 60
+    assert stats.avg_time_to_first_vehicle_min == 7
+    assert sum(row["count"] for row in stats.by_alarm_type) == stats.total
+    assert foreign.id not in [row.id for row in stats.incidents]
+    assert outside.id not in [row.id for row in stats.incidents]
+
+    from openpyxl import load_workbook
+
+    from app.services.excel_export_service import exportiere_einsatzstatistik
+    from app.services.pdf_service import render_statistik_bericht_pdf
+
+    xlsx = exportiere_einsatzstatistik(stats, started.date(), started.date(), org_a)
+    workbook = load_workbook(BytesIO(xlsx))
+    assert workbook["Einsaetze"].max_row == stats.total + 1
+    pdf = render_statistik_bericht_pdf(stats, org_a, started.date(), started.date())
+    assert pdf.startswith(b"%PDF")
+    db.close()
