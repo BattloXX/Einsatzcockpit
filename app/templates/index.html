@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Übersicht – Einsatzleiter FF Wolfurt{% endblock %}
 {% block content %}
+{% set user_roles = user.roles|map(attribute='code')|list %}
+{% set is_admin = ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles) %}
+{% set is_fahrtenbuch = request.state.fahrtenbuch_modul_aktiv and ('fahrtenbuch_admin' in user_roles or 'incident_leader' in user_roles or 'recorder' in user_roles or is_admin) %}
+{% set is_as_pruefung = request.state.atemschutz_pruefung_modul_aktiv %}
 <div class="page-header">
   <h2 class="page-title">Übersicht</h2>
   <button class="btn btn--primary" @click="$refs.newIncidentModal.showModal()">
@@ -27,9 +31,11 @@
 </section>
 {% endif %}
 
-{% if active_incidents %}
 <section class="section">
-  <h3 class="section-title">Aktive Einsätze ({{ active_incidents|length }})</h3>
+  <h3 class="section-title">
+    Aktive Einsätze{% if active_incidents %} ({{ active_incidents|length }}){% endif %}
+  </h3>
+  {% if active_incidents %}
   <div class="incident-cards">
     {% for inc in active_incidents %}
     <a href="/einsatz/{{ inc.id }}/info" class="incident-card {% if inc.is_exercise %}incident-card--exercise{% endif %}">
@@ -45,16 +51,47 @@
     </a>
     {% endfor %}
   </div>
+  {% else %}
+  <div class="incident-standby">
+    <div class="incident-standby__icon">✅</div>
+    <div class="incident-standby__content">
+      <div class="incident-standby__title">Kein aktiver Einsatz</div>
+      <div class="incident-standby__sub">Alles ruhig — Einsätze werden automatisch per API angelegt oder können manuell gestartet werden.</div>
+    </div>
+  </div>
+  {% endif %}
 </section>
-{% endif %}
 
-{% if not active_major_incidents and not active_incidents %}
-<div class="empty-state">
-  <div class="empty-state__icon">🔔</div>
-  <p>Keine aktiven Einsätze.</p>
-  <p class="text-muted">Einsätze werden automatisch per API angelegt oder können manuell gestartet werden.</p>
-</div>
-{% endif %}
+<section class="section">
+  <h3 class="section-title">Module</h3>
+  <div class="module-grid">
+    <a href="/lage" class="module-btn"><span class="module-btn__icon">🚨</span><span class="module-btn__label">Lage</span></a>
+    {% if is_fahrtenbuch %}
+    <a href="/verwaltung/fahrten" class="module-btn"><span class="module-btn__icon">🚒</span><span class="module-btn__label">Fahrtenbuch</span></a>
+    {% endif %}
+    {% if request.state.objekt_enabled %}
+    <a href="/objekte/" class="module-btn"><span class="module-btn__icon">🏢</span><span class="module-btn__label">Objekte</span></a>
+    {% endif %}
+    {% if is_as_pruefung %}
+    <a href="/atemschutz-pruefung" class="module-btn"><span class="module-btn__icon">🫁</span><span class="module-btn__label">Atemschutzprüfung</span></a>
+    {% endif %}
+    {% if WEATHER_ENABLED %}
+    <a href="/wetter" class="module-btn"><span class="module-btn__icon">🌦</span><span class="module-btn__label">Wetter</span></a>
+    {% endif %}
+    <a href="/termine" class="module-btn"><span class="module-btn__icon">📋</span><span class="module-btn__label">Teilnahme</span></a>
+    {% if request.state.uas_module_enabled %}
+    <a href="/uas/einsaetze" class="module-btn"><span class="module-btn__icon">🚁</span><span class="module-btn__label">Drohne / UAS</span></a>
+    {% endif %}
+    {% if request.state.nachschlagewerke_enabled %}
+    <a href="/nachschlagewerke/" class="module-btn"><span class="module-btn__icon">📚</span><span class="module-btn__label">Nachschlagewerke</span></a>
+    {% endif %}
+    {% if request.state.foerderstrecke_enabled %}
+    <a href="/foerderstrecke/" class="module-btn"><span class="module-btn__icon">🚰</span><span class="module-btn__label">Förderstrecke</span></a>
+    {% endif %}
+    <a href="/statistik" class="module-btn"><span class="module-btn__icon">📊</span><span class="module-btn__label">Statistik</span></a>
+    <a href="/archiv" class="module-btn"><span class="module-btn__icon">🗄</span><span class="module-btn__label">Archiv</span></a>
+  </div>
+</section>
 
 <!-- Neuer Einsatz Modal -->
 <dialog class="modal" id="newIncidentModal" x-ref="newIncidentModal" style="max-width:560px;width:95vw">
