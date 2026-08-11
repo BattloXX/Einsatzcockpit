@@ -63,7 +63,6 @@
   <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'stammdaten'}" @click="tab = 'stammdaten'">Stammdaten</button>
   <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'fahrzeuge'}" @click="tab = 'fahrzeuge'">Fahrzeuge ({{ incident.vehicles|length }})</button>
   <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'mannschaft'}" @click="tab = 'mannschaft'">Mannschaft</button>
-  <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'atemschutzpruefungen'}" @click="tab = 'atemschutzpruefungen'">Atemschutzprüfungen ({{ incident.atemschutz_pruefungen|length }})</button>
   <button type="button" class="detail-tabs__btn" :class="{'is-active': tab === 'bericht'}" @click="tab = 'bericht'">Bericht</button>
 </nav>
 <div class="detail-grid" style="margin-top:16px;">
@@ -91,29 +90,6 @@
       <span class="vehicle-detail"><strong>km:</strong> {{ v.km_gefahren if v.km_gefahren is not none else '–' }}</span>
     </div>
     {% endfor %}
-  </div>
-
-  <div class="detail-box detail-box--full" data-tabgroup="atemschutzpruefungen" :class="{'is-active': tab === 'atemschutzpruefungen'}">
-    <h3>Atemschutzprüfungen</h3>
-    <div style="overflow-x:auto;">
-      <table class="table">
-        <thead><tr><th>Gerät</th><th>Atemschutzgeräteträger</th><th>Datum</th><th>Status</th><th>PDF</th></tr></thead>
-        <tbody>
-          {% for pruefung in incident.atemschutz_pruefungen %}
-          <tr>
-            <td>{{ pruefung.geraet.anzeige_label }}</td>
-            <td>{{ pruefung.traeger_name }}</td>
-            <td>{{ pruefung.eingesetzt_am.strftime('%d.%m.%Y') }}</td>
-            <td>{% if pruefung.alles_ok %}<span class="badge badge--success">in Ordnung</span>{% else %}<span class="badge badge--error">Mangel</span>{% endif %}</td>
-            <td><button type="button" class="btn btn--ghost btn--xs"
-              onclick="ecpgPrint({document_type:'as_pruefung', artifact_ref:'{{ pruefung.id }}', title:'Atemschutzprüfung drucken', localUrl:'/atemschutz-pruefung/{{ pruefung.id }}/pdf'})">📄 PDF</button></td>
-          </tr>
-          {% else %}
-          <tr><td colspan="5" class="text-muted">Keine Atemschutzprüfungen vorhanden.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
   </div>
 
   <div class="detail-box" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
@@ -253,6 +229,29 @@
          hx-trigger="load"
          hx-swap="innerHTML">
       <div style="padding:16px;text-align:center;color:var(--text-muted);font-size:.85rem;">Lade…</div>
+    </div>
+  </div>
+
+  <div class="detail-box detail-box--full" data-tabgroup="mannschaft" :class="{'is-active': tab === 'mannschaft'}">
+    <h3>Atemschutzprüfungen</h3>
+    <div style="overflow-x:auto;">
+      <table class="table">
+        <thead><tr><th>Gerät</th><th>Atemschutzgeräteträger</th><th>Datum</th><th>Status</th><th>PDF</th></tr></thead>
+        <tbody>
+          {% for pruefung in incident.atemschutz_pruefungen %}
+          <tr>
+            <td>{{ pruefung.geraet.anzeige_label }}</td>
+            <td>{{ pruefung.traeger_name }}</td>
+            <td>{{ pruefung.eingesetzt_am.strftime('%d.%m.%Y') }}</td>
+            <td>{% if pruefung.alles_ok %}<span class="badge badge--success">in Ordnung</span>{% else %}<span class="badge badge--error">Mangel</span>{% endif %}</td>
+            <td><button type="button" class="btn btn--ghost btn--xs"
+              onclick="ecpgPrint({document_type:'as_pruefung', artifact_ref:'{{ pruefung.id }}', title:'Atemschutzprüfung drucken', localUrl:'/atemschutz-pruefung/{{ pruefung.id }}/pdf'})">📄 PDF</button></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted">Keine Atemschutzprüfungen vorhanden.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 
