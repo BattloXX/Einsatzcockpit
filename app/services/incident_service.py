@@ -714,46 +714,6 @@ def set_commander(
     return vehicle
 
 
-def set_fahrer(
-    db: Session,
-    vehicle: IncidentVehicle,
-    slot: int,
-    member_id: int | None,
-    free_text: str | None,
-    user_id: int | None = None,
-) -> IncidentVehicle:
-    if slot not in (1, 2):
-        raise ValueError("Fahrer-Slot muss 1 oder 2 sein")
-    id_feld = "fahrer_member_id" if slot == 1 else "fahrer2_member_id"
-    name_feld = "fahrer_name" if slot == 1 else "fahrer2_name"
-    before = {id_feld: getattr(vehicle, id_feld), name_feld: getattr(vehicle, name_feld)}
-    setattr(vehicle, id_feld, member_id)
-    setattr(vehicle, name_feld, free_text.strip() if free_text and free_text.strip() else None)
-    db.flush()
-    write_incident_change(
-        db, vehicle.incident_id, "vehicle.fahrer_set", "incident_vehicle", vehicle.id,
-        before=before, after={id_feld: member_id, name_feld: getattr(vehicle, name_feld)},
-        user_id=user_id,
-    )
-    return vehicle
-
-
-def set_km_gefahren(
-    db: Session,
-    vehicle: IncidentVehicle,
-    km: int | None,
-    user_id: int | None = None,
-) -> IncidentVehicle:
-    before = {"km_gefahren": vehicle.km_gefahren}
-    vehicle.km_gefahren = km
-    db.flush()
-    write_incident_change(
-        db, vehicle.incident_id, "vehicle.km_set", "incident_vehicle", vehicle.id,
-        before=before, after={"km_gefahren": km}, user_id=user_id,
-    )
-    return vehicle
-
-
 
 def _next_display_order(db: Session, incident_id: int, column_id: int) -> int:
     """Liefert den nächsten freien display_order-Wert für eine Spalte (ans Ende)."""
@@ -820,16 +780,6 @@ def list_commander_candidates(db: Session, org_ids: list[int]) -> list[Member]:
         )
         .order_by(Member.lastname, Member.firstname)
         .distinct()
-        .all()
-    )
-
-
-def list_fahrer_candidates(db: Session, org_ids: list[int]) -> list[Member]:
-    """Liefert aktive Mitglieder ohne Qualifikationsfilter für die Fahrer-Auswahl."""
-    return (
-        db.query(Member)
-        .filter(Member.active.is_(True))
-        .order_by(Member.lastname, Member.firstname)
         .all()
     )
 

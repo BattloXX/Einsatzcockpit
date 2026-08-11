@@ -238,17 +238,16 @@ def test_pdf_no_ai_draft_section_when_empty(client):
     assert "Einsatzverlauf (KI-Entwurf)" not in html
 
 
-def test_pdf_fahrzeug_enthaelt_fahrer_gk_und_direkte_km(client):
+def test_pdf_fahrzeug_enthaelt_fahrer_gk_und_fahrtenbuch_km(client):
     from types import SimpleNamespace
 
     from app.core.templating import templates
 
     vehicle = SimpleNamespace(
+        vehicle_master_id=10,
         vehicle_master=SimpleNamespace(display_label="TLF-A 2000", dept=SimpleNamespace(name="FF Test")),
         column=SimpleNamespace(title="Aktiv"),
-        fahrer=SimpleNamespace(full_name="Lena Lenker"), fahrer_name=None,
-        fahrer2=None, fahrer2_name="Gast Fahrer",
-        commander=None, commander_name="GK Freitext", km_gefahren=28,
+        commander=None, commander_name="GK Freitext",
     )
     incident = SimpleNamespace(
         id=1, alarm_type_code="B2", is_exercise=False, address_street=None, address_no=None,
@@ -258,6 +257,7 @@ def test_pdf_fahrzeug_enthaelt_fahrer_gk_und_direkte_km(client):
     )
     html = templates.env.get_template("pdf/incident_report.html").render(
         incident=incident, teilnahmen=[], journal=[], objekte=[], now=None, base_url="",
+        fahrten_details={10: {"fahrer": ["Lena Lenker", "Gast Fahrer"], "km": 28}},
         user=SimpleNamespace(org=None), media_b64=lambda m: "", media_exists=lambda m: False,
     )
     assert "Lena Lenker / Gast Fahrer" in html
@@ -272,9 +272,9 @@ def test_archive_zeigt_fahrzeug_und_atemschutzgeraetetraeger(client):
     from app.core.templating import templates
 
     vehicle = SimpleNamespace(
+        vehicle_master_id=10,
         vehicle_master=SimpleNamespace(display_label="KDOF", dept=SimpleNamespace(name="FF Test")),
-        fahrer=None, fahrer_name="Fahrer Freitext", fahrer2=None, fahrer2_name=None,
-        commander=None, commander_name="GK Freitext", km_gefahren=11,
+        commander=None, commander_name="GK Freitext",
     )
     pruefung = SimpleNamespace(
         id=7, geraet=SimpleNamespace(anzeige_label="PA 3"), traeger_name="Anna Atemschutz",
@@ -292,8 +292,9 @@ def test_archive_zeigt_fahrzeug_und_atemschutzgeraetetraeger(client):
     html = templates.env.get_template("archive/detail.html").render(
         request=request, incident=incident, user=SimpleNamespace(is_system_admin=False, is_org_admin=False),
         can_edit=False, wp_report_available=False, ai_enabled=False, uas_einsatz=None, verlauf=[],
+        fahrten_details={10: {"fahrer": ["Fahrer Fahrtenbuch"], "km": 11}},
     )
-    assert "Fahrer Freitext" in html
+    assert "Fahrer Fahrtenbuch" in html
     assert "GK Freitext" in html
     assert "Anna Atemschutz" in html
     assert "PA 3" in html

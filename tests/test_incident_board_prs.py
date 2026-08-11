@@ -21,11 +21,8 @@ from app.models.incident import Incident, IncidentColumn, IncidentLog, IncidentV
 from app.models.master import FireDept, Member, MemberQualification, Qualification, VehicleMaster
 from app.services.incident_service import (
     combined_verlauf,
-    list_fahrer_candidates,
     list_section_leader_candidates,
     prepend_card,
-    set_fahrer,
-    set_km_gefahren,
 )
 
 TEST_DB_URL = "sqlite:///:memory:"
@@ -206,60 +203,6 @@ def _fahrzeug(db, incident, org):
     db.add(vehicle)
     db.flush()
     return vehicle
-
-
-def test_incident_vehicle_fahrer_und_km_roundtrip(db, incident, org):
-    fahrer1 = Member(org_id=org.id, lastname="Lenker", firstname="Lena")
-    fahrer2 = Member(org_id=org.id, lastname="Fahrer", firstname="Franz")
-    db.add_all([fahrer1, fahrer2])
-    db.flush()
-    vehicle = _fahrzeug(db, incident, org)
-
-    set_fahrer(db, vehicle, 1, fahrer1.id, None, user_id=None)
-    set_fahrer(db, vehicle, 2, None, "Externer Fahrer", user_id=None)
-    set_km_gefahren(db, vehicle, 37, user_id=None)
-    db.commit()
-    db.expire_all()
-
-    loaded = db.get(IncidentVehicle, vehicle.id)
-    assert loaded.fahrer.full_name == fahrer1.full_name
-    assert loaded.fahrer2 is None
-    assert loaded.fahrer2_name == "Externer Fahrer"
-    assert loaded.km_gefahren == 37
-    assert fahrer2.id in {m.id for m in list_fahrer_candidates(db, [org.id])}
-
-
-@pytest.mark.asyncio
-async def test_fahrer_und_km_endpoints_speichern_und_broadcasten(db, incident, org, monkeypatch):
-    from types import SimpleNamespace
-
-    from app.routers.ui_incident import set_vehicle_fahrer1, set_vehicle_fahrer2_new, set_vehicle_km
-    from app.services.broadcast import manager
-
-    fahrer = Member(org_id=org.id, lastname="Lenker", firstname="Lena")
-    db.add(fahrer)
-    db.flush()
-    vehicle = _fahrzeug(db, incident, org)
-    request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=123)))
-    broadcasts = []
-
-    async def _broadcast(incident_id, payload):
-        broadcasts.append((incident_id, payload))
-
-    monkeypatch.setattr(manager, "broadcast", _broadcast)
-    response = await set_vehicle_fahrer1(incident.id, vehicle.id, request, fahrer.id, db, None)
-    assert response.status_code == 303
-    response = await set_vehicle_fahrer2_new(incident.id, vehicle.id, request, "Gast Lenker", db, None)
-    assert response.status_code == 303
-    response = await set_vehicle_km(incident.id, vehicle.id, request, 42, db, None)
-    assert response.status_code == 303
-
-    db.refresh(vehicle)
-    assert vehicle.fahrer_member_id == fahrer.id
-    assert vehicle.fahrer2_name == "Gast Lenker"
-    assert vehicle.km_gefahren == 42
-    assert len(broadcasts) == 3
-    assert all(payload["type"] == "vehicle_updated" for _, payload in broadcasts)
 
 
 # ── RescuedPerson: vehicle-Relationship (für Karte/PDF/Journal) ──────────────

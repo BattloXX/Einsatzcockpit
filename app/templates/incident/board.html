@@ -341,29 +341,6 @@
     <!-- Einsatzleiter vor Ort -->
     {% if can_edit or incident.incident_leader_member_id %}{% include "incident/_el_vor_ort_box.html" %}{% endif %}
 
-    <!-- Gefahrene Kilometer (Fahrtenbuch) -->
-    {% if fahrten_km %}
-    <div class="sidebar-box" style="border-top:1px solid var(--border);">
-      <div class="sidebar-box__title">Gefahrene Kilometer</div>
-      <div style="padding:6px 14px 10px;">
-        {% for row in fahrten_km %}
-        <div style="display:flex;justify-content:space-between;align-items:center;
-                    padding:4px 0;font-size:.83rem;border-bottom:1px solid var(--border-subtle,var(--border));">
-          <span>{{ row.label }}</span>
-          <span style="font-weight:600;font-feature-settings:'tnum';">{{ row.km }} km</span>
-        </div>
-        {% endfor %}
-        {% if fahrten_km|length > 1 %}
-        <div style="display:flex;justify-content:space-between;align-items:center;
-                    padding:5px 0 0;font-size:.83rem;font-weight:700;color:var(--text-muted);">
-          <span>Gesamt</span>
-          <span style="font-feature-settings:'tnum';">{{ fahrten_km|sum(attribute='km') }} km</span>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-    {% endif %}
-
     <!-- Verlauf -->
     <div class="sidebar-box">
       <div class="sidebar-box__title">Verlauf <a href="/einsatz/{{ incident.id }}/historie" class="link-sm">Vollansicht</a></div>

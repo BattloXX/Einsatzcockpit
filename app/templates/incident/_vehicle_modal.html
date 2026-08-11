@@ -98,48 +98,6 @@
   {% endif %}
 
   {% if can_edit %}
-  <div class="detail-section">
-    <div class="detail-section__title">FAHRER &amp; KM</div>
-    {% for slot in [1, 2] %}
-    {% set fahrer_id = vehicle.fahrer_member_id if slot == 1 else vehicle.fahrer2_member_id %}
-    {% set fahrer = vehicle.fahrer if slot == 1 else vehicle.fahrer2 %}
-    {% set fahrer_name = vehicle.fahrer_name if slot == 1 else vehicle.fahrer2_name %}
-    <p style="margin:8px 0 4px;font-weight:700;">Fahrer {{ slot }}</p>
-    <form hx-post="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/fahrer{{ slot }}"
-          hx-target="#cardDetailBody" hx-swap="innerHTML"
-          style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <select name="member_id" class="form-select" style="flex:1">
-        <option value="">nicht zugeteilt</option>
-        {% for m in fahrer_members %}
-        <option value="{{ m.id }}" {% if fahrer_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="btn btn--secondary">zuteilen</button>
-    </form>
-    <form hx-post="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/fahrer{{ slot }}-neu"
-          hx-target="#cardDetailBody" hx-swap="innerHTML"
-          style="display:flex; gap:8px; align-items:center;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="text" name="full_name" class="form-input" placeholder="Namen eingeben und zuteilen" style="flex:1" required>
-      <button type="submit" class="btn btn--secondary">ergänzen</button>
-    </form>
-    <p style="margin-top:6px;">Aktuell: <strong>{% if fahrer %}{{ fahrer.full_name }}{% elif fahrer_name %}{{ fahrer_name }}{% else %}nicht zugeteilt{% endif %}</strong></p>
-    {% endfor %}
-
-    <form hx-post="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/km"
-          hx-target="#cardDetailBody" hx-swap="innerHTML"
-          style="display:flex; gap:8px; align-items:center; margin-top:12px;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <label for="km-gefahren-{{ vehicle.id }}" style="font-weight:700;">Gefahrene Kilometer</label>
-      <input id="km-gefahren-{{ vehicle.id }}" type="number" name="km_gefahren" min="0" step="1"
-             value="{{ vehicle.km_gefahren if vehicle.km_gefahren is not none else '' }}" class="form-input" style="width:110px;">
-      <button type="submit" class="btn btn--secondary">speichern</button>
-    </form>
-  </div>
-  {% endif %}
-
-  {% if can_edit %}
   <!-- Schnellaktionen -->
   <div class="detail-section">
     <div class="detail-section__title">AKTIONEN</div>

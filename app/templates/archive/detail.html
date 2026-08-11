@@ -80,14 +80,15 @@
 
   <div class="detail-box" data-tabgroup="fahrzeuge" :class="{'is-active': tab === 'fahrzeuge'}">
     <h3>🚒 Fahrzeuge ({{ incident.vehicles|length }})</h3>
+    {% set fahrten = fahrten_details|default({}) %}
     {% for v in incident.vehicles %}
     <div class="vehicle-row">
       <span class="vehicle-main"><span class="vehicle-code">{{ v.vehicle_master.display_label }}</span>
       <span class="vehicle-dept">{{ v.vehicle_master.dept.name }}</span></span>
       <span class="vehicle-detail"><strong>GK:</strong> {{ v.commander.full_name if v.commander else (v.commander_name or '–') }}</span>
-      <span class="vehicle-detail"><strong>Fahrer 1:</strong> {{ v.fahrer.full_name if v.fahrer else (v.fahrer_name or '–') }}</span>
-      {% if v.fahrer2 or v.fahrer2_name %}<span class="vehicle-detail"><strong>Fahrer 2:</strong> {{ v.fahrer2.full_name if v.fahrer2 else v.fahrer2_name }}</span>{% endif %}
-      <span class="vehicle-detail"><strong>km:</strong> {{ v.km_gefahren if v.km_gefahren is not none else '–' }}</span>
+      {% set fahrt = fahrten.get(v.vehicle_master_id) %}
+      {% if fahrt %}<span class="vehicle-detail"><strong>Fahrer:</strong> {{ fahrt.fahrer|join(' / ') }}</span>
+      <span class="vehicle-detail"><strong>km:</strong> {{ fahrt.km }}</span>{% endif %}
     </div>
     {% endfor %}
   </div>

@@ -77,16 +77,9 @@ def _load_incident_teilnahmen(incident_id: int) -> list:
         db.close()
 
 
-def load_fahrten_km(incident_id: int, db=None) -> list[dict]:
-    """Liefert [{label, km}] je Fahrzeug aus dem Fahrtenbuch für diesen Einsatz.
-
-    Kann mit einer bestehenden Session (``db``) aufgerufen werden (kein eigener
-    Connection-Acquire) oder öffnet selbst eine (für PDF-Kontext ohne Request).
-    Nutzt joinedload, um den N+1-Lazy-Load von ``fahrzeug`` zu vermeiden.
-    """
+def load_fahrten_details(incident_id: int, db=None) -> dict[int, dict]:
+    """Liefert Fahrer und Kilometer je Fahrzeug aus dem Fahrtenbuch."""
     try:
-        from sqlalchemy.orm import joinedload as _jl
-
         from app.models.fahrtenbuch import Fahrt, FahrtStatus
         own_db = db is None
         if own_db:
@@ -94,30 +87,26 @@ def load_fahrten_km(incident_id: int, db=None) -> list[dict]:
         try:
             fahrten = (
                 db.query(Fahrt)
-                .options(_jl(Fahrt.fahrzeug))
                 .filter(
                     Fahrt.incident_id == incident_id,
                     Fahrt.status == FahrtStatus.aktiv,
                 )
+                .order_by(Fahrt.zeitpunkt)
                 .all()
             )
-            km_by: dict[int, dict] = {}
+            details: dict[int, dict] = {}
             for f in fahrten:
-                if f.fahrzeug_id not in km_by:
-                    label = f.fahrzeug.display_label if f.fahrzeug else f"Fahrzeug #{f.fahrzeug_id}"
-                    km_by[f.fahrzeug_id] = {"label": label, "km": 0}
-                if f.km_delta:
-                    km_by[f.fahrzeug_id]["km"] += f.km_delta
-            return [v for v in km_by.values() if v["km"] > 0]
+                detail = details.setdefault(f.fahrzeug_id, {"fahrer": [], "km": 0})
+                detail["fahrer"].append(f.maschinist_name)
+                if f.maschinist2_name:
+                    detail["fahrer"].append(f.maschinist2_name)
+                detail["km"] += f.km_delta or 0
+            return details
         finally:
             if own_db:
                 db.close()
     except Exception:
-        return []
-
-
-# Rückwärtskompatibles Alias (intern genutzt)
-_load_incident_fahrten_km = load_fahrten_km
+        return {}
 
 
 def _load_pdf_context(incident: Incident) -> tuple:
@@ -256,6 +245,7 @@ def _load_incident_objekte(db, incident: Incident) -> list[dict]:
 def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
     template = templates.env.get_template("pdf/incident_report.html")
     primary_org, teilnahmen, journal, objekte = _load_pdf_context(incident)
+    fahrten_details = load_fahrten_details(incident.id)
     pseudo_user = SimpleNamespace(org=primary_org)
     teilnahmen.sort(key=lambda t: (t.funktion.sortierung if t.funktion else 9999, t.hinzugefuegt_am or 0))
 
@@ -264,6 +254,7 @@ def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
         teilnahmen=teilnahmen,
         journal=journal,
         objekte=objekte,
+        fahrten_details=fahrten_details,
         now=datetime.now(UTC),
         base_url=base_url,
         user=pseudo_user,
