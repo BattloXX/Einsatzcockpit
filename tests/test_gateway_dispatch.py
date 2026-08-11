@@ -83,6 +83,20 @@ async def test_dispatch_timeout_returns_sent_not_retried():
         ws._job_pending.pop(str(job_id), None)
 
 
+def test_job_status_log_contains_gateway_context(caplog):
+    import logging
+
+    import app.routers.ws as ws
+
+    with caplog.at_level(logging.INFO, logger="einsatzleiter.ws"):
+        ws._log_gateway_job_status(42, "done", 7, 9, None)
+
+    assert "job_id=42" in caplog.text
+    assert "status=done" in caplog.text
+    assert "org_id=7" in caplog.text
+    assert "gateway_id=9" in caplog.text
+
+
 async def test_dispatch_job_commits_sent_before_await_no_status_overwrite(monkeypatch):
     """Race-Fix: print_dispatcher.dispatch_job committet attempts+'sent' VOR dem Await
     und schreibt den Status danach NICHT erneut – der Laufzeitstatus (printing/done)

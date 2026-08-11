@@ -206,6 +206,10 @@ async def lifespan(app: FastAPI):
     from app.services.task_reminder import task_reminder_loop
     reminder_task = asyncio.create_task(task_reminder_loop())
 
+    # Passiver Backstop für gealterte, nicht-terminale Druckaufträge.
+    from app.services.print_watchdog import print_job_watchdog_loop
+    print_watchdog_task = asyncio.create_task(print_job_watchdog_loop())
+
     # Background-Loop für überfällige GSL-Lagemeldungen (SKKM-Regelkreis)
     from app.services.gsl_lagemeldung_reminder import gsl_lagemeldung_reminder_loop
     lagemeldung_task = asyncio.create_task(gsl_lagemeldung_reminder_loop())
@@ -275,6 +279,7 @@ async def lifespan(app: FastAPI):
         autoclose_task.cancel()
         watchdog_task.cancel()
         reminder_task.cancel()
+        print_watchdog_task.cancel()
         lagemeldung_task.cancel()
         verleih_task.cancel()
         weather_retention_task.cancel()
@@ -289,7 +294,8 @@ async def lifespan(app: FastAPI):
         dibos_trace_retention_task.cancel()
         nachschlagewerk_sync_task.cancel()
         org_backup_task.cancel()
-        for t in (autoclose_task, watchdog_task, reminder_task, lagemeldung_task, verleih_task,
+        for t in (autoclose_task, watchdog_task, reminder_task, print_watchdog_task,
+                  lagemeldung_task, verleih_task,
                   weather_retention_task, ai_log_retention_task, vehicle_position_retention_task, weather_alert_task,
                   abfluss_poll_task, lis_task, lis_capture_retention_task,
                   dibos_task, dibos_trace_retention_task,

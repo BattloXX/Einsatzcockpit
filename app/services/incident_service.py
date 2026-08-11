@@ -1,4 +1,5 @@
 """Core incident business logic – mirrors startIncident(), changeAlarm() from the HTML version."""
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -30,6 +31,8 @@ from app.models.master import (
     VehicleMaster,
 )
 from app.models.user import User
+
+logger = logging.getLogger("einsatzleiter.incident")
 
 
 def _now() -> datetime:
@@ -598,6 +601,22 @@ def move_vehicle_to_column(
 def close_incident(
     db: Session, incident: Incident, user_id: int | None = None, auto_closed_by_lis: bool = False,
 ) -> Incident:
+    try:
+        from app.services.gateway_service import gateway_effective_enabled
+        if gateway_effective_enabled(incident.primary_org_id, db):
+            from app.services.print_dispatcher import unfulfilled_print_jobs
+            pending = unfulfilled_print_jobs(db, incident.id)
+            if pending:
+                logger.warning(
+                    "Einsatz %s abgeschlossen mit %d offenen Pflicht-Druckauftraegen: %s",
+                    incident.id, len(pending),
+                    ", ".join(f"{j.document_type}={j.status}" for j in pending),
+                )
+    except Exception:
+        logger.exception(
+            "Druck-Vollstaendigkeitspruefung bei Abschluss fehlgeschlagen (Einsatz %s)",
+            incident.id,
+        )
     incident.status = "closed"
     incident.closed_at = _now()
     incident.closed_via_lis_auto = auto_closed_by_lis

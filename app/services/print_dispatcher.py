@@ -13,6 +13,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.models.gateway import (
+    JOB_DONE,
     JOB_FAILED,
     JOB_SENT,
     JOB_SOURCE_MANUAL,
@@ -21,6 +22,19 @@ from app.models.gateway import (
 )
 
 logger = logging.getLogger("einsatzleiter.print")
+
+
+def unfulfilled_print_jobs(db: Session, incident_id: int) -> list[PrintJob]:
+    """Bereits angelegte Regel-Jobs eines Einsatzes, die noch nicht fertig sind."""
+    return (
+        db.query(PrintJob)
+        .filter(
+            PrintJob.incident_id == incident_id,
+            PrintJob.source == JOB_SOURCE_RULE,
+            PrintJob.status != JOB_DONE,
+        )
+        .all()
+    )
 
 
 # ── Idempotenz ─────────────────────────────────────────────────────────────────

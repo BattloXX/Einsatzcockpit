@@ -763,9 +763,14 @@ async def cancel_print_job(
         raise HTTPException(status_code=404, detail="Druckauftrag nicht gefunden")
     gw_id = job.gateway_id
     if job.status not in JOB_TERMINAL:
+        previous_status = job.status
         job.status = JOB_CANCELED
         job.error = "Abgebrochen (manuell)"
         db.commit()
+        logger.info(
+            "Druckauftrag %s manuell abgebrochen (user_id=%s, org_id=%s, vorher=%s)",
+            job_id, user.id, user.org_id, previous_status,
+        )
         assert user.org_id is not None  # Guard oben hat bereits org-gebunden gefunden
         await push_gateway_command(user.org_id, {"type": "cancel_job", "payload": {"job_id": job_id}})
         await broadcast_org(user.org_id, {"type": "print_job_status", "job_id": job_id,

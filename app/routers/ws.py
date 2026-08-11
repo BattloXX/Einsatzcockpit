@@ -545,6 +545,15 @@ def _apply_job_status(job_id: int, status: str, error: str | None) -> int | None
         db.close()
 
 
+def _log_gateway_job_status(
+    job_id: object, status: object, org_id: int, gateway_id: int, error: object,
+) -> None:
+    logger.info(
+        "ECPG job_status (job_id=%s, status=%s, org_id=%s, gateway_id=%s, error=%s)",
+        job_id, status, org_id, gateway_id, error,
+    )
+
+
 def _set_serial_status(gateway_id: int, connected: bool) -> int | None:
     from app.models.gateway import Gateway
 
@@ -598,8 +607,13 @@ async def print_gateway_ws(websocket: WebSocket):
             mtype = msg.get("type")
             if mtype == "ping":
                 await websocket.send_text(json.dumps({"type": "pong"}))
-            elif mtype in ("pong", "log_event", "ack"):
+            elif mtype in ("pong", "ack"):
                 pass
+            elif mtype == "log_event":
+                p = msg.get("payload") or {}
+                level = str(p.get("level") or "info").lower()
+                log_fn = logger.error if level == "error" else logger.warning if level == "warning" else logger.info
+                log_fn("ECPG-Gateway %s: %s", gateway_id, p.get("message", ""))
             elif mtype == "hello":
                 _touch_gateway(gateway_id, version=(msg.get("payload") or {}).get("version"))
                 await websocket.send_text(json.dumps({
@@ -622,6 +636,9 @@ async def print_gateway_ws(websocket: WebSocket):
                     })
                 if jid is not None:
                     o = _apply_job_status(int(jid), p.get("status", ""), p.get("error"))
+                    _log_gateway_job_status(
+                        jid, p.get("status"), org_id, gateway_id, p.get("error"),
+                    )
                     if o:
                         await broadcast_org(o, {"type": "print_job_status", "job_id": int(jid),
                                                 "status": p.get("status")})
@@ -658,6 +675,12 @@ async def print_gateway_ws(websocket: WebSocket):
         logger.info("ECPG-Gateway getrennt (org_id=%s, gateway_id=%s)", org_id, gateway_id)
     finally:
         _discard_print_gateway(org_id, websocket)
+        open_jobs = _count_open_print_jobs(gateway_id)
+        if open_jobs:
+            logger.warning(
+                "ECPG-Gateway getrennt mit %d offenen Druckaufträgen "
+                "(org_id=%s, gateway_id=%s)", open_jobs, org_id, gateway_id,
+            )
         _mark_gateway_offline(gateway_id)
         await broadcast_org(org_id, {"type": "gateway_status", "gateway_id": gateway_id, "online": False})
 
@@ -681,6 +704,22 @@ def _mark_gateway_offline(gateway_id: int) -> None:
             gw.status = GATEWAY_STATUS_OFFLINE
             gw.serial_connected = False
             db.commit()
+    finally:
+        db.close()
+
+
+def _count_open_print_jobs(gateway_id: int) -> int:
+    from app.models.gateway import JOB_PRINTING, JOB_SENT, PrintJob
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        return (
+            db.query(PrintJob)
+            .filter(PrintJob.gateway_id == gateway_id, PrintJob.status.in_((JOB_SENT, JOB_PRINTING)))
+            .execution_options(include_all_tenants=True)
+            .count()
+        )
     finally:
         db.close()
 
