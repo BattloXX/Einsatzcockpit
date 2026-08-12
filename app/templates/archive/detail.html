@@ -71,6 +71,10 @@
     <dl class="detail-list">
       <dt>Stichwort</dt><dd>{{ incident.alarm_type_code }}</dd>
       <dt>Start</dt><dd>{{ incident.started_at|local_datetime }} Uhr</dd>
+      {% if incident.taken_over_at %}<dt>Übernommen</dt><dd>{{ incident.taken_over_at|local_datetime }} Uhr</dd>{% endif %}
+      {% if incident.departed_at %}<dt>Ausfahrt</dt><dd>{{ incident.departed_at|local_datetime }} Uhr</dd>{% endif %}
+      {% if incident.on_scene_at %}<dt>Am Einsatzort</dt><dd>{{ incident.on_scene_at|local_datetime }} Uhr</dd>{% endif %}
+      {% if incident.ready_again_at %}<dt>Wieder einsatzbereit</dt><dd>{{ incident.ready_again_at|local_datetime }} Uhr</dd>{% endif %}
       {% if incident.closed_at %}<dt>Ende</dt><dd>{{ incident.closed_at|local_datetime }} Uhr</dd>{% endif %}
       <dt>Adresse</dt><dd>{{ incident.address_street or '–' }} {{ incident.address_no or '' }}, {{ incident.address_city or '' }}</dd>
       <dt>Meldung</dt><dd>{{ incident.report_text or '–' }}</dd>
