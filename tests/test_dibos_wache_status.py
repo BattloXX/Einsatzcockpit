@@ -78,6 +78,40 @@ def test_set_wache_status_noop_und_audit_timestamp(setup_db):
     db.close()
 
 
+def test_set_wache_status_spiegelt_incident_felder(setup_db):
+    """uebernommen/ausgefahren/am_einsatzort/einsatzbereit muessen live auf die
+    gleichnamigen Incident-Felder durchschlagen, die sonst nur der Einsatzimporter
+    befuellt (siehe einsatz_import_service.py); "alarmiert" bleibt bewusst
+    unpsiegelt (started_at kommt bereits aus dem DIBOS-Event)."""
+    db = TestingSession()
+    set_tenant_context(db, ORG_ID)
+    incident = _incident(db, "f-wache-felder")
+
+    set_wache_status(db, incident, "fw_wolfu", "alarmiert", status_at=datetime(2026, 8, 8, 16, 56, 14))
+    assert incident.taken_over_at is None
+    assert incident.departed_at is None
+    assert incident.on_scene_at is None
+    assert incident.ready_again_at is None
+
+    ts_ueb = datetime(2026, 8, 8, 16, 57, 55)
+    set_wache_status(db, incident, "fw_wolfu", "übernommen", status_at=ts_ueb)
+    assert incident.taken_over_at == ts_ueb
+
+    ts_aus = datetime(2026, 8, 8, 17, 1, 0)
+    set_wache_status(db, incident, "fw_wolfu", "ausgefahren", status_at=ts_aus)
+    assert incident.departed_at == ts_aus
+
+    ts_eo = datetime(2026, 8, 8, 17, 3, 0)
+    set_wache_status(db, incident, "fw_wolfu", "am_einsatzort", status_at=ts_eo)
+    assert incident.on_scene_at == ts_eo
+
+    ts_bereit = datetime(2026, 8, 8, 18, 20, 17)
+    set_wache_status(db, incident, "fw_wolfu", "einsatzbereit", status_at=ts_bereit)
+    assert incident.ready_again_at == ts_bereit
+    db.rollback()
+    db.close()
+
+
 def test_echter_trace_wachenstatus_chronologisch(setup_db):
     trace_dir = Path("/tmp/fw_log_extract")
     if not trace_dir.is_dir():
@@ -104,5 +138,11 @@ def test_echter_trace_wachenstatus_chronologisch(setup_db):
     assert [e["summary"] for e in reversed(combined_verlauf(db, incident.id))] == [
         "FW Wolfurt: alarmiert", "FW Wolfurt: übernommen", "FW Wolfurt: einsatzbereit",
     ]
+    # Die Wache selbst meldet in diesem Trace nie S4/S5 (das taten nur einzelne
+    # Fahrzeuge) - departed_at/on_scene_at bleiben daher erwartungsgemaess leer.
+    assert incident.taken_over_at == datetime(2026, 8, 8, 16, 57, 55)
+    assert incident.ready_again_at == datetime(2026, 8, 8, 18, 20, 17)
+    assert incident.departed_at is None
+    assert incident.on_scene_at is None
     db.rollback()
     db.close()

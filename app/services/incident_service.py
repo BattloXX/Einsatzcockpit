@@ -763,6 +763,22 @@ def set_unit_status(
     return vehicle
 
 
+# Spiegelt einen Wachen-Statuswechsel auf das zugehoerige Incident-Feld (dieselben
+# vier Felder, die auch der Einsatzimporter aus dem LFV/BVS-Excel befuellt, siehe
+# einsatz_import_service.py::_STATUS_TIMESTAMP_FIELDS) - damit stehen die Zeiten
+# schon waehrend eines laufenden, per DIBOS erfassten Einsatzes zur Verfuegung und
+# muessen nicht auf einen spaeteren Excel-Reimport warten. "alarmiert" bleibt
+# unpsiegelt: Incident.started_at wird bereits beim Anlegen aus dem DIBOS-Event
+# (GetCurrentEvents.created, siehe dibos_enrich.py) gesetzt, eine zweite Quelle
+# dafuer wuerde nur widerspruechliche Zeitstempel riskieren.
+_WACHE_STATUS_INCIDENT_FIELD = {
+    "übernommen": "taken_over_at",
+    "ausgefahren": "departed_at",
+    "am_einsatzort": "on_scene_at",
+    "einsatzbereit": "ready_again_at",
+}
+
+
 def set_wache_status(
     db: Session,
     incident: Incident,
@@ -791,6 +807,9 @@ def set_wache_status(
     entry.status = status
     entry.status_text_raw = status_text_raw
     entry.status_at = status_at
+    incident_field = _WACHE_STATUS_INCIDENT_FIELD.get(status)
+    if incident_field and status_at is not None:
+        setattr(incident, incident_field, status_at)
     db.flush()
     write_incident_change(
         db, incident.id, "wache.status_set", "incident_wache_status", entry.id,
