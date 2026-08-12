@@ -3,15 +3,18 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import openpyxl
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
+from app.core.timezones import org_tz
+from app.models.fahrtenbuch import Fahrt
+from app.models.foerderstrecke import FoerderPumpenTyp
 from app.models.incident import (
     FIXED_COLUMN_TITLES,
     FIXED_COLUMNS,
@@ -19,7 +22,16 @@ from app.models.incident import (
     IncidentColumn,
     IncidentVehicle,
 )
-from app.models.master import AlarmType, VehicleMaster
+from app.models.major_incident import (
+    IncidentSite,
+    LageEinheit,
+    MajorIncident,
+    SiteResourceAssignment,
+    VehiclePosition,
+)
+from app.models.master import AlarmDispatchVehicle, AlarmType, FireDept, VehicleMaster
+from app.models.teilnahme import Teilnahme
+from app.models.user import DeviceToken, User
 
 _LEITSTELLEN_ID_ALIASES = {"leitstellen nr.", "leitstellen nummer", "leitstellennummer"}
 _DATE_FORMAT = "%d.%m.%Y %H:%M:%S"
@@ -65,15 +77,18 @@ def _text(value: Any) -> str | None:
     return value or None
 
 
-def _date(value: Any) -> datetime | None:
+def _date(value: Any, org: FireDept | None = None) -> datetime | None:
     if value in (None, ""):
         return None
-    if isinstance(value, datetime):
-        return value
     try:
-        return datetime.strptime(str(value).strip(), _DATE_FORMAT)
+        parsed = value if isinstance(value, datetime) else datetime.strptime(
+            str(value).strip(), _DATE_FORMAT
+        )
     except ValueError:
         return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=org_tz(org))
+    return parsed.astimezone(UTC).replace(tzinfo=None)
 
 
 def _float(value: Any) -> float | None:
@@ -158,15 +173,15 @@ def _reason(row: dict[str, Any], format_name: str) -> str | None:
     return "\n".join(dict.fromkeys(part for part in parts if part)) or None
 
 
-def _row_fields(row: dict[str, Any], format_name: str) -> dict[str, Any]:
-    closed = _date(row.get("ende")) if format_name == "B" else None
-    closed = closed or _date(row.get("wieder einsatzbereit"))
+def _row_fields(row: dict[str, Any], format_name: str, org: FireDept | None) -> dict[str, Any]:
+    closed = _date(row.get("ende"), org) if format_name == "B" else None
+    closed = closed or _date(row.get("wieder einsatzbereit"), org)
     return {
-        "started_at": _date(row.get("erst-alarmierung")),
-        "taken_over_at": _date(row.get("übernommen")),
-        "departed_at": _date(row.get("ausfahrt")),
-        "on_scene_at": _date(row.get("am einsatzort")),
-        "ready_again_at": _date(row.get("wieder einsatzbereit")),
+        "started_at": _date(row.get("erst-alarmierung"), org),
+        "taken_over_at": _date(row.get("übernommen"), org),
+        "departed_at": _date(row.get("ausfahrt"), org),
+        "on_scene_at": _date(row.get("am einsatzort"), org),
+        "ready_again_at": _date(row.get("wieder einsatzbereit"), org),
         "closed_at": closed,
         "address_street": _text(row.get("straße/objekt")),
         "address_no": _text(row.get("hausnummer")),
@@ -196,17 +211,23 @@ def _active_column(db: Session, incident: Incident) -> IncidentColumn:
 
 def _vehicle(db: Session, org_id: int, row: dict[str, Any]) -> tuple[VehicleMaster | None, bool]:
     code, name = _text(row.get("fahrzeug")), _text(row.get("funkrufname"))
-    vehicle = None
-    if code:
-        vehicle = db.query(VehicleMaster).filter(
-            VehicleMaster.dept_id == org_id, func.lower(VehicleMaster.code) == code.lower()
-        ).first()
-    if vehicle is None and name:
-        vehicle = db.query(VehicleMaster).filter(
-            VehicleMaster.dept_id == org_id, func.lower(VehicleMaster.name) == name.lower()
-        ).first()
-    if vehicle:
-        return vehicle, False
+    matches = []
+    if code or name:
+        criteria = []
+        if code:
+            criteria.append(func.lower(VehicleMaster.code) == code.lower())
+        if name:
+            criteria.append(func.lower(VehicleMaster.name) == name.lower())
+        matches = db.query(VehicleMaster).filter(
+            VehicleMaster.dept_id == org_id, or_(*criteria)
+        ).all()
+    real = next((item for item in matches if not item.is_adhoc), None)
+    if real is not None:
+        for adhoc in (item for item in matches if item.is_adhoc):
+            _replace_adhoc_vehicle(db, org_id, adhoc, real)
+        return real, False
+    if matches:
+        return matches[0], False
     if not code and not name:
         return None, False
     vehicle = VehicleMaster(
@@ -218,9 +239,52 @@ def _vehicle(db: Session, org_id: int, row: dict[str, Any]) -> tuple[VehicleMast
     return vehicle, True
 
 
+def _replace_adhoc_vehicle(
+    db: Session, org_id: int, adhoc: VehicleMaster, real: VehicleMaster
+) -> None:
+    """Haengt alle tenant-geprueften Referenzen um und entfernt das Adhoc-Fahrzeug."""
+    queries = (
+        (db.query(IncidentVehicle).join(Incident).filter(
+            Incident.primary_org_id == org_id,
+            IncidentVehicle.vehicle_master_id == adhoc.id,
+        ), "vehicle_master_id"),
+        (db.query(Teilnahme).filter(
+            Teilnahme.org_id == org_id, Teilnahme.fahrzeug_id == adhoc.id,
+        ), "fahrzeug_id"),
+        (db.query(DeviceToken).join(User, DeviceToken.user_id == User.id).filter(
+            User.org_id == org_id, DeviceToken.vehicle_master_id == adhoc.id,
+        ), "vehicle_master_id"),
+        (db.query(AlarmDispatchVehicle).join(AlarmType).filter(
+            AlarmType.org_id == org_id, AlarmDispatchVehicle.vehicle_master_id == adhoc.id,
+        ), "vehicle_master_id"),
+        (db.query(FoerderPumpenTyp).filter(
+            FoerderPumpenTyp.org_id == org_id, FoerderPumpenTyp.vehicle_id == adhoc.id,
+        ), "vehicle_id"),
+        (db.query(Fahrt).filter(
+            Fahrt.org_id == org_id, Fahrt.fahrzeug_id == adhoc.id,
+        ), "fahrzeug_id"),
+        (db.query(SiteResourceAssignment).join(IncidentSite).join(MajorIncident).filter(
+            MajorIncident.org_id == org_id, SiteResourceAssignment.vehicle_id == adhoc.id,
+        ), "vehicle_id"),
+        (db.query(LageEinheit).join(MajorIncident).filter(
+            MajorIncident.org_id == org_id, LageEinheit.vehicle_id == adhoc.id,
+        ), "vehicle_id"),
+        (db.query(VehiclePosition).filter(
+            VehiclePosition.org_id == org_id, VehiclePosition.vehicle_id == adhoc.id,
+        ), "vehicle_id"),
+    )
+    for query, attribute in queries:
+        for reference in query.all():
+            setattr(reference, attribute, real.id)
+    db.flush()
+    db.delete(adhoc)
+    db.flush()
+
+
 def import_einsaetze(db: Session, parsed: ParsedImport, org_id: int, user_id: int) -> ImportResult:
     """Importiert gruppenweise mit Savepoints; bestehende Werte bleiben erhalten."""
     result = ImportResult(format=parsed.format)
+    org = db.query(FireDept).filter(FireDept.id == org_id).one_or_none()
     for operation_number, rows in parsed.groups.items():
         counters_before = (
             result.imported, result.updated, result.unchanged,
@@ -233,7 +297,7 @@ def import_einsaetze(db: Session, parsed: ParsedImport, org_id: int, user_id: in
             ).first()
             created = incident is None
             row = rows[0]
-            fields = _row_fields(row, parsed.format)
+            fields = _row_fields(row, parsed.format, org)
             alarm_code, alarm_recognised = _alarm_code(db, org_id, row)
             if created:
                 incident = Incident(

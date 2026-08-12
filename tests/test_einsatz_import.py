@@ -6,10 +6,20 @@ from openpyxl import Workbook
 
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
-from app.models.incident import Incident, IncidentVehicle
-from app.models.master import AlarmType, FireDept, VehicleMaster
+from app.models.fahrtenbuch import Fahrt, FahrtKategorie, Fahrtzweck
+from app.models.foerderstrecke import FoerderPumpenTyp
+from app.models.incident import Incident, IncidentColumn, IncidentVehicle
+from app.models.major_incident import (
+    IncidentSite,
+    LageEinheit,
+    MajorIncident,
+    SiteResourceAssignment,
+    VehiclePosition,
+)
+from app.models.master import AlarmDispatchVehicle, AlarmType, FireDept, VehicleMaster
+from app.models.teilnahme import Teilnahme
 from app.models.uas import UASEinsatz
-from app.models.user import Role, User, UserRole
+from app.models.user import DeviceToken, Role, User, UserRole
 from app.services.einsatz_import_service import import_einsaetze, parse_einsatz_excel
 from tests.conftest import TestingSession
 
@@ -133,12 +143,12 @@ def test_format_b_importiert_alle_statuszeiten():
         ).one()
 
         assert result.imported == 1
-        assert incident.started_at == datetime(2026, 1, 7, 8, 43)
-        assert incident.taken_over_at == datetime(2026, 1, 7, 8, 44)
-        assert incident.departed_at == datetime(2026, 1, 7, 8, 47)
-        assert incident.on_scene_at == datetime(2026, 1, 7, 8, 49)
-        assert incident.ready_again_at == datetime(2026, 1, 7, 8, 59)
-        assert incident.closed_at == datetime(2026, 1, 7, 9, 1)
+        assert incident.started_at == datetime(2026, 1, 7, 7, 43)
+        assert incident.taken_over_at == datetime(2026, 1, 7, 7, 44)
+        assert incident.departed_at == datetime(2026, 1, 7, 7, 47)
+        assert incident.on_scene_at == datetime(2026, 1, 7, 7, 49)
+        assert incident.ready_again_at == datetime(2026, 1, 7, 7, 59)
+        assert incident.closed_at == datetime(2026, 1, 7, 8, 1)
     finally:
         db.close()
 
@@ -168,12 +178,12 @@ def test_reimport_korrigiert_alle_statuszeiten():
         db.refresh(incident)
 
         assert result.updated == 1
-        assert incident.started_at == datetime(2026, 1, 7, 9, 0)
-        assert incident.taken_over_at == datetime(2026, 1, 7, 9, 1)
-        assert incident.departed_at == datetime(2026, 1, 7, 9, 2)
-        assert incident.on_scene_at == datetime(2026, 1, 7, 9, 3)
-        assert incident.ready_again_at == datetime(2026, 1, 7, 9, 4)
-        assert incident.closed_at == datetime(2026, 1, 7, 9, 5)
+        assert incident.started_at == datetime(2026, 1, 7, 8, 0)
+        assert incident.taken_over_at == datetime(2026, 1, 7, 8, 1)
+        assert incident.departed_at == datetime(2026, 1, 7, 8, 2)
+        assert incident.on_scene_at == datetime(2026, 1, 7, 8, 3)
+        assert incident.ready_again_at == datetime(2026, 1, 7, 8, 4)
+        assert incident.closed_at == datetime(2026, 1, 7, 8, 5)
     finally:
         db.close()
 
@@ -225,9 +235,126 @@ def test_format_a_nutzt_einsatzbereit_auch_als_ende():
             primary_org_id=org.id, lis_operation_number="f-format-a"
         ).one()
 
-        expected = datetime(2026, 1, 7, 18, 50)
+        expected = datetime(2026, 1, 7, 17, 50)
         assert incident.ready_again_at == expected
         assert incident.closed_at == expected
+    finally:
+        db.close()
+
+
+def test_import_nutzt_org_zeitzone_statt_fixem_wien_fallback():
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        org = _org(db, "timezone")
+        org.timezone = "Europe/London"
+        user = _user(db, org.id, "org_admin")
+        db.commit()
+        raw = _xlsx(FORMAT_B_HEADERS, [[
+            "f-timezone", "07.07.2026 08:43:00", None, None, None, None,
+            "07.07.2026 09:01:00", "T1", "Alarm", "Ablauf", None, 47.4, 9.7,
+        ]])
+
+        import_einsaetze(db, parse_einsatz_excel(raw), org.id, user.id)
+        incident = db.query(Incident).filter_by(
+            primary_org_id=org.id, lis_operation_number="f-timezone"
+        ).one()
+
+        assert incident.started_at == datetime(2026, 7, 7, 7, 43)
+        assert incident.closed_at == datetime(2026, 7, 7, 8, 1)
+    finally:
+        db.close()
+
+
+def test_reimport_ersetzt_adhoc_fahrzeug_in_allen_fk_tabellen():
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        org = _org(db, "adhoc-fks")
+        user = _user(db, org.id, "org_admin")
+        alarm = AlarmType(org_id=org.id, code="T1", category="T", label="Technisch")
+        adhoc = VehicleMaster(
+            dept_id=org.id, code="RLF-A", name="RLF", active=True, is_adhoc=True
+        )
+        db.add_all([alarm, adhoc])
+        db.flush()
+        adhoc_id = adhoc.id
+
+        incident = Incident(primary_org_id=org.id, alarm_type_code="T1", status="closed")
+        db.add(incident)
+        db.flush()
+        column = IncidentColumn(
+            incident_id=incident.id, code="active", title="Aktiv", column_kind="vehicles",
+            is_fixed=True, display_order=0,
+        )
+        major = MajorIncident(org_id=org.id, name="Lage")
+        purpose = Fahrtzweck(
+            org_id=org.id, name="Einsatz", kategorie=FahrtKategorie.einsatz
+        )
+        db.add_all([column, major, purpose])
+        db.flush()
+        site = IncidentSite(
+            major_incident_id=major.id, org_id=org.id, bezeichnung="Stelle"
+        )
+        db.add(site)
+        db.flush()
+        references = [
+            IncidentVehicle(
+                incident_id=incident.id, column_id=column.id, vehicle_master_id=adhoc.id,
+                unit_status="Einsatzbereit",
+            ),
+            Teilnahme(
+                org_id=org.id, bezug_typ="einsatz", bezug_id=incident.id,
+                fahrzeug_id=adhoc.id,
+            ),
+            DeviceToken(
+                label="Test", token_hash=uuid.uuid4().hex, user_id=user.id,
+                vehicle_master_id=adhoc.id,
+            ),
+            AlarmDispatchVehicle(alarm_type_id=alarm.id, vehicle_master_id=adhoc.id),
+            FoerderPumpenTyp(org_id=org.id, name="Pumpe", vehicle_id=adhoc.id),
+            Fahrt(
+                org_id=org.id, zeitpunkt=datetime(2026, 1, 1), fahrzeug_id=adhoc.id,
+                maschinist_name="Test", zweck_id=purpose.id, fahrttyp=FahrtKategorie.einsatz,
+            ),
+            SiteResourceAssignment(
+                incident_site_id=site.id, resource_type="vehicle", vehicle_id=adhoc.id,
+            ),
+            LageEinheit(lage_id=major.id, vehicle_id=adhoc.id, label="RLF"),
+            VehiclePosition(
+                incident_id=major.id, org_id=org.id, vehicle_id=adhoc.id,
+                lat=47.0, lon=9.0, recorded_at=datetime(2026, 1, 1),
+            ),
+        ]
+        db.add_all(references)
+        db.commit()
+
+        real = VehicleMaster(
+            dept_id=org.id, code="RLF-A", name="RLF neu", active=True, is_adhoc=False
+        )
+        db.add(real)
+        db.commit()
+        real_id = real.id
+        raw = _xlsx(FORMAT_A_HEADERS, [[
+            "f-dedup", "Brand", "07.01.2026 17:50:00", "07.01.2026 18:50:00",
+            "RLF-A", "RLF", None, "Hauptstraße", "1", "WOLFURT",
+        ]])
+
+        result = import_einsaetze(db, parse_einsatz_excel(raw), org.id, user.id)
+
+        assert result.row_errors == 0
+        assert db.get(VehicleMaster, adhoc_id) is None
+        for reference in references:
+            db.refresh(reference)
+        assert references[0].vehicle_master_id == real_id
+        assert references[1].fahrzeug_id == real_id
+        assert references[2].vehicle_master_id == real_id
+        assert references[3].vehicle_master_id == real_id
+        assert references[4].vehicle_id == real_id
+        assert references[5].fahrzeug_id == real_id
+        assert references[6].vehicle_id == real_id
+        assert references[7].vehicle_id == real_id
+        assert references[8].vehicle_id == real_id
     finally:
         db.close()
 
