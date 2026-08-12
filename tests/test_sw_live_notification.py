@@ -11,7 +11,7 @@ def _sw_source() -> str:
 
 def test_live_notification_payload_handling():
     src = _sw_source()
-    assert "const CACHE = 'ec-v8';" in src
+    assert "const CACHE = 'ec-v9';" in src
     assert "einsatz_live" in src
     assert "einsatz_live_end" in src
 

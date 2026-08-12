@@ -96,3 +96,4 @@ def test_same_org_or_system_admin_rejects_org_admin_for_foreign_org():
     org_admin = _FakeUser(1, roles=("org_admin",))
     assert same_org_or_system_admin(org_admin, 2) is False
     assert same_org_or_system_admin(org_admin, 1) is True
+    assert same_org_or_system_admin(org_admin, None) is False

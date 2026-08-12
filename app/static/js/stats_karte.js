@@ -1,5 +1,6 @@
 (function () {
   var MONTHS_AT = ["Jänner", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+  Chart.defaults.color = "#dae2fd";
   function formatMonthLabel(key) {
     var parts = key.split("-");
     return MONTHS_AT[parseInt(parts[1], 10) - 1] + " '" + parts[0].slice(2);
@@ -32,7 +33,7 @@
       labels: ["Brand", "Technisch", "Sonstige"],
       datasets: [{data: data.categories, backgroundColor: ["#d42225", "#1877f2", "#687386"]}]
     }, options: {
-      radius: "85%",
+      radius: "65%",
       plugins: {
         legend: {labels: {generateLabels: function (chart) {
           var values = chart.data.datasets[0].data;

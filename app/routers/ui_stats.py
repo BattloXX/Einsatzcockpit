@@ -1,5 +1,5 @@
 """Statistik-Dashboard."""
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.permissions import has_role
 from app.core.templating import templates
-from app.core.timezones import local_date_to_utc
+from app.core.timezones import local_date_to_utc, now_local
 from app.db import get_db
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck
 from app.models.incident import Incident, IncidentOrg
@@ -49,10 +49,28 @@ def _stats_context(request: Request, db: Session, user, von: str, bis: str) -> d
     bis_date = _parse_range(bis, default_bis)
     if von_date > bis_date:
         von_date, bis_date = bis_date, von_date
+    today = now_local(org).date()
+    active_preset = None
+    if von_date == date(today.year, 1, 1) and bis_date == today:
+        active_preset = "jahr"
+    else:
+        try:
+            previous_year_date = date(today.year - 1, today.month, today.day)
+        except ValueError:
+            previous_year_date = None
+        if von_date == previous_year_date and bis_date == today:
+            active_preset = "jahr12"
+        else:
+            first_of_this_month = date(today.year, today.month, 1)
+            last_of_prev_month = first_of_this_month - timedelta(days=1)
+            first_of_prev_month = date(last_of_prev_month.year, last_of_prev_month.month, 1)
+            if von_date == first_of_prev_month and bis_date == last_of_prev_month:
+                active_preset = "monat"
     result = get_stats(db, user.org_id, von_date, bis_date, user=user)
     return {
         "user": user, "org": org, "stats": result,
         "von": von_date, "bis": bis_date,
+        "active_preset": active_preset,
         "fb_stats": _fahrtenbuch_stats(user.org_id, db) if user.org_id else None,
     }
 

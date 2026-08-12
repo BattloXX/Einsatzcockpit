@@ -244,6 +244,8 @@ def import_einsaetze(db: Session, parsed: ParsedImport, org_id: int, user_id: in
                 if created:
                     _create_fixed_columns(db, incident)
                     result.imported += 1
+            if incident is None:
+                raise RuntimeError("Einsatz konnte nicht angelegt oder geladen werden")
             changed = False
             if not created:
                 for key, value in fields.items():

@@ -1,0 +1,7 @@
+{% from "_tabnav.html" import subtabnav %}
+{% set _fp = request.url.path %}
+{{ subtabnav([
+  {'label': 'Alarm-Infoscreen', 'href': '/infoscreen-alarm/verwaltung', 'active': _fp.startswith('/infoscreen-alarm')},
+  {'label': 'Wetter', 'href': '/admin/settings/wetter', 'active': _fp.startswith('/admin/settings/wetter')},
+  {'label': 'Statistik', 'href': '/admin/settings/statistik', 'active': _fp.startswith('/admin/settings/statistik')},
+]) }}

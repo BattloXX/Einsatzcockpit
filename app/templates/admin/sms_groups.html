@@ -98,7 +98,7 @@
             </span>
           </div>
           <div style="display:flex;gap:6px;">
-            <button class="btn btn--ghost btn--xs"
+            <button type="button" class="btn btn--ghost btn--xs"
                     onclick="toggleEdit({{ grp.id }})">Bearbeiten</button>
             <form method="post" action="/admin/gruppen/{{ grp.id }}/loeschen"
                   onsubmit="return confirm('Gruppe \'{{ grp.name }}\' wirklich loeschen?')">

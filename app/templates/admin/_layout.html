@@ -9,7 +9,8 @@
      or '/admin/api-keys' in _p or '/admin/lagekarte-tokens' in _p or '/admin/audit' in _p
      or '/admin/sms-senden' in _p or '/admin/sms-provider' in _p
      or '/admin/sms-empfang' in _p or '/admin/einsatzinfo-sms' in _p
-     or '/infoscreen-alarm' in _p
+     or '/infoscreen-alarm' in _p or '/admin/settings/wetter' in _p
+     or '/admin/settings/statistik' in _p
      or ('/admin/medien' in _p and not is_sysadmin)
      or '/admin/verleih' in _p or '/admin/wasserstellen' in _p
      or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p
@@ -26,8 +27,7 @@
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
        or '/admin/lis' in _p or '/admin/dibos' in _p or '/admin/mail' in _p
        or '/admin/teams-alarmierung' in _p
-       or ('/admin/medien' in _p and is_sysadmin)
-       or _p == '/admin/settings/wetter' or _p.startswith('/admin/settings/wetter?') %}
+       or ('/admin/medien' in _p and is_sysadmin) %}
   {% set active_group = 'einstellungen' %}
 {% elif _p == '/admin/hilfe' %}
   {% set active_group = 'hilfe' %}
@@ -305,9 +305,9 @@
               <span class="admin-nav__icon">✉️</span>SMS
             </a>
             <a href="/infoscreen-alarm/verwaltung"
-               class="admin-nav__item {% if '/infoscreen-alarm' in request.url.path %}is-active{% endif %}"
-               {{ tip('Wandmonitor im Gerätehaus: Alarm-Infoscreen, Rotations-URLs, Monitor-Tokens') }}>
-              <span class="admin-nav__icon">📺</span>Alarm-Infoscreen
+               class="admin-nav__item {% if '/infoscreen-alarm' in request.url.path or '/admin/settings/wetter' in request.url.path or '/admin/settings/statistik' in request.url.path %}is-active{% endif %}"
+               {{ tip('Alarm-, Wetter- und Statistik-Infoscreens verwalten') }}>
+              <span class="admin-nav__icon">📺</span>Infoscreens
             </a>
             {% if request.state.gateway_enabled %}
             <a href="/gateway"
@@ -335,16 +335,6 @@
                class="admin-nav__item {% if '/admin/gsl-einstellungen' in request.url.path %}is-active{% endif %}"
                {{ tip('GSL: Module, Lagemeldung, Geräteverleih je Org konfigurieren') }}>
               <span class="admin-nav__icon">🚨</span>GSL-Einstellungen
-            </a>
-            <a href="/admin/settings/wetter"
-               class="admin-nav__item {% if request.url.path == '/admin/settings/wetter' or request.url.path.startswith('/admin/settings/wetter') %}is-active{% endif %}"
-               {{ tip('Eigene Wetterstation, Infoscreen-Dashboard-Link, Wetter aktivieren/deaktivieren') }}>
-              <span class="admin-nav__icon">&#x1F321;&#xFE0F;</span>Wetter
-            </a>
-            <a href="/admin/settings/statistik"
-               class="admin-nav__item {% if request.url.path.startswith('/admin/settings/statistik') %}is-active{% endif %}"
-               {{ tip('Statistik-Infoscreen aktivieren und Zugriffs-Tokens verwalten') }}>
-              <span class="admin-nav__icon">&#x1F4CA;</span>Statistik-Infoscreen
             </a>
             <div class="admin-nav__subheading">Schnittstellen</div>
             <a href="/admin/sso"

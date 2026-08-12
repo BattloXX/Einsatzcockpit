@@ -3,6 +3,7 @@
 {% block title %}Statistik-Infoscreen{% endblock %}
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Statistik-Infoscreen'}]) }}{% endblock %}
 {% block admin_content %}
+{% include "admin/_infoscreen_tabs.html" %}
 <div class="page-header"><div><h1>Statistik-Infoscreen</h1><p class="page-header__sub">Oeffentlichen Wandmonitor verwalten</p></div></div>
 {% if is_sysadmin and all_orgs %}
 <section class="card mb-4"><div class="card-body"><select class="form-control" onchange="location.href='/admin/settings/statistik?org_id='+this.value">

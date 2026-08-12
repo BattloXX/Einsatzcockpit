@@ -1592,6 +1592,18 @@ button.htmx-request,
   .archive-card__actions .btn { flex: 1; }
 }
 
+/* Gemeinsame Tab-Navigation fuer Modul-Landingpages, siehe _tabnav.html.
+   Diese Regeln muessen in der Tailwind-Quelle bleiben, damit ein Rebuild sie
+   nicht erneut stillschweigend aus app.css entfernt. */
+.tabnav{display:flex;align-items:flex-end;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.25rem;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.tabnav__item{display:inline-flex;align-items:center;min-height:44px;padding:.6rem 1.1rem;font-size:.9rem;font-weight:600;white-space:nowrap;color:var(--text-muted);text-decoration:none;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;flex-shrink:0;}
+.tabnav__item:hover{color:var(--text);}
+.tabnav__item--active{color:var(--text);border-bottom-color:var(--red);}
+.subtabnav{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:1.25rem;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.subtabnav__item{display:inline-flex;align-items:center;min-height:44px;padding:.4rem .9rem;font-size:.82rem;font-weight:600;white-space:nowrap;color:var(--text-muted);background:var(--surface-mid);border:1px solid var(--border);border-radius:var(--radius-full,999px);text-decoration:none;transition:background .15s,color .15s;flex-shrink:0;}
+.subtabnav__item:hover{color:var(--text);background:var(--surface-high);}
+.subtabnav__item--active{color:#fff;background:var(--red);border-color:var(--red);}
+
 /* ── Einsatzverlauf (Archiv-Detail): Tab-Navigation nur auf Mobil ──────────
    Desktop zeigt weiterhin alle .detail-box im 2-Spalten-Grid; auf Mobil
    wird ueber data-tabgroup gefiltert, damit der lange Einsatzverlauf nicht

@@ -3,9 +3,9 @@
   <label>Von <input class="form-control" type="date" name="von" value="{{ von }}"></label>
   <label>Bis <input class="form-control" type="date" name="bis" value="{{ bis }}"></label>
   <button class="btn btn--primary" type="submit">Anwenden</button>
-  <button class="btn btn--ghost" type="button" onclick="var d=new Date();this.form.von.value=d.getFullYear()+'-01-01';this.form.bis.value=d.toISOString().slice(0,10);this.form.requestSubmit()">Dieses Jahr</button>
-  <button class="btn btn--ghost" type="button" onclick="var d=new Date(),v=new Date(d);v.setFullYear(v.getFullYear()-1);this.form.von.value=v.toISOString().slice(0,10);this.form.bis.value=d.toISOString().slice(0,10);this.form.requestSubmit()">Letzte 12 Monate</button>
-  <button class="btn btn--ghost" type="button" onclick="var d=new Date(),v=new Date(d.getFullYear(),d.getMonth()-1,1),b=new Date(d.getFullYear(),d.getMonth(),0);this.form.von.value=v.toISOString().slice(0,10);this.form.bis.value=b.toISOString().slice(0,10);this.form.requestSubmit()">Letzter Monat</button>
+  <button class="btn btn--ghost {% if active_preset == 'jahr' %}is-active{% endif %}" type="button" onclick="var d=new Date();this.form.von.value=d.getFullYear()+'-01-01';this.form.bis.value=d.toISOString().slice(0,10);this.form.requestSubmit()">Dieses Jahr</button>
+  <button class="btn btn--ghost {% if active_preset == 'jahr12' %}is-active{% endif %}" type="button" onclick="var d=new Date(),v=new Date(d);v.setFullYear(v.getFullYear()-1);this.form.von.value=v.toISOString().slice(0,10);this.form.bis.value=d.toISOString().slice(0,10);this.form.requestSubmit()">Letzte 12 Monate</button>
+  <button class="btn btn--ghost {% if active_preset == 'monat' %}is-active{% endif %}" type="button" onclick="var d=new Date(),v=new Date(d.getFullYear(),d.getMonth()-1,1),b=new Date(d.getFullYear(),d.getMonth(),0);this.form.von.value=v.toISOString().slice(0,10);this.form.bis.value=b.toISOString().slice(0,10);this.form.requestSubmit()">Letzter Monat</button>
   <a class="btn btn--ghost" href="/statistik/export.xlsx?von={{ von }}&bis={{ bis }}">Excel-Export</a>
   <a class="btn btn--ghost" href="/statistik/bericht.pdf?von={{ von }}&bis={{ bis }}">PDF-Bericht</a>
 </form>

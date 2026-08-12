@@ -72,8 +72,8 @@ def get_stats(
     markers: list[dict[str, Any]] = []
     for incident in incidents:
         alarm_counts[incident.alarm_type_code] = alarm_counts.get(incident.alarm_type_code, 0) + 1
-        category = (alarm_by_code.get(incident.alarm_type_code).category
-                    if alarm_by_code.get(incident.alarm_type_code) else "")
+        alarm_type = alarm_by_code.get(incident.alarm_type_code)
+        category = alarm_type.category if alarm_type else ""
         if category in ("B", "F"):
             bucket = "fire"
         elif category == "T":
@@ -81,7 +81,10 @@ def get_stats(
         else:
             bucket = "other"
         categories[bucket] += 1
-        month = to_org_tz(incident.started_at, org).strftime("%Y-%m")
+        local_started_at = to_org_tz(incident.started_at, org)
+        if local_started_at is None:
+            continue
+        month = local_started_at.strftime("%Y-%m")
         months.setdefault(month, {"fire": 0, "technical": 0, "other": 0})
         months[month][bucket] += 1
         if incident.closed_at and incident.closed_at >= incident.started_at:

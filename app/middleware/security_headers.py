@@ -44,10 +44,11 @@ _CSP_ALARM_INFOSCREEN_BASE = _CSP_BASE.replace(
     "frame-src 'self' https://embed.windy.com",
     "frame-src 'self' https:",
 )
-# Wetter-Infoscreen: standalone FullHD-Seite mit Tailwind CDN (Fonts sind lokal, siehe fonts.css)
+# Wetter-/Statistik-Infoscreen: standalone FullHD-Seiten mit Tailwind CDN
+# (Fonts sind lokal, siehe fonts.css)
 _CSP_INFOSCREEN_BASE = (
     "default-src 'self'; "
-    "img-src 'self' data: blob:; "
+    "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; "
     "font-src 'self' data:; "
@@ -94,7 +95,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         path = request.url.path
         embeddable = _is_embeddable_route(path)
-        infoscreen = path.startswith("/wetter/infoscreen/")
+        infoscreen = path.startswith("/wetter/infoscreen/") or path.startswith("/infoscreen/statistik/")
         alarm_infoscreen = path.startswith("/infoscreen/alarm/")
         trusted = _trusted_frame_ancestors()
 

@@ -94,12 +94,14 @@ def can_access_incident(user, incident) -> bool:
     return user.org_id in collab_org_ids
 
 
-def same_org_or_system_admin(user, target_org_id: int) -> bool:
+def same_org_or_system_admin(user, target_org_id: int | None) -> bool:
     """True if user belongs to target_org_id OR is system_admin."""
     if user is None:
         return False
     if "system_admin" in {r.code for r in user.roles}:
         return True
+    if target_org_id is None:
+        return False
     return user.org_id == target_org_id
 
 

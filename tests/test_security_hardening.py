@@ -166,6 +166,17 @@ def test_alarm_infoscreen_csp_erlaubt_https_iframes(monkeypatch):
     assert h["x-frame-options"] == "SAMEORIGIN"
 
 
+def test_statistik_infoscreen_csp_erlaubt_tailwind_und_kartenkacheln(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    h = _security_headers_for("/infoscreen/statistik/tok")
+    csp = h["content-security-policy"]
+    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com" in csp
+    assert "https://tile.openstreetmap.org https://*.tile.openstreetmap.org" in csp
+    assert "frame-ancestors 'self'" in csp
+    assert h["x-frame-options"] == "SAMEORIGIN"
+
+
 def test_default_route_csp_ohne_konfiguration_bleibt_streng(monkeypatch):
     """Ohne konfigurierte TRUSTED_FRAME_ANCESTORS bleiben normale Routen strikt
     (kein Framing, auch nicht same-origin) — der Notausschalter fürs Fremd-Framing."""
