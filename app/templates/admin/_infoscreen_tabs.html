@@ -2,6 +2,7 @@
 {% set _fp = request.url.path %}
 {{ subtabnav([
   {'label': 'Alarm-Infoscreen', 'href': '/infoscreen-alarm/verwaltung', 'active': _fp.startswith('/infoscreen-alarm')},
-  {'label': 'Wetter', 'href': '/admin/settings/wetter', 'active': _fp.startswith('/admin/settings/wetter')},
+  {'label': 'Wetter', 'href': '/admin/settings/wetter', 'active': _fp == '/admin/settings/wetter'},
+  {'label': 'Wetter-Infoscreen', 'href': '/admin/settings/wetter/infoscreen', 'active': _fp.startswith('/admin/settings/wetter/infoscreen')},
   {'label': 'Statistik', 'href': '/admin/settings/statistik', 'active': _fp.startswith('/admin/settings/statistik')},
 ]) }}

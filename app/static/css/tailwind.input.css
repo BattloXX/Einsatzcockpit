@@ -910,6 +910,7 @@ dialog.media-viewer { max-width: 95vw; width: 95vw; max-height: 95dvh; height: 9
 .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 0 24px 24px; }
 .chart-box { background: var(--surface-mid); border-radius: 0.5rem; border: 1px solid var(--border); padding: 20px; }
 .chart-box h3 { font-size: .95rem; font-weight: 700; margin-bottom: 14px; }
+.chart-wrap { position: relative; height: 320px; min-height: 0; }
 
 /* ── Filter Bar ──────────────────────────────────────────── */
 .filter-bar { display: flex; gap: 16px; align-items: center; padding: 12px 24px;

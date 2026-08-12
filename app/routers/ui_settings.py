@@ -683,18 +683,11 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
         if effective_org_id else None
     )
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
-    from app.models.weather import WeatherDashboardToken, WeatherStation
+    from app.models.weather import WeatherStation
     weather_stations = (
         db.query(WeatherStation)
         .filter(WeatherStation.org_id == effective_org_id)
         .order_by(WeatherStation.name)
-        .all()
-        if effective_org_id else []
-    )
-    dashboard_tokens = (
-        db.query(WeatherDashboardToken)
-        .filter(WeatherDashboardToken.org_id == effective_org_id)
-        .order_by(WeatherDashboardToken.created_at.desc())
         .all()
         if effective_org_id else []
     )
@@ -712,20 +705,50 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
         "weather_stations": weather_stations,
         "new_station_token": None,
         "new_station_id": None,
-        "dashboard_tokens": dashboard_tokens,
-        "new_dashboard_token": None,
-        "new_dashboard_token_label": None,
         "weather_db_enabled": bool(app_settings.WEATHER_DATABASE_URL),
         "public_base_url": base_url,
         "kachelmann_is_configured": kachelmann_service.is_configured(effective_org_id),
-        "dashboard_qr": None,
         "alert_rules": alert_rules,
         "alert_logs": alert_logs,
         "rule_labels": RULE_LABELS,
         "rule_defaults": RULE_DEFAULTS,
     }
     ctx.update(extra)
-    # QR-Code nur wenn gerade eine frische URL bekannt ist
+    return ctx
+
+
+def _weather_infoscreen_settings_context(request, db, user, org_id, **extra) -> dict:
+    """Baut den Template-Kontext fuer den Wetter-Infoscreen."""
+    from app.models.weather import WeatherDashboardToken
+
+    is_sysadmin = has_role(user, "system_admin")
+    effective_org_id = org_id if (is_sysadmin and org_id) else user.org_id
+    org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
+    org_settings = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+        if effective_org_id else None
+    )
+    dashboard_tokens = (
+        db.query(WeatherDashboardToken)
+        .filter(WeatherDashboardToken.org_id == effective_org_id)
+        .order_by(WeatherDashboardToken.created_at.desc())
+        .all()
+        if effective_org_id else []
+    )
+    base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
+    ctx = {
+        "user": user,
+        "org": org,
+        "org_settings": org_settings,
+        "is_sysadmin": is_sysadmin,
+        "all_orgs": db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else [],
+        "dashboard_tokens": dashboard_tokens,
+        "new_dashboard_token": None,
+        "new_dashboard_token_label": None,
+        "dashboard_qr": None,
+        "public_base_url": base_url,
+    }
+    ctx.update(extra)
     if ctx.get("new_dashboard_token"):
         dashboard_url = f"{base_url}/wetter/infoscreen/{ctx['new_dashboard_token']}"
         ctx["dashboard_qr"] = _generate_qr_datauri(dashboard_url)
@@ -746,6 +769,19 @@ def weather_settings_page(
     )
 
 
+@router.get("/settings/wetter/infoscreen", response_class=HTMLResponse)
+def weather_infoscreen_settings_page(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    org_id: int | None = None,
+):
+    return templates.TemplateResponse(
+        request, "admin/settings_wetter_infoscreen.html",
+        _weather_infoscreen_settings_context(request, db, user, org_id),
+    )
+
+
 @router.post("/settings/wetter/dashboard-token/neu", response_class=HTMLResponse)
 async def weather_dashboard_token_create(
     request: Request,
@@ -762,7 +798,7 @@ async def weather_dashboard_token_create(
     effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
     org_id_param = effective_org_id if is_sysadmin else None
     if not effective_org_id:
-        return RedirectResponse("/admin/settings/wetter", status_code=303)
+        return RedirectResponse("/admin/settings/wetter/infoscreen", status_code=303)
 
     label = label.strip() or "Unbenannt"
     raw = generate_weather_dashboard_token()
@@ -775,8 +811,8 @@ async def weather_dashboard_token_create(
     db.commit()
 
     return templates.TemplateResponse(
-        request, "admin/settings_wetter.html",
-        _weather_settings_context(
+        request, "admin/settings_wetter_infoscreen.html",
+        _weather_infoscreen_settings_context(
             request, db, user, org_id_param,
             new_dashboard_token=raw,
             new_dashboard_token_label=label,
@@ -806,7 +842,7 @@ async def weather_dashboard_token_delete(
         db.commit()
 
     org_suffix = f"?org_id={target_org_id}" if (is_sysadmin and target_org_id) else ""
-    return RedirectResponse(f"/admin/settings/wetter{org_suffix}#dashboard", status_code=303)
+    return RedirectResponse(f"/admin/settings/wetter/infoscreen{org_suffix}#dashboard", status_code=303)
 
 
 @router.post("/settings/wetter/weather-toggle", response_class=HTMLResponse)
@@ -943,7 +979,7 @@ async def weather_infoscreen_hours_save(
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
     if not effective_org_id:
-        return RedirectResponse("/admin/settings/wetter", status_code=303)
+        return RedirectResponse("/admin/settings/wetter/infoscreen", status_code=303)
 
     hours = history_hours if history_hours in (6, 12, 24, 48, 72) else 24
 
@@ -957,8 +993,8 @@ async def weather_infoscreen_hours_save(
 
     org_id_param = effective_org_id if is_sysadmin else None
     return templates.TemplateResponse(
-        request, "admin/settings_wetter.html",
-        _weather_settings_context(request, db, user, org_id_param),
+        request, "admin/settings_wetter_infoscreen.html",
+        _weather_infoscreen_settings_context(request, db, user, org_id_param),
     )
 
 

@@ -119,8 +119,14 @@
         <div class="min-h-0 overflow-hidden">
           {% for row in stats.vehicle_fleet_stats %}
           <div class="fleet-row flex items-center justify-between gap-4 py-3 border-b border-outline-variant">
-            <strong class="font-mono text-headline-sm text-tertiary">{{ row.code }}</strong>
-            <span class="font-mono text-body-sm text-on-surface-variant text-right">{{ row.km_aktuell }} km &bull; {{ row.betriebsstunden_aktuell }} h</span>
+            <div class="flex items-baseline gap-3">
+              <strong class="font-sans text-on-surface font-extrabold" style="font-size:32px;line-height:1;">{{ row.anzahl_einsaetze }}</strong>
+              <span class="font-mono text-label-caps text-on-surface-variant">EINSAETZE</span>
+            </div>
+            <div class="text-right">
+              <strong class="block font-mono text-headline-sm text-tertiary">{{ row.code }}</strong>
+              <span class="font-mono text-body-sm text-on-surface-variant">{{ row.km_aktuell }} km &bull; {{ row.betriebsstunden_aktuell }} h</span>
+            </div>
           </div>
           {% else %}
           <div class="flex h-full items-center justify-center text-on-surface-variant">Keine Fuhrparkdaten vorhanden.</div>
@@ -155,7 +161,7 @@
 </div>
 
 <script type="application/json" id="stats-map-data">{{ stats.map_markers|tojson }}</script>
-<script type="application/json" id="stats-chart-data">{{ {'categories':[stats.fire_count,stats.technical_count,stats.other_count]}|tojson }}</script>
+<script type="application/json" id="stats-chart-data">{{ {'categories':[stats.fire_count,stats.technical_count,stats.other_count], 'by_alarm_type':stats.by_alarm_type}|tojson }}</script>
 <script src="/static/js/stats_karte.js?v={{ ASSET_VERSION }}"></script>
 <script>
 (function() {

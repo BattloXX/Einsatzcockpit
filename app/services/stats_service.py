@@ -102,6 +102,7 @@ def get_stats(
         alarm = alarm_by_code.get(code)
         by_alarm_type.append({
             "code": code, "label": alarm.label if alarm else "", "count": count,
+            "category": alarm.category if alarm else "",
             "percent": round(count * 100 / len(incidents), 1) if incidents else 0,
         })
 
@@ -151,8 +152,10 @@ def get_stats(
     )
     fleet_stats = [{
         "id": v.id, "code": v.code, "name": v.name,
+        "anzahl_einsaetze": usage.get(v.id, {}).get("count", 0),
         "km_aktuell": v.km_aktuell, "betriebsstunden_aktuell": float(v.betriebsstunden_aktuell or 0),
     } for v in fleet]
+    fleet_stats.sort(key=lambda row: -row["anzahl_einsaetze"])
 
     return StatsResult(
         total=len(incidents), total_exercises=len(exercises),
