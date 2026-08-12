@@ -5,18 +5,59 @@
   <h2>Einsatz-Archiv</h2>
 </div>
 <div x-data="{showExercise: false, search: ''}" style="padding:0 0 24px;">
+  <form method="get" class="filter-bar" style="flex-wrap:wrap;align-items:end;">
+    <div>
+      <label for="archiv-jahr" class="form-label">Jahr</label>
+      <select id="archiv-jahr" name="jahr" class="form-control form-control--sm" onchange="this.form.submit()">
+        {% for jahr in jahre_optionen %}
+        <option value="{{ jahr }}" {% if filter.jahr == jahr|string %}selected{% endif %}>{{ jahr }}</option>
+        {% endfor %}
+        <option value="alle" {% if filter.jahr == 'alle' %}selected{% endif %}>Alle Jahre</option>
+      </select>
+    </div>
+    <div>
+      <label for="archiv-von" class="form-label">Von</label>
+      <input id="archiv-von" type="date" name="von" value="{{ filter.von }}" class="form-control form-control--sm">
+    </div>
+    <div>
+      <label for="archiv-bis" class="form-label">Bis</label>
+      <input id="archiv-bis" type="date" name="bis" value="{{ filter.bis }}" class="form-control form-control--sm">
+    </div>
+    <div>
+      <label for="archiv-sort" class="form-label">Sortierung</label>
+      <select id="archiv-sort" name="sort" class="form-control form-control--sm" onchange="this.form.submit()">
+        <option value="datum_desc" {% if filter.sort == 'datum_desc' %}selected{% endif %}>Neueste zuerst</option>
+        <option value="datum_asc" {% if filter.sort == 'datum_asc' %}selected{% endif %}>Älteste zuerst</option>
+        <option value="dauer_desc" {% if filter.sort == 'dauer_desc' %}selected{% endif %}>Längste Dauer</option>
+        <option value="dauer_asc" {% if filter.sort == 'dauer_asc' %}selected{% endif %}>Kürzeste Dauer</option>
+        <option value="typ_asc" {% if filter.sort == 'typ_asc' %}selected{% endif %}>Einsatzart (A-Z)</option>
+        <option value="ort_asc" {% if filter.sort == 'ort_asc' %}selected{% endif %}>Ort (A-Z)</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <button type="submit" class="btn btn--primary btn--sm">Filter</button>
+      <a href="/archiv" class="btn btn--ghost btn--sm">Reset</a>
+    </div>
+  </form>
+
   <div class="filter-bar">
-    <input type="text" x-model="search" placeholder="Suche…" class="form-input form-input--search">
+    <input type="text" x-model="search" placeholder="Suche..." class="form-input form-input--search">
     <label class="toggle-label">
       <input type="checkbox" x-model="showExercise"> &Uuml;bungen anzeigen
     </label>
   </div>
 
   <div style="max-width:1100px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:10px;">
+    <p style="font-size:.78rem;color:var(--text-muted);margin:0;">
+      {{ incidents|length }} Einsatz{% if incidents|length != 1 %}e{% endif %}
+      {% if filter.von or filter.bis %}im gewählten Zeitraum
+      {% elif filter.jahr == 'alle' %}in allen Jahren
+      {% else %}im Jahr {{ filter.jahr }}{% endif %}
+    </p>
     {% for inc in incidents %}
     <div class="card archive-card card--alarm-{{ inc.alarm_type_code[:1]|lower }} {% if inc.is_exercise %}row--exercise{% endif %}"
          style="padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;"
-         data-search="{{ inc.alarm_type_code }} {{ inc.address_street or '' }} {{ inc.address_no or '' }} {{ inc.address_city or '' }}"
+         data-search="{{ inc.alarm_type_code }} {{ inc.address_street or '' }} {{ inc.address_no or '' }} {{ inc.address_city or '' }} {{ inc.lis_operation_number or '' }} {{ inc.nummer or '' }} {{ inc.external_key or '' }} {{ inc.report_text or '' }} {{ inc.reason or '' }} {{ inc.dibos_diagnose or '' }} {{ inc.incident_leader_name or '' }}"
          x-show="(showExercise || !{{ 'true' if inc.is_exercise else 'false' }}) &&
                  (search === '' || $el.getAttribute('data-search').toLowerCase().includes(search.toLowerCase()))">
       <span class="alarm-badge alarm-badge--sm alarm-badge--{{ inc.alarm_type_code[:1]|lower }}">{{ inc.alarm_type_code }}</span>

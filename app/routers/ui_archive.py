@@ -8,11 +8,12 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.permissions import can_access_incident, has_role, same_org_or_system_admin
 from app.core.templating import templates
+from app.core.timezones import local_date_to_utc, now_local
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentVehicle
 from app.models.master import VehicleMaster
@@ -100,11 +101,72 @@ _WP_REPORT_ROLES = ("incident_leader", "recorder", "org_admin", "system_admin")
 
 
 @router.get("/archiv", response_class=HTMLResponse)
-def archive_list(request: Request, db: Session = Depends(get_db)):
+def archive_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    jahr: str = "",
+    von: str = "",
+    bis: str = "",
+    sort: str = "datum_desc",
+):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
-    incidents = _scoped_incidents_query(db, user).order_by(Incident.started_at.desc()).all()
+
+    aktuelles_jahr = now_local(user.org).year
+    ausgewaehltes_jahr = jahr or str(aktuelles_jahr)
+    basis_query = _scoped_incidents_query(db, user)
+
+    jahre = [
+        row[0]
+        for row in basis_query.with_entities(func.year(Incident.started_at))
+        .filter(Incident.started_at.isnot(None))
+        .distinct()
+        .order_by(func.year(Incident.started_at).desc())
+        .all()
+        if row[0] is not None
+    ]
+    jahre_optionen = sorted(set(jahre) | {aktuelles_jahr}, reverse=True)
+
+    incidents_query = basis_query
+    if von or bis:
+        if von:
+            von_utc = local_date_to_utc(von, org=user.org)
+            if von_utc:
+                incidents_query = incidents_query.filter(Incident.started_at >= von_utc)
+        if bis:
+            bis_utc = local_date_to_utc(bis, end=True, org=user.org)
+            if bis_utc:
+                incidents_query = incidents_query.filter(Incident.started_at <= bis_utc)
+    elif ausgewaehltes_jahr != "alle":
+        jahr_von = local_date_to_utc(f"{ausgewaehltes_jahr}-01-01", org=user.org)
+        jahr_bis = local_date_to_utc(
+            f"{ausgewaehltes_jahr}-12-31", end=True, org=user.org
+        )
+        if jahr_von and jahr_bis:
+            incidents_query = incidents_query.filter(
+                Incident.started_at >= jahr_von,
+                Incident.started_at <= jahr_bis,
+            )
+
+    duration_expr = func.timestampdiff(
+        text("SECOND"), Incident.started_at, Incident.closed_at
+    )
+    sortierungen = {
+        "datum_desc": (Incident.started_at.desc(),),
+        "datum_asc": (Incident.started_at.asc(),),
+        "dauer_desc": (Incident.closed_at.is_(None), duration_expr.desc()),
+        "dauer_asc": (Incident.closed_at.is_(None), duration_expr.asc()),
+        "typ_asc": (Incident.alarm_type_code.asc(), Incident.started_at.desc()),
+        "ort_asc": (
+            Incident.address_city.asc(),
+            Incident.address_street.asc(),
+            Incident.started_at.desc(),
+        ),
+    }
+    if sort not in sortierungen:
+        sort = "datum_desc"
+    incidents = incidents_query.order_by(*sortierungen[sort]).all()
 
     uas_incident_ids: set[int] = set()
     if getattr(request.state, "uas_module_enabled", False) and user.org_id:
@@ -118,6 +180,10 @@ def archive_list(request: Request, db: Session = Depends(get_db)):
 
     return templates.TemplateResponse(request, "archive/list.html", {
         "user": user, "incidents": incidents, "uas_incident_ids": uas_incident_ids,
+        "filter": {
+            "jahr": ausgewaehltes_jahr, "von": von, "bis": bis, "sort": sort,
+        },
+        "jahre_optionen": jahre_optionen,
     })
 
 
