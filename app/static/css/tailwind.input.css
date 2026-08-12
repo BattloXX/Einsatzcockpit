@@ -2328,7 +2328,6 @@ button.htmx-request,
 .stats-bento { display:grid; grid-template-columns:2fr 1fr; gap:1rem; margin:1rem 0; }
 .stats-map-box { grid-row:span 2; }
 .stats-map { height:520px; border-radius:8px; overflow:hidden; }
-.stats-marker span { display:block; width:18px; height:18px; border:2px solid white; border-radius:50%; box-shadow:0 1px 5px #0008; }
 .stats-vehicle-chart { grid-column:1 / -1; }
 .stats-vehicle-cards { display:none; gap:.75rem; overflow-x:auto; margin:1rem 0; scroll-snap-type:x mandatory; }
 .stats-vehicle-cards .kpi-card { min-width:180px; scroll-snap-align:start; display:flex; flex-direction:column; gap:.3rem; }

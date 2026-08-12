@@ -69,7 +69,9 @@
       chart.getDatasetMeta(0).data.forEach(function (arc, index) {
         var point = arc.tooltipPosition();
         var percent = Math.round(values[index] * 1000 / total) / 10;
-        ctx.fillText(percent + " %", point.x, point.y);
+        if (percent < 4) return;
+        ctx.fillText(chart.data.labels[index], point.x, point.y - 7);
+        ctx.fillText(percent + " %", point.x, point.y + 7);
       });
       ctx.restore();
     }
@@ -87,12 +89,20 @@
       var group = L.featureGroup();
       markers.forEach(function (item) {
         var color = (item.category === "B" || item.category === "F") ? "#d42225" : (item.category === "T" ? "#1877f2" : "#687386");
-        var icon = L.divIcon({className: "stats-marker", html: "<span style='background:" + color + "'></span>", iconSize: [18, 18]});
+        var icon = L.divIcon({
+          className: "stats-marker",
+          html: "<span style='display:block;width:18px;height:18px;border:2px solid white;border-radius:50%;box-shadow:0 1px 5px #0008;background:" + color + "'></span>",
+          iconSize: [18, 18]
+        });
         L.marker([item.lat, item.lng], {icon: icon}).bindPopup((item.alarm_type_code || "") + "<br>" + (item.address || "")).addTo(group);
       });
       group.addTo(activeMap);
-      if (markers.length) activeMap.fitBounds(group.getBounds(), {padding: [20, 20], maxZoom: 14});
-      setTimeout(function () { if (activeMap) activeMap.invalidateSize(); }, 0);
+      var renderedMap = activeMap;
+      setTimeout(function () {
+        if (activeMap !== renderedMap) return;
+        renderedMap.invalidateSize();
+        if (markers.length) renderedMap.fitBounds(group.getBounds(), {padding: [20, 20], maxZoom: 14});
+      }, 0);
     }
 
     var chartData = document.getElementById("stats-chart-data");
@@ -121,15 +131,7 @@
         maintainAspectRatio: false,
         radius: "82%",
         plugins: {
-          legend: {labels: {generateLabels: function (chartInstance) {
-            var values = chartInstance.data.datasets[0].data;
-            var colors = chartInstance.data.datasets[0].backgroundColor;
-            var total = values.reduce(function (sum, value) { return sum + value; }, 0);
-            return chartInstance.data.labels.map(function (label, index) {
-              var percent = total ? Math.round(values[index] * 1000 / total) / 10 : 0;
-              return {text: label + ": " + values[index] + " (" + percent + " %)", fillStyle: colors[index], strokeStyle: colors[index], index: index};
-            });
-          }}},
+          legend: {display: false},
           tooltip: {callbacks: {label: function (ctx) {
             var total = ctx.dataset.data.reduce(function (sum, value) { return sum + value; }, 0);
             var percent = total ? Math.round(ctx.parsed * 1000 / total) / 10 : 0;
