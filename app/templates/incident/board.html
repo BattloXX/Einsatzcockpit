@@ -138,6 +138,7 @@
     </span>
   </div>
   {% if lage_hints %}{% include "incident/_header_lage_ticker.html" %}{% endif %}
+  {% include "incident/_wache_status.html" %}
   <div class="incident-header__actions">
     {# ── Primäre Aktionen ────────────────────────────────────────────────── #}
     <a href="/einsatz/{{ incident.id }}/info"

@@ -25,7 +25,9 @@ GetCurrentEvents nicht doppelt abgefragt wird. Fahrzeug-Status
 (S4/S5) wird bewusst NICHT hier gespiegelt — das liefert für Orgs mit LIS/IPR-
 Anbindung bereits lis_sync._sync_vehicle_status() aus einer autoritativen
 Quelle; ein zweiter, DIBOS-basierter Schreiber auf dieselben Felder würde nur
-widersprüchliche Zeitstempel riskieren.
+widersprüchliche Zeitstempel riskieren. Das gilt nur fuer Fahrzeuge, nicht fuer
+die Wache selbst: Fuer sie gibt es kein LIS/IPR-Aequivalent und keinen anderen
+Schreiber, daher wird ihr Status hier bewusst mitgepflegt.
 
 Personen-Zu-/Absagen (personResponseList, siehe
 LWZEventHub_Personenrueckmeldung.md) sind davon ausgenommen: die LIS-Pipeline
@@ -218,6 +220,39 @@ def _find_active_incident_by_event_number(db: Session, org_id: int, event_number
         )
         .first()
     )
+
+
+def _sync_wache_status(
+    db: Session,
+    org,
+    incident,
+    event_number: str,
+    raw_units: list[dict],
+    wache_unid_filter: str | None,
+) -> bool:
+    """Uebernimmt passende Wachen aus den rohen GetCurrentUnits-Daten."""
+    from app.services.dibos.dibos_mapping import map_wache_status
+    from app.services.incident_service import set_wache_status
+
+    changed = False
+    for unit in raw_units:
+        if unit.get("unitType") != "wache" or unit.get("eventNumber") != event_number:
+            continue
+        wache_unid = unit.get("unid")
+        if not wache_unid or (wache_unid_filter and wache_unid != wache_unid_filter):
+            continue
+        raw_status = unit.get("currentStatusText")
+        status = map_wache_status(raw_status)
+        if status is None:
+            logger.debug("Unbekannter DIBOS-Wachenstatus %r fuer %s uebersprungen", raw_status, wache_unid)
+            continue
+        status_at = _parse_dibos_datetime(unit.get("currentStatusTime"), org)
+        entry = set_wache_status(
+            db, incident, wache_unid, status,
+            wache_name=unit.get("unidRfl"), status_text_raw=raw_status, status_at=status_at,
+        )
+        changed |= entry is not None
+    return changed
 
 
 def _enrich_address(incident, location: dict) -> bool:
@@ -513,7 +548,14 @@ def _sync_person_responses(db: Session, org_id: int, org, incident, person_respo
     return changed
 
 
-def enrich_events_for_org(org_id: int, raw_events: list[dict], *, create_incidents: bool = False) -> dict:
+def enrich_events_for_org(
+    org_id: int,
+    raw_events: list[dict],
+    *,
+    raw_units: list[dict] | None = None,
+    wache_unid: str | None = None,
+    create_incidents: bool = False,
+) -> dict:
     """Reichert aktive Einsätze der Org mit DIBOS-Zusatzinfos an — und legt,
     wenn create_incidents=True (Org-Opt-in OrgDibosConfig.create_incidents),
     für ein Event ohne passenden Einsatz einen neuen an (siehe
@@ -556,6 +598,10 @@ def enrich_events_for_org(org_id: int, raw_events: list[dict], *, create_inciden
             changed |= _enrich_caller(incident, event.get("callers") or [])
             changed |= _enrich_metadata(incident, event)
             changed |= _sync_dibos_comments(db, org_id, incident, event.get("comments") or [])
+            if raw_units is not None:
+                changed |= _sync_wache_status(
+                    db, org, incident, event.get("eventNumber"), raw_units, wache_unid
+                )
             if event.get("bmaNo"):
                 changed |= _match_objekt_by_dibos_bma(db, incident)
             rsvp_changed = _sync_person_responses(db, org_id, org, incident, event.get("personResponses") or [])
@@ -589,7 +635,14 @@ def enrich_events_for_org(org_id: int, raw_events: list[dict], *, create_inciden
     return {"changed_ids": changed_ids, "rsvp_changed_ids": rsvp_changed_ids, "created_ids": created_ids}
 
 
-async def enrich_and_broadcast(org_id: int, raw_events: list[dict], *, create_incidents: bool = False) -> None:
+async def enrich_and_broadcast(
+    org_id: int,
+    raw_events: list[dict],
+    *,
+    raw_units: list[dict] | None = None,
+    wache_unid: str | None = None,
+    create_incidents: bool = False,
+) -> None:
     """Reichert an (in einem Thread, da synchron/DB-blockierend) und broadcastet
     pro tatsächlich geänderten Einsatz — Fehler dürfen den aufrufenden Poll nie
     abbrechen. Gemeinsamer Einstiegspunkt für BEIDE DIBOS-Aufrufer:
@@ -611,7 +664,8 @@ async def enrich_and_broadcast(org_id: int, raw_events: list[dict], *, create_in
     """
     try:
         result = await asyncio.to_thread(
-            enrich_events_for_org, org_id, raw_events, create_incidents=create_incidents,
+            enrich_events_for_org, org_id, raw_events, raw_units=raw_units,
+            wache_unid=wache_unid, create_incidents=create_incidents,
         )
     except Exception:
         logger.exception("DIBOS-Einsatzanreicherung fehlgeschlagen (Org %s)", org_id)

@@ -30,6 +30,9 @@ class OrgDibosConfig(Base):
     )
     host: Mapped[str] = mapped_column(String(100), nullable=False, default="einsatzcockpit")
     ag: Mapped[str] = mapped_column(String(10), nullable=False, default="FW")  # Agentur-Filter GetPublicEvents
+    # Eigene Wache in GetCurrentUnits (unitType="wache"). Ist der Wert leer,
+    # werden alle zum Einsatz gemeldeten Wachen uebernommen.
+    wache_unid: Mapped[str | None] = mapped_column(String(50), nullable=True)
     poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
 
     # Diagnose (nur system_admin, siehe ui_dibos.py "Diagnose"-Sektion): startet die

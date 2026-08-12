@@ -49,6 +49,7 @@ def write_incident_change(
     user_id: int | None = None,
     api_key_id: int | None = None,
     ip: str | None = None,
+    ts: datetime | None = None,
 ) -> None:
     """Write a granular incident change record (every field mutation)."""
     import json
@@ -65,6 +66,6 @@ def write_incident_change(
         user_id=user_id,
         api_key_id=api_key_id,
         ip=ip,
-        ts=datetime.now(UTC),
+        ts=ts if ts is not None else datetime.now(UTC),
     )
     db.add(entry)

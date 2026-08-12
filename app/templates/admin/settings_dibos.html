@@ -148,6 +148,13 @@
                  class="form-input">
           <p class="form-hint">z.B. FW</p>
         </div>
+        <div class="form-group" style="margin:0;width:240px">
+          <label for="wache_unid">Eigene Wache-Kennung (unid)</label>
+          <input type="text" id="wache_unid" name="wache_unid"
+                 value="{{ config.wache_unid or '' if config else '' }}"
+                 class="form-input" autocomplete="off" placeholder="z.B. fw_wolfu">
+          <p class="form-hint">Im Diagnose-Trace in GetCurrentUnits nach unitType: "wache" suchen. Leer übernimmt alle Wachen des Einsatzes.</p>
+        </div>
         <div class="form-group" style="margin:0;width:160px">
           <label for="poll_interval_seconds">Poll-Intervall (Sek.)</label>
           <input type="number" id="poll_interval_seconds" name="poll_interval_seconds" min="10" max="3600"

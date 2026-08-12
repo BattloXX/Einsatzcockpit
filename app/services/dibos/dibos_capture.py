@@ -86,6 +86,7 @@ class ExchangeRecorder:
     def __init__(
         self, out_dir: Path, org_id: int, run_id: str,
         enrich_incidents: bool = False, create_incidents: bool = False,
+        wache_unid: str | None = None,
     ):
         self.out_dir = out_dir
         self.org_id = org_id
@@ -99,6 +100,7 @@ class ExchangeRecorder:
         # zusätzlich neue Einsätze für nicht zuordenbare Events an (siehe
         # dibos_enrich.py). Default False, unabhängig von enrich_incidents.
         self.create_incidents = create_incidents
+        self.wache_unid = wache_unid
         self.seq = 0
         self.exchanges: list[dict] = []
         self.latest: dict = {"updated_at": None}
@@ -198,6 +200,8 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
     leichten Erkennungs-Loop (dibos_loop.py::_check_org()) die Anreicherung —
     siehe dort und den Modul-Docstring von dibos_enrich.py.
     """
+    events: list[dict] = []
+    units: list[dict] = []
     for coro_factory, label in (
         (client.get_current_events, "GetCurrentEvents"),
         (client.get_public_events, "GetPublicEvents"),
@@ -210,9 +214,18 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
         except DibosClientError:
             logger.exception("DIBOS-Trace: %s fehlgeschlagen (Org %s)", label, recorder.org_id)
             continue
-        if label == "GetCurrentEvents" and (recorder.enrich_incidents or recorder.create_incidents) and result:
-            from app.services.dibos.dibos_enrich import enrich_and_broadcast
-            await enrich_and_broadcast(recorder.org_id, result, create_incidents=recorder.create_incidents)
+        if label == "GetCurrentEvents":
+            events = result
+        elif label == "GetCurrentUnits":
+            units = result
+    if events and (recorder.enrich_incidents or recorder.create_incidents):
+        from app.services.dibos.dibos_enrich import enrich_and_broadcast
+        await enrich_and_broadcast(
+            recorder.org_id, events,
+            raw_units=units if recorder.enrich_incidents else None,
+            wache_unid=recorder.wache_unid,
+            create_incidents=recorder.create_incidents,
+        )
     recorder.write_latest()
 
 
@@ -315,13 +328,15 @@ async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str
         service_password = decrypt_secret(config.service_password_enc)
         enrich_incidents = config.enrich_incidents
         create_incidents = config.create_incidents
+        wache_unid = config.wache_unid
     finally:
         db.close()
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out_dir = trace_run_dir(org_id, run_id)
     recorder = ExchangeRecorder(
-        out_dir, org_id, run_id, enrich_incidents=enrich_incidents, create_incidents=create_incidents,
+        out_dir, org_id, run_id, enrich_incidents=enrich_incidents,
+        create_incidents=create_incidents, wache_unid=wache_unid,
     )
     client = DibosClient(
         base_url, gateway_user, gateway_password, service_user, service_password,

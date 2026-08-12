@@ -23,6 +23,14 @@ from app.models.master import AlarmType, VehicleMaster
 
 _LEITSTELLEN_ID_ALIASES = {"leitstellen nr.", "leitstellen nummer", "leitstellennummer"}
 _DATE_FORMAT = "%d.%m.%Y %H:%M:%S"
+_STATUS_TIMESTAMP_FIELDS = {
+    "started_at",
+    "taken_over_at",
+    "departed_at",
+    "on_scene_at",
+    "ready_again_at",
+    "closed_at",
+}
 
 
 class EinsatzImportError(ValueError):
@@ -155,6 +163,10 @@ def _row_fields(row: dict[str, Any], format_name: str) -> dict[str, Any]:
     closed = closed or _date(row.get("wieder einsatzbereit"))
     return {
         "started_at": _date(row.get("erst-alarmierung")),
+        "taken_over_at": _date(row.get("übernommen")),
+        "departed_at": _date(row.get("ausfahrt")),
+        "on_scene_at": _date(row.get("am einsatzort")),
+        "ready_again_at": _date(row.get("wieder einsatzbereit")),
         "closed_at": closed,
         "address_street": _text(row.get("straße/objekt")),
         "address_no": _text(row.get("hausnummer")),
@@ -249,7 +261,13 @@ def import_einsaetze(db: Session, parsed: ParsedImport, org_id: int, user_id: in
             changed = False
             if not created:
                 for key, value in fields.items():
-                    if value is not None and getattr(incident, key) in (None, ""):
+                    if value is None:
+                        continue
+                    current = getattr(incident, key)
+                    if key in _STATUS_TIMESTAMP_FIELDS and current != value:
+                        setattr(incident, key, value)
+                        changed = True
+                    elif key not in _STATUS_TIMESTAMP_FIELDS and current in (None, ""):
                         setattr(incident, key, value)
                         changed = True
                 # T1 ist beim Format-A-Import der dokumentierte Platzhalter und darf

@@ -395,6 +395,10 @@ body.mobile-menu-open { overflow: hidden; }
 .unit-status-einsatzbereit         { background: #c62828 !important; }
 .unit-status-einsatz-uebernommen   { background: #e65100 !important; }
 .unit-status-am-einsatzort         { background: #2e7d32 !important; }
+.unit-status-alarmiert             { background: #c62828 !important; color: #fff !important; }
+.unit-status-uebernommen           { background: #e65100 !important; color: #fff !important; }
+.unit-status-ausgefahren           { background: #e65100 !important; color: #fff !important; }
+.unit-status-am_einsatzort         { background: #2e7d32 !important; color: #fff !important; }
 .form-select--unit-status option   { color: #111; background: #fff; }
 
 /* Person-Status Ampel */

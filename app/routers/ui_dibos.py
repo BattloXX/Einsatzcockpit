@@ -184,6 +184,7 @@ async def dibos_settings_save(
     base_url: str = Form(""),
     host: str = Form("einsatzcockpit"),
     ag: str = Form("FW"),
+    wache_unid: str = Form(""),
     poll_interval_seconds: int = Form(20),
     auto_trace_on_event: str = Form(""),
     auto_trace_duration_minutes: int = Form(120),
@@ -208,6 +209,7 @@ async def dibos_settings_save(
     cfg.base_url = base_url.strip().rstrip("/") or None
     cfg.host = host.strip() or "einsatzcockpit"
     cfg.ag = ag.strip() or "FW"
+    cfg.wache_unid = wache_unid.strip() or None
     cfg.poll_interval_seconds = max(10, poll_interval_seconds or 20)
     cfg.auto_trace_on_event = auto_trace_on_event == "1"
     cfg.auto_trace_duration_minutes = max(5, auto_trace_duration_minutes or 120)

@@ -64,6 +64,10 @@ class Incident(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    taken_over_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    departed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    on_scene_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ready_again_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     incident_leader_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     incident_leader_member_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("member.id"), nullable=True)
     incident_leader_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -138,6 +142,9 @@ class Incident(Base):
     )
     vehicles: Mapped[list[IncidentVehicle]] = relationship(
         back_populates="incident", order_by="IncidentVehicle.display_order", cascade="all, delete-orphan"
+    )
+    wache_status_entries: Mapped[list[IncidentWacheStatus]] = relationship(
+        back_populates="incident", cascade="all, delete-orphan"
     )
     tasks: Mapped[list[Task]] = relationship(
         back_populates="incident", order_by="Task.display_order", cascade="all, delete-orphan"
@@ -285,6 +292,27 @@ class IncidentVehicle(Base):
         if n == 1:
             return "yellow"
         return "red"
+
+
+class IncidentWacheStatus(Base):
+    __tablename__ = "incident_wache_status"
+    __table_args__ = (UniqueConstraint("incident_id", "wache_unid", name="uq_incident_wache_unid"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    wache_unid: Mapped[str] = mapped_column(String(50), nullable=False)
+    wache_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    status_text_raw: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    incident: Mapped[Incident] = relationship(back_populates="wache_status_entries")
 
 
 class Task(Base):

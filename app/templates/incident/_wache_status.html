@@ -1,0 +1,10 @@
+{% if incident.wache_status_entries %}
+<div class="incident-header__wache-status" style="display:flex;gap:4px;flex-wrap:wrap;">
+  {% for wache in incident.wache_status_entries %}
+  <span class="badge-pill unit-status-{{ wache.status | unit_status_slug }}"
+        title="Wachenstatus{% if wache.status_at %} seit {{ wache.status_at | local_datetime }}{% endif %}">
+    {{ wache.wache_name or wache.wache_unid }}: {{ wache.status | replace('_', ' ') }}
+  </span>
+  {% endfor %}
+</div>
+{% endif %}

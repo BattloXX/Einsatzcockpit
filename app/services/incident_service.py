@@ -17,6 +17,7 @@ from app.models.incident import (
     IncidentColumn,
     IncidentLog,
     IncidentVehicle,
+    IncidentWacheStatus,
     Message,
     RescuedPerson,
     Task,
@@ -762,6 +763,44 @@ def set_unit_status(
     return vehicle
 
 
+def set_wache_status(
+    db: Session,
+    incident: Incident,
+    wache_unid: str,
+    status: str,
+    *,
+    wache_name: str | None = None,
+    status_text_raw: str | None = None,
+    status_at: datetime | None = None,
+) -> IncidentWacheStatus | None:
+    from app.services.dibos.dibos_mapping import WACHE_STATUS_VALUES
+
+    if status not in WACHE_STATUS_VALUES:
+        raise ValueError(f"Ungültiger Wachenstatus: {status}")
+    entry = db.query(IncidentWacheStatus).filter(
+        IncidentWacheStatus.incident_id == incident.id,
+        IncidentWacheStatus.wache_unid == wache_unid,
+    ).first()
+    if entry is not None and entry.status == status:
+        return None
+    before = {"status": entry.status} if entry is not None else None
+    if entry is None:
+        entry = IncidentWacheStatus(incident_id=incident.id, wache_unid=wache_unid, status=status)
+        db.add(entry)
+    entry.wache_name = wache_name
+    entry.status = status
+    entry.status_text_raw = status_text_raw
+    entry.status_at = status_at
+    db.flush()
+    write_incident_change(
+        db, incident.id, "wache.status_set", "incident_wache_status", entry.id,
+        before=before,
+        after={"wache_unid": wache_unid, "wache_name": wache_name or wache_unid, "status": status},
+        ts=status_at,
+    )
+    return entry
+
+
 def list_commander_candidates(db: Session, org_ids: list[int]) -> list[Member]:
     """Return active members with Gruppenkommandant qualification.
 
@@ -1425,6 +1464,14 @@ def enrich_history(changes, db, incident_id: int) -> list[dict]:
                 summary = f'Gruppenkommandant {vname(eid)} entfernt'
         elif action == "vehicle.status_set":
             summary = f'Fahrzeug {vname(eid)}: {after.get("unit_status", "")}'
+        elif action == "wache.status_set":
+            wache_status_de = {
+                "einsatzbereit": "einsatzbereit", "alarmiert": "alarmiert",
+                "übernommen": "übernommen", "ausgefahren": "ausgerückt",
+                "am_einsatzort": "am Einsatzort",
+            }
+            status = after.get("status", "")
+            summary = f'{after.get("wache_name") or after.get("wache_unid")}: {wache_status_de.get(status, status)}'
         elif action == "message.created":
             summary = f'Meldung erstellt: "{after.get("title") or mtitle(eid)}"'
         elif action == "message.updated":

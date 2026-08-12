@@ -118,6 +118,7 @@ async def _check_org(org_id: int, config_id: int) -> None:
         auto_trace_on_event = config.auto_trace_on_event
         enrich_incidents = config.enrich_incidents
         create_incidents = config.create_incidents
+        wache_unid = config.wache_unid
         if not auto_trace_on_event and not enrich_incidents and not create_incidents:
             return  # nichts, was dieser Loop für die Org tun müsste
         if is_trace_running(org_id):
@@ -143,9 +144,15 @@ async def _check_org(org_id: int, config_id: int) -> None:
         events = await client.get_current_events()
     except DibosClientError:
         logger.exception("dibos_poll_loop: GetCurrentEvents fehlgeschlagen (Org %s)", org_id)
-        return
-    finally:
         await client.aclose()
+        return
+    units = []
+    if enrich_incidents:
+        try:
+            units = await client.get_current_units()
+        except DibosClientError:
+            logger.exception("dibos_poll_loop: GetCurrentUnits fehlgeschlagen (Org %s)", org_id)
+    await client.aclose()
 
     if not events:
         return
@@ -155,7 +162,10 @@ async def _check_org(org_id: int, config_id: int) -> None:
     # Dateien auf Platte) nötig, wenn eine Org nur das will.
     if enrich_incidents or create_incidents:
         from app.services.dibos.dibos_enrich import enrich_and_broadcast
-        await enrich_and_broadcast(org_id, events, create_incidents=create_incidents)
+        await enrich_and_broadcast(
+            org_id, events, raw_units=units if enrich_incidents else None,
+            wache_unid=wache_unid, create_incidents=create_incidents,
+        )
 
     if auto_trace_on_event:
         logger.info(

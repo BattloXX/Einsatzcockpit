@@ -1,5 +1,6 @@
 import io
 import uuid
+from datetime import datetime
 
 from openpyxl import Workbook
 
@@ -49,8 +50,9 @@ FORMAT_A_HEADERS = [
     "Fahrzeug", "Funkrufname", "Objekt", "Straße/Objekt", "Hausnummer", "Einsatzort",
 ]
 FORMAT_B_HEADERS = [
-    "Leitstellen Nummer", "Erst-Alarmierung", "Ende", "Einsatzstichwort tatsächlich",
-    "Alarmtext", "Einsatzablauf", "Bemerkung", "Koordinaten N", "Koordinaten E",
+    "Leitstellen Nummer", "Erst-Alarmierung", "Übernommen", "Ausfahrt", "Am Einsatzort",
+    "Wieder einsatzbereit", "Ende", "Einsatzstichwort tatsächlich", "Alarmtext",
+    "Einsatzablauf", "Bemerkung", "Koordinaten N", "Koordinaten E",
 ]
 
 
@@ -60,8 +62,8 @@ def test_format_erkennung_a_und_b():
          "RLF-A", "Wolfurt RLF", None, "Hauptstraße", "1", "WOLFURT"],
     ]))
     parsed_b = parse_einsatz_excel(_xlsx(FORMAT_B_HEADERS, [
-        ["f1", "07.01.2026 17:50:00", "07.01.2026 18:50:00", "f3",
-         "Alarm", "Ablauf", None, 47.4, 9.7],
+        ["f1", "07.01.2026 17:50:00", None, None, None, None,
+         "07.01.2026 18:50:00", "f3", "Alarm", "Ablauf", None, 47.4, 9.7],
     ]))
     assert parsed_a.format == "A"
     assert parsed_b.format == "B"
@@ -98,8 +100,9 @@ def test_import_dedup_fahrzeug_matching_und_adhoc():
         assert adhoc.is_adhoc is True
 
         detail_raw = _xlsx(FORMAT_B_HEADERS, [[
-            "f2601", "07.01.2026 17:50:00", "07.01.2026 19:00:00", "f3",
-            "Detailalarm", "Neuer Ablauf", None, 47.4768, 9.7465,
+            "f2601", "07.01.2026 17:50:00", None, None, None, None,
+            "07.01.2026 19:00:00", "f3", "Detailalarm", "Neuer Ablauf", None,
+            47.4768, 9.7465,
         ]])
         detail_result = import_einsaetze(db, parse_einsatz_excel(detail_raw), org.id, user.id)
         db.refresh(incidents[0])
@@ -107,6 +110,124 @@ def test_import_dedup_fahrzeug_matching_und_adhoc():
         assert incidents[0].alarm_type_code == "F3"
         assert incidents[0].lat == 47.4768
         assert incidents[0].reason == "Brand"  # bestehender Wert wird nicht überschrieben
+    finally:
+        db.close()
+
+
+def test_format_b_importiert_alle_statuszeiten():
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        org = _org(db, "statuszeiten")
+        user = _user(db, org.id, "org_admin")
+        db.commit()
+        raw = _xlsx(FORMAT_B_HEADERS, [[
+            "f-status", "07.01.2026 08:43:00", "07.01.2026 08:44:00",
+            "07.01.2026 08:47:00", "07.01.2026 08:49:00", "07.01.2026 08:59:00",
+            "07.01.2026 09:01:00", "T1", "Alarm", "Ablauf", None, 47.4, 9.7,
+        ]])
+
+        result = import_einsaetze(db, parse_einsatz_excel(raw), org.id, user.id)
+        incident = db.query(Incident).filter_by(
+            primary_org_id=org.id, lis_operation_number="f-status"
+        ).one()
+
+        assert result.imported == 1
+        assert incident.started_at == datetime(2026, 1, 7, 8, 43)
+        assert incident.taken_over_at == datetime(2026, 1, 7, 8, 44)
+        assert incident.departed_at == datetime(2026, 1, 7, 8, 47)
+        assert incident.on_scene_at == datetime(2026, 1, 7, 8, 49)
+        assert incident.ready_again_at == datetime(2026, 1, 7, 8, 59)
+        assert incident.closed_at == datetime(2026, 1, 7, 9, 1)
+    finally:
+        db.close()
+
+
+def test_reimport_korrigiert_alle_statuszeiten():
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        org = _org(db, "reimport")
+        user = _user(db, org.id, "org_admin")
+        db.commit()
+        first_raw = _xlsx(FORMAT_B_HEADERS, [[
+            "f-reimport", "07.01.2026 08:00:00", "07.01.2026 08:01:00",
+            "07.01.2026 08:02:00", "07.01.2026 08:03:00", "07.01.2026 08:04:00",
+            "07.01.2026 08:05:00", "T1", "Alarm", "Ablauf", None, 47.4, 9.7,
+        ]])
+        import_einsaetze(db, parse_einsatz_excel(first_raw), org.id, user.id)
+        incident = db.query(Incident).filter_by(
+            primary_org_id=org.id, lis_operation_number="f-reimport"
+        ).one()
+        second_raw = _xlsx(FORMAT_B_HEADERS, [[
+            "f-reimport", "07.01.2026 09:00:00", "07.01.2026 09:01:00",
+            "07.01.2026 09:02:00", "07.01.2026 09:03:00", "07.01.2026 09:04:00",
+            "07.01.2026 09:05:00", "T1", "Alarm", "Ablauf", None, 47.4, 9.7,
+        ]])
+        result = import_einsaetze(db, parse_einsatz_excel(second_raw), org.id, user.id)
+        db.refresh(incident)
+
+        assert result.updated == 1
+        assert incident.started_at == datetime(2026, 1, 7, 9, 0)
+        assert incident.taken_over_at == datetime(2026, 1, 7, 9, 1)
+        assert incident.departed_at == datetime(2026, 1, 7, 9, 2)
+        assert incident.on_scene_at == datetime(2026, 1, 7, 9, 3)
+        assert incident.ready_again_at == datetime(2026, 1, 7, 9, 4)
+        assert incident.closed_at == datetime(2026, 1, 7, 9, 5)
+    finally:
+        db.close()
+
+
+def test_reimport_ueberschreibt_manuell_geaenderte_adresse_nicht():
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        org = _org(db, "reimport-adresse")
+        user = _user(db, org.id, "org_admin")
+        db.commit()
+        headers = FORMAT_B_HEADERS + ["Straße/Objekt"]
+        raw = _xlsx(headers, [[
+            "f-adresse", "07.01.2026 08:00:00", None, None, None, None,
+            "07.01.2026 08:05:00", "T1", "Alarm", "Ablauf", None, 47.4, 9.7,
+            "Importstraße",
+        ]])
+        parsed = parse_einsatz_excel(raw)
+        import_einsaetze(db, parsed, org.id, user.id)
+        incident = db.query(Incident).filter_by(
+            primary_org_id=org.id, lis_operation_number="f-adresse"
+        ).one()
+        incident.address_street = "Manuell korrigiert"
+        db.commit()
+
+        result = import_einsaetze(db, parsed, org.id, user.id)
+        db.refresh(incident)
+
+        assert result.unchanged == 1
+        assert incident.address_street == "Manuell korrigiert"
+    finally:
+        db.close()
+
+
+def test_format_a_nutzt_einsatzbereit_auch_als_ende():
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        org = _org(db, "format-a-ende")
+        user = _user(db, org.id, "org_admin")
+        db.commit()
+        raw = _xlsx(FORMAT_A_HEADERS, [[
+            "f-format-a", "Brand", "07.01.2026 17:50:00", "07.01.2026 18:50:00",
+            None, None, None, "Hauptstraße", "1", "WOLFURT",
+        ]])
+
+        import_einsaetze(db, parse_einsatz_excel(raw), org.id, user.id)
+        incident = db.query(Incident).filter_by(
+            primary_org_id=org.id, lis_operation_number="f-format-a"
+        ).one()
+
+        expected = datetime(2026, 1, 7, 18, 50)
+        assert incident.ready_again_at == expected
+        assert incident.closed_at == expected
     finally:
         db.close()
 
