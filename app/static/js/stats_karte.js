@@ -54,8 +54,8 @@
     });
   }
 
-  var segmentPercentPlugin = {
-    id: "statsSegmentPercent",
+  var segmentCountPlugin = {
+    id: "statsSegmentCount",
     afterDatasetsDraw: function (chart) {
       var ctx = chart.ctx;
       var values = chart.data.datasets[0].data;
@@ -71,7 +71,7 @@
         var percent = Math.round(values[index] * 1000 / total) / 10;
         if (percent < 4) return;
         ctx.fillText(chart.data.labels[index], point.x, point.y - 7);
-        ctx.fillText(percent + " %", point.x, point.y + 7);
+        ctx.fillText(values[index], point.x, point.y + 7);
       });
       ctx.restore();
     }
@@ -126,7 +126,7 @@
         labels: alarmRows.map(function (row) { return row.code; }),
         datasets: [{data: alarmValues, backgroundColor: alarmBackgrounds}]
       },
-      plugins: [segmentPercentPlugin],
+      plugins: [segmentCountPlugin],
       options: {
         maintainAspectRatio: false,
         radius: "82%",
