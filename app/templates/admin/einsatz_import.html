@@ -1,0 +1,51 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Einsatz-Import – Verwaltung{% endblock %}
+{% block admin_content %}
+<div class="page-header">
+  <div><h1>📥 Einsatz-Import</h1><p class="muted">Historische Leitstellen-Exporte einlesen</p></div>
+</div>
+
+{% if org_missing or request.query_params.get('error') == 'org_missing' %}
+<div class="alert alert--error">Bitte als Org-Admin einer Feuerwehr importieren. Ihrem Konto ist keine Organisation zugeordnet.</div>
+{% elif request.query_params.get('error') %}
+<div class="alert alert--error">{{ request.query_params.get('error_detail') or 'Die Datei konnte nicht importiert werden.' }}</div>
+{% endif %}
+
+{% if request.query_params.get('format') %}
+<div class="alert alert--success">
+  Format {{ request.query_params.get('format') }} verarbeitet:
+  {{ request.query_params.get('imported', 0) }} neu,
+  {{ request.query_params.get('updated', 0) }} ergänzt,
+  {{ request.query_params.get('unchanged', 0) }} unverändert,
+  {{ request.query_params.get('vehicles_attached', 0) }} Fahrzeuge angehängt
+  ({{ request.query_params.get('vehicles_adhoc', 0) }} Ad-hoc angelegt),
+  {{ request.query_params.get('row_errors', 0) }} Fehler.
+  {% if request.query_params.get('warnings', '0')|int %}
+  {{ request.query_params.get('warnings') }} Einsatzstichwörter wurden nicht erkannt und sollten geprüft werden.
+  {% endif %}
+</div>
+{% if request.query_params.get('warning_detail') %}
+<div class="alert alert--warning"><strong>Bitte prüfen:</strong> {{ request.query_params.get('warning_detail') }}</div>
+{% endif %}
+{% if request.query_params.get('error_detail') %}
+<div class="alert alert--error"><strong>Fehler:</strong> {{ request.query_params.get('error_detail') }}</div>
+{% endif %}
+{% endif %}
+
+<section class="card" style="max-width:760px;">
+  <h2>Excel-Datei hochladen</h2>
+  <p>Unterstützt werden die Fahrzeug-Liste (eine Zeile je Fahrzeug) und die Detail-Liste
+     (eine Zeile je Einsatz). Laden Sie beide Dateien nacheinander in beliebiger Reihenfolge hoch.
+     Zusammengeführt wird über die Leitstellen-Nummer; bestehende Angaben werden nicht überschrieben.</p>
+  <form method="post" action="/admin/einsatz-import" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group">
+      <label for="einsatz-import-file">Excel-Datei</label>
+      <input id="einsatz-import-file" type="file" name="file"
+             accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+             required {% if org_missing %}disabled{% endif %}>
+    </div>
+    <button type="submit" class="btn btn--primary" {% if org_missing %}disabled{% endif %}>Importieren</button>
+  </form>
+</section>
+{% endblock %}

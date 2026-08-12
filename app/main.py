@@ -42,6 +42,7 @@ from app.routers import (
     ui_breathing,
     ui_dibos,
     ui_druck,
+    ui_einsatz_import,
     ui_fahrtenbuch,
     ui_fahrtenbuch_admin,
     ui_foerderstrecke,
@@ -699,6 +700,7 @@ app.include_router(ui_weather.router)
 app.include_router(ui_termin.router)
 app.include_router(ui_uas.router)
 app.include_router(ui_bma_import.router)
+app.include_router(ui_einsatz_import.router)
 app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
 app.include_router(ui_nachschlagewerke.router)

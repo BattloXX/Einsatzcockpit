@@ -14,6 +14,7 @@
      or '/admin/verleih' in _p or '/admin/wasserstellen' in _p
      or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p
      or '/admin/foerderkalibrierung' in _p
+     or '/admin/einsatz-import' in _p
      or _p.startswith('/gateway') %}
   {% set active_group = 'verwaltung' %}
 {% elif '/admin/gruppen' in _p or '/admin/alarmtypen' in _p or '/admin/ausrueckordnung' in _p
@@ -244,6 +245,11 @@
         </button>
         <div x-show="groups.verwaltung" x-transition.opacity.duration.120ms>
           <div class="admin-nav__group-items">
+            <a href="/admin/einsatz-import"
+               class="admin-nav__item {% if '/admin/einsatz-import' in request.url.path %}is-active{% endif %}"
+               {{ tip('Historische Leitstellen-Excel-Exporte importieren') }}>
+              <span class="admin-nav__icon">📥</span>Einsatz-Import
+            </a>
             <a href="/admin/benutzer"
                class="admin-nav__item {% if '/admin/benutzer' in request.url.path %}is-active{% endif %}"
                {{ tip('Login-Accounts, Rollen, Passwörter') }}>

@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.permissions import can_access_incident, has_role, is_system_admin
+from app.core.permissions import can_access_incident, has_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentVehicle
@@ -157,6 +157,7 @@ def archive_detail(incident_id: int, request: Request, db: Session = Depends(get
         "fahrten_details": fahrten_details,
         "uas_einsatz": uas_einsatz,
         "can_edit": can_edit,
+        "can_delete": has_role(user, "admin", "org_admin", "system_admin"),
         "wp_report_available": wp_report_available,
         "verlauf": verlauf,
     })
@@ -265,7 +266,7 @@ async def save_ai_report(incident_id: int, request: Request, db: Session = Depen
 
 @router.post("/archiv/{incident_id}/loeschen")
 def delete_incident(incident_id: int, request: Request, db: Session = Depends(get_db)):
-    """Löscht einen Einsatz endgültig. Nur system_admin."""
+    """Löscht einen Einsatz endgültig. Org-Admins nur in der eigenen Org."""
     import shutil
     from pathlib import Path
 
@@ -275,12 +276,28 @@ def delete_incident(incident_id: int, request: Request, db: Session = Depends(ge
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
-    if not is_system_admin(user):
-        raise HTTPException(403, detail="Nur Systemadministratoren können Einsätze löschen.")
+    if not has_role(user, "admin", "org_admin", "system_admin"):
+        raise HTTPException(403, detail="Nur Administratoren können Einsätze löschen.")
 
-    incident = _load_incident_with_orgs(incident_id, db)
+    # Bewusst tenant-übergreifend laden, damit der nachfolgende explizite Guard
+    # zwischen "nicht vorhanden" und "fremde Organisation" unterscheiden kann.
+    incident = (
+        db.query(Incident)
+        .execution_options(include_all_tenants=True)
+        .filter(Incident.id == incident_id)
+        .first()
+    )
     if not incident:
         raise HTTPException(404)
+    if not same_org_or_system_admin(user, incident.primary_org_id):
+        raise HTTPException(403, detail="Einsätze einer fremden Organisation können nicht gelöscht werden.")
+
+    # UASEinsatz besitzt absichtlich eine RESTRICT-FK. Beim ausdrücklichen
+    # Hard-Delete des gesamten Einsatzes gehört die Drohnenmission mit dazu.
+    from app.models.uas import UASEinsatz
+    for uas_einsatz in db.query(UASEinsatz).filter(UASEinsatz.incident_id == incident_id).all():
+        db.delete(uas_einsatz)
+    db.flush()
 
     write_audit(
         db, "admin.incident.deleted",
