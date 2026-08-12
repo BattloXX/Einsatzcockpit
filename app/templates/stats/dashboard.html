@@ -2,11 +2,11 @@
 {% block title %}Einsatzstatistik{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
-<script src="/static/js/chart.umd.min.js"></script>
-<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/chart.umd.min.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/leaflet.min.js?v={{ ASSET_VERSION }}"></script>
 {% endblock %}
 {% block content %}
 <div class="page-header"><div><h1>Einsatzstatistik</h1><p class="page-header__sub">Auswertung fuer {{ org.name }}</p></div></div>
 <div id="stats-content">{% include "stats/_dashboard_content.html" %}</div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/stats_karte.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/stats_karte.js?v={{ ASSET_VERSION }}"></script>{% endblock %}

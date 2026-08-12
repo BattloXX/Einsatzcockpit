@@ -1,18 +1,118 @@
 <div id="statistik-settings-panel">
 {% if org %}
-<section class="card mb-4"><div class="card-header"><h2>Infoscreen</h2></div><div class="card-body">
-<form hx-post="/admin/settings/statistik/infoscreen-toggle" hx-target="#statistik-settings-panel" hx-swap="outerHTML">
-<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
-<label class="toggle-label"><input type="checkbox" name="enabled_raw" value="1" {% if org_settings and org_settings.statistik_infoscreen_enabled %}checked{% endif %} onchange="this.form.requestSubmit()"> Statistik-Infoscreen aktiviert</label>
-</form></div></section>
-{% if new_dashboard_token %}<div class="alert alert--success"><strong>Token "{{ new_dashboard_token_label }}" wurde erzeugt. Diese URL wird nur einmal angezeigt.</strong>
-<textarea id="statsDashUrl" readonly class="form-control">{{ new_dashboard_url }}</textarea><button class="btn btn--sm" type="button" onclick="navigator.clipboard.writeText(document.getElementById('statsDashUrl').value)">URL kopieren</button>
-{% if dashboard_qr %}<img src="{{ dashboard_qr }}" alt="QR-Code" style="width:100px;height:100px">{% endif %}</div>{% endif %}
-<section class="card"><div class="card-header"><h2>Zugriffs-Tokens</h2></div><div class="card-body">
-<table class="table table-admin--cards"><thead><tr><th>Bezeichnung</th><th>Erstellt</th><th>Verwendet</th><th></th></tr></thead><tbody>
-{% for tok in dashboard_tokens %}<tr><td data-label="Bezeichnung">{{ tok.label }}</td><td data-label="Erstellt">{{ tok.created_at|local_datetime }}</td><td data-label="Verwendet">{{ tok.last_used_at|local_datetime if tok.last_used_at else 'noch nie' }}</td><td>
-<form hx-post="/admin/settings/statistik/dashboard-token/{{ tok.id }}/loeschen" hx-target="#statistik-settings-panel" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}<button class="btn btn--danger btn--sm">Loeschen</button></form>
-</td></tr>{% else %}<tr><td colspan="4">Noch keine Tokens.</td></tr>{% endfor %}</tbody></table>
-<form hx-post="/admin/settings/statistik/dashboard-token/neu" hx-target="#statistik-settings-panel" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}<label>Bezeichnung <input class="form-control" name="label" required></label><button class="btn btn--primary" type="submit">Token erzeugen</button></form>
-</div></section>{% endif %}
+<section class="card mb-4">
+  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+    <h2>&#x2699;&#xFE0F; Statistik-Infoscreen</h2>
+    <span class="badge badge--muted" style="font-size:.72rem;">Organisationseinstellung</span>
+  </div>
+  <div class="card-body">
+    <form hx-post="/admin/settings/statistik/infoscreen-toggle" hx-target="#statistik-settings-panel" hx-swap="outerHTML">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+        <div>
+          <strong style="display:block;font-size:.9rem;margin-bottom:.2rem;">Infoscreen-Zugriff</strong>
+          <p style="font-size:.82rem;color:var(--text-muted);margin:0;">
+            Aktiviert die token-geschuetzte Statistikansicht fuer Wandmonitore dieser Organisation.
+          </p>
+        </div>
+        <label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" name="enabled_raw" value="1"
+                 {% if org_settings and org_settings.statistik_infoscreen_enabled %}checked{% endif %}
+                 onchange="this.form.requestSubmit()">
+          <span>Statistik-Infoscreen aktiviert</span>
+        </label>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section class="card mb-4" id="dashboard">
+  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+    <h2>&#x1F5A5;&#xFE0F; Statistik-Infoscreen-Dashboard</h2>
+    <span class="badge badge--muted" style="font-size:.72rem;">FullHD &bull; Kein Login erforderlich</span>
+  </div>
+  <div class="card-body">
+    {% if new_dashboard_token %}
+    <div class="alert" style="background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.35);border-radius:6px;padding:.8rem 1rem;margin-bottom:1.25rem;">
+      <strong>&#x2705; Token "{{ new_dashboard_token_label }}" erzeugt &ndash; URL wird nur einmal vollst&auml;ndig angezeigt!</strong>
+      <p style="font-size:.82rem;color:var(--text-muted);margin:.4rem 0;">
+        Kopieren Sie die URL und rufen Sie sie auf dem Infoscreen auf. Der Token kann sp&auml;ter nicht erneut
+        eingesehen werden, sondern nur gel&ouml;scht und neu erzeugt werden.
+      </p>
+      <textarea id="statsDashUrl" readonly rows="2"
+                style="width:100%;font-family:var(--font-mono,monospace);font-size:.82rem;background:rgba(0,0,0,.25);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:.5rem;resize:vertical;">{{ new_dashboard_url }}</textarea>
+      <div style="display:flex;align-items:flex-start;gap:1rem;margin-top:.5rem;flex-wrap:wrap;">
+        <button type="button" class="btn btn--sm btn--primary"
+                onclick="var t=document.getElementById('statsDashUrl');t.select();navigator.clipboard.writeText(t.value);this.textContent='Kopiert';">
+          URL kopieren
+        </button>
+        {% if dashboard_qr %}
+        <div style="display:flex;align-items:center;gap:.75rem;">
+          <img src="{{ dashboard_qr }}" alt="QR-Code Dashboard-URL"
+               style="width:80px;height:80px;border-radius:4px;border:1px solid var(--border);"
+               title="QR-Code zum Scannen mit dem Infoscreen-Geraet">
+          <span style="font-size:.78rem;color:var(--text-muted);">QR-Code scannen<br>f&uuml;r schnellen Aufruf<br>am Infoscreen</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="alert" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:.6rem .9rem;font-size:.82rem;color:var(--text-primary);margin-bottom:1.25rem;">
+      Das Dashboard ist eine <strong>passwortfreie Vollbild-Ansicht</strong> f&uuml;r FullHD-Infoscreens (1920&times;1080).
+      Der Zugriff ist ausschlie&szlig;lich mit einem Dashboard-Token in der URL m&ouml;glich.
+      Es zeigt Einsatzkennzahlen, Einsatzorte und Fuhrparkdaten und aktualisiert sich automatisch alle 5 Minuten.
+    </div>
+
+    {% if dashboard_tokens %}
+    <table class="table" style="margin-bottom:1.25rem;">
+      <thead>
+        <tr>
+          <th>Bezeichnung</th>
+          <th>Erzeugt am</th>
+          <th>Zuletzt verwendet</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tok in dashboard_tokens %}
+        <tr>
+          <td>{{ tok.label }}</td>
+          <td>{{ (tok.created_at|local_datetime) if tok.created_at else '-' }}</td>
+          <td>{{ (tok.last_used_at|local_datetime) if tok.last_used_at else 'noch nie' }}</td>
+          <td style="text-align:right;">
+            <form hx-post="/admin/settings/statistik/dashboard-token/{{ tok.id }}/loeschen" hx-target="#statistik-settings-panel" hx-swap="outerHTML" style="display:inline;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+              <button type="submit" class="btn btn--danger btn--sm"
+                      onclick="return confirm('Token &quot;{{ tok.label }}&quot; loeschen? Jeder Verbraucher dieses Tokens verliert sofort den Zugriff.');">
+                L&ouml;schen
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1rem;">
+      Noch kein Dashboard-Token erzeugt. Der Statistik-Infoscreen ist noch nicht erreichbar.
+    </p>
+    {% endif %}
+
+    <form hx-post="/admin/settings/statistik/dashboard-token/neu" hx-target="#statistik-settings-panel" hx-swap="outerHTML" style="display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if is_sysadmin %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+      <div>
+        <label style="font-weight:600;font-size:.85rem;display:block;margin-bottom:.25rem;">Neuer Token f&uuml;r &hellip;</label>
+        <input type="text" name="label" class="form-control" placeholder="z.B. Infoscreen Geraetehaus" required style="min-width:280px;">
+      </div>
+      <button type="submit" class="btn btn--primary">
+        &#x1F511; Token erzeugen &amp; URL anzeigen
+      </button>
+    </form>
+  </div>
+</section>
+{% endif %}
 </div>
