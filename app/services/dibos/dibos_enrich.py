@@ -585,7 +585,8 @@ def enrich_events_for_org(
     try:
         org = db.get(FireDept, org_id)
         for event in parse_events(raw_events):
-            incident = _find_active_incident_by_event_number(db, org_id, event.get("eventNumber"))
+            event_number = event.get("eventNumber")
+            incident = _find_active_incident_by_event_number(db, org_id, event_number)
             just_created = False
             if not incident and create_incidents:
                 result = _get_or_create_incident_for_event(db, org, org_id, event)
@@ -598,9 +599,9 @@ def enrich_events_for_org(
             changed |= _enrich_caller(incident, event.get("callers") or [])
             changed |= _enrich_metadata(incident, event)
             changed |= _sync_dibos_comments(db, org_id, incident, event.get("comments") or [])
-            if raw_units is not None:
+            if raw_units is not None and isinstance(event_number, str):
                 changed |= _sync_wache_status(
-                    db, org, incident, event.get("eventNumber"), raw_units, wache_unid
+                    db, org, incident, event_number, raw_units, wache_unid
                 )
             if event.get("bmaNo"):
                 changed |= _match_objekt_by_dibos_bma(db, incident)
