@@ -68,20 +68,22 @@ def get_stats(
     alarm_counts: dict[str, int] = {}
     categories = {"fire": 0, "technical": 0, "other": 0}
     durations: list[float] = []
-    months: dict[str, int] = {}
+    months: dict[str, dict[str, int]] = {}
     markers: list[dict[str, Any]] = []
     for incident in incidents:
         alarm_counts[incident.alarm_type_code] = alarm_counts.get(incident.alarm_type_code, 0) + 1
         category = (alarm_by_code.get(incident.alarm_type_code).category
                     if alarm_by_code.get(incident.alarm_type_code) else "")
         if category in ("B", "F"):
-            categories["fire"] += 1
+            bucket = "fire"
         elif category == "T":
-            categories["technical"] += 1
+            bucket = "technical"
         else:
-            categories["other"] += 1
+            bucket = "other"
+        categories[bucket] += 1
         month = to_org_tz(incident.started_at, org).strftime("%Y-%m")
-        months[month] = months.get(month, 0) + 1
+        months.setdefault(month, {"fire": 0, "technical": 0, "other": 0})
+        months[month][bucket] += 1
         if incident.closed_at and incident.closed_at >= incident.started_at:
             durations.append((incident.closed_at - incident.started_at).total_seconds() / 60)
         if incident.lat is not None and incident.lng is not None:
@@ -158,7 +160,13 @@ def get_stats(
         # statistics without allowing that outlier class to dominate either KPI.
         avg_duration_min=round(median(durations), 1) if durations else None,
         avg_time_to_first_vehicle_min=round(median(reaction), 1) if reaction else None,
-        by_month=[{"month": key, "count": months[key]} for key in sorted(months)],
+        by_month=[{
+            "month": key,
+            "count": sum(months[key].values()),
+            "fire": months[key]["fire"],
+            "technical": months[key]["technical"],
+            "other": months[key]["other"],
+        } for key in sorted(months)],
         by_alarm_type=by_alarm_type,
         vehicle_usage=sorted(usage.values(), key=lambda item: (-item["count"], item["code"])),
         vehicle_fleet_stats=fleet_stats, recent_incidents=incidents[:15], incidents=incidents,
