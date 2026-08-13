@@ -1,4 +1,5 @@
 import io
+import json
 import uuid
 from datetime import datetime
 
@@ -8,7 +9,7 @@ from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, Fahrtzweck
 from app.models.foerderstrecke import FoerderPumpenTyp
-from app.models.incident import Incident, IncidentColumn, IncidentVehicle
+from app.models.incident import Incident, IncidentColumn, IncidentVehicle, Task
 from app.models.major_incident import (
     IncidentSite,
     LageEinheit,
@@ -120,6 +121,116 @@ def test_import_dedup_fahrzeug_matching_und_adhoc():
         assert incidents[0].alarm_type_code == "F3"
         assert incidents[0].lat == 47.4768
         assert incidents[0].reason == "Brand"  # bestehender Wert wird nicht überschrieben
+    finally:
+        db.close()
+
+
+def test_reimport_fuehrt_adhoc_bei_schreibvarianten_mit_echtem_fahrzeug_zusammen():
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        org = _org(db, "fahrzeug-variante")
+        user = _user(db, org.id, "org_admin")
+        db.commit()
+        first_raw = _xlsx(FORMAT_A_HEADERS, [[
+            "f-variante", "Brand", "07.01.2026 17:50:00", "07.01.2026 18:50:00",
+            "RLF-A", "Wolfurt RLF", None, "Hauptstraße", "1", "WOLFURT",
+        ]])
+        import_einsaetze(db, parse_einsatz_excel(first_raw), org.id, user.id)
+        adhoc = db.query(VehicleMaster).filter_by(dept_id=org.id, code="RLF-A").one()
+        assert adhoc.is_adhoc is True
+
+        real = VehicleMaster(
+            dept_id=org.id, code="RLF-A", name="RLF-A - WOL Feuerwehr Wolfurt",
+            active=True, is_adhoc=False,
+        )
+        db.add(real)
+        db.commit()
+        second_raw = _xlsx(FORMAT_A_HEADERS, [[
+            "f-variante", "Brand", "07.01.2026 17:50:00", "07.01.2026 18:50:00",
+            "RLF-A", "RLF-A - WOL Feuerwehr Wolfurt", None,
+            "Hauptstraße", "1", "WOLFURT",
+        ]])
+
+        result = import_einsaetze(db, parse_einsatz_excel(second_raw), org.id, user.id)
+        incident = db.query(Incident).filter_by(lis_operation_number="f-variante").one()
+        assignments = db.query(IncidentVehicle).filter_by(incident_id=incident.id).all()
+
+        assert result.row_errors == 0
+        assert len(assignments) == 1
+        assert assignments[0].vehicle_master_id == real.id
+        assert db.get(VehicleMaster, adhoc.id) is None
+    finally:
+        db.close()
+
+
+def test_reimport_bereinigt_bestehende_incident_vehicle_duplikate_mit_kinddaten():
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        org = _org(db, "fahrzeug-altduplikat")
+        user = _user(db, org.id, "org_admin")
+        real = VehicleMaster(
+            dept_id=org.id, code="TMB 27", name="TMB 27 - WOL Feuerwehr Wolfurt",
+            active=True, is_adhoc=False,
+        )
+        adhoc = VehicleMaster(
+            dept_id=org.id, code="TMB 27", name="Wolfurt TMB", active=True, is_adhoc=True,
+        )
+        incident = Incident(
+            primary_org_id=org.id, lis_operation_number="f-altduplikat",
+            alarm_type_code="T1", status="closed",
+        )
+        db.add_all([real, adhoc, incident])
+        db.flush()
+        column = IncidentColumn(
+            incident_id=incident.id, code="active", title="Aktiv", column_kind="vehicles",
+            is_fixed=True, display_order=0,
+        )
+        db.add(column)
+        db.flush()
+        real_assignment = IncidentVehicle(
+            incident_id=incident.id, column_id=column.id, vehicle_master_id=real.id,
+            unit_status="Einsatzbereit", created_at=datetime(2026, 1, 7, 17, 0),
+        )
+        adhoc_assignment = IncidentVehicle(
+            incident_id=incident.id, column_id=column.id, vehicle_master_id=adhoc.id,
+            unit_status="Am Einsatzort", commander_name="Kommandant Alt",
+            created_at=datetime(2026, 1, 7, 16, 50),
+        )
+        db.add_all([real_assignment, adhoc_assignment])
+        db.flush()
+        task = Task(
+            incident_id=incident.id, column_id=column.id, vehicle_id=adhoc_assignment.id,
+            title="Wasserversorgung", status="open",
+        )
+        db.add(task)
+        column.card_order = (
+            f'[{json.dumps({"kind": "vehicle", "id": real_assignment.id})}, '
+            f'{json.dumps({"kind": "vehicle", "id": adhoc_assignment.id})}]'
+        )
+        db.commit()
+        raw = _xlsx(FORMAT_A_HEADERS, [[
+            "f-altduplikat", "Brand", "07.01.2026 17:50:00", "07.01.2026 18:50:00",
+            "TMB 27", "TMB 27 - WOL Feuerwehr Wolfurt", None,
+            "Hauptstraße", "1", "WOLFURT",
+        ]])
+
+        result = import_einsaetze(db, parse_einsatz_excel(raw), org.id, user.id)
+        assignments = db.query(IncidentVehicle).filter_by(incident_id=incident.id).all()
+        db.refresh(task)
+        db.refresh(column)
+
+        assert result.row_errors == 0
+        assert len(assignments) == 1
+        survivor = assignments[0]
+        assert survivor.vehicle_master_id == real.id
+        assert survivor.unit_status == "Am Einsatzort"
+        assert survivor.commander_name == "Kommandant Alt"
+        assert survivor.created_at == datetime(2026, 1, 7, 16, 50)
+        assert task.vehicle_id == survivor.id
+        assert json.loads(column.card_order) == [{"kind": "vehicle", "id": survivor.id}]
+        assert db.get(VehicleMaster, adhoc.id) is None
     finally:
         db.close()
 
