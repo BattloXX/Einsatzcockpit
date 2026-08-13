@@ -22,6 +22,7 @@ class StatsResult:
     other_count: int
     avg_duration_min: float | None
     avg_time_to_first_vehicle_min: float | None
+    median_alarm_to_scene_min: float | None
     by_month: list[dict[str, Any]]
     by_alarm_type: list[dict[str, Any]]
     vehicle_usage: list[dict[str, Any]]
@@ -68,6 +69,7 @@ def get_stats(
     alarm_counts: dict[str, int] = {}
     categories = {"fire": 0, "technical": 0, "other": 0}
     durations: list[float] = []
+    anfahrtszeiten: list[float] = []
     months: dict[str, dict[str, int]] = {}
     markers: list[dict[str, Any]] = []
     for incident in incidents:
@@ -89,6 +91,10 @@ def get_stats(
         months[month][bucket] += 1
         if incident.closed_at and incident.closed_at >= incident.started_at:
             durations.append((incident.closed_at - incident.started_at).total_seconds() / 60)
+        if incident.on_scene_at and incident.on_scene_at >= incident.started_at:
+            anfahrtszeiten.append(
+                (incident.on_scene_at - incident.started_at).total_seconds() / 60
+            )
         if incident.lat is not None and incident.lng is not None:
             address = " ".join(filter(None, [incident.address_street, incident.address_no, incident.address_city]))
             markers.append({
@@ -166,6 +172,9 @@ def get_stats(
         # statistics without allowing that outlier class to dominate either KPI.
         avg_duration_min=round(median(durations), 1) if durations else None,
         avg_time_to_first_vehicle_min=round(median(reaction), 1) if reaction else None,
+        median_alarm_to_scene_min=(
+            round(median(anfahrtszeiten), 1) if anfahrtszeiten else None
+        ),
         by_month=[{
             "month": key,
             "count": sum(months[key].values()),

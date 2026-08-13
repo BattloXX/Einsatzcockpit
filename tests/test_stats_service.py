@@ -111,3 +111,60 @@ def test_stats_timestamp_kpis_use_median_for_delayed_records():
     assert stats.avg_duration_min == 60
     assert stats.avg_time_to_first_vehicle_min == 10
     db.close()
+
+
+def test_stats_alarm_to_scene_uses_median_and_omits_missing_values():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    set_tenant_context(db, None)
+    org = FireDept(
+        slug="stats-on-scene", name="Stats Einsatzort", timezone="Europe/Vienna"
+    )
+    db.add(org)
+    db.flush()
+    db.add(AlarmType(org_id=org.id, code="T1", category="T", label="Technisch"))
+
+    started = datetime(2026, 3, 10, 8, 0)
+    db.add_all([
+        Incident(
+            primary_org_id=org.id,
+            alarm_type_code="T1",
+            started_at=started,
+            on_scene_at=started + timedelta(minutes=5),
+            is_exercise=False,
+        ),
+        Incident(
+            primary_org_id=org.id,
+            alarm_type_code="T1",
+            started_at=started + timedelta(minutes=1),
+            on_scene_at=started + timedelta(minutes=16),
+            is_exercise=False,
+        ),
+        Incident(
+            primary_org_id=org.id,
+            alarm_type_code="T1",
+            started_at=started + timedelta(minutes=2),
+            on_scene_at=None,
+            is_exercise=False,
+        ),
+        Incident(
+            primary_org_id=org.id,
+            alarm_type_code="T1",
+            started_at=started + timedelta(days=1),
+            on_scene_at=None,
+            is_exercise=False,
+        ),
+    ])
+    db.commit()
+
+    stats = get_stats(db, org.id, started.date(), started.date(), user=None)
+    assert stats.median_alarm_to_scene_min == 10
+
+    day_without_on_scene = started.date() + timedelta(days=1)
+    assert (
+        get_stats(db, org.id, day_without_on_scene, day_without_on_scene, user=None)
+        .median_alarm_to_scene_min
+        is None
+    )
+    db.close()

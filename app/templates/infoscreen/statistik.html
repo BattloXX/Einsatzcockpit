@@ -86,7 +86,7 @@
 
   <main class="flex flex-col gap-4 px-8 py-5" style="height:964px;flex-shrink:0;">
     <section class="grid grid-cols-5 gap-4" style="height:132px;flex-shrink:0;">
-      {% for value,label in [(stats.total,'Einsaetze'),(stats.fire_count,'Brand'),(stats.technical_count,'Technisch'),(stats.avg_duration_min if stats.avg_duration_min is not none else '-','Median Dauer min'),(stats.avg_time_to_first_vehicle_min if stats.avg_time_to_first_vehicle_min is not none else '-','Median erste Disposition min')] %}
+      {% for value,label in [(stats.total,'Einsaetze'),(stats.fire_count,'Brand'),(stats.technical_count,'Technisch'),(stats.avg_duration_min if stats.avg_duration_min is not none else '-','Median Dauer min'),(stats.median_alarm_to_scene_min if stats.median_alarm_to_scene_min is not none else '-','Median Alarmierung bis Einsatzort min')] %}
       <div class="flex flex-col justify-center rounded-xl bg-surface-container border border-outline-variant px-6 shadow-md">
         <strong class="font-sans text-on-surface font-extrabold" style="font-size:48px;line-height:1;">{{ value }}</strong>
         <span class="mt-2 font-mono text-label-caps text-on-surface-variant uppercase">{{ label }}</span>
