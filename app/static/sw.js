@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v9';
+const CACHE = 'ec-v10';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
@@ -14,10 +14,14 @@ const NW_CACHE = 'ec-nachschlagewerk-v1';
 const PRECACHE = [
   '/',
   '/static/css/app.css',
+  '/static/css/leaflet.min.css',
   '/static/js/app.js',
   '/static/js/alpine.min.js',
+  '/static/js/chart.umd.min.js',
   '/static/js/htmx.min.js',
+  '/static/js/leaflet.min.js',
   '/static/js/sortable.min.js',
+  '/static/js/stats_karte.js',
   '/static/manifest.webmanifest',
   '/login',
 ];
@@ -190,7 +194,7 @@ self.addEventListener('fetch', e => {
   if (url.pathname.startsWith('/static/')) {
     e.respondWith(
       caches.open(CACHE).then(cache =>
-        cache.match(e.request).then(cached => {
+        cache.match(e.request, { ignoreSearch: true }).then(cached => {
           const fetchPromise = fetch(e.request).then(res => {
             if (res.ok) cache.put(e.request, res.clone());
             return res;

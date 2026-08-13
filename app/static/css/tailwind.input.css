@@ -2330,8 +2330,8 @@ button.htmx-request,
 .stats-filter { display:flex; gap:.65rem; align-items:end; flex-wrap:wrap; padding:1rem; margin-bottom:1rem; }
 .stats-filter label { min-width:150px; }
 .stats-bento { display:grid; grid-template-columns:2fr 1fr; gap:1rem; margin:1rem 0; }
-.stats-map-box { grid-row:span 2; }
-.stats-map { height:520px; border-radius:8px; overflow:hidden; }
+.stats-map-box { grid-row:span 2; position:relative; isolation:isolate; }
+.stats-map { position:relative; isolation:isolate; height:520px; border-radius:8px; overflow:hidden; }
 .stats-vehicle-chart { grid-column:1 / -1; }
 .stats-vehicle-cards { display:none; gap:.75rem; overflow-x:auto; margin:1rem 0; scroll-snap-type:x mandatory; }
 .stats-vehicle-cards .kpi-card { min-width:180px; scroll-snap-align:start; display:flex; flex-direction:column; gap:.3rem; }

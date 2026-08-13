@@ -11,7 +11,7 @@ def _sw_source() -> str:
 
 def test_live_notification_payload_handling():
     src = _sw_source()
-    assert "const CACHE = 'ec-v9';" in src
+    assert "const CACHE = 'ec-v10';" in src
     assert "einsatz_live" in src
     assert "einsatz_live_end" in src
 
@@ -19,6 +19,18 @@ def test_live_notification_payload_handling():
     assert "silent" in push_handler
     assert "renotify" in push_handler
     assert src.index("showNotification") < src.index("getNotifications")
+
+
+def test_stats_assets_are_precached_with_versioned_request_fallback():
+    src = _sw_source()
+    for path in (
+        "/static/css/leaflet.min.css",
+        "/static/js/leaflet.min.js",
+        "/static/js/chart.umd.min.js",
+        "/static/js/stats_karte.js",
+    ):
+        assert f"'{path}'" in src
+    assert "cache.match(e.request, { ignoreSearch: true })" in src
 
 
 def test_notification_click_reuses_open_window():
