@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from math import isfinite
 from statistics import median
 from typing import Any
 
@@ -95,10 +96,20 @@ def get_stats(
             anfahrtszeiten.append(
                 (incident.on_scene_at - incident.started_at).total_seconds() / 60
             )
-        if incident.lat is not None and incident.lng is not None:
+        lat = incident.lat
+        lng = incident.lng
+        if (
+            lat is not None
+            and lng is not None
+            and isfinite(lat)
+            and isfinite(lng)
+            and -90 <= lat <= 90
+            and -180 <= lng <= 180
+            and (lat != 0 or lng != 0)
+        ):
             address = " ".join(filter(None, [incident.address_street, incident.address_no, incident.address_city]))
             markers.append({
-                "id": incident.id, "lat": incident.lat, "lng": incident.lng,
+                "id": incident.id, "lat": lat, "lng": lng,
                 "alarm_type_code": incident.alarm_type_code,
                 "category": category, "nummer": incident.nummer, "address": address,
             })

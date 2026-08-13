@@ -168,3 +168,52 @@ def test_stats_alarm_to_scene_uses_median_and_omits_missing_values():
         is None
     )
     db.close()
+
+
+def test_stats_map_markers_omit_invalid_coordinates_for_twelve_month_range():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    set_tenant_context(db, None)
+    org = FireDept(slug="stats-map-coordinates", name="Stats Map", timezone="Europe/Vienna")
+    db.add(org)
+    db.flush()
+
+    started = datetime(2025, 9, 10, 8, 0)
+    coordinates = [
+        (47.5, 14.5),
+        (47.5, 14.5),  # Duplikate sind gueltige, getrennte Einsatzorte.
+        (-33.9, 151.2),  # Weit entfernte, aber gueltige WGS84-Koordinate.
+        (None, 14.5),
+        (47.5, None),
+        (0.0, 0.0),
+        (float("inf"), 14.5),
+        (47.5, float("-inf")),
+        (90.1, 14.5),
+        (47.5, 180.1),
+    ]
+    for index, (lat, lng) in enumerate(coordinates):
+        db.add(Incident(
+            primary_org_id=org.id,
+            alarm_type_code="T1",
+            started_at=started + timedelta(days=index * 30),
+            is_exercise=False,
+            lat=lat,
+            lng=lng,
+        ))
+    db.commit()
+
+    stats = get_stats(
+        db,
+        org.id,
+        started.date(),
+        (started + timedelta(days=365)).date(),
+        user=None,
+    )
+
+    assert [(marker["lat"], marker["lng"]) for marker in stats.map_markers] == [
+        (-33.9, 151.2),
+        (47.5, 14.5),
+        (47.5, 14.5),
+    ]
+    db.close()
