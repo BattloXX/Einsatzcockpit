@@ -91,9 +91,10 @@ async def stats_content(request: Request, db: Session = Depends(get_db), von: st
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
-    return templates.TemplateResponse(
-        request, "stats/_dashboard_content.html", _stats_context(request, db, user, von, bis)
-    )
+    context = _stats_context(request, db, user, von, bis)
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "stats/_dashboard_content.html", context)
+    return templates.TemplateResponse(request, "stats/dashboard.html", context)
 
 
 @router.get("/statistik/export.xlsx")
