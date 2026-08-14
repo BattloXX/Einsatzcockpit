@@ -34,7 +34,7 @@ def test_sw_hat_nachschlagewerk_cache_bucket():
     src = _sw()
     assert "ec-nachschlagewerk-v1" in src
     # Bucket steht in der activate-Whitelist (wird bei App-Update NICHT geloescht)
-    assert "k !== NW_CACHE" in src
+    assert "protectedCaches = [CACHE, BOARD_CACHE, OBJEKT_CACHE, NW_CACHE]" in src
 
 
 def test_sw_index_json_network_first():

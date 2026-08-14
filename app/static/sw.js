@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v10';
+const CACHE = 'ec-v11';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
@@ -11,32 +11,67 @@ const OBJEKT_CACHE = 'ec-objekt-v1';
 // Rettungskarten-PDFs (cache-first, /nachschlagewerk-cache/). App-Updates
 // loeschen ihn nicht (Offline-Bestand bleibt erhalten).
 const NW_CACHE = 'ec-nachschlagewerk-v1';
-const PRECACHE = [
+const CORE_PRECACHE = [
   '/',
   '/static/css/app.css',
-  '/static/css/leaflet.min.css',
   '/static/js/app.js',
   '/static/js/alpine.min.js',
-  '/static/js/chart.umd.min.js',
   '/static/js/htmx.min.js',
-  '/static/js/leaflet.min.js',
   '/static/js/sortable.min.js',
-  '/static/js/stats_karte.js',
   '/static/manifest.webmanifest',
   '/login',
 ];
+const OPTIONAL_PRECACHE = [
+  '/static/css/leaflet.min.css',
+  '/static/js/chart.umd.min.js',
+  '/static/js/leaflet.min.js',
+  '/static/js/stats_karte.js',
+];
+const CORE_READY_KEY = '/__precache-core-ready__';
+
+async function precacheGroup(cache, assets, group) {
+  const results = await Promise.allSettled(assets.map(asset => cache.add(asset)));
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.warn(`[SW] ${group}-Precache fehlgeschlagen: ${assets[index]}`, result.reason);
+    }
+  });
+  return results.every(result => result.status === 'fulfilled');
+}
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(async cache => {
+      const [coreReady] = await Promise.all([
+        precacheGroup(cache, CORE_PRECACHE, 'Core'),
+        precacheGroup(cache, OPTIONAL_PRECACHE, 'Optional'),
+      ]);
+      if (coreReady) {
+        try {
+          await cache.put(CORE_READY_KEY, new Response('ok'));
+        } catch (error) {
+          console.warn('[SW] Core-Precache-Marker konnte nicht gespeichert werden', error);
+        }
+      }
+      await self.skipWaiting();
+    })
   );
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE && k !== BOARD_CACHE && k !== OBJEKT_CACHE && k !== NW_CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.open(CACHE).then(async cache => {
+      const coreReady = Boolean(await cache.match(CORE_READY_KEY));
+      const keys = await caches.keys();
+      const protectedCaches = [CACHE, BOARD_CACHE, OBJEKT_CACHE, NW_CACHE];
+      await Promise.all(keys.filter(key => {
+        if (protectedCaches.includes(key)) return false;
+        // Bei unvollstaendig precachtem Core den letzten App-Shell-Cache behalten.
+        if (!coreReady && /^ec-v\d+$/.test(key)) return false;
+        return true;
+      }).map(key => caches.delete(key)));
+      await self.clients.claim();
+    })
   );
 });
 
@@ -193,15 +228,36 @@ self.addEventListener('fetch', e => {
   // Static assets — stale-while-revalidate (always fetch fresh, serve cache if offline)
   if (url.pathname.startsWith('/static/')) {
     e.respondWith(
-      caches.open(CACHE).then(cache =>
-        cache.match(e.request, { ignoreSearch: true }).then(cached => {
-          const fetchPromise = fetch(e.request).then(res => {
-            if (res.ok) cache.put(e.request, res.clone());
-            return res;
+      caches.open(CACHE).then(async cache => {
+        const currentCached = await cache.match(e.request, { ignoreSearch: true });
+        const cached = currentCached
+          || await caches.match(e.request, { ignoreSearch: true });
+        const fetchPromise = fetch(e.request).then(async res => {
+          if (res.ok) {
+            try {
+              await cache.put(e.request, res.clone());
+            } catch (error) {
+              console.warn(`[SW] Static-Asset konnte nicht gecacht werden: ${url.pathname}`, error);
+            }
+          }
+          return res;
+        });
+        if (cached) {
+          // Der Fetch laeuft best-effort weiter; catch verhindert einen
+          // unbehandelten Reject, waehrend sofort die Cache-Response zurueckgeht.
+          void fetchPromise.catch(error => {
+            console.warn(`[SW] Static-Revalidierung fehlgeschlagen: ${url.pathname}`, error);
           });
-          return cached || fetchPromise;
-        })
-      )
+          return cached;
+        }
+        return fetchPromise.catch(error => {
+          console.warn(`[SW] Static-Asset nicht verfuegbar: ${url.pathname}`, error);
+          return new Response('Static asset unavailable', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain', 'X-Offline': '1' },
+          });
+        });
+      })
     );
     return;
   }

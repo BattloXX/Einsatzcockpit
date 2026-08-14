@@ -11,7 +11,7 @@ def _sw_source() -> str:
 
 def test_live_notification_payload_handling():
     src = _sw_source()
-    assert "const CACHE = 'ec-v10';" in src
+    assert "const CACHE = 'ec-v11';" in src
     assert "einsatz_live" in src
     assert "einsatz_live_end" in src
 
@@ -31,6 +31,27 @@ def test_stats_assets_are_precached_with_versioned_request_fallback():
     ):
         assert f"'{path}'" in src
     assert "cache.match(e.request, { ignoreSearch: true })" in src
+
+
+def test_precache_is_best_effort_and_separates_core_from_optional_assets():
+    src = _sw_source()
+    install_handler = src[
+        src.index("self.addEventListener('install'"):
+        src.index("self.addEventListener('activate'")
+    ]
+    assert "CORE_PRECACHE" in src
+    assert "OPTIONAL_PRECACHE" in src
+    assert "Promise.allSettled" in src
+    assert ".addAll(" not in install_handler
+    assert "CORE_READY_KEY" in install_handler
+
+
+def test_static_handler_always_handles_network_failure():
+    src = _sw_source()
+    static_handler = src[src.index("// Static assets"):src.index("// Everything else")]
+    assert "await caches.match(e.request, { ignoreSearch: true })" in static_handler
+    assert "void fetchPromise.catch" in static_handler
+    assert "return new Response('Static asset unavailable'" in static_handler
 
 
 def test_notification_click_reuses_open_window():
