@@ -6,6 +6,7 @@ Multi-User, mandantenfähig, Echtzeit. Für Feuerwehr, BOS und Gemeinden.
 🔗 [einsatzcockpit.com](https://einsatzcockpit.com)
 
 [![CI](https://github.com/BattloXX/Einsatzcockpit/actions/workflows/ci.yml/badge.svg)](https://github.com/BattloXX/Einsatzcockpit/actions)
+[![Docker Build](https://github.com/BattloXX/Einsatzcockpit/actions/workflows/docker-build.yml/badge.svg)](https://github.com/BattloXX/Einsatzcockpit/pkgs/container/einsatzcockpit)
 ![Python](https://img.shields.io/badge/python-3.14-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green)
 ![Version](https://img.shields.io/badge/version-3.8.0-orange)
@@ -78,6 +79,12 @@ Danach: `http://localhost:8092`. Docker-Datenbank, CSS-Watch-Modus, VAPID und pl
 ## Installation (Produktion)
 
 Die produktive Installation beginnt mit den [Server-Voraussetzungen](docs/wiki/Installation-Server-Voraussetzungen.md). Die anschließenden Wiki-Seiten führen durch Datenbank, App, systemd, NGINX, Erst-Setup, Backups und Updates.
+
+Für einen containerisierten Betrieb baut GitHub Actions bei jedem Push auf `main`
+und jedem Release automatisch ein Image und veröffentlicht es nach
+[`ghcr.io/battloxx/einsatzcockpit`](https://github.com/BattloXX/Einsatzcockpit/pkgs/container/einsatzcockpit);
+`docker compose pull && docker compose up -d` startet App, MariaDB und Redis ohne
+lokalen Build. Details unter [Docker Compose](docs/wiki/Installation-Docker.md).
 
 ## Konfiguration
 

@@ -6,6 +6,12 @@ Docker Compose startet die App mit MariaDB 10.11 und Redis 7. Redis ist wegen de
 zwei Gunicorn-Worker verpflichtend. Ein Reverse-Proxy mit TLS bleibt erforderlich;
 Compose ersetzt NGINX nicht.
 
+GitHub Actions baut das App-Image automatisch bei jedem Push auf `main` und bei
+jedem Versions-Tag (`.github/workflows/docker-build.yml`) und veröffentlicht es nach
+`ghcr.io/battloxx/einsatzcockpit`. Standardmäßig wird dieses fertige Image gepullt
+(schneller, kein lokaler Build nötig); wer eigene Änderungen am Dockerfile oder Code
+testen will, baut stattdessen lokal — beide Wege stehen unter Schritt 3.
+
 ## 1. Voraussetzungen
 
 Docker Engine mit Compose-Plugin und Git müssen installiert sein. Repository klonen:
@@ -40,6 +46,20 @@ REDIS_URL=redis://redis:6379/0
 
 ## 3. Starten
 
+**Option A — vorgebautes Image von GHCR (Standard, empfohlen):**
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose ps
+docker compose logs -f app
+```
+
+`IMAGE_TAG` in der `.env` wählt die Version (Default `latest` = letzter Stand von
+`main`); für ein festes Release z. B. `IMAGE_TAG=v3.8.0` setzen.
+
+**Option B — selbst bauen** (für lokale Änderungen am Dockerfile/Code):
+
 ```bash
 docker compose up -d --build
 docker compose ps
@@ -73,14 +93,24 @@ Proxy-Adresse passen; niemals beliebige Quellnetze eintragen.
 
 ## 5. Updates
 
+**Mit dem GHCR-Image (Option A):**
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose ps
+```
+
+**Bei lokalem Build (Option B):**
+
 ```bash
 git pull origin main
 docker compose up -d --build
 docker compose ps
 ```
 
-Migrationen laufen beim Neustart automatisch. Bei einem fremden, vorgebauten Image
-lautet der Ablauf stattdessen `docker compose pull && docker compose up -d`.
+Migrationen laufen beim Neustart automatisch (Entrypoint führt `alembic upgrade head`
+aus), in beiden Fällen.
 
 ## 6. Backups
 

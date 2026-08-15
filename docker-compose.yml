@@ -1,5 +1,6 @@
 services:
   app:
+    image: ghcr.io/battloxx/einsatzcockpit:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
