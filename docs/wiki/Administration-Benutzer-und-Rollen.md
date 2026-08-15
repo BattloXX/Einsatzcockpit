@@ -1,6 +1,6 @@
 # Benutzer und Rollen
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Benutzer verwalten
 
@@ -133,6 +133,6 @@ Ein Benutzer kann mehrere Rollen haben (z.B. `incident_leader` + `breathing_supe
 - Mindestens ein aktiver Admin-User muss immer vorhanden sein.
 - Die Anzahl der Benutzer ist nicht begrenzt.
 - Benutzer ohne `org_id` (NULL) sind System-Administratoren und sehen alle Organisationen.
-- `org_admin` kann Einladungen an neue Org-Admins versenden: [Organisationen verwalten](Administration-Organisations-verwalten).
+- `org_admin` kann Einladungen an neue Org-Admins versenden: [Organisationen verwalten](Administration-Organisations-verwalten.md).
 - Zwei Funktionen sind bewusst **nicht** rollenbasiert, sondern über eigene, anonyme Mechanismen geregelt: der **QR-/PIN-Gästezugang** zu einem Einsatz (signierter Einmal-Token bzw. ratenbegrenzte PIN, kein Login) und die **Fahrtenbuch-Erfassung per öffentlichem Link/QR** (für Besatzungsmitglieder ohne eigenen Account).
-- Geräte-Logins (fest gekoppelte Tablets/Handys, z.B. für Board-Anzeige oder SMS-Gateway) sind keine „Rolle" im obigen Sinn, sondern ein eigener Login-Mechanismus über Geräte-Token/PIN: [Geräteverleih](Anwender-Geraeteverleih), [SMS-Gateway installieren](Installation-SMS-Gateway).
+- Geräte-Logins (fest gekoppelte Tablets/Handys, z.B. für Board-Anzeige oder SMS-Gateway) sind keine „Rolle" im obigen Sinn, sondern ein eigener Login-Mechanismus über Geräte-Token/PIN: [Geräteverleih](Anwender-Geraeteverleih.md), [SMS-Gateway installieren](Installation-SMS-Gateway.md).

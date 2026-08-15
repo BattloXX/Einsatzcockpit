@@ -1,6 +1,6 @@
 # Wetterwarnungen & Benachrichtigungen
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/admin/settings/wetter#warnungen`  
 > Zugänglich für: `org_admin`, `admin`, `system_admin`

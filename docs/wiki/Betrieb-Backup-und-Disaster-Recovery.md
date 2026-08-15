@@ -1,6 +1,6 @@
 # Backup & Disaster-Recovery
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > Zielgruppe: Betreiber / System-Admin · Betrifft: Produktivserver (Debian 12 + CloudPanel + MariaDB)
 
@@ -266,6 +266,6 @@ Offsite-Spiegelung (Abschnitt 7).
 
 ## Verwandte Seiten
 
-- [Backups (Kurzanleitung)](Installation-Backups)
+- [Backups (Kurzanleitung)](Installation-Backups.md)
 - [Deployment](../deploy/README-Deployment.md)
 - Org-Konfig-Backup (JSON-Export/Import): im Tool unter `/backup`

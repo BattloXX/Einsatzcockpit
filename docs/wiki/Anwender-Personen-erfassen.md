@@ -1,6 +1,6 @@
 # Personen erfassen
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 Im Einsatz-Board gibt es eine Spalte **Gerettete Personen**. Über den 4-Stufen-Wizard können Personen erfasst werden, die gerettet, betreut oder übergeben wurden.
 

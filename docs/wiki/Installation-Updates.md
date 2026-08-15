@@ -1,6 +1,6 @@
 # Updates einspielen
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Auto-Update über das Webinterface (empfohlen)
 
@@ -131,4 +131,4 @@ Für größere Updates kann eine Wartungsseite geschaltet werden:
 
 ---
 
-**Nächster Schritt:** [Troubleshooting](Installation-Troubleshooting)
+**Nächster Schritt:** [Troubleshooting](Installation-Troubleshooting.md)

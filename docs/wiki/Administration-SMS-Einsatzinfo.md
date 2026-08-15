@@ -1,8 +1,8 @@
 # SMS-Einsatzinfo, manueller Versand & SMS-Empfang
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
-SMS kann entweder über eine verbundene [SMS-Gateway-Android-App](Installation-SMS-Gateway) oder über den konfigurierten EUS-Versandweg gesendet werden. EUS funktioniert unabhängig davon, ob ein Gateway verbunden ist.
+SMS kann entweder über eine verbundene [SMS-Gateway-Android-App](Installation-SMS-Gateway.md) oder über den konfigurierten EUS-Versandweg gesendet werden. EUS funktioniert unabhängig davon, ob ein Gateway verbunden ist.
 
 Die Seiten **SMS senden**, **SMS-Versandweg**, **SMS-Empfang** und **SMS-Einsatzinfo** sind unter einem gemeinsamen Menüpunkt **SMS** als vier Tabs erreichbar. Ihre bisherigen URLs `/admin/sms-senden`, `/admin/sms-provider`, `/admin/sms-empfang` und `/admin/einsatzinfo-sms` bleiben gültig.
 
@@ -71,10 +71,10 @@ Unter **Admin → SMS-Empfang** (`/admin/sms-empfang`):
 
 ## SMS-Gateway: native Android-App
 
-Der SMS-Versand/-Empfang läuft über die native Einsatzcockpit-Android-App (eigenes Repo `Einsatzcockpit-Android`), die sich über einen Token-authentifizierten WebSocket (`/ws/sms-gateway`) mit Einsatzcockpit verbindet und die SIM-Karte des Android-Geräts zum Senden/Empfangen nutzt (Foreground-Service, dauerhaft im Hintergrund) — siehe [SMS-Gateway einrichten](Installation-SMS-Gateway).
+Der SMS-Versand/-Empfang läuft über die native Einsatzcockpit-Android-App (eigenes Repo `Einsatzcockpit-Android`), die sich über einen Token-authentifizierten WebSocket (`/ws/sms-gateway`) mit Einsatzcockpit verbindet und die SIM-Karte des Android-Geräts zum Senden/Empfangen nutzt (Foreground-Service, dauerhaft im Hintergrund) — siehe [SMS-Gateway einrichten](Installation-SMS-Gateway.md).
 
 Mehrere Gateways können gleichzeitig registriert und als Fallbacks verwendet werden. Unter **Admin → Geräte-Login → SMS-Gateways** wird ihre Priorität mit den Auf-/Ab-Pfeilen festgelegt; der SMS-Versand versucht die verbundenen Gateways in dieser Reihenfolge.
 
 ---
 
-**Verwandt:** [SMS-Gateway einrichten](Installation-SMS-Gateway) · [Einstellungen](Administration-Einstellungen)
+**Verwandt:** [SMS-Gateway einrichten](Installation-SMS-Gateway.md) · [Einstellungen](Administration-Einstellungen.md)

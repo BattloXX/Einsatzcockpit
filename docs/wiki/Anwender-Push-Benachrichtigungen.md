@@ -1,6 +1,6 @@
 # Push-Benachrichtigungen
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Was sind Web-Push-Benachrichtigungen?
 

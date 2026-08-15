@@ -1,6 +1,6 @@
 # Archiv und PDF-Export
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Einsatz abschließen
 
@@ -64,7 +64,7 @@ Im Einsatz-Archiv: **PDF herunterladen** → Browser lädt die Datei herunter.
 ## Website-Entwurf erstellen
 
 Ist für die Organisation die WordPress-Anbindung eingerichtet (siehe
-[WordPress-Berichte](Administration-WordPress-Berichte)), erscheint bei einem
+[WordPress-Berichte](Administration-WordPress-Berichte.md)), erscheint bei einem
 abgeschlossenen Einsatz (ab Rolle **Bearbeiter**) der Button **„Website-Entwurf
 erstellen"**. Damit wird — falls nicht ohnehin schon automatisch beim Abschließen
 geschehen — ein Beitragsentwurf im Wehr-Blog angelegt, den ein Redakteur dort nur noch
@@ -83,4 +83,4 @@ Für jeden abgeschlossenen Einsatz kann der genaue Zustand zu jedem Zeitpunkt re
 
 **Admin** → **Einsatz-Historie** → Zeitpunkt auswählen → Board-Zustand wird angezeigt
 
-Details: [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise)
+Details: [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise.md)

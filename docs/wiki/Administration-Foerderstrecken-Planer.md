@@ -1,6 +1,6 @@
 # Förderstrecken-Planer – Administration
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/admin/foerderpumpen`, `/admin/foerderschlaeuche`, `/admin/foerderkalibrierung`
 > Zugänglich für: `org_admin`, `admin`, `system_admin`
@@ -73,4 +73,4 @@ Ein Offline-/DGM-Betrieb ist nicht Teil des Moduls.
   strikt auf die eigene Org).
 - Relais-Standorte lassen sich als **Wasserstelle** Typ `relais` persistieren.
 
-Siehe auch: [Anwendung](Anwender-Foerderstrecken-Planer).
+Siehe auch: [Anwendung](Anwender-Foerderstrecken-Planer.md).

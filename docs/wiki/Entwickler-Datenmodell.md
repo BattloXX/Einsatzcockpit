@@ -1,6 +1,6 @@
 # Datenmodell
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Überblick
 

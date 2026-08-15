@@ -1,6 +1,6 @@
 # GSL-Ressourcenverwaltung (Einheiten)
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/lage/{lage_id}/einheiten`  
 > Zugänglich für: `incident_leader`, `org_admin`, `system_admin`
@@ -74,7 +74,7 @@ Einheiten mit hinterlegten Koordinaten (z.B. GPS-Position) erscheinen als Marker
 
 Im **Taktischen Modus** (ÖBFV E-27) werden Einheiten mit ihrem normierten Typ-Symbol und der entsprechenden Magnetfarbe dargestellt.
 
-→ Siehe [Taktische Lagekarte](Anwender-Taktische-Lagekarte)
+→ Siehe [Taktische Lagekarte](Anwender-Taktische-Lagekarte.md)
 
 ---
 

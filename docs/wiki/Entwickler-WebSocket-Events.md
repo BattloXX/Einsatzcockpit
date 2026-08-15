@@ -1,6 +1,6 @@
 # WebSocket-Events
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Verbindung
 

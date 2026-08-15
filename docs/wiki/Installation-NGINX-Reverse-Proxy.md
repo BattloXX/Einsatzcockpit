@@ -1,10 +1,10 @@
 # NGINX Reverse-Proxy (CloudPanel)
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 Diese Seite beschreibt den bestehenden CloudPanel-Weg. Einen vollständigen,
 CloudPanel-freien Vhost samt Certbot-Aufruf zeigt
-[Debian/Ubuntu manuell](Installation-Debian-Manuell). Für Docker bleibt die Proxy-
+[Debian/Ubuntu manuell](Installation-Debian-Manuell.md). Für Docker bleibt die Proxy-
 und WebSocket-Konfiguration gleich; der Upstream ist ebenfalls `127.0.0.1:8092`.
 
 ## CloudPanel-Site anlegen
@@ -102,4 +102,4 @@ websocat wss://einsatzleiter.feuerwehr-wolfurt.at/ws/incident/1
 
 ---
 
-**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup)
+**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup.md)

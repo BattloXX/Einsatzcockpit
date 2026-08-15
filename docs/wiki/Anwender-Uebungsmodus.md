@@ -1,6 +1,6 @@
 # Übungsmodus
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Was ist der Übungsmodus?
 

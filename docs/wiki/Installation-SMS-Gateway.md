@@ -1,14 +1,14 @@
 # SMS-Gateway einrichten (Android-App)
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 Das Gateway ist fuer den SMS-Versand optional, wenn eine Organisation EUS
 verwendet. Auswahl und Fallback sind unter
-[SMS-Versandweg administrieren](Administration-SMS-Versandweg) beschrieben.
+[SMS-Versandweg administrieren](Administration-SMS-Versandweg.md) beschrieben.
 
 Der SMS-Versand/-Empfang läuft über die native **Einsatzcockpit-Android-App** (Repo [`BattloXX/Einsatzcockpit-Android`](https://github.com/BattloXX/Einsatzcockpit-Android)) auf einem beliebigen Android-Gerät mit SIM-Karte. Die App verbindet sich **ausgehend** per WebSocket mit der Haupt-App und versendet/empfängt SMS über die eingebaute `SmsManager`-API — kein separater Server, kein Modem, keine offenen Ports nötig.
 
-**Zweck:** SMS-Versand/-Empfang für die Telefonnummern-Verifizierung im Bürgerportal, [Einsatzinfo-SMS bei Alarm](Administration-SMS-Einsatzinfo), manuellen Versand an Gruppen/Mitglieder und die Weiterleitung eingehender SMS (Teams-Webhook, Gruppen, Mitglieder, Ad-hoc-Nummern).
+**Zweck:** SMS-Versand/-Empfang für die Telefonnummern-Verifizierung im Bürgerportal, [Einsatzinfo-SMS bei Alarm](Administration-SMS-Einsatzinfo.md), manuellen Versand an Gruppen/Mitglieder und die Weiterleitung eingehender SMS (Teams-Webhook, Gruppen, Mitglieder, Ad-hoc-Nummern).
 
 ---
 
@@ -76,7 +76,7 @@ Zusätzlich empfohlen: Gerät dauerhaft am Strom lassen und ein zuverlässiges N
 
 ## SMS-Empfang aktivieren (optional)
 
-Ist [SMS-Empfang](Administration-SMS-Einsatzinfo) für die Organisation serverseitig eingeschaltet, zeigt der Gateway-Bildschirm eine Karte **„SMS-Empfang aktiviert – Berechtigung fehlt"** — dort **SMS-Empfang erlauben** antippen, damit die App die Android-Berechtigung `RECEIVE_SMS` erhält. Ohne diese Berechtigung werden weiterhin SMS versendet, aber keine eingehenden SMS erkannt/weitergeleitet.
+Ist [SMS-Empfang](Administration-SMS-Einsatzinfo.md) für die Organisation serverseitig eingeschaltet, zeigt der Gateway-Bildschirm eine Karte **„SMS-Empfang aktiviert – Berechtigung fehlt"** — dort **SMS-Empfang erlauben** antippen, damit die App die Android-Berechtigung `RECEIVE_SMS` erhält. Ohne diese Berechtigung werden weiterhin SMS versendet, aber keine eingehenden SMS erkannt/weitergeleitet.
 
 ---
 
@@ -101,6 +101,6 @@ Der Gateway-Bildschirm prüft automatisch gegen die [GitHub Releases](https://gi
 
 ---
 
-**Verwandt:** [SMS-Einsatzinfo, manueller Versand & SMS-Empfang](Administration-SMS-Einsatzinfo) — Einrichtung der eigentlichen SMS-Funktionen, sobald das Gateway verbunden ist.
+**Verwandt:** [SMS-Einsatzinfo, manueller Versand & SMS-Empfang](Administration-SMS-Einsatzinfo.md) — Einrichtung der eigentlichen SMS-Funktionen, sobald das Gateway verbunden ist.
 
-**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup)
+**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup.md)

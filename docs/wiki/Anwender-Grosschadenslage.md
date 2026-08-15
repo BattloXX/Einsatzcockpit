@@ -82,7 +82,7 @@ Die KI bewertet `danger_score` (Gefahrenlage 1–4) und `urgency_score` (Dringli
 
 Abschnitte (`/lage/{id}/sektoren`) strukturieren die Einsatzstellen geografisch oder taktisch. Jeder Abschnitt hat einen Namen, eine Farbe und optional einen Abschnittsleiter. Die Abschnittsfarbe erscheint als farbiger Badge auf der Einsatzstellenkarte.
 
-Abschnitte können auch direkt auf der **Lagekarte** als Polygon eingezeichnet werden — ohne Seitenneuladen. Siehe [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte).
+Abschnitte können auch direkt auf der **Lagekarte** als Polygon eingezeichnet werden — ohne Seitenneuladen. Siehe [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte.md).
 
 ---
 
@@ -97,7 +97,7 @@ Abschnitte können auch direkt auf der **Lagekarte** als Polygon eingezeichnet w
 
 ## Lagekarte
 
-Die Lagekarte (`/lage/{id}/karte`) zeigt alle Einsatzstellen und Abschnitt-Polygone auf einer interaktiven Karte. Vollständige Dokumentation: [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte).
+Die Lagekarte (`/lage/{id}/karte`) zeigt alle Einsatzstellen und Abschnitt-Polygone auf einer interaktiven Karte. Vollständige Dokumentation: [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte.md).
 
 ---
 
@@ -177,7 +177,7 @@ Das **Ressourcen-Tab** im GSL-Board ermöglicht die Erfassung und Disposition vo
 - **Mehrfach-Disposition**: Eine Einheit kann gleichzeitig an mehreren Einsatzstellen disponiert sein
 - Ressourcen-Journal mit vollständigem Dispositions-Verlauf
 
-→ Vollständige Dokumentation: [GSL-Ressourcenverwaltung](Anwender-GSL-Ressourcenverwaltung)
+→ Vollständige Dokumentation: [GSL-Ressourcenverwaltung](Anwender-GSL-Ressourcenverwaltung.md)
 
 ---
 
@@ -191,7 +191,7 @@ Im Phasen-Dropdown gibt es die Spalte **„Übergreifend"** für lageweite Meldu
 - Foto-Upload
 - Anzeige auf der Lagekarte
 
-→ Vollständige Dokumentation: [Übergreifende Meldungen](Anwender-Uebergreifende-Meldungen)
+→ Vollständige Dokumentation: [Übergreifende Meldungen](Anwender-Uebergreifende-Meldungen.md)
 
 ---
 
@@ -204,7 +204,7 @@ Das GSL-Board enthält ein **Wetter-Tab** mit aktuellen Wetterdaten für den Lag
 
 Die Lagekarte zeigt zusätzlich ein **Radar-Overlay** (RainViewer).
 
-→ Vollständige Dokumentation: [Wetter-Integration](Anwender-Wetter)
+→ Vollständige Dokumentation: [Wetter-Integration](Anwender-Wetter.md)
 
 ---
 
@@ -216,7 +216,7 @@ Die Lagekarte zeigt zusätzlich ein **Radar-Overlay** (RainViewer).
 - Rücknahme mit Mengenangabe
 - Druckschein und SMS-Erinnerungen
 
-→ Vollständige Dokumentation: [Geräteverleih](Anwender-Geraeteverleih)
+→ Vollständige Dokumentation: [Geräteverleih](Anwender-Geraeteverleih.md)
 
 ---
 

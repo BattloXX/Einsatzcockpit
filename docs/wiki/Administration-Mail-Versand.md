@@ -1,6 +1,6 @@
 # Mail-Versand (SMTP / Office 365)
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/admin/mail`  
 > Zugänglich für: `org_admin`, `system_admin`
@@ -33,7 +33,7 @@ Bei jedem Mailversand wird in dieser Reihenfolge geprüft:
 - Zugang zum **Microsoft Entra Admin Center**: https://entra.microsoft.com
 - Ein Postfach (z. B. `einsatz@feuerwehr-beispiel.at`), das als Absender dienen soll — **kein** persönliches Postfach eines einzelnen Mitglieds
 
-Im Unterschied zu [Single Sign-On](Administration-Single-Sign-On) verwendet der Mailversand **App-only-Zugriff** (Client-Credentials) statt einer Benutzeranmeldung — es ist **kein** Redirect-URI und **keine** Benutzerinteraktion nötig. Die App-Registrierung darf für SSO und Mailversand gemeinsam genutzt werden, sollte aus Sicherheitsgründen aber besser **getrennt** angelegt werden (unterschiedliche Berechtigungen, unterschiedlicher Blast-Radius).
+Im Unterschied zu [Single Sign-On](Administration-Single-Sign-On.md) verwendet der Mailversand **App-only-Zugriff** (Client-Credentials) statt einer Benutzeranmeldung — es ist **kein** Redirect-URI und **keine** Benutzerinteraktion nötig. Die App-Registrierung darf für SSO und Mailversand gemeinsam genutzt werden, sollte aus Sicherheitsgründen aber besser **getrennt** angelegt werden (unterschiedliche Berechtigungen, unterschiedlicher Blast-Radius).
 
 ---
 

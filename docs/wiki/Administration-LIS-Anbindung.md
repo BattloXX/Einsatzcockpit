@@ -1,6 +1,6 @@
 # LIS/IPR-Anbindung einrichten
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 Einsatzcockpit kann sich direkt an das **Leitstellensystem (LIS/IPR)** der Landeswarnzentrale anbinden. Ein Hintergrund-Dienst gleicht dabei laufend die aktiven Einsätze der Organisation ab — ohne dass die Leitstelle eigens eine Anfrage an die Einsatzcockpit-API schicken muss.
 
@@ -54,7 +54,7 @@ Der Loop läuft serverweit; einzelne Organisationen werden über den Schalter **
 - **Einsätze und Übungseinsätze anlegen/verknüpfen** — existiert bereits ein über die API angelegter Einsatz mit passendem Stichwort/Adresse/Zeitpunkt, wird verknüpft statt dupliziert. Übungseinsätze werden anhand des LIS-Einsatztyps (`Schulung`, `Übung`, `Training`, `Probe`) erkannt und auch in Einsatzcockpit als Übungseinsatz markiert (gelb/schwarzer Banner, keine Statistik-Zählung)
 - **Leitstellen-Nummer als führende Kennung** — wird überall angezeigt, wo sonst die interne Einsatz-ID stünde (Alarm-Kopfzeile, Archiv, Verlauf, PDF-Export)
 - **Anrufer/Melder** — Name und Telefonnummer, sofern vom Alarmierungssystem/LIS mitgeliefert; nur Anzeige, keine weitere Verarbeitung
-- **Fahrzeugstatus (S1–S6) und -position** — sofern das Fahrzeug über `lis_reference_id` in den Stammdaten zugeordnet ist (siehe [Stammdaten pflegen](Administration-Stammdaten-pflegen)); Positionen landen in derselben Historie wie App-GPS-Daten
+- **Fahrzeugstatus (S1–S6) und -position** — sofern das Fahrzeug über `lis_reference_id` in den Stammdaten zugeordnet ist (siehe [Stammdaten pflegen](Administration-Stammdaten-pflegen.md)); Positionen landen in derselben Historie wie App-GPS-Daten
 - **Meldungen sowie Zu-/Absagen der Mannschaft** aus den LIS-Aufträgen des Einsatzes
 - **Dokumente/Bilder**, die der Leitstelle zum Einsatz angehängt wurden
 - **Automatisches Schließen** — verschwindet die Operation aus der aktiven Liste des LIS (weil sie dort abgeschlossen wurde), schließt Einsatzcockpit den verknüpften Einsatz automatisch mit (inkl. Widerruf von QR-/Lagekarte-Tokens, wie beim manuellen Abschließen)
@@ -82,4 +82,4 @@ Für die Fehlersuche bei der Erstanbindung gibt es unter `/admin/lis` einen Butt
 
 ---
 
-**Verwandt:** [Einsatz starten](Anwender-Einsatz-starten) · [Stammdaten pflegen](Administration-Stammdaten-pflegen)
+**Verwandt:** [Einsatz starten](Anwender-Einsatz-starten.md) · [Stammdaten pflegen](Administration-Stammdaten-pflegen.md)

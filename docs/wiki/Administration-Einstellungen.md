@@ -1,6 +1,6 @@
 # Einstellungen
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/admin/settings`  
 > Zugänglich für: `org_admin`, `admin`, `system_admin`
@@ -46,7 +46,7 @@ Der Fallback-Standort bestimmt, wo der Karten-Picker im Adress-Bearbeitungs-Dial
 **Karten-Picker**: Marker auf der Karte verschieben oder direkt auf die Karte klicken.  
 **Standard**: Wolfurt (47.4664 / 9.7416) — falls nicht konfiguriert.
 
-Details zur Lagekarte.info-Integration: [Lagekarte.info](Anwender-Lagekarte)
+Details zur Lagekarte.info-Integration: [Lagekarte.info](Anwender-Lagekarte.md)
 
 ## Auto-Schließen (Einsatz automatisch beenden)
 
@@ -86,7 +86,7 @@ Orgs mit einer Davis Vantage Pro 2 Plus (oder kompatibler Station) können diese
 
 **Station entfernen:** Löscht Station und Token; historische Zeitreihen werden beim nächsten Retention-Lauf bereinigt.
 
-Vollständige Anleitung: [Lokale Wetterstation (Admin)](Administration-Wetterstation)
+Vollständige Anleitung: [Lokale Wetterstation (Admin)](Administration-Wetterstation.md)
 
 ## System-Update (nur system_admin)
 

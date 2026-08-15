@@ -1,6 +1,6 @@
 # Datenbank-Einrichtung
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## MariaDB über CloudPanel
 
@@ -58,4 +58,4 @@ conn.close()
 
 ---
 
-**Nächster Schritt:** [App installieren](Installation-App-Installation)
+**Nächster Schritt:** [App installieren](Installation-App-Installation.md)

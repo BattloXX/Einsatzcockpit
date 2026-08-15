@@ -1,10 +1,10 @@
 # Systemd-Service
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 Die folgenden Pfade entsprechen dem bestehenden CloudPanel-Setup. Für einen Server
 ohne Hosting-Panel stehen die angepassten Benutzer und Pfade unter
-[Debian/Ubuntu manuell](Installation-Debian-Manuell).
+[Debian/Ubuntu manuell](Installation-Debian-Manuell.md).
 
 ## Unit-Datei kopieren
 
@@ -85,4 +85,4 @@ Formel allgemein: `2 × CPU-Kerne`. Wert in `/etc/systemd/system/einsatzleiter.s
 
 ---
 
-**Nächster Schritt:** [NGINX Reverse-Proxy konfigurieren](Installation-NGINX-Reverse-Proxy)
+**Nächster Schritt:** [NGINX Reverse-Proxy konfigurieren](Installation-NGINX-Reverse-Proxy.md)

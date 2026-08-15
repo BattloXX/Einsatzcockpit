@@ -1,6 +1,6 @@
 # Datensicherung je Organisation (Self-Service)
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/admin/org-backup` · Menü: **Admin → Datensicherung**
 > Backup einrichten/herunterladen: `org_admin` · Wiederherstellen: `system_admin`
@@ -10,7 +10,7 @@ automatisch an ein **selbst konfiguriertes Ziel**. Das ist etwas anderes als:
 
 - der **[Org-Konfig-Export](Administration-Backup-Import)** (`/admin/backup`): nur wenige
   Konfigurationsfelder als JSON, keine operativen Daten;
-- das **[serverweite Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery)**: ein
+- das **[serverweite Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery.md)**: ein
   `mariadb-dump` ALLER Organisationen, Betreiber-Aufgabe.
 
 Hier geht es um ein **vollständiges, tenant-gescoptes Archiv genau einer Organisation**.
@@ -128,5 +128,5 @@ Ein gemeinsames Protokoll für beide Ablageorte, adressiert über eine **Drive-I
 
 ## Verwandte Seiten
 
-- [Backup & Disaster-Recovery (serverweit)](Betrieb-Backup-und-Disaster-Recovery)
+- [Backup & Disaster-Recovery (serverweit)](Betrieb-Backup-und-Disaster-Recovery.md)
 - [Org-Konfig-Backup (JSON)](Administration-Backup-Import)

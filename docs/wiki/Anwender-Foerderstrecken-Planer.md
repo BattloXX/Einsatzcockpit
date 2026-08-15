@@ -1,6 +1,6 @@
 # Förderstrecken-Planer – Anwendung
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/foerderstrecke/`
 > Zugänglich für: `recorder` und höher (Planung), `org_admin` (Geräte/Kalibrierung)
@@ -84,7 +84,7 @@ Einsatz zuordnen. Damit:
   (Sidebar-Tab „Layer") mit Direktlink, PDF und Status,
 - erscheint die geplante **Route inkl. Pumpenstandorte** dort zusätzlich als eigener,
   ein-/ausblendbarer Kartenlayer **🚰 Förderstrecke** — sichtbar für alle Nutzer der
-  [Lageführung](Anwender-Lagefuehrung), inklusive WYSIWYG-Kartendruck.
+  [Lageführung](Anwender-Lagefuehrung.md), inklusive WYSIWYG-Kartendruck.
 
 Die Verknüpfung lässt sich jederzeit im Dropdown ändern oder auf „— kein —" zurücksetzen.
 
@@ -97,4 +97,4 @@ bildschirmfüllendes Overlay um (z. B. für präzises Zeichnen am Tablet) — al
 (Routing, Zeichnen, Pumpe setzen) bleiben dabei bedienbar. **⤡ Verkleinern** oder `Esc`
 kehrt zur normalen Ansicht zurück.
 
-Siehe auch: [Administration](Administration-Foerderstrecken-Planer) für Geräte-Pflege und Kalibrierung.
+Siehe auch: [Administration](Administration-Foerderstrecken-Planer.md) für Geräte-Pflege und Kalibrierung.

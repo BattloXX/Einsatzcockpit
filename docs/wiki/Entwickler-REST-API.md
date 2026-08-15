@@ -1,6 +1,6 @@
 # REST-API
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 Die REST-API ist für **externe Systeme** (Alarmierungssystem) gedacht. Alle Endpunkte erfordern einen gültigen API-Key.
 

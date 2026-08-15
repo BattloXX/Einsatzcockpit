@@ -1,10 +1,10 @@
 # Installation auf Debian/Ubuntu ohne CloudPanel
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 Diese Anleitung beschreibt einen klassischen Einzelserver mit Debian 12 oder Ubuntu
 22.04+, systemd und NGINX. Hardware, Firewall und Python-/Systempakete stehen unter
-[Server-Voraussetzungen](Installation-Server-Voraussetzungen).
+[Server-Voraussetzungen](Installation-Server-Voraussetzungen.md).
 
 ## 1. Basisdienste installieren
 
@@ -17,7 +17,7 @@ sudo systemctl enable --now mariadb nginx redis-server
 ```
 
 Die Datenbank und den Datenbankbenutzer wie unter
-[Datenbank-Einrichtung](Installation-Datenbank-Einrichtung) anlegen.
+[Datenbank-Einrichtung](Installation-Datenbank-Einrichtung.md) anlegen.
 
 ## 2. Systembenutzer und Anwendung anlegen
 
@@ -88,7 +88,7 @@ sudo systemctl status einsatzleiter
 ```
 
 Weitere Erklärungen zu Workern und Logs stehen unter
-[Systemd-Service](Installation-Systemd-Service).
+[Systemd-Service](Installation-Systemd-Service.md).
 
 ## 5. NGINX-Vhost anlegen
 
@@ -142,7 +142,7 @@ sudo systemctl reload nginx
 ```
 
 WebSocket- und Proxy-Details erklärt
-[NGINX-Reverse-Proxy](Installation-NGINX-Reverse-Proxy).
+[NGINX-Reverse-Proxy](Installation-NGINX-Reverse-Proxy.md).
 
 ## 6. TLS-Zertifikat ausstellen
 
@@ -159,4 +159,4 @@ Danach `https://einsatzcockpit.example.at/` aufrufen und den ersten Login prüfe
 
 ---
 
-**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup)
+**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup.md)

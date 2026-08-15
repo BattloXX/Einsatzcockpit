@@ -1,6 +1,6 @@
 # Erst-Setup nach der Installation
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Admin-User verifizieren
 
@@ -74,7 +74,7 @@ python -m app.cli create-user --username stefan --password passwort --role incid
 
 Verfügbare Rollen: `system_admin`, `org_admin`, `admin`, `incident_leader`, `breathing_supervisor`, `recorder`, `readonly`
 
-Für Multi-Org-Betrieb: den künftigen Org-Admin über einen Einladungslink einrichten (→ [Organisationen verwalten](Administration-Organisations-verwalten)).
+Für Multi-Org-Betrieb: den künftigen Org-Admin über einen Einladungslink einrichten (→ [Organisationen verwalten](Administration-Organisations-verwalten.md)).
 
 ## Passwort ändern
 
@@ -82,4 +82,4 @@ In der Webapp: Oben rechts → Benutzername → **Passwort ändern**
 
 ---
 
-**Nächster Schritt:** [Backups einrichten](Installation-Backups)
+**Nächster Schritt:** [Backups einrichten](Installation-Backups.md)

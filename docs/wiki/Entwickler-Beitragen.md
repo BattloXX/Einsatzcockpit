@@ -1,6 +1,6 @@
 # Beitragen
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Branch-Strategie
 

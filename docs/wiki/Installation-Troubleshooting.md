@@ -1,6 +1,6 @@
 # Troubleshooting
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## App startet nicht
 

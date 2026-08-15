@@ -1,6 +1,6 @@
 # Feedback, Fehler & Wünsche
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ---
 
@@ -50,4 +50,4 @@ Für offene Fragen, allgemeines Feedback oder Rücksprache zu Konzepten:
 - Bitte **keine Passwörter, API-Keys oder personenbezogenen Einsatzdaten** in Issues einfügen.
 - Für dringende operative Probleme direkt Kontakt mit dem Systemadministrator aufnehmen.
 - Issues werden nach Schweregrad und Machbarkeit priorisiert.
-- Beiträge zum Code sind ebenfalls willkommen → [Entwickler: Beitragen](Entwickler-Beitragen)
+- Beiträge zum Code sind ebenfalls willkommen → [Entwickler: Beitragen](Entwickler-Beitragen.md)

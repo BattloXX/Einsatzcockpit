@@ -1,6 +1,6 @@
 # App-Installation
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## 1. Repository klonen
 
@@ -104,4 +104,4 @@ Login mit `admin` / dem Passwort aus `BOOTSTRAP_ADMIN_PASSWORD`.
 
 ---
 
-**Nächster Schritt:** [Systemd-Service einrichten](Installation-Systemd-Service)
+**Nächster Schritt:** [Systemd-Service einrichten](Installation-Systemd-Service.md)

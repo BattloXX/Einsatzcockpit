@@ -1,6 +1,6 @@
 # Fahrtenbuch
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/fahrtenbuch/neu`  
 > Zugänglich für: alle angemeldeten Benutzer sowie anonymer Zugriff via Token/QR-Code

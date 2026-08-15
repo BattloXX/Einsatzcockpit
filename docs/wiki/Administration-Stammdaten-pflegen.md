@@ -1,6 +1,6 @@
 # Stammdaten pflegen
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 Stammdaten sind die Grundkonfiguration der App: Fahrzeuge, Wehren, Alarmstichwörter, Auftragsvorschläge und Lage-Hinweise.
 
@@ -18,7 +18,7 @@ Fahrzeuge sind org-spezifisch: jede Organisation verwaltet ihre eigenen Fahrzeug
 | Name | Vollständiger Name |
 | Typ | Kategorisierung |
 | Kennzeichen | Amtliches Kennzeichen (optional) — dieselbe Angabe wie im Fahrtenbuch, hier oder dort gepflegt wirkt sich auf beide Ansichten aus |
-| LIS-ReferenceId | Optional. Stabile ID des Fahrzeugs im Leitstellensystem (LIS/IPR-Anbindung) — wird auch für die [WordPress-Berichte](Administration-WordPress-Berichte) genutzt, um Fahrzeuge im automatischen Website-Entwurf zuzuordnen |
+| LIS-ReferenceId | Optional. Stabile ID des Fahrzeugs im Leitstellensystem (LIS/IPR-Anbindung) — wird auch für die [WordPress-Berichte](Administration-WordPress-Berichte.md) genutzt, um Fahrzeuge im automatischen Website-Entwurf zuzuordnen |
 | Erstausrückung | ✓ = dieses Fahrzeug rückt bei T1/T2/F1/F2 aus |
 | Reihenfolge | Sortierung im Board |
 | Aktiv | Inaktive Fahrzeuge erscheinen nicht mehr |

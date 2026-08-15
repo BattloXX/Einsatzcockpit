@@ -1,6 +1,6 @@
 # Print & Alarm Gateway einrichten (Docker)
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 Der **ECPG-Gateway** ist ein kleiner Docker-Container im Feuerwehrhaus (eigenes Repo
 [`BattloXX/einsatzcockpit-gateway`](https://github.com/BattloXX/Einsatzcockpit-gateway)),
@@ -15,7 +15,7 @@ Der Container baut **ausschließlich ausgehende** Verbindungen auf (WSS zur Clou
 zum W&T, IPP zu Druckern) — **keine Portfreigaben, kein VPN, keine offenen Ports**.
 
 Die Verwaltung (Drucker, Druckregeln, W&T-Konfiguration) erfolgt vollständig im
-Web-UI: [Print & Alarm Gateway (Administration)](Administration-Print-Alarm-Gateway).
+Web-UI: [Print & Alarm Gateway (Administration)](Administration-Print-Alarm-Gateway.md).
 
 ---
 
@@ -33,7 +33,7 @@ Web-UI: [Print & Alarm Gateway (Administration)](Administration-Print-Alarm-Gate
 
 ## Schritt 1 — Modul aktivieren
 
-Einmalig im Web-UI (siehe [Administration](Administration-Print-Alarm-Gateway)):
+Einmalig im Web-UI (siehe [Administration](Administration-Print-Alarm-Gateway.md)):
 systemweit (System-Admin) **und** je Organisation (Org-Admin) unter
 `/admin/settings`.
 
@@ -92,7 +92,7 @@ Sobald der Container **Online** ist:
    und **Testseite**.
 3. **Druckregeln**: z. B. „Einsatzinfo bei Alarm".
 
-Details: [Administration](Administration-Print-Alarm-Gateway).
+Details: [Administration](Administration-Print-Alarm-Gateway.md).
 
 ---
 
@@ -142,7 +142,7 @@ Details: [Administration](Administration-Print-Alarm-Gateway).
 
 ---
 
-**Verwandt:** [Print & Alarm Gateway (Administration)](Administration-Print-Alarm-Gateway) ·
-[SMS-Gateway einrichten](Installation-SMS-Gateway)
+**Verwandt:** [Print & Alarm Gateway (Administration)](Administration-Print-Alarm-Gateway.md) ·
+[SMS-Gateway einrichten](Installation-SMS-Gateway.md)
 
-**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup)
+**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup.md)

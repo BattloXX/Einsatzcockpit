@@ -1,6 +1,6 @@
 # Taktische Lagekarte (ÖBFV E-27)
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/lage/{lage_id}/karte` — Schaltfläche „Taktisch" in der Karten-Steuerung  
 > Zugänglich für: alle Teilnehmer der Großschadenslage
@@ -79,4 +79,4 @@ Im **Print-Center** kann die Lagekarte im taktischen Modus gedruckt werden:
 - Taktische Legende automatisch auf der Seite
 - Druckfußzeile mit Logo, Zeitstempel, Einsatzstellen-Statistik
 
-→ Siehe [Lagekarte Druck & Print-Center](Anwender-Grosschadenslage-Karte#druck--print-center)
+→ Siehe [Lagekarte Druck & Print-Center](Anwender-Grosschadenslage-Karte.md#druck--print-center)

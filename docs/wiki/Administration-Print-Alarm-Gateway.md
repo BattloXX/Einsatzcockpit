@@ -2,7 +2,7 @@
 
 Einrichtung und Betrieb des ECPG-Moduls im Web-UI: Aktivierung, Gateways koppeln,
 Drucker verwalten, Druckregeln, manueller Druck. Die Installation des lokalen
-Containers ist unter [Print & Alarm Gateway einrichten](Installation-Print-Alarm-Gateway)
+Containers ist unter [Print & Alarm Gateway einrichten](Installation-Print-Alarm-Gateway.md)
 beschrieben.
 
 Das **Gateway** ist ein kleiner Docker-Container im Feuerwehrhaus (eigenes Repo
@@ -50,7 +50,7 @@ Unter **Gateway / Druck** (`/gateway`):
 3. Den Code am Container hinterlegen (`ECPG_PAIRING_CODE` im `docker-compose.yml`
    beim Erststart) **oder** auf der lokalen Statusseite des Gateways eingeben
    (`http://<gateway-ip>:8631/`). Details:
-   [Installation](Installation-Print-Alarm-Gateway).
+   [Installation](Installation-Print-Alarm-Gateway.md).
 4. Sobald der Container gekoppelt ist, wechselt der Status auf **Online** und der
    Container zieht seine Konfiguration (Drucker, W&T, Parser) automatisch.
 
@@ -127,6 +127,6 @@ gespoolt und nachgeholt.
 
 ---
 
-**Verwandt:** [Print & Alarm Gateway einrichten (Installation)](Installation-Print-Alarm-Gateway) ·
-[LIS/IPR-Anbindung](Administration-LIS-Anbindung) ·
-[Objektverwaltung](Administration-Objektverwaltung)
+**Verwandt:** [Print & Alarm Gateway einrichten (Installation)](Installation-Print-Alarm-Gateway.md) ·
+[LIS/IPR-Anbindung](Administration-LIS-Anbindung.md) ·
+[Objektverwaltung](Administration-Objektverwaltung.md)

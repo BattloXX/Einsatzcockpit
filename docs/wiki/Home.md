@@ -49,98 +49,98 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 **Welcher Weg passt zu mir?** CloudPanel bleibt der verwaltete Standardweg. Ohne
 Hosting-Panel eignet sich die manuelle Debian/Ubuntu-Installation; für einen
 containerisierten Betrieb steht Docker Compose bereit. Die Entscheidungshilfe steht
-unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
+unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen.md).
 
 | Seite | Beschreibung |
 |-------|-------------|
-| [Server-Voraussetzungen](Installation-Server-Voraussetzungen) | Hardware, Ports, Systempakete und Wahl des Installationswegs |
-| [Datenbank-Einrichtung](Installation-Datenbank-Einrichtung) | MariaDB anlegen, User und Zeichensatz |
-| [App-Installation](Installation-App-Installation) | git clone, venv, pip, .env, alembic, seed |
-| [Debian/Ubuntu manuell](Installation-Debian-Manuell) | Installation ohne CloudPanel mit systemd, NGINX und Certbot |
+| [Server-Voraussetzungen](Installation-Server-Voraussetzungen.md) | Hardware, Ports, Systempakete und Wahl des Installationswegs |
+| [Datenbank-Einrichtung](Installation-Datenbank-Einrichtung.md) | MariaDB anlegen, User und Zeichensatz |
+| [App-Installation](Installation-App-Installation.md) | git clone, venv, pip, .env, alembic, seed |
+| [Debian/Ubuntu manuell](Installation-Debian-Manuell.md) | Installation ohne CloudPanel mit systemd, NGINX und Certbot |
 | [Docker Compose](Installation-Docker.md) | App, MariaDB und Redis containerisiert betreiben |
-| [Systemd-Service](Installation-Systemd-Service) | Dienst einrichten, starten, Logs |
-| [NGINX-Reverse-Proxy](Installation-NGINX-Reverse-Proxy) | CloudPanel-Vhost, WebSocket-Upgrade, TLS |
-| [Erst-Setup](Installation-Erst-Setup) | Admin-User, API-Key, Stammdaten prüfen |
-| [Backups](Installation-Backups) | Datenbank-Dumps, Audit-Log-Sicherung |
-| [Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery) | Automatische Dumps, getestete Restore-Probe, DR-Runbook (RPO/RTO) |
-| [Updates](Installation-Updates) | git pull / In-App ZIP-Update, Migrationen, Neustart |
-| [SMS-Gateway](Installation-SMS-Gateway) | Android-Gateway-App einrichten: APK, Geräte-Login-QR, Akku-Optimierung |
-| [Print & Alarm Gateway](Installation-Print-Alarm-Gateway) | Lokalen Docker-Container koppeln: Pairing-Code, W&T-Alarmleitung, Netzwerkdrucker |
-| [Troubleshooting](Installation-Troubleshooting) | Häufige Fehler und Lösungen |
+| [Systemd-Service](Installation-Systemd-Service.md) | Dienst einrichten, starten, Logs |
+| [NGINX-Reverse-Proxy](Installation-NGINX-Reverse-Proxy.md) | CloudPanel-Vhost, WebSocket-Upgrade, TLS |
+| [Erst-Setup](Installation-Erst-Setup.md) | Admin-User, API-Key, Stammdaten prüfen |
+| [Backups](Installation-Backups.md) | Datenbank-Dumps, Audit-Log-Sicherung |
+| [Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery.md) | Automatische Dumps, getestete Restore-Probe, DR-Runbook (RPO/RTO) |
+| [Updates](Installation-Updates.md) | git pull / In-App ZIP-Update, Migrationen, Neustart |
+| [SMS-Gateway](Installation-SMS-Gateway.md) | Android-Gateway-App einrichten: APK, Geräte-Login-QR, Akku-Optimierung |
+| [Print & Alarm Gateway](Installation-Print-Alarm-Gateway.md) | Lokalen Docker-Container koppeln: Pairing-Code, W&T-Alarmleitung, Netzwerkdrucker |
+| [Troubleshooting](Installation-Troubleshooting.md) | Häufige Fehler und Lösungen |
 
 ### Anwender
 | Seite | Beschreibung |
 |-------|-------------|
-| [Erste Schritte](Anwender-Erste-Schritte) | Login, Übersicht, Tastatur-Shortcuts |
-| [Einsatz starten](Anwender-Einsatz-starten) | Manuell vs. Automatik über Alarmierungssystem oder LIS/Leitstelle |
-| [Kanban-Board bedienen](Anwender-Kanban-Board-bedienen) | Spalten, Karten, Drag&Drop, Status-Ampel |
-| [Aufträge und Meldungen](Anwender-Auftraege-und-Meldungen) | Anlegen, Zuteilen, Erledigen, Sprachdiktat |
-| [Personen erfassen](Anwender-Personen-erfassen) | 4-Stufen-Wizard |
-| [Atemschutzüberwachung](Anwender-Atemschutzueberwachung) | Trupp, Drücke, Warnungen, Rückzug |
-| [Mannschaftsregister](Anwender-Mannschaftsregister) | Mitglieder, Qualifikationen |
-| [Archiv und PDF-Export](Anwender-Archiv-und-PDF-Export) | Abschließen, Bericht drucken |
-| [Übungsmodus](Anwender-Uebungsmodus) | Was ist anders, Statistik-Ausschluss |
-| [QR-Code Schnellzugriff](Anwender-QR-Code-Schnellzugriff) | Zweites Gerät per Scan einbinden |
-| [Mobile Nutzung / PWA](Anwender-Mobile-Nutzung-PWA) | Installieren, Offline-Verhalten |
-| [Push-Benachrichtigungen](Anwender-Push-Benachrichtigungen) | Aktivieren auf Handy und PC |
-| [Lageführung](Anwender-Lagefuehrung) | Einsatzbezogene Lagekarte: Auto-Layer, taktische Zeichen, Multi-User, Chronologie/Replay, Druck & PDF-Lagebericht |
-| [Lagekarte.info](Anwender-Lagekarte) | Adresse & Koordinaten, Live-Fahrzeuge auf lagekarte.info |
-| [Wetter-Integration](Anwender-Wetter) | Nowcast, Vorhersage, Unwetterwarnungen, Radar-Overlay |
-| [Großschadenslage](Anwender-Grosschadenslage) | Phasen-Kanban, SKKM-Stab, Regelkreis, Ressourcen, GSL-Einheiten |
-| [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte) | Interaktive Karte, Polygone, Pin-Modus, Druck & Print-Center |
-| [Taktische Lagekarte (ÖBFV E-27)](Anwender-Taktische-Lagekarte) | Normkonforme Symbole, Magnetfarben, taktische Legende |
-| [Übergreifende Meldungen](Anwender-Uebergreifende-Meldungen) | Lageweite Cross-Marker mit Status-Workflow, Medien & Karte |
-| [GSL-Ressourcenverwaltung](Anwender-GSL-Ressourcenverwaltung) | Einheiten anlegen, disponieren, Mehrfach-Disposition, Fremdorg |
-| [Geräteverleih](Anwender-Geraeteverleih) | Ausgabe & Rücknahme von Material in der GSL, Barcode-Scan |
-| [Drohne / UAS](Anwender-Drohne-UAS) | BOS-Drohneneinsatz: starten, Flugbuch, Checklisten, Notfall, Medien, PDF |
-| [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
-| [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
-| [Nachschlagewerke](Anwender-Nachschlagewerke) | Gefahrgut nach UN-Nummer/Stoffname, Rettungsdatenblätter, Evakuierungsradius & Ausbreitung — offlinefähig |
-| [Förderstrecken-Planer](Anwender-Foerderstrecken-Planer) | Löschwasserförderung lange Wegstrecke: Q-Berechnung, Druckprofil mit Hochpunkt-Prüfung, Maschinisten-Sollwerte, Material, PDF & Zettel-Link |
+| [Erste Schritte](Anwender-Erste-Schritte.md) | Login, Übersicht, Tastatur-Shortcuts |
+| [Einsatz starten](Anwender-Einsatz-starten.md) | Manuell vs. Automatik über Alarmierungssystem oder LIS/Leitstelle |
+| [Kanban-Board bedienen](Anwender-Kanban-Board-bedienen.md) | Spalten, Karten, Drag&Drop, Status-Ampel |
+| [Aufträge und Meldungen](Anwender-Auftraege-und-Meldungen.md) | Anlegen, Zuteilen, Erledigen, Sprachdiktat |
+| [Personen erfassen](Anwender-Personen-erfassen.md) | 4-Stufen-Wizard |
+| [Atemschutzüberwachung](Anwender-Atemschutzueberwachung.md) | Trupp, Drücke, Warnungen, Rückzug |
+| [Mannschaftsregister](Anwender-Mannschaftsregister.md) | Mitglieder, Qualifikationen |
+| [Archiv und PDF-Export](Anwender-Archiv-und-PDF-Export.md) | Abschließen, Bericht drucken |
+| [Übungsmodus](Anwender-Uebungsmodus.md) | Was ist anders, Statistik-Ausschluss |
+| [QR-Code Schnellzugriff](Anwender-QR-Code-Schnellzugriff.md) | Zweites Gerät per Scan einbinden |
+| [Mobile Nutzung / PWA](Anwender-Mobile-Nutzung-PWA.md) | Installieren, Offline-Verhalten |
+| [Push-Benachrichtigungen](Anwender-Push-Benachrichtigungen.md) | Aktivieren auf Handy und PC |
+| [Lageführung](Anwender-Lagefuehrung.md) | Einsatzbezogene Lagekarte: Auto-Layer, taktische Zeichen, Multi-User, Chronologie/Replay, Druck & PDF-Lagebericht |
+| [Lagekarte.info](Anwender-Lagekarte.md) | Adresse & Koordinaten, Live-Fahrzeuge auf lagekarte.info |
+| [Wetter-Integration](Anwender-Wetter.md) | Nowcast, Vorhersage, Unwetterwarnungen, Radar-Overlay |
+| [Großschadenslage](Anwender-Grosschadenslage.md) | Phasen-Kanban, SKKM-Stab, Regelkreis, Ressourcen, GSL-Einheiten |
+| [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte.md) | Interaktive Karte, Polygone, Pin-Modus, Druck & Print-Center |
+| [Taktische Lagekarte (ÖBFV E-27)](Anwender-Taktische-Lagekarte.md) | Normkonforme Symbole, Magnetfarben, taktische Legende |
+| [Übergreifende Meldungen](Anwender-Uebergreifende-Meldungen.md) | Lageweite Cross-Marker mit Status-Workflow, Medien & Karte |
+| [GSL-Ressourcenverwaltung](Anwender-GSL-Ressourcenverwaltung.md) | Einheiten anlegen, disponieren, Mehrfach-Disposition, Fremdorg |
+| [Geräteverleih](Anwender-Geraeteverleih.md) | Ausgabe & Rücknahme von Material in der GSL, Barcode-Scan |
+| [Drohne / UAS](Anwender-Drohne-UAS.md) | BOS-Drohneneinsatz: starten, Flugbuch, Checklisten, Notfall, Medien, PDF |
+| [Fahrtenbuch](Anwender-Fahrtenbuch.md) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
+| [Objekte](Anwender-Objekte.md) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
+| [Nachschlagewerke](Anwender-Nachschlagewerke.md) | Gefahrgut nach UN-Nummer/Stoffname, Rettungsdatenblätter, Evakuierungsradius & Ausbreitung — offlinefähig |
+| [Förderstrecken-Planer](Anwender-Foerderstrecken-Planer.md) | Löschwasserförderung lange Wegstrecke: Q-Berechnung, Druckprofil mit Hochpunkt-Prüfung, Maschinisten-Sollwerte, Material, PDF & Zettel-Link |
 
 ### Administration
 | Seite | Beschreibung |
 |-------|-------------|
-| [Benutzer und Rollen](Administration-Benutzer-und-Rollen) | User anlegen, Rollen zuweisen, Lockout |
-| [Stammdaten pflegen](Administration-Stammdaten-pflegen) | Fahrzeuge, Alarmtypen, Auftragsvorschläge |
-| [Einstellungen](Administration-Einstellungen) | Org-Stammdaten, Logo, Auto-Schließen, Wetter-Opt-out |
-| [Organisationen verwalten](Administration-Organisations-verwalten) | Multi-Org: anlegen, Seed-Profile, Einladungen, System-Konsole |
-| [API-Keys verwalten](Administration-API-Keys-verwalten) | Anlegen, Rotieren, Sperren |
-| [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise) | Historie nachvollziehen, Stand rekonstruieren |
-| [Statistik-Dashboard](Administration-Statistik-Dashboard) | Kennzahlen interpretieren |
-| [Geräteverleih (Admin)](Administration-Geraeteverleih) | Artikel und Stücklisten pflegen, Verleih-Übersicht |
-| [Drohne / UAS](Administration-Drohne-UAS) | Modul aktivieren, Geräteregister, Wartungsbuch, Pilotenregister, Compliance |
-| [Single Sign-On (Entra ID)](Administration-Single-Sign-On) | Microsoft-365-Login einrichten, Gruppen-Mapping, JIT-Provisioning |
-| [Mail-Versand (SMTP / Office 365)](Administration-Mail-Versand) | Eigenen SMTP-Server und/oder Office 365 je Org einrichten, Fallback-Kette, Azure-App-Registrierung für Mail.Send |
-| [Lokale Wetterstation](Administration-Wetterstation) | Davis/Meteobridge-Anbindung: Station anlegen, Push-Token, Meteobridge-URL, Datenbankarchitektur |
-| [Fahrtenbuch](Administration-Fahrtenbuch) | Fahrzeuge konfigurieren, Zwecke/Zielorte, Token/QR, Schadensmeldung, Fahrten-Verwaltung |
-| [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
-| [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
-| [Teams-Alarmierung](Administration-Teams-Alarmierung) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
-| [WordPress-Berichte](Administration-WordPress-Berichte) | Beim Einsatzabschluss automatisch einen Beitragsentwurf im Wehr-Blog anlegen, Alarmarten- und Fahrzeug-Zuordnung |
-| [Push mit Firebase Cloud Messaging](Administration-Push-FCM) | Globale FCM-Konfiguration für Push-Nachrichten an die native Android-App |
-| [Datensicherung (Org, Self-Service)](Administration-Org-Datensicherung) | Eigene Org-Daten als Archiv herunterladen oder geplant an ein eigenes Ziel senden (SFTP/FTP/rclone); Restore in neue Org (Sysadmin) |
-| [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
-| [Nachschlagewerke](Administration-Nachschlagewerke) | Modul aktivieren (System+Org), Gefahrgut-Datenquelle (BAM/ADR), Rettungskarten-URL, Offline-Funktion |
-| [Print & Alarm Gateway](Administration-Print-Alarm-Gateway) | Modul aktivieren (System+Org), Gateways koppeln, Drucker & Discovery, Druckregeln (Automatikdruck), manueller Druck |
-| [Förderstrecken-Planer](Administration-Foerderstrecken-Planer) | Modul aktivieren (System+Org), Pumpen/Schläuche mit Kennlinien (Vorlagen TS 1600/TS 1200), Kalibrierung über Übungsmessungen, PDF & Maschinisten-Token |
+| [Benutzer und Rollen](Administration-Benutzer-und-Rollen.md) | User anlegen, Rollen zuweisen, Lockout |
+| [Stammdaten pflegen](Administration-Stammdaten-pflegen.md) | Fahrzeuge, Alarmtypen, Auftragsvorschläge |
+| [Einstellungen](Administration-Einstellungen.md) | Org-Stammdaten, Logo, Auto-Schließen, Wetter-Opt-out |
+| [Organisationen verwalten](Administration-Organisations-verwalten.md) | Multi-Org: anlegen, Seed-Profile, Einladungen, System-Konsole |
+| [API-Keys verwalten](Administration-API-Keys-verwalten.md) | Anlegen, Rotieren, Sperren |
+| [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise.md) | Historie nachvollziehen, Stand rekonstruieren |
+| [Statistik-Dashboard](Administration-Statistik-Dashboard.md) | Kennzahlen interpretieren |
+| [Geräteverleih (Admin)](Administration-Geraeteverleih.md) | Artikel und Stücklisten pflegen, Verleih-Übersicht |
+| [Drohne / UAS](Administration-Drohne-UAS.md) | Modul aktivieren, Geräteregister, Wartungsbuch, Pilotenregister, Compliance |
+| [Single Sign-On (Entra ID)](Administration-Single-Sign-On.md) | Microsoft-365-Login einrichten, Gruppen-Mapping, JIT-Provisioning |
+| [Mail-Versand (SMTP / Office 365)](Administration-Mail-Versand.md) | Eigenen SMTP-Server und/oder Office 365 je Org einrichten, Fallback-Kette, Azure-App-Registrierung für Mail.Send |
+| [Lokale Wetterstation](Administration-Wetterstation.md) | Davis/Meteobridge-Anbindung: Station anlegen, Push-Token, Meteobridge-URL, Datenbankarchitektur |
+| [Fahrtenbuch](Administration-Fahrtenbuch.md) | Fahrzeuge konfigurieren, Zwecke/Zielorte, Token/QR, Schadensmeldung, Fahrten-Verwaltung |
+| [LIS/IPR-Anbindung](Administration-LIS-Anbindung.md) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
+| [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo.md) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
+| [Teams-Alarmierung](Administration-Teams-Alarmierung.md) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
+| [WordPress-Berichte](Administration-WordPress-Berichte.md) | Beim Einsatzabschluss automatisch einen Beitragsentwurf im Wehr-Blog anlegen, Alarmarten- und Fahrzeug-Zuordnung |
+| [Push mit Firebase Cloud Messaging](Administration-Push-FCM.md) | Globale FCM-Konfiguration für Push-Nachrichten an die native Android-App |
+| [Datensicherung (Org, Self-Service)](Administration-Org-Datensicherung.md) | Eigene Org-Daten als Archiv herunterladen oder geplant an ein eigenes Ziel senden (SFTP/FTP/rclone); Restore in neue Org (Sysadmin) |
+| [Objektverwaltung](Administration-Objektverwaltung.md) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
+| [Nachschlagewerke](Administration-Nachschlagewerke.md) | Modul aktivieren (System+Org), Gefahrgut-Datenquelle (BAM/ADR), Rettungskarten-URL, Offline-Funktion |
+| [Print & Alarm Gateway](Administration-Print-Alarm-Gateway.md) | Modul aktivieren (System+Org), Gateways koppeln, Drucker & Discovery, Druckregeln (Automatikdruck), manueller Druck |
+| [Förderstrecken-Planer](Administration-Foerderstrecken-Planer.md) | Modul aktivieren (System+Org), Pumpen/Schläuche mit Kennlinien (Vorlagen TS 1600/TS 1200), Kalibrierung über Übungsmessungen, PDF & Maschinisten-Token |
 
 ### Entwickler
 | Seite | Beschreibung |
 |-------|-------------|
-| [Architektur](Entwickler-Architektur) | Module, Schichten, Datenfluss, Multi-Tenancy |
-| [Sicherheit](Entwickler-Sicherheit) | Authentifizierung, CSRF, Tenant-Isolation, Medien und Rate-Limiting |
-| [Datenmodell](Entwickler-Datenmodell) | Tabellen, Beziehungen, Multi-Tenancy-Schema |
-| [REST-API](Entwickler-REST-API) | Endpoints, Payload-Validierung, Rate-Limiting, curl-Beispiele |
-| [WebSocket-Events](Entwickler-WebSocket-Events) | Event-Typen, Pub/Sub |
-| [Lokale Entwicklung](Entwickler-Lokale-Entwicklung) | uvicorn, Docker-Compose für DB, CSS-Build |
-| [Tests](Entwickler-Tests) | pytest, Fixtures, Multi-Tenancy-Tests, CI |
-| [Beitragen](Entwickler-Beitragen) | Branch-Strategie, PRs, Commits, Feature-Flag-Pattern |
+| [Architektur](Entwickler-Architektur.md) | Module, Schichten, Datenfluss, Multi-Tenancy |
+| [Sicherheit](Entwickler-Sicherheit.md) | Authentifizierung, CSRF, Tenant-Isolation, Medien und Rate-Limiting |
+| [Datenmodell](Entwickler-Datenmodell.md) | Tabellen, Beziehungen, Multi-Tenancy-Schema |
+| [REST-API](Entwickler-REST-API.md) | Endpoints, Payload-Validierung, Rate-Limiting, curl-Beispiele |
+| [WebSocket-Events](Entwickler-WebSocket-Events.md) | Event-Typen, Pub/Sub |
+| [Lokale Entwicklung](Entwickler-Lokale-Entwicklung.md) | uvicorn, Docker-Compose für DB, CSS-Build |
+| [Tests](Entwickler-Tests.md) | pytest, Fixtures, Multi-Tenancy-Tests, CI |
+| [Beitragen](Entwickler-Beitragen.md) | Branch-Strategie, PRs, Commits, Feature-Flag-Pattern |
 
 ### Feedback & Support
 | Seite | Beschreibung |
 |-------|-------------|
-| [Fehler melden / Wünsche / Diskussion](Feedback-und-Support) | Bug Reports, Feature Requests und Diskussionen auf GitHub |
+| [Fehler melden / Wünsche / Diskussion](Feedback-und-Support.md) | Bug Reports, Feature Requests und Diskussionen auf GitHub |
 
 ---
 

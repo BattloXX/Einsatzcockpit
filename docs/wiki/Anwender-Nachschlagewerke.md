@@ -1,6 +1,6 @@
 # Nachschlagewerke
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > URL: `/nachschlagewerke`
 > Zugänglich für: alle angemeldeten Nutzer der Organisation
@@ -51,13 +51,13 @@ Aufruf über **📖 Dokumentation → 📚 Nachschlagewerke** (Desktop und mobil
 > aufklappen: dort Hersteller/Modell/Baujahr eingeben und (falls konfiguriert) direkt laden oder
 > **Links** auf offizielle Quellen (Euro Rescue, ADAC …) folgen.
 
-> Ob Karten automatisch geladen werden, hängt von der Konfiguration eurer Organisation ab (siehe [Administration](Administration-Nachschlagewerke)). Ohne hinterlegte Quelle stehen nur die Deep-Links bereit.
+> Ob Karten automatisch geladen werden, hängt von der Konfiguration eurer Organisation ab (siehe [Administration](Administration-Nachschlagewerke.md)). Ohne hinterlegte Quelle stehen nur die Deep-Links bereit.
 
 ---
 
 ## Karten-Overlays (in der Lageführung)
 
-In der **[Lageführungskarte](Anwender-Lagefuehrung)** eines Einsatzes stehen bei aktivem Modul zwei zusätzliche Werkzeuge unter **„Weitere Werkzeuge"** bereit.
+In der **[Lageführungskarte](Anwender-Lagefuehrung.md)** eines Einsatzes stehen bei aktivem Modul zwei zusätzliche Werkzeuge unter **„Weitere Werkzeuge"** bereit.
 
 ### ☣️ Evakuierungsradius
 
@@ -96,6 +96,6 @@ Zeichnet die windbezogene Ausbreitungsfläche (der Wind „bläst" die Fahne vom
 
 ## Verwandte Seiten
 
-- [Nachschlagewerke (Administration)](Administration-Nachschlagewerke) — Aktivierung, Datenquellen-URLs
-- [Lageführung](Anwender-Lagefuehrung) — die Lagekarte mit den Overlays
-- [Objekte](Anwender-Objekte) — Objekt-Gefahren mit derselben Gefahrgut-Anreicherung
+- [Nachschlagewerke (Administration)](Administration-Nachschlagewerke.md) — Aktivierung, Datenquellen-URLs
+- [Lageführung](Anwender-Lagefuehrung.md) — die Lagekarte mit den Overlays
+- [Objekte](Anwender-Objekte.md) — Objekt-Gefahren mit derselben Gefahrgut-Anreicherung

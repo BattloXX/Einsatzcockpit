@@ -1,6 +1,6 @@
 # Organisationen verwalten (Multi-Org)
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 > Verfügbar ab **Version 2.2.0**. Organisations-Verwaltung erfordert die Rolle `system_admin`, eigene Org-Einstellungen erfordern `org_admin` oder `admin`.
 

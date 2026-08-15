@@ -1,6 +1,6 @@
 # Mobile Nutzung und PWA
 
-← [Zurück zur Startseite](Home)
+← [Zurück zur Startseite](Home.md)
 
 ## Progressive Web App (PWA)
 
@@ -12,7 +12,7 @@ Die Webapp kann wie eine native App auf dem Gerät installiert werden. Installie
 
 ## Anmeldung in der Android-App
 
-Die native Android-App (separates APK, siehe [SMS-Gateway](Installation-SMS-Gateway) für den Download-Link) bietet beim ersten Start vier Anmeldewege:
+Die native Android-App (separates APK, siehe [SMS-Gateway](Installation-SMS-Gateway.md) für den Download-Link) bietet beim ersten Start vier Anmeldewege:
 
 | Weg | Für wen | Wie |
 |-----|---------|-----|

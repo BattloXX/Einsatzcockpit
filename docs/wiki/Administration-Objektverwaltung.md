@@ -3,7 +3,7 @@
 Einrichtung und Betrieb des Objektmoduls: Aktivierung, Rollen, Kataloge, Alarm-Matching,
 Alarm-Infoscreen, KI-Klassifizierung und Serverkonfiguration.
 
-Anwender-Doku: [Objekte](Anwender-Objekte)
+Anwender-Doku: [Objekte](Anwender-Objekte.md)
 
 ## Modul aktivieren (zweistufig, wie UAS)
 
@@ -42,7 +42,7 @@ Im selben Abschnitt unter `/admin/settings` (sichtbar sobald das System-Flag an 
 | `org_admin` | Alles, zusätzlich: Kataloge, Modul-Toggle, Infoscreen-Tokens, Objekte endgültig löschen |
 
 Die Rolle **Objektverwalter** wird beim Seed automatisch angelegt und unter
-[Benutzer und Rollen](Administration-Benutzer-und-Rollen) zugewiesen — gedacht für
+[Benutzer und Rollen](Administration-Benutzer-und-Rollen.md) zugewiesen — gedacht für
 Brandschutz-/Objektbeauftragte, die pflegen dürfen, ohne Org-Admin zu sein.
 
 ## Kataloge, Auswahllisten & Symbole
@@ -160,7 +160,7 @@ wie vor nur über einen expliziten Parameter enthalten.
 Vision-Analyse der zerlegten PDF-Seiten (Anthropic Claude): schlägt Dokumentart, Titel,
 Melderlinien und Stand vor. Voraussetzungen:
 
-1. KI-Assistent aktiv (zentraler Key oder BYOK je Org, siehe [Einstellungen](Administration-Einstellungen))
+1. KI-Assistent aktiv (zentraler Key oder BYOK je Org, siehe [Einstellungen](Administration-Einstellungen.md))
 2. Org-Opt-in **„KI-Dokumentklassifizierung"** in den Org-Einstellungen
 
 Objektverwalter starten die Analyse im Dokumente-Abschnitt („✨ KI-Vorschläge für n Seiten",
@@ -235,7 +235,7 @@ Optionale `.env`-/SystemSettings-Parameter:
 **Speicher-Quota:** Original + Einzelseiten + Renderings zählen auf die Org-Quota
 (≈ Faktor 1,5–2 der Originalgröße). Beim Löschen eines Dokuments wird der belegte Speicher
 vollständig freigegeben. Ggf. die Quota der Org erhöhen
-([Organisationen verwalten](Administration-Organisations-verwalten)).
+([Organisationen verwalten](Administration-Organisations-verwalten.md)).
 
 **Offline-Sync (Android):** `GET /api/objekte/sync` liefert das Manifest aller freigegebenen
 Objekte (Session-Auth). Die Android-App synchronisiert damit automatisch alle 6 Stunden Einsatzansichten,
