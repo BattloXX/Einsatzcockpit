@@ -58,7 +58,7 @@ BOOTSTRAP_ADMIN_PASSWORD=sicheres-admin-passwort
 ### VAPID-Keys generieren
 
 ```bash
-python3.12 -c "
+python3.14 -c "
 from py_vapid import Vapid
 v = Vapid()
 v.generate_keys()
@@ -96,10 +96,10 @@ python -m app.seed_data
 ## 7. Erster Test
 
 ```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+uvicorn app.main:app --host 127.0.0.1 --port 8092
 ```
 
-Im Browser: `http://127.0.0.1:8000/login`  
+Im Browser: `http://127.0.0.1:8092/login`
 Login mit `admin` / dem Passwort aus `BOOTSTRAP_ADMIN_PASSWORD`.
 
 ---

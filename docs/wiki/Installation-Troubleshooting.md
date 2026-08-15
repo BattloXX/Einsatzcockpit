@@ -17,7 +17,7 @@ Häufige Ursachen:
 |--------|---------|--------|
 | `Can't connect to MySQL server` | DB-Verbindung schlägt fehl | DATABASE_URL in `.env` prüfen, MariaDB läuft? |
 | `ImportError: No module named 'app'` | venv nicht aktiviert / falscher Pfad | `WorkingDirectory` in service-Datei prüfen |
-| `Address already in use` | Port 8000 belegt | `ss -tlnp \| grep 8000` → Prozess beenden |
+| `Address already in use` | Port 8092 belegt | `ss -tlnp \| grep 8092` → Prozess beenden |
 | `SECRET_KEY not set` | `.env` nicht geladen | `EnvironmentFile` in service-Datei prüfen |
 
 ## Login funktioniert nicht
@@ -95,11 +95,11 @@ WeasyPrint kann für große PDFs viel RAM brauchen. Falls der Server unter Last 
 - Anzahl Gunicorn-Worker reduzieren (`-w 1`)
 - PDF-Generierung in einen separaten Queue-Worker auslagern (zukünftiges Feature)
 
-## Port 8000 von außen erreichbar
+## Port 8092 von außen erreichbar
 
 Firewall-Regel hinzufügen:
 ```bash
-sudo ufw deny 8000/tcp
+sudo ufw deny 8092/tcp
 ```
 
 Nur NGINX (80/443) soll von außen erreichbar sein.

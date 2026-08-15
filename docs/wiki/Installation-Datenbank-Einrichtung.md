@@ -47,7 +47,7 @@ DATABASE_URL=mysql+pymysql://einsatzleiter:PASSWORT@127.0.0.1:3306/einsatzleiter
 ## Verbindung testen (optional)
 
 ```bash
-python3.12 -c "
+python3.14 -c "
 import pymysql
 conn = pymysql.connect(host='127.0.0.1', user='einsatzleiter',
                        password='PASSWORT', db='einsatzleiter')

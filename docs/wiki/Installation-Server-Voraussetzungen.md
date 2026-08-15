@@ -52,7 +52,7 @@ sudo apt-get install -y \
 
 ## Ports und Firewall
 
-Der App-Prozess lauscht intern auf `127.0.0.1:8000`. Nach außen ist **nur NGINX** (Port 80/443) erreichbar. Kein direkter Zugriff auf Port 8000 erforderlich.
+Der App-Prozess lauscht intern auf `127.0.0.1:8092`. Nach außen ist **nur NGINX** (Port 80/443) erreichbar. Kein direkter Zugriff auf Port 8092 erforderlich.
 
 ```bash
 # Beispiel mit ufw:

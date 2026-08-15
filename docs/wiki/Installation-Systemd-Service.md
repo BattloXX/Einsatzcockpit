@@ -25,7 +25,7 @@ EnvironmentFile=/home/clp-einsatz/htdocs/einsatzleiter/.env
 ExecStart=/home/clp-einsatz/htdocs/einsatzleiter/.venv/bin/gunicorn \
     -k uvicorn.workers.UvicornWorker \
     -w 2 \
-    --bind 127.0.0.1:8000 \
+    --bind 127.0.0.1:8092 \
     app.main:app
 ```
 

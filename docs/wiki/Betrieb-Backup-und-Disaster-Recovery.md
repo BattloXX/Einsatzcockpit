@@ -140,7 +140,7 @@ su - clp-einsatz
 cd /home/clp-einsatz/htdocs/
 git clone https://github.com/BattloXX/Einsatzcockpit.git einsatzleiter
 cd einsatzleiter
-python3.12 -m venv .venv && source .venv/bin/activate && pip install -e .
+python3.14 -m venv .venv && source .venv/bin/activate && pip install -e .
 
 # 1) Secrets zurückspielen — die gesicherte .env an ihren Platz
 cp /sicherer-ort/.env .env

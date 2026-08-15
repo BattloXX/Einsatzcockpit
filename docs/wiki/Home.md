@@ -2,13 +2,13 @@
 
 Digitales Einsatzleiter-Werkzeug für österreichische Feuerwehren — Multi-User, Multi-Organisations-fähig, Echtzeit.
 
-**Version:** 3.6.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
+**Version:** 3.8.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
 
 ## Was ist das?
 
 Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-HTML-Tool ersetzt und um echte Multi-User-Fähigkeit, Atemschutzüberwachung, Mannschaftsregister, Archiv, PDF-Export, vollständige Multi-Tenancy, Großschadenslage-Führung und Drohnen-Dokumentation erweitert.
 
-**Kernfunktionen:**
+### Kernfunktionen
 - Echtzeit-Kanban-Board für mehrere Geräte gleichzeitig (WebSockets)
 - Automatische Einsatzanlage aus dem Alarmierungssystem (REST-API, idempotent)
 - LIS/IPR-Anbindung an das Leitstellensystem: Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus, Meldungen, automatisches Schließen
@@ -31,7 +31,10 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Nachschlagewerke: offlinefähige Gefahrgut-Suche (UN-Nummer/Stoffname → ERI-Karte, täglicher BAM/ADR-Sync), Rettungsdatenblätter (on-demand + Cache) und Karten-Overlays (Evakuierungsradius, windbezogene Ausbreitung inkl. Gauß-Modell)
 - SSO via Microsoft Entra ID (JIT-Provisioning, Gruppen-Mapping, PKCE/OIDC)
 - Mail-Versand je Organisation: eigener SMTP-Server und/oder Office 365 / Microsoft Graph, mit automatischer Fallback-Kette
+- Digitales Fahrtenbuch mit QR-/Token-Erfassung, Korrektur- und Storno-Workflow
 - Geräteverleih für Großschadenslagen (Artikel, Stücklisten, Barcode-Scan, SMS)
+- Organisationsbezogene Datensicherung als Download oder geplanter Push mit tenant-gescoptem Restore
+- Lokale Wetterstation mit Push-Ingest, eigener Zeitreihen-Datenbank und Szenario-Analyse
 - PWA für Offline-Betrieb, Web-Push-Benachrichtigungen
 - QR-Code-Schnellzugriff für zustoßende Einsatzkräfte
 - KI-Assistent (Auftragsvorschläge, Lagebild, Auto-Priorisierung) via Anthropic Claude — opt-in
@@ -118,6 +121,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 | Seite | Beschreibung |
 |-------|-------------|
 | [Architektur](Entwickler-Architektur) | Module, Schichten, Datenfluss, Multi-Tenancy |
+| [Sicherheit](Entwickler-Sicherheit) | Authentifizierung, CSRF, Tenant-Isolation, Medien und Rate-Limiting |
 | [Datenmodell](Entwickler-Datenmodell) | Tabellen, Beziehungen, Multi-Tenancy-Schema |
 | [REST-API](Entwickler-REST-API) | Endpoints, Payload-Validierung, Rate-Limiting, curl-Beispiele |
 | [WebSocket-Events](Entwickler-WebSocket-Events) | Event-Typen, Pub/Sub |

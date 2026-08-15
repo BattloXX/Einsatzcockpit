@@ -12,7 +12,7 @@ Vollständige Dokumentation: **[GitHub Wiki](../../wiki)**
 ## Systemabhängigkeiten (als root)
 
 ```bash
-apt install -y python3.12 python3.12-venv python3.12-dev \
+apt install -y python3.14 python3.14-venv python3.14-dev \
     libmariadb-dev build-essential \
     libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
     libffi-dev libcairo2 libcairo2-dev
@@ -31,7 +31,7 @@ git clone https://github.com/BattloXX/Einsatzcockpit.git einsatzleiter
 cd einsatzleiter
 
 # 3. Python-Umgebung
-python3.12 -m venv .venv
+python3.14 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 

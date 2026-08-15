@@ -42,6 +42,12 @@ Browser (HTMX + Alpine.js + WebSocket)
     │   ├── ui_profile.py       – Benutzer-Profil (Name/E-Mail/Passwort/Avatar)
     │   ├── ui_password_reset.py
     │   ├── ui_org_mail.py      – Mail-Versand-Admin (/admin/mail: eigener SMTP + Office 365, Test-Mail)
+    │   ├── ui_fahrtenbuch.py  – Fahrtenbuch-Erfassung und Verwaltung
+    │   ├── ui_lis.py          – LIS/IPR-Konfiguration und Diagnose
+    │   ├── ui_sms.py          – SMS-Gruppen, Einsatzinfo, Versand und Eingang
+    │   ├── ui_teams_bot.py    – Teams-Alarmierungsverwaltung
+    │   ├── teams_bot.py       – Öffentliche Alarmübersicht und Kartenbild
+    │   ├── public.py          – Öffentliche, token-geschützte Endpunkte
     │   ├── api_v1.py           – REST-API (Alarmierung, Lage-Alarm)
     │   ├── lagekarte_api.py    – GeoJSON-Feed für lagekarte.info
     │   ├── device_api.py       – SMS-Gateway/Geräte-WebSocket-Anbindung
@@ -88,6 +94,15 @@ Browser (HTMX + Alpine.js + WebSocket)
     │   ├── alarm_service.py          – Alarmtyp-Lookup + org-aware
     │   ├── seed_service.py           – Seed-Template-Anwendung bei Org-Anlage
     │   ├── sms_service.py            – SMS-Versand via Gateway-Container
+    │   ├── sms_dispatch_service.py   – Einsatzinfo-SMS bei Alarm
+    │   ├── sms_inbox_service.py      – SMS-Empfang und Weiterleitung
+    │   ├── lis/lis_sync.py           – LIS/IPR-Abgleich für Einsätze und Fahrzeuge
+    │   ├── lis/lis_client.py         – SOAP/WCF-Client der LIS/IPR-Anbindung
+    │   ├── incident_notify.py        – SMS-, Push- und Teams-Orchestrierung
+    │   ├── staticmap_service.py      – OSM-Kartenbild-Rendering
+    │   ├── teams_card.py             – Aufbau der Teams-Alarmkarte
+    │   ├── teams_alarm_service.py    – Teams-Dispatch per Webhook oder Bot
+    │   ├── teams_bot_service.py      – Ausgehender Teams-Bot-Versand
     │   ├── mail_service.py           – deliver(): O365 → eigener SMTP der Org → globaler SMTP (Fallback-Kette)
     │   ├── o365_mail_service.py      – Microsoft Graph App-only-Mailversand (Client-Credentials, sendMail)
     │   └── update_service.py         – ZIP-Update + Alembic-Migration

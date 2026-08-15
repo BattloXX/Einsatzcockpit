@@ -7,7 +7,7 @@
 1. **CloudPanel** → **Sites** → **Add Site**
 2. Typ: **Reverse Proxy**
 3. Domain: `einsatzleiter.feuerwehr-wolfurt.at` (deine Domain)
-4. Upstream: `http://127.0.0.1:8000`
+4. Upstream: `http://127.0.0.1:8092`
 5. **Add Site** klicken
 
 ## NGINX-Konfiguration anpassen
@@ -46,7 +46,7 @@ server {
 
     # WebSocket-Verbindungen (benötigen Upgrade-Header):
     location /ws/ {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:8092;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -60,7 +60,7 @@ server {
 
     # Alle anderen Anfragen:
     location / {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:8092;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

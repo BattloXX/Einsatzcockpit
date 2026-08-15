@@ -6,7 +6,9 @@
 
 - Python 3.14
 - Docker (für lokale MariaDB) oder eine lokale MariaDB-Installation
+- Node.js 20+ (für den Tailwind-CSS-Build)
 - Git
+- Optional: `ffmpeg` für Video-Uploads
 
 ## Repository klonen
 
@@ -28,6 +30,14 @@ source .venv/bin/activate      # Linux/Mac
 
 ```bash
 pip install -e ".[dev]"
+npm install
+npm run build
+```
+
+Für laufendes CSS-Kompilieren in einem zweiten Terminal:
+
+```bash
+npm run dev
 ```
 
 ## MariaDB via Docker
@@ -54,7 +64,7 @@ cp .env.example .env
 ```ini
 DATABASE_URL=mysql+pymysql://einsatzleiter:devpassword@127.0.0.1:3306/einsatzleiter
 SECRET_KEY=local-dev-secret-not-for-production
-APP_BASE_URL=http://localhost:8000
+APP_BASE_URL=http://localhost:8092
 BOOTSTRAP_ADMIN_USER=admin
 BOOTSTRAP_ADMIN_PASSWORD=admin123
 # VAPID-Keys optional für lokale Entwicklung:
@@ -79,10 +89,10 @@ python -m app.seed_data
 ## Entwicklungsserver starten
 
 ```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8092
 ```
 
-Browser: `http://localhost:8000`  
+Browser: `http://localhost:8092`
 Login: `admin` / `admin123`
 
 `--reload` startet den Server bei jeder Code-Änderung neu.
