@@ -2,6 +2,10 @@
 
 ← [Zurück zur Startseite](Home)
 
+Die folgenden Pfade entsprechen dem bestehenden CloudPanel-Setup. Für einen Server
+ohne Hosting-Panel stehen die angepassten Benutzer und Pfade unter
+[Debian/Ubuntu manuell](Installation-Debian-Manuell).
+
 ## Unit-Datei kopieren
 
 ```bash
@@ -29,7 +33,8 @@ ExecStart=/home/clp-einsatz/htdocs/einsatzleiter/.venv/bin/gunicorn \
     app.main:app
 ```
 
-> Passe `User` und `WorkingDirectory` an deinen tatsächlichen CloudPanel-Site-User an.
+> Passe `User`, `Group`, `WorkingDirectory`, `EnvironmentFile` und `ExecStart` an den
+> tatsächlichen Installationsbenutzer und App-Pfad an.
 
 ## Dienst aktivieren und starten
 

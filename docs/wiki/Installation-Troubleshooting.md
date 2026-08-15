@@ -20,6 +20,27 @@ Häufige Ursachen:
 | `Address already in use` | Port 8092 belegt | `ss -tlnp \| grep 8092` → Prozess beenden |
 | `SECRET_KEY not set` | `.env` nicht geladen | `EnvironmentFile` in service-Datei prüfen |
 
+## Docker
+
+Wenn der App-Container nicht startet, zuerst Status und vollständige Logs prüfen:
+
+```bash
+docker compose ps
+docker compose logs app
+docker compose logs db
+```
+
+Häufige Ursachen:
+
+- **App beendet sich sofort:** Pflichtwerte in `.env` und `DATABASE_URL` mit Host `db`
+  prüfen. Der konkrete Fehler steht in `docker compose logs app`.
+- **Keine Schreibrechte im Storage:** Das Volume muss unter `/app/app_storage` gemountet
+  und für den Non-Root-Benutzer `einsatzcockpit` schreibbar sein. Bei einem selbst
+  eingebundenen Host-Verzeichnis dessen Besitzer/Rechte prüfen.
+- **DB bleibt `unhealthy`:** `MARIADB_ROOT_PASSWORD`, `MARIADB_DATABASE`,
+  `MARIADB_USER` und `MARIADB_PASSWORD` in `.env` prüfen. Details liefert
+  `docker compose logs db`. Die App wartet auf den erfolgreichen Healthcheck der DB.
+
 ## Login funktioniert nicht
 
 - Passwort falsch → Reset: `python -m app.cli reset-password --username admin --password neues-pw`

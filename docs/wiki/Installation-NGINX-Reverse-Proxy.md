@@ -2,6 +2,11 @@
 
 ← [Zurück zur Startseite](Home)
 
+Diese Seite beschreibt den bestehenden CloudPanel-Weg. Einen vollständigen,
+CloudPanel-freien Vhost samt Certbot-Aufruf zeigt
+[Debian/Ubuntu manuell](Installation-Debian-Manuell). Für Docker bleibt die Proxy-
+und WebSocket-Konfiguration gleich; der Upstream ist ebenfalls `127.0.0.1:8092`.
+
 ## CloudPanel-Site anlegen
 
 1. **CloudPanel** → **Sites** → **Add Site**

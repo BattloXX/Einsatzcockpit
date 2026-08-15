@@ -79,6 +79,26 @@ alembic heads     # Neueste Revision im Code
 
 Falls sie sich unterscheiden: `alembic upgrade head` ausführen.
 
+## Update mit Docker Compose
+
+Bei vorgebauten Images werden neue Images geladen und die Services neu erstellt:
+
+```bash
+docker compose pull && docker compose up -d
+docker compose ps
+```
+
+Beim mitgelieferten Compose-Setup wird die App lokal gebaut. Nach dem Aktualisieren
+des Repositories daher `docker compose up -d --build` verwenden. Der Entrypoint führt
+`alembic upgrade head` automatisch vor jedem App-Start aus.
+
+Falls ein eigenes Image den mitgelieferten Entrypoint nicht verwendet, Migrationen
+vor der Freigabe manuell ausführen:
+
+```bash
+docker compose exec app alembic upgrade head
+```
+
 ## Rollback nach fehlgeschlagenem Update
 
 ```bash
