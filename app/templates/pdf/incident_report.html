@@ -300,7 +300,9 @@
 <div class="page-break"></div>
 <h2>Atemschutz-Protokoll</h2>
 {% for troop in incident.breathing_troops %}
+{% for cycle in get_troop_cycles(troop) %}
 {% include "pdf/_troop_block.html" %}
+{% endfor %}
 {% endfor %}
 {% endif %}
 

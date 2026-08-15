@@ -1,10 +1,10 @@
-"""Tests für die sicherheitskritische Atemschutzlogik (Phase 1 bis 3)."""
+"""Tests für die sicherheitskritische Atemschutzlogik (Phase 1 bis 4)."""
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
-from app.models.breathing import BreathingTroop, TroopMember
+from app.models.breathing import BreathingTroop, PressureLog, TroopMember
 from app.services.breathing_service import (
     ReadinessWarning,
     ack_warning,
@@ -14,10 +14,12 @@ from app.services.breathing_service import (
     check_troop_warnings,
     create_troop,
     get_time_warning,
+    get_troop_cycles,
     get_warning_level,
     log_pressure,
     report_back_pressure,
     report_objective_reached,
+    redeploy_troop,
     start_troop,
 )
 
@@ -65,6 +67,7 @@ def _member(member_id: int, name: str, start: float, current: float, withdraw: f
     member.objective_press = None
     member.objective_press_at = None
     member.member_id = None
+    member.deployment_id = None
     return member
 
 
@@ -73,6 +76,7 @@ def _troop(*members: TroopMember) -> BreathingTroop:
     troop.id = 1
     troop.incident_id = 1
     troop.members = list(members)
+    troop.deployments = []
     troop.pressure_logs = []
     troop.warn_withdraw_acked_at = None
     troop.warn_withdraw_acked_press = None
@@ -189,7 +193,7 @@ def test_create_troop_rejects_fewer_than_two_members():
 
 
 def test_start_troop_rejects_fewer_than_two_members():
-    troop = SimpleNamespace(members=[SimpleNamespace(start_press=300)])
+    troop = _troop(_member(1, "Person A", 300, 300, 160))
     with pytest.raises(ValueError, match="mindestens 2"):
         start_troop(FakeDB(), troop)
 
@@ -334,3 +338,108 @@ def test_escalation_fires_once_and_again_after_ack_reset(monkeypatch):
         FakeDB(), incident, troop, 3, now=now + timedelta(minutes=2), notifier=notifier,
     ) is True
     assert len(notifications) == 2
+
+
+def test_redeploy_rejects_troop_that_is_not_recovered():
+    troop = _troop(
+        _member(1, "Person A", 300, 300, 160),
+        _member(2, "Person B", 300, 300, 160),
+    )
+    troop.status = "zurueck"
+    with pytest.raises(ValueError, match="erholter"):
+        redeploy_troop(FakeDB(), troop, [])
+
+
+def test_get_troop_cycles_returns_unused_troop_only():
+    troop = _troop()
+    troop.entry_at = None
+    assert get_troop_cycles(troop) == [troop]
+
+
+def test_redeploy_archives_cycles_and_allows_roster_change(monkeypatch):
+    import app.services.breathing_service as svc
+    from app.core.tenant import set_tenant_context
+    from tests.conftest import TestingSession
+
+    monkeypatch.setattr(svc, "write_incident_change", lambda *args, **kwargs: None)
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        troop = BreathingTroop(
+            incident_id=1, name="Mehrfachtrupp", status="erholt",
+            is_sicherheitstrupp=True, bottle_preset="1x6", planned_duration_min=33,
+            entry_at=datetime.now(UTC) - timedelta(minutes=20),
+            back_at=datetime.now(UTC), start_press_avg=300, withdraw_press_calc=160,
+            warn_one_third_acked_at=datetime.now(UTC),
+            last_meldung_at=datetime.now(UTC), last_meldung_text="Zyklus 1",
+        )
+        member_a = TroopMember(
+            troop=troop, free_text_name="Person A", role="truppfuehrer",
+            start_press=300, current_press=100, deployment_id=None,
+        )
+        partner = TroopMember(
+            troop=troop, free_text_name="Partner", role="truppmann",
+            start_press=300, current_press=110, deployment_id=None,
+        )
+        db.add(troop)
+        db.flush()
+        log_a = PressureLog(
+            troop=troop, troop_member=member_a, pressure_bar=200, note="Zyklus 1"
+        )
+        db.add(log_a)
+        db.flush()
+
+        redeploy_troop(db, troop, [
+            {"free_text_name": "Person B", "role": "truppfuehrer", "start_press": 300},
+            {"free_text_name": "Partner", "role": "truppmann", "start_press": 290},
+        ])
+        db.flush()
+
+        first = troop.deployments[0]
+        assert first.lfd_nr == 1
+        assert {member.display_name for member in first.members} == {"Person A", "Partner"}
+        assert [log.note for log in first.pressure_logs] == ["Zyklus 1"]
+        assert member_a.deployment_id == first.id
+        assert partner.deployment_id == first.id
+        assert {member.display_name for member in troop.active_members} == {"Person B", "Partner"}
+        assert all(member.deployment_id is None for member in troop.active_members)
+        assert troop.status == "bereit"
+        for field in (
+            "entry_at", "withdraw_at", "back_at", "warn_one_third_acked_at",
+            "warn_two_third_acked_at", "warn_max_time_acked_at", "warn_withdraw_acked_at",
+            "warn_withdraw_acked_press", "readiness_override_reason",
+            "readiness_override_by_user_id", "readiness_override_at", "escalated_at",
+            "start_press_avg", "withdraw_press_calc", "last_meldung_at", "last_meldung_text",
+        ):
+            assert getattr(troop, field) is None
+        assert get_troop_cycles(troop) == [first, troop]
+
+        # Die bestehende Startlogik prüft und verwendet ausschließlich die neue Besetzung.
+        start_troop(db, troop)
+        assert troop.status == "im_einsatz"
+        assert {member.current_press for member in troop.active_members} == {290, 300}
+
+        # Zweiten Zyklus abschließen und archivieren.
+        troop.status = "erholt"
+        troop.back_at = datetime.now(UTC)
+        second_live_member = next(
+            member for member in troop.active_members if member.display_name == "Person B"
+        )
+        db.add(PressureLog(
+            troop=troop, troop_member=second_live_member, pressure_bar=180, note="Zyklus 2"
+        ))
+        db.flush()
+        redeploy_troop(db, troop, [
+            {"free_text_name": "Person C", "role": "truppfuehrer", "start_press": 300},
+            {"free_text_name": "Partner", "role": "truppmann", "start_press": 300},
+        ])
+        db.flush()
+
+        second = troop.deployments[1]
+        assert second.lfd_nr == 2
+        assert "Person A" not in {member.display_name for member in second.members}
+        assert "Person B" not in {member.display_name for member in first.members}
+        assert [log.note for log in second.pressure_logs] == ["Zyklus 2"]
+    finally:
+        db.rollback()
+        db.close()

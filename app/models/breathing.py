@@ -79,6 +79,23 @@ class BreathingTroop(Base):
     pressure_logs: Mapped[list[PressureLog]] = relationship(
         back_populates="troop", order_by="PressureLog.ts", cascade="all, delete-orphan"
     )
+    deployments: Mapped[list[BreathingDeployment]] = relationship(
+        back_populates="troop", order_by="BreathingDeployment.lfd_nr",
+        cascade="all, delete-orphan", lazy="selectin",
+    )
+
+    @property
+    def active_members(self) -> list[TroopMember]:
+        """Mitglieder des aktuellen, noch nicht archivierten Einsatzzyklus."""
+        return [member for member in self.members if member.deployment_id is None]
+
+    @property
+    def active_pressure_logs(self) -> list[PressureLog]:
+        """Druckmeldungen des aktuellen, noch nicht archivierten Einsatzzyklus."""
+        return [
+            pressure_log for pressure_log in self.pressure_logs
+            if pressure_log.troop_member.deployment_id is None
+        ]
 
     @property
     def elapsed_seconds(self) -> int | None:
@@ -112,7 +129,7 @@ class BreathingTroop(Base):
 
     @property
     def lowest_current_pressure(self) -> float | None:
-        pressures = [m.current_press for m in self.members if m.current_press is not None]
+        pressures = [m.current_press for m in self.active_members if m.current_press is not None]
         if not pressures:
             return None
         return min(pressures)
@@ -123,6 +140,94 @@ class BreathingTroop(Base):
             return BOTTLE_PRESET_LABELS.get(self.bottle_preset, self.bottle_preset)
         return "–"
 
+class BreathingDeployment(Base):
+    """Unveränderlicher Snapshot eines abgeschlossenen Atemschutz-Einsatzzyklus."""
+
+    __tablename__ = "breathing_deployment"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    troop_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("breathing_troop.id", ondelete="CASCADE"), nullable=False
+    )
+    lfd_nr: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    withdraw_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    back_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    planned_duration_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bottle_preset: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    task_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    location_text: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    start_press_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    withdraw_press_calc: Mapped[float | None] = mapped_column(Float, nullable=True)
+    warn_one_third_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    warn_two_third_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    warn_max_time_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    warn_withdraw_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    warn_withdraw_acked_press: Mapped[float | None] = mapped_column(Float, nullable=True)
+    readiness_override_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    readiness_override_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=True
+    )
+    readiness_override_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    troop: Mapped[BreathingTroop] = relationship(back_populates="deployments")
+    members: Mapped[list[TroopMember]] = relationship(
+        back_populates="deployment", lazy="selectin"
+    )
+    pressure_logs: Mapped[list[PressureLog]] = relationship(
+        secondary="troop_member",
+        primaryjoin="BreathingDeployment.id == TroopMember.deployment_id",
+        secondaryjoin="TroopMember.id == PressureLog.troop_member_id",
+        order_by="PressureLog.ts",
+        viewonly=True,
+        lazy="selectin",
+    )
+
+    @property
+    def one_third_seconds(self) -> int | None:
+        if self.planned_duration_min is None:
+            return None
+        return self.planned_duration_min * 20
+
+    @property
+    def two_third_seconds(self) -> int | None:
+        if self.planned_duration_min is None:
+            return None
+        return self.planned_duration_min * 40
+
+    @property
+    def max_seconds(self) -> int | None:
+        if self.planned_duration_min is None:
+            return None
+        return self.planned_duration_min * 60
+
+    @property
+    def name(self) -> str:
+        return self.troop.name
+
+    @property
+    def unit_name(self) -> str | None:
+        return self.troop.unit_name
+
+    @property
+    def bottle_label(self) -> str:
+        if self.bottle_preset:
+            return BOTTLE_PRESET_LABELS.get(self.bottle_preset, self.bottle_preset)
+        return "–"
+
+    @property
+    def active_members(self) -> list[TroopMember]:
+        """Kompatibilitätsalias: ein Deployment enthält ausschließlich seinen Zyklus."""
+        return self.members
+
+    @property
+    def active_pressure_logs(self) -> list[PressureLog]:
+        """Kompatibilitätsalias: ein Deployment enthält ausschließlich seinen Zyklus."""
+        return self.pressure_logs
+
 
 class TroopMember(Base):
     __tablename__ = "troop_member"
@@ -130,6 +235,9 @@ class TroopMember(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     troop_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("breathing_troop.id", ondelete="CASCADE"), nullable=False
+    )
+    deployment_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("breathing_deployment.id", ondelete="CASCADE"), nullable=True
     )
     member_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("member.id"), nullable=True)
     free_text_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
@@ -142,6 +250,7 @@ class TroopMember(Base):
     back_press: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     troop: Mapped[BreathingTroop] = relationship(back_populates="members")
+    deployment: Mapped[BreathingDeployment | None] = relationship(back_populates="members")
     member: Mapped[Member | None] = relationship(lazy="joined")  # type: ignore[name-defined]
 
     @property

@@ -190,6 +190,11 @@ from app.services.objekt_service import gefahr_links as _gefahr_links  # noqa: E
 
 templates.env.globals["gefahr_links"] = _gefahr_links
 
+# Atemschutz: einheitliche PDF-Schleife über archivierte und aktuellen Zyklus.
+from app.services.breathing_service import get_troop_cycles as _get_troop_cycles  # noqa: E402
+
+templates.env.globals["get_troop_cycles"] = _get_troop_cycles
+
 # Globale Konfigurationswerte für Templates
 import os as _os  # noqa: E402
 

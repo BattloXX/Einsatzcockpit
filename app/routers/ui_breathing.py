@@ -18,6 +18,7 @@ from app.services.breathing_service import (
     get_time_warning,
     get_warning_level,
     log_pressure,
+    redeploy_troop,
     report_back_pressure,
     report_objective_reached,
     start_troop,
@@ -119,6 +120,66 @@ async def create_breathing_troop(
     )
     db.commit()
     await manager.broadcast(incident_id, {"type": "troop_created", "reload_breathing": True})
+    return RedirectResponse(f"/einsatz/{incident_id}/atemschutz", status_code=303)
+
+
+@router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/erneut-einsetzen")
+async def redeploy_troop_view(
+    incident_id: int, troop_id: int, request: Request,
+    task_text: str | None = Form(None),
+    location_text: str | None = Form(None),
+    bottle_preset: str | None = Form(None),
+    planned_duration_min: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+):
+    """Archiviert den letzten Zyklus und legt eine neue Truppbesetzung an."""
+    troop = db.get(BreathingTroop, troop_id)
+    if not troop or troop.incident_id != incident_id:
+        return Response(status_code=404)
+
+    form_data = await request.form()
+    members_data = []
+    index = 0
+    while True:
+        key_id = f"member_{index}_id"
+        key_name = f"member_{index}_name"
+        key_role = f"member_{index}_role"
+        key_press = f"member_{index}_press"
+        if key_id not in form_data and key_name not in form_data:
+            break
+        member_id = form_data.get(key_id)
+        members_data.append({
+            "member_id": int(member_id) if member_id and str(member_id).isdigit() else None,  # type: ignore[arg-type]
+            "free_text_name": form_data.get(key_name) or None,
+            "role": form_data.get(key_role, "truppmann"),
+            "start_press": float(form_data[key_press]) if form_data.get(key_press) else None,  # type: ignore[arg-type]
+        })
+        index += 1
+
+    duration = planned_duration_min
+    if bottle_preset and bottle_preset != "manuell":
+        from app.models.breathing import BOTTLE_PRESET_DURATIONS
+        preset_duration = BOTTLE_PRESET_DURATIONS.get(bottle_preset)
+        if preset_duration is not None:
+            duration = preset_duration
+
+    try:
+        redeploy_troop(
+            db, troop, members_data,
+            task_text=task_text,
+            location_text=location_text,
+            planned_duration_min=duration,
+            bottle_preset=bottle_preset,
+            user_id=request.state.user.id,
+        )
+    except ValueError as exc:
+        return Response(str(exc), status_code=400)
+    db.commit()
+    lfd_nr = troop.deployments[-1].lfd_nr
+    await manager.broadcast(incident_id, {
+        "type": "troop_redeployed", "troop_id": troop_id, "lfd_nr": lfd_nr,
+    })
     return RedirectResponse(f"/einsatz/{incident_id}/atemschutz", status_code=303)
 
 
@@ -382,7 +443,7 @@ async def troop_pdf(
         from fastapi import HTTPException
         raise HTTPException(404)
     # Eager-load relationships needed for PDF
-    db.refresh(troop, ["members", "pressure_logs"])
+    db.refresh(troop, ["members", "pressure_logs", "deployments"])
     incident = db.get(Incident, incident_id)
     db.refresh(incident)
 

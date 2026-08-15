@@ -1,31 +1,28 @@
-{# Partial: vollständiges Trupp-Protokoll (eingebunden von troop_protocol.html UND incident_report.html) #}
-{# Erwartet Jinja-Variable: troop (BreathingTroop), optionales user für Zeitzone #}
-{% set tz_troop = troop %}
+{# Partial: vollständiger Einsatzzyklus (BreathingTroop oder BreathingDeployment). #}
+{# Erwartet Jinja-Variable: cycle, optionales user für Zeitzone. #}
 
 <div style="margin-bottom:16pt;">
-  <h3 style="margin-top:10pt;">{{ troop.name }}{% if troop.unit_name %} – {{ troop.unit_name }}{% endif %}</h3>
+  <h3 style="margin-top:10pt;">{{ cycle.name }}{% if cycle.unit_name %} – {{ cycle.unit_name }}{% endif %}</h3>
 
-  <!-- Stammdaten -->
   <table>
     <tr>
       <td style="width:50%">
-        <strong>Auftrag:</strong> {{ troop.task_text or '–' }}<br>
-        <strong>Standort:</strong> {{ troop.location_text or '–' }}<br>
-        <strong>Gerät / Flasche:</strong> {{ troop.bottle_label }}<br>
+        <strong>Auftrag:</strong> {{ cycle.task_text or '–' }}<br>
+        <strong>Standort:</strong> {{ cycle.location_text or '–' }}<br>
+        <strong>Gerät / Flasche:</strong> {{ cycle.bottle_label }}<br>
         <strong>Geplante Einsatzdauer:</strong>
-        {% if troop.planned_duration_min %}{{ troop.planned_duration_min }} min{% else %}–{% endif %}
+        {% if cycle.planned_duration_min %}{{ cycle.planned_duration_min }} min{% else %}–{% endif %}
       </td>
       <td>
-        <strong>Status:</strong> {{ {'bereit':'Bereit','im_einsatz':'Im Einsatz','rueckzug':'Rückzug!','zurueck':'Zurück','erholt':'Erholt'}[troop.status] }}<br>
-        <strong>Einsatzbeginn:</strong> {{ troop.entry_at|local_time if troop.entry_at else '–' }} Uhr<br>
-        <strong>Rückzug angeordnet:</strong> {{ troop.withdraw_at|local_time if troop.withdraw_at else '–' }} Uhr<br>
-        <strong>Zurück:</strong> {{ troop.back_at|local_time if troop.back_at else '–' }} Uhr
+        <strong>Status:</strong> {{ {'bereit':'Bereit','im_einsatz':'Im Einsatz','rueckzug':'Rückzug!','zurueck':'Zurück','erholt':'Erholt'}[cycle.status] }}<br>
+        <strong>Einsatzbeginn:</strong> {{ cycle.entry_at|local_time if cycle.entry_at else '–' }} Uhr<br>
+        <strong>Rückzug angeordnet:</strong> {{ cycle.withdraw_at|local_time if cycle.withdraw_at else '–' }} Uhr<br>
+        <strong>Zurück:</strong> {{ cycle.back_at|local_time if cycle.back_at else '–' }} Uhr
       </td>
     </tr>
   </table>
 
-  <!-- 1/3 / 2/3 Zeitpunkte -->
-  {% if troop.entry_at and troop.planned_duration_min %}
+  {% if cycle.entry_at and cycle.planned_duration_min %}
   <table>
     <tr>
       <th>1/3 Einsatzzeit (Lagemeldung)</th>
@@ -33,28 +30,22 @@
       <th>Max-Zeit</th>
     </tr>
     <tr>
-      {% set one_third_sec = troop.planned_duration_min * 20 %}
-      {% set two_third_sec = troop.planned_duration_min * 40 %}
-      {% set max_sec = troop.planned_duration_min * 60 %}
+      {% set one_third_sec = cycle.planned_duration_min * 20 %}
+      {% set two_third_sec = cycle.planned_duration_min * 40 %}
       {% set one_third_min = one_third_sec // 60 %}
-      <td>+{{ one_third_min }} min ({{ troop.entry_at|local_time if troop.entry_at else '–' }} + {{ one_third_min }} min)</td>
+      <td>+{{ one_third_min }} min ({{ cycle.entry_at|local_time }} + {{ one_third_min }} min)</td>
       <td>+{{ (two_third_sec // 60) }} min</td>
-      <td>+{{ troop.planned_duration_min }} min</td>
+      <td>+{{ cycle.planned_duration_min }} min</td>
     </tr>
   </table>
   {% endif %}
 
-  <!-- Mitgliedertabelle -->
   <table>
     <tr>
-      <th>Name</th>
-      <th>Rolle</th>
-      <th>AGT</th>
-      <th>Anfangsdruck</th>
-      <th>Soll-Rückzugsdruck</th>
-      <th>Enddruck</th>
+      <th>Name</th><th>Rolle</th><th>AGT</th><th>Anfangsdruck</th>
+      <th>Soll-Rückzugsdruck</th><th>Enddruck</th>
     </tr>
-    {% for m in troop.members %}
+    {% for m in cycle.active_members %}
     <tr>
       <td>{{ m.display_name }}</td>
       <td>{{ {'truppfuehrer':'Truppführer','truppmann':'Truppmann'}[m.role] }}</td>
@@ -66,14 +57,13 @@
     {% endfor %}
   </table>
 
-  <!-- Meldungs-Chronik -->
-  {% if troop.pressure_logs %}
+  {% if cycle.active_pressure_logs %}
   <h3 style="font-size:9pt;margin-top:8pt;">Druckmeldungen</h3>
   <table>
     <tr><th>Zeit</th><th>Mitglied</th><th>Druck (bar)</th><th>Notiz</th></tr>
-    {% for log in troop.pressure_logs %}
+    {% for log in cycle.active_pressure_logs %}
     {% set ns_name = namespace(name='–') %}
-    {% for m in troop.members %}
+    {% for m in cycle.active_members %}
       {% if m.id == log.troop_member_id %}{% set ns_name.name = m.display_name %}{% endif %}
     {% endfor %}
     <tr>
@@ -86,40 +76,27 @@
   </table>
   {% endif %}
 
-  <!-- Quittierungen -->
   <table style="margin-top:6pt;font-size:8pt;">
-    <tr>
-      <th>Warnung</th><th>Ausgelöst (erwartet)</th><th>Quittiert um</th>
-    </tr>
+    <tr><th>Warnung</th><th>Ausgelöst (erwartet)</th><th>Quittiert um</th></tr>
     <tr>
       <td>1/3-Lagemeldung</td>
-      <td>
-        {% if troop.entry_at and troop.one_third_seconds %}
-          nach {{ (troop.one_third_seconds // 60) }} min
-        {% else %}–{% endif %}
-      </td>
-      <td>{{ troop.warn_one_third_acked_at|local_time if troop.warn_one_third_acked_at else '– (nicht quittiert)' }}</td>
+      <td>{% if cycle.entry_at and cycle.one_third_seconds %}nach {{ (cycle.one_third_seconds // 60) }} min{% else %}–{% endif %}</td>
+      <td>{{ cycle.warn_one_third_acked_at|local_time if cycle.warn_one_third_acked_at else '– (nicht quittiert)' }}</td>
     </tr>
     <tr>
       <td>2/3-Lagemeldung</td>
-      <td>
-        {% if troop.entry_at and troop.two_third_seconds %}
-          nach {{ (troop.two_third_seconds // 60) }} min
-        {% else %}–{% endif %}
-      </td>
-      <td>{{ troop.warn_two_third_acked_at|local_time if troop.warn_two_third_acked_at else '– (nicht quittiert)' }}</td>
+      <td>{% if cycle.entry_at and cycle.two_third_seconds %}nach {{ (cycle.two_third_seconds // 60) }} min{% else %}–{% endif %}</td>
+      <td>{{ cycle.warn_two_third_acked_at|local_time if cycle.warn_two_third_acked_at else '– (nicht quittiert)' }}</td>
     </tr>
     <tr>
       <td>Rückzugsdruck</td>
-      <td>Druck ≤ {{ troop.withdraw_press_calc|int if troop.withdraw_press_calc else '?' }} bar</td>
-      <td>{{ troop.warn_withdraw_acked_at|local_time if troop.warn_withdraw_acked_at else '– (nicht quittiert)' }}</td>
+      <td>Druck ≤ {{ cycle.withdraw_press_calc|int if cycle.withdraw_press_calc else '?' }} bar</td>
+      <td>{{ cycle.warn_withdraw_acked_at|local_time if cycle.warn_withdraw_acked_at else '– (nicht quittiert)' }}</td>
     </tr>
     <tr>
       <td>Max-Einsatzzeit</td>
-      <td>
-        {% if troop.planned_duration_min %}nach {{ troop.planned_duration_min }} min{% else %}–{% endif %}
-      </td>
-      <td>{{ troop.warn_max_time_acked_at|local_time if troop.warn_max_time_acked_at else '– (nicht quittiert)' }}</td>
+      <td>{% if cycle.planned_duration_min %}nach {{ cycle.planned_duration_min }} min{% else %}–{% endif %}</td>
+      <td>{{ cycle.warn_max_time_acked_at|local_time if cycle.warn_max_time_acked_at else '– (nicht quittiert)' }}</td>
     </tr>
   </table>
 </div>

@@ -78,7 +78,9 @@
 
 <h2>Atemschutz-Protokoll</h2>
 
+{% for cycle in get_troop_cycles(troop) %}
 {% include "pdf/_troop_block.html" %}
+{% endfor %}
 
 </body>
 </html>

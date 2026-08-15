@@ -9,6 +9,7 @@ from app.core.audit import write_incident_change
 from app.models.breathing import (
     BOTTLE_PRESET_NOMINAL_BAR,
     TROOP_STATUSES,
+    BreathingDeployment,
     BreathingTroop,
     PressureLog,
     TroopMember,
@@ -71,13 +72,44 @@ def check_start_readiness(db: Session, troop: BreathingTroop) -> list[str]:
     nominal_bar = BOTTLE_PRESET_NOMINAL_BAR.get(troop.bottle_preset or "")
     if nominal_bar is not None:
         minimum = nominal_bar * 0.9
-        for member in troop.members:
+        for member in troop.active_members:
             if member.start_press is not None and member.start_press < minimum:
                 issues.append(
                     f"{member.display_name}: Anfangsdruck {member.start_press:g} bar liegt unter "
                     f"90 % des Nominalfülldrucks ({minimum:g} bar)."
                 )
     return issues
+
+
+def _validated_members_data(members_data: list[dict]) -> list[dict]:
+    """Filtert leere Mitgliedszeilen und erzwingt die Mindeststärke 0/2/2."""
+    filled_members = [
+        data for data in members_data
+        if data.get("member_id") or str(data.get("free_text_name") or "").strip()
+    ]
+    if len(filled_members) < 2:
+        raise ValueError("Ein Atemschutztrupp benötigt mindestens 2 Mitglieder.")
+    return filled_members
+
+
+def _add_live_members(
+    db: Session, troop: BreathingTroop, members_data: list[dict]
+) -> list[TroopMember]:
+    """Legt die validierte Besetzung für den aktuellen Einsatzzyklus an."""
+    members = []
+    for data in _validated_members_data(members_data):
+        member = TroopMember(
+            troop=troop,
+            deployment_id=None,
+            member_id=data.get("member_id"),
+            free_text_name=data.get("free_text_name"),
+            role=data.get("role", "truppmann"),
+            start_press=data.get("start_press"),
+            current_press=data.get("start_press"),
+        )
+        db.add(member)
+        members.append(member)
+    return members
 
 
 def create_troop(
@@ -98,12 +130,7 @@ def create_troop(
     members_data: [{"member_id": int|None, "free_text_name": str|None,
                     "role": "truppfuehrer"|"truppmann", "start_press": float}]
     """
-    filled_members = [
-        md for md in members_data
-        if md.get("member_id") or str(md.get("free_text_name") or "").strip()
-    ]
-    if len(filled_members) < 2:
-        raise ValueError("Ein Atemschutztrupp benötigt mindestens 2 Mitglieder.")
+    filled_members = _validated_members_data(members_data)
 
     troop = BreathingTroop(
         incident_id=incident_id,
@@ -120,16 +147,7 @@ def create_troop(
     db.add(troop)
     db.flush()
 
-    for md in filled_members:
-        m = TroopMember(
-            troop_id=troop.id,
-            member_id=md.get("member_id"),
-            free_text_name=md.get("free_text_name"),
-            role=md.get("role", "truppmann"),
-            start_press=md.get("start_press"),
-            current_press=md.get("start_press"),
-        )
-        db.add(m)
+    _add_live_members(db, troop, filled_members)
     db.flush()
 
     write_incident_change(
@@ -140,6 +158,95 @@ def create_troop(
     return troop
 
 
+def redeploy_troop(
+    db: Session,
+    troop: BreathingTroop,
+    members_data: list[dict],
+    task_text: str | None = None,
+    location_text: str | None = None,
+    planned_duration_min: int | None = None,
+    bottle_preset: str | None = None,
+    user_id: int | None = None,
+) -> BreathingTroop:
+    """Archiviert den abgeschlossenen Zyklus und bereitet den Trupp neu vor."""
+    if troop.status != "erholt":
+        raise ValueError("Nur ein erholter Atemschutztrupp kann erneut eingesetzt werden.")
+    filled_members = _validated_members_data(members_data)
+    old_members = list(troop.active_members)
+    deployment = BreathingDeployment(
+        troop=troop,
+        lfd_nr=len(troop.deployments) + 1,
+        entry_at=troop.entry_at,
+        withdraw_at=troop.withdraw_at,
+        back_at=troop.back_at,
+        status=troop.status,
+        planned_duration_min=troop.planned_duration_min,
+        bottle_preset=troop.bottle_preset,
+        task_text=troop.task_text,
+        location_text=troop.location_text,
+        start_press_avg=troop.start_press_avg,
+        withdraw_press_calc=troop.withdraw_press_calc,
+        warn_one_third_acked_at=troop.warn_one_third_acked_at,
+        warn_two_third_acked_at=troop.warn_two_third_acked_at,
+        warn_max_time_acked_at=troop.warn_max_time_acked_at,
+        warn_withdraw_acked_at=troop.warn_withdraw_acked_at,
+        warn_withdraw_acked_press=troop.warn_withdraw_acked_press,
+        readiness_override_reason=troop.readiness_override_reason,
+        readiness_override_by_user_id=troop.readiness_override_by_user_id,
+        readiness_override_at=troop.readiness_override_at,
+        escalated_at=troop.escalated_at,
+    )
+    db.add(deployment)
+    db.flush()
+
+    for member in old_members:
+        member.deployment = deployment
+        member.deployment_id = deployment.id
+
+    _add_live_members(db, troop, filled_members)
+
+    troop.status = "bereit"
+    troop.entry_at = None
+    troop.withdraw_at = None
+    troop.back_at = None
+    troop.warn_one_third_acked_at = None
+    troop.warn_two_third_acked_at = None
+    troop.warn_max_time_acked_at = None
+    troop.warn_withdraw_acked_at = None
+    troop.warn_withdraw_acked_press = None
+    troop.readiness_override_reason = None
+    troop.readiness_override_by_user_id = None
+    troop.readiness_override_at = None
+    troop.escalated_at = None
+    troop.start_press_avg = None
+    troop.withdraw_press_calc = None
+    troop.last_meldung_at = None
+    troop.last_meldung_text = None
+    troop.task_text = task_text if task_text is not None else troop.task_text
+    troop.location_text = location_text if location_text is not None else troop.location_text
+    troop.planned_duration_min = (
+        planned_duration_min if planned_duration_min is not None else troop.planned_duration_min
+    )
+    troop.bottle_preset = bottle_preset if bottle_preset is not None else troop.bottle_preset
+    db.flush()
+
+    write_incident_change(
+        db, troop.incident_id, "troop.redeployed", "breathing_troop", troop.id,
+        before=None, after={"lfd_nr": deployment.lfd_nr, "members": len(members_data)},
+        user_id=user_id,
+    )
+    return troop
+
+
+def get_troop_cycles(
+    troop: BreathingTroop,
+) -> list[BreathingDeployment | BreathingTroop]:
+    """Liefert archivierte und aktuellen Einsatzzyklus in zeitlicher Reihenfolge."""
+    if troop.entry_at is not None or troop.deployments:
+        return [*troop.deployments, troop]
+    return [troop]
+
+
 def start_troop(
     db: Session,
     troop: BreathingTroop,
@@ -147,7 +254,7 @@ def start_troop(
     override_reason: str | None = None,
     override_user_id: int | None = None,
 ) -> BreathingTroop:
-    if len(troop.members) < 2:
+    if len(troop.active_members) < 2:
         raise ValueError("Ein Atemschutztrupp benötigt mindestens 2 Mitglieder.")
     issues = check_start_readiness(db, troop)
     reason = (override_reason or "").strip()
@@ -166,7 +273,7 @@ def start_troop(
         )
 
     # Calculate average start pressure from members
-    pressures = [m.start_press for m in troop.members if m.start_press]
+    pressures = [m.start_press for m in troop.active_members if m.start_press]
     if pressures:
         avg = sum(pressures) / len(pressures)
         troop.start_press_avg = avg
@@ -175,7 +282,7 @@ def start_troop(
         troop.withdraw_press_calc = calc_withdraw_pressure(avg, factor, reserve)
 
         # Set individual withdraw pressures
-        for m in troop.members:
+        for m in troop.active_members:
             if m.start_press:
                 m.withdraw_press = calc_withdraw_pressure(m.start_press, factor, reserve)
                 m.current_press = m.start_press
@@ -226,7 +333,7 @@ def log_pressure(
     note: str | None = None,
     recorded_by_user_id: int | None = None,
 ) -> PressureLog:
-    member = next((m for m in troop.members if m.id == troop_member_id), None)
+    member = next((m for m in troop.active_members if m.id == troop_member_id), None)
     if member is None:
         raise ValueError("Das Truppmitglied gehört nicht zu diesem Atemschutztrupp.")
     now = _now()
@@ -260,7 +367,7 @@ def report_objective_reached(
     Für den Rückweg wird die doppelte beim Vormarsch verbrauchte Luftmenge
     angesetzt; die konfigurierte Mindestreserve darf nicht unterschritten werden.
     """
-    member = next((m for m in troop.members if m.id == troop_member_id), None)
+    member = next((m for m in troop.active_members if m.id == troop_member_id), None)
     if member is None or member.start_press is None:
         raise ValueError("Das Truppmitglied oder sein Anfangsdruck fehlt.")
     _, reserve = _withdraw_settings(db, troop)
@@ -298,7 +405,7 @@ def report_back_pressure(
     recorded_by_user_id: int | None = None,
 ) -> TroopMember:
     """Erfasst den Enddruck eines Truppmitglieds nach der Rückkehr."""
-    member = next((m for m in troop.members if m.id == troop_member_id), None)
+    member = next((m for m in troop.active_members if m.id == troop_member_id), None)
     if member is None:
         raise ValueError("Das Truppmitglied gehört nicht zu diesem Atemschutztrupp.")
     member.back_press = pressure_bar
@@ -361,7 +468,7 @@ def get_warning_level(troop: BreathingTroop) -> PressureWarning:
     """Prüft jedes Mitglied einzeln; der ungünstigste Status bestimmt den Trupp."""
     worst = PressureWarning("ok", None)
     rank = {"ok": 0, "yellow": 1, "red": 2}
-    for member in troop.members:
+    for member in troop.active_members:
         current = member.current_press
         if current is None or member.start_press is None:
             continue

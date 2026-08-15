@@ -1,0 +1,80 @@
+<dialog class="modal modal--wide" id="redeployTroopModal-{{ troop.id }}">
+  <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/erneut-einsetzen"
+        hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML"
+        class="modal__content"
+        x-data='newTroopForm([{% for current_member in troop.active_members %}{id:{{ (current_member.member_id|string if current_member.member_id else "")|tojson }},name:{{ (current_member.free_text_name or "")|tojson }},press:{{ current_member.start_press if current_member.start_press is not none else "null" }},role:{{ current_member.role|tojson }}}{{ "," if not loop.last }}{% endfor %}], {{ (troop.bottle_preset or "")|tojson }})'
+        @submit="if (!validate()) $event.preventDefault()">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="modal__header">
+      <h3>{{ troop.name }} erneut einsetzen</h3>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="new-troop-fields">
+        <div class="form-group">
+          <label>Auftrag</label>
+          <input type="text" name="task_text" class="form-input" value="{{ troop.task_text or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Standort / Einsatzabschnitt</label>
+          <input type="text" name="location_text" class="form-input" value="{{ troop.location_text or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Flasche / Einsatzzeit</label>
+          <select name="bottle_preset" class="form-select" x-model="bottlePreset">
+            <option value="">– bitte wählen –</option>
+            {% for slug, label, duration in bottle_presets %}
+            <option value="{{ slug }}">{{ label }}{% if duration %} → {{ duration }} min{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" x-show="bottlePreset === 'manuell'">
+          <label>Einsatzzeit (Minuten, manuell)</label>
+          <input type="number" name="planned_duration_min" class="form-input"
+                 value="{{ troop.planned_duration_min or '' }}" min="1" max="120"
+                 :required="bottlePreset === 'manuell'">
+        </div>
+      </div>
+      <p class="form-hint" style="margin-bottom:8px;">Besetzung und Anfangsdrücke für den neuen Einsatzzyklus.</p>
+      <div class="troop-member-list">
+        <template x-for="(m, i) in members" :key="i">
+          <div class="troop-member-row">
+            <select :name="`member_${i}_id`" x-model="m.id" class="form-select">
+              <option value="">Freie Eingabe</option>
+              {% for selectable_member in members %}
+              <option value="{{ selectable_member.id }}">{{ selectable_member.full_name }}{% if selectable_member.is_agt %} (AGT){% endif %}</option>
+              {% endfor %}
+            </select>
+            <input :name="`member_${i}_name`" x-model="m.name" type="text" class="form-input" placeholder="oder Name">
+            <select :name="`member_${i}_role`" x-model="m.role" class="form-select form-select--xs">
+              <option value="truppfuehrer">TF</option>
+              <option value="truppmann">TM</option>
+            </select>
+            <input :name="`member_${i}_press`" type="hidden" :value="m.press">
+            <div class="press-picker-wrap" @click.outside="m.pickerOpen = false">
+              <button type="button" class="btn btn--ghost btn--sm press-trigger"
+                      :class="{'press-trigger--set':m.press}" @click="m.pickerOpen = !m.pickerOpen">
+                <span x-text="m.press ? m.press + ' bar' : 'Druck *'"></span>
+              </button>
+              <div x-show="m.pickerOpen" class="press-picker-popup">
+                <div class="press-grid">
+                  <template x-for="val in pressValues" :key="val">
+                    <button type="button" class="press-btn" :class="{'press-btn--selected':m.press == val}"
+                            @click="m.press=val;m.pickerOpen=false" x-text="val"></button>
+                  </template>
+                </div>
+              </div>
+            </div>
+            <button aria-label="Mitglied entfernen" type="button" @click="removeMember(i)" class="btn btn--icon btn--danger">×</button>
+          </div>
+        </template>
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm"
+              @click="members.push({id:'',name:'',press:null,role:'truppmann',pickerOpen:false,pickerTop:0,pickerLeft:0})">+ Mitglied</button>
+    </div>
+    <div class="modal__footer">
+      <button type="button" class="btn btn--ghost" @click="$el.closest('dialog').close()">Abbrechen</button>
+      <button type="submit" class="btn btn--primary">Neuen Zyklus vorbereiten</button>
+    </div>
+  </form>
+</dialog>
