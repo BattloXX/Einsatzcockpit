@@ -18,6 +18,7 @@ from app.services.breathing_service import (
     get_time_warning,
     get_warning_level,
     log_pressure,
+    report_back_pressure,
     report_objective_reached,
     start_troop,
     update_meldung,
@@ -43,7 +44,8 @@ async def breathing_board(incident_id: int, request: Request, db: Session = Depe
     vehicles = [v for v in incident.vehicles if not v.removed_at]
 
     troops_with_warnings = [
-        (t, *get_warning_level(t), get_time_warning(t)) for t in incident.breathing_troops
+        (t, *get_warning_level(t), get_time_warning(t), check_troop_warnings(t))
+        for t in incident.breathing_troops
     ]
     return templates.TemplateResponse(request, "breathing/board.html", {
         "user": user, "incident": incident,
@@ -156,6 +158,33 @@ async def start_troop_view(
     return Response(status_code=204)
 
 
+@router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/enddruck")
+async def back_pressure_view(
+    incident_id: int, troop_id: int, request: Request,
+    troop_member_id: int = Form(...),
+    pressure_bar: float = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+):
+    """Erfasst den Enddruck eines Mitglieds nach Rückkehr des Trupps."""
+    troop = db.get(BreathingTroop, troop_id)
+    if not troop or troop.incident_id != incident_id:
+        return Response(status_code=404)
+    try:
+        member = report_back_pressure(
+            db, troop, troop_member_id, pressure_bar,
+            recorded_by_user_id=request.state.user.id,
+        )
+    except ValueError:
+        return Response(status_code=400)
+    db.commit()
+    await manager.broadcast(incident_id, {
+        "type": "troop_back_pressure_reported", "troop_id": troop_id,
+        "troop_member_id": member.id, "pressure": pressure_bar,
+    })
+    return Response(status_code=204)
+
+
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/status")
 async def update_status(
     incident_id: int, troop_id: int, request: Request,
@@ -164,7 +193,7 @@ async def update_status(
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
 ):
     troop = db.get(BreathingTroop, troop_id)
-    if not troop:
+    if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
     update_troop_status(db, troop, status, user_id=request.state.user.id)
     db.commit()

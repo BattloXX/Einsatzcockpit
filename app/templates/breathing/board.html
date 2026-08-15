@@ -6,36 +6,36 @@
 /* ── Gauge ───────────────────────────────────────────────────────────────── */
 .gauge-wrap { display:flex; flex-direction:column; align-items:center; padding:8px 0 2px; }
 .gauge-svg  { width:100%; max-width:220px; overflow:visible; }
-.gauge-time { font-size:.72rem; color:var(--color-text-muted); text-align:center; min-height:1.1em; margin-top:2px; }
+.gauge-time { font-size:.72rem; color:var(--text-muted); text-align:center; min-height:1.1em; margin-top:2px; }
 .gauge-labels { display:flex; justify-content:space-between; width:100%; max-width:220px;
-                font-size:.68rem; color:var(--color-text-muted); padding:0 4px; margin-top:-2px; }
+                font-size:.68rem; color:var(--text-muted); padding:0 4px; margin-top:-2px; }
 
 /* ── Pressure picker ─────────────────────────────────────────────────────── */
 .press-picker-wrap { position:relative; display:inline-block; }
 .press-trigger { min-width:80px; font-size:.8rem; }
-.press-trigger--set { border-color:var(--color-success) !important; color:var(--color-success) !important; }
+.press-trigger--set { border-color:var(--green) !important; color:var(--green) !important; }
 .press-picker-popup {
   position:absolute; z-index:60; right:0; top:calc(100% + 4px);
-  background:var(--color-surface-2,#2a2a2a); border:1px solid var(--color-border,#444);
+  background:var(--surface-mid); border:1px solid var(--border);
   border-radius:8px; padding:10px; box-shadow:0 8px 28px rgba(0,0,0,.5);
   min-width:270px;
   max-height:min(280px,calc(100vh - 32px)); overflow-y:auto;
 }
-.press-picker-header { font-size:.75rem; color:var(--color-text-muted); margin-bottom:6px;
-                        padding-bottom:4px; border-bottom:1px solid var(--color-border,#444); }
+.press-picker-header { font-size:.75rem; color:var(--text-muted); margin-bottom:6px;
+                        padding-bottom:4px; border-bottom:1px solid var(--border); }
 .press-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
 .press-btn {
   padding:6px 0; border-radius:4px; font-size:.78rem; font-weight:600; cursor:pointer;
-  border:1px solid var(--color-border,#555); background:transparent;
-  color:var(--color-text,#ddd); transition:background .1s, color .1s;
+  border:1px solid var(--border); background:transparent;
+  color:var(--on-surface); transition:background .1s, color .1s;
   text-align:center;
 }
-.press-btn:hover { background:var(--color-primary,#b71921); color:#fff; border-color:var(--color-primary,#b71921); }
+.press-btn:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
 .press-btn--high   { border-color:#48bb78; color:#48bb78; }
 .press-btn--warn   { border-color:#ed8936; color:#ed8936; }
 .press-btn--danger { border-color:#e53e3e; color:#e53e3e; }
-.press-btn--selected { background:var(--color-primary,#b71921) !important; color:#fff !important;
-                        border-color:var(--color-primary,#b71921) !important; }
+.press-btn--selected { background:var(--primary) !important; color:#fff !important;
+                        border-color:var(--primary) !important; }
 
 /* ── Member rows (active troop) ──────────────────────────────────────────── */
 .member-druck-row { display:flex; align-items:center; gap:8px; padding:4px 0; flex-wrap:wrap; }
@@ -67,7 +67,7 @@
   align-items:end;
 }
 .new-troop-fields .form-group { margin:0; }
-.new-troop-fields .form-group label { display:block; font-size:.75rem; color:var(--color-text-muted); margin-bottom:3px; }
+.new-troop-fields .form-group label { display:block; font-size:.75rem; color:var(--text-muted); margin-bottom:3px; }
 .new-troop-fields .form-group--full { grid-column:1 / -1; }
 
 /* ── Trupp-Mitglied-Zeilen im Modal ─────────────────────────────────────── */
@@ -82,18 +82,18 @@
 .troop-member-row:last-child { border-bottom:none; }
 
 /* ── Meldungen ───────────────────────────────────────────────────────────── */
-.troop-meldungen { margin-top:8px; border-top:1px solid var(--color-border,#444); padding-top:6px; }
-.troop-meldungen__label { font-size:.65rem; color:var(--color-text-muted); text-transform:uppercase;
+.troop-meldungen { margin-top:8px; border-top:1px solid var(--border); padding-top:6px; }
+.troop-meldungen__label { font-size:.65rem; color:var(--text-muted); text-transform:uppercase;
                             letter-spacing:.06em; margin-bottom:4px; }
-.troop-meldung-entry { font-size:.75rem; color:var(--color-text-muted); padding:2px 0;
+.troop-meldung-entry { font-size:.75rem; color:var(--text-muted); padding:2px 0;
                         border-bottom:1px solid rgba(255,255,255,.04); line-height:1.5; }
 .troop-meldung-entry:last-child { border-bottom:none; }
-.troop-meldung-press { font-weight:700; color:var(--color-text,#ddd); }
+.troop-meldung-press { font-weight:700; color:var(--on-surface); }
 
 /* ── Timer row ───────────────────────────────────────────────────────────── */
 .troop-timer-row { display:flex; justify-content:space-between; align-items:center;
-                    font-size:.78rem; color:var(--color-text-muted); margin:4px 0 2px; gap:8px; }
-.troop-timer-bar { flex:1; height:4px; border-radius:2px; background:var(--color-border,#444); min-width:40px; }
+                    font-size:.78rem; color:var(--text-muted); margin:4px 0 2px; gap:8px; }
+.troop-timer-bar { flex:1; height:4px; border-radius:2px; background:var(--border); min-width:40px; }
 .troop-timer-bar__fill { height:100%; border-radius:2px; background:#48bb78; transition:width .5s, background .5s; }
 
 /* ── Warn badges ─────────────────────────────────────────────────────────── */
@@ -109,15 +109,12 @@
 .mini-popup-wrap { position:relative; display:inline-block; }
 .mini-popup {
   position:absolute; z-index:50; left:0; top:calc(100% + 4px);
-  background:var(--color-surface-2,#2a2a2a); border:1px solid var(--color-border,#444);
+  background:var(--surface-mid); border:1px solid var(--border);
   border-radius:8px; padding:10px; box-shadow:0 8px 28px rgba(0,0,0,.5);
   min-width:260px;
 }
-.troop-card__meta { font-size:.75rem; color:var(--color-text-muted); margin:2px 0; }
-.troop-card__meta strong { color:var(--color-text,#ddd); }
-.troop-card--sicherheitstrupp { border:2px solid #63b3ed; }
-.sicherheitstrupp-badge { background:rgba(99,179,237,.18); color:#63b3ed;
-  border:1px solid #63b3ed; font-size:.72rem; padding:2px 8px; border-radius:4px; }
+.troop-card__meta { font-size:.75rem; color:var(--text-muted); margin:2px 0; }
+.troop-card__meta strong { color:var(--on-surface); }
 </style>
 {% endblock %}
 
@@ -134,7 +131,7 @@
 </div>
 
 <div class="troops-grid" id="troopsGrid" @click.once="unlockAudio()">
-  {% for troop, warning, warning_member, time_warning in troops_with_warnings %}
+  {% for troop, warning, warning_member, time_warning, active_warnings in troops_with_warnings %}
 
   {# ── Compute current pressure & last-log timestamp ── #}
   {% set ns = namespace(last_log=None) %}
@@ -148,7 +145,7 @@
   {% set back_iso  = (troop.back_at  | local_iso if troop.back_at  else '') %}
   {% set planned_min = troop.planned_duration_min or 0 %}
 
-  <div class="troop-card troop-card--{{ troop.status }} troop-card--warn-{{ warning }}{% if troop.is_sicherheitstrupp %} troop-card--sicherheitstrupp{% endif %}"
+  <div class="troop-card troop-card--{{ troop.status }} troop-card--warn-{{ warning }}"
        id="troop-{{ troop.id }}"
        x-data="troopCard({{ current_press }}, {{ max_press }}, {{ withdraw_press }}, '{{ last_log_iso }}', '{{ entry_iso }}', {{ planned_min }}, '{{ back_iso }}')"
        x-init="init()">
@@ -160,46 +157,46 @@
         {{ {'bereit':'Bereit','im_einsatz':'Im Einsatz','rueckzug':'Rückzug!','zurueck':'Zurück','erholt':'Erholt'}[troop.status] }}
       </span>
       {% if troop.is_sicherheitstrupp %}
-      <span class="sicherheitstrupp-badge">🛟 Sicherheitstrupp</span>
+      <span class="badge badge--unit">🛟 Sicherheitstrupp</span>
       {% endif %}
 
-      {# Warn-Badges (Priorität: max_time > withdraw > one_third) #}
-      {% if time_warning == 'max_exceeded' %}
-        <span class="warn-badge--max-time" id="warn-max-{{ troop.id }}">
+      {# Alle aktiven Warnungen, in absteigender Schwere. #}
+      {% if 'max_exceeded' in active_warnings %}
+        <span class="warn-badge warn-badge--max-time" id="warn-max-{{ troop.id }}">
           ⚠ MAX-EINSATZZEIT
-          <button type="button" class="btn--ack"
+          <button type="button" class="btn btn--ghost btn--sm btn--ack"
                   onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','max_time','warn-max-{{ troop.id }}')">✓ Quittieren</button>
         </span>
-      {% elif warning == 'red' %}
-        {% if troop.warn_withdraw_acked_at %}
-        <span class="warn-badge--one-third" id="warn-withdraw-{{ troop.id }}">⚠ RÜCKZUGSDRUCK (quittiert)</span>
-        {% else %}
-        <span class="warn-badge--red" id="warn-withdraw-{{ troop.id }}">
+      {% endif %}
+      {% if 'withdraw' in active_warnings %}
+        <span class="warn-badge warn-badge--red" id="warn-withdraw-{{ troop.id }}">
           ⚠ RÜCKZUGSDRUCK{% if warning_member %}: {{ warning_member.display_name }}{% endif %}
-          <button type="button" class="btn--ack"
+          <button type="button" class="btn btn--ghost btn--sm btn--ack"
                   onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','withdraw','warn-withdraw-{{ troop.id }}')">✓ Quittieren</button>
         </span>
-        {% endif %}
-      {% elif time_warning == 'one_third_due' %}
-        <span class="warn-badge--one-third" id="warn-third-{{ troop.id }}">
-          ⚠ Lagemeldung fällig (1/3)
-          <button type="button" class="btn--ack"
-                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','one_third','warn-third-{{ troop.id }}')">✓ Quittieren</button>
-        </span>
-      {% elif time_warning == 'two_third_due' %}
-        <span class="warn-badge--one-third" id="warn-two-third-{{ troop.id }}">
+      {% endif %}
+      {% if 'two_third_due' in active_warnings %}
+        <span class="warn-badge warn-badge--one-third" id="warn-two-third-{{ troop.id }}">
           ⚠ Lagemeldung fällig (2/3)
-          <button type="button" class="btn--ack"
+          <button type="button" class="btn btn--ghost btn--sm btn--ack"
                   onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','two_third','warn-two-third-{{ troop.id }}')">✓ Quittieren</button>
         </span>
-      {% elif warning == 'yellow' %}
-        <span class="troop-card__warn-badge warn-badge--yellow">⚠ 75%{% if warning_member %}: {{ warning_member.display_name }}{% endif %}</span>
+      {% endif %}
+      {% if 'one_third_due' in active_warnings %}
+        <span class="warn-badge warn-badge--one-third" id="warn-third-{{ troop.id }}">
+          ⚠ Lagemeldung fällig (1/3)
+          <button type="button" class="btn btn--ghost btn--sm btn--ack"
+                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','one_third','warn-third-{{ troop.id }}')">✓ Quittieren</button>
+        </span>
+      {% endif %}
+      {% if warning == 'yellow' %}
+        <span class="warn-badge warn-badge--yellow">⚠ 75%{% if warning_member %}: {{ warning_member.display_name }}{% endif %}</span>
       {% endif %}
     </div>
 
     {# Standort + Auftrag + letzter Meldungstext #}
     <div class="troop-card__meta">
-      {% if troop.unit_name %}<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:.72rem;font-weight:600;background:rgba(99,179,237,.15);color:#63b3ed;margin-right:4px">{{ troop.unit_name }}</span>{% endif %}
+      {% if troop.unit_name %}<span class="badge badge--unit" style="margin-right:4px">{{ troop.unit_name }}</span>{% endif %}
       {% if troop.task_text %}<strong>Auftrag:</strong> {{ troop.task_text }} {% endif %}
     </div>
     <div class="troop-card__meta">
@@ -208,7 +205,7 @@
     {% if troop.last_meldung_text %}
     <div class="troop-card__meta">
       <strong>Letzte Meldung:</strong> {{ troop.last_meldung_text }}
-      {% if troop.last_meldung_at %}<span style="font-size:.68rem;color:var(--color-text-muted)"> – {{ (troop.last_meldung_at | local).strftime('%H:%M') }}</span>{% endif %}
+      {% if troop.last_meldung_at %}<span style="font-size:.68rem;color:var(--text-muted)"> – {{ (troop.last_meldung_at | local).strftime('%H:%M') }}</span>{% endif %}
     </div>
     {% endif %}
 
@@ -286,11 +283,11 @@
            x-init="init()">
         <div class="member-druck-name">
           <strong>{{ m.display_name }}</strong>
-          <span style="font-size:.7rem;color:var(--color-text-muted)">
+          <span style="font-size:.7rem;color:var(--text-muted)">
             {{ {'truppfuehrer':'TF','truppmann':'TM'}[m.role] }}
           </span>
           {% if m.member and m.member.is_agt %}<span class="badge badge--agt member-druck-badge">AGT</span>{% endif %}
-          <span style="font-size:.68rem;color:var(--color-text-muted);display:block">
+          <span style="font-size:.68rem;color:var(--text-muted);display:block">
             Rückzug: {{ m.withdraw_press | int if m.withdraw_press is not none else '–' }} bar
             {% if m.objective_press_at %}(final){% else %}(vorläufig){% endif %}
           </span>
@@ -312,7 +309,7 @@
               <input type="hidden" name="troop_member_id" value="{{ m.id }}">
               <input type="hidden" name="pressure_bar" x-ref="pressVal">
               <div class="press-grid">
-                {% for val in range(350, 0, -10) %}
+                {% for val in range(300, 0, -10) %}
                 <button type="button"
                         class="press-btn {% if m.withdraw_press and val <= m.withdraw_press %}press-btn--danger{% elif m.start_press and val <= m.start_press * 0.75 %}press-btn--warn{% else %}press-btn--high{% endif %}"
                         :class="currentPress !== null && Math.floor(currentPress) == {{ val }} ? 'press-btn--selected' : ''"
@@ -335,7 +332,27 @@
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input type="hidden" name="troop_member_id" value="{{ m.id }}">
               <div class="press-grid">
-                {% for val in range(350, 0, -10) %}
+                {% for val in range(300, 0, -10) %}
+                <button type="submit" name="pressure_bar" value="{{ val }}" class="press-btn">{{ val }}</button>
+                {% endfor %}
+              </div>
+            </form>
+          </div>
+        </div>
+        {% endif %}
+        {% if (can_edit is not defined or can_edit) and troop.status in ['zurueck','erholt'] %}
+        <div class="press-picker-wrap" @click.outside="backOpen = false" x-data="{backOpen:false}">
+          <button type="button" class="btn btn--ghost btn--sm" @click="backOpen = !backOpen">
+            Enddruck{% if m.back_press is not none %}: {{ m.back_press | int }} bar{% endif %}
+          </button>
+          <div x-show="backOpen" class="press-picker-popup">
+            <div class="press-picker-header">Enddruck: {{ m.display_name }}</div>
+            <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/enddruck" hx-swap="none"
+                  @htmx:after-request="backOpen = false">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="hidden" name="troop_member_id" value="{{ m.id }}">
+              <div class="press-grid">
+                {% for val in range(300, 0, -10) %}
                 <button type="submit" name="pressure_bar" value="{{ val }}" class="press-btn">{{ val }}</button>
                 {% endfor %}
               </div>
@@ -412,8 +429,8 @@
           <div class="troop-meldung-entry">
             {% if ns_l.name %}<strong>{{ ns_l.name }}:</strong> {% endif %}
             <span class="troop-meldung-press">{{ log.pressure_bar | int }} bar</span>
-            {% if log.note %}<span style="font-size:.7rem;color:var(--color-text-muted)"> – {{ log.note }}</span>{% endif %}
-            <span style="color:var(--color-text-muted);font-size:.68rem">
+            {% if log.note %}<span style="font-size:.7rem;color:var(--text-muted)"> – {{ log.note }}</span>{% endif %}
+            <span style="color:var(--text-muted);font-size:.68rem">
               — {{ (log.ts | local).strftime('%H:%M:%S') }}
             </span>
           </div>
@@ -443,7 +460,7 @@
     </div>
     <div class="modal__body">
       {% if request.query_params.get('error') == 'min_two_members' %}
-      <div class="alert alert--danger" style="margin-bottom:10px;">
+      <div class="alert alert--error" style="margin-bottom:10px;">
         Es müssen mindestens 2 Truppmitglieder ausgefüllt sein.
       </div>
       {% endif %}
@@ -807,7 +824,7 @@ function newTroopForm() {
       {id:'', name:'', press:null, role:'truppmann',    pickerOpen:false, pickerTop:0, pickerLeft:0},
       {id:'', name:'', press:null, role:'truppmann',    pickerOpen:false, pickerTop:0, pickerLeft:0},
     ],
-    pressValues: Array.from({length: 35}, (_, i) => 350 - i * 10),
+    pressValues: Array.from({length: 30}, (_, i) => 300 - i * 10),
     bottlePreset: '',
 
     onPresetChange() {
@@ -840,7 +857,7 @@ function newTroopForm() {
 /* ── Atemschutz-Board: WebSocket + Sicherheitswarnungen ─────────────────── */
 (function () {
   {% set ns_act = namespace(cnt=0) %}
-  {% for troop, _w, _wm, _tw in troops_with_warnings %}
+  {% for troop, _w, _wm, _tw, _aws in troops_with_warnings %}
     {% if troop.status in ['im_einsatz', 'rueckzug'] %}{% set ns_act.cnt = ns_act.cnt + 1 %}{% endif %}
   {% endfor %}
   var HAS_ACTIVE = {{ 'true' if ns_act.cnt > 0 else 'false' }};
@@ -934,7 +951,8 @@ function newTroopForm() {
       }
       if (ev.reload_breathing || ev.type === 'troop_created' || ev.type === 'troop_started'
           || ev.type === 'troop_status_changed' || ev.type === 'troop_meldung'
-          || ev.type === 'troop_standort' || ev.type === 'troop_objective_reached') {
+          || ev.type === 'troop_standort' || ev.type === 'troop_objective_reached'
+          || ev.type === 'troop_back_pressure_reported') {
         doBreathingReload();
       }
     };

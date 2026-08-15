@@ -33,6 +33,7 @@ class FireDept(Base):
     bos: Mapped[str] = mapped_column(String(20), nullable=False, default="Feuerwehr")
     withdraw_press_factor: Mapped[float] = mapped_column(default=0.5)
     withdraw_press_reserve: Mapped[int] = mapped_column(Integer, default=10)
+    escalation_grace_min: Mapped[int] = mapped_column(Integer, default=3)
 
     # Multi-org fields
     is_home_org: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

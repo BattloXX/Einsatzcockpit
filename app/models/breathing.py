@@ -62,6 +62,7 @@ class BreathingTroop(Base):
         BigInteger, ForeignKey("user.id"), nullable=True
     )
     readiness_override_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Pressure tracking
     start_press_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
     entry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

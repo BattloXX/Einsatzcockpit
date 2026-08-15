@@ -1,4 +1,5 @@
 """Atemschutzüberwachung – Rückzugsdruck-Berechnung und Status-Maschine."""
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
@@ -67,7 +68,7 @@ def check_start_readiness(db: Session, troop: BreathingTroop) -> list[str]:
         if standby is None:
             issues.append("Kein bereiter Sicherheitstrupp für diesen Einsatz vorhanden.")
 
-    nominal_bar = BOTTLE_PRESET_NOMINAL_BAR.get(troop.bottle_preset)
+    nominal_bar = BOTTLE_PRESET_NOMINAL_BAR.get(troop.bottle_preset or "")
     if nominal_bar is not None:
         minimum = nominal_bar * 0.9
         for member in troop.members:
@@ -206,6 +207,8 @@ def update_troop_status(
         troop.withdraw_at = _now()
     elif new_status == "zurueck":
         troop.back_at = _now()
+    if new_status not in ("im_einsatz", "rueckzug"):
+        troop.escalated_at = None
     db.flush()
     write_incident_change(
         db, troop.incident_id, "troop.status_changed", "breathing_troop", troop.id,
@@ -287,6 +290,27 @@ def report_objective_reached(
     return member
 
 
+def report_back_pressure(
+    db: Session,
+    troop: BreathingTroop,
+    troop_member_id: int,
+    pressure_bar: float,
+    recorded_by_user_id: int | None = None,
+) -> TroopMember:
+    """Erfasst den Enddruck eines Truppmitglieds nach der Rückkehr."""
+    member = next((m for m in troop.members if m.id == troop_member_id), None)
+    if member is None:
+        raise ValueError("Das Truppmitglied gehört nicht zu diesem Atemschutztrupp.")
+    member.back_press = pressure_bar
+    db.flush()
+    write_incident_change(
+        db, troop.incident_id, "troop.back_pressure_reported", "troop_member", member.id,
+        before=None, after={"pressure_bar": pressure_bar},
+        user_id=recorded_by_user_id,
+    )
+    return member
+
+
 def update_meldung(
     db: Session,
     troop: BreathingTroop,
@@ -318,6 +342,7 @@ def ack_warning(
         troop.warn_two_third_acked_at = now
     elif kind == "max_time":
         troop.warn_max_time_acked_at = now
+        troop.escalated_at = None
     elif kind == "withdraw":
         troop.warn_withdraw_acked_at = now
         warning = get_warning_level(troop)
@@ -351,9 +376,8 @@ def get_warning_level(troop: BreathingTroop) -> PressureWarning:
     return worst
 
 
-def get_time_warning(troop: BreathingTroop) -> str:
-    """
-    Returns 'ok' | 'one_third_due' | 'two_third_due' | 'max_exceeded'.
+def get_time_warnings(troop: BreathingTroop) -> list[str]:
+    """Gibt alle gleichzeitig aktiven Zeitwarnungen nach ASÜW-Leitfaden/FwDV 7 zurück.
 
     Trigger-Regeln (Leitfaden ASÜW / FwDV 7):
       one_third_due / two_third_due: jeweilige Schwelle verstrichen UND keine
@@ -361,17 +385,16 @@ def get_time_warning(troop: BreathingTroop) -> str:
       max_exceeded:  Maximale Einsatzzeit überschritten UND nicht quittiert.
     """
     if troop.entry_at is None or troop.status not in ("im_einsatz", "rueckzug"):
-        return "ok"
+        return []
 
     now = _now()
     entry = troop.entry_at if troop.entry_at.tzinfo else troop.entry_at.replace(tzinfo=UTC)
     elapsed = (now - entry).total_seconds()
 
-    # Max-Zeit zuerst prüfen (schwerwiegender)
+    warnings: list[str] = []
     if troop.max_seconds and elapsed >= troop.max_seconds:
         if troop.warn_max_time_acked_at is None:
-            return "max_exceeded"
-        return "ok"
+            warnings.append("max_exceeded")
 
     last = troop.last_meldung_at
     last_utc = (last if last.tzinfo else last.replace(tzinfo=UTC)) if last else None
@@ -383,7 +406,16 @@ def get_time_warning(troop: BreathingTroop) -> str:
         if due_seconds and elapsed >= due_seconds:
             due_at = entry + timedelta(seconds=due_seconds)
             if (last_utc is None or last_utc < due_at) and acked_at is None:
-                return warning
+                warnings.append(warning)
+
+    return warnings
+
+
+def get_time_warning(troop: BreathingTroop) -> str:
+    """Gibt die schwerwiegendste aktive Zeitwarnung oder ``ok`` zurück."""
+    warnings = get_time_warnings(troop)
+    if warnings:
+        return warnings[0]
 
     return "ok"
 
@@ -399,10 +431,51 @@ def check_troop_warnings(troop: BreathingTroop) -> list[str]:
         or (trigger_press is not None and ack_press is not None and trigger_press < ack_press)
     ):
         warnings.append("withdraw")
-    time_warn = get_time_warning(troop)
-    if time_warn != "ok":
-        warnings.append(time_warn)
+    warnings.extend(get_time_warnings(troop))
     return warnings
+
+
+def check_and_escalate_troop(
+    db: Session,
+    incident,
+    troop: BreathingTroop,
+    grace_min: int,
+    *,
+    now: datetime | None = None,
+    notifier: Callable | None = None,
+) -> bool:
+    """Eskaliert eine unquittierte Max-Zeit-Überschreitung einmalig nach ÖBFV M302."""
+    if (
+        troop.status not in ("im_einsatz", "rueckzug")
+        or troop.entry_at is None
+        or troop.max_seconds is None
+        or troop.warn_max_time_acked_at is not None
+        or troop.escalated_at is not None
+        or incident.incident_leader_user_id is None
+    ):
+        return False
+
+    current = now or _now()
+    current = current if current.tzinfo else current.replace(tzinfo=UTC)
+    entry = troop.entry_at if troop.entry_at.tzinfo else troop.entry_at.replace(tzinfo=UTC)
+    escalation_due = entry + timedelta(seconds=troop.max_seconds, minutes=max(0, grace_min))
+    if current < escalation_due:
+        return False
+
+    if notifier is None:
+        from app.services.push_service import notify_user
+        notifier = notify_user
+    notifier(
+        db,
+        incident.incident_leader_user_id,
+        "Atemschutz: keine Rueckmeldung",
+        f"{troop.name} ueberschreitet die Einsatzzeit ohne Rueckmeldung",
+        url=f"/einsatz/{incident.id}/atemschutz",
+        source="breathing_watchdog",
+    )
+    troop.escalated_at = current
+    db.flush()
+    return True
 
 
 async def _breathing_watchdog_loop() -> None:
@@ -411,6 +484,7 @@ async def _breathing_watchdog_loop() -> None:
 
     from app.db import SessionLocal
     from app.models.incident import Incident
+    from app.models.master import FireDept
     from app.services.broadcast import manager
 
     # Tracking bereits gesendeter Warns (troop_id → set[kind])
@@ -428,9 +502,12 @@ async def _breathing_watchdog_loop() -> None:
         db = SessionLocal()
         set_tenant_context(db, None)
         try:
+            escalation_changed = False
             active_incidents = db.query(Incident).filter(Incident.status == "active").all()
             for incident in active_incidents:
                 db.refresh(incident, ["breathing_troops"])
+                dept = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
+                grace_min = dept.escalation_grace_min if dept else 3
                 for troop in incident.breathing_troops:
                     if troop.status not in ("im_einsatz", "rueckzug"):
                         _sent.pop(troop.id, None)
@@ -440,6 +517,10 @@ async def _breathing_watchdog_loop() -> None:
                     for kind in active_warnings - prev_warnings:
                         events.append((incident.id, troop.id, kind))
                     _sent[troop.id] = active_warnings
+                    if check_and_escalate_troop(db, incident, troop, grace_min):
+                        escalation_changed = True
+            if escalation_changed:
+                db.commit()
         finally:
             db.close()
         return events

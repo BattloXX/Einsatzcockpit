@@ -1,4 +1,4 @@
-"""Tests für die sicherheitskritische Atemschutzlogik (Phase 1 und 2)."""
+"""Tests für die sicherheitskritische Atemschutzlogik (Phase 1 bis 3)."""
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -9,12 +9,14 @@ from app.services.breathing_service import (
     ReadinessWarning,
     ack_warning,
     calc_withdraw_pressure,
+    check_and_escalate_troop,
     check_start_readiness,
     check_troop_warnings,
     create_troop,
     get_time_warning,
     get_warning_level,
     log_pressure,
+    report_back_pressure,
     report_objective_reached,
     start_troop,
 )
@@ -79,6 +81,8 @@ def _troop(*members: TroopMember) -> BreathingTroop:
     troop.readiness_override_reason = None
     troop.readiness_override_by_user_id = None
     troop.readiness_override_at = None
+    troop.escalated_at = None
+    troop.name = "Trupp 1"
     return troop
 
 
@@ -275,3 +279,58 @@ def test_start_troop_override_starts_and_sets_audit_fields(monkeypatch):
     override_event = next(item for item in events if item[0] == "troop.readiness_overridden")
     assert override_event[1]["after"]["reason"] == "Gefahr weitgehend ausgeschlossen"
     assert len(override_event[1]["after"]["issues"]) == 2
+
+
+def test_report_back_pressure_sets_value_and_writes_audit(monkeypatch):
+    import app.services.breathing_service as svc
+
+    member = _member(1, "Person A", 300, 120, 160)
+    troop = _troop(member)
+    events = []
+    monkeypatch.setattr(
+        svc, "write_incident_change",
+        lambda db, incident_id, event, *args, **kwargs: events.append((event, kwargs)),
+    )
+
+    result = report_back_pressure(FakeDB(), troop, 1, 80, recorded_by_user_id=42)
+
+    assert result is member
+    assert member.back_press == 80
+    assert events == [(
+        "troop.back_pressure_reported",
+        {"before": None, "after": {"pressure_bar": 80}, "user_id": 42},
+    )]
+
+
+def test_escalation_fires_once_and_again_after_ack_reset(monkeypatch):
+    import app.services.breathing_service as svc
+
+    now = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
+    troop = _timer_troop(offset_minutes=14, planned_minutes=10)
+    troop.entry_at = now - timedelta(minutes=14)
+    incident = SimpleNamespace(id=7, incident_leader_user_id=99)
+    notifications = []
+
+    def notifier(*args, **kwargs):
+        notifications.append((args, kwargs))
+
+    assert check_and_escalate_troop(
+        FakeDB(), incident, troop, 3, now=now, notifier=notifier,
+    ) is True
+    assert troop.escalated_at == now
+    assert len(notifications) == 1
+
+    assert check_and_escalate_troop(
+        FakeDB(), incident, troop, 3, now=now + timedelta(minutes=1), notifier=notifier,
+    ) is False
+    assert len(notifications) == 1
+
+    monkeypatch.setattr(svc, "write_incident_change", lambda *args, **kwargs: None)
+    ack_warning(FakeDB(), troop, "max_time")
+    assert troop.escalated_at is None
+    troop.warn_max_time_acked_at = None
+
+    assert check_and_escalate_troop(
+        FakeDB(), incident, troop, 3, now=now + timedelta(minutes=2), notifier=notifier,
+    ) is True
+    assert len(notifications) == 2

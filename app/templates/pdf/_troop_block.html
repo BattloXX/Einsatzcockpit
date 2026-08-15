@@ -2,13 +2,6 @@
 {# Erwartet Jinja-Variable: troop (BreathingTroop), optionales user für Zeitzone #}
 {% set tz_troop = troop %}
 
-{% set ns_low = namespace(lowest=None) %}
-{% for log in troop.pressure_logs %}
-  {% if ns_low.lowest is none or log.pressure_bar < ns_low.lowest %}
-    {% set ns_low.lowest = log.pressure_bar %}
-  {% endif %}
-{% endfor %}
-
 <div style="margin-bottom:16pt;">
   <h3 style="margin-top:10pt;">{{ troop.name }}{% if troop.unit_name %} – {{ troop.unit_name }}{% endif %}</h3>
 
@@ -38,7 +31,6 @@
       <th>1/3 Einsatzzeit (Lagemeldung)</th>
       <th>2/3 Einsatzzeit</th>
       <th>Max-Zeit</th>
-      <th>Niedrigster gemeldeter Druck</th>
     </tr>
     <tr>
       {% set one_third_sec = troop.planned_duration_min * 20 %}
@@ -48,7 +40,6 @@
       <td>+{{ one_third_min }} min ({{ troop.entry_at|local_time if troop.entry_at else '–' }} + {{ one_third_min }} min)</td>
       <td>+{{ (two_third_sec // 60) }} min</td>
       <td>+{{ troop.planned_duration_min }} min</td>
-      <td>{% if ns_low.lowest is not none %}{{ ns_low.lowest|int }} bar{% else %}–{% endif %}</td>
     </tr>
   </table>
   {% endif %}
@@ -83,7 +74,7 @@
     {% for log in troop.pressure_logs %}
     {% set ns_name = namespace(name='–') %}
     {% for m in troop.members %}
-      {% if m.member_id == log.member_id %}{% set ns_name.name = m.display_name %}{% endif %}
+      {% if m.id == log.troop_member_id %}{% set ns_name.name = m.display_name %}{% endif %}
     {% endfor %}
     <tr>
       <td>{{ (log.ts|local).strftime('%H:%M:%S') }}</td>
@@ -108,6 +99,15 @@
         {% else %}–{% endif %}
       </td>
       <td>{{ troop.warn_one_third_acked_at|local_time if troop.warn_one_third_acked_at else '– (nicht quittiert)' }}</td>
+    </tr>
+    <tr>
+      <td>2/3-Lagemeldung</td>
+      <td>
+        {% if troop.entry_at and troop.two_third_seconds %}
+          nach {{ (troop.two_third_seconds // 60) }} min
+        {% else %}–{% endif %}
+      </td>
+      <td>{{ troop.warn_two_third_acked_at|local_time if troop.warn_two_third_acked_at else '– (nicht quittiert)' }}</td>
     </tr>
     <tr>
       <td>Rückzugsdruck</td>
