@@ -16,7 +16,7 @@ Multi-User, mandantenfähig, Echtzeit. Für Feuerwehr, BOS und Gemeinden.
 
 ## Überblick
 
-Das Werkzeug ersetzt ein Single-File-HTML-Tool durch eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturierte, Echtzeit-fähige Arbeitsumgebung bietet.
+Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturierte, Echtzeit-fähige Arbeitsumgebung bietet.
 
 **Zielgruppe:** Einsatzleiter, Schriftführer, Atemschutz-Überwacher und UAS-Teams österreichischer Feuerwehren.
 

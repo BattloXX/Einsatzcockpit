@@ -4,7 +4,7 @@ WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tailwind.config.js ./
-COPY app/static/css/tailwind.input.css app/static/css/tailwind.input.css
+COPY app/static/css/tailwind.input.css app/static/css/fonts.css app/static/css/
 COPY app/static/js app/static/js
 COPY app/templates app/templates
 RUN npm run build
@@ -20,7 +20,7 @@ RUN apt-get update \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
         libcairo2 \
-        libgdk-pixbuf2.0-0 \
+        libgdk-pixbuf-2.0-0 \
         libffi-dev \
         build-essential \
         ffmpeg \
