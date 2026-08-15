@@ -2,7 +2,9 @@
 
 ← [Zurück zur Startseite](Home.md)
 
-Entspricht **FwDV 7 „Atemschutz"** und dem **ASÜW-Leitfaden (Falter A6, V0)**.
+Diese Phase-1-Überarbeitung stützt sich auf **FwDV 7** und **ÖBFV M302**. Der
+intern referenzierte Vorarlberger „Falter A6, V0" war online nicht verfügbar.
+Sobald das Original vorliegt, ist ein Abgleich durch den Projektinhaber erforderlich.
 
 ---
 
@@ -38,14 +40,23 @@ Die Atemschutz-Ansicht ist für alle Rollen lesbar. Änderungen dürfen:
 ## Anfangsdrücke
 
 Der Druck-Picker geht von 10 bis 300 bar in 10er-Schritten.  
-**Rückzugsdruck wird automatisch berechnet:**
+Bis zum Erreichen des Einsatzziels wird ein **vorläufiger Rückzugsdruck** geschätzt:
 
 ```
 Rückzugsdruck = Anfangsdruck × 0,5 + 10 bar (Sicherheitsreserve)
 Beispiel: 300 bar × 0,5 + 10 = 160 bar
 ```
 
-Der niedrigste Rückzugsdruck aller Mitglieder gilt für den gesamten Trupp.
+Am Einsatzziel wird der Druck jedes Mitglieds mit **Einsatzziel erreicht** gemeldet.
+Danach gilt der tatsächliche Verbrauch des Vormarschs:
+
+```
+Finaler Rückzugsdruck = 2 × Zieldruck − Anfangsdruck
+```
+
+Die konfigurierte Mindestreserve bildet dabei die Untergrenze. Jedes Mitglied
+wird einzeln gegen seinen eigenen Rückzugsdruck geprüft; der ungünstigste
+Einzelstatus bestimmt den Truppstatus und zeigt die betroffene Person an.
 
 ---
 
@@ -60,12 +71,14 @@ Der niedrigste Rückzugsdruck aller Mitglieder gilt für den gesamten Trupp.
 | Ereignis | Anzeige | Akustik |
 |---|---|---|
 | 1/3 der Einsatzzeit verstrichen, keine Lagemeldung | Gelbes Badge „⚠ Lagemeldung fällig (1/3)" | Ton ~10 s (muss mind. 10 s laut hörbar sein, Leitfaden) |
+| 2/3 der Einsatzzeit verstrichen, keine Meldung nach dieser Schwelle | Gelbes Badge „⚠ Lagemeldung fällig (2/3)" | Ton ~10 s |
 | Rückzugsdruck unterschritten | Rotes Badge „⚠ RÜCKZUGSDRUCK" | Alarm-Ton ~5 s |
 | Max-Einsatzzeit überschritten | Rotes Badge „⚠ MAX-EINSATZZEIT" | **Dauerton** bis manuelle Quittierung |
 
 Jedes Badge hat einen **„✓ Quit."-Button** zum Bestätigen.
 
-> **1/3-Warnung wird zurückgesetzt**, sobald eine neue Lagemeldung eingetragen oder ein neuer Druck gemeldet wird.
+> Eine 1/3- bzw. 2/3-Warnstufe gilt erst durch eine Meldung nach dem jeweiligen
+> Fälligkeitszeitpunkt als erfüllt. Eine frühere Meldung unterdrückt die spätere Warnung nicht.
 
 ---
 
@@ -130,6 +143,7 @@ Im Abschlussbericht des Einsatzes ist eine eigene Seite **„Atemschutz-Protokol
 | Digitaluhr mit laufender Zeit | ✓ Stoppuhr pro Trupp ab Einsatzbeginn |
 | Kurzzeituhr mit geplanter Einsatzzeit | ✓ Timer „mm:ss / Plan-min" mit Fortschrittsbalken |
 | Warnsignal nach 1/3 der Einsatzzeit, laut ≥ 10 s | ✓ Ton + Badge |
+| Warnsignal nach 2/3 der Einsatzzeit | ✓ Ton + Badge |
 | Warnsignal bei Rückzugsdruck | ✓ |
 | Warnsignal Dauerton bei Max-Zeit bis Quittierung | ✓ |
 | Felder: Name, Funkrufname, Gerätetype | ✓ (name, unit_name, bottle_preset) |

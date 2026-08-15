@@ -1,13 +1,85 @@
-"""Tests für Atemschutz-Service."""
+"""Tests für die sicherheitskritische Atemschutzlogik (Phase 1 und 2)."""
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
+import pytest
+
+from app.models.breathing import BreathingTroop, TroopMember
 from app.services.breathing_service import (
+    ReadinessWarning,
     ack_warning,
     calc_withdraw_pressure,
+    check_start_readiness,
+    check_troop_warnings,
+    create_troop,
     get_time_warning,
     get_warning_level,
+    log_pressure,
+    report_objective_reached,
+    start_troop,
 )
-from app.models.breathing import BreathingTroop, PressureLog
+
+
+class FakeDB:
+    def __init__(self):
+        self.added = []
+
+    def add(self, value):
+        self.added.append(value)
+
+    def flush(self):
+        pass
+
+
+class FakeQuery:
+    def __init__(self, result):
+        self.result = result
+
+    def filter(self, *args):
+        return self
+
+    def first(self):
+        return self.result
+
+
+class ReadinessDB(FakeDB):
+    def __init__(self, standby=None):
+        super().__init__()
+        self.standby = standby
+        self.query_count = 0
+
+    def query(self, model):
+        self.query_count += 1
+        return FakeQuery(self.standby)
+
+
+def _member(member_id: int, name: str, start: float, current: float, withdraw: float) -> TroopMember:
+    member = TroopMember()
+    member.id = member_id
+    member.free_text_name = name
+    member.start_press = start
+    member.current_press = current
+    member.withdraw_press = withdraw
+    member.objective_press = None
+    member.objective_press_at = None
+    member.member_id = None
+    return member
+
+
+def _troop(*members: TroopMember) -> BreathingTroop:
+    troop = BreathingTroop()
+    troop.id = 1
+    troop.incident_id = 1
+    troop.members = list(members)
+    troop.pressure_logs = []
+    troop.warn_withdraw_acked_at = None
+    troop.warn_withdraw_acked_press = None
+    troop.is_sicherheitstrupp = False
+    troop.bottle_preset = "1x6"
+    troop.readiness_override_reason = None
+    troop.readiness_override_by_user_id = None
+    troop.readiness_override_at = None
+    return troop
 
 
 def test_withdraw_pressure_calculation():
@@ -15,185 +87,191 @@ def test_withdraw_pressure_calculation():
     assert calc_withdraw_pressure(200, 0.5, 10) == 110.0
 
 
-def test_warning_level_ok():
-    troop = BreathingTroop()
-    troop.start_press_avg = 300
-    troop.withdraw_press_calc = 160
-    troop.pressure_logs = []
-    assert get_warning_level(troop) == "ok"  # no logs → ok
+def test_warning_level_checks_each_member_and_returns_trigger():
+    safe = _member(1, "Person A", 300, 250, 160)
+    weak = _member(2, "Person B", 280, 135, 140)
+    warning = get_warning_level(_troop(safe, weak))
+    assert warning.level == "red"
+    assert warning.member is weak
 
 
-def test_warning_level_yellow():
-    troop = BreathingTroop()
-    troop.start_press_avg = 300
-    troop.withdraw_press_calc = 160
-    log = PressureLog()
-    log.pressure_bar = 220  # 300 * 0.75 = 225, below threshold → yellow
-    troop.pressure_logs = [log]
-    assert get_warning_level(troop) == "yellow"
+def test_warning_level_uses_individual_yellow_threshold():
+    a = _member(1, "Person A", 300, 230, 160)
+    b = _member(2, "Person B", 260, 190, 140)
+    warning = get_warning_level(_troop(a, b))
+    assert warning.level == "yellow"
+    assert warning.member is b
 
 
-def test_warning_level_red():
-    troop = BreathingTroop()
-    troop.start_press_avg = 300
-    troop.withdraw_press_calc = 160
-    log = PressureLog()
-    log.pressure_bar = 155  # below 160 → red
-    troop.pressure_logs = [log]
-    assert get_warning_level(troop) == "red"
+def test_free_text_members_do_not_cross_contaminate_pressure_readings():
+    a = _member(11, "Freitext A", 300, 300, 160)
+    b = _member(12, "Freitext B", 300, 300, 160)
+    troop = _troop(a, b)
+    db = FakeDB()
+
+    log = log_pressure(db, troop, troop_member_id=11, pressure_bar=210)
+
+    assert log.troop_member_id == 11
+    assert log.member_id is None
+    assert a.current_press == 210
+    assert b.current_press == 300
 
 
-# ── Neue Tests (Leitfaden-Umbau) ──────────────────────────────────────────────
-
-def test_one_third_seconds_property():
-    troop = BreathingTroop()
-    troop.planned_duration_min = 33
-    assert troop.one_third_seconds == 660  # 33 * 20
-    troop.planned_duration_min = None
-    assert troop.one_third_seconds is None
+def test_two_third_seconds_property_and_warning():
+    troop = _timer_troop(offset_minutes=23, planned_minutes=33)
+    assert troop.two_third_seconds == 1320
+    assert get_time_warning(troop) == "two_third_due"
 
 
-def test_max_seconds_property():
-    troop = BreathingTroop()
-    troop.planned_duration_min = 37
-    assert troop.max_seconds == 2220  # 37 * 60
-    troop.planned_duration_min = None
-    assert troop.max_seconds is None
-
-
-def _make_troop_with_timer(entry_offset_min: int, planned_min: int) -> BreathingTroop:
-    """Hilfsroutine: BreathingTroop ohne DB, bereits eingesetzt."""
-    troop = BreathingTroop()
+def _timer_troop(offset_minutes: int, planned_minutes: int) -> BreathingTroop:
+    troop = _troop()
     troop.status = "im_einsatz"
-    troop.planned_duration_min = planned_min
-    troop.entry_at = datetime.now(UTC) - timedelta(minutes=entry_offset_min)
+    troop.planned_duration_min = planned_minutes
+    troop.entry_at = datetime.now(UTC) - timedelta(minutes=offset_minutes)
     troop.last_meldung_at = None
     troop.warn_one_third_acked_at = None
+    troop.warn_two_third_acked_at = None
     troop.warn_max_time_acked_at = None
-    troop.warn_withdraw_acked_at = None
-    troop.pressure_logs = []
     return troop
 
 
-def test_get_time_warning_ok_no_plan():
-    troop = _make_troop_with_timer(20, planned_min=0)
-    troop.planned_duration_min = None
-    assert get_time_warning(troop) == "ok"
-
-
-def test_get_time_warning_ok_within_one_third():
-    """Noch innerhalb des ersten Drittels → ok."""
-    troop = _make_troop_with_timer(entry_offset_min=5, planned_min=33)
-    assert get_time_warning(troop) == "ok"
-
-
-def test_get_time_warning_one_third_due():
-    """1/3 verstrichen, keine Meldung → one_third_due."""
-    troop = _make_troop_with_timer(entry_offset_min=12, planned_min=33)
+def test_report_only_suppresses_stage_when_after_its_due_time():
+    troop = _timer_troop(offset_minutes=12, planned_minutes=33)
+    troop.last_meldung_at = troop.entry_at + timedelta(minutes=5)
     assert get_time_warning(troop) == "one_third_due"
-
-
-def test_get_time_warning_resets_on_meldung():
-    """Wenn seit Einsatzbeginn eine Meldung eingegangen ist → ok."""
-    troop = _make_troop_with_timer(entry_offset_min=12, planned_min=33)
-    troop.last_meldung_at = datetime.now(UTC) - timedelta(minutes=5)  # nach Einsatzbeginn
+    troop.last_meldung_at = troop.entry_at + timedelta(minutes=11, seconds=1)
     assert get_time_warning(troop) == "ok"
 
 
-def test_get_time_warning_one_third_due_after_ack_then_new_meldung():
-    """Ack setzt warn aus, ohne neue Meldung bleibt Ack gültig."""
-    troop = _make_troop_with_timer(entry_offset_min=12, planned_min=33)
+def test_acknowledgement_does_not_suppress_worsening_pressure(monkeypatch):
+    import app.services.breathing_service as svc
+
+    member = _member(1, "Person A", 300, 150, 160)
+    troop = _troop(member)
+    monkeypatch.setattr(svc, "write_incident_change", lambda *args, **kwargs: None)
+    ack_warning(FakeDB(), troop, "withdraw")
+    assert check_troop_warnings(troop) == []
+
+    member.current_press = 140
+    assert check_troop_warnings(troop) == ["withdraw"]
+
+
+def test_acknowledged_one_third_does_not_suppress_two_thirds():
+    troop = _timer_troop(offset_minutes=23, planned_minutes=33)
     troop.warn_one_third_acked_at = datetime.now(UTC)
-    assert get_time_warning(troop) == "ok"
+    assert get_time_warning(troop) == "two_third_due"
 
 
-def test_get_time_warning_max_exceeded():
-    """Über Max-Zeit → max_exceeded."""
-    troop = _make_troop_with_timer(entry_offset_min=34, planned_min=33)
-    assert get_time_warning(troop) == "max_exceeded"
-
-
-def test_get_time_warning_max_exceeded_acked():
-    """Nach Quittierung der Max-Zeit → ok."""
-    troop = _make_troop_with_timer(entry_offset_min=34, planned_min=33)
-    troop.warn_max_time_acked_at = datetime.now(UTC)
-    assert get_time_warning(troop) == "ok"
-
-
-def test_ack_warning_sets_timestamp(tmp_path):
-    """ack_warning setzt den richtigen Timestamp – ohne echte DB über stub."""
-    class FakeDB:
-        def flush(self): pass
-
-    fakedb = FakeDB()
-
-    # Monkeypatch write_incident_change
+def test_report_objective_reached_uses_consumption_and_reserve(monkeypatch):
     import app.services.breathing_service as svc
-    original = svc.write_incident_change
-    calls = []
-    svc.write_incident_change = lambda *a, **kw: calls.append((a, kw))
 
-    try:
-        troop = BreathingTroop()
-        troop.incident_id = 1
-        troop.warn_one_third_acked_at = None
-        troop.warn_max_time_acked_at = None
-        troop.warn_withdraw_acked_at = None
+    member = _member(1, "Person A", 300, 300, 160)
+    troop = _troop(member)
+    monkeypatch.setattr(svc, "_withdraw_settings", lambda db, value: (0.5, 50))
+    monkeypatch.setattr(svc, "write_incident_change", lambda *args, **kwargs: None)
 
-        before = datetime.now(UTC)
-        ack_warning(fakedb, troop, "one_third")
-        after = datetime.now(UTC)
+    report_objective_reached(FakeDB(), troop, 1, 220)
+    assert member.withdraw_press == 140  # 2 * 220 - 300
+    assert member.current_press == 220
+    assert member.objective_press_at is not None
 
-        assert troop.warn_one_third_acked_at is not None
-        assert before <= troop.warn_one_third_acked_at <= after
-        assert troop.warn_max_time_acked_at is None
-        assert troop.warn_withdraw_acked_at is None
-    finally:
-        svc.write_incident_change = original
+    report_objective_reached(FakeDB(), troop, 1, 160)
+    assert member.withdraw_press == 50  # Mindestreserve
 
 
-def test_start_troop_uses_primary_org_factor(monkeypatch):
-    """start_troop holt Factor/Reserve über primary_org_id, nicht slug=='wolfurt'."""
-    from types import SimpleNamespace
+def test_create_troop_rejects_fewer_than_two_members():
+    with pytest.raises(ValueError, match="mindestens 2"):
+        create_troop(FakeDB(), 1, "Trupp", [{"free_text_name": "Nur eine Person"}])
+
+
+def test_start_troop_rejects_fewer_than_two_members():
+    troop = SimpleNamespace(members=[SimpleNamespace(start_press=300)])
+    with pytest.raises(ValueError, match="mindestens 2"):
+        start_troop(FakeDB(), troop)
+
+
+def test_readiness_reports_missing_sicherheitstrupp():
+    troop = _troop(
+        _member(1, "Person A", 300, 300, 160),
+        _member(2, "Person B", 300, 300, 160),
+    )
+    issues = check_start_readiness(ReadinessDB(), troop)
+    assert any("Kein bereiter Sicherheitstrupp" in issue for issue in issues)
+
+
+def test_sicherheitstrupp_needs_no_own_standby():
+    troop = _troop(
+        _member(1, "Person A", 300, 300, 160),
+        _member(2, "Person B", 300, 300, 160),
+    )
+    troop.is_sicherheitstrupp = True
+    db = ReadinessDB()
+    assert check_start_readiness(db, troop) == []
+    assert db.query_count == 0
+
+
+def test_readiness_reports_pressure_below_ninety_percent():
+    troop = _troop(
+        _member(1, "Person A", 260, 260, 160),
+        _member(2, "Person B", 300, 300, 160),
+    )
+    issues = check_start_readiness(ReadinessDB(standby=object()), troop)
+    assert any("Person A" in issue and "270 bar" in issue for issue in issues)
+
+
+def test_manual_bottle_skips_pressure_readiness_check():
+    troop = _troop(
+        _member(1, "Person A", 100, 100, 60),
+        _member(2, "Person B", 100, 100, 60),
+    )
+    troop.bottle_preset = "manuell"
+    assert check_start_readiness(ReadinessDB(standby=object()), troop) == []
+
+
+def test_readiness_is_empty_when_all_requirements_are_met():
+    troop = _troop(
+        _member(1, "Person A", 270, 270, 160),
+        _member(2, "Person B", 300, 300, 160),
+    )
+    assert check_start_readiness(ReadinessDB(standby=object()), troop) == []
+
+
+def test_start_troop_raises_readiness_warning_without_override():
+    troop = _troop(
+        _member(1, "Person A", 260, 260, 160),
+        _member(2, "Person B", 300, 300, 160),
+    )
+    with pytest.raises(ReadinessWarning) as exc_info:
+        start_troop(ReadinessDB(), troop)
+    assert len(exc_info.value.issues) == 2
+    assert troop.status != "im_einsatz"
+
+
+def test_start_troop_override_starts_and_sets_audit_fields(monkeypatch):
     import app.services.breathing_service as svc
-    import app.models.incident as inc_mod
-    import app.models.master as master_mod
 
-    class FakeDept:
-        withdraw_press_factor = 0.4
-        withdraw_press_reserve = 20
-
-    class FakeIncident:
-        primary_org_id = 99
-
-    FakeIncidentClass = type("Incident", (), {"__name__": "Incident"})
-    FakeFireDeptClass = type("FireDept", (), {"__name__": "FireDept"})
-
-    monkeypatch.setattr(inc_mod, "Incident", FakeIncidentClass)
-    monkeypatch.setattr(master_mod, "FireDept", FakeFireDeptClass)
-    monkeypatch.setattr(svc, "write_incident_change", lambda *a, **kw: None)
-
-    class FakeDB:
-        def flush(self): pass
-        def get(self, model, pk):
-            if model.__name__ == "Incident":
-                return FakeIncident()
-            return FakeDept()
-
-    m1 = SimpleNamespace(start_press=300, withdraw_press=None)
-    m2 = SimpleNamespace(start_press=290, withdraw_press=None)
-
-    troop = SimpleNamespace(
-        id=1,
-        incident_id=1,
-        status="bereit",
-        entry_at=None,
-        start_press_avg=None,
-        withdraw_press_calc=None,
-        members=[m1, m2],
+    troop = _troop(
+        _member(1, "Person A", 260, 260, 160),
+        _member(2, "Person B", 300, 300, 160),
+    )
+    troop.status = "bereit"
+    events = []
+    monkeypatch.setattr(svc, "_withdraw_settings", lambda db, value: (0.5, 10))
+    monkeypatch.setattr(
+        svc, "write_incident_change",
+        lambda db, incident_id, event, *args, **kwargs: events.append((event, kwargs)),
     )
 
-    svc.start_troop(FakeDB(), troop)
+    start_troop(
+        ReadinessDB(), troop,
+        override_reason="Gefahr weitgehend ausgeschlossen",
+        override_user_id=42,
+    )
 
-    # avg = (300 + 290) / 2 = 295; withdraw = 295 * 0.4 + 20 = 138.0
-    assert troop.withdraw_press_calc == 138.0
+    assert troop.status == "im_einsatz"
+    assert troop.readiness_override_reason == "Gefahr weitgehend ausgeschlossen"
+    assert troop.readiness_override_by_user_id == 42
+    assert troop.readiness_override_at is not None
+    override_event = next(item for item in events if item[0] == "troop.readiness_overridden")
+    assert override_event[1]["after"]["reason"] == "Gefahr weitgehend ausgeschlossen"
+    assert len(override_event[1]["after"]["issues"]) == 2

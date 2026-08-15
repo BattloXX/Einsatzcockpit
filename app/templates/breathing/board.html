@@ -115,6 +115,9 @@
 }
 .troop-card__meta { font-size:.75rem; color:var(--color-text-muted); margin:2px 0; }
 .troop-card__meta strong { color:var(--color-text,#ddd); }
+.troop-card--sicherheitstrupp { border:2px solid #63b3ed; }
+.sicherheitstrupp-badge { background:rgba(99,179,237,.18); color:#63b3ed;
+  border:1px solid #63b3ed; font-size:.72rem; padding:2px 8px; border-radius:4px; }
 </style>
 {% endblock %}
 
@@ -131,7 +134,7 @@
 </div>
 
 <div class="troops-grid" id="troopsGrid" @click.once="unlockAudio()">
-  {% for troop, warning, time_warning in troops_with_warnings %}
+  {% for troop, warning, warning_member, time_warning in troops_with_warnings %}
 
   {# ── Compute current pressure & last-log timestamp ── #}
   {% set ns = namespace(last_log=None) %}
@@ -145,7 +148,7 @@
   {% set back_iso  = (troop.back_at  | local_iso if troop.back_at  else '') %}
   {% set planned_min = troop.planned_duration_min or 0 %}
 
-  <div class="troop-card troop-card--{{ troop.status }} troop-card--warn-{{ warning }}"
+  <div class="troop-card troop-card--{{ troop.status }} troop-card--warn-{{ warning }}{% if troop.is_sicherheitstrupp %} troop-card--sicherheitstrupp{% endif %}"
        id="troop-{{ troop.id }}"
        x-data="troopCard({{ current_press }}, {{ max_press }}, {{ withdraw_press }}, '{{ last_log_iso }}', '{{ entry_iso }}', {{ planned_min }}, '{{ back_iso }}')"
        x-init="init()">
@@ -156,6 +159,9 @@
       <span class="troop-card__status-pill status-pill--{{ troop.status }}">
         {{ {'bereit':'Bereit','im_einsatz':'Im Einsatz','rueckzug':'Rückzug!','zurueck':'Zurück','erholt':'Erholt'}[troop.status] }}
       </span>
+      {% if troop.is_sicherheitstrupp %}
+      <span class="sicherheitstrupp-badge">🛟 Sicherheitstrupp</span>
+      {% endif %}
 
       {# Warn-Badges (Priorität: max_time > withdraw > one_third) #}
       {% if time_warning == 'max_exceeded' %}
@@ -169,7 +175,7 @@
         <span class="warn-badge--one-third" id="warn-withdraw-{{ troop.id }}">⚠ RÜCKZUGSDRUCK (quittiert)</span>
         {% else %}
         <span class="warn-badge--red" id="warn-withdraw-{{ troop.id }}">
-          ⚠ RÜCKZUGSDRUCK
+          ⚠ RÜCKZUGSDRUCK{% if warning_member %}: {{ warning_member.display_name }}{% endif %}
           <button type="button" class="btn--ack"
                   onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','withdraw','warn-withdraw-{{ troop.id }}')">✓ Quittieren</button>
         </span>
@@ -180,8 +186,14 @@
           <button type="button" class="btn--ack"
                   onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','one_third','warn-third-{{ troop.id }}')">✓ Quittieren</button>
         </span>
+      {% elif time_warning == 'two_third_due' %}
+        <span class="warn-badge--one-third" id="warn-two-third-{{ troop.id }}">
+          ⚠ Lagemeldung fällig (2/3)
+          <button type="button" class="btn--ack"
+                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','two_third','warn-two-third-{{ troop.id }}')">✓ Quittieren</button>
+        </span>
       {% elif warning == 'yellow' %}
-        <span class="troop-card__warn-badge warn-badge--yellow">⚠ 75%</span>
+        <span class="troop-card__warn-badge warn-badge--yellow">⚠ 75%{% if warning_member %}: {{ warning_member.display_name }}{% endif %}</span>
       {% endif %}
     </div>
 
@@ -259,22 +271,18 @@
     <!-- ── Members with per-member Druck picker ── -->
     <div class="troop-members" style="margin-top:6px">
       {% for m in troop.members %}
-      {# Find last pressure log for this member #}
-      {% set ns_m = namespace(last_press=None, warn_class='') %}
-      {% for log in troop.pressure_logs %}
-        {% if log.member_id == m.member_id %}{% set ns_m.last_press = log.pressure_bar %}{% endif %}
-      {% endfor %}
-      {% set member_press = ns_m.last_press if ns_m.last_press is not none else m.start_press %}
-      {% if member_press is not none and troop.withdraw_press_calc and member_press <= troop.withdraw_press_calc %}
+      {% set ns_m = namespace(warn_class='') %}
+      {% set member_press = m.current_press if m.current_press is not none else m.start_press %}
+      {% if member_press is not none and m.withdraw_press and member_press <= m.withdraw_press %}
         {% set ns_m.warn_class = 'member-druck-press--danger' %}
-      {% elif member_press is not none and troop.start_press_avg and member_press <= troop.start_press_avg * 0.75 %}
+      {% elif member_press is not none and m.start_press and member_press <= m.start_press * 0.75 %}
         {% set ns_m.warn_class = 'member-druck-press--warn' %}
       {% elif member_press is not none %}
         {% set ns_m.warn_class = 'member-druck-press--ok' %}
       {% endif %}
 
       <div class="member-druck-row"
-           x-data="memberPressRow({{ m.member_id or 'null' }}, {{ (member_press | float) if member_press is not none else 'null' }}, {{ (troop.withdraw_press_calc | float) if troop.withdraw_press_calc else 0 }}, {{ (troop.start_press_avg | float) if troop.start_press_avg else 0 }})"
+           x-data="memberPressRow({{ m.id }}, {{ (member_press | float) if member_press is not none else 'null' }}, {{ (m.withdraw_press | float) if m.withdraw_press else 0 }}, {{ (m.start_press | float) if m.start_press else 0 }})"
            x-init="init()">
         <div class="member-druck-name">
           <strong>{{ m.display_name }}</strong>
@@ -282,6 +290,10 @@
             {{ {'truppfuehrer':'TF','truppmann':'TM'}[m.role] }}
           </span>
           {% if m.member and m.member.is_agt %}<span class="badge badge--agt member-druck-badge">AGT</span>{% endif %}
+          <span style="font-size:.68rem;color:var(--color-text-muted);display:block">
+            Rückzug: {{ m.withdraw_press | int if m.withdraw_press is not none else '–' }} bar
+            {% if m.objective_press_at %}(final){% else %}(vorläufig){% endif %}
+          </span>
         </div>
 
         <span class="member-druck-press"
@@ -296,16 +308,35 @@
             <div class="press-picker-header">{{ m.display_name }}</div>
             <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/druck" hx-swap="none"
                   x-ref="druckForm">
-              <input type="hidden" name="member_id" value="{{ m.member_id if m.member_id else '' }}">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="hidden" name="troop_member_id" value="{{ m.id }}">
               <input type="hidden" name="pressure_bar" x-ref="pressVal">
               <div class="press-grid">
                 {% for val in range(350, 0, -10) %}
                 <button type="button"
-                        class="press-btn {% if troop.withdraw_press_calc and val <= troop.withdraw_press_calc %}press-btn--danger{% elif troop.start_press_avg and val <= troop.start_press_avg * 0.75 %}press-btn--warn{% else %}press-btn--high{% endif %}"
+                        class="press-btn {% if m.withdraw_press and val <= m.withdraw_press %}press-btn--danger{% elif m.start_press and val <= m.start_press * 0.75 %}press-btn--warn{% else %}press-btn--high{% endif %}"
                         :class="currentPress !== null && Math.floor(currentPress) == {{ val }} ? 'press-btn--selected' : ''"
                         @click="currentPress = {{ val }}; $refs.pressVal.value = '{{ val }}'; $refs.druckForm.requestSubmit(); open = false; window.dispatchEvent(new CustomEvent('breathing-pressure', {detail:{troopId:{{ troop.id }}, lowestPressure:{{ val }}, memberId:memberId, pressure:{{ val }}, local:true}}))">
                   {{ val }}
                 </button>
+                {% endfor %}
+              </div>
+            </form>
+          </div>
+        </div>
+        {% endif %}
+        {% if (can_edit is not defined or can_edit) and troop.status in ['im_einsatz','rueckzug'] %}
+        <div class="press-picker-wrap" @click.outside="objectiveOpen = false" x-data="{objectiveOpen:false}">
+          <button type="button" class="btn btn--ghost btn--sm" @click="objectiveOpen = !objectiveOpen">Einsatzziel erreicht</button>
+          <div x-show="objectiveOpen" class="press-picker-popup">
+            <div class="press-picker-header">Einsatzziel: {{ m.display_name }}</div>
+            <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/einsatzziel" hx-swap="none"
+                  @htmx:after-request="objectiveOpen = false">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="hidden" name="troop_member_id" value="{{ m.id }}">
+              <div class="press-grid">
+                {% for val in range(350, 0, -10) %}
+                <button type="submit" name="pressure_bar" value="{{ val }}" class="press-btn">{{ val }}</button>
                 {% endfor %}
               </div>
             </form>
@@ -333,21 +364,31 @@
     <!-- ── Status actions ── -->
     <div class="troop-card__actions">
       {% if troop.status == 'bereit' %}
-      <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/starten">
-        <button type="submit" class="btn btn--primary btn--sm">▶ Einsetzen</button>
-      </form>
+      <div id="readiness-start-{{ troop.id }}">
+        <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/starten"
+              hx-target="#readiness-start-{{ troop.id }}" hx-swap="outerHTML">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn--primary btn--sm">▶ Einsetzen</button>
+        </form>
+      </div>
       {% elif troop.status == 'im_einsatz' %}
-      <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status">
+      <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
+            hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="status" value="rueckzug">
         <button type="submit" class="btn btn--danger btn--sm">⬅ Rückzug</button>
       </form>
       {% elif troop.status == 'rueckzug' %}
-      <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status">
+      <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
+            hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="status" value="zurueck">
         <button type="submit" class="btn btn--warn btn--sm">✓ Zurück</button>
       </form>
       {% elif troop.status == 'zurueck' %}
-      <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status">
+      <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
+            hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="status" value="erholt">
         <button type="submit" class="btn btn--success btn--sm">✓ Erholt</button>
       </form>
@@ -366,7 +407,7 @@
         {% if shown.count < 5 %}
           {% set ns_l = namespace(name='') %}
           {% for m in troop.members %}
-            {% if m.member_id == log.member_id %}{% set ns_l.name = m.display_name %}{% endif %}
+            {% if m.id == log.troop_member_id %}{% set ns_l.name = m.display_name %}{% endif %}
           {% endfor %}
           <div class="troop-meldung-entry">
             {% if ns_l.name %}<strong>{{ ns_l.name }}:</strong> {% endif %}
@@ -391,8 +432,11 @@
 <!-- ── Neuer Trupp Modal ── -->
 <dialog class="modal modal--wide" id="newTroopModal">
   <form method="post" action="/einsatz/{{ incident.id }}/atemschutz/trupp"
+        hx-post="/einsatz/{{ incident.id }}/atemschutz/trupp"
+        hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML"
         class="modal__content" x-data="newTroopForm()"
         @submit="if (!validate()) $event.preventDefault()">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="modal__header">
       <h3>Trupp anlegen</h3>
       <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
@@ -456,6 +500,12 @@
           <label>Einsatzzeit (Minuten, manuell)</label>
           <input type="number" name="planned_duration_min" class="form-input" placeholder="z.B. 45" min="1" max="120"
                  :required="bottlePreset === 'manuell'">
+        </div>
+        <div class="form-group form-group--full">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="is_sicherheitstrupp" value="true">
+            Ist Sicherheitstrupp
+          </label>
         </div>
       </div>
 
@@ -538,7 +588,13 @@
 <script>
 /* ── Programm-Reload: unterdrückt beforeunload-Dialog ─────────────── */
 var _breathingReload = false;
-function doBreathingReload() { _breathingReload = true; location.reload(); }
+function doBreathingReload() {
+  _breathingReload = true;
+  htmx.ajax('GET', location.pathname + location.search, {
+    target: '#troopsGrid', swap: 'outerHTML', select: '#troopsGrid'
+  });
+  window.setTimeout(function () { _breathingReload = false; }, 500);
+}
 
 /* ── Warn-Quittierung: stoppt Animation sofort, sendet POST, lädt Seite ── */
 async function ackWarning(btn, url, kind, badgeId) {
@@ -554,6 +610,7 @@ async function ackWarning(btn, url, kind, badgeId) {
   try {
     const fd = new FormData();
     fd.append('kind', kind);
+    fd.append('_csrf', {{ request.state.csrf_token | tojson }});
     await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' });
   } catch (_) {}
   doBreathingReload();
@@ -561,6 +618,7 @@ async function ackWarning(btn, url, kind, badgeId) {
 
 /* ── Audio unlock (Browser-Autoplay-Policy) ── */
 let _audioUnlocked = false;
+const _pendingWarnings = new Map();
 function unlockAudio() {
   if (_audioUnlocked) return;
   _audioUnlocked = true;
@@ -578,6 +636,12 @@ function unlockAudio() {
     var p = a.play();
     if (p && p.then) p.then(function () { a.pause(); a.currentTime = 0; }).catch(function () {});
   });
+  window.setTimeout(function () {
+    _pendingWarnings.forEach(function (warning) {
+      _playWarning(warning.kind, warning.troopId);
+    });
+    _pendingWarnings.clear();
+  }, 100);
 }
 
 /* ── Audio registry: troop_id → { max: HTMLAudioElement } ── */
@@ -586,6 +650,7 @@ const _loopingAudio = new Map();
 function _playWarning(kind, troopId) {
   const files = {
     'one_third': '/static/audio/troop-warning-third.mp3',
+    'two_third': '/static/audio/troop-warning-third.mp3',
     'withdraw':  '/static/audio/troop-warning-withdraw.mp3',
     'max_time':  '/static/audio/troop-warning-max.mp3',
   };
@@ -600,7 +665,10 @@ function _playWarning(kind, troopId) {
       if (existing) return; // already playing
       _loopingAudio.set(key, audio);
     }
-    audio.play().catch(() => {});
+    audio.play().catch(function () {
+      _pendingWarnings.set(`${troopId}:${kind}`, {kind:kind, troopId:troopId});
+      if (kind === 'max_time') _loopingAudio.delete(`${troopId}:max_time`);
+    });
   } catch (_) {}
 }
 
@@ -611,6 +679,7 @@ function _stopLoopingWarning(kind, troopId) {
     audio.pause();
     _loopingAudio.delete(key);
   }
+  _pendingWarnings.delete(key);
 }
 
 /* ── WS-Event-Handler für Warnungen (ergänzt existing incidentBoard WS) ── */
@@ -771,7 +840,7 @@ function newTroopForm() {
 /* ── Atemschutz-Board: WebSocket + Sicherheitswarnungen ─────────────────── */
 (function () {
   {% set ns_act = namespace(cnt=0) %}
-  {% for troop, _w, _tw in troops_with_warnings %}
+  {% for troop, _w, _wm, _tw in troops_with_warnings %}
     {% if troop.status in ['im_einsatz', 'rueckzug'] %}{% set ns_act.cnt = ns_act.cnt + 1 %}{% endif %}
   {% endfor %}
   var HAS_ACTIVE = {{ 'true' if ns_act.cnt > 0 else 'false' }};
@@ -824,7 +893,16 @@ function newTroopForm() {
 
   function connectWS() {
     var ws = new WebSocket(wsUrl);
-    ws.onopen = function () { firstConn = false; };
+    ws.onopen = function () {
+      firstConn = false;
+      fetch('/einsatz/{{ incident.id }}/atemschutz/aktive-warnungen', {credentials:'same-origin'})
+        .then(function (response) { return response.ok ? response.json() : {warnings:[]}; })
+        .then(function (data) {
+          (data.warnings || []).forEach(function (warning) {
+            _playWarning(warning.kind, warning.troop_id);
+          });
+        }).catch(function () {});
+    };
     ws.onmessage = function (e) {
       lastAct = Date.now();
       if (e.data === 'pong') return;
@@ -834,7 +912,7 @@ function newTroopForm() {
         window.dispatchEvent(new CustomEvent('breathing-pressure', { detail: {
           troopId: ev.troop_id,
           lowestPressure: ev.lowest_pressure != null ? ev.lowest_pressure : ev.pressure,
-          memberId: ev.member_id != null ? ev.member_id : null,
+          memberId: ev.troop_member_id != null ? ev.troop_member_id : null,
           pressure: ev.pressure,
         }}));
       }
@@ -848,16 +926,21 @@ function newTroopForm() {
           detail: { troopId: ev.troop_id, kind: ev.kind }
         }));
       }
+      if (ev.type === 'troop_objective_reached') {
+        window.dispatchEvent(new CustomEvent('breathing-objective', {detail: {
+          troopId: ev.troop_id, memberId: ev.troop_member_id,
+          pressure: ev.pressure, withdrawPress: ev.withdraw_press
+        }}));
+      }
       if (ev.reload_breathing || ev.type === 'troop_created' || ev.type === 'troop_started'
           || ev.type === 'troop_status_changed' || ev.type === 'troop_meldung'
-          || ev.type === 'troop_standort') {
+          || ev.type === 'troop_standort' || ev.type === 'troop_objective_reached') {
         doBreathingReload();
       }
     };
     ws.onclose = function () {
       setTimeout(function () {
-        if (!firstConn && navigator.onLine) doBreathingReload();
-        else connectWS();
+        connectWS();
       }, 3000);
     };
     setInterval(function () { if (ws.readyState === 1) ws.send('ping'); }, 30000);

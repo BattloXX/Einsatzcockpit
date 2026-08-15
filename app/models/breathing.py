@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -29,6 +29,7 @@ BOTTLE_PRESETS = [
 ]
 BOTTLE_PRESET_LABELS = {slug: label for slug, label, _ in BOTTLE_PRESETS}
 BOTTLE_PRESET_DURATIONS = {slug: dur for slug, _, dur in BOTTLE_PRESETS}
+BOTTLE_PRESET_NOMINAL_BAR = {"1x6": 300, "1x6_8": 300, "1x9": 300, "manuell": None}
 
 
 class BreathingTroop(Base):
@@ -39,6 +40,7 @@ class BreathingTroop(Base):
     vehicle_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("incident_vehicle.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, default="Trupp")
     unit_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    is_sicherheitstrupp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="bereit")
     task_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # Planned duration (from bottle preset or manual entry)
@@ -51,8 +53,15 @@ class BreathingTroop(Base):
     last_meldung_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Warning acknowledgements
     warn_one_third_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    warn_two_third_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     warn_max_time_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     warn_withdraw_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    warn_withdraw_acked_press: Mapped[float | None] = mapped_column(Float, nullable=True)
+    readiness_override_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    readiness_override_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=True
+    )
+    readiness_override_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Pressure tracking
     start_press_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
     entry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -94,10 +103,18 @@ class BreathingTroop(Base):
         return self.planned_duration_min * 60
 
     @property
-    def lowest_current_pressure(self) -> float | None:
-        if not self.pressure_logs:
+    def two_third_seconds(self) -> int | None:
+        """2/3 der geplanten Einsatzzeit in Sekunden (= zweite Meldeschwelle)."""
+        if self.planned_duration_min is None:
             return None
-        return min(pl.pressure_bar for pl in self.pressure_logs if pl.pressure_bar is not None)
+        return self.planned_duration_min * 40
+
+    @property
+    def lowest_current_pressure(self) -> float | None:
+        pressures = [m.current_press for m in self.members if m.current_press is not None]
+        if not pressures:
+            return None
+        return min(pressures)
 
     @property
     def bottle_label(self) -> str:
@@ -117,6 +134,9 @@ class TroopMember(Base):
     free_text_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     role: Mapped[str] = mapped_column(String(30), nullable=False, default="truppmann")
     start_press: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_press: Mapped[float | None] = mapped_column(Float, nullable=True)
+    objective_press: Mapped[float | None] = mapped_column(Float, nullable=True)
+    objective_press_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     withdraw_press: Mapped[float | None] = mapped_column(Float, nullable=True)
     back_press: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -139,11 +159,15 @@ class PressureLog(Base):
     )
     ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     member_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("member.id"), nullable=True)
+    troop_member_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("troop_member.id", ondelete="CASCADE"), nullable=False
+    )
     pressure_bar: Mapped[float] = mapped_column(Float, nullable=False)
     recorded_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     troop: Mapped[BreathingTroop] = relationship(back_populates="pressure_logs")
+    troop_member: Mapped[TroopMember] = relationship()
 
 
 # Forward reference resolution

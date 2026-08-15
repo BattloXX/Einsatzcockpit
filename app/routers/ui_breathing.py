@@ -1,21 +1,24 @@
 """Atemschutzüberwachung UI."""
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from app.core.permissions import require_role
+from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.breathing import BOTTLE_PRESETS, BreathingTroop
 from app.models.incident import Incident
 from app.models.master import Member
 from app.services.breathing_service import (
+    ReadinessWarning,
     ack_warning,
+    check_troop_warnings,
     create_troop,
     get_time_warning,
     get_warning_level,
     log_pressure,
+    report_objective_reached,
     start_troop,
     update_meldung,
     update_troop_status,
@@ -40,7 +43,7 @@ async def breathing_board(incident_id: int, request: Request, db: Session = Depe
     vehicles = [v for v in incident.vehicles if not v.removed_at]
 
     troops_with_warnings = [
-        (t, get_warning_level(t), get_time_warning(t)) for t in incident.breathing_troops
+        (t, *get_warning_level(t), get_time_warning(t)) for t in incident.breathing_troops
     ]
     return templates.TemplateResponse(request, "breathing/board.html", {
         "user": user, "incident": incident,
@@ -59,6 +62,7 @@ async def create_breathing_troop(
     location_text: str = Form(""),
     bottle_preset: str = Form(""),
     planned_duration_min: int | None = Form(None),
+    is_sicherheitstrupp: bool = Form(False),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
 ):
@@ -108,6 +112,7 @@ async def create_breathing_troop(
         location_text=location_text.strip() or None,
         planned_duration_min=duration,
         bottle_preset=bottle_preset.strip() or None,
+        is_sicherheitstrupp=is_sicherheitstrupp,
         user_id=request.state.user.id,
     )
     db.commit()
@@ -117,16 +122,38 @@ async def create_breathing_troop(
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/starten")
 async def start_troop_view(
-    incident_id: int, troop_id: int, request: Request, db: Session = Depends(get_db),
-    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    incident_id: int, troop_id: int, request: Request,
+    override_reason: str | None = Form(None),
+    db: Session = Depends(get_db),
+    user=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
 ):
     troop = db.get(BreathingTroop, troop_id)
-    if not troop:
+    if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
-    start_troop(db, troop, user_id=request.state.user.id)
+    can_override = has_role(user, "breathing_supervisor", "incident_leader", "admin")
+    permitted_reason = override_reason if can_override else None
+    try:
+        start_troop(
+            db, troop, user_id=user.id,
+            override_reason=permitted_reason,
+            override_user_id=user.id if permitted_reason else None,
+        )
+    except ReadinessWarning as warning:
+        return templates.TemplateResponse(request, "breathing/_readiness_warning.html", {
+            "user": user,
+            "incident": troop.incident,
+            "troop": troop,
+            "issues": warning.issues,
+            "can_override_readiness": can_override,
+        })
+    except ValueError as exc:
+        return Response(str(exc), status_code=400)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "troop_started", "troop_id": troop_id})
-    return RedirectResponse(f"/einsatz/{incident_id}/atemschutz", status_code=303)
+    await manager.broadcast(incident_id, {
+        "type": "troop_started", "troop_id": troop_id,
+        "readiness_overridden": bool(permitted_reason),
+    })
+    return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/status")
@@ -145,7 +172,7 @@ async def update_status(
     time_warn = get_time_warning(troop)
     await manager.broadcast(incident_id, {
         "type": "troop_status_changed", "troop_id": troop_id,
-        "status": status, "warning": warning, "time_warning": time_warn,
+        "status": status, "warning": warning.level, "time_warning": time_warn,
     })
     return RedirectResponse(f"/einsatz/{incident_id}/atemschutz", status_code=303)
 
@@ -153,18 +180,21 @@ async def update_status(
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/druck")
 async def log_pressure_view(
     incident_id: int, troop_id: int, request: Request,
-    member_id: int | None = Form(None),
+    troop_member_id: int = Form(...),
     pressure_bar: float = Form(...),
     note: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
 ):
     troop = db.get(BreathingTroop, troop_id)
-    if not troop:
+    if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
-    log_pressure(db, troop, member_id, pressure_bar,
+    try:
+        log_pressure(db, troop, troop_member_id, pressure_bar,
                  note=note.strip() or None,
                  recorded_by_user_id=request.state.user.id)
+    except ValueError:
+        return Response(status_code=400)
     db.commit()
     updated_troop = db.get(BreathingTroop, troop_id)
     assert updated_troop is not None
@@ -173,12 +203,66 @@ async def log_pressure_view(
     lowest = updated_troop.lowest_current_pressure or pressure_bar
     await manager.broadcast(incident_id, {
         "type": "pressure_logged", "troop_id": troop_id,
-        "member_id": member_id,
+        "troop_member_id": troop_member_id,
         "pressure": pressure_bar, "lowest_pressure": lowest,
-        "warning": warning, "time_warning": time_warn,
+        "warning": warning.level,
+        "warning_member_id": warning.member.id if warning.member else None,
+        "warning_member_name": warning.member.display_name if warning.member else None,
+        "time_warning": time_warn,
         "last_meldung_at": updated_troop.last_meldung_at.isoformat() if updated_troop.last_meldung_at else None,
     })
     return Response(status_code=204)
+
+
+@router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/einsatzziel")
+async def objective_reached_view(
+    incident_id: int, troop_id: int, request: Request,
+    troop_member_id: int = Form(...),
+    pressure_bar: float = Form(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+):
+    """Erfasst den Druck am Einsatzziel und finalisiert den Rückzugsdruck."""
+    troop = db.get(BreathingTroop, troop_id)
+    if not troop or troop.incident_id != incident_id:
+        return Response(status_code=404)
+    try:
+        member = report_objective_reached(
+            db, troop, troop_member_id, pressure_bar,
+            recorded_by_user_id=request.state.user.id,
+        )
+    except ValueError:
+        return Response(status_code=400)
+    db.commit()
+    warning = get_warning_level(troop)
+    await manager.broadcast(incident_id, {
+        "type": "troop_objective_reached", "troop_id": troop_id,
+        "troop_member_id": member.id, "pressure": pressure_bar,
+        "withdraw_press": member.withdraw_press,
+        "warning": warning.level,
+        "warning_member_id": warning.member.id if warning.member else None,
+    })
+    return Response(status_code=204)
+
+
+@router.get("/einsatz/{incident_id}/atemschutz/aktive-warnungen")
+async def active_breathing_warnings(
+    incident_id: int, request: Request, db: Session = Depends(get_db),
+):
+    """Liefert aktive Warnungen für Reload und WebSocket-Wiederverbindung."""
+    if not getattr(request.state, "user", None):
+        return Response(status_code=401)
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        return Response(status_code=404)
+    db.refresh(incident, ["breathing_troops"])
+    active = []
+    for troop in incident.breathing_troops:
+        if troop.status not in ("im_einsatz", "rueckzug"):
+            continue
+        for kind in check_troop_warnings(troop):
+            active.append({"troop_id": troop.id, "kind": kind})
+    return JSONResponse({"warnings": active})
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/meldung")
@@ -209,7 +293,7 @@ async def troop_ack(
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
 ):
-    if kind not in ("one_third", "max_time", "withdraw"):
+    if kind not in ("one_third", "two_third", "max_time", "withdraw"):
         return Response(status_code=400)
     troop = db.get(BreathingTroop, troop_id)
     if not troop:

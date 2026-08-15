@@ -1,0 +1,24 @@
+<div id="readiness-start-{{ troop.id }}" class="alert alert--danger" style="width:100%;max-width:560px">
+  <strong>⚠ Einsatzbereitschaft nicht vollständig</strong>
+  <ul style="margin:6px 0 8px 18px">
+    {% for issue in issues %}
+    <li>{{ issue }}</li>
+    {% endfor %}
+  </ul>
+
+  {% if can_override_readiness %}
+  <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/starten"
+        hx-target="#readiness-start-{{ troop.id }}" hx-swap="outerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label for="override-reason-{{ troop.id }}" style="display:block;font-size:.78rem;margin-bottom:4px">
+      Begründung für das Einsetzen trotz Warnung
+    </label>
+    <input id="override-reason-{{ troop.id }}" type="text" name="override_reason"
+           class="form-input" required minlength="3" maxlength="500"
+           placeholder="Begründung verpflichtend" style="margin-bottom:6px">
+    <button type="submit" class="btn btn--danger btn--sm">Trotzdem einsetzen</button>
+  </form>
+  {% else %}
+  <p style="margin:6px 0 0">Nur AS-Überwacher, Einsatzleiter oder Administratoren dürfen diese Warnung übersteuern.</p>
+  {% endif %}
+</div>
