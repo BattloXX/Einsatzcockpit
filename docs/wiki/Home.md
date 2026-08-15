@@ -57,7 +57,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Datenbank-Einrichtung](Installation-Datenbank-Einrichtung) | MariaDB anlegen, User und Zeichensatz |
 | [App-Installation](Installation-App-Installation) | git clone, venv, pip, .env, alembic, seed |
 | [Debian/Ubuntu manuell](Installation-Debian-Manuell) | Installation ohne CloudPanel mit systemd, NGINX und Certbot |
-| [Docker Compose](Installation-Docker) | App, MariaDB und Redis containerisiert betreiben |
+| [Docker Compose](Installation-Docker.md) | App, MariaDB und Redis containerisiert betreiben |
 | [Systemd-Service](Installation-Systemd-Service) | Dienst einrichten, starten, Logs |
 | [NGINX-Reverse-Proxy](Installation-NGINX-Reverse-Proxy) | CloudPanel-Vhost, WebSocket-Upgrade, TLS |
 | [Erst-Setup](Installation-Erst-Setup) | Admin-User, API-Key, Stammdaten prüfen |
