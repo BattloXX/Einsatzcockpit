@@ -155,6 +155,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     sys_settings = {s.key: s.value for s in db.query(SystemSettings).all()} if is_sysadmin else {}
     from app.models.weather import WeatherStation
+    from app.services.breathing_service import breathing_system_enabled
     from app.services.foerderstrecke_service import foerderstrecke_system_enabled
     from app.services.gateway_service import gateway_system_enabled as _gateway_system_enabled
     from app.services.lagefuehrung_service import lagefuehrung_system_enabled
@@ -177,6 +178,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "all_orgs": all_orgs,
         "sys_settings": sys_settings,
         "uas_sys_enabled": uas_system_enabled(db),
+        "breathing_sys_enabled": breathing_system_enabled(db),
         "objekt_sys_enabled": objekt_system_enabled(db),
         "nachschlagewerke_sys_enabled": nachschlagewerke_system_enabled(db),
         "foerderstrecke_sys_enabled": foerderstrecke_system_enabled(db),
@@ -229,6 +231,7 @@ async def save_org_settings(
     gsl_lagemeldung_sofort_raw: str = Form(""),
     gsl_lagemeldung_auto_auftrag_raw: str = Form(""),
     uas_module_enabled_raw: str = Form(""),
+    atemschutz_ueberwachung_modul_aktiv_raw: str = Form(""),
     objekt_module_enabled_raw: str = Form(""),
     nachschlagewerke_module_enabled_raw: str = Form(""),
     foerderstrecke_module_enabled_raw: str = Form(""),
@@ -385,6 +388,23 @@ async def save_org_settings(
                 org_id=effective_org_id,
                 user_id=user.id,
                 payload={"alt": old_uas, "neu": new_uas},
+                ip=request.client.host if request.client else None,
+            )
+
+    # Atemschutzueberwachung: Org-Toggle nur bei aktivem System-Flag aendern.
+    from app.services.breathing_service import breathing_system_enabled
+    if breathing_system_enabled(db):
+        old_breathing = org_s.atemschutz_ueberwachung_modul_aktiv
+        new_breathing = atemschutz_ueberwachung_modul_aktiv_raw in ("1", "true", "on")
+        org_s.atemschutz_ueberwachung_modul_aktiv = new_breathing
+        if old_breathing != new_breathing:
+            from app.core.audit import write_audit
+            write_audit(
+                db,
+                "breathing.org_toggle",
+                org_id=effective_org_id,
+                user_id=user.id,
+                payload={"alt": old_breathing, "neu": new_breathing},
                 ip=request.client.host if request.client else None,
             )
 

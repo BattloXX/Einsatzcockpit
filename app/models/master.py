@@ -409,6 +409,12 @@ class OrgSettings(Base):
     # "uas_module_enabled") ebenfalls "true" ist → effektiv = System AND Org.
     uas_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Atemschutzueberwachung: bestehendes Modul bleibt bei Einfuehrung des
+    # Org-Toggles standardmaessig aktiv; effektiv zusaetzlich systemweit gated.
+    atemschutz_ueberwachung_modul_aktiv: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+
     # Objektverwaltung: je Org aktivierbar, effektiv = SystemSettings-Key
     # "objekt_module_enabled" == "true" AND dieser Wert (Muster UAS).
     objekt_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

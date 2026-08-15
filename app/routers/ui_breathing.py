@@ -1,6 +1,6 @@
 """Atemschutzüberwachung UI."""
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
@@ -30,14 +30,24 @@ from app.services.broadcast import manager
 router = APIRouter()
 
 
+def require_breathing_enabled(request: Request) -> None:
+    """HTTP 404 wenn die Atemschutzueberwachung nicht effektiv aktiv ist."""
+    if not getattr(request.state, "breathing_module_enabled", False):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+
+
 @router.get("/einsatz/{incident_id}/atemschutz", response_class=HTMLResponse)
-async def breathing_board(incident_id: int, request: Request, db: Session = Depends(get_db)):
+async def breathing_board(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
+):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
     incident = db.get(Incident, incident_id)
     if not incident:
-        from fastapi import HTTPException
         raise HTTPException(404)
     db.refresh(incident, ["breathing_troops", "vehicles"])
     all_members = db.query(Member).filter(Member.active == True).order_by(Member.lastname).all()  # noqa: E712
@@ -68,6 +78,7 @@ async def create_breathing_troop(
     is_sicherheitstrupp: bool = Form(False),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     # Geplante Einsatzzeit aus Preset ableiten (außer bei "manuell" oder leerem Preset)
     duration = planned_duration_min
@@ -132,6 +143,7 @@ async def redeploy_troop_view(
     planned_duration_min: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     """Archiviert den letzten Zyklus und legt eine neue Truppbesetzung an."""
     troop = db.get(BreathingTroop, troop_id)
@@ -189,6 +201,7 @@ async def start_troop_view(
     override_reason: str | None = Form(None),
     db: Session = Depends(get_db),
     user=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -226,6 +239,7 @@ async def back_pressure_view(
     pressure_bar: float = Form(...),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     """Erfasst den Enddruck eines Mitglieds nach Rückkehr des Trupps."""
     troop = db.get(BreathingTroop, troop_id)
@@ -252,6 +266,7 @@ async def update_status(
     status: str = Form(...),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -275,6 +290,7 @@ async def log_pressure_view(
     note: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
@@ -311,6 +327,7 @@ async def objective_reached_view(
     pressure_bar: float = Form(...),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     """Erfasst den Druck am Einsatzziel und finalisiert den Rückzugsdruck."""
     troop = db.get(BreathingTroop, troop_id)
@@ -338,6 +355,7 @@ async def objective_reached_view(
 @router.get("/einsatz/{incident_id}/atemschutz/aktive-warnungen")
 async def active_breathing_warnings(
     incident_id: int, request: Request, db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     """Liefert aktive Warnungen für Reload und WebSocket-Wiederverbindung."""
     if not getattr(request.state, "user", None):
@@ -361,6 +379,7 @@ async def troop_meldung(
     text: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop:
@@ -382,6 +401,7 @@ async def troop_ack(
     kind: str = Form(...),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     if kind not in ("one_third", "two_third", "max_time", "withdraw"):
         return Response(status_code=400)
@@ -402,6 +422,7 @@ async def troop_standort(
     location_text: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop:
@@ -421,6 +442,7 @@ async def troop_auftrag(
     task_text: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("breathing_supervisor", "incident_leader", "admin", "recorder")),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     troop = db.get(BreathingTroop, troop_id)
     if not troop:
@@ -434,13 +456,13 @@ async def troop_auftrag(
 async def troop_pdf(
     incident_id: int, troop_id: int, request: Request,
     db: Session = Depends(get_db),
+    _guard: None = Depends(require_breathing_enabled),
 ):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
     troop = db.get(BreathingTroop, troop_id)
     if not troop or troop.incident_id != incident_id:
-        from fastapi import HTTPException
         raise HTTPException(404)
     # Eager-load relationships needed for PDF
     db.refresh(troop, ["members", "pressure_logs", "deployments"])

@@ -20,6 +20,26 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def breathing_system_enabled(db: Session) -> bool:
+    """Systemweiter Atemschutz-Flag; ein fehlender Eintrag bedeutet aktiv."""
+    from app.models.master import SystemSettings
+
+    row = db.query(SystemSettings).filter(SystemSettings.key == "breathing_enabled").first()
+    return row.value != "false" if row is not None else True
+
+
+def breathing_effective_enabled(org_id: int | None, db: Session) -> bool:
+    """Atemschutz ist nur bei aktivem System- und Org-Schalter verfügbar."""
+    if org_id is None:
+        return False
+    if not breathing_system_enabled(db):
+        return False
+    from app.models.master import OrgSettings
+
+    org_s = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    return org_s is None or org_s.atemschutz_ueberwachung_modul_aktiv
+
+
 def calc_withdraw_pressure(start_press: float, factor: float = 0.5, reserve: int = 10) -> float:
     return round(start_press * factor + reserve, 1)
 
@@ -585,52 +605,63 @@ def check_and_escalate_troop(
     return True
 
 
+def _collect_new_breathing_warnings(
+    db: Session, sent: dict[int, set[str]]
+) -> list[tuple[int, int, str]]:
+    """Sammelt neue Warnungen aktiver Orgs und führt fällige Eskalationen aus."""
+    from app.models.incident import Incident
+    from app.models.master import FireDept
+
+    events: list[tuple[int, int, str]] = []
+    escalation_changed = False
+    enabled_by_org: dict[int | None, bool] = {}
+    active_incidents = db.query(Incident).filter(Incident.status == "active").all()
+    for incident in active_incidents:
+        org_id = incident.primary_org_id
+        if org_id not in enabled_by_org:
+            enabled_by_org[org_id] = breathing_effective_enabled(org_id, db)
+        if not enabled_by_org[org_id]:
+            continue
+        db.refresh(incident, ["breathing_troops"])
+        dept = db.get(FireDept, org_id) if org_id else None
+        grace_min = dept.escalation_grace_min if dept else 3
+        for troop in incident.breathing_troops:
+            if troop.status not in ("im_einsatz", "rueckzug"):
+                sent.pop(troop.id, None)
+                continue
+            active_warnings = set(check_troop_warnings(troop))
+            prev_warnings = sent.get(troop.id, set())
+            for kind in active_warnings - prev_warnings:
+                events.append((incident.id, troop.id, kind))
+            sent[troop.id] = active_warnings
+            if check_and_escalate_troop(db, incident, troop, grace_min):
+                escalation_changed = True
+    if escalation_changed:
+        db.commit()
+    return events
+
+
 async def _breathing_watchdog_loop() -> None:
     """Prüft alle 5 Sekunden alle laufenden Trupps und broadcastet Warnungen."""
     import asyncio
 
     from app.db import SessionLocal
-    from app.models.incident import Incident
-    from app.models.master import FireDept
     from app.services.broadcast import manager
 
     # Tracking bereits gesendeter Warns (troop_id → set[kind])
     # verhindert dauerhaftes Re-Senden ohne Zustandsänderung
-    _sent: dict[int, set[str]] = {}
+    sent: dict[int, set[str]] = {}
 
     def _collect_new_warnings() -> list[tuple[int, int, str]]:
-        """DB-Scan im Threadpool (Audit B2); liefert (incident_id, troop_id, kind).
-
-        Aktualisiert _sent direkt — unkritisch, da der Loop die Aufrufe strikt
-        sequenziell absetzt (kein paralleler Zugriff auf das Dict).
-        """
+        """DB-Scan im Threadpool (Audit B2)."""
         from app.core.tenant import set_tenant_context
-        events: list[tuple[int, int, str]] = []
+
         db = SessionLocal()
         set_tenant_context(db, None)
         try:
-            escalation_changed = False
-            active_incidents = db.query(Incident).filter(Incident.status == "active").all()
-            for incident in active_incidents:
-                db.refresh(incident, ["breathing_troops"])
-                dept = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
-                grace_min = dept.escalation_grace_min if dept else 3
-                for troop in incident.breathing_troops:
-                    if troop.status not in ("im_einsatz", "rueckzug"):
-                        _sent.pop(troop.id, None)
-                        continue
-                    active_warnings = set(check_troop_warnings(troop))
-                    prev_warnings = _sent.get(troop.id, set())
-                    for kind in active_warnings - prev_warnings:
-                        events.append((incident.id, troop.id, kind))
-                    _sent[troop.id] = active_warnings
-                    if check_and_escalate_troop(db, incident, troop, grace_min):
-                        escalation_changed = True
-            if escalation_changed:
-                db.commit()
+            return _collect_new_breathing_warnings(db, sent)
         finally:
             db.close()
-        return events
 
     while True:
         try:

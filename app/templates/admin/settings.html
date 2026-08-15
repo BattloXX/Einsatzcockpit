@@ -437,6 +437,24 @@
         </small>
       </div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">🫁 Atemschutzüberwachung</h3>
+      {% set _breathing_org_on = (org_settings.atemschutz_ueberwachung_modul_aktiv if org_settings.atemschutz_ueberwachung_modul_aktiv is not none else true) if org_settings else true %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not breathing_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="atemschutz_ueberwachung_modul_aktiv_raw" value="1"
+                 {% if _breathing_org_on %}checked{% endif %}
+                 {% if not breathing_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
+          Atemschutzüberwachung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Schaltet die einsatzbezogene Trupp-, Druck- und Zeitüberwachung für diese Organisation ein.
+          {% if not breathing_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F6B0; Förderstrecken-Planer</h3>
       {% set _foerderstrecke_org_on = (org_settings.foerderstrecke_module_enabled) if org_settings else false %}
       <div class="form-group">

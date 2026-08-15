@@ -53,7 +53,6 @@ from app.models.master import (
     MemberQualification,
     OrgSettings,
     Qualification,
-    SystemSettings,
     TaskSuggestion,
     TaskSuggestionAlarm,
     VehicleMaster,
@@ -61,6 +60,7 @@ from app.models.master import (
 from app.models.user import Role, User, UserRole
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.alarm_service import get_alarm_type_by_code
+from app.services.breathing_service import breathing_effective_enabled
 from app.services.broadcast import broadcast_org, manager
 from app.services.incident_service import (
     _lis_enabled_for_org,
@@ -730,8 +730,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         t for t in incident.tasks
         if t.source == "ai_suggestion" and not t.is_done and not t.is_cancelled
     ]
-    _bs = db.get(SystemSettings, "breathing_enabled")
-    breathing_enabled = (_bs.value if _bs else "true") != "false"
+    breathing_enabled = breathing_effective_enabled(incident.primary_org_id, db)
 
     # Drohnen-Button: UASEinsatz verknüpft? Starten-Berechtigung?
     uas_einsatz_id = None

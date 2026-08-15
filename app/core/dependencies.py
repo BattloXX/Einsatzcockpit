@@ -59,6 +59,10 @@ def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session)
         request.state.foerderstrecke_enabled = bool(
             "foerderstrecke_module_enabled" in sys_on
             and org_s and org_s.foerderstrecke_module_enabled)
+        # Atemschutz fehlt bewusst in der Bulk-Abfrage: fehlender System-Key
+        # bedeutet hier im Gegensatz zu allen obigen Modulen "aktiv".
+        from app.services.breathing_service import breathing_effective_enabled
+        request.state.breathing_module_enabled = breathing_effective_enabled(org_id, db)
         # Rein org-gesteuerte Module (kein System-Flag):
         request.state.fahrtenbuch_modul_aktiv = bool(org_s and org_s.fahrtenbuch_modul_aktiv)
         request.state.atemschutz_pruefung_modul_aktiv = bool(
@@ -88,6 +92,7 @@ def _resolve_current_org(
     request.state.atemschutz_pruefung_modul_aktiv = False
     request.state.lagefuehrung_modul_aktiv = False
     request.state.foerderstrecke_enabled = False
+    request.state.breathing_module_enabled = True
 
     user = getattr(request.state, "user", None)
     if user is None:

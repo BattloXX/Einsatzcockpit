@@ -1,13 +1,19 @@
 """Tests für die sicherheitskritische Atemschutzlogik (Phase 1 bis 4)."""
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
 from app.services.breathing_service import (
     ReadinessWarning,
+    _collect_new_breathing_warnings,
     ack_warning,
+    breathing_effective_enabled,
+    breathing_system_enabled,
     calc_withdraw_pressure,
     check_and_escalate_troop,
     check_start_readiness,
@@ -17,11 +23,88 @@ from app.services.breathing_service import (
     get_troop_cycles,
     get_warning_level,
     log_pressure,
+    redeploy_troop,
     report_back_pressure,
     report_objective_reached,
-    redeploy_troop,
     start_troop,
 )
+
+
+class _SystemFlag:
+    def __init__(self, value: str):
+        self.value = value
+
+
+class _OrgFlag:
+    def __init__(self, enabled: bool):
+        self.atemschutz_ueberwachung_modul_aktiv = enabled
+
+
+def test_breathing_system_enabled_defaults_to_true_when_missing():
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    assert breathing_system_enabled(db) is True
+
+
+@pytest.mark.parametrize(("value", "expected"), [("false", False), ("true", True)])
+def test_breathing_system_enabled_uses_stored_value(value, expected):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = _SystemFlag(value)
+    assert breathing_system_enabled(db) is expected
+
+
+def test_breathing_effective_enabled_rejects_missing_org_id():
+    assert breathing_effective_enabled(None, MagicMock()) is False
+
+
+def test_breathing_effective_enabled_rejects_system_off():
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = _SystemFlag("false")
+    assert breathing_effective_enabled(1, db) is False
+
+
+@pytest.mark.parametrize(("org_row", "expected"), [(_OrgFlag(False), False), (_OrgFlag(True), True), (None, True)])
+def test_breathing_effective_enabled_respects_org_flag_and_missing_default(org_row, expected):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.side_effect = [
+        _SystemFlag("true"),
+        org_row,
+    ]
+    assert breathing_effective_enabled(1, db) is expected
+
+
+def test_breathing_route_returns_404_when_module_disabled():
+    from app.db import get_db
+    from app.routers.ui_breathing import router
+
+    test_app = FastAPI()
+
+    @test_app.middleware("http")
+    async def disable_breathing(request, call_next):
+        request.state.breathing_module_enabled = False
+        return await call_next(request)
+
+    test_app.include_router(router)
+    test_app.dependency_overrides[get_db] = lambda: MagicMock()
+
+    with TestClient(test_app) as client:
+        response = client.get("/einsatz/1/atemschutz")
+    assert response.status_code == 404
+
+
+def test_watchdog_skips_incident_when_org_module_disabled(monkeypatch):
+    import app.services.breathing_service as svc
+
+    incident = SimpleNamespace(id=7, primary_org_id=23)
+    query = MagicMock()
+    query.filter.return_value.all.return_value = [incident]
+    db = MagicMock()
+    db.query.return_value = query
+    monkeypatch.setattr(svc, "breathing_effective_enabled", lambda org_id, session: False)
+
+    assert _collect_new_breathing_warnings(db, {}) == []
+    db.refresh.assert_not_called()
+    db.get.assert_not_called()
 
 
 class FakeDB:
