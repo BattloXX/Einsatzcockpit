@@ -37,16 +37,6 @@
 .press-btn--selected { background:var(--primary) !important; color:#fff !important;
                         border-color:var(--primary) !important; }
 
-/* ── Member rows (active troop) ──────────────────────────────────────────── */
-.member-druck-row { display:flex; align-items:center; gap:8px; padding:4px 0; flex-wrap:wrap; }
-.member-druck-name { flex:1; min-width:0; }
-.member-druck-name strong { font-size:.85rem; }
-.member-druck-badge { display:inline-block; margin-left:4px; }
-.member-druck-press { font-size:.85rem; font-weight:700; min-width:60px; text-align:right; white-space:nowrap; }
-.member-druck-press--ok     { color:#48bb78; }
-.member-druck-press--warn   { color:#ed8936; }
-.member-druck-press--danger { color:#e53e3e; }
-
 /* ── Ack buttons ─────────────────────────────────────────────────────────── */
 .btn--ack {
   display:inline-flex; align-items:center; gap:4px;
@@ -288,7 +278,7 @@
             {{ {'truppfuehrer':'TF','truppmann':'TM'}[m.role] }}
           </span>
           {% if m.member and m.member.is_agt %}<span class="badge badge--agt member-druck-badge">AGT</span>{% endif %}
-          <span style="font-size:.68rem;color:var(--text-muted);display:block">
+          <span class="member-druck-withdraw">
             Rückzug: {{ m.withdraw_press | int if m.withdraw_press is not none else '–' }} bar
             {% if m.objective_press_at %}(final){% else %}(vorläufig){% endif %}
           </span>
