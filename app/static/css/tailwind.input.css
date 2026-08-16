@@ -1622,20 +1622,20 @@ button.htmx-request,
 .incident-subnav__item--active{color:#fff;background:var(--red);}
 @media (max-width:760px){
   .incident-subnav--desktop{display:none!important;}
-  .incident-subnav--mobile{display:block;}
+  .incident-subnav--mobile{display:block;--incident-subnav-safe-bottom:env(safe-area-inset-bottom,0px);}
   /* Das mobile Menue liegt absichtlich im Viewport statt im jeweiligen
      Seiten-Header: so koennen weder Overflow-Vorfahren noch Leaflet-Panes mit
      eigenen z-index-Werten es abschneiden oder uebermalen. */
   .incident-subnav--mobile .incident-subnav__menu{
     position:fixed;
-    top:auto;
-    left:12px;
-    right:12px;
-    bottom:calc(12px + env(safe-area-inset-bottom,0px));
+    top:var(--incident-subnav-top,12px);
+    left:var(--incident-subnav-left,12px);
+    right:auto;
+    bottom:auto;
     z-index:9999;
-    width:auto;
+    width:var(--incident-subnav-width,220px);
     max-width:none;
-    max-height:calc(100dvh - 24px - env(safe-area-inset-bottom,0px));
+    max-height:var(--incident-subnav-max-height,calc(100dvh - 24px));
     overflow-y:auto;
     overscroll-behavior:contain;
     box-shadow:0 12px 40px rgba(0,0,0,.65);

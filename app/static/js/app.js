@@ -22,6 +22,66 @@ window.teilnahmeSetSort = function(bezugTyp, bezugId, sort) {
 
 /* ─── Alpine.js Global App State ────────────────────────────────── */
 document.addEventListener('alpine:init', () => {
+  Alpine.data('incidentSubnav', () => ({
+    init() {
+      this._reposition = () => {
+        if (this.$el.open) this.positionMenu();
+      };
+      window.addEventListener('resize', this._reposition);
+      window.addEventListener('scroll', this._reposition, { passive: true });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', this._reposition);
+        window.visualViewport.addEventListener('scroll', this._reposition);
+      }
+    },
+
+    destroy() {
+      window.removeEventListener('resize', this._reposition);
+      window.removeEventListener('scroll', this._reposition);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', this._reposition);
+        window.visualViewport.removeEventListener('scroll', this._reposition);
+      }
+    },
+
+    onToggle() {
+      if (this.$el.open) requestAnimationFrame(() => this.positionMenu());
+    },
+
+    positionMenu() {
+      const trigger = this.$refs.trigger.getBoundingClientRect();
+      const menu = this.$refs.menu;
+      const viewport = window.visualViewport;
+      const viewportTop = viewport ? viewport.offsetTop : 0;
+      const viewportLeft = viewport ? viewport.offsetLeft : 0;
+      const viewportWidth = viewport ? viewport.width : window.innerWidth;
+      const viewportHeight = viewport ? viewport.height : window.innerHeight;
+      const gap = 4;
+      const edge = 12;
+      const safeBottom = parseFloat(getComputedStyle(this.$el).getPropertyValue('--incident-subnav-safe-bottom')) || 0;
+      const availableWidth = Math.max(0, viewportWidth - edge * 2);
+      const width = Math.min(Math.max(220, menu.scrollWidth), availableWidth);
+      const left = Math.min(
+        Math.max(trigger.left, viewportLeft + edge),
+        viewportLeft + viewportWidth - edge - width
+      );
+      const viewportBottom = viewportTop + viewportHeight - safeBottom;
+      const belowTop = trigger.bottom + gap;
+      const roomBelow = viewportBottom - edge - belowTop;
+      const roomAbove = trigger.top - gap - (viewportTop + edge);
+      const openAbove = roomBelow < menu.scrollHeight && roomAbove > roomBelow;
+      const maxHeight = Math.max(0, openAbove ? roomAbove : roomBelow);
+      const top = openAbove
+        ? Math.max(viewportTop + edge, trigger.top - gap - Math.min(menu.scrollHeight, maxHeight))
+        : Math.max(viewportTop + edge, belowTop);
+
+      menu.style.setProperty('--incident-subnav-top', top + 'px');
+      menu.style.setProperty('--incident-subnav-left', left + 'px');
+      menu.style.setProperty('--incident-subnav-width', width + 'px');
+      menu.style.setProperty('--incident-subnav-max-height', maxHeight + 'px');
+    }
+  }));
+
   Alpine.data('appState', () => ({
     toasts: [],
     newIncidentAlert: null,

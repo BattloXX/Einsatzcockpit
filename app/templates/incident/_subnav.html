@@ -19,9 +19,9 @@
 </nav>
 {% endif %}
 {% if subnav_display is not defined or subnav_display != "desktop" %}
-<details class="incident-subnav incident-subnav--mobile">
-  <summary class="incident-subnav__trigger">🧭 Seiten</summary>
-  <nav class="incident-subnav__menu" aria-label="Einsatzseiten">
+<details class="incident-subnav incident-subnav--mobile" x-data="incidentSubnav" @toggle="onToggle" @click.outside="$el.open = false">
+  <summary class="incident-subnav__trigger" x-ref="trigger">🧭 Bereiche</summary>
+  <nav class="incident-subnav__menu" x-ref="menu" aria-label="Einsatzseiten">
     {% for key, url, icon, label, visible in _targets %}{% if visible %}
     <a href="{{ url }}" class="incident-subnav__item{% if active == key %} incident-subnav__item--active{% endif %}"{% if active == key %} aria-current="page"{% endif %}>{{ icon }} {{ label }}</a>
     {% endif %}{% endfor %}
