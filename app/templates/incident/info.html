@@ -12,6 +12,11 @@
 #einsatz-info-karte { height: calc(100vh - 190px); min-height: 440px; width: 100%; background: var(--surface); }
 .ei-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .ei-side .card { margin-bottom: 0; }
+/* .card setzt global overflow:hidden (Rundung der Ecken) - das schneidet das
+   absolut positionierte mobile Seiten-Menue (_subnav.html) ab, da der Trigger
+   hier innerhalb der Kopf-Karte liegt. Nur diese Karte braucht sichtbaren
+   Overflow, damit das Menue darueber schweben kann. */
+.einsatz-info__kopf { overflow: visible; }
 @media (max-width: 900px) {
   .ei-grid { grid-template-columns: 1fr; }
   /* position:static wuerde das z-index:0 oben wirkungslos machen (Stacking-Context
