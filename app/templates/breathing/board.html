@@ -120,6 +120,7 @@
 
 {% block content %}
 {% if incident.is_exercise %}<div class="exercise-topbar">⚠ ÜBUNG / SIMULATION ⚠</div>{% endif %}
+<div class="breathing-board">
 <div class="page-header">
   {% with active="atemschutz" %}{% include "incident/_subnav.html" %}{% endwith %}
   <h2>Atemschutzüberwachung – {{ incident.alarm_type_code }} #{{ incident.id }}</h2>
@@ -473,6 +474,7 @@
   {% else %}
   <p class="text-muted">Noch keine Trupps angelegt.</p>
   {% endfor %}
+</div>
 </div>
 
 <!-- ── Neuer Trupp Modal ── -->
