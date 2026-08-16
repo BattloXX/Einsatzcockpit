@@ -1620,7 +1620,31 @@ button.htmx-request,
 .incident-subnav__item{display:flex;align-items:center;min-height:40px;padding:.5rem .7rem;color:var(--text);border-radius:5px;font-size:.85rem;font-weight:600;text-decoration:none;white-space:nowrap;}
 .incident-subnav__item:hover{background:var(--surface-high);}
 .incident-subnav__item--active{color:#fff;background:var(--red);}
-@media (max-width:760px){.incident-subnav--desktop{display:none!important;}.incident-subnav--mobile{display:block;}}
+@media (max-width:760px){
+  .incident-subnav--desktop{display:none!important;}
+  .incident-subnav--mobile{display:block;}
+  /* Das mobile Menue liegt absichtlich im Viewport statt im jeweiligen
+     Seiten-Header: so koennen weder Overflow-Vorfahren noch Leaflet-Panes mit
+     eigenen z-index-Werten es abschneiden oder uebermalen. */
+  .incident-subnav--mobile .incident-subnav__menu{
+    position:fixed;
+    top:auto;
+    left:12px;
+    right:12px;
+    bottom:calc(12px + env(safe-area-inset-bottom,0px));
+    z-index:9999;
+    width:auto;
+    max-width:none;
+    max-height:calc(100dvh - 24px - env(safe-area-inset-bottom,0px));
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    box-shadow:0 12px 40px rgba(0,0,0,.65);
+  }
+  /* Ein transformierter Vorfahr wird zum Containing Block fuer position:fixed.
+     .card:hover transformiert global; Karten mit dieser Navigation duerfen das
+     deshalb auf Mobil nicht tun (betrifft aktuell den Einsatzinfo-Kopf). */
+  .card:has(.incident-subnav--mobile){transform:none;}
+}
 
 /* ── Einsatzverlauf (Archiv-Detail): Tab-Navigation nur auf Mobil ──────────
    Desktop zeigt weiterhin alle .detail-box im 2-Spalten-Grid; auf Mobil
