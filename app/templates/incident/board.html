@@ -81,8 +81,6 @@
   .dropdown-arrow.open { transform: rotate(180deg); }
   /* Mobile lane select */
   .mobile-lane-select { display: none; }
-  /* Einsatzinfo-Link nur mobil (Desktop nutzt .incident-header__actions) */
-  .incident-header__info-mobile { display: none; }
   @media (max-width: 760px) {
     .mobile-lane-select {
       display: block;
@@ -94,19 +92,6 @@
       font-size: .85rem;
       cursor: pointer;
       max-width: 160px;
-    }
-    .incident-header__info-mobile {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      background: var(--red, #b71921);
-      color: #fff;
-      border-radius: 5px;
-      padding: 3px 9px;
-      font-size: .85rem;
-      font-weight: 600;
-      text-decoration: none;
-      white-space: nowrap;
     }
     .board-tabs { display: none !important; }
     .task-suggestions { display: none !important; }
@@ -129,6 +114,7 @@
 <!-- Incident Header -->
 <div class="incident-header" x-data="headerState('{{ incident.started_at|local_iso }}')">
   {% include "incident/_header_alarm.html" %}
+  {% with active="board", subnav_display="mobile", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
   <div class="incident-header__timer">
     <span class="timer" x-text="timerDisplay">00:00</span>
     <span class="last-update" :class="'last-update--' + lastUpdateState"
@@ -140,23 +126,7 @@
   {% if lage_hints %}{% include "incident/_header_lage_ticker.html" %}{% endif %}
   {% include "incident/_wache_status.html" %}
   <div class="incident-header__actions">
-    {# ── Primäre Aktionen ────────────────────────────────────────────────── #}
-    <a href="/einsatz/{{ incident.id }}/info"
-       class="btn btn--sm btn--primary incident-header__navlink"
-       {{ tip('Einsatzinformation: Karte, Objektdaten, Ausrückordnung, Hydranten') }}>ℹ️ Einsatzinfo</a>
-    {% if breathing_enabled %}
-    <a href="/einsatz/{{ incident.id }}/atemschutz" class="btn btn--sm btn--secondary incident-header__navlink"
-       {{ tip('Atemschutzüberwachung — Pressluft-Trupp-Steuerung') }}>🫁 AS</a>
-    {% endif %}
-    {% if request.state.lagefuehrung_modul_aktiv %}
-    <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="btn btn--sm btn--secondary incident-header__navlink"
-       {{ tip('Lageführung — einsatzbezogene Lagekarte mit Fahrzeugen, Objekt und Zeichenwerkzeugen') }}>🗺️ Lageführung</a>
-    {% endif %}
-    <a href="/einsatz/{{ incident.id }}/funkjournal" class="btn btn--sm btn--secondary incident-header__navlink"
-       {{ tip('Funkjournal – Sprüche und lagerelevante Einträge') }}>📻 Funk</a>
-
-    <a href="/einsatz/{{ incident.id }}/mannschaft" class="btn btn--sm btn--secondary incident-header__navlink"
-       {{ tip('Mannschaft – Teilnehmerliste und Einsatzkräfte') }}>👥 Mannschaft</a>
+    {% with active="board", subnav_display="desktop", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
 
     {# ── Zu-/Absage-Zähler (Teams-Einsatzinfo) — Desktop only, erst ab erster Antwort ─ #}
     <div class="header-dropdown header-dropdown--rsvp" x-data="rsvpWidget({{ incident.id }})"

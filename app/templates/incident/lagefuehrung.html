@@ -20,7 +20,7 @@
         <option value="A3 portrait">A3 Hochformat</option>
       </select>
       <button type="button" id="lft-tool-druck" class="btn btn--ghost">🖨 Drucken</button>
-      <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">← Zurück zum Einsatz</a>
+      {% with active="lagefuehrung" %}{% include "incident/_subnav.html" %}{% endwith %}
     </div>
   </div>
 

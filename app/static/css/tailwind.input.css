@@ -1596,6 +1596,15 @@ button.htmx-request,
 .subtabnav__item{display:inline-flex;align-items:center;min-height:44px;padding:.4rem .9rem;font-size:.82rem;font-weight:600;white-space:nowrap;color:var(--text-muted);background:var(--surface-mid);border:1px solid var(--border);border-radius:var(--radius-full,999px);text-decoration:none;transition:background .15s,color .15s;flex-shrink:0;}
 .subtabnav__item:hover{color:var(--text);background:var(--surface-high);}
 .subtabnav__item--active{color:#fff;background:var(--red);border-color:var(--red);}
+.incident-subnav--desktop{margin-bottom:0;}
+.incident-subnav--mobile{display:none;position:relative;flex-shrink:0;}
+.incident-subnav__trigger{display:inline-flex;align-items:center;min-height:36px;padding:.35rem .7rem;color:#fff;background:var(--red);border:1px solid var(--red);border-radius:6px;font-size:.82rem;font-weight:700;cursor:pointer;list-style:none;white-space:nowrap;}
+.incident-subnav__trigger::-webkit-details-marker{display:none;}
+.incident-subnav__menu{position:absolute;top:calc(100% + 4px);right:0;z-index:250;display:flex;flex-direction:column;min-width:220px;padding:5px;background:var(--surface-elevated,#1e2130);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.5);}
+.incident-subnav__item{display:flex;align-items:center;min-height:40px;padding:.5rem .7rem;color:var(--text);border-radius:5px;font-size:.85rem;font-weight:600;text-decoration:none;white-space:nowrap;}
+.incident-subnav__item:hover{background:var(--surface-high);}
+.incident-subnav__item--active{color:#fff;background:var(--red);}
+@media (max-width:760px){.incident-subnav--desktop{display:none!important;}.incident-subnav--mobile{display:block;}}
 
 /* ── Einsatzverlauf (Archiv-Detail): Tab-Navigation nur auf Mobil ──────────
    Desktop zeigt weiterhin alle .detail-box im 2-Spalten-Grid; auf Mobil
