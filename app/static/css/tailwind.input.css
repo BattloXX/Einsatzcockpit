@@ -837,6 +837,15 @@ dialog.media-viewer { max-width: 95vw; width: 95vw; max-height: 95dvh; height: 9
 .troop-card__actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .troop-member-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
 .troop-member-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.member-druck-row { display: flex; align-items: center; gap: 6px 8px; padding: 6px 0; flex-wrap: wrap; }
+.member-druck-name { flex: 1 0 100%; min-width: 0; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; line-height: 1.2; }
+.member-druck-name strong { font-size: .85rem; }
+.member-druck-badge { display: inline-block; margin-left: 2px; }
+.member-druck-withdraw { font-size: .68rem; color: var(--text-muted); }
+.member-druck-press { font-size: .85rem; font-weight: 700; min-width: 60px; text-align: left; white-space: nowrap; }
+.member-druck-press--ok { color: #48bb78; }
+.member-druck-press--warn { color: #ed8936; }
+.member-druck-press--danger { color: #e53e3e; }
 
 @media (max-width: 760px) {
   .breathing-board { max-width: none; }

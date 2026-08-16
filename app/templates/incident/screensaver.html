@@ -141,7 +141,7 @@
       x = Math.random() * Math.max(0, bw - w);
       y = Math.random() * Math.max(0, bh - h);
       // random speed direction
-      const speed = Math.min(bw, bh) * 0.0006;
+      const speed = Math.min(bw, bh) * 0.0003;
       const angle = Math.random() * Math.PI * 2;
       vx = Math.cos(angle) * speed;
       vy = Math.sin(angle) * speed;
@@ -196,10 +196,15 @@
   });
 
   // ── Tap/click anywhere (except back link) → zurück zur Überwachung ───
-  document.addEventListener('click', (e) => {
-    if (e.target.closest('#ssBack')) return;
+  function exitScreensaver(e) {
+    if (e.target instanceof Element && e.target.closest('#ssBack')) return;
     location.href = '/einsatz/{{ incident.id }}/atemschutz';
-  });
+  }
+  if ('PointerEvent' in window) {
+    document.addEventListener('pointerdown', exitScreensaver, { passive: true });
+  } else {
+    document.addEventListener('click', exitScreensaver);
+  }
 
   // ── WebSocket Live-Update ────────────────────────────────────────────
   const incidentId = {{ incident.id }};
