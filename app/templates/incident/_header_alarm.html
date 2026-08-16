@@ -30,11 +30,4 @@
   </div>
   {# ── Mobile Lane Select (nur ≤760px) – neben dem Einsatz, spart Platz für die Karten ── #}
   <select class="mobile-lane-select" id="mobile-lane-select" title="Ansicht wechseln"></select>
-  {# ── Einsatzinfo (nur ≤760px, da .incident-header__actions mobil ausgeblendet ist) ── #}
-  <a href="/einsatz/{{ incident.id }}/info" class="incident-header__info-mobile"
-     title="Einsatzinformation: Karte, Objektdaten, Hydranten">ℹ️ Info</a>
-  {% if request.state.lagefuehrung_modul_aktiv %}
-  <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="incident-header__info-mobile"
-     title="Lageführung — einsatzbezogene Lagekarte">🗺️ Lage</a>
-  {% endif %}
 </div>

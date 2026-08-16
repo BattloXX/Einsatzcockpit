@@ -1,0 +1,30 @@
+{# Gemeinsame Navigation fuer Einsatz-Unterseiten.
+   Optional: subnav_display = "desktop" oder "mobile"; Default rendert beides. #}
+{% set _breathing_enabled = breathing_enabled if breathing_enabled is defined else request.state.breathing_module_enabled %}
+{% set _targets = [
+  ("board", "/einsatz/" ~ incident.id, "📋", "Board", true),
+  ("info", "/einsatz/" ~ incident.id ~ "/info", "ℹ️", "Einsatzinfo", true),
+  ("atemschutz", "/einsatz/" ~ incident.id ~ "/atemschutz", "🫁", "Atemschutz", _breathing_enabled),
+  ("lagefuehrung", "/einsatz/" ~ incident.id ~ "/lagefuehrung", "🗺️", "Lageführung", request.state.lagefuehrung_modul_aktiv),
+  ("funk", "/einsatz/" ~ incident.id ~ "/funkjournal", "📻", "Funk", true),
+  ("mannschaft", "/einsatz/" ~ incident.id ~ "/mannschaft", "👥", "Mannschaft", true)
+] %}
+{% if subnav_display is not defined or subnav_display != "mobile" %}
+<nav class="incident-subnav incident-subnav--desktop subtabnav" aria-label="Einsatzseiten">
+  {% for key, url, icon, label, visible in _targets %}{% if visible %}
+  <a href="{{ url }}" class="subtabnav__item{% if active == key %} subtabnav__item--active{% endif %}"{% if active == key %} aria-current="page"{% endif %}>{{ icon }} {{ label }}</a>
+  {% endif %}{% endfor %}
+  <a href="/einsatz/{{ incident.id }}/dashboard" class="subtabnav__item" target="_blank" rel="noopener noreferrer">📊 Dashboard</a>
+  {% if uas_einsatz_id is defined and uas_einsatz_id %}<a href="/uas/einsatz/{{ uas_einsatz_id }}" class="subtabnav__item">🚁 Drohne</a>{% endif %}
+</nav>
+{% endif %}
+{% if subnav_display is not defined or subnav_display != "desktop" %}
+<details class="incident-subnav incident-subnav--mobile">
+  <summary class="incident-subnav__trigger">🧭 Seiten</summary>
+  <nav class="incident-subnav__menu" aria-label="Einsatzseiten">
+    {% for key, url, icon, label, visible in _targets %}{% if visible %}
+    <a href="{{ url }}" class="incident-subnav__item{% if active == key %} incident-subnav__item--active{% endif %}"{% if active == key %} aria-current="page"{% endif %}>{{ icon }} {{ label }}</a>
+    {% endif %}{% endfor %}
+  </nav>
+</details>
+{% endif %}
