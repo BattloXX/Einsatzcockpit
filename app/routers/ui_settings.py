@@ -1718,6 +1718,56 @@ def toggle_lagefuehrung_system(
     return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
 
 
+@router.post("/settings/system/breathing-toggle")
+def toggle_breathing_system(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    enabled_raw: str = Form(""),
+):
+    """Systemweiten Atemschutzüberwachungs-Flag umschalten (nur system_admin).
+
+    Setzt SystemSettings key "breathing_enabled" auf "true" oder "false".
+    Anders als bei den übrigen Modulen bedeutet ein fehlender Key hier "aktiv"
+    (s. breathing_system_enabled) - alt_value defaultet daher auf "true".
+    Beim Ausschalten bleiben alle Org-Daten und Org-Toggles erhalten;
+    Re-Aktivierung stellt die Sichtbarkeit sofort wieder her.
+    """
+    new_enabled = enabled_raw in ("1", "true", "on")
+    new_value = "true" if new_enabled else "false"
+
+    row = db.query(SystemSettings).filter(SystemSettings.key == "breathing_enabled").first()
+    old_value = row.value if row else "true"
+
+    if row is None:
+        from datetime import UTC, datetime
+        row = SystemSettings(
+            key="breathing_enabled",
+            value=new_value,
+            updated_at=datetime.now(UTC),
+            updated_by_user_id=user.id,
+        )
+        db.add(row)
+    else:
+        from datetime import UTC, datetime
+        row.value = new_value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user.id
+
+    from app.core.audit import write_audit
+    write_audit(
+        db,
+        "breathing.system_toggle",
+        user_id=user.id,
+        payload={"alt": old_value, "neu": new_value},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+
+    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
+    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
 @router.post("/settings/system/objekt-toggle")
 def toggle_objekt_system(
     request: Request,

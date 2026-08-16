@@ -224,6 +224,37 @@
         </div>
       </div>
     </form>
+
+    {% set _breathing_sys_on = sys_settings.get('breathing_enabled','true') != 'false' %}
+    <form method="post" action="/admin/settings/system/breathing-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+          <label style="font-weight:600">🫁 Atemschutzüberwachung</label>
+          <p class="form-hint" style="margin-top:.25rem">
+            Einsatzbezogene Trupp-, Druck- und Zeitüberwachung (Pressluft-Trupp-Steuerung) im
+            Einsatz-Board.<br>
+            Zweistufig schaltbar: erst systemweit an, dann je Organisation. Anders als bei den
+            übrigen Modulen ist dieser Schalter <strong>standardmäßig aktiv</strong>.
+            Ausschalten versteckt alle Ansichten &ndash; <strong>keine Daten werden gelöscht</strong>.
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" name="enabled_raw" value="1"
+                   {% if _breathing_sys_on %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <span>Systemweit aktivieren</span>
+          </label>
+          {% if _breathing_sys_on %}
+          <span class="badge badge--success">AN</span>
+          {% else %}
+          <span class="badge badge--muted">AUS</span>
+          {% endif %}
+        </div>
+      </div>
+    </form>
   </div>
 </section>
 {% endif %}
