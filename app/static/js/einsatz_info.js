@@ -41,14 +41,34 @@
   // rechts blieb ein leerer, ungeladener Kachel-Bereich). fit() erzwingt danach
   // denselben Ausschnitt (Einsatzort+Objekte) wie beim initialen Laden.
   window.einsatzInfoKarte = karte;
+  var druckVorbereitungKlasse = "ei-druck-vorbereitung";
+
+  function druckLayoutAktivieren() {
+    document.documentElement.classList.add(druckVorbereitungKlasse);
+    // Erzwingt den Reflow, solange beforeprint noch synchron laeuft. Chromium
+    // schaltet @media print erst danach um; ohne die Vorbereitung sieht Leaflet
+    // hier noch die Bildschirmgroesse und kompensiert auf den falschen Ausschnitt.
+    el.getBoundingClientRect();
+  }
+
   function refitFuerDruck() {
     // animate:false: eine animierte Schwenk-Bewegung braucht laenger als das
     // 'load'-Event der Kacheln unten abwartet und wurde beim Druck teils mitten
     // in der Animation erwischt (Ausdruck zeigte dann einen Zwischenstand statt
     // des Zielausschnitts, Bug 2026-07-13).
-    try { karte.invalidateSize(false); fit(true); } catch (e) { /* egal */ }
+    try {
+      druckLayoutAktivieren();
+      karte.invalidateSize(false);
+      fit(true);
+    } catch (e) { /* egal */ }
   }
   window.addEventListener("beforeprint", refitFuerDruck);
+  window.addEventListener("afterprint", function () {
+    document.documentElement.classList.remove(druckVorbereitungKlasse);
+    requestAnimationFrame(function () {
+      try { karte.invalidateSize(false); fit(true); } catch (e) { /* egal */ }
+    });
+  });
   window.einsatzInfoDrucken = function () {
     refitFuerDruck();
     // Auf das tatsaechliche Laden der Kacheln im neuen Ausschnitt warten statt
