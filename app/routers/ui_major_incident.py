@@ -1122,24 +1122,22 @@ def _leitstellen_nummern_by_site(
     if not incident_ids:
         return {}
 
-    incident_nummern = {
-        incident.id: incident.lis_operation_number or incident.nummer
-        for incident in (
-            db.query(Incident)
-            .filter(
-                Incident.id.in_(incident_ids),
-                Incident.primary_org_id == lage.org_id,
-            )
-            .all()
+    incident_nummern: dict[int, str | int] = {}
+    for incident in (
+        db.query(Incident)
+        .filter(
+            Incident.id.in_(incident_ids),
+            Incident.primary_org_id == lage.org_id,
         )
-    }
+        .all()
+    ):
+        nummer = incident.lis_operation_number or incident.nummer
+        if nummer is not None:
+            incident_nummern[incident.id] = nummer
     return {
         site.id: incident_nummern[site.incident_id]
         for site in sites
-        if (
-            site.incident_id in incident_nummern
-            and incident_nummern[site.incident_id] is not None
-        )
+        if site.incident_id in incident_nummern
     }
 
 
