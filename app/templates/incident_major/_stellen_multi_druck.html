@@ -174,10 +174,11 @@
     </tr>
     {% endif %}
     {% endif %}
-    {% if site.source == 'api' and site.external_key %}
+    {% set leitstellen_nr = (site.external_key if site.source == 'api' else none) or leitstellen_nummern_by_site.get(site.id) %}
+    {% if leitstellen_nr %}
     <tr>
       <td>Leitstellen-Nr.</td>
-      <td>{{ site.external_key }}</td>
+      <td>{{ leitstellen_nr }}</td>
     </tr>
     {% endif %}
     {% if site.resources %}

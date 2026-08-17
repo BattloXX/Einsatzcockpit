@@ -647,18 +647,11 @@ def render_map_html(db, job: PrintJob) -> str:
                                   _f("max_lat"), _f("max_lng"), fmt)
         tmpl = "incident_major/karte_druck.html"
     elif job.document_type == DOC_SITE_KARTE:
-        from app.routers.ui_major_incident import (
-            PHASE_LABELS,
-            SITE_LOG_KIND_LABEL,
-            SITE_PRIORITY_LABEL,
-        )
+        from app.routers.ui_major_incident import build_site_druck_context
         site = db.get(IncidentSite, int(ref)) if ref.isdigit() else None
         if site is None or site.major_incident_id != lage.id:
             raise ArtifactError("Stelle nicht gefunden")
-        ctx = {
-            "lage": lage, "site": site, "phase_labels": PHASE_LABELS,
-            "prio_label": SITE_PRIORITY_LABEL, "site_log_kind_label": SITE_LOG_KIND_LABEL,
-        }
+        ctx = build_site_druck_context(db, lage, site)
         tmpl = "incident_major/_site_druck.html"
     elif job.document_type == DOC_CROSS_KARTE:
         marker = db.get(CrossSiteMarker, int(ref)) if ref.isdigit() else None

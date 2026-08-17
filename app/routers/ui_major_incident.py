@@ -29,6 +29,7 @@ from app.core.permissions import has_role, require_role, same_org_or_system_admi
 from app.core.security import get_author_name, sign_lage_qr_token, sign_session, unsign_lage_qr_token
 from app.core.templating import templates
 from app.db import get_db
+from app.models.incident import Incident
 from app.models.major_incident import (
     CROSS_MARKER_STATUS_COLOR,
     CROSS_MARKER_STATUS_LABEL,
@@ -1113,6 +1114,47 @@ async def site_einheit_abziehen(
 
 # ── Einzeldruck (Einsatzstelle) ─────────────────────────────────────────────
 
+def _leitstellen_nummern_by_site(
+    db: Session, lage, sites: list[IncidentSite]
+) -> dict[int, str | int]:
+    """Ermittelt Leitstellen- bzw. Einsatznummern verknüpfter Einsätze per Batch-Abfrage."""
+    incident_ids = {site.incident_id for site in sites if site.incident_id is not None}
+    if not incident_ids:
+        return {}
+
+    incident_nummern = {
+        incident.id: incident.lis_operation_number or incident.nummer
+        for incident in (
+            db.query(Incident)
+            .filter(
+                Incident.id.in_(incident_ids),
+                Incident.primary_org_id == lage.org_id,
+            )
+            .all()
+        )
+    }
+    return {
+        site.id: incident_nummern[site.incident_id]
+        for site in sites
+        if (
+            site.incident_id in incident_nummern
+            and incident_nummern[site.incident_id] is not None
+        )
+    }
+
+
+def build_site_druck_context(db: Session, lage, site: IncidentSite) -> dict:
+    """Request-freier Kontext für den Einzeldruck (UI und Gateway)."""
+    return {
+        "lage": lage,
+        "site": site,
+        "leitstellen_nummern_by_site": _leitstellen_nummern_by_site(db, lage, [site]),
+        "phase_labels": PHASE_LABELS,
+        "prio_label": SITE_PRIORITY_LABEL,
+        "site_log_kind_label": SITE_LOG_KIND_LABEL,
+    }
+
+
 @router.get("/lage/{lage_id}/stellen/{site_id}/druck", response_class=HTMLResponse)
 def site_druck(
     request: Request,
@@ -1127,13 +1169,8 @@ def site_druck(
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse(request, "incident_major/_site_druck.html", {
-        "lage": lage,
-        "site": site,
-        "phase_labels": PHASE_LABELS,
-        "prio_label": SITE_PRIORITY_LABEL,
-        "site_log_kind_label": SITE_LOG_KIND_LABEL,
-    })
+    ctx = build_site_druck_context(db, lage, site)
+    return templates.TemplateResponse(request, "incident_major/_site_druck.html", ctx)
 
 
 # ── Log-Eintrag hinzufügen ──────────────────────────────────────────────────
@@ -3666,6 +3703,7 @@ def build_stellen_multi_context(db: Session, lage, ids: str, cross_ids: str) -> 
     return {
         "lage": lage,
         "sites": sites,
+        "leitstellen_nummern_by_site": _leitstellen_nummern_by_site(db, lage, sites),
         "cross_markers": cross_markers,
         "phase_labels": PHASE_LABELS,
         "prio_label": SITE_PRIORITY_LABEL,
