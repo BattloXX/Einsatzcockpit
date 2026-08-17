@@ -138,7 +138,7 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
 
   <!-- Nur im Druck sichtbarer Kopf -->
   <div class="ei-print-header" aria-hidden="true">
-    <span>🚨 Einsatzinformation · {{ incident.alarm_type_code }}</span>
+    <span>🚨 Einsatzinformation · {{ incident.alarm_type_code }} · Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</span>
     <span id="ei-print-ts" style="font-weight:400;font-size:.85rem;"></span>
   </div>
 
