@@ -6,7 +6,7 @@ on:
 
 jobs:
   bump:
-    name: Minor-Version um 0.1.0 erhoehen
+    name: CalVer-Version aktualisieren
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -20,16 +20,26 @@ jobs:
       - name: Dateien aktualisieren
         run: |
           python3 - <<'EOF'
-          import re, sys
+          import datetime
+          import re
+          import sys
 
           content = open("pyproject.toml").read()
-          m = re.search(r'^version = "(\d+)\.(\d+)\.(\d+)"', content, re.MULTILINE)
+          m = re.search(r'^version = "([\d.]+)"', content, re.MULTILINE)
           if not m:
               sys.exit("Version nicht gefunden in pyproject.toml")
 
-          major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
-          old_ver = f"{major}.{minor}.{patch}"
-          new_ver = f"{major}.{minor + 1}.{patch}"
+          old_ver = m.group(1)
+          today = datetime.date.today().strftime("%Y.%m.%d")
+          if old_ver == today:
+              new_ver = f"{today}.1"
+          elif old_ver.startswith(f"{today}."):
+              suffix = old_ver.removeprefix(f"{today}.")
+              if not suffix.isdigit():
+                  sys.exit(f"Ungueltiger CalVer-Suffix: {old_ver}")
+              new_ver = f"{today}.{int(suffix) + 1}"
+          else:
+              new_ver = today
           print(f"Bump: {old_ver} -> {new_ver}")
 
           def replace_first(path, pattern, repl):
@@ -40,20 +50,23 @@ jobs:
               open(path, "w", encoding="utf-8").write(new_text)
 
           replace_first("pyproject.toml",
-              r'^version = "\d+\.\d+\.\d+"',
+              r'^version = "[\d.]+"',
               f'version = "{new_ver}"')
           replace_first("app/config.py",
-              r'APP_VERSION: str = "\d+\.\d+\.\d+"',
+              r'APP_VERSION: str = "[\d.]+"',
               f'APP_VERSION: str = "{new_ver}"')
           replace_first("README.md",
               r'!\[Version\]\(https://img\.shields\.io/badge/version-[\d.]+-orange\)',
               f'![Version](https://img.shields.io/badge/version-{new_ver}-orange)')
+          replace_first("README.md",
+              r'^Aktuell: \*\*[\d.]+\*\* · → \[Vollständige Versionshistorie\]\(CHANGELOG\.md\)$',
+              f'Aktuell: **{new_ver}** · → [Vollständige Versionshistorie](CHANGELOG.md)')
           EOF
 
       - name: Neue Version lesen
         id: ver
         run: |
-          V=$(python3 -c "import re; m=re.search(r'version = \"([\d.]+)\"', open('pyproject.toml').read()); print(m.group(1))")
+          V=$(python3 -c "import re; m=re.search(r'^version = \"([\d.]+)\"', open('pyproject.toml').read(), re.MULTILINE); print(m.group(1))")
           echo "new_version=$V" >> "$GITHUB_OUTPUT"
 
       - name: Commit und Push
@@ -61,5 +74,5 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add pyproject.toml app/config.py README.md
-          git commit -m "chore: Version auf ${{ steps.ver.outputs.new_version }} erhoehen (nach Release)"
+          git commit -m "chore: Version auf ${{ steps.ver.outputs.new_version }} aktualisieren (nach Release)"
           git push origin HEAD:main

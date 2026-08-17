@@ -56,7 +56,7 @@ docker compose logs -f app
 ```
 
 `IMAGE_TAG` in der `.env` wählt die Version (Default `latest` = letzter Stand von
-`main`); für ein festes Release z. B. `IMAGE_TAG=v3.8.0` setzen.
+`main`); für ein festes Release z. B. `IMAGE_TAG=v2026.08.17` setzen.
 
 **Option B — selbst bauen** (für lokale Änderungen am Dockerfile/Code):
 

@@ -2,7 +2,7 @@
 
 Digitales Einsatzleiter-Werkzeug für österreichische Feuerwehren — Multi-User, Multi-Organisations-fähig, Echtzeit.
 
-**Version:** 3.8.0 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
+**Version:** 2026.08.17 · **Python:** 3.14 · **FastAPI** + HTMX + MariaDB
 
 ## Was ist das?
 
