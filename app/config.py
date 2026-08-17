@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SECRET_KEY_PLACEHOLDER = "change-me-in-production"
@@ -255,8 +256,18 @@ class Settings(BaseSettings):
     WEATHER_DATABASE_URL: str = ""
     # Ingest-Endpoint (Meteobridge-Push) global aktiv/deaktiv.
     WEATHER_STATION_INGEST_ENABLED: bool = True
-    # Aufbewahrungsdauer der Zeitreihe in Tagen; ältere Messwerte werden täglich gelöscht.
+    # Legacy-Wert bleibt fuer bestehende Deployments und fuer Abfluss erhalten.
     WEATHER_READING_RETENTION_DAYS: int = 365
+    # Der neue Name hat Vorrang; fehlt er, uebernimmt ein vorhandener Legacy-ENV-
+    # Wert die Raw-Retention. Ohne beide Einstellungen gilt der neue Default 30.
+    WEATHER_READING_RAW_RETENTION_DAYS: int = Field(
+        default=30,
+        validation_alias=AliasChoices(
+            "WEATHER_READING_RAW_RETENTION_DAYS",
+            "WEATHER_READING_RETENTION_DAYS",
+        ),
+    )
+    WEATHER_READING_HOURLY_RETENTION_DAYS: int = 730
     # Aufbewahrungsdauer der GPS-Positionshistorie (vehicle_position) in Tagen.
     # Positionen abgeschlossener Lagen + Archiv werden behalten; nur sehr alte Daten werden entfernt.
     VEHICLE_POSITION_RETENTION_DAYS: int = 90

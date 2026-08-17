@@ -1,0 +1,8 @@
+{% macro frost_ice_badges(temp, dewpoint) %}
+{% if temp is not none and temp < 0 %}
+<span style="display:inline-block;background:rgba(96,165,250,.14);color:#93c5fd;border:1px solid rgba(96,165,250,.32);padding:2px 7px;border-radius:999px;font-size:.64rem;font-weight:700;white-space:nowrap;">Frost</span>
+{% endif %}
+{% if temp is not none and temp < 3 and dewpoint is not none and (temp - dewpoint) < 3 %}
+<span style="display:inline-block;background:rgba(147,197,253,.18);color:#bfdbfe;border:1px solid rgba(147,197,253,.38);padding:2px 7px;border-radius:999px;font-size:.64rem;font-weight:700;white-space:nowrap;">Glatteisrisiko</span>
+{% endif %}
+{% endmacro %}

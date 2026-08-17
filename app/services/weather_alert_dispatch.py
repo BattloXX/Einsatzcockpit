@@ -8,8 +8,12 @@ from app.services.weather_alert_service import RULE_LABELS, Decision, RuleResult
 
 logger = logging.getLogger("einsatzleiter.weather_alert_dispatch")
 
-# GeoSphere-Pflichtattribution (CC BY 4.0)
-_ATTRIBUTION = "Wetterdaten: GeoSphere Austria (CC BY 4.0)"
+_SOURCE_ATTRIBUTIONS = {
+    "station": "Lokale Wetterstation",
+    "geosphere": "GeoSphere Austria (CC BY 4.0)",
+    "kachelmann": "Kachelmannwetter",
+    "openmeteo": "Open-Meteo",
+}
 
 # Teams-Farben je Zustand
 _THEME_COLORS = {
@@ -36,7 +40,22 @@ def _render_body(rule, result: RuleResult, org_name: str) -> tuple[str, str]:
         for k, v in result.values.items():
             if v is not None:
                 lines.append(f"  {k}: {v}")
-    lines += ["", _ATTRIBUTION]
+    if result.evidence:
+        lines.append("")
+        lines.append("Datengrundlage:")
+        for item in result.evidence:
+            timestamp = item.get("timestamp")
+            timestamp_text = timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
+            lines.append(
+                f"  {item['metric']}: {item['value']} {item['unit']}"
+                f" | Quelle: {item['source']} | Zeitpunkt: {timestamp_text}"
+            )
+    sources = {item.get("source") for item in result.evidence}
+    attributions = [
+        label for source, label in _SOURCE_ATTRIBUTIONS.items() if source in sources
+    ]
+    if attributions:
+        lines += ["", "Wetterdaten: " + ", ".join(attributions)]
 
     body_text = "\n".join(lines)
     body_html = (

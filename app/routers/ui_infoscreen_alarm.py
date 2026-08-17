@@ -33,6 +33,7 @@ from app.models.objekt import (
     ObjektEinsatz,
 )
 from app.models.user import User
+from app.services import weather_service
 from app.services.objekt_service import lade_auswahl
 
 router = APIRouter(tags=["infoscreen-alarm"])
@@ -637,14 +638,12 @@ async def infoscreen_wetter(
     token: str,
     db: Session = Depends(get_db),
 ):
-    """Kleiner Wetter-Badge für den Kopf (Open-Meteo, frei/kostenlos, kein Key).
+    """Kleiner Wetter-Badge für den Kopf aus dem zentralen Wetterdienst.
 
     Bezugspunkt sind die Org-Fallback-Koordinaten (Gerätehaus). Ohne Koordinaten
     oder bei Fehler → leeres Objekt, der Badge bleibt dann ausgeblendet.
     """
     import time
-
-    import httpx
 
     _, org = _token_org(db, token)
     lat, lng = org.fallback_lat, org.fallback_lng
@@ -657,17 +656,7 @@ async def infoscreen_wetter(
         return cached[1]
 
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            resp = await client.get(
-                "https://api.open-meteo.com/v1/forecast",
-                params={
-                    "latitude": lat, "longitude": lng,
-                    "current": "temperature_2m,wind_speed_10m,weather_code",
-                    "timezone": "auto",
-                },
-            )
-            resp.raise_for_status()
-            cur = resp.json().get("current", {})
+        current = await weather_service.get_current(lat, lng, org_id=org.id)
     except Exception:
         return {}
 
@@ -675,9 +664,9 @@ async def infoscreen_wetter(
         return round(v) if isinstance(v, (int, float)) else None
 
     daten = {
-        "temp": _r(cur.get("temperature_2m")),
-        "wind": _r(cur.get("wind_speed_10m")),
-        "code": cur.get("weather_code"),
+        "temp": _r(current.temperature_c),
+        "wind": _r(current.wind_speed_ms * 3.6) if current.wind_speed_ms is not None else None,
+        "code": None,
     }
     _wetter_cache[org.id] = (now, daten)
     return daten

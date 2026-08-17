@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 logger = logging.getLogger("einsatzleiter.weather_alert")
@@ -68,6 +68,7 @@ class RuleResult:
     detail_de: str      # menschenlesbare Begründung
     values: dict        # ausschlaggebende Messwerte für den Meldungstext
     payload_hash: str | None = None   # für amtliche Warnungen (Dedup)
+    evidence: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -77,6 +78,7 @@ class Decision:
     detail_de: str
     values: dict
     payload_hash: str | None = None
+    evidence: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -89,6 +91,11 @@ class WeatherPicture:
     bodensee_temp_c: float | None = None
     precip_sum_5d_mm: float | None = None  # für 'waldbrand'
     pegel_trend: str | None = None         # 'steigend'|'fallend'|'stabil' für 'tauwetter'
+    provider_data_available: bool = True
+    assembled_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+_STATION_STALE_MIN = 15
 
 
 # ── Wetterbild aufbauen ───────────────────────────────────────────────────────
@@ -100,38 +107,58 @@ async def build_weather_picture(org_settings, db) -> WeatherPicture:
     from app.models.weather import WeatherStation
     from app.services.weather_service import get_current, get_forecast, get_nowcast, get_warnings
 
-    station = (
+    stations = (
         db.query(WeatherStation)
         .filter(WeatherStation.org_id == org_settings.org_id, WeatherStation.active == True)  # noqa: E712
         .order_by(WeatherStation.id)
-        .first()
+        .all()
     )
+    now = datetime.now(UTC)
+    station = None
+    for candidate in stations:
+        last_seen = candidate.last_seen_at
+        if last_seen is not None and last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=UTC)
+        if last_seen is not None:
+            age_min = max(int((now - last_seen).total_seconds() / 60), 0)
+            if age_min <= _STATION_STALE_MIN:
+                station = candidate
+                break
 
     # Koordinaten: bevorzugt aktive Station, sonst Org-Fallback
     lat, lng = None, None
-    if station and station.lat and station.lng:
+    if station and station.lat is not None and station.lng is not None:
         lat, lng = station.lat, station.lng
     else:
         org = db.query(
             __import__("app.models.master", fromlist=["FireDept"]).FireDept
         ).filter_by(id=org_settings.org_id).first()
-        if org and hasattr(org, "fallback_lat") and org.fallback_lat:
+        if org and getattr(org, "fallback_lat", None) is not None:
             lat, lng = org.fallback_lat, org.fallback_lng
 
     current = forecast = nowcast = None
     warnings: list = []
-    if lat and lng:
+    provider_data_available = True
+    if lat is not None and lng is not None:
         current, nowcast, forecast, warnings = await asyncio.gather(  # type: ignore[assignment]
-            get_current(lat, lng),
+            get_current(lat, lng, org_id=org_settings.org_id),
             get_nowcast(lat, lng),
-            get_forecast(lat, lng, horizons=(6, 12, 24)),
+            get_forecast(lat, lng, horizons=(6, 12, 24), org_id=org_settings.org_id),
             get_warnings(lat, lng),
             return_exceptions=True,
         )
-        if isinstance(current,  Exception): current  = None   # noqa: E701
-        if isinstance(nowcast,  Exception): nowcast  = None   # noqa: E701
-        if isinstance(forecast, Exception): forecast = None   # noqa: E701
-        if isinstance(warnings, Exception): warnings = []     # noqa: E701
+        results = (current, nowcast, forecast, warnings)
+        provider_data_available = not any(isinstance(value, Exception) for value in results)
+        if not provider_data_available:
+            logger.warning("Wetteranbieter für Org %s nicht vollständig verfügbar", org_settings.org_id)
+        if isinstance(current, Exception):
+            current = None
+        if isinstance(nowcast, Exception):
+            nowcast = None
+        if isinstance(forecast, Exception):
+            forecast = None
+        if isinstance(warnings, Exception):
+            warnings = []
 
     from app.services.bodensee_service import get_surface_temp_c
     bodensee_temp_c = get_surface_temp_c(org_settings, db)
@@ -143,6 +170,7 @@ async def build_weather_picture(org_settings, db) -> WeatherPicture:
         forecast=forecast,
         warnings=warnings if isinstance(warnings, list) else [],
         bodensee_temp_c=bodensee_temp_c,
+        provider_data_available=provider_data_available,
     )
 
 
@@ -152,7 +180,8 @@ def _p(rule, key: str):
     """Parameterwert aus rule.params, Fallback auf RULE_DEFAULTS."""
     params = rule.params or {}
     defaults = RULE_DEFAULTS.get(rule.key, {})
-    return params.get(key, defaults.get(key))
+    value = params.get(key)
+    return defaults.get(key) if value is None else value
 
 
 def _station_val(pic: WeatherPicture, attr: str):
@@ -165,27 +194,23 @@ def _station_val(pic: WeatherPicture, attr: str):
 
 
 def _gust(pic: WeatherPicture) -> float | None:
-    return _station_val(pic, "last_gust_ms") or (
-        pic.current.gust_speed_ms if pic.current else None
-    )
+    value = _station_val(pic, "last_gust_ms")
+    return pic.current.gust_speed_ms if value is None and pic.current else value
 
 
 def _wind(pic: WeatherPicture) -> float | None:
-    return _station_val(pic, "last_wind_ms") or (
-        pic.current.wind_speed_ms if pic.current else None
-    )
+    value = _station_val(pic, "last_wind_ms")
+    return pic.current.wind_speed_ms if value is None and pic.current else value
 
 
 def _temp(pic: WeatherPicture) -> float | None:
-    return _station_val(pic, "last_temp_c") or (
-        pic.current.temperature_c if pic.current else None
-    )
+    value = _station_val(pic, "last_temp_c")
+    return pic.current.temperature_c if value is None and pic.current else value
 
 
 def _hum(pic: WeatherPicture) -> float | None:
-    return _station_val(pic, "last_hum_pct") or (
-        pic.current.humidity_pct if pic.current else None
-    )
+    value = _station_val(pic, "last_hum_pct")
+    return pic.current.humidity_pct if value is None and pic.current else value
 
 
 def _rain_rate(pic: WeatherPicture) -> float | None:
@@ -197,9 +222,8 @@ def _dewpoint(pic: WeatherPicture) -> float | None:
 
 
 def _wind_dir(pic: WeatherPicture) -> float | None:
-    return _station_val(pic, "last_wind_dir_deg") or (
-        pic.current.wind_direction_deg if pic.current else None
-    )
+    value = _station_val(pic, "last_wind_dir_deg")
+    return pic.current.wind_direction_deg if value is None and pic.current else value
 
 
 def _forecast_gust_6h(pic: WeatherPicture) -> float | None:
@@ -240,11 +264,80 @@ def _nowcast_peak(pic: WeatherPicture) -> float | None:
     return pic.nowcast.peak_mm
 
 
+_EVIDENCE_UNITS = {
+    "gust_ms": "m/s", "forecast_gust_ms": "m/s", "wind_ms": "m/s",
+    "wind_dir_deg": "deg", "temp_c": "degC", "forecast_temp_c": "degC",
+    "temp_now_c": "degC", "temp_24h_c": "degC", "hum_pct": "%",
+    "rain_rate_mmh": "mm/h", "nowcast_peak_mmh": "mm/h",
+    "forecast_precip_mm": "mm", "precip_5d_mm": "mm", "bodensee_c": "degC",
+    "delta_t_k": "K", "anstieg_k": "K", "level": "level",
+}
+
+
+def _source_name(source: str | None) -> str:
+    source = (source or "").lower()
+    if source.startswith("geosphere"):
+        return "geosphere"
+    if source.startswith("kachelmann"):
+        return "kachelmann"
+    if source.startswith("openmeteo") or source.startswith("open-meteo"):
+        return "openmeteo"
+    return source or "station"
+
+
+def _add_evidence(result: RuleResult, pic: WeatherPicture) -> None:
+    """Ergänzt die ausschlaggebenden Werte um Quelle, Einheit und Datenzeitpunkt."""
+    station_metrics = {
+        "gust_ms", "wind_ms", "wind_dir_deg", "temp_c", "hum_pct", "rain_rate_mmh",
+    }
+    forecast_metrics = {
+        "forecast_gust_ms", "forecast_temp_c", "forecast_precip_mm",
+        "temp_now_c", "temp_24h_c", "anstieg_k",
+    }
+    for metric, value in result.values.items():
+        if value is None or metric.startswith("threshold") or metric in {"count", "types"}:
+            continue
+        if metric in forecast_metrics:
+            source = _source_name(getattr(pic.forecast, "source", None))
+            hours = 24 if metric == "temp_24h_c" else 6
+            timestamp = pic.assembled_at + timedelta(hours=hours)
+        elif metric == "nowcast_peak_mmh":
+            source = _source_name(getattr(pic.nowcast, "source", None))
+            timestamp = getattr(pic.nowcast, "peak_at", None) or pic.assembled_at
+        elif metric in {"level", "event_type"}:
+            source = "geosphere"
+            timestamp = pic.warnings[0].valid_from if pic.warnings else pic.assembled_at
+        elif metric in station_metrics and _station_val(pic, f"last_{metric}") is not None:
+            source = "station"
+            timestamp = getattr(pic.station, "last_measured_at", None) or pic.assembled_at
+        else:
+            source = _source_name(getattr(pic.current, "source", None))
+            timestamp = pic.assembled_at
+        result.evidence.append({
+            "metric": metric,
+            "value": value,
+            "unit": _EVIDENCE_UNITS.get(metric, ""),
+            "source": source,
+            "timestamp": timestamp,
+        })
+    if result.payload_hash and pic.warnings and not any(
+        item["source"] == "geosphere" for item in result.evidence
+    ):
+        warning = pic.warnings[0]
+        result.evidence.append({
+            "metric": "warning_level",
+            "value": warning.level,
+            "unit": "level",
+            "source": "geosphere",
+            "timestamp": warning.valid_from,
+        })
+
+
 # ── Regeln ────────────────────────────────────────────────────────────────────
 
 def _eval_sturm(rule, pic: WeatherPicture) -> RuleResult:
-    akut_ms      = _p(rule, "akut_gust_ms") or 25.0
-    vorwarn_ms   = _p(rule, "vorwarn_gust_ms") or 17.0
+    akut_ms      = _p(rule, "akut_gust_ms")
+    vorwarn_ms   = _p(rule, "vorwarn_gust_ms")
     gust         = _gust(pic)
     forecast_gust = _forecast_gust_6h(pic)
 
@@ -258,8 +351,8 @@ def _eval_sturm(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_starkregen(rule, pic: WeatherPicture) -> RuleResult:
-    akut_mmh     = _p(rule, "akut_mmh") or 25.0
-    vorwarn_mmh  = _p(rule, "vorwarn_mmh") or 15.0
+    akut_mmh     = _p(rule, "akut_mmh")
+    vorwarn_mmh  = _p(rule, "vorwarn_mmh")
     rain_rate    = _rain_rate(pic)
     nowcast_peak = _nowcast_peak(pic)
 
@@ -273,9 +366,9 @@ def _eval_starkregen(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_schneefall(rule, pic: WeatherPicture) -> RuleResult:
-    temp_max     = _p(rule, "temp_max_c") or 1.0
-    akut_mmh     = _p(rule, "akut_mmh") or 5.0
-    vorwarn_mmh  = _p(rule, "vorwarn_mmh") or 3.0
+    temp_max     = _p(rule, "temp_max_c")
+    akut_mmh     = _p(rule, "akut_mmh")
+    vorwarn_mmh  = _p(rule, "vorwarn_mmh")
     temp         = _temp(pic)
     rain_rate    = _rain_rate(pic)
     f_temp       = _forecast_temp_6h(pic)
@@ -292,9 +385,9 @@ def _eval_schneefall(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_glatteis(rule, pic: WeatherPicture) -> RuleResult:
-    temp_max       = _p(rule, "temp_max_c") or 1.0
-    temp_min_reif  = _p(rule, "temp_min_reif_c") or -6.0
-    spread_max     = _p(rule, "spread_max_k") or 0.5
+    temp_max       = _p(rule, "temp_max_c")
+    temp_min_reif  = _p(rule, "temp_min_reif_c")
+    spread_max     = _p(rule, "spread_max_k")
     temp           = _temp(pic)
     dew            = _dewpoint(pic)
     rain_rate      = _rain_rate(pic)
@@ -316,7 +409,7 @@ def _eval_glatteis(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_gewitter(rule, pic: WeatherPicture) -> RuleResult:
-    min_level = int(_p(rule, "min_level") or 2)
+    min_level = int(_p(rule, "min_level"))
     THUNDER_TYPES = {"THUNDERSTORM", "THUNDER", "GEWITTER"}
 
     active = [w for w in pic.warnings
@@ -339,13 +432,13 @@ def _eval_gewitter(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_lake_effekt(rule, pic: WeatherPicture) -> RuleResult:
-    temp_max    = _p(rule, "temp_max_c") or 1.0
-    delta_t_min = _p(rule, "delta_t_min") or 12.0
-    dir_min     = _p(rule, "dir_min") or 260.0
-    dir_max     = _p(rule, "dir_max") or 330.0
-    v_min       = _p(rule, "v_min") or 2.0
-    v_max       = _p(rule, "v_max") or 14.0
-    rh_min      = _p(rule, "rh_min") or 80.0
+    temp_max    = _p(rule, "temp_max_c")
+    delta_t_min = _p(rule, "delta_t_min")
+    dir_min     = _p(rule, "dir_min")
+    dir_max     = _p(rule, "dir_max")
+    v_min       = _p(rule, "v_min")
+    v_max       = _p(rule, "v_max")
+    rh_min      = _p(rule, "rh_min")
 
     temp        = _temp(pic)
     wind        = _wind(pic)
@@ -381,8 +474,8 @@ def _eval_lake_effekt(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_amtlich(rule, pic: WeatherPicture) -> RuleResult:
-    min_level = int(_p(rule, "min_level") or 2)
-    nur_typen: list = _p(rule, "nur_typen") or []
+    min_level = int(_p(rule, "min_level"))
+    nur_typen: list = _p(rule, "nur_typen")
 
     matching = [
         w for w in pic.warnings
@@ -405,11 +498,11 @@ def _eval_amtlich(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_foehn(rule, pic: WeatherPicture) -> RuleResult:
-    dir_min      = _p(rule, "dir_min") or 150.0
-    dir_max      = _p(rule, "dir_max") or 210.0
-    akut_gust    = _p(rule, "akut_gust_ms") or 15.0
-    vorwarn_gust = _p(rule, "vorwarn_gust_ms") or 13.0
-    rh_max       = _p(rule, "rh_max_pct") or 40.0
+    dir_min      = _p(rule, "dir_min")
+    dir_max      = _p(rule, "dir_max")
+    akut_gust    = _p(rule, "akut_gust_ms")
+    vorwarn_gust = _p(rule, "vorwarn_gust_ms")
+    rh_max       = _p(rule, "rh_max_pct")
 
     gust     = _gust(pic)
     wind_dir = _wind_dir(pic)
@@ -430,13 +523,14 @@ def _eval_foehn(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_waldbrand(rule, pic: WeatherPicture) -> RuleResult:
-    max_nieder   = _p(rule, "max_nieder_mm") or 1.0
-    temp_min     = _p(rule, "temp_min_c") or 25.0
-    rh_max       = _p(rule, "rh_max_pct") or 35.0
-    wind_min     = _p(rule, "wind_min_ms") or 3.0
+    max_nieder   = _p(rule, "max_nieder_mm")
+    temp_min     = _p(rule, "temp_min_c")
+    rh_max       = _p(rule, "rh_max_pct")
+    wind_min     = _p(rule, "wind_min_ms")
 
     if pic.precip_sum_5d_mm is None:
-        return RuleResult("none", "", {})  # keine Zeitreihe verfügbar
+        logger.debug("Waldbrand-Regel: 5-Tage-Niederschlag explizit nicht verfügbar")
+        return RuleResult("none", "", {})
 
     temp  = _temp(pic)
     hum   = _hum(pic)
@@ -455,14 +549,15 @@ def _eval_waldbrand(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_tauwetter(rule, pic: WeatherPicture) -> RuleResult:
-    anstieg_k   = _p(rule, "temp_anstieg_k") or 8.0
-    schwelle_c  = _p(rule, "temp_schwelle_c") or 2.0
+    anstieg_k   = _p(rule, "temp_anstieg_k")
+    schwelle_c  = _p(rule, "temp_schwelle_c")
 
     temp = _temp(pic)
     t_now, t_24h = _forecast_temp_24h(pic)
 
-    if (temp is not None and temp >= schwelle_c
-            and pic.pegel_trend == "steigend"):
+    if pic.pegel_trend is None:
+        logger.debug("Tauwetter-Regel: Pegeltrend für Akutbewertung explizit nicht verfügbar")
+    if (temp is not None and temp >= schwelle_c and pic.pegel_trend == "steigend"):
         return RuleResult("akut",
                           f"Tauwetter: T {temp:.1f} °C, Pegel steigend",
                           {"temp_c": temp, "pegel_trend": pic.pegel_trend})
@@ -480,7 +575,7 @@ def _eval_tauwetter(rule, pic: WeatherPicture) -> RuleResult:
 
 
 def _eval_downburst(rule, pic: WeatherPicture) -> RuleResult:
-    min_level   = int(_p(rule, "min_level") or 3)
+    min_level   = int(_p(rule, "min_level"))
     HEAVY_TYPES = {"THUNDERSTORM", "THUNDER", "WIND", "STORM"}
 
     active = [w for w in pic.warnings
@@ -523,10 +618,19 @@ def evaluate_rule(rule, pic: WeatherPicture) -> RuleResult:
     if fn is None:
         return RuleResult("none", "", {})
     try:
-        return fn(rule, pic)
+        result = fn(rule, pic)
+        if result.state == "none" and not pic.provider_data_available:
+            return RuleResult(
+                "unavailable",
+                "Wetteranbieterdaten vorübergehend nicht verfügbar",
+                {},
+            )
+        if result.state != "none":
+            _add_evidence(result, pic)
+        return result
     except Exception:
         logger.exception("evaluate_rule: Fehler bei Regel %s", rule.key)
-        return RuleResult("none", "", {})
+        return RuleResult("unavailable", "Regelauswertung nicht verfügbar", {})
 
 
 def _warning_hash(w) -> str:
@@ -548,20 +652,32 @@ def apply_state_machine(rule, result: RuleResult, state_row) -> Decision:
     old_state = state_row.state if state_row else "none"
     new_state  = result.state
 
+    if new_state == "unavailable":
+        return Decision(
+            False, old_state, result.detail_de, result.values,
+            result.payload_hash, result.evidence,
+        )
+
     # Hysterese: 'akut' erst verlassen wenn 2 Zyklen unter Schwelle
     if old_state == "akut" and new_state != "akut":
         cycles = (state_row.below_threshold_cycles or 0) + 1
         if cycles < _HYSTERESE_CYCLES:
             # Noch nicht wechseln
             state_row.below_threshold_cycles = cycles
-            return Decision(False, "akut", result.detail_de, result.values, result.payload_hash)
+            return Decision(
+                False, "akut", result.detail_de, result.values,
+                result.payload_hash, result.evidence,
+            )
     elif new_state == "akut":
         if state_row:
             state_row.below_threshold_cycles = 0
 
     # Amtliche Warnungen deduplizieren
     if result.payload_hash and state_row and state_row.last_payload_hash == result.payload_hash:
-        return Decision(False, new_state, result.detail_de, result.values, result.payload_hash)
+        return Decision(
+            False, new_state, result.detail_de, result.values,
+            result.payload_hash, result.evidence,
+        )
 
     # Eskalation vorwarnung → akut: immer senden (ignoriert Cooldown)
     eskalation = old_state == "vorwarnung" and new_state == "akut" and rule.eskalation
@@ -573,15 +689,20 @@ def apply_state_machine(rule, result: RuleResult, state_row) -> Decision:
             last_utc = last.replace(tzinfo=UTC) if last.tzinfo is None else last
             cooldown_s = (rule.cooldown_min or 60) * 60
             if (now - last_utc).total_seconds() < cooldown_s:
-                return Decision(False, new_state, result.detail_de, result.values,
-                                result.payload_hash)
+                return Decision(
+                    False, new_state, result.detail_de, result.values,
+                    result.payload_hash, result.evidence,
+                )
 
     notify = new_state != "none" and (new_state != old_state or eskalation)
     # Bei Neu-Eintritt in Vorwarnung: auch senden
     if new_state == "vorwarnung" and old_state == "none" and rule.vorwarnung:
         notify = True
 
-    return Decision(notify, new_state, result.detail_de, result.values, result.payload_hash)
+    return Decision(
+        notify, new_state, result.detail_de, result.values,
+        result.payload_hash, result.evidence,
+    )
 
 
 # ── Seeding ───────────────────────────────────────────────────────────────────

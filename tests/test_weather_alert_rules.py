@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -12,7 +14,6 @@ from app.services.weather_alert_service import (
     apply_state_machine,
     evaluate_rule,
 )
-
 
 # ── Hilfsobjekte ─────────────────────────────────────────────────────────────
 
@@ -26,6 +27,10 @@ class FakeStation:
     last_dewpoint_c: float | None = None
     last_wind_dir_deg: float | None = None
     active: bool = True
+    last_seen_at: datetime | None = None
+    last_measured_at: datetime | None = None
+    lat: float | None = None
+    lng: float | None = None
 
 
 @dataclass
@@ -117,6 +122,12 @@ def test_sturm_none():
     assert r.state == "none"
 
 
+def test_station_zero_gust_is_not_replaced_by_provider_value():
+    current = SimpleNamespace(gust_speed_ms=30.0)
+    pic = empty_pic(station=FakeStation(last_gust_ms=0.0), current=current)
+    assert evaluate_rule(FakeRule("sturm"), pic).state == "none"
+
+
 # ── Starkregen ────────────────────────────────────────────────────────────────
 
 def test_starkregen_akut():
@@ -158,6 +169,16 @@ def test_schneefall_vorwarnung():
     pic = empty_pic(forecast=fc)
     r = evaluate_rule(FakeRule("schneefall"), pic)
     assert r.state == "vorwarnung"
+
+
+def test_station_zero_temp_and_zero_rule_param_are_used():
+    station = FakeStation(last_temp_c=0.0, last_rain_rate_mmh=0.0)
+    current = SimpleNamespace(temperature_c=10.0)
+    rule = FakeRule("schneefall", params={"akut_mmh": 0.0})
+    result = evaluate_rule(rule, empty_pic(station=station, current=current))
+    assert result.state == "akut"
+    assert result.values["temp_c"] == 0.0
+    assert result.values["rain_rate_mmh"] == 0.0
 
 
 # ── Glatteis ──────────────────────────────────────────────────────────────────
@@ -269,6 +290,57 @@ def test_foehn_wrong_direction():
     pic = empty_pic(station=st)
     r = evaluate_rule(FakeRule("foehn"), pic)
     assert r.state == "none"
+
+
+def test_station_north_zero_direction_is_not_replaced_by_provider_value():
+    station = FakeStation(last_gust_ms=16.0, last_wind_dir_deg=0.0, last_hum_pct=35.0)
+    current = SimpleNamespace(wind_direction_deg=180.0)
+    result = evaluate_rule(FakeRule("foehn"), empty_pic(station=station, current=current))
+    assert result.state == "none"
+
+
+@pytest.mark.asyncio
+async def test_weather_picture_prefers_fresh_station_and_passes_org_id(monkeypatch):
+    from app.services import bodensee_service, weather_service
+    from app.services.weather_alert_service import build_weather_picture
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    stale = FakeStation(last_seen_at=now - timedelta(minutes=16), lat=47.0, lng=9.0)
+    fresh = FakeStation(last_seen_at=now - timedelta(minutes=15), lat=47.1, lng=9.1)
+
+    class Query:
+        def filter(self, *args):
+            return self
+
+        def order_by(self, *args):
+            return self
+
+        def all(self):
+            return [stale, fresh]
+
+    db = SimpleNamespace(query=lambda *args: Query())
+    current = AsyncMock(return_value=None)
+    forecast = AsyncMock(return_value=None)
+    monkeypatch.setattr(weather_service, "get_current", current)
+    monkeypatch.setattr(weather_service, "get_forecast", forecast)
+    monkeypatch.setattr(weather_service, "get_nowcast", AsyncMock(return_value=None))
+    monkeypatch.setattr(weather_service, "get_warnings", AsyncMock(return_value=[]))
+    monkeypatch.setattr(bodensee_service, "get_surface_temp_c", lambda *args: None)
+
+    picture = await build_weather_picture(SimpleNamespace(org_id=42), db)
+
+    assert picture.station is fresh
+    current.assert_awaited_once_with(47.1, 9.1, org_id=42)
+    forecast.assert_awaited_once_with(47.1, 9.1, horizons=(6, 12, 24), org_id=42)
+
+
+def test_provider_unavailable_preserves_prior_alert_state():
+    pic = empty_pic(provider_data_available=False)
+    result = evaluate_rule(FakeRule("sturm"), pic)
+    decision = apply_state_machine(FakeRule("sturm"), result, FakeState(state="akut"))
+    assert result.state == "unavailable"
+    assert decision.new_state == "akut"
+    assert decision.notify is False
 
 
 # ── Waldbrand ─────────────────────────────────────────────────────────────────

@@ -1,0 +1,51 @@
+<div id="weather-history-{{ station_id }}" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+    <span style="font-size:.62rem;color:var(--text-muted);font-weight:700;letter-spacing:.05em;">MESSVERLAUF</span>
+    <div style="display:inline-flex;gap:3px;">
+      {% for range_value, range_label in [('24h', '24 h'), ('7d', '7 Tage'), ('30d', '30 Tage')] %}
+      <button type="button"
+              hx-get="/wetter/station/{{ station_id }}/history?range={{ range_value }}"
+              hx-target="#weather-history-{{ station_id }}"
+              hx-swap="outerHTML"
+              style="border:1px solid {{ '#3b82f6' if selected_range == range_value else 'var(--border)' }};background:{{ 'rgba(59,130,246,.20)' if selected_range == range_value else 'var(--surface)' }};color:var(--text);border-radius:4px;padding:3px 8px;font-size:.66rem;cursor:pointer;">
+        {{ range_label }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% if chart_points %}
+  <div style="position:relative;height:190px;max-width:100%;"><canvas id="weather-history-canvas-{{ station_id }}"></canvas></div>
+  <script>
+  (function () {
+    var canvas = document.getElementById("weather-history-canvas-{{ station_id }}");
+    if (!canvas || typeof Chart === "undefined") { return; }
+    var points = {{ chart_points|tojson }};
+    new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: points.map(function (point) {
+          return new Intl.DateTimeFormat("de-AT", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}).format(new Date(point.ts));
+        }),
+        datasets: [
+          {label: "Temperatur (°C)", data: points.map(function (point) { return point.temp; }), borderColor: "#f97316", backgroundColor: "#f97316", yAxisID: "temp", pointRadius: 0, borderWidth: 1.7, spanGaps: true, tension: .18},
+          {label: "Wind (m/s)", data: points.map(function (point) { return point.wind; }), borderColor: "#60a5fa", backgroundColor: "#60a5fa", yAxisID: "wind", pointRadius: 0, borderWidth: 1.7, spanGaps: true, tension: .18}
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {mode: "index", intersect: false},
+        plugins: {legend: {labels: {color: "#94a3b8", boxWidth: 12, font: {size: 10}}}},
+        scales: {
+          x: {ticks: {color: "#94a3b8", maxTicksLimit: 7}, grid: {color: "rgba(148,163,184,.10)"}},
+          temp: {type: "linear", position: "left", ticks: {color: "#f97316"}, grid: {color: "rgba(148,163,184,.10)"}},
+          wind: {type: "linear", position: "right", beginAtZero: true, ticks: {color: "#60a5fa"}, grid: {drawOnChartArea: false}}
+        }
+      }
+    });
+  }());
+  </script>
+  {% else %}
+  <div style="font-size:.7rem;color:var(--text-muted);padding:12px 0;">Keine Messwerte im gewählten Zeitraum.</div>
+  {% endif %}
+</div>

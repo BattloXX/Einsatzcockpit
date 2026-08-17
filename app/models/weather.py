@@ -13,7 +13,7 @@ Aufteilung (siehe docs/wetterstation-konzept.md):
 """
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.tenant import TenantScoped
@@ -105,6 +105,58 @@ class WeatherReading(WeatherBase):
     __table_args__ = (
         # Verlauf-Abfragen: je Org+Station chronologisch; Retention löscht über ts.
         Index("ix_weather_reading_org_station_ts", "org_id", "station_id", "ts"),
+    )
+
+
+class WeatherReadingHourly(WeatherBase):
+    """Stündliche Verdichtung einer Stations-Zeitreihe (naive UTC)."""
+    __tablename__ = "weather_reading_hourly"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    org_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    station_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    bucket_start: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    sample_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    temp_c_min: Mapped[float | None] = mapped_column(Float)
+    temp_c_avg: Mapped[float | None] = mapped_column(Float)
+    temp_c_max: Mapped[float | None] = mapped_column(Float)
+    hum_pct_min: Mapped[float | None] = mapped_column(Float)
+    hum_pct_avg: Mapped[float | None] = mapped_column(Float)
+    hum_pct_max: Mapped[float | None] = mapped_column(Float)
+    wind_ms_min: Mapped[float | None] = mapped_column(Float)
+    wind_ms_avg: Mapped[float | None] = mapped_column(Float)
+    wind_ms_max: Mapped[float | None] = mapped_column(Float)
+    gust_ms_min: Mapped[float | None] = mapped_column(Float)
+    gust_ms_avg: Mapped[float | None] = mapped_column(Float)
+    gust_ms_max: Mapped[float | None] = mapped_column(Float)
+    pressure_hpa_min: Mapped[float | None] = mapped_column(Float)
+    pressure_hpa_avg: Mapped[float | None] = mapped_column(Float)
+    pressure_hpa_max: Mapped[float | None] = mapped_column(Float)
+    dewpoint_c_min: Mapped[float | None] = mapped_column(Float)
+    dewpoint_c_avg: Mapped[float | None] = mapped_column(Float)
+    dewpoint_c_max: Mapped[float | None] = mapped_column(Float)
+    solar_wm2_min: Mapped[float | None] = mapped_column(Float)
+    solar_wm2_avg: Mapped[float | None] = mapped_column(Float)
+    solar_wm2_max: Mapped[float | None] = mapped_column(Float)
+    uv_min: Mapped[float | None] = mapped_column(Float)
+    uv_avg: Mapped[float | None] = mapped_column(Float)
+    uv_max: Mapped[float | None] = mapped_column(Float)
+    rain_rate_mmh_min: Mapped[float | None] = mapped_column(Float)
+    rain_rate_mmh_avg: Mapped[float | None] = mapped_column(Float)
+    rain_rate_mmh_max: Mapped[float | None] = mapped_column(Float)
+    rain_hour_mm: Mapped[float | None] = mapped_column(Float)
+    wind_dir_deg: Mapped[float | None] = mapped_column(Float)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id", "station_id", "bucket_start",
+            name="uq_weather_hourly_org_station_bucket",
+        ),
+        Index(
+            "ix_weather_hourly_org_station_bucket",
+            "org_id", "station_id", "bucket_start",
+        ),
     )
 
 

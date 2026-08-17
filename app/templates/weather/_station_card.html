@@ -43,10 +43,17 @@
   {% else %}
   <span style="font-size:.72rem;color:var(--text-muted);">Noch keine Messwerte empfangen.</span>
   {% endif %}
+  {% if enable_station_history|default(false) %}
+  <div hx-get="/wetter/station/{{ st.id }}/history"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       style="min-height:0;"></div>
+  {% else %}
   <div hx-get="/wetter/station/{{ st.id }}/sparkline"
        hx-trigger="load"
        hx-swap="outerHTML"
        style="min-height:0;"></div>
+  {% endif %}
 </div>
 {% endfor %}
 {% endif %}

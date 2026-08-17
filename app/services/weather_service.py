@@ -485,7 +485,9 @@ async def get_forecast(
 
     from app.services import kachelmann_service
     use_kachelmann = kachelmann_service.is_configured(org_id)
-    key = _cache_key(f"nwp_k{org_id}" if use_kachelmann else "nwp", lat, lng)
+    horizon_key = "-".join(str(hour) for hour in horizons)
+    resource = f"nwp_k{org_id}" if use_kachelmann else "nwp"
+    key = _cache_key(f"{resource}_h{horizon_key}", lat, lng)
     cached = _cache_get(key)
     if cached is not None:
         return cached

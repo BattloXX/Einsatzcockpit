@@ -15,6 +15,7 @@ from app.db import get_db
 from app.models.major_incident import MajorIncident
 from app.services import weather_service
 from app.services.weather_focus import resolve_weather_focus
+from app.services.weather_history_service import get_weather_history
 from app.services.weather_service import analyze_weather, has_cached
 
 router = APIRouter()
@@ -54,6 +55,89 @@ _SOURCE_LABELS = {
     "openmeteo": "Open-Meteo",
     "station": "Lokale Wetterstation",
 }
+
+
+def _weather_value(
+    value: float | str | None,
+    unit: str,
+    source: str,
+    *,
+    is_forecast: bool,
+    observed_at: datetime | None = None,
+) -> dict:
+    """Kleine, einheitliche Darstellungsstruktur fuer einen Wetterwert."""
+    return {
+        "value": value,
+        "unit": unit,
+        "source": _SOURCE_LABELS.get(source, source),
+        "is_forecast": is_forecast,
+        "observed_at": observed_at,
+    }
+
+
+def _build_weather_view_model(
+    current: weather_service.CurrentWeather | None,
+    station_views: list[dict],
+    forecast: weather_service.ForecastResult | None,
+    nowcast: weather_service.NowcastResult | None,
+    warnings: list,
+) -> dict[str, dict]:
+    """Baut die effektiven Anzeigewerte samt Quelle und Frische je Feld.
+
+    Live-Werte einer Online-Station werden feldweise bevorzugt. Fehlende Werte
+    fallen auf den externen Ist-/Modellwert zurueck. ``forecast`` und
+    ``warnings`` sind Teil der einheitlichen Eingabe und fuer kuenftige Felder
+    bewusst vorhanden.
+    """
+    del forecast, warnings
+    station = next((item for item in station_views if item.get("online")), None)
+    station_ts = station.get("measured_at") if station else None
+    external_source = current.source if current else ""
+
+    specs = {
+        "temp": ("temp", "temperature_c", "°C"),
+        "wind": ("wind", "wind_speed_ms", "m/s"),
+        "gust": ("gust", "gust_speed_ms", "m/s"),
+        # Rohgrad-Feld fuer den None-Check: "wind_dir" ist bereits das formatierte
+        # Label ("–" bei fehlendem Wert), das faelschlich als "vorhanden" gelten wuerde.
+        "wind_dir": ("wind_dir_deg", "wind_direction_deg", ""),
+        "humidity": ("hum", "humidity_pct", "%"),
+        "dewpoint": ("dew", None, "°C"),
+    }
+    result: dict[str, dict] = {}
+    for key, (station_key, current_attr, unit) in specs.items():
+        station_value = station.get(station_key) if station else None
+        if station_value is not None:
+            display_value = _wind_dir_label(station_value) if key == "wind_dir" else station_value
+            result[key] = _weather_value(
+                display_value, unit, "station", is_forecast=False, observed_at=station_ts
+            )
+        else:
+            current_value = getattr(current, current_attr, None) if current_attr else None
+            if key == "wind_dir":
+                current_value = _wind_dir_label(current_value)
+            result[key] = _weather_value(
+                current_value, unit, external_source, is_forecast=True
+            )
+
+    if nowcast is not None:
+        result["rain"] = _weather_value(
+            nowcast.total_mm, "mm", nowcast.source, is_forecast=True
+        )
+        result["rain"]["forecast_label"] = (
+            f"+3h Vorhersage · {_SOURCE_LABELS.get(nowcast.source, nowcast.source)}"
+        )
+    elif station and station.get("rain_rate") is not None:
+        result["rain"] = _weather_value(
+            station["rain_rate"], "mm/h", "station",
+            is_forecast=False, observed_at=station_ts,
+        )
+    else:
+        result["rain"] = _weather_value(
+            current.precipitation_1h_mm if current else None,
+            "mm", external_source, is_forecast=True,
+        )
+    return result
 
 
 def _build_attribution(
@@ -273,6 +357,7 @@ def _build_station_views(org_id: int | None, db: Session) -> list[dict]:
             "name":      s.name,
             "online":    online,
             "seen_label": seen_label,
+            "measured_at": s.last_measured_at,
             "temp":      s.last_temp_c,
             "hum":       s.last_hum_pct,
             "wind":      s.last_wind_ms,
@@ -497,6 +582,8 @@ async def _render_weather_panel(
     abfluss_views: list[dict] | None = None,
     station_views: list[dict] | None = None,
     org_id: int | None = None,
+    template_name: str = "incident_major/_weather_panel.html",
+    enable_station_history: bool = False,
 ) -> HTMLResponse:
     """Shared rendering logic for all weather panel endpoints."""
     nowcast, current, forecast, warnings = await asyncio.gather(
@@ -549,9 +636,13 @@ async def _render_weather_panel(
         "attribution": _build_attribution(current, forecast, nowcast, warnings, station_current),
         "abfluss_views": abfluss_views or [],
         "station_views": station_views or [],
+        "weather_values": _build_weather_view_model(
+            current, station_views or [], forecast, nowcast, warnings
+        ),
+        "enable_station_history": enable_station_history,
     }
     ctx.update(extra_ctx)
-    return templates.TemplateResponse(request, "incident_major/_weather_panel.html", ctx)
+    return templates.TemplateResponse(request, template_name, ctx)
 
 
 # ── GSL Wetter-Panel ──────────────────────────────────────────────────────────
@@ -893,6 +984,10 @@ async def wetter_index(
             "windy_enabled": settings.WEATHER_WINDY_ENABLED,
             "abfluss_views": abfluss_views,
             "station_views": station_views,
+            "weather_values": _build_weather_view_model(
+                current, station_views, forecast, nowcast, warnings
+            ),
+            "enable_station_history": True,
         },
     )
 
@@ -907,7 +1002,7 @@ async def wetter_panel(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
-    """HTMX-Partial: Wetter-Panel für /wetter-Seite (5-min auto-refresh)."""
+    """HTMX-Partial: vollständige Daten-Sektion für den 5-min-Refresh."""
     if not settings.WEATHER_ENABLED:
         return HTMLResponse("")
 
@@ -919,21 +1014,80 @@ async def wetter_panel(
     if lat is None or lng is None:
         return templates.TemplateResponse(
             request,
-            "incident_major/_weather_panel.html",
+            "weather/_data_section.html",
             {
                 "no_location": True,
+                "focus_label": focus_label,
                 "attribution": weather_service.GEOSPHERE_ATTRIBUTION,
                 "abfluss_views": abfluss_views,
                 "station_views": station_views,
+                "scenarios": [],
+                "enable_station_history": True,
             },
         )
 
-    return await _render_weather_panel(request, lat, lng, focus_label, {},
-                                       abfluss_views=abfluss_views, station_views=station_views,
-                                       org_id=getattr(user, "org_id", None))
+    return await _render_weather_panel(
+        request,
+        lat,
+        lng,
+        focus_label,
+        {},
+        abfluss_views=abfluss_views,
+        station_views=station_views,
+        org_id=getattr(user, "org_id", None),
+        template_name="weather/_data_section.html",
+        enable_station_history=True,
+    )
 
 
 # ── 24-h-Sparkline (lazy HTMX) ───────────────────────────────────────────────
+
+_HISTORY_RANGES = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30)}
+
+
+@router.get(
+    "/wetter/station/{station_id}/history",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def station_history(
+    request: Request,
+    station_id: int,
+    range: str = "24h",
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    """HTMX-Partial: Temperatur- und Windverlauf einer Org-Wetterstation."""
+    user = request.state.user
+    org_id = getattr(user, "org_id", None)
+    if not org_id:
+        return HTMLResponse("")
+
+    from app.models.weather import WeatherStation
+
+    station = db.query(WeatherStation).filter(
+        WeatherStation.id == station_id,
+        WeatherStation.org_id == org_id,
+    ).first()
+    if not station:
+        return HTMLResponse("")
+
+    selected_range = range if range in _HISTORY_RANGES else "24h"
+    end = datetime.now(UTC)
+    points = get_weather_history(org_id, station_id, end - _HISTORY_RANGES[selected_range], end)
+    chart_points = [
+        {
+            "ts": point.ts.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
+            "temp": point.values.get("temp_c"),
+            "wind": point.values.get("wind_ms"),
+        }
+        for point in points
+    ]
+    return templates.TemplateResponse(request, "weather/_history_chart.html", {
+        "station_id": station_id,
+        "selected_range": selected_range,
+        "chart_points": chart_points,
+    })
 
 @router.get(
     "/wetter/station/{station_id}/sparkline",

@@ -293,7 +293,7 @@ def test_retention_purges_only_old_readings(monkeypatch, tmp_path):
     monkeypatch.setattr(dbw, "_SessionLocal", None)
     dbw.init_weather_db()
 
-    from app.models.weather import WeatherReading
+    from app.models.weather import WeatherReading, WeatherReadingHourly
     from app.services.weather_retention import purge_old_readings
 
     now = datetime.now(UTC)
@@ -302,6 +302,12 @@ def test_retention_purges_only_old_readings(monkeypatch, tmp_path):
         s.add(WeatherReading(org_id=1, station_id=1, ts=now - timedelta(days=400), temp_c=1.0))
         s.add(WeatherReading(org_id=1, station_id=1, ts=now - timedelta(days=400), temp_c=1.1))
         s.add(WeatherReading(org_id=1, station_id=1, ts=now - timedelta(days=10), temp_c=2.0))
+        bucket = (now - timedelta(days=400)).replace(
+            minute=0, second=0, microsecond=0, tzinfo=None
+        )
+        s.add(WeatherReadingHourly(
+            org_id=1, station_id=1, bucket_start=bucket, sample_count=2
+        ))
         s.commit()
     finally:
         s.close()

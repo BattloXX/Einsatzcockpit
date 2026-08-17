@@ -1,4 +1,5 @@
 {% set _has_pegel = abfluss_views is defined and abfluss_views and abfluss_views|length > 0 %}
+{% from "weather/_risk_badges.html" import frost_ice_badges %}
 
 <div{% if _has_pegel %} x-data="{_t: localStorage.getItem('wp_tab') || 'wetter', _setTab(v){this._t=v;localStorage.setItem('wp_tab',v);}}"{% endif %}>
 
@@ -32,12 +33,12 @@
 {# ── Messwerte · Nowcast · Vorhersage in einer Zeile ────────────────────────── #}
 <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:5px;">
 
-  {% if current %}
-    {% if current.temperature_c is not none %}
-    <span style="font-size:.83rem;">&#x1F321; <strong>{{ '%.1f'|format(current.temperature_c) }} &deg;C</strong>{% if current.humidity_pct is not none %} <span style="color:var(--text-muted);font-size:.74rem;">{{ current.humidity_pct|int }}%</span>{% endif %}</span>
+  {% if current or weather_values.temp.value is not none or weather_values.wind.value is not none %}
+    {% if weather_values.temp.value is not none %}
+    <span style="font-size:.83rem;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;">&#x1F321; <strong>{{ '%.1f'|format(weather_values.temp.value) }} &deg;C</strong>{% if weather_values.humidity.value is not none %} <span style="color:var(--text-muted);font-size:.74rem;">{{ weather_values.humidity.value|int }}%</span>{% endif %}<span style="font-size:.59rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px;">{{ weather_values.temp.source }}</span>{{ frost_ice_badges(weather_values.temp.value, weather_values.dewpoint.value) }}</span>
     {% endif %}
-    {% if current.wind_speed_ms is not none %}
-    <span style="font-size:.81rem;">&#x1F4A8; {{ '%.1f'|format(current.wind_speed_ms) }} m/s <span style="color:var(--text-muted);">{{ wind_dir_label }}</span>{% if current.gust_speed_ms is not none %}<span style="color:var(--text-muted);font-size:.75rem;"> &middot; B&ouml;e {{ '%.1f'|format(current.gust_speed_ms) }} m/s</span>{% endif %}</span>
+    {% if weather_values.wind.value is not none %}
+    <span style="font-size:.81rem;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;">&#x1F4A8; {{ '%.1f'|format(weather_values.wind.value) }} m/s <span style="color:var(--text-muted);">{{ weather_values.wind_dir.value or wind_dir_label }}</span>{% if weather_values.gust.value is not none %}<span style="color:var(--text-muted);font-size:.75rem;"> &middot; B&ouml;e {{ '%.1f'|format(weather_values.gust.value) }} m/s</span>{% endif %}<span style="font-size:.59rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px;">{{ weather_values.wind.source }}</span></span>
     {% endif %}
   {% endif %}
 
@@ -51,6 +52,7 @@
       {% endfor %}
     </div>
     <span style="font-size:.68rem;color:var(--text-muted);">{{ '%.1f'|format(nowcast.total_mm) }} mm{% if peak_label %} &middot; <strong style="color:#93c5fd;">{{ peak_label }}</strong>{% endif %}</span>
+    <span style="font-size:.59rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px;">{{ weather_values.rain.forecast_label|default(weather_values.rain.source) }}</span>
   </div>
   {% elif nowcast %}
   <span style="color:var(--border);user-select:none;">&#x2502;</span>

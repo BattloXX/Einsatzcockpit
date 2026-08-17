@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from collections import deque
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from sqlalchemy.orm import Session
@@ -117,12 +117,25 @@ def ingest(
 
     clean = {f: clamp(f, values.get(f)) for f in FIELDS}
     measured = measured_at or now
+    if measured.tzinfo is None:
+        measured = measured.replace(tzinfo=UTC)
+    else:
+        measured = measured.astimezone(UTC)
+    if measured > now + timedelta(minutes=5) or measured < now - timedelta(hours=24):
+        logger.warning(
+            "Wetter-Ingest Station %s: unplausibler Messzeitpunkt %s auf Empfangszeit geklemmt",
+            station.id,
+            measured.isoformat(),
+        )
+        measured = now
+    measured_naive = measured.replace(tzinfo=None)
+    now_naive = now.replace(tzinfo=None)
 
     # 1. Snapshot in der Haupt-DB (einsatzkritischer, schneller Pfad)
     for f in FIELDS:
         setattr(station, f"last_{f}", clean[f])
-    station.last_measured_at = measured
-    station.last_seen_at = now
+    station.last_measured_at = measured_naive
+    station.last_seen_at = now_naive
     db.commit()
 
     # 2. Zeitreihe in der separaten Wetter-DB (best effort – Anzeige bleibt aktuell)
@@ -134,7 +147,7 @@ def ingest(
             wdb.add(WeatherReading(
                 org_id=station.org_id,
                 station_id=station.id,
-                ts=measured,
+                ts=measured_naive,
                 **clean,
             ))
             wdb.commit()
@@ -150,7 +163,7 @@ def ingest(
     # 3. In-Memory-Ringpuffer (immer, auch ohne Wetter-DB)
     if station.id not in _station_history:
         _station_history[station.id] = deque(maxlen=_HISTORY_MAX)
-    _station_history[station.id].append(SimpleNamespace(ts=measured, **clean))
+    _station_history[station.id].append(SimpleNamespace(ts=measured_naive, **clean))
 
     return IngestResult(accepted=True, stored_history=stored)
 
