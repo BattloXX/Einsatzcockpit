@@ -40,7 +40,7 @@
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:.95rem;margin-bottom:4px;">
             <span class="alarm-badge alarm-badge--sm alarm-badge--{{ inc.alarm_type_code[:1]|lower }}">{{ inc.alarm_type_code }}</span>
-            Einsatz #{{ inc.nummer or inc.id }}
+            Einsatz #{{ inc.lis_operation_number or inc.nummer or inc.id }}
           </div>
           <div style="font-size:.8rem;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;">
             <span>{{ inc.started_at|local_datetime }}</span>
@@ -81,7 +81,7 @@
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:.95rem;margin-bottom:4px;">
             <span class="alarm-badge alarm-badge--sm alarm-badge--{{ inc.alarm_type_code[:1]|lower }}">{{ inc.alarm_type_code }}</span>
-            Einsatz #{{ inc.nummer or inc.id }}
+            Einsatz #{{ inc.lis_operation_number or inc.nummer or inc.id }}
           </div>
           <div style="font-size:.8rem;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;">
             <span>{{ inc.started_at|local_datetime }}</span>
