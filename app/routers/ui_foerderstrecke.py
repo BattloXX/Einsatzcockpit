@@ -109,7 +109,7 @@ def _aktive_einsaetze(db: Session, org_id: int | None, ensure_id: int | None = N
         out = []
         for r in rows:
             bez = " ".join(x for x in [r.address_street, r.address_no] if x) or r.reason or ""
-            label = f"#{r.nummer or r.id}" + (f" · {bez}" if bez else "") + f" · {r.alarm_type_code}"
+            label = f"#{r.lis_operation_number or r.nummer or r.id}" + (f" · {bez}" if bez else "") + f" · {r.alarm_type_code}"
             out.append({"id": r.id, "name": label, "lat": r.lat, "lng": r.lng})
         return out
     except Exception:

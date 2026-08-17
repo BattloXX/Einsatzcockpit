@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Einsatz #{{ incident.nummer or incident.id }} – Lagekarte</title>
+<title>Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }} – Lagekarte</title>
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
 {% set map_heights = {'A4 portrait': 230, 'A4 landscape': 150, 'A3 portrait': 350, 'A3 landscape': 230} %}
 {% set map_widths  = {'A4 portrait': 190, 'A4 landscape': 277, 'A3 portrait': 277, 'A3 landscape': 400} %}
@@ -73,7 +73,7 @@
 <div class="no-print print-bar">
   <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="print-btn" style="text-decoration:none;background:#374151;">← Lagekarte</a>
   <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
-  <span>{{ fmt_name }} · Einsatz #{{ incident.nummer or incident.id }}</span>
+  <span>{{ fmt_name }} · Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</span>
 </div>
 
 <div id="print-content">
@@ -86,7 +86,7 @@
 
 <div class="karte-kopf">
   <div>
-    <div class="kk-titel">Einsatz #{{ incident.nummer or incident.id }} · {{ incident.alarm_type_code }}{% if incident.reason %} – {{ incident.reason }}{% endif %}</div>
+    <div class="kk-titel">Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }} · {{ incident.alarm_type_code }}{% if incident.reason %} – {{ incident.reason }}{% endif %}</div>
     <div class="kk-sub">
       {%- if incident.address_street -%}
       {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}

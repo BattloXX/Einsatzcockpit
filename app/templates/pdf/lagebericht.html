@@ -40,7 +40,7 @@
 
 <div class="header-box">
   <div class="alarm-badge">{{ incident.alarm_type_code }} · Lagebericht</div>
-  <div><strong>Einsatz #{{ incident.nummer or incident.id }}</strong> —
+  <div><strong>Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</strong> —
     {{ incident.address_street or '' }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</div>
   <div class="meta">Alarmzeit: {{ format_local_datetime(incident.started_at, org) }}</div>
   {% if fuehrer_name %}<div class="meta">Lageführung: <strong>{{ fuehrer_name }}</strong></div>{% endif %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Lagekarte – Einsatz #{{ incident.nummer or incident.id }}{% endblock %}
+{% block title %}Lagekarte – Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
 <link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
@@ -10,7 +10,7 @@
   <div class="page-header">
     <div>
       <h1>🗺️ Lageführung</h1>
-      <p class="text-muted">Einsatz #{{ incident.nummer or incident.id }} — Fahrzeuge, Objekt und Einsatzort werden automatisch angezeigt. Zeichenwerkzeuge oben links auf der Karte.</p>
+      <p class="text-muted">Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }} — Fahrzeuge, Objekt und Einsatzort werden automatisch angezeigt. Zeichenwerkzeuge oben links auf der Karte.</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <select id="lft-druck-format" class="form-input" style="width:auto;">

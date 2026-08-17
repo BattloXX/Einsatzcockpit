@@ -87,7 +87,7 @@
              onerror="this.style.display='none'">
         <div>
           <div class="header__title">{{ incident.alarm_type_code }}</div>
-          <div class="header__sub">Einsatz Nr. {{ incident.nummer or incident.id }}{% if incident.is_exercise %} · ÜBUNG{% endif %}</div>
+          <div class="header__sub">Einsatz Nr. {{ incident.lis_operation_number or incident.nummer or incident.id }}{% if incident.is_exercise %} · ÜBUNG{% endif %}</div>
         </div>
       </div>
       <div class="header__sub" style="text-align:right;">

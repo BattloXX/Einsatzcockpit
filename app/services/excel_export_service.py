@@ -130,7 +130,7 @@ def exportiere_einsatzstatistik(stats, von, bis, org) -> bytes:
     for incident in stats.incidents:
         address = " ".join(filter(None, [incident.address_street, incident.address_no, incident.address_city]))
         incidents.append([
-            incident.nummer or "", format_local_datetime(incident.started_at, org),
+            incident.lis_operation_number or incident.nummer or "", format_local_datetime(incident.started_at, org),
             format_local_datetime(incident.closed_at, org), incident.alarm_type_code, address,
         ])
 

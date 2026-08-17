@@ -204,7 +204,7 @@
           {% set inc = m.task.incident if m.task and m.task.incident else none %}
           {% if inc %}
           <a href="{% if inc.status == 'active' %}/einsatz/{{ inc.id }}{% else %}/archiv/{{ inc.id }}{% endif %}" onclick="event.stopPropagation()">
-            {% if inc.nummer %}E-{{ inc.nummer }}{% else %}Einsatz #{{ inc.id }}{% endif %}
+            {% if inc.lis_operation_number %}E-{{ inc.lis_operation_number }}{% elif inc.nummer %}E-{{ inc.nummer }}{% else %}Einsatz #{{ inc.id }}{% endif %}
             · {{ inc.alarm_type_code }}
           </a>
           {% else %}
