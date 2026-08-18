@@ -161,6 +161,13 @@ def test_fcm_push_uses_database_settings_when_environment_is_empty(monkeypatch, 
     assert response.json() == {"ok": True}
     assert len(sent) == 1
     assert sent[0].token == "fcm-db-settings-token"
+    assert not hasattr(sent[0], "notification")
+    assert sent[0].data == {
+        "url": "/admin/push-nachrichten",
+        "title": "Test-Push",
+        "body": "Wenn du das siehst, funktioniert FCM!",
+        "channel_id": "",
+    }
 
 
 def test_fcm_push_is_scoped_to_current_device():
