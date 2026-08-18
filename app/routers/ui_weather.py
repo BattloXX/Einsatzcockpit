@@ -461,18 +461,16 @@ def _build_infoscreen_metric_history(
     """Liest WeatherReadings der letzten `hours` Stunden und berechnet Sparkline + Statistik.
 
     Gibt ein Dict {metric: {svg, min, max, delta, trend} | None} zurück.
-    Verwendet die separate Wetter-DB; gibt leeres Dict zurück wenn nicht konfiguriert.
+    Verwendet die separate Wetter-DB und faellt auf den In-Memory-Verlauf zurueck.
     """
-    from app.db_weather import get_weather_session, weather_db_enabled
+    from app.db_weather import run_weather_query
     from app.models.weather import WeatherReading
 
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
 
-    if weather_db_enabled():
-        session = get_weather_session()
-        try:
-            readings = (
-                session.query(WeatherReading)
+    readings = run_weather_query(
+        lambda session: (
+            session.query(WeatherReading)
                 .filter(
                     WeatherReading.org_id == org_id,
                     WeatherReading.station_id == station_id,
@@ -481,10 +479,10 @@ def _build_infoscreen_metric_history(
                 .order_by(WeatherReading.ts)
                 .limit(1200)
                 .all()
-            )
-        finally:
-            session.close()
-    else:
+        ),
+        default=None,
+    )
+    if readings is None:
         from app.services.weather_station_service import get_station_history
         readings = get_station_history(station_id, cutoff)
 
@@ -494,7 +492,9 @@ def _build_infoscreen_metric_history(
         ("hum",   "hum_pct"),
         ("wind",  "wind_ms"),
         ("gust",  "gust_ms"),
+        ("pressure", "pressure_hpa"),
         ("rain",  "rain_day_mm"),
+        ("dew",   "dewpoint_c"),
         ("solar", "solar_wm2"),
         ("uv",    "uv"),
     ]:
@@ -524,16 +524,12 @@ def _build_infoscreen_abfluss_history(
     Gibt SVG-Punkt-Dict + Statistik zurück, oder None bei zu wenig Daten.
     Fällt auf In-Memory-Verlauf zurück wenn DB nicht konfiguriert (via abfluss_service.sparkline_data).
     """
-    from app.db_weather import get_weather_session, weather_db_enabled
+    from app.db_weather import run_weather_query
     from app.models.weather import AbflussReading
 
-    if not weather_db_enabled():
-        return None
-
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
-    session = get_weather_session()
-    try:
-        readings = (
+    readings = run_weather_query(
+        lambda session: (
             session.query(AbflussReading)
             .filter(
                 AbflussReading.org_id == org_id,
@@ -543,11 +539,11 @@ def _build_infoscreen_abfluss_history(
             .order_by(AbflussReading.ts)
             .limit(500)
             .all()
-        )
-    finally:
-        session.close()
+        ),
+        default=None,
+    )
 
-    if len(readings) < 2:
+    if readings is None or len(readings) < 2:
         return None
 
     vals = [r.wert_m3s for r in readings]
@@ -1046,6 +1042,59 @@ _HISTORY_RANGES = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": t
 
 
 @router.get(
+    "/wetter/station/{station_id}",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def station_detail(
+    request: Request,
+    station_id: int,
+    hours: int = 24,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    """Vollstaendige Detailseite einer Wetterstation der eigenen Organisation."""
+    if not settings.WEATHER_ENABLED:
+        raise HTTPException(status_code=404)
+
+    user = request.state.user
+    org_id = getattr(user, "org_id", None)
+    if not org_id:
+        raise HTTPException(status_code=404)
+
+    from app.models.weather import WeatherStation
+
+    station = db.query(WeatherStation).filter(
+        WeatherStation.id == station_id,
+        WeatherStation.org_id == org_id,
+        WeatherStation.active == True,  # noqa: E712
+    ).first()
+    if not station:
+        raise HTTPException(status_code=404)
+
+    station_view = next(
+        (view for view in _build_station_views(org_id, db) if view["id"] == station_id),
+        None,
+    )
+    if station_view is None:
+        raise HTTPException(status_code=404)
+
+    selected_hours = hours if hours in {24, 168, 720} else 24
+    metric_history = _build_infoscreen_metric_history(
+        station_id=station_id,
+        org_id=org_id,
+        hours=selected_hours,
+    )
+    return templates.TemplateResponse(request, "weather/station_detail.html", {
+        "user": user,
+        "station": station,
+        "st": station_view,
+        "hours": selected_hours,
+        "metric_history": metric_history,
+    })
+
+
+@router.get(
     "/wetter/station/{station_id}/history",
     response_class=HTMLResponse,
     include_in_schema=False,
@@ -1106,7 +1155,7 @@ async def station_sparkline(
     if not org_id:
         return HTMLResponse("")
 
-    from app.db_weather import get_weather_session, weather_db_enabled
+    from app.db_weather import run_weather_query
     from app.models.weather import WeatherReading, WeatherStation
 
     station = (
@@ -1117,13 +1166,9 @@ async def station_sparkline(
     if not station:
         return HTMLResponse("")
 
-    if not weather_db_enabled():
-        return HTMLResponse("")
-
     cutoff = datetime.now(UTC) - timedelta(hours=24)
-    session = get_weather_session()
-    try:
-        readings = (
+    readings = run_weather_query(
+        lambda session: (
             session.query(WeatherReading)
             .filter(
                 WeatherReading.org_id == org_id,
@@ -1133,9 +1178,9 @@ async def station_sparkline(
             .order_by(WeatherReading.ts)
             .limit(300)
             .all()
-        )
-    finally:
-        session.close()
+        ),
+        default=[],
+    )
 
     return templates.TemplateResponse(
         request,
@@ -1358,26 +1403,24 @@ async def weather_public_json(
 
     # Tages-Min/Max (org-lokale Tagesgrenze, DB speichert naive UTC)
     heute_min = heute_max = None
-    from app.db_weather import get_weather_session, weather_db_enabled
-    if weather_db_enabled():
-        today_str = now_local(org).strftime("%Y-%m-%d")
-        day_start_utc = local_date_to_utc(today_str, org=org)
-        session = get_weather_session()
-        try:
-            todays = (
-                session.query(WeatherReading)
+    from app.db_weather import run_weather_query
+    today_str = now_local(org).strftime("%Y-%m-%d")
+    day_start_utc = local_date_to_utc(today_str, org=org)
+    todays = run_weather_query(
+        lambda session: (
+            session.query(WeatherReading)
                 .filter(
                     WeatherReading.org_id == org.id,
                     WeatherReading.station_id == primary["id"],
                     WeatherReading.ts >= day_start_utc,
                 )
                 .all()
-            )
-        finally:
-            session.close()
-        temps = [r.temp_c for r in todays if r.temp_c is not None]
-        if temps:
-            heute_min, heute_max = min(temps), max(temps)
+        ),
+        default=[],
+    )
+    temps = [r.temp_c for r in todays if r.temp_c is not None]
+    if temps:
+        heute_min, heute_max = min(temps), max(temps)
 
     metric_history = _build_infoscreen_metric_history(
         station_id=primary["id"], org_id=org.id, hours=24,

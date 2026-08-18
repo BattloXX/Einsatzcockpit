@@ -79,6 +79,27 @@ def get_weather_session():
     return session
 
 
+def run_weather_query(fn, default):
+    """Fuehrt einen unkritischen Lesezugriff auf der Wetter-DB aus.
+
+    Ist die separate Wetter-DB nicht konfiguriert oder nicht erreichbar, wird
+    der angegebene Standardwert geliefert. Der operative Ist-Stand in der
+    Haupt-DB bleibt damit unabhaengig von der Wetter-Zeitreihe verfuegbar.
+    """
+    if not weather_db_enabled():
+        return default
+    session = None
+    try:
+        session = get_weather_session()
+        return fn(session)
+    except Exception as exc:
+        logger.warning("Wetter-DB-Lesezugriff fehlgeschlagen: %s", exc)
+        return default
+    finally:
+        if session is not None:
+            session.close()
+
+
 def init_weather_db() -> None:
     """Erstellt das Schema der Wetter-DB (idempotent) beim App-Start.
 

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Wetterstation - {{ st.name }}{% endblock %}
+
+{% block head_extra %}
+<script src="/static/js/chart.umd.min.js?v={{ ASSET_VERSION }}"></script>
+<style>
+.station-detail { max-width:1100px;margin:0 auto;padding:16px 14px 40px;display:flex;flex-direction:column;gap:16px; }
+.station-card { background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px; }
+.station-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
+.station-metric { border:1px solid var(--border);border-radius:6px;padding:12px;min-height:76px; }
+.station-label { color:var(--text-muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.04em; }
+.station-value { color:var(--text);font-size:1.05rem;font-weight:700;margin-top:4px; }
+.station-stats { color:var(--text-muted);font-size:.68rem;margin-top:5px; }
+@media (max-width:800px) { .station-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:480px) { .station-grid { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% macro trend_stats(history, format_string) %}
+  {% if history %}
+  <div class="station-stats">
+    Min {{ format_string|format(history.min) }} &middot; Max {{ format_string|format(history.max) }} &middot;
+    {% if history.trend == "up" %}steigend{% elif history.trend == "down" %}fallend{% else %}gleichbleibend{% endif %}
+  </div>
+  {% else %}
+  <div class="station-stats">Keine Verlaufsdaten</div>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="station-detail">
+  <div><a href="/wetter" style="color:#60a5fa;text-decoration:none;font-size:.8rem;">&larr; Zur Wetter&uuml;bersicht</a></div>
+
+  <section class="station-card">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h1 style="font-size:1.35rem;margin:0;color:var(--text);">{{ st.name }}</h1>
+      {% if st.online %}
+      <span style="display:inline-flex;align-items:center;gap:5px;color:var(--ampel-gruen,#22c55e);font-size:.75rem;"><span style="width:9px;height:9px;border-radius:50%;background:var(--ampel-gruen,#22c55e);"></span>Online</span>
+      {% else %}
+      <span style="display:inline-flex;align-items:center;gap:5px;color:var(--text-muted);font-size:.75rem;"><span style="width:9px;height:9px;border-radius:50%;background:var(--text-muted);"></span>Offline</span>
+      {% endif %}
+      {% if st.seen_label %}<span style="color:var(--text-muted);font-size:.72rem;">{{ st.seen_label }}</span>{% endif %}
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;color:var(--text-muted);font-size:.75rem;">
+      <span>Quelle: {{ station.quelle }}</span>
+      {% if station.lat is not none and station.lng is not none %}<span>Standort: {{ '%.5f'|format(station.lat) }}, {{ '%.5f'|format(station.lng) }}</span>{% endif %}
+      {% if st.measured_at %}<span>Letzte Messung: {{ st.measured_at|local_datetime }}</span>{% endif %}
+    </div>
+  </section>
+
+  <section class="station-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      <h2 style="font-size:.9rem;margin:0;color:var(--text);">Aktuelle Messwerte</h2>
+      <div style="display:flex;gap:4px;">
+        {% for value, label in [(24, '24 h'), (168, '7 Tage'), (720, '30 Tage')] %}
+        <a href="/wetter/station/{{ st.id }}?hours={{ value }}" style="border:1px solid {{ '#3b82f6' if hours == value else 'var(--border)' }};background:{{ 'rgba(59,130,246,.20)' if hours == value else 'transparent' }};color:var(--text);border-radius:4px;padding:4px 8px;text-decoration:none;font-size:.7rem;">{{ label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="station-grid">
+      <div class="station-metric"><div class="station-label">Temperatur</div><div class="station-value">{{ ('%.1f'|format(st.temp) ~ ' &deg;C')|safe if st.temp is not none else '-' }}</div>{{ trend_stats(metric_history.get('temp'), '%.1f') }}</div>
+      <div class="station-metric"><div class="station-label">Luftfeuchtigkeit</div><div class="station-value">{{ ('%.0f'|format(st.hum) ~ ' %') if st.hum is not none else '-' }}</div>{{ trend_stats(metric_history.get('hum'), '%.0f') }}</div>
+      <div class="station-metric"><div class="station-label">Wind</div><div class="station-value">{% if st.wind is not none %}{{ '%.1f'|format(st.wind) }} m/s {{ st.wind_dir }}{% if st.wind_dir_deg is not none %} ({{ '%.0f'|format(st.wind_dir_deg) }}&deg;){% endif %}{% else %}-{% endif %}</div>{{ trend_stats(metric_history.get('wind'), '%.1f') }}</div>
+      <div class="station-metric"><div class="station-label">B&ouml;e</div><div class="station-value">{{ ('%.1f'|format(st.gust) ~ ' m/s') if st.gust is not none else '-' }}</div>{{ trend_stats(metric_history.get('gust'), '%.1f') }}</div>
+      <div class="station-metric"><div class="station-label">Luftdruck</div><div class="station-value">{{ ('%.0f'|format(st.pressure) ~ ' hPa') if st.pressure is not none else '-' }}</div>{{ trend_stats(metric_history.get('pressure'), '%.0f') }}</div>
+      <div class="station-metric"><div class="station-label">Niederschlag</div><div class="station-value">{{ ('%.1f'|format(st.rain_rate) ~ ' mm/h') if st.rain_rate is not none else '-' }}</div>{% if st.rain_day is not none %}<div class="station-stats">Heute {{ '%.1f'|format(st.rain_day) }} mm</div>{% endif %}{{ trend_stats(metric_history.get('rain'), '%.1f') }}</div>
+      <div class="station-metric"><div class="station-label">Taupunkt</div><div class="station-value">{{ ('%.1f'|format(st.dew) ~ ' &deg;C')|safe if st.dew is not none else '-' }}</div>{{ trend_stats(metric_history.get('dew'), '%.1f') }}</div>
+      <div class="station-metric"><div class="station-label">Solarstrahlung</div><div class="station-value">{{ ('%.0f'|format(st.solar) ~ ' W/m&sup2;')|safe if st.solar is not none else '-' }}</div>{{ trend_stats(metric_history.get('solar'), '%.0f') }}</div>
+      <div class="station-metric"><div class="station-label">UV-Index</div><div class="station-value">{{ '%.1f'|format(st.uv) if st.uv is not none else '-' }}</div>{{ trend_stats(metric_history.get('uv'), '%.1f') }}</div>
+    </div>
+  </section>
+
+  <section class="station-card">
+    <div hx-get="/wetter/station/{{ st.id }}/history" hx-trigger="load" hx-swap="outerHTML" style="min-height:40px;"></div>
+  </section>
+</div>
+{% endblock %}

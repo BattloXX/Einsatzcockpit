@@ -43,6 +43,9 @@
   {% else %}
   <span style="font-size:.72rem;color:var(--text-muted);">Noch keine Messwerte empfangen.</span>
   {% endif %}
+  <div style="margin-top:8px;">
+    <a href="/wetter/station/{{ st.id }}" style="font-size:.72rem;color:#60a5fa;text-decoration:none;">Mehr Informationen &rarr;</a>
+  </div>
   {% if enable_station_history|default(false) %}
   <div hx-get="/wetter/station/{{ st.id }}/history"
        hx-trigger="load"
