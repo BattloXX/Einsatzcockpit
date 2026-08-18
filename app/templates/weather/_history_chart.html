@@ -42,7 +42,7 @@
           x: {ticks: {color: "#94a3b8", maxTicksLimit: 7}, grid: {color: "rgba(148,163,184,.10)"}},
           temp: {type: "linear", position: "left", ticks: {color: "#f97316"}, grid: {color: "rgba(148,163,184,.10)"}},
           wind: {type: "linear", position: "right", beginAtZero: true, ticks: {color: "#60a5fa"}, grid: {drawOnChartArea: false}},
-          rain: {type: "linear", beginAtZero: true, display: false},
+          rain: {type: "linear", beginAtZero: true, display: false, afterDataLimits: function (axis) { axis.max = Math.max(axis.max * 4, 1); }},
           hum: {type: "linear", min: 0, max: 100, display: false}
         }
       }
