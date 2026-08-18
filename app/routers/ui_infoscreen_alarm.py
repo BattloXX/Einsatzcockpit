@@ -659,6 +659,8 @@ async def infoscreen_wetter(
         current = await weather_service.get_current(lat, lng, org_id=org.id)
     except Exception:
         return {}
+    if current is None:
+        return {}
 
     def _r(v):  # type: ignore[no-untyped-def]
         return round(v) if isinstance(v, (int, float)) else None

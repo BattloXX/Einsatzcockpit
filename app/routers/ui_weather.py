@@ -589,16 +589,16 @@ async def _render_weather_panel(
         weather_service.get_warnings(lat, lng),
         return_exceptions=True,
     )
-    if isinstance(nowcast, Exception):
+    if isinstance(nowcast, BaseException):
         logger.warning("Nowcast-Fehler: %s", nowcast)
         nowcast = None
-    if isinstance(current, Exception):
+    if isinstance(current, BaseException):
         logger.warning("Current-Fehler: %s", current)
         current = None
-    if isinstance(forecast, Exception):
+    if isinstance(forecast, BaseException):
         logger.warning("Forecast-Fehler: %s", forecast)
         forecast = None
-    if isinstance(warnings, Exception):
+    if isinstance(warnings, BaseException):
         logger.warning("Warnings-Fehler: %s", warnings)
         warnings = []
 
@@ -934,15 +934,15 @@ async def wetter_index(
     )
     for name, val in [("nowcast", nowcast), ("current", current),
                       ("forecast", forecast), ("warnings", warnings)]:
-        if isinstance(val, Exception):
+        if isinstance(val, BaseException):
             logger.warning("Wetter-Seite %s-Fehler: %s", name, val)
-    if isinstance(nowcast, Exception):
+    if isinstance(nowcast, BaseException):
         nowcast = None
-    if isinstance(current, Exception):
+    if isinstance(current, BaseException):
         current = None
-    if isinstance(forecast, Exception):
+    if isinstance(forecast, BaseException):
         forecast = None
-    if isinstance(warnings, Exception):
+    if isinstance(warnings, BaseException):
         warnings = []
 
     nowcast_bars = _build_nowcast_bars(nowcast) if nowcast else []  # type: ignore[arg-type]

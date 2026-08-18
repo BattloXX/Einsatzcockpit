@@ -96,20 +96,26 @@ def _upsert_hourly(session, values: dict) -> None:
     from app.models.weather import WeatherReadingHourly
 
     dialect = session.get_bind().dialect.name
-    insert = (
-        sqlite_insert(WeatherReadingHourly).values(**values)
-        if dialect == "sqlite"
-        else mysql_insert(WeatherReadingHourly).values(**values)
-    )
-    excluded = insert.excluded if dialect == "sqlite" else insert.inserted
-    updates = {key: getattr(excluded, key) for key in values if key not in {"org_id", "station_id", "bucket_start"}}
     if dialect == "sqlite":
-        statement = insert.on_conflict_do_update(
+        sqlite_statement = sqlite_insert(WeatherReadingHourly).values(**values)
+        updates = {
+            key: getattr(sqlite_statement.excluded, key)
+            for key in values
+            if key not in {"org_id", "station_id", "bucket_start"}
+        }
+        sqlite_upsert = sqlite_statement.on_conflict_do_update(
             index_elements=["org_id", "station_id", "bucket_start"], set_=updates
         )
+        session.execute(sqlite_upsert)
     else:
-        statement = insert.on_duplicate_key_update(**updates)
-    session.execute(statement)
+        mysql_statement = mysql_insert(WeatherReadingHourly).values(**values)
+        updates = {
+            key: getattr(mysql_statement.inserted, key)
+            for key in values
+            if key not in {"org_id", "station_id", "bucket_start"}
+        }
+        mysql_upsert = mysql_statement.on_duplicate_key_update(**updates)
+        session.execute(mysql_upsert)
 
 
 def rollup_hourly_readings(

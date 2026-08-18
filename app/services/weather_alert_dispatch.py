@@ -45,7 +45,11 @@ def _render_body(rule, result: RuleResult, org_name: str) -> tuple[str, str]:
         lines.append("Datengrundlage:")
         for item in result.evidence:
             timestamp = item.get("timestamp")
-            timestamp_text = timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
+            timestamp_text = (
+                timestamp.isoformat()
+                if timestamp is not None and hasattr(timestamp, "isoformat")
+                else str(timestamp)
+            )
             lines.append(
                 f"  {item['metric']}: {item['value']} {item['unit']}"
                 f" | Quelle: {item['source']} | Zeitpunkt: {timestamp_text}"
