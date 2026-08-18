@@ -28,7 +28,9 @@
         }),
         datasets: [
           {label: "Temperatur (°C)", data: points.map(function (point) { return point.temp; }), borderColor: "#f97316", backgroundColor: "#f97316", yAxisID: "temp", pointRadius: 0, borderWidth: 1.7, spanGaps: true, tension: .18},
-          {label: "Wind (m/s)", data: points.map(function (point) { return point.wind; }), borderColor: "#60a5fa", backgroundColor: "#60a5fa", yAxisID: "wind", pointRadius: 0, borderWidth: 1.7, spanGaps: true, tension: .18}
+          {label: "Wind (m/s)", data: points.map(function (point) { return point.wind; }), borderColor: "#60a5fa", backgroundColor: "#60a5fa", yAxisID: "wind", pointRadius: 0, borderWidth: 1.7, spanGaps: true, tension: .18},
+          {label: "Niederschlag (mm/h)", type: "bar", data: points.map(function (point) { return point.rain; }), borderColor: "#22d3ee", backgroundColor: "rgba(34,211,238,.35)", yAxisID: "rain", pointRadius: 0, borderWidth: 1.7, spanGaps: true, tension: .18},
+          {label: "Luftfeuchtigkeit (%)", data: points.map(function (point) { return point.hum; }), borderColor: "#a78bfa", backgroundColor: "#a78bfa", yAxisID: "hum", pointRadius: 0, borderWidth: 1.7, spanGaps: true, tension: .18}
         ]
       },
       options: {
@@ -39,7 +41,9 @@
         scales: {
           x: {ticks: {color: "#94a3b8", maxTicksLimit: 7}, grid: {color: "rgba(148,163,184,.10)"}},
           temp: {type: "linear", position: "left", ticks: {color: "#f97316"}, grid: {color: "rgba(148,163,184,.10)"}},
-          wind: {type: "linear", position: "right", beginAtZero: true, ticks: {color: "#60a5fa"}, grid: {drawOnChartArea: false}}
+          wind: {type: "linear", position: "right", beginAtZero: true, ticks: {color: "#60a5fa"}, grid: {drawOnChartArea: false}},
+          rain: {type: "linear", beginAtZero: true, display: false},
+          hum: {type: "linear", min: 0, max: 100, display: false}
         }
       }
     });

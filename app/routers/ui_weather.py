@@ -1129,6 +1129,8 @@ async def station_history(
             "ts": point.ts.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
             "temp": point.values.get("temp_c"),
             "wind": point.values.get("wind_ms"),
+            "rain": point.values.get("rain_rate_mmh"),
+            "hum": point.values.get("hum_pct"),
         }
         for point in points
     ]
