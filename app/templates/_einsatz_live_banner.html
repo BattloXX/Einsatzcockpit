@@ -13,7 +13,7 @@
            :aria-valuetext="incident?.phase_label || ''">
         <template x-for="segment in (incident?.phase_count || 0)" :key="segment">
           <span class="ec-live__segment"
-                :class="{ 'ec-live__segment--active': segment <= (incident?.phase_index || 0) }"></span>
+                :class="{ 'ec-live__segment--active': segment <= (incident?.phase_index || 0) + 1 }"></span>
         </template>
       </div>
       <span class="ec-live__phase" x-text="incident?.phase_label"></span>
