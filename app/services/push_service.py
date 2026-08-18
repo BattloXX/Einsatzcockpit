@@ -93,20 +93,17 @@ def send_fcm(fcm_token_row: FcmToken, title: str, body: str, url: str | None = N
         return False
     try:
         from firebase_admin import messaging  # type: ignore
+        data = {
+            "url": url or "/",
+            "title": title,
+            "body": body,
+            "channel_id": channel_id or "",
+        }
         message = messaging.Message(
-            notification=messaging.Notification(title=title, body=body),
-            data={"url": url or "/", "title": title, "body": body},
-            android=(
-                messaging.AndroidConfig(
-                    priority="high",
-                    notification=messaging.AndroidNotification(
-                        channel_id=channel_id,
-                        sound="default",
-                        default_vibrate_timings=True,
-                    ),
-                )
-                if channel_id else messaging.AndroidConfig(priority="high")
-            ),
+            # Reine Data-Message: auch im Hintergrund wird unser nativer
+            # FirebaseMessagingService ausgefuehrt und kann den Live-Poller sofort wecken.
+            data=data,
+            android=messaging.AndroidConfig(priority="high"),
             token=fcm_token_row.token,
         )
         messaging.send(message)

@@ -197,12 +197,36 @@
   // Bestehende "target=_blank"-Links (z.B. Objekt-Dokumente-Liste) faenden im
   // WebView sonst still ins Leere - global abfangen statt jede Stelle einzeln
   // umzubauen.
-  document.addEventListener('click', function (ev) {
+  document.addEventListener('click', async function (ev) {
     if (!_isNative()) return;
     const a = ev.target.closest && ev.target.closest('a[target="_blank"]');
     if (!a || !a.href) return;
     ev.preventDefault();
     openUrl(a.href);
+  }, true);
+
+  // Beim expliziten Abmelden darf weder der alte Geräte-Token noch der
+  // Live-Foreground-Service beim nächsten App-Start automatisch weiterlaufen.
+  document.addEventListener('click', async function (ev) {
+    if (!_isNative()) return;
+    const a = ev.target.closest && ev.target.closest('a[href]');
+    if (!a) return;
+    let path;
+    try { path = new URL(a.href, window.location.href).pathname; } catch (_) { return; }
+    if (path !== '/logout') return;
+    ev.preventDefault();
+    try {
+      const { DeviceKeepalive, Preferences } = window.Capacitor.Plugins;
+      if (DeviceKeepalive) await DeviceKeepalive.stopKeepalive().catch(() => {});
+      if (Preferences) {
+        await Promise.all([
+          Preferences.remove({ key: 'el_device_token' }),
+          Preferences.set({ key: 'el_live_enabled', value: '0' }),
+          Preferences.remove({ key: 'el_used_account_login' }),
+        ]).catch(() => {});
+      }
+    } catch (_) {}
+    window.location.href = a.href;
   }, true);
 
   // ─── Keep-Awake ─────────────────────────────────────────────────────────────

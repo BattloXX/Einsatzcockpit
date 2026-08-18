@@ -161,7 +161,7 @@
           {% if request.state.is_native_app %}
           <a href="https://localhost/about.html">ℹ️ Über die App</a>
           {% endif %}
-          <a href="/logout">🚪 Abmelden</a>
+          <a href="{% if request.state.is_native_app %}https://localhost/?native_logout=1{% else %}/logout{% endif %}">🚪 Abmelden</a>
         </div>
       </div>
       {% if is_admin %}
@@ -234,7 +234,7 @@
       <button type="button" class="btn btn--secondary btn--full pwa-install-ios" style="display:none">
         📲 App installieren
       </button>
-      <a href="/logout" class="btn btn--ghost btn--full">Abmelden</a>
+      <a href="{% if request.state.is_native_app %}https://localhost/?native_logout=1{% else %}/logout{% endif %}" class="btn btn--ghost btn--full">Abmelden</a>
     </footer>
   </aside>
 
