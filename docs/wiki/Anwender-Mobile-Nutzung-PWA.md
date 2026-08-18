@@ -42,6 +42,26 @@ App-Version angezeigt, ein Update kann direkt heruntergeladen werden (wie beim S
 und ist dieses Gerät als SMS-Gateway konfiguriert, führt ein Button direkt zum
 SMS-Gateway-Status. Der Eintrag ist nur innerhalb der App sichtbar, nicht im Browser/PWA.
 
+### Live-Einsatzstatus (Dauerbenachrichtigung)
+
+Die native Android-App kann laufende Einsätze zusätzlich als **Dauerbenachrichtigung** auf
+Sperrbildschirm und in der Statusleiste anzeigen — mit Stichwort, Adresse, Phase und
+Einsatzdauer (Chronometer), auch wenn die App gerade nicht geöffnet ist.
+
+- **Aktivieren:** Beim Login mit persönlichem Account erscheint die Option „Live-Einsatzstatus
+  aktivieren"; nachträglich lässt sie sich in der App an-/abschalten. Geräte-Logins (QR/PIN,
+  z. B. Fahrzeug-Tablets) haben den Live-Status automatisch aktiv.
+- **Wie es funktioniert:** Eine Push-Nachricht (FCM) weckt die App im Hintergrund sofort, sobald
+  ein neuer Einsatz beginnt oder sich der Status ändert; die Benachrichtigung bleibt dann
+  aktuell, solange der Einsatz läuft.
+- **Kein Dauerbetrieb:** Anders als früher hält die App dafür **nicht mehr permanent** einen
+  Hintergrunddienst am Laufen. Ohne aktiven Einsatz (und ohne Dienst) beendet sich der
+  Hintergrunddienst nach spätestens 15 Minuten Leerlauf von selbst — das schont Akku und
+  vermeidet eine dauerhaft sichtbare „App läuft im Hintergrund"-Meldung. Bei einem neuen
+  Einsatz startet er automatisch wieder.
+- **Deaktivieren:** In der App unter dem Live-Status-Schalter ausschalten, oder beim Abmelden
+  — die Dauerbenachrichtigung und der Hintergrunddienst werden dann sofort beendet.
+
 ## Installation auf iOS (Safari)
 
 1. App in **Safari** öffnen (`https://einsatzleiter.feuerwehr-wolfurt.at`)
