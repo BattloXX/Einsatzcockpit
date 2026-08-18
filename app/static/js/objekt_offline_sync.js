@@ -31,14 +31,14 @@
   }
 
   async function synchronisieren() {
-    if (!("caches" in window)) { return; }
+    if (!("caches" in window)) { return false; }
     var antwort;
     try {
       antwort = await fetch("/api/objekte/sync", { credentials: "same-origin" });
     } catch (e) {
-      return; // offline — naechster Lauf versucht es erneut
+      return false; // offline — naechster Lauf versucht es erneut
     }
-    if (!antwort.ok) { return; } // nicht eingeloggt / Modul aus
+    if (!antwort.ok) { return false; } // nicht eingeloggt / Modul aus
     var manifest = await antwort.json();
 
     var soll = new Set();
@@ -73,6 +73,7 @@
     }
 
     try { localStorage.setItem(LS_KEY, String(Date.now())); } catch (e) { /* egal */ }
+    return true;
   }
 
   function planen() {
