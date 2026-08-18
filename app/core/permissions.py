@@ -53,6 +53,23 @@ def require_role(*roles: str) -> Callable:
     return dependency
 
 
+def require_role_or_device(*roles: str) -> Callable:
+    """Wie require_role, erlaubt aber auch dedizierte Einheit-Geraete.
+
+    Fuer read-only Endpoints, die im angemeldeten Fahrzeug-WebView laufen.
+    Normale Benutzer ohne passende Rolle erhalten weiterhin 403.
+    """
+    role_dependency = require_role(*roles)
+
+    def dependency(request: Request):
+        user = getattr(request.state, "user", None)
+        if user is not None and user.is_device:
+            return user
+        return role_dependency(request)
+
+    return dependency
+
+
 def require_system_admin(request: Request):
     """Dependency: only system_admin can access this endpoint."""
     user = getattr(request.state, "user", None)

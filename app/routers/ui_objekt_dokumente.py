@@ -13,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.core.permissions import require_role
+from app.core.permissions import require_role, require_role_or_device
 from app.core.templating import templates
 from app.db import get_db
 from app.models.objekt import (
@@ -1001,7 +1001,7 @@ def ki_stammdaten_vorschlag_verwerfen(
 def objekte_sync_manifest(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role_or_device(*_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     """Manifest fuer das Offline-Precaching (Android-App/PWA).

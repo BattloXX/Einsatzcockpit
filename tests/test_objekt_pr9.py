@@ -1,5 +1,7 @@
 """Objektverwaltung PR 9: Offline-Sync-Manifest (Android-Precaching)."""
 import pytest
+from types import SimpleNamespace
+from fastapi import HTTPException
 from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
@@ -21,6 +23,8 @@ from app.models.objekt import (
     ObjektDokumentSeite,
 )
 from app.services.objekt_service import build_sync_manifest
+from app.core.permissions import require_role_or_device
+from starlette.requests import Request
 
 
 @pytest.fixture(scope="module")
@@ -106,3 +110,22 @@ def test_pr9_endpoint_registriert():
     from app.routers.ui_objekt_dokumente import router
     pfade = {r.path for r in router.routes}
     assert "/api/objekte/sync" in pfade
+
+
+def test_sync_berechtigung_erlaubt_rollenloses_einheit_geraet():
+    request = Request({"type": "http", "method": "GET", "path": "/api/objekte/sync",
+                       "headers": []})
+    device_user = SimpleNamespace(is_device=True, roles=[])
+    request.state.user = device_user
+
+    assert require_role_or_device("readonly")(request) is device_user
+
+
+def test_sync_berechtigung_lehnt_rollenlosen_normalen_benutzer_ab():
+    request = Request({"type": "http", "method": "GET", "path": "/api/objekte/sync",
+                       "headers": []})
+    request.state.user = SimpleNamespace(is_device=False, roles=[])
+
+    with pytest.raises(HTTPException) as exc:
+        require_role_or_device("readonly")(request)
+    assert exc.value.status_code == 403
