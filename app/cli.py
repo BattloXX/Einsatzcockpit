@@ -153,7 +153,7 @@ def _tar_medien(ziel: Path, medien_root: Path, backup_dir: Path) -> int:
     return ziel.stat().st_size
 
 
-def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> int:
+def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> tuple[int, list[Path]]:
     """Sichert beide DBs (+ optional Medien) und raeumt alte Backups auf."""
     from app.config import settings
     from app.services import backup_service as bs
@@ -205,7 +205,7 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> in
         print(f"Backup mit {fehler} Fehler(n) beendet.", file=sys.stderr)
     else:
         print(f"Backup vollstaendig nach {out}.")
-    return 1 if fehler else 0
+    return (1 if fehler else 0), erzeugt
 
 
 def _remote_upload(dateien: list[Path], backup_dir: Path) -> int:
@@ -358,7 +358,8 @@ def main() -> None:
     elif args.command == "promote-to-system-admin":
         promote_to_system_admin(args.username)
     elif args.command == "backup":
-        sys.exit(run_backup(args.out, args.keep, 0 if args.no_media else -1))
+        rc, _created = run_backup(args.out, args.keep, 0 if args.no_media else -1)
+        sys.exit(rc)
     elif args.command == "restore-test":
         sys.exit(restore_test(args.scratch_db))
     elif args.command == "backup-upload":

@@ -1,5 +1,9 @@
 # Backups
 
+Vor Web-Updates kann zusätzlich automatisch ein DB-Dump erzeugt und bei Fehlschlag als
+harte Update-Voraussetzung behandelt werden; siehe
+[Updates – Automatisches Backup vor Migrationen](Installation-Updates.md#automatisches-backup-vor-migrationen).
+
 ← [Zurück zur Startseite](Home.md)
 
 > **Vollständiges Verfahren inkl. getesteter Restore-Probe und Disaster-Recovery:**

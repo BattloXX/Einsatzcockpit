@@ -36,12 +36,15 @@
     {{ update_result.message }}<br>
     Dateien aktualisiert: {{ update_result.files_updated }}<br>
     Dateien übersprungen (geschützt): {{ update_result.files_skipped }}<br>
+    Backup: {{ update_result.backup.message if update_result.backup is defined else 'nicht ausgeführt' }}<br>
     Migrationen: {{ update_result.migrations_applied }}<br>
     Server-Reload: {{ 'Ja' if update_result.server_reloaded else 'Manuell erforderlich' }}
   </div>
   {% else %}
   <div class="alert alert-danger">
     <strong>Fehler:</strong> {{ update_result.message }}
+    {% if update_result.locked %}<br><code>locked: true</code>{% endif %}
+    {% if update_result.backup is defined %}<br>Backup: {{ update_result.backup.message }}{% endif %}
   </div>
   {% endif %}
 {% endif %}
@@ -130,6 +133,7 @@
         <li><code>.env</code> – Konfiguration und Secrets</li>
         <li><code>alembic/versions/</code> – eigene Datenbank-Migrationen</li>
         <li><code>app/static/img/uploads/</code> – hochgeladene Logos</li>
+        <li><code>app_storage/</code> – Einsatzfotos, Objektdokumente und Backups</li>
       </ul>
     </div>
 
@@ -138,6 +142,11 @@
       <div class="form-group">
         <label>Release-ZIP</label>
         <input type="file" name="release_zip" accept=".zip" required class="form-control">
+      </div>
+      <div class="form-group mt-3">
+        <label>Erwartete SHA256-Prüfsumme</label>
+        <input type="text" name="expected_sha256" pattern="[A-Fa-f0-9]{64}" maxlength="64"
+               class="form-control" placeholder="64 hexadezimale Zeichen">
       </div>
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn-danger">Update einspielen</button>
@@ -158,7 +167,7 @@
       <li>Gunicorn erhält SIGHUP (graceful reload – laufende Requests werden abgeschlossen)</li>
       <li>Falls kein PID-File vorhanden: <code>systemctl restart einsatzleiter</code></li>
     </ol>
-    <p>Empfehlung: Vor einem Update ein Datenbank-Backup erstellen.</p>
+    <p>Vor Migrationen wird automatisch ein Datenbank-Backup erstellt.</p>
   </div>
 </div>
 {% endblock %}

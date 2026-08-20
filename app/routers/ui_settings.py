@@ -29,7 +29,7 @@ from app.services.update_service import (
     check_github_branch,
     check_github_release,
     deploy_github_branch,
-    download_and_apply_github_update,
+    deploy_github_release,
     get_current_version,
     get_github_token,
     list_github_branches,
@@ -1954,11 +1954,12 @@ def update_page(request: Request, db=Depends(get_db), user: User = Depends(requi
 
 
 @router.post("/system/update", response_class=HTMLResponse)
-async def apply_system_update(
+def apply_system_update(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_system_admin),
     release_zip: UploadFile = File(...),
+    expected_sha256: str = Form(""),
 ):
     if not release_zip.filename or not release_zip.filename.endswith(".zip"):
         return templates.TemplateResponse(request, "admin/system_update.html", {
@@ -1967,12 +1968,21 @@ async def apply_system_update(
             "error": "Bitte eine .zip-Datei hochladen",
         })
 
-    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-        shutil.copyfileobj(release_zip.file, tmp)
-        tmp_path = Path(tmp.name)
+    if app_settings.UPDATE_ZIP_REQUIRE_HASH and not expected_sha256.strip():
+        return templates.TemplateResponse(request, "admin/system_update.html", {
+            "user": user, "version": get_current_version(),
+            "error": "Bei manuellen ZIP-Updates ist eine erwartete SHA256-Prüfsumme erforderlich.",
+        })
 
-    result = apply_update(tmp_path)
-    tmp_path.unlink(missing_ok=True)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            shutil.copyfileobj(release_zip.file, tmp)
+            tmp_path = Path(tmp.name)
+        result = apply_update(tmp_path, expected_sha256=expected_sha256.strip() or None)
+    finally:
+        if tmp_path:
+            tmp_path.unlink(missing_ok=True)
 
     return templates.TemplateResponse(request, "admin/system_update.html", {
         "user": user,
@@ -2008,7 +2018,7 @@ def apply_github_update(
     """HTMX-Partial: Release von GitHub herunterladen und einspielen (def → Threadpool)."""
     token = get_github_token(db)
     github = check_github_release(prerelease=prerelease, token=token)
-    if not github.get("download_url"):
+    if not github.get("download_url") or not github.get("tag_name"):
         return templates.TemplateResponse(request, "admin/_github_update.html", {
             "user": user,
             "github": github,
@@ -2020,8 +2030,8 @@ def apply_github_update(
                 payload={"tag": github.get("latest_tag"), "prerelease": prerelease},
                 ip=request.client.host if request.client else None)
     db.commit()
-    result = download_and_apply_github_update(
-        github["download_url"], token=token,
+    result = deploy_github_release(
+        github["download_url"], github["tag_name"], token=token,
         install_deps=install_deps_raw in ("1", "true", "on"),
     )
     github_after = check_github_release(prerelease=prerelease, token=token)
