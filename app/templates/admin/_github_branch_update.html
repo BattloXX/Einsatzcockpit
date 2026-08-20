@@ -75,6 +75,7 @@
   <strong>Update erfolgreich!</strong><br>
   Dateien aktualisiert: {{ update_result.files_updated }},
   geschützt übersprungen: {{ update_result.files_skipped }},
+  Backup: {{ update_result.backup.message if update_result.backup is defined else 'nicht ausgeführt' }},
   Abhängigkeiten: {{ update_result.deps_installed }},
   Migrationen: {{ update_result.migrations_applied }},
   Server-Reload: {{ 'Ja' if update_result.server_reloaded else 'Manuell erforderlich' }}
@@ -82,6 +83,8 @@
 {% else %}
 <div class="alert alert-danger" style="margin-top:12px;margin-bottom:0;">
   <strong>Fehler:</strong> {{ update_result.message }}
+  {% if update_result.locked %}<br><code>locked: true</code>{% endif %}
+  {% if update_result.backup is defined %}<br>Backup: {{ update_result.backup.message }}{% endif %}
 </div>
 {% endif %}
 {% endif %}

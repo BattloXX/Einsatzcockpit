@@ -5,12 +5,13 @@ Ablauf:
 2. ZIP wird strukturell validiert (muss app/, pyproject.toml enthalten)
 3. Optional: erwarteter SHA256 wird gegen die Upload-Datei geprüft (Manipulationsschutz)
 4. Inhalt wird sicher (ohne Zip-Slip) in ein temporäres Verzeichnis extrahiert
-5. Kritische Dateien (.env, alembic/versions/, static/img/uploads/) bleiben unangetastet
+5. Kritische Dateien (.env, alembic/versions/, Uploads, app_storage/) bleiben unangetastet
 6. Neue Dateien werden über die bestehende Installation kopiert
 7. alembic upgrade head wird ausgeführt
 8. Gunicorn erhält SIGHUP (graceful reload) oder systemctl restart
 """
 
+import fcntl
 import hashlib
 import os
 import shutil
@@ -18,6 +19,7 @@ import signal
 import subprocess
 import tempfile
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 
 APP_ROOT = Path(__file__).parent.parent.parent  # Projektverzeichnis
@@ -28,7 +30,24 @@ PROTECTED_PATHS = {
     ".env.local",
     "alembic/versions",     # eigene Migrationen bleiben
     "app/static/img/uploads",  # hochgeladene Logos etc.
+    "app_storage",          # Nutzerdaten, Medien und Backups
 }
+
+
+@contextmanager
+def _update_lock():
+    """Haelt pro Installation exklusiv den Update-Lock; wartet bei Kontention nicht."""
+    lock_path = APP_ROOT / ".update.lock"
+    with lock_path.open("a+") as lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _is_protected(rel_path: str) -> bool:
@@ -88,6 +107,14 @@ def apply_update(zip_path: Path, expected_sha256: str | None = None, install_dep
     - Beim Extrahieren wird jeder Zielpfad mit os.path.commonpath gegen das Tmp-Verzeichnis
       verglichen, sodass auch kaputt geprüfte ZIPs nichts außerhalb schreiben können.
     """
+    with _update_lock() as acquired:
+        if not acquired:
+            return {"success": False, "locked": True, "message": "Update bereits in Arbeit"}
+        return _apply_update_locked(zip_path, expected_sha256, install_deps)
+
+
+def _apply_update_locked(zip_path: Path, expected_sha256: str | None, install_deps: bool) -> dict:
+    """Implementierung von apply_update(), waehrend der Update-Lock gehalten wird."""
     valid, msg = validate_zip(zip_path)
     if not valid:
         return {"success": False, "message": msg}
@@ -158,11 +185,35 @@ def apply_update(zip_path: Path, expected_sha256: str | None = None, install_dep
             shutil.copy2(src_file, dst)
             files_updated.append(rel)
 
+    backup = _run_pre_migration_backup()
+    if not backup["success"] and backup["required"]:
+        return {
+            "success": False,
+            "message": "Code bereits aktualisiert, Migration bewusst übersprungen: " + backup["message"],
+            "files_updated": len(files_updated), "files_skipped": len(skipped),
+            "deps_installed": "übersprungen", "migrations_applied": "übersprungen",
+            "server_reloaded": False, "backup": backup,
+        }
+
     # Optional: Python-Abhängigkeiten nachziehen (z. B. neue pyproject-Dependencies)
-    deps_installed = _run_pip_install() if install_deps else "übersprungen"
+    deps_ok, deps_installed = _run_pip_install() if install_deps else (True, "übersprungen")
+    if not deps_ok:
+        return {
+            "success": False, "message": f"Abhängigkeiten konnten nicht installiert werden: {deps_installed}",
+            "files_updated": len(files_updated), "files_skipped": len(skipped),
+            "deps_installed": deps_installed, "migrations_applied": "übersprungen",
+            "server_reloaded": False, "backup": backup,
+        }
 
     # Migrationen ausführen
-    migrations_applied = _run_migrations()
+    migrations_ok, migrations_applied = _run_migrations()
+    if not migrations_ok:
+        return {
+            "success": False, "message": f"Migration fehlgeschlagen: {migrations_applied}",
+            "files_updated": len(files_updated), "files_skipped": len(skipped),
+            "deps_installed": deps_installed, "migrations_applied": migrations_applied,
+            "server_reloaded": False, "backup": backup,
+        }
 
     # Gunicorn graceful reload (SIGHUP)
     reloaded = _reload_server()
@@ -175,10 +226,11 @@ def apply_update(zip_path: Path, expected_sha256: str | None = None, install_dep
         "deps_installed": deps_installed,
         "migrations_applied": migrations_applied,
         "server_reloaded": reloaded,
+        "backup": backup,
     }
 
 
-def _run_pip_install() -> str:
+def _run_pip_install() -> tuple[bool, str]:
     """Installiert die pyproject-Abhängigkeiten ins venv (pip install -e .).
 
     Nötig, wenn ein Update neue Dependencies mitbringt (z. B. pdf2image).
@@ -196,13 +248,13 @@ def _run_pip_install() -> str:
             timeout=600,
         )
         if result.returncode == 0:
-            return "OK"
-        return f"Fehler: {result.stderr[-500:]}"
+            return True, "OK"
+        return False, f"Fehler: {result.stderr[-500:]}"
     except Exception as e:
-        return f"Fehler: {e}"
+        return False, f"Fehler: {e}"
 
 
-def _run_migrations() -> str:
+def _run_migrations() -> tuple[bool, str]:
     """Führt alembic upgrade head aus. Gibt Ausgabe oder Fehlermeldung zurück."""
     python = APP_ROOT / ".venv" / "bin" / "python"
     if not python.exists():
@@ -216,10 +268,35 @@ def _run_migrations() -> str:
             timeout=120,
         )
         if result.returncode == 0:
-            return "OK"
-        return f"Fehler: {result.stderr[:500]}"
+            return True, "OK"
+        return False, f"Fehler: {result.stderr[:500]}"
     except Exception as e:
-        return f"Fehler: {e}"
+        return False, f"Fehler: {e}"
+
+
+def _run_pre_migration_backup() -> dict:
+    """Erzeugt vor Migrationen DB-Dumps und liefert ein template-taugliches Ergebnis."""
+    from app.config import settings
+
+    required = bool(settings.UPDATE_REQUIRE_BACKUP)
+    if not settings.UPDATE_BACKUP_BEFORE_MIGRATE:
+        return {"success": True, "required": required, "message": "deaktiviert", "files": []}
+    try:
+        from app.cli import run_backup
+        rc, created = run_backup(
+            out_dir=settings.BACKUP_DIR,
+            keep=settings.BACKUP_KEEP_DAILY,
+            include_media=0,
+        )
+        files = [str(path) for path in created]
+        if rc == 0:
+            return {"success": True, "required": required,
+                    "message": f"OK ({len(files)} DB-Dump(s))", "files": files}
+        return {"success": False, "required": required,
+                "message": f"Backup fehlgeschlagen (Exit-Code {rc})", "files": files}
+    except Exception as exc:
+        return {"success": False, "required": required,
+                "message": f"Backup fehlgeschlagen: {exc}", "files": []}
 
 
 def _reload_server() -> bool:
@@ -317,7 +394,8 @@ def check_github_release(
                 f"https://api.github.com/repos/{repo}/releases/latest", token
             )
 
-        tag = data.get("tag_name", "").lstrip("v")
+        tag_name = data.get("tag_name", "")
+        tag = tag_name.lstrip("v")
         assets = data.get("assets", [])
 
         # Server-ZIP: eigenes Release-Asset bevorzugen; Fallback: GitHub-Quellcode-ZIP
@@ -330,6 +408,7 @@ def check_github_release(
         return {
             "current_version": current,
             "latest_tag": tag,
+            "tag_name": tag_name,
             "download_url": download_url,
             "has_update": bool(tag) and tag != current,
             "is_prerelease": bool(data.get("prerelease", False)),
@@ -343,6 +422,7 @@ def check_github_release(
         return {
             "current_version": current,
             "latest_tag": None,
+            "tag_name": None,
             "download_url": None,
             "has_update": False,
             "is_prerelease": False,
@@ -430,8 +510,29 @@ def git_update(branch: str, token: str | None = None, install_deps: bool = False
     (.env, DBs, Uploads, app_storage) bleiben unberührt — reset --hard fasst nur
     getrackte Dateien an, `git clean` wird bewusst NICHT ausgeführt.
     """
+    return _git_sync(branch, token=token, install_deps=install_deps, branch_checkout=branch)
+
+
+def git_update_release(tag: str, token: str | None = None, install_deps: bool = False) -> dict:
+    """Aktualisiert einen Git-Checkout auf einen Release-Tag (detached HEAD)."""
+    return _git_sync(tag, token=token, install_deps=install_deps, branch_checkout=None)
+
+
+def _git_sync(ref: str, *, token: str | None, install_deps: bool,
+              branch_checkout: str | None) -> dict:
+    """Synchronisiert einen Branch oder Release-Tag unter exklusivem Update-Lock."""
     if not is_git_checkout():
         return {"success": False, "message": "Kein Git-Arbeitsverzeichnis – bitte ZIP-Update verwenden."}
+
+    with _update_lock() as acquired:
+        if not acquired:
+            return {"success": False, "locked": True, "message": "Update bereits in Arbeit"}
+        return _git_sync_locked(ref, token=token, install_deps=install_deps,
+                                branch_checkout=branch_checkout)
+
+
+def _git_sync_locked(ref: str, *, token: str | None, install_deps: bool,
+                     branch_checkout: str | None) -> dict:
 
     remote = f"https://github.com/{GITHUB_REPO}.git"
     if token:
@@ -439,17 +540,19 @@ def git_update(branch: str, token: str | None = None, install_deps: bool = False
 
     before = _run_git(["rev-parse", "HEAD"])[1]
 
-    rc, _out, err = _run_git(["fetch", "--force", remote, branch])
+    rc, _out, err = _run_git(["fetch", "--force", remote, ref])
     if rc != 0:
         return {"success": False, "message": f"git fetch fehlgeschlagen: {_scrub(err, token)[:300]}"}
 
-    rc, _out, err = _run_git(["reset", "--hard", "FETCH_HEAD"])
+    if branch_checkout is not None:
+        rc, _out, err = _run_git(["reset", "--hard", "FETCH_HEAD"])
+        if rc != 0:
+            return {"success": False, "message": f"git reset fehlgeschlagen: {_scrub(err, token)[:300]}"}
+        rc, _out, err = _run_git(["checkout", "-B", branch_checkout])
+    else:
+        rc, _out, err = _run_git(["checkout", "--force", "--detach", "FETCH_HEAD"])
     if rc != 0:
-        return {"success": False, "message": f"git reset fehlgeschlagen: {_scrub(err, token)[:300]}"}
-
-    # Lokalen Branch-Namen auf den Zielbranch setzen (kein detached HEAD), damit
-    # die Konsole danach denselben Branch trackt.
-    _run_git(["checkout", "-B", branch])
+        return {"success": False, "message": f"git checkout fehlgeschlagen: {_scrub(err, token)[:300]}"}
 
     after = _run_git(["rev-parse", "HEAD"])[1]
     changed = 0
@@ -458,19 +561,37 @@ def git_update(branch: str, token: str | None = None, install_deps: bool = False
         if rc2 == 0:
             changed = len([ln for ln in out2.splitlines() if ln.strip()])
 
-    deps_installed = _run_pip_install() if install_deps else "übersprungen"
-    migrations_applied = _run_migrations()
+    backup = _run_pre_migration_backup()
+    if not backup["success"] and backup["required"]:
+        return {"success": False,
+                "message": "Code bereits aktualisiert, Migration bewusst übersprungen: " + backup["message"],
+                "files_updated": changed, "files_skipped": 0, "deps_installed": "übersprungen",
+                "migrations_applied": "übersprungen", "server_reloaded": False,
+                "backup": backup, "via": "git"}
+    deps_ok, deps_installed = _run_pip_install() if install_deps else (True, "übersprungen")
+    if not deps_ok:
+        return {"success": False, "message": f"Abhängigkeiten konnten nicht installiert werden: {deps_installed}",
+                "files_updated": changed, "files_skipped": 0, "deps_installed": deps_installed,
+                "migrations_applied": "übersprungen", "server_reloaded": False,
+                "backup": backup, "via": "git"}
+    migrations_ok, migrations_applied = _run_migrations()
+    if not migrations_ok:
+        return {"success": False, "message": f"Migration fehlgeschlagen: {migrations_applied}",
+                "files_updated": changed, "files_skipped": 0, "deps_installed": deps_installed,
+                "migrations_applied": migrations_applied, "server_reloaded": False,
+                "backup": backup, "via": "git"}
     reloaded = _reload_server()
 
     return {
         "success": True,
-        "message": f"Git-Update auf {branch} @ {after[:7]} eingespielt" if after else "Git-Update eingespielt",
+        "message": f"Git-Update auf {ref} @ {after[:7]} eingespielt" if after else "Git-Update eingespielt",
         "files_updated": changed,
         "files_skipped": 0,
         "deps_installed": deps_installed,
         "migrations_applied": migrations_applied,
         "server_reloaded": reloaded,
         "via": "git",
+        "backup": backup,
     }
 
 
@@ -485,6 +606,15 @@ def deploy_github_branch(
     """
     if is_git_checkout():
         return git_update(branch, token=token, install_deps=install_deps)
+    return download_and_apply_github_update(download_url, token=token, install_deps=install_deps)
+
+
+def deploy_github_release(
+    download_url: str, tag_name: str, token: str | None = None, install_deps: bool = False,
+) -> dict:
+    """Installiert Releases in Git-Checkouts per Tag, sonst als geschuetztes ZIP-Overlay."""
+    if is_git_checkout():
+        return git_update_release(tag_name, token=token, install_deps=install_deps)
     return download_and_apply_github_update(download_url, token=token, install_deps=install_deps)
 
 

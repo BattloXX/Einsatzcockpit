@@ -111,6 +111,8 @@ class Settings(BaseSettings):
     # Update-Mechanismus: erwarteter SHA256 der nächsten Release-ZIP (optional;
     # wenn gesetzt, muss er auch im Upload-Form vom Admin angegeben werden)
     UPDATE_ZIP_REQUIRE_HASH: bool = True
+    UPDATE_BACKUP_BEFORE_MIGRATE: bool = True
+    UPDATE_REQUIRE_BACKUP: bool = True
 
     # Media-Upload (Auftrag-Anhaenge)
     # Storage liegt bewusst AUSSERHALB von app/static, damit Dateien nur ueber

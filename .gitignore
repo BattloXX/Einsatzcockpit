@@ -33,3 +33,4 @@ htmlcov/
 
 # Laufzeit-Medienablage (Fotos/Momentaufnahmen/PDFs) — lokal generiert, nicht versioniert
 app_storage/
+.update.lock

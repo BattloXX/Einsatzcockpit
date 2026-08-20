@@ -1,7 +1,9 @@
 """GitHub-Auto-Update: Release-/Branch-Check, Token-Header, Zipball-Validierung."""
 import io
 import json
+import fcntl
 import zipfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -154,6 +156,7 @@ def test_check_github_release_nutzt_token():
         info = update_service.check_github_release(token="ghp_secret")
     assert gesehen["token"] == "ghp_secret"
     assert info["latest_tag"] == "9.9.9"
+    assert info["tag_name"] == "v9.9.9"
     assert info["has_update"] is True
 
 
@@ -233,8 +236,10 @@ def test_git_update_runs_fetch_and_hard_reset(monkeypatch):
         return 0, "", ""
 
     monkeypatch.setattr(us, "_run_git", fake_git)
-    monkeypatch.setattr(us, "_run_pip_install", lambda: "OK")
-    monkeypatch.setattr(us, "_run_migrations", lambda: "OK")
+    monkeypatch.setattr(us, "_run_pre_migration_backup", lambda: {
+        "success": True, "required": True, "message": "OK", "files": []})
+    monkeypatch.setattr(us, "_run_pip_install", lambda: (True, "OK"))
+    monkeypatch.setattr(us, "_run_migrations", lambda: (True, "OK"))
     monkeypatch.setattr(us, "_reload_server", lambda: True)
 
     res = us.git_update("main", token="secrettoken", install_deps=True)
@@ -270,3 +275,182 @@ def test_git_update_no_git_checkout(monkeypatch):
     monkeypatch.setattr(us, "is_git_checkout", lambda: False)
     res = us.git_update("main")
     assert res["success"] is False
+
+
+def _write_update_zip(path: Path, entries: dict[str, bytes]) -> None:
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("release/pyproject.toml", b"[project]\nname='x'")
+        zf.writestr("release/app/main.py", b"new-main")
+        for name, value in entries.items():
+            zf.writestr("release/" + name, value)
+
+
+def _mock_update_tail(monkeypatch, us):
+    monkeypatch.setattr(us, "_run_pre_migration_backup", lambda: {
+        "success": True, "required": True, "message": "OK", "files": []})
+    monkeypatch.setattr(us, "_run_migrations", lambda: (True, "OK"))
+    monkeypatch.setattr(us, "_reload_server", lambda: True)
+
+
+def test_apply_update_copies_and_protects_app_storage(tmp_path, monkeypatch):
+    from app.services import update_service as us
+    root = tmp_path / "install"
+    (root / "app_storage/incident_media").mkdir(parents=True)
+    (root / "app_storage/incident_media/photo.txt").write_text("original")
+    archive = tmp_path / "release.zip"
+    _write_update_zip(archive, {
+        "app/feature.py": b"feature", "app_storage/incident_media/photo.txt": b"clobbered"})
+    monkeypatch.setattr(us, "APP_ROOT", root)
+    _mock_update_tail(monkeypatch, us)
+    result = us.apply_update(archive)
+    assert result["success"] is True
+    assert (root / "app/feature.py").read_bytes() == b"feature"
+    assert (root / "app_storage/incident_media/photo.txt").read_text() == "original"
+    assert result["files_skipped"] == 1
+
+
+@pytest.mark.parametrize("which", ["deps", "migrations"])
+def test_zip_tail_failure_is_unsuccessful_and_does_not_reload(tmp_path, monkeypatch, which):
+    from app.services import update_service as us
+    archive = tmp_path / "release.zip"
+    _write_update_zip(archive, {})
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setattr(us, "APP_ROOT", root)
+    _mock_update_tail(monkeypatch, us)
+    reloader = MagicMock()
+    monkeypatch.setattr(us, "_reload_server", reloader)
+    if which == "deps":
+        monkeypatch.setattr(us, "_run_pip_install", lambda: (False, "pip kaputt"))
+        result = us.apply_update(archive, install_deps=True)
+    else:
+        monkeypatch.setattr(us, "_run_migrations", lambda: (False, "alembic kaputt"))
+        result = us.apply_update(archive)
+    assert result["success"] is False
+    assert result["server_reloaded"] is False
+    reloader.assert_not_called()
+
+
+@pytest.mark.parametrize("required,expected", [(True, False), (False, True)])
+def test_backup_gate_required_or_warning(tmp_path, monkeypatch, required, expected):
+    from app.services import update_service as us
+    archive = tmp_path / "release.zip"
+    _write_update_zip(archive, {})
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setattr(us, "APP_ROOT", root)
+    monkeypatch.setattr(us, "_run_pre_migration_backup", lambda: {
+        "success": False, "required": required, "message": "dump kaputt", "files": []})
+    monkeypatch.setattr(us, "_run_migrations", lambda: (True, "OK"))
+    monkeypatch.setattr(us, "_reload_server", lambda: True)
+    result = us.apply_update(archive)
+    assert result["success"] is expected
+
+
+def test_deploy_github_release_git_and_zip(monkeypatch):
+    from app.services import update_service as us
+    monkeypatch.setattr(us, "is_git_checkout", lambda: True)
+    git = MagicMock(return_value={"via": "git"})
+    monkeypatch.setattr(us, "git_update_release", git)
+    assert us.deploy_github_release("url", "v2.0", token="t", install_deps=True)["via"] == "git"
+    git.assert_called_once_with("v2.0", token="t", install_deps=True)
+    monkeypatch.setattr(us, "is_git_checkout", lambda: False)
+    monkeypatch.setattr(us, "download_and_apply_github_update", lambda *a, **k: {"via": "zip"})
+    assert us.deploy_github_release("url", "v2.0")["via"] == "zip"
+
+
+def test_git_release_detached_and_checkout_failure(monkeypatch):
+    from app.services import update_service as us
+    monkeypatch.setattr(us, "is_git_checkout", lambda: True)
+    commands = []
+    def fake_git(args, timeout=300):
+        commands.append(args)
+        if args[:1] == ["checkout"]:
+            return 1, "", "checkout kaputt"
+        return 0, "abc1234" if args[:1] == ["rev-parse"] else "", ""
+    monkeypatch.setattr(us, "_run_git", fake_git)
+    result = us.git_update_release("v2.0")
+    assert ["fetch", "--force", "https://github.com/BattloXX/Einsatzcockpit.git", "v2.0"] in commands
+    assert ["checkout", "--force", "--detach", "FETCH_HEAD"] in commands
+    assert result["success"] is False
+
+
+def test_git_migration_failure_does_not_reload(monkeypatch):
+    from app.services import update_service as us
+    monkeypatch.setattr(us, "is_git_checkout", lambda: True)
+    monkeypatch.setattr(us, "_run_git", lambda args, timeout=300: (0, "abc1234", ""))
+    monkeypatch.setattr(us, "_run_pre_migration_backup", lambda: {
+        "success": True, "required": True, "message": "OK", "files": []})
+    monkeypatch.setattr(us, "_run_migrations", lambda: (False, "kaputt"))
+    reload_mock = MagicMock()
+    monkeypatch.setattr(us, "_reload_server", reload_mock)
+    result = us.git_update("main")
+    assert result["success"] is False
+    reload_mock.assert_not_called()
+
+
+def test_update_lock_contention_then_release(tmp_path, monkeypatch):
+    from app.services import update_service as us
+    monkeypatch.setattr(us, "APP_ROOT", tmp_path)
+    lock = (tmp_path / ".update.lock").open("a+")
+    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        with us._update_lock() as acquired:
+            assert acquired is False
+    finally:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        lock.close()
+    with us._update_lock() as acquired:
+        assert acquired is True
+
+
+def _router_args(data: bytes = b"zip"):
+    from fastapi import Request, UploadFile
+    return {
+        "request": Request({"type": "http", "method": "POST", "path": "/", "headers": []}),
+        "db": MagicMock(), "user": MagicMock(),
+        "release_zip": UploadFile(io.BytesIO(data), filename="release.zip"),
+    }
+
+
+def test_manual_zip_hash_required_rejects_before_processing(monkeypatch):
+    import inspect
+    from app.routers import ui_settings as router_module
+    assert not inspect.iscoroutinefunction(router_module.apply_system_update)
+    monkeypatch.setattr(router_module.app_settings, "UPDATE_ZIP_REQUIRE_HASH", True)
+    apply_mock = MagicMock()
+    monkeypatch.setattr(router_module, "apply_update", apply_mock)
+    monkeypatch.setattr(router_module.templates, "TemplateResponse",
+                        lambda request, name, context: context)
+    response = router_module.apply_system_update(**_router_args(), expected_sha256="")
+    assert "SHA256" in response["error"]
+    apply_mock.assert_not_called()
+
+
+def test_manual_zip_hash_optional_when_setting_disabled(monkeypatch):
+    from app.routers import ui_settings as router_module
+    monkeypatch.setattr(router_module.app_settings, "UPDATE_ZIP_REQUIRE_HASH", False)
+    apply_mock = MagicMock(return_value={"success": True})
+    monkeypatch.setattr(router_module, "apply_update", apply_mock)
+    monkeypatch.setattr(router_module.templates, "TemplateResponse",
+                        lambda request, name, context: context)
+    response = router_module.apply_system_update(**_router_args(), expected_sha256="")
+    assert response["update_result"]["success"] is True
+    assert apply_mock.call_args.kwargs["expected_sha256"] is None
+
+
+def test_manual_zip_tempfile_removed_when_apply_raises(monkeypatch):
+    from app.routers import ui_settings as router_module
+    monkeypatch.setattr(router_module.app_settings, "UPDATE_ZIP_REQUIRE_HASH", True)
+    seen = {}
+    def explode(path, **kwargs):
+        seen["path"] = path
+        seen["hash"] = kwargs["expected_sha256"]
+        assert path.exists()
+        raise RuntimeError("boom")
+    monkeypatch.setattr(router_module, "apply_update", explode)
+    digest = "a" * 64
+    with pytest.raises(RuntimeError, match="boom"):
+        router_module.apply_system_update(**_router_args(), expected_sha256=digest)
+    assert seen["hash"] == digest
+    assert not seen["path"].exists()
