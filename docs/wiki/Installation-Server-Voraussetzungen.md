@@ -65,6 +65,9 @@ sudo apt-get install -y python3.14 python3.14-venv python3.14-dev
 ## Systempakete für WeasyPrint, MariaDB und PDF-Rendering
 
 WeasyPrint (PDF-Generierung) benötigt Pango/Cairo. Der MariaDB-Connector braucht die Dev-Header.
+`mariadb-client` liefert `mariadb-dump`, das für das **automatische Datenbank-Backup vor
+Migrationen** (System-Update) benötigt wird — ohne dieses Paket schlägt der Backup-Schritt vor
+jedem Update fehl, obwohl die App selbst (reine `pymysql`-Verbindung) normal läuft.
 `poppler-utils` rendert die PDF-Seiten der **Objektverwaltung** (pdf2image) — ohne Poppler werden
 hochgeladene PDFs zwar zerlegt, aber ohne Vorschaubilder abgelegt.
 `tesseract-ocr` (+ Sprachpaket `tesseract-ocr-deu`) liefert die **OCR-Volltextsuche** für gescannte
@@ -75,6 +78,7 @@ sind dann nicht durchsuchbar (die App startet trotzdem).
 ```bash
 sudo apt-get install -y \
     libmariadb-dev \
+    mariadb-client \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     libcairo2 \

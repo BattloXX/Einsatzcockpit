@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -113,6 +114,33 @@ def create_sms_gateway_token(label: str, org_id: int) -> None:
 
 # ── Backup / Disaster-Recovery ────────────────────────────────────────────────
 
+@dataclass
+class BackupResult:
+    """Ergebnis eines run_backup()-Laufs, inkl. UI-tauglicher Fehlerdetails."""
+    returncode: int
+    created: list[Path]
+    failures: list[str] = field(default_factory=list)
+
+
+def _sanitisierter_dump_fehler(label: str, dump_bin: str, exc: Exception) -> str:
+    """Bildet aus einer _dump_db-Exception eine fuer die Web-UI sichere Meldung.
+
+    Wichtig: parse_database_url() haengt bei ValueError die rohe DATABASE_URL
+    (inkl. Passwort im Klartext) an die Exception-Message an — die darf nie
+    unveraendert an den Browser durchgereicht werden. Fuer alle Faelle ausser
+    RuntimeError (das ist mariadb-dumps eigenes stderr, Passwort kommt dort
+    nie vor, siehe MYSQL_PWD-Env in build_dump_argv) daher feste, generische
+    Meldungen statt str(exc).
+    """
+    if isinstance(exc, FileNotFoundError):
+        return f"{label}: {dump_bin} nicht gefunden – Paket mariadb-client installieren"
+    if isinstance(exc, ValueError):
+        return f"{label}: ungueltige Datenbank-URL (Host/Datenbank fehlt)"
+    if isinstance(exc, RuntimeError):
+        return f"{label}: {exc}"
+    return f"{label}: unerwarteter Fehler beim Backup"
+
+
 def _dump_db(cfg, ziel: Path, dump_bin: str) -> int:
     """Streamt einen mariadb-dump gzip-komprimiert nach ziel. Rueckgabe: Bytes."""
     from app.services import backup_service as bs
@@ -153,7 +181,7 @@ def _tar_medien(ziel: Path, medien_root: Path, backup_dir: Path) -> int:
     return ziel.stat().st_size
 
 
-def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> tuple[int, list[Path]]:
+def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> BackupResult:
     """Sichert beide DBs (+ optional Medien) und raeumt alte Backups auf."""
     from app.config import settings
     from app.services import backup_service as bs
@@ -170,6 +198,7 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> tu
 
     fehler = 0
     erzeugt: list[Path] = []
+    failures: list[str] = []
     for label, url in dbs:
         ziel = out / bs.dump_dateiname(label, jetzt)
         try:
@@ -180,6 +209,7 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> tu
         except Exception as exc:  # noqa: BLE001 — Sammelbetrieb, Rest weiterversuchen
             fehler += 1
             print(f"✗ DB-Dump {label} fehlgeschlagen: {exc}", file=sys.stderr)
+            failures.append(_sanitisierter_dump_fehler(label, settings.BACKUP_DUMP_BIN, exc))
 
     if medien:
         medien_root = Path(settings.MEDIA_STORAGE_DIR).parent  # = app_storage
@@ -193,22 +223,25 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> tu
             except Exception as exc:  # noqa: BLE001
                 fehler += 1
                 print(f"✗ Medien-Archiv fehlgeschlagen: {exc}", file=sys.stderr)
+                failures.append("medien: Archivierung fehlgeschlagen")
         else:
             print(f"• Medien-Verzeichnis {medien_root} fehlt — uebersprungen")
 
     # Off-Site-Upload (3-2-1): frisch erzeugte Dumps an die Gegenstelle schieben.
     if settings.BACKUP_REMOTE_ENABLED and erzeugt:
-        if _remote_upload(erzeugt, out) != 0:
+        rc, detail = _remote_upload(erzeugt, out)
+        if rc != 0:
             fehler += 1
+            failures.append(detail or "Off-Site-Upload fehlgeschlagen")
 
     if fehler:
         print(f"Backup mit {fehler} Fehler(n) beendet.", file=sys.stderr)
     else:
         print(f"Backup vollstaendig nach {out}.")
-    return (1 if fehler else 0), erzeugt
+    return BackupResult(returncode=1 if fehler else 0, created=erzeugt, failures=failures)
 
 
-def _remote_upload(dateien: list[Path], backup_dir: Path) -> int:
+def _remote_upload(dateien: list[Path], backup_dir: Path) -> tuple[int, str | None]:
     """Laedt die uebergebenen Backups an das konfigurierte Remote-Ziel. 0 = ok."""
     from app.services import remote_backup_service as rbs
     cfg = rbs.config_aus_settings()
@@ -216,15 +249,15 @@ def _remote_upload(dateien: list[Path], backup_dir: Path) -> int:
         rbs.config_pruefen(cfg)
     except ValueError as exc:
         print(f"✗ Remote-Upload-Konfiguration ungueltig: {exc}", file=sys.stderr)
-        return 1
+        return 1, "Off-Site-Upload: Konfiguration ungueltig"
     try:
         rbs.upload(cfg, dateien, backup_dir)
         print(f"✓ Off-Site-Upload ({len(dateien)} Datei(en)) → {cfg.ziel_beschreibung()}")
-        return 0
+        return 0, None
     except Exception as exc:  # noqa: BLE001 — Off-Site-Fehler sichtbar machen
         print(f"✗ Off-Site-Upload fehlgeschlagen ({cfg.ziel_beschreibung()}): {exc}",
               file=sys.stderr)
-        return 1
+        return 1, f"Off-Site-Upload fehlgeschlagen ({cfg.ziel_beschreibung()})"
 
 
 def backup_upload(alle: bool = False) -> int:
@@ -250,7 +283,7 @@ def backup_upload(alle: bool = False) -> int:
     if not dateien and rbs.config_aus_settings().protocol != "rclone":
         print(f"✗ Keine Backups in {out} gefunden.", file=sys.stderr)
         return 1
-    return _remote_upload(dateien, out)
+    return _remote_upload(dateien, out)[0]
 
 
 def restore_test(scratch_db: str = "") -> int:
@@ -358,8 +391,8 @@ def main() -> None:
     elif args.command == "promote-to-system-admin":
         promote_to_system_admin(args.username)
     elif args.command == "backup":
-        rc, _created = run_backup(args.out, args.keep, 0 if args.no_media else -1)
-        sys.exit(rc)
+        result = run_backup(args.out, args.keep, 0 if args.no_media else -1)
+        sys.exit(result.returncode)
     elif args.command == "restore-test":
         sys.exit(restore_test(args.scratch_db))
     elif args.command == "backup-upload":

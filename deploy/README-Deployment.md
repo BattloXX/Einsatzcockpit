@@ -13,10 +13,14 @@ Vollständige Dokumentation: **[GitHub Wiki](../../wiki)**
 
 ```bash
 apt install -y python3.14 python3.14-venv python3.14-dev \
-    libmariadb-dev build-essential \
+    libmariadb-dev mariadb-client build-essential \
     libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
     libffi-dev libcairo2 libcairo2-dev
 ```
+
+`mariadb-client` liefert `mariadb-dump` für das automatische DB-Backup vor
+Migrationen (System-Update) — ohne dieses Paket schlägt der Backup-Schritt
+fehl, auch wenn die App selbst normal läuft (reine `pymysql`-Verbindung).
 
 ## Schritt-für-Schritt
 

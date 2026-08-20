@@ -184,10 +184,11 @@ def test_run_backup_ruft_remote_upload(tmp_path, monkeypatch):
 
     def fake_remote(dateien, backup_dir):
         hochgeladen["dateien"] = list(dateien)
-        return 0
+        return 0, None
 
     monkeypatch.setattr(cli, "_remote_upload", fake_remote)
-    assert cli.run_backup()[0] == 0
+    result = cli.run_backup()
+    assert result.returncode == 0
     assert len(hochgeladen["dateien"]) == 1  # der eine DB-Dump
 
 
@@ -199,8 +200,10 @@ def test_run_backup_remote_fehler_setzt_exitcode(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "BACKUP_INCLUDE_MEDIA", False)
     monkeypatch.setattr(settings, "BACKUP_REMOTE_ENABLED", True)
     monkeypatch.setattr(cli, "_dump_db", lambda cfg, ziel, b: (Path(ziel).write_bytes(b"x"), 1)[1])
-    monkeypatch.setattr(cli, "_remote_upload", lambda dateien, backup_dir: 1)
-    assert cli.run_backup()[0] == 1  # Off-Site-Fehler -> Exit != 0
+    monkeypatch.setattr(cli, "_remote_upload", lambda dateien, backup_dir: (1, "Off-Site-Upload fehlgeschlagen"))
+    result = cli.run_backup()
+    assert result.returncode == 1  # Off-Site-Fehler -> Exit != 0
+    assert result.failures == ["Off-Site-Upload fehlgeschlagen"]
 
 
 def test_backup_upload_deaktiviert(monkeypatch):

@@ -156,9 +156,10 @@ def test_run_backup_beide_dbs_und_medien(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_dump_db", fake_dump)
     monkeypatch.setattr(cli, "_tar_medien", fake_tar)
 
-    rc, created = cli.run_backup()
-    assert rc == 0
-    assert created
+    result = cli.run_backup()
+    assert result.returncode == 0
+    assert result.created
+    assert result.failures == []
     assert set(gedumpt) == {"einsatzleiter", "einsatzleiter_weather"}
     assert list(out.glob("einsatzleiter-*.sql.gz"))
     assert list(out.glob("einsatzleiter_weather-*.sql.gz"))
@@ -176,7 +177,43 @@ def test_run_backup_meldet_fehler(tmp_path, monkeypatch):
         raise RuntimeError("mariadb-dump nicht gefunden")
 
     monkeypatch.setattr(cli, "_dump_db", boom)
-    assert cli.run_backup()[0] == 1  # Exit-Code != 0 → Timer/Monitoring schlaegt an
+    result = cli.run_backup()
+    assert result.returncode == 1  # Exit-Code != 0 → Timer/Monitoring schlaegt an
+    assert result.failures == ["einsatzleiter: mariadb-dump nicht gefunden"]
+
+
+def test_run_backup_meldet_fehlendes_binary_ohne_rohe_exception(tmp_path, monkeypatch):
+    """FileNotFoundError (Binary fehlt) liefert eine feste, verstaendliche Meldung."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "BACKUP_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "DATABASE_URL", "mysql+pymysql://u:p@h:3306/einsatzleiter")
+    monkeypatch.setattr(settings, "WEATHER_DATABASE_URL", "")
+    monkeypatch.setattr(settings, "BACKUP_INCLUDE_MEDIA", False)
+    monkeypatch.setattr(settings, "BACKUP_DUMP_BIN", "mariadb-dump")
+
+    def boom(cfg, ziel, dump_bin):
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(cli, "_dump_db", boom)
+    result = cli.run_backup()
+    assert result.returncode == 1
+    assert result.failures == [
+        "einsatzleiter: mariadb-dump nicht gefunden – Paket mariadb-client installieren"
+    ]
+
+
+def test_run_backup_leakt_keine_db_url_bei_kaputter_url(tmp_path, monkeypatch):
+    """Eine kaputte DATABASE_URL darf nicht im Klartext (inkl. Passwort) in failures landen."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "BACKUP_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "DATABASE_URL", "mysql+pymysql://u:geheimes-passwort@")
+    monkeypatch.setattr(settings, "WEATHER_DATABASE_URL", "")
+    monkeypatch.setattr(settings, "BACKUP_INCLUDE_MEDIA", False)
+
+    result = cli.run_backup()
+    assert result.returncode == 1
+    assert result.failures == ["einsatzleiter: ungueltige Datenbank-URL (Host/Datenbank fehlt)"]
+    assert not any("geheimes-passwort" in f for f in result.failures)
 
 
 def test_restore_test_verweigert_produktions_db(monkeypatch):
