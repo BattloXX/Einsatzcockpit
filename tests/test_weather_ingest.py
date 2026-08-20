@@ -1,4 +1,6 @@
 """Tests für den Wetterstations-Push-Ingest (PR 2)."""
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from app.config import settings
@@ -81,6 +83,43 @@ def test_ingest_drops_implausible_values(client, station, monkeypatch):
     assert st.last_temp_c is None
     assert st.last_hum_pct is None
     assert st.last_wind_ms == 3.0
+
+
+def test_ingest_checks_rain_rate_against_day_total_delta(client, station, monkeypatch):
+    monkeypatch.setattr(settings, "WEATHER_INGEST_MIN_INTERVAL_S", 0)
+    token, station_id, _ = station
+
+    assert client.get("/api/v1/weather/ingest", params={
+        "token": token, "rainrate": "0", "rainday": "2.6",
+    }).status_code == 204
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        st = db.get(WeatherStation, station_id)
+        st.last_seen_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
+        db.commit()
+    finally:
+        db.close()
+
+    assert client.get("/api/v1/weather/ingest", params={
+        "token": token, "rainrate": "55.2", "rainday": "2.6",
+    }).status_code == 204
+    assert _get_station(station_id).last_rain_rate_mmh is None
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        st = db.get(WeatherStation, station_id)
+        st.last_seen_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
+        db.commit()
+    finally:
+        db.close()
+
+    assert client.get("/api/v1/weather/ingest", params={
+        "token": token, "rainrate": "55.2", "rainday": "7.2",
+    }).status_code == 204
+    assert _get_station(station_id).last_rain_rate_mmh == 55.2
 
 
 def test_ingest_throttled_keeps_old_snapshot(client, station, monkeypatch):
@@ -182,6 +221,20 @@ def test_station_views_online_after_ingest(client, station, monkeypatch):
     assert v["temp"] == 11.0
     assert v["wind"] == 2.5
     assert v["wind_dir"] == "O"   # 90° → Ost
+
+
+def test_station_views_primary_matches_alert_station(setup_db):
+    """Frische Station mit kleinster ID steht in UI und Alarmbild an erster Stelle."""
+    from app.services.weather_station_service import order_stations_for_primary
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    stations = [
+        WeatherStation(id=3, name="A", last_seen_at=now),
+        WeatherStation(id=1, name="Z", last_seen_at=now),
+        WeatherStation(id=2, name="B", last_seen_at=now - timedelta(minutes=16)),
+    ]
+    ordered = order_stations_for_primary(stations, now.replace(tzinfo=UTC))
+    assert [item.id for item in ordered] == [1, 3, 2]
 
 
 def test_station_card_template_compiles():

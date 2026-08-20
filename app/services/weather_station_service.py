@@ -54,6 +54,9 @@ _LIMITS: dict[str, tuple[float, float]] = {
 # Reihenfolge der Mess-Felder (Snapshot-Spalten heißen last_<feld>).
 FIELDS: tuple[str, ...] = tuple(_LIMITS.keys())
 
+_RAIN_RATE_CHECK_MAX_AGE = timedelta(minutes=15)
+_RAIN_RATE_DELTA_TOLERANCE_MM = 1.0
+
 
 @dataclass
 class IngestResult:
@@ -100,6 +103,31 @@ def _is_throttled(station: WeatherStation, now: datetime) -> bool:
     return (now - last).total_seconds() < settings.WEATHER_INGEST_MIN_INTERVAL_S
 
 
+def station_is_online(
+    station: WeatherStation,
+    now: datetime | None = None,
+    stale_after_min: int = 15,
+) -> bool:
+    """Whether a station has reported within the shared freshness window."""
+    last_seen = station.last_seen_at
+    if last_seen is None:
+        return False
+    if last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=UTC)
+    reference = now or datetime.now(UTC)
+    age_min = max(int((reference - last_seen).total_seconds() / 60), 0)
+    return age_min <= stale_after_min
+
+
+def order_stations_for_primary(
+    stations: list[WeatherStation],
+    now: datetime | None = None,
+) -> list[WeatherStation]:
+    """Order stations so the alert engine and UI choose the same primary station."""
+    reference = now or datetime.now(UTC)
+    return sorted(stations, key=lambda station: (not station_is_online(station, reference), station.id))
+
+
 def ingest(
     db: Session,
     station: WeatherStation,
@@ -116,6 +144,35 @@ def ingest(
         return IngestResult(accepted=False, throttled=True, reason="zu häufig")
 
     clean = {f: clamp(f, values.get(f)) for f in FIELDS}
+    previous_seen = station.last_seen_at
+    previous_rain_day = station.last_rain_day_mm
+    rain_rate = clean["rain_rate_mmh"]
+    rain_day = clean["rain_day_mm"]
+    if (
+        previous_seen is not None
+        and previous_rain_day is not None
+        and rain_day is not None
+        and rain_day >= previous_rain_day  # Tageszähler-Reset nicht als Ausreißer behandeln
+        and rain_rate is not None
+    ):
+        if previous_seen.tzinfo is None:
+            previous_seen = previous_seen.replace(tzinfo=UTC)
+        elapsed = now - previous_seen
+        rain_delta = rain_day - previous_rain_day
+        expected_delta = rain_rate * elapsed.total_seconds() / 3600
+        if (
+            timedelta(0) < elapsed <= _RAIN_RATE_CHECK_MAX_AGE
+            and expected_delta > rain_delta + _RAIN_RATE_DELTA_TOLERANCE_MM
+        ):
+            logger.warning(
+                "Wetter-Ingest Station %s: unplausible Regenrate %.1f mm/h verworfen "
+                "(Tagessummenanstieg %.1f mm in %.1f min)",
+                station.id,
+                rain_rate,
+                rain_delta,
+                elapsed.total_seconds() / 60,
+            )
+            clean["rain_rate_mmh"] = None
     measured = measured_at or now
     if measured.tzinfo is None:
         measured = measured.replace(tzinfo=UTC)

@@ -25,7 +25,8 @@ RULE_DEFAULTS: dict[str, dict] = {
     "sturm":       {"vorwarn_gust_ms": 17.0, "akut_gust_ms": 25.0, "hysterese_ms": 3.0},
     "starkregen":  {"vorwarn_mmh": 15.0, "akut_mmh": 25.0, "akut_3h_mm": 30.0},
     "schneefall":  {"temp_max_c": 1.0, "vorwarn_mmh": 3.0, "akut_mmh": 5.0},
-    "glatteis":    {"temp_max_c": 1.0, "temp_min_reif_c": -6.0, "spread_max_k": 0.5},
+    "glatteis":    {"temp_max_c": 1.0, "temp_min_reif_c": -6.0, "spread_max_k": 0.5,
+                     "min_rain_mmh": 0.2},
     "gewitter":    {"min_level": 2},
     "lake_effekt": {
         "temp_max_c": 1.0, "delta_t_min": 12.0,
@@ -110,20 +111,12 @@ async def build_weather_picture(org_settings, db) -> WeatherPicture:
     stations = (
         db.query(WeatherStation)
         .filter(WeatherStation.org_id == org_settings.org_id, WeatherStation.active == True)  # noqa: E712
-        .order_by(WeatherStation.id)
         .all()
     )
     now = datetime.now(UTC)
-    station = None
-    for candidate in stations:
-        last_seen = candidate.last_seen_at
-        if last_seen is not None and last_seen.tzinfo is None:
-            last_seen = last_seen.replace(tzinfo=UTC)
-        if last_seen is not None:
-            age_min = max(int((now - last_seen).total_seconds() / 60), 0)
-            if age_min <= _STATION_STALE_MIN:
-                station = candidate
-                break
+    from app.services.weather_station_service import order_stations_for_primary, station_is_online
+    stations = order_stations_for_primary(stations, now)
+    station = stations[0] if stations and station_is_online(stations[0], now, _STATION_STALE_MIN) else None
 
     # Koordinaten: bevorzugt aktive Station, sonst Org-Fallback
     lat, lng = None, None
@@ -388,6 +381,7 @@ def _eval_glatteis(rule, pic: WeatherPicture) -> RuleResult:
     temp_max       = _p(rule, "temp_max_c")
     temp_min_reif  = _p(rule, "temp_min_reif_c")
     spread_max     = _p(rule, "spread_max_k")
+    min_rain_mmh   = _p(rule, "min_rain_mmh")
     temp           = _temp(pic)
     dew            = _dewpoint(pic)
     rain_rate      = _rain_rate(pic)
@@ -396,7 +390,7 @@ def _eval_glatteis(rule, pic: WeatherPicture) -> RuleResult:
 
     if temp is not None and temp_min_reif <= temp <= temp_max:
         reifglaette = (dew is not None and temp < 0 and (temp - dew) <= spread_max)
-        gefrierregen = rain_rate is not None and rain_rate > 0
+        gefrierregen = rain_rate is not None and rain_rate >= min_rain_mmh
         if gefrierregen or reifglaette:
             reason = "Gefrierregen" if gefrierregen else "Reifglätte (Taupunkt-Spread ≤ 0.5 K)"
             return RuleResult("akut", f"Glatteisgefahr: {reason} bei {temp:.1f} °C",
@@ -641,6 +635,7 @@ def _warning_hash(w) -> str:
 # ── Zustandsmaschine ──────────────────────────────────────────────────────────
 
 _HYSTERESE_CYCLES = 2  # Zyklen unter Schwelle, bis Akut verlassen wird
+_STATION_CONFIRMATION_RULES = {"starkregen", "schneefall", "glatteis", "lake_effekt"}
 
 
 def apply_state_machine(rule, result: RuleResult, state_row) -> Decision:
@@ -657,6 +652,25 @@ def apply_state_machine(rule, result: RuleResult, state_row) -> Decision:
             False, old_state, result.detail_de, result.values,
             result.payload_hash, result.evidence,
         )
+
+    # Stationsbasierte Akut-Eintritte erst nach zwei aufeinanderfolgenden Treffern.
+    # Eine konfigurierte Eskalation aus der Vorwarnung bleibt weiterhin sofortig.
+    station_entry = (
+        rule.key in _STATION_CONFIRMATION_RULES
+        and new_state == "akut"
+        and old_state not in {"akut", "vorwarnung"}
+    )
+    if station_entry:
+        cycles = ((state_row.above_threshold_cycles or 0) if state_row else 0) + 1
+        if state_row:
+            state_row.above_threshold_cycles = cycles
+        if cycles < _HYSTERESE_CYCLES:
+            return Decision(
+                False, old_state, result.detail_de, result.values,
+                result.payload_hash, result.evidence,
+            )
+    elif state_row:
+        state_row.above_threshold_cycles = 0
 
     # Hysterese: 'akut' erst verlassen wenn 2 Zyklen unter Schwelle
     if old_state == "akut" and new_state != "akut":

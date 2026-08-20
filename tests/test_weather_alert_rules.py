@@ -19,6 +19,7 @@ from app.services.weather_alert_service import (
 
 @dataclass
 class FakeStation:
+    id: int = 1
     last_gust_ms: float | None = None
     last_wind_ms: float | None = None
     last_temp_c: float | None = None
@@ -88,6 +89,7 @@ class FakeState:
     last_notified_at: datetime | None = None
     last_payload_hash: str | None = None
     below_threshold_cycles: int = 0
+    above_threshold_cycles: int = 0
 
 
 def empty_pic(**kwargs) -> WeatherPicture:
@@ -201,6 +203,11 @@ def test_glatteis_none():
     assert r.state == "none"
 
 
+def test_glatteis_rain_noise_does_not_trigger():
+    pic = empty_pic(station=FakeStation(last_temp_c=0.5, last_rain_rate_mmh=0.1))
+    assert evaluate_rule(FakeRule("glatteis"), pic).state == "none"
+
+
 # ── Gewitter ──────────────────────────────────────────────────────────────────
 
 def test_gewitter_akut():
@@ -305,8 +312,8 @@ async def test_weather_picture_prefers_fresh_station_and_passes_org_id(monkeypat
     from app.services.weather_alert_service import build_weather_picture
 
     now = datetime.now(UTC).replace(tzinfo=None)
-    stale = FakeStation(last_seen_at=now - timedelta(minutes=16), lat=47.0, lng=9.0)
-    fresh = FakeStation(last_seen_at=now - timedelta(minutes=15), lat=47.1, lng=9.1)
+    stale = FakeStation(id=1, last_seen_at=now - timedelta(minutes=16), lat=47.0, lng=9.0)
+    fresh = FakeStation(id=2, last_seen_at=now - timedelta(minutes=15), lat=47.1, lng=9.1)
 
     class Query:
         def filter(self, *args):
@@ -444,6 +451,32 @@ def test_state_machine_eskalation_bypasses_cooldown():
     rule = _rule()
     d = apply_state_machine(rule, result, state)
     assert d.notify is True
+
+
+@pytest.mark.parametrize("key", ["starkregen", "schneefall", "glatteis", "lake_effekt"])
+def test_station_akut_requires_two_consecutive_cycles(key):
+    from app.services.weather_alert_service import RuleResult
+    state = FakeState(state="none")
+    result = RuleResult("akut", "Stationswert", {})
+
+    first = apply_state_machine(_rule(key), result, state)
+    assert first.notify is False
+    assert first.new_state == "none"
+    assert state.above_threshold_cycles == 1
+
+    second = apply_state_machine(_rule(key), result, state)
+    assert second.notify is True
+    assert second.new_state == "akut"
+
+
+def test_station_akut_confirmation_resets_after_miss():
+    from app.services.weather_alert_service import RuleResult
+    state = FakeState(state="none")
+    rule = _rule("starkregen")
+    apply_state_machine(rule, RuleResult("akut", "Spike", {}), state)
+    apply_state_machine(rule, RuleResult("none", "", {}), state)
+    assert state.above_threshold_cycles == 0
+    assert apply_state_machine(rule, RuleResult("akut", "Spike", {}), state).notify is False
 
 
 def test_state_machine_hysterese():
