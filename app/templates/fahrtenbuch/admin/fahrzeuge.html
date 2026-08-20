@@ -97,9 +97,12 @@
           <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
             <input type="checkbox" name="seilwinde_abfrage" value="on" {% if fz.seilwinde_abfrage %}checked{% endif %}> Seilwinde abfragen
           </label>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
-            <input type="checkbox" name="einsatzleiter_abfrage" value="on" {% if fz.einsatzleiter_abfrage %}checked{% endif %}> Einsatzleiter abfragen (optional)
-          </label>
+          <div>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+              <input type="checkbox" name="einsatzleiter_abfrage" value="on" {% if fz.einsatzleiter_abfrage %}checked{% endif %}> Einsatzleiter abfragen (optional)
+            </label>
+            <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Wird nur bei Fahrtzwecken mit aktivierter Option "GK erforderlich" abgefragt.</p>
+          </div>
         </div>
 
         <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
