@@ -35,6 +35,7 @@ Liste aller Fahrzeuge. Jedes Fahrzeug aufklappen, um die Fahrtenbuch-Einstellung
 | **Betriebsstunden erfassen** | Aktiviert das BH-Stand-Feld |
 | **2. Maschinist Pflicht** | Zeigt das Feld für den 2. Maschinisten |
 | **Seilwinde abfragen** | Aktiviert den Seilwinden-Abschnitt (BH, Bediener, Züge, Wartung) |
+| **Einsatzleiter abfragen (optional)** | Bietet die Auswahl der Rolle Einsatzleiter zusätzlich zum Gruppenkommandanten an; wirkt nur bei Fahrtzwecken mit aktivierter Option **GK erforderlich** |
 
 ### Warnschwellen
 
@@ -82,7 +83,7 @@ Zwecke bestimmen, welche Zusatzfelder im Erfassungsformular erscheinen und in we
 | **Kategorie** | ✓ | `Einsatz` / `Übung` / `Sonstige` — steuert Statistik-Zuordnung |
 | **Reihenfolge** | | Sortierziffer (kleiner = weiter oben) |
 | **Ausbildner erforderlich** | | Zeigt Ausbildner-Autocomplete im Formular |
-| **GK erforderlich** | | Zeigt Gruppenkommandant-Autocomplete im Formular |
+| **GK erforderlich** | | Fragt eine Führungsrolle per Autocomplete ab; wenn die optionale Einsatzleiter-Abfrage am Zweck oder Fahrzeug aktiv ist, kann zwischen Gruppenkommandant und Einsatzleiter gewählt werden |
 
 > **Kategorie „Einsatz"**: Zusätzlich erscheint eine Auswahl der letzten Einsätze (48-h-Fenster), damit die Fahrt direkt mit einem laufenden Einsatz verknüpft werden kann.
 
