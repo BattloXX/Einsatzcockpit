@@ -373,16 +373,31 @@ def _login(client: TestClient, db_session, org, username: str, role_code: str = 
     return user
 
 
-def test_zweck_felder_zeigt_einsatzleiter_bei_zweck_flag(client: TestClient, db_session, org):
-    """Zweck mit optional_einsatzleiter blendet das (optionale) Einsatzleiter-Feld ein."""
+def test_zweck_felder_kein_einsatzleiter_bei_zweck_flag_ohne_gk(client: TestClient, db_session, org):
+    """optional_einsatzleiter allein (ohne GK-Pflicht) zeigt KEIN Einsatzleiter-Feld mehr."""
     _login(client, db_session, org, "el_zweck_tester")
     z = Fahrtzweck(org_id=org.id, name="EL-Zweck", kategorie=FahrtKategorie.einsatz,
-                   optional_einsatzleiter=True)
+                   optional_einsatzleiter=True, verlangt_gruppenkommandant=False)
     db_session.add(z)
     db_session.commit()
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
     assert r.status_code == 200
-    assert 'name="einsatzleiter_name"' in r.text
+    assert "einsatzleiter_name" not in r.text
+
+
+def test_zweck_felder_zeigt_fuehrungsrollen_auswahl_bei_gk_und_zweck_flag(
+    client: TestClient, db_session, org
+):
+    """GK erforderlich + optional_einsatzleiter zeigt die kombinierte Fuehrungsrollen-Auswahl."""
+    _login(client, db_session, org, "el_zweck_gk_tester")
+    z = Fahrtzweck(org_id=org.id, name="EL-GK-Zweck", kategorie=FahrtKategorie.einsatz,
+                   optional_einsatzleiter=True, verlangt_gruppenkommandant=True)
+    db_session.add(z)
+    db_session.commit()
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
+    assert r.status_code == 200
+    assert 'id="fuehrung_name"' in r.text
+    assert "einsatzleiter_name" in r.text
 
 
 def test_zweck_felder_zeigt_einsaetze_der_letzten_drei_tage(
@@ -440,17 +455,35 @@ def test_zweck_felder_zeigt_letzten_einsatz_als_fallback(
     assert f'value="{letzter.id}" selected' in r.text
 
 
-def test_zweck_felder_zeigt_einsatzleiter_bei_fahrzeug_flag(client: TestClient, db_session, org, fahrzeug):
-    """Auch ohne Zweck-Flag erscheint das Feld, wenn das Fahrzeug es aktiviert hat."""
+def test_zweck_felder_kein_einsatzleiter_bei_fahrzeug_flag_ohne_gk(
+    client: TestClient, db_session, org, fahrzeug
+):
+    """Fahrzeug-Flag allein (ohne GK-Pflicht des Zwecks) zeigt KEIN Einsatzleiter-Feld mehr."""
     _login(client, db_session, org, "el_fahrzeug_tester")
     fahrzeug.einsatzleiter_abfrage = True
     z = Fahrtzweck(org_id=org.id, name="Kein-EL-Zweck", kategorie=FahrtKategorie.uebung,
-                   optional_einsatzleiter=False)
+                   optional_einsatzleiter=False, verlangt_gruppenkommandant=False)
     db_session.add(z)
     db_session.commit()
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}&fahrzeug_id={fahrzeug.id}")
     assert r.status_code == 200
-    assert 'name="einsatzleiter_name"' in r.text
+    assert "einsatzleiter_name" not in r.text
+
+
+def test_zweck_felder_zeigt_fuehrungsrollen_auswahl_bei_gk_und_fahrzeug_flag(
+    client: TestClient, db_session, org, fahrzeug
+):
+    """GK erforderlich + Fahrzeug-Flag zeigt die kombinierte Fuehrungsrollen-Auswahl."""
+    _login(client, db_session, org, "el_fahrzeug_gk_tester")
+    fahrzeug.einsatzleiter_abfrage = True
+    z = Fahrtzweck(org_id=org.id, name="GK-Zweck", kategorie=FahrtKategorie.uebung,
+                   optional_einsatzleiter=False, verlangt_gruppenkommandant=True)
+    db_session.add(z)
+    db_session.commit()
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}&fahrzeug_id={fahrzeug.id}")
+    assert r.status_code == 200
+    assert 'id="fuehrung_name"' in r.text
+    assert "einsatzleiter_name" in r.text
 
 
 def test_zweck_felder_sonstige_zeigt_freitext(client: TestClient, db_session, org):
