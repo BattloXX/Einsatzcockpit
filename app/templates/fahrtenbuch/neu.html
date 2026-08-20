@@ -361,6 +361,11 @@ function maschinistAutocomplete(prefix, initialName, initialId) {
     }
   };
 }
+function fuehrungAutocomplete() {
+  const autocomplete = maschinistAutocomplete('fuehrung');
+  autocomplete.rolle = 'gruppenkommandant';
+  return autocomplete;
+}
 document.addEventListener('pointerdown', function(e) {
   const item = e.target.closest('.autocomplete-item');
   if (!item) return;
