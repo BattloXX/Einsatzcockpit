@@ -52,6 +52,43 @@
 </div>
 {% endif %}
 
+{% set beide_fuehrungsrollen = zweck.verlangt_gruppenkommandant and (zweck.optional_einsatzleiter or (fahrzeug and fahrzeug.einsatzleiter_abfrage)) %}
+{% if beide_fuehrungsrollen %}
+<div class="form-group" x-data="fuehrungAutocomplete()">
+  <label class="form-label" for="fuehrung_name" x-text="rolle === 'gruppenkommandant' ? 'Gruppenkommandant *' : 'Einsatzleiter *'">Gruppenkommandant *</label>
+  <div style="display:flex;gap:4px;margin-bottom:.5rem;">
+    <label class="teiln-status-lbl teiln-status-lbl--teilg">
+      <input type="radio" value="gruppenkommandant" x-model="rolle"
+             style="position:absolute;opacity:0;width:0;height:0;">
+      Gruppenkommandant
+    </label>
+    <label class="teiln-status-lbl teiln-status-lbl--entsch">
+      <input type="radio" value="einsatzleiter" x-model="rolle"
+             style="position:absolute;opacity:0;width:0;height:0;">
+      Einsatzleiter
+    </label>
+  </div>
+  <input type="hidden"
+         :name="rolle === 'gruppenkommandant' ? 'gruppenkommandant_member_id' : 'einsatzleiter_member_id'"
+         :value="memberId">
+  <div style="position:relative;">
+    <input type="text" id="fuehrung_name"
+           :name="rolle === 'gruppenkommandant' ? 'gruppenkommandant_name' : 'einsatzleiter_name'"
+           class="form-control form-control--lg"
+           placeholder="Name tippen…" required autocomplete="new-password"
+           x-model="query"
+           hx-get="/fahrtenbuch/hx/maschinist"
+           hx-target="#fuehrung-suggestions"
+           hx-trigger="input changed delay:200ms"
+           hx-vals='js:{q:this.value,t:window.FAB_TOKEN||""}'
+           :class="warn ? 'fb-input-warn' : ''"
+           @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
+    <div id="fuehrung-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
+  </div>
+  <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
+  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Rolle auswählen, Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen.</p>
+</div>
+{% else %}
 {% if zweck.verlangt_gruppenkommandant %}
 <div class="form-group" x-data="maschinistAutocomplete('gruppenkommandant')">
   <label class="form-label" for="gruppenkommandant_name">Gruppenkommandant *</label>
@@ -96,6 +133,7 @@
   <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
   <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen. Kann leer bleiben.</p>
 </div>
+{% endif %}
 {% endif %}
 
 {% endif %}
