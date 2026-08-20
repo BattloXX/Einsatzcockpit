@@ -62,6 +62,8 @@ class WeatherAlertState(Base, TenantScoped):
     last_payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Hysterese-Zähler: wie viele Loop-Zyklen liegt der Wert unter der Akut-Schwelle
     below_threshold_cycles: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Bestätigungs-Zähler für den Eintritt in stationsbasierte Akut-Zustände
+    above_threshold_cycles: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class WeatherAlertLog(Base, TenantScoped):

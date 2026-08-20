@@ -337,10 +337,11 @@ def _build_station_views(org_id: int | None, db: Session) -> list[dict]:
     stations = (
         db.query(WeatherStation)
         .filter(WeatherStation.org_id == org_id, WeatherStation.active == True)  # noqa: E712
-        .order_by(WeatherStation.name)
         .all()
     )
     now = datetime.now(UTC)
+    from app.services.weather_station_service import order_stations_for_primary
+    stations = order_stations_for_primary(stations, now)
     views: list[dict] = []
     for s in stations:
         last_seen = s.last_seen_at
