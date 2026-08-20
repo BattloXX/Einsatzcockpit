@@ -15,7 +15,7 @@
     <input type="text" name="branch" value="{{ branch }}" class="form-control"
            style="max-width:220px;padding:4px 8px;" placeholder="main">
     {% endif %}
-    <button type="submit" class="btn btn-outline btn--sm">Prüfen</button>
+    <button type="submit" class="btn btn--secondary btn--sm">Prüfen</button>
   </form>
   {% if deployed_ref %}
   <span class="text-muted" style="font-size:.8rem;">
@@ -25,7 +25,7 @@
 </div>
 
 {% if branch_info.get('error') %}
-<div class="alert alert-danger" style="margin-bottom:0;">
+<div class="alert alert--error" style="margin-bottom:0;">
   Branch <code>{{ branch }}</code> nicht abrufbar: <code style="font-size:.82rem;">{{ branch_info.error }}</code><br>
   <span style="font-size:.82rem;">Bei privatem Repository unten einen GitHub-Token hinterlegen.</span>
 </div>
@@ -36,7 +36,7 @@
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <code style="font-size:.85rem;">{{ branch }}@{{ branch_info.sha_short }}</code>
     {% if ist_eingespielt %}
-    <span class="badge" style="background:var(--color-success-bg,#dcfce7);color:var(--color-success,#16a34a);font-size:.78rem;padding:2px 7px;">bereits eingespielt</span>
+    <span class="badge-pill badge-pill--green" style="font-size:.78rem;padding:2px 7px;">bereits eingespielt</span>
     {% endif %}
   </div>
   <div style="font-size:.85rem;margin-top:6px;">{{ branch_info.commit_message }}</div>
@@ -53,7 +53,7 @@
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   <input type="hidden" name="branch" value="{{ branch }}">
   <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-    <button type="submit" class="btn btn-danger" {% if ist_eingespielt %}disabled title="Dieser Stand ist bereits eingespielt"{% endif %}>
+    <button type="submit" class="btn btn--danger" {% if ist_eingespielt %}disabled title="Dieser Stand ist bereits eingespielt"{% endif %}>
       Branch-Stand einspielen
     </button>
     <label style="display:flex;align-items:center;gap:5px;font-size:.85rem;cursor:pointer;">
@@ -71,7 +71,7 @@
 
 {% if update_result is defined %}
 {% if update_result.success %}
-<div class="alert alert-success" style="margin-top:12px;margin-bottom:0;">
+<div class="alert alert--success" style="margin-top:12px;margin-bottom:0;">
   <strong>Update erfolgreich!</strong><br>
   Dateien aktualisiert: {{ update_result.files_updated }},
   geschützt übersprungen: {{ update_result.files_skipped }},
@@ -81,7 +81,7 @@
   Server-Reload: {{ 'Ja' if update_result.server_reloaded else 'Manuell erforderlich' }}
 </div>
 {% else %}
-<div class="alert alert-danger" style="margin-top:12px;margin-bottom:0;">
+<div class="alert alert--error" style="margin-top:12px;margin-bottom:0;">
   <strong>Fehler:</strong> {{ update_result.message }}
   {% if update_result.locked %}<br><code>locked: true</code>{% endif %}
   {% if update_result.backup is defined %}<br>Backup: {{ update_result.backup.message }}{% endif %}

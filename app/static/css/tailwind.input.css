@@ -860,6 +860,14 @@ dialog.media-viewer { max-width: 95vw; width: 95vw; max-height: 95dvh; height: 9
 .alert--success { background: rgba(24,169,87,.15); border: 1px solid var(--green); color: var(--green); }
 .alert--info  { background: rgba(30,115,242,.12); border: 1px solid var(--blue); color: var(--blue); }
 
+/* ── Info-Liste / Info-Box (Key/Value-Uebersicht + neutraler Callout) ──── */
+.info-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: .9rem; }
+.info-list dt { color: var(--text-muted); }
+.info-list dd { margin: 0; }
+.info-box { background: rgba(30,115,242,.12); border: 1px solid var(--blue); border-radius: 0.5rem;
+            padding: 12px 16px; font-size: .88rem; }
+.info-box ul { margin: .5rem 0 0; padding-left: 1.2rem; }
+
 /* ── Toasts ──────────────────────────────────────────────── */
 .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 200;
                    display: flex; flex-direction: column; gap: 8px; }
@@ -1113,6 +1121,10 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .topnav__logo { height: 28px; }
   .form-row { flex-direction: column; }
   .admin-main { padding: 16px; }
+  /* System-Update-Seite: kompaktere Card-Polsterung auf schmalen Viewports
+     (seiten-scoped statt global, um alle anderen Admin-Karten unveraendert zu lassen) */
+  .system-update-page .card-header { padding: 12px 14px; }
+  .system-update-page .card-body { padding: 14px; }
 }
 @media (min-width: 901px) {
   .mobile-menu, .mobile-menu-backdrop { display: none !important; }
