@@ -113,10 +113,64 @@ def _org_smtp_cfg(db, org_id: int | None) -> dict[str, Any] | None:
         return None
 
 
+def _org_resend_cfg(db, org_id: int | None) -> dict[str, Any] | None:
+    """Lädt die aktive und vollständige Resend-Konfiguration einer Org."""
+    if db is None or org_id is None or not settings.RESEND_ENABLED:
+        return None
+    try:
+        from app.core.crypto import decrypt_secret
+        from app.models.org_mail import OrgResendConfig
+
+        cfg = db.query(OrgResendConfig).filter(OrgResendConfig.org_id == org_id).first()
+        if not cfg or not cfg.enabled or not cfg.is_fully_configured:
+            return None
+        return {"api_key": decrypt_secret(cfg.api_key_enc), "from_addr": cfg.from_addr}
+    except Exception:
+        logger.exception("Resend-Konfiguration der Org %s konnte nicht geladen werden", org_id)
+        return None
+
+
+def get_resend_cfg(db) -> dict[str, str] | None:
+    """Lädt die globale Resend-Konfiguration und entschlüsselt den API-Key."""
+    if db is None or not settings.RESEND_ENABLED:
+        return None
+    try:
+        from app.core.crypto import decrypt_secret
+        from app.models.master import SystemSettings
+
+        def _get(key: str) -> str | None:
+            row = db.query(SystemSettings).filter_by(key=key).first()
+            return row.value if row and row.value else None
+
+        enabled = (_get("resend_enabled") or "").lower() == "true"
+        api_key_enc = _get("resend_api_key")
+        from_domain = (_get("resend_from_domain") or "").strip().lower()
+        if not enabled or not api_key_enc or not from_domain:
+            return None
+        return {"api_key": decrypt_secret(api_key_enc), "from_domain": from_domain}
+    except Exception:
+        logger.exception("Globale Resend-Konfiguration konnte nicht geladen werden")
+        return None
+
+
+def _resend_from_addr_for_org(db, org_id: int | None, from_domain: str) -> str:
+    """Leitet die Absenderadresse aus Org-Slug und verifizierter Domain ab."""
+    if db is not None and org_id is not None:
+        try:
+            from app.models.master import FireDept
+
+            org = db.query(FireDept).filter(FireDept.id == org_id).first()
+            if org and org.slug:
+                return f"{org.slug}@{from_domain}"
+        except Exception:
+            logger.exception("Org-Slug für Resend-Absender konnte nicht geladen werden (Org %s)", org_id)
+    return f"noreply@{from_domain}"
+
+
 async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | None = None) -> None:
     """Zentraler Versand-Dispatcher: Office 365 (falls für die Org aktiviert +
-    vollständig konfiguriert) zuerst versuchen, sonst/bei Fehlschlag SMTP —
-    zuerst der eigene SMTP-Server der Org, sonst der globale.
+    vollständig konfiguriert) zuerst versuchen, danach Resend (Org, sonst global)
+    und zuletzt SMTP (Org, sonst global).
 
     Graph-Fehler werden verschluckt (das ist der Sinn des Fallbacks) und nur
     geloggt; ein anschließender SMTP-Fehler wird wie bisher propagiert, damit
@@ -133,7 +187,7 @@ async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | No
                 if db is not None else None
             )
         except Exception:
-            logger.exception("O365-Config-Lookup fehlgeschlagen (Org %s) — Fallback SMTP", org_id)
+            logger.exception("O365-Config-Lookup fehlgeschlagen (Org %s) — Fallback Resend", org_id)
             o365_cfg = None
 
         if o365_cfg and o365_cfg.enabled and o365_cfg.is_fully_configured:
@@ -143,7 +197,32 @@ async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | No
                 return  # Erfolg — kein SMTP-Versand mehr noetig
             except Exception as exc:
                 logger.warning(
-                    "O365-Mailversand fehlgeschlagen (Org %s) — Fallback SMTP: %s", org_id, exc,
+                    "O365-Mailversand fehlgeschlagen (Org %s) — Fallback Resend: %s", org_id, exc,
+                )
+
+    own_resend_cfg = _org_resend_cfg(db, org_id)
+    if own_resend_cfg:
+        try:
+            from app.services.resend_mail_service import send_via_resend
+
+            await send_via_resend(msg, own_resend_cfg["api_key"], own_resend_cfg["from_addr"])
+            return
+        except Exception as exc:
+            logger.warning("Resend (Org) fehlgeschlagen (Org %s) — Fallback SMTP: %s", org_id, exc)
+    else:
+        global_resend_cfg = get_resend_cfg(db)
+        if global_resend_cfg:
+            try:
+                from app.services.resend_mail_service import send_via_resend
+
+                from_addr = _resend_from_addr_for_org(
+                    db, org_id, global_resend_cfg["from_domain"],
+                )
+                await send_via_resend(msg, global_resend_cfg["api_key"], from_addr)
+                return
+            except Exception as exc:
+                logger.warning(
+                    "Resend (global) fehlgeschlagen (Org %s) — Fallback SMTP: %s", org_id, exc,
                 )
 
     cfg = smtp_cfg

@@ -1,6 +1,8 @@
 """Admin-UI: Stammdaten, User, Rollen, API-Keys."""
 import logging
+import re
 from datetime import UTC, datetime
+from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -1904,9 +1906,11 @@ async def system_settings_page(request: Request, db: Session = Depends(get_db),
                                _=Depends(require_role("system_admin"))):
     settings_raw = db.query(SystemSettings).all()
     settings = {s.key: s.value for s in settings_raw}
+    resend_api_key_set = bool(settings.pop("resend_api_key", None))
     saved = request.query_params.get("saved")
     return templates.TemplateResponse(request, "admin/system_settings.html", {
         "user": request.state.user, "settings": settings, "saved": saved,
+        "resend_api_key_set": resend_api_key_set,
     })
 
 
@@ -1925,6 +1929,8 @@ async def save_system_settings(
         # E-Mail (SMTP)
         "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from",
         "smtp_starttls", "smtp_timeout",
+        # E-Mail (Resend); API-Key wird separat verschlüsselt behandelt
+        "resend_enabled", "resend_api_key", "resend_from_domain",
         # Allgemein
         "enable_speech_input", "default_session_max_age",
         # Auto-Schließen
@@ -1939,7 +1945,17 @@ async def save_system_settings(
         "mi_feature_stab", "mi_feature_funkjournal", "mi_feature_meldungen",
         "mi_feature_sektoren", "mi_feature_karte", "mi_feature_zeitreise", "mi_feature_ressourcen",
     ]
+    resend_domain = str(form.get("k_resend_from_domain") or "").strip().lower()
+    if resend_domain and not re.fullmatch(
+        r"(?=.{4,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}",
+        resend_domain,
+    ):
+        return RedirectResponse(
+            "/admin/system-einstellungen?resend_error=Ungültige+Resend-Domain", status_code=303,
+        )
     for key in known_keys:
+        if key == "resend_api_key":
+            continue
         val = form.get(f"k_{key}")
         if val is not None:
             existing = db.get(SystemSettings, key)
@@ -1950,6 +1966,18 @@ async def save_system_settings(
             else:
                 db.add(SystemSettings(key=key, value=val,
                                       updated_by_user_id=request.state.user.id))
+    if form.get("k_resend_api_key_changed") == "1" and str(form.get("k_resend_api_key") or "").strip():
+        from app.core.crypto import encrypt_secret
+
+        encrypted_key = encrypt_secret(str(form.get("k_resend_api_key")).strip())
+        existing = db.get(SystemSettings, "resend_api_key")
+        if existing:
+            existing.value = encrypted_key
+            existing.updated_at = datetime.now(UTC)
+            existing.updated_by_user_id = request.state.user.id
+        else:
+            db.add(SystemSettings(key="resend_api_key", value=encrypted_key,
+                                  updated_by_user_id=request.state.user.id))
     # Handle any existing custom keys
     all_existing = db.query(SystemSettings).all()
     for s in all_existing:
@@ -1968,6 +1996,45 @@ async def save_system_settings(
     write_audit(db, "admin.system_settings.updated", user_id=request.state.user.id)
     db.commit()
     return RedirectResponse("/admin/system-einstellungen?saved=1", status_code=303)
+
+
+@router.post("/system-einstellungen/test-resend-mail", response_class=HTMLResponse)
+async def test_resend_mail(
+    request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("system_admin")),
+    test_resend_mail_to: str = Form(""),
+):
+    from app.services.mail_service import _build_message, get_resend_cfg
+    from app.services.resend_mail_service import ResendMailError, send_via_resend
+
+    recipient = test_resend_mail_to.strip() or request.state.user.email or ""
+    cfg = get_resend_cfg(db)
+    if not recipient:
+        message = "Keine Empfängeradresse angegeben"
+    elif not cfg:
+        message = "Resend ist nicht vollständig konfiguriert oder global deaktiviert"
+    else:
+        try:
+            from_addr = f"noreply@{cfg['from_domain']}"
+            msg = _build_message(
+                to=recipient, subject="Test-Mail von Einsatzcockpit (Resend)",
+                body_txt="Diese Test-Mail bestätigt, dass der globale Resend-Versand funktioniert.",
+            )
+            await send_via_resend(msg, cfg["api_key"], from_addr)
+            write_audit(db, "admin.system_settings.test_resend_mail_sent",
+                        user_id=request.state.user.id)
+            db.commit()
+            return RedirectResponse(
+                f"/admin/system-einstellungen?resend_ok={quote_plus(recipient)}", status_code=303,
+            )
+        except ResendMailError as exc:
+            message = str(exc)[:160]
+        except Exception as exc:  # noqa: BLE001
+            logger_admin.warning("Resend-Test-Mail fehlgeschlagen: %s", exc)
+            message = f"Versand fehlgeschlagen: {str(exc)[:120]}"
+    return RedirectResponse(
+        f"/admin/system-einstellungen?resend_error={quote_plus(message)}", status_code=303,
+    )
 
 
 @router.post("/system-einstellungen/test-mail", response_class=HTMLResponse)

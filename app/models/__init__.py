@@ -115,7 +115,7 @@ from app.models.objekt import (
     ObjektZusatzadresse,
 )
 from app.models.org_backup import OrgBackupConfig
-from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
+from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 from app.models.org_sms import OrgSmsConfig
 from app.models.password_reset import PasswordResetToken
 from app.models.sms import (
@@ -176,7 +176,7 @@ __all__ = [
     "OrgDibosConfig",
     "IncidentWacheStatus",
     "OrgBmaImportConfig", "BmaImportSatz",
-    "OrgSmtpConfig", "OrgO365MailConfig", "OrgSmsConfig",
+    "OrgSmtpConfig", "OrgO365MailConfig", "OrgResendConfig", "OrgSmsConfig",
     "OrgBackupConfig",
     "TeamsAlarmConfig", "TeamsChannelBinding", "TeamsCardPost", "AlarmToken",
     "WordPressReportConfig",

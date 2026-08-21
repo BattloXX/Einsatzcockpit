@@ -1,4 +1,4 @@
-"""Mail-Versand je Organisation: eigener SMTP-Server + Office 365 / Microsoft Graph.
+"""Mail-Versand je Organisation: SMTP, Office 365 und Resend.
 
 Fallback-Kette (siehe app/services/mail_service.py::deliver()): Office 365 (falls
 aktiviert + vollständig konfiguriert) → eigener SMTP-Server der Org (falls
@@ -94,3 +94,26 @@ class OrgO365MailConfig(Base):
     @property
     def is_fully_configured(self) -> bool:
         return bool(self.tenant_id and self.client_id and self.client_secret_enc and self.sender_address)
+
+
+class OrgResendConfig(Base):
+    """Resend-Konfiguration einer Organisation (1:1 je Org)."""
+    __tablename__ = "org_resend_mail_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    api_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    from_addr: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    org: Mapped[object] = relationship("FireDept", foreign_keys=[org_id], lazy="joined")
+
+    @property
+    def is_fully_configured(self) -> bool:
+        return bool(self.api_key_enc and self.from_addr)

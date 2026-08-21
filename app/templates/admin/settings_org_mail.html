@@ -7,7 +7,7 @@
 <div class="page-header">
   <div>
     <h1>Mail-Versand</h1>
-    <p class="page-header__sub">Eigener SMTP-Server und/oder Office 365 / Microsoft Graph je Organisation &mdash; ohne eigene Angabe wird der globale System-SMTP verwendet</p>
+    <p class="page-header__sub">Office 365, Resend und SMTP je Organisation mit automatischer Fallback-Kette</p>
   </div>
 </div>
 
@@ -41,9 +41,8 @@
   <div class="card-body" style="padding:16px 20px">
     <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
       Ist Office 365 aktiviert und vollständig konfiguriert, wird zuerst darüber versendet.
-      Schlägt das fehl (oder ist Office 365 nicht/unvollständig konfiguriert), wird auf
-      den eigenen SMTP-Server dieser Organisation ausgewichen &mdash; ist auch der nicht
-      konfiguriert, greift der globale System-SMTP als letzte Stufe.
+      Danach folgt Resend (eigene Org-Konfiguration, sonst global) und als letzte Stufe
+      SMTP (eigener Server der Organisation, sonst globaler System-SMTP).
     </p>
   </div>
 </section>
@@ -53,6 +52,13 @@
   <strong>Office 365 / Microsoft Graph ist global deaktiviert</strong>
   (<code>O365_MAIL_ENABLED=false</code> in der Server-Konfiguration).
   Die Office-365-Einstellungen unten werden ignoriert, bis der Plattform-Admin das Modul wieder aktiviert.
+</div>
+{% endif %}
+
+{% if not resend_globally_enabled %}
+<div class="alert alert--warn mb-4">
+  <strong>Resend ist global deaktiviert</strong> (<code>RESEND_ENABLED=false</code>).
+  Die Resend-Einstellungen werden erst nach Aktivierung durch den Plattform-Admin verwendet.
 </div>
 {% endif %}
 
@@ -251,6 +257,50 @@
   </section>
 </form>
 
+<!-- Resend -->
+<form method="post" action="/admin/mail/resend/save">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+  <section class="card mb-4">
+    <div class="card-header"><h2>Resend</h2></div>
+    <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+      <p class="form-hint">Die Absender-Domain muss im <a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">Resend-Dashboard</a> verifiziert sein.</p>
+      <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" name="enabled" value="1" {% if resend_config and resend_config.enabled %}checked{% endif %} class="toggle-checkbox">
+        <span class="toggle-switch"></span>Resend für diese Organisation verwenden
+      </label>
+      <div class="form-group" style="margin:0">
+        <label for="resend_from_addr">Absenderadresse</label>
+        <input type="email" id="resend_from_addr" name="from_addr" class="form-input"
+               value="{{ resend_config.from_addr or '' if resend_config else '' }}"
+               placeholder="einsatz@feuerwehr-beispiel.at" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label for="resend_api_key">API-Key</label>
+        {% if resend_config and resend_config.api_key_enc %}
+        <div id="secret-status-resend" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="color:var(--color-success);font-size:.85rem">&#10003; API-Key gesetzt</span>
+          <button type="button" class="btn btn--ghost btn--sm" onclick="document.getElementById('secret-status-resend').style.display='none';document.getElementById('secret-replace-resend').style.display='';document.getElementById('secret_changed_resend').value='1'">Ersetzen</button>
+        </div>
+        <div id="secret-replace-resend" style="display:none">
+          <input type="password" id="resend_api_key" name="api_key" class="form-input" autocomplete="new-password" placeholder="Neuen API-Key eingeben">
+        </div>
+        {% else %}
+        <input type="password" id="resend_api_key" name="api_key" class="form-input" autocomplete="new-password" placeholder="API-Key eingeben" oninput="document.getElementById('secret_changed_resend').value='1'">
+        {% endif %}
+        <input type="hidden" id="secret_changed_resend" name="secret_changed" value="{{ '0' if resend_config and resend_config.api_key_enc else '1' }}">
+        <p class="form-hint">Der API-Key wird Fernet-verschlüsselt gespeichert und nie angezeigt.</p>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="submit" class="btn btn--primary">Speichern</button>
+        <input type="email" id="resend-test-recipient" placeholder="Test-Empfänger (optional)" class="form-input" style="max-width:260px">
+        <button type="button" class="btn btn--ghost" onclick="einsatzcockpitResendTest()">Test-Mail senden</button>
+      </div>
+      <div id="resend-test-result" style="font-size:.85rem"></div>
+    </div>
+  </section>
+</form>
+
 <!-- ── Posteingang abrufen (Vorbereitung, noch nicht aktiv) ───────────────────── -->
 <form method="post" action="/admin/mail/smtp/save">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -378,6 +428,22 @@ function einsatzcockpitO365Test() {
   {% endif %}
   params.set("recipient", recipient);
   fetch("/admin/mail/o365/test", { method: "POST", body: params })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      result.textContent = d.message;
+      result.style.color = d.ok ? "var(--color-success)" : "var(--color-danger)";
+    })
+    .catch(function () { result.textContent = "Fehler beim Testen."; });
+}
+
+function einsatzcockpitResendTest() {
+  var result = document.getElementById("resend-test-result");
+  result.textContent = "Sende...";
+  var params = new URLSearchParams();
+  params.set("_csrf", "{{ request.state.csrf_token }}");
+  {% if is_sysadmin and org %}params.set("target_org_id", "{{ org.id }}");{% endif %}
+  params.set("recipient", document.getElementById("resend-test-recipient").value);
+  fetch("/admin/mail/resend/test", { method: "POST", body: params })
     .then(function (r) { return r.json(); })
     .then(function (d) {
       result.textContent = d.message;
