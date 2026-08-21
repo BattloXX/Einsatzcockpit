@@ -11,7 +11,7 @@ from app.services.incident_notify import _combined_address
 PHASES = (
     {"phase": "alarmiert", "phase_label": "Alarmiert"},
     {"phase": "anfahrt", "phase_label": "Anfahrt"},
-    {"phase": "einsatzstelle", "phase_label": "An der Einsatzstelle"},
+    {"phase": "einsatzstelle", "phase_label": "Am Einsatzort"},
     {"phase": "abschluss", "phase_label": "Einsatzbereit"},
 )
 
