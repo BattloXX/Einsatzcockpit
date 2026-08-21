@@ -17,6 +17,15 @@ class ResendMailError(RuntimeError):
     """Resend-Mailversand fehlgeschlagen."""
 
 
+def _mark_test_system_from_addr(from_addr: str) -> str:
+    """Markiert die Absenderadresse auf dem Testsystem (TEST_SYSTEM=true) deutlich
+    als Test, damit Empfänger echte und Testsystem-Mails nicht verwechseln."""
+    if not settings.TEST_SYSTEM or "@" not in from_addr:
+        return from_addr
+    local, domain = from_addr.split("@", 1)
+    return f"Einsatzcockpit (Testsystem) <test-{local}@{domain}>"
+
+
 def _resend_payload(msg: EmailMessage, from_addr: str) -> dict:
     """Konvertiert eine EmailMessage in das Resend-Schema."""
     to_raw = msg["To"] or ""
@@ -43,6 +52,7 @@ async def send_via_resend(msg: EmailMessage, api_key: str, from_addr: str) -> No
     from_addr = (from_addr or "").strip()
     if not api_key or not from_addr:
         raise ResendMailError("Resend-Konfiguration unvollstaendig")
+    from_addr = _mark_test_system_from_addr(from_addr)
     async with httpx.AsyncClient(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
         resp = await client.post(
             RESEND_EMAILS_URL,
