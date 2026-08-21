@@ -32,6 +32,7 @@ def upgrade() -> None:
         sa.Column("fcm_token_id", sa.BigInteger(), nullable=True),
         sa.Column("user_id", sa.BigInteger(), nullable=True),
         sa.Column("sent_at", sa.DateTime(), nullable=False),
+        sa.Column("delivered_at", sa.DateTime(), nullable=True),
         sa.Column("success", sa.Boolean(), nullable=False),
         sa.Column("error_code", sa.String(length=50), nullable=True),
         sa.Column("error_detail", sa.Text(), nullable=True),

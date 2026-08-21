@@ -245,6 +245,7 @@
             {% set fcm = fcm_stats[entry.id] %}
             <div>Web-Push: {{ entry.sent_count }}<span class="text-muted">/{{ entry.total_count }}</span></div>
             <div>FCM: {{ fcm.success }}<span class="text-muted">/{{ fcm.total }}</span></div>
+            <div>Zugestellt: {{ fcm.delivered }}<span class="text-muted">/{{ fcm.total }}</span></div>
             {% if fcm.failures %}
             <details style="margin-top:6px;text-align:left;">
               <summary style="cursor:pointer;color:var(--color-danger);">

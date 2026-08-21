@@ -215,6 +215,7 @@ class FcmDeliveryLog(Base):
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
     )
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), index=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)

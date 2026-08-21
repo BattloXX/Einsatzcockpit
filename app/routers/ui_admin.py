@@ -2585,6 +2585,7 @@ async def push_notifications_page(
         entry.id: {
             "success": sum(delivery.success for delivery in entry.fcm_deliveries),
             "total": len(entry.fcm_deliveries),
+            "delivered": sum(delivery.delivered_at is not None for delivery in entry.fcm_deliveries),
             "failures": [delivery for delivery in entry.fcm_deliveries if not delivery.success],
         }
         for entry in push_logs

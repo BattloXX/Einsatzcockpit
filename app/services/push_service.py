@@ -93,11 +93,24 @@ def send_fcm(
     channel_id: str | None = None,
     cfg: dict | None = None,
     db: Session | None = None,
+    push_log_id: int | None = None,
 ) -> tuple[bool, str | None]:
     """Sendet an ein FCM-Geraet und klassifiziert Fehler fuer das Delivery-Log."""
     app = _get_fcm_app(cfg)
     if app is None:
         return False, "fcm_not_configured"
+    delivery: FcmDeliveryLog | None = None
+    if db is not None and push_log_id is not None:
+        delivery = FcmDeliveryLog(
+            push_log_id=push_log_id,
+            fcm_token_id=fcm_token_row.id,
+            user_id=fcm_token_row.user_id,
+            sent_at=datetime.now(UTC).replace(tzinfo=None),
+            success=False,
+        )
+        db.add(delivery)
+        db.flush()
+
     try:
         from firebase_admin import messaging  # type: ignore
         data = {
@@ -106,6 +119,8 @@ def send_fcm(
             "body": body,
             "channel_id": channel_id or "",
         }
+        if delivery is not None:
+            data["delivery_id"] = str(delivery.id)
         message = messaging.Message(
             # Reine Data-Message: auch im Hintergrund wird unser nativer
             # FirebaseMessagingService ausgefuehrt und kann den Live-Poller sofort wecken.
@@ -114,27 +129,41 @@ def send_fcm(
             token=fcm_token_row.token,
         )
         messaging.send(message)
+        if delivery is not None:
+            delivery.success = True
         return True, None
     except messaging.UnregisteredError as exc:
         log.info("FCM-Token %s ist nicht mehr registriert und wird entfernt: %s", fcm_token_row.id, exc)
         if db is not None:
             db.delete(fcm_token_row)
+        if delivery is not None:
+            delivery.fcm_token_id = None
+            delivery.error_code = "unregistered_pruned"
+            delivery.error_detail = f"FCM-Token {fcm_token_row.id} automatisch entfernt"
         return False, "unregistered_pruned"
     except messaging.SenderIdMismatchError as exc:
         log.info("FCM-Token %s gehoert zu einem anderen Sender und wird entfernt: %s", fcm_token_row.id, exc)
         if db is not None:
             db.delete(fcm_token_row)
+        if delivery is not None:
+            delivery.fcm_token_id = None
+            delivery.error_code = "unregistered_pruned"
+            delivery.error_detail = f"FCM-Token {fcm_token_row.id} automatisch entfernt"
         return False, "unregistered_pruned"
     except messaging.QuotaExceededError as exc:
         log.warning("FCM-Quota ueberschritten fuer Token %s: %s", fcm_token_row.id, exc)
-        return False, "quota_exceeded"
+        error_code = "quota_exceeded"
     except messaging.ThirdPartyAuthError as exc:
         log.warning("FCM-Authentifizierung fehlgeschlagen fuer Token %s: %s", fcm_token_row.id, exc)
-        return False, "sender_id_mismatch"
+        error_code = "sender_id_mismatch"
     except Exception as exc:
         # Auch neue FirebaseError-Unterklassen bleiben sichtbar, ohne den Alarm abzubrechen.
         log.warning("FCM fehlgeschlagen fuer Token %s: %s", fcm_token_row.id, exc)
-        return False, "unknown"
+        error_code = "unknown"
+    if delivery is not None:
+        delivery.error_code = error_code
+        delivery.error_detail = f"FCM-Versand fehlgeschlagen ({error_code})"
+    return False, error_code
 
 
 def upsert_fcm_token(
@@ -319,9 +348,7 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
 
     success_count = 0
     for token in tokens:
-        token_id = token.id
-        user_id = token.user_id
-        ok, error_code = send_fcm(
+        ok, _error_code = send_fcm(
             token,
             title,
             body,
@@ -329,21 +356,8 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
             channel_id=channel_id,
             cfg=cfg,
             db=db,
-        )
-        db.add(FcmDeliveryLog(
             push_log_id=push_log_id,
-            # Ein entfernter Token darf nicht mehr als FK referenziert werden.
-            fcm_token_id=None if error_code == "unregistered_pruned" else token_id,
-            user_id=user_id,
-            sent_at=datetime.now(UTC).replace(tzinfo=None),
-            success=ok,
-            error_code=error_code,
-            error_detail=(
-                f"FCM-Token {token_id} automatisch entfernt"
-                if error_code == "unregistered_pruned"
-                else (f"FCM-Versand fehlgeschlagen ({error_code})" if error_code else None)
-            ),
-        ))
+        )
         success_count += int(ok)
     db.flush()
     return success_count

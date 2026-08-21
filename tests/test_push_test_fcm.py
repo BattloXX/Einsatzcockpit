@@ -9,7 +9,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.main import app
 from app.models.master import SystemSettings
-from app.models.user import DeviceToken, FcmToken, User
+from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, User
 from app.services import push_service
 
 
@@ -162,6 +162,16 @@ def test_fcm_push_uses_database_settings_when_environment_is_empty(monkeypatch, 
     assert len(sent) == 1
     assert sent[0].token == "fcm-db-settings-token"
     assert not hasattr(sent[0], "notification")
+    delivery_id = sent[0].data.pop("delivery_id")
+    assert delivery_id.isdigit()
+    db = SessionLocal()
+    try:
+        delivery = db.get(FcmDeliveryLog, int(delivery_id))
+        assert delivery is not None
+        assert delivery.success is True
+        assert delivery.error_code is None
+    finally:
+        db.close()
     assert sent[0].data == {
         "url": "/admin/push-nachrichten",
         "title": "Test-Push",

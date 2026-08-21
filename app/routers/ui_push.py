@@ -156,9 +156,6 @@ async def test_push_fcm(request: Request, db: Session = Depends(get_db)):
             "error": "Kein FCM-Token für dieses Gerät registriert",
         })
 
-    from datetime import UTC, datetime
-
-    from app.models.user import FcmDeliveryLog
     from app.services.push_service import _log_push, _push_cfg, send_fcm
     cfg = _push_cfg(db)
     push_log = _log_push(
@@ -178,9 +175,10 @@ async def test_push_fcm(request: Request, db: Session = Depends(get_db)):
             url="/admin/push-nachrichten",
             cfg=cfg,
             db=db,
+            push_log_id=push_log.id,
         )
     except TypeError as exc:
-        if "db" not in str(exc):
+        if "db" not in str(exc) and "push_log_id" not in str(exc):
             raise
         send_result = send_fcm(
             token_row,
@@ -193,15 +191,6 @@ async def test_push_fcm(request: Request, db: Session = Depends(get_db)):
         ok, error_code = send_result
     else:  # Kompatibilitaet fuer bestehende Integrations-Mocks.
         ok, error_code = bool(send_result), None
-    db.add(FcmDeliveryLog(
-        push_log_id=push_log.id,
-        fcm_token_id=None if error_code == "unregistered_pruned" else token_row.id,
-        user_id=user.id,
-        sent_at=datetime.now(UTC).replace(tzinfo=None),
-        success=ok,
-        error_code=error_code,
-        error_detail=None,
-    ))
     db.commit()
     if not ok:
         return JSONResponse({
