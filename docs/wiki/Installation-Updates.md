@@ -52,6 +52,13 @@ dem Code-Austausch bewusst vor Dependencies, Migration und Reload. Bei `false` w
 Backup-Warnung angezeigt, das Update läuft aber weiter. Restore-Anleitung und DR-Runbook:
 [Backups](Installation-Backups.md).
 
+> **Hinweis:** Der Code-Austausch (Schritt 1-3) passiert **vor** dem Backup-Schritt.
+> Schlägt das Backup fehl und wird das Update deswegen abgebrochen (`UPDATE_REQUIRE_BACKUP=true`),
+> bleibt der neue Code bereits aktiv, während Migration und Reload bewusst übersprungen wurden.
+> Nach Behebung der Backup-Ursache (z. B. fehlendes `mariadb-client`-Paket, siehe
+> [Server-Voraussetzungen](Installation-Server-Voraussetzungen.md)) das Update einfach erneut
+> auslösen, oder `alembic upgrade head` manuell nachholen.
+
 ### Privates Repository: GitHub-Token
 
 Ist das Repository privat, auf der Update-Seite einen **Fine-grained Personal Access Token**

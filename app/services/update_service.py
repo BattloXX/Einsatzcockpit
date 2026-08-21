@@ -283,17 +283,20 @@ def _run_pre_migration_backup() -> dict:
         return {"success": True, "required": required, "message": "deaktiviert", "files": []}
     try:
         from app.cli import run_backup
-        rc, created = run_backup(
+        result = run_backup(
             out_dir=settings.BACKUP_DIR,
             keep=settings.BACKUP_KEEP_DAILY,
             include_media=0,
         )
-        files = [str(path) for path in created]
-        if rc == 0:
+        files = [str(path) for path in result.created]
+        if result.returncode == 0:
             return {"success": True, "required": required,
                     "message": f"OK ({len(files)} DB-Dump(s))", "files": files}
-        return {"success": False, "required": required,
-                "message": f"Backup fehlgeschlagen (Exit-Code {rc})", "files": files}
+        detail = "; ".join(result.failures)[:400]
+        message = f"Backup fehlgeschlagen (Exit-Code {result.returncode})"
+        if detail:
+            message += f": {detail}"
+        return {"success": False, "required": required, "message": message, "files": files}
     except Exception as exc:
         return {"success": False, "required": required,
                 "message": f"Backup fehlgeschlagen: {exc}", "files": []}

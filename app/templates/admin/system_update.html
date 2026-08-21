@@ -2,9 +2,10 @@
 {% block title %}System-Update{% endblock %}
 
 {% block admin_content %}
+<div class="system-update-page">
 <div class="page-header">
   <h1>System-Update</h1>
-  <span class="badge badge-warning">Nur Systemadministratoren</span>
+  <span class="badge-pill badge-pill--amber">Nur Systemadministratoren</span>
 </div>
 
 <div class="card mb-4">
@@ -22,16 +23,16 @@
 </div>
 
 {% if token_saved %}
-<div class="alert alert-success">GitHub-Token gespeichert.</div>
+<div class="alert alert--success">GitHub-Token gespeichert.</div>
 {% endif %}
 
 {% if error %}
-<div class="alert alert-danger">{{ error }}</div>
+<div class="alert alert--error">{{ error }}</div>
 {% endif %}
 
 {% if update_result %}
   {% if update_result.success %}
-  <div class="alert alert-success">
+  <div class="alert alert--success">
     <strong>Update erfolgreich!</strong><br>
     {{ update_result.message }}<br>
     Dateien aktualisiert: {{ update_result.files_updated }}<br>
@@ -41,7 +42,7 @@
     Server-Reload: {{ 'Ja' if update_result.server_reloaded else 'Manuell erforderlich' }}
   </div>
   {% else %}
-  <div class="alert alert-danger">
+  <div class="alert alert--error">
     <strong>Fehler:</strong> {{ update_result.message }}
     {% if update_result.locked %}<br><code>locked: true</code>{% endif %}
     {% if update_result.backup is defined %}<br>Backup: {{ update_result.backup.message }}{% endif %}
@@ -58,11 +59,11 @@
           hx-indicator="#github-spinner"
           style="display:flex;align-items:center;gap:10px;">
       <span class="htmx-indicator" id="github-spinner"
-            style="font-size:.82rem;color:var(--color-text-muted);">Prüfe…</span>
+            style="font-size:.82rem;color:var(--text-muted);">Prüfe…</span>
       <label style="display:flex;align-items:center;gap:5px;font-size:.87rem;cursor:pointer;user-select:none;white-space:nowrap;">
         <input type="checkbox" name="prerelease" value="1"> Pre-Release
       </label>
-      <button type="submit" class="btn btn-outline btn--sm">Auf Updates prüfen</button>
+      <button type="submit" class="btn btn--secondary btn--sm">Auf Updates prüfen</button>
     </form>
   </div>
   <div class="card-body">
@@ -79,14 +80,14 @@
 <div class="card mb-4">
   <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
     <h2>Direkt vom Repository (Branch)</h2>
-    <button class="btn btn-outline btn--sm"
+    <button class="btn btn--secondary btn--sm"
             hx-get="/admin/system/update/check-branch"
             hx-target="#github-branch-box" hx-swap="innerHTML"
             hx-indicator="#branch-spinner">Branch laden</button>
   </div>
   <div class="card-body">
     <span class="htmx-indicator" id="branch-spinner"
-          style="font-size:.82rem;color:var(--color-text-muted);">Prüfe…</span>
+          style="font-size:.82rem;color:var(--text-muted);">Prüfe…</span>
     <div id="github-branch-box">
       <p class="text-muted" style="margin:0;font-size:.9rem;">
         Spielt den aktuellen Stand eines Branches (Standard <code>main</code>) direkt vom
@@ -102,7 +103,7 @@
   <div class="card-body">
     <p class="text-muted" style="font-size:.9rem;">
       {% if token_configured %}
-      <span class="badge badge-warning" style="padding:2px 8px;">Token hinterlegt</span>
+      <span class="badge-pill badge-pill--amber" style="padding:2px 8px;">Token hinterlegt</span>
       Zum Ersetzen neuen Token eingeben, zum Löschen leer speichern.
       {% else %}
       Ohne Token funktionieren Release- und Branch-Update nur bei öffentlichen Repositories.
@@ -115,7 +116,7 @@
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <input type="password" name="github_token" class="form-control" autocomplete="off"
              placeholder="github_pat_… oder ghp_…" style="max-width:380px;">
-      <button type="submit" class="btn btn-outline">Speichern</button>
+      <button type="submit" class="btn btn--secondary">Speichern</button>
     </form>
   </div>
 </div>
@@ -149,8 +150,8 @@
                class="form-control" placeholder="64 hexadezimale Zeichen">
       </div>
       <div class="form-actions mt-3">
-        <button type="submit" class="btn btn-danger">Update einspielen</button>
-        <a href="/admin/settings" class="btn btn-outline">Abbrechen</a>
+        <button type="submit" class="btn btn--danger">Update einspielen</button>
+        <a href="/admin/settings" class="btn btn--secondary">Abbrechen</a>
       </div>
     </form>
   </div>
@@ -169,5 +170,6 @@
     </ol>
     <p>Vor Migrationen wird automatisch ein Datenbank-Backup erstellt.</p>
   </div>
+</div>
 </div>
 {% endblock %}

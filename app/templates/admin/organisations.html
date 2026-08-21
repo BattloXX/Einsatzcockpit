@@ -8,10 +8,10 @@
 </div>
 
 {% if created %}
-<div class="alert alert-success">Organisation angelegt.</div>
+<div class="alert alert--success">Organisation angelegt.</div>
 {% endif %}
 {% if error == 'slug_exists' %}
-<div class="alert alert-danger">Ein Kürzel mit diesem Namen existiert bereits.</div>
+<div class="alert alert--error">Ein Kürzel mit diesem Namen existiert bereits.</div>
 {% endif %}
 
 <div class="table-responsive">
