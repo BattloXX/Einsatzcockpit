@@ -378,6 +378,10 @@ class Settings(BaseSettings):
     O365_MAIL_HTTP_TIMEOUT: int = 15
     O365_MAIL_TOKEN_MARGIN_S: int = 60  # Sicherheitsmarge vor Token-Ablauf im Cache
 
+    # Resend wird in den System-Einstellungen bzw. je Organisation konfiguriert.
+    RESEND_ENABLED: bool = False
+    RESEND_HTTP_TIMEOUT: int = 15
+
     # SMS-Versand je Org ueber die EUS Message Send API - Alternative/Fallback zum
     # SMS-Gateway-WebSocket (app/routers/ws.py::dispatch_sms).
     EUS_SMS_ENABLED: bool = True

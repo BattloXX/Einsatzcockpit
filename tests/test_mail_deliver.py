@@ -16,12 +16,13 @@ def _bigint_sqlite(element, compiler, **kw):
 
 import app.services.mail_service as mail_service
 import app.services.o365_mail_service as o365_mail_service
+import app.services.resend_mail_service as resend_mail_service
 from app.config import settings
 from app.core.crypto import encrypt_secret
 from app.core.tenant import set_tenant_context
 from app.db import Base
-from app.models.master import FireDept
-from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
+from app.models.master import FireDept, SystemSettings
+from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 
 
 @pytest.fixture()
@@ -73,6 +74,23 @@ def _patch_graph(monkeypatch, *, raises: Exception | None = None):
 
     monkeypatch.setattr(o365_mail_service, "send_via_graph", fake_send_via_graph)
     return calls
+
+
+def _patch_resend(monkeypatch, *, raises: Exception | None = None):
+    calls: list[tuple[str, str]] = []
+
+    async def fake_send_via_resend(msg, api_key, from_addr):
+        calls.append((api_key, from_addr))
+        if raises:
+            raise raises
+
+    monkeypatch.setattr(resend_mail_service, "send_via_resend", fake_send_via_resend)
+    return calls
+
+
+@pytest.fixture(autouse=True)
+def enable_resend(monkeypatch):
+    monkeypatch.setattr(settings, "RESEND_ENABLED", True)
 
 
 async def test_deliver_uses_graph_when_o365_enabled_and_configured(deliver_db, monkeypatch):
@@ -226,3 +244,72 @@ async def test_deliver_explicit_smtp_cfg_bypasses_org_lookup(deliver_db, monkeyp
     await mail_service.deliver(db, org.id, _msg(), smtp_cfg=explicit_cfg)
 
     assert send_calls == [explicit_cfg]
+
+
+async def test_deliver_uses_org_resend_before_smtp(deliver_db, monkeypatch):
+    db, org = deliver_db
+    db.add(OrgResendConfig(org_id=org.id, enabled=True,
+                           api_key_enc=encrypt_secret("org-key"),
+                           from_addr="einsatz@org.example"))
+    db.commit()
+    send_calls = _patch_send(monkeypatch)
+    resend_calls = _patch_resend(monkeypatch)
+    await mail_service.deliver(db, org.id, _msg())
+    assert resend_calls == [("org-key", "einsatz@org.example")]
+    assert send_calls == []
+
+
+async def test_deliver_o365_precedes_resend(deliver_db, monkeypatch):
+    db, org = deliver_db
+    db.add(OrgO365MailConfig(org_id=org.id, enabled=True, tenant_id="tid", client_id="cid",
+                             client_secret_enc=encrypt_secret("sec"), sender_address="a@example.at"))
+    db.add(OrgResendConfig(org_id=org.id, enabled=True,
+                           api_key_enc=encrypt_secret("org-key"), from_addr="r@example.at"))
+    db.commit()
+    graph_calls = _patch_graph(monkeypatch)
+    resend_calls = _patch_resend(monkeypatch)
+    await mail_service.deliver(db, org.id, _msg())
+    assert len(graph_calls) == 1
+    assert resend_calls == []
+
+
+async def test_deliver_graph_failure_uses_resend(deliver_db, monkeypatch):
+    db, org = deliver_db
+    db.add(OrgO365MailConfig(org_id=org.id, enabled=True, tenant_id="tid", client_id="cid",
+                             client_secret_enc=encrypt_secret("sec"), sender_address="a@example.at"))
+    db.add(OrgResendConfig(org_id=org.id, enabled=True,
+                           api_key_enc=encrypt_secret("org-key"), from_addr="r@example.at"))
+    db.commit()
+    _patch_graph(monkeypatch, raises=o365_mail_service.O365MailError("kaputt"))
+    resend_calls = _patch_resend(monkeypatch)
+    await mail_service.deliver(db, org.id, _msg())
+    assert resend_calls == [("org-key", "r@example.at")]
+
+
+async def test_deliver_global_resend_derives_org_sender(deliver_db, monkeypatch):
+    db, org = deliver_db
+    db.add_all([
+        SystemSettings(key="resend_enabled", value="true"),
+        SystemSettings(key="resend_api_key", value=encrypt_secret("global-key")),
+        SystemSettings(key="resend_from_domain", value="einsatzcockpit.com"),
+    ])
+    db.commit()
+    send_calls = _patch_send(monkeypatch)
+    resend_calls = _patch_resend(monkeypatch)
+    await mail_service.deliver(db, org.id, _msg())
+    assert resend_calls == [("global-key", "deliver-org@einsatzcockpit.com")]
+    assert send_calls == []
+
+
+async def test_deliver_resend_failure_falls_back_to_org_smtp(deliver_db, monkeypatch):
+    db, org = deliver_db
+    db.add(OrgResendConfig(org_id=org.id, enabled=True,
+                           api_key_enc=encrypt_secret("org-key"), from_addr="r@example.at"))
+    db.add(OrgSmtpConfig(org_id=org.id, enabled=True, host="smtp.org.at", port=587,
+                         user="u", password_enc=encrypt_secret("pw"),
+                         from_addr="s@example.at", starttls=True, timeout=15))
+    db.commit()
+    _patch_resend(monkeypatch, raises=resend_mail_service.ResendMailError("kaputt"))
+    send_calls = _patch_send(monkeypatch)
+    await mail_service.deliver(db, org.id, _msg())
+    assert send_calls[0]["host"] == "smtp.org.at"

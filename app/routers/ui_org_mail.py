@@ -21,7 +21,7 @@ from app.core.permissions import is_system_admin, require_role, same_org_or_syst
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import FireDept
-from app.models.org_mail import OrgO365MailConfig, OrgSmtpConfig
+from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 from app.models.user import User
 
 router = APIRouter(prefix="/admin")
@@ -58,6 +58,18 @@ def _get_or_create_o365_config(db, org_id: int) -> OrgO365MailConfig:
     return cfg
 
 
+def _get_or_create_resend_config(db, org_id: int) -> OrgResendConfig:
+    cfg = db.query(OrgResendConfig).filter(OrgResendConfig.org_id == org_id).first()
+    if not cfg:
+        cfg = OrgResendConfig(
+            org_id=org_id, enabled=False,
+            created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
+        )
+        db.add(cfg)
+        db.flush()
+    return cfg
+
+
 # ── GET /admin/mail ───────────────────────────────────────────────────────────
 @router.get("/mail", response_class=HTMLResponse)
 def mail_settings_page(
@@ -79,16 +91,22 @@ def mail_settings_page(
         db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == effective_org_id).first()
         if effective_org_id else None
     )
+    resend_config = (
+        db.query(OrgResendConfig).filter(OrgResendConfig.org_id == effective_org_id).first()
+        if effective_org_id else None
+    )
 
     return templates.TemplateResponse(request, "admin/settings_org_mail.html", {
         "user": user,
         "org": org,
         "smtp_config": smtp_config,
         "o365_config": o365_config,
+        "resend_config": resend_config,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
         "flash": request.query_params.get("flash"),
         "o365_globally_enabled": settings.O365_MAIL_ENABLED,
+        "resend_globally_enabled": settings.RESEND_ENABLED,
     })
 
 
@@ -150,6 +168,46 @@ async def smtp_settings_save(
                 ip=request.client.host if request.client else None)
     db.commit()
 
+    redirect_url = (
+        f"/admin/mail?org_id={effective_org_id}&flash=saved"
+        if effective_org_id != user.org_id else "/admin/mail?flash=saved"
+    )
+    return RedirectResponse(redirect_url, status_code=302)
+
+
+@router.post("/mail/resend/save")
+async def resend_settings_save(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+    enabled: str = Form(""),
+    api_key: str = Form(""),
+    secret_changed: str = Form(""),
+    from_addr: str = Form(""),
+):
+    from app.services.mail_service import _looks_like_email
+
+    effective_org_id = _get_org_id(user, target_org_id)
+    if not effective_org_id:
+        return RedirectResponse("/admin/mail?flash=error_no_org", status_code=302)
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
+    from_addr_clean = from_addr.strip()
+    if from_addr_clean and not _looks_like_email(from_addr_clean):
+        return RedirectResponse("/admin/mail?flash=error_from_addr", status_code=302)
+
+    cfg = _get_or_create_resend_config(db, effective_org_id)
+    cfg.enabled = enabled == "1"
+    cfg.from_addr = from_addr_clean or None
+    cfg.updated_at = datetime.now(UTC)
+    if secret_changed == "1" and api_key.strip():
+        cfg.api_key_enc = encrypt_secret(api_key.strip())
+        write_audit(db, "org_mail.resend.credentials_rotated", org_id=effective_org_id,
+                    user_id=user.id, ip=request.client.host if request.client else None)
+    write_audit(db, "org_mail.resend.updated", org_id=effective_org_id, user_id=user.id,
+                ip=request.client.host if request.client else None)
+    db.commit()
     redirect_url = (
         f"/admin/mail?org_id={effective_org_id}&flash=saved"
         if effective_org_id != user.org_id else "/admin/mail?flash=saved"
@@ -305,3 +363,49 @@ async def o365_test(
                     ip=request.client.host if request.client else None)
         db.commit()
         return JSONResponse({"ok": False, "message": f"Unerwarteter Fehler: {exc}"})
+
+
+@router.post("/mail/resend/test")
+async def resend_test(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+    recipient: str = Form(""),
+):
+    effective_org_id = _get_org_id(user, target_org_id)
+    if effective_org_id and not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
+    cfg = (
+        db.query(OrgResendConfig).filter(OrgResendConfig.org_id == effective_org_id).first()
+        if effective_org_id else None
+    )
+    if not cfg or not cfg.is_fully_configured:
+        return JSONResponse({"ok": False, "message": "Resend ist unvollständig konfiguriert."})
+    to = recipient.strip() or cfg.from_addr
+    if not to:
+        return JSONResponse({"ok": False, "message": "Kein Test-Empfänger angegeben."})
+
+    from app.core.crypto import decrypt_secret
+    from app.services.mail_service import _build_message
+    from app.services.resend_mail_service import ResendMailError, send_via_resend
+
+    try:
+        msg = _build_message(
+            to=to, subject="Test-Mail von Einsatzcockpit (Resend)",
+            body_txt="Diese Test-Mail bestätigt, dass der Versand über Resend funktioniert.",
+        )
+        await send_via_resend(msg, decrypt_secret(cfg.api_key_enc), cfg.from_addr)
+        write_audit(db, "org_mail.resend.test", org_id=effective_org_id, user_id=user.id,
+                    payload={"ok": True}, ip=request.client.host if request.client else None)
+        db.commit()
+        return JSONResponse({"ok": True, "message": f"Test-Mail an {to} über Resend versendet."})
+    except ResendMailError as exc:
+        message = f"Fehler: {exc}"
+    except Exception as exc:  # noqa: BLE001
+        message = f"Unerwarteter Fehler: {exc}"
+    write_audit(db, "org_mail.resend.test", org_id=effective_org_id, user_id=user.id,
+                payload={"ok": False, "error": message[:300]},
+                ip=request.client.host if request.client else None)
+    db.commit()
+    return JSONResponse({"ok": False, "message": message})
