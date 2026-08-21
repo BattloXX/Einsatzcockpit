@@ -200,6 +200,31 @@ class FcmToken(Base):
     device_token: Mapped[DeviceToken | None] = relationship("DeviceToken", foreign_keys=[device_token_id])
 
 
+class FcmDeliveryLog(Base):
+    """Persistentes Ergebnis eines nativen FCM-Zustellversuchs."""
+    __tablename__ = "fcm_delivery_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    push_log_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("push_log.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    fcm_token_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("fcm_token.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), index=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    push_log: Mapped[PushLog] = relationship("PushLog", back_populates="fcm_deliveries")
+    fcm_token: Mapped[FcmToken | None] = relationship("FcmToken", foreign_keys=[fcm_token_id])
+    user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
+
+
 class PushLog(Base):
     __tablename__ = "push_log"
 
@@ -209,6 +234,9 @@ class PushLog(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="system")
+    org_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     target_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
@@ -216,6 +244,10 @@ class PushLog(Base):
     total_count: Mapped[int] = mapped_column(Integer, default=0)
 
     target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
+    org: Mapped[FireDept | None] = relationship("FireDept", foreign_keys=[org_id])
+    fcm_deliveries: Mapped[list[FcmDeliveryLog]] = relationship(
+        "FcmDeliveryLog", back_populates="push_log", cascade="all, delete-orphan"
+    )
 
 
 class SmsGatewayToken(Base):

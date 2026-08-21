@@ -16,7 +16,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.user import FcmToken, PushSubscription
+from app.models.user import FcmDeliveryLog, FcmToken, PushLog, PushSubscription
 
 log = logging.getLogger(__name__)
 
@@ -85,12 +85,32 @@ def _get_fcm_app(cfg: dict | None = None):
         return None
 
 
-def send_fcm(fcm_token_row: FcmToken, title: str, body: str, url: str | None = None,
-             channel_id: str | None = None, cfg: dict | None = None) -> bool:
-    """Sendet eine FCM-Nachricht an ein einzelnes Gerät."""
+def send_fcm(
+    fcm_token_row: FcmToken,
+    title: str,
+    body: str,
+    url: str | None = None,
+    channel_id: str | None = None,
+    cfg: dict | None = None,
+    db: Session | None = None,
+    push_log_id: int | None = None,
+) -> tuple[bool, str | None]:
+    """Sendet an ein FCM-Geraet und klassifiziert Fehler fuer das Delivery-Log."""
     app = _get_fcm_app(cfg)
     if app is None:
-        return False
+        return False, "fcm_not_configured"
+    delivery: FcmDeliveryLog | None = None
+    if db is not None and push_log_id is not None:
+        delivery = FcmDeliveryLog(
+            push_log_id=push_log_id,
+            fcm_token_id=fcm_token_row.id,
+            user_id=fcm_token_row.user_id,
+            sent_at=datetime.now(UTC).replace(tzinfo=None),
+            success=False,
+        )
+        db.add(delivery)
+        db.flush()
+
     try:
         from firebase_admin import messaging  # type: ignore
         data = {
@@ -99,6 +119,8 @@ def send_fcm(fcm_token_row: FcmToken, title: str, body: str, url: str | None = N
             "body": body,
             "channel_id": channel_id or "",
         }
+        if delivery is not None:
+            data["delivery_id"] = str(delivery.id)
         message = messaging.Message(
             # Reine Data-Message: auch im Hintergrund wird unser nativer
             # FirebaseMessagingService ausgefuehrt und kann den Live-Poller sofort wecken.
@@ -107,10 +129,41 @@ def send_fcm(fcm_token_row: FcmToken, title: str, body: str, url: str | None = N
             token=fcm_token_row.token,
         )
         messaging.send(message)
-        return True
+        if delivery is not None:
+            delivery.success = True
+        return True, None
+    except messaging.UnregisteredError as exc:
+        log.info("FCM-Token %s ist nicht mehr registriert und wird entfernt: %s", fcm_token_row.id, exc)
+        if db is not None:
+            db.delete(fcm_token_row)
+        if delivery is not None:
+            delivery.fcm_token_id = None
+            delivery.error_code = "unregistered_pruned"
+            delivery.error_detail = f"FCM-Token {fcm_token_row.id} automatisch entfernt"
+        return False, "unregistered_pruned"
+    except messaging.SenderIdMismatchError as exc:
+        log.info("FCM-Token %s gehoert zu einem anderen Sender und wird entfernt: %s", fcm_token_row.id, exc)
+        if db is not None:
+            db.delete(fcm_token_row)
+        if delivery is not None:
+            delivery.fcm_token_id = None
+            delivery.error_code = "unregistered_pruned"
+            delivery.error_detail = f"FCM-Token {fcm_token_row.id} automatisch entfernt"
+        return False, "unregistered_pruned"
+    except messaging.QuotaExceededError as exc:
+        log.warning("FCM-Quota ueberschritten fuer Token %s: %s", fcm_token_row.id, exc)
+        error_code = "quota_exceeded"
+    except messaging.ThirdPartyAuthError as exc:
+        log.warning("FCM-Authentifizierung fehlgeschlagen fuer Token %s: %s", fcm_token_row.id, exc)
+        error_code = "sender_id_mismatch"
     except Exception as exc:
-        log.warning("FCM fehlgeschlagen für Token %s: %s", fcm_token_row.id, exc)
-        return False
+        # Auch neue FirebaseError-Unterklassen bleiben sichtbar, ohne den Alarm abzubrechen.
+        log.warning("FCM fehlgeschlagen fuer Token %s: %s", fcm_token_row.id, exc)
+        error_code = "unknown"
+    if delivery is not None:
+        delivery.error_code = error_code
+        delivery.error_detail = f"FCM-Versand fehlgeschlagen ({error_code})"
+    return False, error_code
 
 
 def upsert_fcm_token(
@@ -184,18 +237,30 @@ def _push_cfg(db: Session | None) -> dict[str, Any]:
     return cfg
 
 
-def _log_push(db: Session, title: str, body: str, url: str | None,
-              source: str, target_user_id: int | None,
-              sent_count: int, total_count: int) -> None:
-    try:
-        from app.models.user import PushLog
-        db.add(PushLog(
-            title=title, body=body, url=url, source=source,
-            target_user_id=target_user_id,
-            sent_count=sent_count, total_count=total_count,
-        ))
-    except Exception:
-        log.exception("Push-Log Eintrag fehlgeschlagen")
+def _log_push(
+    db: Session,
+    title: str,
+    body: str,
+    url: str | None,
+    source: str,
+    target_user_id: int | None,
+    sent_count: int = 0,
+    total_count: int = 0,
+    org_id: int | None = None,
+) -> PushLog:
+    entry = PushLog(
+        title=title,
+        body=body,
+        url=url,
+        source=source,
+        org_id=org_id,
+        target_user_id=target_user_id,
+        sent_count=sent_count,
+        total_count=total_count,
+    )
+    db.add(entry)
+    db.flush()
+    return entry
 
 
 def send_push(subscription: PushSubscription, title: str, body: str,
@@ -247,35 +312,107 @@ def send_push(subscription: PushSubscription, title: str, body: str,
 
 def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
                       url: str | None, cfg: dict | None = None,
-                      channel_id: str | None = None) -> int:
+                      channel_id: str | None = None,
+                      push_log_id: int | None = None) -> int:
     """Sendet FCM an alle registrierten Tokens der angegebenen User-IDs."""
-    if _get_fcm_app(cfg) is None:
-        return 0
     tokens = db.query(FcmToken).filter(FcmToken.user_id.in_(user_ids)).all() if user_ids else []
-    if channel_id:
-        return sum(
-            1 for t in tokens
-            if send_fcm(t, title, body, url, channel_id=channel_id, cfg=cfg)
+    if push_log_id is None:
+        fallback_log = _log_push(db, title, body, url, "system", None)
+        push_log_id = fallback_log.id
+
+    if _get_fcm_app(cfg) is None:
+        if tokens:
+            for token in tokens:
+                db.add(FcmDeliveryLog(
+                    push_log_id=push_log_id,
+                    fcm_token_id=token.id,
+                    user_id=token.user_id,
+                    sent_at=datetime.now(UTC).replace(tzinfo=None),
+                    success=False,
+                    error_code="fcm_not_configured",
+                    error_detail="FCM ist nicht konfiguriert oder konnte nicht initialisiert werden",
+                ))
+        else:
+            # Pro Alarm/Push-Aufruf bleibt die Fehlkonfiguration auch ohne Token sichtbar.
+            db.add(FcmDeliveryLog(
+                push_log_id=push_log_id,
+                fcm_token_id=None,
+                user_id=None,
+                sent_at=datetime.now(UTC).replace(tzinfo=None),
+                success=False,
+                error_code="fcm_not_configured",
+                error_detail="FCM ist nicht konfiguriert oder konnte nicht initialisiert werden",
+            ))
+        db.flush()
+        return 0
+
+    success_count = 0
+    for token in tokens:
+        ok, _error_code = send_fcm(
+            token,
+            title,
+            body,
+            url,
+            channel_id=channel_id,
+            cfg=cfg,
+            db=db,
+            push_log_id=push_log_id,
         )
-    return sum(1 for t in tokens if send_fcm(t, title, body, url, cfg=cfg))
+        success_count += int(ok)
+    db.flush()
+    return success_count
+
+
+def _notify_fcm_logged(
+    db: Session,
+    user_ids: set[int],
+    title: str,
+    body: str,
+    url: str | None,
+    cfg: dict | None,
+    channel_id: str | None,
+    push_log_id: int,
+) -> int:
+    """Ruft den FCM-Fan-out mit PushLog-Verknuepfung auf."""
+    try:
+        return _notify_fcm_users(
+            db,
+            user_ids,
+            title,
+            body,
+            url,
+            cfg,
+            channel_id,
+            push_log_id=push_log_id,
+        )
+    except TypeError as exc:
+        # Bestehende Erweiterungs-/Test-Doubles ohne das neue optionale Argument.
+        if "push_log_id" not in str(exc):
+            raise
+        return _notify_fcm_users(db, user_ids, title, body, url, cfg, channel_id)
 
 
 def notify_all(db: Session, title: str, body: str, url: str | None = None,
                source: str = "system", channel_id: str | None = None, *,
                extra: dict | None = None) -> int:
     cfg = _push_cfg(db)
+    push_log = _log_push(db, title, body, url, source, None)
     # Web-Push (VAPID)
     if cfg["enabled"]:
         subs = db.query(PushSubscription).all()
         wp_count = sum(
             1 for s in subs if send_push(s, title, body, url, db=db, extra=extra)
         )
-        _log_push(db, title, body, url, source, None, wp_count, len(subs))
+        push_log.sent_count = wp_count
+        push_log.total_count = len(subs)
     else:
         wp_count = 0
     # FCM
-    all_user_ids = {s.user_id for s in db.query(PushSubscription.user_id).distinct()}
-    fcm_extra = _notify_fcm_users(db, all_user_ids, title, body, url, cfg, channel_id)
+    from app.models.user import User as _User
+    all_user_ids = {row[0] for row in db.query(_User.id).all()}
+    fcm_extra = _notify_fcm_logged(
+        db, all_user_ids, title, body, url, cfg, channel_id, push_log.id
+    )
     return wp_count + fcm_extra
 
 
@@ -285,6 +422,7 @@ def notify_org(db: Session, org_id: int, title: str, body: str,
     """Push nur an User der angegebenen Org (statt an alle)."""
     from app.models.user import User as _User
     cfg = _push_cfg(db)
+    push_log = _log_push(db, title, body, url, source, None, org_id=org_id)
     org_user_ids_subq = db.query(_User.id).filter(_User.org_id == org_id)
     if cfg["enabled"]:
         subs = (
@@ -295,11 +433,14 @@ def notify_org(db: Session, org_id: int, title: str, body: str,
         wp_count = sum(
             1 for s in subs if send_push(s, title, body, url, db=db, extra=extra)
         )
-        _log_push(db, title, body, url, source, None, wp_count, len(subs))
+        push_log.sent_count = wp_count
+        push_log.total_count = len(subs)
     else:
         wp_count = 0
     org_user_ids = {r[0] for r in db.query(_User.id).filter(_User.org_id == org_id).all()}
-    fcm_extra = _notify_fcm_users(db, org_user_ids, title, body, url, cfg, channel_id)
+    fcm_extra = _notify_fcm_logged(
+        db, org_user_ids, title, body, url, cfg, channel_id, push_log.id
+    )
     return wp_count + fcm_extra
 
 
@@ -322,22 +463,27 @@ def notify_org_web(db: Session, org_id: int, title: str, body: str,
         if send_push(sub, title, body, url, db=db, extra=extra)
     )
     if log:
-        _log_push(db, title, body, url, source, None, wp_count, len(subs))
+        _log_push(db, title, body, url, source, None, wp_count, len(subs), org_id=org_id)
     return wp_count
 
 
 def notify_user(db: Session, user_id: int, title: str, body: str,
                 url: str | None = None, source: str = "system") -> int:
+    from app.models.user import User as _User
+
     cfg = _push_cfg(db)
+    target_org_id = db.query(_User.org_id).filter(_User.id == user_id).scalar()
+    push_log = _log_push(db, title, body, url, source, user_id, org_id=target_org_id)
     # Web-Push
     if cfg["enabled"]:
         subs = db.query(PushSubscription).filter(PushSubscription.user_id == user_id).all()
         wp_count = sum(1 for s in subs if send_push(s, title, body, url, db=db))
-        _log_push(db, title, body, url, source, user_id, wp_count, len(subs))
+        push_log.sent_count = wp_count
+        push_log.total_count = len(subs)
     else:
         wp_count = 0
     # FCM
-    fcm_extra = _notify_fcm_users(db, {user_id}, title, body, url, cfg)
+    fcm_extra = _notify_fcm_logged(db, {user_id}, title, body, url, cfg, None, push_log.id)
     return wp_count + fcm_extra
 
 
@@ -356,15 +502,16 @@ def notify_vehicle(db: Session, vehicle_master_id: int, title: str, body: str,
     )
     if not device_tokens:
         return 0
+    push_log = _log_push(db, title, body, url, "vehicle_assigned", None)
     user_ids = {dt.user_id for dt in device_tokens}
     # Web-Push
     if cfg["enabled"]:
         subs = db.query(PushSubscription).filter(PushSubscription.user_id.in_(user_ids)).all()
         wp_count = sum(1 for s in subs if send_push(s, title, body, url, db=db))
-        if subs:
-            _log_push(db, title, body, url, "vehicle_assigned", None, wp_count, len(subs))
+        push_log.sent_count = wp_count
+        push_log.total_count = len(subs)
     else:
         wp_count = 0
     # FCM
-    fcm_extra = _notify_fcm_users(db, user_ids, title, body, url, cfg)
+    fcm_extra = _notify_fcm_logged(db, user_ids, title, body, url, cfg, None, push_log.id)
     return wp_count + fcm_extra

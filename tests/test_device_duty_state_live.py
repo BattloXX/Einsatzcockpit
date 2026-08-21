@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -37,16 +37,17 @@ def _create_device(*, with_vehicle: bool = True, duty_active: bool = False):
             )
             db.add(vehicle)
             db.flush()
+        raw_token = f"raw-{suffix}"
         token = DeviceToken(
             user_id=user.id,
-            token_hash=hash_api_key(f"raw-{suffix}"),
+            token_hash=hash_api_key(raw_token),
             label=f"Geraet {suffix}",
             vehicle_master_id=vehicle.id if vehicle else None,
             duty_active=duty_active,
         )
         db.add(token)
         db.commit()
-        return user.id, token.id, org.id, vehicle.id if vehicle else None
+        return user.id, token.id, org.id, vehicle.id if vehicle else None, raw_token
     finally:
         db.close()
 
@@ -116,7 +117,7 @@ def test_live_state_ohne_org_kontext_bricht_hart_ab():
 
 
 def test_org_einsatz_aendert_fahrzeug_tracking_nicht(client, setup_db):
-    user_id, device_id, org_id, _ = _create_device(duty_active=False)
+    user_id, device_id, org_id, _, _ = _create_device(duty_active=False)
     incident_id = _create_incident(org_id, started_at=datetime(2026, 8, 3, 11, 2))
     _add_vehicle(incident_id, org_id, "Am Einsatzort")
     _authenticate(client, user_id, device_id)
@@ -157,7 +158,7 @@ def test_org_einsatz_aendert_fahrzeug_tracking_nicht(client, setup_db):
     ],
 )
 def test_phasenmatrix(client, setup_db, statuses, own_status, expected_phase, expected_source):
-    user_id, device_id, org_id, own_vehicle_id = _create_device()
+    user_id, device_id, org_id, own_vehicle_id, _ = _create_device()
     incident_id = _create_incident(org_id, started_at=datetime(2026, 8, 3, 10, 0))
     for status in statuses:
         _add_vehicle(incident_id, org_id, status)
@@ -175,7 +176,7 @@ def test_phasenmatrix(client, setup_db, statuses, own_status, expected_phase, ex
 
 
 def test_fahrzeugrelevanter_einsatz_gewinnt_bei_zwei_aktiven(client, setup_db):
-    user_id, device_id, org_id, vehicle_id = _create_device()
+    user_id, device_id, org_id, vehicle_id, _ = _create_device()
     assigned_id = _create_incident(org_id, started_at=datetime(2026, 8, 3, 9, 0), code="T1")
     newest_id = _create_incident(org_id, started_at=datetime(2026, 8, 3, 12, 0), code="B3")
     _add_vehicle(assigned_id, org_id, "Am Einsatzort", vehicle_id)
@@ -191,7 +192,7 @@ def test_fahrzeugrelevanter_einsatz_gewinnt_bei_zwei_aktiven(client, setup_db):
 
 
 def test_ohne_fahrzeug_gewinnt_neuester_einsatz(client, setup_db):
-    user_id, device_id, org_id, _ = _create_device(with_vehicle=False, duty_active=True)
+    user_id, device_id, org_id, _, _ = _create_device(with_vehicle=False, duty_active=True)
     _create_incident(org_id, started_at=datetime(2026, 8, 3, 8, 0), code="T1")
     newest_id = _create_incident(org_id, started_at=datetime(2026, 8, 3, 8, 0) + timedelta(hours=1))
     _authenticate(client, user_id, device_id)
@@ -206,8 +207,8 @@ def test_ohne_fahrzeug_gewinnt_neuester_einsatz(client, setup_db):
 
 
 def test_cross_org_einsatz_bleibt_unsichtbar(client, setup_db):
-    user_id, device_id, _, _ = _create_device()
-    _, _, foreign_org_id, _ = _create_device()
+    user_id, device_id, _, _, _ = _create_device()
+    _, _, foreign_org_id, _, _ = _create_device()
     _create_incident(foreign_org_id, started_at=datetime(2026, 8, 3, 11, 0))
     _authenticate(client, user_id, device_id)
 
@@ -250,3 +251,37 @@ def test_ohne_device_token_bleibt_antwortform_vollstaendig(client, setup_db):
     assert data["incident_count"] == 0
     assert data["incident"] is None
     assert data["server_time"].endswith("Z")
+
+
+def test_duty_state_akzeptiert_bearer_device_token(client, setup_db):
+    _, device_id, _, _, raw_token = _create_device(duty_active=True)
+
+    response = client.get(
+        "/api/v1/device/duty-state",
+        headers={"Authorization": f"Bearer {raw_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["duty_active"] is True
+    db = SessionLocal()
+    try:
+        assert db.get(DeviceToken, device_id).last_used_at is not None
+    finally:
+        db.close()
+
+
+def test_duty_state_lehnt_widerrufenen_bearer_ab(client, setup_db):
+    _, device_id, _, _, raw_token = _create_device()
+    db = SessionLocal()
+    try:
+        db.get(DeviceToken, device_id).revoked_at = datetime.now(UTC).replace(tzinfo=None)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/api/v1/device/duty-state",
+        headers={"Authorization": f"Bearer {raw_token}"},
+    )
+
+    assert response.status_code == 401

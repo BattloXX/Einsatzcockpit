@@ -34,6 +34,7 @@ from app.models.user import (
     ApiKey,
     AuditLog,
     DeviceToken,
+    FcmDeliveryLog,
     FcmToken,
     PushLog,
     PushSubscription,
@@ -2568,13 +2569,27 @@ async def push_notifications_page(
 
     sub_count = sub_q.count() + fcm_q.count()
     users_with_subs = users_q.order_by(User.display_name).all()
+    push_logs_q = db.query(PushLog).options(
+        joinedload(PushLog.target_user),
+        joinedload(PushLog.fcm_deliveries).joinedload(FcmDeliveryLog.user),
+    )
+    if not is_sysadmin and user.org_id:
+        push_logs_q = push_logs_q.filter(PushLog.org_id == user.org_id)
     push_logs = (
-        db.query(PushLog)
-        .options(joinedload(PushLog.target_user))
+        push_logs_q
         .order_by(PushLog.sent_at.desc())
         .limit(30)
         .all()
     )
+    fcm_stats = {
+        entry.id: {
+            "success": sum(delivery.success for delivery in entry.fcm_deliveries),
+            "total": len(entry.fcm_deliveries),
+            "delivered": sum(delivery.delivered_at is not None for delivery in entry.fcm_deliveries),
+            "failures": [delivery for delivery in entry.fcm_deliveries if not delivery.success],
+        }
+        for entry in push_logs
+    }
     # Native-App-Erkennung (server-seitig, siehe app/main.py::session_middleware):
     # die Android-App hat keinen ServiceWorker/PushManager (WebView-Limitierung),
     # Push läuft dort stattdessen über FCM (native-bridge.js::_registerFcmToken(),
@@ -2591,8 +2606,16 @@ async def push_notifications_page(
         "user": user,
         "sub_count": sub_count,
         "users_with_subs": users_with_subs,
-        "push_enabled": cfg["enabled"] and bool(cfg["private_key"]) and bool(cfg["public_key"]),
+        "push_enabled": (
+            (cfg["enabled"] and bool(cfg["private_key"]) and bool(cfg["public_key"]))
+            or (
+                bool(cfg.get("fcm_enabled"))
+                and bool(cfg.get("fcm_project_id"))
+                and bool(cfg.get("fcm_credentials_path"))
+            )
+        ),
         "push_logs": push_logs,
+        "fcm_stats": fcm_stats,
         "sent": request.query_params.get("sent"),
         "error": request.query_params.get("error"),
         "is_native_app": is_native_app,

@@ -92,6 +92,7 @@ class SmsLog(TenantScoped, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # org_id via TenantScoped
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # "alarm" = automatischer Einsatzinfo-Versand, "manual" = manueller Versand
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
     alarm_type_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -109,6 +110,10 @@ class SmsLog(TenantScoped, Base):
     recipients: Mapped[list[SmsLogRecipient]] = relationship(
         back_populates="sms_log", cascade="all, delete-orphan"
     )
+
+    @property
+    def is_running(self) -> bool:
+        return self.completed_at is None
 
 
 class SmsLogRecipient(Base):

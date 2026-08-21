@@ -413,7 +413,22 @@ def connected_gateway_token_ids(org_id: int) -> set[int]:
     return {token_id for token_id, _ in _sms_gateways.get(org_id, [])}
 
 
-async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: float = 15.0) -> dict:
+def connected_gateway_token_ids_ordered(org_id: int) -> list[int]:
+    """Verbundene Gateways in stabiler Prioritaetsreihenfolge fuer Batch-Verteilung."""
+    entries = list(reversed(_sms_gateways.get(org_id, [])))
+    priorities = _load_gateway_priorities(org_id)
+    entries.sort(key=lambda entry: priorities.get(entry[0], _DEFAULT_GATEWAY_PRIORITY))
+    return [token_id for token_id, _ in entries]
+
+
+async def dispatch_sms(
+    org_id: int,
+    job_id: str,
+    to: str,
+    text: str,
+    timeout: float = 15.0,
+    preferred_gateway_token_id: int | None = None,
+) -> dict:
     """Sendet einen SMS-Job an einen verbundenen Gateway und wartet auf das Ergebnis.
 
     Mehrere registrierte Verbindungen werden nach SmsGatewayToken.priority versucht
@@ -432,6 +447,8 @@ async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: fl
 
     priorities = _load_gateway_priorities(org_id)
     entries.sort(key=lambda entry: priorities.get(entry[0], _DEFAULT_GATEWAY_PRIORITY))
+    if preferred_gateway_token_id is not None:
+        entries.sort(key=lambda entry: entry[0] != preferred_gateway_token_id)
 
     payload = json.dumps({"type": "sms.send", "id": job_id, "to": to, "text": text}, ensure_ascii=False)
     loop = asyncio.get_event_loop()

@@ -10,13 +10,34 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.core.security import sign_native_link_token
+from app.core.security import hash_api_key, sign_native_link_token
 from app.db import get_db
-from app.models.user import DeviceToken, FcmToken
+from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, User
 from app.services import push_service
 from app.services.einsatz_live_service import build_live_state
 
 router = APIRouter(prefix="/api/v1/device", tags=["device"])
+
+
+def _resolve_user_via_bearer_token(request: Request, db: Session) -> User | None:
+    """Authentifiziert ein Gerät über dessen langlebigen Pairing-Token."""
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        return None
+    raw_token = authorization.removeprefix("Bearer ").strip()
+    if not raw_token:
+        return None
+    device_token = db.query(DeviceToken).filter(
+        DeviceToken.token_hash == hash_api_key(raw_token),
+        DeviceToken.revoked_at.is_(None),
+    ).first()
+    if not device_token:
+        return None
+    user = db.get(User, device_token.user_id)
+    if not user or not user.active:
+        return None
+    device_token.last_used_at = datetime.now(UTC).replace(tzinfo=None)
+    return user
 
 
 def _get_device_token(user_id: int, db: Session) -> DeviceToken | None:
@@ -212,8 +233,15 @@ def get_duty_state(request: Request, db: Session = Depends(get_db)):
     Die App nutzt diesen Endpoint, um Standort-Tracking automatisch zu steuern.
     """
     user = getattr(request.state, "user", None)
+    bearer_authenticated = False
+    if not user:
+        user = _resolve_user_via_bearer_token(request, db)
+        bearer_authenticated = user is not None
     if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+
+    if bearer_authenticated:
+        db.commit()
 
     device_token = _get_device_token(user.id, db)
     server_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -259,3 +287,34 @@ def get_duty_state(request: Request, db: Session = Depends(get_db)):
         "incident_count": incident_count,
         "incident": live_incident,
     })
+
+
+@router.post("/push-ack")
+async def acknowledge_push(request: Request, db: Session = Depends(get_db)):
+    """Bestätigt eine FCM-Zustellung, ohne fremde Log-IDs offenzulegen."""
+    user = _resolve_user_via_bearer_token(request, db)
+    if not user:
+        user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+
+    data = await request.json()
+    try:
+        delivery_id = int(data.get("delivery_id"))
+    except (AttributeError, TypeError, ValueError):
+        delivery_id = None
+
+    if delivery_id is not None:
+        delivery = (
+            db.query(FcmDeliveryLog)
+            .join(FcmToken, FcmDeliveryLog.fcm_token_id == FcmToken.id)
+            .filter(
+                FcmDeliveryLog.id == delivery_id,
+                FcmToken.user_id == user.id,
+            )
+            .first()
+        )
+        if delivery and delivery.delivered_at is None:
+            delivery.delivered_at = datetime.now(UTC).replace(tzinfo=None)
+    db.commit()
+    return JSONResponse({"ok": True})
