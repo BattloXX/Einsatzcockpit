@@ -490,3 +490,30 @@ def test_manual_zip_tempfile_removed_when_apply_raises(monkeypatch):
         router_module.apply_system_update(**_router_args(), expected_sha256=digest)
     assert seen["hash"] == digest
     assert not seen["path"].exists()
+
+
+def test_reload_server_reports_failure_when_sudo_restart_fails(monkeypatch):
+    """Regression: `sudo systemctl restart` kann fehlschlagen (fehlende sudoers-
+    Freigabe, Passwort-Prompt), ohne dass subprocess.run eine Exception wirft --
+    _reload_server() muss den returncode auswerten, statt bei jedem Aufruf ohne
+    Exception blind True zu melden (sonst zeigt die Update-Seite faelschlich
+    "Server-Reload: Ja", obwohl der laufende Prozess nie neu gestartet wurde)."""
+    from app.services import update_service as us
+
+    monkeypatch.setattr(us, "APP_ROOT", Path("/nonexistent-app-root"))
+    monkeypatch.setattr(
+        us.subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, returncode=1, stdout=b"", stderr=b"sudo: a password is required"),
+    )
+    assert us._reload_server() is False
+
+
+def test_reload_server_reports_success_when_sudo_restart_succeeds(monkeypatch):
+    from app.services import update_service as us
+
+    monkeypatch.setattr(us, "APP_ROOT", Path("/nonexistent-app-root"))
+    monkeypatch.setattr(
+        us.subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, returncode=0, stdout=b"", stderr=b""),
+    )
+    assert us._reload_server() is True
