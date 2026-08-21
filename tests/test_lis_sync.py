@@ -816,11 +816,19 @@ def test_push_vehicle_status_to_lis_skips_external_vehicle(monkeypatch):
 
 # ── Auto-Close: LIS-Operation nicht mehr aktiv → Einsatz schließen ─────────
 
-def test_close_incidents_missing_from_lis_closes_stale_incident():
+def test_close_incidents_missing_from_lis_closes_stale_incident(monkeypatch):
     """Ein über LIS verknüpfter, noch aktiver Einsatz wird geschlossen, sobald
     seine Operation nicht mehr im aktuellen ActiveParticipation-Ergebnis ist."""
     db = _session()
     try:
+        report_calls = []
+
+        async def _fake_report(report_db, report_incident):
+            report_calls.append((report_db, report_incident.id))
+
+        monkeypatch.setattr(
+            "app.services.wordpress_report_service.post_incident_report", _fake_report,
+        )
         org = db.get(FireDept, ORG_ID)
         incident, _ = lis_sync._get_or_link_incident(
             db, org, _parsed(lis_operation_id="lis-op-wird-geschlossen"),
@@ -833,6 +841,7 @@ def test_close_incidents_missing_from_lis_closes_stale_incident():
         db.refresh(incident)
         assert incident.status == "closed"
         assert incident.closed_at is not None
+        assert report_calls == [(db, incident.id)]
     finally:
         db.rollback()
         db.close()

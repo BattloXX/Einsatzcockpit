@@ -760,6 +760,13 @@ async def _close_incidents_missing_from_lis(
             incident.id, incident.lis_operation_id, org.id,
         )
         try:
+            from app.services.wordpress_report_service import post_incident_report
+            await post_incident_report(db, incident)
+        except Exception:
+            logger.exception(
+                "LIS-Auto-Close: WordPress-Bericht fehlgeschlagen (Einsatz %s)", incident.id
+            )
+        try:
             await manager.broadcast(incident.id, {"type": "incident_closed"})
         except Exception:
             logger.exception("LIS-Auto-Close: Broadcast für Einsatz %s fehlgeschlagen", incident.id)

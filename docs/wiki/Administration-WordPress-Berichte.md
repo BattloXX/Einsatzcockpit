@@ -2,7 +2,8 @@
 
 ← [Zurück zur Startseite](Home.md)
 
-Wird ein Einsatz abgeschlossen (manuell oder über den 48h-Autoclose), kann Einsatzcockpit
+Wird ein Einsatz abgeschlossen (manuell, über den 48h-Autoclose, den LIS-Sync, beim Anlegen
+eines bereits geschlossenen DIBOS-Events oder beim Beenden einer Großschadenslage), kann Einsatzcockpit
 automatisch einen **Beitragsentwurf** im WordPress-Blog der Organisation anlegen — vorbefüllt
 mit Titel, Alarmzeit, Einsatzende, Einsatzort, Einsatzart, Dauer und den ausgerückten
 Fahrzeugen. Alternativ kann derselbe Entwurf jederzeit manuell aus dem Archiv heraus
@@ -51,8 +52,9 @@ Nur `org_admin`/`system_admin` können diese Seite sehen und speichern.
 
 ## Automatischer Entwurf beim Abschließen
 
-Sobald ein Einsatz geschlossen wird — egal ob per Klick auf **Einsatz abschließen** oder
-über den 48h-Autoclose — versucht Einsatzcockpit im Hintergrund (best effort), den Entwurf
+Sobald ein Einsatz geschlossen wird — per Klick auf **Einsatz abschließen**, über den
+48h-Autoclose, den LIS-Sync, beim Anlegen eines bereits geschlossenen DIBOS-Events oder
+beim Beenden einer Großschadenslage — versucht Einsatzcockpit im Hintergrund (best effort), den Entwurf
 anzulegen. Ist die WordPress-Anbindung nicht konfiguriert oder gerade nicht erreichbar,
 wird der Fehler nur geloggt — **der Einsatzabschluss selbst schlägt dadurch nie fehl.**
 
@@ -89,7 +91,7 @@ gibt es keinen sinnvollen Anwendungsfall für mehrere Beiträge zu ein und derse
 
 | Einsatzcockpit | WordPress | Anmerkung |
 |---|---|---|
-| Einsatzgrund | Beitragstitel | Fällt zurück auf die Bezeichnung der Alarmart, dann auf die Einsatznummer, wenn kein Einsatzgrund erfasst wurde |
+| Einsatzgrund | Beitragstitel | Fällt zurück auf die Bezeichnung der Alarmart, dann auf die Leitstellennummer, wenn kein Einsatzgrund erfasst wurde |
 | Alarmzeit / Einsatzende | Alarmzeit / Einsatzende | In der Zeitzone der Organisation |
 | Alarmzeit + Einsatzende | Dauer (Minuten) | Wird direkt berechnet und vorausgefüllt |
 | Adresse (Ort + Straße) | Einsatzort | Innerorts (Ort = Sitz der Organisation): nur die Straße ohne Hausnummer. Außerorts: Ort + Straße |
