@@ -77,8 +77,7 @@
       {% if incident.ready_again_at %}<dt>Wieder einsatzbereit</dt><dd>{{ incident.ready_again_at|local_datetime }} Uhr</dd>{% endif %}
       {% if incident.closed_at %}<dt>Ende</dt><dd>{{ incident.closed_at|local_datetime }} Uhr</dd>{% endif %}
       <dt>Adresse</dt><dd>{{ incident.address_street or '–' }} {{ incident.address_no or '' }}, {{ incident.address_city or '' }}</dd>
-      <dt>Meldung</dt><dd>{{ incident.report_text or '–' }}</dd>
-      <dt>Einsatzgrund</dt><dd>{{ incident.reason or '–' }}</dd>
+      <dt>Einsatzgrund</dt><dd>{{ incident.reason or incident.report_text or '–' }}</dd>
     </dl>
   </div>
 

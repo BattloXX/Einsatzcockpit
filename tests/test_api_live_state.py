@@ -93,7 +93,7 @@ def test_browser_user_ohne_device_token_erhaelt_aktiven_einsatz(client, setup_db
         "phase": "einsatzstelle",
         "phase_index": 2,
         "phase_count": 4,
-        "phase_label": "An der Einsatzstelle",
+        "phase_label": "Am Einsatzort",
         "phase_source": "org",
         "unit_count": 1,
     }

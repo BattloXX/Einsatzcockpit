@@ -33,11 +33,9 @@
       <dl class="detail-list" style="margin-bottom:14px;">
         <dt>Adresse</dt>
         <dd>{{ incident.address_street or '–' }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</dd>
-        {% if incident.report_text %}
-        <dt>Meldung</dt><dd>{{ incident.report_text }}</dd>
-        {% endif %}
-        {% if incident.reason %}
-        <dt>Einsatzgrund</dt><dd>{{ incident.reason }}</dd>
+        {% set _grund = incident.reason or incident.report_text %}
+        {% if _grund %}
+        <dt>Einsatzgrund</dt><dd>{{ _grund }}</dd>
         {% endif %}
       </dl>
 

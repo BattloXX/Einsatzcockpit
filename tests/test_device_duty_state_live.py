@@ -140,7 +140,7 @@ def test_org_einsatz_aendert_fahrzeug_tracking_nicht(client, setup_db):
         "phase": "einsatzstelle",
         "phase_index": 2,
         "phase_count": 4,
-        "phase_label": "An der Einsatzstelle",
+        "phase_label": "Am Einsatzort",
         "phase_source": "org",
         "unit_count": 1,
     }
