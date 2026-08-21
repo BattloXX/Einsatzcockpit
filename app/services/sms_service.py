@@ -71,6 +71,7 @@ def sms_available(org_id: int, db=None) -> bool:
 async def send_sms(
     org_id: int, to: str, text: str, timeout: float = 15.0,
     ctx: SmsContext | None = None,
+    preferred_gateway_token_id: int | None = None,
 ) -> bool:
     from app.routers.ws import dispatch_sms
     ctx = ctx or resolve_sms_config(org_id)
@@ -78,7 +79,17 @@ async def send_sms(
         ctx.providers_used.add(provider)
         try:
             if provider == "gateway":
-                result = await dispatch_sms(org_id, str(uuid.uuid4()), to, text, timeout=timeout)
+                if preferred_gateway_token_id is None:
+                    result = await dispatch_sms(org_id, str(uuid.uuid4()), to, text, timeout=timeout)
+                else:
+                    result = await dispatch_sms(
+                        org_id,
+                        str(uuid.uuid4()),
+                        to,
+                        text,
+                        timeout=timeout,
+                        preferred_gateway_token_id=preferred_gateway_token_id,
+                    )
                 if not result.get("ok", False):
                     raise RuntimeError(str(result.get("error") or "Gateway-Fehler"))
             elif provider == "eus" and ctx.eus:

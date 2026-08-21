@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -709,9 +709,29 @@ async def sms_send_details(
     })
 
 
+@router.get("/sms-senden/{log_id}/status", response_class=HTMLResponse)
+async def sms_send_status(
+    log_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    """Aktualisiert eine laufende Versandzeile per HTMX-Polling."""
+    user = request.state.user
+    org_id = _require_org(user)
+    log_entry = db.query(SmsLog).filter(SmsLog.id == log_id, SmsLog.org_id == org_id).first()
+    if log_entry is None:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, "admin/_sms_log_row.html", {
+        "user": user,
+        "entry": log_entry,
+    })
+
+
 @router.post("/sms-senden/senden")
 async def sms_send_execute(
     request: Request,
+    background_tasks: BackgroundTasks,
     text: str = Form(...),
     target_type: str = Form("group"),  # "group" | "member" | "adhoc"
     db: Session = Depends(get_db),
@@ -724,11 +744,9 @@ async def sms_send_execute(
     if not text:
         return RedirectResponse("/admin/sms-senden?error=empty", status_code=303)
 
-    from app.services.sms_service import resolve_sms_config, sms_available
+    from app.services.sms_service import sms_available
     if not sms_available(org_id, db):
         return RedirectResponse("/admin/sms-senden?error=no_provider", status_code=303)
-    sms_ctx = resolve_sms_config(org_id, db)
-
     form = await request.form()
 
     # Empfaenger aus Formular zusammenstellen
@@ -773,44 +791,35 @@ async def sms_send_execute(
     if not phones:
         return RedirectResponse("/admin/sms-senden?error=no_recipients", status_code=303)
 
-    from app.core.audit import write_audit
-    from app.services.sms_dispatch_service import send_bulk_detailed
+    from app.services.sms_dispatch_service import dispatch_manual_sms
 
-    jobs = [(phone, text) for phone in phones]
-    results = await send_bulk_detailed(org_id, jobs, ctx=sms_ctx)
-    total = len(results)
-    success = sum(result.success for result in results)
-
-    # Protokollieren
+    # Vor dem Hintergrundversand anlegen, damit der Fortschritt sofort sichtbar ist.
     log_entry = SmsLog(
         org_id=org_id,
-        sent_at=datetime.now(UTC),
+        sent_at=datetime.now(UTC).replace(tzinfo=None),
+        completed_at=None,
         source="manual",
         alarm_type_code=None,
         text=text,
-        recipient_count=total,
-        success_count=success,
-        provider=",".join(sorted(sms_ctx.providers_used)) or None,
+        recipient_count=len(phones),
+        success_count=0,
+        provider=None,
         triggered_by_user_id=user.id,
     )
     db.add(log_entry)
     db.flush()
-    db.add_all([
-        SmsLogRecipient(
-            sms_log_id=log_entry.id,
-            member_id=phones[result.phone_number][1],
-            phone_number=result.phone_number,
-            name=phones[result.phone_number][0],
-            success=result.success,
-            sent_at=result.sent_at,
-        )
-        for result in results
-    ])
-    write_audit(db, "admin.sms.manual_send", org_id=org_id, user_id=user.id,
-                payload={"recipient_count": total, "success_count": success, "target_type": target_type})
     db.commit()
+    background_tasks.add_task(
+        dispatch_manual_sms,
+        org_id,
+        log_entry.id,
+        text,
+        phones,
+        user.id,
+        target_type,
+    )
 
-    return RedirectResponse(f"/admin/sms-senden?sent={success}", status_code=303)
+    return RedirectResponse(f"/admin/sms-senden?started={log_entry.id}", status_code=303)
 
 
 # ── SMS-Empfang: Log + Weiterleitungsregeln ───────────────────────────────────

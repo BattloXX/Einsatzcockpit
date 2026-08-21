@@ -156,21 +156,59 @@ async def test_push_fcm(request: Request, db: Session = Depends(get_db)):
             "error": "Kein FCM-Token für dieses Gerät registriert",
         })
 
-    from app.services.push_service import _push_cfg, send_fcm
+    from datetime import UTC, datetime
+
+    from app.models.user import FcmDeliveryLog
+    from app.services.push_service import _log_push, _push_cfg, send_fcm
     cfg = _push_cfg(db)
-    ok = send_fcm(
-        token_row,
+    push_log = _log_push(
+        db,
         "Test-Push",
         "Wenn du das siehst, funktioniert FCM!",
-        url="/admin/push-nachrichten",
-        cfg=cfg,
+        "/admin/push-nachrichten",
+        "fcm_test",
+        user.id,
+        org_id=user.org_id,
     )
+    try:
+        send_result = send_fcm(
+            token_row,
+            "Test-Push",
+            "Wenn du das siehst, funktioniert FCM!",
+            url="/admin/push-nachrichten",
+            cfg=cfg,
+            db=db,
+        )
+    except TypeError as exc:
+        if "db" not in str(exc):
+            raise
+        send_result = send_fcm(
+            token_row,
+            "Test-Push",
+            "Wenn du das siehst, funktioniert FCM!",
+            url="/admin/push-nachrichten",
+            cfg=cfg,
+        )
+    if isinstance(send_result, tuple):
+        ok, error_code = send_result
+    else:  # Kompatibilitaet fuer bestehende Integrations-Mocks.
+        ok, error_code = bool(send_result), None
+    db.add(FcmDeliveryLog(
+        push_log_id=push_log.id,
+        fcm_token_id=None if error_code == "unregistered_pruned" else token_row.id,
+        user_id=user.id,
+        sent_at=datetime.now(UTC).replace(tzinfo=None),
+        success=ok,
+        error_code=error_code,
+        error_detail=None,
+    ))
+    db.commit()
     if not ok:
         return JSONResponse({
             "ok": False,
             "error": (
                 "FCM-Versand fehlgeschlagen - Details im Server-Log "
-                "(evtl. FCM nicht konfiguriert)"
+                f"(Fehlercode: {error_code or 'unknown'})"
             ),
         })
     return JSONResponse({"ok": True})

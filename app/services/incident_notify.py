@@ -26,6 +26,81 @@ from app.models.incident import Incident
 logger = logging.getLogger("einsatzleiter.incident_notify")
 
 
+async def _send_incident_push(
+    incident_id: int,
+    org_id: int | None,
+    title: str,
+    body: str,
+    url: str,
+    extra: dict | None,
+    triggered_by_user_id: int | None,
+) -> None:
+    """Sendet den Alarm-Push mit eigener Session und schreibt das Ergebnis ins Audit-Log."""
+    from app.core.audit import write_audit
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.user import FcmToken, PushSubscription, User
+    from app.services.push_service import notify_all, notify_org
+
+    def _run() -> None:
+        push_db = SessionLocal()
+        set_tenant_context(push_db, None)
+        try:
+            if org_id is not None:
+                user_ids = push_db.query(User.id).filter(User.org_id == org_id)
+                recipient_count = (
+                    push_db.query(PushSubscription).filter(PushSubscription.user_id.in_(user_ids)).count()
+                    + push_db.query(FcmToken).filter(FcmToken.user_id.in_(user_ids)).count()
+                )
+                sent_count = notify_org(
+                    push_db,
+                    org_id,
+                    title,
+                    body,
+                    url,
+                    source="einsatz_alarm",
+                    channel_id="einsatz_alarm",
+                    extra=extra,
+                )
+            else:
+                recipient_count = push_db.query(PushSubscription).count() + push_db.query(FcmToken).count()
+                sent_count = notify_all(
+                    push_db,
+                    title,
+                    body,
+                    url,
+                    source="einsatz_alarm",
+                    channel_id="einsatz_alarm",
+                    extra=extra,
+                )
+            write_audit(
+                push_db,
+                "push.einsatz_alarm_sent",
+                org_id=org_id,
+                user_id=triggered_by_user_id,
+                incident_id=incident_id,
+                payload={
+                    "sent_count": sent_count,
+                    "recipient_count": recipient_count,
+                    "channel_id": "einsatz_alarm",
+                },
+            )
+            push_db.commit()
+            if sent_count == 0 and recipient_count > 0:
+                logger.warning(
+                    "Kein Alarm-Push zugestellt (Einsatz %s, Empfaenger=%s)",
+                    incident_id,
+                    recipient_count,
+                )
+        except Exception:
+            push_db.rollback()
+            logger.exception("Push-Benachrichtigung fehlgeschlagen (Einsatz %s)", incident_id)
+        finally:
+            push_db.close()
+
+    await asyncio.to_thread(_run)
+
+
 def _combined_address(incident: Incident) -> str:
     """Baut den `{adresse}`-Platzhalter-String — gleiches Format wie bisher in api_v1.py."""
     return (
@@ -59,7 +134,6 @@ async def notify_incident_created(
     - `base_url` wird nur für die Teams-Alarmierung gebraucht (absolute Links/Kartenbild-URL
       in der Karte). Ohne `base_url` wird der Teams-Versand übersprungen.
     """
-    from app.services.push_service import notify_all, notify_org
     from app.services.sms_dispatch_service import dispatch_einsatzinfo
     from app.services.teams_alarm_service import post_incident_card
 
@@ -106,18 +180,16 @@ async def notify_incident_created(
         if sms_args is not None:
             background_tasks.add_task(dispatch_einsatzinfo, *sms_args)
         # Feste Gegenstelle zum Alarm-Channel der Android-App.
-        if org_id:
-            background_tasks.add_task(
-                notify_org, db, org_id, push_title, push_body, resolved_push_url,
-                channel_id="einsatz_alarm",
-                extra=live_extra,
-            )
-        else:
-            background_tasks.add_task(
-                notify_all, db, push_title, push_body, resolved_push_url,
-                channel_id="einsatz_alarm",
-                extra=live_extra,
-            )
+        background_tasks.add_task(
+            _send_incident_push,
+            incident.id,
+            org_id,
+            push_title,
+            push_body,
+            resolved_push_url,
+            live_extra,
+            triggered_by_user_id,
+        )
         if teams_args is not None:
             background_tasks.add_task(post_incident_card, *teams_args, base_url=base_url)
         return
@@ -128,21 +200,15 @@ async def notify_incident_created(
             await dispatch_einsatzinfo(*sms_args)
         except Exception:
             logger.exception("Einsatzinfo-SMS fehlgeschlagen (Einsatz %s)", incident.id)
-    try:
-        if org_id:
-            await asyncio.to_thread(
-                notify_org, db, org_id, push_title, push_body, resolved_push_url,
-                channel_id="einsatz_alarm",
-                extra=live_extra,
-            )
-        else:
-            await asyncio.to_thread(
-                notify_all, db, push_title, push_body, resolved_push_url,
-                channel_id="einsatz_alarm",
-                extra=live_extra,
-            )
-    except Exception:
-        logger.exception("Push-Benachrichtigung fehlgeschlagen (Einsatz %s)", incident.id)
+    await _send_incident_push(
+        incident.id,
+        org_id,
+        push_title,
+        push_body,
+        resolved_push_url,
+        live_extra,
+        triggered_by_user_id,
+    )
     if teams_args is not None:
         assert base_url is not None  # teams_args ist nur gesetzt, wenn base_url vorhanden ist
         try:

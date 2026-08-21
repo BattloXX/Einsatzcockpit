@@ -5,8 +5,10 @@ Wird als BackgroundTask nach dem Einsatz-Commit aufgerufen.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -26,6 +28,9 @@ if TYPE_CHECKING:
     from app.models.master import Member
 
 logger = logging.getLogger("einsatzleiter.sms_dispatch")
+
+# Pro Gateway duerfen nur wenige Jobs gleichzeitig auf das gekoppelte Handy treffen.
+SMS_CONCURRENCY_PER_GATEWAY = 4
 
 # Standardvorlage fuer Einsatzinfo-SMS (Platzhalter in geschweiften Klammern)
 _DEFAULT_TEMPLATE = "Einsatz {stichwort}: {adresse}. {meldung} {link}"
@@ -135,25 +140,55 @@ class SmsSendResult:
 
 
 async def send_bulk_detailed(
-    org_id: int, jobs: list[tuple[str, str]], ctx=None
+    org_id: int,
+    jobs: list[tuple[str, str]],
+    ctx=None,
+    on_result: Callable[[SmsSendResult], Awaitable[None]] | None = None,
 ) -> list[SmsSendResult]:
-    """Sendet SMS sequentiell und liefert das Ergebnis jedes Versandversuchs."""
+    """Sendet SMS begrenzt parallel und verteilt Gateway-Jobs round-robin."""
     from app.services.sms_service import resolve_sms_config, send_sms
-    ctx = ctx or resolve_sms_config(org_id)
 
-    results = []
-    for to, text in jobs:
-        ok = False
-        try:
-            ok = bool(await send_sms(org_id, to, text, ctx=ctx))
-        except Exception as exc:
-            logger.warning("SMS-Versand fehlgeschlagen an %s: %s", to[-4:] + "****", exc)
-        results.append(SmsSendResult(
-            phone_number=to,
-            success=ok,
-            sent_at=datetime.now(UTC).replace(tzinfo=None),
-        ))
-    return results
+    ctx = ctx or resolve_sms_config(org_id)
+    from app.routers.ws import connected_gateway_token_ids_ordered
+
+    gateway_ids = connected_gateway_token_ids_ordered(org_id) if "gateway" in ctx.chain else []
+    semaphore_keys: list[int | None] = list(gateway_ids) if gateway_ids else [None]
+    semaphores = {
+        key: asyncio.Semaphore(SMS_CONCURRENCY_PER_GATEWAY)
+        for key in semaphore_keys
+    }
+    progress_lock = asyncio.Lock()
+
+    async def _send(index: int, to: str, text: str) -> SmsSendResult:
+        gateway_id = gateway_ids[index % len(gateway_ids)] if gateway_ids else None
+        async with semaphores[gateway_id]:
+            ok = False
+            try:
+                if gateway_id is None:
+                    ok = bool(await send_sms(org_id, to, text, ctx=ctx))
+                else:
+                    ok = bool(await send_sms(
+                        org_id,
+                        to,
+                        text,
+                        ctx=ctx,
+                        preferred_gateway_token_id=gateway_id,
+                    ))
+            except Exception as exc:
+                logger.warning("SMS-Versand fehlgeschlagen an %s: %s", to[-4:] + "****", exc)
+            result = SmsSendResult(
+                phone_number=to,
+                success=ok,
+                sent_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+            if on_result is not None:
+                async with progress_lock:
+                    await on_result(result)
+            return result
+
+    return list(await asyncio.gather(*(
+        _send(index, to, text) for index, (to, text) in enumerate(jobs)
+    )))
 
 
 async def send_bulk(org_id: int, jobs: list[tuple[str, str]], ctx=None) -> tuple[int, int]:
@@ -164,6 +199,81 @@ async def send_bulk(org_id: int, jobs: list[tuple[str, str]], ctx=None) -> tuple
     """
     results = await send_bulk_detailed(org_id, jobs, ctx=ctx)
     return len(results), sum(result.success for result in results)
+
+
+async def _send_bulk_with_progress(org_id: int, jobs, ctx, on_result):
+    """Kompatibilitaet fuer bestehende Provider-Doubles ohne Progress-Callback."""
+    try:
+        return await send_bulk_detailed(org_id, jobs, ctx=ctx, on_result=on_result)
+    except TypeError as exc:
+        if "on_result" not in str(exc):
+            raise
+        results = await send_bulk_detailed(org_id, jobs, ctx=ctx)
+        for result in results:
+            await on_result(result)
+        return results
+
+
+async def dispatch_manual_sms(
+    org_id: int,
+    log_id: int,
+    text: str,
+    recipients: dict[str, tuple[str | None, int | None]],
+    triggered_by_user_id: int,
+    target_type: str,
+) -> None:
+    """Fuehrt einen bereits protokollierten manuellen Versand im Hintergrund aus."""
+    from app.services.sms_service import resolve_sms_config
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        log_entry = db.query(SmsLog).filter(SmsLog.id == log_id, SmsLog.org_id == org_id).first()
+        if log_entry is None:
+            logger.error("SMS-Log %s fuer Org %s nicht gefunden", log_id, org_id)
+            return
+        sms_ctx = resolve_sms_config(org_id, db)
+
+        async def _record(result: SmsSendResult) -> None:
+            name, member_id = recipients[result.phone_number]
+            db.add(SmsLogRecipient(
+                sms_log_id=log_id,
+                member_id=member_id,
+                phone_number=result.phone_number,
+                name=name,
+                success=result.success,
+                sent_at=result.sent_at,
+            ))
+            if result.success:
+                log_entry.success_count += 1
+            db.commit()
+
+        results = await _send_bulk_with_progress(
+            org_id, [(phone, text) for phone in recipients], sms_ctx, _record
+        )
+        log_entry.provider = ",".join(sorted(sms_ctx.providers_used)) or None
+        log_entry.completed_at = datetime.now(UTC).replace(tzinfo=None)
+        write_audit(
+            db,
+            "admin.sms.manual_send",
+            org_id=org_id,
+            user_id=triggered_by_user_id,
+            payload={
+                "recipient_count": len(results),
+                "success_count": sum(result.success for result in results),
+                "target_type": target_type,
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Manueller SMS-Hintergrundversand fehlgeschlagen (log_id=%s)", log_id)
+        failed_log = db.query(SmsLog).filter(SmsLog.id == log_id, SmsLog.org_id == org_id).first()
+        if failed_log is not None:
+            failed_log.completed_at = datetime.now(UTC).replace(tzinfo=None)
+            db.commit()
+    finally:
+        db.close()
 
 
 async def dispatch_einsatzinfo(
@@ -263,35 +373,44 @@ async def dispatch_einsatzinfo(
             )
             return
 
-        # Versenden
+        # Vor Versand protokollieren; Zwischen-Commits machen den Fortschritt sichtbar.
         jobs = [(phone, text) for phone in recipients]
-        results = await send_bulk_detailed(org_id, jobs, ctx=sms_ctx)
-        total = len(results)
-        success = sum(result.success for result in results)
-
-        # Protokollieren
         log_entry = SmsLog(
             org_id=org_id,
-            sent_at=now,
+            sent_at=now.replace(tzinfo=None),
+            completed_at=None,
             source="alarm",
             alarm_type_code=alarm_type_code,
             text=text,
-            recipient_count=total,
-            success_count=success,
-            provider=",".join(sorted(sms_ctx.providers_used)) or None,
+            recipient_count=len(jobs),
+            success_count=0,
+            provider=None,
             triggered_by_user_id=triggered_by_user_id,
         )
         db.add(log_entry)
         db.flush()
-        db.add_all([
-            SmsLogRecipient(
-                sms_log_id=log_entry.id, member_id=recipients[result.phone_number].id,
+        db.commit()
+
+        async def _record(result: SmsSendResult) -> None:
+            member = recipients[result.phone_number]
+            db.add(SmsLogRecipient(
+                sms_log_id=log_entry.id,
+                member_id=member.id,
                 phone_number=result.phone_number,
-                name=recipients[result.phone_number].full_name,
-                success=result.success, sent_at=result.sent_at,
-            )
-            for result in results
-        ])
+                name=member.full_name,
+                success=result.success,
+                sent_at=result.sent_at,
+            ))
+            if result.success:
+                log_entry.success_count += 1
+            db.commit()
+
+        results = await _send_bulk_with_progress(org_id, jobs, sms_ctx, _record)
+        total = len(results)
+        success = sum(result.success for result in results)
+        log_entry.success_count = success
+        log_entry.provider = ",".join(sorted(sms_ctx.providers_used)) or None
+        log_entry.completed_at = datetime.now(UTC).replace(tzinfo=None)
         write_audit(
             db, "sms.einsatzinfo_sent",
             org_id=org_id,
@@ -316,6 +435,13 @@ async def dispatch_einsatzinfo(
         )
         try:
             db.rollback()
+            if "log_entry" in locals() and log_entry.id:
+                failed_log = db.query(SmsLog).filter(
+                    SmsLog.id == log_entry.id, SmsLog.org_id == org_id
+                ).first()
+                if failed_log is not None:
+                    failed_log.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                    db.commit()
         except Exception:
             pass
     finally:
@@ -364,28 +490,37 @@ async def dispatch_gsl_alarm(
             return
 
         jobs = [(phone, text_) for phone in recipients]
-        results = await send_bulk_detailed(org_id, jobs, ctx=sms_ctx)
-        total = len(results)
-        success = sum(result.success for result in results)
-
-        now = datetime.now(UTC)
+        now = datetime.now(UTC).replace(tzinfo=None)
         log_entry = SmsLog(
-            org_id=org_id, sent_at=now, source="gsl_alarm", alarm_type_code=None,
-            text=text_, recipient_count=total, success_count=success,
-            provider=",".join(sorted(sms_ctx.providers_used)) or None,
+            org_id=org_id, sent_at=now, completed_at=None,
+            source="gsl_alarm", alarm_type_code=None,
+            text=text_, recipient_count=len(jobs), success_count=0, provider=None,
             triggered_by_user_id=triggered_by_user_id,
         )
         db.add(log_entry)
         db.flush()
-        db.add_all([
-            SmsLogRecipient(
-                sms_log_id=log_entry.id, member_id=recipients[result.phone_number].id,
+        db.commit()
+
+        async def _record(result: SmsSendResult) -> None:
+            member = recipients[result.phone_number]
+            db.add(SmsLogRecipient(
+                sms_log_id=log_entry.id,
+                member_id=member.id,
                 phone_number=result.phone_number,
-                name=recipients[result.phone_number].full_name,
-                success=result.success, sent_at=result.sent_at,
-            )
-            for result in results
-        ])
+                name=member.full_name,
+                success=result.success,
+                sent_at=result.sent_at,
+            ))
+            if result.success:
+                log_entry.success_count += 1
+            db.commit()
+
+        results = await _send_bulk_with_progress(org_id, jobs, sms_ctx, _record)
+        total = len(results)
+        success = sum(result.success for result in results)
+        log_entry.success_count = success
+        log_entry.provider = ",".join(sorted(sms_ctx.providers_used)) or None
+        log_entry.completed_at = datetime.now(UTC).replace(tzinfo=None)
         write_audit(
             db, "sms.gsl_alarm_sent", org_id=org_id, user_id=triggered_by_user_id,
             payload={"lage_name": lage_name, "recipient_count": total, "success_count": success,
@@ -401,6 +536,13 @@ async def dispatch_gsl_alarm(
         logger.exception("Fehler beim GSL-Alarm-SMS-Versand (org_id=%d)", org_id)
         try:
             db.rollback()
+            if "log_entry" in locals() and log_entry.id:
+                failed_log = db.query(SmsLog).filter(
+                    SmsLog.id == log_entry.id, SmsLog.org_id == org_id
+                ).first()
+                if failed_log is not None:
+                    failed_log.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                    db.commit()
         except Exception:
             pass
     finally:

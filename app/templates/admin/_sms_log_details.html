@@ -2,7 +2,14 @@
   <h2>Versanddetails</h2>
   <button type="button" class="modal__close" data-ec-action="close-dialog">x</button>
 </div>
-<div class="modal__body">
+<div class="modal__body"{% if log_entry.is_running %}
+     hx-get="/admin/sms-senden/{{ log_entry.id }}/details"
+     hx-trigger="every 2s" hx-target="#smsLogDetailsContent" hx-swap="innerHTML"{% endif %}>
+  {% if log_entry.is_running %}
+  <div class="alert alert--info">
+    {{ recipients|length }} von {{ log_entry.recipient_count }} bereits bearbeitet, Versand laeuft...
+  </div>
+  {% endif %}
   {% if recipients %}
   <div style="overflow-x:auto;">
     <table class="table-admin" style="min-width:560px;">
