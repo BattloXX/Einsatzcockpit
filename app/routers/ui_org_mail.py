@@ -284,7 +284,11 @@ async def smtp_test(
         db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == effective_org_id).first()
         if effective_org_id else None
     )
-    if not cfg or not cfg.is_fully_configured:
+    if not cfg:
+        return JSONResponse({"ok": False, "message": "Eigener SMTP-Server unvollständig konfiguriert."})
+    if not cfg.enabled:
+        return JSONResponse({"ok": False, "message": "Eigener SMTP-Server ist für diese Organisation deaktiviert."})
+    if not cfg.is_fully_configured:
         return JSONResponse({"ok": False, "message": "Eigener SMTP-Server unvollständig konfiguriert."})
     to = recipient.strip() or cfg.from_addr
     if not to:
@@ -331,7 +335,13 @@ async def o365_test(
         db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == effective_org_id).first()
         if effective_org_id else None
     )
-    if not cfg or not cfg.is_fully_configured:
+    if not settings.O365_MAIL_ENABLED:
+        return JSONResponse({"ok": False, "message": "Office 365 ist global deaktiviert (O365_MAIL_ENABLED=false)."})
+    if not cfg:
+        return JSONResponse({"ok": False, "message": "Office 365 unvollständig konfiguriert."})
+    if not cfg.enabled:
+        return JSONResponse({"ok": False, "message": "Office 365 ist für diese Organisation deaktiviert."})
+    if not cfg.is_fully_configured:
         return JSONResponse({"ok": False, "message": "Office 365 unvollständig konfiguriert."})
     to = recipient.strip() or cfg.sender_address
     if not to:
@@ -380,7 +390,13 @@ async def resend_test(
         db.query(OrgResendConfig).filter(OrgResendConfig.org_id == effective_org_id).first()
         if effective_org_id else None
     )
-    if not cfg or not cfg.is_fully_configured:
+    if not settings.RESEND_ENABLED:
+        return JSONResponse({"ok": False, "message": "Resend ist global deaktiviert (RESEND_ENABLED=false)."})
+    if not cfg:
+        return JSONResponse({"ok": False, "message": "Resend ist unvollständig konfiguriert."})
+    if not cfg.enabled:
+        return JSONResponse({"ok": False, "message": "Resend ist für diese Organisation deaktiviert."})
+    if not cfg.is_fully_configured:
         return JSONResponse({"ok": False, "message": "Resend ist unvollständig konfiguriert."})
     to = recipient.strip() or cfg.from_addr
     if not to:
