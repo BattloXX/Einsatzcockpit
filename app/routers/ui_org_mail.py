@@ -106,7 +106,6 @@ def mail_settings_page(
         "all_orgs": all_orgs,
         "flash": request.query_params.get("flash"),
         "o365_globally_enabled": settings.O365_MAIL_ENABLED,
-        "resend_globally_enabled": settings.RESEND_ENABLED,
     })
 
 
@@ -390,8 +389,6 @@ async def resend_test(
         db.query(OrgResendConfig).filter(OrgResendConfig.org_id == effective_org_id).first()
         if effective_org_id else None
     )
-    if not settings.RESEND_ENABLED:
-        return JSONResponse({"ok": False, "message": "Resend ist global deaktiviert (RESEND_ENABLED=false)."})
     if not cfg:
         return JSONResponse({"ok": False, "message": "Resend ist unvollständig konfiguriert."})
     if not cfg.enabled:

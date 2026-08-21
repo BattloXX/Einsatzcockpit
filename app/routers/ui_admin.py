@@ -1904,8 +1904,6 @@ async def delete_default_message(
 @router.get("/system-einstellungen", response_class=HTMLResponse)
 async def system_settings_page(request: Request, db: Session = Depends(get_db),
                                _=Depends(require_role("system_admin"))):
-    from app.config import settings as app_settings
-
     settings_raw = db.query(SystemSettings).all()
     settings = {s.key: s.value for s in settings_raw}
     resend_api_key_set = bool(settings.pop("resend_api_key", None))
@@ -1913,7 +1911,6 @@ async def system_settings_page(request: Request, db: Session = Depends(get_db),
     return templates.TemplateResponse(request, "admin/system_settings.html", {
         "user": request.state.user, "settings": settings, "saved": saved,
         "resend_api_key_set": resend_api_key_set,
-        "resend_globally_enabled": app_settings.RESEND_ENABLED,
     })
 
 
@@ -2014,18 +2011,12 @@ async def test_resend_mail(
     _=Depends(require_role("system_admin")),
     test_resend_mail_to: str = Form(""),
 ):
-    from app.config import settings as app_settings
     from app.services.mail_service import _build_message, get_resend_cfg
     from app.services.resend_mail_service import ResendMailError, send_via_resend
 
     recipient = test_resend_mail_to.strip() or request.state.user.email or ""
     if not recipient:
         message = "Keine Empfängeradresse angegeben"
-    elif not app_settings.RESEND_ENABLED:
-        message = (
-            "Resend ist global deaktiviert: Die Umgebungsvariable RESEND_ENABLED ist false "
-            "(nach Änderung ist ein App-Neustart erforderlich)."
-        )
     else:
         resend_settings = {
             row.key: row.value

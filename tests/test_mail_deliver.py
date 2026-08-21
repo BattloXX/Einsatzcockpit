@@ -88,11 +88,6 @@ def _patch_resend(monkeypatch, *, raises: Exception | None = None):
     return calls
 
 
-@pytest.fixture(autouse=True)
-def enable_resend(monkeypatch):
-    monkeypatch.setattr(settings, "RESEND_ENABLED", True)
-
-
 async def test_deliver_uses_graph_when_o365_enabled_and_configured(deliver_db, monkeypatch):
     db, org = deliver_db
     db.add(OrgO365MailConfig(

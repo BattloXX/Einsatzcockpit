@@ -50,17 +50,13 @@ def _redirect_error(response):
 
 
 @pytest.mark.parametrize(
-    ("env_enabled", "rows", "expected"),
+    ("rows", "expected"),
     [
-        (False, [], "RESEND_ENABLED ist false"),
-        (True, [SimpleNamespace(key="resend_enabled", value="false")], "resend_enabled=false"),
-        (True, [SimpleNamespace(key="resend_enabled", value="true")], "API-Key, Domain"),
+        ([SimpleNamespace(key="resend_enabled", value="false")], "resend_enabled=false"),
+        ([SimpleNamespace(key="resend_enabled", value="true")], "API-Key, Domain"),
     ],
 )
-async def test_global_resend_test_reports_exact_disabled_reason(
-    monkeypatch, env_enabled, rows, expected
-):
-    monkeypatch.setattr(settings, "RESEND_ENABLED", env_enabled)
+async def test_global_resend_test_reports_exact_disabled_reason(monkeypatch, rows, expected):
     request, user = _request()
 
     response = await ui_admin.test_resend_mail(
@@ -76,24 +72,17 @@ def _json(response):
     return json.loads(response.body)
 
 
-@pytest.mark.parametrize(
-    ("endpoint", "global_setting", "expected"),
-    [
-        (ui_org_mail.o365_test, "O365_MAIL_ENABLED", "O365_MAIL_ENABLED=false"),
-        (ui_org_mail.resend_test, "RESEND_ENABLED", "RESEND_ENABLED=false"),
-    ],
-)
-async def test_org_provider_test_respects_global_gate(
-    monkeypatch, endpoint, global_setting, expected
-):
-    monkeypatch.setattr(settings, global_setting, False)
+async def test_org_o365_test_respects_global_gate(monkeypatch):
+    """Resend hat bewusst KEIN Env-Kill-Switch (mehr) -- nur O365 hat noch einen
+    globalen Gate über settings.O365_MAIL_ENABLED."""
+    monkeypatch.setattr(settings, "O365_MAIL_ENABLED", False)
     request, user = _request()
     cfg = SimpleNamespace(enabled=True, is_fully_configured=True)
 
-    response = await endpoint(request=request, db=_Db(cfg=cfg), user=user, recipient="")
+    response = await ui_org_mail.o365_test(request=request, db=_Db(cfg=cfg), user=user, recipient="")
 
     assert _json(response)["ok"] is False
-    assert expected in _json(response)["message"]
+    assert "O365_MAIL_ENABLED=false" in _json(response)["message"]
 
 
 @pytest.mark.parametrize(
@@ -108,7 +97,6 @@ async def test_org_provider_test_respects_org_enabled_flag(
     monkeypatch, endpoint, provider_name
 ):
     monkeypatch.setattr(settings, "O365_MAIL_ENABLED", True)
-    monkeypatch.setattr(settings, "RESEND_ENABLED", True)
     request, user = _request()
     cfg = SimpleNamespace(enabled=False, is_fully_configured=True)
 
