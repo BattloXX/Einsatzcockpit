@@ -333,12 +333,12 @@ def _reload_server() -> bool:
             pass
     # Fallback: systemctl restart (benötigt sudo-Rechte via sudoers)
     try:
-        subprocess.run(
+        result = subprocess.run(
             ["sudo", "systemctl", "restart", "einsatzleiter"],
             timeout=10,
             capture_output=True,
         )
-        return True
+        return result.returncode == 0
     except Exception:
         return False
 
