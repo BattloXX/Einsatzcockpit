@@ -1904,6 +1904,8 @@ async def delete_default_message(
 @router.get("/system-einstellungen", response_class=HTMLResponse)
 async def system_settings_page(request: Request, db: Session = Depends(get_db),
                                _=Depends(require_role("system_admin"))):
+    from app.config import settings as app_settings
+
     settings_raw = db.query(SystemSettings).all()
     settings = {s.key: s.value for s in settings_raw}
     resend_api_key_set = bool(settings.pop("resend_api_key", None))
@@ -1911,6 +1913,7 @@ async def system_settings_page(request: Request, db: Session = Depends(get_db),
     return templates.TemplateResponse(request, "admin/system_settings.html", {
         "user": request.state.user, "settings": settings, "saved": saved,
         "resend_api_key_set": resend_api_key_set,
+        "resend_globally_enabled": app_settings.RESEND_ENABLED,
     })
 
 
@@ -2004,16 +2007,46 @@ async def test_resend_mail(
     _=Depends(require_role("system_admin")),
     test_resend_mail_to: str = Form(""),
 ):
+    from app.config import settings as app_settings
     from app.services.mail_service import _build_message, get_resend_cfg
     from app.services.resend_mail_service import ResendMailError, send_via_resend
 
     recipient = test_resend_mail_to.strip() or request.state.user.email or ""
-    cfg = get_resend_cfg(db)
     if not recipient:
         message = "Keine Empfängeradresse angegeben"
-    elif not cfg:
-        message = "Resend ist nicht vollständig konfiguriert oder global deaktiviert"
+    elif not app_settings.RESEND_ENABLED:
+        message = (
+            "Resend ist global deaktiviert: Die Umgebungsvariable RESEND_ENABLED ist false "
+            "(nach Änderung ist ein App-Neustart erforderlich)."
+        )
     else:
+        resend_settings = {
+            row.key: row.value
+            for row in db.query(SystemSettings).filter(
+                SystemSettings.key.in_(("resend_enabled", "resend_api_key", "resend_from_domain"))
+            ).all()
+        }
+        if (resend_settings.get("resend_enabled") or "").lower() != "true":
+            message = "Resend ist in den Systemeinstellungen deaktiviert: resend_enabled=false."
+            return RedirectResponse(
+                f"/admin/system-einstellungen?resend_error={quote_plus(message)}", status_code=303,
+            )
+        missing = []
+        if not resend_settings.get("resend_api_key"):
+            missing.append("API-Key")
+        if not (resend_settings.get("resend_from_domain") or "").strip():
+            missing.append("Domain")
+        if missing:
+            message = f"Resend-DB-Konfiguration unvollständig: Es fehlt: {', '.join(missing)}."
+            return RedirectResponse(
+                f"/admin/system-einstellungen?resend_error={quote_plus(message)}", status_code=303,
+            )
+        cfg = get_resend_cfg(db)
+        if not cfg:
+            message = "Resend-DB-Konfiguration konnte nicht geladen oder entschlüsselt werden."
+            return RedirectResponse(
+                f"/admin/system-einstellungen?resend_error={quote_plus(message)}", status_code=303,
+            )
         try:
             from_addr = f"noreply@{cfg['from_domain']}"
             msg = _build_message(
