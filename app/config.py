@@ -378,8 +378,9 @@ class Settings(BaseSettings):
     O365_MAIL_HTTP_TIMEOUT: int = 15
     O365_MAIL_TOKEN_MARGIN_S: int = 60  # Sicherheitsmarge vor Token-Ablauf im Cache
 
-    # Resend wird in den System-Einstellungen bzw. je Organisation konfiguriert.
-    RESEND_ENABLED: bool = False
+    # Resend wird ausschließlich über die System-Einstellungen bzw. je Organisation
+    # aktiviert/konfiguriert (DB-Flag) -- kein zusätzlicher Env-Kill-Switch, damit ein
+    # System-Admin das komplett übers Web bedienen kann, ohne Server-Zugriff zu brauchen.
     RESEND_HTTP_TIMEOUT: int = 15
 
     # SMS-Versand je Org ueber die EUS Message Send API - Alternative/Fallback zum

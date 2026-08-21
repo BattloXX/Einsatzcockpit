@@ -115,7 +115,7 @@ def _org_smtp_cfg(db, org_id: int | None) -> dict[str, Any] | None:
 
 def _org_resend_cfg(db, org_id: int | None) -> dict[str, Any] | None:
     """Lädt die aktive und vollständige Resend-Konfiguration einer Org."""
-    if db is None or org_id is None or not settings.RESEND_ENABLED:
+    if db is None or org_id is None:
         return None
     try:
         from app.core.crypto import decrypt_secret
@@ -132,7 +132,7 @@ def _org_resend_cfg(db, org_id: int | None) -> dict[str, Any] | None:
 
 def get_resend_cfg(db) -> dict[str, str] | None:
     """Lädt die globale Resend-Konfiguration und entschlüsselt den API-Key."""
-    if db is None or not settings.RESEND_ENABLED:
+    if db is None:
         return None
     try:
         from app.core.crypto import decrypt_secret

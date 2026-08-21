@@ -55,13 +55,6 @@
 </div>
 {% endif %}
 
-{% if not resend_globally_enabled %}
-<div class="alert alert--warn mb-4">
-  <strong>Resend ist global deaktiviert</strong> (<code>RESEND_ENABLED=false</code>).
-  Die Resend-Einstellungen werden erst nach Aktivierung durch den Plattform-Admin verwendet.
-</div>
-{% endif %}
-
 <!-- ── Eigener SMTP-Server ─────────────────────────────────────────────────── -->
 <form method="post" action="/admin/mail/smtp/save">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
