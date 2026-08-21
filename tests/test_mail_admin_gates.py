@@ -4,8 +4,15 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.config import settings
+from app.core.security import hash_password
+from app.core.tenant import set_tenant_context
+from app.db import SessionLocal
+from app.main import app
+from app.models.master import SystemSettings
+from app.models.user import Role, User, UserRole
 from app.routers import ui_admin, ui_org_mail
 
 
@@ -110,3 +117,94 @@ async def test_org_provider_test_respects_org_enabled_flag(
     assert _json(response)["ok"] is False
     assert provider_name in _json(response)["message"]
     assert "Organisation deaktiviert" in _json(response)["message"]
+
+
+def _setup_system_admin(username: str) -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        role = db.query(Role).filter(Role.code == "system_admin").first()
+        if role is None:
+            role = Role(code="system_admin", name="system_admin")
+            db.add(role)
+            db.flush()
+        user = User(
+            username=username,
+            password_hash=hash_password("Test1234!"),
+            display_name="System Settings Test Admin",
+            org_id=1,
+            active=True,
+        )
+        db.add(user)
+        db.flush()
+        db.add(UserRole(user_id=user.id, role_id=role.id))
+        db.commit()
+    finally:
+        db.close()
+
+
+def _login(client, username):
+    client.get("/login")
+    csrf = client.cookies.get("ec_csrf")
+    return client.post(
+        "/login",
+        data={"username": username, "password": "Test1234!", "_csrf": csrf},
+        follow_redirects=False,
+    )
+
+
+def test_invalid_resend_domain_does_not_block_saving_resend_enabled(request):
+    """Regression: Eine ungültige `resend_from_domain` brach bisher den GESAMTEN
+    Save-Request per Early-Return VOR der known_keys-Schleife ab -- dadurch blieb
+    `resend_enabled` unverändert in der DB, obwohl der Admin es auf "Aktiv" gestellt
+    und gespeichert hatte (das Dropdown "sprang" nach dem Reload scheinbar zurück)."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        for key in ("resend_enabled", "resend_from_domain"):
+            row = db.get(SystemSettings, key)
+            if row is not None:
+                db.delete(row)
+        db.commit()
+    finally:
+        db.close()
+
+    def cleanup():
+        cleanup_db = SessionLocal()
+        set_tenant_context(cleanup_db, None)
+        try:
+            for key in ("resend_enabled", "resend_from_domain"):
+                row = cleanup_db.get(SystemSettings, key)
+                if row is not None:
+                    cleanup_db.delete(row)
+            cleanup_db.commit()
+        finally:
+            cleanup_db.close()
+
+    request.addfinalizer(cleanup)
+
+    _setup_system_admin("resend_domain_sysadmin")
+    client = TestClient(app)
+    assert _login(client, "resend_domain_sysadmin").status_code == 302
+
+    response = client.post(
+        "/admin/system-einstellungen",
+        data={
+            "_csrf": client.cookies.get("ec_csrf"),
+            "k_resend_enabled": "true",
+            "k_resend_from_domain": "not a valid domain",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "settings_error" in response.headers["location"]
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        resend_enabled = db.get(SystemSettings, "resend_enabled")
+        assert resend_enabled is not None and resend_enabled.value == "true"
+        resend_domain = db.get(SystemSettings, "resend_from_domain")
+        assert resend_domain is None
+    finally:
+        db.close()
