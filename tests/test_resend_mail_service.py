@@ -4,7 +4,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.resend_mail_service import ResendMailError, _resend_payload, send_via_resend
+from app.config import settings
+from app.services.resend_mail_service import (
+    ResendMailError,
+    _mark_test_system_from_addr,
+    _resend_payload,
+    send_via_resend,
+)
 
 
 def _msg(html: bool = False) -> EmailMessage:
@@ -58,3 +64,24 @@ async def test_send_via_resend_http_error():
 async def test_send_via_resend_incomplete_config(api_key, from_addr):
     with pytest.raises(ResendMailError, match="unvollstaendig"):
         await send_via_resend(_msg(), api_key, from_addr)
+
+
+def test_mark_test_system_from_addr_noop_when_not_test_system(monkeypatch):
+    monkeypatch.setattr(settings, "TEST_SYSTEM", False)
+    assert _mark_test_system_from_addr("noreply@einsatzcockpit.com") == "noreply@einsatzcockpit.com"
+
+
+def test_mark_test_system_from_addr_prefixes_local_part_and_sets_display_name(monkeypatch):
+    monkeypatch.setattr(settings, "TEST_SYSTEM", True)
+    result = _mark_test_system_from_addr("feuerwehr.wolfurt@einsatzcockpit.com")
+    assert result == "Einsatzcockpit (Testsystem) <test-feuerwehr.wolfurt@einsatzcockpit.com>"
+
+
+async def test_send_via_resend_marks_from_addr_on_test_system(monkeypatch):
+    monkeypatch.setattr(settings, "TEST_SYSTEM", True)
+    response = MagicMock(status_code=200)
+    cls, client = _client(response)
+    with patch("httpx.AsyncClient", cls):
+        await send_via_resend(_msg(), "re_key", "org@verified.example")
+    call = client.post.call_args
+    assert call.kwargs["json"]["from"] == "Einsatzcockpit (Testsystem) <test-org@verified.example>"
