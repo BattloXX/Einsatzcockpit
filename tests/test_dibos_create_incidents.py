@@ -181,6 +181,33 @@ def test_geschlossenes_event_wird_direkt_geschlossen_angelegt(org_id):
         db.close()
 
 
+@pytest.mark.asyncio
+async def test_geschlossenes_event_loest_wordpress_bericht_aus(org_id, monkeypatch):
+    calls = []
+
+    async def _fake_report(db, incident):
+        calls.append(incident.id)
+
+    monkeypatch.setattr(
+        "app.services.wordpress_report_service.post_incident_report", _fake_report,
+    )
+
+    await dibos_enrich.enrich_and_broadcast(
+        org_id, [_event("f-closed-report-004", closed="2026-07-26T11:00:00")],
+        create_incidents=True,
+    )
+
+    db = _session(org_id)
+    try:
+        incident = db.query(Incident).filter(
+            Incident.primary_org_id == org_id,
+            Incident.lis_operation_number == "f-closed-report-004",
+        ).one()
+        assert calls == [incident.id]
+    finally:
+        db.close()
+
+
 def test_create_incidents_false_legt_nichts_an(org_id):
     """Regressionstest: ohne das Org-Opt-in bleibt das Verhalten exakt wie
     bisher — reine Anreicherung, kein Anlegen (Default aus)."""

@@ -159,6 +159,53 @@ async def test_success_payload_innerorts_and_ausserorts(
 
 
 @pytest.mark.asyncio
+async def test_title_skips_internal_incident_number_without_lis_number(monkeypatch):
+    """Die interne laufende Nummer darf nicht als Titel-Fallback erscheinen."""
+    _MockAsyncClient.calls = []
+    _MockAsyncClient.status_code = 201
+    monkeypatch.setattr(httpx, "AsyncClient", _MockAsyncClient)
+    db = _session()
+    try:
+        _configure(db)
+        alarm_type = db.query(AlarmType).filter_by(org_id=ORG_ID, code="T4").first()
+        alarm_type.label = ""
+        incident = _incident(db, city="Wolfurt", reason=None)
+        incident.lis_operation_number = None
+        incident.nummer = "999"
+
+        result = await post_incident_report(db, incident)
+
+        assert result.success is True
+        assert _MockAsyncClient.calls[0]["json"]["title"] == f"Einsatz {incident.id}"
+    finally:
+        db.rollback()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_title_uses_lis_operation_number_as_numeric_fallback(monkeypatch):
+    _MockAsyncClient.calls = []
+    _MockAsyncClient.status_code = 201
+    monkeypatch.setattr(httpx, "AsyncClient", _MockAsyncClient)
+    db = _session()
+    try:
+        _configure(db)
+        alarm_type = db.query(AlarmType).filter_by(org_id=ORG_ID, code="T4").first()
+        alarm_type.label = ""
+        incident = _incident(db, city="Wolfurt", reason=None)
+        incident.lis_operation_number = "f26001234"
+        incident.nummer = "999"
+
+        result = await post_incident_report(db, incident)
+
+        assert result.success is True
+        assert _MockAsyncClient.calls[0]["json"]["title"] == "Einsatz Nr. f26001234"
+    finally:
+        db.rollback()
+        db.close()
+
+
+@pytest.mark.asyncio
 async def test_existing_post_is_first_guard_and_never_calls_httpx(monkeypatch):
     class _ForbiddenClient:
         def __init__(self, *args, **kwargs):

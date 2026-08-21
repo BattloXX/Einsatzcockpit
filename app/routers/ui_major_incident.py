@@ -1623,6 +1623,15 @@ async def lage_beenden(
         await manager.broadcast(iid, {"type": "incident_closed"})
         incident = db.get(_Incident, iid)
         if incident is not None:
+            try:
+                from app.services.wordpress_report_service import post_incident_report
+                await post_incident_report(db, incident)
+            except Exception:
+                logger.exception(
+                    "WordPress-Bericht beim Beenden der Großschadenslage fehlgeschlagen "
+                    "(Einsatz %s)",
+                    incident.id,
+                )
             from app.services.incident_live_notify import notify_incident_live
             await notify_incident_live(
                 db, incident, org_id=incident.primary_org_id,

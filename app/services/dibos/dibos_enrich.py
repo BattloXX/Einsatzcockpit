@@ -566,7 +566,8 @@ def enrich_events_for_org(
     dessen Matching/Dedup zu berühren. Ein Fehler bricht nur den eigenen
     Anreicherungs-Durchlauf ab (Rollback + Log), nie den DIBOS-Poll selbst.
 
-    Gibt {"changed_ids": [...], "rsvp_changed_ids": [...], "created_ids": [...]}
+    Gibt {"changed_ids": [...], "rsvp_changed_ids": [...], "created_ids": [...],
+    "closed_ids": [...]}
     zurück — Erstere für den generellen Board-Reload-Broadcast, "rsvp_changed_ids"
     zusätzlich für den gezielten "rsvp:changed"-Broadcast (Zu-/Absage-Widget),
     "created_ids" für die Einsatzinfo-Benachrichtigung (SMS/Push/Teams) neu
@@ -582,6 +583,7 @@ def enrich_events_for_org(
     changed_ids: list[int] = []
     rsvp_changed_ids: list[int] = []
     created_ids: list[int] = []
+    closed_ids: list[int] = []
     try:
         org = db.get(FireDept, org_id)
         for event in parse_events(raw_events):
@@ -617,6 +619,7 @@ def enrich_events_for_org(
                     from app.services.incident_service import close_incident
                     close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
                     db.flush()
+                    closed_ids.append(incident.id)
                     logger.info(
                         "Einsatz %s aus bereits beendetem DIBOS-Event %s angelegt (Org %s) — "
                         "keine Alarmierung, direkt geschlossen",
@@ -633,7 +636,12 @@ def enrich_events_for_org(
         logger.exception("DIBOS-Einsatzanreicherung für Org %s fehlgeschlagen", org_id)
     finally:
         db.close()
-    return {"changed_ids": changed_ids, "rsvp_changed_ids": rsvp_changed_ids, "created_ids": created_ids}
+    return {
+        "changed_ids": changed_ids,
+        "rsvp_changed_ids": rsvp_changed_ids,
+        "created_ids": created_ids,
+        "closed_ids": closed_ids,
+    }
 
 
 async def enrich_and_broadcast(
@@ -674,6 +682,29 @@ async def enrich_and_broadcast(
     changed_ids = result.get("changed_ids") or []
     rsvp_changed_ids = result.get("rsvp_changed_ids") or []
     created_ids = result.get("created_ids") or []
+    closed_ids = result.get("closed_ids") or []
+    if closed_ids:
+        from app.core.tenant import set_tenant_context
+        from app.db import SessionLocal
+        from app.models.incident import Incident
+
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            for incident_id in closed_ids:
+                incident = db.get(Incident, incident_id)
+                if incident is None:
+                    continue
+                try:
+                    from app.services.wordpress_report_service import post_incident_report
+                    await post_incident_report(db, incident)
+                except Exception:
+                    logger.exception(
+                        "DIBOS-Auto-Close: WordPress-Bericht fehlgeschlagen (Einsatz %s)",
+                        incident.id,
+                    )
+        finally:
+            db.close()
     if created_ids:
         from app.config import settings
         from app.core.tenant import set_tenant_context

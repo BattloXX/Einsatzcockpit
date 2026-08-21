@@ -101,8 +101,6 @@ async def post_incident_report(db: Session, incident: Incident) -> WordPressRepo
         title = alarm_label
     elif incident.lis_operation_number is not None:
         title = f"Einsatz Nr. {incident.lis_operation_number}"
-    elif incident.nummer is not None:
-        title = f"Einsatz Nr. {incident.nummer}"
     else:
         title = f"Einsatz {incident.id}"
 
