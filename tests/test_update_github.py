@@ -1,7 +1,8 @@
 """GitHub-Auto-Update: Release-/Branch-Check, Token-Header, Zipball-Validierung."""
+import fcntl
 import io
 import json
-import fcntl
+import subprocess
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -345,6 +346,41 @@ def test_backup_gate_required_or_warning(tmp_path, monkeypatch, required, expect
     monkeypatch.setattr(us, "_reload_server", lambda: True)
     result = us.apply_update(archive)
     assert result["success"] is expected
+
+
+def test_run_pip_install_erkennt_stille_user_site_ausweichung(monkeypatch, tmp_path):
+    """pip meldet Exit-Code 0, weicht aber (Berechtigungsproblem) auf eine fuer
+    das venv unsichtbare User-Installation aus - das muss als Fehler erkannt werden,
+    nicht als Erfolg (sonst crasht der naechste Start mit ModuleNotFoundError, ohne
+    dass der Update-Schritt je einen Fehler gezeigt haette)."""
+    from app.services import update_service as us
+    monkeypatch.setattr(us, "APP_ROOT", tmp_path)
+
+    def fake_run(argv, cwd=None, capture_output=None, text=None, timeout=None, env=None):
+        assert env is not None and env.get("PYTHONNOUSERSITE") == "1"
+        return subprocess.CompletedProcess(
+            argv, returncode=0,
+            stdout="Defaulting to user installation because normal site-packages is not writeable\n"
+                   "Successfully installed itsdangerous-2.2.0\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(us.subprocess, "run", fake_run)
+    ok, message = us._run_pip_install()
+    assert ok is False
+    assert "beschreibbar" in message or "Berechtigungsproblem" in message
+
+
+def test_run_pip_install_ok_ohne_user_site_ausweichung(monkeypatch, tmp_path):
+    from app.services import update_service as us
+    monkeypatch.setattr(us, "APP_ROOT", tmp_path)
+
+    def fake_run(argv, cwd=None, capture_output=None, text=None, timeout=None, env=None):
+        return subprocess.CompletedProcess(argv, returncode=0, stdout="OK\n", stderr="")
+
+    monkeypatch.setattr(us.subprocess, "run", fake_run)
+    ok, message = us._run_pip_install()
+    assert (ok, message) == (True, "OK")
 
 
 def test_deploy_github_release_git_and_zip(monkeypatch):

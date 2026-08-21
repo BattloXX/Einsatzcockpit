@@ -234,19 +234,38 @@ def _run_pip_install() -> tuple[bool, str]:
     """Installiert die pyproject-Abhängigkeiten ins venv (pip install -e .).
 
     Nötig, wenn ein Update neue Dependencies mitbringt (z. B. pdf2image).
+
+    PYTHONNOUSERSITE=1 verhindert, dass pip bei einem venv mit nicht beschreibbarem
+    site-packages (Berechtigungsproblem) still auf eine User-Installation
+    (~/.local/...) ausweicht. Ohne dieses Flag meldet pip in diesem Fall Exit-Code 0
+    ("Successfully installed"), obwohl die Pakete fürs venv unsichtbar bleiben -
+    der nächste Start/Backup crasht dann mit ModuleNotFoundError, ohne dass der
+    eigentliche Update-Schritt je einen Fehler gezeigt hätte (siehe DR-Vorfall
+    2026-08-21: venv-site-packages war root-owned statt App-User-owned).
+    Der String-Check bleibt als zusätzliches Sicherheitsnetz, falls die
+    Ausweich-Installation trotz des Flags durchrutscht.
     Gibt "OK" oder eine gekürzte Fehlermeldung zurück.
     """
     python = APP_ROOT / ".venv" / "bin" / "python"
     if not python.exists():
         python = Path("python")  # Fallback: System-Python (Dev)
     try:
+        env = {**os.environ, "PYTHONNOUSERSITE": "1"}
         result = subprocess.run(
             [str(python), "-m", "pip", "install", "-e", ".", "--no-input", "--quiet"],
             cwd=str(APP_ROOT),
             capture_output=True,
             text=True,
             timeout=600,
+            env=env,
         )
+        ausgabe = f"{result.stdout}\n{result.stderr}"
+        if "Defaulting to user installation" in ausgabe:
+            return False, (
+                "site-packages im venv nicht beschreibbar (Berechtigungsproblem) - "
+                "pip wäre sonst still auf eine unsichtbare User-Installation "
+                "ausgewichen. venv-Besitzrechte prüfen (z. B. chown -R <App-User> .venv)."
+            )
         if result.returncode == 0:
             return True, "OK"
         return False, f"Fehler: {result.stderr[-500:]}"
