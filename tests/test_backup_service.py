@@ -4,7 +4,7 @@ Die reine Logik (URL-Parsing, Kommandozeilen, Retention, Verifikations-SQL) wird
 direkt geprueft; die Orchestrierung (app.cli.run_backup/restore_test) mit
 gemockten Subprozessen, damit kein echtes MariaDB noetig ist.
 """
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -120,6 +120,42 @@ def test_prune_backups_loescht_alte(tmp_path):
         "einsatzleiter-20260715-000000Z.sql.gz",
     ]
     assert (tmp_path / "medien-20260715-000000Z.tar.gz").exists()
+
+
+def test_dump_policy_loescht_nach_alter():
+    pfade = [
+        Path("einsatzleiter-20260601-000000Z.sql.gz"),
+        Path("einsatzleiter-20260715-000000Z.sql.gz"),
+    ]
+    weg = bs.zu_loeschende_dump_backups(
+        pfade, retention_days=30, max_count=7,
+        jetzt=datetime(2026, 7, 20, tzinfo=UTC),
+    )
+    assert [p.name for p in weg] == ["einsatzleiter-20260601-000000Z.sql.gz"]
+
+
+def test_dump_policy_loescht_nach_anzahl():
+    pfade = [Path(f"einsatzleiter-202607{i:02d}-000000Z.sql.gz") for i in range(10, 16)]
+    weg = bs.zu_loeschende_dump_backups(
+        pfade, retention_days=30, max_count=2,
+        jetzt=datetime(2026, 7, 16, tzinfo=UTC),
+    )
+    assert [p.name for p in weg] == [p.name for p in pfade[:-2]]
+
+
+def test_dump_policy_kombiniert_regeln_und_ignoriert_fremde_namen():
+    pfade = [
+        Path("einsatzleiter-20260501-000000Z.sql.gz"),
+        Path("einsatzleiter-20260718-000000Z.sql.gz"),
+        Path("einsatzleiter-20260719-000000Z.sql.gz"),
+        Path("einsatzleiter-manuell.sql.gz"),
+        Path("medien-20260501-000000Z.tar.gz"),
+    ]
+    weg = bs.zu_loeschende_dump_backups(
+        pfade, retention_days=30, max_count=2,
+        jetzt=datetime(2026, 7, 20, tzinfo=UTC),
+    )
+    assert [p.name for p in weg] == ["einsatzleiter-20260501-000000Z.sql.gz"]
 
 
 def test_verify_sql_enthaelt_kernchecks():

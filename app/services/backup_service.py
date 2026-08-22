@@ -16,6 +16,7 @@ uebergeben, nie als Argument -- sonst waeren sie in der Prozessliste (ps) sichtb
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -26,6 +27,11 @@ logger = logging.getLogger("einsatzleiter.backup")
 
 # Zeitstempel im Dateinamen: sortierbar, ohne Sonderzeichen, UTC.
 _STAMP_FMT = "%Y%m%d-%H%M%SZ"
+DEFAULT_RETENTION_DAYS = 30
+DEFAULT_MAX_COUNT = 7
+_DUMP_RE = re.compile(
+    r"^(?P<label>einsatzleiter(?:_weather)?)-(?P<stamp>\d{8}-\d{6}Z)\.sql\.gz$"
+)
 
 
 @dataclass(frozen=True)
@@ -124,6 +130,85 @@ def medien_dateiname(jetzt: datetime | None = None) -> str:
     """Sortierbarer Medien-Archivname, z. B. 'medien-20260718-013000Z.tar.gz'."""
     stamp = (jetzt or datetime.now(UTC)).strftime(_STAMP_FMT)
     return f"medien-{stamp}.tar.gz"
+
+
+def parse_dump_dateiname(name: str) -> tuple[str, datetime] | None:
+    """Parst ausschließlich serverweite DB-Dumps im festgelegten Namensschema."""
+    match = _DUMP_RE.fullmatch(name)
+    if not match:
+        return None
+    try:
+        zeitpunkt = datetime.strptime(match.group("stamp"), _STAMP_FMT).replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    return match.group("label"), zeitpunkt
+
+
+def lade_dump_policy(db) -> tuple[int, int]:
+    """Lädt und validiert die kombinierte DB-Dump-Retention aus SystemSettings."""
+    from app.models.master import SystemSettings
+
+    werte = {
+        row.key: row.value
+        for row in db.query(SystemSettings).filter(
+            SystemSettings.key.in_(("backup_retention_days", "backup_max_count"))
+        ).all()
+    }
+
+    def _positiv(key: str, default: int) -> int:
+        try:
+            wert = int(werte.get(key) or default)
+        except (TypeError, ValueError):
+            return default
+        return wert if wert >= 1 else default
+
+    return (
+        _positiv("backup_retention_days", DEFAULT_RETENTION_DAYS),
+        _positiv("backup_max_count", DEFAULT_MAX_COUNT),
+    )
+
+
+def zu_loeschende_dump_backups(
+    pfade: list[Path], retention_days: int, max_count: int,
+    jetzt: datetime | None = None,
+) -> list[Path]:
+    """Vereinigungsmenge aus Alters- und Anzahlgrenze für gültige DB-Dumps."""
+    if retention_days < 1 or max_count < 1:
+        raise ValueError("Retention-Tage und maximale Anzahl müssen positiv sein")
+    referenz = jetzt or datetime.now(UTC)
+    if referenz.tzinfo is None:
+        referenz = referenz.replace(tzinfo=UTC)
+    gueltig = [(pfad, parsed[1]) for pfad in pfade if (parsed := parse_dump_dateiname(pfad.name))]
+    gueltig.sort(key=lambda item: item[1], reverse=True)
+    ausserhalb_anzahl = {pfad for pfad, _ in gueltig[max_count:]}
+    zu_alt = {
+        pfad for pfad, zeitpunkt in gueltig
+        if (referenz - zeitpunkt).total_seconds() > retention_days * 86400
+    }
+    return sorted(zu_alt | ausserhalb_anzahl, key=lambda p: p.name)
+
+
+def prune_dump_backups(
+    verzeichnis: Path, praefix: str, retention_days: int, max_count: int,
+    jetzt: datetime | None = None,
+) -> list[Path]:
+    """Löscht DB-Dumps nach Alter oder Anzahl; ignoriert fremde Dateinamen strikt."""
+    if not verzeichnis.is_dir() or praefix not in {"einsatzleiter", "einsatzleiter_weather"}:
+        return []
+    kandidaten = [
+        pfad for pfad in verzeichnis.iterdir()
+        if pfad.is_file()
+        and (parsed := parse_dump_dateiname(pfad.name))
+        and parsed[0] == praefix
+    ]
+    geloescht = []
+    for pfad in zu_loeschende_dump_backups(kandidaten, retention_days, max_count, jetzt):
+        try:
+            pfad.unlink()
+            geloescht.append(pfad)
+        except OSError:
+            logger.warning("Backup-Prune: konnte %s nicht loeschen", pfad)
+    return geloescht
 
 
 def zu_loeschende(pfade: list[Path], behalten: int) -> list[Path]:

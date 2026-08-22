@@ -188,7 +188,22 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> Ba
 
     out = Path(out_dir or settings.BACKUP_DIR)
     out.mkdir(parents=True, exist_ok=True)
-    behalten = settings.BACKUP_KEEP_DAILY if keep < 0 else keep
+    retention_days = bs.DEFAULT_RETENTION_DAYS
+    max_count = settings.BACKUP_KEEP_DAILY
+    try:
+        from app.db import SessionLocal
+        policy_db = SessionLocal()
+        try:
+            retention_days, max_count = bs.lade_dump_policy(policy_db)
+        finally:
+            policy_db.close()
+    except Exception:  # noqa: BLE001 — Backup muss bei nicht erreichbarer App-DB laufen
+        bs.logger.warning(
+            "DB-Dump-Retention konnte nicht geladen werden; verwende Fallbacks",
+            exc_info=True,
+        )
+    db_max_count = max_count if keep < 0 else keep
+    medien_behalten = settings.BACKUP_KEEP_DAILY if keep < 0 else keep
     medien = settings.BACKUP_INCLUDE_MEDIA if include_media < 0 else bool(include_media)
     jetzt = datetime.now(UTC)
 
@@ -205,7 +220,7 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> Ba
             groesse = _dump_db(bs.parse_database_url(url), ziel, settings.BACKUP_DUMP_BIN)
             print(f"✓ DB-Dump {label}: {ziel.name} ({groesse // 1024} KB)")
             erzeugt.append(ziel)
-            bs.prune_backups(out, label, behalten)
+            bs.prune_dump_backups(out, label, retention_days, db_max_count, jetzt)
         except Exception as exc:  # noqa: BLE001 — Sammelbetrieb, Rest weiterversuchen
             fehler += 1
             print(f"✗ DB-Dump {label} fehlgeschlagen: {exc}", file=sys.stderr)
@@ -219,7 +234,7 @@ def run_backup(out_dir: str = "", keep: int = -1, include_media: int = -1) -> Ba
                 groesse = _tar_medien(ziel, medien_root, out)
                 print(f"✓ Medien-Archiv: {ziel.name} ({groesse // 1024} KB)")
                 erzeugt.append(ziel)
-                bs.prune_backups(out, "medien", behalten)
+                bs.prune_backups(out, "medien", medien_behalten)
             except Exception as exc:  # noqa: BLE001
                 fehler += 1
                 print(f"✗ Medien-Archiv fehlgeschlagen: {exc}", file=sys.stderr)

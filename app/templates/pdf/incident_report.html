@@ -160,6 +160,16 @@
     <td style="text-align:right;">{{ fahrt.km if fahrt else '–' }}</td>
   </tr>
   {% endfor %}
+  {% for extra in extra_vehicles %}
+  <tr>
+    <td>{{ extra.vehicle.display_label }}</td>
+    <td>{{ extra.vehicle.dept.name }}</td>
+    <td>nur Fahrtenbuch</td>
+    <td>{{ extra.fahrer|join(' / ') }}</td>
+    <td>–</td>
+    <td style="text-align:right;">{{ extra.km }}</td>
+  </tr>
+  {% endfor %}
   {% set km_gesamt = fahrten.values()|sum(attribute='km') %}
   {% if km_gesamt > 0 %}
   <tr>

@@ -20,7 +20,7 @@ from app.models.master import VehicleMaster
 from app.models.wordpress_report import WordPressReportConfig
 from app.services.ai_service import AIServiceError, generate_report_draft
 from app.services.ai_service import is_enabled as ai_is_enabled
-from app.services.pdf_service import load_fahrten_details, render_incident_pdf
+from app.services.pdf_service import load_fahrtenbuch_report, render_incident_pdf
 
 router = APIRouter()
 logger = logging.getLogger("einsatzleiter.archive")
@@ -215,12 +215,16 @@ def archive_detail(incident_id: int, request: Request, db: Session = Depends(get
 
     from app.services.incident_service import combined_verlauf
     verlauf = combined_verlauf(db, incident_id, limit=500)
-    fahrten_details = load_fahrten_details(incident_id, db=db)
+    assigned_vehicle_ids = {v.vehicle_master_id for v in incident.vehicles}
+    fahrten_details, extra_vehicles = load_fahrtenbuch_report(
+        incident_id, assigned_vehicle_ids, db=db,
+    )
 
     return templates.TemplateResponse(request, "archive/detail.html", {
         "user": user, "incident": incident,
         "ai_enabled": ai_is_enabled(),
         "fahrten_details": fahrten_details,
+        "extra_vehicles": extra_vehicles,
         "uas_einsatz": uas_einsatz,
         "can_edit": can_edit,
         "can_delete": has_role(user, "admin", "org_admin", "system_admin"),

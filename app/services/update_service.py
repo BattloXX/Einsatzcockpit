@@ -304,7 +304,7 @@ def _run_pre_migration_backup() -> dict:
         from app.cli import run_backup
         result = run_backup(
             out_dir=settings.BACKUP_DIR,
-            keep=settings.BACKUP_KEEP_DAILY,
+            keep=-1,
             include_media=0,
         )
         files = [str(path) for path in result.created]
