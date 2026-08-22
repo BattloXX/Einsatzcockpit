@@ -445,6 +445,11 @@
                {{ tip('Stammdaten als JSON sichern oder wiederherstellen') }}>
               <span class="admin-nav__icon">📦</span>Backup
             </a>
+            <a href="/admin/db-backups"
+               class="admin-nav__item {% if '/admin/db-backups' in request.url.path %}is-active{% endif %}"
+               {{ tip('Serverweite Datenbank-Dumps und deren Aufbewahrung verwalten') }}>
+              <span class="admin-nav__icon">🗄️</span>DB-Dumps
+            </a>
             <a href="/admin/organisations"
                class="admin-nav__item {% if '/admin/organisations' in request.url.path %}is-active{% endif %}"
                {{ tip('Alle Organisationen verwalten (Multi-Org)') }}>

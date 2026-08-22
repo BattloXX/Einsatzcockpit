@@ -42,7 +42,7 @@ def exportiere_fahrten(fahrten: list[Fahrt], org=None) -> bytes:
         "Maschinist", "2. Maschinist",
         "km-Stand", "gefahrene km", "BH-Stand", "BH-Delta",
         "Seilwinde-BH", "Seilwinde-Delta",
-        "Zielort", "Zweck", "Zweck-Freitext", "Fahrttyp", "Einsatz-Nr",
+        "Zielort", "Zweck", "Zweck-Freitext", "Fahrttyp", "Leitstellennummer",
         "Ausbildner", "Gruppenkommandant", "Einsatzleiter",
         "Schaden", "betriebsfähig", "Schadenbeschreibung",
         "statistikrelevant", "Status",
@@ -75,7 +75,8 @@ def exportiere_fahrten(fahrten: list[Fahrt], org=None) -> bytes:
             zweck.name if zweck else "",
             f.zweck_freitext or "",
             f.fahrttyp.label if f.fahrttyp else "",
-            str(f.incident_id) if f.incident_id else "",
+            str(f.incident.lis_operation_number or f.incident.nummer or f.incident.id)
+            if f.incident_id and f.incident else "",
             f.ausbildner_name or "",
             f.gruppenkommandant_name or "",
             f.einsatzleiter_name or "",

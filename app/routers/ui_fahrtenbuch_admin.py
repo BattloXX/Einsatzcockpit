@@ -230,7 +230,10 @@ async def fahrten_export(
         db.query(Fahrt)
         .filter(Fahrt.org_id == org_id)
         .execution_options(include_all_tenants=True)
-        .options(joinedload(Fahrt.fahrzeug), joinedload(Fahrt.zweck), joinedload(Fahrt.zielort))
+        .options(
+            joinedload(Fahrt.fahrzeug), joinedload(Fahrt.zweck),
+            joinedload(Fahrt.zielort), joinedload(Fahrt.incident),
+        )
     )
     if status and status != "alle":
         try:
@@ -279,7 +282,7 @@ async def fahrt_detail(request: Request, fahrt_id: int, db: Session = Depends(ge
         .options(
             joinedload(Fahrt.fahrzeug), joinedload(Fahrt.zweck),
             joinedload(Fahrt.zielort), joinedload(Fahrt.benachrichtigungen),
-            joinedload(Fahrt.medien),
+            joinedload(Fahrt.medien), joinedload(Fahrt.incident),
         )
         .first()
     )

@@ -98,8 +98,8 @@
         <div class="fd-card__head"><h3 class="fd-card__title">Zeitpunkt &amp; Ort</h3></div>
         <div class="fd-row"><span class="fd-row__label">Zeitpunkt</span><span class="fd-row__value">{{ fahrt.zeitpunkt|local_datetime }}</span></div>
         <div class="fd-row"><span class="fd-row__label">Zielort</span><span class="fd-row__value">{{ fahrt.zielort.name if fahrt.zielort else fahrt.zielort_freitext or '—' }}</span></div>
-        {% if fahrt.incident_id %}
-        <div class="fd-row"><span class="fd-row__label">Einsatz-Nr.</span><span class="fd-row__value">#{{ fahrt.incident_id }}</span></div>
+        {% if fahrt.incident_id and fahrt.incident %}
+        <div class="fd-row"><span class="fd-row__label">Leitstellennummer</span><span class="fd-row__value">{{ fahrt.incident.lis_operation_number or fahrt.incident.nummer or fahrt.incident.id }}</span></div>
         {% endif %}
       </div>
 

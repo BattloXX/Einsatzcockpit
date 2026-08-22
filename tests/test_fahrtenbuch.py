@@ -20,6 +20,7 @@ from app.services.fahrtenbuch_service import (
     storniere_fahrt,
     stammdaten_korrektur_zaehler,
 )
+from app.services.pdf_service import load_fahrtenbuch_report
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -421,6 +422,90 @@ def test_zweck_felder_zeigt_einsaetze_der_letzten_drei_tage(
     assert f'value="{incident.id}" selected' in r.text
     assert 'name="incident_id"' in r.text
     assert "required" in r.text
+
+
+def test_fahrtenbuch_report_ergaenzt_nur_fahrt_fahrzeug(
+    db_session, org, fahrzeug, zweck,
+):
+    incident = Incident(primary_org_id=org.id, alarm_type_code="B1", status="closed")
+    extra = VehicleMaster(
+        dept_id=org.id, code="EXTRA", name="Zusatzfahrzeug", type="Test",
+        display_order=999,
+    )
+    db_session.add_all([incident, extra])
+    db_session.flush()
+    db_session.add_all([
+        Fahrt(
+            org_id=org.id, zeitpunkt=datetime.now(UTC), fahrzeug_id=fahrzeug.id,
+            maschinist_name="Anna", km_delta=5, zweck_id=zweck.id,
+            fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
+        ),
+        Fahrt(
+            org_id=org.id, zeitpunkt=datetime.now(UTC), fahrzeug_id=extra.id,
+            maschinist_name="Berta", maschinist2_name="Clemens", km_delta=12,
+            zweck_id=zweck.id, fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
+        ),
+    ])
+    db_session.flush()
+
+    details, extras = load_fahrtenbuch_report(incident.id, {fahrzeug.id}, db_session)
+
+    assert details[fahrzeug.id] == {"fahrer": ["Anna"], "km": 5}
+    assert len(extras) == 1
+    assert extras[0]["vehicle"].id == extra.id
+    assert extras[0]["fahrer"] == ["Berta", "Clemens"]
+    assert extras[0]["km"] == 12
+
+
+def test_excel_export_verwendet_leitstellennummer(db_session, org, fahrzeug, zweck):
+    import io
+
+    import openpyxl
+
+    from app.services.excel_export_service import exportiere_fahrten
+
+    incident = Incident(
+        primary_org_id=org.id, alarm_type_code="B2", status="closed",
+        lis_operation_number="f26009999", nummer=42,
+    )
+    db_session.add(incident)
+    db_session.flush()
+    fahrt = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC), fahrzeug_id=fahrzeug.id,
+        maschinist_name="Dora", zweck_id=zweck.id,
+        fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
+    )
+    fahrt.incident = incident
+
+    ws = openpyxl.load_workbook(io.BytesIO(exportiere_fahrten([fahrt], org=org))).active
+    assert ws.cell(1, 16).value == "Leitstellennummer"
+    assert ws.cell(2, 16).value == "f26009999"
+
+
+def test_fahrt_detail_zeigt_leitstellennummer(
+    client: TestClient, db_session, org, fahrzeug, zweck,
+):
+    _login(client, db_session, org, "leitstellen_detail", role_code="fahrtenbuch_admin")
+    incident = Incident(
+        primary_org_id=org.id, alarm_type_code="B3", status="closed",
+        lis_operation_number="f26007777", nummer=77,
+    )
+    db_session.add(incident)
+    db_session.flush()
+    fahrt = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC), fahrzeug_id=fahrzeug.id,
+        maschinist_name="Emil", zweck_id=zweck.id,
+        fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
+    )
+    db_session.add(fahrt)
+    db_session.commit()
+
+    response = client.get(f"/verwaltung/fahrten/{fahrt.id}")
+
+    assert response.status_code == 200
+    assert "Leitstellennummer" in response.text
+    assert "f26007777" in response.text
+    assert "Einsatz-Nr." not in response.text
 
 
 def test_zweck_felder_zeigt_letzten_einsatz_als_fallback(

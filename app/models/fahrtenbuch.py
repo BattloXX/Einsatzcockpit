@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from app.models.incident import Incident
     from app.models.master import VehicleMaster
 
 from sqlalchemy import (
@@ -209,6 +210,7 @@ class Fahrt(Base):
 
     # Relationships
     fahrzeug: Mapped[VehicleMaster] = relationship(foreign_keys=[fahrzeug_id])  # type: ignore[name-defined]
+    incident: Mapped[Incident | None] = relationship(foreign_keys=[incident_id])  # type: ignore[name-defined]
     zweck: Mapped[Fahrtzweck] = relationship(foreign_keys=[zweck_id])
     zielort: Mapped[Zielort | None] = relationship(foreign_keys=[zielort_id])
     benachrichtigungen: Mapped[list[FahrtBenachrichtigung]] = relationship(

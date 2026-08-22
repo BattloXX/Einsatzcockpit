@@ -40,6 +40,7 @@ from app.routers import (
     ui_backup,
     ui_bma_import,
     ui_breathing,
+    ui_db_backup,
     ui_dibos,
     ui_druck,
     ui_einsatz_import,
@@ -673,6 +674,7 @@ app.include_router(ui_incident.router)
 app.include_router(ui_lagefuehrung.router)
 app.include_router(ui_invitation.router)
 app.include_router(ui_backup.router)
+app.include_router(ui_db_backup.router)
 app.include_router(ui_org_backup.router)
 app.include_router(ui_major_incident.router)
 app.include_router(ui_gsl_staff.router)

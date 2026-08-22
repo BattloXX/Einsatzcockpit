@@ -77,8 +77,10 @@ def _load_incident_teilnahmen(incident_id: int) -> list:
         db.close()
 
 
-def load_fahrten_details(incident_id: int, db=None) -> dict[int, dict]:
-    """Liefert Fahrer und Kilometer je Fahrzeug aus dem Fahrtenbuch."""
+def load_fahrtenbuch_report(
+    incident_id: int, assigned_vehicle_ids: set[int], db=None,
+) -> tuple[dict[int, dict], list[dict]]:
+    """Liefert Fahrtdetails sowie nur im Fahrtenbuch vorkommende Fahrzeuge."""
     try:
         from app.models.fahrtenbuch import Fahrt, FahrtStatus
         own_db = db is None
@@ -101,12 +103,31 @@ def load_fahrten_details(incident_id: int, db=None) -> dict[int, dict]:
                 if f.maschinist2_name:
                     detail["fahrer"].append(f.maschinist2_name)
                 detail["km"] += f.km_delta or 0
-            return details
+            extra_ids = set(details) - assigned_vehicle_ids
+            if not extra_ids:
+                return details, []
+            from sqlalchemy.orm import joinedload
+
+            from app.models.master import VehicleMaster
+            fahrzeuge = (
+                db.query(VehicleMaster)
+                .options(joinedload(VehicleMaster.dept))
+                .filter(VehicleMaster.id.in_(extra_ids))
+                .execution_options(include_all_tenants=True)
+                .all()
+            )
+            extra = [
+                {"vehicle": fahrzeug, **details[fahrzeug.id]}
+                for fahrzeug in fahrzeuge
+            ]
+            extra.sort(key=lambda item: item["vehicle"].display_label)
+            return details, extra
         finally:
             if own_db:
                 db.close()
     except Exception:
-        return {}
+        logger.exception("Fahrtenbuch-Bericht laden fehlgeschlagen (Einsatz %s)", incident_id)
+        return {}, []
 
 
 def _load_pdf_context(incident: Incident) -> tuple:
@@ -245,7 +266,10 @@ def _load_incident_objekte(db, incident: Incident) -> list[dict]:
 def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
     template = templates.env.get_template("pdf/incident_report.html")
     primary_org, teilnahmen, journal, objekte = _load_pdf_context(incident)
-    fahrten_details = load_fahrten_details(incident.id)
+    assigned_vehicle_ids = {v.vehicle_master_id for v in incident.vehicles}
+    fahrten_details, extra_vehicles = load_fahrtenbuch_report(
+        incident.id, assigned_vehicle_ids,
+    )
     pseudo_user = SimpleNamespace(org=primary_org)
     teilnahmen.sort(key=lambda t: (t.funktion.sortierung if t.funktion else 9999, t.hinzugefuegt_am or 0))
 
@@ -255,6 +279,7 @@ def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
         journal=journal,
         objekte=objekte,
         fahrten_details=fahrten_details,
+        extra_vehicles=extra_vehicles,
         now=datetime.now(UTC),
         base_url=base_url,
         user=pseudo_user,
