@@ -458,7 +458,7 @@ async def fahrt_korrektur_speichern(
 
     from app.routers.ui_fahrtenbuch import _form_zu_daten
     form = await request.form()
-    daten = _form_zu_daten(form, org_id=org_id, user=user, org=org)
+    daten = _form_zu_daten(form, org_id=org_id, user=user)
     neue_fahrt = korrigiere_fahrt(fahrt, daten, user.id, db)
     db.commit()
     return RedirectResponse(f"/verwaltung/fahrten/{neue_fahrt.id}{_redirect_q(request, korrigiert=1)}", status_code=303)
