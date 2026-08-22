@@ -82,8 +82,9 @@ def load_fahrtenbuch_report(
 ) -> tuple[dict[int, dict], list[dict]]:
     """Liefert Fahrtdetails sowie nur im Fahrtenbuch vorkommende Fahrzeuge."""
     try:
-        from app.models.fahrtenbuch import Fahrt, FahrtStatus
         from sqlalchemy.orm import joinedload
+
+        from app.models.fahrtenbuch import Fahrt, FahrtStatus
 
         own_db = db is None
         if own_db:
