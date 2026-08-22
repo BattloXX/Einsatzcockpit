@@ -129,11 +129,28 @@ def test_zaehler_seilwinde(fahrzeug):
 
 def test_erstelle_fahrt_erfolgreich(db_session, org, fahrzeug, zweck):
     daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    vorher = datetime.now(UTC)
     fahrt = erstelle_fahrt(daten, db_session)
+    nachher = datetime.now(UTC)
     assert fahrt.id is not None
+    assert vorher <= fahrt.zeitpunkt <= nachher
     assert fahrt.km_delta == 10
     assert fahrt.fahrttyp == zweck.kategorie
     assert fahrzeug.km_aktuell == 1010
+
+
+def test_erfassungsformular_ignoriert_zeitpunkt():
+    """Der Erfassungs-POST darf keinen clientseitigen Zeitpunkt übernehmen."""
+    from starlette.datastructures import FormData
+
+    from app.routers.ui_fahrtenbuch import _form_zu_daten
+
+    daten = _form_zu_daten(
+        FormData({"zeitpunkt": "2000-01-01T00:00"}),
+        org_id=1,
+    )
+
+    assert "zeitpunkt" not in daten
 
 
 def test_km_pflicht_bei_erfasst_km(db_session, org, fahrzeug, zweck):
@@ -949,6 +966,8 @@ def test_fahrtenbuch_neu_rendert_offline_draft_markup(client: TestClient, db_ses
     assert r.status_code == 200
     assert "draft-restored-hinweis" in r.text
     assert "fahrt_draft_v1" in r.text
+    assert 'name="zeitpunkt"' not in r.text
+    assert "Zeitpunkt (Ankunftszeit)" not in r.text
 
 
 # ── Fremde/Ad-hoc Ressourcen: nicht im Fahrtenbuch ───────────────────────────

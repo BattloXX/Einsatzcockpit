@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.core.templating import templates
-from app.core.timezones import local_input_to_utc, now_local
 from app.db import get_db
 from app.models.fahrtenbuch import FahrtErfassungsweg, FahrtKategorie, Fahrtzweck, Zielort
 from app.models.incident import Incident
@@ -397,11 +396,10 @@ async def _render_erfassung(
         "doppelfahrt_warnung": doppelfahrt_warnung,
         "fehler": fehler,
         "form_daten": form_daten or {},
-        "now": now_local(org),
     })
 
 
-def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | None = None, org=None) -> dict:
+def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | None = None) -> dict:
     def _int(key: str) -> int | None:
         v = form.get(key, "").strip()
         return int(v) if v else None
@@ -418,15 +416,6 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
         v = form.get(key, "").strip()
         return v or None
 
-    zeitpunkt_raw = _str("zeitpunkt")
-    # Org-Objekt für Zeitzonenumrechnung (lokal→UTC). Aus user.org bzw. token_org.org ableiten,
-    # falls der Aufrufer kein explizites org-Objekt mitgibt.
-    if org is None:
-        org = getattr(user, "org", None)
-    if org is None and token_org is not None:
-        org = getattr(token_org, "org", None)
-    zeitpunkt = local_input_to_utc(zeitpunkt_raw, org) if zeitpunkt_raw else None
-
     token_label = None
     if token_org and not user:
         fahrzeug_id = _int("fahrzeug_id")
@@ -441,7 +430,6 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
 
     return {
         "org_id": org_id,
-        "zeitpunkt": zeitpunkt,
         "fahrzeug_id": _int("fahrzeug_id"),
         "maschinist_member_id": _int("maschinist_member_id"),
         "maschinist_name": _str("maschinist_name") or "",

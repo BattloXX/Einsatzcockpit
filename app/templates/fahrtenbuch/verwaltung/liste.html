@@ -167,7 +167,7 @@
         {% for f in fahrten %}
         <tr class="{% if f.status.value != 'aktiv' %}fb-row--inactive{% elif f.schaden_vorhanden %}fb-row--alert{% endif %}">
           {% if is_sysadmin %}<td><input type="checkbox" class="fb-check" name="ids" value="{{ f.id }}" form="fb-bulk-form"></td>{% endif %}
-          <td style="font-family:'JetBrains Mono',monospace;">{{ f.zeitpunkt|local_datetime }}</td>
+          <td style="font-family:'JetBrains Mono',monospace;">{{ f.created_at|local_datetime }}</td>
           <td>
             <span class="fb-badge {% if f.fahrttyp.value == 'einsatz' %}fb-badge--red{% elif f.fahrttyp.value == 'uebung' %}fb-badge--blue{% elif f.fahrttyp.value == 'taetigkeit' %}fb-badge--green{% else %}fb-badge--gray{% endif %}">
               {{ f.fahrzeug.code if f.fahrzeug else '—' }}
@@ -207,7 +207,7 @@
           {% if is_sysadmin %}<input type="checkbox" class="fb-check" name="ids" value="{{ f.id }}" form="fb-bulk-form">{% endif %}
           {{ f.fahrzeug.code if f.fahrzeug else '—' }}
         </span>
-        <span class="fb-mcard__time">{{ f.zeitpunkt|local_datetime }}</span>
+        <span class="fb-mcard__time">{{ f.created_at|local_datetime }}</span>
       </div>
       <div class="fb-mcard__grid">
         <div>
