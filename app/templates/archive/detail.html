@@ -92,6 +92,13 @@
       {% set fahrt = fahrten.get(v.vehicle_master_id) %}
       {% if fahrt %}<span class="vehicle-detail"><strong>Fahrer:</strong> {{ fahrt.fahrer|join(' / ') }}</span>
       <span class="vehicle-detail"><strong>km:</strong> {{ fahrt.km }}</span>{% endif %}
+      {% if fahrt and fahrt.fahrten|length > 1 %}
+      <ul style="flex-basis:100%;margin:2px 0 0 228px;padding-left:1rem;color:var(--text-muted);font-size:.8rem;">
+        {% for einzeln in fahrt.fahrten %}
+        <li>{{ einzeln.zeitpunkt|local_datetime }} Uhr · {{ einzeln.zweck }} · {{ einzeln.fahrer|join(' / ') or '–' }} · {{ einzeln.km }} km</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
     </div>
     {% endfor %}
     {% for extra in extra_vehicles %}
@@ -101,6 +108,13 @@
       <span class="vehicle-detail"><span class="badge">nur Fahrtenbuch</span></span>
       <span class="vehicle-detail"><strong>Fahrer:</strong> {{ extra.fahrer|join(' / ') }}</span>
       <span class="vehicle-detail"><strong>km:</strong> {{ extra.km }}</span>
+      {% if extra.fahrten|length > 1 %}
+      <ul style="flex-basis:100%;margin:2px 0 0 228px;padding-left:1rem;color:var(--text-muted);font-size:.8rem;">
+        {% for einzeln in extra.fahrten %}
+        <li>{{ einzeln.zeitpunkt|local_datetime }} Uhr · {{ einzeln.zweck }} · {{ einzeln.fahrer|join(' / ') or '–' }} · {{ einzeln.km }} km</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
     </div>
     {% endfor %}
   </div>
