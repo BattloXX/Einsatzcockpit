@@ -31,7 +31,9 @@ CSRF_COOKIE = "ec_csrf"
 CSRF_HEADER = "X-CSRF-Token"
 CSRF_FORM_FIELD = "_csrf"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
-EXEMPT_PREFIXES = ("/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/")
+# Resend authenticates its public webhook with a raw-body HMAC and cannot supply
+# the browser double-submit token.
+EXEMPT_PREFIXES = ("/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/", "/mailing/webhook/resend/")
 # Cookie-authentifizierte API-Endpunkte innerhalb von /api/v1/ (SEC-8) — kein
 # Token-Exempt-Freifahrtschein, sondern Origin-Check (siehe Docstring oben).
 _ORIGIN_CHECK_PREFIXES = ("/api/v1/device/",)

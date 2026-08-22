@@ -81,6 +81,8 @@ from app.models.master import (
     LageHintAlarm,
     Member,
     MemberQualification,
+    MemberTag,
+    MemberTagAssignment,
     MessageSuggestion,
     MessageSuggestionAlarm,
     OrgStorageUsage,
@@ -89,6 +91,12 @@ from app.models.master import (
     TaskSuggestion,
     TaskSuggestionAlarm,
     VehicleMaster,
+)
+from app.models.mailing import (
+    MailingCampaign, MailingCampaignAttachment, MailingCampaignRecipientList,
+    MailingConfig, MailingLinkClick, MailingQueueItem, MailingRecipientList,
+    MailingRecipientListEntry, MailingTemplate, MailingWebhookEvent,
+    MailingSuppressionEntry, MailingApiImportBatch,
 )
 from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
 from app.models.nachschlagewerk import RettungsdatenblattCache, RettungskartenKatalog
@@ -116,6 +124,8 @@ from app.models.objekt import (
 )
 from app.models.org_backup import OrgBackupConfig
 from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
+from app.models.mailing import (MailingCampaign, MailingConfig, MailingQueueItem,
+                                MailingRecipientList, MailingRecipientListEntry, MailingTemplate)
 from app.models.org_sms import OrgSmsConfig
 from app.models.password_reset import PasswordResetToken
 from app.models.sms import (

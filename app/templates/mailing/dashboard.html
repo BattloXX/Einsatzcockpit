@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_tabnav.html" import subtabnav %}
+{% block title %}Mailing-Dashboard{% endblock %}
+{% block head_extra %}<script src="/static/js/chart.umd.min.js?v={{ ASSET_VERSION }}"></script>{% endblock %}
+{% block content %}
+<div class="container mailing-page">
+  <h1>Mailing-Dashboard</h1>
+  {{ subtabnav([
+    {'label':'Dashboard','href':'/mailing/dashboard','active':true},
+    {'label':'Kampagnen','href':'/mailing/campaigns','active':false},
+    {'label':'Vorlagen','href':'/mailing/templates','active':false},
+    {'label':'Empfänger','href':'/mailing/lists','active':false},
+    {'label':'Einstellungen','href':'/mailing/settings','active':false}
+  ]) }}
+  <div class="kpi-grid mailing-kpis">
+    {% for label, value, suffix in [('Kampagnen',total_campaigns,''),('Versendet',sent,''),('Open-Rate',open_rate,' %'),('Click-Rate',click_rate,' %'),('Rückstand',backlog,''),('Fehler (24 h)',failures,'')] %}
+    <div class="kpi-card"><div class="kpi-card__value">{{ value }}{{ suffix }}</div><div class="kpi-card__label">{{ label }}</div></div>
+    {% endfor %}
+  </div>
+  <div class="stats-bento">
+    <section class="chart-box"><h3>Kampagnen-Reaktionen</h3><div class="chart-wrap"><canvas id="campaignRates"></canvas></div></section>
+    <section class="chart-box"><h3>Fehlerursachen</h3><div class="chart-wrap"><canvas id="failureBreakdown"></canvas></div></section>
+  </div>
+  <section class="chart-box"><h3>Versand der letzten 30 Tage</h3><div class="chart-wrap"><canvas id="sendsOverTime"></canvas></div></section>
+  <section class="card mailing-section">
+    <div class="mailing-section__head"><h2>Letzte Kampagnen</h2><a href="/mailing/campaigns">Alle anzeigen →</a></div>
+    <div class="table-scroll"><table class="table-admin"><thead><tr><th>Kampagne</th><th>Status</th><th>Fortschritt</th><th>Erstellt</th></tr></thead><tbody>
+    {% for campaign in recent_campaigns %}
+      {% set badge = 'badge--active' if campaign.status == 'sent' else 'badge--warn' if campaign.status == 'failed' else 'badge--exercise' if campaign.status in ['scheduled','queued','sending'] else 'badge--closed' %}
+      {% set progress = (100 * campaign.sent_count / campaign.total_count)|round|int if campaign.total_count else 0 %}
+      <tr><td data-label="Kampagne"><a href="/mailing/campaigns/{{ campaign.id }}">{{ campaign.template.name }}</a></td><td data-label="Status"><span class="badge {{ badge }}">{{ campaign.status }}</span></td><td data-label="Fortschritt"><div class="mailing-progress"><span style="width:{{ progress }}%"></span></div><small>{{ campaign.sent_count }}/{{ campaign.total_count }}</small></td><td data-label="Erstellt">{{ campaign.created_at|local_datetime }}</td></tr>
+    {% else %}<tr><td colspan="4" class="text-muted">Noch keine Kampagnen.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  <script type="application/json" id="mailing-dashboard-data">{{ {'campaign_labels':campaign_labels,'campaign_open_rates':campaign_open_rates,'campaign_click_rates':campaign_click_rates,'day_labels':day_labels,'day_sends':day_sends,'failure_labels':failure_labels,'failure_values':failure_values}|tojson }}</script>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/mailing_dashboard.js?v={{ ASSET_VERSION }}"></script>{% endblock %}

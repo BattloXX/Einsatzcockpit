@@ -59,6 +59,9 @@ from app.routers import (
     ui_lagefuehrung,
     ui_lis,
     ui_major_incident,
+    ui_mailing,
+    public_mailing_tracking,
+    mailing_webhook,
     ui_media,
     ui_medienverwaltung,
     ui_nachschlagewerke,
@@ -273,6 +276,10 @@ async def lifespan(app: FastAPI):
     # Background-Loop für geplante Org-Backups (Push ans je Org konfigurierte Ziel)
     from app.services.org_backup_loop import org_backup_loop
     org_backup_task = asyncio.create_task(org_backup_loop())
+    from app.services.mailing_dispatch_loop import mailing_dispatch_loop
+    mailing_dispatch_task = asyncio.create_task(mailing_dispatch_loop())
+    from app.services.mailing_schedule_loop import mailing_schedule_loop
+    mailing_schedule_task = asyncio.create_task(mailing_schedule_loop())
 
     try:
         yield
@@ -297,12 +304,14 @@ async def lifespan(app: FastAPI):
         dibos_trace_retention_task.cancel()
         nachschlagewerk_sync_task.cancel()
         org_backup_task.cancel()
+        mailing_dispatch_task.cancel()
+        mailing_schedule_task.cancel()
         for t in (autoclose_task, watchdog_task, reminder_task, print_watchdog_task,
                   lagemeldung_task, verleih_task,
                   weather_retention_task, ai_log_retention_task, vehicle_position_retention_task, weather_alert_task,
                   abfluss_poll_task, lis_task, lis_capture_retention_task,
                   dibos_task, dibos_trace_retention_task,
-                  nachschlagewerk_sync_task, org_backup_task):
+                  nachschlagewerk_sync_task, org_backup_task, mailing_dispatch_task, mailing_schedule_task):
             try:
                 await t
             except (asyncio.CancelledError, Exception):
@@ -660,6 +669,8 @@ if settings.TRUST_PROXY_HEADERS:
 app.include_router(auth.router)
 app.include_router(sso.router)
 app.include_router(public.router)
+app.include_router(public_mailing_tracking.router)
+app.include_router(mailing_webhook.router)
 app.include_router(ui_password_reset.router)
 app.include_router(ui_pin_login.router)
 app.include_router(api_v1.router)
@@ -694,6 +705,7 @@ app.include_router(ui_sso.router)
 app.include_router(ui_lis.router)
 app.include_router(ui_dibos.router)
 app.include_router(ui_org_mail.router)
+app.include_router(ui_mailing.router)
 app.include_router(ui_teams_bot.router)
 app.include_router(ui_sysadmin.router)
 app.include_router(ui_ai_prompts.router)

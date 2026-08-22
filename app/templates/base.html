@@ -56,6 +56,9 @@
       <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">🎛 Konsole</a>
       <a href="/lage" class="nav-link {% if request.url.path.startswith('/lage') %}active{% endif %}">🚨 Lage</a>
       <a href="/archiv" class="nav-link {% if '/archiv' in request.url.path %}active{% endif %}">Archiv</a>
+      {% if request.state.mailing_module_enabled %}
+      <a href="/mailing/" class="nav-link {% if request.url.path.startswith('/mailing') %}active{% endif %}">📧 Mailing</a>
+      {% endif %}
       <div class="topnav__doku" x-data="{open:false}" @click.outside="open=false" style="position:relative;">
         <button type="button" class="nav-link nav-link--dropdown {% if _doku_active %}active{% endif %}" @click="open=!open">
           📖 Dokumentation <span style="font-size:.7rem; opacity:.7; margin-left:2px;">▾</span>

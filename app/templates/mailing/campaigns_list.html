@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% from "_tabnav.html" import subtabnav %}
+{% block title %}Mailing-Kampagnen{% endblock %}
+{% block content %}<div class="container mailing-page"><div class="mailing-title-row"><h1>Kampagnen</h1><a class="btn btn--primary" href="/mailing/campaigns/new">Neue Kampagne</a></div>
+{{ subtabnav([{'label':'Dashboard','href':'/mailing/dashboard','active':false},{'label':'Kampagnen','href':'/mailing/campaigns','active':true},{'label':'Vorlagen','href':'/mailing/templates','active':false},{'label':'Empfänger','href':'/mailing/lists','active':false},{'label':'Einstellungen','href':'/mailing/settings','active':false}]) }}
+<nav class="mailing-filter" aria-label="Statusfilter">
+{% for value,label in [('', 'Alle'),('draft','Entwurf'),('scheduled','Geplant'),('queued','Wartend'),('sending','Versand'),('sent','Versendet'),('failed','Fehler'),('cancelled','Abgebrochen')] %}<a href="/mailing/campaigns{% if value %}?status={{ value }}{% endif %}" class="{% if status == value %}active{% endif %}">{{ label }}</a>{% endfor %}
+</nav>
+<section class="card"><div class="table-scroll"><table class="table-admin"><thead><tr><th>Kampagne</th><th>Status</th><th>Empfänger</th><th>Fortschritt</th><th>Erstellt</th></tr></thead><tbody>
+{% for x in items %}{% set badge = 'badge--active' if x.status == 'sent' else 'badge--warn' if x.status == 'failed' else 'badge--exercise' if x.status in ['scheduled','queued','sending'] else 'badge--closed' %}{% set progress = (100*x.sent_count/x.total_count)|round|int if x.total_count else 0 %}
+<tr><td data-label="Kampagne"><a href="/mailing/campaigns/{{ x.id }}"><strong>{{ x.template.name }}</strong></a><div class="text-muted">{{ x.subject_override or x.template.subject }}</div></td><td data-label="Status"><span class="badge {{ badge }}">{{ x.status }}</span></td><td data-label="Empfänger">{{ x.total_count }}</td><td data-label="Fortschritt"><div class="mailing-progress"><span style="width:{{ progress }}%"></span></div><small>{{ x.sent_count }}/{{ x.total_count }}</small></td><td data-label="Erstellt">{{ x.created_at|local_datetime }}</td></tr>
+{% else %}<tr><td colspan="5" class="text-muted">Keine Kampagnen für diesen Filter.</td></tr>{% endfor %}</tbody></table></div></section></div>{% endblock %}

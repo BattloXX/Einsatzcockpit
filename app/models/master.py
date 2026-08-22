@@ -222,6 +222,21 @@ class MemberQualification(Base):
     qualification: Mapped[Qualification] = relationship(lazy="joined")
 
 
+class MemberTag(TenantScoped, Base):
+    __tablename__ = "member_tag"
+    __table_args__ = (UniqueConstraint("org_id", "name", name="uq_member_tag_org_name"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    color: Mapped[str | None] = mapped_column(String(30))
+
+
+class MemberTagAssignment(Base):
+    __tablename__ = "member_tag_assignment"
+    member_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("member.id", ondelete="CASCADE"), primary_key=True)
+    tag_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("member_tag.id", ondelete="CASCADE"), primary_key=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), nullable=False)
+
+
 class AlarmType(TenantScoped, Base):
     __tablename__ = "alarm_type"
     __table_args__ = (UniqueConstraint("org_id", "code", name="uq_alarm_type_org_code"),)
@@ -448,6 +463,7 @@ class OrgSettings(Base):
     # Print & Alarm Gateway (ECPG): je Org aktivierbar, effektiv = SystemSettings-Key
     # "gateway_module_enabled" == "true" AND dieser Wert (Muster UAS/Objekt).
     gateway_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mailing_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Gateway gilt als offline nach N Minuten ohne Heartbeat → Admin-Benachrichtigung.
     gateway_offline_alert_min: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
     # Verleihscheine bei Anlage automatisch am Stationsdrucker drucken (nur wirksam,

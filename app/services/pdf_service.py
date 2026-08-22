@@ -449,3 +449,11 @@ def render_statistik_bericht_pdf(stats, org, von, bis, base_url: str = "") -> by
         buf = io.BytesIO()
         pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
         return buf.getvalue()
+
+def render_mailing_report_pdf(data: dict, org, base_url: str = "") -> bytes:
+    template = templates.env.get_template("mailing/dashboard_report.html")
+    html_str = template.render(**data, org=org, now=datetime.now(UTC), base_url=base_url, pdf=True)
+    from weasyprint import HTML
+    buf = io.BytesIO()
+    HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+    return buf.getvalue()

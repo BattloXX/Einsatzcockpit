@@ -134,6 +134,30 @@ def unsign_fahrt_foto_token(token: str) -> tuple[int, int] | None:
     except (BadSignature, KeyError, TypeError):
         return None
 
+_mailing_track_signer = URLSafeSerializer(settings.SECRET_KEY, salt="mailing-track")
+
+def sign_mailing_track_token(queue_item_id: int, org_id: int) -> str:
+    return _mailing_track_signer.dumps({"q": queue_item_id, "o": org_id})
+
+def unsign_mailing_track_token(token: str) -> tuple[int, int] | None:
+    try:
+        data = _mailing_track_signer.loads(token)
+        return (data["q"], data["o"])
+    except (BadSignature, KeyError, TypeError):
+        return None
+
+_mailing_webhook_signer = URLSafeSerializer(settings.SECRET_KEY, salt="mailing-webhook")
+
+def sign_mailing_webhook_org(org_id: int) -> str:
+    return _mailing_webhook_signer.dumps({"o": org_id})
+
+def unsign_mailing_webhook_org(token: str) -> int | None:
+    try:
+        data = _mailing_webhook_signer.loads(token)
+        return data["o"]
+    except (BadSignature, KeyError, TypeError):
+        return None
+
 
 # ── Native-App-Datei-Handoff: kurzlebiges, pfadgebundenes Auth-Token ───────────
 # Capacitor-Custom-Tabs (@capacitor/browser) teilen sich NICHT den Cookie-Jar

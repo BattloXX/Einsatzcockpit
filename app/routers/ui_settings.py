@@ -1,4 +1,5 @@
 """Settings-Router: Organisations-Einstellungen, Logo-Upload, System-Update (system_admin)."""
+
 import re
 import shutil
 import tempfile
@@ -63,19 +64,22 @@ def wordpress_report_settings_page(
     sysadmin = is_system_admin(user)
     org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
     config = (
-        db.query(WordPressReportConfig)
-        .filter(WordPressReportConfig.org_id == effective_org_id)
-        .first()
-        if effective_org_id else None
+        db.query(WordPressReportConfig).filter(WordPressReportConfig.org_id == effective_org_id).first()
+        if effective_org_id
+        else None
     )
-    return templates.TemplateResponse(request, "admin/settings_wordpress_report.html", {
-        "user": user,
-        "org": org,
-        "config": config,
-        "is_sysadmin": sysadmin,
-        "all_orgs": db.query(FireDept).order_by(FireDept.name).all() if sysadmin else [],
-        "flash": request.query_params.get("flash"),
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/settings_wordpress_report.html",
+        {
+            "user": user,
+            "org": org,
+            "config": config,
+            "is_sysadmin": sysadmin,
+            "all_orgs": db.query(FireDept).order_by(FireDept.name).all() if sysadmin else [],
+            "flash": request.query_params.get("flash"),
+        },
+    )
 
 
 @router.post("/wordpress-berichte/save")
@@ -97,13 +101,9 @@ def wordpress_report_settings_save(
     clean_url = webhook_url.strip()
     if clean_url and not clean_url.startswith("https://"):
         suffix = f"&org_id={effective_org_id}" if is_system_admin(user) else ""
-        return RedirectResponse(
-            f"/admin/wordpress-berichte?flash=error_https{suffix}", status_code=303
-        )
+        return RedirectResponse(f"/admin/wordpress-berichte?flash=error_https{suffix}", status_code=303)
 
-    config = db.query(WordPressReportConfig).filter(
-        WordPressReportConfig.org_id == effective_org_id
-    ).first()
+    config = db.query(WordPressReportConfig).filter(WordPressReportConfig.org_id == effective_org_id).first()
     if not config:
         config = WordPressReportConfig(org_id=effective_org_id)
         db.add(config)
@@ -113,9 +113,7 @@ def wordpress_report_settings_save(
     db.commit()
 
     suffix = f"&org_id={effective_org_id}" if effective_org_id != user.org_id else ""
-    return RedirectResponse(
-        f"/admin/wordpress-berichte?flash=saved{suffix}", status_code=303
-    )
+    return RedirectResponse(f"/admin/wordpress-berichte?flash=saved{suffix}", status_code=303)
 
 
 def _validate_logo_bytes(data: bytes, ext: str) -> tuple[bool, str]:
@@ -131,6 +129,7 @@ def _validate_logo_bytes(data: bytes, ext: str) -> tuple[bool, str]:
         return True, ""
     try:
         import filetype  # type: ignore
+
         kind = filetype.guess(data)
         if kind is None:
             return False, "Unbekanntes Dateiformat"
@@ -143,6 +142,7 @@ def _validate_logo_bytes(data: bytes, ext: str) -> tuple[bool, str]:
 
 
 # ── Organisations-Einstellungen ──────────────────────────────────────────────
+
 
 def _settings_context(request, db, user, org_id, **extra) -> dict:
     """Baut den Template-Kontext für admin/settings.html (GET + Wetter-POST teilen sich ihn)."""
@@ -159,15 +159,15 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     from app.services.foerderstrecke_service import foerderstrecke_system_enabled
     from app.services.gateway_service import gateway_system_enabled as _gateway_system_enabled
     from app.services.lagefuehrung_service import lagefuehrung_system_enabled
+    from app.services.mailing_service import mailing_system_enabled
     from app.services.nachschlagewerk_service import nachschlagewerke_system_enabled
     from app.services.objekt_service import objekt_system_enabled
     from app.services.uas_service import uas_system_enabled
+
     weather_stations = (
-        db.query(WeatherStation)
-        .filter(WeatherStation.org_id == effective_org_id)
-        .order_by(WeatherStation.name)
-        .all()
-        if effective_org_id else []
+        db.query(WeatherStation).filter(WeatherStation.org_id == effective_org_id).order_by(WeatherStation.name).all()
+        if effective_org_id
+        else []
     )
     ctx = {
         "user": user,
@@ -183,6 +183,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "nachschlagewerke_sys_enabled": nachschlagewerke_system_enabled(db),
         "foerderstrecke_sys_enabled": foerderstrecke_system_enabled(db),
         "gateway_sys_enabled": _gateway_system_enabled(db),
+        "mailing_sys_enabled": mailing_system_enabled(db),
         "lagefuehrung_sys_enabled": lagefuehrung_system_enabled(db),
         "timezones": common_timezones(),
         "default_timezone": app_settings.DEFAULT_TIMEZONE,
@@ -196,11 +197,13 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
 
 
 @router.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request, db=Depends(get_db), user: User = Depends(require_role("org_admin", "admin")),
-                  org_id: int | None = None):
-    return templates.TemplateResponse(
-        request, "admin/settings.html", _settings_context(request, db, user, org_id)
-    )
+def settings_page(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    org_id: int | None = None,
+):
+    return templates.TemplateResponse(request, "admin/settings.html", _settings_context(request, db, user, org_id))
 
 
 @router.post("/settings/org", response_class=HTMLResponse)
@@ -238,6 +241,7 @@ async def save_org_settings(
     objekt_geo_match_radius_raw: str = Form(""),
     objekt_ki_klassifikation_raw: str = Form(""),
     gateway_module_enabled_raw: str = Form(""),
+    mailing_module_enabled_raw: str = Form(""),
     fahrtenbuch_modul_aktiv_raw: str = Form(""),
     atemschutz_pruefung_modul_aktiv_raw: str = Form(""),
     lagefuehrung_modul_aktiv_raw: str = Form(""),
@@ -277,6 +281,7 @@ async def save_org_settings(
     if org and timezone:
         # Akzeptiere nur bekannte IANA-Namen, sonst ignorieren (Default greift)
         from zoneinfo import available_timezones
+
         if timezone in available_timezones():
             org.timezone = timezone
     if org:
@@ -337,9 +342,7 @@ async def save_org_settings(
     else:
         org_s.autoclose_enabled = False
     try:
-        org_s.autoclose_after_hours = (
-            int(autoclose_after_hours_raw) if autoclose_after_hours_raw.strip() else None
-        )
+        org_s.autoclose_after_hours = int(autoclose_after_hours_raw) if autoclose_after_hours_raw.strip() else None
     except ValueError:
         pass
     try:
@@ -376,12 +379,14 @@ async def save_org_settings(
     # Wenn System-Flag AUS: Wert unverändert lassen (disabled-Checkbox liefert
     # keinen Wert, was den Toggle sonst stillschweigend auf False setzen würde).
     from app.services.uas_service import uas_system_enabled
+
     if uas_system_enabled(db):
         old_uas = org_s.uas_module_enabled
         new_uas = uas_module_enabled_raw in ("1", "true", "on")
         org_s.uas_module_enabled = new_uas
         if old_uas != new_uas:
             from app.core.audit import write_audit
+
             write_audit(
                 db,
                 "uas.org_toggle",
@@ -393,12 +398,14 @@ async def save_org_settings(
 
     # Atemschutzueberwachung: Org-Toggle nur bei aktivem System-Flag aendern.
     from app.services.breathing_service import breathing_system_enabled
+
     if breathing_system_enabled(db):
         old_breathing = org_s.atemschutz_ueberwachung_modul_aktiv
         new_breathing = atemschutz_ueberwachung_modul_aktiv_raw in ("1", "true", "on")
         org_s.atemschutz_ueberwachung_modul_aktiv = new_breathing
         if old_breathing != new_breathing:
             from app.core.audit import write_audit
+
             write_audit(
                 db,
                 "breathing.org_toggle",
@@ -411,12 +418,14 @@ async def save_org_settings(
     # Lageführung: Org-Toggle — nur änderbar wenn System-Flag aktiv
     # (gleiches Muster wie UAS: disabled-Checkbox darf den Wert nicht kippen).
     from app.services.lagefuehrung_service import lagefuehrung_system_enabled
+
     if lagefuehrung_system_enabled(db):
         old_lagefuehrung = org_s.lagefuehrung_modul_aktiv
         new_lagefuehrung = lagefuehrung_modul_aktiv_raw in ("1", "true", "on")
         org_s.lagefuehrung_modul_aktiv = new_lagefuehrung
         if old_lagefuehrung != new_lagefuehrung:
             from app.core.audit import write_audit
+
             write_audit(
                 db,
                 "lagefuehrung.org_toggle",
@@ -429,12 +438,14 @@ async def save_org_settings(
     # Förderstrecken-Planer: Org-Toggle — nur änderbar wenn System-Flag aktiv
     # (gleiches Muster wie UAS: disabled-Checkbox darf den Wert nicht kippen).
     from app.services.foerderstrecke_service import foerderstrecke_system_enabled
+
     if foerderstrecke_system_enabled(db):
         old_foerder = org_s.foerderstrecke_module_enabled
         new_foerder = foerderstrecke_module_enabled_raw in ("1", "true", "on")
         org_s.foerderstrecke_module_enabled = new_foerder
         if old_foerder != new_foerder:
             from app.core.audit import write_audit
+
             write_audit(
                 db,
                 "foerderstrecke.org_toggle",
@@ -447,12 +458,14 @@ async def save_org_settings(
     # Objektverwaltung: Org-Toggle — nur änderbar wenn System-Flag aktiv
     # (gleiches Muster wie UAS: disabled-Checkbox darf den Wert nicht kippen).
     from app.services.objekt_service import objekt_system_enabled
+
     if objekt_system_enabled(db):
         old_objekt = org_s.objekt_module_enabled
         new_objekt = objekt_module_enabled_raw in ("1", "true", "on")
         org_s.objekt_module_enabled = new_objekt
         if old_objekt != new_objekt:
             from app.core.audit import write_audit
+
             write_audit(
                 db,
                 "objekt.org_toggle",
@@ -474,12 +487,14 @@ async def save_org_settings(
 
     # Nachschlagewerke: Org-Toggle — nur änderbar wenn System-Flag aktiv.
     from app.services.nachschlagewerk_service import nachschlagewerke_system_enabled
+
     if nachschlagewerke_system_enabled(db):
         old_nw = org_s.nachschlagewerke_module_enabled
         new_nw = nachschlagewerke_module_enabled_raw in ("1", "true", "on")
         org_s.nachschlagewerke_module_enabled = new_nw
         if old_nw != new_nw:
             from app.core.audit import write_audit
+
             write_audit(
                 db,
                 "nachschlagewerke.org_toggle",
@@ -491,12 +506,14 @@ async def save_org_settings(
 
     # Print & Alarm Gateway: Org-Toggle — nur änderbar wenn System-Flag aktiv.
     from app.services.gateway_service import gateway_system_enabled
+
     if gateway_system_enabled(db):
         old_gw = org_s.gateway_module_enabled
         new_gw = gateway_module_enabled_raw in ("1", "true", "on")
         org_s.gateway_module_enabled = new_gw
         if old_gw != new_gw:
             from app.core.audit import write_audit
+
             write_audit(
                 db,
                 "gateway.org_toggle",
@@ -505,6 +522,11 @@ async def save_org_settings(
                 payload={"alt": old_gw, "neu": new_gw},
                 ip=request.client.host if request.client else None,
             )
+
+    from app.services.mailing_service import mailing_system_enabled
+
+    if mailing_system_enabled(db):
+        org_s.mailing_module_enabled = mailing_module_enabled_raw in ("1", "true", "on")
 
     # Hydranten-/Löschwasser-Layer (Hidden+Checkbox: None = Feld nicht im Formular → unveraendert)
     if hydrant_layer_enabled_raw is not None:
@@ -516,6 +538,7 @@ async def save_org_settings(
     org_s.fahrtenbuch_modul_aktiv = new_fb
     if old_fb != new_fb:
         from app.core.audit import write_audit
+
         write_audit(
             db,
             "fahrtenbuch.org_toggle",
@@ -531,6 +554,7 @@ async def save_org_settings(
     org_s.atemschutz_pruefung_modul_aktiv = new_as_pruefung
     if old_as_pruefung != new_as_pruefung:
         from app.core.audit import write_audit
+
         write_audit(
             db,
             "atemschutz_pruefung.org_toggle",
@@ -549,6 +573,7 @@ async def save_org_settings(
     if interval_was_off and org_s.gsl_lagemeldung_interval_minutes is not None:
         from app.models.major_incident import IncidentSite, MajorIncident, MajorIncidentStatus, SitePhase
         from app.services import lagemeldung_service
+
         active_sites = (
             db.query(IncidentSite)
             .join(MajorIncident, MajorIncident.id == IncidentSite.major_incident_id)
@@ -568,6 +593,7 @@ async def save_org_settings(
         org_s.default_access_pin_hash = None
     elif pin_val:
         from app.core.security import hash_pin
+
         org_s.default_access_pin_hash = hash_pin(pin_val[:16])
 
     db.commit()
@@ -593,7 +619,7 @@ async def reset_org_logo(
             target = Path("app") / rel if rel else None
             if target and UPLOAD_DIR.resolve() in target.resolve().parents:
                 target.unlink(missing_ok=True)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             pass
         org.logo_path = None
     org_s = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
@@ -604,6 +630,7 @@ async def reset_org_logo(
 
 
 # ── Pegelmessstationen ───────────────────────────────────────────────────────
+
 
 @router.post("/settings/abfluss/add")
 async def abfluss_station_add(
@@ -616,6 +643,7 @@ async def abfluss_station_add(
     target_org_id: int | None = Form(None),
 ):
     import json
+
     effective_org_id = target_org_id if has_role(user, "system_admin") and target_org_id else user.org_id
     if not effective_org_id:
         return RedirectResponse("/admin/settings", status_code=303)
@@ -651,6 +679,7 @@ async def abfluss_station_remove(
     target_org_id: int | None = Form(None),
 ):
     import json
+
     effective_org_id = target_org_id if has_role(user, "system_admin") and target_org_id else user.org_id
     if not effective_org_id:
         return RedirectResponse("/admin/settings", status_code=303)
@@ -662,6 +691,7 @@ async def abfluss_station_remove(
         db.commit()
 
         from app.services import abfluss_service
+
         abfluss_service.remove_station(effective_org_id, hzbnr.strip())
 
     amp = f"&org_id={effective_org_id}" if has_role(user, "system_admin") else ""
@@ -670,6 +700,7 @@ async def abfluss_station_remove(
 
 # ── Wetter-Einstellungsseite ─────────────────────────────────────────────────
 
+
 def _generate_qr_datauri(url: str) -> str | None:
     """Generiert einen QR-Code als base64 PNG Data-URI (dark theme). None bei Fehler."""
     try:
@@ -677,6 +708,7 @@ def _generate_qr_datauri(url: str) -> str | None:
         import io
 
         import qrcode
+
         qr = qrcode.QRCode(
             version=None,
             error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -699,23 +731,23 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
     effective_org_id = org_id if (is_sysadmin and org_id) else user.org_id
     org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
     org_settings = (
-        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
-        if effective_org_id else None
+        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first() if effective_org_id else None
     )
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     from app.models.weather import WeatherStation
+
     weather_stations = (
-        db.query(WeatherStation)
-        .filter(WeatherStation.org_id == effective_org_id)
-        .order_by(WeatherStation.name)
-        .all()
-        if effective_org_id else []
+        db.query(WeatherStation).filter(WeatherStation.org_id == effective_org_id).order_by(WeatherStation.name).all()
+        if effective_org_id
+        else []
     )
     from app.services import kachelmann_service
+
     base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
     alert_rules = _alert_rules_for_template(db, effective_org_id)
     alert_logs = _alert_logs_for_template(db, effective_org_id)
     from app.services.weather_alert_service import RULE_DEFAULTS, RULE_LABELS
+
     ctx = {
         "user": user,
         "org": org,
@@ -745,15 +777,15 @@ def _weather_infoscreen_settings_context(request, db, user, org_id, **extra) -> 
     effective_org_id = org_id if (is_sysadmin and org_id) else user.org_id
     org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
     org_settings = (
-        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
-        if effective_org_id else None
+        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first() if effective_org_id else None
     )
     dashboard_tokens = (
         db.query(WeatherDashboardToken)
         .filter(WeatherDashboardToken.org_id == effective_org_id)
         .order_by(WeatherDashboardToken.created_at.desc())
         .all()
-        if effective_org_id else []
+        if effective_org_id
+        else []
     )
     base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
     ctx = {
@@ -784,7 +816,8 @@ def weather_settings_page(
     org_id: int | None = None,
 ):
     return templates.TemplateResponse(
-        request, "admin/settings_wetter.html",
+        request,
+        "admin/settings_wetter.html",
         _weather_settings_context(request, db, user, org_id),
     )
 
@@ -797,7 +830,8 @@ def weather_infoscreen_settings_page(
     org_id: int | None = None,
 ):
     return templates.TemplateResponse(
-        request, "admin/settings_wetter_infoscreen.html",
+        request,
+        "admin/settings_wetter_infoscreen.html",
         _weather_infoscreen_settings_context(request, db, user, org_id),
     )
 
@@ -823,17 +857,27 @@ async def weather_dashboard_token_create(
     label = label.strip() or "Unbenannt"
     raw = generate_weather_dashboard_token()
     tok = WeatherDashboardToken(
-        token_hash=hash_api_key(raw), label=label, org_id=effective_org_id,
+        token_hash=hash_api_key(raw),
+        label=label,
+        org_id=effective_org_id,
     )
     db.add(tok)
-    write_audit(db, "admin.weather_dashboard_token.created", user_id=user.id,
-                payload={"label": label, "org_id": effective_org_id})
+    write_audit(
+        db,
+        "admin.weather_dashboard_token.created",
+        user_id=user.id,
+        payload={"label": label, "org_id": effective_org_id},
+    )
     db.commit()
 
     return templates.TemplateResponse(
-        request, "admin/settings_wetter_infoscreen.html",
+        request,
+        "admin/settings_wetter_infoscreen.html",
         _weather_infoscreen_settings_context(
-            request, db, user, org_id_param,
+            request,
+            db,
+            user,
+            org_id_param,
             new_dashboard_token=raw,
             new_dashboard_token_label=label,
         ),
@@ -855,9 +899,14 @@ async def weather_dashboard_token_delete(
     is_sysadmin = has_role(user, "system_admin")
     tok = db.get(WeatherDashboardToken, token_id)
     if tok and same_org_or_system_admin(user, tok.org_id):
-        write_audit(db, "admin.weather_dashboard_token.deleted", user_id=user.id,
-                    entity_type="weather_dashboard_token", entity_id=token_id,
-                    payload={"label": tok.label})
+        write_audit(
+            db,
+            "admin.weather_dashboard_token.deleted",
+            user_id=user.id,
+            entity_type="weather_dashboard_token",
+            entity_id=token_id,
+            payload={"label": tok.label},
+        )
         db.delete(tok)
         db.commit()
 
@@ -888,28 +937,41 @@ async def weather_toggle(
 
     org_id_param = effective_org_id if is_sysadmin else None
     return templates.TemplateResponse(
-        request, "admin/settings_wetter.html",
+        request,
+        "admin/settings_wetter.html",
         _weather_settings_context(request, db, user, org_id_param),
     )
 
 
 def _stats_settings_context(request, db, user, org_id, **extra) -> dict:
     from app.models.stats import StatistikDashboardToken
+
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = org_id if (is_sysadmin and org_id) else user.org_id
     org = db.query(FireDept).filter(FireDept.id == effective_org_id).first() if effective_org_id else None
     org_settings = (
-        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
-        if effective_org_id else None
+        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first() if effective_org_id else None
     )
-    tokens = (db.query(StatistikDashboardToken)
-              .filter(StatistikDashboardToken.org_id == effective_org_id)
-              .order_by(StatistikDashboardToken.created_at.desc()).all()) if effective_org_id else []
+    tokens = (
+        (
+            db.query(StatistikDashboardToken)
+            .filter(StatistikDashboardToken.org_id == effective_org_id)
+            .order_by(StatistikDashboardToken.created_at.desc())
+            .all()
+        )
+        if effective_org_id
+        else []
+    )
     ctx = {
-        "user": user, "org": org, "org_settings": org_settings, "dashboard_tokens": tokens,
+        "user": user,
+        "org": org,
+        "org_settings": org_settings,
+        "dashboard_tokens": tokens,
         "is_sysadmin": is_sysadmin,
         "all_orgs": db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else [],
-        "new_dashboard_token": None, "new_dashboard_token_label": None, "dashboard_qr": None,
+        "new_dashboard_token": None,
+        "new_dashboard_token_label": None,
+        "dashboard_qr": None,
     }
     ctx.update(extra)
     if ctx.get("new_dashboard_token"):
@@ -921,17 +983,25 @@ def _stats_settings_context(request, db, user, org_id, **extra) -> dict:
 
 
 @router.get("/settings/statistik", response_class=HTMLResponse)
-def statistik_settings_page(request: Request, db=Depends(get_db),
-                             user: User = Depends(require_role("org_admin", "admin")),
-                             org_id: int | None = None):
-    return templates.TemplateResponse(request, "admin/settings_statistik.html",
-                                      _stats_settings_context(request, db, user, org_id))
+def statistik_settings_page(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    org_id: int | None = None,
+):
+    return templates.TemplateResponse(
+        request, "admin/settings_statistik.html", _stats_settings_context(request, db, user, org_id)
+    )
 
 
 @router.post("/settings/statistik/infoscreen-toggle", response_class=HTMLResponse)
-async def statistik_toggle(request: Request, db=Depends(get_db),
-                           user: User = Depends(require_role("org_admin", "admin")),
-                           enabled_raw: str = Form(""), target_org_id: int | None = Form(None)):
+async def statistik_toggle(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    enabled_raw: str = Form(""),
+    target_org_id: int | None = Form(None),
+):
     is_sysadmin = has_role(user, "system_admin")
     org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
     if not org_id:
@@ -942,17 +1012,25 @@ async def statistik_toggle(request: Request, db=Depends(get_db),
         db.add(settings_row)
     settings_row.statistik_infoscreen_enabled = bool(enabled_raw)
     db.commit()
-    return templates.TemplateResponse(request, "admin/_settings_statistik_panel.html",
-                                      _stats_settings_context(request, db, user, org_id if is_sysadmin else None))
+    return templates.TemplateResponse(
+        request,
+        "admin/_settings_statistik_panel.html",
+        _stats_settings_context(request, db, user, org_id if is_sysadmin else None),
+    )
 
 
 @router.post("/settings/statistik/dashboard-token/neu", response_class=HTMLResponse)
-async def statistik_token_create(request: Request, db=Depends(get_db),
-                                 user: User = Depends(require_role("org_admin", "admin")),
-                                 label: str = Form(...), target_org_id: int | None = Form(None)):
+async def statistik_token_create(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    label: str = Form(...),
+    target_org_id: int | None = Form(None),
+):
     from app.core.audit import write_audit
     from app.core.security import generate_statistik_dashboard_token, hash_api_key
     from app.models.stats import StatistikDashboardToken
+
     is_sysadmin = has_role(user, "system_admin")
     org_id = target_org_id if (is_sysadmin and target_org_id) else user.org_id
     if not org_id:
@@ -960,33 +1038,50 @@ async def statistik_token_create(request: Request, db=Depends(get_db),
     raw = generate_statistik_dashboard_token()
     label = label.strip() or "Unbenannt"
     db.add(StatistikDashboardToken(token_hash=hash_api_key(raw), label=label, org_id=org_id))
-    write_audit(db, "admin.statistik_dashboard_token.created", user_id=user.id,
-                payload={"label": label, "org_id": org_id})
+    write_audit(
+        db, "admin.statistik_dashboard_token.created", user_id=user.id, payload={"label": label, "org_id": org_id}
+    )
     db.commit()
-    return templates.TemplateResponse(request, "admin/_settings_statistik_panel.html",
-        _stats_settings_context(request, db, user, org_id if is_sysadmin else None,
-                                new_dashboard_token=raw, new_dashboard_token_label=label))
+    return templates.TemplateResponse(
+        request,
+        "admin/_settings_statistik_panel.html",
+        _stats_settings_context(
+            request, db, user, org_id if is_sysadmin else None, new_dashboard_token=raw, new_dashboard_token_label=label
+        ),
+    )
 
 
 @router.post("/settings/statistik/dashboard-token/{token_id}/loeschen", response_class=HTMLResponse)
-async def statistik_token_delete(token_id: int, request: Request, db=Depends(get_db),
-                                 user: User = Depends(require_role("org_admin", "admin")),
-                                 target_org_id: int | None = Form(None)):
+async def statistik_token_delete(
+    token_id: int,
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
     from app.core.audit import write_audit
     from app.models.stats import StatistikDashboardToken
+
     tok = db.get(StatistikDashboardToken, token_id)
     if tok and same_org_or_system_admin(user, tok.org_id):
-        write_audit(db, "admin.statistik_dashboard_token.deleted", user_id=user.id,
-                    entity_type="statistik_dashboard_token", entity_id=token_id)
+        write_audit(
+            db,
+            "admin.statistik_dashboard_token.deleted",
+            user_id=user.id,
+            entity_type="statistik_dashboard_token",
+            entity_id=token_id,
+        )
         db.delete(tok)
         db.commit()
     is_sysadmin = has_role(user, "system_admin")
     org_id = target_org_id if (is_sysadmin and target_org_id) else None
-    return templates.TemplateResponse(request, "admin/_settings_statistik_panel.html",
-                                      _stats_settings_context(request, db, user, org_id))
+    return templates.TemplateResponse(
+        request, "admin/_settings_statistik_panel.html", _stats_settings_context(request, db, user, org_id)
+    )
 
 
 # ── Infoscreen Darstellungszeitraum ──────────────────────────────────────────
+
 
 @router.post("/settings/wetter/infoscreen-hours", response_class=HTMLResponse)
 async def weather_infoscreen_hours_save(
@@ -1013,12 +1108,14 @@ async def weather_infoscreen_hours_save(
 
     org_id_param = effective_org_id if is_sysadmin else None
     return templates.TemplateResponse(
-        request, "admin/settings_wetter_infoscreen.html",
+        request,
+        "admin/settings_wetter_infoscreen.html",
         _weather_infoscreen_settings_context(request, db, user, org_id_param),
     )
 
 
 # ── Kachelmann API-Key (je Org, org_admin) ───────────────────────────────────
+
 
 @router.post("/settings/wetter/kachelmann")
 async def weather_kachelmann_save(
@@ -1032,8 +1129,7 @@ async def weather_kachelmann_save(
     effective_org_id = org_id if (is_sysadmin and org_id) else user.org_id
 
     org_settings = (
-        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
-        if effective_org_id else None
+        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first() if effective_org_id else None
     )
     if not org_settings:
         return RedirectResponse("/admin/settings/wetter?saved=1#kachelmann", status_code=303)
@@ -1047,6 +1143,7 @@ async def weather_kachelmann_save(
 
     try:
         from app.services import kachelmann_service
+
         kachelmann_service.reset_key_cache(effective_org_id)
     except Exception:
         pass
@@ -1105,13 +1202,16 @@ async def weather_kachelmann_test(
 
 # ── Wetterwarnungen ──────────────────────────────────────────────────────────
 
+
 def _alert_rules_for_template(db, org_id: int) -> list:
     """Lädt WeatherAlertRule-Einträge für das Template (stellt Seeding sicher)."""
     if not org_id:
         return []
     from app.services.weather_alert_service import ensure_rules
+
     ensure_rules(org_id, db)
     from app.models.weather_alert import WeatherAlertRule
+
     return (
         db.query(WeatherAlertRule)
         .filter(WeatherAlertRule.org_id == org_id)
@@ -1125,6 +1225,7 @@ def _alert_logs_for_template(db, org_id: int, limit: int = 20) -> list:
     if not org_id:
         return []
     from app.models.weather_alert import WeatherAlertLog
+
     return (
         db.query(WeatherAlertLog)
         .filter(WeatherAlertLog.org_id == org_id)
@@ -1163,6 +1264,7 @@ async def weather_alert_channels_save(
     if bodensee_raw:
         try:
             from datetime import UTC, datetime
+
             org_s.bodensee_temp_override_c = float(bodensee_raw.replace(",", "."))
             org_s.bodensee_temp_override_at = datetime.now(UTC)
         except ValueError:
@@ -1206,12 +1308,12 @@ async def weather_alert_rule_save(
     if not rule or rule.org_id != effective_org_id:
         raise HTTPException(status_code=404, detail="Regel nicht gefunden")
 
-    rule.enabled         = enabled in ("1", "true", "on")
-    rule.vorwarnung      = vorwarnung in ("1", "true", "on")
-    rule.eskalation      = eskalation in ("1", "true", "on")
-    rule.channel_mail    = channel_mail in ("1", "true", "on")
-    rule.channel_teams   = channel_teams in ("1", "true", "on")
-    rule.mail_override   = mail_override.strip()[:255] or None
+    rule.enabled = enabled in ("1", "true", "on")
+    rule.vorwarnung = vorwarnung in ("1", "true", "on")
+    rule.eskalation = eskalation in ("1", "true", "on")
+    rule.channel_mail = channel_mail in ("1", "true", "on")
+    rule.channel_teams = channel_teams in ("1", "true", "on")
+    rule.mail_override = mail_override.strip()[:255] or None
     webhook = teams_webhook_override.strip()
     rule.teams_webhook_override = webhook[:1000] if webhook.startswith("https://") else None
     try:
@@ -1221,10 +1323,11 @@ async def weather_alert_rule_save(
     if params_json.strip():
         try:
             rule.params = json.loads(params_json)
-        except (ValueError, json.JSONDecodeError):
+        except ValueError, json.JSONDecodeError:
             pass
 
     from datetime import UTC, datetime
+
     rule.updated_at = datetime.now(UTC)
     db.commit()
 
@@ -1253,6 +1356,7 @@ async def weather_alert_test_mail(
         try:
             from app.models.master import FireDept
             from app.services.mail_service import _build_message, _org_smtp_cfg, deliver, get_smtp_cfg
+
             org = db.query(FireDept).filter(FireDept.id == effective_org_id).first()
             smtp_cfg = _org_smtp_cfg(db, effective_org_id) or get_smtp_cfg(db)
             betreff = f"[Wetterwarnung Test] – {org.name if org else ''}"
@@ -1286,6 +1390,7 @@ async def weather_alert_test_teams(
         error = "Kein Teams-Webhook konfiguriert."
     else:
         from app.services.weather_alert_dispatch import _post_teams
+
         ok = await _post_teams(webhook, "Wetterwarnung Test", "Dies ist eine Test-Wetterwarnung.", None, "f59e0b")
         if not ok:
             error = "Teams-Post fehlgeschlagen (Webhook-URL prüfen)"
@@ -1296,6 +1401,7 @@ async def weather_alert_test_teams(
 
 
 # ── Lokale Wetterstationen (Davis/Meteobridge) ───────────────────────────────
+
 
 def _parse_coord(raw: str | None, lo: float, hi: float) -> float | None:
     """Parst eine optionale Koordinate; None bei leer/ungültig/außerhalb des Bereichs."""
@@ -1329,9 +1435,9 @@ async def weather_station_add(
     name = name.strip()[:150]
     if not name:
         return templates.TemplateResponse(
-            request, "admin/settings_wetter.html",
-            _weather_settings_context(request, db, user, org_id_param,
-                                      weather_error="Name darf nicht leer sein."),
+            request,
+            "admin/settings_wetter.html",
+            _weather_settings_context(request, db, user, org_id_param, weather_error="Name darf nicht leer sein."),
         )
 
     raw = generate_weather_station_token()
@@ -1347,9 +1453,9 @@ async def weather_station_add(
     db.commit()
 
     return templates.TemplateResponse(
-        request, "admin/settings_wetter.html",
-        _weather_settings_context(request, db, user, org_id_param,
-                                  new_station_token=raw, new_station_id=station.id),
+        request,
+        "admin/settings_wetter.html",
+        _weather_settings_context(request, db, user, org_id_param, new_station_token=raw, new_station_id=station.id),
     )
 
 
@@ -1376,9 +1482,9 @@ async def weather_station_regenerate(
     db.commit()
 
     return templates.TemplateResponse(
-        request, "admin/settings_wetter.html",
-        _weather_settings_context(request, db, user, org_id_param,
-                                  new_station_token=raw, new_station_id=station.id),
+        request,
+        "admin/settings_wetter.html",
+        _weather_settings_context(request, db, user, org_id_param, new_station_token=raw, new_station_id=station.id),
     )
 
 
@@ -1404,18 +1510,23 @@ async def weather_station_remove(
 
 # ── Organisations-Verwaltung (system_admin) ──────────────────────────────────
 
+
 @router.get("/organisations", response_class=HTMLResponse)
 def organisations_page(request: Request, db=Depends(get_db), user: User = Depends(require_system_admin)):
     orgs = db.query(FireDept).order_by(FireDept.name).all()
     seed_profiles = list_profiles(db)
-    return templates.TemplateResponse(request, "admin/organisations.html", {
-        "user": user,
-        "orgs": orgs,
-        "bos_values": BOS_VALUES,
-        "seed_profiles": seed_profiles,
-        "created": request.query_params.get("created"),
-        "error": request.query_params.get("error"),
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/organisations.html",
+        {
+            "user": user,
+            "orgs": orgs,
+            "bos_values": BOS_VALUES,
+            "seed_profiles": seed_profiles,
+            "created": request.query_params.get("created"),
+            "error": request.query_params.get("error"),
+        },
+    )
 
 
 @router.post("/organisations/new")
@@ -1497,21 +1608,25 @@ async def _invite_org_admin(request: Request, db, org: FireDept, email: str, dis
 
     raw_token = sec.token_urlsafe(32)
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-    db.add(PasswordResetToken(
-        user_id=new_user.id,
-        token_hash=token_hash,
-        expires_at=datetime.now(UTC) + timedelta(days=7),
-        requesting_ip=request.client.host if request.client else None,
-    ))
+    db.add(
+        PasswordResetToken(
+            user_id=new_user.id,
+            token_hash=token_hash,
+            expires_at=datetime.now(UTC) + timedelta(days=7),
+            requesting_ip=request.client.host if request.client else None,
+        )
+    )
     db.flush()
 
     base = cfg.effective_public_base_url.rstrip("/")
     reset_url = f"{base}/passwort-zuruecksetzen?token={raw_token}"
     try:
         await send_password_reset(
-            to=email.lower(), reset_url=reset_url,
+            to=email.lower(),
+            reset_url=reset_url,
             user_display_name=new_user.display_name,
-            db=db, org_id=new_user.org_id,
+            db=db,
+            org_id=new_user.org_id,
         )
     except Exception:
         pass
@@ -1530,6 +1645,7 @@ def toggle_organisation(org_id: int, db=Depends(get_db), user: User = Depends(re
 def delete_organisation(org_id: int, db=Depends(get_db), user: User = Depends(require_system_admin)):
     """Soft-Delete: setzt deleted_at auf jetzt; Purge nach 30 Tagen."""
     from datetime import UTC, datetime
+
     org = db.query(FireDept).filter(FireDept.id == org_id).first()
     if org and not org.deleted_at:
         org.deleted_at = datetime.now(UTC)
@@ -1553,11 +1669,8 @@ def restore_organisation(org_id: int, db=Depends(get_db), user: User = Depends(r
 def seed_templates_page(request: Request, db=Depends(get_db), user: User = Depends(require_system_admin)):
     import json as json_lib
     from collections import defaultdict
-    raw = (
-        db.query(SeedTemplate)
-        .order_by(SeedTemplate.profile, SeedTemplate.type, SeedTemplate.display_order)
-        .all()
-    )
+
+    raw = db.query(SeedTemplate).order_by(SeedTemplate.profile, SeedTemplate.type, SeedTemplate.display_order).all()
     by_profile: dict[str, dict] = {}
     for t in raw:
         if t.profile not in by_profile:
@@ -1567,13 +1680,18 @@ def seed_templates_page(request: Request, db=Depends(get_db), user: User = Depen
         except Exception:
             d = {}
         by_profile[t.profile]["types"][t.type].append({"id": t.id, "data": d, "order": t.display_order})
-    return templates.TemplateResponse(request, "admin/seed_templates.html", {
-        "user": user,
-        "by_profile": by_profile,
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/seed_templates.html",
+        {
+            "user": user,
+            "by_profile": by_profile,
+        },
+    )
 
 
 # ── System-Modul-Toggles (system_admin only) ─────────────────────────────────
+
 
 @router.post("/settings/system/uas-toggle")
 def toggle_uas_system(
@@ -1596,6 +1714,7 @@ def toggle_uas_system(
 
     if row is None:
         from datetime import UTC, datetime
+
         row = SystemSettings(
             key="uas_module_enabled",
             value=new_value,
@@ -1605,11 +1724,13 @@ def toggle_uas_system(
         db.add(row)
     else:
         from datetime import UTC, datetime
+
         row.value = new_value
         row.updated_at = datetime.now(UTC)
         row.updated_by_user_id = user.id
 
     from app.core.audit import write_audit
+
     write_audit(
         db,
         "uas.system_toggle",
@@ -1638,11 +1759,11 @@ def toggle_foerderstrecke_system(
     new_enabled = enabled_raw in ("1", "true", "on")
     new_value = "true" if new_enabled else "false"
 
-    row = db.query(SystemSettings).filter(
-        SystemSettings.key == "foerderstrecke_module_enabled").first()
+    row = db.query(SystemSettings).filter(SystemSettings.key == "foerderstrecke_module_enabled").first()
     old_value = row.value if row else "false"
 
     from datetime import UTC, datetime
+
     if row is None:
         row = SystemSettings(
             key="foerderstrecke_module_enabled",
@@ -1657,6 +1778,7 @@ def toggle_foerderstrecke_system(
         row.updated_by_user_id = user.id
 
     from app.core.audit import write_audit
+
     write_audit(
         db,
         "foerderstrecke.system_toggle",
@@ -1691,6 +1813,7 @@ def toggle_lagefuehrung_system(
 
     if row is None:
         from datetime import UTC, datetime
+
         row = SystemSettings(
             key="lagefuehrung_modul_aktiv",
             value=new_value,
@@ -1700,11 +1823,13 @@ def toggle_lagefuehrung_system(
         db.add(row)
     else:
         from datetime import UTC, datetime
+
         row.value = new_value
         row.updated_at = datetime.now(UTC)
         row.updated_by_user_id = user.id
 
     from app.core.audit import write_audit
+
     write_audit(
         db,
         "lagefuehrung.system_toggle",
@@ -1741,6 +1866,7 @@ def toggle_breathing_system(
 
     if row is None:
         from datetime import UTC, datetime
+
         row = SystemSettings(
             key="breathing_enabled",
             value=new_value,
@@ -1750,11 +1876,13 @@ def toggle_breathing_system(
         db.add(row)
     else:
         from datetime import UTC, datetime
+
         row.value = new_value
         row.updated_at = datetime.now(UTC)
         row.updated_by_user_id = user.id
 
     from app.core.audit import write_audit
+
     write_audit(
         db,
         "breathing.system_toggle",
@@ -1788,6 +1916,7 @@ def toggle_objekt_system(
     old_value = row.value if row else "false"
 
     from datetime import UTC, datetime
+
     if row is None:
         row = SystemSettings(
             key="objekt_module_enabled",
@@ -1802,6 +1931,7 @@ def toggle_objekt_system(
         row.updated_by_user_id = user.id
 
     from app.core.audit import write_audit
+
     write_audit(
         db,
         "objekt.system_toggle",
@@ -1834,6 +1964,7 @@ def toggle_gateway_system(
     old_value = row.value if row else "false"
 
     from datetime import UTC, datetime
+
     if row is None:
         row = SystemSettings(
             key="gateway_module_enabled",
@@ -1848,6 +1979,7 @@ def toggle_gateway_system(
         row.updated_by_user_id = user.id
 
     from app.core.audit import write_audit
+
     write_audit(
         db,
         "gateway.system_toggle",
@@ -1859,6 +1991,27 @@ def toggle_gateway_system(
 
     org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
     return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
+@router.post("/settings/system/mailing-toggle")
+def toggle_mailing_system(
+    request: Request, db=Depends(get_db), user: User = Depends(require_system_admin), enabled_raw: str = Form("")
+):
+    from datetime import UTC, datetime
+
+    new_value = "true" if enabled_raw in ("1", "true", "on") else "false"
+    row = db.query(SystemSettings).filter(SystemSettings.key == "mailing_module_enabled").first()
+    if row is None:
+        row = SystemSettings(
+            key="mailing_module_enabled", value=new_value, updated_at=datetime.now(UTC), updated_by_user_id=user.id
+        )
+        db.add(row)
+    else:
+        row.value = new_value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user.id
+    db.commit()
+    return RedirectResponse("/admin/settings?saved=1", status_code=303)
 
 
 @router.post("/settings/system/nachschlagewerke-toggle")
@@ -1876,11 +2029,11 @@ def toggle_nachschlagewerke_system(
     new_enabled = enabled_raw in ("1", "true", "on")
     new_value = "true" if new_enabled else "false"
 
-    row = db.query(SystemSettings).filter(
-        SystemSettings.key == "nachschlagewerke_module_enabled").first()
+    row = db.query(SystemSettings).filter(SystemSettings.key == "nachschlagewerke_module_enabled").first()
     old_value = row.value if row else "false"
 
     from datetime import UTC, datetime
+
     if row is None:
         row = SystemSettings(
             key="nachschlagewerke_module_enabled",
@@ -1895,6 +2048,7 @@ def toggle_nachschlagewerke_system(
         row.updated_by_user_id = user.id
 
     from app.core.audit import write_audit
+
     write_audit(
         db,
         "nachschlagewerke.system_toggle",
@@ -1910,30 +2064,37 @@ def toggle_nachschlagewerke_system(
 
 # ── System-Update (system_admin only) ────────────────────────────────────────
 
+
 def _deployed_ref(db) -> dict | None:
     """Letzter per Branch-Update eingespielter Stand (SystemSettings, JSON)."""
     import json as _json
+
     row = db.query(SystemSettings).filter(SystemSettings.key == DEPLOYED_REF_KEY).first()
     if not row or not row.value:
         return None
     try:
         return _json.loads(row.value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
 def _save_deployed_ref(db, user_id: int, branch: str, sha: str) -> None:
     import json as _json
     from datetime import UTC, datetime
-    value = _json.dumps({
-        "branch": branch,
-        "sha": sha,
-        "datum": datetime.now(UTC).isoformat(),
-    }, ensure_ascii=False)
+
+    value = _json.dumps(
+        {
+            "branch": branch,
+            "sha": sha,
+            "datum": datetime.now(UTC).isoformat(),
+        },
+        ensure_ascii=False,
+    )
     row = db.query(SystemSettings).filter(SystemSettings.key == DEPLOYED_REF_KEY).first()
     if row is None:
-        row = SystemSettings(key=DEPLOYED_REF_KEY, value=value,
-                             updated_at=datetime.now(UTC), updated_by_user_id=user_id)
+        row = SystemSettings(
+            key=DEPLOYED_REF_KEY, value=value, updated_at=datetime.now(UTC), updated_by_user_id=user_id
+        )
         db.add(row)
     else:
         row.value = value
@@ -1944,13 +2105,17 @@ def _save_deployed_ref(db, user_id: int, branch: str, sha: str) -> None:
 @router.get("/system/update", response_class=HTMLResponse)
 def update_page(request: Request, db=Depends(get_db), user: User = Depends(require_system_admin)):
     version = get_current_version()
-    return templates.TemplateResponse(request, "admin/system_update.html", {
-        "user": user,
-        "version": version,
-        "token_configured": get_github_token(db) is not None,
-        "deployed_ref": _deployed_ref(db),
-        "token_saved": request.query_params.get("token_saved"),
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/system_update.html",
+        {
+            "user": user,
+            "version": version,
+            "token_configured": get_github_token(db) is not None,
+            "deployed_ref": _deployed_ref(db),
+            "token_saved": request.query_params.get("token_saved"),
+        },
+    )
 
 
 @router.post("/system/update", response_class=HTMLResponse)
@@ -1962,17 +2127,26 @@ def apply_system_update(
     expected_sha256: str = Form(""),
 ):
     if not release_zip.filename or not release_zip.filename.endswith(".zip"):
-        return templates.TemplateResponse(request, "admin/system_update.html", {
-            "user": user,
-            "version": get_current_version(),
-            "error": "Bitte eine .zip-Datei hochladen",
-        })
+        return templates.TemplateResponse(
+            request,
+            "admin/system_update.html",
+            {
+                "user": user,
+                "version": get_current_version(),
+                "error": "Bitte eine .zip-Datei hochladen",
+            },
+        )
 
     if app_settings.UPDATE_ZIP_REQUIRE_HASH and not expected_sha256.strip():
-        return templates.TemplateResponse(request, "admin/system_update.html", {
-            "user": user, "version": get_current_version(),
-            "error": "Bei manuellen ZIP-Updates ist eine erwartete SHA256-Prüfsumme erforderlich.",
-        })
+        return templates.TemplateResponse(
+            request,
+            "admin/system_update.html",
+            {
+                "user": user,
+                "version": get_current_version(),
+                "error": "Bei manuellen ZIP-Updates ist eine erwartete SHA256-Prüfsumme erforderlich.",
+            },
+        )
 
     tmp_path: Path | None = None
     try:
@@ -1984,11 +2158,15 @@ def apply_system_update(
         if tmp_path:
             tmp_path.unlink(missing_ok=True)
 
-    return templates.TemplateResponse(request, "admin/system_update.html", {
-        "user": user,
-        "version": get_current_version(),
-        "update_result": result,
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/system_update.html",
+        {
+            "user": user,
+            "version": get_current_version(),
+            "update_result": result,
+        },
+    )
 
 
 @router.get("/system/update/check-github", response_class=HTMLResponse)
@@ -2000,11 +2178,15 @@ def check_github_update(
 ):
     """HTMX-Partial: GitHub auf neuere Releases prüfen."""
     github = check_github_release(prerelease=prerelease, token=get_github_token(db))
-    return templates.TemplateResponse(request, "admin/_github_update.html", {
-        "user": user,
-        "github": github,
-        "prerelease": prerelease,
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/_github_update.html",
+        {
+            "user": user,
+            "github": github,
+            "prerelease": prerelease,
+        },
+    )
 
 
 @router.post("/system/update/github", response_class=HTMLResponse)
@@ -2019,31 +2201,47 @@ def apply_github_update(
     token = get_github_token(db)
     github = check_github_release(prerelease=prerelease, token=token)
     if not github.get("download_url") or not github.get("tag_name"):
-        return templates.TemplateResponse(request, "admin/_github_update.html", {
-            "user": user,
-            "github": github,
-            "prerelease": prerelease,
-            "update_result": {"success": False, "message": "Kein Download-Link im aktuellen Release gefunden."},
-        })
+        return templates.TemplateResponse(
+            request,
+            "admin/_github_update.html",
+            {
+                "user": user,
+                "github": github,
+                "prerelease": prerelease,
+                "update_result": {"success": False, "message": "Kein Download-Link im aktuellen Release gefunden."},
+            },
+        )
     from app.core.audit import write_audit
-    write_audit(db, "system.update_github_release", user_id=user.id,
-                payload={"tag": github.get("latest_tag"), "prerelease": prerelease},
-                ip=request.client.host if request.client else None)
+
+    write_audit(
+        db,
+        "system.update_github_release",
+        user_id=user.id,
+        payload={"tag": github.get("latest_tag"), "prerelease": prerelease},
+        ip=request.client.host if request.client else None,
+    )
     db.commit()
     result = deploy_github_release(
-        github["download_url"], github["tag_name"], token=token,
+        github["download_url"],
+        github["tag_name"],
+        token=token,
         install_deps=install_deps_raw in ("1", "true", "on"),
     )
     github_after = check_github_release(prerelease=prerelease, token=token)
-    return templates.TemplateResponse(request, "admin/_github_update.html", {
-        "user": user,
-        "github": github_after,
-        "prerelease": prerelease,
-        "update_result": result,
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/_github_update.html",
+        {
+            "user": user,
+            "github": github_after,
+            "prerelease": prerelease,
+            "update_result": result,
+        },
+    )
 
 
 # ── Direktes Repo-Update (Branch-Zipball, system_admin) ──────────────────────
+
 
 @router.get("/system/update/check-branch", response_class=HTMLResponse)
 def check_branch_update(
@@ -2054,13 +2252,17 @@ def check_branch_update(
 ):
     """HTMX-Partial: letzten Commit eines Branches anzeigen (direktes Repo-Update)."""
     token = get_github_token(db)
-    return templates.TemplateResponse(request, "admin/_github_branch_update.html", {
-        "user": user,
-        "branch_info": check_github_branch(branch, token=token),
-        "branches": list_github_branches(token=token),
-        "branch": branch,
-        "deployed_ref": _deployed_ref(db),
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/_github_branch_update.html",
+        {
+            "user": user,
+            "branch_info": check_github_branch(branch, token=token),
+            "branches": list_github_branches(token=token),
+            "branch": branch,
+            "deployed_ref": _deployed_ref(db),
+        },
+    )
 
 
 @router.post("/system/update/github-branch", response_class=HTMLResponse)
@@ -2079,38 +2281,55 @@ def apply_github_branch_update(
     token = get_github_token(db)
     branch_info = check_github_branch(branch, token=token)
     if branch_info.get("error") or not branch_info.get("sha"):
-        return templates.TemplateResponse(request, "admin/_github_branch_update.html", {
-            "user": user,
-            "branch_info": branch_info,
-            "branches": list_github_branches(token=token),
-            "branch": branch,
-            "deployed_ref": _deployed_ref(db),
-            "update_result": {"success": False,
-                              "message": f"Branch nicht abrufbar: {branch_info.get('error', 'unbekannt')}"},
-        })
+        return templates.TemplateResponse(
+            request,
+            "admin/_github_branch_update.html",
+            {
+                "user": user,
+                "branch_info": branch_info,
+                "branches": list_github_branches(token=token),
+                "branch": branch,
+                "deployed_ref": _deployed_ref(db),
+                "update_result": {
+                    "success": False,
+                    "message": f"Branch nicht abrufbar: {branch_info.get('error', 'unbekannt')}",
+                },
+            },
+        )
 
     from app.core.audit import write_audit
-    write_audit(db, "system.update_github_branch", user_id=user.id,
-                payload={"branch": branch, "sha": branch_info["sha_short"]},
-                ip=request.client.host if request.client else None)
+
+    write_audit(
+        db,
+        "system.update_github_branch",
+        user_id=user.id,
+        payload={"branch": branch, "sha": branch_info["sha_short"]},
+        ip=request.client.host if request.client else None,
+    )
     db.commit()
 
     result = deploy_github_branch(
-        branch, branch_info["download_url"], token=token,
+        branch,
+        branch_info["download_url"],
+        token=token,
         install_deps=install_deps_raw in ("1", "true", "on"),
     )
     if result.get("success"):
         _save_deployed_ref(db, user.id, branch, branch_info["sha"])
         db.commit()
 
-    return templates.TemplateResponse(request, "admin/_github_branch_update.html", {
-        "user": user,
-        "branch_info": check_github_branch(branch, token=token),
-        "branches": list_github_branches(token=token),
-        "branch": branch,
-        "deployed_ref": _deployed_ref(db),
-        "update_result": result,
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/_github_branch_update.html",
+        {
+            "user": user,
+            "branch_info": check_github_branch(branch, token=token),
+            "branches": list_github_branches(token=token),
+            "branch": branch,
+            "deployed_ref": _deployed_ref(db),
+            "update_result": result,
+        },
+    )
 
 
 @router.post("/system/update/github-token")
@@ -2129,10 +2348,12 @@ def save_github_token(
     token = github_token.strip()
     if token:
         from app.services.ai_service import encrypt_api_key
+
         value = encrypt_api_key(token)
         if row is None:
-            row = SystemSettings(key=GITHUB_TOKEN_KEY, value=value,
-                                 updated_at=datetime.now(UTC), updated_by_user_id=user.id)
+            row = SystemSettings(
+                key=GITHUB_TOKEN_KEY, value=value, updated_at=datetime.now(UTC), updated_by_user_id=user.id
+            )
             db.add(row)
         else:
             row.value = value
@@ -2143,9 +2364,13 @@ def save_github_token(
         if row is not None:
             db.delete(row)
         aktion = "geloescht"
-    write_audit(db, "system.update_github_token", user_id=user.id,
-                payload={"aktion": aktion},
-                ip=request.client.host if request.client else None)
+    write_audit(
+        db,
+        "system.update_github_token",
+        user_id=user.id,
+        payload={"aktion": aktion},
+        ip=request.client.host if request.client else None,
+    )
     db.commit()
     return RedirectResponse(url="/admin/system/update?token_saved=1", status_code=303)
 
@@ -2153,14 +2378,21 @@ def save_github_token(
 def _org_flags_dict(org_settings) -> dict:
     """Hilfsfunktion: OrgSettings-Feature-Flags als einfaches Dict für Templates."""
     _MI_KEYS = [
-        "mi_feature_stab", "mi_feature_funkjournal", "mi_feature_meldungen",
-        "mi_feature_sektoren", "mi_feature_karte", "mi_feature_zeitreise",
-        "mi_feature_ressourcen", "mi_feature_uebergreifend", "mi_feature_geraeteverleih",
+        "mi_feature_stab",
+        "mi_feature_funkjournal",
+        "mi_feature_meldungen",
+        "mi_feature_sektoren",
+        "mi_feature_karte",
+        "mi_feature_zeitreise",
+        "mi_feature_ressourcen",
+        "mi_feature_uebergreifend",
+        "mi_feature_geraeteverleih",
     ]
     return {k: bool(getattr(org_settings, k, True)) for k in _MI_KEYS}
 
 
 # ── GSL-Einstellungen ────────────────────────────────────────────────────────
+
 
 @router.get("/gsl-einstellungen", response_class=HTMLResponse)
 def gsl_einstellungen(
@@ -2172,11 +2404,15 @@ def gsl_einstellungen(
     if not org_id:
         raise HTTPException(403)
     org_settings = db.query(OrgSettings).filter_by(org_id=org_id).first()
-    return templates.TemplateResponse(request, "admin/gsl_einstellungen.html", {
-        "user": user,
-        "org_settings": org_settings,
-        "org_flags": _org_flags_dict(org_settings),
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/gsl_einstellungen.html",
+        {
+            "user": user,
+            "org_settings": org_settings,
+            "org_flags": _org_flags_dict(org_settings),
+        },
+    )
 
 
 @router.post("/gsl-einstellungen", response_class=HTMLResponse)
@@ -2202,14 +2438,14 @@ async def gsl_einstellungen_save(
         return int(v) if v.isdigit() else None
 
     # Feature-Flags
-    org_settings.mi_feature_stab           = _bool("mi_feature_stab")
-    org_settings.mi_feature_funkjournal    = _bool("mi_feature_funkjournal")
-    org_settings.mi_feature_meldungen      = _bool("mi_feature_meldungen")
-    org_settings.mi_feature_sektoren       = _bool("mi_feature_sektoren")
-    org_settings.mi_feature_karte          = _bool("mi_feature_karte")
-    org_settings.mi_feature_zeitreise      = _bool("mi_feature_zeitreise")
-    org_settings.mi_feature_ressourcen     = _bool("mi_feature_ressourcen")
-    org_settings.mi_feature_uebergreifend  = _bool("mi_feature_uebergreifend")
+    org_settings.mi_feature_stab = _bool("mi_feature_stab")
+    org_settings.mi_feature_funkjournal = _bool("mi_feature_funkjournal")
+    org_settings.mi_feature_meldungen = _bool("mi_feature_meldungen")
+    org_settings.mi_feature_sektoren = _bool("mi_feature_sektoren")
+    org_settings.mi_feature_karte = _bool("mi_feature_karte")
+    org_settings.mi_feature_zeitreise = _bool("mi_feature_zeitreise")
+    org_settings.mi_feature_ressourcen = _bool("mi_feature_ressourcen")
+    org_settings.mi_feature_uebergreifend = _bool("mi_feature_uebergreifend")
     org_settings.mi_feature_geraeteverleih = _bool("mi_feature_geraeteverleih")
 
     # Lagemeldungs-Regelkreis
@@ -2226,7 +2462,7 @@ async def gsl_einstellungen_save(
     # Geräteverleih-Konfiguration
     erinnerung_h = _int_or_none("gsl_verleih_erinnerung_stunden")
     org_settings.gsl_verleih_erinnerung_stunden = erinnerung_h
-    org_settings.gsl_verleih_sms_ausleih_text    = str(form.get("gsl_verleih_sms_ausleih_text", "")).strip() or None
+    org_settings.gsl_verleih_sms_ausleih_text = str(form.get("gsl_verleih_sms_ausleih_text", "")).strip() or None
     org_settings.gsl_verleih_sms_erinnerung_text = str(form.get("gsl_verleih_sms_erinnerung_text", "")).strip() or None
 
     # Allgemein
@@ -2234,23 +2470,33 @@ async def gsl_einstellungen_save(
 
     db.commit()
 
-    return templates.TemplateResponse(request, "admin/gsl_einstellungen.html", {
-        "user": user,
-        "org_settings": org_settings,
-        "org_flags": _org_flags_dict(org_settings),
-        "saved": True,
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/gsl_einstellungen.html",
+        {
+            "user": user,
+            "org_settings": org_settings,
+            "org_flags": _org_flags_dict(org_settings),
+            "saved": True,
+        },
+    )
 
 
 # ── About ─────────────────────────────────────────────────────────────────────
 
+
 @router.get("/about", response_class=HTMLResponse)
 def about_page(request: Request, db=Depends(get_db)):
     from app.config import settings
+
     user = getattr(request.state, "user", None)
     version = get_current_version()
-    return templates.TemplateResponse(request, "admin/about.html", {
-        "user": user,
-        "version": version,
-        "app_version": settings.APP_VERSION,
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/about.html",
+        {
+            "user": user,
+            "version": version,
+            "app_version": settings.APP_VERSION,
+        },
+    )

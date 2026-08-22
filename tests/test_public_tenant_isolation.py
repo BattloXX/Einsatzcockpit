@@ -17,8 +17,69 @@ from app.models.master import FireDept, OrgSettings, VehicleMaster
 from app.models.objekt import AlarmInfoscreenToken
 from app.models.stats import StatistikDashboardToken
 from app.models.wasserstelle import Wasserstelle
+from app.models.mailing import MailingCampaign, MailingConfig, MailingQueueItem, MailingRecipientList, MailingRecipientListEntry, MailingTemplate
+from app.models.user import ApiKey
+from app.core.crypto import encrypt_secret
+from app.core.security import sign_mailing_track_token, sign_mailing_webhook_org
 
 ORG_A = 1  # FF Wolfurt (seeded)
+
+def test_mailing_tracking_token_cannot_mutate_other_org(client):
+    org_b_id = _setup_zwei_orgs()
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        tpl=MailingTemplate(org_id=org_b_id,name="Isolation Tracking",subject="x",body_html="x")
+        lst=MailingRecipientList(org_id=org_b_id,name="Isolation Tracking",kind="static")
+        db.add_all([tpl,lst]); db.flush()
+        campaign=MailingCampaign(org_id=org_b_id,template_id=tpl.id,recipient_list_id=lst.id,status="sent")
+        db.add(campaign); db.flush(); item=MailingQueueItem(org_id=org_b_id,campaign_id=campaign.id,email="secret-b@example.at",status="sent")
+        db.add(item); db.commit(); iid=item.id
+        forged=sign_mailing_track_token(iid,ORG_A)
+        assert client.get(f"/mailing/t/{forged}.png").status_code == 200
+        assert client.get(f"/mailing/c/{forged}?u=https%3A%2F%2Fexample.at",follow_redirects=False).status_code == 302
+        db.expire_all(); row=db.query(MailingQueueItem).execution_options(include_all_tenants=True).filter(MailingQueueItem.id==iid).one()
+        assert row.open_count == 0 and row.click_count == 0
+    finally: db.close()
+
+def _svix(secret: bytes, body: bytes, event_id: str):
+    import base64, hashlib, hmac, time
+    stamp=str(int(time.time())); signature=base64.b64encode(hmac.new(secret,f"{event_id}.{stamp}.{body.decode()}".encode(),hashlib.sha256).digest()).decode()
+    return {"svix-id":event_id,"svix-timestamp":stamp,"svix-signature":"v1,"+signature}
+
+def test_mailing_webhook_secret_and_org_token_are_both_required(client, monkeypatch):
+    import base64, json
+    org_b_id=_setup_zwei_orgs(); db=SessionLocal(); set_tenant_context(db,None)
+    try:
+        secret_a=b"secret-a"; secret_b=b"secret-b"
+        for oid,secret in ((ORG_A,secret_a),(org_b_id,secret_b)):
+            cfg=db.query(MailingConfig).filter_by(org_id=oid).first() or MailingConfig(org_id=oid)
+            cfg.resend_webhook_secret_enc=encrypt_secret("whsec_"+base64.b64encode(secret).decode()); db.add(cfg)
+        tpl=MailingTemplate(org_id=ORG_A,name="Webhook Isolation",subject="x",body_html="x"); lst=MailingRecipientList(org_id=ORG_A,name="Webhook Isolation",kind="static"); db.add_all([tpl,lst]); db.flush()
+        campaign=MailingCampaign(org_id=ORG_A,template_id=tpl.id,recipient_list_id=lst.id,status="sent"); db.add(campaign); db.flush()
+        item=MailingQueueItem(org_id=ORG_A,campaign_id=campaign.id,email="a@example.at",status="sent",resend_message_id="shared-mail"); db.add(item); db.commit()
+        from app.services.mailing_service import mailing_webhook_secret
+        assert mailing_webhook_secret(db.query(MailingConfig).filter_by(org_id=org_b_id).one()).endswith(base64.b64encode(secret_b).decode())
+        from app.services.mailing_webhook_service import verify_resend_webhook_signature as real_verify
+        seen=[]
+        def checked(secret,*args,**kwargs): seen.append(secret); return real_verify(secret,*args,**kwargs)
+        monkeypatch.setattr("app.routers.mailing_webhook.verify_resend_webhook_signature",checked)
+        body=json.dumps({"type":"email.delivered","data":{"email_id":"shared-mail"}},separators=(",",":")).encode()
+        cross=client.post(f"/mailing/webhook/resend/{sign_mailing_webhook_org(org_b_id)}",content=body,headers=_svix(secret_a,body,"evt-cross"))
+        assert cross.status_code==401, (cross.text,seen)
+        assert seen[-1].endswith(base64.b64encode(secret_b).decode())
+        assert client.post(f"/mailing/webhook/resend/{sign_mailing_webhook_org(ORG_A)}",content=body,headers=_svix(secret_a,body,"evt-own")).status_code==200
+        db.expire_all(); assert db.get(MailingQueueItem,item.id).status=="delivered"
+    finally: db.close()
+
+def test_mailing_api_import_cannot_target_foreign_list(client):
+    org_b_id=_setup_zwei_orgs(); raw="mailing-import-org-a"; db=SessionLocal(); set_tenant_context(db,None)
+    try:
+        key=db.query(ApiKey).filter_by(key_hash=hash_api_key(raw)).first() or ApiKey(key_hash=hash_api_key(raw),label="Mailing isolation",org_id=ORG_A)
+        target=MailingRecipientList(org_id=org_b_id,name="Foreign API list",kind="static"); db.add_all([key,target]); db.commit(); target_id=target.id
+        response=client.post(f"/api/v1/mailing/recipient-lists/{target_id}/import",headers={"X-API-Key":raw},json={"Key":"cross-org","recipients":[{"email":"forbidden@example.at"}]})
+        assert response.status_code==404
+        assert db.query(MailingRecipientListEntry).execution_options(include_all_tenants=True).filter_by(list_id=target_id).count()==0
+    finally: db.close()
 
 RAW_TOKEN_A = "iso-test-infoscreen-token-org-a"
 RAW_TOKEN_B = "iso-test-infoscreen-token-org-b"

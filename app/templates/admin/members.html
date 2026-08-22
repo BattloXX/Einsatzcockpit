@@ -129,6 +129,7 @@
               {% if m.active %}Deaktivieren{% else %}Aktivieren{% endif %}
             </button>
           </form>
+          {% if mailing_tags %}{% with member=m, tags=mailing_tags, assigned_ids=mailing_tag_assignments.get(m.id, []) %}{% include "mailing/_member_tags.html" %}{% endwith %}{% endif %}
         </td>
       </tr>
       {% else %}

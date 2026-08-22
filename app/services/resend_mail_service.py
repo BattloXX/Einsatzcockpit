@@ -26,7 +26,7 @@ def _mark_test_system_from_addr(from_addr: str) -> str:
     return f"Einsatzcockpit (Testsystem) <test-{local}@{domain}>"
 
 
-def _resend_payload(msg: EmailMessage, from_addr: str) -> dict:
+def _resend_payload(msg: EmailMessage, from_addr: str, attachments: list[dict] | None = None) -> dict:
     """Konvertiert eine EmailMessage in das Resend-Schema."""
     to_raw = msg["To"] or ""
     recipients = [addr.strip() for addr in re.split(r"[,;]", to_raw) if addr.strip()]
@@ -43,10 +43,12 @@ def _resend_payload(msg: EmailMessage, from_addr: str) -> dict:
         payload["html"] = html.get_content()
     if "text" not in payload and "html" not in payload:
         payload["text"] = ""
+    if attachments:
+        payload["attachments"] = attachments
     return payload
 
 
-async def send_via_resend(msg: EmailMessage, api_key: str, from_addr: str) -> None:
+async def send_via_resend(msg: EmailMessage, api_key: str, from_addr: str, attachments: list[dict] | None = None) -> str | None:
     """Versendet eine Mail ueber Resend und wirft bei Fehlern ResendMailError."""
     api_key = (api_key or "").strip()
     from_addr = (from_addr or "").strip()
@@ -57,7 +59,7 @@ async def send_via_resend(msg: EmailMessage, api_key: str, from_addr: str) -> No
         resp = await client.post(
             RESEND_EMAILS_URL,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json=_resend_payload(msg, from_addr),
+            json=_resend_payload(msg, from_addr, attachments),
         )
     if not 200 <= resp.status_code < 300:
         try:
@@ -67,3 +69,8 @@ async def send_via_resend(msg: EmailMessage, api_key: str, from_addr: str) -> No
             err_desc = resp.text[:400]
         logger.error("Resend-Mailversand fehlgeschlagen: HTTP %s | %s", resp.status_code, err_desc)
         raise ResendMailError(f"HTTP {resp.status_code}: {err_desc}")
+    try:
+        value = resp.json().get("id")
+        return str(value) if value is not None else None
+    except Exception:
+        return None

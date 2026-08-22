@@ -24,6 +24,8 @@ from app.models.master import (
     LageHintAlarm,
     Member,
     MemberQualification,
+    MemberTag,
+    MemberTagAssignment,
     MessageSuggestion,
     MessageSuggestionAlarm,
     Qualification,
@@ -358,6 +360,11 @@ async def members_list(request: Request, db: Session = Depends(get_db),
     return templates.TemplateResponse(request, "admin/members.html", {
         "user": request.state.user,
         "members": members, "qualifications": qualifications,
+        "mailing_tags": db.query(MemberTag).order_by(MemberTag.name).all(),
+        "mailing_tag_assignments": {
+            m.id: {x.tag_id for x in db.query(MemberTagAssignment).filter(MemberTagAssignment.member_id == m.id).all()}
+            for m in members
+        },
     })
 
 
@@ -389,21 +396,23 @@ async def create_member(
 
 @router.get("/audit", response_class=HTMLResponse)
 async def audit_log(request: Request, db: Session = Depends(get_db),
-                    _=Depends(require_role("admin"))):
+                    scope: str | None = None, _=Depends(require_role("admin"))):
     user = request.state.user
     if has_role(user, "system_admin"):
-        entries = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(500).all()
+        q = db.query(AuditLog)
+        if scope == "mailing": q=q.filter(AuditLog.action.like("mailing.%"))
+        elif scope == "roles": q=q.filter(AuditLog.action.like("%roles%"))
+        entries = q.order_by(AuditLog.created_at.desc()).limit(500).all()
     else:
         org_user_ids = db.query(User.id).filter(User.org_id == user.org_id).subquery()
-        entries = (
-            db.query(AuditLog)
+        q = (db.query(AuditLog)
             .filter(AuditLog.user_id.in_(org_user_ids))  # type: ignore[arg-type]
-            .order_by(AuditLog.created_at.desc())
-            .limit(500)
-            .all()
         )
+        if scope == "mailing": q=q.filter(AuditLog.action.like("mailing.%"))
+        elif scope == "roles": q=q.filter(AuditLog.action.like("%roles%"))
+        entries=q.order_by(AuditLog.created_at.desc()).limit(500).all()
     return templates.TemplateResponse(request, "admin/audit.html", {
-        "user": request.state.user, "entries": entries,
+        "user": request.state.user, "entries": entries, "scope": scope,
     })
 
 

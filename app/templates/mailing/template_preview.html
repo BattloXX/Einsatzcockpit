@@ -1,0 +1,1 @@
+<article class="mailing-preview__mail"><header>{{ subject or 'Kein Betreff' }}</header><div class="mailing-preview__body">{{ body_html|safe }}</div>{% if body_text %}<details><summary>Textversion</summary><pre class="code-block">{{ body_text }}</pre></details>{% endif %}</article>

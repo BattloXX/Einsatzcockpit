@@ -106,6 +106,11 @@
     </form>
 
     {% set _gateway_sys_on = sys_settings.get('gateway_module_enabled') == 'true' %}
+    {% set _mailing_sys_on = sys_settings.get('mailing_module_enabled') == 'true' %}
+    <form method="post" action="/admin/settings/system/mailing-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group" style="display:flex;justify-content:space-between;gap:1rem"><div><label style="font-weight:600">Mailing-Modul</label><p class="form-hint">Vorlagen, Empfängerlisten und Kampagnenversand über Resend.</p></div><label><input type="checkbox" name="enabled_raw" value="1" {% if _mailing_sys_on %}checked{% endif %} onchange="this.form.submit()"> Systemweit aktivieren</label></div>
+    </form>
     <form method="post" action="/admin/settings/system/gateway-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
@@ -591,6 +596,8 @@
       </div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F5A8; Print &amp; Alarm Gateway</h3>
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Mailing</h3>
+      <div class="form-group"><label style="{% if not mailing_sys_enabled %}opacity:.5{% endif %}"><input type="checkbox" name="mailing_module_enabled_raw" value="1" {% if org_settings and org_settings.mailing_module_enabled %}checked{% endif %} {% if not mailing_sys_enabled %}disabled{% endif %}> Mailing für diese Organisation aktivieren</label></div>
       {% set _gateway_org_on = (org_settings.gateway_module_enabled) if org_settings else false %}
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:.5rem;

@@ -22,7 +22,8 @@ from app.db import get_db
 # Request 2 Queries statt bis zu 10 anfallen (Audit B4).
 _SYSTEM_FLAG_KEYS = ("uas_module_enabled", "objekt_module_enabled",
                      "gateway_module_enabled", "lagefuehrung_modul_aktiv",
-                     "nachschlagewerke_module_enabled", "foerderstrecke_module_enabled")
+                     "nachschlagewerke_module_enabled", "foerderstrecke_module_enabled",
+                     "mailing_module_enabled")
 
 
 def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session) -> None:
@@ -59,6 +60,8 @@ def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session)
         request.state.foerderstrecke_enabled = bool(
             "foerderstrecke_module_enabled" in sys_on
             and org_s and org_s.foerderstrecke_module_enabled)
+        request.state.mailing_module_enabled = bool(
+            "mailing_module_enabled" in sys_on and org_s and org_s.mailing_module_enabled)
         # Atemschutz fehlt bewusst in der Bulk-Abfrage: fehlender System-Key
         # bedeutet hier im Gegensatz zu allen obigen Modulen "aktiv".
         from app.services.breathing_service import breathing_effective_enabled
@@ -92,6 +95,7 @@ def _resolve_current_org(
     request.state.atemschutz_pruefung_modul_aktiv = False
     request.state.lagefuehrung_modul_aktiv = False
     request.state.foerderstrecke_enabled = False
+    request.state.mailing_module_enabled = False
     request.state.breathing_module_enabled = True
 
     user = getattr(request.state, "user", None)

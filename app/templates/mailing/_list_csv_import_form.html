@@ -1,0 +1,1 @@
+<form method="post" enctype="multipart/form-data" action="/mailing/lists/{{ item.id }}/csv"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><label>CSV importieren <input type="file" name="file" accept=".csv,text/csv" required></label><button class="btn">Importieren</button></form>
