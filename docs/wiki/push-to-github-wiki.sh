@@ -17,6 +17,12 @@ echo "Kopiere Wiki-Seiten..."
 # Alle .md Dateien außer diesem Skript kopieren:
 find "$WIKI_DIR" -name "*.md" -exec cp {} "$TMP_DIR/" \;
 
+# Eingebettete Bilder mit ihrer relativen Verzeichnisstruktur kopieren:
+if [ -d "$WIKI_DIR/images" ]; then
+  mkdir -p "$TMP_DIR/images"
+  cp -R "$WIKI_DIR/images/." "$TMP_DIR/images/"
+fi
+
 cd "$TMP_DIR"
 git config user.email "johannes@battlogg.org"
 git config user.name "Johannes Battlogg"

@@ -31,6 +31,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Nachschlagewerke: offlinefähige Gefahrgut-Suche (UN-Nummer/Stoffname → ERI-Karte, täglicher BAM/ADR-Sync), Rettungsdatenblätter (on-demand + Cache) und Karten-Overlays (Evakuierungsradius, windbezogene Ausbreitung inkl. Gauß-Modell)
 - SSO via Microsoft Entra ID (JIT-Provisioning, Gruppen-Mapping, PKCE/OIDC)
 - Mail-Versand je Organisation: eigener SMTP-Server und/oder Office 365 / Microsoft Graph, mit automatischer Fallback-Kette
+- Mailing-Kampagnen je Organisation: Vorlagen, statische/dynamische Empfängerlisten, Resend-Versand, Webhook-Tracking und Sperrliste
 - Digitales Fahrtenbuch mit QR-/Token-Erfassung, Korrektur- und Storno-Workflow
 - Geräteverleih für Großschadenslagen (Artikel, Stücklisten, Barcode-Scan, SMS)
 - Organisationsbezogene Datensicherung als Download oder geplanter Push mit tenant-gescoptem Restore
@@ -93,6 +94,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen.md).
 | [GSL-Ressourcenverwaltung](Anwender-GSL-Ressourcenverwaltung.md) | Einheiten anlegen, disponieren, Mehrfach-Disposition, Fremdorg |
 | [Geräteverleih](Anwender-Geraeteverleih.md) | Ausgabe & Rücknahme von Material in der GSL, Barcode-Scan |
 | [Drohne / UAS](Anwender-Drohne-UAS.md) | BOS-Drohneneinsatz: starten, Flugbuch, Checklisten, Notfall, Medien, PDF |
+| [Mailing-Kampagnen](Anwender-Mailing-Kampagnen.md) | Vorlagen verwenden, Empfängerlisten aufbauen, Kampagnen planen/senden und Zustellung auswerten |
 | [Fahrtenbuch](Anwender-Fahrtenbuch.md) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
 | [Objekte](Anwender-Objekte.md) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
 | [Nachschlagewerke](Anwender-Nachschlagewerke.md) | Gefahrgut nach UN-Nummer/Stoffname, Rettungsdatenblätter, Evakuierungsradius & Ausbreitung — offlinefähig |
@@ -112,6 +114,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen.md).
 | [Drohne / UAS](Administration-Drohne-UAS.md) | Modul aktivieren, Geräteregister, Wartungsbuch, Pilotenregister, Compliance |
 | [Single Sign-On (Entra ID)](Administration-Single-Sign-On.md) | Microsoft-365-Login einrichten, Gruppen-Mapping, JIT-Provisioning |
 | [Mail-Versand (SMTP / Office 365)](Administration-Mail-Versand.md) | Eigenen SMTP-Server und/oder Office 365 je Org einrichten, Fallback-Kette, Azure-App-Registrierung für Mail.Send |
+| [Mailing-Modul](Administration-Mailing-Modul.md) | Modul aktivieren (System+Org), Rollen, dediziertes Resend, Webhook, Sperrliste, API-Import und Berichte |
 | [Lokale Wetterstation](Administration-Wetterstation.md) | Davis/Meteobridge-Anbindung: Station anlegen, Push-Token, Meteobridge-URL, Datenbankarchitektur |
 | [Fahrtenbuch](Administration-Fahrtenbuch.md) | Fahrzeuge konfigurieren, Zwecke/Zielorte, Token/QR, Schadensmeldung, Fahrten-Verwaltung |
 | [LIS/IPR-Anbindung](Administration-LIS-Anbindung.md) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
