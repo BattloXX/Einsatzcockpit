@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from app.config import settings
 from app.core.security import generate_weather_dashboard_token, generate_weather_station_token, hash_api_key
 from app.core.tenant import set_tenant_context
+from app.core.timezones import local_date_to_utc, now_local
 from app.db import SessionLocal
 from app.models.master import FireDept
 from app.models.weather import WeatherDashboardToken, WeatherStation
@@ -91,12 +92,15 @@ def test_public_json_liefert_aktuelle_werte(client, setup_db, monkeypatch, tmp_p
     station_id = _make_station(org_id)
 
     from app.models.weather import WeatherReading
-    now = datetime.now(UTC)
+    # Anchor the readings inside the organization's local day. Using the previous
+    # four UTC hours makes this test fail shortly after local midnight, when those
+    # readings correctly belong to yesterday.
+    day_start = local_date_to_utc(now_local().strftime("%Y-%m-%d"))
     s = dbw.get_weather_session()
     try:
         for i, temp in enumerate([14.2, 18.0, 22.5, 26.8, 24.3]):
             s.add(WeatherReading(org_id=org_id, station_id=station_id,
-                                  ts=now - timedelta(hours=4 - i), temp_c=temp,
+                                  ts=day_start + timedelta(minutes=i), temp_c=temp,
                                   rain_rate_mmh=0.1 * i))
         s.commit()
     finally:
@@ -123,7 +127,7 @@ def test_public_json_liefert_aktuelle_werte(client, setup_db, monkeypatch, tmp_p
 
     assert data["standort"]["lat"] is None  # _make_station ohne lat/lng in diesem Test
 
-    # Tages-Min/Max aus den soeben eingefuegten WeatherReadings (alle "heute" == UTC-naher Test)
+    # Tages-Min/Max aus den soeben eingefuegten WeatherReadings (alle org-lokal "heute")
     assert data["heute"]["temp_min_c"] == 14.2
     assert data["heute"]["temp_max_c"] == 26.8
 
