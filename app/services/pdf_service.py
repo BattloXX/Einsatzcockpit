@@ -83,12 +83,15 @@ def load_fahrtenbuch_report(
     """Liefert Fahrtdetails sowie nur im Fahrtenbuch vorkommende Fahrzeuge."""
     try:
         from app.models.fahrtenbuch import Fahrt, FahrtStatus
+        from sqlalchemy.orm import joinedload
+
         own_db = db is None
         if own_db:
             db = SessionLocal()
         try:
             fahrten = (
                 db.query(Fahrt)
+                .options(joinedload(Fahrt.zweck))
                 .filter(
                     Fahrt.incident_id == incident_id,
                     Fahrt.status == FahrtStatus.aktiv,
@@ -98,16 +101,24 @@ def load_fahrtenbuch_report(
             )
             details: dict[int, dict] = {}
             for f in fahrten:
-                detail = details.setdefault(f.fahrzeug_id, {"fahrer": [], "km": 0})
+                detail = details.setdefault(
+                    f.fahrzeug_id, {"fahrer": [], "km": 0, "fahrten": []}
+                )
                 detail["fahrer"].append(f.maschinist_name)
                 if f.maschinist2_name:
                     detail["fahrer"].append(f.maschinist2_name)
                 detail["km"] += f.km_delta or 0
+                detail["fahrten"].append({
+                    "zeitpunkt": f.zeitpunkt,
+                    "zweck": f.zweck.name if f.zweck else (f.zweck_freitext or "–"),
+                    "fahrer": [
+                        name for name in (f.maschinist_name, f.maschinist2_name) if name
+                    ],
+                    "km": f.km_delta or 0,
+                })
             extra_ids = set(details) - assigned_vehicle_ids
             if not extra_ids:
                 return details, []
-            from sqlalchemy.orm import joinedload
-
             from app.models.master import VehicleMaster
             fahrzeuge = (
                 db.query(VehicleMaster)

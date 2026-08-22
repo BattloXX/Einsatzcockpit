@@ -450,11 +450,87 @@ def test_fahrtenbuch_report_ergaenzt_nur_fahrt_fahrzeug(
 
     details, extras = load_fahrtenbuch_report(incident.id, {fahrzeug.id}, db_session)
 
-    assert details[fahrzeug.id] == {"fahrer": ["Anna"], "km": 5}
+    assert details[fahrzeug.id]["fahrer"] == ["Anna"]
+    assert details[fahrzeug.id]["km"] == 5
+    assert len(details[fahrzeug.id]["fahrten"]) == 1
     assert len(extras) == 1
     assert extras[0]["vehicle"].id == extra.id
     assert extras[0]["fahrer"] == ["Berta", "Clemens"]
     assert extras[0]["km"] == 12
+
+
+def test_mehrere_fahrten_fuer_fahrzeug_und_einsatz_speicherbar(
+    db_session, org, fahrzeug, zweck,
+):
+    incident = Incident(primary_org_id=org.id, alarm_type_code="B2", status="closed")
+    db_session.add(incident)
+    db_session.flush()
+    zeitpunkt = datetime.now(UTC)
+    db_session.add_all([
+        Fahrt(
+            org_id=org.id, zeitpunkt=zeitpunkt, fahrzeug_id=fahrzeug.id,
+            maschinist_name="Anna", km_delta=5, zweck_id=zweck.id,
+            fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
+        ),
+        Fahrt(
+            org_id=org.id, zeitpunkt=zeitpunkt + timedelta(hours=1),
+            fahrzeug_id=fahrzeug.id, maschinist_name="Berta", km_delta=8,
+            zweck_id=zweck.id, fahrttyp=FahrtKategorie.uebung,
+            incident_id=incident.id,
+        ),
+    ])
+
+    db_session.commit()
+
+    fahrten = db_session.query(Fahrt).filter(
+        Fahrt.fahrzeug_id == fahrzeug.id,
+        Fahrt.incident_id == incident.id,
+    ).all()
+    assert len(fahrten) == 2
+
+
+def test_fahrtenbuch_report_liefert_einzelfahrten_desselben_fahrzeugs(
+    db_session, org, fahrzeug, zweck,
+):
+    incident = Incident(primary_org_id=org.id, alarm_type_code="B3", status="closed")
+    db_session.add(incident)
+    db_session.flush()
+    erster_zeitpunkt = datetime.now(UTC)
+    db_session.add_all([
+        Fahrt(
+            org_id=org.id, zeitpunkt=erster_zeitpunkt, fahrzeug_id=fahrzeug.id,
+            maschinist_name="Anna", km_delta=5, zweck_id=zweck.id,
+            fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
+        ),
+        Fahrt(
+            org_id=org.id, zeitpunkt=erster_zeitpunkt + timedelta(hours=1),
+            fahrzeug_id=fahrzeug.id, maschinist_name="Berta",
+            maschinist2_name="Clemens", km_delta=8, zweck_id=zweck.id,
+            fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
+        ),
+    ])
+    db_session.flush()
+
+    details, extras = load_fahrtenbuch_report(incident.id, {fahrzeug.id}, db_session)
+
+    assert extras == []
+    assert details[fahrzeug.id]["fahrer"] == ["Anna", "Berta", "Clemens"]
+    assert details[fahrzeug.id]["km"] == 13
+    erster_zeitpunkt_db = erster_zeitpunkt.replace(tzinfo=None)
+    assert details[fahrzeug.id]["fahrten"] == [
+        {
+            "zeitpunkt": erster_zeitpunkt_db,
+            "zweck": zweck.name,
+            "fahrer": ["Anna"],
+            "km": 5,
+        },
+        {
+            "zeitpunkt": erster_zeitpunkt_db + timedelta(hours=1),
+            "zweck": zweck.name,
+            "fahrer": ["Berta", "Clemens"],
+            "km": 8,
+        },
+    ]
 
 
 def test_excel_export_verwendet_leitstellennummer(db_session, org, fahrzeug, zweck):

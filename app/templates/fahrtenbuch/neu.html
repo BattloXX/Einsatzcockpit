@@ -118,6 +118,10 @@
     <a href="#" id="draft-discard-link" style="margin-left:.5rem;">Verwerfen</a>
   </div>
 
+  <div class="alert alert--warn" style="margin-bottom:1rem;display:none;" id="auto-reload-hinweis" role="status">
+    &#8635; Das Formular wird in Kürze automatisch aktualisiert, damit die Daten aktuell bleiben. Deine Eingaben bleiben erhalten; ausgewählte Fotos müssen danach neu angehängt werden.
+  </div>
+
   <form method="post" action="/fahrtenbuch" enctype="multipart/form-data"
         x-data="fahrtForm()"
         @submit="onSubmit($event)">
@@ -400,6 +404,22 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
     input.value = d.toISOString().slice(0, 16);
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
+})();
+
+// Dieser zeitbasierte Vollseiten-Refresh ist bewusst erlaubt: Er folgt auf
+// keine HTMX-Aktion und aktualisiert nur ein lange geöffnetes Erfassungsformular.
+(function() {
+  const reloadAfterMs = 20 * 60 * 1000;
+  const warningBeforeMs = 30 * 1000;
+  const hint = document.getElementById('auto-reload-hinweis');
+
+  window.setTimeout(function() {
+    if (hint) hint.style.display = '';
+  }, reloadAfterMs - warningBeforeMs);
+
+  window.setTimeout(function() {
+    location.reload();
+  }, reloadAfterMs);
 })();
 
 /* ─── Offline-Draft (STAB-2): Eingaben lokal sichern, bei Abbruch/Reload

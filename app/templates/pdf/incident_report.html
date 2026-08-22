@@ -159,6 +159,15 @@
     <td>{{ v.commander.full_name if v.commander else (v.commander_name or '–') }}</td>
     <td style="text-align:right;">{{ fahrt.km if fahrt else '–' }}</td>
   </tr>
+  {% if fahrt and fahrt.fahrten|length > 1 %}
+  <tr>
+    <td colspan="6" style="padding-left:18pt;font-size:8.5pt;color:#555;">
+      {% for einzeln in fahrt.fahrten %}
+      <div>{{ einzeln.zeitpunkt|local_datetime }} Uhr · {{ einzeln.zweck }} · {{ einzeln.fahrer|join(' / ') or '–' }} · {{ einzeln.km }} km</div>
+      {% endfor %}
+    </td>
+  </tr>
+  {% endif %}
   {% endfor %}
   {% for extra in extra_vehicles %}
   <tr>
@@ -169,6 +178,15 @@
     <td>–</td>
     <td style="text-align:right;">{{ extra.km }}</td>
   </tr>
+  {% if extra.fahrten|length > 1 %}
+  <tr>
+    <td colspan="6" style="padding-left:18pt;font-size:8.5pt;color:#555;">
+      {% for einzeln in extra.fahrten %}
+      <div>{{ einzeln.zeitpunkt|local_datetime }} Uhr · {{ einzeln.zweck }} · {{ einzeln.fahrer|join(' / ') or '–' }} · {{ einzeln.km }} km</div>
+      {% endfor %}
+    </td>
+  </tr>
+  {% endif %}
   {% endfor %}
   {% set km_gesamt = fahrten.values()|sum(attribute='km') %}
   {% if km_gesamt > 0 %}
