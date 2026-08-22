@@ -46,10 +46,6 @@
 .fb-input-warn{border-color:#f59e0b !important;background:rgba(245,158,11,.08) !important;}
 .fb-name-warn{font-size:.8rem;color:#f59e0b;margin:.35rem 0 0;font-weight:600;}
 
-.fab-now-row{display:flex;gap:.5rem;align-items:stretch;}
-.fab-now-row .form-control{flex:1;}
-.fab-now-btn{flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700;letter-spacing:.04em;}
-
 .fab-actions{position:sticky;bottom:0;left:0;right:0;padding:1rem 0 max(.5rem, env(safe-area-inset-bottom));margin:.25rem -1rem 0;background:linear-gradient(to top, var(--bg) 60%, transparent);}
 .fab-actions .btn{width:100%;}
 
@@ -265,21 +261,13 @@
       </div>
     </div>
 
-    {# 4. Zeitpunkt & Bemerkung #}
+    {# 4. Bemerkung #}
     <div class="fab-card fab-card--zeit">
       <div class="fab-card__head">
-        <span class="fab-card__icon">&#x1F550;</span>
-        <h2 class="fab-card__title">Zeitpunkt &amp; Bemerkung</h2>
+        <span class="fab-card__icon">&#x1F4AC;</span>
+        <h2 class="fab-card__title">Bemerkung</h2>
       </div>
       <div class="fab-card__body">
-        <div class="form-group">
-          <label class="form-label" for="zeitpunkt">Zeitpunkt (Ankunftszeit)</label>
-          <div class="fab-now-row">
-            <input type="datetime-local" name="zeitpunkt" id="zeitpunkt" class="form-control"
-                   value="{{ form_daten.get('zeitpunkt') or now.strftime('%Y-%m-%dT%H:%M') }}">
-            <button type="button" class="btn btn--secondary fab-now-btn" id="zeitpunkt-jetzt-btn">JETZT</button>
-          </div>
-        </div>
         <div class="form-group">
           <label class="form-label" for="bemerkung">Bemerkung</label>
           <textarea name="bemerkung" id="bemerkung" class="form-control" rows="2">{{ form_daten.get('bemerkung', '') }}</textarea>
@@ -393,18 +381,6 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
     _fabApplyDraftTo(t);
   }
 });
-
-// "JETZT"-Button: Zeitpunkt-Feld auf aktuelle lokale Zeit setzen.
-(function() {
-  const btn = document.getElementById('zeitpunkt-jetzt-btn');
-  const input = document.getElementById('zeitpunkt');
-  if (!btn || !input) return;
-  btn.addEventListener('click', function() {
-    const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
-    input.value = d.toISOString().slice(0, 16);
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-})();
 
 // Dieser zeitbasierte Vollseiten-Refresh ist bewusst erlaubt: Er folgt auf
 // keine HTMX-Aktion und aktualisiert nur ein lange geöffnetes Erfassungsformular.
