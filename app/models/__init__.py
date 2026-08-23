@@ -95,7 +95,7 @@ from app.models.master import (
 from app.models.mailing import (
     MailingCampaign, MailingCampaignAttachment, MailingCampaignRecipientList,
     MailingConfig, MailingLinkClick, MailingQueueItem, MailingRecipientList,
-    MailingRecipientListEntry, MailingTemplate, MailingWebhookEvent,
+    MailingRecipientListEntry, MailingRecipientListEntryTag, MailingTemplate, MailingWebhookEvent,
     MailingSuppressionEntry, MailingApiImportBatch,
 )
 from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion

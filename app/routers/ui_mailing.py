@@ -1,10 +1,13 @@
 """HTML-/HTMX-Routen des Mailing-Moduls."""
+import io
 import json
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from openpyxl import Workbook
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -13,7 +16,7 @@ from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident
-from app.models.mailing import MailingCampaign, MailingCampaignAttachment, MailingCampaignRecipientList, MailingLinkClick, MailingQueueItem, MailingRecipientList, MailingRecipientListEntry, MailingTemplate, MailingSuppressionEntry
+from app.models.mailing import MailingCampaign, MailingCampaignAttachment, MailingCampaignRecipientList, MailingLinkClick, MailingQueueItem, MailingRecipientList, MailingRecipientListEntry, MailingRecipientListEntryTag, MailingTemplate, MailingSuppressionEntry
 from app.models.master import MemberTag, MemberTagAssignment, Qualification
 from app.services import mailing_service as service
 
@@ -195,6 +198,25 @@ def list_create(
     return RedirectResponse("/mailing/lists", 303)
 
 
+@router.get("/lists/import-vorlage.xlsx")
+def list_import_template(
+    user=Depends(require_role("mailing_admin")),
+    _g=Depends(require_mailing_enabled),
+):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Empfaenger"
+    sheet.append(["E-Mail", "Name", "Gruppe"])
+    sheet.append(["max.mustermann@example.at", "Max Mustermann", "Einsatzleitung, Presse"])
+    output = io.BytesIO()
+    workbook.save(output)
+    return Response(
+        output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="mailing-import-vorlage.xlsx"'},
+    )
+
+
 @router.get("/lists/{list_id}", response_class=HTMLResponse)
 def list_detail(
     list_id: int,
@@ -212,6 +234,7 @@ def list_detail(
     total = resolved_count = 0
     total_pages = 1
     filter_summary = ""
+    group_stats = []
     if item.kind == "static":
         query = db.query(MailingRecipientListEntry).filter(MailingRecipientListEntry.list_id == item.id)
         if q:
@@ -220,6 +243,19 @@ def list_detail(
         total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
         page = min(max(page, 1), total_pages)
         entries = query.order_by(MailingRecipientListEntry.email).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).all()
+        group_stats = (
+            db.query(MemberTag.name, func.count(MailingRecipientListEntryTag.entry_id))
+            .join(MailingRecipientListEntryTag, MailingRecipientListEntryTag.tag_id == MemberTag.id)
+            .join(MailingRecipientListEntry, MailingRecipientListEntry.id == MailingRecipientListEntryTag.entry_id)
+            .filter(
+                MemberTag.org_id == user.org_id,
+                MailingRecipientListEntry.org_id == user.org_id,
+                MailingRecipientListEntry.list_id == item.id,
+            )
+            .group_by(MemberTag.id, MemberTag.name)
+            .order_by(MemberTag.name)
+            .all()
+        )
     elif item.kind == "dynamic":
         from app.services.mailing_recipients import resolve_dynamic_list
 
@@ -231,7 +267,7 @@ def list_detail(
 
         resolved_count = len(resolve_recipient_list(db, item))
         total = resolved_count
-    return templates.TemplateResponse(request, "mailing/list_detail.html", ctx(request, user, item=item, entries=entries, total=total, resolved_count=resolved_count, filter_summary=filter_summary, q=q, page=page, total_pages=total_pages))
+    return templates.TemplateResponse(request, "mailing/list_detail.html", ctx(request, user, item=item, entries=entries, total=total, resolved_count=resolved_count, filter_summary=filter_summary, group_stats=group_stats, import_error=request.query_params.get("import_error"), q=q, page=page, total_pages=total_pages))
 
 
 @router.post("/lists/{list_id}/csv")
@@ -247,7 +283,30 @@ async def csv_import(
         raise HTTPException(404)
     service.import_csv(db, item, await file.read())
     db.commit()
-    return RedirectResponse("/mailing/lists", 303)
+    return RedirectResponse(f"/mailing/lists/{item.id}", 303)
+
+
+@router.post("/lists/{list_id}/xlsx")
+async def xlsx_import(
+    list_id: int,
+    file: UploadFile = File(...),
+    db=Depends(get_db),
+    user=Depends(require_role("mailing_admin")),
+    _g=Depends(require_mailing_enabled),
+):
+    item = db.get(MailingRecipientList, list_id)
+    if not item or item.kind != "static":
+        raise HTTPException(404)
+    try:
+        service.import_xlsx(db, item, await file.read())
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        return RedirectResponse(
+            f"/mailing/lists/{item.id}?import_error={quote(str(exc))}",
+            303,
+        )
+    return RedirectResponse(f"/mailing/lists/{item.id}", 303)
 
 
 @router.get("/campaigns", response_class=HTMLResponse)

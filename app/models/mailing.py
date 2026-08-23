@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
 from app.db import Base
+from app.models.master import MemberTag
 
 
 def _utcnow() -> datetime:
@@ -56,6 +57,21 @@ class MailingRecipientListEntry(TenantScoped, Base):
     display_name: Mapped[str | None] = mapped_column(String(200))
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
     recipient_list: Mapped[MailingRecipientList] = relationship(back_populates="entries")
+    tags: Mapped[list[MemberTag]] = relationship(secondary="mailing_recipient_list_entry_tag")
+
+
+class MailingRecipientListEntryTag(Base):
+    __tablename__ = "mailing_recipient_list_entry_tag"
+    entry_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("mailing_recipient_list_entry.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tag_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("member_tag.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
 
 
 class MailingCampaign(TenantScoped, Base):

@@ -1,1 +1,22 @@
-<form method="post" enctype="multipart/form-data" action="/mailing/lists/{{ item.id }}/csv"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><label>CSV importieren <input type="file" name="file" accept=".csv,text/csv" required></label><button class="btn">Importieren</button></form>
+{% if import_error %}<p class="alert alert--danger">Excel-Import fehlgeschlagen: {{ import_error }}</p>{% endif %}
+<div style="display:grid;gap:16px">
+  <form method="post" enctype="multipart/form-data" action="/mailing/lists/{{ item.id }}/xlsx" hx-post="/mailing/lists/{{ item.id }}/xlsx" hx-target="#mailing-list-detail" hx-swap="innerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group">
+      <label for="xlsx-file-{{ item.id }}">Excel importieren</label>
+      <input class="form-input" id="xlsx-file-{{ item.id }}" type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+    </div>
+    <div class="form-actions" style="justify-content:flex-start">
+      <button class="btn btn--primary">Excel importieren</button>
+      <a class="btn btn--ghost" href="/mailing/lists/import-vorlage.xlsx">Vorlage herunterladen</a>
+    </div>
+  </form>
+  <form method="post" enctype="multipart/form-data" action="/mailing/lists/{{ item.id }}/csv" hx-post="/mailing/lists/{{ item.id }}/csv" hx-target="#mailing-list-detail" hx-swap="innerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group">
+      <label for="csv-file-{{ item.id }}">CSV importieren</label>
+      <input class="form-input" id="csv-file-{{ item.id }}" type="file" name="file" accept=".csv,text/csv" required>
+    </div>
+    <button class="btn btn--secondary">CSV importieren</button>
+  </form>
+</div>

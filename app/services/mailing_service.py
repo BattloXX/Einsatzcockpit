@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func
 
 from sqlalchemy.orm import Session
+from openpyxl import load_workbook
 
 from app.core.crypto import decrypt_secret, encrypt_secret
 from app.models.mailing import (
@@ -19,6 +20,7 @@ from app.models.mailing import (
     MailingTemplate,
     MailingSuppressionEntry,
 )
+from app.models.master import MemberTag
 
 
 def summarize_filter_json(filter_json: str | None, db: Session | None = None, org_id: int | None = None) -> str:
@@ -181,6 +183,92 @@ def import_csv(db: Session, recipient_list: MailingRecipientList, content: bytes
         )
         recipients.append({"email": email, "display_name": name or None})
     return import_recipients(db, recipient_list, recipients)
+
+
+def import_xlsx(db: Session, recipient_list: MailingRecipientList, content: bytes):
+    """Excel-Empfaenger org-sicher importieren und bestehende Eintraege aktualisieren."""
+    workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    sheet = workbook.active
+    rows = sheet.iter_rows(values_only=True)
+    try:
+        raw_headers = next(rows)
+    except StopIteration as exc:
+        raise ValueError("Die Excel-Datei ist leer.") from exc
+
+    headers = {str(value or "").strip().casefold(): index for index, value in enumerate(raw_headers)}
+    email_index = next(
+        (headers[name] for name in ("e-mail", "email", "e-mail-adresse") if name in headers),
+        None,
+    )
+    if email_index is None:
+        raise ValueError("Die Pflichtspalte E-Mail fehlt.")
+    name_index = headers.get("name")
+    first_name_index = headers.get("vorname")
+    last_name_index = headers.get("nachname")
+    group_index = headers.get("gruppe")
+
+    existing_entries = {
+        entry.email.lower(): entry
+        for entry in db.query(MailingRecipientListEntry)
+        .filter(
+            MailingRecipientListEntry.org_id == recipient_list.org_id,
+            MailingRecipientListEntry.list_id == recipient_list.id,
+        )
+        .all()
+    }
+    tags_by_name = {
+        tag.name.casefold(): tag
+        for tag in db.query(MemberTag).filter(MemberTag.org_id == recipient_list.org_id).all()
+    }
+    added = updated = skipped = 0
+
+    def cell(row, index):
+        return str(row[index] or "").strip() if index is not None and index < len(row) else ""
+
+    for row in rows:
+        email = cell(row, email_index).lower()
+        if not _EMAIL.match(email):
+            skipped += 1
+            continue
+        name = cell(row, name_index)
+        if not name:
+            name = " ".join(filter(None, [cell(row, first_name_index), cell(row, last_name_index)]))
+
+        row_tags = []
+        for raw_tag_name in cell(row, group_index).split(","):
+            tag_name = raw_tag_name.strip()
+            if not tag_name:
+                continue
+            key = tag_name.casefold()
+            tag = tags_by_name.get(key)
+            if tag is None:
+                tag = MemberTag(org_id=recipient_list.org_id, name=tag_name)
+                db.add(tag)
+                db.flush()
+                tags_by_name[key] = tag
+            if tag not in row_tags:
+                row_tags.append(tag)
+
+        entry = existing_entries.get(email)
+        if entry is None:
+            entry = MailingRecipientListEntry(
+                org_id=recipient_list.org_id,
+                list_id=recipient_list.id,
+                email=email,
+                display_name=name or None,
+            )
+            entry.tags = row_tags
+            db.add(entry)
+            existing_entries[email] = entry
+            added += 1
+        else:
+            if name:
+                entry.display_name = name
+            existing_tag_ids = {tag.id for tag in entry.tags}
+            entry.tags.extend(tag for tag in row_tags if tag.id not in existing_tag_ids)
+            updated += 1
+    db.flush()
+    return {"added": added, "updated": updated, "skipped": skipped}
 
 
 def create_campaign(db, org_id, **data):
