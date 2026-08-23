@@ -596,8 +596,6 @@
       </div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F5A8; Print &amp; Alarm Gateway</h3>
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Mailing</h3>
-      <div class="form-group"><label style="{% if not mailing_sys_enabled %}opacity:.5{% endif %}"><input type="checkbox" name="mailing_module_enabled_raw" value="1" {% if org_settings and org_settings.mailing_module_enabled %}checked{% endif %} {% if not mailing_sys_enabled %}disabled{% endif %}> Mailing für diese Organisation aktivieren</label></div>
       {% set _gateway_org_on = (org_settings.gateway_module_enabled) if org_settings else false %}
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:.5rem;
@@ -611,6 +609,23 @@
           Schaltet die Gateway-/Drucker-/Druckregel-Verwaltung („Gateway / Druck") ein.
           Der lokale Container wird per Einmal-Code gekoppelt (siehe Wiki).
           {% if not gateway_sys_enabled %}
+          <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
+          {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F4E7; Mailing</h3>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;
+                      {% if not mailing_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="mailing_module_enabled_raw" value="1"
+                 {% if org_settings and org_settings.mailing_module_enabled %}checked{% endif %}
+                 {% if not mailing_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Mailing für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">
+          Vorlagen, Empfängerlisten und Kampagnenversand über Resend.
+          {% if not mailing_sys_enabled %}
           <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
           {% endif %}
         </small>

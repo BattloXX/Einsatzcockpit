@@ -201,6 +201,9 @@
       {% if WEATHER_ENABLED %}
       <a href="/wetter" class="mobile-menu__link {% if request.url.path.startswith('/wetter') %}active{% endif %}">🌦 Wetter</a>
       {% endif %}
+      {% if request.state.mailing_module_enabled %}
+      <a href="/mailing/" class="mobile-menu__link {% if request.url.path.startswith('/mailing') %}active{% endif %}">📧 Mailing</a>
+      {% endif %}
       <div class="mobile-menu__group-hdr">Dokumentation</div>
       {% if is_fahrtenbuch %}
       <a href="/verwaltung/fahrten" class="mobile-menu__link {% if '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path %}active{% endif %}">🚒 Fahrtenbuch</a>
