@@ -4,6 +4,7 @@
 {% set user_roles = user.roles|map(attribute='code')|list %}
 {% set is_admin = ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles) %}
 {% set is_fahrtenbuch = request.state.fahrtenbuch_modul_aktiv and ('fahrtenbuch_admin' in user_roles or 'incident_leader' in user_roles or 'recorder' in user_roles or is_admin) %}
+{% set is_mailing = request.state.mailing_module_enabled and ('mailing_admin' in user_roles or 'mailing_sender' in user_roles or is_admin) %}
 {% set is_as_pruefung = request.state.atemschutz_pruefung_modul_aktiv %}
 <div class="page-header">
   <h2 class="page-title">Übersicht</h2>
@@ -88,8 +89,14 @@
     {% if request.state.foerderstrecke_enabled %}
     <a href="/foerderstrecke/" class="module-btn"><span class="module-btn__icon">🚰</span><span class="module-btn__label">Förderstrecke</span></a>
     {% endif %}
+    {% if is_mailing %}
+    <a href="/mailing/" class="module-btn"><span class="module-btn__icon">📧</span><span class="module-btn__label">Mailing</span></a>
+    {% endif %}
     <a href="/statistik" class="module-btn"><span class="module-btn__icon">📊</span><span class="module-btn__label">Statistik</span></a>
     <a href="/archiv" class="module-btn"><span class="module-btn__icon">🗄</span><span class="module-btn__label">Archiv</span></a>
+    {% if is_admin %}
+    <a href="/admin" class="module-btn"><span class="module-btn__icon">⚙</span><span class="module-btn__label">Verwaltung</span></a>
+    {% endif %}
     <a href="https://github.com/BattloXX/Einsatzcockpit/wiki" target="_blank" rel="noopener" class="module-btn"><span class="module-btn__icon">❓</span><span class="module-btn__label">Hilfe</span></a>
   </div>
 </section>
