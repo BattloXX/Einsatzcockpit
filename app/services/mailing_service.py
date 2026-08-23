@@ -5,10 +5,10 @@ import io
 import json
 import re
 from datetime import UTC, datetime, timedelta
-from sqlalchemy import func
 
-from sqlalchemy.orm import Session
 from openpyxl import load_workbook
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.core.crypto import decrypt_secret, encrypt_secret
 from app.models.mailing import (
@@ -18,7 +18,6 @@ from app.models.mailing import (
     MailingRecipientList,
     MailingRecipientListEntry,
     MailingTemplate,
-    MailingSuppressionEntry,
 )
 from app.models.master import MemberTag
 
@@ -27,7 +26,7 @@ def summarize_filter_json(filter_json: str | None, db: Session | None = None, or
     """Dynamische Listenfilter kompakt und menschenlesbar beschreiben."""
     try:
         filters = json.loads(filter_json or "{}")
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return "Keine Filter"
     if not isinstance(filters, dict):
         return "Keine Filter"
@@ -42,8 +41,8 @@ def summarize_filter_json(filter_json: str | None, db: Session | None = None, or
         if db is not None:
             from app.models.master import Qualification
 
-            rows = db.query(Qualification).filter(Qualification.code.in_(codes)).all()
-            names = {row.code: row.label for row in rows}
+            qualification_rows = db.query(Qualification).filter(Qualification.code.in_(codes)).all()
+            names = {row.code: row.label for row in qualification_rows}
             labels = [names.get(code, code) for code in codes]
         parts.append("Qualifikation: " + ", ".join(labels))
 
@@ -56,9 +55,9 @@ def summarize_filter_json(filter_json: str | None, db: Session | None = None, or
             query = db.query(MemberTag).filter(MemberTag.id.in_(tag_ids))
             if org_id is not None:
                 query = query.filter(MemberTag.org_id == org_id)
-            rows = query.all()
-            names = {row.id: row.name for row in rows}
-            labels = [names.get(tag_id, str(tag_id)) for tag_id in tag_ids]
+            tag_rows = query.all()
+            tag_names = {row.id: row.name for row in tag_rows}
+            labels = [tag_names.get(tag_id, str(tag_id)) for tag_id in tag_ids]
         parts.append("Tag: " + ", ".join(labels))
 
     if filters.get("member_since_after"):
@@ -118,6 +117,7 @@ def save_mailing_config(
 def mailing_api_key(cfg):
     return decrypt_secret(cfg.resend_api_key_enc) if cfg and cfg.resend_api_key_enc else None
 
+
 def mailing_webhook_secret(cfg):
     return decrypt_secret(cfg.resend_webhook_secret_enc) if cfg and cfg.resend_webhook_secret_enc else None
 
@@ -149,17 +149,30 @@ def create_recipient_list(db, org_id, **data):
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+
 def import_recipients(db: Session, recipient_list: MailingRecipientList, recipients):
-    existing = {x[0].lower() for x in db.query(MailingRecipientListEntry.email)
-        .filter(MailingRecipientListEntry.list_id == recipient_list.id).all()}
+    existing = {
+        x[0].lower()
+        for x in db.query(MailingRecipientListEntry.email)
+        .filter(MailingRecipientListEntry.list_id == recipient_list.id)
+        .all()
+    }
     added = skipped = 0
     for recipient in recipients:
         email = str(recipient.get("email") or "").strip().lower()
         if not _EMAIL.match(email) or email in existing:
-            skipped += 1; continue
-        db.add(MailingRecipientListEntry(org_id=recipient_list.org_id, list_id=recipient_list.id,
-            email=email, display_name=(recipient.get("display_name") or None)))
-        existing.add(email); added += 1
+            skipped += 1
+            continue
+        db.add(
+            MailingRecipientListEntry(
+                org_id=recipient_list.org_id,
+                list_id=recipient_list.id,
+                email=email,
+                display_name=(recipient.get("display_name") or None),
+            )
+        )
+        existing.add(email)
+        added += 1
     db.flush()
     return {"added": added, "skipped": skipped}
 
@@ -217,8 +230,7 @@ def import_xlsx(db: Session, recipient_list: MailingRecipientList, content: byte
         .all()
     }
     tags_by_name = {
-        tag.name.casefold(): tag
-        for tag in db.query(MemberTag).filter(MemberTag.org_id == recipient_list.org_id).all()
+        tag.name.casefold(): tag for tag in db.query(MemberTag).filter(MemberTag.org_id == recipient_list.org_id).all()
     }
     added = updated = skipped = 0
 
@@ -301,10 +313,15 @@ def queue_campaign(db: Session, campaign: MailingCampaign):
     db.flush()
     return campaign
 
+
 def retry_failed_items(db: Session, campaign: MailingCampaign):
     now = datetime.now(UTC).replace(tzinfo=None)
     db.flush()
-    rows = db.query(MailingQueueItem).filter(MailingQueueItem.campaign_id == campaign.id, MailingQueueItem.status == "failed").all()
+    rows = (
+        db.query(MailingQueueItem)
+        .filter(MailingQueueItem.campaign_id == campaign.id, MailingQueueItem.status == "failed")
+        .all()
+    )
     for row in rows:
         row.status, row.attempt_count, row.next_attempt_at, row.error_message = "queued", 0, now, None
     if rows:
@@ -313,14 +330,56 @@ def retry_failed_items(db: Session, campaign: MailingCampaign):
     db.flush()
     return len(rows)
 
+
 def build_mailing_dashboard_data(db: Session) -> dict:
-    campaigns=db.query(MailingCampaign).order_by(MailingCampaign.created_at.desc()).all(); sent=sum(x.sent_count for x in campaigns)
-    backlog=db.query(MailingQueueItem).filter(MailingQueueItem.status.in_(["queued","sending"])).count(); cutoff=datetime.now(UTC).replace(tzinfo=None)-timedelta(hours=24)
-    failures=db.query(MailingQueueItem).filter(MailingQueueItem.status=="failed",MailingQueueItem.created_at>=cutoff).count()
-    days=[(datetime.now(UTC).date()-timedelta(days=x)) for x in range(29,-1,-1)]
-    send_rows=db.query(func.date(MailingQueueItem.sent_at),func.count(MailingQueueItem.id)).filter(MailingQueueItem.status.in_(["sent","delivered"]),MailingQueueItem.sent_at>=datetime.combine(days[0],datetime.min.time())).group_by(func.date(MailingQueueItem.sent_at)).all(); send_map={str(k):v for k,v in send_rows}
-    categories={"Konfiguration":0,"Rate-Limit":0,"Timeout/Netzwerk":0,"Sonstige":0}
-    for (msg,) in db.query(MailingQueueItem.error_message).filter(MailingQueueItem.status=="failed").all():
-        low=(msg or "").lower(); key="Konfiguration" if "konfiguration" in low or "auth" in low else "Rate-Limit" if "429" in low or "rate" in low else "Timeout/Netzwerk" if "timeout" in low or "connect" in low else "Sonstige"; categories[key]+=1
-    recent=campaigns[:20]
-    return {"total_campaigns":len(campaigns),"sent":sent,"open_rate":round(100*sum(x.open_count for x in campaigns)/sent,1) if sent else 0,"click_rate":round(100*sum(x.click_count for x in campaigns)/sent,1) if sent else 0,"backlog":backlog,"failures":failures,"campaign_labels":[x.template.name for x in recent],"campaign_open_rates":[round(100*x.open_count/x.sent_count,1) if x.sent_count else 0 for x in recent],"campaign_click_rates":[round(100*x.click_count/x.sent_count,1) if x.sent_count else 0 for x in recent],"day_labels":[str(x) for x in days],"day_sends":[send_map.get(str(x),0) for x in days],"failure_labels":list(categories),"failure_values":list(categories.values()),"recent_campaigns":campaigns[:5],"campaigns":campaigns}
+    campaigns = db.query(MailingCampaign).order_by(MailingCampaign.created_at.desc()).all()
+    sent = sum(x.sent_count for x in campaigns)
+    backlog = db.query(MailingQueueItem).filter(MailingQueueItem.status.in_(["queued", "sending"])).count()
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
+    failures = (
+        db.query(MailingQueueItem)
+        .filter(MailingQueueItem.status == "failed", MailingQueueItem.created_at >= cutoff)
+        .count()
+    )
+    days = [(datetime.now(UTC).date() - timedelta(days=x)) for x in range(29, -1, -1)]
+    send_rows = (
+        db.query(func.date(MailingQueueItem.sent_at), func.count(MailingQueueItem.id))
+        .filter(
+            MailingQueueItem.status.in_(["sent", "delivered"]),
+            MailingQueueItem.sent_at >= datetime.combine(days[0], datetime.min.time()),
+        )
+        .group_by(func.date(MailingQueueItem.sent_at))
+        .all()
+    )
+    send_map = {str(k): v for k, v in send_rows}
+    categories = {"Konfiguration": 0, "Rate-Limit": 0, "Timeout/Netzwerk": 0, "Sonstige": 0}
+    for (msg,) in db.query(MailingQueueItem.error_message).filter(MailingQueueItem.status == "failed").all():
+        low = (msg or "").lower()
+        key = (
+            "Konfiguration"
+            if "konfiguration" in low or "auth" in low
+            else "Rate-Limit"
+            if "429" in low or "rate" in low
+            else "Timeout/Netzwerk"
+            if "timeout" in low or "connect" in low
+            else "Sonstige"
+        )
+        categories[key] += 1
+    recent = campaigns[:20]
+    return {
+        "total_campaigns": len(campaigns),
+        "sent": sent,
+        "open_rate": round(100 * sum(x.open_count for x in campaigns) / sent, 1) if sent else 0,
+        "click_rate": round(100 * sum(x.click_count for x in campaigns) / sent, 1) if sent else 0,
+        "backlog": backlog,
+        "failures": failures,
+        "campaign_labels": [x.template.name for x in recent],
+        "campaign_open_rates": [round(100 * x.open_count / x.sent_count, 1) if x.sent_count else 0 for x in recent],
+        "campaign_click_rates": [round(100 * x.click_count / x.sent_count, 1) if x.sent_count else 0 for x in recent],
+        "day_labels": [str(x) for x in days],
+        "day_sends": [send_map.get(str(x), 0) for x in days],
+        "failure_labels": list(categories),
+        "failure_values": list(categories.values()),
+        "recent_campaigns": campaigns[:5],
+        "campaigns": campaigns,
+    }

@@ -400,16 +400,20 @@ async def audit_log(request: Request, db: Session = Depends(get_db),
     user = request.state.user
     if has_role(user, "system_admin"):
         q = db.query(AuditLog)
-        if scope == "mailing": q=q.filter(AuditLog.action.like("mailing.%"))
-        elif scope == "roles": q=q.filter(AuditLog.action.like("%roles%"))
+        if scope == "mailing":
+            q=q.filter(AuditLog.action.like("mailing.%"))
+        elif scope == "roles":
+            q=q.filter(AuditLog.action.like("%roles%"))
         entries = q.order_by(AuditLog.created_at.desc()).limit(500).all()
     else:
         org_user_ids = db.query(User.id).filter(User.org_id == user.org_id).subquery()
         q = (db.query(AuditLog)
             .filter(AuditLog.user_id.in_(org_user_ids))  # type: ignore[arg-type]
         )
-        if scope == "mailing": q=q.filter(AuditLog.action.like("mailing.%"))
-        elif scope == "roles": q=q.filter(AuditLog.action.like("%roles%"))
+        if scope == "mailing":
+            q=q.filter(AuditLog.action.like("mailing.%"))
+        elif scope == "roles":
+            q=q.filter(AuditLog.action.like("%roles%"))
         entries=q.order_by(AuditLog.created_at.desc()).limit(500).all()
     return templates.TemplateResponse(request, "admin/audit.html", {
         "user": request.state.user, "entries": entries, "scope": scope,

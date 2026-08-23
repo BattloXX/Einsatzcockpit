@@ -1185,8 +1185,9 @@ class MailingImportRecipient(BaseModel):
     @classmethod
     def valid_email(cls, value: str):
         from app.services.mailing_service import _EMAIL
-        clean=value.strip().lower()
-        if not _EMAIL.match(clean): raise ValueError("Ungültige E-Mail-Adresse")
+        clean = value.strip().lower()
+        if not _EMAIL.match(clean):
+            raise ValueError("Ungültige E-Mail-Adresse")
         return clean
 
 class MailingImportPayload(BaseModel):
@@ -1194,19 +1195,56 @@ class MailingImportPayload(BaseModel):
     recipients: list[MailingImportRecipient] = Field(..., max_length=5000)
 
 class MailingImportResponse(BaseModel):
-    list_id:int; added:int; skipped:int; total_submitted:int; idempotent_hit:bool
+    list_id: int
+    added: int
+    skipped: int
+    total_submitted: int
+    idempotent_hit: bool
 
 @router.post("/mailing/recipient-lists/{list_id}/import", response_model=MailingImportResponse)
 @(_limiter.limit(settings.API_ALARM_RATELIMIT,key_func=get_api_key_identifier) if _limiter else lambda f:f)
-def mailing_recipient_import(list_id:int,payload:MailingImportPayload,request:Request,db:Session=Depends(get_db),api_key:ApiKey=Depends(_get_api_key)):
+def mailing_recipient_import(
+    list_id: int,
+    payload: MailingImportPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: ApiKey = Depends(_get_api_key),
+):
     from app.models.mailing import MailingApiImportBatch, MailingRecipientList
     from app.services.mailing_service import import_recipients
-    target=(db.query(MailingRecipientList).execution_options(include_all_tenants=True).filter(MailingRecipientList.id==list_id,MailingRecipientList.org_id==api_key.org_id,MailingRecipientList.kind=="static").first())
-    if not target: raise HTTPException(404,"Nicht gefunden")
-    batch=db.query(MailingApiImportBatch).filter(MailingApiImportBatch.org_id==api_key.org_id,MailingApiImportBatch.list_id==list_id,MailingApiImportBatch.external_key==payload.Key).first()
-    if batch: return MailingImportResponse(list_id=list_id,added=batch.added_count,skipped=batch.skipped_count,total_submitted=batch.added_count+batch.skipped_count,idempotent_hit=True)
+    target = (
+        db.query(MailingRecipientList)
+        .execution_options(include_all_tenants=True)
+        .filter(
+            MailingRecipientList.id == list_id,
+            MailingRecipientList.org_id == api_key.org_id,
+            MailingRecipientList.kind == "static",
+        )
+        .first()
+    )
+    if not target:
+        raise HTTPException(404, "Nicht gefunden")
+    batch = db.query(MailingApiImportBatch).filter(
+        MailingApiImportBatch.org_id == api_key.org_id,
+        MailingApiImportBatch.list_id == list_id,
+        MailingApiImportBatch.external_key == payload.Key,
+    ).first()
+    if batch:
+        return MailingImportResponse(
+            list_id=list_id,
+            added=batch.added_count,
+            skipped=batch.skipped_count,
+            total_submitted=batch.added_count + batch.skipped_count,
+            idempotent_hit=True,
+        )
     result=import_recipients(db,target,[x.model_dump() for x in payload.recipients])
     db.add(MailingApiImportBatch(org_id=api_key.org_id,list_id=list_id,external_key=payload.Key,added_count=result["added"],skipped_count=result["skipped"]))
     write_audit(db,"mailing.api.import",org_id=api_key.org_id,api_key_id=api_key.id,entity_type="mailing_recipient_list",entity_id=list_id,payload={"added":result["added"],"skipped":result["skipped"],"key":payload.Key})
     db.commit()
-    return MailingImportResponse(list_id=list_id,added=result["added"],skipped=result["skipped"],total_submitted=len(payload.recipients),idempotent_hit=False)
+    return MailingImportResponse(
+        list_id=list_id,
+        added=result["added"],
+        skipped=result["skipped"],
+        total_submitted=len(payload.recipients),
+        idempotent_hit=False,
+    )
