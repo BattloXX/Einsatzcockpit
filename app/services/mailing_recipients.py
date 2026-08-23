@@ -50,7 +50,7 @@ def resolve_incident_commanders(db: Session, org_id: int):
 def resolve_incident_participants(db: Session, org_id: int, incident_id: int | None):
     if not incident_id:
         return []
-    ids = []
+    ids: list[int] = []
     for row in (
         db.query(
             IncidentVehicle.commander_member_id, IncidentVehicle.fahrer_member_id, IncidentVehicle.fahrer2_member_id
@@ -74,33 +74,52 @@ def resolve_recipient_list(db: Session, recipient_list: MailingRecipientList, in
             {"email": e.email, "display_name": e.display_name or "", "vorname": "", "nachname": ""}
             for e in recipient_list.entries
         ]
+    org_id = recipient_list.org_id
+    if org_id is None:
+        return []
     if recipient_list.kind == "dynamic":
-        return resolve_dynamic_list(db, recipient_list.org_id, recipient_list.filter_json)
+        return resolve_dynamic_list(db, org_id, recipient_list.filter_json)
     resolvers = {"all_members": resolve_all_members, "incident_commanders": resolve_incident_commanders}
     if recipient_list.auto_source == "incident_participants":
-        return resolve_incident_participants(db, recipient_list.org_id, incident_id)
+        return resolve_incident_participants(db, org_id, incident_id)
     fn = resolvers.get(recipient_list.auto_source or "")
-    return fn(db, recipient_list.org_id) if fn else []
+    return fn(db, org_id) if fn else []
 
 def resolve_dynamic_list(db: Session, org_id: int, filter_json: str | None):
-    try: filters = json.loads(filter_json or "{}")
-    except (TypeError, ValueError): filters = {}
+    try:
+        filters = json.loads(filter_json or "{}")
+    except (TypeError, ValueError):
+        filters = {}
     q = db.query(Member).filter(Member.org_id == org_id, Member.email.isnot(None))
-    if isinstance(filters.get("active"), bool): q = q.filter(Member.active.is_(filters["active"]))
-    if filters.get("member_since_after"): q = q.filter(Member.created_at >= datetime.combine(date.fromisoformat(filters["member_since_after"]), time.min))
-    if filters.get("member_since_before"): q = q.filter(Member.created_at <= datetime.combine(date.fromisoformat(filters["member_since_before"]), time.max))
+    if isinstance(filters.get("active"), bool):
+        q = q.filter(Member.active.is_(filters["active"]))
+    if filters.get("member_since_after"):
+        q = q.filter(
+            Member.created_at >= datetime.combine(date.fromisoformat(filters["member_since_after"]), time.min)
+        )
+    if filters.get("member_since_before"):
+        q = q.filter(
+            Member.created_at <= datetime.combine(date.fromisoformat(filters["member_since_before"]), time.max)
+        )
     if filters.get("qualification_codes"):
-        q = q.join(MemberQualification).join(Qualification).filter(Qualification.code.in_(filters["qualification_codes"]))
+        q = q.join(MemberQualification).join(Qualification).filter(
+            Qualification.code.in_(filters["qualification_codes"])
+        )
     if filters.get("tag_ids"):
-        q = q.join(MemberTagAssignment, MemberTagAssignment.member_id == Member.id).filter(MemberTagAssignment.tag_id.in_(filters["tag_ids"]))
+        q = q.join(MemberTagAssignment, MemberTagAssignment.member_id == Member.id).filter(
+            MemberTagAssignment.tag_id.in_(filters["tag_ids"])
+        )
     return _rows(q.distinct().order_by(Member.lastname, Member.firstname).all())
 
 def resolve_recipient_list_multi(db: Session, campaign):
     lists = [x.recipient_list for x in campaign.recipient_list_links]
-    if not lists and campaign.recipient_list is not None: lists = [campaign.recipient_list]
+    if not lists and campaign.recipient_list is not None:
+        lists = [campaign.recipient_list]
     result, seen = [], set()
     for lst in lists:
         for row in resolve_recipient_list(db, lst, campaign.source_incident_id):
             key = row["email"].strip().lower()
-            if key not in seen: seen.add(key); result.append({**row, "email": key})
+            if key not in seen:
+                seen.add(key)
+                result.append({**row, "email": key})
     return result

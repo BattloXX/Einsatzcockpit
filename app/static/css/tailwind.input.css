@@ -979,9 +979,25 @@ dialog.media-viewer { max-width: 95vw; width: 95vw; max-height: 95dvh; height: 9
 .mailing-variable { border:0; cursor:pointer; text-align:left; font-family:'JetBrains Mono',monospace; }
 .mailing-editor textarea.wysiwyg-source { display:block; width:100%; resize:vertical; color:var(--text); border:1px solid var(--border); }
 .mailing-editor__preview { position:sticky; top:80px; }
+.mailing-preview-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.mailing-preview-toggle { display:flex; gap:5px; padding:4px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
+.mailing-preview-toggle__btn { padding:7px 10px; border:1px solid transparent; border-radius:6px; background:transparent; color:var(--text-muted); cursor:pointer; font-size:.78rem; font-weight:600; transition:background .12s,color .12s; }
+.mailing-preview-toggle__btn.is-active { border-color:var(--border); background:var(--surface-high); color:var(--text); }
+.mailing-preview-dark-toggle { border-color:var(--border); background:var(--surface); }
 .mailing-preview { min-height:420px; padding:14px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius-lg,.75rem); background:#fff; color:#172033; }
 .mailing-preview__mail header { padding-bottom:12px; margin-bottom:14px; border-bottom:1px solid #d8dde8; font-weight:700; }
-.mailing-preview__mail img { max-width:100%; height:auto; }
+.mailing-preview__preheader { margin-top:5px; color:#64748b; font-size:.82rem; font-weight:400; }
+.mailing-preview__preheader>span { display:block; max-width:80ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mailing-preview__preheader small { display:block; margin-top:3px; font-size:.7rem; }
+.mailing-preview__preheader-limit--mobile { display:none; }
+.mailing-preview--mobile .mailing-preview__preheader>span { max-width:40ch; }
+.mailing-preview--mobile .mailing-preview__preheader-limit--desktop { display:none; }
+.mailing-preview--mobile .mailing-preview__preheader-limit--mobile { display:inline; }
+.mailing-preview__frame-wrap { width:100%; overflow:hidden; }
+.mailing-preview--mobile .mailing-preview__frame-wrap { max-width:375px; margin:0 auto; border:8px solid var(--surface-high); border-radius:20px; }
+.mailing-preview__frame { display:block; width:100%; border:0; }
+.mailing-preview--dark .mailing-preview__frame { filter:invert(1) hue-rotate(180deg); }
+.mailing-preview__hint { margin:10px 0; color:#64748b; font-size:.75rem; line-height:1.4; }
 .mailing-preview__mail .code-block { white-space:pre-wrap; }
 @media(max-width:900px){ .mailing-editor { grid-template-columns:1fr 1fr; } .mailing-editor__variables { grid-column:1/-1; flex-direction:row; flex-wrap:wrap; } .mailing-editor__variables h2,.mailing-editor__variables p { width:100%; } }
 @media(max-width:760px){ .mailing-split,.mailing-editor,.mailing-template-meta { grid-template-columns:1fr; } .mailing-editor__variables { grid-column:auto; } .mailing-editor__preview { position:static; } .mailing-title-row { align-items:flex-start; flex-direction:column; } .mailing-kpis .kpi-card { min-width:calc(50% - 8px); padding:14px; } .mailing-kpis .kpi-card__value { font-size:1.7rem; } }

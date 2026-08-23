@@ -1,4 +1,5 @@
 """Mailversand ueber die Resend-HTTP-API."""
+
 from __future__ import annotations
 
 import logging
@@ -48,7 +49,9 @@ def _resend_payload(msg: EmailMessage, from_addr: str, attachments: list[dict] |
     return payload
 
 
-async def send_via_resend(msg: EmailMessage, api_key: str, from_addr: str, attachments: list[dict] | None = None) -> str | None:
+async def send_via_resend(
+    msg: EmailMessage, api_key: str, from_addr: str, attachments: list[dict] | None = None
+) -> str | None:
     """Versendet eine Mail ueber Resend und wirft bei Fehlern ResendMailError."""
     api_key = (api_key or "").strip()
     from_addr = (from_addr or "").strip()

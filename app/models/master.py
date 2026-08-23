@@ -234,7 +234,9 @@ class MemberTagAssignment(Base):
     __tablename__ = "member_tag_assignment"
     member_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("member.id", ondelete="CASCADE"), primary_key=True)
     tag_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("member_tag.id", ondelete="CASCADE"), primary_key=True)
-    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), nullable=False)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), nullable=False
+    )
 
 
 class AlarmType(TenantScoped, Base):

@@ -2,20 +2,20 @@
 
 import asyncio
 import logging
-from types import SimpleNamespace
-import httpx
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
+from types import SimpleNamespace
 
+import httpx
 from sqlalchemy import func, or_
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.mailing import MailingCampaign, MailingConfig, MailingQueueItem, MailingSuppressionEntry
+from app.services.mail_service import _org_smtp_cfg, _send
 from app.services.mailing_render import render_template
 from app.services.mailing_service import mailing_api_key
 from app.services.resend_mail_service import ResendMailError, send_via_resend
-from app.services.mail_service import _org_smtp_cfg, _send
 
 logger = logging.getLogger("einsatzleiter.mailing")
 INTERVAL_SECONDS = 15
@@ -39,7 +39,10 @@ def _message(item, cfg):
     }
     subject, html, text = render_template(campaign.subject_override or tpl.subject, tpl.body_html, tpl.body_text, ctx)
     from app.services.mailing_tracking import rewrite_links
-    html = rewrite_links(html, item.id, item.org_id, track_opens=campaign.track_opens, track_clicks=campaign.track_clicks)
+
+    html = rewrite_links(
+        html, item.id, item.org_id, track_opens=campaign.track_opens, track_clicks=campaign.track_clicks
+    )
     msg = EmailMessage()
     msg["To"] = item.email
     msg["Subject"] = subject
@@ -84,9 +87,13 @@ async def dispatch_once(db=None, *, batch_size=BATCH_SIZE):
             # Sperrlisten-Check zuerst, noch unter der Zeilensperre aus dem
             # SELECT ... FOR UPDATE oben, aber VOR status="sending"/attempt_count+=1 -
             # ein unterdrückter Empfänger darf nie wie ein Versandversuch aussehen.
-            suppression = (db.query(MailingSuppressionEntry)
-                .filter(MailingSuppressionEntry.org_id == item.org_id,
-                        MailingSuppressionEntry.email == item.email.lower()).first())
+            suppression = (
+                db.query(MailingSuppressionEntry)
+                .filter(
+                    MailingSuppressionEntry.org_id == item.org_id, MailingSuppressionEntry.email == item.email.lower()
+                )
+                .first()
+            )
             if suppression:
                 item.status = "suppressed"
                 item.error_message = f"Unterdrückt (Sperrliste, Grund: {suppression.reason})"
@@ -108,14 +115,22 @@ async def dispatch_once(db=None, *, batch_size=BATCH_SIZE):
                     if cfg.sender_display_name:
                         from_addr = f"{cfg.sender_display_name} <{cfg.from_addr}>"
                     from app.services.mailing_attachments import resend_attachments
+
                     try:
-                        item.resend_message_id = await send_via_resend(msg, mailing_api_key(cfg), from_addr, resend_attachments(item.campaign, attachment_cache))
+                        item.resend_message_id = await send_via_resend(
+                            msg, mailing_api_key(cfg), from_addr, resend_attachments(item.campaign, attachment_cache)
+                        )
                     except (ResendMailError, httpx.HTTPError) as exc:
                         resend_error = exc
-                        if not smtp_cfg: raise
+                        if not smtp_cfg:
+                            raise
                         msg["From"] = smtp_cfg["from_addr"]
-                        try: await _send(msg, smtp_cfg)
-                        except Exception as smtp_exc: raise RuntimeError(f"Resend fehlgeschlagen: {exc}; SMTP-Fallback fehlgeschlagen: {smtp_exc}") from smtp_exc
+                        try:
+                            await _send(msg, smtp_cfg)
+                        except Exception as smtp_exc:
+                            raise RuntimeError(
+                                f"Resend fehlgeschlagen: {exc}; SMTP-Fallback fehlgeschlagen: {smtp_exc}"
+                            ) from smtp_exc
                 elif smtp_cfg:
                     msg["From"] = smtp_cfg["from_addr"]
                     await _send(msg, smtp_cfg)
@@ -123,7 +138,9 @@ async def dispatch_once(db=None, *, batch_size=BATCH_SIZE):
                     raise RuntimeError("Mailing-Konfiguration unvollstaendig")
                 item.status = "sent"
                 item.sent_at = _now()
-                item.error_message = f"Resend fehlgeschlagen ({resend_error}); SMTP-Fallback verwendet" if resend_error else None
+                item.error_message = (
+                    f"Resend fehlgeschlagen ({resend_error}); SMTP-Fallback verwendet" if resend_error else None
+                )
             except Exception as exc:
                 item.error_message = str(exc)[:2000]
                 if item.attempt_count >= item.max_attempts:
@@ -158,10 +175,15 @@ async def dispatch_once(db=None, *, batch_size=BATCH_SIZE):
         if owns:
             db.close()
 
+
 def _update_campaign_counts(db, campaign):
     db.flush()
-    counts = dict(db.query(MailingQueueItem.status, func.count(MailingQueueItem.id))
-        .filter(MailingQueueItem.campaign_id == campaign.id).group_by(MailingQueueItem.status).all())
+    counts = dict(
+        db.query(MailingQueueItem.status, func.count(MailingQueueItem.id))
+        .filter(MailingQueueItem.campaign_id == campaign.id)
+        .group_by(MailingQueueItem.status)
+        .all()
+    )
     campaign.sent_count = counts.get("sent", 0) + counts.get("delivered", 0)
     campaign.failed_count = counts.get("failed", 0) + counts.get("bounced", 0)
     campaign.suppressed_count = counts.get("suppressed", 0)

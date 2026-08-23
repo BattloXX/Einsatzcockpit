@@ -55,6 +55,21 @@ from app.models.lagefuehrung import (
 from app.models.lagekarte import LagekarteToken
 from app.models.lis import LisSyncedObject, OrgLisConfig
 from app.models.login_pin import LoginPin
+from app.models.mailing import (  # noqa: F401 -- imports register ORM models in Base.metadata
+    MailingApiImportBatch,
+    MailingCampaign,
+    MailingCampaignAttachment,
+    MailingCampaignRecipientList,
+    MailingConfig,
+    MailingLinkClick,
+    MailingQueueItem,
+    MailingRecipientList,
+    MailingRecipientListEntry,
+    MailingRecipientListEntryTag,
+    MailingSuppressionEntry,
+    MailingTemplate,
+    MailingWebhookEvent,
+)
 from app.models.major_incident import (
     CitizenReport,
     CommLogEntry,
@@ -70,7 +85,7 @@ from app.models.major_incident import (
     StaffAssignment,
     StaffFunction,
 )
-from app.models.master import (
+from app.models.master import (  # noqa: F401 -- imports register ORM models in Base.metadata
     AIPromptVersion,
     AIRequestLog,
     AlarmType,
@@ -91,12 +106,6 @@ from app.models.master import (
     TaskSuggestion,
     TaskSuggestionAlarm,
     VehicleMaster,
-)
-from app.models.mailing import (
-    MailingCampaign, MailingCampaignAttachment, MailingCampaignRecipientList,
-    MailingConfig, MailingLinkClick, MailingQueueItem, MailingRecipientList,
-    MailingRecipientListEntry, MailingRecipientListEntryTag, MailingTemplate, MailingWebhookEvent,
-    MailingSuppressionEntry, MailingApiImportBatch,
 )
 from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
 from app.models.nachschlagewerk import RettungsdatenblattCache, RettungskartenKatalog
@@ -124,8 +133,6 @@ from app.models.objekt import (
 )
 from app.models.org_backup import OrgBackupConfig
 from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
-from app.models.mailing import (MailingCampaign, MailingConfig, MailingQueueItem,
-                                MailingRecipientList, MailingRecipientListEntry, MailingTemplate)
 from app.models.org_sms import OrgSmsConfig
 from app.models.password_reset import PasswordResetToken
 from app.models.sms import (
