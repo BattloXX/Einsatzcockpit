@@ -21,6 +21,7 @@ class MailingTemplate(TenantScoped, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    preheader: Mapped[str | None] = mapped_column(String(500))
     body_html: Mapped[str] = mapped_column(Text, nullable=False)
     body_text: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
@@ -101,7 +102,9 @@ class MailingCampaign(TenantScoped, Base):
     template: Mapped[MailingTemplate] = relationship()
     recipient_list: Mapped[MailingRecipientList] = relationship()
     queue_items: Mapped[list[MailingQueueItem]] = relationship(back_populates="campaign", cascade="all, delete-orphan")
-    attachments: Mapped[list[MailingCampaignAttachment]] = relationship(back_populates="campaign", cascade="all, delete-orphan")
+    attachments: Mapped[list[MailingCampaignAttachment]] = relationship(
+        back_populates="campaign", cascade="all, delete-orphan"
+    )
     recipient_list_links: Mapped[list[MailingCampaignRecipientList]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"
     )
@@ -134,7 +137,9 @@ class MailingQueueItem(TenantScoped, Base):
 class MailingCampaignAttachment(TenantScoped, Base):
     __tablename__ = "mailing_campaign_attachment"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    campaign_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("mailing_campaign.id", ondelete="CASCADE"), nullable=False, index=True)
+    campaign_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("mailing_campaign.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -147,7 +152,9 @@ class MailingCampaignAttachment(TenantScoped, Base):
 class MailingLinkClick(TenantScoped, Base):
     __tablename__ = "mailing_link_click"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    queue_item_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("mailing_queue_item.id", ondelete="CASCADE"), nullable=False, index=True)
+    queue_item_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("mailing_queue_item.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     url: Mapped[str] = mapped_column(Text, nullable=False)
     clicked_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
     ip: Mapped[str | None] = mapped_column(String(64))
@@ -155,8 +162,12 @@ class MailingLinkClick(TenantScoped, Base):
 
 class MailingCampaignRecipientList(Base):
     __tablename__ = "mailing_campaign_recipient_list"
-    campaign_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("mailing_campaign.id", ondelete="CASCADE"), primary_key=True)
-    recipient_list_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("mailing_recipient_list.id", ondelete="CASCADE"), primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("mailing_campaign.id", ondelete="CASCADE"), primary_key=True
+    )
+    recipient_list_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("mailing_recipient_list.id", ondelete="CASCADE"), primary_key=True
+    )
     campaign: Mapped[MailingCampaign] = relationship(back_populates="recipient_list_links")
     recipient_list: Mapped[MailingRecipientList] = relationship()
 
@@ -184,7 +195,9 @@ class MailingConfig(Base):
 class MailingWebhookEvent(TenantScoped, Base):
     __tablename__ = "mailing_webhook_event"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    queue_item_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("mailing_queue_item.id", ondelete="SET NULL"), index=True)
+    queue_item_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("mailing_queue_item.id", ondelete="SET NULL"), index=True
+    )
     campaign_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("mailing_campaign.id", ondelete="SET NULL"))
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     resend_message_id: Mapped[str | None] = mapped_column(String(200), index=True)
@@ -201,7 +214,9 @@ class MailingSuppressionEntry(TenantScoped, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
     reason: Mapped[str] = mapped_column(String(30), nullable=False)
-    source_event_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("mailing_webhook_event.id", ondelete="SET NULL"))
+    source_event_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("mailing_webhook_event.id", ondelete="SET NULL")
+    )
     note: Mapped[str | None] = mapped_column(Text)
     created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
@@ -211,8 +226,12 @@ class MailingApiImportBatch(Base):
     __tablename__ = "mailing_api_import_batch"
     __table_args__ = (UniqueConstraint("org_id", "list_id", "external_key", name="uq_mailing_api_import_key"),)
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False, index=True)
-    list_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("mailing_recipient_list.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    list_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("mailing_recipient_list.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     external_key: Mapped[str] = mapped_column(String(200), nullable=False)
     added_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
