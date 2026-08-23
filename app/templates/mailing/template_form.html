@@ -1,11 +1,60 @@
 {% extends "base.html" %}{% from "_tabnav.html" import subtabnav %}
 {% block title %}Mailing-Vorlage{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<link href="/static/css/quill.snow.css" rel="stylesheet">
+<style>
+  .mailing-editor__source .ql-toolbar.ql-snow {
+    background: var(--surface-low); border: 1px solid var(--border);
+    border-bottom: none; border-radius: 8px 8px 0 0;
+    position: sticky; top: 0; z-index: 5;
+  }
+  .mailing-editor__source .ql-container.ql-snow {
+    background: #0b1326; color: #dae2fd;
+    border: 1px solid var(--border); border-radius: 0 0 8px 8px;
+    font-size: .95rem; line-height: 1.55;
+  }
+  .mailing-editor__source .ql-editor { min-height: 420px; padding: 24px; }
+  .mailing-editor__source .ql-editor.ql-blank::before { color: var(--text-muted); font-style: normal; }
+  .mailing-editor__source .ql-toolbar.ql-snow button { color: var(--on-surface); }
+  .mailing-editor__source .ql-toolbar.ql-snow button:hover,
+  .mailing-editor__source .ql-toolbar.ql-snow button.ql-active { color: #f87171; }
+  .mailing-editor__source .ql-toolbar.ql-snow .ql-stroke { stroke: var(--on-surface, #dae2fd); }
+  .mailing-editor__source .ql-toolbar.ql-snow button:hover .ql-stroke,
+  .mailing-editor__source .ql-toolbar.ql-snow button.ql-active .ql-stroke { stroke: #f87171; }
+  .mailing-editor__source .ql-toolbar.ql-snow .ql-fill { fill: var(--on-surface, #dae2fd); }
+  .mailing-editor__source .ql-toolbar.ql-snow button:hover .ql-fill { fill: #f87171; }
+  .mailing-editor__source .ql-toolbar.ql-snow .ql-picker { color: var(--on-surface); }
+  .mailing-editor__source .ql-toolbar.ql-snow .ql-picker-options {
+    background: var(--surface-elevated, #1e2130); border-color: var(--border);
+  }
+  .mailing-editor__source .ql-toolbar.ql-snow .ql-picker-options .ql-picker-item { color: var(--on-surface); }
+  .mailing-editor__source .ql-toolbar.ql-snow .ql-picker-options .ql-picker-item:hover { color: #f87171; }
+  .mailing-editor__source .ql-toolbar.ql-snow .ql-picker-label { border-color: var(--border); color: var(--on-surface); }
+  .mailing-editor__source .ql-toolbar.ql-snow .ql-picker-label .ql-stroke { stroke: var(--on-surface, #dae2fd); }
+  .mailing-editor__source .ql-html-source { font-size: .78rem !important; padding: 4px 7px !important; }
+  .mailing-editor__source .ql-html-source::after { content: '</> HTML'; }
+  .mailing-editor__source .ql-html-source.ql-active::after { color: #f87171; }
+  .mailing-editor__source .ql-editor h1 { font-size: 2rem; }
+  .mailing-editor__source .ql-editor h2 { font-size: 1.5rem; margin-top: 1em; }
+  .mailing-editor__source .ql-editor h3 { font-size: 1.2rem; }
+  .mailing-editor__source .ql-editor a { color: #ff8a85; }
+  #mailing-body-html.wysiwyg-source {
+    min-height: 420px; padding: 24px; background: #0b1326; color: #dae2fd;
+    border: 1px solid var(--border); border-radius: 0 0 8px 8px;
+    width: 100%; box-sizing: border-box; resize: vertical; tab-size: 2;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .85rem; white-space: pre; overflow-wrap: normal;
+  }
+  #mailing-body-html.wysiwyg-source:focus { outline: 2px solid #f87171; outline-offset: -2px; }
+</style>
+{% endblock %}
 {% block content %}<div class="container mailing-page"><div class="mailing-title-row"><h1>{{ 'Vorlage bearbeiten' if item else 'Neue Vorlage' }}</h1><a class="btn btn--ghost" href="/mailing/templates">← Vorlagen</a></div>
 {{ subtabnav([{'label':'Dashboard','href':'/mailing/dashboard','active':false},{'label':'Kampagnen','href':'/mailing/campaigns','active':false},{'label':'Vorlagen','href':'/mailing/templates','active':true},{'label':'Empfänger','href':'/mailing/lists','active':false},{'label':'Einstellungen','href':'/mailing/settings','active':false}]) }}
 {% if test_sent %}<div class="alert alert--success">Test-E-Mail wurde an {{ user.email }} gesendet.</div>{% endif %}
 <form id="mailing-template-form" method="post" action="/mailing/templates/save"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if item %}<input type="hidden" name="template_id" value="{{ item.id }}">{% endif %}
 <div class="card mailing-template-meta"><div class="form-group"><label for="template_name">Name</label><input class="form-input" id="template_name" name="name" required value="{{ item.name if item else '' }}"></div><div class="form-group"><label for="template_subject">Betreff</label><input class="form-input" id="template_subject" name="subject" required value="{{ item.subject if item else '' }}" hx-post="/mailing/templates/preview" hx-trigger="input changed delay:500ms" hx-include="#mailing-template-form" hx-target="#preview"></div><div class="form-group"><label for="template_preheader">Preheader</label><input class="form-input" id="template_preheader" name="preheader" maxlength="500" value="{{ item.preheader or '' if item else '' }}" hx-post="/mailing/templates/preview" hx-trigger="input changed delay:500ms" hx-include="#mailing-template-form" hx-target="#preview"><small class="text-muted">Vorschautext neben dem Betreff im Posteingang (optional).</small></div><div class="form-group"><label for="template_description">Beschreibung</label><textarea class="form-input" id="template_description" name="description" rows="2">{{ item.description or '' if item else '' }}</textarea></div></div>
 <div class="mailing-editor"><aside class="card mailing-editor__variables"><h2>Variablen</h2><p class="text-muted">Zum Einfügen anklicken.</p>{% for variable in ['vorname','nachname','email','empfaenger_name','org_name'] %}<button type="button" class="badge-pill badge-pill--gray mailing-variable" data-variable="{{ variable }}">{{ '{{ ' }}{{ variable }}{{ ' }}' }}</button>{% endfor %}</aside>
-<section class="card mailing-editor__source"><label>HTML<textarea id="mailing-body-html" class="wysiwyg-source code-block" name="body_html" required rows="20" hx-post="/mailing/templates/preview" hx-trigger="input changed delay:500ms" hx-include="#mailing-template-form" hx-target="#preview">{{ item.body_html if item else '' }}</textarea></label><label>Text<textarea id="mailing-body-text" class="wysiwyg-source code-block" name="body_text" rows="10" hx-post="/mailing/templates/preview" hx-trigger="input changed delay:500ms" hx-include="#mailing-template-form" hx-target="#preview">{{ item.body_text or '' if item else '' }}</textarea></label><div class="mailing-action-row"><button class="btn btn--primary">Speichern</button>{% if item %}<button class="btn btn--secondary" type="submit" form="mailing-template-test-send" {% if not user.email %}disabled title="Keine Benutzer-E-Mail hinterlegt"{% endif %}>Test-Mail senden</button>{% endif %}</div></section>
+<section class="card mailing-editor__source"><label>HTML<div id="mailing-body-html-quill"></div><textarea id="mailing-body-html" class="wysiwyg-source code-block" name="body_html" required rows="20" hx-post="/mailing/templates/preview" hx-trigger="input changed delay:500ms" hx-include="#mailing-template-form" hx-target="#preview">{{ item.body_html if item else '' }}</textarea></label><label>Text<textarea id="mailing-body-text" class="wysiwyg-source code-block" name="body_text" rows="10" hx-post="/mailing/templates/preview" hx-trigger="input changed delay:500ms" hx-include="#mailing-template-form" hx-target="#preview">{{ item.body_text or '' if item else '' }}</textarea></label><div class="mailing-action-row"><button class="btn btn--primary">Speichern</button>{% if item %}<button class="btn btn--secondary" type="submit" form="mailing-template-test-send" {% if not user.email %}disabled title="Keine Benutzer-E-Mail hinterlegt"{% endif %}>Test-Mail senden</button>{% endif %}</div></section>
 <aside class="mailing-editor__preview"><div class="mailing-section__head"><h2>Live-Vorschau</h2><div class="mailing-preview-controls"><div class="mailing-preview-toggle" role="group" aria-label="Vorschaugröße"><button type="button" class="mailing-preview-toggle__btn is-active" data-preview-view="desktop" aria-pressed="true">Desktop</button><button type="button" class="mailing-preview-toggle__btn" data-preview-view="mobile" aria-pressed="false">Mobil</button></div><button type="button" class="mailing-preview-toggle__btn mailing-preview-dark-toggle" data-preview-dark aria-pressed="false">Dark Mode</button></div></div><div id="preview" class="mailing-preview">{% if item %}<div hx-post="/mailing/templates/preview" hx-trigger="load" hx-include="#mailing-template-form" hx-target="#preview"></div>{% else %}<div class="mailing-empty-state">Vorschau erscheint beim Tippen.</div>{% endif %}</div></aside></div></form>{% if item %}<form id="mailing-template-test-send" method="post" action="/mailing/templates/{{ item.id }}/test-send"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"></form>{% endif %}</div>{% endblock %}
-{% block scripts %}<script src="/static/js/mailing_editor.js?v={{ ASSET_VERSION }}"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/quill.min.js"></script><script src="/static/js/mailing_editor.js?v={{ ASSET_VERSION }}"></script>{% endblock %}
