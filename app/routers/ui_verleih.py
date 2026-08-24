@@ -775,7 +775,7 @@ async def pin_senden(
         except Exception:
             org_name = "Feuerwehr"
         sms_text = f"Ihr Geraeteausleihe-PIN: {pin} - {org_name}"
-        sms_ok = await send_sms(lage.org_id, ausleihe.telefon, sms_text)
+        sms_ok = bool(await send_sms(lage.org_id, ausleihe.telefon, sms_text))
 
     return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
         _detail_ctx(db, user, lage, ausleihe,
@@ -799,7 +799,7 @@ async def sms_ausleih_senden(
     sms_ok = False
     if ausleihe.telefon:
         from app.services.sms_service import send_sms
-        sms_ok = await send_sms(lage.org_id, ausleihe.telefon, sms_text.strip())
+        sms_ok = bool(await send_sms(lage.org_id, ausleihe.telefon, sms_text.strip()))
         if sms_ok:
             ausleihe.sms_ausleih_gesendet = True
             db.commit()
@@ -949,7 +949,7 @@ async def erinnerung_manuell(
     sms_ok = False
     if ausleihe.telefon:
         from app.services.sms_service import send_sms
-        sms_ok = await send_sms(lage.org_id, ausleihe.telefon, sms_text.strip())
+        sms_ok = bool(await send_sms(lage.org_id, ausleihe.telefon, sms_text.strip()))
         if sms_ok:
             ausleihe.erinnerung_gesendet_at = datetime.now(UTC)
             db.commit()
