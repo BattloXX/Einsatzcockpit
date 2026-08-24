@@ -210,7 +210,11 @@ document.addEventListener('alpine:init', () => {
     _onlineHandler: null,
 
     get visible() {
-      return this.incident !== null && String(this.incident.id) !== this.dismissedIncidentId;
+      if (this.incident === null || String(this.incident.id) === this.dismissedIncidentId) return false;
+      const boardIncident = document.getElementById('incidentHeaderAlarm')?.dataset.incidentId;
+      const isOwnMobileBoard = window.matchMedia('(max-width: 760px)').matches
+        && boardIncident === String(this.incident.id);
+      return !isOwnMobileBoard;
     },
 
     init() {
