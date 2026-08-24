@@ -548,6 +548,45 @@ def _sync_person_responses(db: Session, org_id: int, org, incident, person_respo
     return changed
 
 
+async def _notify_new_dibos_incident(incident_id: int, org_id: int) -> None:
+    """Broadcastet und alarmiert einen frisch committeten DIBOS-Einsatz."""
+    from app.config import settings
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.incident import Incident
+    from app.services.broadcast import broadcast_org
+    from app.services.incident_notify import notify_incident_created
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = db.get(Incident, incident_id)
+        if incident is None:
+            return
+        try:
+            await broadcast_org(org_id, {
+                "type": "incident_created",
+                "incident_id": incident.id,
+                "url": f"/einsatz/{incident.id}/info",
+                "title": f"Neuer Einsatz aus DIBOS: {incident.alarm_type_code}",
+            })
+        except Exception:
+            logger.exception("DIBOS-Board-Broadcast für neuen Einsatz %s fehlgeschlagen", incident.id)
+        try:
+            await notify_incident_created(
+                db, incident, org_id=org_id,
+                base_url=settings.effective_public_base_url,
+                background_tasks=None,
+            )
+        except Exception:
+            logger.exception(
+                "Einsatzinfo-Benachrichtigung für DIBOS-Einsatz %s fehlgeschlagen",
+                incident.id,
+            )
+    finally:
+        db.close()
+
+
 def enrich_events_for_org(
     org_id: int,
     raw_events: list[dict],
@@ -555,6 +594,7 @@ def enrich_events_for_org(
     raw_units: list[dict] | None = None,
     wache_unid: str | None = None,
     create_incidents: bool = False,
+    loop: asyncio.AbstractEventLoop | None = None,
 ) -> dict:
     """Reichert aktive Einsätze der Org mit DIBOS-Zusatzinfos an — und legt,
     wenn create_incidents=True (Org-Opt-in OrgDibosConfig.create_incidents),
@@ -566,13 +606,9 @@ def enrich_events_for_org(
     dessen Matching/Dedup zu berühren. Ein Fehler bricht nur den eigenen
     Anreicherungs-Durchlauf ab (Rollback + Log), nie den DIBOS-Poll selbst.
 
-    Gibt {"changed_ids": [...], "rsvp_changed_ids": [...], "created_ids": [...],
-    "closed_ids": [...]}
-    zurück — Erstere für den generellen Board-Reload-Broadcast, "rsvp_changed_ids"
-    zusätzlich für den gezielten "rsvp:changed"-Broadcast (Zu-/Absage-Widget),
-    "created_ids" für die Einsatzinfo-Benachrichtigung (SMS/Push/Teams) neu
-    angelegter Einsätze — siehe enrich_and_broadcast() (die eigentliche
-    Benachrichtigung braucht `await` und läuft daher dort, nicht hier).
+    Neue Einsätze werden nach vollständiger Anreicherung sofort committet. Ihre
+    Benachrichtigung wird per ``run_coroutine_threadsafe`` auf dem übergebenen
+    Haupt-Event-Loop eingeplant; die Coroutine verwendet eine eigene DB-Session.
     """
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -630,6 +666,15 @@ def enrich_events_for_org(
             if changed:
                 db.flush()
                 changed_ids.append(incident.id)
+            if just_created and not event.get("closed"):
+                # ID vor dem Commit sichern: expire_on_commit invalidiert auch `incident`
+                # und `org`; spätere Zugriffe werden bei Bedarf automatisch nachgeladen.
+                incident_id = incident.id
+                db.commit()
+                if loop is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        _notify_new_dibos_incident(incident_id, org_id), loop
+                    )
         db.commit()
     except Exception:
         db.rollback()
@@ -659,29 +704,26 @@ async def enrich_and_broadcast(
     UND dibos_loop.py::_check_org() (leichter Poll, KEINE Voll-Aufzeichnung nötig
     — reduziert die Speicherlast, da keine Rohdaten auf Platte geschrieben werden).
 
-    create_incidents=True (Org-Opt-in) legt zusätzlich neue Einsätze für nicht
-    zuordenbare Events an (siehe enrich_events_for_org()) und löst für jeden neu
-    angelegten, noch nicht abgeschlossenen Einsatz dieselbe zentrale
-    Benachrichtigung wie API/manuelle Anlage/LIS-Sync aus (SMS/Push/Teams,
-    siehe incident_notify.py) — das braucht `await` und läuft daher hier, nicht
-    im Thread von enrich_events_for_org().
+    create_incidents=True (Org-Opt-in) legt zusätzlich neue Einsätze an. Sobald
+    ein neuer Einsatz vollständig angereichert und committet ist, plant der
+    Worker-Thread seine Benachrichtigung auf diesem Event-Loop ein.
 
     Drei Broadcast-/Benachrichtigungs-Typen: "dibos_sync" (voller Board-Reload)
     für jeden geänderten Einsatz, "rsvp:changed" (nur Zu-/Absage-Widget neu
     laden, siehe app.js) für Einsätze mit neuen Personenrückmeldungen, sowie
     die Einsatzinfo-Benachrichtigung für neu angelegte Einsätze.
     """
+    loop = asyncio.get_running_loop()
     try:
         result = await asyncio.to_thread(
             enrich_events_for_org, org_id, raw_events, raw_units=raw_units,
-            wache_unid=wache_unid, create_incidents=create_incidents,
+            wache_unid=wache_unid, create_incidents=create_incidents, loop=loop,
         )
     except Exception:
         logger.exception("DIBOS-Einsatzanreicherung fehlgeschlagen (Org %s)", org_id)
         return
     changed_ids = result.get("changed_ids") or []
     rsvp_changed_ids = result.get("rsvp_changed_ids") or []
-    created_ids = result.get("created_ids") or []
     closed_ids = result.get("closed_ids") or []
     if closed_ids:
         from app.core.tenant import set_tenant_context
@@ -703,40 +745,6 @@ async def enrich_and_broadcast(
                         "DIBOS-Auto-Close: WordPress-Bericht fehlgeschlagen (Einsatz %s)",
                         incident.id,
                     )
-        finally:
-            db.close()
-    if created_ids:
-        from app.config import settings
-        from app.core.tenant import set_tenant_context
-        from app.db import SessionLocal
-        from app.models.incident import Incident
-        from app.services.broadcast import broadcast_org
-        from app.services.incident_notify import notify_incident_created
-
-        db = SessionLocal()
-        set_tenant_context(db, None)
-        try:
-            for incident_id in created_ids:
-                incident = db.get(Incident, incident_id)
-                if incident is None:
-                    continue
-                try:
-                    await broadcast_org(org_id, {
-                        "type": "incident_created",
-                        "incident_id": incident.id,
-                        "url": f"/einsatz/{incident.id}/info",
-                        "title": f"Neuer Einsatz aus DIBOS: {incident.alarm_type_code}",
-                    })
-                except Exception:
-                    logger.exception("DIBOS-Board-Broadcast für neuen Einsatz %s fehlgeschlagen", incident.id)
-                try:
-                    await notify_incident_created(
-                        db, incident, org_id=org_id,
-                        base_url=settings.effective_public_base_url,
-                        background_tasks=None,
-                    )
-                except Exception:
-                    logger.exception("Einsatzinfo-Benachrichtigung für DIBOS-Einsatz %s fehlgeschlagen", incident.id)
         finally:
             db.close()
     if not changed_ids and not rsvp_changed_ids:
