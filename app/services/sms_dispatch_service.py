@@ -161,10 +161,11 @@ async def send_bulk_detailed(
         db = SessionLocal()
         set_tenant_context(db, None)
         try:
-            gateway_labels = dict(db.query(SmsGatewayToken.id, SmsGatewayToken.label).filter(
+            gateway_rows = db.query(SmsGatewayToken.id, SmsGatewayToken.label).filter(
                 SmsGatewayToken.org_id == org_id,
                 SmsGatewayToken.id.in_(gateway_ids),
-            ).all())
+            ).all()
+            gateway_labels = {row[0]: row[1] for row in gateway_rows}
         finally:
             db.close()
     semaphore_keys: list[int | None] = list(gateway_ids) if gateway_ids else [None]
@@ -191,12 +192,17 @@ async def send_bulk_detailed(
                     )
             except Exception as exc:
                 logger.warning("SMS-Versand fehlgeschlagen an %s: %s", to[-4:] + "****", exc)
+            gateway_token_id = getattr(delivery, "gateway_token_id", None)
             result = SmsSendResult(
                 phone_number=to,
                 success=bool(delivery),
                 sent_at=datetime.now(UTC).replace(tzinfo=None),
                 provider=getattr(delivery, "provider", None),
-                gateway_label=gateway_labels.get(getattr(delivery, "gateway_token_id", None)),
+                gateway_label=(
+                    gateway_labels.get(gateway_token_id)
+                    if isinstance(gateway_token_id, int)
+                    else None
+                ),
             )
             if on_result is not None:
                 async with progress_lock:
