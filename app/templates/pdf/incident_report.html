@@ -151,12 +151,13 @@
   <tr><th>Fahrzeug</th><th>Organisation</th><th>Spalte</th><th>Fahrer</th><th>Gruppenkommandant</th><th style="width:55pt;text-align:right;">km</th></tr>
   {% for v in incident.vehicles %}
   {% set fahrt = fahrten.get(v.vehicle_master_id) %}
+  {% set board_gk = v.commander.full_name if v.commander else v.commander_name %}
   <tr>
     <td>{{ v.vehicle_master.display_label }}</td>
     <td>{{ v.vehicle_master.dept.name }}</td>
     <td>{{ v.column.title if v.column else '–' }}</td>
     <td>{{ fahrt.fahrer|join(' / ') if fahrt else '–' }}</td>
-    <td>{{ v.commander.full_name if v.commander else (v.commander_name or '–') }}</td>
+    <td>{{ board_gk or (fahrt.gruppenkommandant if fahrt else None) or '–' }}</td>
     <td style="text-align:right;">{{ fahrt.km if fahrt else '–' }}</td>
   </tr>
   {% if fahrt and fahrt.fahrten|length > 1 %}

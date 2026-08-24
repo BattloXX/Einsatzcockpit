@@ -103,12 +103,14 @@ def load_fahrtenbuch_report(
             details: dict[int, dict] = {}
             for f in fahrten:
                 detail = details.setdefault(
-                    f.fahrzeug_id, {"fahrer": [], "km": 0, "fahrten": []}
+                    f.fahrzeug_id, {"fahrer": [], "km": 0, "fahrten": [], "gruppenkommandant": None}
                 )
                 detail["fahrer"].append(f.maschinist_name)
                 if f.maschinist2_name:
                     detail["fahrer"].append(f.maschinist2_name)
                 detail["km"] += f.km_delta or 0
+                if f.gruppenkommandant_name:
+                    detail["gruppenkommandant"] = f.gruppenkommandant_name
                 detail["fahrten"].append({
                     "zeitpunkt": f.zeitpunkt,
                     "zweck": f.zweck.name if f.zweck else (f.zweck_freitext or "–"),

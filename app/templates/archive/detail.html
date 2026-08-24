@@ -88,8 +88,9 @@
     <div class="vehicle-row">
       <span class="vehicle-main"><span class="vehicle-code">{{ v.vehicle_master.display_label }}</span>
       <span class="vehicle-dept">{{ v.vehicle_master.dept.name }}</span></span>
-      <span class="vehicle-detail"><strong>GK:</strong> {{ v.commander.full_name if v.commander else (v.commander_name or '–') }}</span>
       {% set fahrt = fahrten.get(v.vehicle_master_id) %}
+      {% set board_gk = v.commander.full_name if v.commander else v.commander_name %}
+      <span class="vehicle-detail"><strong>GK:</strong> {{ board_gk or (fahrt.gruppenkommandant if fahrt else None) or '–' }}</span>
       {% if fahrt %}<span class="vehicle-detail"><strong>Fahrer:</strong> {{ fahrt.fahrer|join(' / ') }}</span>
       <span class="vehicle-detail"><strong>km:</strong> {{ fahrt.km }}</span>{% endif %}
       {% if fahrt and fahrt.fahrten|length > 1 %}
@@ -106,6 +107,7 @@
       <span class="vehicle-main"><span class="vehicle-code">{{ extra.vehicle.display_label }}</span>
       <span class="vehicle-dept">{{ extra.vehicle.dept.name }}</span></span>
       <span class="vehicle-detail"><span class="badge">nur Fahrtenbuch</span></span>
+      <span class="vehicle-detail"><strong>GK:</strong> {{ extra.gruppenkommandant or '–' }}</span>
       <span class="vehicle-detail"><strong>Fahrer:</strong> {{ extra.fahrer|join(' / ') }}</span>
       <span class="vehicle-detail"><strong>km:</strong> {{ extra.km }}</span>
       {% if extra.fahrten|length > 1 %}
