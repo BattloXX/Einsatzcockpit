@@ -5,8 +5,8 @@ from starlette.requests import Request
 
 from app.core.templating import templates
 from app.models.mailing import MailingTemplate
-from app.routers.ui_mailing import preview, template_save
-from tests.mailing_phase2_helpers import db_session
+from app.routers.ui_mailing import campaign_preview, preview, template_save
+from tests.mailing_phase2_helpers import campaign as build_campaign, db_session
 
 
 def test_preview_srcdoc_attribute_escapes_script_and_quotes():
@@ -85,3 +85,16 @@ def test_preview_context_contains_plain_text_preheader():
     assert "26 Zeichen" in response.body.decode()
     assert "Desktop zeigt ca. 80" in response.body.decode()
     assert "Mobil zeigt ca. 40" in response.body.decode()
+    assert '<a href="#">Jetzt abmelden</a>' in response.context["body_html"]
+    assert "Jetzt abmelden: #" in response.context["body_text"]
+
+
+def test_campaign_preview_contains_unsubscribe_footer():
+    db = db_session()
+    item, _ = build_campaign(db)
+    request = Request({"type": "http", "method": "GET", "path": f"/mailing/campaigns/{item.id}/preview", "headers": []})
+    user = SimpleNamespace(org=SimpleNamespace(name="Feuerwehr Test"))
+    response = campaign_preview(item.id, request, db=db, user=user, _g=None)
+    assert '<a href="#">Jetzt abmelden</a>' in response.context["body_html"]
+    assert "Jetzt abmelden: #" in response.context["body_text"]
+    db.close()

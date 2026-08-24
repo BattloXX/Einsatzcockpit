@@ -33,7 +33,12 @@ CSRF_FORM_FIELD = "_csrf"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 # Resend authenticates its public webhook with a raw-body HMAC and cannot supply
 # the browser double-submit token.
-EXEMPT_PREFIXES = ("/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/", "/mailing/webhook/resend/")
+# /mailing/u/ (RFC 8058 One-Click-Unsubscribe): Mail-Clients senden diesen POST
+# automatisiert ohne Browser-Kontext und damit ohne CSRF-Cookie/-Token. Der
+# signierte Token im Pfad selbst authentifiziert die Aktion.
+EXEMPT_PREFIXES = (
+    "/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/", "/mailing/webhook/resend/", "/mailing/u/",
+)
 # Cookie-authentifizierte API-Endpunkte innerhalb von /api/v1/ (SEC-8) — kein
 # Token-Exempt-Freifahrtschein, sondern Origin-Check (siehe Docstring oben).
 _ORIGIN_CHECK_PREFIXES = ("/api/v1/device/",)

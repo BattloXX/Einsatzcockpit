@@ -73,6 +73,14 @@ Transaktionsmail-Versands aus.
 Nach dem Speichern ist die Konfiguration vollständig, wenn **Versand aktiv**,
 **Resend API-Key** und **Absenderadresse** gesetzt sind.
 
+Jede Kampagnen-E-Mail enthält automatisch einen sichtbaren Abmelde-Link sowie die
+One-Click-Abmelde-Header für unterstützte Mailprogramme. Dafür ist keine zusätzliche
+Konfiguration durch Administratoren erforderlich. Bei einer neuen Absender-Domain
+muss dennoch zuerst eine positive Reputation bei Microsoft aufgebaut werden
+("Sender-Warm-up"). Auch bei korrekter Konfiguration können deshalb einzelne der
+ersten Sendungen noch im Spam-Ordner landen; ein niedriges Anfangsvolumen und positive
+Empfängerinteraktionen verbessern die Einstufung mit der Zeit.
+
 ## Resend-Webhook einrichten
 
 Die Einstellungsseite zeigt eine organisationsspezifische, signierte Webhook-URL:

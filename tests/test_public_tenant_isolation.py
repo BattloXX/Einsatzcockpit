@@ -17,7 +17,7 @@ from app.models.master import FireDept, OrgSettings, VehicleMaster
 from app.models.objekt import AlarmInfoscreenToken
 from app.models.stats import StatistikDashboardToken
 from app.models.wasserstelle import Wasserstelle
-from app.models.mailing import MailingCampaign, MailingConfig, MailingQueueItem, MailingRecipientList, MailingRecipientListEntry, MailingTemplate
+from app.models.mailing import MailingCampaign, MailingConfig, MailingQueueItem, MailingRecipientList, MailingRecipientListEntry, MailingSuppressionEntry, MailingTemplate
 from app.models.user import ApiKey
 from app.core.crypto import encrypt_secret
 from app.core.security import sign_mailing_track_token, sign_mailing_webhook_org
@@ -37,8 +37,10 @@ def test_mailing_tracking_token_cannot_mutate_other_org(client):
         forged=sign_mailing_track_token(iid,ORG_A)
         assert client.get(f"/mailing/t/{forged}.png").status_code == 200
         assert client.get(f"/mailing/c/{forged}?u=https%3A%2F%2Fexample.at",follow_redirects=False).status_code == 302
+        assert client.post(f"/mailing/u/{forged}").status_code == 200
         db.expire_all(); row=db.query(MailingQueueItem).execution_options(include_all_tenants=True).filter(MailingQueueItem.id==iid).one()
         assert row.open_count == 0 and row.click_count == 0
+        assert db.query(MailingSuppressionEntry).execution_options(include_all_tenants=True).filter_by(org_id=org_b_id,email="secret-b@example.at").count() == 0
     finally: db.close()
 
 def _svix(secret: bytes, body: bytes, event_id: str):

@@ -1,4 +1,4 @@
-from app.services.mailing_dispatch_loop import BATCH_SIZE, INTERVAL_SECONDS, dispatch_once
+from app.services.mailing_dispatch_loop import BATCH_SIZE, INTERVAL_SECONDS, _message, dispatch_once
 import pytest
 from datetime import UTC,datetime
 from app.models.mailing import MailingConfig,MailingQueueItem
@@ -7,6 +7,22 @@ from tests.mailing_phase2_helpers import campaign,db_session
 
 def test_dispatch_defaults():
     assert BATCH_SIZE == 20 and INTERVAL_SECONDS == 15 and callable(dispatch_once)
+
+
+def test_message_contains_unsubscribe_headers_and_visible_footer(monkeypatch):
+    db = db_session()
+    c, _ = campaign(db)
+    item = MailingQueueItem(org_id=1, campaign_id=c.id, email="send@example.at")
+    db.add(item)
+    db.commit()
+    monkeypatch.setattr("app.services.mailing_dispatch_loop.settings.PUBLIC_BASE_URL", "https://mail.example.at")
+    cfg = MailingConfig(org_id=1, from_addr="newsletter@example.at", reply_to_default="reply@example.at")
+    msg = _message(item, cfg)
+    assert str(msg["List-Unsubscribe"]).startswith("<mailto:reply@example.at?subject=unsubscribe>, <https://mail.example.at/mailing/u/")
+    assert msg["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+    assert "Jetzt abmelden: https://mail.example.at/mailing/u/" in msg.get_body(preferencelist=("plain",)).get_content()
+    assert "Jetzt abmelden</a>" in msg.get_body(preferencelist=("html",)).get_content()
+    db.close()
 
 @pytest.mark.asyncio
 async def test_dispatch_persists_resend_id_and_sql_counts(monkeypatch):

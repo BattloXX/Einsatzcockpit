@@ -211,7 +211,7 @@ def preview(
     body_html: str = Form(""),
     body_text: str = Form(""),
 ):
-    from app.services.mailing_render import render_template
+    from app.services.mailing_render import append_unsubscribe_footer, render_template
 
     rendered = render_template(
         subject,
@@ -219,6 +219,7 @@ def preview(
         body_text,
         _preview_recipient_context(user),
     )
+    preview_html, preview_text = append_unsubscribe_footer(rendered[1], rendered[2], "#")
     return templates.TemplateResponse(
         request,
         "mailing/template_preview.html",
@@ -227,8 +228,8 @@ def preview(
             user,
             subject=rendered[0],
             preheader=preheader,
-            body_html=rendered[1],
-            body_text=rendered[2],
+            body_html=preview_html,
+            body_text=preview_text,
         ),
     )
 
@@ -612,7 +613,7 @@ def campaign_preview(
     if not item:
         raise HTTPException(404)
 
-    from app.services.mailing_render import render_template
+    from app.services.mailing_render import append_unsubscribe_footer, render_template
 
     rendered = render_template(
         item.subject_override or item.template.subject,
@@ -620,6 +621,7 @@ def campaign_preview(
         item.template.body_text,
         _preview_recipient_context(user),
     )
+    preview_html, preview_text = append_unsubscribe_footer(rendered[1], rendered[2], "#")
     return templates.TemplateResponse(
         request,
         "mailing/template_preview.html",
@@ -628,8 +630,8 @@ def campaign_preview(
             user,
             subject=rendered[0],
             preheader=item.template.preheader,
-            body_html=rendered[1],
-            body_text=rendered[2],
+            body_html=preview_html,
+            body_text=preview_text,
         ),
     )
 
