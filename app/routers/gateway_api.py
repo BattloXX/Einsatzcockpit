@@ -102,15 +102,26 @@ async def ingest_alarm(
     # (BMA-Nr./Adresse; Geo-Stufe folgt nach dem Geocoding) als Background-Task.
     # Ohne das wurden bei Gateway-Alarmen nie Objekte automatisch verknüpft.
     if created and ingest.einsatz_id:
-        try:
-            from app.services.broadcast import broadcast_org
-            await broadcast_org(gateway.org_id, {"type": "incident_created", "incident_id": ingest.einsatz_id})
-        except Exception:
-            pass
-
         from app.models.incident import Incident
         inc = db.get(Incident, ingest.einsatz_id)
         if inc is not None:
+            from app.services.incident_notify import notify_incident_created
+            await notify_incident_created(
+                db, inc,
+                org_id=gateway.org_id,
+                triggered_by_user_id=None,
+                push_url=f"/einsatz/{inc.id}",
+                base_url=str(request.base_url),
+                background_tasks=background_tasks,
+            )
+            try:
+                from app.services.broadcast import broadcast_org
+                await broadcast_org(
+                    gateway.org_id,
+                    {"type": "incident_created", "incident_id": ingest.einsatz_id},
+                )
+            except Exception:
+                pass
             if inc.lat is None and (inc.address_street or inc.address_city):
                 from app.routers.api_v1 import _geocode_incident
                 background_tasks.add_task(

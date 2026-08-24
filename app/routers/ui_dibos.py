@@ -43,7 +43,7 @@ def _get_or_create_config(db, org_id: int) -> OrgDibosConfig:
             base_url="https://dibos.lwz-vorarlberg.at/Z_EventHub",
             host="einsatzcockpit",
             ag="FW",
-            poll_interval_seconds=20,
+            poll_interval_seconds=5,
             auto_trace_on_event=True,
             auto_trace_duration_minutes=120,
             created_at=datetime.now(UTC),
@@ -185,7 +185,7 @@ async def dibos_settings_save(
     host: str = Form("einsatzcockpit"),
     ag: str = Form("FW"),
     wache_unid: str = Form(""),
-    poll_interval_seconds: int = Form(20),
+    poll_interval_seconds: int = Form(5),
     auto_trace_on_event: str = Form(""),
     auto_trace_duration_minutes: int = Form(120),
     enrich_incidents: str = Form(""),
@@ -210,7 +210,7 @@ async def dibos_settings_save(
     cfg.host = host.strip() or "einsatzcockpit"
     cfg.ag = ag.strip() or "FW"
     cfg.wache_unid = wache_unid.strip() or None
-    cfg.poll_interval_seconds = max(10, poll_interval_seconds or 20)
+    cfg.poll_interval_seconds = max(5, poll_interval_seconds or 5)
     cfg.auto_trace_on_event = auto_trace_on_event == "1"
     cfg.auto_trace_duration_minutes = max(5, auto_trace_duration_minutes or 120)
     cfg.enrich_incidents = enrich_incidents == "1"

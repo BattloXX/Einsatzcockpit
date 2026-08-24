@@ -57,6 +57,7 @@ async def test_dispatch_prunes_dead_and_uses_live():
     try:
         result = await ws.dispatch_sms(org_id, job_id, "+43660111", "hallo", timeout=2.0)
         assert result["ok"] is True
+        assert result["gateway_token_id"] == 1
         assert live.sent, "lebende Verbindung hätte senden müssen"
         assert (2, dead) not in ws._sms_gateways[org_id], "tote Verbindung muss entfernt sein"
         assert (1, live) in ws._sms_gateways[org_id], "lebende Verbindung bleibt registriert"

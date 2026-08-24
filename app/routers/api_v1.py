@@ -698,25 +698,6 @@ async def create_incident_api(
     address = f"{payload.Strasse or ''} {payload.HausNr or ''}, {payload.Ort or ''}".strip(", ")
     exercise_prefix = "[ÜBUNG] " if payload.Uebung else ""
 
-    # Geocoding in Background – kein Warten auf Nominatim (≥1,1 s)
-    if payload.Ort or payload.Strasse:
-        background_tasks.add_task(
-            _geocode_incident,
-            incident.id,
-            payload.Strasse,
-            payload.HausNr,
-            payload.Ort,
-        )
-
-    # Objekt-Matching (BMA-Nr./Adresse) im Hintergrund; die Geo-Stufe wird nach
-    # dem Background-Geocoding erneut angestossen (siehe _geocode_incident)
-    from app.services.objekt_matching_service import match_incident_background
-    background_tasks.add_task(match_incident_background, incident.id)
-
-    # Automatikdruck (ECPG): Druckregeln mit Trigger einsatz_created auswerten.
-    from app.services.print_dispatcher import autoprint_incident_background
-    background_tasks.add_task(autoprint_incident_background, incident.id)
-
     # GSL-Trigger (nutzt vorerst keine Geocoding-Koords, da diese im Background kommen)
     _mi_site = None
     if api_key.org_id:
@@ -752,6 +733,41 @@ async def create_incident_api(
                 base_url=str(request.base_url), background_tasks=background_tasks,
             )
 
+    # Einsatzinfo-SMS + Web-Push (+ Teams) zuerst einreihen, damit langsamere
+    # Nebenwirkungen die Alarmierung nicht verzögern.
+    if _mi_site:
+        push_url = f"/lage/{_mi_site.major_incident_id}?open_site={_mi_site.id}"
+    else:
+        push_url = f"/einsatz/{incident.id}"
+    from app.services.incident_notify import notify_incident_created
+    await notify_incident_created(
+        db, incident,
+        org_id=api_key.org_id,
+        triggered_by_user_id=api_key.created_by_user_id,
+        push_url=push_url,
+        base_url=str(request.base_url),
+        background_tasks=background_tasks,
+    )
+
+    # Geocoding in Background – kein Warten auf Nominatim (≥1,1 s)
+    if payload.Ort or payload.Strasse:
+        background_tasks.add_task(
+            _geocode_incident,
+            incident.id,
+            payload.Strasse,
+            payload.HausNr,
+            payload.Ort,
+        )
+
+    # Objekt-Matching (BMA-Nr./Adresse) im Hintergrund; die Geo-Stufe wird nach
+    # dem Background-Geocoding erneut angestossen (siehe _geocode_incident)
+    from app.services.objekt_matching_service import match_incident_background
+    background_tasks.add_task(match_incident_background, incident.id)
+
+    # Automatikdruck (ECPG): Druckregeln mit Trigger einsatz_created auswerten.
+    from app.services.print_dispatcher import autoprint_incident_background
+    background_tasks.add_task(autoprint_incident_background, incident.id)
+
     # WebSocket broadcast – org-spezifisch
     if api_key.org_id:
         background_tasks.add_task(
@@ -772,23 +788,6 @@ async def create_incident_api(
     run_side_effect(
         "neighbor_invitations",
         _create_neighbor_invitations_api, db, incident, alarm_type_code, api_key.org_id,
-    )
-
-    # Einsatzinfo-SMS + Web-Push (+ Teams) – zentral gebuendelt, damit alle Erzeugungspfade
-    # (API/manuell/LIS) konsistent alarmieren (siehe incident_notify.py). Der Aufruf selbst
-    # ist synchron/billig – er meldet SMS+Push nur als BackgroundTasks an, wie bisher.
-    if _mi_site:
-        push_url = f"/lage/{_mi_site.major_incident_id}?open_site={_mi_site.id}"
-    else:
-        push_url = f"/einsatz/{incident.id}"
-    from app.services.incident_notify import notify_incident_created
-    await notify_incident_created(
-        db, incident,
-        org_id=api_key.org_id,
-        triggered_by_user_id=api_key.created_by_user_id,
-        push_url=push_url,
-        base_url=str(request.base_url),
-        background_tasks=background_tasks,
     )
 
     board_token, board_url = run_side_effect(

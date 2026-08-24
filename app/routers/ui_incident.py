@@ -401,6 +401,62 @@ async def new_incident(
     # ── Einsatz ist jetzt gespeichert ────────────────────────────────────────
     db.commit()
 
+    # Einsatzinfo-SMS + Web-Push (+ Teams) vor langsameren Nebenwirkungen einreihen.
+    from app.services.incident_notify import notify_incident_created
+    await notify_incident_created(
+        db, incident,
+        org_id=user.org_id,
+        triggered_by_user_id=user.id,
+        base_url=str(request.base_url),
+        background_tasks=background_tasks,
+    )
+
+    # Großschadenslage ebenfalls vor langsameren Background-Tasks auswerten.
+    _lage_redirect: str | None = None
+    if user.org_id:
+        from app.models.master import OrgSettings as _OrgSettings
+        from app.services.major_incident_service import (
+            adopt_incident_as_site as _adopt_incident_as_site,
+        )
+        from app.services.major_incident_service import get_active_lage as _get_active_lage
+        from app.services.major_incident_service import handle_alarm_trigger as _handle_alarm_trigger
+        try:
+            at = get_alarm_type_by_code(db, user.org_id, alarm_type_code)
+            if at and at.triggers_major_incident:
+                lage, _site, _created = _handle_alarm_trigger(
+                    db, user.org_id, alarm_type_code, incident.id,
+                    external_key=f"ui_{incident.id}", is_exercise=is_exercise,
+                    ort=address_city or None, strasse=address_street or None,
+                    hausnr=address_no or None, lat=incident.lat, lng=incident.lng,
+                    einsatzgrund=report_text or None,
+                )
+                db.commit()
+                _lage_redirect = f"/lage/{lage.id}"
+                if _created:
+                    from app.services.gsl_notify import notify_gsl_created
+                    await notify_gsl_created(
+                        lage, triggered_by_user_id=user.id, base_url=str(request.base_url),
+                        background_tasks=background_tasks,
+                    )
+            else:
+                active_lage = _get_active_lage(db, user.org_id)
+                if active_lage:
+                    org_settings = db.query(_OrgSettings).filter(_OrgSettings.org_id == user.org_id).first()
+                    if not org_settings or org_settings.mi_auto_adopt:
+                        _adopt_incident_as_site(
+                            db, active_lage, incident_id=incident.id,
+                            external_key=f"ui_{incident.id}", alarm_type_code=alarm_type_code,
+                            org_id=user.org_id, ort=address_city or None,
+                            strasse=address_street or None, hausnr=address_no or None,
+                            lat=incident.lat, lng=incident.lng, einsatzgrund=report_text or None,
+                        )
+                        db.commit()
+        except Exception:
+            _log.exception(
+                "GSL-Trigger für Einsatz %d fehlgeschlagen – Einsatz bleibt erhalten",
+                incident.id,
+            )
+
     # Geocoding in Background – blockiert weder Redirect noch den Event-Loop
     if (lat_f is None or lng_f is None) and (address_street or address_city):
         background_tasks.add_task(
@@ -433,17 +489,6 @@ async def new_incident(
         _create_neighbor_invitations, db, incident, alarm_type_code, user.org_id, user.id,
     )
 
-    # Einsatzinfo-SMS + Web-Push (+ Teams) – zentral gebuendelt, damit auch der manuelle
-    # Pfad wie API/LIS konsistent alarmiert (bisher fehlte hier Push, siehe incident_notify.py)
-    from app.services.incident_notify import notify_incident_created
-    await notify_incident_created(
-        db, incident,
-        org_id=user.org_id,
-        triggered_by_user_id=user.id,
-        base_url=str(request.base_url),
-        background_tasks=background_tasks,
-    )
-
     if ai_is_enabled() and not is_exercise:
         background_tasks.add_task(
             _trigger_ai_task_suggestions,
@@ -454,67 +499,6 @@ async def new_incident(
         )
     elif not is_exercise:
         _log.debug("KI-Auftragsvorschläge übersprungen: KI nicht aktiviert (Einsatz %d)", incident.id)
-
-    # Großschadenslage-Trigger: AlarmTyp-Flag prüfen
-    # Fehler darf den Nutzer nicht auf einer 500-Seite landen lassen.
-    _lage_redirect: str | None = None
-    if user.org_id:
-        from app.models.master import OrgSettings as _OrgSettings
-        from app.services.major_incident_service import (
-            adopt_incident_as_site as _adopt_incident_as_site,
-        )
-        from app.services.major_incident_service import (
-            get_active_lage as _get_active_lage,
-        )
-        from app.services.major_incident_service import (
-            handle_alarm_trigger as _handle_alarm_trigger,
-        )
-        try:
-            at = get_alarm_type_by_code(db, user.org_id, alarm_type_code)
-            if at and at.triggers_major_incident:
-                lage, _site, _created = _handle_alarm_trigger(
-                    db, user.org_id, alarm_type_code, incident.id,
-                    external_key=f"ui_{incident.id}",
-                    is_exercise=is_exercise,
-                    ort=address_city or None,
-                    strasse=address_street or None,
-                    hausnr=address_no or None,
-                    lat=incident.lat,
-                    lng=incident.lng,
-                    einsatzgrund=report_text or None,
-                )
-                db.commit()
-                _lage_redirect = f"/lage/{lage.id}"
-                if _created:
-                    from app.services.gsl_notify import notify_gsl_created
-                    await notify_gsl_created(
-                        lage, triggered_by_user_id=user.id, base_url=str(request.base_url),
-                        background_tasks=background_tasks,
-                    )
-            else:
-                active_lage = _get_active_lage(db, user.org_id)
-                if active_lage:
-                    org_settings = db.query(_OrgSettings).filter(_OrgSettings.org_id == user.org_id).first()
-                    if not org_settings or org_settings.mi_auto_adopt:
-                        _adopt_incident_as_site(
-                            db, active_lage,
-                            incident_id=incident.id,
-                            external_key=f"ui_{incident.id}",
-                            alarm_type_code=alarm_type_code,
-                            org_id=user.org_id,
-                            ort=address_city or None,
-                            strasse=address_street or None,
-                            hausnr=address_no or None,
-                            lat=incident.lat,
-                            lng=incident.lng,
-                            einsatzgrund=report_text or None,
-                        )
-                        db.commit()
-        except Exception:
-            _log.exception(
-                "GSL-Trigger für Einsatz %d fehlgeschlagen – Einsatz bleibt erhalten",
-                incident.id,
-            )
 
     if _lage_redirect:
         return RedirectResponse(_lage_redirect, status_code=303)

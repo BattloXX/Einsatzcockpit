@@ -837,6 +837,27 @@ async def sync_operation(
         await manager.broadcast(incident.id, {"type": "lis_sync", "reload_board": True})
 
     if created:
+        if parsed.get("is_closed"):
+            # Historische, bereits beendete Einsätze dokumentieren, aber nicht alarmieren.
+            from app.services.incident_service import close_incident
+            close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
+            db.flush()
+            logger.info(
+                "Einsatz %s aus bereits beendeter LIS-Operation %s angelegt (Org %s) — "
+                "keine Alarmierung, direkt geschlossen",
+                incident.id, parsed["lis_operation_id"], org.id,
+            )
+            return
+
+        # Zeitkritische Alarmierung vor Geocoding und Objekt-Matching ausführen.
+        from app.config import settings
+        from app.services.incident_notify import notify_incident_created
+        await notify_incident_created(
+            db, incident, org_id=org.id,
+            base_url=settings.effective_public_base_url,
+            background_tasks=None,
+        )
+
         # Adress-Geocoding-Fallback: nur wenn die LIS-Operation KEINE eigenen Koordinaten
         # mitgeliefert hat (sonst wurden diese bereits direkt übernommen, siehe
         # _get_or_link_incident). Läuft in der bestehenden Session (kein Request-Kontext);
@@ -864,21 +885,6 @@ async def sync_operation(
         except Exception:
             logger.exception("Objekt-Matching nach LIS-Anlage fehlgeschlagen (Einsatz %s)", incident.id)
 
-        if parsed.get("is_closed"):
-            # Der Einsatz war bei Anlage in LIS bereits abgeschlossen (Backfill historischer
-            # Einsätze oder Operation zwischen zwei Polls beendet). Zur Dokumentation anlegen,
-            # aber KEINE Alarmierung (Push/SMS/Teams/Board-Toast) mehr auslösen und den Einsatz
-            # direkt schließen, damit er nicht fälschlich als aktiver Alarm erscheint.
-            from app.services.incident_service import close_incident
-            close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
-            db.flush()
-            logger.info(
-                "Einsatz %s aus bereits beendeter LIS-Operation %s angelegt (Org %s) — "
-                "keine Alarmierung, direkt geschlossen",
-                incident.id, parsed["lis_operation_id"], org.id,
-            )
-            return
-
         from app.services.broadcast import broadcast_org
         await broadcast_org(org.id, {
             "type": "incident_created",
@@ -886,18 +892,6 @@ async def sync_operation(
             "url": f"/einsatz/{incident.id}/info",
             "title": f"Neuer Einsatz aus LIS: {parsed['alarm_type_code']}",
         })
-
-        # SMS-Einsatzinfo + Web-Push (+ Teams) – bisher loeste der LIS-Sync ueberhaupt
-        # keine Benachrichtigung aus (kein Request-Kontext -> kein BackgroundTasks).
-        # Gleiche zentrale Funktion wie API/manuelle Anlage (incident_notify.py),
-        # hier ohne background_tasks direkt ausgefuehrt.
-        from app.config import settings
-        from app.services.incident_notify import notify_incident_created
-        await notify_incident_created(
-            db, incident, org_id=org.id,
-            base_url=settings.effective_public_base_url,
-            background_tasks=None,
-        )
 
         # Diagnose (system_admin-Opt-in, siehe ui_lis.py): Rohdaten-Aufzeichnung
         # automatisch für 120 Minuten starten, damit ein echter Einsatz nicht verpasst

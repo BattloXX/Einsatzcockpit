@@ -16,6 +16,7 @@ from jinja2 import pass_context
 
 from app.core.timezones import (
     format_local_datetime,
+    format_local_datetime_sec,
     format_local_iso,
     format_local_time,
     to_org_tz,
@@ -35,6 +36,11 @@ def _local_time(ctx, dt):
 @pass_context
 def _local_datetime(ctx, dt):
     return format_local_datetime(dt, _ctx_org(ctx))
+
+
+@pass_context
+def _local_datetime_sec(ctx, dt):
+    return format_local_datetime_sec(dt, _ctx_org(ctx))
 
 
 @pass_context
@@ -108,6 +114,7 @@ templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["local"] = _local
 templates.env.filters["local_time"] = _local_time
 templates.env.filters["local_datetime"] = _local_datetime
+templates.env.filters["local_datetime_sec"] = _local_datetime_sec
 templates.env.filters["local_iso"] = _local_iso
 templates.env.filters["action_label"] = _action_label
 templates.env.filters["unit_status_slug"] = _unit_status_slug

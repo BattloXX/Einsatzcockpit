@@ -157,8 +157,8 @@
         </div>
         <div class="form-group" style="margin:0;width:160px">
           <label for="poll_interval_seconds">Poll-Intervall (Sek.)</label>
-          <input type="number" id="poll_interval_seconds" name="poll_interval_seconds" min="10" max="3600"
-                 value="{{ config.poll_interval_seconds if config else 20 }}"
+          <input type="number" id="poll_interval_seconds" name="poll_interval_seconds" min="5" max="3600"
+                 value="{{ config.poll_interval_seconds if config else 5 }}"
                  class="form-input">
         </div>
         <div class="form-group" style="margin:0;width:180px">
