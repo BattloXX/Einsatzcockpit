@@ -1,6 +1,6 @@
 # Kanban-Board bedienen
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Aufbau des Boards
 

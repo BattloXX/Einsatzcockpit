@@ -1,6 +1,6 @@
 # Mannschaftsregister
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 Das Mannschaftsregister enthält alle Mitglieder mit ihren Qualifikationen. Es wird bei der Atemschutzüberwachung und bei der Kommandanten-Zuweisung verwendet.
 

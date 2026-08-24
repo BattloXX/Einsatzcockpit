@@ -1,6 +1,6 @@
 # Nachschlagewerke
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/nachschlagewerke` · Konfiguration: `/admin/settings` + `.env`
 > Zugänglich für: alle angemeldeten Nutzer (lesen) · Aktivierung: `system_admin` (systemweit) + `org_admin` (je Org)
@@ -142,6 +142,6 @@ Technischer Plan: `docs/plans/nachschlagewerke-plan.md`.
 
 ## Verwandte Seiten
 
-- [Nachschlagewerke (Anwender)](Anwender-Nachschlagewerke.md)
-- [Objektverwaltung](Administration-Objektverwaltung.md) — Objekt-Gefahren nutzen dieselbe Gefahrgut-Anreicherung
-- [Lageführung](Anwender-Lagefuehrung.md) — hier liegen die Karten-Overlays
+- [Nachschlagewerke (Anwender)](Anwender-Nachschlagewerke)
+- [Objektverwaltung](Administration-Objektverwaltung) — Objekt-Gefahren nutzen dieselbe Gefahrgut-Anreicherung
+- [Lageführung](Anwender-Lagefuehrung) — hier liegen die Karten-Overlays

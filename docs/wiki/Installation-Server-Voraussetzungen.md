@@ -1,6 +1,6 @@
 # Server-Voraussetzungen
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Mindest-Hardware
 
@@ -30,9 +30,9 @@ sudo ufw enable
 
 | Weg | Geeignet für | Anleitung |
 |-----|--------------|-----------|
-| CloudPanel | Bestehende oder neue CloudPanel-Server mit verwaltetem NGINX, TLS und Datenbank | [App-Installation mit CloudPanel](Installation-App-Installation.md) |
-| Debian/Ubuntu manuell | Klassischer Einzelserver ohne Hosting-Panel; volle Kontrolle über systemd und NGINX | [Debian/Ubuntu manuell](Installation-Debian-Manuell.md) |
-| Docker Compose | Container-basierter Betrieb mit gebündelter MariaDB und Redis | [Docker Compose](Installation-Docker.md) |
+| CloudPanel | Bestehende oder neue CloudPanel-Server mit verwaltetem NGINX, TLS und Datenbank | [App-Installation mit CloudPanel](Installation-App-Installation) |
+| Debian/Ubuntu manuell | Klassischer Einzelserver ohne Hosting-Panel; volle Kontrolle über systemd und NGINX | [Debian/Ubuntu manuell](Installation-Debian-Manuell) |
+| Docker Compose | Container-basierter Betrieb mit gebündelter MariaDB und Redis | [Docker Compose](Installation-Docker) |
 
 Die folgenden Pakete gelten für die beiden nativen Installationswege. Im Docker-Weg
 werden Python und alle Systempakete durch das Image bereitgestellt.
@@ -93,4 +93,4 @@ sudo apt-get install -y \
 
 ---
 
-**Nächster Schritt:** [Datenbank einrichten](Installation-Datenbank-Einrichtung.md)
+**Nächster Schritt:** [Datenbank einrichten](Installation-Datenbank-Einrichtung)

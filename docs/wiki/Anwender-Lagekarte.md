@@ -1,10 +1,10 @@
 # Lagekarte.info Integration
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 Die Lagekarte.info-Integration ermöglicht es, die Fahrzeuge eines laufenden Einsatzes per GeoJSON/KML-Feed in [lagekarte.info](https://www.lagekarte.info) einzubinden — für Organisationen, die weiterhin mit lagekarte.info arbeiten.
 
-> **Hinweis:** Der direkte **🗺️ lagekarte.info**-Button im Einsatz-Board und in der Einsatzinfo wurde entfernt — die einsatzbezogene Lagekarte läuft jetzt über das eingebaute [Lageführung](Anwender-Lagefuehrung.md)-Modul (kein externer Dienst nötig, automatische Fahrzeug-/Objektdaten). Der GeoJSON/KML-Feed dieser Seite bleibt für Organisationen bestehen, die zusätzlich lagekarte.info nutzen möchten.
+> **Hinweis:** Der direkte **🗺️ lagekarte.info**-Button im Einsatz-Board und in der Einsatzinfo wurde entfernt — die einsatzbezogene Lagekarte läuft jetzt über das eingebaute [Lageführung](Anwender-Lagefuehrung)-Modul (kein externer Dienst nötig, automatische Fahrzeug-/Objektdaten). Der GeoJSON/KML-Feed dieser Seite bleibt für Organisationen bestehen, die zusätzlich lagekarte.info nutzen möchten.
 
 ---
 

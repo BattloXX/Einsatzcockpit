@@ -1,6 +1,6 @@
 # Geräteverleih – Administration
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/admin/verleih-artikel`  
 > Zugänglich für: `org_admin`, `system_admin`  
@@ -88,4 +88,4 @@ Das System kann automatisch **SMS-Erinnerungen** an Empfänger mit offenen Ausle
 - Erinnerung wird nach konfigurierbarer Zeit automatisch ausgelöst
 - Manuelle Erinnerung ist über die Ausleihe-Detailseite jederzeit möglich
 
-→ Siehe [Installation SMS-Gateway](Installation-SMS-Gateway.md)
+→ Siehe [Installation SMS-Gateway](Installation-SMS-Gateway)

@@ -1,6 +1,6 @@
 # Teams-Alarmierung einrichten
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 Bei jeder Einsatzanlage (über das Alarmierungssystem, das Leitstellensystem/LIS oder manuell)
 kann Einsatzcockpit die komplette Alarmierung zusätzlich als Karte in einen Microsoft-Teams-Kanal
@@ -134,4 +134,4 @@ Namensliste. Auf Mobilgeräten wird dieser Bereich der Kopfzeile grundsätzlich 
 
 ---
 
-**Verwandt:** [Einsatz starten](Anwender-Einsatz-starten.md) · [SMS-Einsatzinfo, manueller Versand & SMS-Empfang](Administration-SMS-Einsatzinfo.md)
+**Verwandt:** [Einsatz starten](Anwender-Einsatz-starten) · [SMS-Einsatzinfo, manueller Versand & SMS-Empfang](Administration-SMS-Einsatzinfo)

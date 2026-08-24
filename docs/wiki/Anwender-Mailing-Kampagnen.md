@@ -1,10 +1,10 @@
 # Mailing-Kampagnen
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/mailing/`  
 > Zugänglich für: `mailing_sender`, `mailing_admin`, `org_admin`, `admin`, `system_admin`  
-> Modul muss vom System-Admin und Org-Admin aktiviert sein (siehe [Administration Mailing-Modul](Administration-Mailing-Modul.md))
+> Modul muss vom System-Admin und Org-Admin aktiviert sein (siehe [Administration Mailing-Modul](Administration-Mailing-Modul))
 
 Das Mailing-Modul bündelt Vorlagen, Empfängerlisten und Versandstatus für
 organisationsbezogene Serienmail-Kampagnen. Ein `mailing_sender` erstellt und
@@ -180,5 +180,5 @@ auswerten. Fehlgeschlagene Einträge können nach Behebung der Ursache mit
 
 ---
 
-**Verwandt:** [Mailing-Modul administrieren](Administration-Mailing-Modul.md) ·
-[Mannschaftsregister](Anwender-Mannschaftsregister.md)
+**Verwandt:** [Mailing-Modul administrieren](Administration-Mailing-Modul) ·
+[Mannschaftsregister](Anwender-Mannschaftsregister)

@@ -1,10 +1,10 @@
 # Drohne / UAS
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/uas/`  
 > Zugänglich für: alle angemeldeten Benutzer (ab `recorder`)  
-> Modul muss vom System-Admin und Org-Admin aktiviert sein (siehe [Administration Drohne/UAS](Administration-Drohne-UAS.md))
+> Modul muss vom System-Admin und Org-Admin aktiviert sein (siehe [Administration Drohne/UAS](Administration-Drohne-UAS))
 
 Das UAS-Modul bildet den vollständigen BOS-Drohneneinsatz gemäß **RL-UAS LFV Vorarlberg (Jänner 2024)** digital ab — von der Alarmierung über Flugbuch und Checklisten bis zur Medien-DSGVO und PDF-Exportdokumentation.
 
@@ -189,4 +189,4 @@ Die **Löschfrist-Ampel** zeigt an, welche Dateien bald gelöscht werden müssen
 
 - Das UAS-Modul greift auf die Stammdaten (Geräte, Piloten) zu, die vorab unter **Drohne → Geräteregister** und **Drohne → Piloten** eingepflegt wurden.
 - Compliance-Status (Piloten-Freigabe, Wartungsampel, Versicherungsablauf) wird bei jedem Seitenaufruf automatisch berechnet — keine manuelle Aktualisierung nötig.
-- Alle Einträge landen im Audit-Log und sind über die [Zeitreise](Administration-Audit-Log-und-Zeitreise.md) nachvollziehbar.
+- Alle Einträge landen im Audit-Log und sind über die [Zeitreise](Administration-Audit-Log-und-Zeitreise) nachvollziehbar.

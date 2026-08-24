@@ -1,6 +1,6 @@
 # Lokale Entwicklung
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Voraussetzungen
 

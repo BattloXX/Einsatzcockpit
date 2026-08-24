@@ -1,6 +1,6 @@
 # Updates einspielen
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Auto-Update über das Webinterface (empfohlen)
 
@@ -50,13 +50,13 @@ Medienarchiv. Sie landen in `BACKUP_DIR` und unterliegen `BACKUP_KEEP_DAILY`. Mi
 Standard `UPDATE_REQUIRE_BACKUP=true` stoppt ein fehlgeschlagenes Backup das Update nach
 dem Code-Austausch bewusst vor Dependencies, Migration und Reload. Bei `false` wird die
 Backup-Warnung angezeigt, das Update läuft aber weiter. Restore-Anleitung und DR-Runbook:
-[Backups](Installation-Backups.md).
+[Backups](Installation-Backups).
 
 > **Hinweis:** Der Code-Austausch (Schritt 1-3) passiert **vor** dem Backup-Schritt.
 > Schlägt das Backup fehl und wird das Update deswegen abgebrochen (`UPDATE_REQUIRE_BACKUP=true`),
 > bleibt der neue Code bereits aktiv, während Migration und Reload bewusst übersprungen wurden.
 > Nach Behebung der Backup-Ursache (z. B. fehlendes `mariadb-client`-Paket, siehe
-> [Server-Voraussetzungen](Installation-Server-Voraussetzungen.md)) das Update einfach erneut
+> [Server-Voraussetzungen](Installation-Server-Voraussetzungen)) das Update einfach erneut
 > auslösen, oder `alembic upgrade head` manuell nachholen.
 
 ### Privates Repository: GitHub-Token
@@ -165,4 +165,4 @@ Für größere Updates kann eine Wartungsseite geschaltet werden:
 
 ---
 
-**Nächster Schritt:** [Troubleshooting](Installation-Troubleshooting.md)
+**Nächster Schritt:** [Troubleshooting](Installation-Troubleshooting)

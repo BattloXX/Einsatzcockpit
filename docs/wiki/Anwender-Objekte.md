@@ -6,7 +6,7 @@ die Mannschaft bei BMA-Alarm oder Brandeinsatz sofort braucht: Gefahren, Schlüs
 Melderpläne/Laufkarten, Ansprechpartner, Anfahrt.
 
 > Das Modul erscheint nur, wenn es für deine Organisation aktiviert ist
-> (siehe [Administration → Objektverwaltung](Administration-Objektverwaltung.md)).
+> (siehe [Administration → Objektverwaltung](Administration-Objektverwaltung)).
 > Einstieg: **Dokumentation → 🏢 Objekte** in der Hauptnavigation.
 
 ## Objektliste
@@ -68,7 +68,7 @@ Der Ablauf:
 Unklassifizierte Seiten sind gelb umrandet. Ältere Dokumente (vor Einführung der Volltextsuche
 hochgeladen) lassen sich mit dem Knopf **„🔎 Volltext neu indexieren"** nachträglich durchsuchbar
 machen. Optional schlägt die
-[KI-Klassifizierung](Administration-Objektverwaltung.md#ki-dokumentklassifizierung) Dokumentart, Titel
+[KI-Klassifizierung](Administration-Objektverwaltung#ki-dokumentklassifizierung) Dokumentart, Titel
 und Melderlinien vor — Vorschläge müssen immer manuell bestätigt werden.
 
 ### Gefahren mit Links und Gefahrgut-Anreicherung
@@ -130,4 +130,4 @@ Seiten mit „Bei Einsatz drucken"-Flag an (Laufkartenmappe fürs Fahrzeug).
 ## Alarm-Infoscreen
 
 Für den Wandmonitor im Gerätehaus gibt es eine eigene Vollbild-Alarmansicht — Einrichtung siehe
-[Administration → Objektverwaltung](Administration-Objektverwaltung.md#alarm-infoscreen).
+[Administration → Objektverwaltung](Administration-Objektverwaltung#alarm-infoscreen).

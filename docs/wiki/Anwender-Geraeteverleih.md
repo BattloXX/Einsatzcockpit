@@ -1,6 +1,6 @@
 # Geräteverleih
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/lage/{lage_id}/verleih`  
 > Zugänglich für: `incident_leader`, `recorder`, `org_admin`, `system_admin`  

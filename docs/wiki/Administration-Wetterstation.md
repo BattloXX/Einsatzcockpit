@@ -1,6 +1,6 @@
 # Lokale Wetterstation
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/admin/settings#wetterstation`
 > Zugänglich für: `org_admin`, `admin`, `system_admin`
@@ -70,7 +70,7 @@ Nach dem ersten erfolgreichen Push erscheint die Station im Wetter-Panel:
 
 Die lokalen Messwerte werden automatisch für die **Szenario-Analyse** (Sturm, Waldbrand) herangezogen — Vorrang vor dem NWP-Modellwert.
 
-Details: [Wetter-Integration (Anwender)](Anwender-Wetter.md)
+Details: [Wetter-Integration (Anwender)](Anwender-Wetter)
 
 ---
 

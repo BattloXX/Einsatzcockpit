@@ -1,6 +1,6 @@
 # API-Keys verwalten
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 API-Keys ermöglichen externen Systemen (z.B. dem Alarmierungssystem) die automatische Anlage von Einsätzen über die REST-API, ohne einen Benutzernamen/Passwort zu verwenden.
 
@@ -83,4 +83,4 @@ Jede Verwendung eines API-Keys wird im Audit-Log festgehalten:
 - Aktion (z.B. `incident.created`)
 - Einsatz-ID (falls relevant)
 
-Details: [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise.md)
+Details: [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise)

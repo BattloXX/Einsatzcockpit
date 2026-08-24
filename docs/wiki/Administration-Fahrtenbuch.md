@@ -1,6 +1,6 @@
 # Fahrtenbuch – Administration
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL-Bereich: `/admin/fahrtenbuch/` und `/verwaltung/fahrten/`  
 > Zugänglich für: `org_admin`, `admin`

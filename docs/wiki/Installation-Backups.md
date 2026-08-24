@@ -2,12 +2,12 @@
 
 Vor Web-Updates kann zusätzlich automatisch ein DB-Dump erzeugt und bei Fehlschlag als
 harte Update-Voraussetzung behandelt werden; siehe
-[Updates – Automatisches Backup vor Migrationen](Installation-Updates.md#automatisches-backup-vor-migrationen).
+[Updates – Automatisches Backup vor Migrationen](Installation-Updates#automatisches-backup-vor-migrationen).
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > **Vollständiges Verfahren inkl. getesteter Restore-Probe und Disaster-Recovery:**
-> [Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery.md). Diese Seite ist die
+> [Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery). Diese Seite ist die
 > Kurzanleitung.
 
 ## Empfohlen: eingebautes Backup-Tooling
@@ -69,8 +69,8 @@ BACKUP_REMOTE_PATH=/srv/einsatzcockpit-backups
 
 Testen: `python -m app.cli backup-upload`. Details, rclone-Cloud-Ziele und
 Sicherheitshinweise (die Dumps sind unverschlüsselt und enthalten personenbezogene
-Daten) im [DR-Runbook, Abschnitt 7](Betrieb-Backup-und-Disaster-Recovery.md).
+Daten) im [DR-Runbook, Abschnitt 7](Betrieb-Backup-und-Disaster-Recovery).
 
 ---
 
-**Nächster Schritt:** [Updates einspielen](Installation-Updates.md)
+**Nächster Schritt:** [Updates einspielen](Installation-Updates)

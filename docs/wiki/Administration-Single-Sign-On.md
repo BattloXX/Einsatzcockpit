@@ -1,6 +1,6 @@
 # Single Sign-On (Microsoft Entra ID)
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/admin/sso`  
 > Zugänglich für: `org_admin`, `system_admin`
