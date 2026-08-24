@@ -1,6 +1,6 @@
 # Push-Benachrichtigungen mit Firebase Cloud Messaging (FCM)
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 Firebase Cloud Messaging wird fuer Push-Benachrichtigungen an die native Android-App verwendet. Die FCM-Konfiguration ist **global** und gilt nicht pro Feuerwehr-Organisation: Ein einziges Firebase-Projekt versorgt alle Organisationen.
 
@@ -53,4 +53,4 @@ Nach der Konfiguration darf die Warnung `FCM ist nicht konfiguriert` nicht mehr 
 
 ---
 
-**Verwandt:** [Push-Benachrichtigungen](Anwender-Push-Benachrichtigungen.md) · [Systemd-Service](Installation-Systemd-Service.md)
+**Verwandt:** [Push-Benachrichtigungen](Anwender-Push-Benachrichtigungen) · [Systemd-Service](Installation-Systemd-Service)

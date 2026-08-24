@@ -1,6 +1,6 @@
 # Audit-Log und Zeitreise
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Zwei Ebenen des Audit-Logs
 

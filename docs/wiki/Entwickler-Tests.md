@@ -1,6 +1,6 @@
 # Tests
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Test-Stack
 

@@ -1,6 +1,6 @@
 # Sicherheit
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Authentifizierung und Session
 
@@ -9,7 +9,7 @@
 - Brute-Force-Schutz: konfigurierbare Anzahl Fehlversuche sperrt das Konto für eine konfigurierbare Dauer (`LOGIN_MAX_FAILED`, `LOGIN_LOCKOUT_MINUTES`)
 - `COOKIE_SECURE=true` wird in Produktion erzwungen (HTTPS)
 - `FERNET_KEY` wird in Produktion als eigener, von `SECRET_KEY` unabhängig rotierbarer Datenschlüssel erzwungen
-- `validate_startup_secrets()` in `app/config.py` prüft `SECRET_KEY`, `COOKIE_SECURE` und `FERNET_KEY` beim Start. In Produktion (`DEBUG=false`) bricht die App mit `RuntimeError` ab, wenn eine Angabe fehlt. Siehe [Installation-Troubleshooting](Installation-Troubleshooting.md).
+- `validate_startup_secrets()` in `app/config.py` prüft `SECRET_KEY`, `COOKIE_SECURE` und `FERNET_KEY` beim Start. In Produktion (`DEBUG=false`) bricht die App mit `RuntimeError` ab, wenn eine Angabe fehlt. Siehe [Installation-Troubleshooting](Installation-Troubleshooting).
 
 ## CSRF
 
@@ -25,7 +25,7 @@
 - Die Einsatz-Kollaboration erfolgt über `IncidentOrg`; nur explizit eingeladene Organisationen sehen gemeinsame Einsätze (`visible_incidents_q()`).
 - Systemadministratoren sehen alle Organisationen, Organisationsadministratoren nur ihre eigene.
 
-Weitere technische Details: [Architektur](Entwickler-Architektur.md).
+Weitere technische Details: [Architektur](Entwickler-Architektur).
 
 ## Medien-Sicherheit
 
@@ -47,4 +47,4 @@ Weitere technische Details: [Architektur](Entwickler-Architektur.md).
 - Der Vergleich erfolgt timing-sicher mit `hmac.compare_digest`.
 - Ablaufdatum und Widerruf werden unterstützt; jeder Key ist einer Organisation zugeordnet.
 
-Weitere API-Details: [REST-API](Entwickler-REST-API.md).
+Weitere API-Details: [REST-API](Entwickler-REST-API).

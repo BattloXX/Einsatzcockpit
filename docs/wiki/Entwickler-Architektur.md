@@ -1,6 +1,6 @@
 # Architektur
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Schichten-Übersicht
 

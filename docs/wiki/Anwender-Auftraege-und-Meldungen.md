@@ -1,6 +1,6 @@
 # Aufträge und Meldungen
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Aufträge
 

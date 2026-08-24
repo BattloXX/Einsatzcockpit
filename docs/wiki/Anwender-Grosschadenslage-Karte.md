@@ -1,6 +1,6 @@
 # Lagekarte der Großschadenslage
 
-← [Zurück zur Großschadenslage](Anwender-Grosschadenslage.md)
+← [Zurück zur Großschadenslage](Anwender-Grosschadenslage)
 
 Die Lagekarte (`/lage/{id}/karte`) zeigt alle Einsatzstellen und Abschnitt-Polygone einer Großschadenslage auf einer interaktiven OpenStreetMap-Karte.
 
@@ -168,7 +168,7 @@ Die Lagekarte kann in einen **taktischen Anzeigemodus** nach ÖBFV-Richtlinie E-
 
 **Umschalten:** Karten-Steuerung oben rechts → **„Taktisch"**-Schalter.
 
-→ Vollständige Dokumentation: [Taktische Lagekarte (ÖBFV E-27)](Anwender-Taktische-Lagekarte.md)
+→ Vollständige Dokumentation: [Taktische Lagekarte (ÖBFV E-27)](Anwender-Taktische-Lagekarte)
 
 ---
 
@@ -182,7 +182,7 @@ Das **Niederschlagsradar-Overlay** (via RainViewer) kann über die Karten-Steuer
 
 Das Overlay benötigt Internetverbindung und ist nicht für Offline-Betrieb verfügbar.
 
-→ Mehr zur Wetter-Integration: [Wetter](Anwender-Wetter.md)
+→ Mehr zur Wetter-Integration: [Wetter](Anwender-Wetter)
 
 ---
 

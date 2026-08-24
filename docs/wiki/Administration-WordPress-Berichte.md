@@ -1,6 +1,6 @@
 # WordPress-Berichte einrichten
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 Wird ein Einsatz abgeschlossen (manuell, über den 48h-Autoclose, den LIS-Sync, beim Anlegen
 eines bereits geschlossenen DIBOS-Events oder beim Beenden einer Großschadenslage), kann Einsatzcockpit
@@ -44,7 +44,7 @@ Nur `org_admin`/`system_admin` können diese Seite sehen und speichern.
 4. **Fahrzeuge zuordnen**: Damit ausgerückte Fahrzeuge im Entwurf korrekt erscheinen, muss
    jedes Fahrzeug auf **beiden** Seiten dieselbe **LIS-ReferenceId** tragen — hier unter
    **Admin → Fahrzeuge** je Fahrzeug pflegen (Feld existiert bereits, siehe
-   [Stammdaten pflegen](Administration-Stammdaten-pflegen.md)), auf WordPress-Seite im
+   [Stammdaten pflegen](Administration-Stammdaten-pflegen)), auf WordPress-Seite im
    entsprechenden Feld der Fahrzeug-Stammdaten. Fahrzeuge ohne übereinstimmende
    ReferenceId auf einer der beiden Seiten werden im Entwurf einfach ausgelassen.
 
@@ -117,4 +117,4 @@ WordPress-Editor selbst ein.
 
 ---
 
-**Verwandt:** [Archiv und PDF-Export](Anwender-Archiv-und-PDF-Export.md) · [Stammdaten pflegen](Administration-Stammdaten-pflegen.md) · [Teams-Alarmierung](Administration-Teams-Alarmierung.md)
+**Verwandt:** [Archiv und PDF-Export](Anwender-Archiv-und-PDF-Export) · [Stammdaten pflegen](Administration-Stammdaten-pflegen) · [Teams-Alarmierung](Administration-Teams-Alarmierung)

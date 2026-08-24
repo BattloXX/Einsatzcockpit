@@ -1,6 +1,6 @@
 # Einsatz starten
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Automatisch über das Alarmierungssystem
 
@@ -16,7 +16,7 @@ Das Alarmierungssystem sendet bei jedem Alarm automatisch eine Anfrage an die AP
 
 ## Automatisch über die Leitstelle (LIS/IPR)
 
-Ist die LIS-Anbindung für deine Organisation eingerichtet (siehe [LIS/IPR-Anbindung](Administration-LIS-Anbindung.md)), gleicht Einsatzcockpit im Hintergrund laufend mit dem Leitstellensystem ab:
+Ist die LIS-Anbindung für deine Organisation eingerichtet (siehe [LIS/IPR-Anbindung](Administration-LIS-Anbindung)), gleicht Einsatzcockpit im Hintergrund laufend mit dem Leitstellensystem ab:
 
 - Neue Einsätze **und Übungseinsätze** aus LIS werden automatisch angelegt bzw. mit einem bereits über die API angelegten Einsatz verknüpft (kein doppelter Einsatz)
 - Die **Leitstellen-Nummer** wird als führende Kennung angezeigt (Alarm-Kopfzeile, Archiv, Verlauf, PDF-Export) — statt der internen Einsatz-ID
@@ -67,4 +67,4 @@ Bei Stufen T3+/F3+ werden Nachbarwehren automatisch im Kanban-Board in der Spalt
 ## Einsatz abschließen
 
 Im Einsatz-Board oben rechts: **Einsatz abschließen** → Bestätigung → Einsatz wird archiviert und ist nur noch lesbar.  
-Details: [Archiv und PDF-Export](Anwender-Archiv-und-PDF-Export.md)
+Details: [Archiv und PDF-Export](Anwender-Archiv-und-PDF-Export)

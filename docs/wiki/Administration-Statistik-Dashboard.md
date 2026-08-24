@@ -1,6 +1,6 @@
 # Statistik-Dashboard
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Aufruf
 

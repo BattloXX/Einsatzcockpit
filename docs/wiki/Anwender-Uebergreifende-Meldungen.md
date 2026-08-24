@@ -1,6 +1,6 @@
 # Übergreifende Meldungen
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/lage/{lage_id}/meldungen/uebergreifend` (via Großschadenslage-Board)  
 > Zugänglich für: `incident_leader`, `org_admin`, `system_admin`

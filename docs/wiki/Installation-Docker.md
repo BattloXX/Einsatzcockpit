@@ -1,6 +1,6 @@
 # Installation mit Docker Compose
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 Docker Compose startet die App mit MariaDB 10.11 und Redis 7. Redis ist wegen der
 zwei Gunicorn-Worker verpflichtend. Ein Reverse-Proxy mit TLS bleibt erforderlich;
@@ -85,7 +85,7 @@ docker compose exec app python -m app.cli create-admin \
 Der Host-Port ist aus Sicherheitsgründen nur als `127.0.0.1:8092` veröffentlicht.
 Port 8092 nicht in der Firewall freigeben. NGINX auf demselben Host kann an
 `http://127.0.0.1:8092` weiterleiten; WebSocket-Header und Timeouts stehen unter
-[NGINX-Reverse-Proxy](Installation-NGINX-Reverse-Proxy.md).
+[NGINX-Reverse-Proxy](Installation-NGINX-Reverse-Proxy).
 
 TLS wird außerhalb von Compose terminiert, etwa mit Certbot auf dem Host oder einem
 vorgelagerten Reverse-Proxy-Container. `TRUSTED_PROXY_IPS` muss zur tatsächlichen
@@ -124,8 +124,8 @@ docker compose exec -T db sh -c \
 
 Zusätzlich das Volume `app_storage` sichern. Ein bloßes Kopieren des Datenbank-Volumes
 im laufenden Betrieb ist kein konsistenter Dump. Aufbewahrung, Off-Site-Kopie und
-Restore-Proben beschreibt [Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery.md).
+Restore-Proben beschreibt [Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery).
 
 ---
 
-**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup.md)
+**Nächster Schritt:** [Erst-Setup](Installation-Erst-Setup)

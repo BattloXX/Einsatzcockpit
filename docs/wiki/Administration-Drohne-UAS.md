@@ -1,6 +1,6 @@
 # Drohne / UAS – Administration
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/uas/`  
 > Zugänglich für: `org_admin`, `admin`, `system_admin`

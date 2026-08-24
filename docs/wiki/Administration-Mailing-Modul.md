@@ -1,6 +1,6 @@
 # Mailing-Modul (Administration)
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 > URL: `/mailing/`  
 > Zugänglich für: `mailing_admin`, `mailing_sender`, `org_admin`, `admin`, `system_admin`  
@@ -13,7 +13,7 @@ Sperreinträge werden je Organisation getrennt verwaltet.
 Das Modul ist ein **eigenständiges Versandsystem**. Es verwendet einen eigenen
 Resend-API-Key je Organisation und ist absichtlich vom Versand für Passwort-Reset,
 Willkommensmail und andere Transaktionsmails getrennt. Siehe auch
-[Mail-Versand (SMTP/Office 365)](Administration-Mail-Versand.md) für den systemweiten
+[Mail-Versand (SMTP/Office 365)](Administration-Mail-Versand) für den systemweiten
 Transaktionsmail-Versand - das Mailing-Modul hier ist davon unabhängig.
 
 ---
@@ -130,7 +130,7 @@ Mailing-Resend → OrgSmtpConfig → Fehler protokollieren und Retry/Fehlstatus
 
 Der Fallback verwendet `OrgSmtpConfig`; es gibt dafür keine zweite SMTP-Maske im
 Mailing-Modul. Einrichtung und Test des Organisations-SMTP-Servers sind unter
-[Mail-Versand (SMTP/Office 365)](Administration-Mail-Versand.md) beschrieben.
+[Mail-Versand (SMTP/Office 365)](Administration-Mail-Versand) beschrieben.
 Microsoft Graph aus der Transaktionsmail-Fallback-Kette wird vom Mailing-Modul nicht
 als eigener Versandweg verwendet.
 
@@ -177,6 +177,6 @@ behandeln.
 
 ---
 
-**Verwandt:** [Mailing-Kampagnen verwenden](Anwender-Mailing-Kampagnen.md) ·
-[Mail-Versand (SMTP/Office 365)](Administration-Mail-Versand.md) ·
-[API-Keys verwalten](Administration-API-Keys-verwalten.md)
+**Verwandt:** [Mailing-Kampagnen verwenden](Anwender-Mailing-Kampagnen) ·
+[Mail-Versand (SMTP/Office 365)](Administration-Mail-Versand) ·
+[API-Keys verwalten](Administration-API-Keys-verwalten)

@@ -1,6 +1,6 @@
 # Erste Schritte
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 ## Login
 
@@ -8,7 +8,7 @@ URL: `https://einsatzleiter.feuerwehr-wolfurt.at/login`
 
 Benutzername und Passwort eingeben → **Anmelden**.
 
-Bei Problemen: [Troubleshooting](Installation-Troubleshooting.md)
+Bei Problemen: [Troubleshooting](Installation-Troubleshooting)
 
 ## Übersicht der Bereiche
 
@@ -53,4 +53,4 @@ Mehrere Benutzer können denselben Einsatz auf verschiedenen Geräten gleichzeit
 ## QR-Code für schnellen Zugriff
 
 Im laufenden Einsatz: **QR-Code anzeigen** → mit einem zweiten Gerät scannen → direkt eingeloggt ohne Passwort.  
-Details: [QR-Code Schnellzugriff](Anwender-QR-Code-Schnellzugriff.md)
+Details: [QR-Code Schnellzugriff](Anwender-QR-Code-Schnellzugriff)

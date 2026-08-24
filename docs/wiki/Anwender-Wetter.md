@@ -1,6 +1,6 @@
 # Wetter-Integration
 
-← [Zurück zur Startseite](Home.md)
+← [Zurück zur Startseite](Home)
 
 Das Wetter-Modul zeigt Echtzeit-Wetterdaten, Vorhersagen und amtliche Unwetterwarnungen direkt im Tool an — integriert in Einsatz-Board und Großschadenslage sowie als eigene Seite.
 
@@ -27,7 +27,7 @@ Die lokale Station erscheint **zuerst** im Wetter-Panel — noch vor den externe
 
 Wenn die Station **online** ist, werden ihre Messwerte automatisch für die **Szenario-Analyse** (Sturm, Waldbrand) herangezogen statt des NWP-Modellwertes. Lokale Böen aus dem Garten der Feuerwehr sind verlässlicher als ein Gitterpunkt-Modell.
 
-> Administration der Wetterstation: [Admin → Lokale Wetterstation](Administration-Wetterstation.md)
+> Administration der Wetterstation: [Admin → Lokale Wetterstation](Administration-Wetterstation)
 
 ---
 
