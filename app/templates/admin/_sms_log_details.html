@@ -12,28 +12,30 @@
   {% endif %}
   {% if recipients %}
   <div style="overflow-x:auto;">
-    <table class="table-admin" style="min-width:560px;">
+    <table class="table-admin table-admin--cards">
       <thead>
         <tr>
           <th>Telefonnummer</th>
           <th>Name</th>
           <th>Zeitpunkt</th>
           <th>Status</th>
+          <th>Gateway</th>
         </tr>
       </thead>
       <tbody>
         {% for recipient in recipients %}
         <tr>
-          <td>{{ recipient.phone_number }}</td>
-          <td>{{ recipient.name or '-' }}</td>
-          <td style="white-space:nowrap;">{{ recipient.sent_at|local_datetime }}</td>
-          <td>
+          <td data-label="Telefonnummer">{{ recipient.phone_number }}</td>
+          <td data-label="Name">{{ recipient.name or '-' }}</td>
+          <td data-label="Zeitpunkt" style="white-space:nowrap;">{{ recipient.sent_at|local_datetime_sec }}</td>
+          <td data-label="Status">
             {% if recipient.success %}
             <span style="color:var(--green-light, #4ade80);">Erfolgreich</span>
             {% else %}
             <span style="color:var(--red-light, #f87171);">Fehlgeschlagen</span>
             {% endif %}
           </td>
+          <td data-label="Gateway">{{ recipient.gateway_label or (recipient.provider|upper if recipient.provider else '-') }}</td>
         </tr>
         {% endfor %}
       </tbody>

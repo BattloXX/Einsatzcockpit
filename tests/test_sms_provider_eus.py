@@ -90,7 +90,10 @@ async def test_send_sms_eus_success_without_gateway(monkeypatch):
     monkeypatch.setattr("app.services.sms_service.send_via_eus", eus)
     monkeypatch.setattr("app.routers.ws.dispatch_sms", gateway)
     ctx = SmsContext(1, ["eus"], _cfg())
-    assert await send_sms(1, "+436601234", "Text", ctx=ctx)
+    result = await send_sms(1, "+436601234", "Text", ctx=ctx)
+    assert result
+    assert result.provider == "eus"
+    assert result.gateway_token_id is None
     gateway.assert_not_awaited()
     assert ctx.providers_used == {"eus"}
 
@@ -111,10 +114,13 @@ async def test_send_sms_eus_falls_back_to_gateway(monkeypatch):
         "app.services.sms_service.send_via_eus",
         AsyncMock(side_effect=EusSmsError("HTTP 500")),
     )
-    gateway = AsyncMock(return_value={"ok": True})
+    gateway = AsyncMock(return_value={"ok": True, "gateway_token_id": 17})
     monkeypatch.setattr("app.routers.ws.dispatch_sms", gateway)
     ctx = SmsContext(1, ["eus", "gateway"], _cfg())
-    assert await send_sms(1, "+436601234", "Text", ctx=ctx)
+    result = await send_sms(1, "+436601234", "Text", ctx=ctx)
+    assert result
+    assert result.provider == "gateway"
+    assert result.gateway_token_id == 17
     gateway.assert_awaited_once()
     assert ctx.providers_used == {"eus", "gateway"}
 

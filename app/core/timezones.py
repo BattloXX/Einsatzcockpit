@@ -46,6 +46,12 @@ def format_local_datetime(dt: datetime | None, org: Any | None = None) -> str:
     return local.strftime("%d.%m.%Y %H:%M") if local else ""
 
 
+def format_local_datetime_sec(dt: datetime | None, org: Any | None = None) -> str:
+    """DD.MM.YYYY HH:MM:SS in Org-Zeitzone."""
+    local = to_org_tz(dt, org)
+    return local.strftime("%d.%m.%Y %H:%M:%S") if local else ""
+
+
 def format_local_iso(dt: datetime | None, org: Any | None = None) -> str:
     """ISO-8601 mit Offset (fuer Frontend-Konsumenten wie Alpine-Timer)."""
     local = to_org_tz(dt, org)

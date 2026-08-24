@@ -21,6 +21,16 @@ class SmsContext:
     providers_used: set[str] = field(default_factory=set)
 
 
+@dataclass(frozen=True)
+class SmsDeliveryResult:
+    success: bool
+    provider: str | None = None
+    gateway_token_id: int | None = None
+
+    def __bool__(self) -> bool:
+        return self.success
+
+
 def resolve_sms_config(org_id: int, db=None) -> SmsContext:
     from app.core.crypto import decrypt_secret
     from app.core.tenant import set_tenant_context
@@ -72,11 +82,14 @@ async def send_sms(
     org_id: int, to: str, text: str, timeout: float = 15.0,
     ctx: SmsContext | None = None,
     preferred_gateway_token_id: int | None = None,
-) -> bool:
+) -> SmsDeliveryResult:
     from app.routers.ws import dispatch_sms
     ctx = ctx or resolve_sms_config(org_id)
+    last_provider: str | None = None
+    last_gateway_token_id: int | None = None
     for provider in ctx.chain:
         ctx.providers_used.add(provider)
+        last_provider = provider
         try:
             if provider == "gateway":
                 if preferred_gateway_token_id is None:
@@ -90,17 +103,26 @@ async def send_sms(
                         timeout=timeout,
                         preferred_gateway_token_id=preferred_gateway_token_id,
                     )
+                last_gateway_token_id = result.get("gateway_token_id")
                 if not result.get("ok", False):
                     raise RuntimeError(str(result.get("error") or "Gateway-Fehler"))
             elif provider == "eus" and ctx.eus:
                 await send_via_eus(ctx.eus, to, text)
             else:
                 continue
-            return True
+            return SmsDeliveryResult(
+                success=True,
+                provider=provider,
+                gateway_token_id=result.get("gateway_token_id") if provider == "gateway" else None,
+            )
         except (RuntimeError, EusSmsError, httpx.HTTPError) as exc:
             logger.warning("SMS-Provider %s fuer %s fehlgeschlagen: %s",
                            provider, _mask(to), exc)
-    return False
+    return SmsDeliveryResult(
+        success=False,
+        provider=last_provider,
+        gateway_token_id=last_gateway_token_id,
+    )
 
 
 def _mask(number: str) -> str:

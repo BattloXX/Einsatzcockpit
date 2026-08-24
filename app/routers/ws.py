@@ -438,7 +438,7 @@ async def dispatch_sms(
     erfolgreich, aber keine Antwort) wird hingegen NICHT erneut versucht, um doppelte
     SMS zu vermeiden.
 
-    Rückgabe: sms.result-Dict (ok, error, provider_response).
+    Rückgabe: sms.result-Dict (ok, error, provider_response, gateway_token_id).
     Wirft RuntimeError wenn kein Gateway verbunden oder Timeout überschritten.
     """
     entries = list(reversed(_sms_gateways.get(org_id, [])))
@@ -454,7 +454,7 @@ async def dispatch_sms(
     loop = asyncio.get_event_loop()
     last_error: Exception | None = None
 
-    for _token_id, ws in entries:
+    for token_id, ws in entries:
         fut: asyncio.Future = loop.create_future()
         _sms_pending[job_id] = fut
         try:
@@ -468,7 +468,9 @@ async def dispatch_sms(
             continue
 
         try:
-            return await asyncio.wait_for(fut, timeout=timeout)
+            result = await asyncio.wait_for(fut, timeout=timeout)
+            result["gateway_token_id"] = token_id
+            return result
         except TimeoutError:
             # Senden gelang, aber keine Antwort – nicht erneut versuchen (Doppelversand)
             _sms_pending.pop(job_id, None)

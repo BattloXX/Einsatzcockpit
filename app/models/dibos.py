@@ -33,7 +33,7 @@ class OrgDibosConfig(Base):
     # Eigene Wache in GetCurrentUnits (unitType="wache"). Ist der Wert leer,
     # werden alle zum Einsatz gemeldeten Wachen uebernommen.
     wache_unid: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
 
     # Diagnose (nur system_admin, siehe ui_dibos.py "Diagnose"-Sektion): startet die
     # Rohdaten-Aufzeichnung (dibos_capture.py) automatisch, sobald der leichte

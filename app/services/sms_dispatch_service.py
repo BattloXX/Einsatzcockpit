@@ -137,6 +137,8 @@ class SmsSendResult:
     phone_number: str
     success: bool
     sent_at: datetime
+    provider: str | None = None
+    gateway_label: str | None = None
 
 
 async def send_bulk_detailed(
@@ -152,6 +154,19 @@ async def send_bulk_detailed(
     from app.routers.ws import connected_gateway_token_ids_ordered
 
     gateway_ids = connected_gateway_token_ids_ordered(org_id) if "gateway" in ctx.chain else []
+    gateway_labels: dict[int, str] = {}
+    if gateway_ids:
+        from app.models.user import SmsGatewayToken
+
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            gateway_labels = dict(db.query(SmsGatewayToken.id, SmsGatewayToken.label).filter(
+                SmsGatewayToken.org_id == org_id,
+                SmsGatewayToken.id.in_(gateway_ids),
+            ).all())
+        finally:
+            db.close()
     semaphore_keys: list[int | None] = list(gateway_ids) if gateway_ids else [None]
     semaphores = {
         key: asyncio.Semaphore(SMS_CONCURRENCY_PER_GATEWAY)
@@ -162,24 +177,26 @@ async def send_bulk_detailed(
     async def _send(index: int, to: str, text: str) -> SmsSendResult:
         gateway_id = gateway_ids[index % len(gateway_ids)] if gateway_ids else None
         async with semaphores[gateway_id]:
-            ok = False
+            delivery = None
             try:
                 if gateway_id is None:
-                    ok = bool(await send_sms(org_id, to, text, ctx=ctx))
+                    delivery = await send_sms(org_id, to, text, ctx=ctx)
                 else:
-                    ok = bool(await send_sms(
+                    delivery = await send_sms(
                         org_id,
                         to,
                         text,
                         ctx=ctx,
                         preferred_gateway_token_id=gateway_id,
-                    ))
+                    )
             except Exception as exc:
                 logger.warning("SMS-Versand fehlgeschlagen an %s: %s", to[-4:] + "****", exc)
             result = SmsSendResult(
                 phone_number=to,
-                success=ok,
+                success=bool(delivery),
                 sent_at=datetime.now(UTC).replace(tzinfo=None),
+                provider=getattr(delivery, "provider", None),
+                gateway_label=gateway_labels.get(getattr(delivery, "gateway_token_id", None)),
             )
             if on_result is not None:
                 async with progress_lock:
@@ -243,6 +260,8 @@ async def dispatch_manual_sms(
                 name=name,
                 success=result.success,
                 sent_at=result.sent_at,
+                provider=result.provider,
+                gateway_label=result.gateway_label,
             ))
             if result.success:
                 log_entry.success_count += 1
@@ -400,6 +419,8 @@ async def dispatch_einsatzinfo(
                 name=member.full_name,
                 success=result.success,
                 sent_at=result.sent_at,
+                provider=result.provider,
+                gateway_label=result.gateway_label,
             ))
             if result.success:
                 log_entry.success_count += 1
@@ -510,6 +531,8 @@ async def dispatch_gsl_alarm(
                 name=member.full_name,
                 success=result.success,
                 sent_at=result.sent_at,
+                provider=result.provider,
+                gateway_label=result.gateway_label,
             ))
             if result.success:
                 log_entry.success_count += 1

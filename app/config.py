@@ -361,7 +361,7 @@ class Settings(BaseSettings):
     # DIBOS EventHub / Elvis-Anbindung (Landeswarnzentrale Vorarlberg) - reines
     # Tracing/Diagnose-Feature, siehe app/services/dibos/
     DIBOS_TRACE_ENABLED: bool = True   # globaler Kill-Switch für den Auto-Erkennungs-Loop
-    DIBOS_POLL_INTERVAL_S: int = 20    # Loop-Intervall (leichter Poll auf GetCurrentEvents)
+    DIBOS_POLL_INTERVAL_S: int = 5     # Loop-Intervall (leichter Poll auf GetCurrentEvents)
 
     # BMA-Webplattform-Import (Landeswarnzentrale Vorarlberg) - siehe app/services/bma_import/.
     # Taeglicher Lauf (Europe/Vienna), Muster: NACHSCHLAGEWERK_SYNC_ENABLED/nachschlagewerk_sync.py.
