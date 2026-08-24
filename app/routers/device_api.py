@@ -57,6 +57,8 @@ async def register_fcm_token(request: Request, db: Session = Depends(get_db)):
     """Registriert oder aktualisiert den FCM Registration Token des eingeloggten Geräts."""
     user = getattr(request.state, "user", None)
     if not user:
+        user = _resolve_user_via_bearer_token(request, db)
+    if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
     data = await request.json()
     token = (data.get("token") or "").strip()
