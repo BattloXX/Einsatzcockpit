@@ -1,0 +1,41 @@
+services:
+  app:
+    env_file:
+      - .env.e2e-docker
+    environment:
+      SSL_CERT_FILE: /certs/ca.pem
+      EUS_SMS_ENABLED: "true"
+      NOMINATIM_BASE_URL: http://fake-sink:8089/nominatim-delay
+      NOMINATIM_TIMEOUT_SECONDS: "2"
+    volumes:
+      - probe_certs:/certs:ro
+      - ./e2e:/app/e2e:ro
+    depends_on:
+      fake-sink:
+        condition: service_healthy
+  db:
+    env_file:
+      - .env.e2e-docker
+  fake-sink:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.e2e-docker
+    command: ["python", "e2e/notification_sink.py"]
+    user: root
+    ports:
+      - "127.0.0.1:8089:8089"
+    volumes:
+      - probe_certs:/certs
+      - ./e2e:/app/e2e:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8089/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+volumes:
+  probe_certs:
