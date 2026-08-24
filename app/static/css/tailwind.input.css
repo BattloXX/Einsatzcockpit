@@ -1160,10 +1160,10 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .kanban-col[data-lane-active] { display: flex; flex: 1 1 auto; min-height: 0; }
   .kanban { flex-direction: column; overflow-x: hidden; padding: 8px; }
   .board-tabs { display: flex; }
-  /* Mobile: Spalten-Inhalt luftiger, Karten besser lesbar (keine festen 280px mehr) */
-  .kanban-col__header { padding: 12px 14px; }
-  .kanban-col__title { font-size: 1rem; }
-  .kanban-col__body { padding: 10px; }
+  /* Mobile: kompakte Spalten-Kopfleiste und kleinere leere Drop-Zone */
+  .kanban-col__header { padding: 8px 10px; }
+  .kanban-col__title { font-size: .85rem; }
+  .kanban-col__body { padding: 10px; min-height: 32px; }
   .card { margin-bottom: 10px; border-left-width: 5px; }
   .card__body { padding: 12px 14px; padding-right: 32px; }
   .card__title { font-size: 1rem; line-height: 1.3; overflow-wrap: anywhere; }
@@ -1258,7 +1258,7 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
 .ec-live__more{font-size:.78rem;color:var(--red-light);white-space:nowrap;}
 .ec-live__close{min-height:30px;padding:0 9px;flex-shrink:0;border:1px solid var(--border);border-radius:.375rem;background:transparent;color:var(--text-muted);font-size:.75rem;line-height:1;}
 .ec-live__close:hover{background:var(--surface-high);color:var(--on-surface);}
-@media(max-width:760px){.ec-live{top:var(--topnav-h);padding:6px 8px;}.ec-live__content{position:relative;align-items:flex-start;gap:6px;padding:9px 38px 9px 10px;flex-wrap:wrap;}.ec-live__details{flex:1 1 100%;gap:6px;flex-direction:column;}.ec-live__address{width:100%;}.ec-live__status{flex:1 1 auto;gap:6px;}.ec-live__progress{width:88px;}.ec-live__phase{max-width:115px;overflow:hidden;text-overflow:ellipsis;}.ec-live__more{align-self:center;}.ec-live__close{position:absolute;right:6px;top:6px;}}
+@media(max-width:760px){.ec-live{top:var(--topnav-h);padding:6px 8px;}.ec-live__content{position:relative;align-items:flex-start;gap:5px;padding:6px 36px 6px 8px;flex-wrap:wrap;}.ec-live__details{flex:1 1 100%;gap:4px;flex-direction:column;}.ec-live__address{width:100%;}.ec-live__status{flex:1 1 auto;gap:6px;}.ec-live__progress{width:88px;}.ec-live__phase{max-width:115px;overflow:hidden;text-overflow:ellipsis;}.ec-live__more{align-self:center;}.ec-live__close{position:absolute;right:4px;top:4px;}}
 
 /* ── Multi-Site Dispatch ─────────────────────────────────────── */
 .dispatch-conflict-box{background:rgba(242,176,46,.12);border:1px solid var(--yellow);border-radius:var(--radius-md, .5rem);padding:8px 10px;margin-top:4px;font-size:.82rem;}

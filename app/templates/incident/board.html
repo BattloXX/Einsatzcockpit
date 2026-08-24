@@ -1143,6 +1143,15 @@ function lageTicker(hints, aiFlags) {
     buildLaneDropdown();
   };
 
+  // Die Kopfleiste wird als OOB-Fragment ersetzt. Unabhaengig vom Ausloeser
+  // danach die gespeicherte Mobile-Lane samt Select-Optionen wiederherstellen.
+  document.addEventListener('htmx:oobAfterSwap', function (e) {
+    var target = e.detail && e.detail.target;
+    if ((target && target.id === 'incidentHeaderAlarm') || e.target.id === 'incidentHeaderAlarm') {
+      window.reapplyMobileLane();
+    }
+  });
+
   // Initial lane setup
   try {
     const saved = localStorage.getItem(LANE_KEY);

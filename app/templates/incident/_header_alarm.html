@@ -1,5 +1,5 @@
 {# Alarmstufe + Adresse in der Kopfleiste. Variablen: incident, can_edit, oob (optional) #}
-<div class="incident-header__alarm" id="incidentHeaderAlarm" {% if oob %}hx-swap-oob="true"{% endif %}>
+<div class="incident-header__alarm" id="incidentHeaderAlarm" data-incident-id="{{ incident.id }}" {% if oob %}hx-swap-oob="true"{% endif %}>
   {% if can_edit %}
   <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}" style="cursor:pointer"
         hx-get="/einsatz/{{ incident.id }}/alarm/bearbeiten"
