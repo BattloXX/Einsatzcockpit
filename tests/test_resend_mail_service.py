@@ -34,11 +34,18 @@ def _client(response):
 
 
 def test_resend_payload_contains_both_bodies_and_explicit_from():
-    payload = _resend_payload(_msg(html=True), "org@verified.example")
+    msg = _msg(html=True)
+    msg["List-Unsubscribe"] = "<https://example.at/mailing/u/token>"
+    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    payload = _resend_payload(msg, "org@verified.example")
     assert payload["from"] == "org@verified.example"
     assert payload["to"] == ["a@example.at", "b@example.at"]
     assert "Textinhalt" in payload["text"]
     assert "HTML-Inhalt" in payload["html"]
+    assert payload["headers"] == {
+        "List-Unsubscribe": "<https://example.at/mailing/u/token>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
 
 
 async def test_send_via_resend_success():

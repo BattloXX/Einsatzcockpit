@@ -9,11 +9,13 @@ from types import SimpleNamespace
 import httpx
 from sqlalchemy import func, or_
 
+from app.config import settings
+from app.core.security import sign_mailing_track_token
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.mailing import MailingCampaign, MailingConfig, MailingQueueItem, MailingSuppressionEntry
 from app.services.mail_service import _org_smtp_cfg, _send
-from app.services.mailing_render import render_template
+from app.services.mailing_render import append_unsubscribe_footer, render_template
 from app.services.mailing_service import mailing_api_key
 from app.services.resend_mail_service import ResendMailError, send_via_resend
 
@@ -43,12 +45,22 @@ def _message(item, cfg):
     html = rewrite_links(
         html, item.id, item.org_id, track_opens=campaign.track_opens, track_clicks=campaign.track_clicks
     )
+    unsub_url = (
+        f"{settings.effective_public_base_url.rstrip('/')}/mailing/u/"
+        f"{sign_mailing_track_token(item.id, item.org_id)}"
+    )
+    html, text = append_unsubscribe_footer(html, text, unsub_url)
     msg = EmailMessage()
     msg["To"] = item.email
     msg["Subject"] = subject
     reply_to = campaign.reply_to_override or cfg.reply_to_default
     if reply_to:
         msg["Reply-To"] = reply_to
+    contact = cfg.reply_to_default or getattr(cfg, "from_addr", None)
+    msg["List-Unsubscribe"] = (
+        f"<mailto:{contact}?subject=unsubscribe>, <{unsub_url}>" if contact else f"<{unsub_url}>"
+    )
+    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     msg.set_content(text or "")
     msg.add_alternative(html, subtype="html")
     return msg

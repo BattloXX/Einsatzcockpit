@@ -1,7 +1,7 @@
 import pytest
 from jinja2 import UndefinedError
 
-from app.services.mailing_render import render_mailing
+from app.services.mailing_render import append_unsubscribe_footer, render_mailing
 
 
 def test_renders_whitelisted_values():
@@ -16,3 +16,10 @@ def test_unknown_value_is_strict():
 def test_sandbox_blocks_object_access():
     with pytest.raises(Exception):
         render_mailing("{{ x.__class__ }}", {"x": "ignored"})
+
+
+def test_unsubscribe_footer_is_added_to_html_and_text():
+    html, text = append_unsubscribe_footer("<html><body><p>Inhalt</p></body></html>", None, "#")
+    assert '<a href="#">Jetzt abmelden</a>' in html
+    assert html.index("Jetzt abmelden") < html.index("</body>")
+    assert "Jetzt abmelden: #" in text
