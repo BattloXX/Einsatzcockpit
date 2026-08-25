@@ -78,6 +78,45 @@ async def register_fcm_token(request: Request, db: Session = Depends(get_db)):
     return JSONResponse({"ok": True})
 
 
+@router.get("/fcm-token/status")
+def get_fcm_token_status(
+    request: Request, token: str | None = None, db: Session = Depends(get_db)
+):
+    """Gibt den Registrierungs- und letzten Zustellstatus eines FCM-Tokens zurück."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        user = _resolve_user_via_bearer_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+
+    token = (token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="token fehlt")
+
+    fcm_token = db.query(FcmToken).filter(
+        FcmToken.user_id == user.id, FcmToken.token == token
+    ).first()
+    if not fcm_token:
+        return JSONResponse({"registered": False})
+
+    letzte_zustellung = (
+        db.query(FcmDeliveryLog)
+        .filter(FcmDeliveryLog.fcm_token_id == fcm_token.id)
+        .order_by(FcmDeliveryLog.sent_at.desc())
+        .first()
+    )
+    return JSONResponse({
+        "registered": True,
+        "registered_at": fcm_token.created_at.isoformat() + "Z",
+        "last_delivery_success": (
+            letzte_zustellung.success if letzte_zustellung else None
+        ),
+        "last_delivery_at": (
+            letzte_zustellung.sent_at.isoformat() + "Z" if letzte_zustellung else None
+        ),
+    })
+
+
 @router.delete("/fcm-token")
 async def unregister_fcm_token(request: Request, db: Session = Depends(get_db)):
     """Entfernt den FCM Token bei Logout oder Token-Rotation.

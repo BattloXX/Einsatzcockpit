@@ -1,7 +1,9 @@
+from datetime import datetime
+
 from app.core.security import hash_api_key, hash_password, sign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.user import DeviceToken, FcmToken, User
+from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, PushLog, User
 
 
 def _make_device_user(username: str) -> tuple[int, int]:
@@ -116,3 +118,131 @@ def test_fcm_token_api_ohne_session_antwortet_401(client, setup_db):
     assert client.request(
         "DELETE", "/api/v1/device/fcm-token", json={"token": "fcm-unauthenticated"}
     ).status_code == 401
+
+
+def _create_fcm_token(
+    user_id: int, token: str, created_at: datetime
+) -> int:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        fcm_token = FcmToken(
+            user_id=user_id,
+            token=token,
+            platform="android",
+            created_at=created_at,
+        )
+        db.add(fcm_token)
+        db.commit()
+        return fcm_token.id
+    finally:
+        db.close()
+
+
+def test_fcm_token_status_registriert_ohne_zustellung(client, setup_db):
+    user_id, device_id = _make_device_user("fcm_status_registered")
+    created_at = datetime(2026, 8, 24, 10, 11, 12)
+    _create_fcm_token(user_id, "fcm-status-registered", created_at)
+    _authenticate(client, user_id, device_id)
+
+    response = client.get(
+        "/api/v1/device/fcm-token/status",
+        params={"token": "fcm-status-registered"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "registered": True,
+        "registered_at": created_at.isoformat() + "Z",
+        "last_delivery_success": None,
+        "last_delivery_at": None,
+    }
+
+
+def test_fcm_token_status_verraet_fremden_token_nicht(client, setup_db):
+    user_id, device_id = _make_device_user("fcm_status_requester")
+    other_id, _ = _make_device_user("fcm_status_other")
+    _create_fcm_token(
+        other_id, "fcm-status-foreign", datetime(2026, 8, 24, 11, 12, 13)
+    )
+    _authenticate(client, user_id, device_id)
+
+    for token in ("fcm-status-foreign", "fcm-status-missing"):
+        response = client.get(
+            "/api/v1/device/fcm-token/status", params={"token": token}
+        )
+        assert response.status_code == 200
+        assert response.json() == {"registered": False}
+
+
+def test_fcm_token_status_mit_letzter_zustellung(client, setup_db):
+    user_id, device_id = _make_device_user("fcm_status_delivery")
+    created_at = datetime(2026, 8, 24, 12, 13, 14)
+    sent_at = datetime(2026, 8, 24, 13, 14, 15)
+    fcm_token_id = _create_fcm_token(
+        user_id, "fcm-status-delivery", created_at
+    )
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        push_log = PushLog(title="Status", body="Test", source="test")
+        db.add(push_log)
+        db.flush()
+        db.add(FcmDeliveryLog(
+            push_log_id=push_log.id,
+            fcm_token_id=fcm_token_id,
+            user_id=user_id,
+            sent_at=sent_at,
+            success=False,
+        ))
+        db.commit()
+    finally:
+        db.close()
+    _authenticate(client, user_id, device_id)
+
+    response = client.get(
+        "/api/v1/device/fcm-token/status",
+        params={"token": "fcm-status-delivery"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "registered": True,
+        "registered_at": created_at.isoformat() + "Z",
+        "last_delivery_success": False,
+        "last_delivery_at": sent_at.isoformat() + "Z",
+    }
+
+
+def test_fcm_token_status_ohne_token_antwortet_400(client, setup_db):
+    user_id, device_id = _make_device_user("fcm_status_missing_param")
+    _authenticate(client, user_id, device_id)
+
+    assert client.get("/api/v1/device/fcm-token/status").status_code == 400
+    assert client.get(
+        "/api/v1/device/fcm-token/status", params={"token": "   "}
+    ).status_code == 400
+
+
+def test_fcm_token_status_ohne_authentifizierung_antwortet_401(client, setup_db):
+    response = client.get(
+        "/api/v1/device/fcm-token/status", params={"token": "fcm-status-token"}
+    )
+
+    assert response.status_code == 401
+
+
+def test_fcm_token_status_funktioniert_per_bearer_token(client, setup_db):
+    user_id, _ = _make_device_user("fcm_status_bearer")
+    created_at = datetime(2026, 8, 24, 14, 15, 16)
+    _create_fcm_token(user_id, "fcm-status-bearer", created_at)
+
+    response = client.get(
+        "/api/v1/device/fcm-token/status",
+        params={"token": "fcm-status-bearer"},
+        headers={"Authorization": "Bearer raw-fcm_status_bearer"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["registered"] is True
+    assert response.json()["registered_at"] == created_at.isoformat() + "Z"
