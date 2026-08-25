@@ -35,8 +35,9 @@ class _FakeDibosClient:
     """Simuliert DibosClient: ruft on_exchange wie der echte Client nach jedem
     (fingierten) HTTP-Austausch mit der Operation als Namen auf."""
 
-    def __init__(self, events=None, on_exchange=None, fail_ops=()):
+    def __init__(self, events=None, public_events=None, on_exchange=None, fail_ops=()):
         self._events = events if events is not None else []
+        self._public_events = public_events if public_events is not None else []
         self.on_exchange = on_exchange
         self.calls: list[str] = []
         self._fail_ops = set(fail_ops)
@@ -65,8 +66,8 @@ class _FakeDibosClient:
     async def get_public_events(self, qty=15):
         self.calls.append("get_public_events")
         await self._maybe_fail("GetPublicEvents")
-        self._fire("GetPublicEvents", [])
-        return []
+        self._fire("GetPublicEvents", self._public_events)
+        return self._public_events
 
     async def get_current_units(self):
         self.calls.append("get_current_units")
@@ -183,6 +184,30 @@ def test_capture_once_continues_after_one_endpoint_fails(tmp_path):
     ]
     # Nur 4 Exchanges, weil GetCurrentUnits fehlgeschlagen ist (kein on_exchange-Aufruf)
     assert len(recorder.exchanges) == 4
+
+
+def test_capture_once_enriches_public_events_when_current_events_empty(tmp_path, monkeypatch):
+    public_events = [{"eventNumber": "f26007481", "closed": "2026-08-25T11:23:45"}]
+    recorder = ExchangeRecorder(
+        tmp_path, org_id=1, run_id="run-public-close", enrich_incidents=True
+    )
+    client = _FakeDibosClient([], public_events=public_events, on_exchange=recorder.record)
+    calls = []
+
+    async def fake_enrich_and_broadcast(org_id, raw_events, **kwargs):
+        calls.append((org_id, raw_events, kwargs))
+
+    import app.services.dibos.dibos_enrich as dibos_enrich
+    monkeypatch.setattr(dibos_enrich, "enrich_and_broadcast", fake_enrich_and_broadcast)
+
+    asyncio.run(_capture_once(client, recorder))
+
+    assert calls == [(1, [], {
+        "raw_public_events": public_events,
+        "raw_units": [],
+        "wache_unid": None,
+        "create_incidents": False,
+    })]
 
 
 # ── Retention: alte Läufe löschen, laufende nie ─────────────────────────────

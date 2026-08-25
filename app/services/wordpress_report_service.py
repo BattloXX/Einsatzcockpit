@@ -104,16 +104,31 @@ async def post_incident_report(db: Session, incident: Incident) -> WordPressRepo
     else:
         title = f"Einsatz {incident.id}"
 
+    assigned_vehicle_ids = {
+        vehicle.vehicle_master_id
+        for vehicle in incident.vehicles
+        if vehicle.removed_at is None and vehicle.vehicle_master
+    }
+    from app.services.pdf_service import load_fahrtenbuch_report
+    _details, extra = load_fahrtenbuch_report(
+        incident.id, assigned_vehicle_ids, db=db
+    )
+    fahrzeuge = [
+        vehicle.vehicle_master.lis_reference_id
+        for vehicle in incident.vehicles
+        if vehicle.removed_at is None
+        and vehicle.vehicle_master
+        and vehicle.vehicle_master.lis_reference_id
+    ]
+    fahrzeuge += [
+        item["vehicle"].lis_reference_id
+        for item in extra
+        if item["vehicle"].lis_reference_id
+    ]
     payload: dict = {
         "incident_id": incident.id,
         "title": title,
-        "fahrzeuge": [
-            vehicle.vehicle_master.lis_reference_id
-            for vehicle in incident.vehicles
-            if vehicle.removed_at is None
-            and vehicle.vehicle_master
-            and vehicle.vehicle_master.lis_reference_id
-        ],
+        "fahrzeuge": list(dict.fromkeys(fahrzeuge)),
     }
 
     alarmzeit = to_org_tz(incident.started_at, org)

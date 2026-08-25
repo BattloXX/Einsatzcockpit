@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from app.core.tenant import set_tenant_context
+from app.models.fahrtenbuch import Fahrt, FahrtKategorie, Fahrtzweck
 from app.models.incident import Incident, IncidentColumn, IncidentVehicle
 from app.models.major_incident import IncidentSite, MajorIncident
 from app.models.master import AlarmType, FireDept, VehicleMaster
@@ -153,6 +154,46 @@ async def test_success_payload_innerorts_and_ausserorts(
         assert payload["fahrzeuge"] == [f"lis-{incident.id}"]
         assert incident.wp_report_post_id == 4711
         assert incident.wp_report_edit_url.startswith("https://website.test/wp-admin/")
+    finally:
+        db.rollback()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_payload_includes_and_deduplicates_fahrtenbuch_vehicles(monkeypatch):
+    _MockAsyncClient.calls = []
+    _MockAsyncClient.status_code = 201
+    monkeypatch.setattr(httpx, "AsyncClient", _MockAsyncClient)
+    db = _session()
+    try:
+        _configure(db)
+        incident = _incident(db, city="Wolfurt")
+        board_vehicle = incident.vehicles[0].vehicle_master
+        extra_vehicle = VehicleMaster(
+            dept_id=ORG_ID, code=f"WP{incident.id}EXTRA", name="TLF", type="TLF",
+            lis_reference_id=f"lis-extra-{incident.id}",
+        )
+        purpose = Fahrtzweck(
+            org_id=ORG_ID, name=f"WP Test {incident.id}",
+            kategorie=FahrtKategorie.einsatz,
+        )
+        db.add_all([extra_vehicle, purpose])
+        db.flush()
+        for vehicle in (board_vehicle, extra_vehicle):
+            db.add(Fahrt(
+                org_id=ORG_ID, zeitpunkt=datetime(2026, 8, 9, 12, 35),
+                fahrzeug_id=vehicle.id, maschinist_name="Max Muster",
+                zweck_id=purpose.id, fahrttyp=FahrtKategorie.einsatz,
+                incident_id=incident.id,
+            ))
+        db.flush()
+
+        result = await post_incident_report(db, incident)
+
+        assert result.success is True
+        assert _MockAsyncClient.calls[0]["json"]["fahrzeuge"] == [
+            f"lis-{incident.id}", f"lis-extra-{incident.id}",
+        ]
     finally:
         db.rollback()
         db.close()

@@ -201,6 +201,7 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
     siehe dort und den Modul-Docstring von dibos_enrich.py.
     """
     events: list[dict] = []
+    public_events: list[dict] = []
     units: list[dict] = []
     for coro_factory, label in (
         (client.get_current_events, "GetCurrentEvents"),
@@ -216,12 +217,15 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
             continue
         if label == "GetCurrentEvents":
             events = result
+        elif label == "GetPublicEvents":
+            public_events = result
         elif label == "GetCurrentUnits":
             units = result
-    if events and (recorder.enrich_incidents or recorder.create_incidents):
+    if (events or public_events) and (recorder.enrich_incidents or recorder.create_incidents):
         from app.services.dibos.dibos_enrich import enrich_and_broadcast
         await enrich_and_broadcast(
             recorder.org_id, events,
+            raw_public_events=public_events,
             raw_units=units if recorder.enrich_incidents else None,
             wache_unid=recorder.wache_unid,
             create_incidents=recorder.create_incidents,
