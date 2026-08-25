@@ -391,6 +391,7 @@ class Settings(BaseSettings):
     EUS_SMS_ENABLED: bool = True
     EUS_SMS_HTTP_TIMEOUT: int = 15
     EUS_SMS_TOKEN_MARGIN_S: int = 60
+    EUS_SMS_CONCURRENCY: int = 10
 
     @property
     def effective_public_base_url(self) -> str:

@@ -176,42 +176,48 @@ async def notify_incident_created(
 
     teams_args = (db, incident) if base_url else None
 
-    if background_tasks is not None:
-        if sms_args is not None:
-            background_tasks.add_task(dispatch_einsatzinfo, *sms_args)
-        # Feste Gegenstelle zum Alarm-Channel der Android-App.
-        background_tasks.add_task(
-            _send_incident_push,
-            incident.id,
-            org_id,
-            push_title,
-            push_body,
-            resolved_push_url,
-            live_extra,
-            triggered_by_user_id,
-        )
-        if teams_args is not None:
-            background_tasks.add_task(post_incident_card, *teams_args, base_url=base_url)
-        return
-
-    # Kein Request-Kontext (LIS-Poll-Loop) — direkt ausfuehren statt background_tasks
-    if sms_args is not None:
+    async def _sms_senden() -> None:
+        if sms_args is None:
+            return
         try:
             await dispatch_einsatzinfo(*sms_args)
         except Exception:
             logger.exception("Einsatzinfo-SMS fehlgeschlagen (Einsatz %s)", incident.id)
-    await _send_incident_push(
-        incident.id,
-        org_id,
-        push_title,
-        push_body,
-        resolved_push_url,
-        live_extra,
-        triggered_by_user_id,
-    )
-    if teams_args is not None:
-        assert base_url is not None  # teams_args ist nur gesetzt, wenn base_url vorhanden ist
+
+    async def _push_senden() -> None:
+        try:
+            await _send_incident_push(
+                incident.id,
+                org_id,
+                push_title,
+                push_body,
+                resolved_push_url,
+                live_extra,
+                triggered_by_user_id,
+            )
+        except Exception:
+            logger.exception("Push-Benachrichtigung fehlgeschlagen (Einsatz %s)", incident.id)
+
+    async def _teams_senden() -> None:
+        if teams_args is None:
+            return
+        assert base_url is not None  # teams_args ist nur mit base_url gesetzt
         try:
             await post_incident_card(*teams_args, base_url=base_url)
         except Exception:
             logger.exception("Teams-Alarmierung fehlgeschlagen (Einsatz %s)", incident.id)
+
+    async def _notify_fanout() -> None:
+        await asyncio.gather(
+            _sms_senden(),
+            _push_senden(),
+            _teams_senden(),
+            return_exceptions=True,
+        )
+
+    if background_tasks is not None:
+        background_tasks.add_task(_notify_fanout)
+        return
+
+    # Kein Request-Kontext (LIS-Poll-Loop) — direkt ausfuehren statt background_tasks
+    await _notify_fanout()

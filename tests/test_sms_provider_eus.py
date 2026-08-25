@@ -1,6 +1,7 @@
 """Tests fuer EUS-SMS-Adapter und providerneutralen Dispatcher."""
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -8,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+import pytest_asyncio
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
 os.environ.setdefault("DEBUG", "true")
@@ -130,12 +132,25 @@ class _Client:
 
     def __init__(self, *args, **kwargs):
         self.client = _REAL_ASYNC_CLIENT(transport=self.transport)
+        self.is_closed = False
 
-    async def __aenter__(self):
-        return self.client
+    async def post(self, *args, **kwargs):
+        return await self.client.post(*args, **kwargs)
 
-    async def __aexit__(self, *args):
+    async def aclose(self):
+        self.is_closed = True
         await self.client.aclose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_eus_http_client():
+    alter_client = eus_sms_service._http_client
+    eus_sms_service._http_client = None
+    yield
+    client = eus_sms_service._http_client
+    eus_sms_service._http_client = alter_client
+    if client is not None and not client.is_closed:
+        await client.aclose()
 
 
 @pytest.mark.asyncio
@@ -193,6 +208,27 @@ async def test_basic_auth_skips_login(monkeypatch):
     monkeypatch.setattr(eus_sms_service.httpx, "AsyncClient", _Client)
     await send_via_eus(_cfg(93, "basic"), "+431", "A")
     assert paths == ["/messageapi/send"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_oauth_sends_acquire_only_one_token(monkeypatch):
+    login_count = 0
+
+    async def handler(request: httpx.Request):
+        nonlocal login_count
+        if request.url.path == "/oauthapi/login":
+            login_count += 1
+            await asyncio.sleep(0.02)
+            return httpx.Response(200, json={"access_token": "token", "expires_in": 3600})
+        return httpx.Response(200)
+
+    _Client.transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(eus_sms_service.httpx, "AsyncClient", _Client)
+    invalidate_token_cache(94)
+
+    await asyncio.gather(*(send_via_eus(_cfg(94), f"+43{i}", "A") for i in range(8)))
+
+    assert login_count == 1
 
 
 # ── resolve_sms_config / sms_available ───────────────────────────────────────

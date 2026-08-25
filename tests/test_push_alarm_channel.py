@@ -1,11 +1,92 @@
 """Tests fuer den exklusiven FCM-Alarm-Channel bei neuen Einsaetzen."""
+import asyncio
+import logging
+from time import perf_counter
 from unittest.mock import Mock
 
 import pytest
+from fastapi import BackgroundTasks
 
 from app.models.incident import Incident
-from app.services.incident_notify import notify_incident_created
 from app.services import push_service
+from app.services.incident_notify import notify_incident_created
+
+
+def _incident() -> Incident:
+    return Incident(
+        id=42,
+        alarm_type_code="B2",
+        address_city="Testort",
+        is_exercise=True,
+    )
+
+
+@pytest.mark.parametrize("mit_background_tasks", [False, True])
+@pytest.mark.asyncio
+async def test_incident_channels_run_concurrently(monkeypatch, mit_background_tasks):
+    gestartet: list[str] = []
+
+    async def langsam(name, *args, **kwargs):
+        gestartet.append(name)
+        await asyncio.sleep(0.05)
+
+    monkeypatch.setattr(
+        "app.services.sms_dispatch_service.dispatch_einsatzinfo",
+        lambda *args, **kwargs: langsam("sms"),
+    )
+    monkeypatch.setattr(
+        "app.services.incident_notify._send_incident_push",
+        lambda *args, **kwargs: langsam("push"),
+    )
+    monkeypatch.setattr(
+        "app.services.teams_alarm_service.post_incident_card",
+        lambda *args, **kwargs: langsam("teams"),
+    )
+    background_tasks = BackgroundTasks() if mit_background_tasks else None
+
+    start = perf_counter()
+    await notify_incident_created(
+        Mock(), _incident(), org_id=1, base_url="https://example.test",
+        background_tasks=background_tasks,
+    )
+    if background_tasks is not None:
+        await background_tasks()
+    dauer = perf_counter() - start
+
+    assert set(gestartet) == {"sms", "push", "teams"}
+    assert dauer < 0.11
+
+
+@pytest.mark.asyncio
+async def test_incident_channel_error_does_not_stop_others(monkeypatch, caplog):
+    beendet: list[str] = []
+
+    async def sms_fehler(*args, **kwargs):
+        raise RuntimeError("kaputt")
+
+    async def erfolgreich(name, *args, **kwargs):
+        beendet.append(name)
+
+    monkeypatch.setattr(
+        "app.services.sms_dispatch_service.dispatch_einsatzinfo", sms_fehler,
+    )
+    monkeypatch.setattr(
+        "app.services.incident_notify._send_incident_push",
+        lambda *args, **kwargs: erfolgreich("push"),
+    )
+    monkeypatch.setattr(
+        "app.services.teams_alarm_service.post_incident_card",
+        lambda *args, **kwargs: erfolgreich("teams"),
+    )
+
+    with caplog.at_level(logging.ERROR, logger="einsatzleiter.incident_notify"):
+        await notify_incident_created(
+            Mock(), _incident(), org_id=1, base_url="https://example.test",
+            background_tasks=None,
+        )
+
+    assert set(beendet) == {"push", "teams"}
+    assert "Einsatzinfo-SMS fehlgeschlagen (Einsatz 42)" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -25,12 +106,7 @@ async def test_new_incident_uses_alarm_channel(monkeypatch):
         "app.services.teams_alarm_service.post_incident_card",
         Mock(),
     )
-    incident = Incident(
-        id=42,
-        alarm_type_code="B2",
-        address_city="Testort",
-        is_exercise=True,
-    )
+    incident = _incident()
 
     await notify_incident_created(
         Mock(), incident, org_id=1, background_tasks=None,
