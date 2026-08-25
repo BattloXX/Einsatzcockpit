@@ -591,6 +591,7 @@ def enrich_events_for_org(
     org_id: int,
     raw_events: list[dict],
     *,
+    raw_public_events: list[dict] | None = None,
     raw_units: list[dict] | None = None,
     wache_unid: str | None = None,
     create_incidents: bool = False,
@@ -675,6 +676,22 @@ def enrich_events_for_org(
                     asyncio.run_coroutine_threadsafe(
                         _notify_new_dibos_incident(incident_id, org_id), loop
                     )
+        for event in parse_events(raw_public_events or []):
+            if not event.get("closed"):
+                continue
+            incident = _find_active_incident_by_event_number(
+                db, org_id, event.get("eventNumber")
+            )
+            if incident is None:
+                continue
+            from app.services.incident_service import close_incident
+            close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
+            db.flush()
+            closed_ids.append(incident.id)
+            logger.info(
+                "Einsatz %s durch abgeschlossenes DIBOS-Event %s automatisch geschlossen (Org %s)",
+                incident.id, event.get("eventNumber"), org_id,
+            )
         db.commit()
     except Exception:
         db.rollback()
@@ -693,6 +710,7 @@ async def enrich_and_broadcast(
     org_id: int,
     raw_events: list[dict],
     *,
+    raw_public_events: list[dict] | None = None,
     raw_units: list[dict] | None = None,
     wache_unid: str | None = None,
     create_incidents: bool = False,
@@ -716,7 +734,8 @@ async def enrich_and_broadcast(
     loop = asyncio.get_running_loop()
     try:
         result = await asyncio.to_thread(
-            enrich_events_for_org, org_id, raw_events, raw_units=raw_units,
+            enrich_events_for_org, org_id, raw_events, raw_public_events=raw_public_events,
+            raw_units=raw_units,
             wache_unid=wache_unid, create_incidents=create_incidents, loop=loop,
         )
     except Exception:
@@ -725,6 +744,7 @@ async def enrich_and_broadcast(
     changed_ids = result.get("changed_ids") or []
     rsvp_changed_ids = result.get("rsvp_changed_ids") or []
     closed_ids = result.get("closed_ids") or []
+    from app.services.broadcast import manager
     if closed_ids:
         from app.core.tenant import set_tenant_context
         from app.db import SessionLocal
@@ -745,11 +765,17 @@ async def enrich_and_broadcast(
                         "DIBOS-Auto-Close: WordPress-Bericht fehlgeschlagen (Einsatz %s)",
                         incident.id,
                     )
+                try:
+                    await manager.broadcast(incident_id, {"type": "incident_closed"})
+                except Exception:
+                    logger.exception(
+                        "DIBOS-Auto-Close: Broadcast fehlgeschlagen (Einsatz %s)",
+                        incident.id,
+                    )
         finally:
             db.close()
     if not changed_ids and not rsvp_changed_ids:
         return
-    from app.services.broadcast import manager
     for incident_id in changed_ids:
         try:
             await manager.broadcast(incident_id, {"type": "dibos_sync", "reload_board": True})

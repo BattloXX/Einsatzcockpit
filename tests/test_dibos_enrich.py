@@ -286,6 +286,50 @@ def test_enrich_ignores_events_without_matching_incident():
     assert result["changed_ids"] == []
 
 
+def test_public_closed_event_closes_matching_active_incident():
+    event = _event(20)
+    event["closed"] = "2026-08-25T11:23:45"
+    db = _session()
+    incident_id = _make_incident_id(db, lis_operation_number=event["eventNumber"])
+    db.close()
+
+    result = dibos_enrich.enrich_events_for_org(
+        ORG_ID, [], raw_public_events=[event]
+    )
+
+    check_db = _session()
+    assert check_db.get(Incident, incident_id).status == "closed"
+    check_db.close()
+    assert result["closed_ids"] == [incident_id]
+
+
+def test_public_closed_event_without_matching_active_incident_has_no_effect():
+    event = _event(21)
+    event["closed"] = "2026-08-25T11:23:45"
+
+    result = dibos_enrich.enrich_events_for_org(
+        ORG_ID, [], raw_public_events=[event]
+    )
+
+    assert result["closed_ids"] == []
+
+
+def test_public_closed_event_does_not_close_already_closed_incident_again():
+    event = _event(22)
+    event["closed"] = "2026-08-25T11:23:45"
+    db = _session()
+    _make_incident_id(
+        db, lis_operation_number=event["eventNumber"], status="closed"
+    )
+    db.close()
+
+    result = dibos_enrich.enrich_events_for_org(
+        ORG_ID, [], raw_public_events=[event]
+    )
+
+    assert result["closed_ids"] == []
+
+
 # ── BMA-Nr. -> Objektverwaltung: Objekt automatisch mit dem Einsatz verknüpfen ──
 #
 # Eigene, ISOLIERTE Test-Org je Test (statt der gemeinsam genutzten ORG_ID=1):

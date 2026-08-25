@@ -147,25 +147,32 @@ async def _check_org(org_id: int, config_id: int) -> None:
         await client.aclose()
         return
     units = []
+    public_events = []
     if enrich_incidents:
         try:
             units = await client.get_current_units()
         except DibosClientError:
             logger.exception("dibos_poll_loop: GetCurrentUnits fehlgeschlagen (Org %s)", org_id)
+    if enrich_incidents or create_incidents:
+        try:
+            public_events = await client.get_public_events()
+        except DibosClientError:
+            logger.exception("dibos_poll_loop: GetPublicEvents fehlgeschlagen (Org %s)", org_id)
     await client.aclose()
-
-    if not events:
-        return
 
     # Anreicherung/Einsatzanlage: unabhängig von auto_trace_on_event, direkt aus
     # diesem leichten Poll — keine Voll-Aufzeichnung (und damit keine Rohdaten-
     # Dateien auf Platte) nötig, wenn eine Org nur das will.
-    if enrich_incidents or create_incidents:
+    if (events or public_events) and (enrich_incidents or create_incidents):
         from app.services.dibos.dibos_enrich import enrich_and_broadcast
         await enrich_and_broadcast(
-            org_id, events, raw_units=units if enrich_incidents else None,
+            org_id, events, raw_public_events=public_events,
+            raw_units=units if enrich_incidents else None,
             wache_unid=wache_unid, create_incidents=create_incidents,
         )
+
+    if not events:
+        return
 
     if auto_trace_on_event:
         logger.info(

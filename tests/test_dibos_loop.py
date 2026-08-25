@@ -46,14 +46,18 @@ def _make_config(db, **overrides) -> OrgDibosConfig:
 
 
 class _FakeClient:
-    def __init__(self, events, *args, **kwargs):
+    def __init__(self, events, *args, public_events=None, **kwargs):
         self._events = events
+        self._public_events = public_events or []
 
     async def get_current_events(self):
         return self._events
 
     async def get_current_units(self):
         return []
+
+    async def get_public_events(self):
+        return self._public_events
 
     async def aclose(self):
         pass
@@ -267,6 +271,38 @@ def test_check_org_skips_enrichment_when_events_empty(monkeypatch):
     asyncio.run(dibos_loop._check_org(ORG_ID, config_id))
 
     assert enrich_calls == []
+
+
+def test_check_org_enriches_closed_public_event_when_current_events_empty(monkeypatch):
+    db = _session()
+    try:
+        cfg = _make_config(db, auto_trace_on_event=False, enrich_incidents=True)
+        config_id = cfg.id
+    finally:
+        db.close()
+
+    public_events = [{"eventNumber": "f26007481", "closed": "2026-08-25T11:23:45"}]
+    monkeypatch.setattr(
+        dibos_client, "DibosClient",
+        lambda *a, **kw: _FakeClient([], public_events=public_events),
+    )
+    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: False)
+    enrich_calls = []
+
+    async def fake_enrich_and_broadcast(org_id, raw_events, **kwargs):
+        enrich_calls.append((org_id, raw_events, kwargs))
+
+    import app.services.dibos.dibos_enrich as dibos_enrich
+    monkeypatch.setattr(dibos_enrich, "enrich_and_broadcast", fake_enrich_and_broadcast)
+
+    asyncio.run(dibos_loop._check_org(ORG_ID, config_id))
+
+    assert enrich_calls == [(ORG_ID, [], {
+        "raw_public_events": public_events,
+        "raw_units": [],
+        "wache_unid": cfg.wache_unid,
+        "create_incidents": False,
+    })]
 
 
 def test_check_org_skips_entirely_when_neither_capability_enabled(monkeypatch):
