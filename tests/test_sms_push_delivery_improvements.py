@@ -41,6 +41,33 @@ async def test_sms_bulk_distributes_and_limits_concurrency(monkeypatch):
     assert maximum[22] <= sms_dispatch_service.SMS_CONCURRENCY_PER_GATEWAY
 
 
+@pytest.mark.asyncio
+async def test_sms_bulk_uses_eus_concurrency_setting(monkeypatch):
+    aktiv = 0
+    maximum = 0
+
+    monkeypatch.setattr(
+        "app.routers.ws.connected_gateway_token_ids_ordered", lambda _org_id: [],
+    )
+    monkeypatch.setattr(sms_dispatch_service.settings, "EUS_SMS_CONCURRENCY", 7)
+
+    async def fake_send_sms(_org_id, _to, _text, ctx=None):
+        nonlocal aktiv, maximum
+        aktiv += 1
+        maximum = max(maximum, aktiv)
+        await asyncio.sleep(0.02)
+        aktiv -= 1
+        return True
+
+    monkeypatch.setattr("app.services.sms_service.send_sms", fake_send_sms)
+    ctx = SimpleNamespace(chain=["eus"], providers_used=set())
+    jobs = [(f"+4366000{index}", "Test") for index in range(12)]
+
+    await sms_dispatch_service.send_bulk_detailed(1, jobs, ctx=ctx)
+
+    assert maximum == 7
+
+
 def test_fcm_not_configured_is_logged_for_every_push(monkeypatch):
     db = SessionLocal()
     set_tenant_context(db, None)

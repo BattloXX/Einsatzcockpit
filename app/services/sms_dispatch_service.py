@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from app.config import settings
+
 # Sicher auf Modul-Ebene importierbar (keine Kreisabhaengigkeiten)
 from app.core.audit import write_audit
 from app.core.tenant import set_tenant_context
@@ -170,7 +172,11 @@ async def send_bulk_detailed(
             db.close()
     semaphore_keys: list[int | None] = list(gateway_ids) if gateway_ids else [None]
     semaphores = {
-        key: asyncio.Semaphore(SMS_CONCURRENCY_PER_GATEWAY)
+        key: asyncio.Semaphore(
+            settings.EUS_SMS_CONCURRENCY
+            if key is None
+            else SMS_CONCURRENCY_PER_GATEWAY
+        )
         for key in semaphore_keys
     }
     progress_lock = asyncio.Lock()
