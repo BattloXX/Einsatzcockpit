@@ -51,18 +51,17 @@ def _allowed_origin_host() -> str | None:
         return None
 
 
-def _csrf_cookie_attrs() -> str:
+def _csrf_cookie_attrs(sec_fetch_dest: str | None = None) -> str:
     """SameSite/Secure-Attribute des CSRF-Cookies.
 
-    Ist die Iframe-Einbettung aktiv (TRUSTED_FRAME_ANCESTORS gesetzt) UND laufen
-    Cookies ohnehin nur über HTTPS (COOKIE_SECURE), muss das Cookie
-    ``SameSite=None; Secure`` sein – sonst wird es im Cross-Site-Iframe nicht gesendet
-    und das Double-Submit (Cookie == Formfeld) schlägt fehl. ``Partitioned`` (CHIPS)
-    macht es zusätzlich robust gegen das Blockieren von Third-Party-Cookies.
-    Ohne Einbettung/HTTPS bleibt es beim strengeren ``SameSite=Lax``.
+    Nur eine tatsächlich als Iframe geladene Anfrage erhält bei aktivierter
+    Einbettung und HTTPS ``SameSite=None; Secure; Partitioned``. Direkte
+    Navigationen und Anfragen ohne ``Sec-Fetch-Dest: iframe`` bleiben beim
+    strengeren ``SameSite=Lax``. TRUSTED_FRAME_ANCESTORS ist dabei weiterhin
+    der app-weite Master-Schalter für die Einbettung.
     """
     embedding = bool((settings.TRUSTED_FRAME_ANCESTORS or "").strip())
-    if embedding and settings.COOKIE_SECURE:
+    if embedding and settings.COOKIE_SECURE and sec_fetch_dest == "iframe":
         return "; SameSite=None; Secure; Partitioned"
     return "; SameSite=Lax" + ("; Secure" if settings.COOKIE_SECURE else "")
 
@@ -97,6 +96,7 @@ class CSRFMiddleware:
         path: str = scope.get("path", "")
         headers = {k.decode("latin-1").lower(): v.decode("latin-1")
                    for k, v in scope.get("headers", [])}
+        sec_fetch_dest = headers.get("sec-fetch-dest")
 
         cookies = _parse_cookie(headers.get("cookie", ""))
         existing_token = cookies.get(CSRF_COOKIE)
@@ -148,7 +148,7 @@ class CSRFMiddleware:
                     )
                     await resp(scope, receive, send)
                     return
-                await self._call_with_cookie(scope, receive, send, new_token)
+                await self._call_with_cookie(scope, receive, send, new_token, sec_fetch_dest)
                 return
 
             # Fallback: Body buffern, damit wir das _csrf-Formfeld parsen UND
@@ -169,6 +169,7 @@ class CSRFMiddleware:
             content_type = headers.get("content-type", "")
 
             submitted: str | None = None
+            fahrtenbuch_token: str | None = None
 
             if "application/x-www-form-urlencoded" in content_type:
                 try:
@@ -176,6 +177,8 @@ class CSRFMiddleware:
                                       keep_blank_values=True)
                     if CSRF_FORM_FIELD in parsed:
                         submitted = parsed[CSRF_FORM_FIELD][0]
+                    if "t" in parsed:
+                        fahrtenbuch_token = parsed["t"][0]
                 except Exception:
                     pass
             elif "multipart/form-data" in content_type:
@@ -189,28 +192,58 @@ class CSRFMiddleware:
                             boundary = piece.split("=", 1)[1].strip().strip('"')
                             break
                     if boundary:
-                        marker = b'name="' + CSRF_FORM_FIELD.encode() + b'"'
-                        idx = raw_body.find(marker)
-                        if idx >= 0:
+                        def multipart_feld(name: str) -> str | None:
+                            marker = b'name="' + name.encode() + b'"'
+                            idx = raw_body.find(marker)
+                            if idx < 0:
+                                return None
                             after = raw_body[idx + len(marker):]
                             # nächstes \r\n\r\n überspringen, dann bis nächste boundary lesen
                             sep = b"\r\n\r\n"
                             sidx = after.find(sep)
-                            if sidx >= 0:
-                                tail = after[sidx + len(sep):]
-                                end_boundary = b"\r\n--" + boundary.encode()
-                                eidx = tail.find(end_boundary)
-                                if eidx >= 0:
-                                    submitted = tail[:eidx].decode("utf-8", errors="ignore").strip()
+                            if sidx < 0:
+                                return None
+                            tail = after[sidx + len(sep):]
+                            end_boundary = b"\r\n--" + boundary.encode()
+                            eidx = tail.find(end_boundary)
+                            if eidx < 0:
+                                return None
+                            return tail[:eidx].decode("utf-8", errors="ignore").strip()
+
+                        submitted = multipart_feld(CSRF_FORM_FIELD)
+                        fahrtenbuch_token = multipart_feld("t")
                 except Exception:
                     pass
 
             if not submitted or not _constant_time_eq(submitted, existing_token):
-                from starlette.responses import JSONResponse
-                resp = JSONResponse(
-                    {"detail": "CSRF-Token fehlt oder ungültig"},
-                    status_code=403,
-                )
+                is_api = path.startswith("/api/") or path.endswith(".json")
+                wants_html = "text/html" in headers.get("accept", "") and not is_api
+                if wants_html:
+                    from starlette.requests import Request
+
+                    from app.core.templating import templates
+
+                    request = Request(scope, receive)
+                    context = {
+                        "status": 403,
+                        "title": "Kein Zugriff",
+                        "emoji": "⛔",
+                        "detail": "CSRF-Token fehlt oder ungültig",
+                        "authenticated": False,
+                    }
+                    if path == "/fahrtenbuch" and fahrtenbuch_token:
+                        context["back_url"] = f"/f/{fahrtenbuch_token}"
+                        context["back_label"] = "🚗 Neue Fahrt erfassen"
+                    resp = templates.TemplateResponse(
+                        request, "errors/fehler.html", context, status_code=403,
+                    )
+                else:
+                    from starlette.responses import JSONResponse
+
+                    resp = JSONResponse(
+                        {"detail": "CSRF-Token fehlt oder ungültig"},
+                        status_code=403,
+                    )
                 await resp(scope, receive, send)
                 return
 
@@ -224,20 +257,22 @@ class CSRFMiddleware:
                     return {"type": "http.request", "body": raw_body, "more_body": False}
                 return {"type": "http.disconnect"}
 
-            await self._call_with_cookie(scope, replay_receive, send, new_token)
+            await self._call_with_cookie(scope, replay_receive, send, new_token, sec_fetch_dest)
             return
 
         # Safe oder exempt → einfach durchreichen
-        await self._call_with_cookie(scope, receive, send, new_token)
+        await self._call_with_cookie(scope, receive, send, new_token, sec_fetch_dest)
 
-    async def _call_with_cookie(self, scope, receive, send, new_token: str | None):
+    async def _call_with_cookie(
+        self, scope, receive, send, new_token: str | None, sec_fetch_dest: str | None,
+    ):
         if not new_token:
             await self.app(scope, receive, send)
             return
 
         cookie_value = (
             f"{CSRF_COOKIE}={new_token}; Path=/; Max-Age=2592000"
-            + _csrf_cookie_attrs()
+            + _csrf_cookie_attrs(sec_fetch_dest)
         )
 
         async def send_wrapper(message):

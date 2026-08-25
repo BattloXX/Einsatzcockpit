@@ -36,7 +36,7 @@
   <div style="position:relative;">
     <input type="text" name="ausbildner_name" id="ausbildner_name"
            class="form-control form-control--lg"
-           placeholder="Name tippen…" required autocomplete="new-password"
+           placeholder="Name tippen…" required autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
            x-model="query"
            hx-get="/fahrtenbuch/hx/maschinist"
            hx-target="#ausbildner-suggestions"
@@ -75,7 +75,7 @@
     <input type="text" id="fuehrung_name"
            :name="rolle === 'gruppenkommandant' ? 'gruppenkommandant_name' : 'einsatzleiter_name'"
            class="form-control form-control--lg"
-           placeholder="Name tippen…" required autocomplete="new-password"
+           placeholder="Name tippen…" required autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
            x-model="query"
            hx-get="/fahrtenbuch/hx/maschinist"
            hx-target="#fuehrung-suggestions"
@@ -96,7 +96,7 @@
   <div style="position:relative;">
     <input type="text" name="gruppenkommandant_name" id="gruppenkommandant_name"
            class="form-control form-control--lg"
-           placeholder="Name tippen…" required autocomplete="new-password"
+           placeholder="Name tippen…" required autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
            x-model="query"
            hx-get="/fahrtenbuch/hx/maschinist"
            hx-target="#gk-suggestions"

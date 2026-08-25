@@ -116,6 +116,13 @@ Der Org-Token ermöglicht die Fahrterfassung **ohne Benutzer-Login** (z. B. auf 
 2. Den Link ausdrucken, als QR-Code anzeigen oder per Messenger teilen.
 3. Jeder mit diesem Link kann Fahrten für die eigene Organisation erfassen.
 
+Der Org-Token-Link kann auf jeder externen Website, zum Beispiel auf der eigenen
+Feuerwehr-Homepage, per Iframe eingebettet werden:
+
+```html
+<iframe src="https://einsatz.example.com/f/{token}" title="Fahrtenbuch"></iframe>
+```
+
 > **Token rotieren** macht den alten Link sofort ungültig. Alle ausgegebenen Links müssen danach neu verteilt werden. Nur rotieren, wenn der Token kompromittiert wurde.
 
 ### Fahrzeug-QR-Codes

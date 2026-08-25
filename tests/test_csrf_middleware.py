@@ -53,10 +53,61 @@ def test_header_token_falsch_403(client):
     assert r.status_code == 403
 
 
+def test_header_token_falsch_bleibt_mit_html_accept_json(client):
+    _csrf_cookie(client)
+    r = client.post(
+        PROBE,
+        headers={"X-CSRF-Token": "falsches-token", "Accept": "text/html"},
+        data={"x": "1"},
+    )
+    assert r.status_code == 403
+    assert r.json() == {"detail": "CSRF-Token fehlt oder ungültig"}
+
+
 def test_ohne_token_403(client):
     _csrf_cookie(client)
     r = client.post(PROBE, data={"x": "1"})
     assert r.status_code == 403
+
+
+def test_formfeld_fehler_als_html_fuer_browser(client):
+    _csrf_cookie(client)
+    r = client.post(PROBE, headers={"Accept": "text/html"}, data={"_csrf": "falsch"})
+    assert r.status_code == 403
+    assert "text/html" in r.headers["content-type"]
+    assert "Kein Zugriff" in r.text
+    assert not r.text.startswith('{"detail":')
+
+
+def test_formfeld_fehler_ohne_html_accept_bleibt_json(client):
+    _csrf_cookie(client)
+    r = client.post(PROBE, data={"_csrf": "falsch"})
+    assert r.status_code == 403
+    assert r.json() == {"detail": "CSRF-Token fehlt oder ungültig"}
+
+
+def test_fahrtenbuch_csrf_fehler_enthaelt_ruecksprung(client):
+    _csrf_cookie(client)
+    r = client.post(
+        "/fahrtenbuch",
+        headers={"Accept": "text/html"},
+        data={"_csrf": "falsch", "t": "abc123"},
+    )
+    assert r.status_code == 403
+    assert 'href="/f/abc123"' in r.text
+    assert "Neue Fahrt erfassen" in r.text
+
+
+def test_andere_csrf_fehler_enthalten_keinen_fahrtenbuch_ruecksprung(client):
+    _csrf_cookie(client)
+    r = client.post(
+        "/login",
+        headers={"Accept": "text/html"},
+        data={"_csrf": "falsch", "t": "abc123"},
+    )
+    assert r.status_code == 403
+    assert 'href="/f/abc123"' not in r.text
+    assert "Neue Fahrt erfassen" not in r.text
 
 
 def test_formfeld_fallback_funktioniert_weiter(client):

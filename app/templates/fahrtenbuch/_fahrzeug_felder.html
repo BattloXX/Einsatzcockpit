@@ -7,7 +7,7 @@
   <div style="position:relative;">
     <input type="text" name="maschinist_name" id="maschinist_name"
            class="form-control form-control--lg"
-           placeholder="Name tippen…" required autocomplete="new-password"
+           placeholder="Name tippen…" required autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
            x-model="query"
            hx-get="/fahrtenbuch/hx/maschinist"
            hx-target="#maschinist-suggestions"
@@ -94,7 +94,7 @@
   <div style="position:relative;">
     <input type="text" name="maschinist2_name" id="maschinist2_name"
            class="form-control form-control--lg"
-           placeholder="Name tippen…" required autocomplete="new-password"
+           placeholder="Name tippen…" required autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
            x-model="query"
            hx-get="/fahrtenbuch/hx/maschinist"
            hx-target="#maschinist2-suggestions"
@@ -148,7 +148,7 @@
     <div style="position:relative;">
       <input type="text" name="seilwinde_bediener_name" id="seilwinde_bediener_name"
              class="form-control"
-             placeholder="Name tippen (optional)" autocomplete="new-password"
+             placeholder="Name tippen (optional)" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
              x-model="query"
              hx-get="/fahrtenbuch/hx/maschinist"
              hx-target="#seilwinde-suggestions"

@@ -199,7 +199,7 @@ def test_trusted_frame_ancestors_erlaubt_alle_routen(monkeypatch):
     monkeypatch.setattr(
         settings, "TRUSTED_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at https://*.fwwo.at",
     )
-    for path in ("/login", "/verwaltung/fahrten", "/fahrtenbuch/neu", "/f/abc123", "/board", "/admin/settings"):
+    for path in ("/login", "/verwaltung/fahrten", "/fahrtenbuch/neu", "/board", "/admin/settings"):
         h = _security_headers_for(path)
         csp = h["content-security-policy"]
         assert "frame-ancestors 'self' https://feuerwehr.wolfurt.at https://*.fwwo.at" in csp
@@ -213,7 +213,7 @@ def test_csrf_cookie_samesite_none_bei_embedding(monkeypatch):
     from app.middleware import csrf
     monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at")
     monkeypatch.setattr(settings, "COOKIE_SECURE", True)
-    attrs = csrf._csrf_cookie_attrs()
+    attrs = csrf._csrf_cookie_attrs(sec_fetch_dest="iframe")
     assert "SameSite=None" in attrs
     assert "Secure" in attrs
 
@@ -226,3 +226,31 @@ def test_csrf_cookie_samesite_lax_ohne_embedding(monkeypatch):
     attrs = csrf._csrf_cookie_attrs()
     assert "SameSite=Lax" in attrs
     assert "SameSite=None" not in attrs
+
+
+def test_csrf_cookie_samesite_lax_bei_direkter_navigation(monkeypatch):
+    from app.config import settings
+    from app.middleware import csrf
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at")
+    monkeypatch.setattr(settings, "COOKIE_SECURE", True)
+    attrs = csrf._csrf_cookie_attrs(sec_fetch_dest="document")
+    assert "SameSite=Lax" in attrs
+    assert "SameSite=None" not in attrs
+
+
+def test_oeffentliches_fahrtenbuch_von_jeder_origin_einbettbar(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    for path in ("/f/abc123", "/fahrtenbuch"):
+        h = _security_headers_for(path)
+        assert "frame-ancestors *" in h["content-security-policy"]
+        assert "x-frame-options" not in h
+
+
+def test_internes_fahrtenbuch_bleibt_gegen_framing_geschuetzt(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    h = _security_headers_for("/fahrtenbuch/neu")
+    assert "frame-ancestors 'none'" in h["content-security-policy"]
+    assert "frame-ancestors *" not in h["content-security-policy"]
+    assert h["x-frame-options"] == "DENY"
