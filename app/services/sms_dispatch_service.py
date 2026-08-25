@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("einsatzleiter.sms_dispatch")
 
 # Pro Gateway duerfen nur wenige Jobs gleichzeitig auf das gekoppelte Handy treffen.
-SMS_CONCURRENCY_PER_GATEWAY = 4
+SMS_CONCURRENCY_PER_GATEWAY = 7
 
 # Standardvorlage fuer Einsatzinfo-SMS (Platzhalter in geschweiften Klammern)
 _DEFAULT_TEMPLATE = "Einsatz {stichwort}: {adresse}. {meldung} {link}"
