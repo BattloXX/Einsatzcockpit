@@ -70,12 +70,24 @@ def _is_embeddable_route(path: str) -> bool:
     return False
 
 
+def _is_public_fahrtenbuch_route(path: str) -> bool:
+    """Öffentliche Fahrtenbuch-Routen, die jede Origin einbetten darf."""
+    # Exakter Vergleich: /fahrtenbuch/neu und weitere interne Routen bleiben geschützt.
+    return (
+        path.startswith("/f/")
+        or path == "/fahrtenbuch"
+        or path.startswith("/fahrtenbuch/hx/")
+    )
+
+
 def _trusted_frame_ancestors() -> str:
     """Liefert die konfigurierten externen Eltern-Origins (leerzeichen-getrennt), oder ""."""
     return " ".join((settings.TRUSTED_FRAME_ANCESTORS or "").split())
 
 
-def _frame_ancestors_directive(*, self_allowed: bool, trusted: str) -> str:
+def _frame_ancestors_directive(
+    *, self_allowed: bool, trusted: str, any_origin: bool = False,
+) -> str:
     """CSP frame-ancestors für eine Antwort.
 
     Sind externe Origins konfiguriert (`trusted`), dürfen sie die Seite IMMER
@@ -84,6 +96,8 @@ def _frame_ancestors_directive(*, self_allowed: bool, trusted: str) -> str:
     kombinierbar ist. Ohne Konfiguration bleibt es beim bisherigen, strikteren
     Verhalten je Routen-Kategorie (self_allowed).
     """
+    if any_origin:
+        return "frame-ancestors *"
     if trusted:
         return "frame-ancestors 'self' " + trusted
     return "frame-ancestors 'self'" if self_allowed else "frame-ancestors 'none'"
@@ -95,6 +109,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         path = request.url.path
         embeddable = _is_embeddable_route(path)
+        public_fahrtenbuch = _is_public_fahrtenbuch_route(path)
         infoscreen = path.startswith("/wetter/infoscreen/") or path.startswith("/infoscreen/statistik/")
         alarm_infoscreen = path.startswith("/infoscreen/alarm/")
         trusted = _trusted_frame_ancestors()
@@ -112,7 +127,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             csp_base = _CSP_BASE
             self_allowed = False
 
-        csp = csp_base + "; " + _frame_ancestors_directive(self_allowed=self_allowed, trusted=trusted)
+        csp = csp_base + "; " + _frame_ancestors_directive(
+            self_allowed=self_allowed,
+            trusted=trusted,
+            any_origin=public_fahrtenbuch,
+        )
 
         # CSP überschreibt frame-ancestors → eigener X-Frame-Options als Fallback
         response.headers.setdefault("Content-Security-Policy", csp)
@@ -123,7 +142,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "geolocation=(), microphone=(self), camera=(self), payment=()",
         )
 
-        if trusted:
+        if trusted or public_fahrtenbuch:
             # X-Frame-Options kann keine fremde Origin erlauben (ALLOW-FROM ist tot).
             # Deshalb hier KEIN X-Frame-Options setzen – moderne Browser richten sich
             # nach CSP frame-ancestors. Ein evtl. vom Reverse-Proxy (nginx) gesetztes
