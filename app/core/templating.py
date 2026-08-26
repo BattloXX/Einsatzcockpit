@@ -14,6 +14,7 @@ import json as _json
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
+from app.core.telefon import telefon_kompakt
 from app.core.timezones import (
     format_local_datetime,
     format_local_datetime_sec,
@@ -119,6 +120,7 @@ templates.env.filters["local_iso"] = _local_iso
 templates.env.filters["action_label"] = _action_label
 templates.env.filters["unit_status_slug"] = _unit_status_slug
 templates.env.filters["person_status_label"] = _person_status_label
+templates.env.filters["tel"] = telefon_kompakt
 
 def _ordered_col_items(col, vehicles, tasks, messages, persons):
     """Gibt geordnete Liste von (kind, obj)-Tupeln zurück.

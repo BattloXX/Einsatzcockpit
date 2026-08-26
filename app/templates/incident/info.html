@@ -168,7 +168,7 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;">
           {% if incident.caller_name %}<span>👤 {{ incident.caller_name }}</span>{% endif %}
           {% if incident.caller_phone %}
-          <a href="tel:{{ incident.caller_phone|replace(' ', '') }}" class="btn btn--primary objekt-einsatz-telbtn">📞 {{ incident.caller_phone }}</a>
+          <a href="tel:{{ incident.caller_phone|tel }}" class="btn btn--primary objekt-einsatz-telbtn">📞 {{ incident.caller_phone }}</a>
           {% endif %}
         </div>
         {% endif %}

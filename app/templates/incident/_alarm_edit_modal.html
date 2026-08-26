@@ -34,7 +34,7 @@
       {% if incident.caller_phone %}
       <span>
         📞
-        <a href="tel:{{ incident.caller_phone }}" style="color:var(--color-primary,#3b82f6);text-decoration:none">
+        <a href="tel:{{ incident.caller_phone|tel }}" style="color:var(--color-primary,#3b82f6);text-decoration:none">
           {{ incident.caller_phone }}
         </a>
       </span>

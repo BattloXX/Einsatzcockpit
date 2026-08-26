@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,6 +16,7 @@ from app.config import settings
 
 # Sicher auf Modul-Ebene importierbar (keine Kreisabhaengigkeiten)
 from app.core.audit import write_audit
+from app.core.telefon import telefon_kompakt
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import AlarmType, FireDept, OrgSettings
@@ -40,8 +40,6 @@ _DEFAULT_TEMPLATE = "Einsatz {stichwort}: {adresse}. {meldung} {link}"
 # Standardtext fuer den Grossschadenslage-Sonderalarm (siehe dispatch_gsl_alarm()).
 # Bewusst ohne Umlaute (SMS-Zeichensatz, wie gsl_verleih_sms_*_text in verleih_service.py).
 _DEFAULT_GSL_ALARM_TEXT = "Grossschadenslage! Alle Mitglieder ruecken sofort ins Geraetehaus ein."
-
-_PHONE_STRIP_RE = re.compile(r"[\s\-\(\)]")
 
 
 def default_einsatzinfo_template() -> str:
@@ -71,14 +69,6 @@ def render_template(template: str, ctx: dict) -> str:
             return ""
 
     return template.format_map(_Safe(ctx))
-
-
-def _normalize_phone(phone: str) -> str:
-    """Normalisiert eine Telefonnummer fuer Deduplizierung.
-
-    Entfernt Leerzeichen, Bindestriche und Klammern.
-    """
-    return _PHONE_STRIP_RE.sub("", phone).strip()
 
 
 def collect_einsatzinfo_recipients(
@@ -127,7 +117,7 @@ def collect_einsatzinfo_recipients(
             phone = (m.phone or "").strip()
             if not phone:
                 continue
-            norm = _normalize_phone(phone)
+            norm = telefon_kompakt(phone)
             if norm and norm not in result:
                 result[norm] = m
 

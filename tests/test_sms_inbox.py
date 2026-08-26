@@ -55,12 +55,7 @@ def _make_rule(
     return rule
 
 
-# ── _normalize_phone / _rule_matches ──────────────────────────────────────────
-
-def test_normalize_phone_strips_formatting():
-    from app.services.sms_inbox_service import _normalize_phone
-    assert _normalize_phone(" +43 (664) 111-222 ") == "+43664111222"
-
+# ── _rule_matches ─────────────────────────────────────────────────────────────
 
 def test_rule_matches_exact():
     from app.services.sms_inbox_service import _rule_matches
