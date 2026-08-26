@@ -1,128 +1,23 @@
 <div class="card" style="padding:16px;">
   <h3 style="margin-top:0;">📞 Kontakte</h3>
-  {% if objekt.kontakte %}
-  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+  <div class="objekt-kontakte">
     {% for k in objekt.kontakte %}
-    <div class="objekt-kontakt" x-data="{ edit: false }">
-      <div x-show="!edit" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <div>
-          <div>
-            <span class="badge-pill badge-pill--gray">{{ kontakt_arten.get(k.art, k.art) }}</span>
-            <strong>{{ k.name }}</strong>
-            {% if k.benachrichtigung_mail %}<span class="badge-pill badge-pill--gray">✉️ Einsatzinfo</span>{% endif %}
-            {% if k.benachrichtigung_sms %}<span class="badge-pill badge-pill--gray">💬 SMS</span>{% endif %}
-          </div>
-          {% if k.erreichbarkeit %}<div class="text-muted" style="font-size:0.85em;">{{ k.erreichbarkeit }}</div>{% endif %}
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-            {% for tel in k.telefone %}
-            <a href="tel:{{ tel|replace(' ', '') }}" class="btn btn--ghost btn--xs">📞 {{ tel }}</a>
-            {% endfor %}
-            {% if k.email %}<a href="mailto:{{ k.email }}" class="btn btn--ghost btn--xs">✉️ {{ k.email }}</a>{% endif %}
-          </div>
-        </div>
-        {% if ist_verwalter %}
-        <div style="display:flex;gap:6px;align-items:flex-start;">
-          <button type="button" class="btn btn--ghost btn--xs" @click="edit = true">Bearbeiten</button>
-          <form hx-post="/objekte/{{ objekt.id }}/kontakte/{{ k.id }}/loeschen"
-                hx-target="#abschnitt-kontakte" hx-swap="innerHTML"
-                hx-confirm="Kontakt '{{ k.name }}' löschen?" style="display:inline;">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button type="submit" class="btn btn--danger btn--xs">Löschen</button>
-          </form>
-        </div>
-        {% endif %}
+    <div class="objekt-kontakt" x-data="{{ {'edit': false, 'telefone': k.telefone_eintraege}|tojson|forceescape }}">
+      <div x-show="!edit">
+        <div class="objekt-kontakt__kopf"><div><span class="badge-pill badge-pill--gray">{{ kontakt_arten.get(k.art, k.art) }}</span> <strong>{{ k.name }}</strong></div>
+          {% if ist_verwalter %}<div class="objekt-kontakt__aktionen"><button type="button" class="btn btn--ghost btn--xs" @click="edit = true">Bearbeiten</button><form hx-post="/objekte/{{ objekt.id }}/kontakte/{{ k.id }}/loeschen" hx-target="#abschnitt-kontakte" hx-swap="innerHTML" hx-confirm="Kontakt '{{ k.name }}' löschen?"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger btn--xs">Löschen</button></form></div>{% endif %}</div>
+        {% if k.erreichbarkeit %}<div class="text-muted">{{ k.erreichbarkeit }}</div>{% endif %}
+        <div class="objekt-kontakt__kanaele">{% for tel in k.telefone_eintraege %}<div class="objekt-kontakt__telzeile"><a class="btn btn--ghost btn--xs" href="tel:{{ tel.nummer|replace(' ', '')|replace('-', '')|replace('(', '')|replace(')', '')|replace('/', '') }}">📞 {% if tel.label %}{{ tel.label }}: {% endif %}{{ tel.nummer }}</a>{% if tel.sms %}<span class="badge-pill badge-pill--gray">💬 Einsatzinfo</span>{% endif %}</div>{% endfor %}{% if k.email %}<div class="objekt-kontakt__telzeile"><a class="btn btn--ghost btn--xs" href="mailto:{{ k.email }}">✉️ {{ k.email }}</a>{% if k.benachrichtigung_mail %}<span class="badge-pill badge-pill--gray">✉️ Einsatzinfo</span>{% endif %}</div>{% endif %}</div>
       </div>
-      {% if ist_verwalter %}
-      <form x-show="edit" x-cloak hx-post="/objekte/{{ objekt.id }}/kontakte/{{ k.id }}"
-            hx-target="#abschnitt-kontakte" hx-swap="innerHTML"
-            style="display:grid;grid-template-columns:1fr 1.2fr 1.2fr 1fr 1fr auto;gap:8px;align-items:end;">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <div class="form-group" style="margin:0;">
-          <label class="form-label">Art</label>
-          <select name="art" class="form-input">
-            {% for code, label in kontakt_arten.items() %}
-            <option value="{{ code }}" {% if k.art == code %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label class="form-label">Name *</label>
-          <input type="text" name="name" class="form-input" required maxlength="150" value="{{ k.name }}">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label class="form-label">Telefon(e), kommagetrennt</label>
-          <input type="text" name="telefone" class="form-input" value="{{ k.telefone|join(', ') }}">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label class="form-label">E-Mail</label>
-          <input type="text" name="email" class="form-input" maxlength="200" value="{{ k.email or '' }}">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label class="form-label">Erreichbarkeit</label>
-          <input type="text" name="erreichbarkeit" class="form-input" maxlength="200" value="{{ k.erreichbarkeit or '' }}">
-        </div>
-        <div style="display:flex;gap:6px;">
-          <button type="button" class="btn btn--ghost btn--xs" @click="edit = false">Abbr.</button>
-          <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
-        </div>
-        <div style="grid-column:1 / -1;display:flex;gap:16px;align-items:end;flex-wrap:wrap;">
-          <label><input type="checkbox" name="benachrichtigung_mail" value="1" {% if k.benachrichtigung_mail %}checked{% endif %}> Einsatzinfo per E-Mail</label>
-          <label><input type="checkbox" name="benachrichtigung_sms" value="1" {% if k.benachrichtigung_sms %}checked{% endif %}> Einsatzinfo per SMS</label>
-          <div class="form-group" style="margin:0;min-width:240px;">
-            <label class="form-label">SMS an Nummer (leer = erste Nummer)</label>
-            <input type="text" name="benachrichtigung_telefon" maxlength="30" class="form-input" value="{{ k.benachrichtigung_telefon or '' }}">
-          </div>
-          {% if k.benachrichtigung_sms and not k.benachrichtigung_telefon and not k.telefone %}
-          <span style="color:var(--warning);">SMS aktiv, aber keine Telefonnummer hinterlegt</span>
-          {% endif %}
-        </div>
-      </form>
-      {% endif %}
-    </div>
-    {% endfor %}
+      {% if ist_verwalter %}<form x-show="edit" x-cloak hx-post="/objekte/{{ objekt.id }}/kontakte/{{ k.id }}" hx-target="#abschnitt-kontakte" hx-swap="innerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-grid"><div class="form-group"><label class="form-label">Art</label><select name="art" class="form-input">{% for code, label in kontakt_arten.items() %}<option value="{{ code }}" {% if k.art == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div><div class="form-group"><label class="form-label">Name *</label><input name="name" class="form-input" required maxlength="150" value="{{ k.name }}"></div><div class="form-group"><label class="form-label">E-Mail</label><input name="email" class="form-input" maxlength="200" value="{{ k.email or '' }}"><label><input type="checkbox" name="benachrichtigung_mail" value="1" {% if k.benachrichtigung_mail %}checked{% endif %}> Einsatzinfo per E-Mail</label></div><div class="form-group"><label class="form-label">Erreichbarkeit</label><input name="erreichbarkeit" class="form-input" maxlength="200" value="{{ k.erreichbarkeit or '' }}"></div></div>
+        <template x-for="(tel, index) in telefone" :key="index"><div class="objekt-kontakt__telefonformular"><input name="telefon_label" class="form-input" maxlength="40" placeholder="Bezeichnung" x-model="tel.label"><input name="telefon_nummer" class="form-input" maxlength="30" placeholder="Telefonnummer" x-model="tel.nummer"><label><input type="checkbox" name="telefon_sms" :value="index" x-model="tel.sms"> SMS-Einsatzinfo</label><button type="button" class="btn btn--ghost btn--xs" @click="telefone.splice(index, 1)">Entfernen</button></div></template>
+        <button type="button" class="btn btn--ghost btn--xs" @click="telefone.push({label: '', nummer: '', sms: false})">+ Nummer</button><div class="objekt-kontakt__formularaktionen"><button type="button" class="btn btn--ghost" @click="edit = false">Abbr.</button><button class="btn btn--primary">Speichern</button></div>
+      </form>{% endif %}
+    </div>{% else %}<p class="text-muted">Keine Kontakte erfasst.</p>{% endfor %}
   </div>
-  {% else %}
-  <p class="text-muted">Keine Kontakte erfasst.</p>
-  {% endif %}
-
-  {% if ist_verwalter %}
-  <form hx-post="/objekte/{{ objekt.id }}/kontakte/neu"
-        hx-target="#abschnitt-kontakte" hx-swap="innerHTML"
-        style="display:grid;grid-template-columns:1fr 1.2fr 1.2fr 1fr 1fr auto;gap:8px;align-items:end;border-top:1px solid var(--border);padding-top:12px;">
-    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <div class="form-group" style="margin:0;">
-      <label class="form-label">Art</label>
-      <select name="art" class="form-input">
-        {% for code, label in kontakt_arten.items() %}
-        <option value="{{ code }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="form-group" style="margin:0;">
-      <label class="form-label">Name *</label>
-      <input type="text" name="name" class="form-input" required maxlength="150">
-    </div>
-    <div class="form-group" style="margin:0;">
-      <label class="form-label">Telefon(e), kommagetrennt</label>
-      <input type="text" name="telefone" class="form-input" placeholder="+43 5574 ..., +43 664 ...">
-    </div>
-    <div class="form-group" style="margin:0;">
-      <label class="form-label">E-Mail</label>
-      <input type="text" name="email" class="form-input" maxlength="200">
-    </div>
-    <div class="form-group" style="margin:0;">
-      <label class="form-label">Erreichbarkeit</label>
-      <input type="text" name="erreichbarkeit" class="form-input" maxlength="200" placeholder="Mo–Fr 8–17 Uhr">
-    </div>
-    <button type="submit" class="btn btn--primary">+ Kontakt</button>
-    <div style="grid-column:1 / -1;display:flex;gap:16px;align-items:end;flex-wrap:wrap;">
-      <label><input type="checkbox" name="benachrichtigung_mail" value="1"> Einsatzinfo per E-Mail</label>
-      <label><input type="checkbox" name="benachrichtigung_sms" value="1"> Einsatzinfo per SMS</label>
-      <div class="form-group" style="margin:0;min-width:240px;">
-        <label class="form-label">SMS an Nummer (leer = erste Nummer)</label>
-        <input type="text" name="benachrichtigung_telefon" maxlength="30" class="form-input">
-      </div>
-    </div>
-  </form>
-  {% endif %}
+  {% if ist_verwalter %}<form class="objekt-kontakt objekt-kontakt--neu" hx-post="/objekte/{{ objekt.id }}/kontakte/neu" hx-target="#abschnitt-kontakte" hx-swap="innerHTML" x-data="{ telefone: [{label: '', nummer: '', sms: false}] }"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-grid"><div class="form-group"><label class="form-label">Art</label><select name="art" class="form-input">{% for code, label in kontakt_arten.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></div><div class="form-group"><label class="form-label">Name *</label><input name="name" class="form-input" required maxlength="150"></div><div class="form-group"><label class="form-label">E-Mail</label><input name="email" class="form-input" maxlength="200"><label><input type="checkbox" name="benachrichtigung_mail" value="1"> Einsatzinfo per E-Mail</label></div><div class="form-group"><label class="form-label">Erreichbarkeit</label><input name="erreichbarkeit" class="form-input" maxlength="200"></div></div>
+    <template x-for="(tel, index) in telefone" :key="index"><div class="objekt-kontakt__telefonformular"><input name="telefon_label" class="form-input" maxlength="40" placeholder="Bezeichnung" x-model="tel.label"><input name="telefon_nummer" class="form-input" maxlength="30" placeholder="Telefonnummer" x-model="tel.nummer"><label><input type="checkbox" name="telefon_sms" :value="index" x-model="tel.sms"> SMS-Einsatzinfo</label><button type="button" class="btn btn--ghost btn--xs" @click="telefone.splice(index, 1)">Entfernen</button></div></template><button type="button" class="btn btn--ghost btn--xs" @click="telefone.push({label: '', nummer: '', sms: false})">+ Nummer</button><div class="objekt-kontakt__formularaktionen"><button class="btn btn--primary">+ Kontakt</button></div>
+  </form>{% endif %}
 </div>

@@ -1782,11 +1782,25 @@ button.htmx-request,
 .objekt-protokoll__change { font-size: .9em; margin-top: 2px; }
 .objekt-protokoll__old { color: #f87171; text-decoration: line-through; }
 .objekt-protokoll__new { color: #4ade80; }
+.objekt-kontakte { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.objekt-kontakt { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-low); }
+.objekt-kontakt--neu { border-style: dashed; }
+.objekt-kontakt__kopf { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.objekt-kontakt__aktionen, .objekt-kontakt__kanaele, .objekt-kontakt__telzeile { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.objekt-kontakt__aktionen form { margin: 0; }
+.objekt-kontakt__kanaele { margin-top: 8px; flex-direction: column; align-items: flex-start; }
+.objekt-kontakt__telefonformular { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(180px, 1fr) auto auto; gap: 8px; align-items: center; margin: 8px 0; }
+.objekt-kontakt__formularaktionen { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 @media (max-width: 760px) {
   .objekt-detail-grid { grid-template-columns: 1fr; }
   .objekt-abschnitt-nav { flex-direction: row; flex-wrap: wrap; position: static; }
   .objekt-dl { grid-template-columns: 1fr; gap: 2px; }
   .objekt-dl dt { margin-top: 8px; }
+  .objekt-kontakt .form-grid, .objekt-kontakt__telefonformular { grid-template-columns: 1fr; }
+  .objekt-kontakt__kopf { flex-direction: column; }
+  .objekt-kontakt__aktionen, .objekt-kontakt__formularaktionen { width: 100%; }
+  .objekt-kontakt__aktionen > *, .objekt-kontakt__aktionen .btn, .objekt-kontakt__formularaktionen .btn { flex: 1; min-height: 44px; }
+  .objekt-kontakt__aktionen form { display: flex; flex: 1; }
 }
 
 /* ── Objektverwaltung (PR2): Gefahren-/Merkmal-Chips ────────────────────── */

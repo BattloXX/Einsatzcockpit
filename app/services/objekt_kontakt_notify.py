@@ -10,6 +10,7 @@ import logging
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import write_audit
@@ -35,6 +36,7 @@ from app.services.mail_service import (
 )
 from app.services.sms_dispatch_service import render_template
 from app.services.sms_service import resolve_sms_config, send_sms, sms_available
+from app.services.objekt_service import telefon_normalisiert
 
 logger = logging.getLogger("einsatzleiter.objekt_kontakt_notify")
 
@@ -81,22 +83,16 @@ def stichwort_erlaubt(objekt: Objekt, alarm_type_code: str | None) -> bool:
     return (alarm_type_code or "").strip().casefold() in erlaubt
 
 
-def sms_nummer(kontakt: ObjektKontakt) -> str | None:
-    nummer = (kontakt.benachrichtigung_telefon or "").strip()
-    if nummer:
-        return nummer
-    return kontakt.telefone[0].strip() if kontakt.telefone else None
-
-
 def sammle_ziele(objekt: Objekt) -> list[tuple[ObjektKontakt, str, str]]:
     ziele: list[tuple[ObjektKontakt, str, str]] = []
     for kontakt in objekt.kontakte:
         email = (kontakt.email or "").strip()
         if kontakt.benachrichtigung_mail and _looks_like_email(email):
-            ziele.append((kontakt, "mail", email))
-        nummer = sms_nummer(kontakt)
-        if kontakt.benachrichtigung_sms and nummer:
-            ziele.append((kontakt, "sms", nummer))
+            ziele.append((kontakt, "mail", email.casefold()))
+        for nummer in kontakt.sms_nummern:
+            normalisiert = telefon_normalisiert(nummer)
+            if normalisiert:
+                ziele.append((kontakt, "sms", normalisiert))
     return ziele
 
 
@@ -171,8 +167,7 @@ async def dispatch_objekt_einsatzinfo(
                 ergebnis["uebersprungen"] += 1
                 continue
             if not force and (
-                not objekt.kontakt_info_enabled
-                or (incident.is_exercise and not objekt.kontakt_info_uebung)
+                (incident.is_exercise and not objekt.kontakt_info_uebung)
                 or not stichwort_erlaubt(objekt, incident.alarm_type_code)
             ):
                 ergebnis["uebersprungen"] += 1
@@ -199,6 +194,7 @@ async def dispatch_objekt_einsatzinfo(
                     ObjektKontaktBenachrichtigung.incident_id == incident_id,
                     ObjektKontaktBenachrichtigung.objekt_kontakt_id == kontakt.id,
                     ObjektKontaktBenachrichtigung.kanal == kanal,
+                    ObjektKontaktBenachrichtigung.empfaenger == empfaenger,
                 ).first()
                 if protokoll and protokoll.status == OBJEKT_INFO_GESENDET:
                     ergebnis["uebersprungen"] += 1
@@ -214,16 +210,20 @@ async def dispatch_objekt_einsatzinfo(
                     sms_text = text
                 versandtext = sms_text if kanal == "sms" else text
                 if not protokoll:
-                    protokoll = ObjektKontaktBenachrichtigung(
-                        org_id=org_id,
-                        incident_id=incident_id,
-                        objekt_id=objekt.id,
-                        objekt_kontakt_id=kontakt.id,
-                        kanal=kanal,
-                        kontakt_name=kontakt.name,
-                        empfaenger=empfaenger,
-                    )
-                    db.add(protokoll)
+                    savepoint = db.begin_nested()
+                    try:
+                        protokoll = ObjektKontaktBenachrichtigung(
+                            org_id=org_id, incident_id=incident_id, objekt_id=objekt.id,
+                            objekt_kontakt_id=kontakt.id, kanal=kanal,
+                            kontakt_name=kontakt.name, empfaenger=empfaenger,
+                        )
+                        db.add(protokoll)
+                        db.flush()
+                        savepoint.commit()
+                    except IntegrityError:
+                        savepoint.rollback()
+                        ergebnis["uebersprungen"] += 1
+                        continue
                 protokoll.kontakt_name = kontakt.name
                 protokoll.empfaenger = empfaenger
                 protokoll.text = versandtext

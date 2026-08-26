@@ -26,10 +26,11 @@ from app.models.objekt import (
     ObjektAuswahl,
     ObjektBMA,
     ObjektKontakt,
+    legacy_telefon_eintrag,
 )
 from app.services.bma_import.bma_pdf_parser import namens_slug
 from app.services.objekt_plan_upload_service import erstelle_objekt_aus_identitaet, finde_passendes_objekt
-from app.services.objekt_service import aktualisiere_felder, telefone_zu_json, write_objekt_change
+from app.services.objekt_service import aktualisiere_felder, telefon_normalisiert, write_objekt_change
 
 _BMA_ALARMPERSON_CODE = "bma_alarmperson"
 _BMA_ALARMPERSON_NAME = "BMA Alarmperson"
@@ -67,13 +68,39 @@ def _stelle_kontaktart_sicher(db: Session, org_id: int) -> None:
 
 
 def _kontakt_felder(kontakt: dict) -> dict:
-    telefone = kontakt.get("telefone") or []
     return {
         "art": kontakt.get("art") or "sonstig",
         "name": (kontakt.get("name") or "").strip()[:150],
-        "telefone_json": telefone_zu_json(", ".join(telefone)) if telefone else None,
         "email": kontakt.get("email") or None,
     }
+
+
+def _telefon_daten(eintrag) -> dict:
+    if isinstance(eintrag, dict):
+        return {"nummer": str(eintrag.get("nummer") or "").strip(),
+                "label": str(eintrag.get("label") or "").strip() or None, "sms": False}
+    return legacy_telefon_eintrag(str(eintrag))
+
+
+def _telefone_zusammenfuehren(alt_json: str | None, neue_telefone: list) -> str | None:
+    alt = ObjektKontakt(telefone_json=alt_json).telefone_eintraege
+    freigegeben = {telefon_normalisiert(e["nummer"]) for e in alt if e["sms"]}
+    bereits_uebernommen: set[str] = set()
+    neu = []
+    for roh in neue_telefone:
+        eintrag = _telefon_daten(roh)
+        if not eintrag["nummer"]:
+            continue
+        schluessel = telefon_normalisiert(eintrag["nummer"])
+        eintrag["sms"] = schluessel in freigegeben and schluessel not in bereits_uebernommen
+        if eintrag["sms"]:
+            bereits_uebernommen.add(schluessel)
+        neu.append(eintrag)
+    return json.dumps(neu, ensure_ascii=False) if neu else None
+
+
+def _mail_key(wert: str | None) -> str:
+    return (wert or "").strip().casefold()
 
 
 def _kontakt_praefix(satz: BmaImportSatz) -> str:
@@ -186,7 +213,9 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
                 # haendische Pflege, die der Import nicht umsortieren soll.
         if kontakt is None:
             kontakt = ObjektKontakt(org_id=objekt.org_id, extern_quelle="dibos_bma",
-                                    extern_id=extern_id, sort=naechster_sort, **felder)
+                                    extern_id=extern_id, sort=naechster_sort,
+                                    telefone_json=_telefone_zusammenfuehren(None, daten.get("telefone") or []),
+                                    **felder)
             # An die geladene Collection haengen statt db.add(): SessionLocal laeuft mit
             # autoflush=False (app/db.py:63) und ein Mehrfach-Upload teilt sich EINE
             # Session (ui_objekt.py::dokumente_upload_verarbeiten, ein begin_nested je
@@ -197,6 +226,24 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
             bestehende[extern_id] = kontakt  # doppelte extern_id in EINER Liste -> Update
             naechster_sort += 1
             geaendert = True
+        alte_sms_schluessel = {telefon_normalisiert(n) for n in kontakt.sms_nummern}
+        neues_json = _telefone_zusammenfuehren(
+            kontakt.telefone_json, daten.get("telefone") or [],
+        )
+        neue_sms_schluessel = {
+            telefon_normalisiert(n) for n in ObjektKontakt(telefone_json=neues_json).sms_nummern
+        }
+        if alte_sms_schluessel - neue_sms_schluessel:
+            write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "sms_freigabe",
+                                before="freigegeben", after="entzogen", user_id=user_id)
+        if kontakt.telefone_json != neues_json:
+            kontakt.telefone_json = neues_json
+            geaendert = True
+        if _mail_key(kontakt.email) != _mail_key(felder["email"]):
+            if kontakt.benachrichtigung_mail:
+                write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "mail_freigabe",
+                                    before="freigegeben", after="entzogen", user_id=user_id)
+            kontakt.benachrichtigung_mail = False
         for feld, wert in felder.items():
             # erreichbarkeit steht bewusst NICHT in _kontakt_felder: das Datenblatt
             # kennt das Feld nicht, die Handpflege darf es behalten.

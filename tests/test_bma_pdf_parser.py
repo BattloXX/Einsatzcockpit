@@ -122,10 +122,10 @@ def test_kontakt_telefone_und_email():
     andreas = next(k for k in kontakte if k["name"] == "Andreas Böhler")
     assert andreas["email"] == "andreas.boehler@boehlerfenster.com"
     assert andreas["telefone"] == [
-        "Telefon beruflich: +43 5574 74550",
-        "Mobil beruflich: +43 664 2642912",
-        "Mobil privat: +43 664 2642912",
-        "Pager: FW Wolfurt 31",
+        {"label": "Telefon beruflich", "nummer": "+43 5574 74550"},
+        {"label": "Mobil beruflich", "nummer": "+43 664 2642912"},
+        {"label": "Mobil privat", "nummer": "+43 664 2642912"},
+        {"label": "Pager", "nummer": "FW Wolfurt 31"},
     ]
 
 
