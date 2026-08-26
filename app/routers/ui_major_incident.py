@@ -347,6 +347,9 @@ async def lage_neu_create(
         lage, triggered_by_user_id=user.id, base_url=str(request.base_url),
         background_tasks=background_tasks,
     )
+    from app.services.gsl_live_notify import notify_gsl_live
+    await notify_gsl_live(db, lage, org_id=org_id, reason="created",
+                          background_tasks=background_tasks)
     # Alarm-Infoscreen: GSL-Sonderansicht sofort einblenden
     try:
         from app.services.broadcast import broadcast_org
@@ -488,6 +491,8 @@ async def site_create(
         db.rollback()
         raise
     await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
+    from app.services.gsl_live_notify import notify_gsl_live
+    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     # Board (board.html) ruft per HTMX auf (hx-swap="none") -- die neue Karte
     # erscheint bei allen verbundenen Clients (auch dem anlegenden) ueber den
     # site_created-Broadcast (lage_board.js -> sitePhaseChanged), daher hier
@@ -553,6 +558,8 @@ async def site_create_via_karte(
         db.rollback()
         raise
     await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
+    from app.services.gsl_live_notify import notify_gsl_live
+    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     return JSONResponse({"id": site.id, "bezeichnung": site.bezeichnung,
                          "lat": site.lat, "lng": site.lng})
 
@@ -612,6 +619,8 @@ async def site_phase_change(
         "phase": new_phase.value,
         "reload_board": True,
     })
+    from app.services.gsl_live_notify import notify_gsl_live
+    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     return Response(status_code=204)
 
 
@@ -1619,6 +1628,8 @@ async def lage_beenden(
                          "closed_incidents": len(closed_incident_ids)})
     db.commit()
     await broadcast_lage(lage_id, {"type": "lage_closed", "reload_board": True})
+    from app.services.gsl_live_notify import notify_gsl_live
+    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="closed")
     for iid in closed_incident_ids:
         await manager.broadcast(iid, {"type": "incident_closed"})
         incident = db.get(_Incident, iid)

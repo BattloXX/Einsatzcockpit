@@ -833,6 +833,8 @@ async def schnell_einsatzstelle(
     site = create_site(db, lage, bezeichnung=bezeichnung, ort=ort.strip()[:120] or None, created_by=user.id)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
+    from app.services.gsl_live_notify import notify_gsl_live
+    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     return JSONResponse({"id": site.id, "bezeichnung": site.bezeichnung})
 
 

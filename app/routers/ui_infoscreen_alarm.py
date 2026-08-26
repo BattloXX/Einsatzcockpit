@@ -24,6 +24,7 @@ from app.core.permissions import require_role
 from app.core.security import hash_api_key
 from app.core.templating import templates
 from app.db import get_db
+from app.models.major_incident import SITE_PHASE_GROUP
 from app.models.master import FireDept, OrgSettings
 from app.models.objekt import (
     AUSWAHL_PIKTOGRAMM,
@@ -138,14 +139,12 @@ def _iso_z(dt):  # type: ignore[no-untyped-def]
     return dt.isoformat() + "Z"
 
 
-# Phase → 3 Kanban-Gruppen (Wandmonitor: kompakter als die 6 Board-Spalten)
+# Phase → 3 Kanban-Gruppen (Wandmonitor: kompakter als die 6 Board-Spalten).
+# Gleiche Einteilung wie SITE_PHASE_GROUP, nur heisst die erste Gruppe hier
+# "eingegangen" statt "neu" — Template und JS des Wandmonitors nutzen den Key.
 _GSL_PHASE_GRUPPE = {
-    "eingegangen": "eingegangen",
-    "erkundung":   "in_arbeit",
-    "bewertet":    "in_arbeit",
-    "disponiert":  "in_arbeit",
-    "in_arbeit":   "in_arbeit",
-    "erledigt":    "erledigt",
+    phase.value: ("eingegangen" if group == "neu" else group)
+    for phase, group in SITE_PHASE_GROUP.items()
 }
 _GSL_PRIO_LETTER = {1: "S", 2: "D", 3: "N", 4: "A"}
 # Prioritätsfarbe (Kartenmarker + Kartenkante), analog Lagekarte

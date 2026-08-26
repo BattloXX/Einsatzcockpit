@@ -24,7 +24,7 @@
       <div class="incident-card__address" style="font-weight:600;">{{ lage.name }}</div>
       <div class="incident-card__meta">
         <span class="badge badge--active">Aktiv</span>
-        <span class="incident-card__time">{{ lage.sites|length }} Einsatzstellen · seit {{ lage.started_at|local_time }} Uhr</span>
+        <span class="incident-card__time">{{ lage.counts.gesamt }} Einsatzstellen · {{ lage.counts.neu }} neu · {{ lage.counts.in_arbeit }} in Arbeit · {{ lage.counts.erledigt }} erledigt · seit {{ lage.display_started_at|local_time }} Uhr</span>
       </div>
     </a>
     {% endfor %}
@@ -51,6 +51,15 @@
       </div>
     </a>
     {% endfor %}
+  </div>
+  {% elif active_major_incidents %}
+  {% set lage = active_major_incidents[0] %}
+  <div class="incident-standby incident-standby--lage">
+    <div class="incident-standby__icon">🚨</div>
+    <div class="incident-standby__content">
+      <div class="incident-standby__title">Einsatzstellen laufen über die Lage</div>
+      <div class="incident-standby__sub"><a href="{{ lage.url }}">{{ lage.counts.neu + lage.counts.in_arbeit }} von {{ lage.counts.gesamt }} Einsatzstellen offen — zur Lage »</a></div>
+    </div>
   </div>
   {% else %}
   <div class="incident-standby">

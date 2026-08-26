@@ -15,6 +15,7 @@ from app.db import get_db
 from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, User
 from app.services import push_service
 from app.services.einsatz_live_service import build_live_state
+from app.services.gsl_live_service import build_gsl_live_state
 
 router = APIRouter(prefix="/api/v1/device", tags=["device"])
 
@@ -294,6 +295,8 @@ def get_duty_state(request: Request, db: Session = Depends(get_db)):
             "server_time": server_time,
             "incident_count": 0,
             "incident": None,
+            "lage_count": 0,
+            "lage": None,
         })
 
     # Prüfen ob dem Fahrzeug ein aktiver Einsatz zugewiesen ist
@@ -320,6 +323,7 @@ def get_duty_state(request: Request, db: Session = Depends(get_db)):
             ).first() is not None
 
     live_incident, incident_count = build_live_state(db, user, device_token)
+    live_lage, lage_count = build_gsl_live_state(db, user)
     return JSONResponse({
         "duty_active": device_token.duty_active,
         "incident_active": incident_active,
@@ -327,6 +331,8 @@ def get_duty_state(request: Request, db: Session = Depends(get_db)):
         "server_time": server_time,
         "incident_count": incident_count,
         "incident": live_incident,
+        "lage_count": lage_count,
+        "lage": live_lage,
     })
 
 

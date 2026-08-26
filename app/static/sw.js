@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v11';
+const CACHE = 'ec-v12';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
@@ -315,11 +315,11 @@ self.addEventListener('push', e => {
     requireInteraction: true,
   };
 
-  if (kind === 'einsatz_live') {
+  if (kind === 'einsatz_live' || kind === 'gsl_live') {
     opts.tag = data.tag;
     opts.renotify = data.live && data.live.alert === true;
     opts.silent = !opts.renotify;
-  } else if (kind === 'einsatz_live_end') {
+  } else if (kind === 'einsatz_live_end' || kind === 'gsl_live_end') {
     opts.tag = data.tag;
     opts.renotify = false;
     opts.silent = true;
@@ -327,7 +327,7 @@ self.addEventListener('push', e => {
   }
 
   let shown = self.registration.showNotification(data.title || 'Einsatzcockpit', opts);
-  if (kind === 'einsatz_live_end') {
+  if (kind === 'einsatz_live_end' || kind === 'gsl_live_end') {
     shown = shown.then(() => new Promise(resolve => setTimeout(resolve, 8000)))
       .then(() => self.registration.getNotifications({ tag: opts.tag })
         .then(notifications => notifications.forEach(notification => notification.close()))

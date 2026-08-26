@@ -134,6 +134,63 @@ async def _broadcast_events(events: list[dict]) -> None:
             )
 
 
+def _collect_gsl_live_in_new_session() -> list[dict]:
+    """DB-Arbeit fuer den Threadpool (Audit B2): Session lebt komplett im Worker-Thread."""
+    from app.services.gsl_live_service import build_gsl_live_payload
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        lagen = db.query(MajorIncident).filter(
+            MajorIncident.status == MajorIncidentStatus.active,
+        ).all()
+        lage_counts: dict[int, int] = {}
+        for lage in lagen:
+            lage_counts[lage.org_id] = lage_counts.get(lage.org_id, 0) + 1
+        return [
+            {
+                "lage_id": lage.id,
+                "org_id": lage.org_id,
+                "payload": build_gsl_live_payload(db, lage),
+                "lage_count": lage_counts[lage.org_id],
+            }
+            for lage in lagen
+        ]
+    finally:
+        db.close()
+
+
+async def _refresh_gsl_live() -> None:
+    """Sicherheitsnetz fuer Einsatzstellen-Aenderungen ohne direkten notify_gsl_live-Aufruf.
+
+    Deckt Pfade ab, die den Live-Status nicht selbst melden (Buergermeldung, Adoption
+    eines Einsatzes als Einsatzstelle). Der Push bleibt ueber _claim_push gedrosselt,
+    es entstehen also keine Doppel-Benachrichtigungen.
+    """
+    from app.services.broadcast import broadcast_org
+    from app.services.gsl_live_notify import _dispatch_gsl_push, _utcnow_naive
+
+    entries = await asyncio.to_thread(_collect_gsl_live_in_new_session)
+    for entry in entries:
+        try:
+            # incident_count bewusst weggelassen: der Einsatz-Live-Pfad pflegt ihn,
+            # und applyUpdate() im Banner ueberschreibt nur mitgesendete Keys.
+            await broadcast_org(entry["org_id"], {
+                "type": "gsl_live",
+                "lage": entry["payload"],
+                "lage_count": entry["lage_count"],
+                "server_time": _utcnow_naive().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            })
+            await asyncio.to_thread(
+                _dispatch_gsl_push, entry["lage_id"], entry["org_id"], "counts"
+            )
+        except Exception:
+            logger.exception(
+                "gsl_lagemeldung_reminder: GSL-Live-Refresh fuer Lage %s fehlgeschlagen",
+                entry["lage_id"],
+            )
+
+
 async def gsl_lagemeldung_reminder_loop() -> None:
     from app.services.loop_utils import iteration_watch
     logger.info("gsl_lagemeldung_reminder_loop gestartet")
@@ -143,6 +200,7 @@ async def gsl_lagemeldung_reminder_loop() -> None:
             with iteration_watch(logger, "gsl_lagemeldung_reminder_loop", LOOP_INTERVAL_SECONDS):
                 events = await asyncio.to_thread(_scan_in_new_session)
                 await _broadcast_events(events)
+                await _refresh_gsl_live()
         except asyncio.CancelledError:
             logger.info("gsl_lagemeldung_reminder_loop beendet")
             break

@@ -5,6 +5,9 @@ from app.core.templating import templates
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
+from app.models.major_incident import (
+    IncidentSite, MajorIncident, MajorIncidentStatus, SitePhase,
+)
 from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.user import Role, User, UserRole
 
@@ -17,7 +20,9 @@ SYSTEM_MODULE_FLAGS = (
 )
 
 
-def _setup_dashboard_user(*, modules_enabled: bool, active_incident: bool) -> str:
+def _setup_dashboard_user(
+    *, modules_enabled: bool, active_incident: bool, active_gsl: bool = False,
+) -> str:
     suffix = uuid.uuid4().hex[:10]
     username = f"dashboard_{suffix}"
     db = SessionLocal()
@@ -67,6 +72,30 @@ def _setup_dashboard_user(*, modules_enabled: bool, active_incident: bool) -> st
                 address_no="1",
                 address_city="Wolfurt",
             ))
+
+        if active_gsl:
+            lage = MajorIncident(
+                org_id=org.id,
+                name="Hochwasser Wolfurt",
+                status=MajorIncidentStatus.active,
+            )
+            db.add(lage)
+            db.flush()
+            # 2 neu, 3 in Arbeit, 1 erledigt, 1 abgebrochen (letzteres zaehlt nicht mit)
+            for phase, anzahl in (
+                (SitePhase.eingegangen, 2),
+                (SitePhase.erkundung, 1),
+                (SitePhase.in_arbeit, 2),
+                (SitePhase.erledigt, 1),
+                (SitePhase.abgebrochen, 1),
+            ):
+                for i in range(anzahl):
+                    db.add(IncidentSite(
+                        major_incident_id=lage.id,
+                        org_id=org.id,
+                        bezeichnung=f"{phase.value}-{i}",
+                        phase=phase,
+                    ))
 
         db.commit()
         return username
@@ -121,3 +150,35 @@ def test_dashboard_zeigt_aktiven_einsatz_und_aktivierte_module(client, monkeypat
         "Nachschlagewerke", "Förderstrecke",
     ):
         assert f'<span class="module-btn__label">{label}</span>' in response.text
+
+
+def test_dashboard_meldet_bei_aktiver_gsl_keinen_standby(client, monkeypatch):
+    """Regression: eine laufende GSL darf nicht als "Kein aktiver Einsatz" erscheinen."""
+    username = _setup_dashboard_user(
+        modules_enabled=False, active_incident=False, active_gsl=True,
+    )
+    monkeypatch.setitem(templates.env.globals, "WEATHER_ENABLED", False)
+    _login(client, username)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Kein aktiver Einsatz" not in response.text
+    assert "Alles ruhig" not in response.text
+    assert "Einsatzstellen laufen über die Lage" in response.text
+    assert "5 von 6 Einsatzstellen offen" in response.text
+
+
+def test_dashboard_gsl_karte_zeigt_statuszahlen(client, monkeypatch):
+    username = _setup_dashboard_user(
+        modules_enabled=False, active_incident=False, active_gsl=True,
+    )
+    monkeypatch.setitem(templates.env.globals, "WEATHER_ENABLED", False)
+    _login(client, username)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Großschadenslagen (1)" in response.text
+    # abgebrochene Einsatzstelle ist weder in gesamt noch in einer Gruppe enthalten
+    assert "6 Einsatzstellen · 2 neu · 3 in Arbeit · 1 erledigt" in response.text
