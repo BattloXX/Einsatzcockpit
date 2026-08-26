@@ -108,7 +108,7 @@
           </span>
           {% else %}<span class="text-muted">–</span>{% endfor %}
         </td>
-        <td data-label="Telefon">{% if m.phone %}<a href="tel:{{ m.phone }}">{{ m.phone }}</a>{% else %}–{% endif %}</td>
+        <td data-label="Telefon">{% if m.phone %}<a href="tel:{{ m.phone|tel }}">{{ m.phone }}</a>{% else %}–{% endif %}</td>
         <td data-label="E-Mail">{% if m.email %}<a href="mailto:{{ m.email }}">{{ m.email }}</a>{% else %}–{% endif %}</td>
         <td data-label="syBOS-ID">{{ m.sybos_id or '–' }}</td>
         <td data-label="Status">

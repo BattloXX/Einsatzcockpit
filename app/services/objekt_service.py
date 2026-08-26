@@ -11,6 +11,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+# Kompatibler Re-Export: bma_sync.py und die Tests importieren telefon_normalisiert
+# weiterhin von hier, die Implementierung liegt seit dem Refactoring in app/core/telefon.py.
+from app.core.telefon import telefon_normalisiert  # noqa: F401
 from app.models.objekt import (
     AUSWAHL_DOKUMENTART,
     AUSWAHL_KONTAKTART,
@@ -30,14 +33,6 @@ from app.models.objekt import (
     ObjektWohnanlage,
     ObjektZusatzadresse,
 )
-
-
-def telefon_normalisiert(nummer: str) -> str:
-    """Kanonische Identitaet einer Rufnummer ohne Trennzeichen."""
-    wert = str(nummer or "").strip()
-    for zeichen in (" ", "-", "(", ")", "/"):
-        wert = wert.replace(zeichen, "")
-    return "+" + wert[2:] if wert.startswith("00") else wert
 
 
 def telefone_aus_form(nummern: list[str], labels: list[str], sms_indizes: list[str]) -> str | None:

@@ -75,7 +75,7 @@
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
         {% for tel in k.telefone_eintraege %}
-        <a href="tel:{{ tel.nummer|replace(' ', '')|replace('-', '')|replace('(', '')|replace(')', '')|replace('/', '') }}" class="btn btn--primary objekt-einsatz-telbtn">📞 {% if tel.label %}{{ tel.label }}: {% endif %}{{ tel.nummer }}</a>
+        <a href="tel:{{ tel.nummer|tel }}" class="btn btn--primary objekt-einsatz-telbtn">📞 {% if tel.label %}{{ tel.label }}: {% endif %}{{ tel.nummer }}</a>
         {% endfor %}
       </div>
     </div>

@@ -7,10 +7,10 @@ Wird vom SMS-Gateway-WebSocket (app/routers/ws.py) bei "sms.received" aufgerufen
 from __future__ import annotations
 
 import logging
-import re
 from datetime import UTC, datetime
 
 from app.core.audit import write_audit
+from app.core.telefon import telefon_kompakt
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import OrgSettings
@@ -18,16 +18,9 @@ from app.models.sms import SmsForwardRule, SmsInbox
 
 logger = logging.getLogger("einsatzleiter.sms_inbox")
 
-_PHONE_STRIP_RE = re.compile(r"[\s\-\(\)]")
-
-
-def _normalize_phone(phone: str) -> str:
-    """Normalisiert eine Telefonnummer fuer Vergleich/Dedup (wie sms_dispatch_service)."""
-    return _PHONE_STRIP_RE.sub("", phone).strip()
-
 
 def _rule_matches(rule: SmsForwardRule, from_normalized: str) -> bool:
-    pattern = _normalize_phone(rule.match_number)
+    pattern = telefon_kompakt(rule.match_number)
     if not pattern:
         return False
     if rule.match_type == "prefix":
@@ -90,7 +83,7 @@ async def process_inbound_sms(inbox_id: int) -> None:
             db.commit()
             return
 
-        from_norm = _normalize_phone(entry.from_number)
+        from_norm = telefon_kompakt(entry.from_number)
         rules = (
             db.query(SmsForwardRule)
             .filter(SmsForwardRule.org_id == org_id, SmsForwardRule.enabled.is_(True))
@@ -127,17 +120,17 @@ async def process_inbound_sms(inbox_id: int) -> None:
             for gm in grp.members:
                 m = gm.member
                 if m and m.active and m.phone:
-                    norm = _normalize_phone(m.phone)
+                    norm = telefon_kompakt(m.phone)
                     if norm:
                         phones[norm] = m.full_name
         for rm in rule.members:
             m = rm.member
             if m and m.active and m.phone:
-                norm = _normalize_phone(m.phone)
+                norm = telefon_kompakt(m.phone)
                 if norm:
                     phones[norm] = m.full_name
         for raw in (rule.forward_adhoc_numbers or "").split(","):
-            norm = _normalize_phone(raw)
+            norm = telefon_kompakt(raw)
             if norm:
                 phones.setdefault(norm, raw.strip())
 

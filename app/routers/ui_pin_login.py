@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import re
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, Request, Response
@@ -30,6 +29,7 @@ from app.config import settings
 from app.core.audit import write_audit
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import generate_numeric_pin, sign_session
+from app.core.telefon import telefon_kompakt
 from app.core.templating import templates
 from app.db import get_db
 from app.models.login_pin import LOGIN_PIN_TTL_MINUTES, LoginPin
@@ -38,15 +38,9 @@ from app.models.user import User
 logger = logging.getLogger("einsatzleiter.pin_login")
 router = APIRouter()
 
-_PHONE_STRIP_RE = re.compile(r"[\s\-\(\)]")
-
 
 def _hash_pin(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _normalize_phone(phone: str | None) -> str:
-    return _PHONE_STRIP_RE.sub("", phone or "").strip()
 
 
 def _find_user_by_phone(db: Session, phone_norm: str) -> User | None:
@@ -55,7 +49,7 @@ def _find_user_by_phone(db: Session, phone_norm: str) -> User | None:
     if not phone_norm:
         return None
     users = db.query(User).filter(User.active == True, User.phone.isnot(None)).all()  # noqa: E712
-    return next((u for u in users if _normalize_phone(u.phone) == phone_norm), None)
+    return next((u for u in users if telefon_kompakt(u.phone) == phone_norm), None)
 
 
 def _set_session_cookie(response: Response, token: str, max_age: int | None = None) -> None:
@@ -75,7 +69,7 @@ async def pin_login_form(request: Request):
 @router.post("/pin-login", response_class=HTMLResponse)
 @(_limiter.limit("5/minute") if _limiter else lambda f: f)
 async def pin_login_submit(request: Request, phone: str = Form(...), db: Session = Depends(get_db)):
-    phone_norm = _normalize_phone(phone)
+    phone_norm = telefon_kompakt(phone)
     # Immer zur Code-Eingabe weiterleiten — unabhängig davon, ob die Nummer
     # registriert ist (kein Enumerations-Leak, Muster ui_password_reset.py).
     redirect = RedirectResponse(f"/pin-login/code?phone={phone_norm}", status_code=303)
@@ -140,7 +134,7 @@ async def pin_login_code_submit(
             {"error": generic_error, "phone": phone}, status_code=401,
         )
 
-    phone_norm = _normalize_phone(phone)
+    phone_norm = telefon_kompakt(phone)
     pin_clean = pin.strip()
     if not phone_norm or not pin_clean:
         return _err()
