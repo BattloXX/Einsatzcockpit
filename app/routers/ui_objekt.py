@@ -2494,6 +2494,7 @@ _MATCH_ROLLEN = ("incident_leader", "objekt_verwalter")
 
 def _panel_context(request: Request, db: Session, user: User, incident_id: int) -> dict:
     from sqlalchemy import case, func
+
     from app.models.incident import Incident
     from app.models.objekt import (
         OBJEKT_EINSATZ_QUELLEN,
