@@ -205,7 +205,8 @@ def _baue_kontakt(block: dict) -> dict | None:
     if not name:
         return None
     telefone = [
-        f"{label}: {block[feld]}" for feld, label in _TELEFON_PRAEFIXE if block.get(feld)
+        {"label": label, "nummer": block[feld]}
+        for feld, label in _TELEFON_PRAEFIXE if block.get(feld)
     ]
     return {
         "rolle_quelle": block["rolle_quelle"],

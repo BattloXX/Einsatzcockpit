@@ -32,6 +32,37 @@ from app.models.objekt import (
 )
 
 
+def telefon_normalisiert(nummer: str) -> str:
+    """Kanonische Identitaet einer Rufnummer ohne Trennzeichen."""
+    wert = str(nummer or "").strip()
+    for zeichen in (" ", "-", "(", ")", "/"):
+        wert = wert.replace(zeichen, "")
+    return "+" + wert[2:] if wert.startswith("00") else wert
+
+
+def telefone_aus_form(nummern: list[str], labels: list[str], sms_indizes: list[str]) -> str | None:
+    """Validiert und serialisiert die wiederholbaren Telefonzeilen."""
+    if len(nummern) != len(labels):
+        raise ValueError("Telefonnummern und Bezeichnungen sind unvollstaendig")
+    if len(nummern) > 20:
+        raise ValueError("Hoechstens 20 Telefonnummern sind erlaubt")
+    markiert: set[int] = set()
+    for roh in sms_indizes:
+        if not str(roh).isdigit():
+            continue
+        index = int(roh)
+        if 0 <= index < len(nummern):
+            markiert.add(index)
+    eintraege = []
+    for index, (nummer_roh, label_roh) in enumerate(zip(nummern, labels, strict=True)):
+        nummer, label = nummer_roh.strip(), label_roh.strip()
+        if len(nummer) > 30 or len(label) > 40:
+            raise ValueError("Telefonnummer oder Bezeichnung ist zu lang")
+        if nummer:
+            eintraege.append({"nummer": nummer, "label": label or None, "sms": index in markiert})
+    return json.dumps(eintraege, ensure_ascii=False) if eintraege else None
+
+
 def telefone_zu_json(telefone_raw: str) -> str | None:
     """Serialisiert eine kommagetrennte Telefonliste zu JSON (ObjektKontakt.telefone_json).
 
@@ -40,7 +71,7 @@ def telefone_zu_json(telefone_raw: str) -> str | None:
     Funktion nutzt wie das manuelle Kontaktformular.
     """
     nummern = [t.strip() for t in telefone_raw.replace(";", ",").split(",") if t.strip()]
-    return json.dumps(nummern, ensure_ascii=False) if nummern else None
+    return telefone_aus_form(nummern, [""] * len(nummern), [])
 
 
 def objekt_system_enabled(db: Session) -> bool:

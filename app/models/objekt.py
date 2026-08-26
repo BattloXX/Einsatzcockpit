@@ -66,7 +66,7 @@ OBJEKT_STATUS_UEBERGAENGE: dict[str, set[str]] = {
 # org_id, status, entwurf_von_id, erstellt_*/aktualisiert_* NICHT versehentlich mitwandern.
 OBJEKT_KOPIERBARE_FELDER = (
     "name", "vulgoname", "kategorie_id", "strasse", "hausnummer", "plz", "ort",
-    "lat", "lng", "informationen", "anfahrtsweg", "kontakt_info_enabled",
+    "lat", "lng", "informationen", "anfahrtsweg",
     "kontakt_info_uebung", "kontakt_info_stichworte", "kontakt_info_betreff",
     "kontakt_info_template", "revision_datum",
 )
@@ -179,7 +179,6 @@ class Objekt(TenantScoped, Base):
     informationen: Mapped[str | None] = mapped_column(Text, nullable=True)
     anfahrtsweg: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Einsatzinfo an Objektkontakte (Mail/SMS)
-    kontakt_info_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     kontakt_info_uebung: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     kontakt_info_stichworte: Mapped[str | None] = mapped_column(String(200), nullable=True)
     kontakt_info_betreff: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -498,6 +497,21 @@ class ObjektMerkmal(TenantScoped, Base):
     merkmal: Mapped[MerkmalKatalog] = relationship(lazy="joined")
 
 
+_BMA_TELEFON_LABELS = (
+    "Telefon beruflich", "Telefon privat", "Mobil beruflich", "Mobil privat", "Pager",
+)
+
+
+def legacy_telefon_eintrag(wert: str) -> dict:
+    """Zerlegt ausschliesslich die bekannten, historischen BMA-Telefonpraefixe."""
+    text = str(wert).strip()
+    for label in _BMA_TELEFON_LABELS:
+        praefix = f"{label}: "
+        if text.startswith(praefix):
+            return {"nummer": text[len(praefix):].strip(), "label": label, "sms": False}
+    return {"nummer": text, "label": None, "sms": False}
+
+
 class ObjektKontakt(TenantScoped, Base):
     """Ansprechpartner am Objekt (Brandschutzbeauftragter, Betreiber, ...)."""
     __tablename__ = "objekt_kontakt"
@@ -522,14 +536,12 @@ class ObjektKontakt(TenantScoped, Base):
     # Art: brandschutzbeauftragter / betreiber / hausverwaltung / schluesseltraeger / sonstig
     art: Mapped[str] = mapped_column(String(50), nullable=False, default="sonstig")
     name: Mapped[str] = mapped_column(String(150), nullable=False)
-    # JSON-Liste von Telefonnummern (UI rendert jede als tel:-Button)
+    # JSON-Liste aus {nummer, label, sms}; alte String-Listen bleiben lesbar.
     telefone_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     erreichbarkeit: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    # Einsatzinfo-Kanaele je Kontakt
+    # Einsatzinfo per E-Mail; SMS-Freigaben liegen je Nummer in telefone_json.
     benachrichtigung_mail: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    benachrichtigung_sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    benachrichtigung_telefon: Mapped[str | None] = mapped_column(String(30), nullable=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Externe Identitaet (siehe app/services/bma_import/): NULL = haendisch gepflegt,
     # wird vom Import NIE angefasst. Gesetzt (z. B. extern_quelle="dibos_bma",
@@ -541,15 +553,42 @@ class ObjektKontakt(TenantScoped, Base):
     objekt: Mapped[Objekt] = relationship(back_populates="kontakte")
 
     @property
-    def telefone(self) -> list[str]:
+    def telefone_eintraege(self) -> list[dict]:
         import json as _json
         if not self.telefone_json:
             return []
         try:
             werte = _json.loads(self.telefone_json)
-            return [str(w) for w in werte if str(w).strip()]
         except (ValueError, TypeError):
             return []
+        if not isinstance(werte, list):
+            return []
+        ergebnis = []
+        for wert in werte:
+            if isinstance(wert, str):
+                eintrag = legacy_telefon_eintrag(wert)
+            elif isinstance(wert, dict):
+                nummer = str(wert.get("nummer") or "").strip()
+                if not nummer:
+                    continue
+                label = str(wert.get("label") or "").strip() or None
+                eintrag = {"nummer": nummer, "label": label, "sms": wert.get("sms") is True}
+            else:
+                continue
+            if eintrag["nummer"]:
+                ergebnis.append(eintrag)
+        return ergebnis
+
+    @property
+    def telefone(self) -> list[str]:
+        return [
+            f'{e["label"]}: {e["nummer"]}' if e["label"] else e["nummer"]
+            for e in self.telefone_eintraege
+        ]
+
+    @property
+    def sms_nummern(self) -> list[str]:
+        return [e["nummer"] for e in self.telefone_eintraege if e["sms"]]
 
 
 class ObjektWohnanlage(TenantScoped, Base):
@@ -720,11 +759,16 @@ OBJEKT_INFO_FEHLER = "fehler"
 
 
 class ObjektKontaktBenachrichtigung(TenantScoped, Base):
-    """Protokoll + Idempotenzschutz je (Einsatz, Kontakt, Kanal)."""
+    """Personenbezogenes Versandprotokoll, das mit dem Einsatz geloescht wird.
+
+    Der nullable Kontakt-FK ist erst nach Kontaktloeschung NULL und eroeffnet daher
+    keinen Doppelversandpfad. Empfaenger und Nachrichtentext brauchen ein separates
+    Retentionskonzept; das ist nicht Aufgabe dieses Modells.
+    """
     __tablename__ = "objekt_kontakt_benachrichtigung"
     __table_args__ = (
         UniqueConstraint(
-            "incident_id", "objekt_kontakt_id", "kanal",
+            "incident_id", "objekt_kontakt_id", "kanal", "empfaenger",
             name="uq_objekt_kontakt_benachrichtigung",
         ),
         Index("ix_okb_org_incident", "org_id", "incident_id"),

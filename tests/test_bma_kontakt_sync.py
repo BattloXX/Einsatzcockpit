@@ -1,4 +1,5 @@
 """Regressionstests fuer den BMA-Kontaktabgleich innerhalb einer Session."""
+import json
 import uuid
 from types import SimpleNamespace
 
@@ -13,6 +14,7 @@ from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
 from app.models.master import FireDept
 from app.models.objekt import OBJEKT_STATUS_ENTWURF, Objekt, ObjektBMA, ObjektKontakt
 from app.services.bma_import.bma_sync import _sync_kontakte, verarbeite_pdf_anlage
+from app.services.bma_import.bma_sync import _telefone_zusammenfuehren
 
 
 @compiles(BigInteger, "sqlite")
@@ -183,3 +185,96 @@ def test_kontakt_der_aus_dem_datenblatt_verschwindet_wird_entfernt(db):
 
     assert objekt.kontakte == []
     assert session.get(ObjektKontakt, kontakt_id) is None
+
+
+def test_telefon_merge_erhaelt_nur_unveraenderte_freigabe():
+    alt = json.dumps([
+        {"nummer": "+43 664 1", "label": "Alt", "sms": True},
+        {"nummer": "+43 664 2", "label": None, "sms": False},
+    ])
+    neu = json.loads(_telefone_zusammenfuehren(alt, [
+        {"nummer": "0043-664/1", "label": "Neu"},
+        {"nummer": "+43 664 3", "label": "Neu"},
+    ]))
+    assert [e["sms"] for e in neu] == [True, False]
+    assert _telefone_zusammenfuehren(alt, []) is None
+
+
+def _mit_freigabe(nummer, label=None):
+    """Handgepflegte Kontaktzeile mit einer fuer SMS freigegebenen Nummer."""
+    return json.dumps([{"nummer": nummer, "label": label, "sms": True}])
+
+
+def test_freigabe_ueberlebt_adoption_bei_unveraenderter_nummer(db):
+    """Der Adoptionspfad ist der Massenfall - hier darf die Freigabe NICHT verlorengehen."""
+    session, org = db
+    objekt = _objekt(session, org)
+    hand = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
+                         name="Max Muster", telefone_json=_mit_freigabe("+43 555 123"),
+                         benachrichtigung_mail=True, email="max@example.at", sort=1)
+    objekt.kontakte.append(hand)
+    session.flush()
+
+    _sync_kontakte(session, _satz(session, org, objekt), objekt,
+                   [{"extern_id": "pdf:1332:bma_alarmperson:max-muster", "name": "Max Muster",
+                     "art": "bma_alarmperson", "email": "max@example.at",
+                     "telefone": [{"label": "Mobil beruflich", "nummer": "0043-555/123"}]}], None)
+
+    assert hand.sms_nummern == ["0043-555/123"]
+    assert hand.benachrichtigung_mail is True
+
+
+def test_freigabe_verfaellt_bei_adoption_mit_geaenderter_nummer(db):
+    """Eine geaenderte Rufnummer wurde nie freigegeben - die SMS darf nicht dorthin gehen."""
+    session, org = db
+    objekt = _objekt(session, org)
+    hand = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
+                         name="Max Muster", telefone_json=_mit_freigabe("+43 555 123"),
+                         benachrichtigung_mail=True, email="alt@example.at", sort=1)
+    objekt.kontakte.append(hand)
+    session.flush()
+
+    _sync_kontakte(session, _satz(session, org, objekt), objekt,
+                   [{"extern_id": "pdf:1332:bma_alarmperson:max-muster", "name": "Max Muster",
+                     "art": "bma_alarmperson", "email": "neu@example.at",
+                     "telefone": [{"label": "Mobil beruflich", "nummer": "+43 555 999"}]}], None)
+
+    assert hand.sms_nummern == []
+    assert hand.benachrichtigung_mail is False
+
+
+def test_freigabe_ueberlebt_erneuten_import_bei_exaktem_treffer(db):
+    """Zweiter Lauf ueber dieselbe extern_id: Freigabe bleibt, solange die Nummer steht."""
+    session, org = db
+    objekt = _objekt(session, org)
+    satz = _satz(session, org, objekt)
+    daten = [{"extern_id": "pdf:1332:bma_alarmperson:max-muster", "name": "Max Muster",
+              "art": "bma_alarmperson", "telefone": [{"label": "Pager", "nummer": "+43 555 123"}]}]
+
+    _sync_kontakte(session, satz, objekt, daten, None)
+    kontakt = objekt.kontakte[0]
+    assert kontakt.sms_nummern == []          # Import gibt nie von sich aus frei
+    kontakt.telefone_json = _mit_freigabe("+43 555 123", "Pager")
+    session.flush()
+
+    _sync_kontakte(session, satz, objekt, daten, None)
+    assert objekt.kontakte[0].sms_nummern == ["+43 555 123"]
+
+
+def test_freigabe_verfaellt_wenn_nummer_aus_datenblatt_verschwindet(db):
+    session, org = db
+    objekt = _objekt(session, org)
+    satz = _satz(session, org, objekt)
+    kontakt = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
+                            name="Max Muster", extern_quelle="dibos_bma",
+                            extern_id="pdf:1332:bma_alarmperson:max-muster",
+                            telefone_json=_mit_freigabe("+43 555 123"), sort=1)
+    objekt.kontakte.append(kontakt)
+    session.flush()
+
+    _sync_kontakte(session, satz, objekt, [
+        {"extern_id": "pdf:1332:bma_alarmperson:max-muster", "name": "Max Muster",
+         "art": "bma_alarmperson", "telefone": [{"label": None, "nummer": "+43 555 777"}]}], None)
+
+    assert kontakt.sms_nummern == []
+    assert kontakt.telefone == ["+43 555 777"]

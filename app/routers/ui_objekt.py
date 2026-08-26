@@ -67,7 +67,7 @@ from app.services.objekt_service import (
     naechste_nummer,
     nur_produktiv,
     status_uebergang_erlaubt,
-    telefone_zu_json,
+    telefone_aus_form,
     uebernimm_arbeitskopie,
     verwirf_arbeitskopie,
     write_objekt_change,
@@ -1588,12 +1588,12 @@ def kontakt_neu(
     _guard: None = Depends(require_objekt_enabled),
     art: str = Form("sonstig"),
     name: str = Form(...),
-    telefone: str = Form(""),
+    telefon_nummer: list[str] = Form(default=[]),
+    telefon_label: list[str] = Form(default=[]),
+    telefon_sms: list[str] = Form(default=[]),
     email: str = Form(""),
     erreichbarkeit: str = Form(""),
     benachrichtigung_mail: str = Form(""),
-    benachrichtigung_sms: str = Form(""),
-    benachrichtigung_telefon: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     if not name.strip():
@@ -1601,17 +1601,19 @@ def kontakt_neu(
     if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
         art = "sonstig"
     max_sort = max([k.sort for k in objekt.kontakte], default=0)
+    try:
+        telefone_json = telefone_aus_form(telefon_nummer, telefon_label, telefon_sms)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     kontakt = ObjektKontakt(
         org_id=objekt.org_id,
         objekt_id=objekt.id,
         art=art,
         name=name.strip(),
-        telefone_json=telefone_zu_json(telefone),
+        telefone_json=telefone_json,
         email=email.strip() or None,
         erreichbarkeit=erreichbarkeit.strip() or None,
         benachrichtigung_mail=benachrichtigung_mail in ("1", "true", "on"),
-        benachrichtigung_sms=benachrichtigung_sms in ("1", "true", "on"),
-        benachrichtigung_telefon=benachrichtigung_telefon.strip() or None,
         sort=max_sort + 1,
     )
     db.add(kontakt)
@@ -1634,12 +1636,12 @@ def kontakt_speichern(
     _guard: None = Depends(require_objekt_enabled),
     art: str = Form("sonstig"),
     name: str = Form(...),
-    telefone: str = Form(""),
+    telefon_nummer: list[str] = Form(default=[]),
+    telefon_label: list[str] = Form(default=[]),
+    telefon_sms: list[str] = Form(default=[]),
     email: str = Form(""),
     erreichbarkeit: str = Form(""),
     benachrichtigung_mail: str = Form(""),
-    benachrichtigung_sms: str = Form(""),
-    benachrichtigung_telefon: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     kontakt = (
@@ -1651,15 +1653,17 @@ def kontakt_speichern(
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
         art = "sonstig"
+    try:
+        telefone_json = telefone_aus_form(telefon_nummer, telefon_label, telefon_sms)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     daten = {
         "art": art,
         "name": name.strip(),
-        "telefone_json": telefone_zu_json(telefone),
+        "telefone_json": telefone_json,
         "email": email.strip() or None,
         "erreichbarkeit": erreichbarkeit.strip() or None,
         "benachrichtigung_mail": benachrichtigung_mail in ("1", "true", "on"),
-        "benachrichtigung_sms": benachrichtigung_sms in ("1", "true", "on"),
-        "benachrichtigung_telefon": benachrichtigung_telefon.strip() or None,
     }
     for feld, neu in daten.items():
         alt = getattr(kontakt, feld)
@@ -1697,7 +1701,6 @@ def benachrichtigung_speichern(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
-    kontakt_info_enabled: str = Form(""),
     kontakt_info_uebung: str = Form(""),
     kontakt_info_stichworte: str = Form(""),
     kontakt_info_betreff: str = Form(""),
@@ -1708,7 +1711,6 @@ def benachrichtigung_speichern(
         db,
         objekt,
         {
-            "kontakt_info_enabled": kontakt_info_enabled in ("1", "true", "on"),
             "kontakt_info_uebung": kontakt_info_uebung in ("1", "true", "on"),
             "kontakt_info_stichworte": kontakt_info_stichworte.strip() or None,
             "kontakt_info_betreff": kontakt_info_betreff.strip() or None,
@@ -2505,11 +2507,18 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
     if incident is None:
         raise HTTPException(status_code=404, detail="Einsatz nicht gefunden")
 
+    # Explizites Scoping ueber die Org DES EINSATZES, nicht ueber user.org_id: bei
+    # system_admin ist user.org_id NULL (models/user.py:38) bzw. beim Org-Wechsel per
+    # ?org= die Heimat-Org des Admins - beides wuerde das Panel faelschlich leeren.
+    # Der Einsatz selbst ist oben bereits tenant-gefiltert geladen.
+    panel_org_id = incident.primary_org_id
+
     verknuepfungen = (
         db.query(ObjektEinsatz)
         .options(selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren),
-                 selectinload(ObjektEinsatz.objekt).selectinload(Objekt.bma))
-        .filter(ObjektEinsatz.incident_id == incident_id)
+                 selectinload(ObjektEinsatz.objekt).selectinload(Objekt.bma),
+                 selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte))
+        .filter(ObjektEinsatz.incident_id == incident_id, ObjektEinsatz.org_id == panel_org_id)
         .order_by(ObjektEinsatz.status, ObjektEinsatz.erstellt_am)
         .all()
     )
@@ -2529,10 +2538,19 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
             func.sum(case((ObjektKontaktBenachrichtigung.status == OBJEKT_INFO_GESENDET, 1), else_=0)),
             func.sum(case((ObjektKontaktBenachrichtigung.status == OBJEKT_INFO_FEHLER, 1), else_=0)),
         ).filter(
+            ObjektKontaktBenachrichtigung.org_id == panel_org_id,
             ObjektKontaktBenachrichtigung.incident_id == incident_id,
             ObjektKontaktBenachrichtigung.objekt_id.in_(verknuepfte_ids),
         ).group_by(ObjektKontaktBenachrichtigung.objekt_id).all()
     } if verknuepfte_ids else {}
+    hat_empfaenger = {
+        v.objekt_id: any(
+            (k.benachrichtigung_mail and bool((k.email or "").strip())) or bool(k.sms_nummern)
+            for k in (v.objekt.kontakte if v.objekt else [])
+            if k.org_id == panel_org_id
+        )
+        for v in verknuepfungen
+    }
     if incident.lat is not None and incident.lng is not None:
         # Vorschläge nach Entfernung zum Einsatzort sortieren statt nach Objekt-Nr. —
         # bei der manuellen Verknüpfung sind die nächstgelegenen Objekte am relevantesten.
@@ -2552,6 +2570,7 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
         "quellen_labels": OBJEKT_EINSATZ_QUELLEN,
         "kandidaten": kandidaten,
         "benachrichtigungen": benachrichtigungen,
+        "hat_empfaenger": hat_empfaenger,
         "darf_verknuepfen": is_objekt_verwalter(user) or any(
             r.code in ("incident_leader",) for r in user.roles
         ),

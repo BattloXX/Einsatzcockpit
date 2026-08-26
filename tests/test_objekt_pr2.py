@@ -1,5 +1,6 @@
 """Objektverwaltung PR 2: Kataloge, Gefahren, Merkmale, Kontakte, Wohnanlage, Erinnerung."""
 from datetime import date, timedelta
+import json
 
 import pytest
 from sqlalchemy import BigInteger, create_engine
@@ -65,8 +66,14 @@ def test_kontakt_telefone_roundtrip():
 
 def test_telefone_to_json_parser():
     from app.services.objekt_service import telefone_zu_json
-    assert telefone_zu_json("+43 5574 123, +43 664 456") == '["+43 5574 123", "+43 664 456"]'
-    assert telefone_zu_json("+43 5574 123; +43 664 456") == '["+43 5574 123", "+43 664 456"]'
+    assert json.loads(telefone_zu_json("+43 5574 123, +43 664 456")) == [
+        {"nummer": "+43 5574 123", "label": None, "sms": False},
+        {"nummer": "+43 664 456", "label": None, "sms": False},
+    ]
+    assert json.loads(telefone_zu_json("+43 5574 123; +43 664 456")) == [
+        {"nummer": "+43 5574 123", "label": None, "sms": False},
+        {"nummer": "+43 664 456", "label": None, "sms": False},
+    ]
     assert telefone_zu_json("   ") is None
     assert telefone_zu_json("") is None
 

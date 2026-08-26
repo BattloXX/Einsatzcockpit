@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "einsatzcockpit"
-version = "2026.08.26"
+version = "2026.08.26.1"
 description = "Einsatzcockpit – Multi-Organisations-Plattform für Feuerwehren und BOS"
 license = "LGPL-2.1-or-later"
 license-files = ["LICENSE"]
