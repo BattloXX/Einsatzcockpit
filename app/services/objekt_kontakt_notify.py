@@ -34,9 +34,9 @@ from app.services.mail_service import (
     deliver,
     get_smtp_cfg,
 )
+from app.services.objekt_service import telefon_normalisiert
 from app.services.sms_dispatch_service import render_template
 from app.services.sms_service import resolve_sms_config, send_sms, sms_available
-from app.services.objekt_service import telefon_normalisiert
 
 logger = logging.getLogger("einsatzleiter.objekt_kontakt_notify")
 
