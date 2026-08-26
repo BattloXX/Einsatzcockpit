@@ -309,7 +309,6 @@ def index(request: Request, db: Session = Depends(get_db)):
         payload = build_gsl_live_payload(db, lage)
         payload["display_started_at"] = lage.started_at
         active_major_payloads.append(payload)
-    active_major = active_major_payloads
     adopted_ids = (
         db.query(IncidentSite.incident_id)
         .join(MajorIncident, IncidentSite.major_incident_id == MajorIncident.id)
@@ -333,7 +332,7 @@ def index(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "index.html", {
         "user": user,
         "active_incidents": active,
-        "active_major_incidents": active_major,
+        "active_major_incidents": active_major_payloads,
         "alarm_types": alarm_types,
         "default_city": default_city,
     })

@@ -3,7 +3,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.major_incident import (
-    IncidentSite, MajorIncident, MajorIncidentStatus, SITE_PHASE_GROUP,
+    SITE_PHASE_GROUP,
+    IncidentSite,
+    MajorIncident,
+    MajorIncidentStatus,
 )
 
 
