@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.services.einsatz_live_service import build_live_state
+from app.services.gsl_live_service import build_gsl_live_state
 
 router = APIRouter(prefix="/api/v1/live", tags=["live"])
 
@@ -17,11 +18,14 @@ def get_live_state(request: Request, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
     incident, count = build_live_state(db, user, None)
+    lage, lage_count = build_gsl_live_state(db, user)
     return JSONResponse(
         {
             "server_time": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "incident_count": count,
             "incident": incident,
+            "lage_count": lage_count,
+            "lage": lage,
         },
         headers={"Cache-Control": "no-store"},
     )

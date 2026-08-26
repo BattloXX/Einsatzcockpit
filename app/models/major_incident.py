@@ -144,6 +144,16 @@ SITE_PRIORITY_LABEL = {
     SitePriority.aufschiebbar: "Aufschiebbar",
 }
 
+SITE_PHASE_GROUP = {  # abgebrochen bewusst NICHT enthalten
+    SitePhase.eingegangen: "neu",
+    SitePhase.erkundung: "in_arbeit",
+    SitePhase.bewertet: "in_arbeit",
+    SitePhase.disponiert: "in_arbeit",
+    SitePhase.in_arbeit: "in_arbeit",
+    SitePhase.erledigt: "erledigt",
+}
+SITE_PHASE_GROUP_LABEL = {"neu": "neu", "in_arbeit": "in Arbeit", "erledigt": "erledigt"}
+
 STAFF_FUNCTION_LABEL = {
     StaffFunction.lageleitung:   "Lageleitung",
     StaffFunction.s1_personal:   "S1 – Personal",
@@ -186,6 +196,8 @@ class MajorIncident(Base):
     public_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     started_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     ended_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    live_push_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    live_push_sig: Mapped[str | None] = mapped_column(String(64), nullable=True)
     started_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id"), nullable=True)
     created_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

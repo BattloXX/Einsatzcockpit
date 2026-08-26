@@ -1109,6 +1109,10 @@ async def lage_alarm(
     auto_assign_section(db, site)
     db.commit()
 
+    from app.services.gsl_live_notify import notify_gsl_live
+    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts",
+                          background_tasks=background_tasks)
+
     background_tasks.add_task(
         broadcast_lage, lage.id, {"type": "site_created", "reload_board": True}
     )

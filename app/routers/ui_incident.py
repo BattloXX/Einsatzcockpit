@@ -296,15 +296,26 @@ def index(request: Request, db: Session = Depends(get_db)):
         return render_start(request, kontakt=request.query_params.get("kontakt"))
     active_major = (
         db.query(MajorIncident)
-        .filter(MajorIncident.status == MajorIncidentStatus.active)
+        .filter(
+            MajorIncident.status == MajorIncidentStatus.active,
+            MajorIncident.org_id == user.org_id,
+        )
         .order_by(MajorIncident.started_at.desc())
         .all()
     )
+    from app.services.gsl_live_service import build_gsl_live_payload
+    active_major_payloads = []
+    for lage in active_major:
+        payload = build_gsl_live_payload(db, lage)
+        payload["display_started_at"] = lage.started_at
+        active_major_payloads.append(payload)
+    active_major = active_major_payloads
     adopted_ids = (
         db.query(IncidentSite.incident_id)
         .join(MajorIncident, IncidentSite.major_incident_id == MajorIncident.id)
         .filter(
             MajorIncident.status == MajorIncidentStatus.active,
+            MajorIncident.org_id == user.org_id,
             IncidentSite.incident_id.isnot(None),
         )
         .all()

@@ -11,9 +11,11 @@ def _sw_source() -> str:
 
 def test_live_notification_payload_handling():
     src = _sw_source()
-    assert "const CACHE = 'ec-v11';" in src
+    assert "const CACHE = 'ec-v12';" in src
     assert "einsatz_live" in src
     assert "einsatz_live_end" in src
+    assert "gsl_live" in src
+    assert "gsl_live_end" in src
 
     push_handler = src[src.index("self.addEventListener('push'"):]
     assert "silent" in push_handler

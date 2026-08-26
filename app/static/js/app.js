@@ -142,6 +142,10 @@ document.addEventListener('alpine:init', () => {
             const liveEv = new CustomEvent('einsatz-live', { detail: ev, bubbles: true });
             document.body.dispatchEvent(liveEv);
           }
+          if (ev.type === 'gsl_live') {
+            const liveEv = new CustomEvent('gsl-live', { detail: ev, bubbles: true });
+            document.body.dispatchEvent(liveEv);
+          }
         };
         ws.onclose = () => {
           window.__ecGlobalWsOpen = false;
@@ -199,6 +203,8 @@ document.addEventListener('alpine:init', () => {
   /* ─── Laufender Einsatz: globales In-App-Banner ────────────────── */
   Alpine.data('einsatzLiveBanner', () => ({
     incident: null,
+    lage: null,
+    lageCount: 0,
     incidentCount: 0,
     duration: '0 min',
     serverTimeSkew: 0,
@@ -210,7 +216,9 @@ document.addEventListener('alpine:init', () => {
     _onlineHandler: null,
 
     get visible() {
-      if (this.incident === null || String(this.incident.id) === this.dismissedIncidentId) return false;
+      const current = this.lage ? 'lage-' + this.lage.id : (this.incident ? 'inc-' + this.incident.id : null);
+      if (current === null || current === this.dismissedIncidentId) return false;
+      if (this.lage) return true;
       const boardIncident = document.getElementById('incidentHeaderAlarm')?.dataset.incidentId;
       const isOwnMobileBoard = window.matchMedia('(max-width: 760px)').matches
         && boardIncident === String(this.incident.id);
@@ -225,11 +233,13 @@ document.addEventListener('alpine:init', () => {
         if (!window.__ecGlobalWsOpen) this.fetchState();
       }, 60000);
       this._liveHandler = (event) => this.applyUpdate(event.detail);
+      this._gslHandler = (event) => this.applyUpdate(event.detail);
       this._visibilityHandler = () => {
         if (document.visibilityState === 'visible') this.fetchState();
       };
       this._onlineHandler = () => this.fetchState();
       document.body.addEventListener('einsatz-live', this._liveHandler);
+      document.body.addEventListener('gsl-live', this._gslHandler);
       document.addEventListener('visibilitychange', this._visibilityHandler);
       window.addEventListener('online', this._onlineHandler);
     },
@@ -238,6 +248,7 @@ document.addEventListener('alpine:init', () => {
       if (this._durationTimer) clearInterval(this._durationTimer);
       if (this._pollTimer) clearInterval(this._pollTimer);
       document.body.removeEventListener('einsatz-live', this._liveHandler);
+      document.body.removeEventListener('gsl-live', this._gslHandler);
       document.removeEventListener('visibilitychange', this._visibilityHandler);
       window.removeEventListener('online', this._onlineHandler);
     },
@@ -255,6 +266,8 @@ document.addEventListener('alpine:init', () => {
       if (!isNaN(serverTime)) this.serverTimeSkew = serverTime - Date.now();
       this.incidentCount = data.incident_count || 0;
       this.incident = data.incident || null;
+      this.lageCount = data.lage_count || 0;
+      this.lage = data.lage || null;
       this.tick();
     },
 
@@ -264,6 +277,11 @@ document.addEventListener('alpine:init', () => {
       if (!isNaN(serverTime)) this.serverTimeSkew = serverTime - Date.now();
       if (Object.prototype.hasOwnProperty.call(data, 'incident_count')) {
         this.incidentCount = data.incident_count || 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'lage_count')) this.lageCount = data.lage_count || 0;
+      if (Object.prototype.hasOwnProperty.call(data, 'lage')) {
+        this.lage = data.lage === null ? null : (this.lage && this.lage.id === data.lage.id
+          ? { ...this.lage, ...data.lage } : data.lage);
       }
       if (Object.prototype.hasOwnProperty.call(data, 'incident')) {
         if (data.incident === null) {
@@ -287,8 +305,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     tick() {
-      if (!this.incident?.started_at) { this.duration = '0 min'; return; }
-      const startedAt = Date.parse(this.incident.started_at);
+      const live = this.lage || this.incident;
+      if (!live?.started_at) { this.duration = '0 min'; return; }
+      const startedAt = Date.parse(live.started_at);
       if (isNaN(startedAt)) { this.duration = '0 min'; return; }
       const elapsedMinutes = Math.max(0, Math.floor((Date.now() + this.serverTimeSkew - startedAt) / 60000));
       if (elapsedMinutes < 60) {
@@ -301,9 +320,15 @@ document.addEventListener('alpine:init', () => {
     },
 
     dismiss() {
-      if (!this.incident) return;
-      this.dismissedIncidentId = String(this.incident.id);
+      const current = this.lage ? 'lage-' + this.lage.id : (this.incident ? 'inc-' + this.incident.id : null);
+      if (!current) return;
+      this.dismissedIncidentId = current;
       try { sessionStorage.setItem('ec-live-dismissed', this.dismissedIncidentId); } catch (_) {}
+    },
+
+    formatCounts(counts) {
+      if (!counts) return '';
+      return counts.neu + ' neu · ' + counts.in_arbeit + ' in Arbeit · ' + counts.erledigt + ' erledigt';
     },
   }));
 
