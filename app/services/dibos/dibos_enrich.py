@@ -621,6 +621,7 @@ def enrich_events_for_org(
     rsvp_changed_ids: list[int] = []
     created_ids: list[int] = []
     closed_ids: list[int] = []
+    objekt_match_ids: list[int] = []
     try:
         org = db.get(FireDept, org_id)
         for event in parse_events(raw_events):
@@ -643,7 +644,10 @@ def enrich_events_for_org(
                     db, org, incident, event_number, raw_units, wache_unid
                 )
             if event.get("bmaNo"):
-                changed |= _match_objekt_by_dibos_bma(db, incident)
+                objekt_match = _match_objekt_by_dibos_bma(db, incident)
+                changed |= objekt_match
+                if objekt_match:
+                    objekt_match_ids.append(incident.id)
             rsvp_changed = _sync_person_responses(db, org_id, org, incident, event.get("personResponses") or [])
             changed |= rsvp_changed
             if rsvp_changed:
@@ -703,6 +707,7 @@ def enrich_events_for_org(
         "rsvp_changed_ids": rsvp_changed_ids,
         "created_ids": created_ids,
         "closed_ids": closed_ids,
+        "objekt_match_ids": objekt_match_ids,
     }
 
 
@@ -744,6 +749,13 @@ async def enrich_and_broadcast(
     changed_ids = result.get("changed_ids") or []
     rsvp_changed_ids = result.get("rsvp_changed_ids") or []
     closed_ids = result.get("closed_ids") or []
+    objekt_match_ids = result.get("objekt_match_ids") or []
+    for incident_id in objekt_match_ids:
+        try:
+            from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+            await dispatch_objekt_einsatzinfo(incident_id)
+        except Exception:
+            logger.exception("DIBOS-Objekt-Einsatzinfo fehlgeschlagen (Einsatz %s)", incident_id)
     from app.services.broadcast import manager
     if closed_ids:
         from app.core.tenant import set_tenant_context

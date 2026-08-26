@@ -240,6 +240,8 @@ async def save_org_settings(
     foerderstrecke_module_enabled_raw: str = Form(""),
     objekt_geo_match_radius_raw: str = Form(""),
     objekt_ki_klassifikation_raw: str = Form(""),
+    objekt_kontakt_info_betreff_raw: str = Form(""),
+    objekt_kontakt_info_template_raw: str = Form(""),
     gateway_module_enabled_raw: str = Form(""),
     mailing_module_enabled_raw: str = Form(""),
     fahrtenbuch_modul_aktiv_raw: str = Form(""),
@@ -484,6 +486,8 @@ async def save_org_settings(
                 pass
         # KI-Dokumentklassifizierung (Opt-in, zusaetzlich zum AI-Setup)
         org_s.objekt_ki_klassifikation_enabled = objekt_ki_klassifikation_raw in ("1", "true", "on")
+        org_s.objekt_kontakt_info_betreff = objekt_kontakt_info_betreff_raw.strip() or None
+        org_s.objekt_kontakt_info_template = objekt_kontakt_info_template_raw.strip() or None
 
     # Nachschlagewerke: Org-Toggle — nur änderbar wenn System-Flag aktiv.
     from app.services.nachschlagewerk_service import nachschlagewerke_system_enabled

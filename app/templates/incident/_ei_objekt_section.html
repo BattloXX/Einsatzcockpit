@@ -14,6 +14,8 @@
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         {% if v.status == 'vorschlag' %}<span class="badge-pill badge-pill--amber">Vorschlag{% if v.distanz_m %} · {{ v.distanz_m }} m{% endif %}</span>{% endif %}
+        {% set bn = benachrichtigungen.get(o.id, {}) %}
+        {% if v.status == 'bestaetigt' and (bn.get('gesendet', 0) or bn.get('fehler', 0) or o.kontakt_info_enabled) %}<span class="text-muted">{% if bn.get('gesendet', 0) %}✉️ {{ bn.get('gesendet') }} benachrichtigt{% endif %}{% if bn.get('fehler', 0) %} ⚠️ {{ bn.get('fehler') }} Fehler{% endif %}</span>{% endif %}
         {% if darf_verknuepfen and v.status == 'vorschlag' %}
         <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/bestaetigen"
               hx-target="#ei-objekt-section" hx-swap="outerHTML" style="display:inline;margin:0;">
@@ -26,6 +28,13 @@
                 onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ o.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ o.id }}/objektblatt.pdf?anhang=1'})">🖨 Drucken</button>
         <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary ei-noprint">Objektinfo öffnen</a>
         {% if darf_verknuepfen %}
+        {% if v.status == 'bestaetigt' %}
+        <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/benachrichtigen" hx-target="#ei-objekt-section" hx-swap="outerHTML" hx-confirm="Einsatzinfo jetzt an die Objektkontakte senden?" style="display:inline;margin:0;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="view" value="info">
+          <button type="submit" class="btn btn--sm btn--primary ei-noprint">Kontakte benachrichtigen</button>
+        </form>
+        {% endif %}
         <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/loesen"
               hx-target="#ei-objekt-section" hx-swap="outerHTML"
               hx-confirm="Verknüpfung zu {{ o.name }} lösen?" style="display:inline;margin:0;">

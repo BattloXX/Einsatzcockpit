@@ -1,0 +1,33 @@
+<div class="card" style="padding:16px;" x-data="{ edit: false }">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+    <h3 style="margin:0;">🔔 Benachrichtigung</h3>
+    {% if ist_verwalter %}<button type="button" class="btn btn--ghost btn--xs" @click="edit = !edit">Bearbeiten</button>{% endif %}
+  </div>
+
+  <div x-show="!edit" style="margin-top:12px;">
+    <p><strong>{{ "Aktiv" if objekt.kontakt_info_enabled else "Deaktiviert" }}</strong>{% if objekt.kontakt_info_uebung %} · auch bei Übungen{% endif %}</p>
+    <p class="text-muted">Stichworte: {{ objekt.kontakt_info_stichworte or "alle" }}</p>
+    <div class="form-label">Vorschau mit Beispielwerten</div>
+    <div style="background:var(--surface-2);padding:12px;border-radius:8px;white-space:pre-wrap;"><strong>{{ benachrichtigung_vorschau_betreff }}</strong><br><br>{{ benachrichtigung_vorschau_text }}</div>
+  </div>
+
+  {% if ist_verwalter %}
+  <form x-show="edit" x-cloak hx-post="/objekte/{{ objekt.id }}/benachrichtigung" hx-target="#abschnitt-benachrichtigung" hx-swap="innerHTML" style="margin-top:12px;display:grid;gap:12px;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label><input type="checkbox" name="kontakt_info_enabled" value="1" {% if objekt.kontakt_info_enabled %}checked{% endif %}> Objektkontakte bei einem Einsatz auf diesem Objekt benachrichtigen</label>
+    <label><input type="checkbox" name="kontakt_info_uebung" value="1" {% if objekt.kontakt_info_uebung %}checked{% endif %}> Auch bei Übungen senden</label>
+    <div class="form-group"><label class="form-label">Nur bei Stichworten (kommagetrennt, leer = alle)</label><input type="text" name="kontakt_info_stichworte" maxlength="200" class="form-input" value="{{ objekt.kontakt_info_stichworte or '' }}"></div>
+    <div class="form-group"><label class="form-label">Mail-Betreff (leer = Standard)</label><input type="text" name="kontakt_info_betreff" maxlength="200" class="form-input" value="{{ objekt.kontakt_info_betreff or '' }}"></div>
+    <div class="form-group"><label class="form-label">Nachrichtentext (leer = Standard)</label><textarea name="kontakt_info_template" class="form-input" rows="5">{{ objekt.kontakt_info_template or '' }}</textarea></div>
+    <div><button type="submit" class="btn btn--primary">Speichern</button> <button type="button" class="btn btn--ghost" @click="edit = false">Abbrechen</button></div>
+  </form>
+  {% endif %}
+
+  <p class="form-hint" style="margin-top:12px;">Platzhalter: {objekt}, {objektnummer}, {vulgoname}, {stichwort}, {adresse}, {ort}, {meldung}, {einsatzgrund}, {datum}, {zeit}, {feuerwehr}, {kontakt}, {leitstellennummer}</p>
+  <div style="margin-top:10px;"><strong>Aktuelle Empfänger</strong>
+    {% set ns = namespace(anzahl=0) %}
+    <ul>{% for k in objekt.kontakte %}{% if k.benachrichtigung_mail and k.email %}{% set ns.anzahl = ns.anzahl + 1 %}<li>{{ k.name }} · E-Mail · {{ k.email }}</li>{% endif %}{% if k.benachrichtigung_sms and (k.benachrichtigung_telefon or k.telefone) %}{% set ns.anzahl = ns.anzahl + 1 %}<li>{{ k.name }} · SMS · {{ k.benachrichtigung_telefon or k.telefone[0] }}</li>{% endif %}{% endfor %}</ul>
+    {% if objekt.kontakt_info_enabled and ns.anzahl == 0 %}<p style="color:var(--warning);">Benachrichtigung ist aktiv, aber kein Kontakt hat einen verwendbaren Kanal aktiviert.</p>{% endif %}
+  </div>
+  <div class="alert alert--warning" style="margin-top:12px;">Der Platzhalter <code>{meldung}</code> gibt den Alarmtext unverändert an externe Empfänger weiter und kann Melderdaten enthalten.</div>
+</div>
