@@ -81,7 +81,8 @@ AREA_ROOTS: dict[str, set[str]] = {
     "objekte": {
         "objekt", "objekt_auswahl", "objekt_bma", "objekt_change", "objekt_dokument",
         "objekt_dokument_seite", "objekt_einsatz", "objekt_gefahr", "objekt_karten_objekt",
-        "objekt_kategorie", "objekt_kontakt", "objekt_merkmal", "objekt_seite_ki_vorschlag",
+        "objekt_kategorie", "objekt_kontakt", "objekt_kontakt_benachrichtigung",
+        "objekt_merkmal", "objekt_seite_ki_vorschlag",
         "objekt_symbol", "objekt_wohnanlage", "objekt_zusatzadresse",
         "gefahren_katalog", "merkmal_katalog", "infoscreen_url",
     },

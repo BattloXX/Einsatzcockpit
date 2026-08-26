@@ -25,6 +25,10 @@
             {% if o.gefahren|length > 4 %}<span class="text-muted" style="font-size:0.7em;">+{{ o.gefahren|length - 4 }}</span>{% endif %}
           </div>
           {% endif %}
+          {% set bn = benachrichtigungen.get(o.id, {}) %}
+          {% if v.status == 'bestaetigt' and (bn.get('gesendet', 0) or bn.get('fehler', 0) or o.kontakt_info_enabled) %}
+          <div class="text-muted" style="font-size:0.78em;margin-top:4px;">{% if bn.get('gesendet', 0) %}✉️ {{ bn.get('gesendet') }} benachrichtigt{% endif %}{% if bn.get('fehler', 0) %} ⚠️ {{ bn.get('fehler') }} Fehler{% endif %}</div>
+          {% endif %}
         </div>
         <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--primary btn--xs" style="flex-shrink:0;">Objektinfo</a>
       </div>
@@ -35,6 +39,12 @@
               hx-target="#objekt-panel" hx-swap="outerHTML" style="display:inline;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button type="submit" class="btn btn--primary btn--xs">✓ Bestätigen</button>
+        </form>
+        {% endif %}
+        {% if v.status == 'bestaetigt' %}
+        <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/benachrichtigen" hx-target="#objekt-panel" hx-swap="outerHTML" hx-confirm="Einsatzinfo jetzt an die Objektkontakte senden?" style="display:inline;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn--primary btn--xs">Kontakte benachrichtigen</button>
         </form>
         {% endif %}
         <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/loesen"

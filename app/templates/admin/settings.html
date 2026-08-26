@@ -573,6 +573,16 @@
             Setzt aktivierten KI-Assistenten voraus (zentral oder BYOK).
           </small>
         </div>
+        <div class="form-group">
+          <label>Standard-Betreff für Einsatzinfo an Objektkontakte</label>
+          <input type="text" name="objekt_kontakt_info_betreff_raw" maxlength="200" class="form-control" value="{{ org_settings.objekt_kontakt_info_betreff or '' if org_settings else '' }}">
+          <small class="form-hint">Leer verwendet den System-Standard.</small>
+        </div>
+        <div class="form-group">
+          <label>Standard-Nachricht für Einsatzinfo an Objektkontakte</label>
+          <textarea name="objekt_kontakt_info_template_raw" class="form-control" rows="4">{{ org_settings.objekt_kontakt_info_template or '' if org_settings else '' }}</textarea>
+          <small class="form-hint">Leer verwendet den System-Standard. Objekte können diese Vorlage überschreiben.</small>
+        </div>
       </div>
       {% endif %}
 

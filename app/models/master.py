@@ -457,6 +457,9 @@ class OrgSettings(Base):
     alarm_infoscreen_gsl_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # KI-Dokumentklassifizierung (Objektverwaltung): Opt-in je Org, zusaetzlich zum AI-Setup
     objekt_ki_klassifikation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Org-Standardvorlage fuer die Einsatzinfo an Objektkontakte
+    objekt_kontakt_info_betreff: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    objekt_kontakt_info_template: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Hydranten-/Löschwasser-Layer (OSM/OSMHydrant) auf Einsatz- und Objekt-Lagekarten.
     # Effektiv = Settings.HYDRANT_ENABLED AND dieser Wert.

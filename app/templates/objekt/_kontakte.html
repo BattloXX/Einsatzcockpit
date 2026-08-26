@@ -9,6 +9,8 @@
           <div>
             <span class="badge-pill badge-pill--gray">{{ kontakt_arten.get(k.art, k.art) }}</span>
             <strong>{{ k.name }}</strong>
+            {% if k.benachrichtigung_mail %}<span class="badge-pill badge-pill--gray">✉️ Einsatzinfo</span>{% endif %}
+            {% if k.benachrichtigung_sms %}<span class="badge-pill badge-pill--gray">💬 SMS</span>{% endif %}
           </div>
           {% if k.erreichbarkeit %}<div class="text-muted" style="font-size:0.85em;">{{ k.erreichbarkeit }}</div>{% endif %}
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
@@ -63,6 +65,17 @@
           <button type="button" class="btn btn--ghost btn--xs" @click="edit = false">Abbr.</button>
           <button type="submit" class="btn btn--primary btn--xs">Speichern</button>
         </div>
+        <div style="grid-column:1 / -1;display:flex;gap:16px;align-items:end;flex-wrap:wrap;">
+          <label><input type="checkbox" name="benachrichtigung_mail" value="1" {% if k.benachrichtigung_mail %}checked{% endif %}> Einsatzinfo per E-Mail</label>
+          <label><input type="checkbox" name="benachrichtigung_sms" value="1" {% if k.benachrichtigung_sms %}checked{% endif %}> Einsatzinfo per SMS</label>
+          <div class="form-group" style="margin:0;min-width:240px;">
+            <label class="form-label">SMS an Nummer (leer = erste Nummer)</label>
+            <input type="text" name="benachrichtigung_telefon" maxlength="30" class="form-input" value="{{ k.benachrichtigung_telefon or '' }}">
+          </div>
+          {% if k.benachrichtigung_sms and not k.benachrichtigung_telefon and not k.telefone %}
+          <span style="color:var(--warning);">SMS aktiv, aber keine Telefonnummer hinterlegt</span>
+          {% endif %}
+        </div>
       </form>
       {% endif %}
     </div>
@@ -102,6 +115,14 @@
       <input type="text" name="erreichbarkeit" class="form-input" maxlength="200" placeholder="Mo–Fr 8–17 Uhr">
     </div>
     <button type="submit" class="btn btn--primary">+ Kontakt</button>
+    <div style="grid-column:1 / -1;display:flex;gap:16px;align-items:end;flex-wrap:wrap;">
+      <label><input type="checkbox" name="benachrichtigung_mail" value="1"> Einsatzinfo per E-Mail</label>
+      <label><input type="checkbox" name="benachrichtigung_sms" value="1"> Einsatzinfo per SMS</label>
+      <div class="form-group" style="margin:0;min-width:240px;">
+        <label class="form-label">SMS an Nummer (leer = erste Nummer)</label>
+        <input type="text" name="benachrichtigung_telefon" maxlength="30" class="form-input">
+      </div>
+    </div>
   </form>
   {% endif %}
 </div>

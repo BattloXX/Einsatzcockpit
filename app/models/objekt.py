@@ -66,7 +66,9 @@ OBJEKT_STATUS_UEBERGAENGE: dict[str, set[str]] = {
 # org_id, status, entwurf_von_id, erstellt_*/aktualisiert_* NICHT versehentlich mitwandern.
 OBJEKT_KOPIERBARE_FELDER = (
     "name", "vulgoname", "kategorie_id", "strasse", "hausnummer", "plz", "ort",
-    "lat", "lng", "informationen", "anfahrtsweg", "revision_datum",
+    "lat", "lng", "informationen", "anfahrtsweg", "kontakt_info_enabled",
+    "kontakt_info_uebung", "kontakt_info_stichworte", "kontakt_info_betreff",
+    "kontakt_info_template", "revision_datum",
 )
 
 # Piktogramm-Typen fuer den Gefahren-Katalog (steuern Chip-/Symbol-Rendering)
@@ -176,6 +178,12 @@ class Objekt(TenantScoped, Base):
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     informationen: Mapped[str | None] = mapped_column(Text, nullable=True)
     anfahrtsweg: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Einsatzinfo an Objektkontakte (Mail/SMS)
+    kontakt_info_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    kontakt_info_uebung: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    kontakt_info_stichworte: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    kontakt_info_betreff: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    kontakt_info_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=OBJEKT_STATUS_ENTWURF)
     # Self-FK: gesetzt ⟺ diese Zeile ist eine Arbeitskopie des referenzierten (produktiven)
     # Objekts. ON DELETE CASCADE: wird das produktive Objekt geloescht, faellt die offene
@@ -518,6 +526,10 @@ class ObjektKontakt(TenantScoped, Base):
     telefone_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     erreichbarkeit: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Einsatzinfo-Kanaele je Kontakt
+    benachrichtigung_mail: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    benachrichtigung_sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    benachrichtigung_telefon: Mapped[str | None] = mapped_column(String(30), nullable=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Externe Identitaet (siehe app/services/bma_import/): NULL = haendisch gepflegt,
     # wird vom Import NIE angefasst. Gesetzt (z. B. extern_quelle="dibos_bma",
@@ -700,6 +712,45 @@ class ObjektKartenObjekt(TenantScoped, Base):
     geometry_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+OBJEKT_INFO_KANAELE = {"mail": "E-Mail", "sms": "SMS"}
+OBJEKT_INFO_GESENDET = "gesendet"
+OBJEKT_INFO_FEHLER = "fehler"
+
+
+class ObjektKontaktBenachrichtigung(TenantScoped, Base):
+    """Protokoll + Idempotenzschutz je (Einsatz, Kontakt, Kanal)."""
+    __tablename__ = "objekt_kontakt_benachrichtigung"
+    __table_args__ = (
+        UniqueConstraint(
+            "incident_id", "objekt_kontakt_id", "kanal",
+            name="uq_objekt_kontakt_benachrichtigung",
+        ),
+        Index("ix_okb_org_incident", "org_id", "incident_id"),
+        Index("ix_okb_org_objekt", "org_id", "objekt_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False
+    )
+    objekt_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=False
+    )
+    objekt_kontakt_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_kontakt.id", ondelete="SET NULL"), nullable=True
+    )
+    kanal: Mapped[str] = mapped_column(String(10), nullable=False)
+    kontakt_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    empfaenger: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=OBJEKT_INFO_GESENDET)
+    fehlertext: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gesendet_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    ausgeloest_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 def parse_karten_geometry(geometry_json: str | None) -> dict | None:

@@ -346,6 +346,8 @@ async def match_incident_background(incident_id: int, *, nur_geo: bool = False) 
                 await manager.broadcast(incident_id, {"type": "objektgefahren", "reload_board": True})
             except Exception:
                 logger.exception("Board-Reload-Broadcast fehlgeschlagen (Einsatz %d)", incident_id)
+        from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+        await dispatch_objekt_einsatzinfo(incident_id)
     except Exception:
         logger.exception("Objekt-Matching fehlgeschlagen (Einsatz %d)", incident_id)
         try:

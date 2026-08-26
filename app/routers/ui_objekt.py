@@ -1591,6 +1591,9 @@ def kontakt_neu(
     telefone: str = Form(""),
     email: str = Form(""),
     erreichbarkeit: str = Form(""),
+    benachrichtigung_mail: str = Form(""),
+    benachrichtigung_sms: str = Form(""),
+    benachrichtigung_telefon: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     if not name.strip():
@@ -1606,6 +1609,9 @@ def kontakt_neu(
         telefone_json=telefone_zu_json(telefone),
         email=email.strip() or None,
         erreichbarkeit=erreichbarkeit.strip() or None,
+        benachrichtigung_mail=benachrichtigung_mail in ("1", "true", "on"),
+        benachrichtigung_sms=benachrichtigung_sms in ("1", "true", "on"),
+        benachrichtigung_telefon=benachrichtigung_telefon.strip() or None,
         sort=max_sort + 1,
     )
     db.add(kontakt)
@@ -1631,6 +1637,9 @@ def kontakt_speichern(
     telefone: str = Form(""),
     email: str = Form(""),
     erreichbarkeit: str = Form(""),
+    benachrichtigung_mail: str = Form(""),
+    benachrichtigung_sms: str = Form(""),
+    benachrichtigung_telefon: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     kontakt = (
@@ -1648,6 +1657,9 @@ def kontakt_speichern(
         "telefone_json": telefone_zu_json(telefone),
         "email": email.strip() or None,
         "erreichbarkeit": erreichbarkeit.strip() or None,
+        "benachrichtigung_mail": benachrichtigung_mail in ("1", "true", "on"),
+        "benachrichtigung_sms": benachrichtigung_sms in ("1", "true", "on"),
+        "benachrichtigung_telefon": benachrichtigung_telefon.strip() or None,
     }
     for feld, neu in daten.items():
         alt = getattr(kontakt, feld)
@@ -1661,6 +1673,87 @@ def kontakt_speichern(
     return templates.TemplateResponse(
         request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt)
     )
+
+
+@router.get("/{objekt_id}/benachrichtigung", response_class=HTMLResponse)
+def benachrichtigung_partial(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    ctx = _benachrichtigung_context(request, db, user, objekt)
+    return templates.TemplateResponse(
+        request, "objekt/_benachrichtigung.html", ctx
+    )
+
+
+@router.post("/{objekt_id}/benachrichtigung", response_class=HTMLResponse)
+def benachrichtigung_speichern(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    kontakt_info_enabled: str = Form(""),
+    kontakt_info_uebung: str = Form(""),
+    kontakt_info_stichworte: str = Form(""),
+    kontakt_info_betreff: str = Form(""),
+    kontakt_info_template: str = Form(""),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    aktualisiere_felder(
+        db,
+        objekt,
+        {
+            "kontakt_info_enabled": kontakt_info_enabled in ("1", "true", "on"),
+            "kontakt_info_uebung": kontakt_info_uebung in ("1", "true", "on"),
+            "kontakt_info_stichworte": kontakt_info_stichworte.strip() or None,
+            "kontakt_info_betreff": kontakt_info_betreff.strip() or None,
+            "kontakt_info_template": kontakt_info_template.strip() or None,
+        },
+        bereich="benachrichtigung",
+        user_id=user.id,
+    )
+    db.commit()
+    db.refresh(objekt)
+    return templates.TemplateResponse(
+        request, "objekt/_benachrichtigung.html",
+        _benachrichtigung_context(request, db, user, objekt),
+    )
+
+
+def _benachrichtigung_context(request: Request, db: Session, user: User, objekt: Objekt) -> dict:
+    from app.models.master import OrgSettings
+    from app.services.objekt_kontakt_notify import loese_betreff, loese_template
+    from app.services.sms_dispatch_service import render_template
+
+    ctx = _detail_context(request, db, user, objekt)
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == objekt.org_id).first()
+    beispiel = {
+        "objekt": objekt.name or "Beispielobjekt",
+        "objektnummer": objekt.nummer or "123",
+        "vulgoname": objekt.vulgoname or "Beispielbetrieb",
+        "stichwort": "B2",
+        "adresse": objekt.adresse_zeile or "Hauptstraße 1, 0000 Musterort",
+        "ort": objekt.ort or "Musterort",
+        "meldung": "Beispiel-Alarmtext",
+        "einsatzgrund": "Brandverdacht",
+        "datum": "26.08.2026",
+        "zeit": "14:30",
+        "feuerwehr": user.org.name if user.org else "Feuerwehr",
+        "kontakt": "Max Mustermann",
+        "leitstellennummer": "f26001234",
+    }
+    ctx["benachrichtigung_vorschau_betreff"] = render_template(
+        loese_betreff(objekt, org_settings), beispiel
+    )
+    ctx["benachrichtigung_vorschau_text"] = render_template(
+        loese_template(objekt, org_settings), beispiel
+    )
+    return ctx
 
 
 @router.post("/{objekt_id}/kontakte/{kontakt_id}/loeschen", response_class=HTMLResponse)
@@ -2398,8 +2491,15 @@ _MATCH_ROLLEN = ("incident_leader", "objekt_verwalter")
 
 
 def _panel_context(request: Request, db: Session, user: User, incident_id: int) -> dict:
+    from sqlalchemy import case, func
     from app.models.incident import Incident
-    from app.models.objekt import OBJEKT_EINSATZ_QUELLEN, ObjektEinsatz
+    from app.models.objekt import (
+        OBJEKT_EINSATZ_QUELLEN,
+        OBJEKT_INFO_FEHLER,
+        OBJEKT_INFO_GESENDET,
+        ObjektEinsatz,
+        ObjektKontaktBenachrichtigung,
+    )
 
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if incident is None:
@@ -2422,6 +2522,17 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
         .all()
     )
     kandidaten = [o for o in kandidaten if o.id not in verknuepfte_ids]
+    benachrichtigungen = {
+        objekt_id: {"gesendet": gesendet or 0, "fehler": fehler or 0}
+        for objekt_id, gesendet, fehler in db.query(
+            ObjektKontaktBenachrichtigung.objekt_id,
+            func.sum(case((ObjektKontaktBenachrichtigung.status == OBJEKT_INFO_GESENDET, 1), else_=0)),
+            func.sum(case((ObjektKontaktBenachrichtigung.status == OBJEKT_INFO_FEHLER, 1), else_=0)),
+        ).filter(
+            ObjektKontaktBenachrichtigung.incident_id == incident_id,
+            ObjektKontaktBenachrichtigung.objekt_id.in_(verknuepfte_ids),
+        ).group_by(ObjektKontaktBenachrichtigung.objekt_id).all()
+    } if verknuepfte_ids else {}
     if incident.lat is not None and incident.lng is not None:
         # Vorschläge nach Entfernung zum Einsatzort sortieren statt nach Objekt-Nr. —
         # bei der manuellen Verknüpfung sind die nächstgelegenen Objekte am relevantesten.
@@ -2440,6 +2551,7 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
         "verknuepfungen": verknuepfungen,
         "quellen_labels": OBJEKT_EINSATZ_QUELLEN,
         "kandidaten": kandidaten,
+        "benachrichtigungen": benachrichtigungen,
         "darf_verknuepfen": is_objekt_verwalter(user) or any(
             r.code in ("incident_leader",) for r in user.roles
         ),
@@ -2476,6 +2588,7 @@ def einsatz_panel(
 async def einsatz_manuell_verknuepfen(
     incident_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_MATCH_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
@@ -2509,6 +2622,10 @@ async def einsatz_manuell_verknuepfen(
         if incident is not None:
             erzeuge_gefahren_meldungen(db, incident, objekt)
         db.commit()
+        from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+        background_tasks.add_task(
+            dispatch_objekt_einsatzinfo, incident_id, triggered_by_user_id=user.id
+        )
         try:
             from app.services.broadcast import manager
             await manager.broadcast(incident_id, {"type": "objektgefahren", "reload_board": True})
@@ -2525,6 +2642,7 @@ def einsatz_match_bestaetigen(
     incident_id: int,
     verknuepfung_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_MATCH_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
@@ -2545,9 +2663,54 @@ def einsatz_match_bestaetigen(
                 entity_type="objekt", entity_id=verknuepfung.objekt_id,
                 incident_id=incident_id, payload={"quelle": verknuepfung.quelle})
     db.commit()
+    from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+    background_tasks.add_task(
+        dispatch_objekt_einsatzinfo,
+        incident_id,
+        objekt_ids=[verknuepfung.objekt_id],
+        triggered_by_user_id=user.id,
+    )
     return templates.TemplateResponse(
         request, _panel_template(view),
         _panel_context(request, db, user, incident_id),
+    )
+
+
+@router.post(
+    "/einsatz-panel/{incident_id}/{verknuepfung_id}/benachrichtigen",
+    response_class=HTMLResponse,
+)
+def einsatz_kontakte_benachrichtigen(
+    incident_id: int,
+    verknuepfung_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_MATCH_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+    view: str = Form(""),
+):
+    from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
+    from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+
+    verknuepfung = db.query(ObjektEinsatz).filter(
+        ObjektEinsatz.id == verknuepfung_id,
+        ObjektEinsatz.incident_id == incident_id,
+        ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
+    ).first()
+    if verknuepfung is None:
+        raise HTTPException(status_code=404, detail="Verknuepfung nicht gefunden")
+    write_audit(
+        db, "objekt.kontakt_info_manuell", org_id=user.org_id, user_id=user.id,
+        incident_id=incident_id, entity_type="objekt", entity_id=verknuepfung.objekt_id,
+    )
+    db.commit()
+    background_tasks.add_task(
+        dispatch_objekt_einsatzinfo, incident_id,
+        objekt_ids=[verknuepfung.objekt_id], force=True, triggered_by_user_id=user.id,
+    )
+    return templates.TemplateResponse(
+        request, _panel_template(view), _panel_context(request, db, user, incident_id)
     )
 
 
