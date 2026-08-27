@@ -176,6 +176,7 @@ def dokument_pdf(
         pdf = render_job_pdf(db, job)
     except ArtifactError as exc:
         # Fehlende Bezugsdaten – als klare Meldung statt PDF ausliefern.
+        logger.warning("Druck-PDF kann nicht gerendert werden: %s", exc)
         return _fehler_seite(str(exc), status=422)
     except Exception:
         # Jeder andere Fehler (z. B. PDF-Renderer) darf keinen rohen 500 zeigen –

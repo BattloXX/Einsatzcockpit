@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
+import uuid
 
 import pytest
 from sqlalchemy import BigInteger, create_engine
@@ -528,12 +529,110 @@ def test_build_test_jobs_ignores_trigger_and_filters(db):
                      filters={"min_alarmstufe": 9})  # Filter würde sonst blocken
     db.add(rule)
     db.flush()
-    incident = MagicMock(id=42, reason="B3", report_text=None)
-
-    jobs = disp.build_test_jobs(db, rule, incident)
+    jobs = disp.build_test_jobs(db, rule, {"incident_id": 42})
     assert len(jobs) == 1
     assert jobs[0].source == JOB_SOURCE_MANUAL
     assert jobs[0].incident_id == 42
+
+
+def test_idempotency_key_fallback_segment_is_conditional():
+    kwargs = dict(
+        org_id=7, source="rule", rule_id=11, incident_id=13, gsl_id=None,
+        objekt_id=None, document_type="einsatzinfo", artifact_ref=None, printer_id=17,
+    )
+    # Altbestand-Kompatibilitaet: Dieser Literalwert darf sich ohne fallback_of nie aendern.
+    assert disp.build_idempotency_key(**kwargs) == "rule:9b8c4878eb6da9a09c4954229e2643d1"
+    assert disp.build_idempotency_key(**kwargs, fallback_of=19) == disp.build_idempotency_key(
+        **kwargs, fallback_of=19,
+    )
+    assert disp.build_idempotency_key(**kwargs, fallback_of=19) != disp.build_idempotency_key(**kwargs)
+
+
+def test_resolve_test_context_alle_ausloeser_und_gsl_org_isolation(db):
+    from app.models.gateway import AlarmIngest, PrintRule
+    from app.models.incident import Incident
+    from app.models.major_incident import MajorIncident
+    from app.models.verleih import VerleihAusleihe
+
+    org = 1
+    fremde_lage = MajorIncident(org_id=2, name="Fremd")
+    lage = MajorIncident(org_id=org, name="Eigene Lage", is_exercise=True)
+    inc = Incident(primary_org_id=org, reason="B3")
+    db.add_all([fremde_lage, lage, inc])
+    db.flush()
+    ausleihe = VerleihAusleihe(org_id=org, lage_id=lage.id, name="Test")
+    gw = Gateway(org_id=org, name="Kontext-GW")
+    db.add_all([ausleihe, gw])
+    db.flush()
+    ingest = AlarmIngest(
+        org_id=org, gateway_id=gw.id, raw_hash=uuid.uuid4().hex, raw_text="ALARM",
+        parse_status="parsed", einsatz_id=inc.id,
+    )
+    db.add(ingest)
+    db.flush()
+
+    erwartet = {
+        "einsatz_created": ("einsatz", inc.id, "incident_id", inc.id),
+        "gsl_created": ("gsl", lage.id, "gsl_id", lage.id),
+        "verleih_created": ("verleih", ausleihe.id, "gsl_id", lage.id),
+        "alarm_serial_received": ("alarm", ingest.id, "alarm_ingest_id", ingest.id),
+    }
+    for trigger, (art, ref_id, key, value) in erwartet.items():
+        rule = PrintRule(org_id=org, name=trigger, trigger=trigger)
+        bezug = disp.resolve_test_context(db, rule)
+        assert bezug is not None
+        assert (bezug.art, bezug.ref_id, bezug.context[key]) == (art, ref_id, value)
+
+
+def test_test_jobs_gsl_verleih_und_alarm_setzen_renderbezug(db):
+    from app.models.gateway import PrintRule
+
+    org = 991850
+    gw = Gateway(org_id=org, name="GW", device_token_hash=hash_api_key("ctx"))
+    db.add(gw)
+    db.flush()
+    faelle = [
+        ("gsl_created", ["gsl_lageblatt"], {"gsl_id": 71}, "gsl_id", 71),
+        ("verleih_created", ["verleih_schein"], {"gsl_id": 72, "ausleihe_id": 73}, "artifact_ref", "73"),
+        ("alarm_serial_received", ["alarm_rohtext"], {"alarm_ingest_id": 74}, "artifact_ref", "74"),
+    ]
+    for trigger, documents, context, attribut, wert in faelle:
+        rule = PrintRule(
+            org_id=org, name=trigger, trigger=trigger, documents=documents,
+            printer_ids=[101],
+        )
+        db.add(rule)
+        db.flush()
+        jobs = disp.build_test_jobs(db, rule, context)
+        assert len(jobs) == 1
+        assert getattr(jobs[0], attribut) == wert
+
+
+def test_alarm_rohtext_ohne_alarmbezug_wird_uebersprungen(db, caplog):
+    """Alarm-Rohtext ohne AlarmIngest im Kontext darf weder crashen noch leer drucken.
+
+    Erreichbar ueber den Testdruck einer Altbestand-Regel, deren Dokumente nicht zum
+    Ausloeser passen: der Testdruck umgeht die TRIGGER_DOCUMENT_TYPES-Allowlist
+    (_jobs_for_rule, source=manual), der Einsatz-Kontext hat aber kein alarm_ingest_id.
+    """
+    from app.models.gateway import PrintRule
+
+    org = 991851
+    gw = Gateway(org_id=org, name="GW", device_token_hash=hash_api_key("alarm-ohne-bezug"))
+    db.add(gw)
+    db.flush()
+    rule = PrintRule(
+        org_id=org, name="Altbestand Rohtext", trigger="einsatz_created",
+        documents=["alarm_rohtext"], printer_ids=[101],
+    )
+    db.add(rule)
+    db.flush()
+
+    with caplog.at_level("WARNING"):
+        jobs = disp.build_test_jobs(db, rule, {"incident_id": 4711})
+
+    assert jobs == []
+    assert "ohne Alarm-Bezug" in caplog.text
 
 
 # ── Serieller Ingest (Idempotenz via raw_hash) ───────────────────────────────────

@@ -150,6 +150,7 @@ def get_artifact(job_id: int, sig: str = "", db: Session = Depends(get_db)):
     set_tenant_context(db, None)
     from app.models.gateway import PrintJob
     from app.services.print_artifact_service import ArtifactError, render_job_pdf, verify_artifact_token
+    from app.services.print_dispatcher import mark_job_failed
 
     org_id = verify_artifact_token(job_id, sig)
     if org_id is None:
@@ -160,6 +161,8 @@ def get_artifact(job_id: int, sig: str = "", db: Session = Depends(get_db)):
     try:
         pdf = render_job_pdf(db, job)
     except ArtifactError as exc:
+        # Kein Broadcast: Die Historie hat keinen Live-Listener und wird beim Reload geladen.
+        mark_job_failed(db, job, f"Rendern fehlgeschlagen: {exc}")
         raise HTTPException(status_code=422, detail=str(exc))
     return Response(content=pdf, media_type="application/pdf")
 
@@ -176,6 +179,7 @@ def get_render_page(job_id: int, sig: str = "", db: Session = Depends(get_db)):
         render_map_html,
         verify_artifact_token,
     )
+    from app.services.print_dispatcher import mark_job_failed
 
     org_id = verify_artifact_token(job_id, sig)
     if org_id is None:
@@ -188,5 +192,7 @@ def get_render_page(job_id: int, sig: str = "", db: Session = Depends(get_db)):
     try:
         html = render_map_html(db, job)
     except ArtifactError as exc:
+        # Kein Broadcast: Die Historie hat keinen Live-Listener und wird beim Reload geladen.
+        mark_job_failed(db, job, f"Rendern fehlgeschlagen: {exc}")
         raise HTTPException(status_code=422, detail=str(exc))
     return HTMLResponse(content=html)

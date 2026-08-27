@@ -11,6 +11,7 @@ from app.db import SessionLocal
 from app.models.gateway import Gateway
 from app.models.master import OrgSettings, SystemSettings
 from app.models.user import Role, User, UserRole
+import pytest
 
 ORG_ID = 1  # FF Wolfurt (seeded)
 
@@ -103,3 +104,27 @@ def test_druckregeln_tab_ist_fuer_recorder_gesperrt():
 
     r = client.get(f"/gateway/{gw_id}/druckregeln")
     assert r.status_code == 403, r.status_code
+
+
+@pytest.mark.parametrize(
+    ("query", "meldung"),
+    [
+        ("test_err=printer", "kein Zieldrucker"),
+        ("test_err=gateway", "kein gekoppeltes Gateway"),
+        ("test_err=einsatz", "keinen Einsatz"),
+        ("test_err=gsl", "keine Großschadenslage"),
+        ("test_err=verleih", "keinen Verleihschein"),
+        ("test_err=alarm", "keinen seriellen Alarm"),
+        ("test_err=leer&test_art=einsatz&test_ref=123", "keine Druckaufträge"),
+    ],
+)
+def test_druckregeln_testmeldungen(query, meldung):
+    gw_id = _setup("druckregeln_meldung_" + query.split("=")[1].split("&")[0], "org_admin")
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    _login(client, "druckregeln_meldung_" + query.split("=")[1].split("&")[0], "Test1234!")
+    response = client.get(f"/gateway/{gw_id}/druckregeln?{query}")
+    assert response.status_code == 200
+    assert meldung in response.text
