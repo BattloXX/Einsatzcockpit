@@ -40,9 +40,15 @@
     {% if q.get('rule_created') %}<div class="gwx-alert gwx-alert--ok">Regel angelegt – jetzt konfigurieren.</div>{% endif %}
     {% if q.get('error') == 'rule_dup' %}<div class="gwx-alert gwx-alert--err">Regelname bereits vergeben.</div>{% endif %}
     {% if q.get('error') == 'rule_documents' %}<div class="gwx-alert gwx-alert--err">Die gewählten Dokumente passen nicht zum Auslöser.</div>{% endif %}
-    {% if q.get('test_ok') %}<div class="gwx-alert gwx-alert--ok">Testdruck ausgelöst: {{ q.get('test_ok') }} Auftrag/Aufträge{% if q.get('test_inc') %} (Einsatz #{{ q.get('test_inc') }}){% endif %} an die Zieldrucker gesendet.</div>{% endif %}
+    {% set test_art_labels = {'einsatz': 'Einsatz', 'gsl': 'Großschadenslage', 'verleih': 'Verleihschein', 'alarm': 'Alarm'} %}
+    {% if q.get('test_ok') %}<div class="gwx-alert gwx-alert--ok">Testdruck ausgelöst: {{ q.get('test_ok') }} Auftrag/Aufträge für {{ test_art_labels.get(q.get('test_art'), q.get('test_art')) }} #{{ q.get('test_ref') }} an die Zieldrucker gesendet.</div>{% endif %}
     {% if q.get('test_err') == 'printer' %}<div class="gwx-alert gwx-alert--err">Testdruck: Der Regel ist kein Zieldrucker zugewiesen.</div>{% endif %}
-    {% if q.get('test_err') == 'incident' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen Einsatz zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'gateway' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es ist kein gekoppeltes Gateway verfügbar.</div>{% endif %}
+    {% if q.get('test_err') == 'einsatz' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen Einsatz zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'gsl' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keine Großschadenslage zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'verleih' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen Verleihschein zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'alarm' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen seriellen Alarm zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'leer' %}<div class="gwx-alert gwx-alert--err">Testdruck: Für {{ test_art_labels.get(q.get('test_art'), q.get('test_art')) }} #{{ q.get('test_ref') }} entstanden keine Druckaufträge – prüfen Sie Dokumente und Objekt-Elemente der Regel, z. B. Objektblatt ohne verknüpftes Objekt.</div>{% endif %}
     <div class="gwx-grid">
       {# ── Druckregeln ── #}
       <div class="gwx-col-12">
@@ -158,7 +164,8 @@
                         <option value="">– keiner –</option>
                         {% for p in printers %}
                         <option value="{{ p.id }}" {{ 'selected' if r.fallback_printer_id==p.id }}>{{ p.name }}</option>{% endfor %}
-                      </select></div>
+                      </select>
+                      <div class="gwx-help">Greift erst, wenn das Gateway den Auftrag nach eigenen Wiederholungsversuchen endgültig aufgibt, nicht sofort.</div></div>
                   </div>
                   {% endif %}
 

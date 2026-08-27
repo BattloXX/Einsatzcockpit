@@ -570,10 +570,14 @@ async def rule_test(
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
 ):
-    """Testdruck: wertet die Regel gegen den zuletzt angelegten Einsatz der Org aus
-    (unabhängig von Trigger/aktiv/Filter) und stellt die Jobs zu."""
-    from app.models.incident import Incident
-    from app.services.print_dispatcher import build_test_jobs, dispatch_job
+    """Testdruck: wertet die Regel gegen den juengsten passenden Bezug der Org aus."""
+    from app.services.print_dispatcher import (
+        TRIGGER_TEST_BEZUG,
+        build_test_jobs,
+        dispatch_job,
+        paired_gateway,
+        resolve_test_context,
+    )
 
     rule = db.get(PrintRule, rule_id)
     if rule is None or rule.org_id != user.org_id:
@@ -581,16 +585,19 @@ async def rule_test(
     if not rule.printer_ids:
         return RedirectResponse(_rule_return(gw, f"test_err=printer#regel-{rule.id}"), status_code=303)
 
-    incident = (
-        db.query(Incident)
-        .filter(Incident.primary_org_id == user.org_id)
-        .order_by(Incident.started_at.desc())
-        .first()
-    )
-    if incident is None:
-        return RedirectResponse(_rule_return(gw, f"test_err=incident#regel-{rule.id}"), status_code=303)
+    if paired_gateway(db, user.org_id) is None:
+        return RedirectResponse(_rule_return(gw, f"test_err=gateway#regel-{rule.id}"), status_code=303)
+    bezug = resolve_test_context(db, rule)
+    if bezug is None:
+        art = TRIGGER_TEST_BEZUG.get(rule.trigger, "einsatz")
+        return RedirectResponse(_rule_return(gw, f"test_err={art}#regel-{rule.id}"), status_code=303)
 
-    jobs = build_test_jobs(db, rule, incident)
+    jobs = build_test_jobs(db, rule, bezug.context)
+    if not jobs:
+        return RedirectResponse(
+            _rule_return(gw, f"test_err=leer&test_art={bezug.art}&test_ref={bezug.ref_id}#regel-{rule.id}"),
+            status_code=303,
+        )
     db.commit()
     for job in jobs:
         try:
@@ -598,7 +605,7 @@ async def rule_test(
         except Exception:
             logger.exception("Testdruck: Job %s nicht zustellbar", job.id)
     return RedirectResponse(
-        _rule_return(gw, f"test_ok={len(jobs)}&test_inc={incident.id}#regel-{rule.id}"),
+        _rule_return(gw, f"test_ok={len(jobs)}&test_art={bezug.art}&test_ref={bezug.ref_id}#regel-{rule.id}"),
         status_code=303,
     )
 

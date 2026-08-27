@@ -10,6 +10,7 @@ import hashlib
 import logging
 import re
 import uuid
+from typing import NamedTuple
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -24,6 +25,23 @@ from app.models.gateway import (
 )
 
 logger = logging.getLogger("einsatzleiter.print")
+
+
+class TestBezug(NamedTuple):
+    context: dict
+    art: str
+    ref_id: int
+
+
+TRIGGER_TEST_BEZUG = {
+    "einsatz_created": "einsatz",
+    "einsatz_updated": "einsatz",
+    "manual_only": "einsatz",
+    "gsl_created": "gsl",
+    "gsl_lage_updated": "gsl",
+    "verleih_created": "verleih",
+    "alarm_serial_received": "alarm",
+}
 
 
 def unfulfilled_print_jobs(db: Session, incident_id: int) -> list[PrintJob]:
@@ -52,6 +70,7 @@ def build_idempotency_key(
     document_type: str,
     artifact_ref: str | None,
     printer_id: int | None,
+    fallback_of: int | None = None,
 ) -> str:
     """Deterministischer Schlüssel für Automatik-Jobs (max. einmal je Kombination).
 
@@ -70,6 +89,8 @@ def build_idempotency_key(
         str(artifact_ref or ""),
         str(printer_id or ""),
     ]
+    if fallback_of is not None:
+        parts.append(f"fb{fallback_of}")
     raw = ":".join(parts)
     return f"{source}:{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
@@ -89,6 +110,7 @@ def create_print_job(
     artifact_ref: str | None = None,
     options: dict | None = None,
     created_by_id: int | None = None,
+    fallback_of_job_id: int | None = None,
 ) -> tuple[PrintJob, bool]:
     """Legt einen Druckauftrag an. Gibt (job, created) zurück.
 
@@ -100,6 +122,7 @@ def create_print_job(
         org_id=org_id, source=source, rule_id=rule_id, incident_id=incident_id, gsl_id=gsl_id,
         objekt_id=objekt_id, document_type=document_type, artifact_ref=artifact_ref,
         printer_id=printer_id,
+        fallback_of=fallback_of_job_id,
     )
     if source != JOB_SOURCE_MANUAL:
         existing = (
@@ -125,6 +148,7 @@ def create_print_job(
         options=options or {},
         idempotency_key=key,
         created_by_id=created_by_id,
+        fallback_of_job_id=fallback_of_job_id,
     )
     try:
         with db.begin_nested():
@@ -178,6 +202,8 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
     try:
         result = await dispatch_print_job(job.org_id, job.id, payload)
     except RuntimeError as exc:
+        # Bewusst kein Fallback: Ist kein Gateway verbunden, ist auch ein Ersatzdrucker
+        # derselben Organisation nicht erreichbar.
         db.refresh(job)
         job.status = JOB_FAILED
         job.error = str(exc)[:500]
@@ -188,6 +214,88 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
     # Erfolgreich übergeben. Endstatus kommt asynchron via job_status → _apply_job_status.
     return {"job_id": job.id, "status": result.get("status") or JOB_SENT,
             "error": result.get("error")}
+
+
+def mark_job_failed(db: Session, job: PrintJob, grund: str) -> bool:
+    """Setzt einen Job auf 'failed' mit Begruendung. Idempotent und terminal-sicher.
+
+    True, wenn der Status gewechselt hat.
+    """
+    from app.models.gateway import JOB_TERMINAL
+
+    if job.status in JOB_TERMINAL:
+        return False
+    job.status = JOB_FAILED
+    job.error = grund[:500]
+    db.commit()
+    return True
+
+
+async def dispatch_fallback_for_failed_job(job_id: int) -> PrintJob | None:
+    """Legt nach einem gemeldeten Fehlschlag genau einen Ersatz-Job an und stellt ihn zu.
+
+    Eigene Session, best-effort.
+    """
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.gateway import Printer, PrintRule
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        job = db.get(PrintJob, job_id)
+        if job is None or job.source != JOB_SOURCE_RULE or job.rule_id is None:
+            return None
+        if job.fallback_of_job_id is not None:
+            return None
+        rule = db.get(PrintRule, job.rule_id)
+        if rule is None or rule.org_id != job.org_id or not rule.fallback_printer_id:
+            return None
+        if rule.fallback_printer_id == job.printer_id:
+            return None
+        printer = db.get(Printer, rule.fallback_printer_id)
+        if printer is None or printer.org_id != job.org_id or not printer.aktiv:
+            logger.warning(
+                "Fallback-Drucker %s fuer Druckauftrag %s nicht verfuegbar",
+                rule.fallback_printer_id, job.id,
+            )
+            return None
+
+        options = dict(job.options or {})
+        media = options.get("media")
+        supported_media = (printer.capabilities or {}).get("media") or ["A4"]
+        if media and media not in supported_media:
+            options.pop("media", None)
+        ersatz, created = create_print_job(
+            db,
+            org_id=job.org_id,
+            gateway_id=printer.gateway_id,
+            printer_id=printer.id,
+            document_type=job.document_type,
+            source=job.source,
+            rule_id=job.rule_id,
+            incident_id=job.incident_id,
+            gsl_id=job.gsl_id,
+            objekt_id=job.objekt_id,
+            artifact_ref=job.artifact_ref,
+            options=options,
+            created_by_id=job.created_by_id,
+            fallback_of_job_id=job.id,
+        )
+        if not created:
+            return None
+        db.commit()
+        logger.info(
+            "Ersatz-Druckauftrag %s fuer fehlgeschlagenen Auftrag %s angelegt",
+            ersatz.id, job.id,
+        )
+        await dispatch_job(db, ersatz)
+        return ersatz
+    except Exception as exc:  # pragma: no cover - best-effort Hintergrundpfad
+        logger.warning("Fallback fuer Druckauftrag %s fehlgeschlagen: %s", job_id, exc)
+        return None
+    finally:
+        db.close()
 
 
 # ── Domain-Events → Druckregeln (Phase 4) ──────────────────────────────────────
@@ -205,11 +313,7 @@ def on_event(db: Session, org_id: int, trigger: str, context: dict) -> list[Prin
     if not gateway_effective_enabled(org_id, db):
         return []
 
-    gateway = (
-        db.query(Gateway)
-        .filter(Gateway.org_id == org_id, Gateway.device_token_hash.isnot(None))
-        .first()
-    )
+    gateway = paired_gateway(db, org_id)
     if gateway is None:
         return []
 
@@ -325,6 +429,77 @@ def _gsl_context(lage) -> dict:
         "stichwort": lage.name,
         "is_exercise": getattr(lage, "is_exercise", None),
     }
+
+
+def paired_gateway(db: Session, org_id: int) -> "Gateway | None":
+    """Erstes gekoppeltes Gateway einer Organisation."""
+    from app.models.gateway import Gateway
+
+    return (
+        db.query(Gateway)
+        .filter(Gateway.org_id == org_id, Gateway.device_token_hash.isnot(None))
+        .first()
+    )
+
+
+def resolve_test_context(db: Session, rule) -> TestBezug | None:
+    """Loest den juengsten zur Regel passenden Testbezug derselben Organisation auf."""
+    from app.models.gateway import AlarmIngest
+    from app.models.incident import Incident
+    from app.models.major_incident import MajorIncident
+    from app.models.verleih import VerleihAusleihe
+
+    art = TRIGGER_TEST_BEZUG.get(rule.trigger)
+    if art == "einsatz":
+        inc = (
+            db.query(Incident)
+            .filter(Incident.primary_org_id == rule.org_id)
+            .order_by(Incident.started_at.desc())
+            .first()
+        )
+        return TestBezug(_incident_context(inc), art, inc.id) if inc else None
+    if art == "gsl":
+        lage = (
+            db.query(MajorIncident)
+            .filter(MajorIncident.org_id == rule.org_id)
+            .order_by(MajorIncident.started_at.desc())
+            .first()
+        )
+        return TestBezug(_gsl_context(lage), art, lage.id) if lage else None
+    if art == "verleih":
+        ausleihe = (
+            db.query(VerleihAusleihe)
+            .filter(VerleihAusleihe.org_id == rule.org_id)
+            .order_by(VerleihAusleihe.created_at.desc())
+            .first()
+        )
+        if ausleihe is None:
+            return None
+        lage = (
+            db.query(MajorIncident)
+            .filter(MajorIncident.id == ausleihe.lage_id, MajorIncident.org_id == rule.org_id)
+            .first()
+            if ausleihe.lage_id else None
+        )
+        context = {
+            "gsl_id": ausleihe.lage_id,
+            "ausleihe_id": ausleihe.id,
+            "is_exercise": getattr(lage, "is_exercise", None),
+        }
+        return TestBezug(context, art, ausleihe.id)
+    if art == "alarm":
+        ingest = (
+            db.query(AlarmIngest)
+            .filter(AlarmIngest.org_id == rule.org_id)
+            .order_by(AlarmIngest.received_at.desc())
+            .first()
+        )
+        if ingest is None:
+            return None
+        return TestBezug(
+            {"alarm_ingest_id": ingest.id, "incident_id": ingest.einsatz_id}, art, ingest.id,
+        )
+    return None
 
 
 async def autoprint_incident_background(incident_id: int) -> None:
@@ -485,6 +660,7 @@ def _jobs_for_rule(
     """Erzeugt Jobs einer Regel: je Dokument × Zieldrucker sowie – bei zugeordnetem
     Objekt – je Objekt-Element-Seite × Zieldrucker (idempotent, außer bei source=manual)."""
     from app.models.gateway import (
+        DOC_ALARM_ROHTEXT,
         DOC_OBJEKT_DOKUMENT,
         DOC_OBJEKTBLATT,
         DOC_VERLEIH_SCHEIN,
@@ -522,6 +698,24 @@ def _jobs_for_rule(
             continue
         if document_type == DOC_VERLEIH_SCHEIN:
             continue  # braucht Vorgangs-Kontext → unten mit artifact_ref (ausleihe_id)
+        if document_type == DOC_ALARM_ROHTEXT:
+            # Ohne AlarmIngest-Bezug wuerde _render_alarm_rohtext ein leeres Blatt
+            # erzeugen. Der Schluessel fehlt bei jedem nicht-Alarm-Kontext (z.B.
+            # Testdruck einer Altbestand-Regel, deren Dokumente nicht zum Ausloeser
+            # passen) - dann den Dokumenttyp ueberspringen statt leer zu drucken.
+            alarm_ingest_id = context.get("alarm_ingest_id")
+            if not alarm_ingest_id:
+                logger.warning(
+                    "Alarm-Rohtext für Druckregel %s ohne Alarm-Bezug übersprungen", rule.id,
+                )
+                continue
+            for printer_id in printer_ids:
+                _add(
+                    printer_id=printer_id,
+                    document_type=document_type,
+                    artifact_ref=str(alarm_ingest_id),
+                )
+            continue
         if document_type == DOC_OBJEKTBLATT:
             # Objektblatt braucht immer ein konkretes Objekt: entweder explizit im
             # Kontext (z.B. manueller Testdruck fuer ein Objekt) oder - beim
@@ -558,20 +752,11 @@ def _jobs_for_rule(
     return jobs
 
 
-def build_test_jobs(db: Session, rule, incident) -> list[PrintJob]:
-    """„Testdruck dieser Regel": erzeugt die Jobs der Regel gegen einen echten Einsatz,
-    unabhängig von Trigger/aktiv/Filter, mit source=manual (immer neu, nie dedupliziert).
-    Der Aufrufer committet und dispatcht. Gibt [] zurück, wenn kein Gateway/keine Drucker."""
-    from app.models.gateway import Gateway
-
-    gateway = (
-        db.query(Gateway)
-        .filter(Gateway.org_id == rule.org_id, Gateway.device_token_hash.isnot(None))
-        .first()
-    )
+def build_test_jobs(db: Session, rule, context: dict) -> list[PrintJob]:
+    """Erzeugt Test-Jobs der Regel mit fertigem Bezugskontext."""
+    gateway = paired_gateway(db, rule.org_id)
     if gateway is None:
         return []
-    context = _incident_context(incident)
     jobs = _jobs_for_rule(db, gateway, rule, context, source=JOB_SOURCE_MANUAL)
     if jobs:
         db.flush()

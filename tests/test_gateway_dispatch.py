@@ -130,3 +130,38 @@ async def test_dispatch_job_commits_sent_before_await_no_status_overwrite(monkey
         assert result["status"] == "done"   # Rückgabe für den Aufrufer bleibt erhalten
     finally:
         db.close()
+
+
+def test_apply_job_status_guards_transitions():
+    import uuid
+
+    import app.routers.ws as ws
+    from app.core.tenant import set_tenant_context
+    from app.models.gateway import PrintJob
+    from tests.conftest import TestingSession
+
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        jobs = []
+        for status in ("sent", "done", "canceled"):
+            job = PrintJob(
+                org_id=880001, gateway_id=1, document_type="einsatzinfo", status=status,
+                idempotency_key=f"status-{uuid.uuid4().hex}",
+            )
+            db.add(job)
+            jobs.append(job)
+        db.commit()
+        ids = [job.id for job in jobs]
+        assert ws._apply_job_status(ids[0], "printing", None) == 880001
+        assert ws._apply_job_status(ids[1], "printing", None) is None
+        assert ws._apply_job_status(ids[2], "failed", "x") is None
+        assert ws._apply_job_status(ids[0], "unbekannt", None) is None
+        assert ws._apply_job_status(999999999, "printing", None) is None
+        db.expire_all()
+        assert db.get(PrintJob, ids[0]).status == "printing"
+        assert db.get(PrintJob, ids[1]).status == "done"
+        assert db.get(PrintJob, ids[2]).status == "canceled"
+    finally:
+        db.rollback()
+        db.close()

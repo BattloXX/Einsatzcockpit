@@ -351,7 +351,7 @@
                   {% for j in jobs %}
                   <tr>
                     <td class="gwx-mono" style="white-space:nowrap;">{{ j.erstellt_am | local_datetime }}</td>
-                    <td>{{ j.document_label }}</td>
+                    <td>{{ j.document_label }}{% if j.fallback_of_job_id %} <span class="gwx-chip">Ersatz für #{{ j.fallback_of_job_id }}</span>{% endif %}</td>
                     <td>{{ printer_names.get(j.printer_id, '–') }}</td>
                     <td>{{ 'Regel' if j.source == 'rule' else 'Manuell' }}</td>
                     <td>

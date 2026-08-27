@@ -304,6 +304,10 @@ class PrintJob(TenantScoped, Base):
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Herkunft eines Ersatz-Drucks: id des fehlgeschlagenen Original-Jobs. Bewusst ohne
+    # FK (reine Markierung). Gesetzt => dieser Job IST ein Fallback und loest selbst
+    # nie wieder einen aus.
+    fallback_of_job_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_by_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )

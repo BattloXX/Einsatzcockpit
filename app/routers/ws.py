@@ -546,14 +546,22 @@ def _gateway_config_sync(gateway_id: int) -> dict:
 
 
 def _apply_job_status(job_id: int, status: str, error: str | None) -> int | None:
-    """Schreibt job_status vom Gateway in die DB. Gibt org_id zurück (für Broadcast)."""
-    from app.models.gateway import PrintJob
+    """Schreibt job_status vom Gateway in die DB.
+
+    Gibt org_id zurueck, wenn der Statusuebergang tatsaechlich vollzogen wurde, sonst
+    None (unbekannter Status, Job weg, oder Job bereits in einem Terminal-Status).
+    """
+    from app.models.gateway import JOB_STATUS_LABELS, JOB_TERMINAL, PrintJob
+
+    if status not in JOB_STATUS_LABELS:
+        logger.warning("Unbekannter Druckauftrag-Status %s fuer Job %s ignoriert", status, job_id)
+        return None
 
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         job = db.get(PrintJob, job_id)
-        if not job:
+        if job is None or job.status in JOB_TERMINAL:
             return None
         job.status = status
         if error:
@@ -661,6 +669,13 @@ async def print_gateway_ws(websocket: WebSocket):
                     if o:
                         await broadcast_org(o, {"type": "print_job_status", "job_id": int(jid),
                                                 "status": p.get("status")})
+                        # Erst nach dem Broadcast: der Ersatzdruck wartet auf die
+                        # Zustellung (bis 20 s Timeout) und darf die Statusmeldung
+                        # an die Clients nicht so lange aufhalten.
+                        from app.models.gateway import JOB_FAILED
+                        if p.get("status") == JOB_FAILED:
+                            from app.services.print_dispatcher import dispatch_fallback_for_failed_job
+                            await dispatch_fallback_for_failed_job(int(jid))
             elif mtype == "serial_status":
                 p = msg.get("payload") or {}
                 o = _set_serial_status(gateway_id, bool(p.get("connected")))
