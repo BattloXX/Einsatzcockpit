@@ -262,6 +262,13 @@ def test_filter_uebung_ohne_kontext_fail_closed(filterwert, caplog):
     assert "Übungsstatus" in caplog.text
 
 
+def test_verleih_created_filtert_nach_uebungsstatus():
+    rule = MagicMock(id=8, trigger="verleih_created")
+    rule.filters = {"uebung": "nur_uebung"}
+    assert disp._filter_matches(rule, {"is_exercise": True}) is True
+    assert disp._filter_matches(rule, {"is_exercise": False}) is False
+
+
 def test_filter_nur_bma_mit_bma_kontext():
     rule = MagicMock(filters={"nur_bma": True})
     rule.filters = {"nur_bma": True}
@@ -391,6 +398,54 @@ def test_verleih_created_ignoriert_min_alarmstufe_und_nur_bma(db):
     assert len(jobs) == 1
     assert jobs[0].document_type == "verleih_schein"
     assert jobs[0].artifact_ref == "88"
+
+
+@pytest.mark.asyncio
+async def test_autoprint_verleih_background_reicht_uebungsstatus_durch(db, monkeypatch):
+    from app.models.gateway import PrintJob, PrintRule
+    from app.models.major_incident import MajorIncident
+    from app.models.master import OrgSettings, SystemSettings
+    from app.models.verleih import VerleihAusleihe
+
+    org = 991603
+    system_flag = db.query(SystemSettings).filter(
+        SystemSettings.key == "gateway_module_enabled"
+    ).first()
+    if system_flag is None:
+        db.add(SystemSettings(key="gateway_module_enabled", value="true"))
+    else:
+        system_flag.value = "true"
+    db.add(OrgSettings(org_id=org, gateway_module_enabled=True))
+    gw = Gateway(org_id=org, name="Verleih-GW", device_token_hash=hash_api_key("bg-tok"))
+    db.add(gw)
+    db.flush()
+    db.add(PrintRule(
+        org_id=org, name="Nur Uebungsverleih", aktiv=True, trigger="verleih_created",
+        documents=["verleih_schein"], printer_ids=[gw.id],
+        filters={"uebung": "nur_uebung"},
+    ))
+    uebung = MajorIncident(org_id=org, name="Uebung", is_exercise=True)
+    echt = MajorIncident(org_id=org, name="Echt", is_exercise=False)
+    db.add_all([uebung, echt])
+    db.flush()
+    ausleihe_uebung = VerleihAusleihe(org_id=org, lage_id=uebung.id, name="Uebung")
+    ausleihe_echt = VerleihAusleihe(org_id=org, lage_id=echt.id, name="Echt")
+    db.add_all([ausleihe_uebung, ausleihe_echt])
+    db.commit()
+
+    zugestellt = []
+
+    async def _dispatch(_db, job):
+        zugestellt.append(job.artifact_ref)
+
+    monkeypatch.setattr(disp, "dispatch_job", _dispatch)
+    await disp.autoprint_verleih_background(ausleihe_uebung.id)
+    await disp.autoprint_verleih_background(ausleihe_echt.id)
+
+    db.expire_all()
+    jobs = db.query(PrintJob).filter(PrintJob.org_id == org).all()
+    assert [job.artifact_ref for job in jobs] == [str(ausleihe_uebung.id)]
+    assert zugestellt == [str(ausleihe_uebung.id)]
 
 
 def test_gsl_created_ueberspringt_einsatzinfo(db, caplog):

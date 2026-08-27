@@ -90,20 +90,25 @@ Web-UI.
 
 ## Druckregeln (Automatikdruck)
 
-Im Abschnitt **Druckregeln**: pro Regel wählbar
+Druckregeln werden im eigenen Tab unter `/gateway/<id>/druckregeln` verwaltet. Pro Regel ist wählbar:
 
 | Feld | Beschreibung |
 |------|--------------|
-| Auslöser | `einsatz_created`, `einsatz_updated`, `gsl_created`, `gsl_lage_updated`, `alarm_serial_received` |
-| Filter | z. B. Mindest-Alarmstufe, Stichwort |
-| Dokumente | Einsatzinfo, GSL-Lageblatt, Alarm-Rohtext |
+| Auslöser | `einsatz_created`, `einsatz_updated`, `gsl_created`, `gsl_lage_updated`, `alarm_serial_received`, `verleih_created` |
+| Filter | z. B. Mindest-Alarmstufe, Stichwort, Einsatzart (Echt/Übung), Zeitfenster, nur BMA |
+| Dokumente | Einsatzinfo, GSL-Lageblatt, GSL-Gesamtbericht, Objektblatt, Alarm-Rohtext, Verleihschein |
 | Objekt-Elemente | Feuerwehrplan, BMA-Laufkarten, Hydrantenplan … (wenn dem Einsatz ein Objekt zugeordnet ist) |
-| Ziel | ein oder mehrere Drucker + optionaler Fallback-Drucker |
+| Ziel | ein oder mehrere Drucker (der Fallback-Drucker ist derzeit nur speicherbar und wird beim Druck noch nicht ausgewertet) |
 | Optionen | Kopien, Duplex, Farbe |
 
 Beispiel: „Einsatzinfo bei Alarm" → Auslöser `einsatz_created`, Dokument
 `Einsatzinfo`, Ziel `Florianstation`. Bei jeder Einsatzanlage (API, LIS, seriell,
 manuell) wird die Einsatzinfo automatisch gedruckt.
+
+Verleihscheine werden automatisch gedruckt, indem eine Regel mit Auslöser
+**Verleihschein angelegt** und Dokument **Verleihschein** eingerichtet wird. Bestehende
+Einstellungen des früheren Verleih-Autodruck-Schalters werden bei der Aktualisierung in
+eine solche Regel migriert.
 
 **Doppeldruck ausgeschlossen:** pro (Einsatz, Regel, Dokument, Drucker) wird maximal
 einmal automatisch gedruckt — auch wenn ein Alarm parallel über LIS **und** die

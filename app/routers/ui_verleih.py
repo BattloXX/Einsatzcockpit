@@ -609,7 +609,7 @@ async def verleih_neu(
 
     await broadcast_lage(lage_id, {"type": "verleih:changed", "lage_id": lage_id})
 
-    # Optionaler Auto-Druck am Stationsdrucker (nur wenn OrgSettings.verleih_autodruck aktiv).
+    # Regelbasierter Auto-Druck mit Ausloeser verleih_created.
     from app.services.print_dispatcher import autoprint_verleih_background
     background_tasks.add_task(autoprint_verleih_background, ausleihe.id)
 

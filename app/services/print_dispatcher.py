@@ -384,40 +384,15 @@ async def autoprint_gsl_background(lage_id: int) -> None:
         db.close()
 
 
-def _resolve_autoprint_printer(db: Session, org_id: int):
-    """Zieldrucker für Auto-Druck: erstes gekoppeltes Gateway der Org + aktiver Drucker,
-    bevorzugt Rolle 'standard'. Gibt (gateway, printer) oder (None, None)."""
-    from app.models.gateway import Gateway, Printer
-
-    gateway = (
-        db.query(Gateway)
-        .filter(Gateway.org_id == org_id, Gateway.device_token_hash.isnot(None))
-        .first()
-    )
-    if gateway is None:
-        return None, None
-    printers = (
-        db.query(Printer)
-        .filter(Printer.gateway_id == gateway.id, Printer.aktiv == True)  # noqa: E712
-        .order_by(Printer.name)
-        .execution_options(include_all_tenants=True)
-        .all()
-    )
-    if not printers:
-        return gateway, None
-    standard = next((p for p in printers if (p.defaults or {}).get("role") == "standard"), None)
-    return gateway, (standard or printers[0])
-
-
 async def autoprint_verleih_background(ausleihe_id: int) -> None:
-    """Background-Hook nach Verleihschein-Anlage. Druckt automatisch, wenn Gateway-Modul
-    aktiv ist – primär über Druckregeln (Trigger verleih_created, voller Drucker-/Filter-
-    Kontrolle), sonst als einfacher Fallback über OrgSettings.verleih_autodruck an den
-    Standarddrucker. Best-effort – Fehler dürfen den Request nie beeinflussen."""
+    """Background-Hook nach Verleihschein-Anlage; ausschliesslich regelbasiert.
+
+    Best-effort: Fehler duerfen den Request nie beeinflussen.
+    """
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
-    from app.models.gateway import DOC_VERLEIH_SCHEIN, TRIGGER_VERLEIH_CREATED
-    from app.models.master import OrgSettings
+    from app.models.gateway import TRIGGER_VERLEIH_CREATED
+    from app.models.major_incident import MajorIncident
     from app.models.verleih import VerleihAusleihe
     from app.services.gateway_service import gateway_effective_enabled
 
@@ -433,24 +408,13 @@ async def autoprint_verleih_background(ausleihe_id: int) -> None:
         if not gateway_effective_enabled(org_id, db):
             return
 
-        # 1) Regelbasiert (Trigger verleih_created) – Admin wählt Drucker/Filter.
-        context = {"gsl_id": a.lage_id, "ausleihe_id": a.id}
+        lage = db.get(MajorIncident, a.lage_id) if a.lage_id else None
+        context = {
+            "gsl_id": a.lage_id,
+            "ausleihe_id": a.id,
+            "is_exercise": getattr(lage, "is_exercise", None),
+        }
         jobs = on_event(db, org_id, TRIGGER_VERLEIH_CREATED, context)
-
-        # 2) Fallback: einfacher Toggle an den Standarddrucker – NUR wenn keine Regel griff.
-        if not jobs:
-            row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
-            if row and row.verleih_autodruck:
-                gateway, printer = _resolve_autoprint_printer(db, org_id)
-                if gateway is not None and printer is not None:
-                    defaults = printer.defaults or {}
-                    job, _created = create_print_job(
-                        db, org_id=org_id, gateway_id=gateway.id, printer_id=printer.id,
-                        document_type=DOC_VERLEIH_SCHEIN, source=JOB_SOURCE_RULE,
-                        gsl_id=a.lage_id, artifact_ref=str(a.id),
-                        options={"copies": 1, "duplex": defaults.get("duplex") or "off"},
-                    )
-                    jobs = [job]
 
         db.commit()
         for job in jobs:

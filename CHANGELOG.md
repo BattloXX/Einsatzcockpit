@@ -4,6 +4,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **2026.08.27.1** | 2026-08-27 | **Druckregeln und Verleihschein-Autodruck**: Druckregeln als eigenes Gateway-Tab; Verleihschein-Autodruck vollständig über Druckregeln, bestehender Schalter migriert und entfernt; Übungsfilter greift nun auch bei Verleihscheinen |
 | **2026.08.27** | 2026-08-27 | **Mehrfach-Login und Drucksteuerung**: mehrere Konten gleichzeitig angemeldet halten und ohne erneute Anmeldung wechseln; QR-Codes auf Einsatz- und GSL-Drucken mit optionalem PIN-Schutz je Lage; Übungs-/Echt-Filter je Druckregel |
 | **2026.08.26.1** | 2026-08-26 | **Telefonbezogene Einsatzinfo-Freigabe**: SMS-Freigabe je einzelner Rufnummer, responsive Kontaktkarten, sichere Übernahme unveränderter Freigaben beim BMA-Import und Idempotenz je Empfänger |
 | **2026.08.26** | 2026-08-26 | **Einsatzinfo an Objektkontakte**: je Objekt konfigurierbarer automatischer Einzelversand per E-Mail/SMS bei bestätigter Einsatzverknüpfung, mit Übungs-/Stichwortfilter, Vorlagen, kanalweiser Kontakt-Auswahl, Versandprotokoll und manuellem Retry im Board |

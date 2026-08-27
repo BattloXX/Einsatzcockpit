@@ -33,6 +33,10 @@ def test_gateway_detail_still_matches_numeric_id():
     assert _match_endpoint("/gateway/42") == "gateway_detail"
 
 
+def test_gateway_druckregeln_still_matches_numeric_id():
+    assert _match_endpoint("/gateway/7/druckregeln") == "gateway_druckregeln"
+
+
 # ── HTML-Render-Route (Leaflet-Karten fürs Gateway-Chromium) ────────────────────
 
 def test_render_route_is_registered():

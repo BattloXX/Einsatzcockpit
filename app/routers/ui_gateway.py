@@ -96,10 +96,8 @@ def gateway_detail(
         db.query(PrintJob).filter(PrintJob.gateway_id == gw.id)
         .order_by(PrintJob.erstellt_am.desc()).limit(30).all()
     )
-    from app.models.master import OrgSettings
     from app.routers.ws import get_passthrough_status
     from app.services import ws_bus
-    os_row = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     return templates.TemplateResponse(request, "gateway/detail.html", {
         "user": user,
         "gw": gw,
@@ -111,32 +109,31 @@ def gateway_detail(
         "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
         "trigger_labels": TRIGGER_LABELS,
         "passthrough_status": get_passthrough_status(user.org_id),
-        "verleih_autodruck": bool(os_row and os_row.verleih_autodruck),
         "redis_status": ws_bus.status(),
     })
 
 
-# ── Org-Druckeinstellungen ─────────────────────────────────────────────────────
-
-@router.post("/{gateway_id}/verleih-autodruck")
-def gateway_verleih_autodruck(
+@router.get("/{gateway_id:int}/druckregeln", response_class=HTMLResponse)
+def gateway_druckregeln(
     gateway_id: int,
     request: Request,
-    enabled: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
 ):
-    """Schaltet den automatischen Stationsdruck von Verleihscheinen (OrgSettings)."""
-    _gw_or_404(db, user.org_id, gateway_id)
-    from app.models.master import OrgSettings
-    row = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
-    if row is None:
-        row = OrgSettings(org_id=user.org_id)
-        db.add(row)
-    row.verleih_autodruck = enabled == "1"
-    db.commit()
-    return RedirectResponse(f"/gateway/{gateway_id}?verleih_autodruck=1#regeln", status_code=303)
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    printers = db.query(Printer).filter(Printer.gateway_id == gw.id).order_by(Printer.name).all()
+    rules = (
+        db.query(PrintRule).filter(PrintRule.org_id == user.org_id)
+        .order_by(PrintRule.sort_order, PrintRule.name).all()
+    )
+    return templates.TemplateResponse(request, "gateway/druckregeln.html", {
+        "user": user, "gw": gw, "printers": printers, "rules": rules,
+        "connected": _is_connected(user.org_id),
+        "doc_labels": RULE_DOCUMENT_LABELS,
+        "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
+        "trigger_labels": TRIGGER_LABELS,
+    })
 
 
 # ── Gateway-CRUD + Pairing ─────────────────────────────────────────────────────
@@ -427,9 +424,7 @@ async def printer_test(
 # ── Druckregeln (Phase 4) ──────────────────────────────────────────────────────
 
 def _rule_return(gw: int | None, suffix: str) -> str:
-    """Regeln liegen org-weit, werden aber auf der Gateway-Detailseite bearbeitet →
-    nach jeder Regel-Aktion zurück auf die Detailseite (Kontext erhalten)."""
-    base = f"/gateway/{gw}" if gw else "/gateway"
+    base = f"/gateway/{gw}/druckregeln" if gw else "/gateway"
     return f"{base}?{suffix}"
 
 
