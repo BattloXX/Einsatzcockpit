@@ -480,6 +480,8 @@ async def new_incident(
     # Objekt-Matching (BMA-Nr./Adresse; Geo-Stufe folgt nach Geocoding)
     from app.services.objekt_matching_service import match_incident_background
     background_tasks.add_task(match_incident_background, incident.id)
+    from app.services.print_dispatcher import autoprint_incident_background
+    background_tasks.add_task(autoprint_incident_background, incident.id)
 
     # Broadcast – Fehler darf den Redirect nicht verhindern
     if user.org_id:
@@ -2323,18 +2325,10 @@ def _einsatzinfo_qr_url(request: Request, incident, user, db: Session) -> str:
     """
     if incident.alarm_token:
         return f"{request.base_url}alarm/{incident.alarm_token}"
-    token = sign_qr_token(incident.id, user.id)
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    existing = db.query(IncidentToken).filter(
-        IncidentToken.incident_id == incident.id,
-        IncidentToken.issued_by_user_id == user.id,
-        IncidentToken.revoked_at.is_(None),
-    ).first()
-    if not existing:
-        db.add(IncidentToken(incident_id=incident.id, token_hash=token_hash,
-                             issued_by_user_id=user.id))
-        db.commit()
-    return f"{request.base_url}qr-login?incident_id={incident.id}&token={token}"
+
+    from app.services.incident_qr_service import einsatz_qr_login_url
+
+    return einsatz_qr_login_url(db, incident, issuing_user_id=user.id) or ""
 
 
 @router.get("/einsatz/{incident_id}/qr", response_class=HTMLResponse)

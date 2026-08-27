@@ -108,14 +108,22 @@ def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
 
 def _render_einsatzinfo(db, job: PrintJob, base_url: str) -> bytes:
     from app.models.incident import Incident
+    from app.services.incident_qr_service import einsatz_qr_login_url
     from app.services.pdf_service import render_incident_pdf
+    from app.services.qr_service import generate_qr_datauri
 
     if not job.incident_id:
         raise ArtifactError("Einsatzinfo ohne incident_id")
     incident = db.get(Incident, job.incident_id)
     if incident is None:
         raise ArtifactError(f"Einsatz {job.incident_id} nicht gefunden")
-    return render_incident_pdf(incident, base_url=base_url)
+    if incident.primary_org_id != job.org_id:
+        raise ArtifactError("Einsatz nicht gefunden")
+    qr_url = einsatz_qr_login_url(db, incident)
+    qr_datauri = generate_qr_datauri(qr_url, druck=True, box_size=10) if qr_url else None
+    return render_incident_pdf(
+        incident, base_url=base_url, qr_datauri=qr_datauri, qr_url=qr_url
+    )
 
 
 def _render_objektblatt(db, job: PrintJob, base_url: str) -> bytes:
@@ -149,15 +157,26 @@ def _render_objekt_dokument(db, job: PrintJob) -> bytes:
 
 def _render_gsl_lageblatt(db, job: PrintJob, base_url: str) -> bytes:
     """GSL-Lageblatt als schlichtes A4-PDF (WeasyPrint + xhtml2pdf-Fallback)."""
+    from types import SimpleNamespace
+
     from app.models.major_incident import MajorIncident
 
     if not job.gsl_id:
         raise ArtifactError("GSL-Lageblatt ohne gsl_id")
     lage = db.get(MajorIncident, job.gsl_id)
-    if lage is None:
+    if lage is None or lage.org_id != job.org_id:
         raise ArtifactError(f"Großschadenslage {job.gsl_id} nicht gefunden")
     from app.core.templating import templates as _t
-    html_str = _t.env.get_template("pdf/gsl_lageblatt.html").render(lage=lage, org=lage.org)
+    from app.services.incident_qr_service import lage_qr_login_url
+    from app.services.qr_service import generate_qr_datauri
+    qr_url = lage_qr_login_url(db, lage)
+    qr_datauri = generate_qr_datauri(qr_url, druck=True, box_size=10) if qr_url else None
+    html_str = _t.env.get_template("pdf/gsl_lageblatt.html").render(
+        lage=lage,
+        org=lage.org,
+        user=SimpleNamespace(org=lage.org),
+        qr_datauri=qr_datauri,
+    )
     return _html_to_pdf(html_str, base_url)
 
 
@@ -606,6 +625,10 @@ def _render_gsl_bericht(db, job: PrintJob, base_url: str) -> bytes:
     if lage is None or lage.org_id != job.org_id:
         raise ArtifactError("Großschadenslage nicht gefunden")
     ctx = build_bericht_context(db, lage)
+    from app.services.incident_qr_service import lage_qr_login_url
+    from app.services.qr_service import generate_qr_datauri
+    qr_url = lage_qr_login_url(db, lage)
+    ctx["qr_datauri"] = generate_qr_datauri(qr_url, druck=True, box_size=10) if qr_url else None
     ctx["user"] = SimpleNamespace(org=_org(db, lage.org_id))
     html_str = _t.env.get_template("incident_major/druck_bericht.html").render(**ctx)
     return _html_to_pdf(html_str, base_url)
@@ -624,6 +647,8 @@ def render_map_html(db, job: PrintJob) -> str:
 
     from app.core.templating import templates as _t
     from app.models.major_incident import CrossSiteMarker, IncidentSite, MajorIncident
+    from app.services.incident_qr_service import lage_qr_login_url
+    from app.services.qr_service import generate_qr_datauri
 
     if not job.gsl_id:
         raise ArtifactError("Karten-Druck ohne gsl_id")
@@ -652,6 +677,10 @@ def render_map_html(db, job: PrintJob) -> str:
         if site is None or site.major_incident_id != lage.id:
             raise ArtifactError("Stelle nicht gefunden")
         ctx = build_site_druck_context(db, lage, site)
+        qr_url = lage_qr_login_url(db, lage, site_id=site.id)
+        ctx["qr_datauri"] = (
+            generate_qr_datauri(qr_url, druck=True, box_size=10) if qr_url else None
+        )
         tmpl = "incident_major/_site_druck.html"
     elif job.document_type == DOC_CROSS_KARTE:
         marker = db.get(CrossSiteMarker, int(ref)) if ref.isdigit() else None
@@ -665,6 +694,14 @@ def render_map_html(db, job: PrintJob) -> str:
         ctx = build_stellen_multi_context(
             db, lage, q.get("ids", [""])[0], q.get("cross_ids", [""])[0]
         )
+        qr_datauri_by_site = {}
+        for karten_site in ctx["sites"]:
+            qr_url = lage_qr_login_url(db, lage, site_id=karten_site.id)
+            if qr_url:
+                qr_datauri_by_site[karten_site.id] = generate_qr_datauri(
+                    qr_url, druck=True, box_size=10
+                )
+        ctx["qr_datauri_by_site"] = qr_datauri_by_site
         tmpl = "incident_major/_stellen_multi_druck.html"
     else:
         raise ArtifactError(f"Kein Karten-Dokumenttyp: {job.document_type}")

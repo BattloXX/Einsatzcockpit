@@ -277,7 +277,13 @@ def _load_incident_objekte(db, incident: Incident) -> list[dict]:
     return ergebnis
 
 
-def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
+def render_incident_pdf(
+    incident: Incident,
+    base_url: str = "",
+    *,
+    qr_datauri: str | None = None,
+    qr_url: str | None = None,
+) -> bytes:
     template = templates.env.get_template("pdf/incident_report.html")
     primary_org, teilnahmen, journal, objekte = _load_pdf_context(incident)
     assigned_vehicle_ids = {v.vehicle_master_id for v in incident.vehicles}
@@ -299,6 +305,8 @@ def render_incident_pdf(incident: Incident, base_url: str = "") -> bytes:
         user=pseudo_user,
         media_b64=_media_b64_uri,
         media_exists=_media_file_exists,
+        qr_datauri=qr_datauri,
+        qr_url=qr_url,
     )
     try:
         from weasyprint import HTML  # noqa: PLC0415

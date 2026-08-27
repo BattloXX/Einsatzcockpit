@@ -95,6 +95,12 @@
     <div class="source-url">{{ brand_domain }}</div>
   </div>
   <div style="text-align:right">
+    {% if qr_datauri %}
+    <div style="margin-bottom:4pt;">
+      <img src="{{ qr_datauri }}" alt="QR-Code Einsatzboard" style="width:25mm;height:25mm;">
+      <div class="meta">Scannen → PIN eingeben → Einsatzboard</div>
+    </div>
+    {% endif %}
     <div><strong>Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</strong></div>
     <div>{{ incident.started_at|local_datetime }} Uhr</div>
     {% if incident.taken_over_at %}

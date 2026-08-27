@@ -24,6 +24,68 @@ from app.core.security import sign_mailing_track_token, sign_mailing_webhook_org
 
 ORG_A = 1  # FF Wolfurt (seeded)
 
+
+def test_lage_qr_public_flow_isoliert_org_pin_und_open_site(client):
+    """Direkter POST, fremdes PIN-Cookie und fremde Site öffnen keine Lage."""
+    from urllib.parse import parse_qs, urlparse
+
+    from app.core.security import hash_pin, sign_lage_pin_access_token
+    from app.models.major_incident import IncidentSite, MajorIncident
+    from app.services.incident_qr_service import lage_qr_login_url
+
+    org_b_id = _setup_zwei_orgs()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        lage_a = MajorIncident(org_id=ORG_A, name="QR Isolation A", access_pin_hash=hash_pin("1111"))
+        lage_b = MajorIncident(org_id=org_b_id, name="QR Isolation B", access_pin_hash=hash_pin("2222"))
+        db.add_all([lage_a, lage_b])
+        db.flush()
+        site_b = IncidentSite(
+            major_incident_id=lage_b.id,
+            org_id=org_b_id,
+            bezeichnung="Geheime Site B",
+        )
+        db.add(site_b)
+        db.commit()
+        url_a = lage_qr_login_url(db, lage_a)
+        token_a = parse_qs(urlparse(url_a).query)["token"][0]
+        lage_a_id, lage_b_id, site_b_id = lage_a.id, lage_b.id, site_b.id
+    finally:
+        db.close()
+
+    client.get("/login")
+    csrf = client.cookies.get("ec_csrf")
+    direkt = client.post(
+        f"/lage/{lage_a_id}/qr-login?token={token_a}",
+        data={"display_name": "Direkt", "_csrf": csrf},
+        follow_redirects=False,
+    )
+    assert direkt.status_code == 403
+
+    client.cookies.set("board_pin_lage", sign_lage_pin_access_token(lage_b_id))
+    fremdes_cookie = client.post(
+        f"/lage/{lage_a_id}/qr-login?token={token_a}",
+        data={"display_name": "Fremd", "_csrf": csrf},
+        follow_redirects=False,
+    )
+    assert fremdes_cookie.status_code == 403
+
+    einstieg = client.get(
+        f"/lage/{lage_a_id}/qr-login?token={token_a}&open_site={site_b_id}",
+        follow_redirects=False,
+    )
+    assert einstieg.status_code == 302
+    assert "open_site" not in einstieg.headers["location"]
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.get(MajorIncident, lage_a_id).status = "closed"
+        db.get(MajorIncident, lage_b_id).status = "closed"
+        db.commit()
+    finally:
+        db.close()
+
 def test_mailing_tracking_token_cannot_mutate_other_org(client):
     org_b_id = _setup_zwei_orgs()
     db = SessionLocal(); set_tenant_context(db, None)

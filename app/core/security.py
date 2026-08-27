@@ -335,3 +335,20 @@ def unsign_pin_access_token(token: str) -> int | None:
         return data.get("incident_id")
     except (BadSignature, SignatureExpired):
         return None
+
+
+_lage_pin_access_signer = URLSafeTimedSerializer(
+    settings.SECRET_KEY, salt="major-incident-pin-access"
+)
+
+
+def sign_lage_pin_access_token(lage_id: int) -> str:
+    return _lage_pin_access_signer.dumps({"lage_id": lage_id})
+
+
+def unsign_lage_pin_access_token(token: str) -> int | None:
+    try:
+        data = _lage_pin_access_signer.loads(token, max_age=PIN_ACCESS_MAX_AGE)
+        return data.get("lage_id")
+    except (BadSignature, SignatureExpired):
+        return None

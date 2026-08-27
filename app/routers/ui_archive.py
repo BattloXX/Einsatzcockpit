@@ -243,7 +243,17 @@ def download_pdf(incident_id: int, request: Request, db: Session = Depends(get_d
         raise HTTPException(404)
     if not can_access_incident(user, incident):
         raise _deny_access(user, incident)
-    pdf_bytes = render_incident_pdf(incident, base_url=str(request.base_url))
+    from app.services.incident_qr_service import einsatz_qr_login_url
+    from app.services.qr_service import generate_qr_datauri
+
+    qr_url = einsatz_qr_login_url(db, incident, issuing_user_id=user.id)
+    qr_datauri = generate_qr_datauri(qr_url, druck=True, box_size=10) if qr_url else None
+    pdf_bytes = render_incident_pdf(
+        incident,
+        base_url=str(request.base_url),
+        qr_datauri=qr_datauri,
+        qr_url=qr_url,
+    )
     filename = f"einsatz_{incident.id}_{incident.alarm_type_code}.pdf"
     return Response(
         content=pdf_bytes,

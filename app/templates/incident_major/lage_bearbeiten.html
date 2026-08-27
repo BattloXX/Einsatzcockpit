@@ -77,9 +77,20 @@
   <div style="margin-top:40px;border-top:1px solid var(--border-color,#333);padding-top:28px;">
     <h3 style="margin-bottom:12px;font-size:1rem;">QR-Code – Schnellzugang für Einsatzkräfte</h3>
     <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:16px;">
-      QR-Code scannen → Name eingeben → direkt als Bearbeiter auf die Lage zugreifen.<br>
+      QR-Code scannen → PIN eingeben → Name eingeben → direkt als Bearbeiter auf die Lage zugreifen.<br>
       Gültig solange die Lage aktiv ist.
     </p>
+    <form method="post" action="/lage/{{ lage.id }}/pin" style="margin-bottom:18px;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <label class="form-label" for="lage_access_pin">Zugangs-PIN</label>
+      <div style="display:flex;gap:8px;">
+        <input class="form-input" type="password" id="lage_access_pin" name="pin"
+               maxlength="16" inputmode="numeric"
+               placeholder="{% if lage.access_pin_hash %}PIN ist gesetzt{% else %}Kein PIN{% endif %}">
+        <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
+      </div>
+      <p class="form-hint">Leer speichern, um den PIN zu entfernen.</p>
+    </form>
     <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
       <img src="data:image/png;base64,{{ qr_img }}"
            alt="QR-Code Lage-Zugang"

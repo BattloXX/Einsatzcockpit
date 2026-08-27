@@ -129,6 +129,12 @@
   {% endif %}
 
   <div class="hdr">
+    {% if qr_datauri_by_site and qr_datauri_by_site.get(site.id) %}
+    <div style="float:right;text-align:center;font-size:7.5pt;color:#6b7280;">
+      <img src="{{ qr_datauri_by_site.get(site.id) }}" alt="QR-Code Einsatzstelle" style="width:26mm;height:26mm;"><br>
+      Scannen → PIN eingeben → Einsatzstelle
+    </div>
+    {% endif %}
     <div class="hdr__lage">{{ lage.name }} · Einsatzstelle</div>
     <div class="hdr__title">{{ site.einsatzgrund or site.bezeichnung }}</div>
     {% if site.einsatzgrund and site.bezeichnung != site.einsatzgrund %}

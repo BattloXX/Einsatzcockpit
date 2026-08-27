@@ -7,6 +7,7 @@ import logging
 import random
 import secrets
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
 from fastapi import (
     APIRouter,
@@ -23,10 +24,20 @@ from fastapi import (
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
+from app.config import settings
 from app.core.audit import write_audit
 from app.core.html_utils import sanitize_html
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
-from app.core.security import get_author_name, sign_lage_qr_token, sign_session, unsign_lage_qr_token
+from app.core.rate_limit import limiter as _limiter
+from app.core.security import (
+    get_author_name,
+    hash_pin,
+    sign_lage_pin_access_token,
+    sign_session,
+    unsign_lage_pin_access_token,
+    unsign_lage_qr_token,
+    verify_pin,
+)
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident
@@ -324,6 +335,11 @@ async def lage_neu_create(
         is_exercise=is_exercise,
         started_by_user_id=user.id,
     )
+    from app.models.master import OrgSettings
+
+    org_einstellungen = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    if org_einstellungen and org_einstellungen.default_access_pin_hash:
+        lage.access_pin_hash = org_einstellungen.default_access_pin_hash
     write_audit(db, "major_incident.created", user_id=user.id,
                 payload={"name": lage.name, "lage_id": lage.id})
     for _v in (
@@ -341,6 +357,9 @@ async def lage_neu_create(
             status=resource_service.STATUS_BEREITGESTELLT,
         ))
     db.commit()
+
+    from app.services.print_dispatcher import autoprint_gsl_background
+    background_tasks.add_task(autoprint_gsl_background, lage.id)
 
     from app.services.gsl_notify import notify_gsl_created
     await notify_gsl_created(
@@ -1152,6 +1171,10 @@ def _leitstellen_nummern_by_site(
 
 def build_site_druck_context(db: Session, lage, site: IncidentSite) -> dict:
     """Request-freier Kontext für den Einzeldruck (UI und Gateway)."""
+    from app.services.incident_qr_service import lage_qr_login_url
+    from app.services.qr_service import generate_qr_datauri
+
+    qr_url = lage_qr_login_url(db, lage, site_id=site.id)
     return {
         "lage": lage,
         "site": site,
@@ -1159,6 +1182,7 @@ def build_site_druck_context(db: Session, lage, site: IncidentSite) -> dict:
         "phase_labels": PHASE_LABELS,
         "prio_label": SITE_PRIORITY_LABEL,
         "site_log_kind_label": SITE_LOG_KIND_LABEL,
+        "qr_datauri": generate_qr_datauri(qr_url, druck=True, box_size=10) if qr_url else None,
     }
 
 
@@ -1660,16 +1684,24 @@ async def lage_beenden(
 
 # ── Lage editieren ───────────────────────────────────────────────────────────
 
-def _generate_lage_qr(request: Request, lage_id: int, user_id: int) -> tuple[str, str]:
+def _generate_lage_qr(
+    request: Request, lage: MajorIncident, user_id: int | None, db: Session
+) -> tuple[str, str]:
     """Erstellt QR-Token + base64-PNG für die Lage. Gibt (url, img_b64) zurück."""
     import qrcode
-    token = sign_lage_qr_token(lage_id, user_id)
-    base = str(request.base_url).rstrip("/")
-    url = f"{base}/lage/{lage_id}/qr-login?token={token}"
+
+    from app.services.incident_qr_service import lage_qr_login_url
+
+    url = lage_qr_login_url(db, lage, issuing_user_id=user_id) or ""
     img = qrcode.make(url, box_size=4, border=1)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return url, base64.b64encode(buf.getvalue()).decode()
+
+
+def _lage_qr_aussteller_id(user, lage: MajorIncident) -> int | None:
+    """Org-fremde Systemadmins verwenden den nicht interaktiven QR-Benutzer der Org."""
+    return user.id if getattr(user, "org_id", None) == lage.org_id else None
 
 
 @router.get("/lage/{lage_id}/bearbeiten", response_class=HTMLResponse)
@@ -1682,7 +1714,7 @@ def lage_bearbeiten_form(
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
-    qr_url, qr_img = _generate_lage_qr(request, lage_id, getattr(user, "id", 0))
+    qr_url, qr_img = _generate_lage_qr(request, lage, _lage_qr_aussteller_id(user, lage), db)
     return templates.TemplateResponse(request, "incident_major/lage_bearbeiten.html", {
         "user": user,
         "lage": lage,
@@ -1717,6 +1749,23 @@ async def lage_bearbeiten_save(
                 payload={"lage_id": lage_id, "name": lage.name})
     await broadcast_lage(lage_id, {"type": "lage_updated", "reload_board": True})
     return RedirectResponse(f"/lage/{lage_id}", status_code=303)
+
+
+@router.post("/lage/{lage_id}/pin")
+def lage_pin_setzen(
+    lage_id: int,
+    request: Request,
+    pin: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin")),
+):
+    """Setzt oder löscht den PIN für den gedruckten Lage-QR-Zugang."""
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    lage.access_pin_hash = hash_pin(pin.strip()[:16]) if pin.strip() else None
+    db.commit()
+    return RedirectResponse(f"/lage/{lage_id}/bearbeiten", status_code=303)
 
 
 # ── Lage wiedereröffnen ───────────────────────────────────────────────────────
@@ -1756,7 +1805,7 @@ def lage_qr_page(
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
-    qr_url, qr_img = _generate_lage_qr(request, lage_id, user.id)
+    qr_url, qr_img = _generate_lage_qr(request, lage, _lage_qr_aussteller_id(user, lage), db)
     return templates.TemplateResponse(request, "incident_major/lage_qr.html", {
         "lage": lage,
         "qr_url": qr_url,
@@ -1769,6 +1818,7 @@ def lage_qr_login(
     request: Request,
     lage_id: int,
     token: str,
+    open_site: int | None = None,
     db: Session = Depends(get_db),
 ):
     """QR-Scan-Einstieg: validiert Token, legt LageToken an und setzt QR-Session."""
@@ -1788,29 +1838,133 @@ def lage_qr_login(
     if lage.org_id != issuing_user.org_id:
         raise HTTPException(status_code=403, detail="Kein Zugriff")
 
+    normalisierte_site_id = _normalisiere_open_site(db, lage_id, open_site)
+
     # Token-Hash für Revoke-Lookup
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     db_token = db.query(LageToken).filter(
         LageToken.lage_id == lage_id,
         LageToken.token_hash == token_hash,
     ).first()
-    if db_token is None:
-        db_token = LageToken(
-            lage_id=lage_id,
-            token_hash=token_hash,
-            issued_by_user_id=issuing_user_id,
-        )
-        db.add(db_token)
-        db.commit()
-        db.refresh(db_token)
-    elif db_token.revoked_at is not None:
+    if db_token is None or db_token.revoked_at is not None:
         raise HTTPException(status_code=403, detail="QR-Code wurde widerrufen")
+
+    if lage.access_pin_hash and not _hat_lage_pin_cookie(request, lage_id):
+        parameter: dict[str, str | int] = {"token": token}
+        if normalisierte_site_id is not None:
+            parameter["open_site"] = normalisierte_site_id
+        return RedirectResponse(
+            f"/lage/{lage_id}/qr-pin?{urlencode(parameter)}", status_code=302
+        )
 
     # QR-Namenseingabe-Seite anzeigen (gleicher Flow wie bei Einsatz-QR)
     return templates.TemplateResponse(request, "incident_major/lage_qr_name.html", {
         "lage": lage,
         "token": token,
+        "open_site": normalisierte_site_id,
     })
+
+
+_LAGE_PIN_COOKIE = "board_pin_lage"
+_LAGE_PIN_COOKIE_MAX_AGE = 86400
+
+
+def _normalisiere_open_site(db: Session, lage_id: int, open_site: int | None) -> int | None:
+    if open_site is None:
+        return None
+    site = db.query(IncidentSite).filter(
+        IncidentSite.id == open_site,
+        IncidentSite.major_incident_id == lage_id,
+    ).first()
+    return site.id if site else None
+
+
+def _hat_lage_pin_cookie(request: Request, lage_id: int) -> bool:
+    token = request.cookies.get(_LAGE_PIN_COOKIE)
+    return bool(token and unsign_lage_pin_access_token(token) == lage_id)
+
+
+def _pruefe_lage_qr_beweiskette(db: Session, lage_id: int, token: str):
+    data = unsign_lage_qr_token(token)
+    if not data or data.get("l") != lage_id:
+        raise HTTPException(status_code=400, detail="Ungültiger QR-Code")
+    lage = db.get(MajorIncident, lage_id)
+    if lage is None or lage.status != MajorIncidentStatus.active:
+        raise HTTPException(status_code=400, detail="Lage ist nicht mehr aktiv")
+    aussteller = db.get(User, data.get("u"))
+    if aussteller is None or not aussteller.active or aussteller.org_id != lage.org_id:
+        raise HTTPException(status_code=403, detail="QR-Code ungültig oder widerrufen")
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    db_token = db.query(LageToken).filter(
+        LageToken.lage_id == lage_id,
+        LageToken.token_hash == token_hash,
+        LageToken.issued_by_user_id == aussteller.id,
+        LageToken.revoked_at.is_(None),
+    ).first()
+    if db_token is None:
+        raise HTTPException(status_code=403, detail="QR-Code ungültig oder widerrufen")
+    return lage, aussteller
+
+
+@router.get("/lage/{lage_id}/qr-pin", response_class=HTMLResponse)
+def lage_qr_pin_form(
+    request: Request,
+    lage_id: int,
+    token: str,
+    open_site: int | None = None,
+    db: Session = Depends(get_db),
+):
+    session_lage_id = getattr(request.state, "qr_lage_id", None)
+    if session_lage_id is not None and session_lage_id != lage_id:
+        raise HTTPException(status_code=403, detail="Kein Zugriff")
+    lage, _ = _pruefe_lage_qr_beweiskette(db, lage_id, token)
+    normalisierte_site_id = _normalisiere_open_site(db, lage_id, open_site)
+    if not lage.access_pin_hash:
+        parameter: dict[str, str | int] = {"token": token}
+        if normalisierte_site_id is not None:
+            parameter["open_site"] = normalisierte_site_id
+        return RedirectResponse(f"/lage/{lage_id}/qr-login?{urlencode(parameter)}", status_code=302)
+    return templates.TemplateResponse(request, "incident_major/lage_qr_pin.html", {
+        "lage": lage,
+        "token": token,
+        "open_site": normalisierte_site_id,
+        "error": request.query_params.get("error"),
+    })
+
+
+@router.post("/lage/{lage_id}/qr-pin")
+@(_limiter.limit("5/15minutes") if _limiter else lambda funktion: funktion)
+def lage_qr_pin_submit(
+    request: Request,
+    lage_id: int,
+    token: str = Form(...),
+    pin: str = Form(""),
+    open_site: int | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    session_lage_id = getattr(request.state, "qr_lage_id", None)
+    if session_lage_id is not None and session_lage_id != lage_id:
+        raise HTTPException(status_code=403, detail="Kein Zugriff")
+    lage, _ = _pruefe_lage_qr_beweiskette(db, lage_id, token)
+    normalisierte_site_id = _normalisiere_open_site(db, lage_id, open_site)
+    parameter: dict[str, str | int] = {"token": token}
+    if normalisierte_site_id is not None:
+        parameter["open_site"] = normalisierte_site_id
+    if not lage.access_pin_hash:
+        return RedirectResponse(f"/lage/{lage_id}/qr-login?{urlencode(parameter)}", status_code=302)
+    if not verify_pin(pin.strip(), lage.access_pin_hash):
+        parameter["error"] = "wrong_pin"
+        return RedirectResponse(f"/lage/{lage_id}/qr-pin?{urlencode(parameter)}", status_code=302)
+    antwort = RedirectResponse(f"/lage/{lage_id}/qr-login?{urlencode(parameter)}", status_code=302)
+    antwort.set_cookie(
+        _LAGE_PIN_COOKIE,
+        sign_lage_pin_access_token(lage_id),
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        max_age=_LAGE_PIN_COOKIE_MAX_AGE,
+    )
+    return antwort
 
 
 @router.post("/lage/{lage_id}/qr-login", response_class=HTMLResponse)
@@ -1819,27 +1973,15 @@ def lage_qr_login_post(
     lage_id: int,
     token: str,
     display_name: str = Form(...),
+    open_site: int | None = Form(None),
     db: Session = Depends(get_db),
 ):
     """Setzt QR-Session nach Namenseingabe."""
-    data = unsign_lage_qr_token(token)
-    if not data or data.get("l") != lage_id:
-        raise HTTPException(status_code=400, detail="Ungültiger QR-Code")
-
-    lage = _lage_or_404(lage_id, db)
-    if lage.status != MajorIncidentStatus.active:
-        raise HTTPException(status_code=400, detail="Lage ist nicht mehr aktiv")
-
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    db_token = db.query(LageToken).filter(
-        LageToken.lage_id == lage_id,
-        LageToken.token_hash == token_hash,
-        LageToken.revoked_at.is_(None),
-    ).first()
-    if not db_token:
-        raise HTTPException(status_code=403, detail="QR-Code ungültig oder widerrufen")
-
-    issuing_user_id: int = data["u"]
+    lage, aussteller = _pruefe_lage_qr_beweiskette(db, lage_id, token)
+    if lage.access_pin_hash and not _hat_lage_pin_cookie(request, lage_id):
+        raise HTTPException(status_code=403, detail="PIN erforderlich")
+    normalisierte_site_id = _normalisiere_open_site(db, lage_id, open_site)
+    issuing_user_id = aussteller.id
     name = display_name.strip()[:80] or "QR-Nutzer"
     session_token = sign_session(
         issuing_user_id,
@@ -1847,7 +1989,10 @@ def lage_qr_login_post(
         lage_id=lage_id,
         display_name=name,
     )
-    response = RedirectResponse(f"/lage/{lage_id}", status_code=303)
+    ziel = f"/lage/{lage_id}"
+    if normalisierte_site_id is not None:
+        ziel = f"{ziel}?{urlencode({'open_site': normalisierte_site_id})}"
+    response = RedirectResponse(ziel, status_code=303)
     from app.config import settings as _cfg
     response.set_cookie(
         "session",
@@ -3639,6 +3784,10 @@ def build_bericht_context(db: Session, lage) -> dict:
 
     cross_markers = sorted(lage.cross_site_markers, key=lambda m: m.sort_index)
 
+    from app.services.incident_qr_service import lage_qr_login_url
+    from app.services.qr_service import generate_qr_datauri
+
+    qr_url = lage_qr_login_url(db, lage)
     return {
         "lage": lage,
         "active_sites": active_sites,
@@ -3654,6 +3803,7 @@ def build_bericht_context(db: Session, lage) -> dict:
         "journal_entries": journal_entries,
         "journal_categories": JOURNAL_CATEGORIES,
         "now": datetime.now(UTC),
+        "qr_datauri": generate_qr_datauri(qr_url, druck=True, box_size=10) if qr_url else None,
     }
 
 
@@ -3718,6 +3868,14 @@ def build_stellen_multi_context(db: Session, lage, ids: str, cross_ids: str) -> 
         }
         cross_markers = [cross_map[i] for i in cross_id_list if i in cross_map]
 
+    from app.services.incident_qr_service import lage_qr_login_url
+    from app.services.qr_service import generate_qr_datauri
+
+    qr_datauri_by_site = {}
+    for site in sites:
+        qr_url = lage_qr_login_url(db, lage, site_id=site.id)
+        if qr_url:
+            qr_datauri_by_site[site.id] = generate_qr_datauri(qr_url, druck=True, box_size=10)
     return {
         "lage": lage,
         "sites": sites,
@@ -3726,6 +3884,7 @@ def build_stellen_multi_context(db: Session, lage, ids: str, cross_ids: str) -> 
         "phase_labels": PHASE_LABELS,
         "prio_label": SITE_PRIORITY_LABEL,
         "site_log_kind_label": SITE_LOG_KIND_LABEL,
+        "qr_datauri_by_site": qr_datauri_by_site,
     }
 
 

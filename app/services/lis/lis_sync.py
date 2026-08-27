@@ -6,6 +6,7 @@ Aufgerufen aus lis_loop.py (Hintergrund-Poll) — kann aber auch direkt (z.B. im
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -35,6 +36,24 @@ from app.services.major_incident_service import incident_belongs_to_major_incide
 logger = logging.getLogger("einsatzleiter.lis.sync")
 
 _BACKFILL_INTERVAL = timedelta(hours=24)
+_autoprint_tasks: set[asyncio.Task] = set()
+
+
+def _starte_autoprint(incident_id: int) -> None:
+    """Autoprint nach dem LIS-Commit verwaltet im laufenden Event-Loop starten."""
+    from app.services.print_dispatcher import autoprint_incident_background
+
+    task = asyncio.create_task(autoprint_incident_background(incident_id))
+    _autoprint_tasks.add(task)
+
+    def _fertig(t: asyncio.Task) -> None:
+        _autoprint_tasks.discard(t)
+        try:
+            t.result()
+        except Exception:
+            logger.exception("LIS-Auto-Druck fehlgeschlagen (Einsatz %s)", incident_id)
+
+    task.add_done_callback(_fertig)
 
 
 # ── Kleine Hilfsfunktionen ──────────────────────────────────────────────────
@@ -780,12 +799,12 @@ async def _close_incidents_missing_from_lis(
 async def sync_operation(
     db: Session, org: FireDept, config: OrgLisConfig, client: LisClient, op: dict,
     *, root_org_map: dict[str, str] | None = None,
-) -> None:
+) -> int | None:
     # Wird nur nach is_fully_configured-Pruefung in sync_organization() aufgerufen.
     assert config.organization_id
     parsed = _parse_operation(op, org)
     if not parsed["lis_operation_id"]:
-        return
+        return None
 
     incident, created = _get_or_link_incident(db, org, parsed)
 
@@ -847,7 +866,7 @@ async def sync_operation(
                 "keine Alarmierung, direkt geschlossen",
                 incident.id, parsed["lis_operation_id"], org.id,
             )
-            return
+            return None
 
         # Zeitkritische Alarmierung vor Geocoding und Objekt-Matching ausführen.
         from app.config import settings
@@ -920,6 +939,7 @@ async def sync_operation(
         await notify_incident_live(
             db, incident, org_id=org.id, reason="unit_status", background_tasks=None,
         )
+    return incident.id if created else None
 
 
 # ── Backfill (historische Einsätze) ──────────────────────────────────────────
@@ -1036,8 +1056,12 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
 
     for op in operations:
         try:
-            await sync_operation(db, org, config, client, op, root_org_map=root_org_map)
+            neue_incident_id = await sync_operation(
+                db, org, config, client, op, root_org_map=root_org_map,
+            )
             db.commit()
+            if neue_incident_id is not None:
+                _starte_autoprint(neue_incident_id)
         except Exception:
             db.rollback()
             logger.exception(

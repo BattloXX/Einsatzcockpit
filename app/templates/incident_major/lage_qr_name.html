@@ -27,6 +27,7 @@
 
       <form method="post" action="/lage/{{ lage.id }}/qr-login?token={{ token }}" class="login-form">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        {% if open_site %}<input type="hidden" name="open_site" value="{{ open_site }}">{% endif %}
         <div class="form-group">
           <label for="display_name">Dein Name</label>
           <input type="text" id="display_name" name="display_name" required
