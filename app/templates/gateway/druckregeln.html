@@ -1,0 +1,264 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Druckregeln - {{ gw.name }} - {{ brand }}{% endblock %}
+{% block admin_content %}
+{% include "gateway/_gwx_style.html" %}
+
+<div class="gwx">
+  <div class="gwx-bar">
+    <div class="gwx-brand">
+      <div class="gwx-brand__icon">🖨️</div>
+      <div>
+        <div class="gwx-brand__t">{{ gw.name }}</div>
+        <div class="gwx-brand__s">{{ (gw.standort or 'PRINT & ALARM GATEWAY')|upper }}</div>
+      </div>
+    </div>
+    <div class="gwx-pills">
+      {% if gw.status == 'online' and connected %}
+      <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
+      {% elif not gw.is_paired %}
+      <span class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
+      {% else %}
+      <span class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
+      {% endif %}
+      {% if gw.is_paired %}
+        {% if gw.serial_connected %}
+        <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Alarmleitung</span>
+        {% else %}
+        <span class="gwx-pill gwx-pill--warn"><span class="gwx-pill__d"></span>Alarmleitung getrennt</span>
+        {% endif %}
+      {% endif %}
+      {% if gw.version %}<span class="gwx-pill">v{{ gw.version }}</span>{% endif %}
+    </div>
+    <div class="gwx-spacer"></div>
+    <a href="/gateway" class="gwx-btn">&larr; Übersicht</a>
+  </div>
+  {% from "gateway/_tabs.html" import gwtabs %}
+  {{ gwtabs(gw.id, "regeln") }}
+  <div class="gwx-body">
+    {% set q = request.query_params %}
+    {% if q.get('rule_saved') %}<div class="gwx-alert gwx-alert--ok">Gespeichert.</div>{% endif %}
+    {% if q.get('rule_created') %}<div class="gwx-alert gwx-alert--ok">Regel angelegt – jetzt konfigurieren.</div>{% endif %}
+    {% if q.get('error') == 'rule_dup' %}<div class="gwx-alert gwx-alert--err">Regelname bereits vergeben.</div>{% endif %}
+    {% if q.get('error') == 'rule_documents' %}<div class="gwx-alert gwx-alert--err">Die gewählten Dokumente passen nicht zum Auslöser.</div>{% endif %}
+    {% if q.get('test_ok') %}<div class="gwx-alert gwx-alert--ok">Testdruck ausgelöst: {{ q.get('test_ok') }} Auftrag/Aufträge{% if q.get('test_inc') %} (Einsatz #{{ q.get('test_inc') }}){% endif %} an die Zieldrucker gesendet.</div>{% endif %}
+    {% if q.get('test_err') == 'printer' %}<div class="gwx-alert gwx-alert--err">Testdruck: Der Regel ist kein Zieldrucker zugewiesen.</div>{% endif %}
+    {% if q.get('test_err') == 'incident' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen Einsatz zum Testen.</div>{% endif %}
+    <div class="gwx-grid">
+      {# ── Druckregeln ── #}
+      <div class="gwx-col-12">
+        <div class="gwx-panel" id="regeln">
+          <div class="gwx-panel__hd">
+            <div>
+              <div class="gwx-panel__t">⚙️ Druckregeln</div>
+              <div class="gwx-panel__sub">Was wird bei welchem Auslöser auf welchem Drucker automatisch gedruckt?</div>
+            </div>
+          </div>
+          <div class="gwx-panel__bd">
+            <form method="post" action="/gateway/rules/create" class="gwx-inline" style="margin-bottom:14px;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="hidden" name="gw" value="{{ gw.id }}">
+              <input class="gwx-input" style="width:auto;" type="text" name="name" placeholder="Regelname" required>
+              <select name="trigger" style="width:auto;">
+                {% for key, label in trigger_labels.items() %}<option value="{{ key }}">{{ label }}{% if key in ('einsatz_updated', 'gsl_lage_updated', 'alarm_serial_received') %} (noch nicht aktiv){% endif %}</option>{% endfor %}
+              </select>
+              <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">+ Regel</button>
+            </form>
+
+            {% if not rules %}
+            <div class="gwx-empty">Noch keine Druckregel. Automatischer Verleihschein-Druck wird über eine Regel mit Auslöser „Verleihschein angelegt" abgebildet.</div>
+            {% else %}
+            <p style="font-size:.76rem;color:var(--g-dim);margin:0 0 10px;">⠿ Ziehen ändert die Reihenfolge – obere Regeln werden zuerst ausgewertet.</p>
+            <div id="gwx-rule-list" data-gw="{{ gw.id }}">
+            {% for r in rules %}
+            {% set f = r.filters or {} %}{% set o = r.options or {} %}{% set fenster = f.get('zeitfenster') or {} %}
+            <div class="gwx-rule" id="regel-{{ r.id }}" data-rule-id="{{ r.id }}"
+                 x-data="{ open: {{ 'true' if q.get('rule_created')|string == r.id|string else 'false' }} }">
+              <div class="gwx-rule__hd" @click="open=!open">
+                <span class="gwx-drag" title="Ziehen zum Sortieren" @click.stop>⠿</span>
+                <span x-text="open ? '▾' : '▸'" class="gwx-mono" style="color:var(--g-dim);"></span>
+                <div style="flex:1;min-width:0;">
+                  <div class="gwx-rule__name">{{ r.name }}
+                    {% if r.aktiv %}<span class="gwx-chip gwx-chip--ok" style="margin-left:6px;"><span class="gwx-chip__d"></span>aktiv</span>
+                    {% else %}<span class="gwx-chip" style="margin-left:6px;"><span class="gwx-chip__d"></span>aus</span>{% endif %}
+                  </div>
+                  <div class="gwx-rule__sum">
+                    {{ r.trigger_label }} ·
+                    {{ (r.documents or [])|length }} Dokument(e) ·
+                    {{ (r.printer_ids or [])|length }} Drucker ·
+                    {{ o.get('copies', 1) }}×
+                    {% if f.get('stichwort') %} · Stichwort: {{ f.get('stichwort')|join(', ') }}{% endif %}
+                    {% if f.get('uebung') == 'nur_echt' %} · <span class="gwx-chip">nur Echteinsätze</span>{% endif %}
+                    {% if f.get('uebung') == 'nur_uebung' %} · <span class="gwx-chip">nur Übungen</span>{% endif %}
+                    {% if fenster.get('von') %} · {{ fenster.get('von') }}–{{ fenster.get('bis') }}{% endif %}
+                  </div>
+                </div>
+                <div class="gwx-inline" @click.stop>
+                  <form method="post" action="/gateway/rules/{{ r.id }}/test"
+                        onsubmit="return confirm('Diese Regel jetzt als Testdruck gegen den letzten Einsatz ausfuehren?')">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <input type="hidden" name="gw" value="{{ gw.id }}">
+                    <button class="gwx-btn gwx-btn--sm" type="submit" title="Regel gegen den letzten Einsatz testen">🧪 Testdruck</button>
+                  </form>
+                  <form method="post" action="/gateway/rules/{{ r.id }}/toggle">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <input type="hidden" name="gw" value="{{ gw.id }}">
+                    <button class="gwx-btn gwx-btn--sm" type="submit">{{ 'Deaktivieren' if r.aktiv else 'Aktivieren' }}</button>
+                  </form>
+                </div>
+              </div>
+
+              <div class="gwx-rule__body" x-show="open" x-cloak>
+                <form method="post" action="/gateway/rules/{{ r.id }}/save" x-data="{ trigger: '{{ r.trigger }}' }">
+                  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                  <input type="hidden" name="gw" value="{{ gw.id }}">
+
+                  <div class="gwx-formgrid">
+                    <div class="gwx-field"><label class="gwx-label">Regelname</label>
+                      <input class="gwx-input" type="text" name="name" value="{{ r.name }}"></div>
+                    <div class="gwx-field"><label class="gwx-label">Auslöser</label>
+                      <select name="trigger" x-model="trigger">
+                        {% for key, label in trigger_labels.items() %}
+                        <option value="{{ key }}" {{ 'selected' if r.trigger==key }}>{{ label }}{% if key in ('einsatz_updated', 'gsl_lage_updated', 'alarm_serial_received') %} (noch nicht aktiv){% endif %}</option>{% endfor %}
+                      </select></div>
+                  </div>
+
+                  <div class="gwx-sechd">📄 Inhalte (Dokumente)</div>
+                  <div class="gwx-checks">
+                    {% for key, label in doc_labels.items() %}
+                    {% if key in ('einsatzinfo', 'objektblatt') %}{% set doc_trigger = "trigger === 'einsatz_created'" %}
+                    {% elif key in ('gsl_lageblatt', 'gsl_bericht') %}{% set doc_trigger = "trigger === 'gsl_created'" %}
+                    {% elif key == 'alarm_rohtext' %}{% set doc_trigger = "trigger === 'alarm_serial_received'" %}
+                    {% else %}{% set doc_trigger = "trigger === 'verleih_created'" %}{% endif %}
+                    <label class="gwx-check" x-show="{{ doc_trigger }}"><input type="checkbox" name="documents" value="{{ key }}" :disabled="!({{ doc_trigger }})"
+                      {{ 'checked' if key in (r.documents or []) }}> {{ label }}</label>
+                    {% endfor %}
+                  </div>
+
+                  <div class="gwx-sechd">🏢 Objekt-Elemente (bei zugeordnetem Objekt)</div>
+                  <div class="gwx-checks" x-show="trigger === 'einsatz_created'">
+                    {% for key, label in objekt_element_labels.items() %}
+                    <label class="gwx-check"><input type="checkbox" name="objekt_elements" value="{{ key }}" :disabled="trigger !== 'einsatz_created'"
+                      {{ 'checked' if key in (r.objekt_elements or []) }}> {{ label }}</label>
+                    {% endfor %}
+                  </div>
+
+                  <div class="gwx-sechd">🖨️ Zieldrucker</div>
+                  {% if not printers %}
+                  <p style="font-size:.82rem;color:var(--g-dim);">Erst Drucker hinzufügen.</p>
+                  {% else %}
+                  <div class="gwx-checks">
+                    {% for p in printers %}
+                    <label class="gwx-check"><input type="checkbox" name="printer_ids" value="{{ p.id }}"
+                      {{ 'checked' if p.id in (r.printer_ids or []) }}> {{ p.name }}</label>
+                    {% endfor %}
+                  </div>
+                  <div class="gwx-formgrid" style="margin-top:10px;">
+                    <div class="gwx-field"><label class="gwx-label">Fallback-Drucker (wenn Ziel offline)</label>
+                      <select name="fallback_printer_id">
+                        <option value="">– keiner –</option>
+                        {% for p in printers %}
+                        <option value="{{ p.id }}" {{ 'selected' if r.fallback_printer_id==p.id }}>{{ p.name }}</option>{% endfor %}
+                      </select></div>
+                  </div>
+                  {% endif %}
+
+                  <div class="gwx-sechd">🖨️ Druckoptionen</div>
+                  <div class="gwx-formgrid">
+                    <div class="gwx-field"><label class="gwx-label">Exemplare</label>
+                      <input class="gwx-input gwx-input--mono" type="number" min="1" name="copies" value="{{ o.get('copies', 1) }}"></div>
+                    <div class="gwx-field"><label class="gwx-label">Seiten (z. B. 1-2, leer = alle)</label>
+                      <input class="gwx-input gwx-input--mono" type="text" name="page_range" value="{{ o.get('page_range','') }}" placeholder="alle"></div>
+                    <div class="gwx-field"><label class="gwx-label">Duplex</label>
+                      <select name="duplex">
+                        <option value="off" {{ 'selected' if o.get('duplex','off')=='off' }}>Einseitig</option>
+                        <option value="long" {{ 'selected' if o.get('duplex')=='long' }}>Duplex (lang)</option>
+                        <option value="short" {{ 'selected' if o.get('duplex')=='short' }}>Duplex (kurz)</option>
+                      </select></div>
+                    <div class="gwx-field"><label class="gwx-label">Farbe</label>
+                      <select name="color">
+                        <option value="color" {{ 'selected' if o.get('color','color')=='color' }}>Farbe</option>
+                        <option value="monochrome" {{ 'selected' if o.get('color')=='monochrome' }}>S/W</option>
+                      </select></div>
+                    <div class="gwx-field"><label class="gwx-label">Format (A3 nur, wenn Drucker es kann)</label>
+                      <select name="media">
+                        <option value="A4" {{ 'selected' if o.get('media','A4')=='A4' }}>A4</option>
+                        <option value="A3" {{ 'selected' if o.get('media')=='A3' }}>A3</option>
+                      </select></div>
+                  </div>
+
+                  <div class="gwx-sechd">🎯 Filter (optional – wann greift die Regel?)</div>
+                  <div class="gwx-formgrid">
+                    <div class="gwx-field"><label class="gwx-label">Einsatzart</label>
+                      <select name="filter_uebung">
+                        <option value="alle" {{ 'selected' if f.get('uebung', 'alle') == 'alle' }}>Alle Einsätze</option>
+                        <option value="nur_echt" {{ 'selected' if f.get('uebung') == 'nur_echt' }}>Nur Echteinsätze</option>
+                        <option value="nur_uebung" {{ 'selected' if f.get('uebung') == 'nur_uebung' }}>Nur Übungen</option>
+                      </select></div>
+                    <div class="gwx-field" x-show="trigger !== 'verleih_created'"><label class="gwx-label">Min. Alarmstufe</label>
+                      <input class="gwx-input gwx-input--mono" type="number" name="min_alarmstufe" value="{{ f.get('min_alarmstufe','') }}" placeholder="egal"></div>
+                    <div class="gwx-field" x-show="trigger !== 'verleih_created'"><label class="gwx-label">Stichwort enthält (Komma-getrennt)</label>
+                      <input class="gwx-input" type="text" name="stichwort" value="{{ (f.get('stichwort') or [])|join(', ') }}" placeholder="z. B. B, T, BMA"></div>
+                    <div class="gwx-field"><label class="gwx-label">Nur ab</label>
+                      <input class="gwx-input gwx-input--mono" type="time" name="zeit_von" value="{{ fenster.get('von','') }}"></div>
+                    <div class="gwx-field"><label class="gwx-label">bis</label>
+                      <input class="gwx-input gwx-input--mono" type="time" name="zeit_bis" value="{{ fenster.get('bis','') }}"></div>
+                    <div class="gwx-field" style="justify-content:end;" x-show="trigger !== 'verleih_created'">
+                      <label class="gwx-check" style="border:none;background:none;padding:0;">
+                        <input type="checkbox" name="nur_bma" value="1" {{ 'checked' if f.get('nur_bma') }}> Nur BMA-Alarme</label></div>
+                  </div>
+
+                  <div class="gwx-btnrow" style="margin-top:16px;">
+                    <button class="gwx-btn gwx-btn--primary" type="submit">Regel speichern</button>
+                    <span class="gwx-spacer"></span>
+                    <button class="gwx-btn gwx-btn--danger gwx-btn--sm" type="submit"
+                            formaction="/gateway/rules/{{ r.id }}/delete"
+                            onclick="return confirm('Diese Regel loeschen?')">Löschen</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+            {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if rules %}
+<script>
+  // Regel-Reihenfolge per Drag&Drop (SortableJS ist global via base.html geladen).
+  // DOMContentLoaded: laeuft nach den deferred Skripten (Sortable + csrf.js-fetch-Patch).
+  window.addEventListener('DOMContentLoaded', function () {
+    var list = document.getElementById('gwx-rule-list');
+    if (!list || typeof Sortable === 'undefined') return;
+    var gw = list.dataset.gw;
+    new Sortable(list, {
+      handle: '.gwx-drag',
+      draggable: '.gwx-rule',
+      animation: 150,
+      ghostClass: 'gwx-ghost',
+      chosenClass: 'gwx-chosen',
+      onEnd: function () {
+        var ids = Array.prototype.map.call(
+          list.querySelectorAll('.gwx-rule'),
+          function (el) { return parseInt(el.dataset.ruleId, 10); }
+        );
+        var body = new URLSearchParams();
+        body.set('order', JSON.stringify(ids));
+        if (gw) body.set('gw', gw);
+        // csrf.js patcht window.fetch und setzt den X-CSRF-Token-Header automatisch.
+        fetch('/gateway/rules/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+          credentials: 'same-origin',
+        }).catch(function () {});
+      },
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}
