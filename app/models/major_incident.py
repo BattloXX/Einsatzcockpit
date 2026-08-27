@@ -194,6 +194,7 @@ class MajorIncident(Base):
     auto_adopt:    Mapped[bool] = mapped_column(Boolean, default=True)
     public_token:  Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     public_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    access_pin_hash: Mapped[str | None] = mapped_column(String(120), nullable=True)
     started_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     ended_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     live_push_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

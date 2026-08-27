@@ -25,6 +25,7 @@
 
       <form method="post" action="/pin-login" class="login-form">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="add" value="{% if add %}1{% else %}0{% endif %}">
         <div class="form-group">
           <label for="phone">Handynummer</label>
           <input type="tel" id="phone" name="phone" required autofocus
@@ -33,7 +34,7 @@
         <button type="submit" class="btn btn--primary btn--full">PIN anfordern</button>
       </form>
       <div style="text-align:center; margin-top:14px;">
-        <a href="/login" class="link-sm">← zurück zur normalen Anmeldung</a>
+        <a href="/login{% if add %}?add=1{% endif %}" class="link-sm">← zurück zur normalen Anmeldung</a>
       </div>
     </div>
   </div>

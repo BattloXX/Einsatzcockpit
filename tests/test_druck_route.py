@@ -14,12 +14,12 @@ def _bigint_sqlite(element, compiler, **kw):
     return "INTEGER"
 
 
-from app.core.tenant import set_tenant_context
-from app.db import Base
-from app.models.atemschutz_pruefung import AtemschutzPruefung
-from app.models.incident import Incident
-from app.models.master import FireDept
-from app.routers.ui_druck import _verify_org
+from app.core.tenant import set_tenant_context  # noqa: E402
+from app.db import Base  # noqa: E402
+from app.models.atemschutz_pruefung import AtemschutzPruefung  # noqa: E402
+from app.models.incident import Incident  # noqa: E402
+from app.models.master import FireDept  # noqa: E402
+from app.routers.ui_druck import _verify_org  # noqa: E402
 
 _ORG_A = 970001
 _ORG_B = 970002
@@ -205,6 +205,33 @@ def test_render_map_html_foreign_org_raises(db, lage):
         render_map_html(db, job)
 
 
+def test_render_map_html_stellen_karte_geschlossene_lage(db, lage):
+    """Eine geschlossene Lage hat keinen Login-QR, bleibt aber druckbar."""
+    from types import SimpleNamespace
+
+    from app.models.major_incident import IncidentSite, MajorIncidentStatus
+    from app.services.print_artifact_service import render_map_html
+
+    site = IncidentSite(
+        major_incident_id=lage.id,
+        org_id=_ORG_A,
+        bezeichnung="Teststelle",
+    )
+    db.add(site)
+    lage.status = MajorIncidentStatus.closed
+    db.flush()
+    job = SimpleNamespace(
+        document_type="stellen_karte",
+        gsl_id=lage.id,
+        org_id=_ORG_A,
+        artifact_ref=f"ids={site.id}",
+    )
+
+    html = render_map_html(db, job)
+
+    assert "Teststelle" in html
+
+
 def test_render_verleih_schein_pdf(db):
     """End-to-End: echte Zeilen → render_job_pdf liefert ein PDF (Template + Pipeline)."""
     from types import SimpleNamespace
@@ -227,3 +254,45 @@ def test_render_verleih_schein_pdf(db):
     pdf = render_job_pdf(db, job)
     assert isinstance(pdf, bytes) and len(pdf) > 500
     assert pdf[:4] == b"%PDF"
+
+
+def test_render_einsatzinfo_pdf_mit_druck_qr(db, incident):
+    """Einsatzinfo wird mit technischem Board-QR als PDF gerendert."""
+    from types import SimpleNamespace
+
+    from app.models.user import Role
+    from app.services.print_artifact_service import render_job_pdf
+
+    db.add(Role(code="recorder", label="Bearbeiter"))
+    db.commit()
+    job = SimpleNamespace(
+        document_type="einsatzinfo",
+        incident_id=incident.id,
+        gsl_id=None,
+        objekt_id=None,
+        artifact_ref=None,
+        org_id=_ORG_A,
+    )
+    pdf = render_job_pdf(db, job)
+    assert pdf.startswith(b"%PDF") and len(pdf) > 500
+
+
+def test_render_gsl_bericht_pdf_mit_druck_qr(db, lage):
+    """GSL-Gesamtbericht wird mit technischem Lageboard-QR als PDF gerendert."""
+    from types import SimpleNamespace
+
+    from app.models.user import Role
+    from app.services.print_artifact_service import render_job_pdf
+
+    db.add(Role(code="recorder", label="Bearbeiter"))
+    db.commit()
+    job = SimpleNamespace(
+        document_type="gsl_bericht",
+        incident_id=None,
+        gsl_id=lage.id,
+        objekt_id=None,
+        artifact_ref=None,
+        org_id=_ORG_A,
+    )
+    pdf = render_job_pdf(db, job)
+    assert pdf.startswith(b"%PDF") and len(pdf) > 500

@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import uuid
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.gateway import (
@@ -41,6 +43,7 @@ def unfulfilled_print_jobs(db: Session, incident_id: int) -> list[PrintJob]:
 
 def build_idempotency_key(
     *,
+    org_id: int,
     source: str,
     rule_id: int | None,
     incident_id: int | None,
@@ -57,6 +60,7 @@ def build_idempotency_key(
     if source == JOB_SOURCE_MANUAL:
         return f"manual:{uuid.uuid4()}"
     parts = [
+        str(org_id),
         source,
         str(rule_id or ""),
         f"i{incident_id or ''}",
@@ -93,7 +97,7 @@ def create_print_job(
     vorhandene zurückgegeben (created=False).
     """
     key = build_idempotency_key(
-        source=source, rule_id=rule_id, incident_id=incident_id, gsl_id=gsl_id,
+        org_id=org_id, source=source, rule_id=rule_id, incident_id=incident_id, gsl_id=gsl_id,
         objekt_id=objekt_id, document_type=document_type, artifact_ref=artifact_ref,
         printer_id=printer_id,
     )
@@ -122,8 +126,20 @@ def create_print_job(
         idempotency_key=key,
         created_by_id=created_by_id,
     )
-    db.add(job)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(job)
+            db.flush()
+    except IntegrityError:
+        existing = (
+            db.query(PrintJob)
+            .filter(PrintJob.idempotency_key == key)
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
+        if existing is not None:
+            return existing, False
+        raise
     return job, True
 
 
@@ -226,19 +242,34 @@ def on_event(db: Session, org_id: int, trigger: str, context: dict) -> list[Prin
 
 
 def _filter_matches(rule, context: dict) -> bool:
+    from app.models.gateway import TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_UPDATED
+
     f = rule.filters or {}
+    hat_einsatzbezug = rule.trigger in (TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_UPDATED)
+    uebung = f.get("uebung", "alle")
+    if uebung in ("nur_echt", "nur_uebung"):
+        is_exercise = context.get("is_exercise")
+        if is_exercise is None:
+            logger.warning("Druckregel %s übersprungen: Übungsstatus im Kontext fehlt", rule.id)
+            return False
+        if uebung == "nur_echt" and is_exercise:
+            return False
+        if uebung == "nur_uebung" and not is_exercise:
+            return False
     min_stufe = f.get("min_alarmstufe")
-    if min_stufe is not None and context.get("alarmstufe") is not None:
+    if min_stufe is not None and hat_einsatzbezug:
+        if context.get("alarmstufe") is None:
+            return False
         try:
             if int(context["alarmstufe"]) < int(min_stufe):
                 return False
         except (ValueError, TypeError):
-            pass
+            return False
     stichworte = f.get("stichwort") or []
     if stichworte and context.get("stichwort"):
         if not any(s.lower() in str(context["stichwort"]).lower() for s in stichworte):
             return False
-    if f.get("nur_bma") and not context.get("nur_bma"):
+    if f.get("nur_bma") and hat_einsatzbezug and not context.get("nur_bma"):
         return False
     fenster = f.get("zeitfenster") or {}
     von, bis = fenster.get("von"), fenster.get("bis")
@@ -251,6 +282,49 @@ def _filter_matches(rule, context: dict) -> bool:
         elif not (now >= von or now <= bis):
             return False
     return True
+
+
+def _incident_context(inc) -> dict:
+    """Vollständiger Filterkontext eines Einsatzes."""
+    alarm_code = getattr(inc, "alarm_type_code", None)
+    if not isinstance(alarm_code, str):
+        alarm_code = ""
+    treffer = re.search(r"\d+", alarm_code)
+    from sqlalchemy.orm.exc import UnmappedInstanceError
+
+    from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
+    try:
+        session = Session.object_session(inc)
+    except UnmappedInstanceError:
+        session = None
+    objekt_links = [] if session is None else (
+        session.query(ObjektEinsatz)
+        .filter(
+            ObjektEinsatz.incident_id == inc.id,
+            ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
+        )
+        .all()
+    )
+    nur_bma = any(
+        link.objekt and link.objekt.bma and link.objekt.bma.bma_nummer
+        for link in objekt_links
+    )
+    return {
+        "incident_id": inc.id,
+        "stichwort": getattr(inc, "reason", None) or getattr(inc, "report_text", None),
+        "is_exercise": getattr(inc, "is_exercise", None),
+        "alarmstufe": int(treffer.group()) if treffer else None,
+        "nur_bma": nur_bma,
+    }
+
+
+def _gsl_context(lage) -> dict:
+    """Vollständiger Filterkontext einer Großschadenslage."""
+    return {
+        "gsl_id": lage.id,
+        "stichwort": lage.name,
+        "is_exercise": getattr(lage, "is_exercise", None),
+    }
 
 
 async def autoprint_incident_background(incident_id: int) -> None:
@@ -269,10 +343,7 @@ async def autoprint_incident_background(incident_id: int) -> None:
             return
         org_id = inc.primary_org_id
         set_tenant_context(db, org_id)
-        context = {
-            "incident_id": incident_id,
-            "stichwort": getattr(inc, "reason", None) or getattr(inc, "report_text", None),
-        }
+        context = _incident_context(inc)
         jobs = on_event(db, org_id, TRIGGER_EINSATZ_CREATED, context)
         db.commit()
         for job in jobs:
@@ -282,6 +353,33 @@ async def autoprint_incident_background(incident_id: int) -> None:
                 logger.warning("Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
     except Exception as exc:  # pragma: no cover
         logger.warning("Auto-Druck fehlgeschlagen (Einsatz %s): %s", incident_id, exc)
+    finally:
+        db.close()
+
+
+async def autoprint_gsl_background(lage_id: int) -> None:
+    """Background-Hook nach Anlage einer Großschadenslage."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.gateway import TRIGGER_GSL_CREATED
+    from app.models.major_incident import MajorIncident
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        lage = db.get(MajorIncident, lage_id)
+        if lage is None or lage.org_id is None:
+            return
+        set_tenant_context(db, lage.org_id)
+        jobs = on_event(db, lage.org_id, TRIGGER_GSL_CREATED, _gsl_context(lage))
+        db.commit()
+        for job in jobs:
+            try:
+                await dispatch_job(db, job)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("GSL-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("GSL-Auto-Druck fehlgeschlagen (Lage %s): %s", lage_id, exc)
     finally:
         db.close()
 
@@ -422,7 +520,12 @@ def _jobs_for_rule(
 ) -> list[PrintJob]:
     """Erzeugt Jobs einer Regel: je Dokument × Zieldrucker sowie – bei zugeordnetem
     Objekt – je Objekt-Element-Seite × Zieldrucker (idempotent, außer bei source=manual)."""
-    from app.models.gateway import DOC_OBJEKT_DOKUMENT, DOC_OBJEKTBLATT, DOC_VERLEIH_SCHEIN
+    from app.models.gateway import (
+        DOC_OBJEKT_DOKUMENT,
+        DOC_OBJEKTBLATT,
+        DOC_VERLEIH_SCHEIN,
+        TRIGGER_DOCUMENT_TYPES,
+    )
 
     jobs: list[PrintJob] = []
     printer_ids = rule.printer_ids or []
@@ -439,9 +542,20 @@ def _jobs_for_rule(
             jobs.append(job)
 
     documents = rule.documents or []
+    erlaubte_typen = (
+        frozenset(documents) | {DOC_OBJEKT_DOKUMENT}
+        if source == JOB_SOURCE_MANUAL
+        else TRIGGER_DOCUMENT_TYPES.get(rule.trigger, frozenset())
+    )
 
     # 1) Dokumenttypen (Einsatzinfo, GSL-Lageblatt, Objektblatt …)
     for document_type in documents:
+        if document_type not in erlaubte_typen:
+            logger.warning(
+                "Dokumenttyp %s für Druckregel %s mit Auslöser %s übersprungen",
+                document_type, rule.id, rule.trigger,
+            )
+            continue
         if document_type == DOC_VERLEIH_SCHEIN:
             continue  # braucht Vorgangs-Kontext → unten mit artifact_ref (ausleihe_id)
         if document_type == DOC_OBJEKTBLATT:
@@ -463,14 +577,15 @@ def _jobs_for_rule(
             _add(printer_id=printer_id, document_type=document_type, objekt_id=context.get("objekt_id"))
 
     # 1b) Verleihschein: nur sinnvoll mit ausleihe_id im Kontext (Trigger verleih_created).
-    if DOC_VERLEIH_SCHEIN in documents and context.get("ausleihe_id"):
+    if (DOC_VERLEIH_SCHEIN in documents and DOC_VERLEIH_SCHEIN in erlaubte_typen
+            and context.get("ausleihe_id")):
         for printer_id in printer_ids:
             _add(printer_id=printer_id, document_type=DOC_VERLEIH_SCHEIN,
                  artifact_ref=str(context["ausleihe_id"]))
 
     # 2) Objekt-Elemente → konkrete Objekt-Dokumentseiten des zugeordneten Objekts
     objekt_elements = rule.objekt_elements or []
-    if objekt_elements:
+    if objekt_elements and DOC_OBJEKT_DOKUMENT in erlaubte_typen:
         for objekt_id in _resolve_objekt_ids(db, context):
             for seite in _seiten_for_elements(db, objekt_id, objekt_elements):
                 for printer_id in printer_ids:
@@ -492,10 +607,7 @@ def build_test_jobs(db: Session, rule, incident) -> list[PrintJob]:
     )
     if gateway is None:
         return []
-    context = {
-        "incident_id": incident.id,
-        "stichwort": getattr(incident, "reason", None) or getattr(incident, "report_text", None),
-    }
+    context = _incident_context(incident)
     jobs = _jobs_for_rule(db, gateway, rule, context, source=JOB_SOURCE_MANUAL)
     if jobs:
         db.flush()

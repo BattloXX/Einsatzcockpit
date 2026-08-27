@@ -211,6 +211,7 @@
     {% if q.get('discover') %}<div class="gwx-alert gwx-alert--info">Netzwerksuche angestoßen – Vorschläge erscheinen nach kurzer Zeit.</div>{% endif %}
     {% if q.get('test') %}<div class="gwx-alert gwx-alert--info">Testseite gesendet.</div>{% endif %}
     {% if q.get('error') == 'rule_dup' %}<div class="gwx-alert gwx-alert--err">Regelname bereits vergeben.</div>{% endif %}
+    {% if q.get('error') == 'rule_documents' %}<div class="gwx-alert gwx-alert--err">Die gewählten Dokumente passen nicht zum Auslöser.</div>{% endif %}
     {% if q.get('error') == 'printer' %}<div class="gwx-alert gwx-alert--err">Bitte Name und IP angeben.</div>{% endif %}
     {% if q.get('test_ok') %}<div class="gwx-alert gwx-alert--ok">Testdruck ausgelöst: {{ q.get('test_ok') }} Auftrag/Aufträge{% if q.get('test_inc') %} (Einsatz #{{ q.get('test_inc') }}){% endif %} an die Zieldrucker gesendet.</div>{% endif %}
     {% if q.get('test_err') == 'printer' %}<div class="gwx-alert gwx-alert--err">Testdruck: Der Regel ist kein Zieldrucker zugewiesen.</div>{% endif %}
@@ -533,7 +534,7 @@
               <input type="hidden" name="gw" value="{{ gw.id }}">
               <input class="gwx-input" style="width:auto;" type="text" name="name" placeholder="Regelname" required>
               <select name="trigger" style="width:auto;">
-                {% for key, label in trigger_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                {% for key, label in trigger_labels.items() %}<option value="{{ key }}">{{ label }}{% if key in ('einsatz_updated', 'gsl_lage_updated', 'alarm_serial_received') %} (noch nicht aktiv){% endif %}</option>{% endfor %}
               </select>
               <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">+ Regel</button>
             </form>
@@ -561,6 +562,8 @@
                     {{ (r.printer_ids or [])|length }} Drucker ·
                     {{ o.get('copies', 1) }}×
                     {% if f.get('stichwort') %} · Stichwort: {{ f.get('stichwort')|join(', ') }}{% endif %}
+                    {% if f.get('uebung') == 'nur_echt' %} · <span class="gwx-chip">nur Echteinsätze</span>{% endif %}
+                    {% if f.get('uebung') == 'nur_uebung' %} · <span class="gwx-chip">nur Übungen</span>{% endif %}
                     {% if fenster.get('von') %} · {{ fenster.get('von') }}–{{ fenster.get('bis') }}{% endif %}
                   </div>
                 </div>
@@ -580,7 +583,7 @@
               </div>
 
               <div class="gwx-rule__body" x-show="open" x-cloak>
-                <form method="post" action="/gateway/rules/{{ r.id }}/save">
+                <form method="post" action="/gateway/rules/{{ r.id }}/save" x-data="{ trigger: '{{ r.trigger }}' }">
                   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                   <input type="hidden" name="gw" value="{{ gw.id }}">
 
@@ -588,24 +591,28 @@
                     <div class="gwx-field"><label class="gwx-label">Regelname</label>
                       <input class="gwx-input" type="text" name="name" value="{{ r.name }}"></div>
                     <div class="gwx-field"><label class="gwx-label">Auslöser</label>
-                      <select name="trigger">
+                      <select name="trigger" x-model="trigger">
                         {% for key, label in trigger_labels.items() %}
-                        <option value="{{ key }}" {{ 'selected' if r.trigger==key }}>{{ label }}</option>{% endfor %}
+                        <option value="{{ key }}" {{ 'selected' if r.trigger==key }}>{{ label }}{% if key in ('einsatz_updated', 'gsl_lage_updated', 'alarm_serial_received') %} (noch nicht aktiv){% endif %}</option>{% endfor %}
                       </select></div>
                   </div>
 
                   <div class="gwx-sechd">📄 Inhalte (Dokumente)</div>
                   <div class="gwx-checks">
                     {% for key, label in doc_labels.items() %}
-                    <label class="gwx-check"><input type="checkbox" name="documents" value="{{ key }}"
+                    {% if key in ('einsatzinfo', 'objektblatt') %}{% set doc_trigger = "trigger === 'einsatz_created'" %}
+                    {% elif key in ('gsl_lageblatt', 'gsl_bericht') %}{% set doc_trigger = "trigger === 'gsl_created'" %}
+                    {% elif key == 'alarm_rohtext' %}{% set doc_trigger = "trigger === 'alarm_serial_received'" %}
+                    {% else %}{% set doc_trigger = "trigger === 'verleih_created'" %}{% endif %}
+                    <label class="gwx-check" x-show="{{ doc_trigger }}"><input type="checkbox" name="documents" value="{{ key }}" :disabled="!({{ doc_trigger }})"
                       {{ 'checked' if key in (r.documents or []) }}> {{ label }}</label>
                     {% endfor %}
                   </div>
 
                   <div class="gwx-sechd">🏢 Objekt-Elemente (bei zugeordnetem Objekt)</div>
-                  <div class="gwx-checks">
+                  <div class="gwx-checks" x-show="trigger === 'einsatz_created'">
                     {% for key, label in objekt_element_labels.items() %}
-                    <label class="gwx-check"><input type="checkbox" name="objekt_elements" value="{{ key }}"
+                    <label class="gwx-check"><input type="checkbox" name="objekt_elements" value="{{ key }}" :disabled="trigger !== 'einsatz_created'"
                       {{ 'checked' if key in (r.objekt_elements or []) }}> {{ label }}</label>
                     {% endfor %}
                   </div>
@@ -656,6 +663,12 @@
 
                   <div class="gwx-sechd">🎯 Filter (optional – wann greift die Regel?)</div>
                   <div class="gwx-formgrid">
+                    <div class="gwx-field"><label class="gwx-label">Einsatzart</label>
+                      <select name="filter_uebung">
+                        <option value="alle" {{ 'selected' if f.get('uebung', 'alle') == 'alle' }}>Alle Einsätze</option>
+                        <option value="nur_echt" {{ 'selected' if f.get('uebung') == 'nur_echt' }}>Nur Echteinsätze</option>
+                        <option value="nur_uebung" {{ 'selected' if f.get('uebung') == 'nur_uebung' }}>Nur Übungen</option>
+                      </select></div>
                     <div class="gwx-field"><label class="gwx-label">Min. Alarmstufe</label>
                       <input class="gwx-input gwx-input--mono" type="number" name="min_alarmstufe" value="{{ f.get('min_alarmstufe','') }}" placeholder="egal"></div>
                     <div class="gwx-field"><label class="gwx-label">Stichwort enthält (Komma-getrennt)</label>

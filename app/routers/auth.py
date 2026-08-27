@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.audit import write_audit
+from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import (
     hash_api_key,
@@ -59,11 +60,11 @@ def _safe_next(next_url: str | None) -> str:
 
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, next: str = "", fcm_token: str = ""):
-    if getattr(request.state, "user", None):
+async def login_page(request: Request, next: str = "", fcm_token: str = "", add: int = 0):
+    if getattr(request.state, "user", None) and not add:
         return RedirectResponse(_safe_next(next), status_code=302)
     return templates.TemplateResponse(
-        request, "login.html", {"error": None, "next": next, "fcm_token": fcm_token}
+        request, "login.html", {"error": None, "next": next, "fcm_token": fcm_token, "add": bool(add)}
     )
 
 
@@ -168,6 +169,10 @@ async def login(
         redirect, token,
         max_age=settings.SESSION_REMEMBER_MAX_AGE_SECONDS if is_remember else None,
     )
+    set_accounts_cookie(
+        redirect,
+        add_account(load_accounts(request.cookies.get(ACCOUNTS_COOKIE)), user.id, is_remember),
+    )
     return redirect
 
 
@@ -268,13 +273,9 @@ async def device_login_pin_submit(request: Request, pin: str = Form(...), db: Se
 
 @router.get("/logout")
 async def logout(request: Request, db: Session = Depends(get_db)):
-    user = getattr(request.state, "user", None)
-    if user:
-        write_audit(db, "auth.logout", user_id=user.id)
-        db.commit()
-    response = RedirectResponse("/login", status_code=302)
-    response.delete_cookie("session", path="/")
-    return response
+    from app.routers.ui_account_switch import logout_oder_wechseln
+
+    return logout_oder_wechseln(request, db)
 
 
 @router.get("/qr-login")

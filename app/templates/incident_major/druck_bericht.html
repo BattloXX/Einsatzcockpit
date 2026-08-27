@@ -122,6 +122,12 @@
 {% endif %}
 
 <div class="header">
+  {% if qr_datauri %}
+  <div style="float:right;text-align:center;font-size:8pt;color:#555;">
+    <img src="{{ qr_datauri }}" alt="QR-Code Lageboard" style="width:28mm;height:28mm;"><br>
+    Scannen → PIN eingeben → Lageboard
+  </div>
+  {% endif %}
   <h1>{{ lage.name }}</h1>
   <div class="header__meta">
     Beginn: {{ lage.started_at|local_datetime }}

@@ -750,6 +750,13 @@ async def enrich_and_broadcast(
     rsvp_changed_ids = result.get("rsvp_changed_ids") or []
     closed_ids = result.get("closed_ids") or []
     objekt_match_ids = result.get("objekt_match_ids") or []
+    created_ids = result.get("created_ids") or []
+    for incident_id in created_ids:
+        try:
+            from app.services.print_dispatcher import autoprint_incident_background
+            await autoprint_incident_background(incident_id)
+        except Exception:
+            logger.exception("DIBOS-Auto-Druck fehlgeschlagen (Einsatz %s)", incident_id)
     for incident_id in objekt_match_ids:
         try:
             from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo

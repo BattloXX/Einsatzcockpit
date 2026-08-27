@@ -19,6 +19,29 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png?v={{ IMG_VERSION }}">
   <link rel="icon" type="image/png" sizes="192x192" href="/static/img/icon-192.png?v={{ IMG_VERSION }}">
   <link rel="apple-touch-icon" sizes="192x192" href="/static/img/icon-192.png?v={{ IMG_VERSION }}">
+  <script>
+    // WebSockets dieses Tabs werden vor dem Kontowechsel geschlossen. Die Zielseite
+    // baut sie mit dem neuen Session-Cookie neu auf. Andere offene Tabs verwenden
+    // bis zu ihrem eigenen Reconnect weiterhin die beim Handshake gelesene Identitaet.
+    (function() {
+      var NativeWebSocket = window.WebSocket;
+      var offeneSockets = new Set();
+      function ErfassterWebSocket(url, protocols) {
+        var socket = protocols === undefined
+          ? new NativeWebSocket(url)
+          : new NativeWebSocket(url, protocols);
+        offeneSockets.add(socket);
+        socket.addEventListener("close", function() { offeneSockets.delete(socket); });
+        return socket;
+      }
+      ErfassterWebSocket.prototype = NativeWebSocket.prototype;
+      Object.setPrototypeOf(ErfassterWebSocket, NativeWebSocket);
+      window.WebSocket = ErfassterWebSocket;
+      window.ecKontowechselVorbereiten = function() {
+        offeneSockets.forEach(function(socket) { socket.close(1000, "Benutzerwechsel"); });
+      };
+    })();
+  </script>
   {% block head_extra %}{% endblock %}
 </head>
 <body x-data="appState()" @incident-created.window="onIncidentCreated($event.detail)"
@@ -164,6 +187,25 @@
           {% if request.state.is_native_app %}
           <a href="https://localhost/about.html">ℹ️ Über die App</a>
           {% endif %}
+          {% if not request.state.is_device and not request.state.qr_incident_id and not request.state.qr_lage_id %}
+          <div style="padding:8px 16px 4px;font-size:.7rem;font-weight:700;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase;border-top:1px solid var(--border);margin-top:4px;">Benutzer wechseln</div>
+          {% for account in request.state.accounts %}
+          <form method="post" action="/benutzer/wechseln" onsubmit="window.ecKontowechselVorbereiten()">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <input type="hidden" name="user_id" value="{{ account.user_id }}">
+            <input type="hidden" name="fcm_token" value="{{ request.query_params.get('fcm_token', '') }}">
+            <button type="submit" style="display:block;width:100%;text-align:left;padding:7px 16px;background:none;color:var(--on-surface);border:none;cursor:pointer;font-size:.88rem;">
+              {% if account.is_active_account %}✓ {% endif %}{{ account.display_name }}<br>
+              <span style="font-size:.72rem;color:var(--text-muted);">{{ account.org_name }}</span>
+            </button>
+          </form>
+          {% endfor %}
+          <a href="/benutzer/hinzufuegen">➕ Weiteren Benutzer anmelden</a>
+          <form method="post" action="/logout/alle">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button type="submit" style="display:block;width:100%;text-align:left;padding:8px 16px;background:none;color:var(--on-surface);border:none;cursor:pointer;font-size:.88rem;">🚪 Alle abmelden</button>
+          </form>
+          {% endif %}
           <a href="{% if request.state.is_native_app %}https://localhost/?native_logout=1{% else %}/logout{% endif %}">🚪 Abmelden</a>
         </div>
       </div>
@@ -233,6 +275,24 @@
       {% endif %}
       {% if is_admin %}
       <a href="/admin" class="mobile-menu__link {% if '/admin' in request.url.path %}active{% endif %}">⚙ Verwaltung</a>
+      {% endif %}
+      {% if not request.state.is_device and not request.state.qr_incident_id and not request.state.qr_lage_id %}
+      <div class="mobile-menu__group-hdr">Benutzer wechseln</div>
+      {% for account in request.state.accounts %}
+      <form method="post" action="/benutzer/wechseln" onsubmit="window.ecKontowechselVorbereiten()">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="user_id" value="{{ account.user_id }}">
+        <input type="hidden" name="fcm_token" value="{{ request.query_params.get('fcm_token', '') }}">
+        <button type="submit" class="mobile-menu__link" style="width:100%;border:none;background:none;text-align:left;">
+          {% if account.is_active_account %}✓ {% endif %}{{ account.display_name }} · {{ account.org_name }}
+        </button>
+      </form>
+      {% endfor %}
+      <a href="/benutzer/hinzufuegen" class="mobile-menu__link">➕ Weiteren Benutzer anmelden</a>
+      <form method="post" action="/logout/alle">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="mobile-menu__link" style="width:100%;border:none;background:none;text-align:left;">🚪 Alle abmelden</button>
+      </form>
       {% endif %}
       <button type="button" class="btn btn--secondary btn--full pwa-install-btn" style="display:none">
         📲 App installieren

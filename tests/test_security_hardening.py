@@ -96,6 +96,42 @@ def test_qr_pin_rate_limit_enforced(client, setup_db):
     assert 429 in statuses, f"Rate-Limit griff nicht, Status-Codes: {statuses}"
 
 
+def test_lage_qr_pin_rate_limit_enforced(client, setup_db):
+    """>5 falsche Lage-PINs in 15 Minuten müssen 429 auslösen."""
+    from urllib.parse import parse_qs, urlparse
+
+    from app.models.major_incident import MajorIncident
+    from app.models.master import FireDept
+    from app.services.incident_qr_service import lage_qr_login_url
+
+    limiter.reset()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org = FireDept(slug="lage-pin-limit", name="Lage PIN Limit")
+        db.add(org)
+        db.flush()
+        lage = MajorIncident(org_id=org.id, name="PIN-Lage", access_pin_hash=hash_pin("1234"))
+        db.add(lage)
+        db.commit()
+        url = lage_qr_login_url(db, lage)
+        token = parse_qs(urlparse(url).query)["token"][0]
+        lage_id = lage.id
+    finally:
+        db.close()
+    client.get("/login")
+    csrf = client.cookies.get("ec_csrf")
+    statuses = []
+    for _ in range(7):
+        antwort = client.post(
+            f"/lage/{lage_id}/qr-pin",
+            data={"token": token, "pin": "9999", "_csrf": csrf},
+            follow_redirects=False,
+        )
+        statuses.append(antwort.status_code)
+    assert 429 in statuses, f"Rate-Limit griff nicht, Status-Codes: {statuses}"
+
+
 # ── SEC-2: fcm-token DELETE Auth + Owner-Scope ───────────────────────────────
 
 def test_fcm_token_delete_requires_auth(client, setup_db):
