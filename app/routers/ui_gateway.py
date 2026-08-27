@@ -20,6 +20,7 @@ from app.models.gateway import (
     DOCUMENT_TYPE_LABELS,
     OBJEKT_ELEMENT_LABELS,
     RULE_DOCUMENT_LABELS,
+    TRIGGER_DOCUMENT_TYPES,
     TRIGGER_LABELS,
     Gateway,
     Printer,
@@ -470,6 +471,7 @@ def rule_save(
     min_alarmstufe: int | None = Form(None),
     stichwort: str = Form(""),
     nur_bma: str = Form(""),
+    filter_uebung: str = Form("alle"),
     zeit_von: str = Form(""),
     zeit_bis: str = Form(""),
     copies: int = Form(1),
@@ -500,13 +502,21 @@ def rule_save(
     if trigger in TRIGGER_LABELS:
         rule.trigger = trigger
 
-    rule.documents = [d for d in documents if d in RULE_DOCUMENT_LABELS]
+    ausgewaehlte_dokumente = [d for d in documents if d in RULE_DOCUMENT_LABELS]
+    erlaubte_dokumente = TRIGGER_DOCUMENT_TYPES.get(rule.trigger, frozenset())
+    if any(d not in erlaubte_dokumente for d in ausgewaehlte_dokumente):
+        return RedirectResponse(
+            _rule_return(gw, f"error=rule_documents#regel-{rule.id}"), status_code=303,
+        )
+    rule.documents = ausgewaehlte_dokumente
     rule.objekt_elements = [e for e in objekt_elements if e in OBJEKT_ELEMENT_LABELS]
     rule.printer_ids = [int(p) for p in printer_ids]
     rule.fallback_printer_id = fallback_printer_id
 
     # Filter: nur gesetzte Schlüssel speichern (leere = kein Filter)
     filters: dict = {}
+    if filter_uebung in ("nur_echt", "nur_uebung"):
+        filters["uebung"] = filter_uebung
     if min_alarmstufe:
         filters["min_alarmstufe"] = int(min_alarmstufe)
     stichworte = [s.strip() for s in stichwort.replace(";", ",").split(",") if s.strip()]

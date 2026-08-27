@@ -130,6 +130,9 @@ async def ingest_alarm(
                 )
             from app.services.objekt_matching_service import match_incident_background
             background_tasks.add_task(match_incident_background, inc.id)
+            if ingest.dedup_action == "created":
+                from app.services.print_dispatcher import autoprint_incident_background
+                background_tasks.add_task(autoprint_incident_background, inc.id)
 
     return {
         "ingest_id": ingest.id,

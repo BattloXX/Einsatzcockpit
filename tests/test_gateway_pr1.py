@@ -1,5 +1,6 @@
 """ECPG PR1: Feature-Flag, Pairing, Artifact-Signatur, Idempotenz, Job-Anlage,
 serieller Ingest, printer_report, Tenant-Isolation."""
+# ruff: noqa: E402  # App-Imports erst nach Registrierung des SQLite-BigInteger-Compilers.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -7,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import BigInteger, create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
 
@@ -26,7 +28,6 @@ from app.models.gateway import (
     GATEWAY_STATUS_OFFLINE,
     GATEWAY_STATUS_UNPAIRED,
     Gateway,
-    PrintJob,
     Printer,
 )
 from app.services import gateway_service as gw_svc
@@ -171,19 +172,20 @@ def test_rotate_and_revoke(db):
 # ── Idempotenz + Job-Anlage ──────────────────────────────────────────────────────
 
 def test_idempotency_manual_always_unique():
-    k1 = disp.build_idempotency_key(source="manual", rule_id=None, incident_id=1,
+    k1 = disp.build_idempotency_key(org_id=_ORG_A, source="manual", rule_id=None, incident_id=1,
                                     gsl_id=None, objekt_id=None, document_type="einsatzinfo",
                                     artifact_ref=None, printer_id=2)
-    k2 = disp.build_idempotency_key(source="manual", rule_id=None, incident_id=1,
+    k2 = disp.build_idempotency_key(org_id=_ORG_A, source="manual", rule_id=None, incident_id=1,
                                     gsl_id=None, objekt_id=None, document_type="einsatzinfo",
                                     artifact_ref=None, printer_id=2)
     assert k1 != k2 and k1.startswith("manual:")
 
 
 def test_idempotency_rule_deterministic():
-    kw = dict(source="rule", rule_id=3, incident_id=1, gsl_id=None, objekt_id=None,
+    kw = dict(org_id=_ORG_A, source="rule", rule_id=3, incident_id=1, gsl_id=None, objekt_id=None,
               document_type="einsatzinfo", artifact_ref=None, printer_id=2)
     assert disp.build_idempotency_key(**kw) == disp.build_idempotency_key(**kw)
+    assert disp.build_idempotency_key(**kw) != disp.build_idempotency_key(**(kw | {"org_id": _ORG_B}))
 
 
 def test_create_print_job_rule_dedup(db):
@@ -200,6 +202,23 @@ def test_create_print_job_rule_dedup(db):
     assert job1.id == job2.id
 
 
+def test_create_print_job_race_liefert_bestehenden_job():
+    """Ein Unique-Konflikt zwischen Vorabprüfung und Insert bleibt idempotent."""
+    fake_db = MagicMock()
+    existing = MagicMock(id=77)
+    abfrage = fake_db.query.return_value.filter.return_value.execution_options.return_value
+    abfrage.first.side_effect = [None, existing]
+    fake_db.flush.side_effect = IntegrityError("insert", {}, Exception("unique"))
+
+    job, created = disp.create_print_job(
+        fake_db, org_id=_ORG_A, gateway_id=1, printer_id=2,
+        document_type="einsatzinfo", source="rule", rule_id=5, incident_id=100,
+    )
+
+    assert job is existing
+    assert created is False
+
+
 def test_create_print_job_manual_new_each_time(db):
     gw = _make_gateway(db)
     j1, c1 = disp.create_print_job(db, org_id=_ORG_A, gateway_id=gw.id, printer_id=1,
@@ -213,9 +232,73 @@ def test_create_print_job_manual_new_each_time(db):
 
 def test_filter_min_alarmstufe():
     rule = MagicMock()
+    rule.trigger = "einsatz_created"
     rule.filters = {"min_alarmstufe": 3}
     assert disp._filter_matches(rule, {"alarmstufe": 5}) is True
     assert disp._filter_matches(rule, {"alarmstufe": 1}) is False
+    assert disp._filter_matches(rule, {"alarmstufe": None}) is False
+
+
+@pytest.mark.parametrize(
+    ("filterwert", "is_exercise", "erwartet"),
+    [
+        (None, False, True), (None, True, True),
+        ("alle", False, True), ("alle", True, True),
+        ("nur_echt", False, True), ("nur_echt", True, False),
+        ("nur_uebung", False, False), ("nur_uebung", True, True),
+    ],
+)
+def test_filter_uebung_matrix(filterwert, is_exercise, erwartet):
+    rule = MagicMock(id=7)
+    rule.filters = {} if filterwert is None else {"uebung": filterwert}
+    assert disp._filter_matches(rule, {"is_exercise": is_exercise}) is erwartet
+
+
+@pytest.mark.parametrize("filterwert", ["nur_echt", "nur_uebung"])
+def test_filter_uebung_ohne_kontext_fail_closed(filterwert, caplog):
+    rule = MagicMock(id=7, filters={"uebung": filterwert})
+    rule.filters = {"uebung": filterwert}
+    assert disp._filter_matches(rule, {}) is False
+    assert "Übungsstatus" in caplog.text
+
+
+def test_filter_nur_bma_mit_bma_kontext():
+    rule = MagicMock(filters={"nur_bma": True})
+    rule.filters = {"nur_bma": True}
+    rule.trigger = "einsatz_created"
+    assert disp._filter_matches(rule, {"nur_bma": True}) is True
+
+
+def test_incident_context_erkennt_bestaetigtes_bma_objekt(db):
+    from app.models.incident import Incident
+    from app.models.objekt import Objekt, ObjektBMA, ObjektEinsatz
+
+    incident = Incident(primary_org_id=_ORG_A, alarm_type_code="B3", is_exercise=False)
+    objekt = Objekt(org_id=_ORG_A, name="BMA-Testobjekt")
+    db.add_all([incident, objekt])
+    db.flush()
+    db.add(ObjektBMA(org_id=_ORG_A, objekt_id=objekt.id, bma_nummer="4711"))
+    db.add(ObjektEinsatz(
+        org_id=_ORG_A, incident_id=incident.id, objekt_id=objekt.id,
+        quelle="bma", status="bestaetigt",
+    ))
+    db.flush()
+
+    context = disp._incident_context(incident)
+    assert context["nur_bma"] is True
+    assert context["alarmstufe"] == 3
+
+
+def test_incident_context_alarmstufe_ohne_zahl_unbekannt():
+    incident = MagicMock(id=8, alarm_type_code="BMA", reason="Brandmeldeanlage",
+                         report_text=None, is_exercise=False,
+                         objekt_verknuepfungen=[])
+    context = disp._incident_context(incident)
+    assert context["alarmstufe"] is None
+    rule = MagicMock(filters={"min_alarmstufe": 2})
+    rule.filters = {"min_alarmstufe": 2}
+    rule.trigger = "einsatz_created"
+    assert disp._filter_matches(rule, context) is False
 
 
 def test_filter_stichwort():
@@ -272,6 +355,61 @@ def test_on_event_empty_when_module_off(db):
     # Org ohne Flag → keine Jobs
     jobs = disp.on_event(db, 991600, "einsatz_created", {"incident_id": 1})
     assert jobs == []
+
+
+def test_verleih_created_ignoriert_min_alarmstufe_und_nur_bma(db):
+    """Einsatzfilter blockieren einen nicht einsatzbezogenen Verleih-Trigger nicht."""
+    from app.models.gateway import PrintRule
+    from app.models.master import OrgSettings, SystemSettings
+
+    org = 991602
+    system_flag = (
+        db.query(SystemSettings)
+        .filter(SystemSettings.key == "gateway_module_enabled")
+        .first()
+    )
+    if system_flag is None:
+        db.add(SystemSettings(key="gateway_module_enabled", value="true"))
+    else:
+        system_flag.value = "true"
+    db.add(OrgSettings(org_id=org, gateway_module_enabled=True))
+    gw = Gateway(org_id=org, name="GW", device_token_hash=hash_api_key("verleih-tok"))
+    db.add(gw)
+    db.flush()
+    rule = PrintRule(
+        org_id=org, name="Verleih trotz Einsatzfilter", aktiv=True,
+        trigger="verleih_created", documents=["verleih_schein"], printer_ids=[1],
+        filters={"min_alarmstufe": 4, "nur_bma": True},
+    )
+    db.add(rule)
+    db.flush()
+
+    jobs = disp.on_event(
+        db, org, "verleih_created", {"gsl_id": 3, "ausleihe_id": 88},
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0].document_type == "verleih_schein"
+    assert jobs[0].artifact_ref == "88"
+
+
+def test_gsl_created_ueberspringt_einsatzinfo(db, caplog):
+    """Ein unpassender Altbestand erzeugt keinen Job und erreicht keinen Renderer."""
+    from app.models.gateway import PrintRule
+
+    org = 991601
+    gw = Gateway(org_id=org, name="GW", device_token_hash=hash_api_key("gsl-tok"))
+    db.add(gw)
+    db.flush()
+    rule = PrintRule(
+        org_id=org, name="Ungültiger Altbestand", aktiv=True, trigger="gsl_created",
+        documents=["einsatzinfo"], printer_ids=[1],
+    )
+    db.add(rule)
+    db.flush()
+
+    assert disp._jobs_for_rule(db, gw, rule, {"gsl_id": 44}) == []
+    assert "übersprungen" in caplog.text
 
 
 def test_objekt_elements_create_dokumentseiten_jobs(db):
