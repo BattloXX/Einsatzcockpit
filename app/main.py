@@ -3,6 +3,7 @@ import asyncio
 import logging
 import secrets as _secrets
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
@@ -14,6 +15,7 @@ from starlette.exceptions import HTTPException as _StarletteHTTPException
 
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
+from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
 from app.core.security import unsign_native_link_token, unsign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -33,6 +35,7 @@ from app.routers import (
     public_mailing_tracking,
     sso,
     teams_bot,
+    ui_account_switch,
     ui_admin,
     ui_ai_prompts,
     ui_annotation,
@@ -435,6 +438,7 @@ async def session_middleware(request: Request, call_next):
     request.state.qr_lage_id = None
     request.state.is_device = False
     request.state.device_token_id = None
+    request.state.accounts = []
     _refresh_user_id: int | None = None  # set for non-QR sessions to trigger cookie refresh
     _refresh_remember: bool = False      # "Login merken" – längeres, gleitendes Fenster
 
@@ -562,13 +566,61 @@ async def session_middleware(request: Request, call_next):
                 finally:
                     db.close()
 
+    _bereinigte_accounts = []
+    if (request.state.user is not None and not request.state.is_device
+            and request.state.qr_incident_id is None and request.state.qr_lage_id is None):
+        cookie_accounts = load_accounts(request.cookies.get(ACCOUNTS_COOKIE))
+        account_ids = [account["u"] for account in cookie_accounts]
+        if account_ids:
+            db = SessionLocal()
+            set_tenant_context(db, None)
+            try:
+                users = db.query(User).filter(User.id.in_(account_ids), User.active == True).all()  # noqa: E712
+                users_by_id = {user.id: user for user in users}
+                now = datetime.now(UTC)
+                for account in cookie_accounts:
+                    account_user = users_by_id.get(account["u"])
+                    if not account_user or account_user.is_device:
+                        continue
+                    locked_until = account_user.locked_until
+                    if locked_until and locked_until.tzinfo is None:
+                        locked_until = locked_until.replace(tzinfo=UTC)
+                    if locked_until and locked_until > now:
+                        continue
+                    _bereinigte_accounts.append(account)
+                    request.state.accounts.append({
+                        "user_id": account_user.id,
+                        "display_name": account_user.display_name,
+                        "org_name": account_user.org.name if account_user.org else "Keine Organisation",
+                        "is_active_account": account_user.id == request.state.user.id,
+                    })
+            except Exception:
+                logger.exception("session_middleware: Kontoliste konnte nicht validiert werden")
+                request.state.accounts = []
+                _bereinigte_accounts = []
+            finally:
+                db.close()
+        if _refresh_user_id is not None:
+            _bereinigte_accounts = add_account(
+                _bereinigte_accounts, _refresh_user_id, _refresh_remember,
+            )
+            if not any(account["is_active_account"] for account in request.state.accounts):
+                active_user = request.state.user
+                request.state.accounts.append({
+                    "user_id": active_user.id,
+                    "display_name": active_user.display_name,
+                    "org_name": active_user.org.name if active_user.org else "Keine Organisation",
+                    "is_active_account": True,
+                })
+            request.state.accounts.sort(key=lambda account: not account["is_active_account"])
+
     response = await call_next(request)
 
     # Sliding-Window-Refresh, ABER nicht auf /logout: dort löscht der Handler das
     # Session-Cookie – ein Refresh würde es sofort wieder setzen und das Abmelden
     # damit wirkungslos machen.
     if (_refresh_user_id is not None and request.state.user is not None
-            and request.url.path != "/logout"):
+            and request.url.path not in {"/logout", "/logout/alle", "/login", "/benutzer/wechseln"}):
         from app.core.security import sign_session as _sign
         _cookie_max_age = (
             settings.SESSION_REMEMBER_MAX_AGE_SECONDS if _refresh_remember
@@ -582,6 +634,7 @@ async def session_middleware(request: Request, call_next):
             samesite="lax",
             max_age=_cookie_max_age,
         )
+        set_accounts_cookie(response, _bereinigte_accounts)
 
     if _native_query and not request.cookies.get("ec_native"):
         response.set_cookie(
@@ -673,6 +726,7 @@ app.include_router(public_mailing_tracking.router)
 app.include_router(mailing_webhook.router)
 app.include_router(ui_password_reset.router)
 app.include_router(ui_pin_login.router)
+app.include_router(ui_account_switch.router)
 app.include_router(api_v1.router)
 app.include_router(api_weather.router)
 app.include_router(device_api.router)

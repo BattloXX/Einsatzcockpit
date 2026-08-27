@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.audit import write_audit
+from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import generate_numeric_pin, sign_session
 from app.core.telefon import telefon_kompakt
@@ -60,19 +61,29 @@ def _set_session_cookie(response: Response, token: str, max_age: int | None = No
 
 
 @router.get("/pin-login", response_class=HTMLResponse)
-async def pin_login_form(request: Request):
-    if getattr(request.state, "user", None):
+async def pin_login_form(request: Request, add: int = 0):
+    if getattr(request.state, "user", None) and not add:
         return RedirectResponse("/", status_code=302)
-    return templates.TemplateResponse(request, "auth/pin_login.html", {"error": None})
+    return templates.TemplateResponse(
+        request, "auth/pin_login.html", {"error": None, "add": bool(add)},
+    )
 
 
 @router.post("/pin-login", response_class=HTMLResponse)
 @(_limiter.limit("5/minute") if _limiter else lambda f: f)
-async def pin_login_submit(request: Request, phone: str = Form(...), db: Session = Depends(get_db)):
+async def pin_login_submit(
+    request: Request,
+    phone: str = Form(...),
+    add: int = Form(0),
+    db: Session = Depends(get_db),
+):
     phone_norm = telefon_kompakt(phone)
     # Immer zur Code-Eingabe weiterleiten — unabhängig davon, ob die Nummer
     # registriert ist (kein Enumerations-Leak, Muster ui_password_reset.py).
-    redirect = RedirectResponse(f"/pin-login/code?phone={phone_norm}", status_code=303)
+    add_query = "&add=1" if add else ""
+    redirect = RedirectResponse(
+        f"/pin-login/code?phone={phone_norm}{add_query}", status_code=303,
+    )
     if not phone_norm:
         return redirect
 
@@ -112,11 +123,13 @@ async def pin_login_submit(request: Request, phone: str = Form(...), db: Session
 
 
 @router.get("/pin-login/code", response_class=HTMLResponse)
-async def pin_login_code_form(request: Request, phone: str = ""):
-    if getattr(request.state, "user", None):
+async def pin_login_code_form(request: Request, phone: str = "", add: int = 0):
+    if getattr(request.state, "user", None) and not add:
         return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse(
-        request, "auth/pin_login_code.html", {"error": None, "phone": phone},
+        request,
+        "auth/pin_login_code.html",
+        {"error": None, "phone": phone, "add": bool(add)},
     )
 
 
@@ -124,14 +137,14 @@ async def pin_login_code_form(request: Request, phone: str = ""):
 @(_limiter.limit("5/minute") if _limiter else lambda f: f)
 async def pin_login_code_submit(
     request: Request, phone: str = Form(...), pin: str = Form(...),
-    remember: str = Form(""), db: Session = Depends(get_db),
+    remember: str = Form(""), add: int = Form(0), db: Session = Depends(get_db),
 ):
     generic_error = "PIN ungültig oder abgelaufen."
 
     def _err() -> HTMLResponse:
         return templates.TemplateResponse(
             request, "auth/pin_login_code.html",
-            {"error": generic_error, "phone": phone}, status_code=401,
+            {"error": generic_error, "phone": phone, "add": bool(add)}, status_code=401,
         )
 
     phone_norm = telefon_kompakt(phone)
@@ -171,5 +184,9 @@ async def pin_login_code_submit(
     _set_session_cookie(
         redirect, token,
         max_age=settings.SESSION_REMEMBER_MAX_AGE_SECONDS if is_remember else None,
+    )
+    set_accounts_cookie(
+        redirect,
+        add_account(load_accounts(request.cookies.get(ACCOUNTS_COOKIE)), match.id, is_remember),
     )
     return redirect

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.crypto import decrypt_secret
+from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import sign_session
 from app.core.tenant import set_tenant_context
@@ -360,6 +361,10 @@ async def sso_callback(
     session_token = sign_session(user.id)
     redirect = RedirectResponse(_safe_next(flow.get("next")), status_code=302)
     _set_session_cookie(redirect, session_token)
+    set_accounts_cookie(
+        redirect,
+        add_account(load_accounts(request.cookies.get(ACCOUNTS_COOKIE)), user.id, False),
+    )
     redirect.delete_cookie(_FLOW_COOKIE, path="/")
     return redirect
 

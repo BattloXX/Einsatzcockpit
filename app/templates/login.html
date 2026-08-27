@@ -23,6 +23,13 @@
       {% if error %}
       <div class="alert alert--error">{{ error }}</div>
       {% endif %}
+      {% if add %}
+      <div class="alert alert--info">
+        <strong>Weiteren Benutzer anmelden</strong><br>
+        Das derzeit aktive Konto bleibt für einen späteren Wechsel gespeichert.
+        <a href="/" class="link-sm">Zurück zur Übersicht</a>
+      </div>
+      {% endif %}
 
       {% set qerr = request.query_params.get('error') %}
       {% if qerr == 'qr_invalid' %}
@@ -71,7 +78,7 @@
       <div style="text-align:center; margin-top:14px;">
         <a href="/passwort-vergessen" class="link-sm" title="Passwort per E-Mail zurücksetzen">Passwort vergessen?</a>
         <span style="color:var(--text-muted);"> · </span>
-        <a href="/pin-login" class="link-sm" title="Passwortlos per SMS-PIN anmelden">Per SMS-PIN anmelden</a>
+        <a href="/pin-login{% if add %}?add=1{% endif %}" class="link-sm" title="Passwortlos per SMS-PIN anmelden">Per SMS-PIN anmelden</a>
       </div>
 
       <div style="margin:18px 0 0;display:flex;align-items:center;gap:10px;color:var(--color-text-muted,#6b7280)">

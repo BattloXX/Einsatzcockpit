@@ -26,6 +26,7 @@
       <form method="post" action="/pin-login/code" class="login-form">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="phone" value="{{ phone }}">
+        <input type="hidden" name="add" value="{% if add %}1{% else %}0{% endif %}">
         <div class="form-group">
           <label for="pin">PIN</label>
           <input type="text" id="pin" name="pin" required
@@ -43,7 +44,7 @@
         <button type="submit" class="btn btn--primary btn--full">Anmelden</button>
       </form>
       <div style="text-align:center; margin-top:14px;">
-        <a href="/pin-login" class="link-sm">← andere Nummer / neuen PIN anfordern</a>
+        <a href="/pin-login{% if add %}?add=1{% endif %}" class="link-sm">← andere Nummer / neuen PIN anfordern</a>
       </div>
     </div>
   </div>
