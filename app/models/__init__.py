@@ -6,6 +6,11 @@ from app.models.atemschutz_pruefung import (
 from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
 from app.models.dibos import OrgDibosConfig
+from app.models.dienst_monitor import (  # noqa: F401 -- registriert ORM-Modelle
+    DienstMonitorLog,
+    DienstMonitorToken,
+    DienstStatus,
+)
 from app.models.fahrtenbuch import (
     Fahrt,
     FahrtBenachrichtigung,

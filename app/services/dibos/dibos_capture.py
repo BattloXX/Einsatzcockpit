@@ -212,7 +212,13 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
     ):
         try:
             result = await coro_factory()
-        except DibosClientError:
+            if label == "GetCurrentEvents":
+                from app.services.dienst_monitor_service import record_probe
+                record_probe(recorder.org_id, "alarm_dibos", True)
+        except DibosClientError as exc:
+            if label == "GetCurrentEvents":
+                from app.services.dienst_monitor_service import record_probe
+                record_probe(recorder.org_id, "alarm_dibos", False, str(exc))
             logger.exception("DIBOS-Trace: %s fehlgeschlagen (Org %s)", label, recorder.org_id)
             continue
         if label == "GetCurrentEvents":

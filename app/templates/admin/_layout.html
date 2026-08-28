@@ -425,6 +425,11 @@
                {{ tip('VAPID, Push-Konfiguration, globale Parameter') }}>
               <span class="admin-nav__icon">⚙️</span>System
             </a>
+            <a href="/admin/systemstatus"
+               class="admin-nav__item {% if '/admin/systemstatus' in request.url.path %}is-active{% endif %}"
+               {{ tip('Status externer Gateways und Monitoring-Tokens verwalten') }}>
+              <span class="admin-nav__icon">🚦</span>Systemstatus
+            </a>
             <a href="/admin/system/server-log"
                class="admin-nav__item {% if '/admin/system/server-log' in request.url.path %}is-active{% endif %}"
                {{ tip('Live-Log des Server-Prozesses — Level-Filter, Auto-Refresh') }}>

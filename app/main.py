@@ -31,6 +31,7 @@ from app.routers import (
     gateway_api,
     lagekarte_api,
     mailing_webhook,
+    monitoring_api,
     public,
     public_mailing_tracking,
     sso,
@@ -47,6 +48,7 @@ from app.routers import (
     ui_breathing,
     ui_db_backup,
     ui_dibos,
+    ui_dienst_monitor,
     ui_druck,
     ui_einsatz_import,
     ui_fahrtenbuch,
@@ -245,6 +247,10 @@ async def lifespan(app: FastAPI):
     from app.services.weather_alert_loop import weather_alert_loop
     weather_alert_task = asyncio.create_task(weather_alert_loop())
 
+    # Background-Loop für die Dienstüberwachung (Gateways/Alarm, alle 60 s je Org)
+    from app.services.dienst_monitor_loop import dienst_monitor_loop
+    dienst_monitor_task = asyncio.create_task(dienst_monitor_loop())
+
     # Background-Loop für kontinuierliches Pegel-Polling (alle 10 Minuten je Org,
     # unabhängig von Seitenaufrufen – vermeidet Lücken im 24-h-Verlauf)
     from app.services.abfluss_poll_loop import abfluss_poll_loop
@@ -300,6 +306,7 @@ async def lifespan(app: FastAPI):
         sms_log_retention_task.cancel()
         vehicle_position_retention_task.cancel()
         weather_alert_task.cancel()
+        dienst_monitor_task.cancel()
         abfluss_poll_task.cancel()
         lis_task.cancel()
         lis_capture_retention_task.cancel()
@@ -312,6 +319,7 @@ async def lifespan(app: FastAPI):
         for t in (autoclose_task, watchdog_task, reminder_task, print_watchdog_task,
                   lagemeldung_task, verleih_task,
                   weather_retention_task, ai_log_retention_task, vehicle_position_retention_task, weather_alert_task,
+                  dienst_monitor_task,
                   abfluss_poll_task, lis_task, lis_capture_retention_task,
                   dibos_task, dibos_trace_retention_task,
                   nachschlagewerk_sync_task, org_backup_task, mailing_dispatch_task, mailing_schedule_task):
@@ -762,6 +770,8 @@ app.include_router(ui_org_mail.router)
 app.include_router(ui_mailing.router)
 app.include_router(ui_teams_bot.router)
 app.include_router(ui_sysadmin.router)
+app.include_router(ui_dienst_monitor.router)
+app.include_router(monitoring_api.router)
 app.include_router(ui_ai_prompts.router)
 app.include_router(ui_profile.router)
 app.include_router(ui_weather.router)
@@ -834,7 +844,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
     path = request.url.path
-    is_api = path.startswith("/api/") or path.endswith(".json")
+    is_api = path.startswith("/api/") or path.startswith("/health/dienst") or path.endswith(".json")
     wants_html = "text/html" in request.headers.get("accept", "") and not is_api
     user = getattr(request.state, "user", None)
 

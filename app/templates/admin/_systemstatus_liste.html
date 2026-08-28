@@ -1,0 +1,12 @@
+<div class="grid grid--cards">
+  {% for check in checks %}
+  {% set row = status_rows.get(check.key) %}
+  <article class="card">
+    <h3>{{ "🟢" if check.state == "ok" else ("🔴" if check.state == "down" else "⚪") }} {{ check.key|replace('_', ' ')|title }}</h3>
+    <p><strong>Rohstatus:</strong> {{ check.state }}</p>
+    <p><strong>Gemeldeter Status:</strong> {{ "Störung" if row and row.outage_notified_at else "OK" }}</p>
+    {% if row and row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}
+    <p>{{ check.detail }}</p>
+  </article>
+  {% endfor %}
+</div>

@@ -93,6 +93,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "weather_alert_rule",
     "weather_alert_state",
     "weather_alert_log",
+    "dienst_status",
+    "dienst_monitor_log",
     # Fahrtenbuch-Modul (TenantScoped via Mixin)
     "fahrtzweck",
     "zielort",

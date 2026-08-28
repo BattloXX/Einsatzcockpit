@@ -12,7 +12,7 @@ import json
 import logging
 import time
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -297,6 +297,20 @@ def _touch_sms_gateway_token(token_id: int) -> None:
         db.close()
 
 
+def _heartbeat_sms_gateway_token(token_id: int) -> None:
+    """Persistiert hoechstens einmal je Minute einen echten WS-Heartbeat."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        tok = db.get(SmsGatewayToken, token_id)
+        now = datetime.now(UTC).replace(tzinfo=None)
+        if tok and (tok.last_heartbeat_at is None or now - tok.last_heartbeat_at >= timedelta(seconds=60)):
+            tok.last_heartbeat_at = now
+            db.commit()
+    finally:
+        db.close()
+
+
 def _sms_receive_enabled(org_id: int) -> bool:
     """Liest OrgSettings.sms_receive_enabled – bestimmt ob die App RECEIVE_SMS anfordern soll."""
     from app.models.master import OrgSettings
@@ -342,6 +356,7 @@ async def sms_gateway_ws(websocket: WebSocket):
     try:
         while True:
             raw = await websocket.receive_text()
+            _heartbeat_sms_gateway_token(token_id)
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:

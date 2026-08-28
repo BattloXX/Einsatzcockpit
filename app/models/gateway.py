@@ -206,9 +206,6 @@ class Gateway(TenantScoped, Base):
     version: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # W&T-Verbindungsstatus (aus serial_status-Meldung des Gateways)
     serial_connected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Marker fuer Offline-Benachrichtigung (verhindert Doppelversand, Muster Sent-Marker)
-    offline_alerted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
     # W&T-Com-Server-Konfiguration: {host, port, datagram_strategy, idle_ms, charset,
     # notfalldruck_printer_id}
     wut_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
