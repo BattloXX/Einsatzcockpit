@@ -1,14 +1,16 @@
 <div class="grid grid--cards">
   {% for check in checks %}
   {% set row = status_rows.get(check.key) %}
+  {% set zustand = dienst_zustaende.get(check.key, 'ok') %}
   <article class="card">
     <div class="card-body">
       <h3>{{ labels.get(check.key, check.key) }}</h3>
-      {% if not check.relevant %}
+      {% if zustand == 'nicht_konfiguriert' %}
       <span class="badge">Nicht eingerichtet</span>
-      {% elif row and row.outage_notified_at %}
-      <span class="badge badge--closed">Störung gemeldet</span>
+      {% elif zustand == 'down' %}
+      <span class="badge badge--closed">Störung</span>
       {% if row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}
+      {% if not row.outage_notified_at %}<p style="color:var(--text-muted);font-size:.8rem">Keine Benachrichtigung verschickt{% if org_settings and not org_settings.dienst_monitor_enabled %} – Überwachung ist deaktiviert.{% endif %}</p>{% endif %}
       {% else %}
       <span class="badge badge--active">OK</span>
       {% endif %}
