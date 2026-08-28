@@ -10,7 +10,7 @@ import hashlib
 import logging
 import re
 import uuid
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -24,6 +24,9 @@ from app.models.gateway import (
     JOB_SOURCE_RULE,
     PrintJob,
 )
+
+if TYPE_CHECKING:
+    from app.models.gateway import Gateway
 
 logger = logging.getLogger("einsatzleiter.print")
 
@@ -280,6 +283,7 @@ async def dispatch_fallback_for_failed_job(job_id: int) -> PrintJob | None:
                 rule.fallback_printer_id, job.id,
             )
             return None
+        assert job.org_id is not None
 
         options = dict(job.options or {})
         media = options.get("media")
@@ -327,7 +331,7 @@ def on_event(db: Session, org_id: int, trigger: str, context: dict) -> list[Prin
     Gibt die neu angelegten Jobs zurück (Dispatch erfolgt separat/asynchron).
     Verbindet sich kein Gateway, bleiben die Jobs 'queued'.
     """
-    from app.models.gateway import Gateway, PrintRule
+    from app.models.gateway import PrintRule
     from app.services.gateway_service import gateway_effective_enabled
 
     if not gateway_effective_enabled(org_id, db):
@@ -451,7 +455,7 @@ def _gsl_context(lage) -> dict:
     }
 
 
-def paired_gateway(db: Session, org_id: int) -> "Gateway | None":
+def paired_gateway(db: Session, org_id: int) -> Gateway | None:
     """Erstes gekoppeltes Gateway einer Organisation."""
     from app.models.gateway import Gateway
 
@@ -601,7 +605,7 @@ async def autoprint_alarm_background(alarm_ingest_id: int) -> None:
     """Wertet den Regel-Ausloeser fuer genau einen neuen seriellen Alarm aus."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
-    from app.models.gateway import AlarmIngest, TRIGGER_ALARM_SERIAL
+    from app.models.gateway import TRIGGER_ALARM_SERIAL, AlarmIngest
 
     db = SessionLocal()
     set_tenant_context(db, None)

@@ -62,10 +62,10 @@ def _prepare_printer_status(printers: list[Printer], gateways: dict[int, Gateway
     from app.services.gateway_service import printer_checked_at, printer_reachable
     for printer in printers:
         gateway = gateways.get(printer.gateway_id)
-        printer.reachable_derived = (
+        setattr(printer, "reachable_derived", (
             printer_reachable(printer, gateway) if gateway is not None else None
-        )
-        printer.checked_at_derived = printer_checked_at(printer)
+        ))
+        setattr(printer, "checked_at_derived", printer_checked_at(printer))
 
 
 def _historie_context(db: Session, gw: Gateway) -> dict:
@@ -618,7 +618,7 @@ async def rule_test(
     if not rule.printer_ids:
         return RedirectResponse(_rule_return(gw, f"test_err=printer#regel-{rule.id}"), status_code=303)
 
-    if paired_gateway(db, user.org_id) is None:
+    if user.org_id is None or paired_gateway(db, user.org_id) is None:
         return RedirectResponse(_rule_return(gw, f"test_err=gateway#regel-{rule.id}"), status_code=303)
     bezug = resolve_test_context(db, rule)
     if bezug is None:
@@ -711,7 +711,7 @@ def printers_json(
             {
                 "id": p.id,
                 "name": p.name,
-                "reachable": p.reachable_derived,
+                "reachable": getattr(p, "reachable_derived", None),
                 "checked_at": (p.status or {}).get("checked_at"),
                 # Unterstützte Papiergrößen (aus der Discovery); A3 nur wenn der Drucker es kann.
                 "media": (p.capabilities or {}).get("media") or ["A4"],
