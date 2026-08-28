@@ -160,7 +160,9 @@ RULE_DOCUMENT_LABELS = {
 
 TRIGGER_DOCUMENT_TYPES = {
     TRIGGER_EINSATZ_CREATED: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT}),
+    TRIGGER_EINSATZ_UPDATED: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT}),
     TRIGGER_GSL_CREATED: frozenset({DOC_GSL_LAGEBLATT, DOC_GSL_BERICHT}),
+    TRIGGER_GSL_LAGE_UPDATED: frozenset({DOC_GSL_LAGEBLATT, DOC_GSL_BERICHT}),
     TRIGGER_ALARM_SERIAL: frozenset({DOC_ALARM_ROHTEXT}),
     TRIGGER_VERLEIH_CREATED: frozenset({DOC_VERLEIH_SCHEIN}),
 }
@@ -347,7 +349,7 @@ class AlarmIngest(TenantScoped, Base):
     einsatz_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True
     )
-    # created / merged_lis / merged_api
+    # created / merged
     dedup_action: Mapped[str | None] = mapped_column(String(20), nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 

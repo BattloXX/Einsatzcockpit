@@ -557,7 +557,7 @@ def alarm_edit_modal(
 
 @router.post("/einsatz/{incident_id}/alarm", response_class=HTMLResponse)
 async def alarm_save(
-    incident_id: int, request: Request,
+    incident_id: int, request: Request, background_tasks: BackgroundTasks,
     alarm_type_code: str = Form(...),
     reason: str = Form(""),
     report_text: str = Form(""),
@@ -565,10 +565,14 @@ async def alarm_save(
     _=Depends(require_role("incident_leader", "admin")),
 ):
     incident = _incident_or_404(incident_id, db)
+    before = (incident.alarm_type_code, incident.reason, incident.report_text)
     incident.alarm_type_code = alarm_type_code
     incident.reason = reason.strip() or None
     incident.report_text = report_text.strip() or None
     db.commit()
+    if before != (incident.alarm_type_code, incident.reason, incident.report_text):
+        from app.services.print_dispatcher import autoprint_incident_updated_background
+        background_tasks.add_task(autoprint_incident_updated_background, incident.id)
     await manager.broadcast(incident_id, {"type": "alarm_type_changed"})
     return templates.TemplateResponse(request, "incident/_alarm_confirm_fahrzeuge.html", {
         "incident": incident,
@@ -3387,7 +3391,7 @@ async def address_geocode(
 
 @router.post("/einsatz/{incident_id}/adresse", response_class=HTMLResponse)
 async def address_save(
-    incident_id: int, request: Request,
+    incident_id: int, request: Request, background_tasks: BackgroundTasks,
     address_street: str = Form(""),
     address_no: str = Form(""),
     address_city: str = Form(""),
@@ -3443,6 +3447,9 @@ async def address_save(
         ip=request.client.host if request.client else None,
     )
     db.commit()
+    if before != after:
+        from app.services.print_dispatcher import autoprint_incident_updated_background
+        background_tasks.add_task(autoprint_incident_updated_background, incident.id)
 
     await manager.broadcast(incident_id, {"type": "address_updated"})
 

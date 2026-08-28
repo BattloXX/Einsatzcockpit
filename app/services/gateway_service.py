@@ -130,6 +130,51 @@ def derive_status(gateway: Gateway, *, connected: bool | None = None) -> str:
     return GATEWAY_STATUS_OFFLINE
 
 
+def _status_datetime(value: object) -> datetime | None:
+    """Parst einen Status-Zeitpunkt robust als naive UTC."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return _naive_utc(parsed)
+
+
+def printer_reachable(printer: Printer, gateway: Gateway) -> bool | None:
+    """True/False = gemeldeter Stand, None = unbekannt (Gateway weg/Meldung zu alt).
+
+    Die Frische-Schwelle leitet sich aus dem Health-Intervall DIESES Gateways ab
+    (wut_config.health_interval_s, Default 60, Minimum 15, nach oben frei). Ein
+    fester Wert wuerde bei langem Intervall gesunde Drucker als unbekannt zeigen.
+    """
+    config = gateway.wut_config or {}
+    try:
+        interval = max(15, int(config.get("health_interval_s", 60)))
+    except (TypeError, ValueError):
+        interval = 60
+    stale_after = timedelta(seconds=max(180, 3 * interval))
+    now = datetime.now(UTC).replace(tzinfo=None)
+    last_seen = _naive_utc(gateway.last_seen_at)
+    checked_at = _status_datetime((printer.status or {}).get("checked_at"))
+    if (
+        gateway.status != GATEWAY_STATUS_ONLINE
+        or last_seen is None
+        or now - last_seen > stale_after
+        or checked_at is None
+        or now - checked_at > stale_after
+        or checked_at > now + timedelta(seconds=interval)
+    ):
+        return None
+    reachable = (printer.status or {}).get("reachable")
+    return reachable if isinstance(reachable, bool) else None
+
+
+def printer_checked_at(printer: Printer) -> datetime | None:
+    """Status-Zeitpunkt fuer die lokale Anzeige, robust als naive UTC geparst."""
+    return _status_datetime((printer.status or {}).get("checked_at"))
+
+
 def mark_seen(db: Session, gateway: Gateway, *, version: str | None = None) -> None:
     """Aktualisiert last_seen_at/version/status bei hello/heartbeat."""
     gateway.last_seen_at = datetime.now(UTC).replace(tzinfo=None)

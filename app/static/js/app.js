@@ -146,6 +146,9 @@ document.addEventListener('alpine:init', () => {
             const liveEv = new CustomEvent('gsl-live', { detail: ev, bubbles: true });
             document.body.dispatchEvent(liveEv);
           }
+          if (ev.type === 'print_job_status') {
+            document.body.dispatchEvent(new CustomEvent('print-job-status', { detail: ev, bubbles: true }));
+          }
         };
         ws.onclose = () => {
           window.__ecGlobalWsOpen = false;

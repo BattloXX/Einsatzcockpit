@@ -97,6 +97,10 @@ async def ingest_alarm(
     )
     db.commit()
 
+    if created:
+        from app.services.print_dispatcher import autoprint_alarm_background
+        background_tasks.add_task(autoprint_alarm_background, ingest.id)
+
     # Board/Infoscreen live informieren + Objekt-Verknüpfung nachziehen.
     # Wie bei UI-/API-/LIS-Anlage: Geocoding (setzt Koordinaten) und Objekt-Matching
     # (BMA-Nr./Adresse; Geo-Stufe folgt nach dem Geocoding) als Background-Task.

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.models.gateway import (
     JOB_DONE,
     JOB_FAILED,
+    JOB_PRINTING,
     JOB_SENT,
     JOB_SOURCE_MANUAL,
     JOB_SOURCE_RULE,
@@ -212,6 +213,8 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
         return {"job_id": job.id, "status": JOB_FAILED, "error": str(exc)}
 
     # Erfolgreich übergeben. Endstatus kommt asynchron via job_status → _apply_job_status.
+    if result.get("note"):
+        logger.info("Druckauftrag %s zugestellt: %s", job.id, result["note"])
     return {"job_id": job.id, "status": result.get("status") or JOB_SENT,
             "error": result.get("error")}
 
@@ -229,6 +232,23 @@ def mark_job_failed(db: Session, job: PrintJob, grund: str) -> bool:
     job.error = grund[:500]
     db.commit()
     return True
+
+
+def escalate_stale_job(db: Session, job_id: int, grund: str) -> bool:
+    """Uebernimmt einen haengenden Job atomar auf 'failed'. True nur fuer den Gewinner.
+
+    Bedingtes UPDATE statt Python-Pruefung: der Watchdog laeuft ohne Leader-Guard in
+    jedem Worker, ein Check-then-commit wuerde doppelt zuschlagen. Das Bulk-UPDATE
+    ist trotz Tenant-Tabelle zulaessig, weil der Filter ueber den eindeutigen
+    Primaerschluessel genau eine Zeile adressiert.
+    """
+    treffer = (
+        db.query(PrintJob)
+        .filter(PrintJob.id == job_id, PrintJob.status.in_((JOB_SENT, JOB_PRINTING)))
+        .update({"status": JOB_FAILED, "error": grund[:500]}, synchronize_session=False)
+    )
+    db.commit()
+    return treffer == 1
 
 
 async def dispatch_fallback_for_failed_job(job_id: int) -> PrintJob | None:
@@ -502,8 +522,8 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
     return None
 
 
-async def autoprint_incident_background(incident_id: int) -> None:
-    """Background-Hook nach Einsatz-Anlage: wertet Druckregeln (einsatz_created) aus
+async def autoprint_incident_background(incident_id: int, trigger: str | None = None) -> None:
+    """Background-Hook fuer Einsatz-Aenderungen: wertet passende Druckregeln aus
     und stellt die Jobs zu. Best-effort – Fehler dürfen den Request nie beeinflussen."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -519,7 +539,7 @@ async def autoprint_incident_background(incident_id: int) -> None:
         org_id = inc.primary_org_id
         set_tenant_context(db, org_id)
         context = _incident_context(inc)
-        jobs = on_event(db, org_id, TRIGGER_EINSATZ_CREATED, context)
+        jobs = on_event(db, org_id, trigger or TRIGGER_EINSATZ_CREATED, context)
         db.commit()
         for job in jobs:
             try:
@@ -532,8 +552,16 @@ async def autoprint_incident_background(incident_id: int) -> None:
         db.close()
 
 
-async def autoprint_gsl_background(lage_id: int) -> None:
-    """Background-Hook nach Anlage einer Großschadenslage."""
+async def autoprint_incident_updated_background(incident_id: int) -> None:
+    """Duennner BackgroundTasks-Wrapper fuer den Nachzuegler-Ausloeser."""
+    from app.models.gateway import TRIGGER_EINSATZ_UPDATED
+    await autoprint_incident_background(incident_id, TRIGGER_EINSATZ_UPDATED)
+
+
+async def autoprint_gsl_background(
+    lage_id: int, org_id: int, trigger: str | None = None,
+) -> None:
+    """Background-Hook fuer Anlage oder Aenderung einer Großschadenslage."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.gateway import TRIGGER_GSL_CREATED
@@ -542,11 +570,15 @@ async def autoprint_gsl_background(lage_id: int) -> None:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        lage = db.get(MajorIncident, lage_id)
+        lage = (
+            db.query(MajorIncident)
+            .filter(MajorIncident.id == lage_id, MajorIncident.org_id == org_id)
+            .first()
+        )
         if lage is None or lage.org_id is None:
             return
         set_tenant_context(db, lage.org_id)
-        jobs = on_event(db, lage.org_id, TRIGGER_GSL_CREATED, _gsl_context(lage))
+        jobs = on_event(db, lage.org_id, trigger or TRIGGER_GSL_CREATED, _gsl_context(lage))
         db.commit()
         for job in jobs:
             try:
@@ -555,6 +587,41 @@ async def autoprint_gsl_background(lage_id: int) -> None:
                 logger.warning("GSL-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
     except Exception as exc:  # pragma: no cover
         logger.warning("GSL-Auto-Druck fehlgeschlagen (Lage %s): %s", lage_id, exc)
+    finally:
+        db.close()
+
+
+async def autoprint_gsl_updated_background(lage_id: int, org_id: int) -> None:
+    """Duennner BackgroundTasks-Wrapper fuer den GSL-Nachzuegler-Ausloeser."""
+    from app.models.gateway import TRIGGER_GSL_LAGE_UPDATED
+    await autoprint_gsl_background(lage_id, org_id, TRIGGER_GSL_LAGE_UPDATED)
+
+
+async def autoprint_alarm_background(alarm_ingest_id: int) -> None:
+    """Wertet den Regel-Ausloeser fuer genau einen neuen seriellen Alarm aus."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.gateway import AlarmIngest, TRIGGER_ALARM_SERIAL
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        ingest = db.get(AlarmIngest, alarm_ingest_id)
+        if ingest is None or ingest.org_id is None:
+            return
+        set_tenant_context(db, ingest.org_id)
+        jobs = on_event(db, ingest.org_id, TRIGGER_ALARM_SERIAL, {
+            "alarm_ingest_id": ingest.id,
+            "incident_id": ingest.einsatz_id,
+        })
+        db.commit()
+        for job in jobs:
+            try:
+                await dispatch_job(db, job)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Alarm-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Auto-Druck fehlgeschlagen (Alarm %s): %s", alarm_ingest_id, exc)
     finally:
         db.close()
 

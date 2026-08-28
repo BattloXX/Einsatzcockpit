@@ -1,0 +1,50 @@
+<div class="gwx-col-12" id="historie"
+     hx-get="/gateway/{{ gw.id }}/historie"
+     hx-trigger="print-job-status from:body"
+     hx-swap="outerHTML">
+  <div class="gwx-panel">
+    <div class="gwx-panel__hd">
+      <div class="gwx-panel__t">🧾 Druckhistorie</div>
+    </div>
+    <div class="gwx-panel__bd" style="padding:0;">
+      {% if not jobs %}
+      <div class="gwx-empty">Noch keine Druckaufträge.</div>
+      {% else %}
+      {% set printer_names = {} %}{% for p in printers %}{% set _ = printer_names.update({p.id: p.name}) %}{% endfor %}
+      <div style="overflow:auto;">
+        <table class="gwx-table">
+          <thead><tr><th>Zeit</th><th>Dokument</th><th>Drucker</th><th>Quelle</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for j in jobs %}
+            <tr>
+              <td class="gwx-mono" style="white-space:nowrap;">{{ j.erstellt_am | local_datetime }}</td>
+              <td>{{ j.document_label }}{% if j.fallback_of_job_id %} <span class="gwx-chip">Ersatz für #{{ j.fallback_of_job_id }}</span>{% endif %}</td>
+              <td>{{ printer_names.get(j.printer_id, '–') }}</td>
+              <td>{{ 'Regel' if j.source == 'rule' else 'Manuell' }}</td>
+              <td>
+                {% if j.status in ('done',) %}<span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>
+                {% elif j.status in ('failed','canceled') %}<span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>
+                {% else %}<span class="gwx-chip gwx-chip--warn"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>{% endif %}
+                {% if j.error %}<span style="color:var(--g-dim);font-size:.76rem;"> {{ j.error }}</span>{% endif %}
+              </td>
+              <td style="text-align:right;white-space:nowrap;">
+                {% if j.status not in ('done','failed','canceled') %}
+                <form method="post" action="/gateway/jobs/{{ j.id }}/cancel" style="display:inline;"
+                      hx-post="/gateway/jobs/{{ j.id }}/cancel"
+                      hx-target="#historie"
+                      hx-swap="outerHTML"
+                      onsubmit="return confirm('Diesen Druckauftrag abbrechen?');">
+                  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                  <button type="submit" class="gwx-btn gwx-btn--sm" title="Druckauftrag abbrechen">✖ Abbrechen</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
