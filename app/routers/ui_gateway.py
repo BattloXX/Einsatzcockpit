@@ -57,6 +57,28 @@ def _is_connected(org_id: int | None) -> bool:
     return gateway_online(org_id)
 
 
+def _prepare_printer_status(printers: list[Printer], gateways: dict[int, Gateway]) -> None:
+    """Bereitet gateway-genaue, abgeleitete Statuswerte fuer Templates vor."""
+    from app.services.gateway_service import printer_checked_at, printer_reachable
+    for printer in printers:
+        gateway = gateways.get(printer.gateway_id)
+        printer.reachable_derived = (
+            printer_reachable(printer, gateway) if gateway is not None else None
+        )
+        printer.checked_at_derived = printer_checked_at(printer)
+
+
+def _historie_context(db: Session, gw: Gateway) -> dict:
+    """Gateway-genauer Kontext fuer Detailseite, Partial und Abbruchantwort."""
+    printers = db.query(Printer).filter(Printer.gateway_id == gw.id).order_by(Printer.name).all()
+    _prepare_printer_status(printers, {gw.id: gw})
+    jobs = (
+        db.query(PrintJob).filter(PrintJob.gateway_id == gw.id)
+        .order_by(PrintJob.erstellt_am.desc()).limit(30).all()
+    )
+    return {"gw": gw, "printers": printers, "jobs": jobs}
+
+
 # ── Übersicht ──────────────────────────────────────────────────────────────────
 
 @router.get("", response_class=HTMLResponse)
@@ -87,14 +109,11 @@ def gateway_detail(
     _guard: None = Depends(require_gateway_enabled),
 ):
     gw = _gw_or_404(db, user.org_id, gateway_id)
-    printers = db.query(Printer).filter(Printer.gateway_id == gw.id).order_by(Printer.name).all()
+    historie = _historie_context(db, gw)
+    printers = historie["printers"]
     rules = (
         db.query(PrintRule).filter(PrintRule.org_id == user.org_id)
         .order_by(PrintRule.sort_order, PrintRule.name).all()
-    )
-    jobs = (
-        db.query(PrintJob).filter(PrintJob.gateway_id == gw.id)
-        .order_by(PrintJob.erstellt_am.desc()).limit(30).all()
     )
     from app.routers.ws import get_passthrough_status
     from app.services import ws_bus
@@ -103,7 +122,7 @@ def gateway_detail(
         "gw": gw,
         "printers": printers,
         "rules": rules,
-        "jobs": jobs,
+        "jobs": historie["jobs"],
         "connected": _is_connected(user.org_id),
         "doc_labels": RULE_DOCUMENT_LABELS,
         "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
@@ -111,6 +130,20 @@ def gateway_detail(
         "passthrough_status": get_passthrough_status(user.org_id),
         "redis_status": ws_bus.status(),
     })
+
+
+@router.get("/{gateway_id:int}/historie", response_class=HTMLResponse)
+def gateway_historie(
+    gateway_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    context = _historie_context(db, gw)
+    context["user"] = user
+    return templates.TemplateResponse(request, "gateway/_druckhistorie.html", context)
 
 
 @router.get("/{gateway_id:int}/druckregeln", response_class=HTMLResponse)
@@ -663,6 +696,14 @@ def printers_json(
         .execution_options(include_all_tenants=True)
         .all()
     )
+    gateways = (
+        db.query(Gateway)
+        .filter(Gateway.org_id == user.org_id)
+        .execution_options(include_all_tenants=True)
+        .all()
+    )
+    gateway_by_id = {gateway.id: gateway for gateway in gateways}
+    _prepare_printer_status(printers, gateway_by_id)
     connected = _is_connected(user.org_id)
     return JSONResponse({
         "connected": connected,
@@ -670,7 +711,7 @@ def printers_json(
             {
                 "id": p.id,
                 "name": p.name,
-                "reachable": (p.status or {}).get("reachable"),
+                "reachable": p.reachable_derived,
                 "checked_at": (p.status or {}).get("checked_at"),
                 # Unterstützte Papiergrößen (aus der Discovery); A3 nur wenn der Drucker es kann.
                 "media": (p.capabilities or {}).get("media") or ["A4"],
@@ -787,4 +828,9 @@ async def cancel_print_job(
         await push_gateway_command(user.org_id, {"type": "cancel_job", "payload": {"job_id": job_id}})
         await broadcast_org(user.org_id, {"type": "print_job_status", "job_id": job_id,
                                           "status": JOB_CANCELED})
+    if request.headers.get("HX-Request") == "true":
+        gw = _gw_or_404(db, user.org_id, gw_id)
+        context = _historie_context(db, gw)
+        context["user"] = user
+        return templates.TemplateResponse(request, "gateway/_druckhistorie.html", context)
     return RedirectResponse(f"/gateway/{gw_id}?job_canceled=1#historie", status_code=303)

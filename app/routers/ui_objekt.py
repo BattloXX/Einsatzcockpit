@@ -2646,6 +2646,8 @@ async def einsatz_manuell_verknuepfen(
         background_tasks.add_task(
             dispatch_objekt_einsatzinfo, incident_id, triggered_by_user_id=user.id
         )
+        from app.services.print_dispatcher import autoprint_incident_updated_background
+        background_tasks.add_task(autoprint_incident_updated_background, incident_id)
         try:
             from app.services.broadcast import manager
             await manager.broadcast(incident_id, {"type": "objektgefahren", "reload_board": True})
@@ -2677,19 +2679,22 @@ def einsatz_match_bestaetigen(
     )
     if verknuepfung is None:
         raise HTTPException(status_code=404, detail="Verknuepfung nicht gefunden")
-    verknuepfung.status = OBJEKT_EINSATZ_BESTAETIGT
-    verknuepfung.bestaetigt_von_id = user.id
-    write_audit(db, "objekt.einsatz_bestaetigt", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=verknuepfung.objekt_id,
-                incident_id=incident_id, payload={"quelle": verknuepfung.quelle})
-    db.commit()
-    from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
-    background_tasks.add_task(
-        dispatch_objekt_einsatzinfo,
-        incident_id,
-        objekt_ids=[verknuepfung.objekt_id],
-        triggered_by_user_id=user.id,
-    )
+    if verknuepfung.status != OBJEKT_EINSATZ_BESTAETIGT:
+        verknuepfung.status = OBJEKT_EINSATZ_BESTAETIGT
+        verknuepfung.bestaetigt_von_id = user.id
+        write_audit(db, "objekt.einsatz_bestaetigt", org_id=user.org_id, user_id=user.id,
+                    entity_type="objekt", entity_id=verknuepfung.objekt_id,
+                    incident_id=incident_id, payload={"quelle": verknuepfung.quelle})
+        db.commit()
+        from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+        background_tasks.add_task(
+            dispatch_objekt_einsatzinfo,
+            incident_id,
+            objekt_ids=[verknuepfung.objekt_id],
+            triggered_by_user_id=user.id,
+        )
+        from app.services.print_dispatcher import autoprint_incident_updated_background
+        background_tasks.add_task(autoprint_incident_updated_background, incident_id)
     return templates.TemplateResponse(
         request, _panel_template(view),
         _panel_context(request, db, user, incident_id),

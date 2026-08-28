@@ -359,7 +359,7 @@ async def lage_neu_create(
     db.commit()
 
     from app.services.print_dispatcher import autoprint_gsl_background
-    background_tasks.add_task(autoprint_gsl_background, lage.id)
+    background_tasks.add_task(autoprint_gsl_background, lage.id, lage.org_id)
 
     from app.services.gsl_notify import notify_gsl_created
     await notify_gsl_created(
@@ -1729,6 +1729,7 @@ def lage_bearbeiten_form(
 async def lage_bearbeiten_save(
     request: Request,
     lage_id: int,
+    background_tasks: BackgroundTasks,
     name: str = Form(...),
     description: str = Form(""),
     is_exercise: bool = Form(False),
@@ -1740,11 +1741,16 @@ async def lage_bearbeiten_save(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
+    before = (lage.name, lage.description, lage.is_exercise, lage.auto_adopt)
+
     lage.name = name.strip()[:160]
     lage.description = description.strip() or None
     lage.is_exercise = is_exercise
     lage.auto_adopt = auto_adopt
     db.commit()
+    if before != (lage.name, lage.description, lage.is_exercise, lage.auto_adopt):
+        from app.services.print_dispatcher import autoprint_gsl_updated_background
+        background_tasks.add_task(autoprint_gsl_updated_background, lage.id, lage.org_id)
     write_audit(db, "major_incident.edited", user_id=user.id,
                 payload={"lage_id": lage_id, "name": lage.name})
     await broadcast_lage(lage_id, {"type": "lage_updated", "reload_board": True})

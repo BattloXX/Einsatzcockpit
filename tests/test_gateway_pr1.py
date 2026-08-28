@@ -27,6 +27,7 @@ from app.core.security import (
 from app.core.tenant import set_tenant_context
 from app.models.gateway import (
     GATEWAY_STATUS_OFFLINE,
+    GATEWAY_STATUS_ONLINE,
     GATEWAY_STATUS_UNPAIRED,
     Gateway,
     Printer,
@@ -694,6 +695,52 @@ def test_printer_status_updates_reachable_by_id(db):
     assert db.get(Printer, p1.id).status.get("reachable") is True
     assert db.get(Printer, p1.id).status.get("checked_at")  # default gesetzt
     assert db.get(Printer, p2.id).status.get("reachable") is False
+
+
+def test_printer_reachable_is_gateway_specific_and_fresh():
+    now = datetime.now(UTC).replace(tzinfo=None)
+    online = Gateway(status=GATEWAY_STATUS_ONLINE, last_seen_at=now, wut_config={})
+    offline = Gateway(status=GATEWAY_STATUS_OFFLINE, last_seen_at=now, wut_config={})
+    fresh = Printer(status={"reachable": True, "checked_at": now.isoformat()})
+    unreachable = Printer(status={"reachable": False, "checked_at": now.isoformat()})
+
+    assert gw_svc.printer_reachable(fresh, online) is True
+    assert gw_svc.printer_reachable(unreachable, online) is False
+    assert gw_svc.printer_reachable(fresh, offline) is None
+
+
+@pytest.mark.parametrize("checked_at", [None, "ungueltig", ""])
+def test_printer_reachable_rejects_missing_or_invalid_checked_at(checked_at):
+    now = datetime.now(UTC).replace(tzinfo=None)
+    gateway = Gateway(status=GATEWAY_STATUS_ONLINE, last_seen_at=now, wut_config={})
+    printer = Printer(status={"reachable": True, "checked_at": checked_at})
+    assert gw_svc.printer_reachable(printer, gateway) is None
+
+
+def test_printer_reachable_accepts_timezone_and_gateway_interval():
+    now = datetime.now(UTC)
+    gateway = Gateway(
+        status=GATEWAY_STATUS_ONLINE,
+        last_seen_at=(now - timedelta(seconds=200)).replace(tzinfo=None),
+        wut_config={"health_interval_s": 300},
+    )
+    printer = Printer(status={
+        "reachable": True,
+        "checked_at": (now - timedelta(seconds=200)).isoformat(),
+    })
+    assert gw_svc.printer_reachable(printer, gateway) is True
+
+
+def test_printer_reachable_rejects_stale_status_and_stale_gateway():
+    now = datetime.now(UTC).replace(tzinfo=None)
+    stale = (now - timedelta(seconds=181)).isoformat()
+    gateway = Gateway(status=GATEWAY_STATUS_ONLINE, last_seen_at=now, wut_config={})
+    printer = Printer(status={"reachable": True, "checked_at": stale})
+    assert gw_svc.printer_reachable(printer, gateway) is None
+
+    gateway.last_seen_at = now - timedelta(seconds=181)
+    printer.status = {"reachable": True, "checked_at": now.isoformat()}
+    assert gw_svc.printer_reachable(printer, gateway) is None
 
 
 # ── Tenant-Isolation ─────────────────────────────────────────────────────────────

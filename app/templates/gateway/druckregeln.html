@@ -65,7 +65,7 @@
               <input type="hidden" name="gw" value="{{ gw.id }}">
               <input class="gwx-input" style="width:auto;" type="text" name="name" placeholder="Regelname" required>
               <select name="trigger" style="width:auto;">
-                {% for key, label in trigger_labels.items() %}<option value="{{ key }}">{{ label }}{% if key in ('einsatz_updated', 'gsl_lage_updated', 'alarm_serial_received') %} (noch nicht aktiv){% endif %}</option>{% endfor %}
+                {% for key, label in trigger_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
               </select>
               <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">+ Regel</button>
             </form>
@@ -124,15 +124,16 @@
                     <div class="gwx-field"><label class="gwx-label">Auslöser</label>
                       <select name="trigger" x-model="trigger">
                         {% for key, label in trigger_labels.items() %}
-                        <option value="{{ key }}" {{ 'selected' if r.trigger==key }}>{{ label }}{% if key in ('einsatz_updated', 'gsl_lage_updated', 'alarm_serial_received') %} (noch nicht aktiv){% endif %}</option>{% endfor %}
+                        <option value="{{ key }}" {{ 'selected' if r.trigger==key }}>{{ label }}</option>{% endfor %}
                       </select></div>
                   </div>
+                  <div class="gwx-help">Bei Aktualisierungen druckt die Regel nur Inhalte, die für diesen Einsatz oder diese Großschadenslage noch nicht gedruckt wurden.</div>
 
                   <div class="gwx-sechd">📄 Inhalte (Dokumente)</div>
                   <div class="gwx-checks">
                     {% for key, label in doc_labels.items() %}
-                    {% if key in ('einsatzinfo', 'objektblatt') %}{% set doc_trigger = "trigger === 'einsatz_created'" %}
-                    {% elif key in ('gsl_lageblatt', 'gsl_bericht') %}{% set doc_trigger = "trigger === 'gsl_created'" %}
+                    {% if key in ('einsatzinfo', 'objektblatt') %}{% set doc_trigger = "['einsatz_created', 'einsatz_updated'].includes(trigger)" %}
+                    {% elif key in ('gsl_lageblatt', 'gsl_bericht') %}{% set doc_trigger = "['gsl_created', 'gsl_lage_updated'].includes(trigger)" %}
                     {% elif key == 'alarm_rohtext' %}{% set doc_trigger = "trigger === 'alarm_serial_received'" %}
                     {% else %}{% set doc_trigger = "trigger === 'verleih_created'" %}{% endif %}
                     <label class="gwx-check" x-show="{{ doc_trigger }}"><input type="checkbox" name="documents" value="{{ key }}" :disabled="!({{ doc_trigger }})"
@@ -141,9 +142,9 @@
                   </div>
 
                   <div class="gwx-sechd">🏢 Objekt-Elemente (bei zugeordnetem Objekt)</div>
-                  <div class="gwx-checks" x-show="trigger === 'einsatz_created'">
+                  <div class="gwx-checks" x-show="['einsatz_created', 'einsatz_updated'].includes(trigger)">
                     {% for key, label in objekt_element_labels.items() %}
-                    <label class="gwx-check"><input type="checkbox" name="objekt_elements" value="{{ key }}" :disabled="trigger !== 'einsatz_created'"
+                    <label class="gwx-check"><input type="checkbox" name="objekt_elements" value="{{ key }}" :disabled="!['einsatz_created', 'einsatz_updated'].includes(trigger)"
                       {{ 'checked' if key in (r.objekt_elements or []) }}> {{ label }}</label>
                     {% endfor %}
                   </div>

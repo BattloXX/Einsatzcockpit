@@ -62,7 +62,7 @@
     {% set aktive_drucker = printers | selectattr('aktiv') | list %}
     {% set aktive_regeln = rules | selectattr('aktiv') | list %}
     {% set _on = namespace(n=0) %}
-    {% for p in aktive_drucker if p.status and p.status.get('reachable') %}{% set _on.n = _on.n + 1 %}{% endfor %}
+    {% for p in aktive_drucker if p.reachable_derived %}{% set _on.n = _on.n + 1 %}{% endfor %}
     {% set _pt = passthrough_status or {} %}
     <div class="gwx-tiles">
       <div class="gwx-tile">
@@ -254,9 +254,9 @@
                       </form>
                     </template>
                   </div>
-                  {% if p.status and p.status.get('reachable') %}
+                  {% if p.reachable_derived %}
                   <span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>erreichbar</span>
-                  {% elif p.status and p.status.get('reachable') == false %}
+                  {% elif p.reachable_derived == false %}
                   <span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>offline</span>
                   {% elif p.aktiv %}
                   <span class="gwx-chip"><span class="gwx-chip__d"></span>unbekannt</span>
@@ -271,7 +271,7 @@
                   {% if d.get('duplex') and d.get('duplex') != 'off' %}<span class="gwx-role">Duplex</span>{% endif %}
                   {% if d.get('color') == 'monochrome' %}<span class="gwx-role">S/W</span>{% endif %}
                   {% if p.status and p.status.get('toner_pct') is not none %}<span>🩸 {{ p.status.get('toner_pct') }} %</span>{% endif %}
-                  {% if p.status and p.status.get('checked_at') %}<span title="Zuletzt geprüft (UTC)">🕓 {{ p.status.get('checked_at')[11:16] }}</span>{% endif %}
+                  {% if p.checked_at_derived %}<span title="Zuletzt geprüft">🕓 {{ p.checked_at_derived|local_datetime }}</span>{% endif %}
                 </div>
 
                 <template x-if="cfg">
@@ -334,50 +334,7 @@
       </div>
 
       {# ── Druckhistorie ── #}
-      <div class="gwx-col-12">
-        <div class="gwx-panel" id="historie">
-          <div class="gwx-panel__hd">
-            <div class="gwx-panel__t">🧾 Druckhistorie</div>
-          </div>
-          <div class="gwx-panel__bd" style="padding:0;">
-            {% if not jobs %}
-            <div class="gwx-empty">Noch keine Druckaufträge.</div>
-            {% else %}
-            {% set printer_names = {} %}{% for p in printers %}{% set _ = printer_names.update({p.id: p.name}) %}{% endfor %}
-            <div style="overflow:auto;">
-              <table class="gwx-table">
-                <thead><tr><th>Zeit</th><th>Dokument</th><th>Drucker</th><th>Quelle</th><th>Status</th><th></th></tr></thead>
-                <tbody>
-                  {% for j in jobs %}
-                  <tr>
-                    <td class="gwx-mono" style="white-space:nowrap;">{{ j.erstellt_am | local_datetime }}</td>
-                    <td>{{ j.document_label }}{% if j.fallback_of_job_id %} <span class="gwx-chip">Ersatz für #{{ j.fallback_of_job_id }}</span>{% endif %}</td>
-                    <td>{{ printer_names.get(j.printer_id, '–') }}</td>
-                    <td>{{ 'Regel' if j.source == 'rule' else 'Manuell' }}</td>
-                    <td>
-                      {% if j.status in ('done',) %}<span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>
-                      {% elif j.status in ('failed','canceled') %}<span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>
-                      {% else %}<span class="gwx-chip gwx-chip--warn"><span class="gwx-chip__d"></span>{{ j.status_label }}</span>{% endif %}
-                      {% if j.error %}<span style="color:var(--g-dim);font-size:.76rem;"> {{ j.error }}</span>{% endif %}
-                    </td>
-                    <td style="text-align:right;white-space:nowrap;">
-                      {% if j.status not in ('done','failed','canceled') %}
-                      <form method="post" action="/gateway/jobs/{{ j.id }}/cancel" style="display:inline;"
-                            onsubmit="return confirm('Diesen Druckauftrag abbrechen?');">
-                        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                        <button type="submit" class="gwx-btn gwx-btn--sm" title="Druckauftrag abbrechen">✖ Abbrechen</button>
-                      </form>
-                      {% endif %}
-                    </td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
+      {% include "gateway/_druckhistorie.html" %}
     </div>
 
     {# ── Danger Zone ── #}

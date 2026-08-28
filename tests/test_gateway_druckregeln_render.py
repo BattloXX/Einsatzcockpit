@@ -8,7 +8,7 @@ liefert. Muster: tests/test_dibos_admin_routes.py.
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.gateway import Gateway
+from app.models.gateway import JOB_SENT, Gateway, PrintJob
 from app.models.master import OrgSettings, SystemSettings
 from app.models.user import Role, User, UserRole
 import pytest
@@ -104,6 +104,94 @@ def test_druckregeln_tab_ist_fuer_recorder_gesperrt():
 
     r = client.get(f"/gateway/{gw_id}/druckregeln")
     assert r.status_code == 403, r.status_code
+
+
+def _add_job(gateway_id: int, *, document_type: str = "einsatzinfo") -> int:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gateway = db.get(Gateway, gateway_id)
+        job = PrintJob(
+            org_id=gateway.org_id,
+            gateway_id=gateway.id,
+            document_type=document_type,
+            status=JOB_SENT,
+            idempotency_key="historie-" + __import__("uuid").uuid4().hex,
+        )
+        db.add(job)
+        db.commit()
+        return job.id
+    finally:
+        db.close()
+
+
+def test_gateway_historie_partial_rendert_gateway_genau_und_mit_csrf(client):
+    gw_id = _setup("historie_admin", "org_admin")
+    own_job_id = _add_job(gw_id)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        other = Gateway(org_id=ORG_ID, name="Anderes Gateway")
+        db.add(other)
+        db.flush()
+        foreign = PrintJob(
+            org_id=ORG_ID,
+            gateway_id=other.id,
+            document_type="gsl_bericht",
+            status=JOB_SENT,
+            idempotency_key="historie-" + __import__("uuid").uuid4().hex,
+        )
+        db.add(foreign)
+        db.commit()
+        foreign_job_id = foreign.id
+    finally:
+        db.close()
+
+    _login(client, "historie_admin", "Test1234!")
+    response = client.get(f"/gateway/{gw_id}/historie")
+
+    assert response.status_code == 200
+    assert f'id="historie"' in response.text
+    assert f'hx-get="/gateway/{gw_id}/historie"' in response.text
+    assert f'/gateway/jobs/{own_job_id}/cancel' in response.text
+    assert f'/gateway/jobs/{foreign_job_id}/cancel' not in response.text
+    assert 'name="_csrf"' in response.text
+
+
+def test_gateway_historie_guard_recorder_403(client):
+    gw_id = _setup("historie_recorder", "recorder")
+    _login(client, "historie_recorder", "Test1234!")
+    assert client.get(f"/gateway/{gw_id}/historie").status_code == 403
+
+
+def test_cancel_job_htmx_returns_partial_and_classic_redirects(client, monkeypatch):
+    async def noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr("app.routers.ws.push_gateway_command", noop)
+    monkeypatch.setattr("app.services.broadcast.broadcast_org", noop)
+    gw_id = _setup("historie_cancel", "org_admin")
+    _login(client, "historie_cancel", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    htmx_job = _add_job(gw_id)
+    htmx = client.post(
+        f"/gateway/jobs/{htmx_job}/cancel",
+        data={"_csrf": csrf},
+        headers={"HX-Request": "true"},
+    )
+    assert htmx.status_code == 200
+    assert 'id="historie"' in htmx.text
+    assert 'name="_csrf"' in htmx.text
+
+    classic_job = _add_job(gw_id)
+    classic = client.post(
+        f"/gateway/jobs/{classic_job}/cancel",
+        data={"_csrf": csrf},
+        follow_redirects=False,
+    )
+    assert classic.status_code == 303
+    assert classic.headers["location"].endswith("#historie")
 
 
 @pytest.mark.parametrize(
