@@ -21,8 +21,11 @@ Die Detailzeile jeder Karte nennt den konkreten Grund des aktuellen Rohstatus.
 - **Nicht eingerichtet:** Der Dienst ist für die Organisation nicht konfiguriert. Er ist
   nicht relevant (`relevant == False`) und löst daher niemals einen Alarm aus.
 - **OK:** Der Dienst ist erreichbar oder ein relevanter Ausfall ist noch nicht bestätigt.
-- **Störung gemeldet:** Der Ausfall besteht über die Karenz hinaus und wurde als Störung
-  gemeldet.
+- **Störung:** Der Ausfall besteht über die Karenz hinaus. Dieser Zustand ist unabhängig
+  davon, ob eine Benachrichtigung versendet wurde. Eine Organisation ohne Empfänger oder
+  mit deaktivierter Überwachung sieht damit denselben Zustand wie Uptime Kuma; die Kachel
+  weist dann mit „Keine Benachrichtigung verschickt“ auf den fehlenden Versand hin. Die
+  gemeinsame Logik liegt in `dienst_zustand` und verwendet `bestaetigt_down`.
 
 ## Karenz und Wiederholung
 
@@ -55,12 +58,17 @@ Monitoring-Tokens werden nur gehasht gespeichert. Der Klartext und die fertigen 
 werden deshalb **nur unmittelbar nach dem Anlegen einmal angezeigt**. Kopieren Sie sie
 sofort. Ein widerrufener Token kann nicht mehr verwendet werden.
 
-| Endpunkt | Bedeutung / gültige Schlüssel |
-|----------|-------------------------------|
-| `GET /health/dienste` | Gesamtstatus aller vier Dienste |
-| `GET /health/dienst/{key}` | Einzelstatus; gültig sind `print_gateway`, `sms_gateway`, `alarm_seriell` und `alarm_dibos` |
+| Endpunkt | Token | Bedeutung / gültige Schlüssel |
+|----------|-------|-------------------------------|
+| `GET /health` | nein | Prüft Anwendung und Datenbankverbindung; antwortet mit `{"status":"ok","db":"up"}` oder bei nicht erreichbarer Datenbank mit HTTP 503 und `{"status":"error","db":"down"}` |
+| `GET /health/dienste` | ja | Gesamtstatus aller vier Dienste |
+| `GET /health/dienst/{key}` | ja | Einzelstatus; gültig sind `print_gateway`, `sms_gateway`, `alarm_seriell` und `alarm_dibos` |
 
-Die Authentifizierung ist entweder als Query-Parameter
+`/health` beantwortet die Frage „Läuft die Cloud?“, während `/health/dienste`
+beantwortet: „Laufen die Dienste dieser Organisation?“. Nur die Dienst-Endpunkte
+benötigen einen Monitoring-Token.
+
+Bei den Token-Endpunkten ist die Authentifizierung entweder als Query-Parameter
 `?token=<TOKEN>` oder als HTTP-Header `Authorization: Bearer <TOKEN>` möglich.
 
 Beispiel für die Antwort des Gesamtstatus:
@@ -89,10 +97,14 @@ Beispiel für die Antwort des Gesamtstatus:
 
 ## Uptime Kuma einrichten
 
-1. Einen Monitoring-Token anlegen und die fertige Gesamt- oder Einzel-URL kopieren.
-2. In Uptime Kuma einen Monitor vom Typ **HTTP(s)** erstellen.
-3. Die kopierte URL eintragen und das Intervall auf **60 Sekunden** setzen.
-4. Unter **Accepted Status Codes** ausschließlich `200` eintragen.
+Es werden zwei Monitore empfohlen:
+
+1. Einen Monitor vom Typ **HTTP(s)** für `/health` anlegen. Er ist sofort nutzbar und
+   benötigt keinen Token.
+2. Einen Monitoring-Token anlegen und einen zweiten HTTP(s)-Monitor für
+   `/health/dienste?token=<TOKEN>` erstellen.
+3. Bei beiden Monitoren das Intervall auf **60 Sekunden** setzen.
+4. Bei beiden unter **Accepted Status Codes** ausschließlich `200` eintragen.
 
 Uptime Kuma wertet damit HTTP 503 als „down“ und kann seine eigenen Alarmwege auslösen.
 
@@ -100,6 +112,7 @@ Uptime Kuma wertet damit HTTP 503 als „down“ und kann seine eigenen Alarmweg
 
 | Anzeige / Fehler | Ursache und Lösung |
 |------------------|-------------------|
+| `/health` liefert `503` mit `"db":"down"` | Die Anwendung ist erreichbar, kann aber die Datenbank nicht erreichen. Das ist kein Dienstproblem der Organisation. |
 | `401` | Der Token wurde widerrufen, ist abgelaufen oder falsch. Einen neuen Token anlegen und die URL ersetzen. |
 | Letzter Monitorlauf: „noch nie“ | Der Hintergrund-Loop der Dienstüberwachung läuft nicht. Worker-Konfiguration und Anwendungsprotokoll prüfen. |
 | Dauerhaft „Nicht eingerichtet“ | Das betreffende Gateway beziehungsweise DIBOS ist für diese Organisation nicht vollständig konfiguriert oder aktiviert. |

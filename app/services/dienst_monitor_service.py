@@ -186,6 +186,17 @@ def bestaetigt_down(row: DienstStatus | None, karenz_min: int, now: datetime) ->
     return jetzt - down_since >= timedelta(minutes=karenz_min)
 
 
+def dienst_zustand(check: DienstCheck, row: DienstStatus | None, karenz_min: int, now: datetime) -> str:
+    """Dreizustand fuer UI und Uptime-API: nicht_konfiguriert | down | ok.
+
+    Einzige Quelle fuer beide Pfade, damit die Kachel nicht wieder gegen den
+    HTTP-Status laufen kann (siehe bestaetigt_down).
+    """
+    if not check.relevant:
+        return "nicht_konfiguriert"
+    return "down" if bestaetigt_down(row, karenz_min, now) else "ok"
+
+
 def claim_meldung(db: Session, row: DienstStatus, org_id: int, art: str, now: datetime, wiederholung_min: int) -> bool:
     jetzt = _naive_utc(now)
     assert jetzt is not None

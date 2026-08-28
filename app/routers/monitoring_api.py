@@ -13,7 +13,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.dienst_monitor import DIENST_LABELS, DienstMonitorToken, DienstStatus
 from app.models.master import OrgSettings, SystemSettings
-from app.services.dienst_monitor_service import bestaetigt_down, pruefe_dienste
+from app.services.dienst_monitor_service import dienst_zustand, pruefe_dienste
 
 router = APIRouter(tags=["Monitoring"])
 
@@ -67,12 +67,7 @@ def dienste(request: Request):
         down = False
         for key, label in DIENST_LABELS.items():
             check, row = checks[key], rows.get(key)
-            if not check.relevant:
-                status = "nicht_konfiguriert"
-            elif bestaetigt_down(row, karenz, jetzt):
-                status = "down"
-            else:
-                status = "ok"
+            status = dienst_zustand(check, row, karenz, jetzt)
             down |= status == "down"
             ausgabe.append(
                 {
@@ -99,18 +94,20 @@ def dienst(key: str, request: Request):
     db, org_id = _token_org(request)
     try:
         check = next(c for c in pruefe_dienste(db, org_id) if c.key == key)
-        if not check.relevant:
-            return {"status": "nicht_konfiguriert", "roh_status": check.state, "detail": check.detail}
         row = (
             db.query(DienstStatus)
             .filter(DienstStatus.org_id == org_id, DienstStatus.key == key)
             .execution_options(include_all_tenants=True)
             .first()
         )
-        down = bestaetigt_down(row, _karenz_min(db, org_id), datetime.now(UTC).replace(tzinfo=None))
+        status = dienst_zustand(
+            check, row, _karenz_min(db, org_id), datetime.now(UTC).replace(tzinfo=None)
+        )
+        if status == "nicht_konfiguriert":
+            return {"status": "nicht_konfiguriert", "roh_status": check.state, "detail": check.detail}
         return JSONResponse(
-            {"status": "down" if down else "ok", "roh_status": check.state, "detail": check.detail},
-            status_code=503 if down else 200,
+            {"status": status, "roh_status": check.state, "detail": check.detail},
+            status_code=503 if status == "down" else 200,
         )
     finally:
         db.close()
