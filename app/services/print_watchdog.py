@@ -71,7 +71,11 @@ def _eskalations_context(job_ids: list[int]) -> list[tuple[int, int, int]]:
             .execution_options(include_all_tenants=True)
             .all()
         )
-        return [(job.id, job.org_id, job.gateway_id) for job in jobs]
+        return [
+            (job.id, job.org_id, job.gateway_id)
+            for job in jobs
+            if job.org_id is not None
+        ]
     finally:
         db.close()
 
