@@ -60,3 +60,53 @@ def test_system_admin_sieht_systemstatus_nav_eintrag_genau_einmal(client, setup_
 
     assert response.status_code == 200
     assert response.text.count('href="/admin/systemstatus"') == 1
+
+
+def test_systemstatus_zeigt_korrekte_dienstlabels(client, setup_db):
+    _make_org_admin("systemstatus_labels", "systemstatus-labels")
+    _login(client, "systemstatus_labels", "Test1234!")
+
+    response = client.get("/admin/systemstatus")
+
+    assert response.status_code == 200
+    assert "SMS-Gateway" in response.text
+    assert "Alarm DIBOS" in response.text
+    assert "Sms Gateway" not in response.text
+    assert "Alarm Dibos" not in response.text
+
+
+def test_systemstatus_zeigt_nicht_eingerichtete_dienste(client, setup_db):
+    _make_org_admin("systemstatus_fresh", "systemstatus-fresh")
+    _login(client, "systemstatus_fresh", "Test1234!")
+
+    response = client.get("/admin/systemstatus")
+
+    assert response.status_code == 200
+    assert "Nicht eingerichtet" in response.text
+
+
+def test_systemstatus_zeigt_uptime_referenz_ohne_token(client, setup_db):
+    _make_org_admin("systemstatus_reference", "systemstatus-reference")
+    _login(client, "systemstatus_reference", "Test1234!")
+
+    response = client.get("/admin/systemstatus")
+
+    assert response.status_code == 200
+    assert "health/dienste" in response.text
+    assert "&lt;TOKEN&gt;" in response.text
+
+
+def test_systemstatus_zeigt_fertige_urls_nach_token_anlage(client, setup_db):
+    _make_org_admin("systemstatus_token", "systemstatus-token")
+    _login(client, "systemstatus_token", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+
+    response = client.post(
+        "/admin/systemstatus/token/neu",
+        data={"_csrf": csrf, "label": "Uptime Kuma"},
+    )
+
+    assert response.status_code == 200
+    assert "health/dienste?token=" in response.text
+    for key in ("print_gateway", "sms_gateway", "alarm_seriell", "alarm_dibos"):
+        assert f"health/dienst/{key}?token=" in response.text

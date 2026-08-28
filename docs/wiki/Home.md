@@ -109,6 +109,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Organisationen verwalten](Administration-Organisations-verwalten) | Multi-Org: anlegen, Seed-Profile, Einladungen, System-Konsole |
 | [API-Keys verwalten](Administration-API-Keys-verwalten) | Anlegen, Rotieren, Sperren |
 | [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise) | Historie nachvollziehen, Stand rekonstruieren |
+| [Systemstatus & Überwachung](Administration-Dienstueberwachung) | Dienstüberwachung, Benachrichtigungen (Mail/Teams/SMS), Uptime-Token und Health-Endpunkte für Uptime Kuma |
 | [Statistik-Dashboard](Administration-Statistik-Dashboard) | Kennzahlen interpretieren |
 | [Geräteverleih (Admin)](Administration-Geraeteverleih) | Artikel und Stücklisten pflegen, Verleih-Übersicht |
 | [Drohne / UAS](Administration-Drohne-UAS) | Modul aktivieren, Geräteregister, Wartungsbuch, Pilotenregister, Compliance |
