@@ -23,7 +23,7 @@ def _org_id(user: User, target_org_id: int | None = None) -> int:
 
 
 def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
-    from app.models.dienst_monitor import DienstMonitorLog, DienstMonitorToken, DienstStatus
+    from app.models.dienst_monitor import DIENST_LABELS, DienstMonitorLog, DienstMonitorToken, DienstStatus
     from app.models.master import FireDept, OrgSettings, SystemSettings
     from app.services.dienst_monitor_service import pruefe_dienste
 
@@ -38,6 +38,11 @@ def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
     }
     checks = pruefe_dienste(db, org_id)
     loop = db.get(SystemSettings, "dienst_monitor_last_run")
+    loop_letzter_lauf = loop.value if loop else None
+    try:
+        loop_letzter_lauf_dt = datetime.fromisoformat(loop_letzter_lauf) if loop_letzter_lauf else None
+    except (ValueError, TypeError):
+        loop_letzter_lauf_dt = None
     ctx = {
         "request": request,
         "user": user,
@@ -45,7 +50,10 @@ def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
         "org_settings": settings,
         "checks": checks,
         "status_rows": rows,
-        "loop_letzter_lauf": loop.value if loop else None,
+        "loop_letzter_lauf": loop_letzter_lauf,
+        "loop_letzter_lauf_dt": loop_letzter_lauf_dt,
+        "labels": DIENST_LABELS,
+        "dienst_keys": list(DIENST_LABELS.keys()),
         "tokens": db.query(DienstMonitorToken)
         .filter(DienstMonitorToken.org_id == org_id)
         .order_by(DienstMonitorToken.created_at.desc())

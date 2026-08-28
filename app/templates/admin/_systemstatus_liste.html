@@ -2,11 +2,19 @@
   {% for check in checks %}
   {% set row = status_rows.get(check.key) %}
   <article class="card">
-    <h3>{{ "🟢" if check.state == "ok" else ("🔴" if check.state == "down" else "⚪") }} {{ check.key|replace('_', ' ')|title }}</h3>
-    <p><strong>Rohstatus:</strong> {{ check.state }}</p>
-    <p><strong>Gemeldeter Status:</strong> {{ "Störung" if row and row.outage_notified_at else "OK" }}</p>
-    {% if row and row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}
-    <p>{{ check.detail }}</p>
+    <div class="card-body">
+      <h3>{{ labels.get(check.key, check.key) }}</h3>
+      {% if not check.relevant %}
+      <span class="badge">Nicht eingerichtet</span>
+      {% elif row and row.outage_notified_at %}
+      <span class="badge badge--closed">Störung gemeldet</span>
+      {% if row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}
+      {% else %}
+      <span class="badge badge--active">OK</span>
+      {% endif %}
+      <p>{{ check.detail }}</p>
+      <p style="color:var(--text-muted);font-size:.8rem;margin-bottom:0">Rohstatus: {{ check.state }}</p>
+    </div>
   </article>
   {% endfor %}
 </div>
