@@ -469,8 +469,13 @@ class OrgSettings(Base):
     # "gateway_module_enabled" == "true" AND dieser Wert (Muster UAS/Objekt).
     gateway_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     mailing_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Gateway gilt als offline nach N Minuten ohne Heartbeat → Admin-Benachrichtigung.
-    gateway_offline_alert_min: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    # Dienstueberwachung und Benachrichtigung der Organisations-Admins.
+    dienst_monitor_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    dienst_monitor_mail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dienst_monitor_teams_webhook_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    dienst_monitor_sms: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dienst_monitor_karenz_min: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    dienst_monitor_wiederholung_min: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     # GSL-Feature-Flags je Org (effektiv = SystemSettings-Globalschalter AND dieser Wert).
     # Default True = Modul aktiv sofern global nicht deaktiviert.
     mi_feature_stab:           Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

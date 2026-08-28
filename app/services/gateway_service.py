@@ -179,7 +179,6 @@ def mark_seen(db: Session, gateway: Gateway, *, version: str | None = None) -> N
     """Aktualisiert last_seen_at/version/status bei hello/heartbeat."""
     gateway.last_seen_at = datetime.now(UTC).replace(tzinfo=None)
     gateway.status = GATEWAY_STATUS_ONLINE
-    gateway.offline_alerted_at = None
     if version:
         gateway.version = version
 

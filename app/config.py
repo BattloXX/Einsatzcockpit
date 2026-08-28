@@ -282,6 +282,8 @@ class Settings(BaseSettings):
     # Wetterwarnungen – automatischer Versand per Mail / Teams
     WEATHER_ALERTS_ENABLED: bool = True      # globaler Kill-Switch
     WEATHER_ALERT_INTERVAL_S: int = 300      # Loop-Intervall (5 min)
+    DIENST_MONITOR_ENABLED: bool = True
+    DIENST_MONITOR_INTERVAL_S: int = 60
     BODENSEE_TEMP_FETCH_ENABLED: bool = False  # optionaler externer Adapter (nicht aktiv)
     BODENSEE_TEMP_SOURCE_URL: str = ""       # URL für externen Temperatur-Adapter
 

@@ -142,7 +142,11 @@ async def _check_org(org_id: int, config_id: int) -> None:
     client = DibosClient(base_url, gateway_user, gateway_password, service_user, service_password, host=host, ag=ag)
     try:
         events = await client.get_current_events()
-    except DibosClientError:
+        from app.services.dienst_monitor_service import record_probe
+        record_probe(org_id, "alarm_dibos", True)
+    except DibosClientError as exc:
+        from app.services.dienst_monitor_service import record_probe
+        record_probe(org_id, "alarm_dibos", False, str(exc))
         logger.exception("dibos_poll_loop: GetCurrentEvents fehlgeschlagen (Org %s)", org_id)
         await client.aclose()
         return

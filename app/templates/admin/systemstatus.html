@@ -1,0 +1,50 @@
+{% extends "admin/_layout.html" %}
+{% block admin_content %}
+<h1>Systemstatus</h1>
+<p>Letzter Monitorlauf: {{ loop_letzter_lauf or "noch nie" }}</p>
+{% if gespeichert %}<div class="alert alert--success">Einstellungen gespeichert.</div>{% endif %}
+{% if test_ergebnis is defined %}<div class="alert">Testversand: {{ "erfolgreich" if test_ergebnis else "fehlgeschlagen" }}</div>{% endif %}
+<div id="dienststatus-liste" hx-get="/admin/systemstatus/liste{% if target_org_id %}?org_id={{ target_org_id }}{% endif %}" hx-trigger="every 30s" hx-swap="innerHTML">
+  {% include "admin/_systemstatus_liste.html" %}
+</div>
+
+<h2>Benachrichtigungen</h2>
+<form hx-post="/admin/systemstatus/empfaenger" hx-target="body" hx-swap="innerHTML">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if target_org_id %}<input type="hidden" name="target_org_id" value="{{ target_org_id }}">{% endif %}
+  <label><input type="checkbox" name="enabled" {% if org_settings and org_settings.dienst_monitor_enabled %}checked{% endif %}> Überwachung aktiv</label>
+  <label>E-Mail <input type="text" name="mail" value="{{ org_settings.dienst_monitor_mail or '' }}"></label>
+  <label>Teams-Webhook <input type="url" name="teams_webhook" value="{{ org_settings.dienst_monitor_teams_webhook_url or '' }}"></label>
+  <label>SMS-Nummern (kommagetrennt) <input type="text" name="sms" value="{{ org_settings.dienst_monitor_sms or '' }}"></label>
+  <label>Karenz (Minuten) <input type="number" min="1" name="karenz_min" value="{{ org_settings.dienst_monitor_karenz_min or 5 }}"></label>
+  <label>Wiederholung (Minuten) <input type="number" min="1" name="wiederholung_min" value="{{ org_settings.dienst_monitor_wiederholung_min or 60 }}"></label>
+  <button class="btn btn--primary" type="submit">Speichern</button>
+</form>
+<div class="button-row">
+  {% for kanal in ["mail", "teams", "sms"] %}
+  <form hx-post="/admin/systemstatus/test/{{ kanal }}" hx-target="body" hx-swap="innerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    {% if target_org_id %}<input type="hidden" name="target_org_id" value="{{ target_org_id }}">{% endif %}
+    <button class="btn" type="submit">{{ kanal|upper }} testen</button>
+  </form>
+  {% endfor %}
+</div>
+
+<h2>Uptime-Token</h2>
+{% if neues_token %}<div class="alert alert--warning">Token jetzt kopieren; er wird nur einmal angezeigt: <code>{{ neues_token }}</code></div>{% endif %}
+<form hx-post="/admin/systemstatus/token/neu" hx-target="body" hx-swap="innerHTML">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if target_org_id %}<input type="hidden" name="target_org_id" value="{{ target_org_id }}">{% endif %}
+  <input type="text" name="label" placeholder="Uptime Kuma">
+  <button class="btn" type="submit">Token anlegen</button>
+</form>
+<ul>{% for token in tokens %}<li>{{ token.label }} – {{ "widerrufen" if token.revoked_at else "aktiv" }}{% if not token.revoked_at %}
+  <form class="inline" hx-post="/admin/systemstatus/token/{{ token.id }}/widerrufen" hx-target="body" hx-swap="innerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if target_org_id %}<input type="hidden" name="target_org_id" value="{{ target_org_id }}">{% endif %}<button class="btn btn--danger" type="submit">Widerrufen</button>
+  </form>{% endif %}</li>{% endfor %}</ul>
+
+<h2>Letzte Meldungen</h2>
+<table><thead><tr><th>Zeit</th><th>Dienst</th><th>Kanal</th><th>Status</th><th>Fehler</th></tr></thead><tbody>
+{% for log in logs %}<tr><td>{{ log.gesendet_am|local_datetime }}</td><td>{{ log.key }}</td><td>{{ log.kanal }}</td><td>{{ log.status }}</td><td>{{ log.fehlertext or "" }}</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}

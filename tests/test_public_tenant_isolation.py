@@ -86,6 +86,43 @@ def test_lage_qr_public_flow_isoliert_org_pin_und_open_site(client):
     finally:
         db.close()
 
+
+def test_dienst_monitor_token_zeigt_keinen_status_fremder_org(client):
+    """Monitoring-Token A darf selbst bei identischem Dienst-Key nie Zeilen von B lesen."""
+    from app.models.dienst_monitor import DienstMonitorToken, DienstStatus
+
+    org_b_id = _setup_zwei_orgs()
+    raw = "dienst-monitor-isolation-a"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        token = DienstMonitorToken(
+            token_hash=hash_api_key(raw), label="Isolation A", org_id=ORG_A,
+            created_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        fremd = DienstStatus(
+            org_id=org_b_id, key="print_gateway", state="down",
+            last_error="GEHEIM-ORG-B", outage_notified_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        db.add_all([token, fremd])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/health/dienste", headers={"Authorization": f"Bearer {raw}"})
+    assert response.status_code in {200, 503}
+    assert "GEHEIM-ORG-B" not in response.text
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.query(DienstMonitorToken).filter(DienstMonitorToken.token_hash == hash_api_key(raw)).delete()
+        db.query(DienstStatus).filter(DienstStatus.org_id == org_b_id,
+                                      DienstStatus.key == "print_gateway").delete()
+        db.commit()
+    finally:
+        db.close()
+
 def test_mailing_tracking_token_cannot_mutate_other_org(client):
     org_b_id = _setup_zwei_orgs()
     db = SessionLocal(); set_tenant_context(db, None)
