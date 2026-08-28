@@ -414,6 +414,11 @@
                {{ tip('Tokenverbrauch und Fehler der KI-Anfragen anzeigen') }}>
               <span class="admin-nav__icon">KI</span>KI-Anfragen-Log
             </a>
+            <a href="/admin/systemstatus"
+               class="admin-nav__item {% if '/admin/systemstatus' in request.url.path %}is-active{% endif %}"
+               {{ tip('Status externer Gateways und Monitoring-Tokens verwalten') }}>
+              <span class="admin-nav__icon">🚦</span>Systemstatus
+            </a>
             {% if is_sysadmin %}
             <a href="/admin/ki-prompts"
                class="admin-nav__item {% if '/admin/ki-prompts' in request.url.path %}is-active{% endif %}"
@@ -424,11 +429,6 @@
                class="admin-nav__item {% if '/admin/system-einstellungen' in request.url.path %}is-active{% endif %}"
                {{ tip('VAPID, Push-Konfiguration, globale Parameter') }}>
               <span class="admin-nav__icon">⚙️</span>System
-            </a>
-            <a href="/admin/systemstatus"
-               class="admin-nav__item {% if '/admin/systemstatus' in request.url.path %}is-active{% endif %}"
-               {{ tip('Status externer Gateways und Monitoring-Tokens verwalten') }}>
-              <span class="admin-nav__icon">🚦</span>Systemstatus
             </a>
             <a href="/admin/system/server-log"
                class="admin-nav__item {% if '/admin/system/server-log' in request.url.path %}is-active{% endif %}"
