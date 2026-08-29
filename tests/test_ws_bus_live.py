@@ -109,7 +109,7 @@ async def test_live_print_dispatch_ueber_redis(fake_redis, monkeypatch):
             })
 
     gw = _GwWS()
-    ws._print_gateways[org_id] = [gw]
+    ws._print_gateways[org_id] = [(1, gw)]
     try:
         result = await ws.dispatch_print_job(org_id, job_id, {"job_id": job_id}, timeout=3.0)
         assert result["status"] == "done"

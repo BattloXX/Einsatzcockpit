@@ -39,8 +39,8 @@ _sms_gateways: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
 _sms_pending: dict[str, asyncio.Future] = {}
 
 # ── Print & Alarm Gateway (ECPG) Registry ──────────────────────────────────────
-# org_id → aktive Gateway-WebSocket-Verbindungen (Muster _sms_gateways).
-_print_gateways: dict[int, list[WebSocket]] = defaultdict(list)
+# org_id → (gateway_id, WebSocket)-Paare aktiver Gateway-Verbindungen.
+_print_gateways: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
 # job_id(str) → Future für die erste job_status-Rückmeldung (dispatch_print_job)
 _job_pending: dict[str, asyncio.Future] = {}
 # org_id → letzter Serial-Fan-Out-Status {enabled, listening, clients} (best effort, live).
@@ -628,7 +628,7 @@ async def print_gateway_ws(websocket: WebSocket):
     gateway_id = gateway.id
 
     await websocket.accept()
-    _print_gateways[org_id].append(websocket)
+    _print_gateways[org_id].append((gateway_id, websocket))
     _touch_gateway(gateway_id)
     await broadcast_org(org_id, {"type": "gateway_status", "gateway_id": gateway_id, "online": True})
     logger.info("ECPG-Gateway verbunden (org_id=%s, gateway_id=%s)", org_id, gateway_id)
@@ -735,10 +735,10 @@ async def print_gateway_ws(websocket: WebSocket):
 
 
 def _discard_print_gateway(org_id: int, websocket: WebSocket) -> None:
-    try:
-        _print_gateways.get(org_id, []).remove(websocket)
-    except ValueError:
-        pass
+    gateways = _print_gateways.get(org_id, [])
+    for entry in list(gateways):
+        if entry[1] is websocket:
+            gateways.remove(entry)
 
 
 def _mark_gateway_offline(gateway_id: int) -> None:
@@ -748,8 +748,13 @@ def _mark_gateway_offline(gateway_id: int) -> None:
     set_tenant_context(db, None)
     try:
         gw = db.get(Gateway, gateway_id)
-        # Nur offline setzen wenn keine weitere Verbindung dieser Org mehr offen ist.
-        if gw and gw.org_id is not None and not _print_gateways.get(gw.org_id):
+        # Nur offline setzen wenn dieses konkrete Gateway keine weitere offene
+        # Verbindung an diesem Worker mehr hat (nicht: die Org als Ganzes).
+        if (
+            gw
+            and gw.org_id is not None
+            and gateway_id not in connected_print_gateway_ids(gw.org_id)
+        ):
             gw.status = GATEWAY_STATUS_OFFLINE
             gw.serial_connected = False
             db.commit()
@@ -776,6 +781,11 @@ def _count_open_print_jobs(gateway_id: int) -> int:
 def is_gateway_connected(org_id: int) -> bool:
     """True, wenn ein ECPG-Gateway dieser Org an DIESEM Worker verbunden ist."""
     return bool(_print_gateways.get(org_id))
+
+
+def connected_print_gateway_ids(org_id: int) -> set[int]:
+    """Gateway-IDs aller aktuell an DIESEM Worker verbundenen Print-Gateways."""
+    return {gateway_id for gateway_id, _ in _print_gateways.get(org_id, [])}
 
 
 def gateway_online(org_id: int | None) -> bool:
@@ -812,13 +822,41 @@ def gateway_online(org_id: int | None) -> bool:
         db.close()
 
 
+def gateway_online_id(gateway_id: int, org_id: int | None) -> bool:
+    """Wie gateway_online(), aber fuer genau dieses Gateway (Statusanzeige pro Geraet).
+
+    Lokale Registry ODER DB-Heartbeat (status online + last_seen der letzten 2 Min),
+    aus demselben Grund wie gateway_online: der Socket kann an einem anderen Worker haengen.
+    """
+    if org_id is None:
+        return False
+    if gateway_id in connected_print_gateway_ids(org_id):
+        return True
+
+    from app.models.gateway import GATEWAY_STATUS_ONLINE, Gateway
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=2)
+        gw = db.get(Gateway, gateway_id)
+        return bool(
+            gw
+            and gw.org_id == org_id
+            and gw.status == GATEWAY_STATUS_ONLINE
+            and gw.last_seen_at is not None
+            and gw.last_seen_at >= cutoff
+        )
+    finally:
+        db.close()
+
+
 async def _send_to_local_gateways(org_id: int, message: dict) -> bool:
     """Sendet eine Nachricht an die an DIESEM Worker verbundenen Gateways der Org.
 
     Gemeinsamer Zusteller für den lokalen Pfad und den Bus-Handler."""
     payload = json.dumps(message, ensure_ascii=False)
     sent = False
-    for ws in list(_print_gateways.get(org_id, [])):
+    for _gateway_id, ws in list(_print_gateways.get(org_id, [])):
         try:
             await ws.send_text(payload)
             sent = True
@@ -924,7 +962,7 @@ async def _dispatch_print_job_local(org_id: int, job_id: int, payload: dict, tim
     loop = asyncio.get_event_loop()
     last_error: Exception | None = None
 
-    for ws in reversed(gateways):
+    for _gateway_id, ws in reversed(gateways):
         fut: asyncio.Future = loop.create_future()
         _job_pending[key] = fut
         try:

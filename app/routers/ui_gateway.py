@@ -93,10 +93,12 @@ def gateway_liste(
         db.query(Gateway).filter(Gateway.org_id == user.org_id)
         .order_by(Gateway.name).all()
     )
+    from app.routers.ws import gateway_online_id
+    connected_ids = {gw.id for gw in gateways if gateway_online_id(gw.id, user.org_id)}
     return templates.TemplateResponse(request, "gateway/liste.html", {
         "user": user,
         "gateways": gateways,
-        "connected": _is_connected(user.org_id),
+        "connected_ids": connected_ids,
     })
 
 
@@ -115,7 +117,7 @@ def gateway_detail(
         db.query(PrintRule).filter(PrintRule.org_id == user.org_id)
         .order_by(PrintRule.sort_order, PrintRule.name).all()
     )
-    from app.routers.ws import get_passthrough_status
+    from app.routers.ws import gateway_online_id, get_passthrough_status
     from app.services import ws_bus
     return templates.TemplateResponse(request, "gateway/detail.html", {
         "user": user,
@@ -123,7 +125,7 @@ def gateway_detail(
         "printers": printers,
         "rules": rules,
         "jobs": historie["jobs"],
-        "connected": _is_connected(user.org_id),
+        "connected": gateway_online_id(gw.id, user.org_id),
         "doc_labels": RULE_DOCUMENT_LABELS,
         "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
         "trigger_labels": TRIGGER_LABELS,
