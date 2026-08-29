@@ -20,11 +20,22 @@ def _naive_utc(value: datetime | None) -> datetime | None:
 
 
 @dataclass(frozen=True)
+class DienstTeil:
+    """Ein einzelnes Geraet eines Dienstes (ein Gateway, eine SMS-Verbindung)."""
+
+    ref: str
+    name: str
+    state: str
+    detail: str
+
+
+@dataclass(frozen=True)
 class DienstCheck:
     key: str
     state: str
     detail: str
     relevant: bool
+    teile: tuple[DienstTeil, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -42,13 +53,23 @@ def _gateway_frisch(gateway, now: datetime) -> bool:
     return bool(last_seen and now - last_seen <= timedelta(seconds=max(180, 3 * interval)))
 
 
+def aggregiere(teile: tuple[DienstTeil, ...]) -> str:
+    """Dienstzustand aus den Einzelgeraeten: ok | teilweise | down | unknown."""
+    if not teile:
+        return "unknown"
+    down = [t for t in teile if t.state == "down"]
+    if not down:
+        return "ok" if any(t.state == "ok" for t in teile) else "unknown"
+    return "down" if len(down) == len(teile) else "teilweise"
+
+
 def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> list[DienstCheck]:
     from app.core.timezones import format_local_datetime
     from app.models.dibos import OrgDibosConfig
     from app.models.gateway import Gateway
     from app.models.master import FireDept
     from app.models.user import SmsGatewayToken
-    from app.routers.ws import is_sms_gateway_connected
+    from app.routers.ws import connected_gateway_token_ids
     from app.services.sms_service import resolve_sms_config
 
     jetzt = _naive_utc(now or datetime.now(UTC))
@@ -56,18 +77,36 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     org = db.get(FireDept, org_id)
     gateways = db.query(Gateway).filter(Gateway.org_id == org_id).execution_options(include_all_tenants=True).all()
     paired = [g for g in gateways if g.device_token_hash is not None]
-    stale = [g for g in paired if not _gateway_frisch(g, jetzt)]
     if not paired:
         print_check = DienstCheck("print_gateway", "unknown", "Kein Print-Gateway eingerichtet.", False)
-    elif stale:
-        teile = [
-            f"{g.name} ({g.standort or 'ohne Standort'}, zuletzt "
-            f"{format_local_datetime(g.last_seen_at, org) or 'nie'})"
-            for g in stale
-        ]
-        print_check = DienstCheck("print_gateway", "down", "Kein frischer Heartbeat: " + ", ".join(teile), True)
     else:
-        print_check = DienstCheck("print_gateway", "ok", "Alle Print-Gateways melden frische Heartbeats.", True)
+        print_teile = tuple(
+            DienstTeil(
+                ref=f"gateway:{g.id}",
+                name=g.name,
+                state="ok" if _gateway_frisch(g, jetzt) else "down",
+                detail=(
+                    "Frischer Heartbeat."
+                    if _gateway_frisch(g, jetzt)
+                    else f"Kein frischer Heartbeat ({g.standort or 'ohne Standort'}, zuletzt "
+                    f"{format_local_datetime(g.last_seen_at, org) or 'nie'})."
+                ),
+            )
+            for g in paired
+        )
+        print_state = aggregiere(print_teile)
+        print_down = [t for t in print_teile if t.state == "down"]
+        if print_state == "ok":
+            print_detail = "Alle Print-Gateways melden frische Heartbeats."
+        elif print_state == "down":
+            namen = ", ".join(t.name for t in print_down)
+            print_detail = f"Kein Print-Gateway meldet einen frischen Heartbeat. Betroffen: {namen}."
+        else:
+            namen = ", ".join(t.name for t in print_down)
+            print_detail = (
+                f"{len(print_down)} von {len(print_teile)} Print-Gateways ohne frischen Heartbeat: {namen}."
+            )
+        print_check = DienstCheck("print_gateway", print_state, print_detail, True, print_teile)
 
     tokens = (
         db.query(SmsGatewayToken).filter(SmsGatewayToken.org_id == org_id, SmsGatewayToken.revoked_at.is_(None)).all()
@@ -75,44 +114,80 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     ctx = resolve_sms_config(org_id, db)
     eus = "eus" in ctx.chain and ctx.eus is not None
     sms_relevant = bool(tokens or eus)
-    heartbeat = any(
-        (hb := _naive_utc(t.last_heartbeat_at)) is not None and jetzt - hb <= timedelta(minutes=10) for t in tokens
-    )
     if not sms_relevant:
         sms_check = DienstCheck("sms_gateway", "unknown", "Kein SMS-Dienst eingerichtet.", False)
-    elif eus:
-        sms_check = DienstCheck(
-            "sms_gateway", "ok", "EUS ist konfiguriert (Erreichbarkeit nicht aktiv geprueft).", True
-        )
-    elif is_sms_gateway_connected(org_id) or heartbeat:
-        sms_check = DienstCheck(
-            "sms_gateway", "ok", "SMS-Gateway ist verbunden oder hat kuerzlich einen Heartbeat gesendet.", True
-        )
-    elif tokens and not any(t.last_heartbeat_at for t in tokens):
-        sms_check = DienstCheck(
-            "sms_gateway", "unknown", "Die vorhandenen SMS-Gateways haben noch nie einen Heartbeat gesendet.", True
-        )
     else:
-        sms_check = DienstCheck(
-            "sms_gateway", "down", "Kein SMS-Gateway-Heartbeat innerhalb der letzten 10 Minuten.", True
-        )
+        connected = connected_gateway_token_ids(org_id)
+        sms_teile_liste = []
+        for token in tokens:
+            heartbeat = _naive_utc(token.last_heartbeat_at)
+            frisch = heartbeat is not None and jetzt - heartbeat <= timedelta(minutes=10)
+            if token.id in connected or frisch:
+                state, detail = "ok", "Verbunden oder Heartbeat innerhalb der letzten 10 Minuten."
+            elif heartbeat is None:
+                state, detail = "unknown", "Noch nie einen Heartbeat gesendet."
+            else:
+                state, detail = "down", "Kein Heartbeat innerhalb der letzten 10 Minuten."
+            sms_teile_liste.append(DienstTeil(f"sms:{token.id}", token.label, state, detail))
+        if eus:
+            sms_teile_liste.append(
+                DienstTeil("eus", "EUS", "ok", "EUS ist konfiguriert (Erreichbarkeit nicht aktiv geprueft).")
+            )
+        sms_teile = tuple(sms_teile_liste)
+        sms_state = aggregiere(sms_teile)
+        sms_down = [t for t in sms_teile if t.state == "down"]
+        if sms_state == "ok":
+            sms_detail = (
+                "EUS ist konfiguriert (Erreichbarkeit nicht aktiv geprueft)."
+                if eus
+                else "SMS-Gateway ist verbunden oder hat kuerzlich einen Heartbeat gesendet."
+            )
+        elif sms_state == "unknown":
+            sms_detail = "Die vorhandenen SMS-Gateways haben noch nie einen Heartbeat gesendet."
+        elif sms_state == "down":
+            namen = ", ".join(t.name for t in sms_down)
+            sms_detail = f"Kein SMS-Gateway ist erreichbar. Betroffen: {namen}."
+        else:
+            namen = ", ".join(t.name for t in sms_down)
+            sms_detail = f"{len(sms_down)} von {len(sms_teile)} SMS-Gateways nicht erreichbar: {namen}."
+        sms_check = DienstCheck("sms_gateway", sms_state, sms_detail, True, sms_teile)
 
     wut = [g for g in paired if (g.wut_config or {}).get("host")]
     if not wut:
         serial = DienstCheck("alarm_seriell", "unknown", "Kein serieller W&T-Alarm eingerichtet.", False)
     else:
-        veraltet = [g for g in wut if not _gateway_frisch(g, jetzt)]
-        getrennt = [g for g in wut if _gateway_frisch(g, jetzt) and g.serial_connected is False]
-        if getrennt:
-            serial = DienstCheck(
-                "alarm_seriell", "down", "Serielle Verbindung getrennt: " + ", ".join(g.name for g in getrennt), True
+        serial_teile = tuple(
+            DienstTeil(
+                f"gateway:{g.id}",
+                g.name,
+                "unknown" if not _gateway_frisch(g, jetzt) else ("down" if g.serial_connected is False else "ok"),
+                (
+                    "Gateway-Heartbeat veraltet; serieller Status nicht beurteilbar."
+                    if not _gateway_frisch(g, jetzt)
+                    else (
+                        "Serielle Verbindung getrennt."
+                        if g.serial_connected is False
+                        else "Serielle Verbindung aktiv."
+                    )
+                ),
             )
-        elif veraltet:
-            serial = DienstCheck(
-                "alarm_seriell", "unknown", "Gateway-Heartbeat veraltet; serieller Status nicht beurteilbar.", True
-            )
+            for g in wut
+        )
+        serial_state = aggregiere(serial_teile)
+        serial_down = [t for t in serial_teile if t.state == "down"]
+        if serial_state == "ok":
+            serial_detail = "Alle eingerichteten W&T-Verbindungen sind aktiv."
+        elif serial_state == "unknown":
+            serial_detail = "Gateway-Heartbeat veraltet; serieller Status nicht beurteilbar."
+        elif serial_state == "down":
+            namen = ", ".join(t.name for t in serial_down)
+            serial_detail = f"Keine eingerichtete W&T-Verbindung ist aktiv. Betroffen: {namen}."
         else:
-            serial = DienstCheck("alarm_seriell", "ok", "Alle eingerichteten W&T-Verbindungen sind aktiv.", True)
+            namen = ", ".join(t.name for t in serial_down)
+            serial_detail = (
+                f"{len(serial_down)} von {len(serial_teile)} W&T-Verbindungen getrennt: {namen}."
+            )
+        serial = DienstCheck("alarm_seriell", serial_state, serial_detail, True, serial_teile)
 
     cfg = db.query(OrgDibosConfig).filter(OrgDibosConfig.org_id == org_id).first()
     dibos_relevant = bool(
@@ -129,16 +204,19 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     )
     if not dibos_relevant:
         dibos = DienstCheck("alarm_dibos", "unknown", "DIBOS-Poll ist nicht eingerichtet.", False)
-    elif not probe or probe.last_probe_at is None:
-        dibos = DienstCheck("alarm_dibos", "unknown", "DIBOS wurde noch nicht geprueft.", True)
-    elif probe.last_probe_ok is False:
-        dibos = DienstCheck("alarm_dibos", "down", probe.last_probe_error or "DIBOS-Poll fehlgeschlagen.", True)
-    elif jetzt - (_naive_utc(probe.last_probe_at) or jetzt) > timedelta(
-        seconds=max(180, 6 * (cfg.poll_interval_seconds if cfg else 5))
-    ):
-        dibos = DienstCheck("alarm_dibos", "down", "Kein DIBOS-Poll innerhalb des erwarteten Intervalls.", True)
     else:
-        dibos = DienstCheck("alarm_dibos", "ok", "DIBOS-Poll erfolgreich.", True)
+        if not probe or probe.last_probe_at is None:
+            dibos_state, dibos_detail = "unknown", "DIBOS wurde noch nicht geprueft."
+        elif probe.last_probe_ok is False:
+            dibos_state, dibos_detail = "down", probe.last_probe_error or "DIBOS-Poll fehlgeschlagen."
+        elif jetzt - (_naive_utc(probe.last_probe_at) or jetzt) > timedelta(
+            seconds=max(180, 6 * (cfg.poll_interval_seconds if cfg else 5))
+        ):
+            dibos_state, dibos_detail = "down", "Kein DIBOS-Poll innerhalb des erwarteten Intervalls."
+        else:
+            dibos_state, dibos_detail = "ok", "DIBOS-Poll erfolgreich."
+        dibos_teile = (DienstTeil("dibos", "DIBOS-Poll", dibos_state, dibos_detail),)
+        dibos = DienstCheck("alarm_dibos", aggregiere(dibos_teile), dibos_detail, True, dibos_teile)
     return [print_check, sms_check, serial, dibos]
 
 
@@ -149,7 +227,7 @@ def entscheide(
     assert jetzt is not None
     if not check.relevant or check.state == "unknown":
         return Entscheidung(None)
-    if check.state == "down":
+    if check.state in ("down", "teilweise"):
         if row.down_since is None:
             row.down_since = jetzt
         row.fail_cycles = (row.fail_cycles or 0) + 1
@@ -187,14 +265,12 @@ def bestaetigt_down(row: DienstStatus | None, karenz_min: int, now: datetime) ->
 
 
 def dienst_zustand(check: DienstCheck, row: DienstStatus | None, karenz_min: int, now: datetime) -> str:
-    """Dreizustand fuer UI und Uptime-API: nicht_konfiguriert | down | ok.
-
-    Einzige Quelle fuer beide Pfade, damit die Kachel nicht wieder gegen den
-    HTTP-Status laufen kann (siehe bestaetigt_down).
-    """
+    """nicht_konfiguriert | ok | teilweise | down -- einzige Quelle fuer UI und Uptime-API."""
     if not check.relevant:
         return "nicht_konfiguriert"
-    return "down" if bestaetigt_down(row, karenz_min, now) else "ok"
+    if not bestaetigt_down(row, karenz_min, now):
+        return "ok"
+    return "teilweise" if check.state == "teilweise" else "down"
 
 
 def claim_meldung(db: Session, row: DienstStatus, org_id: int, art: str, now: datetime, wiederholung_min: int) -> bool:

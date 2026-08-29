@@ -7,14 +7,24 @@
       <h3>{{ labels.get(check.key, check.key) }}</h3>
       {% if zustand == 'nicht_konfiguriert' %}
       <span class="badge">Nicht eingerichtet</span>
-      {% elif zustand == 'down' %}
-      <span class="badge badge--closed">Störung</span>
+      {% elif zustand == 'teilweise' %}
+      <span class="badge badge--warn">Teilstörung</span>
       {% if row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}
-      {% if not row.outage_notified_at %}<p style="color:var(--text-muted);font-size:.8rem">Keine Benachrichtigung verschickt{% if org_settings and not org_settings.dienst_monitor_enabled %} – Überwachung ist deaktiviert.{% endif %}</p>{% endif %}
+      {% elif zustand == 'down' %}
+      <span class="badge badge--closed">Ausfall</span>
+      {% if row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}
       {% else %}
       <span class="badge badge--active">OK</span>
       {% endif %}
+      {% if zustand in ('down', 'teilweise') and not row.outage_notified_at %}<p style="color:var(--text-muted);font-size:.8rem">Keine Benachrichtigung verschickt{% if org_settings and not org_settings.dienst_monitor_enabled %} – Überwachung ist deaktiviert.{% endif %}</p>{% endif %}
       <p>{{ check.detail }}</p>
+      {% if check.teile|length > 1 %}
+      <ul style="list-style:none;padding:0;margin:.75rem 0">
+        {% for teil in check.teile %}
+        <li style="margin-bottom:.5rem"><strong>{{ teil.name }}</strong> <span class="badge {% if teil.state == 'ok' %}badge--active{% elif teil.state == 'unknown' %}badge--warn{% else %}badge--closed{% endif %}">{{ 'OK' if teil.state == 'ok' else ('Unbekannt' if teil.state == 'unknown' else 'Ausfall') }}</span><br><span style="color:var(--text-muted);font-size:.8rem">{{ teil.detail }}</span></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
       <p style="color:var(--text-muted);font-size:.8rem;margin-bottom:0">Rohstatus: {{ check.state }}</p>
     </div>
   </article>

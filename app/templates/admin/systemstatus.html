@@ -72,7 +72,7 @@
         {% for key in dienst_keys %}<tr><td>Einzeldienst {{ labels.get(key, key) }}</td><td><code class="api-key-display">{{ request.base_url }}health/dienst/{{ key }}?token=&lt;TOKEN&gt;</code></td><td>ja</td></tr>{% endfor %}
       </tbody></table>
       <p>Authentifizierung: <code>?token=&lt;TOKEN&gt;</code> oder <code>Authorization: Bearer &lt;TOKEN&gt;</code>.</p>
-      <p><strong>200</strong> = erreichbar beziehungsweise OK oder nicht eingerichtet. <strong>503</strong> = Datenbank nicht erreichbar bei <code>/health</code> beziehungsweise bestätigte Störung bei <code>/health/dienste</code>. <strong>401</strong> = ungültiger oder widerrufener Token, nur bei den Token-Endpunkten. HTTP 503 ist das Signal, auf das Uptime Kuma triggert.</p>
+      <p><strong>200</strong> = erreichbar beziehungsweise alle Dienste vollständig OK oder nicht eingerichtet. <strong>207</strong> = mindestens ein Dienst arbeitet nur teilweise. <strong>503</strong> = mindestens ein Dienst fällt vollständig aus beziehungsweise die Datenbank ist bei <code>/health</code> nicht erreichbar. <strong>401</strong> = ungültiger oder widerrufener Token, nur bei den Token-Endpunkten. HTTP 207 und 503 können als Signale für Uptime Kuma verwendet werden.</p>
     </div>
   </section>
 
@@ -84,7 +84,7 @@
   </div></section>
 
   <section class="card"><div class="card-header"><h2>Kurzanleitung</h2><a href="https://github.com/BattloXX/Einsatzcockpit/wiki/Administration-Dienstueberwachung" target="_blank" rel="noopener">Wiki öffnen</a></div><div class="card-body">
-    <ol style="line-height:2;padding-left:1.2rem"><li>Basis-Monitor auf <code>/health</code> anlegen – braucht keinen Token.</li><li>Überwachung aktivieren und mindestens einen Empfänger eintragen.</li><li>Karenz und Wiederholung festlegen.</li><li>Für jeden verwendeten Kanal einen Testversand auslösen.</li><li>Token anlegen und die jetzt angezeigte fertige URL kopieren.</li><li>In Uptime Kuma als HTTP(s)-Monitor mit <strong>Accepted Status Codes 200</strong> eintragen.</li></ol>
+    <ol style="line-height:2;padding-left:1.2rem"><li>Basis-Monitor auf <code>/health</code> anlegen – braucht keinen Token.</li><li>Überwachung aktivieren und mindestens einen Empfänger eintragen.</li><li>Karenz und Wiederholung festlegen.</li><li>Für jeden verwendeten Kanal einen Testversand auslösen.</li><li>Token anlegen und die jetzt angezeigte fertige URL kopieren.</li><li>In Uptime Kuma als HTTP(s)-Monitor eintragen: <strong>Accepted Status Codes 200</strong> alarmiert auch bei Teilausfall, <strong>200,207</strong> toleriert ihn.</li></ol>
   </div></section>
 </div>
 {% endblock %}

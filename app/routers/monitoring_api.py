@@ -18,6 +18,17 @@ from app.services.dienst_monitor_service import dienst_zustand, pruefe_dienste
 router = APIRouter(tags=["Monitoring"])
 
 
+def _teil_daten(check) -> tuple[dict[str, int], list[dict[str, str]]]:
+    anzahl = {
+        "gesamt": len(check.teile),
+        "ok": sum(t.state == "ok" for t in check.teile),
+        "down": sum(t.state == "down" for t in check.teile),
+        "unbekannt": sum(t.state == "unknown" for t in check.teile),
+    }
+    teile = [{"ref": t.ref, "name": t.name, "status": t.state, "detail": t.detail} for t in check.teile]
+    return anzahl, teile
+
+
 def _token_org(request: Request) -> tuple[Session, int]:
     auth = request.headers.get("authorization", "")
     raw = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
@@ -65,10 +76,13 @@ def dienste(request: Request):
         jetzt = datetime.now(UTC).replace(tzinfo=None)
         ausgabe = []
         down = False
+        teilweise = False
         for key, label in DIENST_LABELS.items():
             check, row = checks[key], rows.get(key)
             status = dienst_zustand(check, row, karenz, jetzt)
             down |= status == "down"
+            teilweise |= status == "teilweise"
+            anzahl, teile = _teil_daten(check)
             ausgabe.append(
                 {
                     "key": key,
@@ -77,11 +91,15 @@ def dienste(request: Request):
                     "roh_status": check.state,
                     "seit": row.down_since.isoformat() if row and row.down_since else None,
                     "detail": check.detail,
+                    "anzahl": anzahl,
+                    "teile": teile,
                 }
             )
         loop = db.get(SystemSettings, "dienst_monitor_last_run")
+        gesamt = "down" if down else ("teilweise" if teilweise else "ok")
         return JSONResponse(
-            {"dienste": ausgabe, "loop_letzter_lauf": loop.value if loop else None}, status_code=503 if down else 200
+            {"gesamt": gesamt, "dienste": ausgabe, "loop_letzter_lauf": loop.value if loop else None},
+            status_code=503 if down else (207 if teilweise else 200),
         )
     finally:
         db.close()
@@ -103,11 +121,24 @@ def dienst(key: str, request: Request):
         status = dienst_zustand(
             check, row, _karenz_min(db, org_id), datetime.now(UTC).replace(tzinfo=None)
         )
+        anzahl, teile = _teil_daten(check)
         if status == "nicht_konfiguriert":
-            return {"status": "nicht_konfiguriert", "roh_status": check.state, "detail": check.detail}
+            return {
+                "status": "nicht_konfiguriert",
+                "roh_status": check.state,
+                "detail": check.detail,
+                "anzahl": anzahl,
+                "teile": teile,
+            }
         return JSONResponse(
-            {"status": status, "roh_status": check.state, "detail": check.detail},
-            status_code=503 if status == "down" else 200,
+            {
+                "status": status,
+                "roh_status": check.state,
+                "detail": check.detail,
+                "anzahl": anzahl,
+                "teile": teile,
+            },
+            status_code=503 if status == "down" else (207 if status == "teilweise" else 200),
         )
     finally:
         db.close()

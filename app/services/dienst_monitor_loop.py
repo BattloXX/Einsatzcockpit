@@ -103,7 +103,7 @@ async def _process_org(org_id: int) -> None:
             if check.state == "ok":
                 row.last_ok_at = now
                 row.last_error = None
-            elif check.state == "down":
+            elif check.state in ("down", "teilweise"):
                 row.last_error = check.detail[:500]
             entscheidung = entscheide(
                 check, row, org_settings.dienst_monitor_karenz_min, org_settings.dienst_monitor_wiederholung_min, now

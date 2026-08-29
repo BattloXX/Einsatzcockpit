@@ -142,20 +142,21 @@ def test_systemstatus_zeigt_bestaetigten_ausfall_ohne_benachrichtigung(client, s
             ]
         )
         db.commit()
-        monkeypatch.setattr("app.routers.ws.is_sms_gateway_connected", lambda _org_id: False)
+        monkeypatch.setattr("app.routers.ws.connected_gateway_token_ids", lambda _org_id: set())
         _login(client, "systemstatus_down", "Test1234!")
 
         response = client.get("/admin/systemstatus")
 
         assert response.status_code == 200
-        assert '<span class="badge badge--closed">Störung</span>' in response.text
+        assert '<span class="badge badge--closed">Ausfall</span>' in response.text
         assert "Keine Benachrichtigung verschickt" in response.text
     finally:
         db.query(DienstStatus).filter(
             DienstStatus.org_id == org_id, DienstStatus.key == "sms_gateway"
         ).delete()
         db.query(SmsGatewayToken).filter(
-            SmsGatewayToken.token_hash == "systemstatus-down-sms-token"
+            SmsGatewayToken.org_id == org_id,
+            SmsGatewayToken.token_hash == "systemstatus-down-sms-token",
         ).delete()
         db.commit()
         db.close()
@@ -194,10 +195,11 @@ def test_ui_und_uptime_api_zeigen_denselben_ausfall(client, setup_db, monkeypatc
             ]
         )
         db.commit()
-        monkeypatch.setattr("app.routers.ws.is_sms_gateway_connected", lambda _org_id: False)
+        monkeypatch.setattr("app.routers.ws.connected_gateway_token_ids", lambda _org_id: set())
 
         gesamt = client.get("/health/dienste?token=gleichlauf-uptime-token")
         assert gesamt.status_code == 503
+        assert gesamt.json()["gesamt"] == "down"
         sms = next(d for d in gesamt.json()["dienste"] if d["key"] == "sms_gateway")
         assert sms["status"] == "down"
 
@@ -207,12 +209,77 @@ def test_ui_und_uptime_api_zeigen_denselben_ausfall(client, setup_db, monkeypatc
 
         _login(client, "gleichlauf_admin", "Test1234!")
         seite = client.get("/admin/systemstatus")
-        assert '<span class="badge badge--closed">Störung</span>' in seite.text
+        assert '<span class="badge badge--closed">Ausfall</span>' in seite.text
     finally:
         db.query(DienstStatus).filter(DienstStatus.org_id == org_id, DienstStatus.key == "sms_gateway").delete()
-        db.query(SmsGatewayToken).filter(SmsGatewayToken.token_hash == "gleichlauf-sms-token").delete()
+        db.query(SmsGatewayToken).filter(
+            SmsGatewayToken.org_id == org_id, SmsGatewayToken.token_hash == "gleichlauf-sms-token"
+        ).delete()
         db.query(DienstMonitorToken).filter(
-            DienstMonitorToken.token_hash == hash_api_key("gleichlauf-uptime-token")
+            DienstMonitorToken.org_id == org_id,
+            DienstMonitorToken.token_hash == hash_api_key("gleichlauf-uptime-token"),
+        ).delete()
+        db.commit()
+        db.close()
+
+
+def test_ui_und_uptime_api_zeigen_sms_teilstoerung(client, setup_db, monkeypatch):
+    org_id = _make_org_admin("teilausfall_admin", "teilausfall-org")
+    now = datetime.now(UTC).replace(tzinfo=None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    sms_hashes = ["teilausfall-sms-ok", "teilausfall-sms-down"]
+    uptime_hash = hash_api_key("teilausfall-uptime-token")
+    try:
+        db.add_all(
+            [
+                SmsGatewayToken(
+                    org_id=org_id, label="Android-Wache", token_hash=sms_hashes[0], last_heartbeat_at=now
+                ),
+                SmsGatewayToken(
+                    org_id=org_id,
+                    label="Android-Nord",
+                    token_hash=sms_hashes[1],
+                    last_heartbeat_at=now - timedelta(minutes=30),
+                ),
+                DienstStatus(
+                    org_id=org_id,
+                    key="sms_gateway",
+                    state="down",
+                    down_since=now - timedelta(minutes=60),
+                ),
+                DienstMonitorToken(org_id=org_id, label="Uptime Kuma", token_hash=uptime_hash),
+            ]
+        )
+        db.commit()
+        monkeypatch.setattr("app.routers.ws.connected_gateway_token_ids", lambda _org_id: set())
+
+        gesamt = client.get("/health/dienste?token=teilausfall-uptime-token")
+        assert gesamt.status_code == 207
+        assert gesamt.json()["gesamt"] == "teilweise"
+        sms = next(d for d in gesamt.json()["dienste"] if d["key"] == "sms_gateway")
+        assert sms["status"] == "teilweise"
+        assert sms["anzahl"] == {"gesamt": 2, "ok": 1, "down": 1, "unbekannt": 0}
+        assert {t["name"] for t in sms["teile"]} == {"Android-Wache", "Android-Nord"}
+
+        einzeln = client.get("/health/dienst/sms_gateway?token=teilausfall-uptime-token")
+        assert einzeln.status_code == 207
+        assert einzeln.json()["status"] == "teilweise"
+
+        _login(client, "teilausfall_admin", "Test1234!")
+        seite = client.get("/admin/systemstatus")
+        assert '<span class="badge badge--warn">Teilstörung</span>' in seite.text
+        assert "Android-Wache" in seite.text
+        assert "Android-Nord" in seite.text
+    finally:
+        db.query(DienstStatus).filter(
+            DienstStatus.org_id == org_id, DienstStatus.key == "sms_gateway"
+        ).delete()
+        db.query(SmsGatewayToken).filter(
+            SmsGatewayToken.org_id == org_id, SmsGatewayToken.token_hash.in_(sms_hashes)
+        ).delete()
+        db.query(DienstMonitorToken).filter(
+            DienstMonitorToken.org_id == org_id, DienstMonitorToken.token_hash == uptime_hash
         ).delete()
         db.commit()
         db.close()

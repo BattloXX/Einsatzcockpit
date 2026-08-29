@@ -146,16 +146,83 @@ def test_gateway_aggregation_serial_unknown_und_sms_ohne_heartbeat(monkeypatch):
                       wut_config={"host": "wt-b"})
         token = SmsGatewayToken(org_id=1, label="Altclient", token_hash="dm-sms-ohne-heartbeat")
         db.add_all([frisch, alt, token]); db.commit()
-        monkeypatch.setattr("app.routers.ws.is_sms_gateway_connected", lambda _org_id: False)
+        monkeypatch.setattr("app.routers.ws.connected_gateway_token_ids", lambda _org_id: set())
         checks = {c.key: c for c in pruefe_dienste(db, 1, now)}
-        assert checks["print_gateway"].state == "down"
+        assert checks["print_gateway"].state == "teilweise"
         assert "Alt" in checks["print_gateway"].detail and "Frisch" not in checks["print_gateway"].detail
-        assert checks["alarm_seriell"].state == "unknown"
+        assert {t.name for t in checks["print_gateway"].teile} == {"Frisch", "Alt"}
+        assert [t.name for t in checks["print_gateway"].teile if t.state == "down"] == ["Alt"]
+        assert checks["alarm_seriell"].state == "ok"
+        assert [t.name for t in checks["alarm_seriell"].teile if t.state == "unknown"] == ["Alt"]
         assert checks["sms_gateway"].state == "unknown"
     finally:
         db.query(SmsGatewayToken).filter(SmsGatewayToken.token_hash == "dm-sms-ohne-heartbeat").delete()
         db.query(Gateway).filter(Gateway.device_token_hash.in_(["dm-frisch", "dm-alt"])).delete()
         db.commit(); db.close()
+
+
+def test_sms_gateway_aggregation_teilweise_down_und_ok(monkeypatch):
+    from app.db import SessionLocal
+    from app.models.master import FireDept
+    from app.models.user import SmsGatewayToken
+    from app.services.dienst_monitor_service import pruefe_dienste
+
+    db = SessionLocal(); set_tenant_context(db, None)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    hashes = ["dm-sms-aggregation-1", "dm-sms-aggregation-2", "dm-sms-aggregation-3"]
+    try:
+        org = FireDept(slug="dm-sms-aggregation", name="SMS-Aggregation", color="#112233", bos="Feuerwehr")
+        db.add(org); db.flush()
+        org_id = org.id
+        tokens = [
+            SmsGatewayToken(org_id=org_id, label="Wache", token_hash=hashes[0], last_heartbeat_at=now),
+            SmsGatewayToken(org_id=org_id, label="Nord", token_hash=hashes[1], last_heartbeat_at=now),
+            SmsGatewayToken(
+                org_id=org_id,
+                label="Sued",
+                token_hash=hashes[2],
+                last_heartbeat_at=now - timedelta(minutes=30),
+            ),
+        ]
+        db.add_all(tokens); db.commit()
+        monkeypatch.setattr("app.routers.ws.connected_gateway_token_ids", lambda _org_id: set())
+
+        check = next(c for c in pruefe_dienste(db, org_id, now) if c.key == "sms_gateway")
+        assert check.state == "teilweise"
+        assert [t.name for t in check.teile if t.state == "down"] == ["Sued"]
+
+        for token in tokens:
+            token.last_heartbeat_at = now - timedelta(minutes=30)
+        db.commit()
+        check = next(c for c in pruefe_dienste(db, org_id, now) if c.key == "sms_gateway")
+        assert check.state == "down"
+
+        for token in tokens:
+            token.last_heartbeat_at = now
+        db.commit()
+        check = next(c for c in pruefe_dienste(db, org_id, now) if c.key == "sms_gateway")
+        assert check.state == "ok"
+    finally:
+        db.query(SmsGatewayToken).filter(
+            SmsGatewayToken.org_id == org_id, SmsGatewayToken.token_hash.in_(hashes)
+        ).delete()
+        db.query(FireDept).filter(FireDept.id == org_id).delete()
+        db.commit(); db.close()
+
+
+def test_teilstoerung_loest_keine_entwarnung_aus():
+    now = datetime(2026, 1, 1, 12)
+    status = row(
+        down_since=now - timedelta(minutes=30),
+        fail_cycles=2,
+        outage_notified_at=now - timedelta(minutes=20),
+        last_repeat_at=now - timedelta(minutes=10),
+    )
+
+    entscheidung = entscheide(DienstCheck("print_gateway", "teilweise", "Nord aus", True), status, 5, 60, now)
+
+    assert entscheidung.art is None
+    assert status.outage_notified_at is not None
 
 
 def test_monitoring_token_fehler_alle_identisch(client):
