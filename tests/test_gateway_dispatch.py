@@ -42,7 +42,7 @@ async def test_dispatch_live_returns_status():
     import app.routers.ws as ws
     org_id, job_id = 770002, 42
     live = _LiveWS(job_id)
-    ws._print_gateways[org_id] = [live]
+    ws._print_gateways[org_id] = [(1, live)]
     try:
         result = await ws.dispatch_print_job(org_id, job_id, {"job_id": job_id}, timeout=2.0)
         assert result["status"] == "done"
@@ -57,12 +57,12 @@ async def test_dispatch_prunes_dead_and_uses_live():
     org_id, job_id = 770003, 43
     live = _LiveWS(job_id)
     dead = _DeadWS()
-    ws._print_gateways[org_id] = [live, dead]  # dead = neueste → zuerst versucht
+    ws._print_gateways[org_id] = [(1, live), (2, dead)]  # dead = neueste → zuerst versucht
     try:
         result = await ws.dispatch_print_job(org_id, job_id, {"job_id": job_id}, timeout=2.0)
         assert result["status"] == "done"
-        assert dead not in ws._print_gateways[org_id]
-        assert live in ws._print_gateways[org_id]
+        assert (2, dead) not in ws._print_gateways[org_id]
+        assert (1, live) in ws._print_gateways[org_id]
     finally:
         ws._print_gateways.pop(org_id, None)
         ws._job_pending.pop(str(job_id), None)
@@ -73,7 +73,7 @@ async def test_dispatch_timeout_returns_sent_not_retried():
     import app.routers.ws as ws
     org_id, job_id = 770004, 44
     a, b = _SilentWS(), _SilentWS()
-    ws._print_gateways[org_id] = [a, b]
+    ws._print_gateways[org_id] = [(1, a), (2, b)]
     try:
         result = await ws.dispatch_print_job(org_id, job_id, {"job_id": job_id}, timeout=0.1)
         assert result["status"] == "sent"
@@ -81,6 +81,54 @@ async def test_dispatch_timeout_returns_sent_not_retried():
     finally:
         ws._print_gateways.pop(org_id, None)
         ws._job_pending.pop(str(job_id), None)
+
+
+def test_ein_gateway_trennt_anderes_bleibt_verbunden():
+    """Offline-Markierung prueft das konkrete Gateway statt die ganze Org."""
+    import app.routers.ws as ws
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.gateway import GATEWAY_STATUS_OFFLINE, GATEWAY_STATUS_ONLINE, Gateway
+
+    token_hashes = ["gateway-online-regression-a", "gateway-online-regression-b"]
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw_a = Gateway(
+            org_id=1,
+            name="A",
+            device_token_hash=token_hashes[0],
+            status=GATEWAY_STATUS_ONLINE,
+        )
+        gw_b = Gateway(
+            org_id=1,
+            name="B",
+            device_token_hash=token_hashes[1],
+            status=GATEWAY_STATUS_ONLINE,
+        )
+        db.add_all([gw_a, gw_b])
+        db.commit()
+        org_id = 1
+        ws_a, ws_b = object(), object()
+        ws._print_gateways[org_id] = [(gw_a.id, ws_a), (gw_b.id, ws_b)]
+        try:
+            ws._discard_print_gateway(org_id, ws_a)
+            ws._mark_gateway_offline(gw_a.id)
+
+            db.refresh(gw_a)
+            db.refresh(gw_b)
+            assert gw_a.status == GATEWAY_STATUS_OFFLINE
+            assert gw_b.status == GATEWAY_STATUS_ONLINE
+            assert ws.connected_print_gateway_ids(org_id) == {gw_b.id}
+        finally:
+            ws._print_gateways.pop(org_id, None)
+    finally:
+        db.query(Gateway).filter(
+            Gateway.org_id == 1,
+            Gateway.device_token_hash.in_(token_hashes),
+        ).delete()
+        db.commit()
+        db.close()
 
 
 def test_job_status_log_contains_gateway_context(caplog):

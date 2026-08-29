@@ -14,7 +14,7 @@
       </div>
     </div>
     <div class="gwx-pills">
-      {% if gw.status == 'online' and connected %}
+      {% if connected %}
       <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
       {% elif not gw.is_paired %}
       <span class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
@@ -67,7 +67,7 @@
     <div class="gwx-tiles">
       <div class="gwx-tile">
         <div class="gwx-tile__ic">🔌</div>
-        <div><div class="gwx-tile__v">{{ 'Online' if (gw.status=='online' and connected) else ('—' if not gw.is_paired else 'Offline') }}</div>
+        <div><div class="gwx-tile__v">{{ 'Online' if connected else ('—' if not gw.is_paired else 'Offline') }}</div>
           <div class="gwx-tile__l">Verbindung</div></div>
       </div>
       <div class="gwx-tile">

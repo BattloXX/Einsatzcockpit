@@ -88,7 +88,7 @@
               <div class="gwl-card__name">🖨️ {{ gw.name }}</div>
               <div class="gwl-card__loc">{{ gw.standort or 'Kein Standort' }}</div>
             </div>
-            {% if gw.status == 'online' and connected %}
+            {% if gw.id in connected_ids %}
             <span class="gwl-chip gwl-chip--ok"><span class="gwl-chip__d"></span>Online</span>
             {% elif not gw.is_paired %}
             <span class="gwl-chip"><span class="gwl-chip__d"></span>Nicht gekoppelt</span>
