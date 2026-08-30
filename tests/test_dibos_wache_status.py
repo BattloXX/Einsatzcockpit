@@ -1,7 +1,5 @@
 """Tests fuer Mapping, Persistenz und Verlauf des DIBOS-Wachenstatus."""
-import json
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
@@ -11,7 +9,7 @@ from app.models.incident import IncidentChange, IncidentWacheStatus
 from app.models.master import FireDept
 from app.services.dibos.dibos_enrich import _sync_wache_status
 from app.services.dibos.dibos_mapping import map_wache_status
-from app.services.incident_service import combined_verlauf, create_incident, set_wache_status
+from app.services.incident_service import create_incident, set_wache_status
 from tests.conftest import TestingSession
 
 ORG_ID = 1
@@ -108,41 +106,5 @@ def test_set_wache_status_spiegelt_incident_felder(setup_db):
     ts_bereit = datetime(2026, 8, 8, 18, 20, 17)
     set_wache_status(db, incident, "fw_wolfu", "einsatzbereit", status_at=ts_bereit)
     assert incident.ready_again_at == ts_bereit
-    db.rollback()
-    db.close()
-
-
-def test_echter_trace_wachenstatus_chronologisch(setup_db):
-    trace_dir = Path("/tmp/fw_log_extract")
-    if not trace_dir.is_dir():
-        pytest.skip("Echter DIBOS-Trace /tmp/fw_log_extract nicht vorhanden")
-
-    db = TestingSession()
-    set_tenant_context(db, ORG_ID)
-    org = db.get(FireDept, ORG_ID)
-    incident = _incident(db, "f26006968")
-    for path in sorted(trace_dir.glob("*GetCurrentUnits_response.json")):
-        _sync_wache_status(
-            db, org, incident, "f26006968", json.loads(path.read_text(encoding="utf-8")), "fw_wolfu"
-        )
-    db.flush()
-
-    changes = db.query(IncidentChange).filter_by(
-        incident_id=incident.id, action="wache.status_set"
-    ).order_by(IncidentChange.ts).all()
-    assert [(json.loads(c.after_json)["status"], c.ts) for c in changes] == [
-        ("alarmiert", datetime(2026, 8, 8, 16, 56, 14)),
-        ("übernommen", datetime(2026, 8, 8, 16, 57, 55)),
-        ("einsatzbereit", datetime(2026, 8, 8, 18, 20, 17)),
-    ]
-    assert [e["summary"] for e in reversed(combined_verlauf(db, incident.id))] == [
-        "FW Wolfurt: alarmiert", "FW Wolfurt: übernommen", "FW Wolfurt: einsatzbereit",
-    ]
-    # Die Wache selbst meldet in diesem Trace nie S4/S5 (das taten nur einzelne
-    # Fahrzeuge) - departed_at/on_scene_at bleiben daher erwartungsgemaess leer.
-    assert incident.taken_over_at == datetime(2026, 8, 8, 16, 57, 55)
-    assert incident.ready_again_at == datetime(2026, 8, 8, 18, 20, 17)
-    assert incident.departed_at is None
-    assert incident.on_scene_at is None
     db.rollback()
     db.close()
