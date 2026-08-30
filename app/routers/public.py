@@ -11,6 +11,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import (
     FileResponse,
@@ -21,7 +22,9 @@ from fastapi.responses import (
     Response,
 )
 
+from app.config import settings
 from app.core.permissions import require_system_admin
+from app.core.rate_limit import limiter as _limiter
 from app.core.templating import templates
 from app.db import get_db
 from app.models.user import User
@@ -36,6 +39,39 @@ router = APIRouter()
 ALLOWED_IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 MAX_IMG_BYTES = 4 * 1024 * 1024  # 4 MB
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9_.-]+$")
+_URL_IM_NAMEN = re.compile(r"https?://|www\.", re.IGNORECASE)
+
+
+async def _verify_turnstile(token: str, remote_ip: str) -> bool:
+    """Prüft ein Turnstile-Token; technische Fehler blockieren die Anfrage."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={
+                    "secret": settings.TURNSTILE_SECRET_KEY,
+                    "response": token,
+                    "remoteip": remote_ip,
+                },
+            )
+            response.raise_for_status()
+            return bool(response.json().get("success"))
+    except Exception:
+        logger.exception("Kontaktformular: Turnstile-Verifikation fehlgeschlagen")
+        return False
+
+
+def _remote_ip(request: Request) -> str:
+    """Ermittelt die Client-IP und vertraut XFF nur bei konfigurierten Proxies."""
+    client_ip = request.client.host if request.client else ""
+    trusted_proxies = {
+        ip.strip() for ip in settings.TRUSTED_PROXY_IPS.split(",") if ip.strip()
+    }
+    if settings.TRUST_PROXY_HEADERS and (client_ip in trusted_proxies or "*" in trusted_proxies):
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return client_ip
 
 
 def public_context(request: Request, active_nav: str | None, **extra) -> dict:
@@ -100,7 +136,15 @@ async def funktionen(request: Request):
 @router.get("/ueber-das-projekt", response_class=HTMLResponse)
 async def ueber(request: Request, kontakt: str | None = None):
     return templates.TemplateResponse(
-        request, "public/ueber.html", public_context(request, "ueber", kontakt=kontakt))
+        request,
+        "public/ueber.html",
+        public_context(
+            request,
+            "ueber",
+            kontakt=kontakt,
+            turnstile_site_key=settings.TURNSTILE_SITE_KEY,
+        ),
+    )
 
 
 @router.get("/roadmap", response_class=HTMLResponse)
@@ -128,17 +172,25 @@ async def about_redirect():
 
 
 @router.post("/kontakt")
+@(_limiter.limit(settings.CONTACT_RATELIMIT) if _limiter else lambda f: f)
 async def contact_submit(
     request: Request, db=Depends(get_db),
     name: str = Form(""), email: str = Form(""), message: str = Form(""),
     website: str = Form(""),  # Honeypot – muss leer bleiben
+    turnstile_token: str = Form("", alias="cf-turnstile-response"),
 ):
     # Das Kontaktformular lebt auf /ueber-das-projekt#kontakt – dorthin zurück.
     ok = "/ueber-das-projekt?kontakt=ok#kontakt"
     fehler = "/ueber-das-projekt?kontakt=fehler#kontakt"
     if website.strip():
         return RedirectResponse(ok, status_code=303)
+    if _URL_IM_NAMEN.search(name):
+        return RedirectResponse(ok, status_code=303)
     if not name.strip() or not email.strip() or not message.strip():
+        return RedirectResponse(fehler, status_code=303)
+    if settings.TURNSTILE_SECRET_KEY and not await _verify_turnstile(
+        turnstile_token, _remote_ip(request),
+    ):
         return RedirectResponse(fehler, status_code=303)
     try:
         await send_contact_message(

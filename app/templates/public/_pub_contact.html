@@ -1,5 +1,8 @@
 {# Kontaktformular -- postet an die bestehende Route POST /kontakt (Honeypot +
    serverseitiger Mailversand). ``kontakt`` = Statuswert aus der Redirect-Query. #}
+{% if turnstile_site_key %}
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{% endif %}
 <section class="pub-section pub-section--alt" id="kontakt">
   <div class="pub-wrap">
     <span class="pub-eyebrow">[ KONTAKT ]</span>
@@ -29,6 +32,9 @@
         <label for="k-msg">Nachricht</label>
         <textarea id="k-msg" name="message" required maxlength="4000"></textarea>
       </div>
+      {% if turnstile_site_key %}
+      <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
+      {% endif %}
       <div>
         <button type="submit" class="pub-btn pub-btn--primary">Nachricht senden</button>
       </div>
