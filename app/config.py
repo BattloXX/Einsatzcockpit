@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     VAPID_PUBLIC_KEY: str = ""
     VAPID_CLAIM_EMAIL: str = "admin@feuerwehr-wolfurt.at"
 
+    TURNSTILE_SITE_KEY: str = ""
+    TURNSTILE_SECRET_KEY: str = ""
+
     # Firebase Cloud Messaging (native Android Push)
     FCM_ENABLED: bool = False
     FCM_PROJECT_ID: str = ""
@@ -177,6 +180,7 @@ class Settings(BaseSettings):
     LOGIN_RATELIMIT: str = "10/minute"          # POST /login – IP-basiert
     API_ALARM_RATELIMIT: str = "60/minute"      # POST /api/v1/einsatz – Key-basiert
     UPLOAD_RATELIMIT: str = "20/minute"         # Medien-Uploads – IP-basiert
+    CONTACT_RATELIMIT: str = "5/hour"            # POST /kontakt – IP-basiert
 
     # Lagekarte.info GeoJSON-Endpoint
     LAGEKARTE_CORS_ORIGINS: str = "https://www.lagekarte.info,https://lagekarte.info"
