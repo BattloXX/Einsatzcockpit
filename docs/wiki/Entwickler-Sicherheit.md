@@ -40,6 +40,19 @@ Weitere technische Details: [Architektur](Entwickler-Architektur).
 - `POST /login`: `LOGIN_RATELIMIT` (Standard `10/minute`), IP-basiert
 - `POST /api/v1/einsatz`: `API_ALARM_RATELIMIT` (Standard `60/minute`), pro API-Key
 - Medien-Upload: `UPLOAD_RATELIMIT` (Standard `20/minute`), IP-basiert
+- `POST /kontakt`: `CONTACT_RATELIMIT` (Standard `5/hour`), IP-basiert
+
+## Öffentliches Kontaktformular (`POST /kontakt`)
+
+Mehrstufiger Spam-Schutz, angewendet in dieser Reihenfolge (`app/routers/public.py::contact_submit`):
+
+1. **Honeypot**: Verstecktes Feld `website` — ist es befüllt, wird die Anfrage still verworfen (Redirect wie bei Erfolg, kein Mailversand).
+2. **URL-Filter im Namensfeld**: Enthält `name` ein URL-Muster (`https?://` oder `www.`), wird die Anfrage ebenfalls still verworfen. Legitime Nutzer tragen nie eine URL im Namen ein — dieses Muster stammt von einem beobachteten Spam-Bot.
+3. **Pflichtfeld-Check**: Fehlt `name`, `email` oder `message`, wird ein Fehler angezeigt (kein stiller Drop, da hier ein Mensch tippt).
+4. **Rate-Limit**: `CONTACT_RATELIMIT`, IP-basiert (siehe oben).
+5. **Cloudflare Turnstile** (optional): Nur aktiv, wenn `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` gesetzt sind. Serverseitige Prüfung via `_verify_turnstile()` gegen `https://challenges.cloudflare.com/turnstile/v0/siteverify`; technische Fehler (Timeout, Netzwerk) werden als fehlgeschlagen gewertet (fail closed). Ohne gesetzten `TURNSTILE_SECRET_KEY` läuft das Formular unverändert ohne CAPTCHA (kein Widget im Template, kein Server-Check).
+
+Turnstile-Keys erzeugen: `dash.cloudflare.com` → Turnstile → Widget-Typ "Managed" oder unsichtbar, Domain der Instanz eintragen. Details in `.env.example`.
 
 ## API-Key-Sicherheit
 
