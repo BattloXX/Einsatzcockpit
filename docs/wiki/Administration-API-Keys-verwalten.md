@@ -47,7 +47,7 @@ können daher nicht automatisch Nachrichten versenden.
 
 ```bash
 python -m app.cli create-api-key --label "Alarmierungssystem FWWO"
-# Ausgabe: fwwo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Ausgabe: ec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Mit Ablaufdatum:
@@ -60,7 +60,7 @@ python -m app.cli create-api-key --label "Test-Key" --expires "2026-12-31"
 ```http
 POST /api/v1/einsatz HTTP/1.1
 Host: einsatzleiter.feuerwehr-wolfurt.at
-X-API-Key: fwwo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+X-API-Key: ec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 Content-Type: application/json
 
 { "Key": "...", ... }
@@ -87,7 +87,7 @@ Best Practice: Alle 6–12 Monate Keys rotieren.
 
 ## API-Key-Format
 
-Alle Keys beginnen mit dem Präfix `fwwo_` und bestehen aus URL-sicheren Zeichen.  
+Alle Keys beginnen mit dem Präfix `ec_` und bestehen aus URL-sicheren Zeichen.
 In der Datenbank wird nur der **SHA-256-Hash** des Keys gespeichert — auch ein kompromittierter Datenbank-Dump gibt keine echten Keys preis.
 
 ## Audit-Protokoll

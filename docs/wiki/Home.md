@@ -108,6 +108,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Einstellungen](Administration-Einstellungen) | Org-Stammdaten, Logo, Auto-Schließen, Wetter-Opt-out |
 | [Organisationen verwalten](Administration-Organisations-verwalten) | Multi-Org: anlegen, Seed-Profile, Einladungen, System-Konsole |
 | [API-Keys verwalten](Administration-API-Keys-verwalten) | Anlegen, Rotieren, Sperren |
+| [Nachrichten-API](Administration-Nachrichten-API) | Externen SMS-/E-Mail-Versand, Scopes, Limits und Statusabfrage einrichten |
 | [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise) | Historie nachvollziehen, Stand rekonstruieren |
 | [Systemstatus & Überwachung](Administration-Dienstueberwachung) | Dienstüberwachung, Benachrichtigungen (Mail/Teams/SMS), Uptime-Token und Health-Endpunkte für Uptime Kuma |
 | [Statistik-Dashboard](Administration-Statistik-Dashboard) | Kennzahlen interpretieren |

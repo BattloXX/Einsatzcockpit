@@ -7,10 +7,23 @@ Die REST-API ist für **externe Systeme** (Alarmierungssystem) gedacht. Alle End
 ## Authentifizierung
 
 ```http
-X-API-Key: elh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+X-API-Key: ec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 API-Keys sind org-spezifisch. Der Key wird als SHA-256-Hash gespeichert, nie im Klartext.
+
+## Scopes
+
+Jeder API-Key besitzt explizite Berechtigungen. Für die Nachrichten-API sind relevant:
+
+| Scope | Endpunkte |
+|-------|-----------|
+| `sms:send` | `POST /api/v1/sms`, Status eigener Nachrichtenjobs |
+| `mail:send` | `POST /api/v1/mail`, Status eigener Nachrichtenjobs |
+
+Für `GET /api/v1/nachricht/{id}` genügt einer der beiden Scopes. Ein gültiger Key ohne den
+benötigten Scope erhält HTTP `403`. Bestehende Keys wurden mit
+`einsatz:write,mailing:import` migriert und dürfen nicht automatisch Nachrichten versenden.
 
 ## Rate-Limiting
 
@@ -30,7 +43,7 @@ Legt einen neuen Einsatz an (oder gibt den bestehenden zurück bei Idempotenz).
 
 ```http
 POST /api/v1/einsatz
-X-API-Key: elh_...
+X-API-Key: ec_...
 Content-Type: application/json
 ```
 
@@ -112,7 +125,7 @@ Erstellt eine neue Einsatzstelle in einer laufenden Großschadenslage.
 
 ```http
 POST /api/v1/lage/alarm
-X-API-Key: elh_...
+X-API-Key: ec_...
 Content-Type: application/json
 ```
 
@@ -139,7 +152,7 @@ Zusätzliche Felder gegenüber AlarmPayload:
 
 ```http
 GET /api/v1/einsatz/active
-X-API-Key: elh_...
+X-API-Key: ec_...
 ```
 
 Response: Array von Einsatz-Objekten mit `id`, `alarm_type_code`, `started_at`, `is_exercise`.
@@ -148,8 +161,126 @@ Response: Array von Einsatz-Objekten mit `id`, `alarm_type_code`, `started_at`, 
 
 ```http
 GET /api/v1/einsatz/42
-X-API-Key: elh_...
+X-API-Key: ec_...
 ```
+
+### POST /api/v1/sms — SMS senden
+
+Nimmt einen persistenten Versandauftrag an. Erforderlicher Scope: `sms:send`.
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|------|-----|---------|-------------|-------------|
+| `Key` | string | ja | 1–200 Zeichen | Idempotenz-Token je Organisation und Kanal |
+| `text` | string | ja | 1–`API_MESSAGE_MAX_BODY_CHARS` Zeichen | SMS-Inhalt |
+| `empfaenger` | object | ja | mindestens ein gültig aufgelöstes Ziel | Empfängerauswahl |
+| `empfaenger.nummern` | string[] | nein | strikt E.164 (`+` und 8–15 Ziffern) | freie Nummern |
+| `empfaenger.gruppen_ids` | integer[] | nein | Gruppe muss zur Key-Organisation gehören | SMS-Gruppen |
+| `empfaenger.mitglieder_ids` | integer[] | nein | Mitglied muss zur Key-Organisation gehören | einzelne Mitglieder |
+
+```bash
+curl -X POST https://einsatzcockpit.example.at/api/v1/sms \
+  -H "X-API-Key: ec_..." -H "Content-Type: application/json" \
+  -d '{
+    "Key":"sms-2026-09-01-001",
+    "text":"Probealarm Sirene 12:00. Keine Aktion erforderlich.",
+    "empfaenger":{"nummern":["+436641234567"],"gruppen_ids":[3],"mitglieder_ids":[12]}
+  }'
+```
+
+Ungültige freie Nummern werden unter `abgelehnt` zurückgegeben und blockieren gültige Ziele nicht.
+Alle Ziele werden nach normalisierter Nummer dedupliziert.
+
+### POST /api/v1/mail — E-Mail senden
+
+Nimmt einen persistenten Mail-Auftrag an. Erforderlicher Scope: `mail:send`.
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|------|-----|---------|-------------|-------------|
+| `Key` | string | ja | 1–200 Zeichen | Idempotenz-Token je Organisation und Kanal |
+| `betreff` | string | ja | 1–500 Zeichen | Mail-Betreff |
+| `text` | string/null | bedingt | zusammen mit HTML höchstens `API_MESSAGE_MAX_BODY_CHARS` | Text-Version |
+| `html` | string/null | bedingt | mindestens `text` oder `html` | HTML-Version |
+| `empfaenger` | object | ja | mindestens ein gültig aufgelöstes Ziel | Empfängerauswahl |
+| `empfaenger.adressen` | string[] | nein | plausible, Header-sichere E-Mail-Adresse | freie Adressen |
+| `empfaenger.listen_ids` | integer[] | nein | Liste muss zur Key-Organisation gehören | Mailinglisten |
+
+```bash
+curl -X POST https://einsatzcockpit.example.at/api/v1/mail \
+  -H "X-API-Key: ec_..." -H "Content-Type: application/json" \
+  -d '{
+    "Key":"mail-2026-09-01-001",
+    "betreff":"Übungstermin verschoben",
+    "text":"Die Übung am Freitag entfällt.",
+    "html":"<p>Die Übung am Freitag entfällt.</p>",
+    "empfaenger":{"adressen":["max@example.at"],"listen_ids":[5]}
+  }'
+```
+
+Adressen auf der Mailing-Sperrliste werden als `suppressed` gespeichert und nicht versendet.
+
+### Antwort auf Versandaufträge
+
+Beide POST-Endpunkte antworten mit `202 Accepted`:
+
+```json
+{
+  "id": 41,
+  "kanal": "sms",
+  "status": "queued",
+  "empfaenger_anzahl": 12,
+  "abgelehnt": [{"wert": "0664 abc", "grund": "ungueltige_nummer"}],
+  "idempotent_hit": false
+}
+```
+
+Ein bereits bekannter `Key` liefert dieselbe `id`, keine neuen Empfänger und
+`idempotent_hit: true`. Der Lookup geschieht vor der Versandwegprüfung.
+
+### GET /api/v1/nachricht/{id} — Versandstatus
+
+Erforderlicher Scope: `sms:send` oder `mail:send`. Ein Job einer fremden Organisation liefert
+`404`.
+
+```bash
+curl https://einsatzcockpit.example.at/api/v1/nachricht/41 \
+  -H "X-API-Key: ec_..."
+```
+
+```json
+{
+  "id": 41,
+  "kanal": "sms",
+  "status": "partial",
+  "erstellt_am": "2026-09-01T10:00:00Z",
+  "abgeschlossen_am": "2026-09-01T10:00:14Z",
+  "empfaenger_anzahl": 2,
+  "erfolg_anzahl": 1,
+  "fehler_anzahl": 1,
+  "empfaenger": [
+    {"ziel":"+436641234567","name":"Max M.","status":"sent","provider":"gateway",
+     "gesendet_am":"2026-09-01T10:00:03Z","fehler":null}
+  ]
+}
+```
+
+Job-Status: `queued`, `sending`, `sent`, `partial`, `failed`. Empfängerstatus: `queued`,
+`sending`, `sent`, `failed`, `suppressed`. Zeitstempel sind UTC mit `Z`-Suffix. Mail-Empfänger
+werden bis zu dreimal versucht; SMS wird wegen des Doppelversandrisikos nicht wiederholt.
+
+### Fehler der Nachrichten-API
+
+| Code | Bedeutung |
+|------|-----------|
+| 401 | Key ungültig, gesperrt oder abgelaufen |
+| 403 | erforderlicher Scope fehlt |
+| 404 | fremde oder unbekannte Gruppe, Liste, Mitglied oder Job-ID |
+| 409 | kein SMS- beziehungsweise Mail-Versandweg konfiguriert |
+| 422 | Payload ungültig, zu viele oder keine gültigen Empfänger |
+| 429 | Key-basiertes Request-Limit oder 24-Stunden-Empfängerlimit überschritten |
+
+Standardmäßig gelten `20/minute`, höchstens 200 Empfänger pro Auftrag, 500 SMS-Empfänger und
+2.000 Mail-Empfänger je Organisation und 24 Stunden. Die Umgebungsvariablen sind in
+[Nachrichten-API administrieren](Administration-Nachrichten-API) beschrieben.
 
 ## Stufen-Normalisierung
 
@@ -160,7 +291,7 @@ Die API normalisiert `Stufe` automatisch: `f3` → `F3`, `T3` bleibt `T3`.
 ```bash
 # Einsatz anlegen:
 curl -X POST https://einsatzleiter.feuerwehr-wolfurt.at/api/v1/einsatz \
-  -H "X-API-Key: elh_xxxx" \
+  -H "X-API-Key: ec_xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "Key": "test-uuid-001",
@@ -177,7 +308,7 @@ curl -X POST https://einsatzleiter.feuerwehr-wolfurt.at/api/v1/einsatz \
 
 # Aktive Einsätze:
 curl https://einsatzleiter.feuerwehr-wolfurt.at/api/v1/einsatz/active \
-  -H "X-API-Key: elh_xxxx"
+  -H "X-API-Key: ec_xxxx"
 
 # Rate-Limit-Header in der Response:
 # X-RateLimit-Limit: 60
@@ -193,7 +324,7 @@ python -m app.cli create-api-key --label "Alarmierungssystem Leitstelle" --org-i
 
 Ausgabe:
 ```
-API-Key: elh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+API-Key: ec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 Key-ID: 1
 Label: Alarmierungssystem Leitstelle
 ```
