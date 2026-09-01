@@ -109,6 +109,23 @@ async def _dispatch_mail(db, message: ApiMessage, recipients: list[ApiMessageRec
         db.commit()
 
 
+async def send_message_now(db, message: ApiMessage) -> None:
+    """Sendet einen bereits angelegten SMS-Auftrag sofort und finalisiert ihn."""
+    recipients = db.query(ApiMessageRecipient).filter(
+        ApiMessageRecipient.message_id == message.id,
+        ApiMessageRecipient.status == "queued",
+    ).all()
+    message.status = "sending"
+    message.started_at = message.started_at or _now()
+    for recipient in recipients:
+        recipient.status = "sending"
+        recipient.attempt_count += 1
+    db.commit()
+    await _dispatch_sms(db, message, recipients)
+    _finish(db, message)
+    db.commit()
+
+
 async def dispatch_once(db=None, *, batch_size: int = BATCH_SIZE) -> int:
     owns = db is None
     if owns:

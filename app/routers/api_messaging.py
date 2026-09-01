@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
@@ -16,6 +17,7 @@ from app.db import get_db
 from app.models.api_message import ApiMessage
 from app.models.user import ApiKey
 from app.services import api_message_service, mail_service
+from app.services.api_message_dispatch_loop import send_message_now
 from app.services.sms_service import sms_available
 
 router = APIRouter(prefix="/api/v1", tags=["Nachrichten"])
@@ -74,6 +76,27 @@ class MessageAcceptedResponse(BaseModel):
     idempotent_hit: bool
 
 
+class GatewaySendRequest(BaseModel):
+    to: str = Field(min_length=1, description="Komma-separierte E.164-Rufnummern.")
+    body: str = Field(min_length=1, description="Zu versendender SMS-Text.")
+
+    @model_validator(mode="after")
+    def validate_body(self):
+        if not self.body.strip():
+            raise ValueError("Nachrichtentext darf nicht leer sein")
+        if len(self.body) > settings.API_MESSAGE_MAX_BODY_CHARS:
+            raise ValueError("Nachrichtentext ist zu lang")
+        return self
+
+
+class GatewaySendResponse(BaseModel):
+    status: Literal["sent", "failed"]
+    id: int
+    gesendet: int
+    fehlgeschlagen: int
+    error: str | None = None
+
+
 def _accepted(message: ApiMessage, rejected: list[dict], hit: bool) -> dict:
     return {
         "id": message.id, "kanal": message.kanal, "status": message.status,
@@ -123,6 +146,58 @@ async def send_sms_message(
     )
     db.commit()
     return _accepted(message, rejected, hit)
+
+
+@router.post(
+    "/sms/send", response_model=GatewaySendResponse, response_model_exclude_none=True,
+    summary="SMS synchron versenden",
+    description=(
+        "Uptime-Kuma-kompatibler Gateway-Endpunkt. Versandfehler werden bewusst mit HTTP 200 "
+        "und status=failed gemeldet. Der Endpunkt arbeitet ohne Idempotenzschutz."
+    ),
+    responses={401: {"description": "API-Key ungültig."}, 403: {"description": "Scope fehlt."},
+               409: {"description": "Kein SMS-Versandweg."}, 422: {"description": "Ungültige Eingabe."},
+               429: {"description": "Limit überschritten."}},
+)
+@(_limiter.limit(settings.API_MESSAGE_RATELIMIT, key_func=get_api_key_identifier)
+  if _limiter else lambda f: f)
+async def send_sms_gateway(
+    request: Request, payload: GatewaySendRequest, db: Session = Depends(get_db),
+    api_key: ApiKey = Depends(require_scope("sms:send")),
+):
+    if not sms_available(api_key.org_id, db):
+        raise HTTPException(409, "Kein SMS-Versandweg konfiguriert")
+    recipients, _rejected = api_message_service.parse_to_field(payload.to)
+    if not recipients:
+        raise HTTPException(422, "Keine gültige Rufnummer in 'to'")
+    if len(recipients) > settings.API_SMS_SYNC_MAX_RECIPIENTS:
+        raise HTTPException(
+            422,
+            f"Zu viele Empfänger für synchronen Versand; bitte POST /api/v1/sms verwenden "
+            f"(maximal {settings.API_SMS_SYNC_MAX_RECIPIENTS})",
+        )
+    api_message_service.enforce_recipient_limits(db, api_key.org_id, "sms", len(recipients))
+    message, _ = api_message_service.create_message(
+        db, api_key, "sms", f"uptime-kuma:{uuid4().hex}", recipients,
+        body_text=payload.body, initial_status="sending",
+    )
+    await send_message_now(db, message)
+    status = "sent" if message.status == "sent" else "failed"
+    response = {
+        "status": status,
+        "id": message.id,
+        "gesendet": message.success_count,
+        "fehlgeschlagen": message.failed_count,
+    }
+    if status == "failed":
+        response["error"] = "SMS-Versand fehlgeschlagen"
+    write_audit(
+        db, "api.sms.gateway_send", org_id=api_key.org_id, api_key_id=api_key.id,
+        entity_type="api_message", entity_id=message.id,
+        payload={"empfaenger": len(recipients), "status": status},
+    )
+    db.commit()
+    return response
 
 
 @router.post(

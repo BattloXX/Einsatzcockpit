@@ -181,6 +181,7 @@ class Settings(BaseSettings):
     API_ALARM_RATELIMIT: str = "60/minute"      # POST /api/v1/einsatz – Key-basiert
     API_MESSAGE_RATELIMIT: str = "20/minute"
     API_MESSAGE_MAX_RECIPIENTS: int = 200
+    API_SMS_SYNC_MAX_RECIPIENTS: int = 20
     API_SMS_DAILY_LIMIT: int = 500
     API_MAIL_DAILY_LIMIT: int = 2000
     API_MESSAGE_MAX_BODY_CHARS: int = 10_000

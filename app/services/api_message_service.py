@@ -73,6 +73,20 @@ def resolve_sms_recipients(db, org_id: int, empfaenger) -> tuple[list[Recipient]
     return list(result.values()), rejected
 
 
+def parse_to_field(raw: str) -> tuple[list[Recipient], list[dict]]:
+    """Parst das komma-separierte Empfängerfeld des synchronen SMS-Gateways."""
+    result: dict[str, Recipient] = {}
+    rejected: list[dict] = []
+    for value in raw.split(","):
+        candidate = value.strip()
+        nummer = telefon_e164(candidate)
+        if nummer:
+            result.setdefault(nummer, Recipient(nummer))
+        else:
+            rejected.append({"wert": candidate, "grund": "ungueltige_nummer"})
+    return list(result.values()), rejected
+
+
 def resolve_mail_recipients(db, org_id: int, empfaenger) -> tuple[list[Recipient], list[dict]]:
     result: dict[str, Recipient] = {}
     rejected: list[dict] = []
@@ -129,6 +143,7 @@ def enforce_recipient_limits(db, org_id: int, kanal: str, count: int) -> None:
 def create_message(
     db, api_key: ApiKey, kanal: str, external_key: str, recipients: list[Recipient],
     *, betreff: str | None = None, body_text: str | None = None, body_html: str | None = None,
+    initial_status: str = "queued",
 ) -> tuple[ApiMessage, bool]:
     existing = db.query(ApiMessage).filter(
         ApiMessage.org_id == api_key.org_id,
@@ -148,7 +163,8 @@ def create_message(
     message = ApiMessage(
         org_id=api_key.org_id, api_key_id=api_key.id, external_key=external_key,
         kanal=kanal, betreff=betreff, body_text=body_text, body_html=body_html,
-        recipient_count=len(recipients), sms_log_id=sms_log.id if sms_log else None,
+        status=initial_status, recipient_count=len(recipients),
+        sms_log_id=sms_log.id if sms_log else None,
     )
     if recipients and all(recipient.status == "suppressed" for recipient in recipients):
         message.status = "sent"
