@@ -1,0 +1,26 @@
+<a href="/profil" class="{{ link_class }} {% if request.url.path.startswith('/profil') %}active{% endif %}">👤 Profil bearbeiten</a>
+{% if request.state.is_native_app %}
+<a href="https://localhost/about.html" class="{{ link_class }}">ℹ️ Über die App</a>
+{% endif %}
+{% if is_admin %}
+<a href="/admin" class="{{ link_class }} {% if '/admin' in request.url.path %}active{% endif %}">⚙ Verwaltung</a>
+{% endif %}
+{% if not request.state.is_device and not request.state.qr_incident_id and not request.state.qr_lage_id %}
+<div class="mobile-menu__group-hdr">Benutzer wechseln</div>
+{% for account in request.state.accounts %}
+<form method="post" action="/benutzer/wechseln" onsubmit="window.ecKontowechselVorbereiten()">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <input type="hidden" name="user_id" value="{{ account.user_id }}">
+  <input type="hidden" name="fcm_token" value="{{ request.query_params.get('fcm_token', '') }}">
+  <button type="submit" class="{{ link_class }}" style="width:100%;border:none;background:none;text-align:left;">
+    {% if account.is_active_account %}✓ {% endif %}{{ account.display_name }} · {{ account.org_name }}
+  </button>
+</form>
+{% endfor %}
+<a href="/benutzer/hinzufuegen" class="{{ link_class }}">➕ Weiteren Benutzer anmelden</a>
+<form method="post" action="/logout/alle">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <button type="submit" class="{{ link_class }}" style="width:100%;border:none;background:none;text-align:left;">🚪 Alle abmelden</button>
+</form>
+{% endif %}
+<a href="{% if request.state.is_native_app %}https://localhost/?native_logout=1{% else %}/logout{% endif %}" class="{{ link_class }}">🚪 Abmelden</a>

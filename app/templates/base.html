@@ -45,11 +45,12 @@
   {% block head_extra %}{% endblock %}
 </head>
 <body x-data="appState()" @incident-created.window="onIncidentCreated($event.detail)"
-      :class="{ 'mobile-menu-open': mobileMenuOpen }">
+      :class="{ 'mobile-menu-open': mobileMenuOpen || profilSheetOpen }">
 
   {% if user %}
   {% set user_roles = user.roles|map(attribute='code')|list %}
   {% set is_admin = ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles) %}
+  {% set darf_einsatz_anlegen = ('incident_leader' in user_roles or is_admin) and not request.state.is_device %}
   {% set is_fahrtenbuch = request.state.fahrtenbuch_modul_aktiv and ('fahrtenbuch_admin' in user_roles or 'incident_leader' in user_roles or 'recorder' in user_roles or is_admin) %}
   {% set is_as_pruefung = request.state.atemschutz_pruefung_modul_aktiv %}
   <nav class="topnav" id="topnav">
@@ -171,7 +172,7 @@
     <div class="topnav__user">
       <div class="topnav__profile" x-data="{open:false}" @click.outside="open=false" style="position:relative;">
         <button type="button" class="nav-link nav-link--dropdown user-badge {% if request.url.path.startswith('/profil') %}active{% endif %}"
-                @click="open=!open" style="display:inline-flex;align-items:center;gap:6px;">
+                @click="open=!open">
           {% if user.avatar_path %}
           <img src="/profil/avatar/{{ user.avatar_path }}" alt=""
                style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;">
@@ -269,63 +270,75 @@
       <a href="/statistik" class="mobile-menu__link {% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
     </nav>
     <footer class="mobile-menu__footer">
-      <a href="/profil" class="mobile-menu__link {% if request.url.path.startswith('/profil') %}active{% endif %}">👤 Mein Profil</a>
-      {% if request.state.is_native_app %}
-      <a href="https://localhost/about.html" class="mobile-menu__link">ℹ️ Über die App</a>
-      {% endif %}
-      {% if is_admin %}
-      <a href="/admin" class="mobile-menu__link {% if '/admin' in request.url.path %}active{% endif %}">⚙ Verwaltung</a>
-      {% endif %}
-      {% if not request.state.is_device and not request.state.qr_incident_id and not request.state.qr_lage_id %}
-      <div class="mobile-menu__group-hdr">Benutzer wechseln</div>
-      {% for account in request.state.accounts %}
-      <form method="post" action="/benutzer/wechseln" onsubmit="window.ecKontowechselVorbereiten()">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <input type="hidden" name="user_id" value="{{ account.user_id }}">
-        <input type="hidden" name="fcm_token" value="{{ request.query_params.get('fcm_token', '') }}">
-        <button type="submit" class="mobile-menu__link" style="width:100%;border:none;background:none;text-align:left;">
-          {% if account.is_active_account %}✓ {% endif %}{{ account.display_name }} · {{ account.org_name }}
-        </button>
-      </form>
-      {% endfor %}
-      <a href="/benutzer/hinzufuegen" class="mobile-menu__link">➕ Weiteren Benutzer anmelden</a>
-      <form method="post" action="/logout/alle">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button type="submit" class="mobile-menu__link" style="width:100%;border:none;background:none;text-align:left;">🚪 Alle abmelden</button>
-      </form>
-      {% endif %}
+      {% with link_class = 'mobile-menu__link' %}{% include "_profil_aktionen.html" %}{% endwith %}
       <button type="button" class="btn btn--secondary btn--full pwa-install-btn" style="display:none">
         📲 App installieren
       </button>
       <button type="button" class="btn btn--secondary btn--full pwa-install-ios" style="display:none">
         📲 App installieren
       </button>
-      <a href="{% if request.state.is_native_app %}https://localhost/?native_logout=1{% else %}/logout{% endif %}" class="btn btn--ghost btn--full">Abmelden</a>
     </footer>
   </aside>
 
   <!-- Bottom-Nav (mobil) -->
   {% set _p = request.url.path %}
   <nav class="bottom-nav" aria-label="Schnellnavigation">
-    <a href="/" class="bottom-nav__item {% if _p == '/' %}bottom-nav__item--active{% endif %}">
+    <a href="/" class="bottom-nav__item {% if _p == '/' %}bottom-nav__item--active{% endif %}"
+       {% if _p == '/' %}aria-current="page"{% endif %}>
       <span class="bottom-nav__icon">🏠</span>
       <span>Übersicht</span>
     </a>
-    <a href="/lage" class="bottom-nav__item {% if _p.startswith('/lage') %}bottom-nav__item--active{% endif %}">
+    <a href="/lage" class="bottom-nav__item {% if _p.startswith('/lage') %}bottom-nav__item--active{% endif %}"
+       {% if _p.startswith('/lage') %}aria-current="page"{% endif %}>
       <span class="bottom-nav__icon">🚨</span>
       <span>Lage</span>
     </a>
-    <a href="/archiv" class="bottom-nav__item {% if '/archiv' in _p %}bottom-nav__item--active{% endif %}">
+    {% if darf_einsatz_anlegen %}
+    <button type="button" class="bottom-nav__fab" aria-label="Neuen Einsatz starten"
+            @click="neuenEinsatzOeffnen()">
+      <span class="bottom-nav__fab-plus" aria-hidden="true">+</span>
+      <span class="bottom-nav__fab-label">Einsatz</span>
+    </button>
+    {% endif %}
+    {% if is_admin %}
+    <a href="/admin" class="bottom-nav__item {% if '/admin' in _p %}bottom-nav__item--active{% endif %}"
+       {% if '/admin' in _p %}aria-current="page"{% endif %}>
+      <span class="bottom-nav__icon">⚙</span>
+      <span>Verwaltung</span>
+    </a>
+    {% else %}
+    <a href="/archiv" class="bottom-nav__item {% if '/archiv' in _p %}bottom-nav__item--active{% endif %}"
+       {% if '/archiv' in _p %}aria-current="page"{% endif %}>
       <span class="bottom-nav__icon">📚</span>
       <span>Archiv</span>
     </a>
-    {% if WEATHER_ENABLED %}
-    <a href="/wetter" class="bottom-nav__item {% if _p.startswith('/wetter') %}bottom-nav__item--active{% endif %}">
-      <span class="bottom-nav__icon">🌦</span>
-      <span>Wetter</span>
-    </a>
     {% endif %}
+    <button type="button" class="bottom-nav__item {% if _p.startswith('/profil') %}bottom-nav__item--active{% endif %}"
+            :class="profilSheetOpen ? 'bottom-nav__item--active' : ''"
+            @click="profilSheetOpen = true" aria-label="Profil und Konto">
+      <span class="bottom-nav__icon">
+        {% if user.avatar_path %}<img src="/profil/avatar/{{ user.avatar_path }}" alt="" class="bottom-nav__avatar">
+        {% else %}👤{% endif %}
+      </span>
+      <span>Profil</span>
+    </button>
   </nav>
+
+  <div class="profil-sheet-backdrop" x-show="profilSheetOpen" x-cloak x-transition.opacity
+       @click="profilSheetOpen = false"></div>
+  <div class="profil-sheet" :class="profilSheetOpen ? 'profil-sheet--open' : ''"
+       @keydown.escape.window="profilSheetOpen = false" role="dialog" aria-label="Profil">
+    <div class="profil-sheet__grip" aria-hidden="true"></div>
+    <header class="profil-sheet__header">
+      {% if user.avatar_path %}
+      <img src="/profil/avatar/{{ user.avatar_path }}" alt="" class="profil-sheet__avatar">
+      {% else %}
+      <span class="profil-sheet__avatar-placeholder" aria-hidden="true">👤</span>
+      {% endif %}
+      <span><strong>{{ user.display_name }}</strong>{% if _org_name %}<small>{{ _org_name }}</small>{% endif %}</span>
+    </header>
+    {% with link_class = 'profil-sheet__link' %}{% include "_profil_aktionen.html" %}{% endwith %}
+  </div>
 
   <!-- iOS-Safari Install-Hinweis -->
   <dialog id="iosInstallHint" class="modal">
