@@ -86,6 +86,7 @@ document.addEventListener('alpine:init', () => {
     toasts: [],
     newIncidentAlert: null,
     mobileMenuOpen: false,
+    profilSheetOpen: false,
     _ws: null,
 
     init() {
@@ -93,9 +94,18 @@ document.addEventListener('alpine:init', () => {
       this._registerPush();
       // Schließe Mobile-Menü bei Navigation (Link-Klick auf Anker innerhalb des Panels)
       document.addEventListener('click', (e) => {
-        const link = e.target.closest('.mobile-menu__link');
-        if (link) this.mobileMenuOpen = false;
+        const link = e.target.closest('.mobile-menu__link, .profil-sheet__link');
+        if (link) {
+          this.mobileMenuOpen = false;
+          this.profilSheetOpen = false;
+        }
       });
+    },
+
+    neuenEinsatzOeffnen() {
+      const dlg = document.getElementById('newIncidentModal');
+      if (dlg && typeof dlg.showModal === 'function') { dlg.showModal(); return; }
+      window.location.href = '/?neuer_einsatz=1';
     },
 
     addToast(msg, type = 'info') {

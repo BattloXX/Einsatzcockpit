@@ -8,9 +8,11 @@
 {% set is_as_pruefung = request.state.atemschutz_pruefung_modul_aktiv %}
 <div class="page-header">
   <h2 class="page-title">Übersicht</h2>
+  {% if darf_einsatz_anlegen %}
   <button class="btn btn--primary" @click="$refs.newIncidentModal.showModal()">
     + Neuer Einsatz
   </button>
+  {% endif %}
 </div>
 
 {% if active_major_incidents %}
@@ -179,6 +181,15 @@
 
 {% block scripts %}
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get('neuer_einsatz') !== '1') return;
+  const dialog = document.getElementById('newIncidentModal');
+  if (dialog && typeof dialog.showModal === 'function') dialog.showModal();
+  url.searchParams.delete('neuer_einsatz');
+  window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+});
+
 // Karten-Picker für "Neuer Einsatz"-Dialog
 (function() {
   const _newIncidentForm = document.getElementById('newIncidentForm');
