@@ -125,7 +125,7 @@
             </div>
             <div class="text-right">
               <strong class="block font-mono text-headline-sm text-tertiary">{{ row.code }}</strong>
-              <span class="font-mono text-body-sm text-on-surface-variant">{{ row.km_aktuell }} km &bull; {{ row.betriebsstunden_aktuell }} h</span>
+              {% if row.km_aktuell > 0 or row.betriebsstunden_aktuell > 0 %}<span class="font-mono text-body-sm text-on-surface-variant">{% if row.km_aktuell > 0 %}{{ row.km_aktuell }} km{% endif %}{% if row.km_aktuell > 0 and row.betriebsstunden_aktuell > 0 %} &bull; {% endif %}{% if row.betriebsstunden_aktuell > 0 %}{{ row.betriebsstunden_aktuell }} h{% endif %}</span>{% endif %}
             </div>
           </div>
           {% else %}

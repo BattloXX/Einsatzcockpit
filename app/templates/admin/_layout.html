@@ -9,7 +9,7 @@
      or '/admin/api-keys' in _p or '/admin/lagekarte-tokens' in _p or '/admin/audit' in _p
      or '/admin/sms-senden' in _p or '/admin/sms-provider' in _p
      or '/admin/sms-empfang' in _p or '/admin/einsatzinfo-sms' in _p
-     or '/infoscreen-alarm' in _p or '/admin/settings/wetter' in _p
+     or '/infoscreen-alarm' in _p or '/admin/settings/wetter/infoscreen' in _p
      or '/admin/settings/statistik' in _p
      or ('/admin/medien' in _p and not is_sysadmin)
      or '/admin/verleih' in _p or '/admin/wasserstellen' in _p
@@ -341,7 +341,7 @@
               <span class="admin-nav__icon">✉️</span>SMS
             </a>
             <a href="/infoscreen-alarm/verwaltung"
-               class="admin-nav__item {% if '/infoscreen-alarm' in request.url.path or '/admin/settings/wetter' in request.url.path or '/admin/settings/statistik' in request.url.path %}is-active{% endif %}"
+               class="admin-nav__item {% if '/infoscreen-alarm' in request.url.path or '/admin/settings/wetter/infoscreen' in request.url.path or '/admin/settings/statistik' in request.url.path %}is-active{% endif %}"
                {{ tip('Alarm-, Wetter- und Statistik-Infoscreens verwalten') }}>
               <span class="admin-nav__icon">📺</span>Infoscreens
             </a>
@@ -364,7 +364,7 @@
         <div x-show="groups.einstellungen || isMobile()" x-transition.opacity.duration.120ms>
           <div class="admin-nav__group-items">
             <a href="/admin/settings"
-               class="admin-nav__item {% if '/admin/settings' in request.url.path %}is-active{% endif %}"
+               class="admin-nav__item {% if request.url.path == '/admin/settings' %}is-active{% endif %}"
                {{ tip('Organisations-Stammdaten, Logo, Farbe') }}>
               <span class="admin-nav__icon">🏛️</span>Organisation
             </a>
@@ -372,6 +372,11 @@
                class="admin-nav__item {% if '/admin/gsl-einstellungen' in request.url.path %}is-active{% endif %}"
                {{ tip('GSL: Module, Lagemeldung, Geräteverleih je Org konfigurieren') }}>
               <span class="admin-nav__icon">🚨</span>GSL-Einstellungen
+            </a>
+            <a href="/admin/settings/wetter"
+               class="admin-nav__item {% if request.url.path == '/admin/settings/wetter' %}is-active{% endif %}"
+               {{ tip('Wetterstation, Pegel, Warnungen und Wetter-Aktivierung') }}>
+              <span class="admin-nav__icon">🌦</span>Wetter
             </a>
             <div class="admin-nav__subheading">Schnittstellen</div>
             <a href="/admin/sso"

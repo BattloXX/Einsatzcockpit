@@ -155,8 +155,9 @@ a:hover { text-decoration: underline; }
 *::-webkit-scrollbar-corner { background: transparent; }
 
 /* ── Top Navigation ───────────────────────────────────────── */
+/* Die Topnav muss ueber .ec-live (105) liegen, damit ihre Dropdowns sichtbar bleiben. */
 .topnav {
-  position: sticky; top: 0; z-index: 100;
+  position: sticky; top: 0; z-index: 120;
   /* Android/iOS: WebView zeichnet edge-to-edge unter die System-Statusleiste –
      Hoehe + Top-Padding um den Inset erweitern, damit Inhalt (Burger/Logo/User)
      nicht dahinter verschwindet (siehe Vorfall 2026-07-11, Screenshot). */
