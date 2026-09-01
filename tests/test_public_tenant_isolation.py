@@ -19,6 +19,8 @@ from app.models.stats import StatistikDashboardToken
 from app.models.wasserstelle import Wasserstelle
 from app.models.mailing import MailingCampaign, MailingConfig, MailingQueueItem, MailingRecipientList, MailingRecipientListEntry, MailingSuppressionEntry, MailingTemplate
 from app.models.user import ApiKey
+from app.models.api_message import ApiMessage, ApiMessageRecipient
+from app.models.sms import SmsGroup
 from app.core.crypto import encrypt_secret
 from app.core.security import sign_mailing_track_token, sign_mailing_webhook_org
 
@@ -181,6 +183,51 @@ def test_mailing_api_import_cannot_target_foreign_list(client):
         assert response.status_code==404
         assert db.query(MailingRecipientListEntry).execution_options(include_all_tenants=True).filter_by(list_id=target_id).count()==0
     finally: db.close()
+
+
+def test_nachrichten_api_isoliert_gruppen_listen_und_jobs(client, monkeypatch):
+    org_b_id = _setup_zwei_orgs()
+    raw = f"messaging-isolation-{datetime.now(UTC).timestamp()}"
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        key = ApiKey(
+            key_hash=hash_api_key(raw), label="Messaging isolation", org_id=ORG_A,
+            scopes="sms:send,mail:send",
+        )
+        group_b = SmsGroup(org_id=org_b_id, name=f"Foreign SMS {raw}")
+        list_b = MailingRecipientList(org_id=org_b_id, name=f"Foreign Mail {raw}", kind="static")
+        db.add_all([key, group_b, list_b]); db.flush()
+        message_b = ApiMessage(
+            org_id=org_b_id, api_key_id=key.id, external_key=f"foreign-job-{raw}",
+            kanal="sms", body_text="geheim", recipient_count=1,
+        )
+        db.add(message_b); db.flush()
+        db.add(ApiMessageRecipient(
+            org_id=org_b_id, message_id=message_b.id, ziel="+436649999999"
+        ))
+        db.commit()
+        group_id, list_id, message_id = group_b.id, list_b.id, message_b.id
+    finally:
+        db.close()
+    monkeypatch.setattr("app.routers.api_messaging.sms_available", lambda *_: True)
+    monkeypatch.setattr("app.services.mail_service.mail_available", lambda *_: True)
+    headers = {"X-API-Key": raw}
+    sms = client.post("/api/v1/sms", headers=headers, json={
+        "Key": f"cross-sms-{raw}", "text": "x", "empfaenger": {"gruppen_ids": [group_id]},
+    })
+    mail = client.post("/api/v1/mail", headers=headers, json={
+        "Key": f"cross-mail-{raw}", "betreff": "x", "text": "x",
+        "empfaenger": {"listen_ids": [list_id]},
+    })
+    status = client.get(f"/api/v1/nachricht/{message_id}", headers=headers)
+    assert (sms.status_code, mail.status_code, status.status_code) == (404, 404, 404)
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        assert db.query(ApiMessageRecipient).execution_options(include_all_tenants=True).join(
+            ApiMessage
+        ).filter(ApiMessage.external_key.in_([f"cross-sms-{raw}", f"cross-mail-{raw}"])).count() == 0
+    finally:
+        db.close()
 
 RAW_TOKEN_A = "iso-test-infoscreen-token-org-a"
 RAW_TOKEN_B = "iso-test-infoscreen-token-org-b"

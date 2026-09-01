@@ -28,6 +28,9 @@ def test_upgrade_downgrade_ist_wiederaufsetzbar_und_backfillt_alt_keys(tmp_path)
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'm0229.db'}")
     modul = _migration()
     with engine.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE fire_dept (id INTEGER PRIMARY KEY)")
+        conn.exec_driver_sql("CREATE TABLE sms_log (id INTEGER PRIMARY KEY)")
+        conn.exec_driver_sql("CREATE TABLE member (id INTEGER PRIMARY KEY)")
         conn.exec_driver_sql("CREATE TABLE api_key (id INTEGER PRIMARY KEY)")
         conn.exec_driver_sql("INSERT INTO api_key (id) VALUES (1)")
         _lauf(conn, modul.upgrade)
@@ -35,6 +38,7 @@ def test_upgrade_downgrade_ist_wiederaufsetzbar_und_backfillt_alt_keys(tmp_path)
         assert conn.exec_driver_sql("SELECT scopes FROM api_key WHERE id = 1").scalar() == (
             "einsatz:write,mailing:import"
         )
+        assert {"api_message", "api_message_recipient"}.issubset(sa.inspect(conn).get_table_names())
         _lauf(conn, modul.downgrade)
         _lauf(conn, modul.downgrade)
         assert "scopes" not in {s["name"] for s in sa.inspect(conn).get_columns("api_key")}

@@ -179,6 +179,11 @@ class Settings(BaseSettings):
     # Rate-Limits
     LOGIN_RATELIMIT: str = "10/minute"          # POST /login – IP-basiert
     API_ALARM_RATELIMIT: str = "60/minute"      # POST /api/v1/einsatz – Key-basiert
+    API_MESSAGE_RATELIMIT: str = "20/minute"
+    API_MESSAGE_MAX_RECIPIENTS: int = 200
+    API_SMS_DAILY_LIMIT: int = 500
+    API_MAIL_DAILY_LIMIT: int = 2000
+    API_MESSAGE_MAX_BODY_CHARS: int = 10_000
     UPLOAD_RATELIMIT: str = "20/minute"         # Medien-Uploads – IP-basiert
     CONTACT_RATELIMIT: str = "5/hour"            # POST /kontakt – IP-basiert
 

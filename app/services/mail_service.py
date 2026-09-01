@@ -29,6 +29,20 @@ class MailConfigError(RuntimeError):
     """SMTP nicht konfiguriert."""
 
 
+def mail_available(db, org_id: int | None) -> bool:
+    """True, wenn O365, Resend oder SMTP tatsächlich konfiguriert ist."""
+    if org_id is not None and settings.O365_MAIL_ENABLED:
+        from app.models.org_mail import OrgO365MailConfig
+        cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
+        if cfg and cfg.enabled and cfg.is_fully_configured:
+            return True
+    return bool(
+        _org_resend_cfg(db, org_id)
+        or get_resend_cfg(db)
+        or (_org_smtp_cfg(db, org_id) or get_smtp_cfg(db)).get("host")
+    )
+
+
 def get_smtp_cfg(db=None) -> dict[str, Any]:
     """Lädt SMTP-Konfiguration – DB-Werte haben Vorrang vor Umgebungsvariablen."""
     cfg = {
