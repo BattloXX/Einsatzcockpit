@@ -28,6 +28,21 @@ Liste aller Keys mit:
 
 Nach dem Erstellen wird der Key **einmalig im Klartext angezeigt**. Sofort kopieren!
 
+## Scopes (Berechtigungen)
+
+Beim Anlegen wird festgelegt, welche API-Funktionen ein Key verwenden darf:
+
+| Scope | Berechtigung |
+|------|--------------|
+| `einsatz:write` | Einsätze über die REST-API anlegen und lesen |
+| `mailing:import` | Empfänger in Mailinglisten importieren |
+| `sms:send` | SMS über die Nachrichten-API versenden |
+| `mail:send` | E-Mails über die Nachrichten-API versenden |
+
+Vergeben Sie nur die tatsächlich benötigten Scopes. Bestehende Keys behalten durch die
+Migration ausschließlich ihre bisherigen Berechtigungen `einsatz:write,mailing:import` und
+können daher nicht automatisch Nachrichten versenden.
+
 ### Via CLI
 
 ```bash

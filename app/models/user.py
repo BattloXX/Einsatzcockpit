@@ -99,6 +99,13 @@ class ApiKey(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    scopes: Mapped[str] = mapped_column(
+        String(200), nullable=False, default="einsatz:write,mailing:import",
+        server_default="einsatz:write,mailing:import",
+    )
+
+    def has_scope(self, name: str) -> bool:
+        return name in {scope.strip() for scope in self.scopes.split(",") if scope.strip()}
 
     @property
     def is_active(self) -> bool:

@@ -6,7 +6,15 @@
   <h2>API-Keys</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <form method="post" action="/admin/api-keys/neu" class="inline-form">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <input type="text" name="label" placeholder="Bezeichnung..." class="form-input" required>
+      <fieldset style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border:0;padding:0;margin:0;">
+        <legend class="sr-only">Berechtigungen</legend>
+        <label><input type="checkbox" name="scopes" value="einsatz:write" checked> Einsätze</label>
+        <label><input type="checkbox" name="scopes" value="mailing:import" checked> Mailing-Import</label>
+        <label><input type="checkbox" name="scopes" value="sms:send"> SMS senden</label>
+        <label><input type="checkbox" name="scopes" value="mail:send"> E-Mail senden</label>
+      </fieldset>
       <button type="submit" class="btn btn--primary">+ API-Key erstellen</button>
     </form>
     <a href="/api/docs" target="_blank" class="btn btn--ghost btn--sm">API-Dokumentation →</a>
@@ -22,11 +30,12 @@
 {% endif %}
 
 <table class="table">
-  <thead><tr><th>Bezeichnung</th><th>Erstellt</th><th>Zuletzt genutzt</th><th>Ablauf</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>Bezeichnung</th><th>Scopes</th><th>Erstellt</th><th>Zuletzt genutzt</th><th>Ablauf</th><th>Status</th><th></th></tr></thead>
   <tbody>
     {% for k in keys %}
     <tr>
       <td>{{ k.label }}</td>
+      <td><code>{{ k.scopes }}</code></td>
       <td>{{ (k.created_at|local).strftime('%d.%m.%Y') }}</td>
       <td>{{ k.last_used_at|local_datetime if k.last_used_at else '–' }}</td>
       <td>{{ (k.expires_at|local).strftime('%d.%m.%Y') if k.expires_at else '∞' }}</td>
@@ -34,6 +43,7 @@
       <td>
         {% if k.is_active %}
         <form method="post" action="/admin/api-keys/{{ k.id }}/sperren" style="display:inline">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button type="submit" class="btn btn--xs btn--danger"
                   onclick="return confirm('Key sperren?')">Sperren</button>
         </form>
