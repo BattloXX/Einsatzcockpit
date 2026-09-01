@@ -141,4 +141,5 @@ passenden Eintrag in `teile` überwacht werden, ohne einen eigenen Endpunkt zu b
 
 **Verwandt:** [Print & Alarm Gateway](Administration-Print-Alarm-Gateway) ·
 [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) ·
+[Uptime-Kuma-SMS über die Nachrichten-API](Administration-Nachrichten-API#uptime-kuma-als-alarmweg-einrichten) ·
 [Teams-Alarmierung](Administration-Teams-Alarmierung)

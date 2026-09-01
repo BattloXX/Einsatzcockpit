@@ -56,6 +56,7 @@ anderer Organisationen werden nie aufgelöst oder angezeigt.
 |-------------|----------|-----------|
 | `API_MESSAGE_RATELIMIT` | `20/minute` | POST-Anfragen je API-Key |
 | `API_MESSAGE_MAX_RECIPIENTS` | `200` | aufgelöste Empfänger je Auftrag |
+| `API_SMS_SYNC_MAX_RECIPIENTS` | `20` | Empfänger je synchronem Gateway-Auftrag |
 | `API_SMS_DAILY_LIMIT` | `500` | SMS-Empfänger je Organisation in 24 Stunden |
 | `API_MAIL_DAILY_LIMIT` | `2000` | Mail-Empfänger je Organisation in 24 Stunden |
 | `API_MESSAGE_MAX_BODY_CHARS` | `10000` | maximale Text-/HTML-Gesamtlänge |
@@ -67,6 +68,20 @@ Ein Tageslimit von `0` deaktiviert das jeweilige Tageslimit. Überschreitungen l
 `Key` ist pro Organisation und Kanal eindeutig. Ein wiederholter Request mit demselben `Key`
 liefert dieselbe Job-ID und `idempotent_hit: true`; es entstehen keine neuen Empfänger und kein
 zweiter Versand. Für unterschiedliche fachliche Nachrichten immer neue Schlüssel verwenden.
+
+## Uptime Kuma als Alarmweg einrichten
+
+1. Unter **Verwaltung → API-Keys** einen Key mit dem Scope `sms:send` anlegen.
+2. In Uptime Kuma **Settings → Notifications → Setup Notification** öffnen und den Typ
+   **SMS Gateway** wählen.
+3. Als Server-URL die Basis-URL des Einsatzcockpits ohne `/api/v1/sms/send` eintragen, den
+   API-Key hinterlegen und im Feld *To* eine oder mehrere E.164-Rufnummern angeben.
+
+Der Gateway-Endpunkt sendet synchron und wartet auf die Bestätigung des eingerichteten
+SMS-Versandwegs. Der Uptime-Kuma-Provider ist derzeit kein veröffentlichter Standard: Der
+[Upstream-PR #7720](https://github.com/louislam/uptime-kuma/pull/7720) ist noch offen. Je nach
+Uptime-Kuma-Version kann der Typ **SMS Gateway** daher fehlen; ändert sich dessen Format vor dem
+Merge, muss die Integration angepasst werden.
 
 ## Status abfragen
 

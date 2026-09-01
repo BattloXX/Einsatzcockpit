@@ -18,7 +18,7 @@ Jeder API-Key besitzt explizite Berechtigungen. Für die Nachrichten-API sind re
 
 | Scope | Endpunkte |
 |-------|-----------|
-| `sms:send` | `POST /api/v1/sms`, Status eigener Nachrichtenjobs |
+| `sms:send` | `POST /api/v1/sms`, `POST /api/v1/sms/send`, Status eigener Nachrichtenjobs |
 | `mail:send` | `POST /api/v1/mail`, Status eigener Nachrichtenjobs |
 
 Für `GET /api/v1/nachricht/{id}` genügt einer der beiden Scopes. Ein gültiger Key ohne den
@@ -189,6 +189,34 @@ curl -X POST https://einsatzcockpit.example.at/api/v1/sms \
 
 Ungültige freie Nummern werden unter `abgelehnt` zurückgegeben und blockieren gültige Ziele nicht.
 Alle Ziele werden nach normalisierter Nummer dedupliziert.
+
+### POST /api/v1/sms/send — SMS synchron senden
+
+Uptime-Kuma-kompatibler Gateway-Endpunkt mit Scope `sms:send`. Anders als `POST /api/v1/sms`
+wartet er auf das echte Versandergebnis, reiht keinen Hintergrundauftrag ein und arbeitet ohne
+Idempotenzschutz.
+
+| Feld | Typ | Pflicht | Validierung | Beschreibung |
+|------|-----|---------|-------------|-------------|
+| `to` | string | ja | komma-separiert, strikt E.164, höchstens `API_SMS_SYNC_MAX_RECIPIENTS` eindeutige Nummern | SMS-Empfänger |
+| `body` | string | ja | nicht leer, höchstens `API_MESSAGE_MAX_BODY_CHARS` Zeichen | SMS-Inhalt |
+
+```bash
+curl -X POST https://einsatzcockpit.example.at/api/v1/sms/send \
+  -H "X-API-Key: ec_..." -H "Content-Type: application/json" \
+  -d '{"to":"+436641234567,+436769876543","body":"DIBOS-Poll ist ausgefallen."}'
+```
+
+Bei vollständigem Erfolg lautet die Antwort beispielsweise:
+
+```json
+{"status":"sent","id":42,"gesendet":2,"fehlgeschlagen":0}
+```
+
+Ein Versandfehler wird bewusst ebenfalls mit HTTP `200`, aber mit `status: "failed"` und einem
+`error`-Feld gemeldet. Diese vom übrigen REST-API-Stil abweichende Semantik gilt nur für diesen
+Endpunkt, weil der Uptime-Kuma-Provider das Ergebnis aus dem Body liest. Authentifizierungs-,
+Validierungs-, Limit- und Konfigurationsfehler behalten ihre regulären HTTP-Codes.
 
 ### POST /api/v1/mail — E-Mail senden
 

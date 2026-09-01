@@ -4,6 +4,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **Unveröffentlicht** | 2026-09-01 | **Uptime-Kuma-SMS-Gateway**: synchroner `POST /api/v1/sms/send` mit Scope-Authentifizierung, Limits, Versandstatus, SMS-Protokoll und Audit |
 | **2026.09.01** | 2026-09-01 | **Nachrichten-API**: persistenter externer SMS- und E-Mail-Versand mit API-Key-Scopes, Idempotenz, Empfängerstatus, Limits, Mail-Retry, SMS-Protokoll und Audit |
 | **2026.08.27.1** | 2026-08-27 | **Druckregeln und Verleihschein-Autodruck**: Druckregeln als eigenes Gateway-Tab; Verleihschein-Autodruck vollständig über Druckregeln, bestehender Schalter migriert und entfernt; Übungsfilter greift nun auch bei Verleihscheinen |
 | **2026.08.27** | 2026-08-27 | **Mehrfach-Login und Drucksteuerung**: mehrere Konten gleichzeitig angemeldet halten und ohne erneute Anmeldung wechseln; QR-Codes auf Einsatz- und GSL-Drucken mit optionalem PIN-Schutz je Lage; Übungs-/Echt-Filter je Druckregel |
