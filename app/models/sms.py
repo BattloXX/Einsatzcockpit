@@ -93,7 +93,7 @@ class SmsLog(TenantScoped, Base):
     # org_id via TenantScoped
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), index=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    # "alarm" = automatischer Einsatzinfo-Versand, "manual" = manueller Versand
+    # "alarm" = Einsatzinfo, "manual" = manueller Versand, "api" = Nachrichten-API
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
     alarm_type_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)

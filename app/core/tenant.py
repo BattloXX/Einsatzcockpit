@@ -106,6 +106,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "sms_log",
     "sms_forward_rule",
     "sms_inbox",
+    "api_message",
+    "api_message_recipient",
     # Teilnehmerlisten-Modul (TenantScoped via Mixin)
     "termin",
     "funktion",

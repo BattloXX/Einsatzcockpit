@@ -24,6 +24,7 @@ from app.models.major_incident import LageToken, MajorIncident, MajorIncidentSta
 from app.models.user import DeviceToken, Role, User
 from app.routers import (
     api_live,
+    api_messaging,
     api_v1,
     api_weather,
     auth,
@@ -287,6 +288,8 @@ async def lifespan(app: FastAPI):
     org_backup_task = asyncio.create_task(org_backup_loop())
     from app.services.mailing_dispatch_loop import mailing_dispatch_loop
     mailing_dispatch_task = asyncio.create_task(mailing_dispatch_loop())
+    from app.services.api_message_dispatch_loop import api_message_dispatch_loop
+    api_message_dispatch_task = asyncio.create_task(api_message_dispatch_loop())
     from app.services.mailing_schedule_loop import mailing_schedule_loop
     mailing_schedule_task = asyncio.create_task(mailing_schedule_loop())
 
@@ -315,6 +318,7 @@ async def lifespan(app: FastAPI):
         nachschlagewerk_sync_task.cancel()
         org_backup_task.cancel()
         mailing_dispatch_task.cancel()
+        api_message_dispatch_task.cancel()
         mailing_schedule_task.cancel()
         for t in (autoclose_task, watchdog_task, reminder_task, print_watchdog_task,
                   lagemeldung_task, verleih_task,
@@ -322,7 +326,8 @@ async def lifespan(app: FastAPI):
                   dienst_monitor_task,
                   abfluss_poll_task, lis_task, lis_capture_retention_task,
                   dibos_task, dibos_trace_retention_task,
-                  nachschlagewerk_sync_task, org_backup_task, mailing_dispatch_task, mailing_schedule_task):
+                  nachschlagewerk_sync_task, org_backup_task, mailing_dispatch_task,
+                  api_message_dispatch_task, mailing_schedule_task):
             try:
                 await t
             except (asyncio.CancelledError, Exception):
@@ -736,6 +741,7 @@ app.include_router(ui_password_reset.router)
 app.include_router(ui_pin_login.router)
 app.include_router(ui_account_switch.router)
 app.include_router(api_v1.router)
+app.include_router(api_messaging.router)
 app.include_router(api_weather.router)
 app.include_router(device_api.router)
 app.include_router(api_live.router)
