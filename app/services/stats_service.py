@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from math import isfinite
@@ -46,6 +47,33 @@ def _incident_scope(q, db: Session, org_id: int, user=None):
         return _apply_org_scope(q, user, db)
     collab = db.query(IncidentOrg.incident_id).filter(IncidentOrg.org_id == org_id)
     return q.filter(or_(Incident.primary_org_id == org_id, Incident.id.in_(collab)))
+
+
+def _merge_fleet_by_code(
+    fleet: Iterable[VehicleMaster], usage: dict[int, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    groups: dict[str, list[VehicleMaster]] = {}
+    for vehicle in fleet:
+        groups.setdefault((vehicle.code or "").strip().casefold(), []).append(vehicle)
+
+    result: list[dict[str, Any]] = []
+    for vehicles in groups.values():
+        own_vehicles = [v for v in vehicles if not v.is_adhoc and not v.is_external]
+        if not own_vehicles:
+            continue
+        lead = min(own_vehicles, key=lambda v: (v.display_order, v.id))
+        result.append({
+            "id": lead.id,
+            "code": lead.code,
+            "name": lead.name,
+            "anzahl_einsaetze": sum(usage.get(v.id, {}).get("count", 0) for v in vehicles),
+            "km_aktuell": max((v.km_aktuell or 0) for v in vehicles),
+            "betriebsstunden_aktuell": max(
+                float(v.betriebsstunden_aktuell or 0) for v in vehicles
+            ),
+        })
+    result.sort(key=lambda row: -row["anzahl_einsaetze"])
+    return result
 
 
 def get_stats(
@@ -131,11 +159,13 @@ def get_stats(
             .join(VehicleMaster, VehicleMaster.id == IncidentVehicle.vehicle_master_id)
             .filter(
                 IncidentVehicle.incident_id.in_(incident_ids),
+                IncidentVehicle.removed_at.is_(None),
                 VehicleMaster.dept_id == org_id,
             )
             .all()
         )
     usage: dict[int, dict[str, Any]] = {}
+    usage_incidents: dict[int, set[int]] = {}
     first_dispatch: dict[int, Any] = {}
     incident_by_id = {i.id: i for i in incidents}
     for assignment, vehicle in vehicle_rows:
@@ -145,11 +175,13 @@ def get_stats(
             "id": vehicle.id, "code": vehicle.code, "name": vehicle.name,
             "count": 0, "km": 0,
         })
-        item["count"] += 1
+        usage_incidents.setdefault(vehicle.id, set()).add(assignment.incident_id)
         item["km"] += assignment.km_gefahren or 0
         previous = first_dispatch.get(assignment.incident_id)
         if previous is None or assignment.created_at < previous:
             first_dispatch[assignment.incident_id] = assignment.created_at
+    for vehicle_id, incident_id_set in usage_incidents.items():
+        usage[vehicle_id]["count"] = len(incident_id_set)
     reaction = []
     for incident_id, dispatched_at in first_dispatch.items():
         started_at = incident_by_id[incident_id].started_at
@@ -167,12 +199,7 @@ def get_stats(
         .order_by(VehicleMaster.display_order, VehicleMaster.code)
         .all()
     )
-    fleet_stats = [{
-        "id": v.id, "code": v.code, "name": v.name,
-        "anzahl_einsaetze": usage.get(v.id, {}).get("count", 0),
-        "km_aktuell": v.km_aktuell, "betriebsstunden_aktuell": float(v.betriebsstunden_aktuell or 0),
-    } for v in fleet]
-    fleet_stats.sort(key=lambda row: -row["anzahl_einsaetze"])
+    fleet_stats = _merge_fleet_by_code(fleet, usage)
 
     return StatsResult(
         total=len(incidents), total_exercises=len(exercises),
