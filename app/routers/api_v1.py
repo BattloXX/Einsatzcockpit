@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
@@ -19,9 +19,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.audit import write_audit
+from app.core.dependencies import get_api_key
 from app.core.rate_limit import get_api_key_identifier
 from app.core.rate_limit import limiter as _limiter
-from app.core.security import hash_api_key, sign_qr_token
+from app.core.security import sign_qr_token
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentToken
 from app.models.major_incident import IncidentSite as _IncidentSiteType
@@ -221,15 +222,6 @@ def _get_or_create_board_token(
         ))
     board_url = f"{base_url}qr-login?incident_id={incident_id}&token={token}"
     return token, board_url
-
-
-def _get_api_key(x_api_key: str = Header(..., alias="X-API-Key"), db: Session = Depends(get_db)):
-    key_hash = hash_api_key(x_api_key)
-    api_key = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
-    if not api_key or not api_key.is_active:
-        raise HTTPException(status_code=401, detail="Ungültiger oder gesperrter API-Key")
-    api_key.last_used_at = datetime.now(UTC)
-    return api_key
 
 
 async def _geocode_incident(incident_id: int, street: str | None, no: str | None, city: str | None) -> None:
@@ -499,7 +491,7 @@ async def create_incident_api(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    api_key: ApiKey = Depends(_get_api_key),
+    api_key: ApiKey = Depends(get_api_key),
 ):
     org = db.get(FireDept, api_key.org_id) if api_key.org_id else None
 
@@ -1055,7 +1047,7 @@ async def lage_alarm(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    api_key: ApiKey = Depends(_get_api_key),
+    api_key: ApiKey = Depends(get_api_key),
 ):
     from app.models.major_incident import (
         IncidentSite,
@@ -1148,7 +1140,7 @@ async def lage_alarm(
     ),
     responses={401: {"description": "Ungültiger oder gesperrter API-Key."}},
 )
-def list_active_incidents(db: Session = Depends(get_db), api_key: ApiKey = Depends(_get_api_key)):
+def list_active_incidents(db: Session = Depends(get_db), api_key: ApiKey = Depends(get_api_key)):
     incidents = _api_key_scoped_incidents(db, api_key).filter(Incident.status == "active").all()
     return [{"id": i.id, "alarm_type_code": i.alarm_type_code,
              "started_at": i.started_at, "is_exercise": i.is_exercise} for i in incidents]
@@ -1166,7 +1158,7 @@ def list_active_incidents(db: Session = Depends(get_db), api_key: ApiKey = Depen
         404: {"description": "Einsatz nicht gefunden oder nicht im Scope der Org."},
     },
 )
-def get_incident(incident_id: int, db: Session = Depends(get_db), api_key: ApiKey = Depends(_get_api_key)):
+def get_incident(incident_id: int, db: Session = Depends(get_db), api_key: ApiKey = Depends(get_api_key)):
     incident = _api_key_scoped_incidents(db, api_key).filter(Incident.id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404)
@@ -1211,7 +1203,7 @@ def mailing_recipient_import(
     payload: MailingImportPayload,
     request: Request,
     db: Session = Depends(get_db),
-    api_key: ApiKey = Depends(_get_api_key),
+    api_key: ApiKey = Depends(get_api_key),
 ):
     from app.models.mailing import MailingApiImportBatch, MailingRecipientList
     from app.services.mailing_service import import_recipients

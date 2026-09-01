@@ -6,15 +6,45 @@ TenantScoped-Listener automatisch filtert.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
 from app.core.audit import write_audit
+from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import get_db
+from app.models.user import ApiKey
+
+
+def get_api_key(
+    x_api_key: str = Header(..., alias="X-API-Key"),
+    db: Session = Depends(get_db),
+) -> ApiKey:
+    """Authentifiziert einen aktiven API-Key, ohne bestehende Routen einzuschränken."""
+    key_hash = hash_api_key(x_api_key)
+    api_key = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
+    if not api_key or not api_key.is_active:
+        raise HTTPException(status_code=401, detail="Ungültiger oder gesperrter API-Key")
+    api_key.last_used_at = datetime.now(UTC)
+    return api_key
+
+
+def require_scope(*scopes: str):
+    """Dependency-Factory für API-Key-Scopes mit gesetztem Tenant-Kontext."""
+    def dependency(
+        api_key: ApiKey = Depends(get_api_key),
+        db: Session = Depends(get_db),
+    ) -> ApiKey:
+        if not any(api_key.has_scope(scope) for scope in scopes):
+            raise HTTPException(status_code=403, detail="API-Key hat nicht den nötigen Scope")
+        set_tenant_context(db, api_key.org_id)
+        return api_key
+
+    return dependency
 
 # System-Flag-Key in SystemSettings → request.state-Attribut. Die Semantik je
 # Modul ist identisch zu den *_effective_enabled-Helfern der Services

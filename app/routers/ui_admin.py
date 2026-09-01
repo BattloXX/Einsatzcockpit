@@ -312,6 +312,9 @@ async def create_api_key(
     request: Request, label: str = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
+    form = await request.form()
+    erlaubte_scopes = {"einsatz:write", "mailing:import", "sms:send", "mail:send"}
+    scopes = [scope for scope in form.getlist("scopes") if scope in erlaubte_scopes]
     raw = generate_api_key()
     user = request.state.user
     key = ApiKey(
@@ -319,10 +322,11 @@ async def create_api_key(
         label=label,
         org_id=user.org_id,
         created_by_user_id=user.id,
+        scopes=",".join(scopes),
     )
     db.add(key)
     write_audit(db, "admin.api_key.created", user_id=user.id,
-                payload={"label": label, "org_id": user.org_id})
+                payload={"label": label, "org_id": user.org_id, "scopes": scopes})
     db.commit()
     keys = _org_filter(db.query(ApiKey), user, ApiKey.org_id).order_by(ApiKey.created_at.desc()).all()
     return templates.TemplateResponse(request, "admin/api_keys.html", {
