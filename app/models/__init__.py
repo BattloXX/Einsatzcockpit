@@ -1,3 +1,4 @@
+from app.models.api_message import ApiMessage, ApiMessageRecipient
 from app.models.atemschutz_pruefung import (
     AtemschutzGeraet,
     AtemschutzPruefBenachrichtigung,
@@ -194,6 +195,7 @@ from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherA
 from app.models.wordpress_report import WordPressReportConfig
 
 __all__ = [
+    "ApiMessage", "ApiMessageRecipient",
     "OrgSsoConfig", "OrgSsoGroupMap",
     "OrgLisConfig", "LisSyncedObject",
     "OrgDibosConfig",
