@@ -36,7 +36,7 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 | **Großschadenslage & Stab** | Phasen-Kanban, Einsatzstellen, SKKM-Regelkreis, Ressourcen und Lagekarte |
 | **Lageführung** | Taktische Zeichen, Fahrzeug- und Objekt-Layer, Multi-User-Editing, Replay und Druck |
 | **Atemschutzüberwachung** | Rückzugsdruckberechnung, Zeitmessung und Warnungen |
-| **Alarm-Integrationen** | REST-API, LIS/IPR, SMS, Teams sowie Print & Alarm Gateway |
+| **Alarm-Integrationen** | REST-API, LIS/IPR, externer SMS-/E-Mail-Versand, Teams sowie Print & Alarm Gateway |
 | **Objekt- & Nachschlagewerke** | Einsatzunterlagen, Alarm-Matching, OCR-Suche, Gefahrgut und Rettungsdatenblätter |
 | **Multi-Org-Support** | Mehrere Feuerwehren, gemeinsame Einsätze und strikt isolierte Stammdaten |
 | **Archiv & Berichte** | Audit-Log, Zeitreise, Statistik und PDF-Exporte |
@@ -162,7 +162,7 @@ Das Projekt besitzt eine umfangreiche Test-Suite; der aktuelle Status ist im [CI
 
 ```bash
 curl https://einsatzleiter.example.at/api/v1/einsatz/active \
-  -H "X-API-Key: elh_xxxx"
+  -H "X-API-Key: ec_xxxx"
 ```
 
 Authentifizierung, Payloads, Validierungsregeln, Rate-Limits und weitere Beispiele: [REST-API im Wiki](docs/wiki/Entwickler-REST-API.md).
