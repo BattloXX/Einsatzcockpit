@@ -206,6 +206,7 @@ templates.env.globals["get_troop_cycles"] = _get_troop_cycles
 
 # Globale Konfigurationswerte für Templates
 import os as _os  # noqa: E402
+import time as _time  # noqa: E402
 
 from app.config import settings as _settings  # noqa: E402
 
@@ -223,27 +224,50 @@ templates.env.globals["public_login_url"] = _settings.PUBLIC_LOGIN_URL
 templates.env.globals["public_github_url"] = _settings.PUBLIC_GITHUB_URL
 templates.env.globals["public_contact_email"] = _settings.PUBLIC_CONTACT_EMAIL
 
+class _LazyAssetVersion:
+    """Berechnet eine Asset-Version regelmaessig neu, ohne App-Neustart."""
+
+    def __init__(self, resolver, ttl_seconds: float = 30.0):
+        self._resolver = resolver
+        self._ttl_seconds = ttl_seconds
+        self._value = "1"
+        self._valid_until = 0.0
+
+    def __str__(self) -> str:
+        now = _time.monotonic()
+        if now >= self._valid_until:
+            try:
+                self._value = str(int(self._resolver()))
+            except (OSError, ValueError):
+                self._value = "1"
+            self._valid_until = now + self._ttl_seconds
+        return self._value
+
+    def __html__(self) -> str:
+        return str(self)
+
+
 # Cache-Busting: Versionsnummer aus mtime der app.css
 _css_path = _os.path.join(_os.path.dirname(__file__), "..", "static", "css", "app.css")
-try:
-    templates.env.globals["CSS_VERSION"] = str(int(_os.path.getmtime(_css_path)))
-except OSError:
-    templates.env.globals["CSS_VERSION"] = "1"
+templates.env.globals["CSS_VERSION"] = _LazyAssetVersion(
+    lambda: _os.path.getmtime(_css_path)
+)
 
 # Cache-Busting für JS/Scripts: max(mtime) über alle app/static/js/*.js-Dateien.
 # Ohne Versions-Query behielt der Service Worker (stale-while-revalidate, sw.js)
 # nach einem Deploy die alte JS-Datei bis zum zweiten Seitenaufruf ("F5 nötig") –
 # mit ?v=… erzwingt ein geänderter Board-Skript-Stand sofort einen neuen Cache-Key.
 _js_dir = _os.path.join(_os.path.dirname(__file__), "..", "static", "js")
-try:
-    _js_mtimes = [
+def _latest_js_mtime() -> float:
+    mtimes = [
         _os.path.getmtime(_os.path.join(_js_dir, f))
         for f in _os.listdir(_js_dir)
         if f.endswith(".js")
     ]
-    templates.env.globals["ASSET_VERSION"] = str(int(max(_js_mtimes))) if _js_mtimes else "1"
-except OSError:
-    templates.env.globals["ASSET_VERSION"] = "1"
+    return max(mtimes) if mtimes else 1
+
+
+templates.env.globals["ASSET_VERSION"] = _LazyAssetVersion(_latest_js_mtime)
 
 # Cache-Busting für Icons/Favicons: NGINX liefert /static/ mit
 # "Cache-Control: immutable" + 7 Tage Expiry direkt von der Platte aus (siehe

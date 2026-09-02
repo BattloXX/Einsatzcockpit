@@ -94,13 +94,13 @@ def send_fcm(
     cfg: dict | None = None,
     db: Session | None = None,
     push_log_id: int | None = None,
+    delivery: FcmDeliveryLog | None = None,
 ) -> tuple[bool, str | None]:
-    """Sendet an ein FCM-Geraet und klassifiziert Fehler fuer das Delivery-Log."""
+    """Sendet Wake- und Display-Nachricht an ein FCM-Geraet."""
     app = _get_fcm_app(cfg)
     if app is None:
         return False, "fcm_not_configured"
-    delivery: FcmDeliveryLog | None = None
-    if db is not None and push_log_id is not None:
+    if delivery is None and db is not None and push_log_id is not None:
         delivery = FcmDeliveryLog(
             push_log_id=push_log_id,
             fcm_token_id=fcm_token_row.id,
@@ -109,61 +109,77 @@ def send_fcm(
             success=False,
         )
         db.add(delivery)
-        db.flush()
+        db.commit()
 
-    try:
-        from firebase_admin import messaging  # type: ignore
-        data = {
-            "url": url or "/",
-            "title": title,
-            "body": body,
-            "channel_id": channel_id or "",
-        }
-        if delivery is not None:
-            data["delivery_id"] = str(delivery.id)
-        message = messaging.Message(
-            # Reine Data-Message: auch im Hintergrund wird unser nativer
-            # FirebaseMessagingService ausgefuehrt und kann den Live-Poller sofort wecken.
+    from firebase_admin import messaging  # type: ignore
+
+    data = {
+        "url": url or "/",
+        "title": title,
+        "body": body,
+        "channel_id": channel_id or "",
+    }
+    if delivery is not None:
+        data["delivery_id"] = str(delivery.id)
+
+    def _send(message, kind: str) -> tuple[bool, str | None, bool]:
+        try:
+            messaging.send(message)
+            return True, None, False
+        except (messaging.UnregisteredError, messaging.SenderIdMismatchError) as exc:
+            log.info("FCM-Token %s ist ungueltig und wird entfernt: %s", fcm_token_row.id, exc)
+            if db is not None:
+                db.delete(fcm_token_row)
+            if delivery is not None:
+                delivery.fcm_token_id = None
+            return False, "unregistered_pruned", True
+        except messaging.QuotaExceededError as exc:
+            log.warning("FCM-Quota ueberschritten fuer Token %s (%s): %s", fcm_token_row.id, kind, exc)
+            return False, "quota_exceeded", False
+        except messaging.ThirdPartyAuthError as exc:
+            log.warning("FCM-Authentifizierung fehlgeschlagen fuer Token %s (%s): %s", fcm_token_row.id, kind, exc)
+            return False, "sender_id_mismatch", False
+        except Exception as exc:
+            log.warning("FCM fehlgeschlagen fuer Token %s (%s): %s", fcm_token_row.id, kind, exc)
+            return False, "unknown", False
+
+    wake_data = dict(data, silent="1")
+    wake_message = messaging.Message(
+        data=wake_data,
+        android=messaging.AndroidConfig(priority="high"),
+        token=fcm_token_row.token,
+    )
+    wake_ok, wake_error, token_invalid = _send(wake_message, "wake")
+
+    display_ok = False
+    display_error: str | None = "unregistered_pruned" if token_invalid else None
+    if not token_invalid:
+        display_android = messaging.AndroidConfig(
+            priority="high",
+            notification=messaging.AndroidNotification(
+                channel_id=channel_id,
+                sound="default",
+                default_vibrate_timings=True,
+            ),
+        ) if channel_id else messaging.AndroidConfig(priority="high")
+        display_message = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
             data=data,
-            android=messaging.AndroidConfig(priority="high"),
+            android=display_android,
             token=fcm_token_row.token,
         )
-        messaging.send(message)
-        if delivery is not None:
-            delivery.success = True
-        return True, None
-    except messaging.UnregisteredError as exc:
-        log.info("FCM-Token %s ist nicht mehr registriert und wird entfernt: %s", fcm_token_row.id, exc)
-        if db is not None:
-            db.delete(fcm_token_row)
-        if delivery is not None:
-            delivery.fcm_token_id = None
-            delivery.error_code = "unregistered_pruned"
-            delivery.error_detail = f"FCM-Token {fcm_token_row.id} automatisch entfernt"
-        return False, "unregistered_pruned"
-    except messaging.SenderIdMismatchError as exc:
-        log.info("FCM-Token %s gehoert zu einem anderen Sender und wird entfernt: %s", fcm_token_row.id, exc)
-        if db is not None:
-            db.delete(fcm_token_row)
-        if delivery is not None:
-            delivery.fcm_token_id = None
-            delivery.error_code = "unregistered_pruned"
-            delivery.error_detail = f"FCM-Token {fcm_token_row.id} automatisch entfernt"
-        return False, "unregistered_pruned"
-    except messaging.QuotaExceededError as exc:
-        log.warning("FCM-Quota ueberschritten fuer Token %s: %s", fcm_token_row.id, exc)
-        error_code = "quota_exceeded"
-    except messaging.ThirdPartyAuthError as exc:
-        log.warning("FCM-Authentifizierung fehlgeschlagen fuer Token %s: %s", fcm_token_row.id, exc)
-        error_code = "sender_id_mismatch"
-    except Exception as exc:
-        # Auch neue FirebaseError-Unterklassen bleiben sichtbar, ohne den Alarm abzubrechen.
-        log.warning("FCM fehlgeschlagen fuer Token %s: %s", fcm_token_row.id, exc)
-        error_code = "unknown"
+        display_ok, display_error, _token_invalid = _send(display_message, "display")
+
     if delivery is not None:
-        delivery.error_code = error_code
-        delivery.error_detail = f"FCM-Versand fehlgeschlagen ({error_code})"
-    return False, error_code
+        delivery.success = display_ok
+        errors = []
+        if not wake_ok:
+            errors.append(f"Wake-Nachricht fehlgeschlagen ({wake_error or 'unknown'})")
+        if not display_ok:
+            errors.append(f"Display-Nachricht fehlgeschlagen ({display_error or 'unknown'})")
+        delivery.error_code = display_error if not display_ok else wake_error
+        delivery.error_detail = "; ".join(errors) or None
+    return display_ok, display_error if not display_ok else wake_error
 
 
 def upsert_fcm_token(
@@ -313,8 +329,19 @@ def send_push(subscription: PushSubscription, title: str, body: str,
 def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
                       url: str | None, cfg: dict | None = None,
                       channel_id: str | None = None,
-                      push_log_id: int | None = None) -> int:
-    """Sendet FCM an alle registrierten Tokens der angegebenen User-IDs."""
+                      push_log_id: int | None = None,
+                      commit_delivery_log: bool = True) -> int:
+    """Sendet FCM an alle registrierten Tokens der angegebenen User-IDs.
+
+    ``commit_delivery_log`` committet die Delivery-Zeilen VOR dem Versand, damit die
+    ``delivery_id`` sichtbar ist, bevor das Geraet den Ack schickt (sonst laeuft der
+    Ack ins Leere und "Zugestellt" bleibt bei 0). Ein Commit haengt hier zwingend an
+    der Session des Aufrufers: ``fcm_delivery_log.push_log_id`` ist ein Fremdschluessel
+    auf die noch nicht committete ``push_log``-Zeile, eine eigene Session koennte die
+    Zeile also gar nicht anlegen. Aufrufer, die mitten in einer groesseren Transaktion
+    stehen (``notify_vehicle`` aus ``incident_service``), setzen daher False und
+    verzichten auf die Ack-Garantie.
+    """
     tokens = db.query(FcmToken).filter(FcmToken.user_id.in_(user_ids)).all() if user_ids else []
     if push_log_id is None:
         fallback_log = _log_push(db, title, body, url, "system", None)
@@ -343,11 +370,30 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
                 error_code="fcm_not_configured",
                 error_detail="FCM ist nicht konfiguriert oder konnte nicht initialisiert werden",
             ))
-        db.flush()
+        if commit_delivery_log:
+            db.commit()
+        else:
+            db.flush()
         return 0
 
-    success_count = 0
+    deliveries = []
     for token in tokens:
+        delivery = FcmDeliveryLog(
+            push_log_id=push_log_id,
+            fcm_token_id=token.id,
+            user_id=token.user_id,
+            sent_at=datetime.now(UTC).replace(tzinfo=None),
+            success=False,
+        )
+        db.add(delivery)
+        deliveries.append((token, delivery))
+    if commit_delivery_log:
+        db.commit()
+    else:
+        db.flush()
+
+    success_count = 0
+    for token, delivery in deliveries:
         ok, _error_code = send_fcm(
             token,
             title,
@@ -357,6 +403,7 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
             cfg=cfg,
             db=db,
             push_log_id=push_log_id,
+            delivery=delivery,
         )
         success_count += int(ok)
     db.flush()
@@ -372,6 +419,7 @@ def _notify_fcm_logged(
     cfg: dict | None,
     channel_id: str | None,
     push_log_id: int,
+    commit_delivery_log: bool = True,
 ) -> int:
     """Ruft den FCM-Fan-out mit PushLog-Verknuepfung auf."""
     try:
@@ -384,6 +432,7 @@ def _notify_fcm_logged(
             cfg,
             channel_id,
             push_log_id=push_log_id,
+            commit_delivery_log=commit_delivery_log,
         )
     except TypeError as exc:
         # Bestehende Erweiterungs-/Test-Doubles ohne das neue optionale Argument.
@@ -512,6 +561,11 @@ def notify_vehicle(db: Session, vehicle_master_id: int, title: str, body: str,
         push_log.total_count = len(subs)
     else:
         wp_count = 0
-    # FCM
-    fcm_extra = _notify_fcm_logged(db, user_ids, title, body, url, cfg, None, push_log.id)
+    # FCM. Kein Commit der Delivery-Zeilen: notify_vehicle laeuft mitten in der
+    # Transaktion des Aufrufers (incident_service: Auftrag/Meldung zuweisen), ein
+    # Zwischen-Commit wuerde dort halbfertige Zuweisungen festschreiben.
+    fcm_extra = _notify_fcm_logged(
+        db, user_ids, title, body, url, cfg, None, push_log.id,
+        commit_delivery_log=False,
+    )
     return wp_count + fcm_extra

@@ -80,7 +80,7 @@ def test_push_ack_cookie_fallback_funktioniert(client, setup_db):
         db.close()
 
 
-def test_push_ack_fremde_id_bleibt_generischer_noop(client, setup_db):
+def test_push_ack_fremde_id_wird_diagnostizierbar_abgelehnt(client, setup_db):
     _, owner_token, owner_delivery_id = _create_delivery()
     _, attacker_token, _ = _create_delivery()
 
@@ -91,9 +91,22 @@ def test_push_ack_fremde_id_bleibt_generischer_noop(client, setup_db):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    assert response.json() == {"ok": False, "reason": "unknown_delivery"}
     db = SessionLocal()
     try:
         assert db.get(FcmDeliveryLog, owner_delivery_id).delivered_at is None
     finally:
         db.close()
+
+
+def test_push_ack_unbekannte_id_wird_diagnostizierbar_abgelehnt(client, setup_db):
+    _, raw_token, _ = _create_delivery()
+
+    response = client.post(
+        "/api/v1/device/push-ack",
+        json={"delivery_id": 999999999},
+        headers={"Authorization": f"Bearer {raw_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": False, "reason": "unknown_delivery"}
