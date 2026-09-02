@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     ALARM_MAP_TTL_DAYS: int = 365
     # Die oeffentliche No-Login-Seite zeigt mehr Daten und laeuft frueher ab.
     ALARM_LINK_TTL_DAYS: int = 30
-    APP_VERSION: str = "2026.08.17"
+    APP_VERSION: str = "2026.09.02"
     DEBUG: bool = False
     TEST_SYSTEM: bool = False
 
