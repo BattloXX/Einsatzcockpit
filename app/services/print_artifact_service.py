@@ -18,6 +18,7 @@ from app.models.gateway import (
     DOC_GSL_JOURNAL,
     DOC_GSL_LAGEBLATT,
     DOC_LAGE_KARTE,
+    DOC_MASCHINISTEN_MATRIX,
     DOC_OBJEKT_DOKUMENT,
     DOC_OBJEKT_SAMMEL,
     DOC_OBJEKTBLATT,
@@ -101,6 +102,8 @@ def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
         return _render_gsl_bericht(db, job, base_url)
     if job.document_type == DOC_FAHRTENBUCH_BERICHT:
         return _render_fahrtenbuch_bericht(db, job, base_url)
+    if job.document_type == DOC_MASCHINISTEN_MATRIX:
+        return _render_maschinisten_matrix(db, job, base_url)
     raise ArtifactError(f"Unbekannter Dokumenttyp: {job.document_type}")
 
 
@@ -329,6 +332,30 @@ def _render_fahrtenbuch_bericht(db, job: PrintJob, base_url: str) -> bytes:
     }
     pseudo_user = SimpleNamespace(org=org)
     return render_fahrtenbuch_bericht_pdf(daten, filter_info, user=pseudo_user, base_url=base_url)
+
+
+def _render_maschinisten_matrix(db, job: PrintJob, base_url: str) -> bytes:
+    from types import SimpleNamespace
+    from urllib.parse import parse_qs
+
+    from app.services.maschinisten_matrix_service import berechne_maschinisten_matrix
+    from app.services.pdf_service import render_maschinisten_matrix_pdf
+
+    if not job.org_id:
+        raise ArtifactError("Maschinisten-Matrix ohne Organisation")
+    try:
+        jahr = int((parse_qs(job.artifact_ref or "").get("jahr") or [""])[0])
+    except ValueError as exc:
+        raise ArtifactError("Ungültiges Matrix-Jahr") from exc
+    if jahr < 1900 or jahr > 2200:
+        raise ArtifactError("Ungültiges Matrix-Jahr")
+    org = _org(db, job.org_id)
+    if org is None:
+        raise ArtifactError("Organisation nicht gefunden")
+    matrix = berechne_maschinisten_matrix(db, job.org_id, jahr)
+    return render_maschinisten_matrix_pdf(
+        matrix, user=SimpleNamespace(org=org), base_url=base_url,
+    )
 
 
 def _render_troop(db, job: PrintJob, base_url: str) -> bytes:

@@ -4,6 +4,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **Unveröffentlicht** | 2026-09-02 | **Maschinisten-Matrix**: Jahresauswertung Mitglied × Fahrzeug (Übung/Einsatz) in der Fahrtenbuch-Statistik, als XLSX und als einseitiger farbiger A3-Querformat-Druck (lokal und über den Stationsdrucker); Maschinisten-Stufen M1–M4 im Qualifikationskatalog, pflegbar auch durch Fahrtenbuch-Administratoren; Fahrzeuge zusammenführen jetzt jederzeit über die Ressourcen-Verwaltung statt nur bei erkannten Dubletten |
 | **Unveröffentlicht** | 2026-09-01 | **Uptime-Kuma-SMS-Gateway**: synchroner `POST /api/v1/sms/send` mit Scope-Authentifizierung, Limits, Versandstatus, SMS-Protokoll und Audit |
 | **2026.09.01** | 2026-09-01 | **Nachrichten-API**: persistenter externer SMS- und E-Mail-Versand mit API-Key-Scopes, Idempotenz, Empfängerstatus, Limits, Mail-Retry, SMS-Protokoll und Audit |
 | **2026.08.27.1** | 2026-08-27 | **Druckregeln und Verleihschein-Autodruck**: Druckregeln als eigenes Gateway-Tab; Verleihschein-Autodruck vollständig über Druckregeln, bestehender Schalter migriert und entfernt; Übungsfilter greift nun auch bei Verleihscheinen |

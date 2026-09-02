@@ -201,3 +201,78 @@ def exportiere_fahrzeug_links(fahrzeuge: list, org_token: str, base_url: str) ->
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def exportiere_maschinisten_matrix(matrix: dict, org) -> bytes:
+    """Erstellt die Maschinisten-Matrix druckfertig als A3-XLSX."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
+        from openpyxl.worksheet.properties import PageSetupProperties
+    except ImportError:
+        raise RuntimeError("openpyxl ist nicht installiert. `pip install openpyxl` ausführen.")
+    from app.services.maschinisten_matrix_service import (
+        FARBE_EINSATZ,
+        FARBE_STUFE,
+        FARBE_UEBUNG,
+    )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Maschinisten-Matrix"
+    ws["A1"] = f"Maschinisten-Matrix {org.name}"
+    ws["A2"], ws["B2"] = "M-Stufe", "Name"
+    thin = Side(style="thin", color="808080")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill("solid", fgColor="2D2D2D")
+    header_font = Font(bold=True, color="FFFFFF")
+    col = 3
+    for spalte in matrix["spalten"]:
+        ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 1)
+        ws.cell(1, col, spalte["label"])
+        ws.cell(2, col, "Üng")
+        ws.cell(2, col + 1, "Einsatz")
+        col += 2
+    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 1)
+    ws.cell(1, col, f"Gesamt {matrix['jahr']}")
+    ws.cell(2, col, "Üng")
+    ws.cell(2, col + 1, "Einsatz")
+    for row in ws.iter_rows(min_row=1, max_row=2, min_col=1, max_col=col + 1):
+        for cell in row:
+            cell.fill, cell.font, cell.border = header_fill, header_font, border
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+    for row_no, zeile in enumerate(matrix["zeilen"], 3):
+        ws.cell(row_no, 1, f"M{zeile['stufe']}" if zeile["stufe"] else "")
+        ws.cell(row_no, 2, zeile["name"])
+        if zeile["stufe"]:
+            ws.cell(row_no, 1).fill = PatternFill("solid", fgColor=FARBE_STUFE[zeile["stufe"]])
+        col = 3
+        for spalte in matrix["spalten"]:
+            zelle = zeile["zellen"].get(spalte["key"], {})
+            for typ, farbe in (("uebung", FARBE_UEBUNG), ("einsatz", FARBE_EINSATZ)):
+                wert = zelle.get(typ, 0)
+                ws.cell(row_no, col, wert if wert else None)
+                ws.cell(row_no, col).fill = PatternFill("solid", fgColor=farbe)
+                col += 1
+        for typ, farbe in (("uebung", FARBE_UEBUNG), ("einsatz", FARBE_EINSATZ)):
+            wert = zeile["summe"][typ]
+            ws.cell(row_no, col, wert if wert else None)
+            ws.cell(row_no, col).fill = PatternFill("solid", fgColor=farbe)
+            col += 1
+        for cell in ws[row_no]:
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center" if cell.column != 2 else "left")
+    ws.freeze_panes = "C3"
+    ws.column_dimensions["A"].width = 9
+    ws.column_dimensions["B"].width = 28
+    for col_no in range(3, ws.max_column + 1):
+        ws.column_dimensions[get_column_letter(col_no)].width = 8
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A3
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 1
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.print_title_rows = "1:2"
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

@@ -1,14 +1,14 @@
 """Statistik-Dashboard."""
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.permissions import has_role
 from app.core.templating import templates
-from app.core.timezones import local_date_to_utc, now_local
+from app.core.timezones import local_date_to_utc, now_local, to_org_tz
 from app.db import get_db
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck
 from app.models.incident import Incident, IncidentOrg
@@ -134,7 +134,7 @@ async def stats_fahrtenbuch(
     db: Session = Depends(get_db),
     von: str = "", bis: str = "",
     fahrzeug_id: int = 0, fahrttyp: str = "",
-    zweck_id: int = 0, gruppierung: str = "fahrzeug",
+    zweck_id: int = 0, gruppierung: str = "fahrzeug", matrix_jahr: int = 0,
 ):
     user = getattr(request.state, "user", None)
     if not user:
@@ -151,11 +151,11 @@ async def stats_fahrtenbuch(
         .options(joinedload(Fahrt.fahrzeug))
     )
     if von:
-        dt = local_date_to_utc(von)
+        dt = local_date_to_utc(von, org=user.org)
         if dt:
             q = q.filter(Fahrt.zeitpunkt >= dt)
     if bis:
-        dt = local_date_to_utc(bis, end=True)
+        dt = local_date_to_utc(bis, end=True, org=user.org)
         if dt:
             q = q.filter(Fahrt.zeitpunkt <= dt)
     if fahrzeug_id:
@@ -180,6 +180,33 @@ async def stats_fahrtenbuch(
     zwecke = db.query(Fahrtzweck).filter(Fahrtzweck.aktiv == True).order_by(Fahrtzweck.sort).all()  # noqa: E712
 
     gruppen = _gruppiere_fahrten(fahrten, gruppierung, fahrzeuge)
+    from app.services.maschinisten_matrix_service import (
+        FARBE_EINSATZ,
+        FARBE_STUFE,
+        FARBE_UEBUNG,
+        berechne_maschinisten_matrix,
+    )
+    matrix_jahr = matrix_jahr or now_local(user.org).year
+    if user.org_id:
+        matrix = berechne_maschinisten_matrix(db, user.org_id, matrix_jahr)
+        zeitpunkte = (
+            db.query(Fahrt.zeitpunkt)
+            .filter(Fahrt.org_id == user.org_id)
+            .execution_options(include_all_tenants=True)
+            .all()
+        )
+        matrix_jahre = sorted({
+            lokal.year for (zeitpunkt,) in zeitpunkte
+            if (lokal := to_org_tz(zeitpunkt, user.org)) is not None
+        }, reverse=True)
+    else:
+        matrix = {
+            "jahr": matrix_jahr, "spalten": [], "zeilen": [],
+            "summen": {"gesamt": {"uebung": 0, "einsatz": 0}},
+        }
+        matrix_jahre = []
+    if matrix_jahr not in matrix_jahre:
+        matrix_jahre.insert(0, matrix_jahr)
 
     return templates.TemplateResponse(request, "stats/fahrtenbuch.html", {
         "user": user,
@@ -192,7 +219,32 @@ async def stats_fahrtenbuch(
             "fahrttyp": fahrttyp, "zweck_id": zweck_id,
         },
         "gesamt_fahrten": len(fahrten),
+        "matrix": matrix, "matrix_jahre": matrix_jahre, "matrix_jahr": matrix_jahr,
+        "matrix_farben": {
+            "uebung": FARBE_UEBUNG, "einsatz": FARBE_EINSATZ, "stufe": FARBE_STUFE,
+        },
     })
+
+
+@router.get("/statistik/fahrtenbuch/maschinisten.xlsx")
+async def stats_fahrtenbuch_maschinisten_xlsx(
+    request: Request, jahr: int = 0, db: Session = Depends(get_db),
+):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    if not user.org_id:
+        raise HTTPException(status_code=404, detail="Keine Organisation zugeordnet")
+    jahr = jahr or now_local(user.org).year
+    from app.services.excel_export_service import exportiere_maschinisten_matrix
+    from app.services.maschinisten_matrix_service import berechne_maschinisten_matrix
+    matrix = berechne_maschinisten_matrix(db, user.org_id, jahr)
+    content = exportiere_maschinisten_matrix(matrix, user.org)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="Maschinisten-Matrix_{jahr}.xlsx"'},
+    )
 
 
 def _fahrtenbuch_stats(org_id: int, db: Session) -> dict:

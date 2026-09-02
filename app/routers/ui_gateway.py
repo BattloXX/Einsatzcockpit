@@ -717,6 +717,7 @@ def printers_json(
                 "checked_at": (p.status or {}).get("checked_at"),
                 # Unterstützte Papiergrößen (aus der Discovery); A3 nur wenn der Drucker es kann.
                 "media": (p.capabilities or {}).get("media") or ["A4"],
+                "color": bool((p.capabilities or {}).get("color")),
             }
             for p in printers
         ],
@@ -737,6 +738,7 @@ async def manual_print(
     copies: int = Form(1),
     duplex: str = Form("off"),
     media: str = Form(""),
+    color: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("recorder")),
     _guard: None = Depends(require_gateway_enabled),
@@ -756,6 +758,8 @@ async def manual_print(
     supported_media = (printer.capabilities or {}).get("media") or ["A4"]
     if media in ("A3", "A4") and media in supported_media:
         opts["media"] = media
+    if color in ("color", "mono") and (printer.capabilities or {}).get("color"):
+        opts["color"] = color
 
     from app.services.print_dispatcher import create_print_job, dispatch_job
 

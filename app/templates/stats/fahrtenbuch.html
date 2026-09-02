@@ -17,6 +17,13 @@
 .fbs-table td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:.85rem;}
 .fbs-table tbody tr:last-child td{border-bottom:none;}
 .fbs-table tbody tr:hover td{background:rgba(255,255,255,.03);}
+.matrix-wrap{overflow-x:auto}.matrix-table{border-collapse:collapse;min-width:100%;font-size:.75rem}
+.matrix-table th,.matrix-table td{border:1px solid var(--border);padding:4px 6px;text-align:center;white-space:nowrap}
+.matrix-table .matrix-stage{position:sticky;left:0;z-index:3;min-width:54px}
+.matrix-table .matrix-name{position:sticky;left:54px;z-index:3;text-align:left;min-width:180px;background:var(--surface-low)}
+.matrix-table thead .matrix-stage,.matrix-table thead .matrix-name{background:var(--surface-mid)}
+.matrix-actions{display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap}
+@media(max-width:760px){.matrix-actions{align-items:stretch}.matrix-actions .btn{width:100%}}
 </style>
 {% endblock %}
 
@@ -118,6 +125,39 @@
     </tbody>
   </table>
 </div>
+<div class="fbs-card">
+  <div class="fbs-card__pad">
+    <div class="matrix-actions" style="justify-content:space-between;margin-bottom:1rem">
+      <div><h2 style="font-size:1.15rem;font-weight:700">Maschinisten-Matrix</h2><small class="text-muted">Übung und Einsatz je Fahrzeug</small></div>
+      <form method="get">
+        <input type="hidden" name="von" value="{{ filter.von }}">
+        <input type="hidden" name="bis" value="{{ filter.bis }}">
+        <input type="hidden" name="fahrzeug_id" value="{{ filter.fahrzeug_id }}">
+        <input type="hidden" name="fahrttyp" value="{{ filter.fahrttyp }}">
+        <input type="hidden" name="zweck_id" value="{{ filter.zweck_id }}">
+        <input type="hidden" name="gruppierung" value="{{ gruppierung }}">
+        <label class="form-label">Jahr</label>
+        <select name="matrix_jahr" class="form-control form-control--sm" onchange="this.form.submit()">
+          {% for jahr in matrix_jahre %}<option value="{{ jahr }}" {% if jahr == matrix_jahr %}selected{% endif %}>{{ jahr }}</option>{% endfor %}
+        </select>
+      </form>
+      <a class="btn btn--ghost btn--sm" href="/statistik/fahrtenbuch/maschinisten.xlsx?jahr={{ matrix_jahr }}">⬇ Excel</a>
+      <button type="button" class="btn btn--primary btn--sm" onclick="printMaschinistenMatrix()">🖨️ A3 farbig drucken</button>
+    </div>
+    <div class="matrix-wrap">
+      <table class="matrix-table">
+        <thead><tr><th class="matrix-stage" rowspan="2">Stufe</th><th class="matrix-name" rowspan="2">Name</th>{% for s in matrix.spalten %}<th colspan="2">{{ s.label }}</th>{% endfor %}<th colspan="2">Gesamt</th></tr>
+        <tr>{% for s in matrix.spalten %}<th style="background:#{{ matrix_farben.uebung }};color:#172033">Üng</th><th style="background:#{{ matrix_farben.einsatz }};color:#172033">Einsatz</th>{% endfor %}<th>Üng</th><th>Einsatz</th></tr></thead>
+        <tbody>{% for z in matrix.zeilen %}<tr>
+          <td class="matrix-stage" {% if z.stufe %}style="background:#{{ matrix_farben.stufe[z.stufe] }};color:{{ '#222' if z.stufe == 2 else '#fff' }}"{% endif %}>{{ 'M' ~ z.stufe if z.stufe else '' }}</td>
+          <td class="matrix-name">{{ z.name }}</td>
+          {% for s in matrix.spalten %}{% set c=z.zellen.get(s.key, {}) %}<td style="background:#{{ matrix_farben.uebung }};color:#172033">{{ c.get('uebung', '') or '' }}</td><td style="background:#{{ matrix_farben.einsatz }};color:#172033">{{ c.get('einsatz', '') or '' }}</td>{% endfor %}
+          <td>{{ z.summe.uebung or '' }}</td><td>{{ z.summe.einsatz or '' }}</td>
+        </tr>{% else %}<tr><td colspan="{{ 4 + matrix.spalten|length * 2 }}">Keine Daten</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </div>
+</div>
 </div>
 {% include "_print_dialog.html" %}
 {% endblock %}
@@ -166,6 +206,12 @@ function printBericht() {
     document_type: 'fahrtenbuch_bericht',
     artifact_ref: ref.toString(),
     title: 'Fahrtenbuch-Bericht drucken',
+  });
+}
+function printMaschinistenMatrix() {
+  ecpgPrint({
+    document_type: 'maschinisten_matrix', artifact_ref: 'jahr={{ matrix_jahr }}',
+    title: 'Maschinisten-Matrix drucken', defaultMedia: 'A3', defaultColor: 'color'
   });
 }
 </script>

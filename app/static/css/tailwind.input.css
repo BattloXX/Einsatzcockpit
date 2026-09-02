@@ -616,6 +616,10 @@ body.mobile-menu-open { overflow: hidden; }
 .badge-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .72rem;
               font-weight: 600; line-height: 1.6; font-family: 'JetBrains Mono', monospace; }
 .badge-pill--green { background: rgba(24,169,87,.2); color: var(--green); }
+.badge-pill--m1 { background: #00b050; color: #fff; }
+.badge-pill--m2 { background: #ffe699; color: #332600; }
+.badge-pill--m3 { background: #ff3b30; color: #fff; }
+.badge-pill--m4 { background: #c00000; color: #fff; }
 .badge-pill--red   { background: rgba(216,48,48,.2); color: var(--danger); }
 .badge-pill--gray  { background: rgba(128,128,128,.2); color: var(--text-muted); }
 

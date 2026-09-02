@@ -441,6 +441,37 @@ def render_fahrtenbuch_bericht_pdf(
         return buf.getvalue()
 
 
+def render_maschinisten_matrix_pdf(matrix: dict, user, base_url: str = "") -> bytes:
+    """Maschinisten-Matrix dynamisch skaliert als A3-Querformat-PDF."""
+    from app.services.maschinisten_matrix_service import (
+        FARBE_EINSATZ,
+        FARBE_STUFE,
+        FARBE_UEBUNG,
+    )
+    nutzhoehe_mm = 297 - 2 * 8 - 22
+    # WeasyPrint addiert Rahmen- und Rundungsanteile je Tabellenzeile. Ein
+    # Sicherheitsfaktor verhindert deshalb, dass große Matrizen knapp umbrechen.
+    zeile = min(5.5, nutzhoehe_mm * 0.82 / max(len(matrix["zeilen"]) + 2, 1))
+    font = max(4.0, min(9.5, zeile * 1.55))
+    namensspalten_mm = 50
+    spalte = (420 - 2 * 8 - namensspalten_mm) / max(len(matrix["spalten"]) * 2 + 2, 1)
+    html_str = templates.env.get_template("pdf/maschinisten_matrix.html").render(
+        matrix=matrix, user=user, now=datetime.now(UTC), base_url=base_url,
+        farbe_uebung=FARBE_UEBUNG, farbe_einsatz=FARBE_EINSATZ,
+        farbe_stufe=FARBE_STUFE, s={"zeile": zeile, "font": font, "spalte": spalte},
+    )
+    try:
+        from weasyprint import HTML
+        buf = io.BytesIO()
+        HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
+        return buf.getvalue()
+    except OSError:
+        from xhtml2pdf import pisa
+        buf = io.BytesIO()
+        pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
+        return buf.getvalue()
+
+
 def render_statistik_bericht_pdf(stats, org, von, bis, base_url: str = "") -> bytes:
     """Einsatzstatistik als druckbaren Zeitraumbericht."""
     from app.services.chart_svg import build_statistik_charts

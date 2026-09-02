@@ -53,6 +53,7 @@
       <p class="page-header__sub">Eigene Einheiten und Ressourcen aus Fremdorganisationen</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn--ghost" data-ec-action="open-dialog" data-ec-dialog="mergeVehiclesModal">🔗 Fahrzeuge zusammenführen</button>
       <button class="btn btn--ghost" data-ec-action="open-dialog" data-ec-dialog="newExternalModal">
         + Fremdorganisation
       </button>
@@ -69,7 +70,7 @@
   <div class="alert alert--warning">
     <strong>Doppelte Fahrzeugcodes gefunden.</strong>
     {% for group in duplicate_groups %}
-    <a href="/admin/fahrzeuge/zusammenfuehren?ids={{ group[0].id }},{{ group[1].id }}">{{ group[0].code }} zusammenführen</a>{% if not loop.last %}, {% endif %}
+    <a href="/admin/fahrzeuge/zusammenfuehren?ids={{ group[0].id }},{{ group[1].id }}">{{ group[0].code }} zusammenführen</a>{% if group|length > 2 %} ({{ group|length }} Fahrzeuge, mehrfach zusammenführen){% endif %}{% if not loop.last %}, {% endif %}
     {% endfor %}
   </div>
   {% endif %}
@@ -165,6 +166,7 @@
             Bearbeiten
           </button>
           {% endif %}
+          <button type="button" class="btn btn--ghost btn--xs" onclick="openMergeVehicles({{ v.id }})">Zusammenführen</button>
           <form method="post" action="/admin/fahrzeuge/{{ v.id }}/toggle" style="display:inline">
             <button type="submit" class="btn btn--ghost btn--xs">
               {% if v.active %}Deaktivieren{% else %}Aktivieren{% endif %}
@@ -183,6 +185,23 @@
     </tbody>
   </table>
 </div>
+
+<dialog class="modal" id="mergeVehiclesModal">
+  <div class="modal__content">
+    <div class="modal__header"><h3>Fahrzeuge zusammenführen</h3><button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button></div>
+    <form id="mergeVehiclesForm" onsubmit="return previewVehicleMerge(event)">
+      <div class="modal__body">
+        {% for field, label in [('mergeWinner', 'Bleibt erhalten'), ('mergeLoser', 'Wird zusammengeführt')] %}
+        <div class="form-group"><label class="form-label">{{ label }}</label><select id="{{ field }}" class="form-select" required><option value="">Bitte wählen</option>
+          {% if is_sysadmin %}{% for org in all_orgs %}<optgroup label="{{ org.name }}">{% for v in vehicles if v.dept_id == org.id %}<option value="{{ v.id }}">{{ v.display_label }} – {{ v.name }}</option>{% endfor %}</optgroup>{% endfor %}
+          {% else %}{% for v in vehicles %}<option value="{{ v.id }}">{{ v.display_label }} – {{ v.name }}</option>{% endfor %}{% endif %}
+        </select></div>{% endfor %}
+        <div id="mergeVehiclesError" class="alert alert--danger" style="display:none">Bitte zwei verschiedene Fahrzeuge auswählen.</div>
+      </div>
+      <div class="modal__footer"><button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button><button type="submit" class="btn btn--primary">Vorschau</button></div>
+    </form>
+  </div>
+</dialog>
 
 <!-- Neue eigene Ressource -->
 <dialog class="modal" id="newVehicleModal">
@@ -447,6 +466,24 @@ function openEditVehicle(id, code, name, type, firstTrain, bosOverride, lisRefer
   document.getElementById('ev_kennzeichen').value = kennzeichen || '';
   document.getElementById('editVehicleForm').action = `/admin/fahrzeuge/${id}/edit`;
   document.getElementById('editVehicleModal').showModal();
+}
+
+function openMergeVehicles(winnerId) {
+  document.getElementById('mergeWinner').value = winnerId || '';
+  document.getElementById('mergeLoser').value = '';
+  document.getElementById('mergeVehiclesError').style.display = 'none';
+  document.getElementById('mergeVehiclesModal').showModal();
+}
+function previewVehicleMerge(event) {
+  event.preventDefault();
+  const winner = document.getElementById('mergeWinner').value;
+  const loser = document.getElementById('mergeLoser').value;
+  if (!winner || !loser || winner === loser) {
+    document.getElementById('mergeVehiclesError').style.display = '';
+    return false;
+  }
+  window.location.href = '/admin/fahrzeuge/zusammenfuehren?ids=' + encodeURIComponent(winner + ',' + loser);
+  return false;
 }
 
 function openEditExternal(id, orgName, orgShort, code, name, type, bosOverride, kennzeichen) {

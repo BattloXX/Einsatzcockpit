@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -175,6 +176,7 @@ class Qualification(Base):
     label: Mapped[str] = mapped_column(String(100), nullable=False)
     is_einsatzleiter: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_gruppenkommandant: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    maschinist_stufe: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
 
 
 class Member(TenantScoped, Base):

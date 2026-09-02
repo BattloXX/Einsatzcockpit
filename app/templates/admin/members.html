@@ -1,16 +1,18 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Mitglieder – Admin{% endblock %}
 {% block admin_content %}
+{% set user_role_codes = user.roles|map(attribute='code')|list %}
+{% set can_manage_members = 'system_admin' in user_role_codes or 'admin' in user_role_codes or 'org_admin' in user_role_codes %}
 <div class="page-content">
   <div class="page-header">
     <div>
       <h1>Mannschaftsregister</h1>
       <p class="page-header__sub">{{ members|length }} Mitglieder</p>
     </div>
-    <div style="display:flex;gap:8px;">
+    {% if can_manage_members %}<div style="display:flex;gap:8px;">
       <button class="btn btn--secondary" data-ec-action="open-dialog" data-ec-dialog="excelImportModal">Excel importieren</button>
       <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newMemberModal">+ Mitglied</button>
-    </div>
+    </div>{% endif %}
   </div>
 
   {% if saved %}
@@ -67,18 +69,19 @@
     <span class="text-muted" id="memberFilterCount" style="font-size:.85rem;"></span>
   </div>
 
-  <div id="bulkBar" style="display:none;align-items:center;gap:10px;margin:8px 0;padding:8px 12px;background:var(--surface-2,#1f2937);border-radius:6px;">
+  {% if can_manage_members %}<div id="bulkBar" style="display:none;align-items:center;gap:10px;margin:8px 0;padding:8px 12px;background:var(--surface-2,#1f2937);border-radius:6px;">
     <span><strong id="bulkCount">0</strong> ausgewählt</span>
     <button type="button" class="btn btn--danger btn--sm" onclick="bulkDeleteMembers()">Auswahl löschen</button>
     <button type="button" class="btn btn--ghost btn--sm" onclick="clearMemberSelection()">Auswahl aufheben</button>
   </div>
 
   <form id="bulkDeleteForm" method="post" action="/admin/mitglieder/bulk-delete" style="display:none"></form>
+  {% endif %}
 
   <table class="table-admin table-admin--cards" id="membersTable">
     <thead>
       <tr>
-        <th style="width:32px"><input type="checkbox" id="selectAllMembers" onchange="toggleSelectAllMembers(this)"></th>
+        {% if can_manage_members %}<th style="width:32px"><input type="checkbox" id="selectAllMembers" onchange="toggleSelectAllMembers(this)"></th>{% endif %}
         <th class="sortable" data-sort="name" onclick="sortMembers('name')">Name <span class="sort-ind"></span></th>
         <th>Qualifikationen</th>
         <th class="sortable" data-sort="phone" onclick="sortMembers('phone')">Telefon <span class="sort-ind"></span></th>
@@ -98,11 +101,11 @@
           data-sybos="{{ (m.sybos_id or '')|e }}"
           data-quals="{{ _quals|e }}"
           data-status="{{ 'active' if m.active else 'inactive' }}">
-        <td data-label=""><input type="checkbox" class="member-select" value="{{ m.id }}" onchange="updateBulkBar()"></td>
+        {% if can_manage_members %}<td data-label=""><input type="checkbox" class="member-select" value="{{ m.id }}" onchange="updateBulkBar()"></td>{% endif %}
         <td data-label="Name"><strong>{{ m.full_name }}</strong></td>
         <td data-label="Qualifikationen">
           {% for mq in m.qualifications %}
-          <span class="badge-pill badge-pill--green" title="{{ mq.qualification.label if mq.qualification else '' }}">
+          <span class="badge-pill {% if mq.qualification and mq.qualification.maschinist_stufe %}badge-pill--m{{ mq.qualification.maschinist_stufe }}{% else %}badge-pill--green{% endif %}" title="{{ mq.qualification.label if mq.qualification else '' }}">
             {{ mq.qualification.code if mq.qualification else '?' }}
             {% if mq.valid_until %}<small> bis {{ mq.valid_until.strftime('%m/%y') }}</small>{% endif %}
           </span>
@@ -116,24 +119,24 @@
           {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}
         </td>
         <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn--ghost btn--xs"
+          {% if can_manage_members %}<button class="btn btn--ghost btn--xs"
                   onclick="openEditMember({{ m.id }}, '{{ m.lastname|replace("'","\\'")|e }}', '{{ m.firstname|replace("'","\\'")|e }}', '{{ m.phone or "" }}', '{{ m.email or "" }}', '{{ m.sybos_id or "" }}')">
             Bearbeiten
-          </button>
+          </button>{% endif %}
           <button class="btn btn--ghost btn--xs"
                   onclick="openQualiEditor({{ m.id }}, '{{ m.full_name|replace("'","\\'")|e }}')">
             Qualifikationen
           </button>
-          <form method="post" action="/admin/mitglieder/{{ m.id }}/toggle" style="display:inline">
+          {% if can_manage_members %}<form method="post" action="/admin/mitglieder/{{ m.id }}/toggle" style="display:inline">
             <button type="submit" class="btn btn--ghost btn--xs">
               {% if m.active %}Deaktivieren{% else %}Aktivieren{% endif %}
             </button>
           </form>
-          {% if mailing_tags %}{% with member=m, tags=mailing_tags, assigned_ids=mailing_tag_assignments.get(m.id, []) %}{% include "mailing/_member_tags.html" %}{% endwith %}{% endif %}
+          {% if mailing_tags %}{% with member=m, tags=mailing_tags, assigned_ids=mailing_tag_assignments.get(m.id, []) %}{% include "mailing/_member_tags.html" %}{% endwith %}{% endif %}{% endif %}
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="text-center text-muted">Keine Mitglieder.</td></tr>
+      <tr><td colspan="{{ 8 if can_manage_members else 7 }}" class="text-center text-muted">Keine Mitglieder.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -147,6 +150,7 @@
   #membersTable th.sort-desc .sort-ind::after { content: '▼'; color: var(--on-surface); }
 </style>
 
+{% if can_manage_members %}
 <!-- Excel Import -->
 <dialog class="modal" id="excelImportModal">
   <form method="post" action="/admin/mitglieder/excel-import" enctype="multipart/form-data" class="modal__content">
@@ -251,6 +255,7 @@
     </form>
   </div>
 </dialog>
+{% endif %}
 
 <!-- Qualifikationen bearbeiten -->
 <dialog class="modal" id="qualiEditorModal">

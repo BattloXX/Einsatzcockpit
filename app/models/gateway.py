@@ -67,6 +67,7 @@ DOC_VERLEIH_SCHEIN = "verleih_schein"    # Verleihschein (gsl_id = lage_id + art
 DOC_QR_EINSATZ = "qr_einsatz"            # QR-Druckseite eines Einsatzes (incident_id)
 DOC_GSL_BERICHT = "gsl_bericht"          # GSL-Gesamtbericht/Einsatzjournal (gsl_id = lage_id)
 DOC_FAHRTENBUCH_BERICHT = "fahrtenbuch_bericht"  # Fahrtenbuch-Statistik-Bericht (artifact_ref = Filter-Query)
+DOC_MASCHINISTEN_MATRIX = "maschinisten_matrix"  # Jahresmatrix Maschinist x Fahrzeug
 # Hinweis: „mannschaft" wird über DOC_TEILNAHME (artifact_ref = "einsatz:<id>") abgedeckt.
 
 # Leaflet-Karten – am Stationsdrucker über Gateway-Headless-Chromium gerendert
@@ -99,6 +100,7 @@ DOCUMENT_TYPE_LABELS = {
     DOC_QR_EINSATZ: "QR-Einsatzinfo",
     DOC_GSL_BERICHT: "GSL-Gesamtbericht",
     DOC_FAHRTENBUCH_BERICHT: "Fahrtenbuch-Bericht",
+    DOC_MASCHINISTEN_MATRIX: "Maschinisten-Matrix",
     DOC_LAGE_KARTE: "Lagekarte",
     DOC_SITE_KARTE: "Stellen-Druck",
     DOC_CROSS_KARTE: "Meldungs-Druck",
