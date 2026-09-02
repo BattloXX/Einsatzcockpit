@@ -14,7 +14,8 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings, VehicleMaster
-from app.models.objekt import AlarmInfoscreenToken
+from app.models.objekt import AlarmInfoscreenToken, Objekt, ObjektEinsatz, ObjektKartenObjekt
+from app.models.teams_bot import AlarmToken
 from app.models.stats import StatistikDashboardToken
 from app.models.wasserstelle import Wasserstelle
 from app.models.mailing import MailingCampaign, MailingConfig, MailingQueueItem, MailingRecipientList, MailingRecipientListEntry, MailingSuppressionEntry, MailingTemplate
@@ -301,6 +302,45 @@ def test_infoscreen_token_sieht_nur_eigene_org(client):
     assert r_b.status_code == 200
     assert r_b.json()["modus"] == "alarm"
     assert "Geheime Adresse der Org B" in r_b.text
+
+
+def test_alarm_objekt_token_sieht_keine_kartenobjekte_fremder_org(client):
+    import hashlib
+
+    org_b_id = _setup_zwei_orgs()
+    raw = "iso-test-public-alarm-objekt-a"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident_a = Incident(
+            primary_org_id=ORG_A, alarm_type_code="B3", status="active",
+            started_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        objekt_b = Objekt(org_id=org_b_id, nummer=9876, name="Geheimobjekt B")
+        db.add_all([incident_a, objekt_b])
+        db.flush()
+        db.add_all([
+            AlarmToken(
+                incident_id=incident_a.id,
+                token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+            ),
+            ObjektEinsatz(
+                org_id=org_b_id, incident_id=incident_a.id, objekt_id=objekt_b.id,
+                quelle="manuell", status="bestaetigt",
+            ),
+            ObjektKartenObjekt(
+                org_id=org_b_id, objekt_id=objekt_b.id, typ="bmz",
+                lat=48.123, lng=10.456, label="GEHEIM-ORG-B",
+            ),
+        ])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/alarm/{raw}/objekt.json")
+    assert response.status_code == 200
+    assert response.json() == {"karten_objekte": [], "symbole": []}
+    assert "GEHEIM-ORG-B" not in response.text
 
 
 def test_infoscreen_hydranten_sind_tenant_isoliert(client, monkeypatch):

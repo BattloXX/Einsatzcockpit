@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.permissions import can_access_incident
 from app.core.templating import templates
@@ -102,6 +102,53 @@ async def alarm_hydranten(token: str, db: Session = Depends(get_db)):
     if not enabled or incident.lat is None or incident.lng is None:
         return {"hydranten": [], "stand": None}
     return {"hydranten": await fetch_osm_hydranten(incident.lat, incident.lng), "stand": None}
+
+
+@router.get("/alarm/{token}/objekt.json")
+def alarm_objekt(token: str, db: Session = Depends(get_db)):
+    """Kartensymbole des verknuepften Objekts (Zugaenge, BMZ/FBF, Gefahren-Dreiecke).
+
+    Bewusst NUR Geometrie/Symbolcode/Label - kein Objektname, keine Kontakte,
+    keine Dokumente (DSGVO, login-frei; vgl. alarm_hydranten).
+    """
+    from app.models.objekt import Objekt, ObjektEinsatz, parse_karten_geometry
+    from app.services.objekt_symbol_service import symbol_katalog_json
+
+    _tok, incident = _resolve_alarm_token(db, token)
+    verknuepfung = (
+        db.query(ObjektEinsatz)
+        .options(selectinload(ObjektEinsatz.objekt).selectinload(Objekt.karten_objekte))
+        .execution_options(include_all_tenants=True)
+        .filter(
+            ObjektEinsatz.incident_id == incident.id,
+            ObjektEinsatz.org_id == incident.primary_org_id,
+        )
+        .order_by(ObjektEinsatz.status)
+        .first()
+    )
+    if verknuepfung is None or verknuepfung.objekt is None:
+        return {"karten_objekte": [], "symbole": []}
+
+    symbole = symbol_katalog_json(db, incident.primary_org_id)
+    for symbol in symbole:
+        if symbol["stil"] == "bild":
+            symbol["stil"] = "box"
+            symbol["text"] = symbol["text"] or symbol["name"][:4].upper()
+            symbol["bild"] = None
+
+    return {
+        "karten_objekte": [
+            {
+                "typ": k.typ,
+                "lat": k.lat,
+                "lng": k.lng,
+                "geometry": parse_karten_geometry(k.geometry_json),
+                "label": k.label,
+            }
+            for k in verknuepfung.objekt.karten_objekte
+        ],
+        "symbole": symbole,
+    }
 
 
 # ── Kartenbild (No-Login, wird von Teams-Servern per URL geladen) ───────────────

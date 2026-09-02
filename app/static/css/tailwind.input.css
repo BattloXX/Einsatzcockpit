@@ -894,10 +894,10 @@ dialog.media-viewer { max-width: 95vw; width: 95vw; max-height: 95dvh; height: 9
 
 /* ── Login ───────────────────────────────────────────────── */
 .login-body {
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
   min-height: 100vh; background: radial-gradient(ellipse at top, #131b2e 0%, var(--surface) 60%);
 }
-.login-container { width: 100%; max-width: 420px; padding: 24px; }
+.login-container { width: 100%; max-width: 420px; padding: 24px; margin: auto; }
 .login-card {
   background: var(--surface-mid); border-radius: 0.75rem; border: 1px solid rgba(255,255,255,.05);
   padding: 36px 32px; box-shadow: 0 10px 40px rgba(0,0,0,.55);

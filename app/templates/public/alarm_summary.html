@@ -10,10 +10,11 @@
 <body class="login-body">
   <div class="login-container">
     <div class="login-card" style="max-width:480px;">
-      <div class="login-logo">
-        <img src="/static/img/logo_einsatzcockpit.png" alt="{{ brand }}"
-             onerror="this.style.display='none'" class="login-logo__img">
-        <p class="login-logo__sub">{{ brand_tagline }}</p>
+      <div class="login-logo" style="margin-bottom:14px;">
+        {% set _logo_src = org.logo_path if org and org.logo_path else '/static/img/logo_einsatzcockpit.png' %}
+        <img src="{{ _logo_src }}" alt="{{ org.name if org else brand }}"
+             onerror="this.style.display='none'" class="login-logo__img" style="max-height:64px;">
+        <p class="login-logo__sub">{{ org.name if org and org.name else brand_tagline }}</p>
       </div>
 
       {% if incident.is_exercise %}
@@ -43,16 +44,14 @@
       <div id="alarm-karte"
            data-lat="{{ incident.lat }}" data-lng="{{ incident.lng }}"
            data-hydranten="/alarm/{{ token }}/hydranten.json"
+           data-objekt="/alarm/{{ token }}/objekt.json"
            style="height:260px;width:100%;border-radius:8px;margin-bottom:12px;background:#0b1326;">
         <noscript>
           <img src="{{ map_png_url }}" alt="Kartenausschnitt"
                style="width:100%;border-radius:8px;display:block;">
         </noscript>
       </div>
-      <div id="alarm-hydranten" style="margin-bottom:14px;"></div>
-      {% endif %}
-
-      <div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
         {% if gmaps_url %}
         <a href="{{ gmaps_url }}" target="_blank" rel="noopener" class="btn btn--primary btn--full">
           &#x1F5FA; In Google Maps öffnen
@@ -62,6 +61,14 @@
           &#x1F5A5; Einsatz-Board öffnen
         </a>
       </div>
+      <div id="alarm-hydranten"></div>
+      {% else %}
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <a href="/einsatz/{{ incident.id }}" class="btn btn--secondary btn--full">
+          &#x1F5A5; Einsatz-Board öffnen
+        </a>
+      </div>
+      {% endif %}
 
       <p style="text-align:center;margin-top:18px;font-size:.78rem;color:var(--text-muted);">
         Diese Übersicht enthält keine Mannschafts- oder Personendaten.
@@ -72,6 +79,7 @@
   {% if has_coords %}
   <link rel="stylesheet" href="/static/css/leaflet.min.css">
   <script src="/static/js/leaflet.min.js"></script>
+  <script src="/static/js/objekt_karte.js"></script>
   <script>
   (function () {
     var el = document.getElementById("alarm-karte");
@@ -88,10 +96,10 @@
 
     var TXT = { ueberflur: "H", unterflur: "UH", loeschwasser: "≈" };
     var LBL = { ueberflur: "Überflurhydrant", unterflur: "Unterflurhydrant", loeschwasser: "Löschwasserstelle" };
-    fetch(el.dataset.hydranten).then(function (r) { return r.ok ? r.json() : null; })
+    var bounds = [[lat, lng]];
+    var hydranten = fetch(el.dataset.hydranten).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d || !d.hydranten || !d.hydranten.length) { return; }
-        var bounds = [[lat, lng]];
         d.hydranten.forEach(function (h) {
           if (h.lat == null || h.lng == null) { return; }
           L.marker([h.lat, h.lng], {
@@ -101,7 +109,6 @@
             (h.entfernung_m != null ? "<br>" + h.entfernung_m + " m" : ""));
           bounds.push([h.lat, h.lng]);
         });
-        karte.fitBounds(bounds, { padding: [25, 25], maxZoom: 18 });
         var box = document.getElementById("alarm-hydranten");
         if (box) {
           var html = '<h3 style="margin:0 0 8px;font-size:.9rem;">🚰 Nächste Hydranten</h3><div class="hydrant-liste">';
@@ -114,7 +121,38 @@
           html += "</div>";
           box.innerHTML = html;
         }
-      }).catch(function () {});
+      });
+    var objekt = fetch(el.dataset.objekt).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) { return; }
+        if (d.symbole && window.setObjektSymbole) { window.setObjektSymbole(d.symbole); }
+        (d.karten_objekte || []).forEach(function (k) {
+          var punkt = k.geometry && k.geometry.type === "Point";
+          var mlat = punkt ? k.geometry.coordinates[1] : k.lat;
+          var mlng = punkt ? k.geometry.coordinates[0] : k.lng;
+          if (k.geometry && !punkt) {
+            var layer = L.geoJSON(k.geometry, {
+              style: { color: "#d42225", weight: 3, fillOpacity: .12 }
+            }).addTo(karte);
+            layer.eachLayer(function (l) {
+              if (l.getLatLng) { bounds.push(l.getLatLng()); }
+              else if (l.getBounds) {
+                var b = l.getBounds(); bounds.push(b.getSouthWest(), b.getNorthEast());
+              }
+            });
+          } else if (mlat != null && mlng != null) {
+            L.marker([mlat, mlng], {
+              icon: L.divIcon({ html: window.objektSymbolHtml(k.typ, k.label),
+                className: "oks-divicon", iconSize: null, iconAnchor: [16, 16] }),
+              interactive: false
+            }).addTo(karte);
+            bounds.push([mlat, mlng]);
+          }
+        });
+      });
+    Promise.all([hydranten, objekt]).then(function () {
+      if (bounds.length > 1) { karte.fitBounds(bounds, { padding: [25, 25], maxZoom: 18 }); }
+    }).catch(function () {});
   })();
   </script>
   {% endif %}
