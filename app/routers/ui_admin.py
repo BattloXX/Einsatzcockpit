@@ -361,7 +361,7 @@ async def revoke_api_key(
 
 @router.get("/mitglieder", response_class=HTMLResponse)
 async def members_list(request: Request, db: Session = Depends(get_db),
-                       _=Depends(require_role("admin"))):
+                       _=Depends(require_role("admin", "fahrtenbuch_admin"))):
     members = (
         _org_filter(db.query(Member), request.state.user, Member.org_id)
         .order_by(Member.lastname, Member.firstname)
@@ -582,9 +582,14 @@ async def bulk_delete_members(
 async def update_member_quali(
     member_id: int, request: Request,
     qualification_codes: list[str] = Form([]),
-    db: Session = Depends(get_db), _=Depends(require_role("admin")),
+    db: Session = Depends(get_db), _=Depends(require_role("admin", "fahrtenbuch_admin")),
 ):
-    m = db.get(Member, member_id)
+    m = (
+        db.query(Member)
+        .execution_options(include_all_tenants=True)
+        .filter(Member.id == member_id)
+        .first()
+    )
     if not m:
         return RedirectResponse("/admin/mitglieder", status_code=303)
     if not same_org_or_system_admin(request.state.user, m.org_id):  # type: ignore[arg-type]
@@ -613,7 +618,7 @@ async def update_member_quali(
 # ── Mitglieder Excel-Import ───────────────────────────────────────────────────
 
 @router.get("/mitglieder/excel-import")
-def excel_import_redirect():
+def excel_import_redirect(_=Depends(require_role("admin"))):
     """GET-Fallback: User hat Direkt-URL aufgerufen → zur Mitglieder-Seite."""
     return RedirectResponse("/admin/mitglieder", status_code=303)
 
@@ -974,7 +979,11 @@ async def vehicles_list(
     vehicles = q.order_by(FireDept.name, VehicleMaster.display_order).all()
     duplicate_groups: list[list[VehicleMaster]] = []
     grouped: dict[tuple[int, str], list[VehicleMaster]] = {}
-    duplicate_query = db.query(VehicleMaster).filter(VehicleMaster.deleted == False)  # noqa: E712
+    duplicate_query = db.query(VehicleMaster).filter(
+        VehicleMaster.deleted == False,  # noqa: E712
+        VehicleMaster.is_external == False,  # noqa: E712
+        VehicleMaster.is_adhoc == False,  # noqa: E712
+    )
     if is_sysadmin and filter_org_id:
         duplicate_query = duplicate_query.filter(VehicleMaster.dept_id == filter_org_id)
     elif not is_sysadmin:
@@ -1715,7 +1724,7 @@ async def reset_dispatch_order(
 
 @router.get("/qualifikationen", response_class=HTMLResponse)
 async def qualifications_list(request: Request, db: Session = Depends(get_db),
-                              _=Depends(require_role("admin"))):
+                              _=Depends(require_role("admin", "fahrtenbuch_admin"))):
     qualifications = db.query(Qualification).order_by(Qualification.code).all()
     from sqlalchemy import func as sqlfunc
     usage: dict[int, int] = dict(
@@ -1734,12 +1743,14 @@ async def qualifications_list(request: Request, db: Session = Depends(get_db),
 async def create_qualification(
     request: Request, code: str = Form(...), label: str = Form(...),
     is_einsatzleiter: str = Form(""), is_gruppenkommandant: str = Form(""),
-    db: Session = Depends(get_db), _=Depends(require_role("admin")),
+    maschinist_stufe: int | None = Form(None),
+    db: Session = Depends(get_db), _=Depends(require_role("admin", "fahrtenbuch_admin")),
 ):
     q = Qualification(
         code=code.upper(), label=label,
         is_einsatzleiter=bool(is_einsatzleiter),
         is_gruppenkommandant=bool(is_gruppenkommandant),
+        maschinist_stufe=maschinist_stufe if maschinist_stufe in (1, 2, 3, 4) else None,
     )
     db.add(q)
     db.commit()
@@ -1750,7 +1761,8 @@ async def create_qualification(
 async def edit_qualification(
     qid: int, request: Request, code: str = Form(...), label: str = Form(...),
     is_einsatzleiter: str = Form(""), is_gruppenkommandant: str = Form(""),
-    db: Session = Depends(get_db), _=Depends(require_role("admin")),
+    maschinist_stufe: int | None = Form(None),
+    db: Session = Depends(get_db), _=Depends(require_role("admin", "fahrtenbuch_admin")),
 ):
     q = db.get(Qualification, qid)
     if q:
@@ -1758,6 +1770,7 @@ async def edit_qualification(
         q.label = label
         q.is_einsatzleiter = bool(is_einsatzleiter)
         q.is_gruppenkommandant = bool(is_gruppenkommandant)
+        q.maschinist_stufe = maschinist_stufe if maschinist_stufe in (1, 2, 3, 4) else None
         db.commit()
     return RedirectResponse("/admin/qualifikationen?saved=1", status_code=303)
 
@@ -1765,7 +1778,7 @@ async def edit_qualification(
 @router.post("/qualifikationen/{qid}/loeschen")
 async def delete_qualification(
     qid: int, request: Request, db: Session = Depends(get_db),
-    _=Depends(require_role("admin")),
+    _=Depends(require_role("admin", "fahrtenbuch_admin")),
 ):
     q = db.get(Qualification, qid)
     if q:

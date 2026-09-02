@@ -53,6 +53,9 @@
           <option value="A3">A3</option>
         </select>
       </label>
+      <label id="ecpgColorWrap" style="display:none">Farbe
+        <select name="color" id="ecpgColor"><option value="color">Farbe</option><option value="mono">Schwarzweiß</option></select>
+      </label>
       <div id="ecpgPrintMsg" class="ecpg-msg"></div>
       <div class="ecpg-modal__actions">
         <button type="button" class="btn btn--ghost" onclick="ecpgClosePrintDialog()">Abbrechen</button>
@@ -159,6 +162,17 @@
     if(a3opt){ a3opt.disabled = !hasA3; a3opt.style.display = hasA3 ? '' : 'none'; }
     if(!hasA3 && mediaSel.value === 'A3'){ mediaSel.value = 'A4'; }
     wrap.style.display = hasA3 ? 'block' : 'none';
+    if(ctx.defaultMedia && media.indexOf(ctx.defaultMedia) !== -1){ mediaSel.value = ctx.defaultMedia; }
+  }
+
+  function updateColorOptions(){
+    const sel = document.getElementById('ecpgPrinter');
+    const wrap = document.getElementById('ecpgColorWrap');
+    const colorSel = document.getElementById('ecpgColor');
+    if(!sel || !wrap || !colorSel) return;
+    const p = (window._ecpgPrinters || []).find(x => String(x.id) === String(sel.value));
+    wrap.style.display = p && p.color ? 'block' : 'none';
+    if(ctx.defaultColor && p && p.color){ colorSel.value = ctx.defaultColor; }
   }
 
   function openDialogWithStation(printers, connected){
@@ -178,9 +192,10 @@
     }).join('');
     const last = localStorage.getItem('ecpg_last_printer');
     if(last){ sel.value = last; }
-    sel.onchange = function(){ updatePrinterHint(); updateFormatOptions(); };
+    sel.onchange = function(){ updatePrinterHint(); updateFormatOptions(); updateColorOptions(); };
     updatePrinterHint();
     updateFormatOptions();
+    updateColorOptions();
     document.getElementById('ecpgTarget').style.display = 'flex';
     let target = 'station';
     try{ target = localStorage.getItem('ec_print_target') || 'station'; }catch(e){}

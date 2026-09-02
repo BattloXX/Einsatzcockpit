@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><style>
+@page { size: A3 landscape; margin: 8mm; }
+body { font-family: Arial, sans-serif; color:#172033; margin:0; }
+.kopf { display:flex; justify-content:space-between; align-items:flex-end; height:14mm; }
+h1 { font-size:15pt; margin:0; }.legend { font-size:8pt; }
+.swatch { display:inline-block; width:12px; height:8px; margin-left:8px; }
+table { width:100%; border-collapse:collapse; table-layout:fixed; page-break-inside:avoid; }
+th,td { border:.25mm solid #777; padding:0 .6mm; text-align:center; overflow:hidden; }
+th { background:#2d2d2d; color:#fff; font-weight:bold; }
+.stage { width:12mm; }.name { width:38mm; text-align:left; }.data { width:{{ s.spalte }}mm; }
+</style></head><body>
+<div class="kopf"><h1>Maschinisten-Matrix {{ user.org.name }}</h1><div><strong>{{ matrix.jahr }}</strong><span class="legend"><span class="swatch" style="background:#{{ farbe_uebung }}"></span>Üng <span class="swatch" style="background:#{{ farbe_einsatz }}"></span>Einsatz</span></div></div>
+<table style="font-size:{{ s.font }}pt;line-height:{{ s.zeile }}mm">
+<thead><tr><th class="stage" rowspan="2">Stufe</th><th class="name" rowspan="2">Name</th>{% for col in matrix.spalten %}<th colspan="2">{{ col.label }}</th>{% endfor %}<th colspan="2">Gesamt</th></tr>
+<tr>{% for col in matrix.spalten %}<th class="data" style="background:#{{ farbe_uebung }};color:#172033">Üng</th><th class="data" style="background:#{{ farbe_einsatz }};color:#172033">Einsatz</th>{% endfor %}<th class="data">Üng</th><th class="data">Einsatz</th></tr></thead>
+<tbody>{% for row in matrix.zeilen %}<tr><td {% if row.stufe %}style="background:#{{ farbe_stufe[row.stufe] }};color:{{ '#222' if row.stufe == 2 else '#fff' }}"{% endif %}>{{ 'M' ~ row.stufe if row.stufe else '' }}</td><td class="name">{{ row.name }}</td>{% for col in matrix.spalten %}{% set cell=row.zellen.get(col.key, {}) %}<td style="background:#{{ farbe_uebung }}">{{ cell.get('uebung', 0) or '' }}</td><td style="background:#{{ farbe_einsatz }}">{{ cell.get('einsatz', 0) or '' }}</td>{% endfor %}<td>{{ row.summe.uebung or '' }}</td><td>{{ row.summe.einsatz or '' }}</td></tr>{% endfor %}</tbody>
+</table></body></html>

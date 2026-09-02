@@ -202,3 +202,23 @@ def test_admin_validation_extern_erlaubt_und_tenant_delete_merge_verboten(client
         "winner_id": own_id, "loser_id": foreign_id, "_csrf": csrf,
     }, follow_redirects=False)
     assert denied_merge.status_code == 403
+
+
+def test_org_admin_sieht_merge_einstieg_ohne_dubletten_und_extern_ist_keine_dublette(client):
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        _org_admin(db, "merge_visible_admin")
+        db.add_all([
+            VehicleMaster(dept_id=ORG_ID, code="UNIQUE-MERGE", name="Eigen"),
+            VehicleMaster(dept_id=ORG_ID, code="UNIQUE-MERGE", name="Extern",
+                          is_external=True, adhoc_org_name="Nachbar"),
+        ])
+        db.commit()
+    finally:
+        db.close()
+    _login(client, "merge_visible_admin")
+    response = client.get("/admin/fahrzeuge")
+    assert response.status_code == 200
+    assert "Fahrzeuge zusammenführen" in response.text
+    assert "UNIQUE-MERGE zusammenführen" not in response.text
