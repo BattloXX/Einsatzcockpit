@@ -165,6 +165,7 @@ def get_stats(
             .all()
         )
     usage: dict[int, dict[str, Any]] = {}
+    usage_vehicles: dict[int, VehicleMaster] = {}
     usage_incidents: dict[int, set[int]] = {}
     first_dispatch: dict[int, Any] = {}
     incident_by_id = {i.id: i for i in incidents}
@@ -175,6 +176,7 @@ def get_stats(
             "id": vehicle.id, "code": vehicle.code, "name": vehicle.name,
             "count": 0, "km": 0,
         })
+        usage_vehicles[vehicle.id] = vehicle
         usage_incidents.setdefault(vehicle.id, set()).add(assignment.incident_id)
         item["km"] += assignment.km_gefahren or 0
         previous = first_dispatch.get(assignment.incident_id)
@@ -182,6 +184,13 @@ def get_stats(
             first_dispatch[assignment.incident_id] = assignment.created_at
     for vehicle_id, incident_id_set in usage_incidents.items():
         usage[vehicle_id]["count"] = len(incident_id_set)
+    code_counts: dict[str, int] = {}
+    for item in usage.values():
+        key = item["code"].strip().casefold()
+        code_counts[key] = code_counts.get(key, 0) + 1
+    for vehicle_id, item in usage.items():
+        if code_counts[item["code"].strip().casefold()] > 1:
+            item["display_label"] = usage_vehicles[vehicle_id].display_label
     reaction = []
     for incident_id, dispatched_at in first_dispatch.items():
         started_at = incident_by_id[incident_id].started_at

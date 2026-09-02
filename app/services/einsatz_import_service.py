@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import io
-import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -14,29 +13,15 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.timezones import org_tz
-from app.models.breathing import BreathingTroop
-from app.models.fahrtenbuch import Fahrt
-from app.models.foerderstrecke import FoerderPumpenTyp
 from app.models.incident import (
     FIXED_COLUMN_TITLES,
     FIXED_COLUMNS,
     Incident,
     IncidentColumn,
     IncidentVehicle,
-    Message,
-    RescuedPerson,
-    Task,
 )
-from app.models.major_incident import (
-    IncidentSite,
-    LageEinheit,
-    MajorIncident,
-    SiteResourceAssignment,
-    VehiclePosition,
-)
-from app.models.master import AlarmDispatchVehicle, AlarmType, FireDept, VehicleMaster
-from app.models.teilnahme import Teilnahme
-from app.models.user import DeviceToken, User
+from app.models.master import AlarmType, FireDept, VehicleMaster
+from app.services.vehicle_merge_service import merge_incident_vehicle, repoint_vehicle_references
 
 _LEITSTELLEN_ID_ALIASES = {"leitstellen nr.", "leitstellen nummer", "leitstellennummer"}
 _DATE_FORMAT = "%d.%m.%Y %H:%M:%S"
@@ -224,7 +209,9 @@ def _vehicle(db: Session, org_id: int, row: dict[str, Any]) -> tuple[VehicleMast
         if name:
             criteria.append(func.lower(VehicleMaster.name) == name.lower())
         matches = db.query(VehicleMaster).filter(
-            VehicleMaster.dept_id == org_id, or_(*criteria)
+            VehicleMaster.dept_id == org_id,
+            VehicleMaster.deleted == False,  # noqa: E712
+            or_(*criteria),
         ).all()
     real = next((item for item in matches if not item.is_adhoc), None)
     if real is not None:
@@ -248,108 +235,8 @@ def _replace_adhoc_vehicle(
     db: Session, org_id: int, adhoc: VehicleMaster, real: VehicleMaster
 ) -> None:
     """Haengt alle tenant-geprueften Referenzen um und entfernt das Adhoc-Fahrzeug."""
-    adhoc_assignments = (db.query(IncidentVehicle).join(Incident).filter(
-        Incident.primary_org_id == org_id,
-        IncidentVehicle.vehicle_master_id == adhoc.id,
-    ).all())
-    for duplicate in adhoc_assignments:
-        survivor = db.query(IncidentVehicle).filter(
-            IncidentVehicle.incident_id == duplicate.incident_id,
-            IncidentVehicle.vehicle_master_id == real.id,
-            IncidentVehicle.id != duplicate.id,
-        ).order_by(IncidentVehicle.removed_at.is_not(None), IncidentVehicle.id).first()
-        if survivor is None:
-            duplicate.vehicle_master_id = real.id
-        else:
-            _merge_incident_vehicle(db, survivor, duplicate)
-
-    queries = (
-        (db.query(Teilnahme).filter(
-            Teilnahme.org_id == org_id, Teilnahme.fahrzeug_id == adhoc.id,
-        ), "fahrzeug_id"),
-        (db.query(DeviceToken).join(User, DeviceToken.user_id == User.id).filter(
-            User.org_id == org_id, DeviceToken.vehicle_master_id == adhoc.id,
-        ), "vehicle_master_id"),
-        (db.query(AlarmDispatchVehicle).join(AlarmType).filter(
-            AlarmType.org_id == org_id, AlarmDispatchVehicle.vehicle_master_id == adhoc.id,
-        ), "vehicle_master_id"),
-        (db.query(FoerderPumpenTyp).filter(
-            FoerderPumpenTyp.org_id == org_id, FoerderPumpenTyp.vehicle_id == adhoc.id,
-        ), "vehicle_id"),
-        (db.query(Fahrt).filter(
-            Fahrt.org_id == org_id, Fahrt.fahrzeug_id == adhoc.id,
-        ), "fahrzeug_id"),
-        (db.query(SiteResourceAssignment).join(IncidentSite).join(MajorIncident).filter(
-            MajorIncident.org_id == org_id, SiteResourceAssignment.vehicle_id == adhoc.id,
-        ), "vehicle_id"),
-        (db.query(LageEinheit).join(MajorIncident).filter(
-            MajorIncident.org_id == org_id, LageEinheit.vehicle_id == adhoc.id,
-        ), "vehicle_id"),
-        (db.query(VehiclePosition).filter(
-            VehiclePosition.org_id == org_id, VehiclePosition.vehicle_id == adhoc.id,
-        ), "vehicle_id"),
-    )
-    for query, attribute in queries:
-        for reference in query.all():
-            setattr(reference, attribute, real.id)
-    db.flush()
+    repoint_vehicle_references(db, org_id, adhoc, real, dedupe_assignments=False)
     db.delete(adhoc)
-    db.flush()
-
-
-def _merge_incident_vehicle(
-    db: Session, survivor: IncidentVehicle, duplicate: IncidentVehicle
-) -> None:
-    """Konsolidiert zwei Zuordnungen desselben Fahrzeugs ohne Kinddaten zu verlieren."""
-    nullable_fields = (
-        "commander_member_id", "commander_name", "fahrer_member_id", "fahrer_name",
-        "fahrer2_member_id", "fahrer2_name", "km_gefahren", "org_color_override",
-        "lis_operation_unit_id",
-    )
-    for field_name in nullable_fields:
-        if getattr(survivor, field_name) is None:
-            setattr(survivor, field_name, getattr(duplicate, field_name))
-    if survivor.unit_status == "Einsatzbereit" and duplicate.unit_status != "Einsatzbereit":
-        survivor.unit_status = duplicate.unit_status
-        survivor.column_id = duplicate.column_id
-    survivor.display_order = min(survivor.display_order, duplicate.display_order)
-    survivor.created_at = min(survivor.created_at, duplicate.created_at)
-    if survivor.removed_at is None or duplicate.removed_at is None:
-        survivor.removed_at = None
-    else:
-        survivor.removed_at = max(survivor.removed_at, duplicate.removed_at)
-
-    for model in (Task, Message, RescuedPerson, BreathingTroop):
-        # incident_id zusaetzlich zu vehicle_id filtern (auch wenn vehicle_id als FK auf
-        # incident_vehicle.id ohnehin schon eindeutig ist) - CLAUDE.md verbietet ungefilterte
-        # Bulk-Updates auf Tenant-Tabellen, also explizit auf den bereits tenant-geprueften
-        # Einsatz von "duplicate" einschraenken statt sich nur auf die FK-Eindeutigkeit zu verlassen.
-        db.query(model).filter(
-            model.vehicle_id == duplicate.id, model.incident_id == duplicate.incident_id
-        ).update({model.vehicle_id: survivor.id}, synchronize_session=False)
-    for column in db.query(IncidentColumn).filter_by(incident_id=survivor.incident_id).all():
-        if not column.card_order:
-            continue
-        try:
-            order = json.loads(column.card_order)
-        except (TypeError, ValueError):
-            continue
-        changed = False
-        merged_order = []
-        survivor_seen = False
-        for card in order:
-            if card.get("kind") == "vehicle" and card.get("id") == duplicate.id:
-                card = {**card, "id": survivor.id}
-                changed = True
-            if card.get("kind") == "vehicle" and card.get("id") == survivor.id:
-                if survivor_seen:
-                    changed = True
-                    continue
-                survivor_seen = True
-            merged_order.append(card)
-        if changed:
-            column.card_order = json.dumps(merged_order)
-    db.delete(duplicate)
     db.flush()
 
 
@@ -363,7 +250,7 @@ def _deduplicate_incident_vehicle(
         return None
     survivor = assignments[0]
     for duplicate in assignments[1:]:
-        _merge_incident_vehicle(db, survivor, duplicate)
+        merge_incident_vehicle(db, survivor, duplicate)
     return survivor
 
 

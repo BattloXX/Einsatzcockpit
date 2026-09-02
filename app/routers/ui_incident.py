@@ -9,7 +9,7 @@ from typing import Any
 import qrcode
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
@@ -1836,20 +1836,28 @@ async def attach_vehicle_to_incident(
         dept_id = incident.primary_org_id or request.state.user.org_id
         if not dept_id:
             return Response("Keine Organisation zugeordnet", status_code=400)
-        vm = VehicleMaster(
-            dept_id=dept_id,
-            code=new_code.strip()[:30],
-            name=new_name.strip()[:150],
-            type=(new_type.strip() or None),
-            is_first_train=False,
-            active=True,
-            display_order=999,
-            is_adhoc=True,
-            adhoc_org_name=new_org_name.strip()[:150] or None,
-            adhoc_org_short=new_org_short.strip()[:3] or None,
-        )
-        db.add(vm)
-        db.flush()
+        vm = None
+        if not new_org_name.strip():
+            vm = db.query(VehicleMaster).filter(
+                VehicleMaster.dept_id == dept_id,
+                VehicleMaster.deleted == False,  # noqa: E712
+                func.lower(VehicleMaster.code) == new_code.strip().lower(),
+            ).first()
+        if vm is None:
+            vm = VehicleMaster(
+                dept_id=dept_id,
+                code=new_code.strip()[:30],
+                name=new_name.strip()[:150],
+                type=(new_type.strip() or None),
+                is_first_train=False,
+                active=True,
+                display_order=999,
+                is_adhoc=True,
+                adhoc_org_name=new_org_name.strip()[:150] or None,
+                adhoc_org_short=new_org_short.strip()[:3] or None,
+            )
+            db.add(vm)
+            db.flush()
     else:
         return Response("vehicle_master_id ODER (new_code + new_name) erforderlich", status_code=400)
 

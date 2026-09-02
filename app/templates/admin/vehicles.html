@@ -1,6 +1,51 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Ressourcen – Admin{% endblock %}
 {% block admin_content %}
+{% if merge_preview is defined %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Fahrzeuge zusammenführen</h1><p class="page-header__sub">Dublette prüfen und Gewinner auswählen</p></div>
+    <a href="/admin/fahrzeuge" class="btn btn--ghost">Zurück</a>
+  </div>
+  {% if merge_preview|length == 2 %}
+  <section class="card mb-4">
+    <div class="card-header"><h2>Änderungsvorschau</h2></div>
+    <div class="card-body">
+      <table class="table table--compact">
+        <thead><tr><th>Feld</th>{% for item in merge_preview %}<th>{{ item.vehicle.display_label }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          <tr><td>Code</td>{% for item in merge_preview %}<td>{{ item.vehicle.code }}</td>{% endfor %}</tr>
+          <tr><td>Name</td>{% for item in merge_preview %}<td>{{ item.vehicle.name }}</td>{% endfor %}</tr>
+          <tr><td>Herkunft</td>{% for item in merge_preview %}<td>{{ item.vehicle.org_display_name }}</td>{% endfor %}</tr>
+          <tr><td>Kilometerstand</td>{% for item in merge_preview %}<td>{{ item.vehicle.km_aktuell }}</td>{% endfor %}</tr>
+          <tr><td>Betriebsstunden</td>{% for item in merge_preview %}<td>{{ item.vehicle.betriebsstunden_aktuell }}</td>{% endfor %}</tr>
+          <tr><td>Einsatzzuordnungen</td>{% for item in merge_preview %}<td>{{ item.incidents }}</td>{% endfor %}</tr>
+          <tr><td>Fahrten</td>{% for item in merge_preview %}<td>{{ item.fahrten }}</td>{% endfor %}</tr>
+          <tr><td>Kennzeichen</td>{% for item in merge_preview %}<td>{{ item.vehicle.kennzeichen or '–' }}</td>{% endfor %}</tr>
+          <tr><td>LIS-Referenz</td>{% for item in merge_preview %}<td>{{ item.vehicle.lis_reference_id or '–' }}</td>{% endfor %}</tr>
+        </tbody>
+      </table>
+      <form method="post" action="/admin/fahrzeuge/zusammenfuehren" style="margin-top:12px">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-group">
+          <label class="form-label">Dieses Fahrzeug bleibt erhalten</label>
+          {% for item in merge_preview %}
+          <label style="display:block;margin:.5rem 0">
+            <input type="radio" name="winner_id" value="{{ item.vehicle.id }}" required{% if loop.first %} checked{% endif %}>
+            {{ item.vehicle.display_label }} – {{ item.vehicle.name }}
+          </label>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="loser_id" id="mergeLoserId" value="{{ merge_preview[1].vehicle.id }}">
+        <button type="submit" class="btn btn--danger" onclick="var selected=this.form.querySelector('[name=winner_id]:checked');this.form.loser_id.value=selected.value=='{{ merge_preview[0].vehicle.id }}'?'{{ merge_preview[1].vehicle.id }}':'{{ merge_preview[0].vehicle.id }}';return confirm('Fahrzeuge wirklich zusammenführen?')">Jetzt anwenden</button>
+      </form>
+    </div>
+  </section>
+  {% else %}
+  <div class="alert alert--info">Bitte genau zwei gültige Fahrzeuge auswählen.</div>
+  {% endif %}
+</div>
+{% else %}
 <div class="page-content">
   <div class="page-header">
     <div>
@@ -18,7 +63,16 @@
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
-  {% if error %}<div class="alert alert--danger">{{ error }}</div>{% endif %}
+  {% if error %}<div class="alert alert--danger">{% if error == 'no_org' %}Keine Organisation zugeordnet.{% elif error == 'exists' %}Dieser Code wird bereits von einem eigenen Fahrzeug verwendet.{% elif error == 'fahrtenbuch_conflict' %}Beide Fahrzeuge besitzen Fahrtenbucheinträge und können nicht zusammengeführt werden.{% elif error == 'same_vehicle' %}Bitte zwei verschiedene Fahrzeuge auswählen.{% elif error == 'different_org' %}Die Fahrzeuge gehören nicht derselben Organisation.{% elif error == 'not_found' %}Mindestens ein Fahrzeug wurde nicht gefunden.{% elif error == 'references_remaining' %}Nicht alle Referenzen konnten übertragen werden.{% else %}{{ error }}{% endif %}</div>{% endif %}
+
+  {% if duplicate_groups %}
+  <div class="alert alert--warning">
+    <strong>Doppelte Fahrzeugcodes gefunden.</strong>
+    {% for group in duplicate_groups %}
+    <a href="/admin/fahrzeuge/zusammenfuehren?ids={{ group[0].id }},{{ group[1].id }}">{{ group[0].code }} zusammenführen</a>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
 
   <form method="get" action="/admin/fahrzeuge" style="display:flex;gap:10px;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
     {% if is_sysadmin %}
@@ -378,6 +432,7 @@
   </div>
 </dialog>
 
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>
