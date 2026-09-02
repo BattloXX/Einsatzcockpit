@@ -31,6 +31,9 @@ def test_delivery_count_is_only_shown_for_alarm_sources():
     alarm_branch = template[template.index(condition):template.index("{% endif %}", template.index(condition))]
     assert "Zugestellt: {{ fcm.delivered }}" in alarm_branch
     assert "Zustellbestätigung nur für Einsatzalarme" in template
+    # tip() liefert Attribute (data-tip=... aria-label=...) und muss daher IM Tag
+    # stehen - als Elementinhalt wuerde der Nutzer den Attribut-Text sehen.
+    assert "<div {{ tip('Zustellbestätigung nur für Einsatzalarme') }}>" in template
 
 
 def _login(client, username, password):

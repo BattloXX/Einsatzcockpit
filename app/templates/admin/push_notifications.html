@@ -248,7 +248,7 @@
             {% if entry.source == 'einsatz_alarm' %}
             <div>Zugestellt: {{ fcm.delivered }}<span class="text-muted">/{{ fcm.total }}</span></div>
             {% else %}
-            <div>Zugestellt: {{ tip('Zustellbestätigung nur für Einsatzalarme') }} –</div>
+            <div {{ tip('Zustellbestätigung nur für Einsatzalarme') }}>Zugestellt: <span class="text-muted">–</span></div>
             {% endif %}
             {% if fcm.failures %}
             <details style="margin-top:6px;text-align:left;">

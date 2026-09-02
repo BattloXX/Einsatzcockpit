@@ -218,3 +218,46 @@ def test_delivery_is_committed_before_first_fcm_send(monkeypatch):
         assert len(set(observed_delivery_ids)) == 1
     finally:
         db.close()
+
+
+def test_notify_vehicle_committet_die_transaktion_des_aufrufers_nicht(monkeypatch):
+    """notify_vehicle laeuft mitten in incident_service-Transaktionen.
+
+    Ein Commit der Delivery-Zeilen wuerde dort halbfertige Auftrags-/Meldungs-
+    Zuweisungen festschreiben (Regression aus dem Zwei-Nachrichten-Umbau).
+    """
+    from app.core.security import hash_api_key
+    from app.models.master import VehicleMaster
+    from app.models.user import DeviceToken
+
+    _fake_messaging(monkeypatch, lambda _message: None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = User(username="fcm-veh", display_name="FCM Fahrzeug", org_id=1, active=True)
+        vehicle = VehicleMaster(dept_id=1, code="TLF-T", name="TLF Test", type="Test")
+        db.add_all([user, vehicle])
+        db.flush()
+        db.add_all([
+            FcmToken(user_id=user.id, token="fcm-vehicle-token"),
+            DeviceToken(
+                user_id=user.id,
+                token_hash=hash_api_key("fcm-vehicle-device"),
+                label="Fahrzeug-Tablet",
+                vehicle_master_id=vehicle.id,
+            ),
+        ])
+        db.commit()
+
+        # Ab hier simuliert die noch offene Aenderung den Aufrufer-Kontext.
+        user.display_name = "Noch nicht committet"
+        db.flush()
+        commit_spy = Mock(side_effect=AssertionError("notify_vehicle darf nicht committen"))
+        monkeypatch.setattr(db, "commit", commit_spy)
+
+        push_service.notify_vehicle(db, vehicle.id, "Auftrag", "Test")
+
+        commit_spy.assert_not_called()
+    finally:
+        db.rollback()
+        db.close()

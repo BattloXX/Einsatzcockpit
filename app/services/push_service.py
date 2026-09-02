@@ -329,8 +329,19 @@ def send_push(subscription: PushSubscription, title: str, body: str,
 def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
                       url: str | None, cfg: dict | None = None,
                       channel_id: str | None = None,
-                      push_log_id: int | None = None) -> int:
-    """Sendet FCM an alle registrierten Tokens der angegebenen User-IDs."""
+                      push_log_id: int | None = None,
+                      commit_delivery_log: bool = True) -> int:
+    """Sendet FCM an alle registrierten Tokens der angegebenen User-IDs.
+
+    ``commit_delivery_log`` committet die Delivery-Zeilen VOR dem Versand, damit die
+    ``delivery_id`` sichtbar ist, bevor das Geraet den Ack schickt (sonst laeuft der
+    Ack ins Leere und "Zugestellt" bleibt bei 0). Ein Commit haengt hier zwingend an
+    der Session des Aufrufers: ``fcm_delivery_log.push_log_id`` ist ein Fremdschluessel
+    auf die noch nicht committete ``push_log``-Zeile, eine eigene Session koennte die
+    Zeile also gar nicht anlegen. Aufrufer, die mitten in einer groesseren Transaktion
+    stehen (``notify_vehicle`` aus ``incident_service``), setzen daher False und
+    verzichten auf die Ack-Garantie.
+    """
     tokens = db.query(FcmToken).filter(FcmToken.user_id.in_(user_ids)).all() if user_ids else []
     if push_log_id is None:
         fallback_log = _log_push(db, title, body, url, "system", None)
@@ -359,7 +370,10 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
                 error_code="fcm_not_configured",
                 error_detail="FCM ist nicht konfiguriert oder konnte nicht initialisiert werden",
             ))
-        db.commit()
+        if commit_delivery_log:
+            db.commit()
+        else:
+            db.flush()
         return 0
 
     deliveries = []
@@ -373,7 +387,10 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
         )
         db.add(delivery)
         deliveries.append((token, delivery))
-    db.commit()
+    if commit_delivery_log:
+        db.commit()
+    else:
+        db.flush()
 
     success_count = 0
     for token, delivery in deliveries:
@@ -402,6 +419,7 @@ def _notify_fcm_logged(
     cfg: dict | None,
     channel_id: str | None,
     push_log_id: int,
+    commit_delivery_log: bool = True,
 ) -> int:
     """Ruft den FCM-Fan-out mit PushLog-Verknuepfung auf."""
     try:
@@ -414,6 +432,7 @@ def _notify_fcm_logged(
             cfg,
             channel_id,
             push_log_id=push_log_id,
+            commit_delivery_log=commit_delivery_log,
         )
     except TypeError as exc:
         # Bestehende Erweiterungs-/Test-Doubles ohne das neue optionale Argument.
@@ -542,6 +561,11 @@ def notify_vehicle(db: Session, vehicle_master_id: int, title: str, body: str,
         push_log.total_count = len(subs)
     else:
         wp_count = 0
-    # FCM
-    fcm_extra = _notify_fcm_logged(db, user_ids, title, body, url, cfg, None, push_log.id)
+    # FCM. Kein Commit der Delivery-Zeilen: notify_vehicle laeuft mitten in der
+    # Transaktion des Aufrufers (incident_service: Auftrag/Meldung zuweisen), ein
+    # Zwischen-Commit wuerde dort halbfertige Zuweisungen festschreiben.
+    fcm_extra = _notify_fcm_logged(
+        db, user_ids, title, body, url, cfg, None, push_log.id,
+        commit_delivery_log=False,
+    )
     return wp_count + fcm_extra
