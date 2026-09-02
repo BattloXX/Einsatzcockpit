@@ -144,6 +144,7 @@ def test_fcm_push_uses_database_settings_when_environment_is_empty(monkeypatch, 
     firebase_admin.initialize_app = lambda cred, options: fake_app
     firebase_admin.get_app = lambda: fake_app
     messaging.Notification = lambda **kwargs: SimpleNamespace(**kwargs)
+    messaging.AndroidNotification = lambda **kwargs: SimpleNamespace(**kwargs)
     messaging.AndroidConfig = lambda **kwargs: SimpleNamespace(**kwargs)
     messaging.Message = lambda **kwargs: SimpleNamespace(**kwargs)
     messaging.send = lambda message: sent.append(message)
@@ -159,10 +160,12 @@ def test_fcm_push_uses_database_settings_when_environment_is_empty(monkeypatch, 
     response = client.post("/push/test-fcm")
 
     assert response.json() == {"ok": True}
-    assert len(sent) == 1
-    assert sent[0].token == "fcm-db-settings-token"
-    assert not hasattr(sent[0], "notification")
-    delivery_id = sent[0].data.pop("delivery_id")
+    assert len(sent) == 2
+    wake = next(message for message in sent if not hasattr(message, "notification"))
+    display = next(message for message in sent if hasattr(message, "notification"))
+    assert wake.token == display.token == "fcm-db-settings-token"
+    delivery_id = wake.data.pop("delivery_id")
+    assert display.data.pop("delivery_id") == delivery_id
     assert delivery_id.isdigit()
     db = SessionLocal()
     try:
@@ -172,7 +175,14 @@ def test_fcm_push_uses_database_settings_when_environment_is_empty(monkeypatch, 
         assert delivery.error_code is None
     finally:
         db.close()
-    assert sent[0].data == {
+    assert wake.data == {
+        "url": "/admin/push-nachrichten",
+        "title": "Test-Push",
+        "body": "Wenn du das siehst, funktioniert FCM!",
+        "channel_id": "",
+        "silent": "1",
+    }
+    assert display.data == {
         "url": "/admin/push-nachrichten",
         "title": "Test-Push",
         "body": "Wenn du das siehst, funktioniert FCM!",

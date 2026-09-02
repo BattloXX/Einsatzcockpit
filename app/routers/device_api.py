@@ -3,6 +3,7 @@
 Diese Endpoints werden von der nativen Android-App (Capacitor) aufgerufen.
 Auth über bestehende Session-Cookies (Device-Login via /geraet-login).
 """
+import logging
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
@@ -18,6 +19,7 @@ from app.services.einsatz_live_service import build_live_state
 from app.services.gsl_live_service import build_gsl_live_state
 
 router = APIRouter(prefix="/api/v1/device", tags=["device"])
+log = logging.getLogger(__name__)
 
 
 def _resolve_user_via_bearer_token(request: Request, db: Session) -> User | None:
@@ -338,7 +340,7 @@ def get_duty_state(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/push-ack")
 async def acknowledge_push(request: Request, db: Session = Depends(get_db)):
-    """Bestätigt eine FCM-Zustellung, ohne fremde Log-IDs offenzulegen."""
+    """Bestätigt eine FCM-Zustellung fuer das angemeldete Geraet."""
     user = _resolve_user_via_bearer_token(request, db)
     if not user:
         user = getattr(request.state, "user", None)
@@ -351,6 +353,7 @@ async def acknowledge_push(request: Request, db: Session = Depends(get_db)):
     except (AttributeError, TypeError, ValueError):
         delivery_id = None
 
+    delivery = None
     if delivery_id is not None:
         delivery = (
             db.query(FcmDeliveryLog)
@@ -363,5 +366,12 @@ async def acknowledge_push(request: Request, db: Session = Depends(get_db)):
         )
         if delivery and delivery.delivered_at is None:
             delivery.delivered_at = datetime.now(UTC).replace(tzinfo=None)
+    if delivery is None:
+        log.warning(
+            "Unbekannte oder fremde Push-Delivery-ID fuer User %s: %s",
+            user.id,
+            delivery_id,
+        )
+        return JSONResponse({"ok": False, "reason": "unknown_delivery"})
     db.commit()
     return JSONResponse({"ok": True})

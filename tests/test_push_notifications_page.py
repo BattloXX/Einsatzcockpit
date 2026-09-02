@@ -8,6 +8,7 @@ FCM, siehe push_service.py) berücksichtigen, sonst unterschätzt sie die
 tatsächliche Reichweite und schließt native-App-Nutzer aus der Empfänger-Liste aus.
 """
 import re
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -18,6 +19,18 @@ from app.main import app
 from app.models.user import DeviceToken, FcmToken, PushSubscription, Role, User, UserRole
 
 ORG_ID = 1  # FF Wolfurt (seeded)
+
+
+def test_delivery_count_is_only_shown_for_alarm_sources():
+    template = (
+        Path(__file__).resolve().parent.parent
+        / "app" / "templates" / "admin" / "push_notifications.html"
+    ).read_text(encoding="utf-8")
+    condition = "{% if entry.source == 'einsatz_alarm' %}"
+    assert condition in template
+    alarm_branch = template[template.index(condition):template.index("{% endif %}", template.index(condition))]
+    assert "Zugestellt: {{ fcm.delivered }}" in alarm_branch
+    assert "Zustellbestätigung nur für Einsatzalarme" in template
 
 
 def _login(client, username, password):

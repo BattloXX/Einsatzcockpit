@@ -1,13 +1,18 @@
 """Tests fuer den exklusiven FCM-Alarm-Channel bei neuen Einsaetzen."""
 import asyncio
 import logging
+import sys
 from time import perf_counter
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 from fastapi import BackgroundTasks
 
+from app.core.tenant import set_tenant_context
+from app.db import SessionLocal
 from app.models.incident import Incident
+from app.models.user import FcmDeliveryLog, FcmToken, PushLog, User
 from app.services import push_service
 from app.services.incident_notify import notify_incident_created
 
@@ -130,3 +135,86 @@ def test_notify_user_does_not_use_alarm_channel(monkeypatch):
 
     assert count == 1
     assert forwarded["channel_id"] is None
+
+
+def _fake_messaging(monkeypatch, send):
+    firebase_admin = ModuleType("firebase_admin")
+    messaging = ModuleType("firebase_admin.messaging")
+    messaging.Notification = lambda **kwargs: SimpleNamespace(**kwargs)
+    messaging.AndroidNotification = lambda **kwargs: SimpleNamespace(**kwargs)
+    messaging.AndroidConfig = lambda **kwargs: SimpleNamespace(**kwargs)
+    messaging.Message = lambda **kwargs: SimpleNamespace(**kwargs)
+    messaging.send = send
+    for name in (
+        "UnregisteredError", "SenderIdMismatchError", "QuotaExceededError",
+        "ThirdPartyAuthError",
+    ):
+        setattr(messaging, name, type(name, (Exception,), {}))
+    firebase_admin.messaging = messaging
+    monkeypatch.setitem(sys.modules, "firebase_admin", firebase_admin)
+    monkeypatch.setitem(sys.modules, "firebase_admin.messaging", messaging)
+    monkeypatch.setattr(push_service, "_get_fcm_app", lambda _cfg=None: object())
+
+
+def _fcm_rows(suffix: str):
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    user = User(username=f"fcm-dual-{suffix}", display_name="FCM Dual", org_id=1, active=True)
+    db.add(user)
+    db.flush()
+    token = FcmToken(user_id=user.id, token=f"fcm-dual-token-{suffix}")
+    push_log = PushLog(title="Alarm", body="Test", source="einsatz_alarm", org_id=1)
+    db.add_all([token, push_log])
+    db.commit()
+    return db, user, token, push_log
+
+
+def test_alarm_sends_wake_and_display_with_one_delivery(monkeypatch):
+    sent = []
+    _fake_messaging(monkeypatch, sent.append)
+    db, user, _token, push_log = _fcm_rows("messages")
+    try:
+        count = push_service._notify_fcm_users(
+            db, {user.id}, "Alarm", "Test", "/einsatz/42", {},
+            channel_id="einsatz_alarm", push_log_id=push_log.id,
+        )
+        db.commit()
+
+        assert count == 1
+        assert len(sent) == 2
+        wake = next(message for message in sent if not hasattr(message, "notification"))
+        display = next(message for message in sent if hasattr(message, "notification"))
+        assert wake.data["silent"] == "1"
+        assert "silent" not in display.data
+        assert wake.data["delivery_id"] == display.data["delivery_id"]
+        assert display.android.notification.channel_id == "einsatz_alarm"
+        deliveries = db.query(FcmDeliveryLog).filter_by(push_log_id=push_log.id).all()
+        assert len(deliveries) == 1
+        assert deliveries[0].success is True
+    finally:
+        db.close()
+
+
+def test_delivery_is_committed_before_first_fcm_send(monkeypatch):
+    observed_delivery_ids = []
+
+    def assert_committed(message):
+        delivery_id = int(message.data["delivery_id"])
+        other_db = SessionLocal()
+        try:
+            assert other_db.get(FcmDeliveryLog, delivery_id) is not None
+            observed_delivery_ids.append(delivery_id)
+        finally:
+            other_db.close()
+
+    _fake_messaging(monkeypatch, assert_committed)
+    db, user, _token, push_log = _fcm_rows("commit")
+    try:
+        push_service._notify_fcm_users(
+            db, {user.id}, "Alarm", "Test", None, {},
+            channel_id="einsatz_alarm", push_log_id=push_log.id,
+        )
+        assert len(observed_delivery_ids) == 2
+        assert len(set(observed_delivery_ids)) == 1
+    finally:
+        db.close()
