@@ -11,6 +11,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -442,6 +443,21 @@ def _get_or_create_external_vehicle(
         adhoc_org_short = None
 
     code = str(unit.get("Alias") or ref_id)[:30]
+    vehicle_master = (
+        db.query(VehicleMaster)
+        .filter(
+            VehicleMaster.dept_id == org.id,
+            VehicleMaster.is_external.is_(True),
+            VehicleMaster.lis_auto_created.is_(True),
+            VehicleMaster.deleted.is_(False),
+            func.lower(VehicleMaster.code) == code.lower(),
+            func.lower(VehicleMaster.adhoc_org_name) == adhoc_org_name.lower(),
+        )
+        .first()
+    )
+    if vehicle_master:
+        vehicle_master.lis_reference_id = str(ref_id)[:60]
+        return vehicle_master
     max_order = db.query(VehicleMaster).filter(VehicleMaster.dept_id == org.id).count()
     vehicle_master = VehicleMaster(
         dept_id=org.id,

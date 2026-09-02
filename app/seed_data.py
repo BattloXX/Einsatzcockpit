@@ -295,7 +295,10 @@ def _upsert_depts_and_vehicles(db):
 
     # Wolfurt own vehicles
     for v in WOLFURT_VEHICLES:
-        existing = db.query(VehicleMaster).filter(VehicleMaster.code == v["code"]).first()
+        existing = db.query(VehicleMaster).filter(
+            VehicleMaster.dept_id == dept_map["wolfurt"].id,
+            VehicleMaster.code == v["code"],
+        ).first()
         if not existing:
             db.add(VehicleMaster(dept_id=dept_map["wolfurt"].id, **v))
 
@@ -305,7 +308,10 @@ def _upsert_depts_and_vehicles(db):
         if dept is None:
             continue
         for v in vehicles:
-            existing = db.query(VehicleMaster).filter(VehicleMaster.code == v["code"]).first()
+            existing = db.query(VehicleMaster).filter(
+                VehicleMaster.dept_id == dept.id,
+                VehicleMaster.code == v["code"],
+            ).first()
             if not existing:
                 db.add(VehicleMaster(dept_id=dept.id, **v))
 

@@ -6,6 +6,7 @@ from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
@@ -51,6 +52,7 @@ from app.routers.ws import connected_gateway_token_ids
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.push_service import notify_all as _push_notify_all
 from app.services.push_service import notify_org as _push_notify_org
+from app.services.vehicle_merge_service import VehicleMergeError, merge_vehicles
 
 router = APIRouter(prefix="/admin")
 logger_admin = logging.getLogger("einsatzleiter.admin")
@@ -61,6 +63,11 @@ def _org_filter(q, user, col):
     if not has_role(user, "system_admin") and user.org_id:
         q = q.filter(col == user.org_id)
     return q
+
+
+def _vehicle_for_tenancy_check(db: Session, vehicle_id: int) -> VehicleMaster | None:
+    return db.query(VehicleMaster).execution_options(include_all_tenants=True).filter(
+        VehicleMaster.id == vehicle_id).first()
 
 
 def _admin_check(request: Request):
@@ -965,6 +972,16 @@ async def vehicles_list(
     elif filter_kind == "external":
         q = q.filter(VehicleMaster.is_external == True)  # noqa: E712
     vehicles = q.order_by(FireDept.name, VehicleMaster.display_order).all()
+    duplicate_groups: list[list[VehicleMaster]] = []
+    grouped: dict[tuple[int, str], list[VehicleMaster]] = {}
+    duplicate_query = db.query(VehicleMaster).filter(VehicleMaster.deleted == False)  # noqa: E712
+    if is_sysadmin and filter_org_id:
+        duplicate_query = duplicate_query.filter(VehicleMaster.dept_id == filter_org_id)
+    elif not is_sysadmin:
+        duplicate_query = duplicate_query.filter(VehicleMaster.dept_id == user.org_id)
+    for vehicle in duplicate_query.all():
+        grouped.setdefault((vehicle.dept_id, vehicle.code.strip().casefold()), []).append(vehicle)
+    duplicate_groups = [group for group in grouped.values() if len(group) > 1]
     saved = request.query_params.get("saved")
     error = request.query_params.get("error")
     from app.services.tz_service import list_tz_symbole
@@ -977,6 +994,7 @@ async def vehicles_list(
         "filter_status": filter_status,
         "filter_kind": filter_kind,
         "tz_symbole": tz_symbole,
+        "duplicate_groups": duplicate_groups,
     })
 
 
@@ -999,6 +1017,16 @@ async def create_vehicle(
         target_dept_id = user.org_id
     if not target_dept_id:
         return RedirectResponse("/admin/fahrzeuge?error=no_org", status_code=303)
+    code = code.strip()[:30]
+    existing = db.query(VehicleMaster).filter(
+        VehicleMaster.dept_id == target_dept_id,
+        VehicleMaster.is_adhoc == False,  # noqa: E712
+        VehicleMaster.is_external == False,  # noqa: E712
+        VehicleMaster.deleted == False,  # noqa: E712
+        func.lower(VehicleMaster.code) == code.lower(),
+    ).first()
+    if existing:
+        return RedirectResponse("/admin/fahrzeuge?error=exists", status_code=303)
     max_order = db.query(VehicleMaster).filter(VehicleMaster.dept_id == target_dept_id).count()
     v = VehicleMaster(
         dept_id=target_dept_id, code=code, name=name, type=type,
@@ -1052,6 +1080,66 @@ async def create_external_resource(
     return RedirectResponse("/admin/fahrzeuge?saved=1&filter_kind=external", status_code=303)
 
 
+@router.get("/fahrzeuge/zusammenfuehren", response_class=HTMLResponse)
+async def merge_vehicles_preview(
+    request: Request, ids: str = "", db: Session = Depends(get_db),
+    _=Depends(require_role("admin", "org_admin")),
+):
+    from app.models.fahrtenbuch import Fahrt
+    from app.models.incident import IncidentVehicle
+
+    try:
+        vehicle_ids = [int(value) for value in ids.split(",") if value.strip()][:2]
+    except ValueError:
+        vehicle_ids = []
+    loaded_vehicles = [_vehicle_for_tenancy_check(db, vehicle_id) for vehicle_id in vehicle_ids]
+    vehicles: list[VehicleMaster] = [
+        vehicle for vehicle in loaded_vehicles if vehicle is not None
+    ]
+    user = request.state.user
+    if any(not (has_role(user, "system_admin") or v.dept_id == user.org_id) for v in vehicles):
+        raise HTTPException(403, "Keine Berechtigung")
+    if len(vehicles) == 2 and vehicles[0].dept_id != vehicles[1].dept_id:
+        vehicles = []
+    comparison = []
+    for vehicle in vehicles:
+        comparison.append({
+            "vehicle": vehicle,
+            "incidents": db.query(IncidentVehicle).filter(
+                IncidentVehicle.vehicle_master_id == vehicle.id).count(),
+            "fahrten": db.query(Fahrt).filter(Fahrt.fahrzeug_id == vehicle.id).count(),
+        })
+    return templates.TemplateResponse(request, "admin/vehicles.html", {
+        "user": user, "merge_preview": comparison,
+        "error": request.query_params.get("error"),
+    })
+
+
+@router.post("/fahrzeuge/zusammenfuehren")
+async def merge_vehicles_apply(
+    request: Request, winner_id: int = Form(...), loser_id: int = Form(...),
+    db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
+):
+    winner = _vehicle_for_tenancy_check(db, winner_id)
+    loser = _vehicle_for_tenancy_check(db, loser_id)
+    if winner is None or loser is None:
+        return RedirectResponse("/admin/fahrzeuge?error=not_found", status_code=303)
+    user = request.state.user
+    if any(
+        not (has_role(user, "system_admin") or vehicle.dept_id == user.org_id)
+        for vehicle in (winner, loser)
+    ):
+        raise HTTPException(403, "Keine Berechtigung")
+    try:
+        merge_vehicles(db, winner, loser, actor_user_id=user.id)
+        db.commit()
+    except VehicleMergeError as exc:
+        db.rollback()
+        return RedirectResponse(
+            f"/admin/fahrzeuge?error={quote_plus(exc.code)}", status_code=303)
+    return RedirectResponse("/admin/fahrzeuge?saved=1", status_code=303)
+
+
 @router.post("/fahrzeuge/{vehicle_id}/edit")
 async def edit_vehicle(
     vehicle_id: int, request: Request,
@@ -1063,8 +1151,22 @@ async def edit_vehicle(
     kennzeichen: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
-    v = db.get(VehicleMaster, vehicle_id)
+    v = _vehicle_for_tenancy_check(db, vehicle_id)
+    user = request.state.user
+    if v and not (has_role(user, "system_admin") or v.dept_id == user.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     if v:
+        code = code.strip()[:30]
+        existing = db.query(VehicleMaster).filter(
+            VehicleMaster.dept_id == v.dept_id,
+            VehicleMaster.id != v.id,
+            VehicleMaster.is_adhoc == False,  # noqa: E712
+            VehicleMaster.is_external == False,  # noqa: E712
+            VehicleMaster.deleted == False,  # noqa: E712
+            func.lower(VehicleMaster.code) == code.lower(),
+        ).first()
+        if existing:
+            return RedirectResponse("/admin/fahrzeuge?error=exists", status_code=303)
         v.code = code
         v.name = name
         v.type = type
@@ -1088,7 +1190,10 @@ async def edit_external_resource(
     kennzeichen: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
-    v = db.get(VehicleMaster, vehicle_id)
+    v = _vehicle_for_tenancy_check(db, vehicle_id)
+    user = request.state.user
+    if v and not (has_role(user, "system_admin") or v.dept_id == user.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     if v:
         v.code = code.strip()[:30]
         v.name = name.strip()[:150]
@@ -1108,7 +1213,10 @@ async def toggle_vehicle(
     vehicle_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
-    v = db.get(VehicleMaster, vehicle_id)
+    v = _vehicle_for_tenancy_check(db, vehicle_id)
+    user = request.state.user
+    if v and not (has_role(user, "system_admin") or v.dept_id == user.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     if v:
         v.active = not v.active
         db.commit()
@@ -1120,7 +1228,7 @@ async def reorder_vehicle(
     vehicle_id: int, direction: str, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
-    v = db.get(VehicleMaster, vehicle_id)
+    v = _vehicle_for_tenancy_check(db, vehicle_id)
     if not v:
         return RedirectResponse("/admin/fahrzeuge", status_code=303)
     siblings = (
@@ -1162,9 +1270,12 @@ async def delete_vehicle(
     vehicle_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
-    v = db.get(VehicleMaster, vehicle_id)
+    v = _vehicle_for_tenancy_check(db, vehicle_id)
     if not v:
         return RedirectResponse("/admin/fahrzeuge?error=Einheit+nicht+gefunden.", status_code=303)
+    user = request.state.user
+    if not (has_role(user, "system_admin") or v.dept_id == user.org_id):
+        raise HTTPException(403, "Keine Berechtigung")
     v.deleted = True
     v.active = False
     write_audit(db, "admin.vehicle.deleted", user_id=request.state.user.id,
@@ -2384,7 +2495,10 @@ async def backup_restore(
                     f"  Warnung: Wehr '{v.get('dept_slug')}' nicht gefunden, Fahrzeug '{v.get('code')}' übersprungen"
                 )
                 continue
-            obj = db.query(VehicleMaster).filter(VehicleMaster.code == v["code"]).first()  # type: ignore[assignment]
+            obj = db.query(VehicleMaster).filter(
+                VehicleMaster.dept_id == dept.id,
+                VehicleMaster.code == v["code"],
+            ).first()  # type: ignore[assignment]
             if not obj:
                 db.add(VehicleMaster(
                     dept_id=dept.id, code=v["code"], name=v["name"],
