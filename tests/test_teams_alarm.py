@@ -9,7 +9,8 @@ import pytest
 from app.core.tenant import set_tenant_context
 from app.models.incident import Incident
 from app.models.master import AlarmType, FireDept
-from app.models.teams_bot import TeamsAlarmConfig, TeamsChannelBinding
+from app.models.objekt import Objekt, ObjektEinsatz, ObjektKartenObjekt, ObjektSymbol
+from app.models.teams_bot import AlarmToken, TeamsAlarmConfig, TeamsChannelBinding
 from app.services import teams_alarm_service
 from app.services.teams_card import build_incident_message_card
 from tests.conftest import TestingSession
@@ -42,6 +43,106 @@ def _cfg(**overrides) -> TeamsAlarmConfig:
     )
     defaults.update(overrides)
     return TeamsAlarmConfig(**defaults)
+
+
+def _public_alarm(db, *, token: str, with_objekt: bool = False):
+    incident = _incident(alarm_token=None)
+    db.add(incident)
+    db.flush()
+    db.add(AlarmToken(incident_id=incident.id, token_hash=__import__("hashlib").sha256(
+        token.encode()
+    ).hexdigest()))
+    if with_objekt:
+        objekt = Objekt(org_id=ORG_ID, nummer=9000 + incident.id, name="Testobjekt")
+        db.add(objekt)
+        db.flush()
+        db.add_all([
+            ObjektEinsatz(
+                org_id=ORG_ID, objekt_id=objekt.id, incident_id=incident.id,
+                quelle="manuell", status="bestaetigt",
+            ),
+            ObjektKartenObjekt(
+                org_id=ORG_ID, objekt_id=objekt.id, typ="bmz",
+                lat=47.471, lng=9.731, label="Foyer",
+            ),
+            ObjektSymbol(
+                org_id=ORG_ID, code=f"bild_{incident.id}", name="Bildzeichen",
+                stil="bild", text=None, bild_pfad="symbole/test.svg", aktiv=True,
+            ),
+        ])
+    db.commit()
+    return incident
+
+
+def test_public_alarm_org_logo_und_button_reihenfolge(client):
+    token = "teams-public-logo-order"
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        altes_logo = org.logo_path
+        org.logo_path = "/static/uploads/org-test-logo.png"
+        _public_alarm(db, token=token)
+
+        response = client.get(f"/alarm/{token}")
+        assert response.status_code == 200
+        assert org.logo_path in response.text
+        assert response.text.index("In Google Maps öffnen") < response.text.index(
+            'id="alarm-hydranten"'
+        )
+
+        org.logo_path = None
+        db.commit()
+        fallback = client.get(f"/alarm/{token}")
+        assert "/static/img/logo_einsatzcockpit.png" in fallback.text
+    finally:
+        org.logo_path = altes_logo
+        db.commit()
+        db.close()
+
+
+def test_public_alarm_objekt_liefert_kartenobjekte_und_bild_fallback(client):
+    token = "teams-public-objekt"
+    db = _session()
+    try:
+        _public_alarm(db, token=token, with_objekt=True)
+        response = client.get(f"/alarm/{token}/objekt.json")
+        assert response.status_code == 200
+        assert response.json()["karten_objekte"] == [{
+            "typ": "bmz", "lat": 47.471, "lng": 9.731,
+            "geometry": None, "label": "Foyer",
+        }]
+        bild = next(s for s in response.json()["symbole"] if s["name"] == "Bildzeichen")
+        assert bild["stil"] == "box"
+        assert bild["text"] == "BILD"
+        assert bild["bild"] is None
+    finally:
+        db.close()
+
+
+def test_public_alarm_objekt_ohne_verknuepfung_und_ungueltiger_token(client):
+    token = "teams-public-ohne-objekt"
+    db = _session()
+    try:
+        incident = _public_alarm(db, token=token)
+        incident_id = incident.id
+    finally:
+        db.close()
+
+    response = client.get(f"/alarm/{token}/objekt.json")
+    assert response.status_code == 200
+    assert response.json() == {"karten_objekte": [], "symbole": []}
+    assert client.get("/alarm/ungueltig/objekt.json").status_code == 404
+
+    db = _session()
+    try:
+        alarm_token = db.query(AlarmToken).filter(
+            AlarmToken.incident_id == incident_id
+        ).first()
+        alarm_token.expires_at = datetime(2020, 1, 1)
+        db.commit()
+    finally:
+        db.close()
+    assert client.get(f"/alarm/{token}/objekt.json").status_code == 404
 
 
 # ── build_incident_message_card ──────────────────────────────────────────────
