@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v12';
+const CACHE = 'ec-v13';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
@@ -229,13 +229,15 @@ self.addEventListener('fetch', e => {
   if (url.pathname.startsWith('/static/')) {
     e.respondWith(
       caches.open(CACHE).then(async cache => {
-        const currentCached = await cache.match(e.request, { ignoreSearch: true });
-        const cached = currentCached
-          || await caches.match(e.request, { ignoreSearch: true });
+        const cached = await cache.match(e.request);
         const fetchPromise = fetch(e.request).then(async res => {
           if (res.ok) {
             try {
               await cache.put(e.request, res.clone());
+              const keys = await cache.keys();
+              await Promise.all(keys
+                .filter(key => key.url !== e.request.url && new URL(key.url).pathname === url.pathname)
+                .map(key => cache.delete(key)));
             } catch (error) {
               console.warn(`[SW] Static-Asset konnte nicht gecacht werden: ${url.pathname}`, error);
             }
@@ -250,8 +252,11 @@ self.addEventListener('fetch', e => {
           });
           return cached;
         }
-        return fetchPromise.catch(error => {
+        return fetchPromise.catch(async error => {
           console.warn(`[SW] Static-Asset nicht verfuegbar: ${url.pathname}`, error);
+          const offlineCached = await cache.match(e.request, { ignoreSearch: true })
+            || await caches.match(e.request, { ignoreSearch: true });
+          if (offlineCached) return offlineCached;
           return new Response('Static asset unavailable', {
             status: 503,
             headers: { 'Content-Type': 'text/plain', 'X-Offline': '1' },
