@@ -96,8 +96,7 @@
 
     var TXT = { ueberflur: "H", unterflur: "UH", loeschwasser: "≈" };
     var LBL = { ueberflur: "Überflurhydrant", unterflur: "Unterflurhydrant", loeschwasser: "Löschwasserstelle" };
-    var bounds = [[lat, lng]];
-    var hydranten = fetch(el.dataset.hydranten).then(function (r) { return r.ok ? r.json() : null; })
+    fetch(el.dataset.hydranten).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d || !d.hydranten || !d.hydranten.length) { return; }
         d.hydranten.forEach(function (h) {
@@ -107,7 +106,6 @@
               (TXT[h.typ] || "H") + "</div>", className: "hydrant-divicon", iconSize: null, iconAnchor: [11, 11] })
           }).addTo(karte).bindPopup("<strong>" + (LBL[h.typ] || "Hydrant") + "</strong>" +
             (h.entfernung_m != null ? "<br>" + h.entfernung_m + " m" : ""));
-          bounds.push([h.lat, h.lng]);
         });
         var box = document.getElementById("alarm-hydranten");
         if (box) {
@@ -121,8 +119,8 @@
           html += "</div>";
           box.innerHTML = html;
         }
-      });
-    var objekt = fetch(el.dataset.objekt).then(function (r) { return r.ok ? r.json() : null; })
+      }).catch(function () {});
+    fetch(el.dataset.objekt).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) { return; }
         if (d.symbole && window.setObjektSymbole) { window.setObjektSymbole(d.symbole); }
@@ -131,28 +129,18 @@
           var mlat = punkt ? k.geometry.coordinates[1] : k.lat;
           var mlng = punkt ? k.geometry.coordinates[0] : k.lng;
           if (k.geometry && !punkt) {
-            var layer = L.geoJSON(k.geometry, {
+            L.geoJSON(k.geometry, {
               style: { color: "#d42225", weight: 3, fillOpacity: .12 }
             }).addTo(karte);
-            layer.eachLayer(function (l) {
-              if (l.getLatLng) { bounds.push(l.getLatLng()); }
-              else if (l.getBounds) {
-                var b = l.getBounds(); bounds.push(b.getSouthWest(), b.getNorthEast());
-              }
-            });
           } else if (mlat != null && mlng != null) {
             L.marker([mlat, mlng], {
               icon: L.divIcon({ html: window.objektSymbolHtml(k.typ, k.label),
                 className: "oks-divicon", iconSize: null, iconAnchor: [16, 16] }),
               interactive: false
             }).addTo(karte);
-            bounds.push([mlat, mlng]);
           }
         });
-      });
-    Promise.all([hydranten, objekt]).then(function () {
-      if (bounds.length > 1) { karte.fitBounds(bounds, { padding: [25, 25], maxZoom: 18 }); }
-    }).catch(function () {});
+      }).catch(function () {});
   })();
   </script>
   {% endif %}
