@@ -75,8 +75,6 @@
   .dropdown-item:hover { background: rgba(255,255,255,.07); color: var(--text); }
   .dropdown-item .di-icon { font-size: 1rem; flex-shrink: 0; }
   .dropdown-divider { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
-  .header-btn--ki { background:rgba(139,92,246,.12) !important; border-color:rgba(139,92,246,.4) !important; color:#a78bfa !important; }
-  .header-btn--ki:hover { background:rgba(139,92,246,.22) !important; }
   .dropdown-arrow { display:inline-block; font-size:.75rem; margin-left:2px; transition: transform .15s; }
   .dropdown-arrow.open { transform: rotate(180deg); }
   /* Mobile lane select */
@@ -129,7 +127,7 @@
     {% with active="board", subnav_display="desktop", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
 
     {# ── Zu-/Absage-Zähler (Teams-Einsatzinfo) — Desktop only, erst ab erster Antwort ─ #}
-    <div class="header-dropdown header-dropdown--rsvp" x-data="rsvpWidget({{ incident.id }})"
+    <div class="header-dropdown" x-data="rsvpWidget({{ incident.id }})"
          x-show="(zusagen + absagen) > 0" x-cloak
          @click.outside="open=false"
          {{ tip('Zu-/Absagen aus der Teams-Einsatzinfo') }}>
@@ -152,7 +150,7 @@
     </div>
 
     {# ── Mehr-Menü: KI, Dashboard, Drohne + seltene Aktionen (nur Desktop, mobil ausgeblendet) ── #}
-    <div class="header-dropdown header-dropdown--more" x-data="{open:false}" @click.outside="open=false">
+    <div class="header-dropdown" x-data="{open:false}" @click.outside="open=false">
       <button class="btn btn--sm btn--ghost"
               @click="open=!open"
               {{ tip('Weitere Aktionen: KI, Dashboard, Drohne, QR-Code, PDF-Export') }}>⋯</button>

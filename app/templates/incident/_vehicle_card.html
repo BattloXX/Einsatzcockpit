@@ -18,7 +18,7 @@
       <span class="card__org">{{ vehicle.vehicle_master.org_display_name }}</span>
       {% set bos = vehicle.vehicle_master.effective_bos %}
       {% if bos and bos != 'Feuerwehr' %}
-      <span class="badge badge--bos" style="font-size:.65rem; padding:1px 5px; border-radius:3px; background:rgba(255,255,255,.12); margin-left:4px;">{{ bos }}</span>
+      <span class="badge" style="font-size:.65rem; padding:1px 5px; border-radius:3px; background:rgba(255,255,255,.12); margin-left:4px;">{{ bos }}</span>
       {% endif %}
     </div>
     {% if can_edit and gk_member_candidates is defined %}

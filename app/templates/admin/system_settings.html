@@ -18,12 +18,12 @@
   </div>
   {% endif %}
   {% if request.query_params.get('mail_error') %}
-  <div class="alert alert--danger">
+  <div class="alert alert--error">
     Test-Mail fehlgeschlagen: {{ request.query_params.get('mail_error') }}
   </div>
   {% endif %}
   {% if request.query_params.get('resend_ok') %}<div class="alert alert--success">Resend-Test-Mail erfolgreich an <strong>{{ request.query_params.get('resend_ok') }}</strong> versendet.</div>{% endif %}
-  {% if request.query_params.get('resend_error') %}<div class="alert alert--danger">Resend-Test fehlgeschlagen: {{ request.query_params.get('resend_error') }}</div>{% endif %}
+  {% if request.query_params.get('resend_error') %}<div class="alert alert--error">Resend-Test fehlgeschlagen: {{ request.query_params.get('resend_error') }}</div>{% endif %}
   {% if request.query_params.get('settings_error') %}<div class="alert alert--warn">{{ request.query_params.get('settings_error') }}</div>{% endif %}
   {% if request.query_params.get('kachelmann_ok') %}
   <div class="alert alert--success">
@@ -31,7 +31,7 @@
   </div>
   {% endif %}
   {% if request.query_params.get('kachelmann_error') %}
-  <div class="alert alert--danger">
+  <div class="alert alert--error">
     Kachelmann-Test fehlgeschlagen: {{ request.query_params.get('kachelmann_error') }}
   </div>
   {% endif %}

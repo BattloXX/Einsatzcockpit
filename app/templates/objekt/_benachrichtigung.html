@@ -28,5 +28,5 @@
     <ul>{% for k in objekt.kontakte %}{% if k.benachrichtigung_mail and k.email %}{% set ns.anzahl = ns.anzahl + 1 %}<li>{{ k.name }} · E-Mail · {{ k.email }}</li>{% endif %}{% for nummer in k.sms_nummern %}{% set ns.anzahl = ns.anzahl + 1 %}<li>{{ k.name }} · SMS · {{ nummer }}</li>{% endfor %}{% endfor %}</ul>
     {% if ns.anzahl == 0 %}<p style="color:var(--warning);">Kein Kontakt hat einen verwendbaren Kanal freigegeben.</p>{% endif %}
   </div>
-  <div class="alert alert--warning" style="margin-top:12px;">Der Platzhalter <code>{meldung}</code> gibt den Alarmtext unverändert an externe Empfänger weiter und kann Melderdaten enthalten.</div>
+  <div class="alert alert--warn" style="margin-top:12px;">Der Platzhalter <code>{meldung}</code> gibt den Alarmtext unverändert an externe Empfänger weiter und kann Melderdaten enthalten.</div>
 </div>

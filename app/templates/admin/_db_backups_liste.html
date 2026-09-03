@@ -19,7 +19,7 @@
           <td>{{ dump.label }}</td>
           <td>{{ dump.zeitpunkt|local_datetime }}</td>
           <td>{{ '%.1f'|format(dump.groesse / 1024 / 1024) }} MB</td>
-          <td><a class="btn btn--small" href="/admin/db-backups/{{ dump.name }}">Herunterladen</a></td>
+          <td><a class="btn btn--sm" href="/admin/db-backups/{{ dump.name }}">Herunterladen</a></td>
         </tr>
       {% else %}
         <tr><td colspan="5" class="text-muted">Keine DB-Dumps vorhanden.</td></tr>
@@ -46,7 +46,7 @@
           <div class="db-mobile-card__value">{{ '%.1f'|format(dump.groesse / 1024 / 1024) }} MB</div>
         </div>
       </div>
-      <a class="btn btn--small" href="/admin/db-backups/{{ dump.name }}">Herunterladen</a>
+      <a class="btn btn--sm" href="/admin/db-backups/{{ dump.name }}">Herunterladen</a>
     </article>
     {% else %}
     <div class="text-muted">Keine DB-Dumps vorhanden.</div>
