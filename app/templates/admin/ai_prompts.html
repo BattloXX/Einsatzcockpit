@@ -18,9 +18,9 @@
     Prompt „{{ prompts[saved].label if saved in prompts else saved }}" wurde als neue Version gespeichert.
   </div>
   {% elif saved == 'error' %}
-  <div class="alert alert--danger">Ungültiger Prompt-Schlüssel.</div>
+  <div class="alert alert--error">Ungültiger Prompt-Schlüssel.</div>
   {% elif saved == 'empty' %}
-  <div class="alert alert--danger">Variabler Teil darf nicht leer sein.</div>
+  <div class="alert alert--error">Variabler Teil darf nicht leer sein.</div>
   {% endif %}
 
   {% for key, p in prompts.items() %}

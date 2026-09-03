@@ -29,7 +29,7 @@
     {{ sent }} Push-Nachricht{{ 'en' if sent|int != 1 else '' }} erfolgreich zugestellt.
   </div>
   {% else %}
-  <div class="alert alert--danger">
+  <div class="alert alert--error">
     Keine Nachricht zugestellt (0 von {{ sub_count }} Gerät{{ 'en' if sub_count != 1 else '' }}).
     Mögliche Ursachen: VAPID-Schlüssel fehlen/falsch, Abonnement abgelaufen oder Browser-Berechtigungen entzogen.
     Details im Server-Log.
@@ -37,11 +37,11 @@
   {% endif %}
   {% endif %}
   {% if error == 'empty' %}
-  <div class="alert alert--danger">Titel und Text dürfen nicht leer sein.</div>
+  <div class="alert alert--error">Titel und Text dürfen nicht leer sein.</div>
   {% endif %}
 
   {% if not push_enabled %}
-  <div class="alert alert--danger" style="margin-bottom:20px;">
+  <div class="alert alert--error" style="margin-bottom:20px;">
     Push-Nachrichten sind nicht aktiviert oder VAPID-Schlüssel fehlen.
     Bitte unter <a href="/admin/system-einstellungen">System-Einstellungen</a> konfigurieren.
   </div>
@@ -449,7 +449,7 @@ async function subscribePush() {
       + '<button type="button" class="btn btn--ghost btn--xs" onclick="unsubscribePush()">Deaktivieren</button>';
   } catch (e) {
     const errEl = document.createElement('span');
-    errEl.className = 'alert alert--danger';
+    errEl.className = 'alert alert--error';
     errEl.style.display = 'inline-block';
     errEl.textContent = 'Fehler beim Aktivieren: ' + e.message;
     area.replaceChildren(errEl);

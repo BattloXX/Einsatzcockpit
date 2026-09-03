@@ -33,7 +33,7 @@
   </div>
   {% endif %}
   {% if request.query_params.get('error') == 'missing_columns' %}
-  <div class="alert alert--danger">
+  <div class="alert alert--error">
     Excel-Datei ungueltig: Pflicht-Spalten nicht erkannt.
     {% if request.query_params.get('error_detail') %}
     {{ request.query_params.get('error_detail') }}
@@ -42,19 +42,19 @@
     {% endif %}
   </div>
   {% elif request.query_params.get('error') == 'invalid_excel' %}
-  <div class="alert alert--danger">Ungueltige Excel-Datei. Bitte .xlsx-Format verwenden.</div>
+  <div class="alert alert--error">Ungueltige Excel-Datei. Bitte .xlsx-Format verwenden.</div>
   {% elif request.query_params.get('error') == 'empty_sheet' %}
-  <div class="alert alert--danger">Excel-Datei ist leer – keine Kopfzeile gefunden.</div>
+  <div class="alert alert--error">Excel-Datei ist leer – keine Kopfzeile gefunden.</div>
   {% elif request.query_params.get('error') == 'empty_file' %}
-  <div class="alert alert--danger">Keine Datei hochgeladen.</div>
+  <div class="alert alert--error">Keine Datei hochgeladen.</div>
   {% elif request.query_params.get('error') == 'openpyxl_missing' %}
-  <div class="alert alert--danger">Excel-Modul (openpyxl) nicht installiert. Admin kontaktieren.</div>
+  <div class="alert alert--error">Excel-Modul (openpyxl) nicht installiert. Admin kontaktieren.</div>
   {% elif request.query_params.get('error') == 'invalid_group' %}
-  <div class="alert alert--danger">Ungueltiger Gruppen-Parameter. Bitte eine Gruppe aus der Liste auswaehlen.</div>
+  <div class="alert alert--error">Ungueltiger Gruppen-Parameter. Bitte eine Gruppe aus der Liste auswaehlen.</div>
   {% elif request.query_params.get('error') == 'empty' %}
-  <div class="alert alert--danger">Name darf nicht leer sein.</div>
+  <div class="alert alert--error">Name darf nicht leer sein.</div>
   {% elif request.query_params.get('error') %}
-  <div class="alert alert--danger">Fehler: {{ request.query_params.get('error') }}</div>
+  <div class="alert alert--error">Fehler: {{ request.query_params.get('error') }}</div>
   {% endif %}
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;align-items:start;">

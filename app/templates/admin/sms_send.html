@@ -26,7 +26,7 @@
     {{ sent }} SMS erfolgreich versendet.
   </div>
   {% else %}
-  <div class="alert alert--danger">
+  <div class="alert alert--error">
     Keine SMS zugestellt (Gateway pruefen oder Empfaenger-Telefonnummern kontrollieren).
   </div>
   {% endif %}
@@ -35,13 +35,13 @@
   {% endif %}
   {% endif %}
   {% if error == 'empty' %}
-  <div class="alert alert--danger">Nachrichtentext darf nicht leer sein.</div>
+  <div class="alert alert--error">Nachrichtentext darf nicht leer sein.</div>
   {% endif %}
   {% if error == 'no_provider' %}
-  <div class="alert alert--danger">SMS-Versand derzeit nicht verfuegbar.</div>
+  <div class="alert alert--error">SMS-Versand derzeit nicht verfuegbar.</div>
   {% endif %}
   {% if error == 'no_recipients' %}
-  <div class="alert alert--danger">Keine Empfaenger ausgewaehlt oder Empfaenger haben keine Telefonnummer.</div>
+  <div class="alert alert--error">Keine Empfaenger ausgewaehlt oder Empfaenger haben keine Telefonnummer.</div>
   {% endif %}
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;align-items:start;">

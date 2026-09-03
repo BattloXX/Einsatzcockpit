@@ -8,9 +8,9 @@
   <div class="page-header"><div><h1>SMS-Versandweg</h1>
     <p class="page-header__sub">Primaeren Provider und optionalen Fallback festlegen.</p></div></div>
   {% if saved %}<div class="alert alert--success">Konfiguration gespeichert.</div>{% endif %}
-  {% if error == "base_url" %}<div class="alert alert--danger">Die EUS-Serveradresse ist ungueltig.</div>{% endif %}
-  {% if error == "provider" %}<div class="alert alert--danger">Die Provider-Auswahl ist ungueltig.</div>{% endif %}
-  {% if error == "retention" %}<div class="alert alert--danger">Die Aufbewahrungswerte muessen nicht-negative ganze Zahlen sein.</div>{% endif %}
+  {% if error == "base_url" %}<div class="alert alert--error">Die EUS-Serveradresse ist ungueltig.</div>{% endif %}
+  {% if error == "provider" %}<div class="alert alert--error">Die Provider-Auswahl ist ungueltig.</div>{% endif %}
+  {% if error == "retention" %}<div class="alert alert--error">Die Aufbewahrungswerte muessen nicht-negative ganze Zahlen sein.</div>{% endif %}
   <form method="post" action="/admin/sms-provider/speichern" x-data="{ secretChanged: false }">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="secret_changed" :value="secretChanged ? '1' : ''">

@@ -106,9 +106,9 @@
   <div class="alert alert--success">Gespeichert.</div>
   {% endif %}
   {% if error == 'empty' %}
-  <div class="alert alert--danger">Name und Absendernummer sind Pflichtfelder.</div>
+  <div class="alert alert--error">Name und Absendernummer sind Pflichtfelder.</div>
   {% elif error %}
-  <div class="alert alert--danger">Fehler: {{ error }}</div>
+  <div class="alert alert--error">Fehler: {{ error }}</div>
   {% endif %}
 
   <!-- ── Allgemeine Einstellungen ─────────────────────────────────────────── -->

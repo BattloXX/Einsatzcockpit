@@ -16,7 +16,7 @@
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
-  {% if error == 'duplicate' %}<div class="alert alert--danger">Eine Meldung mit diesem Text existiert bereits.</div>{% endif %}
+  {% if error == 'duplicate' %}<div class="alert alert--error">Eine Meldung mit diesem Text existiert bereits.</div>{% endif %}
 
   <!-- ── Alle Meldungen ───────────────────────────────────────────── -->
   <div class="admin-section-title">Alle Meldungen <small style="font-weight:400;color:var(--color-text-muted)">({{ messages|length }})</small></div>

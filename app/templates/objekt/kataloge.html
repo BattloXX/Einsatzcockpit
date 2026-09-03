@@ -12,19 +12,19 @@
 
   {% if request.query_params.get('saved') %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
   {% if request.query_params.get('error') == 'exists' %}
-  <div class="alert alert--danger">Ein Eintrag mit diesem Namen existiert bereits.</div>
+  <div class="alert alert--error">Ein Eintrag mit diesem Namen existiert bereits.</div>
   {% endif %}
   {% if request.query_params.get('error') == 'in_use' %}
-  <div class="alert alert--danger">Eintrag wird noch verwendet und kann nicht gelöscht werden. Alternativ deaktivieren.</div>
+  <div class="alert alert--error">Eintrag wird noch verwendet und kann nicht gelöscht werden. Alternativ deaktivieren.</div>
   {% endif %}
   {% if request.query_params.get('error') == 'system' %}
-  <div class="alert alert--danger">Standardeinträge können nicht gelöscht werden (nur umbenennen oder deaktivieren).</div>
+  <div class="alert alert--error">Standardeinträge können nicht gelöscht werden (nur umbenennen oder deaktivieren).</div>
   {% endif %}
   {% if request.query_params.get('error') == 'bild' %}
-  <div class="alert alert--danger">Symbolbild abgelehnt – nur SVG/PNG bis 512 KB sind erlaubt.</div>
+  <div class="alert alert--error">Symbolbild abgelehnt – nur SVG/PNG bis 512 KB sind erlaubt.</div>
   {% endif %}
   {% if request.query_params.get('error') == 'bild_fehlt' %}
-  <div class="alert alert--danger">Für den Stil „Bild" muss eine SVG-/PNG-Datei hochgeladen werden.</div>
+  <div class="alert alert--error">Für den Stil „Bild" muss eine SVG-/PNG-Datei hochgeladen werden.</div>
   {% endif %}
 
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">

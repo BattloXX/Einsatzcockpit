@@ -64,10 +64,10 @@
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
-  {% if error %}<div class="alert alert--danger">{% if error == 'no_org' %}Keine Organisation zugeordnet.{% elif error == 'exists' %}Dieser Code wird bereits von einem eigenen Fahrzeug verwendet.{% elif error == 'fahrtenbuch_conflict' %}Beide Fahrzeuge besitzen Fahrtenbucheinträge und können nicht zusammengeführt werden.{% elif error == 'same_vehicle' %}Bitte zwei verschiedene Fahrzeuge auswählen.{% elif error == 'different_org' %}Die Fahrzeuge gehören nicht derselben Organisation.{% elif error == 'not_found' %}Mindestens ein Fahrzeug wurde nicht gefunden.{% elif error == 'references_remaining' %}Nicht alle Referenzen konnten übertragen werden.{% else %}{{ error }}{% endif %}</div>{% endif %}
+  {% if error %}<div class="alert alert--error">{% if error == 'no_org' %}Keine Organisation zugeordnet.{% elif error == 'exists' %}Dieser Code wird bereits von einem eigenen Fahrzeug verwendet.{% elif error == 'fahrtenbuch_conflict' %}Beide Fahrzeuge besitzen Fahrtenbucheinträge und können nicht zusammengeführt werden.{% elif error == 'same_vehicle' %}Bitte zwei verschiedene Fahrzeuge auswählen.{% elif error == 'different_org' %}Die Fahrzeuge gehören nicht derselben Organisation.{% elif error == 'not_found' %}Mindestens ein Fahrzeug wurde nicht gefunden.{% elif error == 'references_remaining' %}Nicht alle Referenzen konnten übertragen werden.{% else %}{{ error }}{% endif %}</div>{% endif %}
 
   {% if duplicate_groups %}
-  <div class="alert alert--warning">
+  <div class="alert alert--warn">
     <strong>Doppelte Fahrzeugcodes gefunden.</strong>
     {% for group in duplicate_groups %}
     <a href="/admin/fahrzeuge/zusammenfuehren?ids={{ group[0].id }},{{ group[1].id }}">{{ group[0].code }} zusammenführen</a>{% if group|length > 2 %} ({{ group|length }} Fahrzeuge, mehrfach zusammenführen){% endif %}{% if not loop.last %}, {% endif %}
@@ -132,7 +132,7 @@
         <td data-label="Code">
           <strong>{{ v.code }}</strong>
           {% if v.is_external %}
-          <span class="badge-pill badge-pill--orange" style="font-size:.6rem;margin-left:4px;vertical-align:middle;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.4);">FREMD</span>
+          <span class="badge-pill badge-pill--amber" style="font-size:.6rem;margin-left:4px;vertical-align:middle;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.4);">FREMD</span>
           {% endif %}
           {% if v.lis_auto_created %}
           <span class="badge-pill badge-pill--gray" style="font-size:.6rem;margin-left:4px;vertical-align:middle;" title="Automatisch aus LIS übernommen — wird bei Bedarf beim nächsten Poll neu angelegt">AUS LIS</span>
@@ -196,7 +196,7 @@
           {% if is_sysadmin %}{% for org in all_orgs %}<optgroup label="{{ org.name }}">{% for v in vehicles if v.dept_id == org.id %}<option value="{{ v.id }}">{{ v.display_label }} – {{ v.name }}</option>{% endfor %}</optgroup>{% endfor %}
           {% else %}{% for v in vehicles %}<option value="{{ v.id }}">{{ v.display_label }} – {{ v.name }}</option>{% endfor %}{% endif %}
         </select></div>{% endfor %}
-        <div id="mergeVehiclesError" class="alert alert--danger" style="display:none">Bitte zwei verschiedene Fahrzeuge auswählen.</div>
+        <div id="mergeVehiclesError" class="alert alert--error" style="display:none">Bitte zwei verschiedene Fahrzeuge auswählen.</div>
       </div>
       <div class="modal__footer"><button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button><button type="submit" class="btn btn--primary">Vorschau</button></div>
     </form>

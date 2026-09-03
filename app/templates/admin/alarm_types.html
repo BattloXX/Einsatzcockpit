@@ -11,7 +11,7 @@
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
-  {% if error %}<div class="alert alert--danger">{{ error }}</div>{% endif %}
+  {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
 
   <table class="table-admin table-admin--cards">
     <thead>
@@ -26,7 +26,7 @@
         <td data-label="WordPress-Einsatzart">{{ at.wp_einsatzart or '–' }}</td>
         <td data-label="Nur Erstausr.">{% if at.default_first_train_only %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
         <td data-label="Nachalarm.">{% if at.notify_neighbors %}<span class="badge-pill badge-pill--green">Ja</span>{% else %}–{% endif %}</td>
-        <td data-label="Großschadenslage">{% if at.triggers_major_incident %}<span class="badge-pill badge-pill--orange">Ja</span>{% else %}–{% endif %}</td>
+        <td data-label="Großschadenslage">{% if at.triggers_major_incident %}<span class="badge-pill badge-pill--amber">Ja</span>{% else %}–{% endif %}</td>
         <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn--ghost btn--xs"
                   onclick='openEditAt({{ at.code|tojson }}, {{ at.category|tojson }}, {{ at.label|tojson }}, {{ (at.wp_einsatzart or "")|tojson }}, {{ at.default_first_train_only|lower }}, {{ at.notify_neighbors|lower }}, {{ at.triggers_major_incident|lower }})'>

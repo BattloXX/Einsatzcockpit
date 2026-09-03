@@ -81,7 +81,7 @@
         {% endif %}
       </div>
       {% if pin_sms_ok is defined %}
-      <div style="font-size:.75rem;margin-top:6px;" class="{% if pin_sms_ok %}alert alert--success{% else %}alert alert--danger{% endif %}" style="padding:4px 8px;border-radius:4px;">
+      <div style="font-size:.75rem;margin-top:6px;" class="{% if pin_sms_ok %}alert alert--success{% else %}alert alert--error{% endif %}" style="padding:4px 8px;border-radius:4px;">
         {% if pin_sms_ok %}PIN-SMS erfolgreich gesendet.{% else %}PIN-SMS konnte nicht gesendet werden (Gateway prüfen).{% endif %}
       </div>
       {% endif %}
@@ -100,7 +100,7 @@
       <div class="alert alert--success" style="font-size:.78rem;padding:4px 8px;margin-bottom:8px;">Material hinzugefuegt.</div>
       {% endif %}
       {% if add_error is defined %}
-      <div class="alert alert--danger" style="font-size:.78rem;padding:4px 8px;margin-bottom:8px;">{{ add_error }}</div>
+      <div class="alert alert--error" style="font-size:.78rem;padding:4px 8px;margin-bottom:8px;">{{ add_error }}</div>
       {% endif %}
 
       {% for p in a.positionen %}
@@ -252,12 +252,12 @@
       </div>
 
       {% if sms_ausleih_ok is defined %}
-      <div class="{% if sms_ausleih_ok %}alert alert--success{% else %}alert alert--danger{% endif %}" style="font-size:.78rem;padding:6px 10px;">
+      <div class="{% if sms_ausleih_ok %}alert alert--success{% else %}alert alert--error{% endif %}" style="font-size:.78rem;padding:6px 10px;">
         {% if sms_ausleih_ok %}SMS gesendet.{% else %}SMS konnte nicht gesendet werden.{% endif %}
       </div>
       {% endif %}
       {% if erinnerung_ok is defined %}
-      <div class="{% if erinnerung_ok %}alert alert--success{% else %}alert alert--danger{% endif %}" style="font-size:.78rem;padding:6px 10px;">
+      <div class="{% if erinnerung_ok %}alert alert--success{% else %}alert alert--error{% endif %}" style="font-size:.78rem;padding:6px 10px;">
         {% if erinnerung_ok %}Erinnerungs-SMS gesendet.{% else %}Erinnerungs-SMS konnte nicht gesendet werden.{% endif %}
       </div>
       {% endif %}
