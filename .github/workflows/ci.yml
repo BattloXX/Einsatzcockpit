@@ -56,3 +56,45 @@ jobs:
           alembic upgrade head
           python -m app.seed_data
           pytest tests/ -v
+
+  e2e-board:
+    name: Board ohne Full-Reload (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.14" }
+      - run: pip install -e ".[dev]"
+      - run: playwright install --with-deps chromium
+      - name: Board-Stack konfigurieren und starten
+        run: |
+          cat > .env.board-e2e <<'EOF'
+          DATABASE_URL=mysql+pymysql://einsatzleiter:testpass@db:3306/einsatzleiter
+          MARIADB_ROOT_PASSWORD=root
+          MARIADB_DATABASE=einsatzleiter
+          MARIADB_USER=einsatzleiter
+          MARIADB_PASSWORD=testpass
+          REDIS_URL=redis://redis:6379/0
+          SECRET_KEY=ci-board-secret-key-with-at-least-32-characters
+          BOOTSTRAP_ADMIN_USER=e2e-admin
+          BOOTSTRAP_ADMIN_PASSWORD=e2e-board-password
+          COOKIE_SECURE=false
+          FERNET_KEY=iPrXRPrxonUV-LHr4tvc2N189MQ1MkotnDhaaR1Ebjo=
+          # DEBUG=true ist zwingend: validate_startup_secrets() bricht sonst hart ab,
+          # weil COOKIE_SECURE=false in Produktion ein Konfigurationsfehler ist.
+          DEBUG=true
+          EOF
+          docker compose -p ec-board-e2e --env-file .env.board-e2e -f e2e/docker-compose.board.yml up -d --build
+          timeout 90 sh -c 'until curl -fsS http://127.0.0.1:8094/login >/dev/null; do sleep 2; done'
+          docker compose -p ec-board-e2e --env-file .env.board-e2e -f e2e/docker-compose.board.yml exec -T app python -m app.seed_data
+          incident_id=$(docker compose -p ec-board-e2e --env-file .env.board-e2e -f e2e/docker-compose.board.yml exec -T app python e2e/seed_board_ci.py | tail -1)
+          echo "E2E_INCIDENT_ID=$incident_id" >> "$GITHUB_ENV"
+      - name: Pflicht-Regression ausführen
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8094
+          E2E_REDIS_CONTAINER: ec-board-e2e-redis-1
+          BOOTSTRAP_ADMIN_USER: e2e-admin
+          BOOTSTRAP_ADMIN_PASSWORD: e2e-board-password
+        run: pytest e2e/test_board_kein_reload.py::test_board_bleibt_bei_updates_und_reconnect_montiert -q
+      - if: always()
+        run: docker compose -p ec-board-e2e --env-file .env.board-e2e -f e2e/docker-compose.board.yml down -v

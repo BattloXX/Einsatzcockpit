@@ -2650,7 +2650,7 @@ async def einsatz_manuell_verknuepfen(
         background_tasks.add_task(autoprint_incident_updated_background, incident_id)
         try:
             from app.services.broadcast import manager
-            await manager.broadcast(incident_id, {"type": "objektgefahren", "reload_board": True})
+            await manager.broadcast(incident_id, {"type": "objektgefahren"})
         except Exception:
             pass
     return templates.TemplateResponse(
@@ -2770,7 +2770,7 @@ async def einsatz_match_loesen(
     if entfernt:
         try:
             from app.services.broadcast import manager
-            await manager.broadcast(incident_id, {"type": "objektgefahren", "reload_board": True})
+            await manager.broadcast(incident_id, {"type": "objektgefahren"})
         except Exception:
             pass
     return templates.TemplateResponse(

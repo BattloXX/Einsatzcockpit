@@ -321,7 +321,6 @@ async def _enrich_with_ai_suggestions(
         from app.services.broadcast import manager
         await manager.broadcast(incident_id, {
             "type": "ai_suggestions_ready",
-            "reload_board": True,
             "count": len(suggestions),
         })
     except Exception:
@@ -362,7 +361,7 @@ async def _enrich_with_ai_hints(
         db.commit()
 
         from app.services.broadcast import manager
-        await manager.broadcast(incident_id, {"type": "ai_hints_ready", "reload_board": True})
+        await manager.broadcast(incident_id, {"type": "ai_hints_ready"})
     except Exception:
         pass
     finally:
@@ -1012,7 +1011,6 @@ async def _enrich_site_from_alarm(
                 await _bl(site.major_incident_id, {
                     "type": "site_updated",
                     "site_id": site_id,
-                    "reload_board": True,
                 })
             except Exception:
                 pass
@@ -1106,7 +1104,7 @@ async def lage_alarm(
                           background_tasks=background_tasks)
 
     background_tasks.add_task(
-        broadcast_lage, lage.id, {"type": "site_created", "reload_board": True}
+        broadcast_lage, lage.id, {"type": "site_created"}
     )
     background_tasks.add_task(
         _enrich_site_from_alarm,

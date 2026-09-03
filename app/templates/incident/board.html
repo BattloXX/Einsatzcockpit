@@ -120,6 +120,7 @@
       <span class="last-update__icon">⟳</span>
       <span class="last-update__time" x-text="lastUpdateDisplay">–</span>
     </span>
+    <span class="last-update" x-text="connectionStatus" aria-live="polite">verbunden</span>
   </div>
   {% if lage_hints %}{% include "incident/_header_lage_ticker.html" %}{% endif %}
   {% include "incident/_wache_status.html" %}
@@ -1004,12 +1005,17 @@ function lageTicker(hints, aiFlags) {
     hints,
     aiFlags: aiFlags || [],
     idx: 0,
+    _timer: null,
     get currentHint() { return this.hints[this.idx] || ''; },
     get currentIsAI() { return this.aiFlags[this.idx] || false; },
     init() {
       if (this.hints.length > 1) {
-        setInterval(() => { this.idx = (this.idx + 1) % this.hints.length; }, 8000);
+        this._timer = setInterval(() => { this.idx = (this.idx + 1) % this.hints.length; }, 8000);
       }
+    },
+    destroy() {
+      if (this._timer) clearInterval(this._timer);
+      this._timer = null;
     }
   };
 }

@@ -797,7 +797,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     })
 
 
-# ── Board: gezielte HTMX-Fragment-Endpoints (ersetzen reload_board) ───────────
+# ── Board: gezielte HTMX-Fragment-Endpoints statt Voll-Reload ────────────────
 
 # type[Any] statt implizitem type[IncidentVehicle] | type[Task] | ... -- sonst inferiert mypy
 # fuer db.get(model, uid) nur die gemeinsame SQLAlchemy-Base statt des konkreten Modells und
@@ -814,7 +814,7 @@ _CARD_KIND_MODEL: dict[str, tuple[type[Any], str, str]] = {
 def board_card_fragment(
     incident_id: int, kind: str, uid: int, request: Request, db: Session = Depends(get_db)
 ):
-    """Einzelne Board-Karte als Fragment für gezielten HTMX-Swap (statt reload_board)."""
+    """Einzelne Board-Karte als Fragment für einen gezielten HTMX-Swap."""
     user = getattr(request.state, "user", None)
     if not user:
         return Response("Nicht eingeloggt", status_code=401)

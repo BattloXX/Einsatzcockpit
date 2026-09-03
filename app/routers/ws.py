@@ -234,6 +234,8 @@ async def lage_ws(websocket: WebSocket, lage_id: int):
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
+        pass
+    finally:
         await manager.disconnect(channel, websocket)
 
 

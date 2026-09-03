@@ -157,48 +157,8 @@
          autocomplete="off"
          style="padding:5px 11px;font-size:.8rem;border-radius:var(--radius-md, .5rem);border:1px solid var(--border);
                 background:var(--surface-high);color:var(--text);width:150px;">
-  {% if sectors %}
-  <div style="position:relative;" id="sector-filter-wrap">
-    <button type="button" id="sector-filter-btn" onclick="toggleSectorDropdown()"
-            style="font-size:.8rem;padding:5px 11px;border-radius:var(--radius-md, .5rem);border:1px solid var(--border);
-                   background:var(--surface-high);color:var(--text);cursor:pointer;
-                   white-space:nowrap;display:flex;align-items:center;gap:5px;">
-      <span id="sector-filter-label">Alle Abschnitte</span>
-      <span style="font-size:.6rem;opacity:.6;">▾</span>
-    </button>
-    <div id="sector-filter-dropdown"
-         style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:300;
-                min-width:200px;background:var(--surface-mid);
-                border:1px solid var(--border);border-radius:var(--radius-lg, .75rem);
-                box-shadow:var(--shadow-modal, 0 4px 16px rgba(0,0,0,.5));padding:4px 0;">
-      <label style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;
-                    font-size:.78rem;font-weight:600;border-bottom:1px solid var(--border);
-                    margin-bottom:2px;">
-        <input type="checkbox" id="sector-all-cb" onchange="sectorToggleAll(this.checked)"
-               style="accent-color:var(--red);">
-        Alle / Keine
-      </label>
-      {% for sec in sectors %}
-      <label style="display:flex;align-items:center;gap:8px;padding:4px 12px;cursor:pointer;
-                    font-size:.78rem;">
-        <input type="checkbox" class="sector-cb" value="{{ sec.id }}"
-               onchange="sectorCbChanged()" style="accent-color:{{ sec.color or '#6b7280' }};">
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0;
-                     background:{{ sec.color or '#6b7280' }};"></span>
-        {{ sec.name }}
-      </label>
-      {% endfor %}
-      <label style="display:flex;align-items:center;gap:8px;padding:4px 12px;cursor:pointer;
-                    font-size:.78rem;border-top:1px solid var(--border);margin-top:2px;">
-        <input type="checkbox" class="sector-cb" value="none" onchange="sectorCbChanged()"
-               style="accent-color:#6b7280;">
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0;
-                     background:#6b7280;"></span>
-        Ohne Abschnitt
-      </label>
-    </div>
-  </div>
-  {% endif %}
+  {% include "incident_major/_board_sector_filter.html" %}
+  <span id="lage-connection-status" style="font-size:.75rem;color:var(--text-muted);" aria-live="polite">verbunden · aktualisiert --:--:--</span>
   <button id="prio-sort-btn" type="button" onclick="togglePrioSort()"
           class="btn btn--ghost btn--sm" title="Karten nach Priorität sortieren">↕ Prio</button>
   <span style="font-size:.8rem;color:var(--text-muted);white-space:nowrap;" id="board-counts">

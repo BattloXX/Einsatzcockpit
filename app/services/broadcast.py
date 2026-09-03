@@ -9,6 +9,7 @@ Handler (``_bus_deliver``) – auf jedem Worker, inkl. des Publishers. Ohne Redi
 import asyncio
 import json
 from collections import defaultdict
+from contextvars import ContextVar, Token
 
 from fastapi import WebSocket
 
@@ -22,6 +23,16 @@ ORG_WS_OFFSET = 20_000_000
 _ALL_KEY = -1
 # Sende-Timeout je Socket: haengende Clients werden getrennt statt gewartet
 _SEND_TIMEOUT_S = 2.0
+_request_client_id: ContextVar[str | None] = ContextVar("ec_request_client_id", default=None)
+
+
+def set_request_client_id(client_id: str | None) -> Token:
+    """Bindet die Board-Client-ID an den aktuellen Request-Task."""
+    return _request_client_id.set(client_id[:128] if client_id else None)
+
+
+def reset_request_client_id(token: Token) -> None:
+    _request_client_id.reset(token)
 
 
 class ConnectionManager:
@@ -77,6 +88,9 @@ class ConnectionManager:
 
     async def broadcast(self, incident_id: int, event: dict) -> None:
         """Broadcast an einen Kanal – worker-übergreifend via Bus, sonst lokal."""
+        origin = _request_client_id.get()
+        if origin and "origin" not in event:
+            event = {**event, "origin": origin}
         if ws_bus.enabled():
             await ws_bus.publish(ws_bus.CH_WS, {"key": incident_id, "event": event})
         else:

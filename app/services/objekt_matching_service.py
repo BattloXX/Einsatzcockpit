@@ -343,7 +343,7 @@ async def match_incident_background(incident_id: int, *, nur_geo: bool = False) 
             # Board neu laden (neue Spalte/Meldungen "Objektgefahren")
             try:
                 from app.services.broadcast import manager
-                await manager.broadcast(incident_id, {"type": "objektgefahren", "reload_board": True})
+                await manager.broadcast(incident_id, {"type": "objektgefahren"})
             except Exception:
                 logger.exception("Board-Reload-Broadcast fehlgeschlagen (Einsatz %d)", incident_id)
         from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo

@@ -35,3 +35,5 @@ htmlcov/
 # Laufzeit-Medienablage (Fotos/Momentaufnahmen/PDFs) — lokal generiert, nicht versioniert
 app_storage/
 .update.lock
+.env.board-e2e
+e2e/artifacts/
