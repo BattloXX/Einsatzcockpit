@@ -27,23 +27,23 @@
   <div class="card__body">
     <div class="card__title">
       {{ task.title }}
-      {% if can_edit %}
-      {% set sl = task.status if task.status else 'open' %}
-      <div onclick="event.stopPropagation()" style="margin-top:5px;">
-        <select name="status" class="form-select form-select--xs form-select--status status-{{ sl }}"
-                style="width:auto;min-width:75px;"
-                hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ampel"
-                hx-trigger="change"
-                hx-swap="none"
-                onchange="this.className='form-select form-select--xs form-select--status status-'+this.value">
-          <option value="open" {% if sl=='open' %}selected{% endif %}>🔴 Offen</option>
-          <option value="in_progress" {% if sl=='in_progress' %}selected{% endif %}>🟡 In Arbeit</option>
-          <option value="done" {% if sl=='done' %}selected{% endif %}>🟢 Erledigt</option>
-          <option value="cancelled" {% if sl=='cancelled' %}selected{% endif %}>⚪ Storniert</option>
-        </select>
-      </div>
-      {% endif %}
     </div>
+    {% if can_edit %}
+    {% set sl = task.status if task.status else 'open' %}
+    <div onclick="event.stopPropagation()" style="margin-top:5px;">
+      <select name="status" class="form-select form-select--xs form-select--status status-{{ sl }}"
+              style="width:auto;min-width:75px;"
+              hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ampel"
+              hx-trigger="change"
+              hx-swap="none"
+              onchange="this.className='form-select form-select--xs form-select--status status-'+this.value">
+        <option value="open" {% if sl=='open' %}selected{% endif %}>🔴 Offen</option>
+        <option value="in_progress" {% if sl=='in_progress' %}selected{% endif %}>🟡 In Arbeit</option>
+        <option value="done" {% if sl=='done' %}selected{% endif %}>🟢 Erledigt</option>
+        <option value="cancelled" {% if sl=='cancelled' %}selected{% endif %}>⚪ Storniert</option>
+      </select>
+    </div>
+    {% endif %}
     {% if task.detail %}<div class="card__sub">{{ task.detail }}</div>{% endif %}
     {% if task.due_at and not task.is_done %}<div class="card__due">⏰ {{ task.due_at|local_time }}</div>{% endif %}
     {% if task.media %}
