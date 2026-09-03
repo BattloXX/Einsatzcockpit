@@ -22,7 +22,7 @@
       <td>{{ e.input_tokens }}</td><td>{{ e.output_tokens }}</td><td>{{ e.total_tokens }}</td>
       <td>
         {% if e.success %}<span class="badge badge--success">Erfolgreich</span>
-        {% else %}<span class="badge badge--danger">Fehler</span>{% if e.error_message %}<br><small>{{ e.error_message }}</small>{% endif %}
+        {% else %}<span class="badge badge--error">Fehler</span>{% if e.error_message %}<br><small>{{ e.error_message }}</small>{% endif %}
         {% endif %}
       </td>
     </tr>
