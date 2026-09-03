@@ -1,7 +1,9 @@
 """Kernlogik: Fahrtenbuch – Plausibilität, Erfassung, Korrektur."""
+
 from __future__ import annotations
 
 import logging
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -24,6 +26,18 @@ from app.models.master import Member, OrgSettings, VehicleMaster
 logger = logging.getLogger("einsatzleiter.fahrtenbuch")
 
 _SEILWINDE_SCHWELLE_DEFAULT = Decimal("10")
+
+
+def fahrtenbuch_person_name(member: Member) -> str:
+    """Rendert Mitgliedsnamen im einheitlichen Fahrtenbuch-Format."""
+    return f"{member.lastname.strip()} {member.firstname.strip()}".strip()
+
+
+def normalisiere_person_name(name: str | None) -> str:
+    """Reihenfolge-, Case- und Umlaut-unabhaengiger Gruppierungsschluessel."""
+    text = unicodedata.normalize("NFKD", (name or "").strip().casefold())
+    ascii_text = "".join(char for char in text if not unicodedata.combining(char))
+    return " ".join(sorted(ascii_text.split()))
 
 
 @dataclass
@@ -80,6 +94,7 @@ def pruefe_doppelfahrt(fahrzeug: VehicleMaster, db: Session, jetzt: datetime | N
     existiert = (
         db.query(Fahrt)
         .filter(
+            Fahrt.org_id == fahrzeug.dept_id,
             Fahrt.fahrzeug_id == fahrzeug.id,
             Fahrt.status == FahrtStatus.aktiv,
             Fahrt.zeitpunkt >= grenze,
@@ -138,6 +153,9 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
     if not zweck:
         raise HTTPException(status_code=404, detail="Fahrtzweck nicht gefunden")
 
+    if pruefe_doppelfahrt(fahrzeug, db) and not daten.get("doppelfahrt_bestaetigt"):
+        raise HTTPException(status_code=422, detail="doppelfahrt_nicht_bestaetigt")
+
     if (
         zweck.kategorie == FahrtKategorie.einsatz
         and not daten.get("incident_id")
@@ -171,21 +189,31 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
             raise HTTPException(status_code=422, detail="seilwinde_warnung_nicht_bestaetigt")
         sw_delta = Decimal(str(erg.delta))
 
-    # Maschinist-Name auflösen (Member → denormalisierter Name)
-    maschinist_name = daten.get("maschinist_name", "")
-    if daten.get("maschinist_member_id") and not maschinist_name:
-        m = db.query(Member).filter(Member.id == daten["maschinist_member_id"]).first()
-        if m:
-            maschinist_name = m.full_name
+    # Personen-Snapshots bei vorhandener Mitglieds-ID immer kanonisch schreiben.
+    rollen = (
+        "maschinist",
+        "maschinist2",
+        "seilwinde_bediener",
+        "ausbildner",
+        "gruppenkommandant",
+        "einsatzleiter",
+    )
+    namen: dict[str, str | None] = {rolle: daten.get(f"{rolle}_name") for rolle in rollen}
+    for rolle in rollen:
+        member_id = daten.get(f"{rolle}_member_id")
+        if member_id:
+            member = db.query(Member).filter(Member.id == member_id).first()
+            if member:
+                namen[rolle] = fahrtenbuch_person_name(member)
 
     fahrt = Fahrt(
         org_id=daten["org_id"],
         zeitpunkt=daten.get("zeitpunkt") or datetime.now(UTC),
         fahrzeug_id=fahrzeug_id,
         maschinist_member_id=daten.get("maschinist_member_id"),
-        maschinist_name=maschinist_name,
+        maschinist_name=namen["maschinist"] or "",
         maschinist2_member_id=daten.get("maschinist2_member_id"),
-        maschinist2_name=daten.get("maschinist2_name"),
+        maschinist2_name=namen["maschinist2"],
         km_stand_neu=daten.get("km_stand_neu"),
         km_delta=km_delta,
         km_warnung_bestaetigt=bool(daten.get("km_warnung_bestaetigt")),
@@ -196,7 +224,7 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
         seilwinde_bh_delta=sw_delta,
         seilwinde_warnung_bestaetigt=bool(daten.get("seilwinde_warnung_bestaetigt")),
         seilwinde_bediener_member_id=daten.get("seilwinde_bediener_member_id"),
-        seilwinde_bediener_name=daten.get("seilwinde_bediener_name"),
+        seilwinde_bediener_name=namen["seilwinde_bediener"],
         seilwinde_zuege=daten.get("seilwinde_zuege"),
         seilwinde_wartung=daten.get("seilwinde_wartung"),
         zielort_id=daten.get("zielort_id"),
@@ -206,11 +234,11 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
         zweck_freitext=daten.get("zweck_freitext") if zweck.kategorie == FahrtKategorie.sonstige else None,
         incident_id=daten.get("incident_id"),
         ausbildner_member_id=daten.get("ausbildner_member_id"),
-        ausbildner_name=daten.get("ausbildner_name"),
+        ausbildner_name=namen["ausbildner"],
         gruppenkommandant_member_id=daten.get("gruppenkommandant_member_id"),
-        gruppenkommandant_name=daten.get("gruppenkommandant_name"),
+        gruppenkommandant_name=namen["gruppenkommandant"],
         einsatzleiter_member_id=daten.get("einsatzleiter_member_id"),
-        einsatzleiter_name=daten.get("einsatzleiter_name"),
+        einsatzleiter_name=namen["einsatzleiter"],
         schaden_vorhanden=bool(daten.get("schaden_vorhanden")),
         schaden_betriebsfaehig=daten.get("schaden_betriebsfaehig"),
         schaden_beschreibung=daten.get("schaden_beschreibung"),
@@ -355,8 +383,7 @@ def berechne_bericht_daten(fahrten: list[Fahrt]) -> dict[str, Any]:
     TYPEN = ("einsatz", "uebung", "taetigkeit", "sonstige")
 
     def _leer(label: str) -> dict:
-        return {"label": label, "einsatz": 0, "uebung": 0, "taetigkeit": 0,
-                "sonstige": 0, "km": 0, "bh": Decimal("0")}
+        return {"label": label, "einsatz": 0, "uebung": 0, "taetigkeit": 0, "sonstige": 0, "km": 0, "bh": Decimal("0")}
 
     def _typ(f: Fahrt) -> str:
         if f.fahrttyp == FahrtKategorie.einsatz:
@@ -387,11 +414,19 @@ def berechne_bericht_daten(fahrten: list[Fahrt]) -> dict[str, Any]:
 
         # Maschinist + optionaler Korbmaschinist (beide zählen als Maschinist)
         personen: list[tuple[str, str]] = []
-        pkey = str(f.maschinist_member_id or f.maschinist_name or "?")
-        personen.append((pkey, f.maschinist_name or pkey))
+        # Snapshot ist kanonisch (Schreibpfad + Migration 0231); der Gruppierungs-
+        # schluessel nutzt die Mitglieds-ID, damit Schreibweisen nicht aufsplitten.
+        label = (f.maschinist_name or "").strip() or "?"
+        pkey = f"id:{f.maschinist_member_id}" if f.maschinist_member_id else f"name:{normalisiere_person_name(label)}"
+        personen.append((pkey, label))
         if f.maschinist2_name or f.maschinist2_member_id:
-            k2 = str(f.maschinist2_member_id or f.maschinist2_name)
-            personen.append((k2, (f.maschinist2_name or k2) + " (Korb)"))
+            label2 = (f.maschinist2_name or "").strip() or "?"
+            k2 = (
+                f"id:{f.maschinist2_member_id}"
+                if f.maschinist2_member_id
+                else f"name:{normalisiere_person_name(label2)}"
+            )
+            personen.append((k2, label2 + " (Korb)"))
 
         for pk, plabel in personen:
             # 2) Maschinisten gesamt (alle Fahrzeuge)

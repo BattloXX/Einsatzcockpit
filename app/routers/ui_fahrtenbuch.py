@@ -14,7 +14,12 @@ from app.db import get_db
 from app.models.fahrtenbuch import FahrtErfassungsweg, FahrtKategorie, Fahrtzweck, Zielort
 from app.models.incident import Incident
 from app.models.master import FireDept, Member, MemberQualification, OrgSettings, Qualification, VehicleMaster
-from app.services.fahrtenbuch_service import erstelle_fahrt, pruefe_doppelfahrt, pruefe_zaehler
+from app.services.fahrtenbuch_service import (
+    erstelle_fahrt,
+    fahrtenbuch_person_name,
+    pruefe_doppelfahrt,
+    pruefe_zaehler,
+)
 from app.services.schaden_service import melde_schaden_background
 
 router = APIRouter()
@@ -190,19 +195,25 @@ async def hx_maschinist_autocomplete(
 
     members = (
         db.query(Member)
-        .filter(Member.active == True, Member.lastname.ilike(f"%{q}%") | Member.firstname.ilike(f"%{q}%"))  # noqa: E712
+        .filter(
+            Member.org_id == org_id,
+            Member.active == True,  # noqa: E712
+            Member.lastname.ilike(f"%{q}%") | Member.firstname.ilike(f"%{q}%"),
+        )
+        .execution_options(include_all_tenants=True)
         .order_by(Member.lastname, Member.firstname)
         .limit(10)
         .all()
     )
     html = "<ul class='autocomplete-list'>"
     for m in members:
+        name = fahrtenbuch_person_name(m)
         html += (
             f"<li class='autocomplete-item' "
             f"style='cursor:pointer;' "
             f"data-member-id='{m.id}' "
-            f"data-name='{m.full_name}'>"
-            f"{m.full_name}</li>"
+            f"data-name='{name}'>"
+            f"{name}</li>"
         )
     html += "</ul>"
     return HTMLResponse(html)

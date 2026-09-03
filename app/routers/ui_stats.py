@@ -1,4 +1,5 @@
 """Statistik-Dashboard."""
+
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -35,7 +36,7 @@ def _apply_org_scope(q, user, db: Session):
 def _parse_range(value: str, fallback: date) -> date:
     try:
         return date.fromisoformat(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return fallback
 
 
@@ -68,8 +69,11 @@ def _stats_context(request: Request, db: Session, user, von: str, bis: str) -> d
                 active_preset = "monat"
     result = get_stats(db, user.org_id, von_date, bis_date, user=user)
     return {
-        "user": user, "org": org, "stats": result,
-        "von": von_date, "bis": bis_date,
+        "user": user,
+        "org": org,
+        "stats": result,
+        "von": von_date,
+        "bis": bis_date,
         "active_preset": active_preset,
         "fb_stats": _fahrtenbuch_stats(user.org_id, db) if user.org_id else None,
     }
@@ -81,9 +85,7 @@ async def stats(request: Request, db: Session = Depends(get_db), von: str = "", 
     if not user:
         return RedirectResponse("/login", status_code=302)
 
-    return templates.TemplateResponse(
-        request, "stats/dashboard.html", _stats_context(request, db, user, von, bis)
-    )
+    return templates.TemplateResponse(request, "stats/dashboard.html", _stats_context(request, db, user, von, bis))
 
 
 @router.get("/statistik/inhalt", response_class=HTMLResponse)
@@ -104,13 +106,15 @@ async def stats_export(request: Request, db: Session = Depends(get_db), von: str
         return RedirectResponse("/login", status_code=302)
     context = _stats_context(request, db, user, von, bis)
     from app.services.excel_export_service import exportiere_einsatzstatistik
-    content = exportiere_einsatzstatistik(
-        context["stats"], context["von"], context["bis"], context["org"]
-    )
+
+    content = exportiere_einsatzstatistik(context["stats"], context["von"], context["bis"], context["org"])
     org_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in context["org"].name)
     filename = f"Einsatzstatistik_{org_name}_{context['von']}_{context['bis']}.xlsx"
-    return Response(content=content, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/statistik/bericht.pdf")
@@ -120,21 +124,32 @@ async def stats_pdf(request: Request, db: Session = Depends(get_db), von: str = 
         return RedirectResponse("/login", status_code=302)
     context = _stats_context(request, db, user, von, bis)
     from app.services.pdf_service import render_statistik_bericht_pdf
+
     content = render_statistik_bericht_pdf(
-        context["stats"], context["org"], context["von"], context["bis"],
+        context["stats"],
+        context["org"],
+        context["von"],
+        context["bis"],
         base_url=str(request.base_url),
     )
-    return Response(content=content, media_type="application/pdf",
-                    headers={"Content-Disposition": "inline; filename=Einsatzstatistik.pdf"})
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=Einsatzstatistik.pdf"},
+    )
 
 
 @router.get("/statistik/fahrtenbuch", response_class=HTMLResponse)
 async def stats_fahrtenbuch(
     request: Request,
     db: Session = Depends(get_db),
-    von: str = "", bis: str = "",
-    fahrzeug_id: int = 0, fahrttyp: str = "",
-    zweck_id: int = 0, gruppierung: str = "fahrzeug", matrix_jahr: int = 0,
+    von: str = "",
+    bis: str = "",
+    fahrzeug_id: int = 0,
+    fahrttyp: str = "",
+    zweck_id: int = 0,
+    gruppierung: str = "fahrzeug",
+    matrix_jahr: int = 0,
 ):
     user = getattr(request.state, "user", None)
     if not user:
@@ -186,6 +201,7 @@ async def stats_fahrtenbuch(
         FARBE_UEBUNG,
         berechne_maschinisten_matrix,
     )
+
     matrix_jahr = matrix_jahr or now_local(user.org).year
     if user.org_id:
         matrix = berechne_maschinisten_matrix(db, user.org_id, matrix_jahr)
@@ -195,40 +211,55 @@ async def stats_fahrtenbuch(
             .execution_options(include_all_tenants=True)
             .all()
         )
-        matrix_jahre = sorted({
-            lokal.year for (zeitpunkt,) in zeitpunkte
-            if (lokal := to_org_tz(zeitpunkt, user.org)) is not None
-        }, reverse=True)
+        matrix_jahre = sorted(
+            {lokal.year for (zeitpunkt,) in zeitpunkte if (lokal := to_org_tz(zeitpunkt, user.org)) is not None},
+            reverse=True,
+        )
     else:
         matrix = {
-            "jahr": matrix_jahr, "spalten": [], "zeilen": [],
+            "jahr": matrix_jahr,
+            "spalten": [],
+            "zeilen": [],
             "summen": {"gesamt": {"uebung": 0, "einsatz": 0}},
         }
         matrix_jahre = []
     if matrix_jahr not in matrix_jahre:
         matrix_jahre.insert(0, matrix_jahr)
 
-    return templates.TemplateResponse(request, "stats/fahrtenbuch.html", {
-        "user": user,
-        "gruppen": gruppen,
-        "fahrzeuge": fahrzeuge,
-        "zwecke": zwecke,
-        "gruppierung": gruppierung,
-        "filter": {
-            "von": von, "bis": bis, "fahrzeug_id": fahrzeug_id,
-            "fahrttyp": fahrttyp, "zweck_id": zweck_id,
+    return templates.TemplateResponse(
+        request,
+        "stats/fahrtenbuch.html",
+        {
+            "user": user,
+            "gruppen": gruppen,
+            "fahrzeuge": fahrzeuge,
+            "zwecke": zwecke,
+            "gruppierung": gruppierung,
+            "filter": {
+                "von": von,
+                "bis": bis,
+                "fahrzeug_id": fahrzeug_id,
+                "fahrttyp": fahrttyp,
+                "zweck_id": zweck_id,
+            },
+            "gesamt_fahrten": len(fahrten),
+            "matrix": matrix,
+            "matrix_jahre": matrix_jahre,
+            "matrix_jahr": matrix_jahr,
+            "matrix_farben": {
+                "uebung": FARBE_UEBUNG,
+                "einsatz": FARBE_EINSATZ,
+                "stufe": FARBE_STUFE,
+            },
         },
-        "gesamt_fahrten": len(fahrten),
-        "matrix": matrix, "matrix_jahre": matrix_jahre, "matrix_jahr": matrix_jahr,
-        "matrix_farben": {
-            "uebung": FARBE_UEBUNG, "einsatz": FARBE_EINSATZ, "stufe": FARBE_STUFE,
-        },
-    })
+    )
 
 
 @router.get("/statistik/fahrtenbuch/maschinisten.xlsx")
 async def stats_fahrtenbuch_maschinisten_xlsx(
-    request: Request, jahr: int = 0, db: Session = Depends(get_db),
+    request: Request,
+    jahr: int = 0,
+    db: Session = Depends(get_db),
 ):
     user = getattr(request.state, "user", None)
     if not user:
@@ -238,6 +269,7 @@ async def stats_fahrtenbuch_maschinisten_xlsx(
     jahr = jahr or now_local(user.org).year
     from app.services.excel_export_service import exportiere_maschinisten_matrix
     from app.services.maschinisten_matrix_service import berechne_maschinisten_matrix
+
     matrix = berechne_maschinisten_matrix(db, user.org_id, jahr)
     content = exportiere_maschinisten_matrix(matrix, user.org)
     return Response(
@@ -261,10 +293,17 @@ def _fahrtenbuch_stats(org_id: int, db: Session) -> dict:
     total = basis.count()
     einsatz = basis.filter(Fahrt.fahrttyp == FahrtKategorie.einsatz).count()
     uebung = basis.filter(Fahrt.fahrttyp == FahrtKategorie.uebung).count()
-    km_sum = db.query(func.sum(Fahrt.km_delta)).filter(
-        Fahrt.org_id == org_id, Fahrt.status == FahrtStatus.aktiv,
-        Fahrt.nicht_statistikrelevant == False,  # noqa: E712
-    ).execution_options(include_all_tenants=True).scalar() or 0
+    km_sum = (
+        db.query(func.sum(Fahrt.km_delta))
+        .filter(
+            Fahrt.org_id == org_id,
+            Fahrt.status == FahrtStatus.aktiv,
+            Fahrt.nicht_statistikrelevant == False,  # noqa: E712
+        )
+        .execution_options(include_all_tenants=True)
+        .scalar()
+        or 0
+    )
     return {"total": total, "einsatz": einsatz, "uebung": uebung, "km_sum": int(km_sum)}
 
 
@@ -273,11 +312,28 @@ def _gruppiere_fahrten(fahrten: list, gruppierung: str, fahrzeuge: list) -> list
     from collections import defaultdict
     from decimal import Decimal
 
-    gruppen: dict[str, dict] = defaultdict(lambda: {
-        "label": "", "einsatz": 0, "uebung": 0, "taetigkeit": 0, "sonstige": 0,
-        "km_sum": 0, "bh_sum": Decimal("0"),
-        "per_fahrzeug": {},
-    })
+    from app.services.fahrtenbuch_service import normalisiere_person_name
+
+    def _person(fahrt, rolle: str) -> tuple[str, str]:
+        # Der Snapshot ist seit Migration 0231 kanonisch "Nachname Vorname"; gruppiert
+        # wird ueber die Mitglieds-ID, damit spaetere Namensaenderungen nicht splitten.
+        member_id = getattr(fahrt, f"{rolle}_member_id")
+        label = (getattr(fahrt, f"{rolle}_name") or "").strip() or "?"
+        key = f"id:{member_id}" if member_id else f"name:{normalisiere_person_name(label)}"
+        return key, label
+
+    gruppen: dict[str, dict] = defaultdict(
+        lambda: {
+            "label": "",
+            "einsatz": 0,
+            "uebung": 0,
+            "taetigkeit": 0,
+            "sonstige": 0,
+            "km_sum": 0,
+            "bh_sum": Decimal("0"),
+            "per_fahrzeug": {},
+        }
+    )
 
     for f in fahrten:
         entries: list[tuple[str, str]] = []
@@ -287,23 +343,19 @@ def _gruppiere_fahrten(fahrten: list, gruppierung: str, fahrzeuge: list) -> list
             if (f.maschinist2_name or f.maschinist2_member_id) and f.fahrzeug:
                 entries.append(("korb_" + str(f.fahrzeug_id), f.fahrzeug.code + " Korb"))
         elif gruppierung == "maschinist":
-            k = str(f.maschinist_member_id or f.maschinist_name)
-            entries.append((k, f.maschinist_name or k))
+            entries.append(_person(f, "maschinist"))
         elif gruppierung == "ausbildner":
             if not f.ausbildner_name and not f.ausbildner_member_id:
                 continue
-            k = str(f.ausbildner_member_id or f.ausbildner_name)
-            entries.append((k, f.ausbildner_name or k))
+            entries.append(_person(f, "ausbildner"))
         elif gruppierung == "gruppenkommandant":
             if not f.gruppenkommandant_name and not f.gruppenkommandant_member_id:
                 continue
-            k = str(f.gruppenkommandant_member_id or f.gruppenkommandant_name)
-            entries.append((k, f.gruppenkommandant_name or k))
+            entries.append(_person(f, "gruppenkommandant"))
         elif gruppierung == "korbmaschinist":
             if not f.maschinist2_name and not f.maschinist2_member_id:
                 continue
-            k = str(f.maschinist2_member_id or f.maschinist2_name)
-            entries.append((k, f.maschinist2_name or k))
+            entries.append(_person(f, "maschinist2"))
         else:
             entries.append(("gesamt", "Gesamt"))
 
@@ -328,7 +380,11 @@ def _gruppiere_fahrten(fahrten: list, gruppierung: str, fahrzeuge: list) -> list
                 fz_key = str(f.fahrzeug_id)
                 if fz_key not in g["per_fahrzeug"]:
                     g["per_fahrzeug"][fz_key] = {
-                        "label": f.fahrzeug.code, "einsatz": 0, "uebung": 0, "taetigkeit": 0, "sonstige": 0,
+                        "label": f.fahrzeug.code,
+                        "einsatz": 0,
+                        "uebung": 0,
+                        "taetigkeit": 0,
+                        "sonstige": 0,
                     }
                 g["per_fahrzeug"][fz_key][typ] += 1
 

@@ -1,0 +1,55 @@
+<div id="db-dump-liste">
+  {% if backup_laeuft %}
+  <div class="alert alert--warn">Ein DB-Dump wird bereits erstellt. Bitte warten Sie, bis der laufende Vorgang beendet ist.</div>
+  {% endif %}
+  {% if created %}
+  <div class="alert alert--success">Erstellt: {{ created|join(', ') }}</div>
+  {% endif %}
+  {% if failures %}
+  <div class="alert alert--error">{{ failures|join('; ') }}</div>
+  {% endif %}
+
+  <div class="db-table-wrap">
+    <table class="db-table">
+      <thead><tr><th>Datei</th><th>Datenbank</th><th>Datum</th><th>Größe</th><th></th></tr></thead>
+      <tbody>
+      {% for dump in dumps %}
+        <tr>
+          <td><code>{{ dump.name }}</code></td>
+          <td>{{ dump.label }}</td>
+          <td>{{ dump.zeitpunkt|local_datetime }}</td>
+          <td>{{ '%.1f'|format(dump.groesse / 1024 / 1024) }} MB</td>
+          <td><a class="btn btn--small" href="/admin/db-backups/{{ dump.name }}">Herunterladen</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-muted">Keine DB-Dumps vorhanden.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="db-mobile-list">
+    {% for dump in dumps %}
+    <article class="db-mobile-card">
+      <div class="db-mobile-card__name"><code>{{ dump.name }}</code></div>
+      <div class="db-mobile-card__grid">
+        <div>
+          <div class="db-mobile-card__label">Datenbank</div>
+          <div class="db-mobile-card__value">{{ dump.label }}</div>
+        </div>
+        <div>
+          <div class="db-mobile-card__label">Datum</div>
+          <div class="db-mobile-card__value">{{ dump.zeitpunkt|local_datetime }}</div>
+        </div>
+        <div>
+          <div class="db-mobile-card__label">Größe</div>
+          <div class="db-mobile-card__value">{{ '%.1f'|format(dump.groesse / 1024 / 1024) }} MB</div>
+        </div>
+      </div>
+      <a class="btn btn--small" href="/admin/db-backups/{{ dump.name }}">Herunterladen</a>
+    </article>
+    {% else %}
+    <div class="text-muted">Keine DB-Dumps vorhanden.</div>
+    {% endfor %}
+  </div>
+</div>

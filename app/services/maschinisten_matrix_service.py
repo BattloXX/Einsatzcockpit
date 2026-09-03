@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.timezones import local_date_to_utc
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus
 from app.models.master import FireDept, Member, VehicleMaster
+from app.services.fahrtenbuch_service import fahrtenbuch_person_name, normalisiere_person_name
 
 FARBE_UEBUNG = "DDEBF7"
 FARBE_EINSATZ = "FCE4D6"
@@ -87,7 +88,7 @@ def berechne_maschinisten_matrix(db: Session, org_id: int, jahr: int) -> dict:
         stufe = maschinist_stufe(member)
         if stufe is not None:
             rows[("id", member.id)] = {
-                "member_id": member.id, "name": f"{member.lastname} {member.firstname}",
+                "member_id": member.id, "name": fahrtenbuch_person_name(member),
                 "lastname": member.lastname, "firstname": member.firstname,
                 "stufe": stufe, "zellen": {}, "summe": {"uebung": 0, "einsatz": 0},
             }
@@ -102,13 +103,13 @@ def berechne_maschinisten_matrix(db: Session, org_id: int, jahr: int) -> dict:
         for rolle, member_id, name in personen:
             if not name and not member_id:
                 continue
-            key = ("id", member_id) if member_id else ("name", (name or "").strip().casefold())
+            key = ("id", member_id) if member_id else ("name", normalisiere_person_name(name))
             matched_member = member_by_id.get(member_id) if member_id else None
             if key not in rows:
                 fallback_name = (name or "").strip()
                 rows[key] = {
                     "member_id": member_id,
-                    "name": f"{matched_member.lastname} {matched_member.firstname}"
+                    "name": fahrtenbuch_person_name(matched_member)
                     if matched_member else fallback_name,
                     "lastname": matched_member.lastname if matched_member else fallback_name,
                     "firstname": matched_member.firstname if matched_member else "",

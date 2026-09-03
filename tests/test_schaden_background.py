@@ -64,6 +64,7 @@ def fahrt_mit_schaden(db_session):
         "schaden_vorhanden": True,
         "schaden_betriebsfaehig": True,
         "schaden_beschreibung": "Testschaden",
+        "doppelfahrt_bestaetigt": True,
     }
     fahrt = erstelle_fahrt(daten, db_session)
     db_session.commit()

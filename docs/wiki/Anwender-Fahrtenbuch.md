@@ -17,7 +17,7 @@ Das Fahrtenbuch erfasst jede Ausfahrt eines Fahrzeugs digital — Maschinist, Ki
 
 Dropdown mit allen aktiven, eigenen Fahrzeugen der Organisation (keine Ad-hoc- oder Fremdfahrzeuge).
 
-> **Doppelfahrt-Warnung**: Wurde für dasselbe Fahrzeug innerhalb des konfigurierten Zeitfensters (Standard: 10 Minuten) bereits eine Fahrt erfasst, erscheint ein gelber Warnhinweis. Die Erfassung kann trotzdem fortgesetzt werden (Bestätigungscheckbox).
+> **Doppelfahrt-Warnung**: Wurde für dasselbe Fahrzeug innerhalb des konfigurierten Zeitfensters (Standard: 10 Minuten) bereits eine Fahrt erfasst, erscheint ein gelber Warnhinweis. Vor dem Speichern muss die Doppelfahrt mit der Checkbox bestätigt werden.
 
 ### Schritt 2 – Fahrzeugspezifische Felder
 

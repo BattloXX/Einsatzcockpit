@@ -158,7 +158,7 @@ Beide Felder sind optional. Wenn beide gesetzt sind, werden beide Kanäle gleich
 |------|:--------:|-------------|
 | **Zeitfenster (Minuten)** | 10 | Wird für dasselbe Fahrzeug innerhalb dieses Zeitraums eine weitere Fahrt erfasst, erscheint ein Warnhinweis im Formular |
 
-Der Warnhinweis ist kein Blocker — der Benutzer kann mit einer Bestätigungscheckbox fortfahren.
+Die Fahrt wird erst gespeichert, nachdem der Benutzer den Warnhinweis mit der Checkbox bestätigt hat.
 
 ---
 
