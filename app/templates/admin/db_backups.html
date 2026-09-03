@@ -1,6 +1,32 @@
 {% extends "admin/_layout.html" %}
 {% block title %}DB-Dumps{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<style>
+.db-table-wrap{overflow-x:auto;}
+.db-table{width:100%;border-collapse:collapse;}
+.db-table th{background:var(--surface-mid);color:var(--text-muted);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;text-align:left;white-space:nowrap;}
+.db-table td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:.85rem;}
+.db-table tbody tr:last-child td{border-bottom:none;}
+.db-mobile-list{display:none;flex-direction:column;gap:.75rem;}
+.db-mobile-card{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-md);padding:.85rem;}
+.db-mobile-card__name{font-weight:700;word-break:break-all;margin-bottom:.75rem;}
+.db-mobile-card__grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;}
+.db-mobile-card__label{color:var(--text-muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;}
+.db-mobile-card__value{font-size:.85rem;}
+.db-mobile-card .btn{display:flex;width:100%;min-height:44px;align-items:center;justify-content:center;margin-top:.85rem;}
+.db-create-form{margin-bottom:1rem;}
+.db-create-hint{color:var(--text-muted);font-size:.8rem;margin:.5rem 0 0;}
+.db-indicator{margin-left:.6rem;color:var(--text-muted);}
+@media (max-width:760px){
+  .db-table-wrap{display:none;}
+  .db-mobile-list{display:flex;}
+  .db-retention-form .form-grid{grid-template-columns:1fr;}
+}
+</style>
+{% endblock %}
+
 {% block admin_content %}
 <div class="page-header">
   <h1>Server-Datensicherung</h1>
@@ -12,7 +38,7 @@
 <div class="card mb-4">
   <div class="card-body">
     <h2>Aufbewahrung für DB-Dumps</h2>
-    <form method="post" action="/admin/db-backups">
+    <form method="post" action="/admin/db-backups" class="db-retention-form">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-grid">
         <label>Aufbewahrung in Tagen
@@ -30,24 +56,14 @@
 <div class="card">
   <div class="card-body">
     <h2>Vorhandene DB-Dumps</h2>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Datei</th><th>Datenbank</th><th>Datum</th><th>Größe</th><th></th></tr></thead>
-        <tbody>
-        {% for dump in dumps %}
-          <tr>
-            <td><code>{{ dump.name }}</code></td>
-            <td>{{ dump.label }}</td>
-            <td>{{ dump.zeitpunkt|local_datetime }}</td>
-            <td>{{ '%.1f'|format(dump.groesse / 1024 / 1024) }} MB</td>
-            <td><a class="btn btn--small" href="/admin/db-backups/{{ dump.name }}">Herunterladen</a></td>
-          </tr>
-        {% else %}
-          <tr><td colspan="5" class="text-muted">Keine DB-Dumps vorhanden.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
+    <form class="db-create-form" hx-post="/admin/db-backups/erstellen"
+          hx-target="#db-dump-liste" hx-swap="outerHTML" hx-indicator="#db-dump-indicator">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--primary">Dump jetzt erstellen</button>
+      <span id="db-dump-indicator" class="htmx-indicator db-indicator">Dump wird erstellt ...</span>
+      <p class="db-create-hint">Der Lauf wendet die Aufbewahrungsregeln oben an und löscht dabei alte Dumps.</p>
+    </form>
+    {% include "admin/_db_backups_liste.html" %}
   </div>
 </div>
 {% endblock %}
