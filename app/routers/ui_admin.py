@@ -6,7 +6,7 @@ from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
@@ -388,6 +388,8 @@ async def create_member(
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     user = request.state.user
+    if user.org_id is None:
+        return RedirectResponse("/admin/mitglieder?error=org_required", status_code=303)
     member = Member(lastname=lastname, firstname=firstname,
                     phone=phone or None, email=email or None,
                     org_id=user.org_id)
@@ -713,6 +715,8 @@ async def import_members_excel(
                 quali_cache[_code] = q.id
 
     user = request.state.user
+    if user.org_id is None:
+        return RedirectResponse("/admin/mitglieder?error=org_required", status_code=303)
     created = 0
     updated = 0
     skipped = 0
@@ -745,14 +749,15 @@ async def import_members_excel(
             if sybos_id:
                 existing = db.query(Member).filter(
                     Member.org_id == user.org_id, Member.sybos_id == sybos_id,
-                ).first()
+                ).execution_options(include_all_tenants=True).first()
             if existing is None:
                 existing = db.query(Member).filter(
-                    Member.org_id == user.org_id,
-                    Member.lastname == lastname,
-                    Member.firstname == firstname,
-                ).first()
+                    or_(Member.org_id == user.org_id, Member.org_id.is_(None)),
+                    func.lower(func.trim(Member.lastname)) == lastname.strip().lower(),
+                    func.lower(func.trim(Member.firstname)) == firstname.strip().lower(),
+                ).execution_options(include_all_tenants=True).first()
             if existing:
+                existing.org_id = user.org_id
                 # Name kann sich geändert haben (z.B. Heirat) — bei syBOS-ID-Match
                 # wird er deshalb IMMER übernommen, nicht nur bei Namensgleichheit.
                 existing.lastname = lastname

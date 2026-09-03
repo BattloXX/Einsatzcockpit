@@ -1,6 +1,7 @@
 """Tests für den Mitglieder-Excel-Import (app/routers/ui_admin.py::import_members_excel),
 insbesondere die neue syBOS-ID-Spalte (verknüpft DIBOS-Personenrückmeldungen mit einem
 Mitglied, siehe app/services/dibos/dibos_enrich.py)."""
+
 import io
 
 import openpyxl
@@ -20,8 +21,9 @@ def _login(client, username, password):
     client.cookies.clear()
     client.get("/login")
     csrf = client.cookies.get("ec_csrf")
-    return client.post("/login", data={"username": username, "password": password, "_csrf": csrf},
-                       follow_redirects=False)
+    return client.post(
+        "/login", data={"username": username, "password": password, "_csrf": csrf}, follow_redirects=False
+    )
 
 
 def _rolle(db, code):
@@ -37,8 +39,13 @@ def _setup_admin(username: str) -> int:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        user = User(username=username, password_hash=hash_password("Test1234!"),
-                    display_name="Mitglieder-Import Test-Admin", org_id=ORG_ID, active=True)
+        user = User(
+            username=username,
+            password_hash=hash_password("Test1234!"),
+            display_name="Mitglieder-Import Test-Admin",
+            org_id=ORG_ID,
+            active=True,
+        )
         db.add(user)
         db.flush()
         db.add(UserRole(user_id=user.id, role_id=_rolle(db, "admin").id))
@@ -71,8 +78,7 @@ def test_import_sets_sybos_id_on_new_member():
     )
     r = client.post(
         "/admin/mitglieder/excel-import",
-        files={"file": ("adressliste.xlsx", xlsx,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("adressliste.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
         data={"_csrf": csrf},
         follow_redirects=False,
     )
@@ -82,13 +88,86 @@ def test_import_sets_sybos_id_on_new_member():
     db = SessionLocal()
     set_tenant_context(db, ORG_ID)
     try:
-        member = db.query(Member).filter(
-            Member.org_id == ORG_ID, Member.firstname == "Jesse", Member.lastname == "Rohner-ImportTest",
-        ).first()
+        member = (
+            db.query(Member)
+            .filter(
+                Member.org_id == ORG_ID,
+                Member.firstname == "Jesse",
+                Member.lastname == "Rohner-ImportTest",
+            )
+            .first()
+        )
         assert member is not None
         assert member.sybos_id == "31359"
     finally:
         db.close()
+
+
+def test_import_adoptiert_orgloses_mitglied_case_insensitiv():
+    _setup_admin("mitglieder_import_adopt")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        alt = Member(org_id=None, firstname="  Maria ", lastname="MUSTER ", active=True)
+        db.add(alt)
+        db.commit()
+        alt_id = alt.id
+    finally:
+        db.close()
+    client = TestClient(app)
+    _login(client, "mitglieder_import_adopt", "Test1234!")
+    xlsx = _xlsx_bytes(["Vorname", "Zuname", "syBOS-ID"], [["maria", "muster", "99881"]])
+    response = client.post(
+        "/admin/mitglieder/excel-import",
+        files={"file": ("liste.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"_csrf": client.cookies.get("ec_csrf")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        rows = db.query(Member).execution_options(include_all_tenants=True).filter(Member.sybos_id == "99881").all()
+        assert len(rows) == 1
+        assert rows[0].id == alt_id
+        assert rows[0].org_id == ORG_ID
+    finally:
+        db.close()
+
+
+def test_import_system_admin_ohne_org_wird_abgelehnt():
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        user = User(
+            username="member_import_sys_no_org",
+            password_hash=hash_password("Test1234!"),
+            display_name="Systemadmin",
+            org_id=None,
+            active=True,
+        )
+        db.add(user)
+        db.flush()
+        db.add(UserRole(user_id=user.id, role_id=_rolle(db, "system_admin").id))
+        db.commit()
+    finally:
+        db.close()
+    client = TestClient(app)
+    _login(client, "member_import_sys_no_org", "Test1234!")
+    response = client.post(
+        "/admin/mitglieder/excel-import",
+        files={
+            "file": (
+                "liste.xlsx",
+                _xlsx_bytes(["Vorname", "Zuname"], [["Keine", "Org"]]),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"_csrf": client.cookies.get("ec_csrf")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "error=org_required" in response.headers["location"]
 
 
 def test_import_updates_sybos_id_on_existing_member():
@@ -104,8 +183,7 @@ def test_import_updates_sybos_id_on_existing_member():
     )
     r1 = client.post(
         "/admin/mitglieder/excel-import",
-        files={"file": ("liste1.xlsx", xlsx1,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("liste1.xlsx", xlsx1, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
         data={"_csrf": csrf},
         follow_redirects=False,
     )
@@ -119,8 +197,7 @@ def test_import_updates_sybos_id_on_existing_member():
     )
     r2 = client.post(
         "/admin/mitglieder/excel-import",
-        files={"file": ("liste2.xlsx", xlsx2,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("liste2.xlsx", xlsx2, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
         data={"_csrf": csrf},
         follow_redirects=False,
     )
@@ -130,9 +207,15 @@ def test_import_updates_sybos_id_on_existing_member():
     db = SessionLocal()
     set_tenant_context(db, ORG_ID)
     try:
-        members = db.query(Member).filter(
-            Member.org_id == ORG_ID, Member.firstname == "Maria", Member.lastname == "Update-ImportTest",
-        ).all()
+        members = (
+            db.query(Member)
+            .filter(
+                Member.org_id == ORG_ID,
+                Member.firstname == "Maria",
+                Member.lastname == "Update-ImportTest",
+            )
+            .all()
+        )
         assert len(members) == 1  # kein Duplikat durch den zweiten Import
         assert members[0].sybos_id == "44642"
     finally:
@@ -153,8 +236,7 @@ def test_import_without_sybos_column_leaves_sybos_id_empty():
     )
     r = client.post(
         "/admin/mitglieder/excel-import",
-        files={"file": ("liste.xlsx", xlsx,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("liste.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
         data={"_csrf": csrf},
         follow_redirects=False,
     )
@@ -164,9 +246,15 @@ def test_import_without_sybos_column_leaves_sybos_id_empty():
     db = SessionLocal()
     set_tenant_context(db, ORG_ID)
     try:
-        member = db.query(Member).filter(
-            Member.org_id == ORG_ID, Member.firstname == "Klaus", Member.lastname == "Ohnesybos-ImportTest",
-        ).first()
+        member = (
+            db.query(Member)
+            .filter(
+                Member.org_id == ORG_ID,
+                Member.firstname == "Klaus",
+                Member.lastname == "Ohnesybos-ImportTest",
+            )
+            .first()
+        )
         assert member is not None
         assert member.sybos_id is None
     finally:
@@ -188,9 +276,9 @@ def test_import_matches_by_sybos_id_when_name_changes():
     )
     r1 = client.post(
         "/admin/mitglieder/excel-import",
-        files={"file": ("liste1.xlsx", xlsx1,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
-        data={"_csrf": csrf}, follow_redirects=False,
+        files={"file": ("liste1.xlsx", xlsx1, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"_csrf": csrf},
+        follow_redirects=False,
     )
     assert r1.status_code == 303
     assert "imported=1" in r1.headers["location"]
@@ -202,9 +290,9 @@ def test_import_matches_by_sybos_id_when_name_changes():
     )
     r2 = client.post(
         "/admin/mitglieder/excel-import",
-        files={"file": ("liste2.xlsx", xlsx2,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
-        data={"_csrf": csrf}, follow_redirects=False,
+        files={"file": ("liste2.xlsx", xlsx2, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"_csrf": csrf},
+        follow_redirects=False,
     )
     assert r2.status_code == 303
     assert "updated=1" in r2.headers["location"]
@@ -235,9 +323,9 @@ def test_import_matches_by_sybos_id_when_email_changes():
     )
     r1 = client.post(
         "/admin/mitglieder/excel-import",
-        files={"file": ("liste1.xlsx", xlsx1,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
-        data={"_csrf": csrf}, follow_redirects=False,
+        files={"file": ("liste1.xlsx", xlsx1, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"_csrf": csrf},
+        follow_redirects=False,
     )
     assert r1.status_code == 303
 
@@ -247,9 +335,9 @@ def test_import_matches_by_sybos_id_when_email_changes():
     )
     r2 = client.post(
         "/admin/mitglieder/excel-import",
-        files={"file": ("liste2.xlsx", xlsx2,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
-        data={"_csrf": csrf}, follow_redirects=False,
+        files={"file": ("liste2.xlsx", xlsx2, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"_csrf": csrf},
+        follow_redirects=False,
     )
     assert r2.status_code == 303
     assert "updated=1" in r2.headers["location"]

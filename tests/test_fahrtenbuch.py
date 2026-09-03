@@ -1,4 +1,5 @@
 """Tests: Digitales Fahrten- & Betriebsbuch."""
+
 from __future__ import annotations
 
 import pytest
@@ -13,6 +14,7 @@ from app.models.incident import Incident
 from app.models.master import Member, OrgSettings, VehicleMaster
 from app.models.user import Role, User, UserRole
 from app.services.fahrtenbuch_service import (
+    berechne_bericht_daten,
     erstelle_fahrt,
     pruefe_doppelfahrt,
     pruefe_zaehler,
@@ -25,9 +27,11 @@ from app.services.pdf_service import load_fahrtenbuch_report
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture()
 def db_session(setup_db):
     from tests.conftest import TestingSession
+
     db = TestingSession()
     set_tenant_context(db, None)
     yield db
@@ -38,6 +42,7 @@ def db_session(setup_db):
 @pytest.fixture()
 def org(db_session):
     from app.models.master import FireDept
+
     dept = db_session.query(FireDept).first()
     assert dept, "Keine Org in der Test-DB"
     return dept
@@ -45,14 +50,9 @@ def org(db_session):
 
 @pytest.fixture()
 def fahrzeug(db_session, org):
-    fz = (
-        db_session.query(VehicleMaster)
-        .filter(VehicleMaster.dept_id == org.id)
-        .first()
-    )
+    fz = db_session.query(VehicleMaster).filter(VehicleMaster.dept_id == org.id).first()
     if not fz:
-        fz = VehicleMaster(dept_id=org.id, code="TEST-FZ", name="Testfahrzeug", type="Test",
-                            display_order=99)
+        fz = VehicleMaster(dept_id=org.id, code="TEST-FZ", name="Testfahrzeug", type="Test", display_order=99)
         db_session.add(fz)
         db_session.flush()
     fz.km_aktuell = 1000
@@ -86,10 +86,12 @@ def _basis_daten(org_id, fahrzeug_id, zweck_id):
         "maschinist_name": "Max Mustermann",
         "km_stand_neu": 1010,
         "erfasst_via": FahrtErfassungsweg.web,
+        "doppelfahrt_bestaetigt": True,
     }
 
 
 # ── Zähler-Tests ──────────────────────────────────────────────────────────────
+
 
 def test_zaehler_steigt_normal(fahrzeug):
     erg = pruefe_zaehler(fahrzeug, "km", 1050)
@@ -126,6 +128,7 @@ def test_zaehler_seilwinde(fahrzeug):
 
 
 # ── Fahrt erstellen ───────────────────────────────────────────────────────────
+
 
 def test_erstelle_fahrt_erfolgreich(db_session, org, fahrzeug, zweck):
     daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
@@ -232,6 +235,7 @@ def test_einsatzleiter_darf_leer_bleiben(db_session, org, fahrzeug, zweck):
 
 # ── Storno & Revision ─────────────────────────────────────────────────────────
 
+
 def test_storno(db_session, org, fahrzeug, zweck):
     daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
     fahrt = erstelle_fahrt(daten, db_session)
@@ -255,6 +259,7 @@ def test_recompute_nach_storno(db_session, org, fahrzeug, zweck):
 
 # ── Stammdaten-Korrektur ──────────────────────────────────────────────────────
 
+
 def test_stammdaten_korrektur_erlaubt_sinkenden_wert(db_session, org, fahrzeug):
     fahrzeug.km_aktuell = 5000
     db_session.flush()
@@ -264,11 +269,44 @@ def test_stammdaten_korrektur_erlaubt_sinkenden_wert(db_session, org, fahrzeug):
 
 # ── Doppelfahrt-Schutz ────────────────────────────────────────────────────────
 
+
 def test_doppelfahrt_warnung(db_session, org, fahrzeug, zweck):
     daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
     erstelle_fahrt(daten, db_session)
     warnung = pruefe_doppelfahrt(fahrzeug, db_session, jetzt=datetime.now(UTC))
     assert warnung is True
+
+
+def test_doppelfahrt_muss_serverseitig_bestaetigt_werden(db_session, org, fahrzeug, zweck):
+    erste = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    erstelle_fahrt(erste, db_session)
+    zweite = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    zweite["km_stand_neu"] = 1020
+    zweite["doppelfahrt_bestaetigt"] = False
+    with pytest.raises(HTTPException) as exc:
+        erstelle_fahrt(zweite, db_session)
+    assert exc.value.detail == "doppelfahrt_nicht_bestaetigt"
+    zweite["doppelfahrt_bestaetigt"] = True
+    assert erstelle_fahrt(zweite, db_session).id is not None
+
+
+def test_erstelle_fahrt_schreibt_nachname_vorname(db_session, org, fahrzeug, zweck):
+    member = Member(org_id=org.id, firstname="Oliver", lastname="Berger", active=True)
+    db_session.add(member)
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    daten.update(maschinist_member_id=member.id, maschinist_name="Oliver Berger")
+    assert erstelle_fahrt(daten, db_session).maschinist_name == "Berger Oliver"
+
+
+def test_bericht_gruppiert_freitext_unabhaengig_von_reihenfolge(db_session, org, fahrzeug, zweck):
+    d1 = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    d1.update(maschinist_name="Thomas Horwath", zeitpunkt=datetime.now(UTC) - timedelta(hours=2))
+    f1 = erstelle_fahrt(d1, db_session)
+    d2 = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    d2.update(maschinist_name="horwath THOMAS", km_stand_neu=1020)
+    f2 = erstelle_fahrt(d2, db_session)
+    assert len(berechne_bericht_daten([f1, f2])["maschinisten"]) == 1
 
 
 def test_doppelfahrt_kein_alarm_nach_fenster(db_session, org, fahrzeug, zweck):
@@ -282,8 +320,10 @@ def test_doppelfahrt_kein_alarm_nach_fenster(db_session, org, fahrzeug, zweck):
 
 # ── Multi-Org-Isolation ───────────────────────────────────────────────────────
 
+
 def test_multi_org_isolation(db_session):
     from app.models.master import FireDept
+
     orgs = db_session.query(FireDept).all()
     if len(orgs) < 2:
         pytest.skip("Weniger als 2 Orgs in Test-DB")
@@ -298,8 +338,11 @@ def test_multi_org_isolation(db_session):
     z_a.kategorie = FahrtKategorie.uebung
 
     daten_a = {
-        "org_id": org_a.id, "fahrzeug_id": fz_a.id, "zweck_id": z_a.id,
-        "maschinist_name": "Org-A-Maschinist", "km_stand_neu": None,
+        "org_id": org_a.id,
+        "fahrzeug_id": fz_a.id,
+        "zweck_id": z_a.id,
+        "maschinist_name": "Org-A-Maschinist",
+        "km_stand_neu": None,
         "erfasst_via": FahrtErfassungsweg.web,
     }
     fz_a.erfasst_km = False
@@ -307,15 +350,12 @@ def test_multi_org_isolation(db_session):
     fahrt_a = erstelle_fahrt(daten_a, db_session)
 
     # Org B sieht die Fahrt nicht (org_id-Filter)
-    fahrten_b = (
-        db_session.query(Fahrt)
-        .filter(Fahrt.org_id == org_b.id, Fahrt.id == fahrt_a.id)
-        .all()
-    )
+    fahrten_b = db_session.query(Fahrt).filter(Fahrt.org_id == org_b.id, Fahrt.id == fahrt_a.id).all()
     assert fahrten_b == []
 
 
 # ── Token-Routen (HTTP-Tests) ─────────────────────────────────────────────────
+
 
 def test_token_route_ungueltig(client: TestClient):
     response = client.get("/f/nicht_existierender_token_xyz")
@@ -370,9 +410,13 @@ def test_taetigkeit_zweck_ohne_freitext(db_session, org, fahrzeug, zweck):
 
 def _login(client: TestClient, db_session, org, username: str, role_code: str = "readonly"):
     from app.core.security import hash_password
+
     user = User(
-        username=username, password_hash=hash_password("Test1234!"),
-        display_name=username, org_id=org.id, active=True,
+        username=username,
+        password_hash=hash_password("Test1234!"),
+        display_name=username,
+        org_id=org.id,
+        active=True,
     )
     db_session.add(user)
     db_session.flush()
@@ -385,8 +429,9 @@ def _login(client: TestClient, db_session, org, username: str, role_code: str = 
     db_session.commit()
     client.get("/login")
     csrf = client.cookies.get("ec_csrf")
-    r = client.post("/login", data={"username": username, "password": "Test1234!", "_csrf": csrf},
-                    follow_redirects=False)
+    r = client.post(
+        "/login", data={"username": username, "password": "Test1234!", "_csrf": csrf}, follow_redirects=False
+    )
     assert r.status_code == 302
     return user
 
@@ -394,8 +439,13 @@ def _login(client: TestClient, db_session, org, username: str, role_code: str = 
 def test_zweck_felder_kein_einsatzleiter_bei_zweck_flag_ohne_gk(client: TestClient, db_session, org):
     """optional_einsatzleiter allein (ohne GK-Pflicht) zeigt KEIN Einsatzleiter-Feld mehr."""
     _login(client, db_session, org, "el_zweck_tester")
-    z = Fahrtzweck(org_id=org.id, name="EL-Zweck", kategorie=FahrtKategorie.einsatz,
-                   optional_einsatzleiter=True, verlangt_gruppenkommandant=False)
+    z = Fahrtzweck(
+        org_id=org.id,
+        name="EL-Zweck",
+        kategorie=FahrtKategorie.einsatz,
+        optional_einsatzleiter=True,
+        verlangt_gruppenkommandant=False,
+    )
     db_session.add(z)
     db_session.commit()
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
@@ -403,13 +453,16 @@ def test_zweck_felder_kein_einsatzleiter_bei_zweck_flag_ohne_gk(client: TestClie
     assert "einsatzleiter_name" not in r.text
 
 
-def test_zweck_felder_zeigt_fuehrungsrollen_auswahl_bei_gk_und_zweck_flag(
-    client: TestClient, db_session, org
-):
+def test_zweck_felder_zeigt_fuehrungsrollen_auswahl_bei_gk_und_zweck_flag(client: TestClient, db_session, org):
     """GK erforderlich + optional_einsatzleiter zeigt die kombinierte Fuehrungsrollen-Auswahl."""
     _login(client, db_session, org, "el_zweck_gk_tester")
-    z = Fahrtzweck(org_id=org.id, name="EL-GK-Zweck", kategorie=FahrtKategorie.einsatz,
-                   optional_einsatzleiter=True, verlangt_gruppenkommandant=True)
+    z = Fahrtzweck(
+        org_id=org.id,
+        name="EL-GK-Zweck",
+        kategorie=FahrtKategorie.einsatz,
+        optional_einsatzleiter=True,
+        verlangt_gruppenkommandant=True,
+    )
     db_session.add(z)
     db_session.commit()
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
@@ -418,9 +471,7 @@ def test_zweck_felder_zeigt_fuehrungsrollen_auswahl_bei_gk_und_zweck_flag(
     assert "einsatzleiter_name" in r.text
 
 
-def test_zweck_felder_zeigt_einsaetze_der_letzten_drei_tage(
-    client: TestClient, db_session, org
-):
+def test_zweck_felder_zeigt_einsaetze_der_letzten_drei_tage(client: TestClient, db_session, org):
     _login(client, db_session, org, "einsatz_drei_tage_tester")
     z = Fahrtzweck(org_id=org.id, name="Einsatzfahrt", kategorie=FahrtKategorie.einsatz)
     incident = Incident(
@@ -442,27 +493,46 @@ def test_zweck_felder_zeigt_einsaetze_der_letzten_drei_tage(
 
 
 def test_fahrtenbuch_report_ergaenzt_nur_fahrt_fahrzeug(
-    db_session, org, fahrzeug, zweck,
+    db_session,
+    org,
+    fahrzeug,
+    zweck,
 ):
     incident = Incident(primary_org_id=org.id, alarm_type_code="B1", status="closed")
     extra = VehicleMaster(
-        dept_id=org.id, code="EXTRA", name="Zusatzfahrzeug", type="Test",
+        dept_id=org.id,
+        code="EXTRA",
+        name="Zusatzfahrzeug",
+        type="Test",
         display_order=999,
     )
     db_session.add_all([incident, extra])
     db_session.flush()
-    db_session.add_all([
-        Fahrt(
-            org_id=org.id, zeitpunkt=datetime.now(UTC), fahrzeug_id=fahrzeug.id,
-            maschinist_name="Anna", km_delta=5, zweck_id=zweck.id,
-            fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
-        ),
-        Fahrt(
-            org_id=org.id, zeitpunkt=datetime.now(UTC), fahrzeug_id=extra.id,
-            maschinist_name="Berta", maschinist2_name="Clemens", km_delta=12,
-            zweck_id=zweck.id, fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
-        ),
-    ])
+    db_session.add_all(
+        [
+            Fahrt(
+                org_id=org.id,
+                zeitpunkt=datetime.now(UTC),
+                fahrzeug_id=fahrzeug.id,
+                maschinist_name="Anna",
+                km_delta=5,
+                zweck_id=zweck.id,
+                fahrttyp=FahrtKategorie.uebung,
+                incident_id=incident.id,
+            ),
+            Fahrt(
+                org_id=org.id,
+                zeitpunkt=datetime.now(UTC),
+                fahrzeug_id=extra.id,
+                maschinist_name="Berta",
+                maschinist2_name="Clemens",
+                km_delta=12,
+                zweck_id=zweck.id,
+                fahrttyp=FahrtKategorie.uebung,
+                incident_id=incident.id,
+            ),
+        ]
+    )
     db_session.flush()
 
     details, extras = load_fahrtenbuch_report(incident.id, {fahrzeug.id}, db_session)
@@ -477,55 +547,88 @@ def test_fahrtenbuch_report_ergaenzt_nur_fahrt_fahrzeug(
 
 
 def test_mehrere_fahrten_fuer_fahrzeug_und_einsatz_speicherbar(
-    db_session, org, fahrzeug, zweck,
+    db_session,
+    org,
+    fahrzeug,
+    zweck,
 ):
     incident = Incident(primary_org_id=org.id, alarm_type_code="B2", status="closed")
     db_session.add(incident)
     db_session.flush()
     zeitpunkt = datetime.now(UTC)
-    db_session.add_all([
-        Fahrt(
-            org_id=org.id, zeitpunkt=zeitpunkt, fahrzeug_id=fahrzeug.id,
-            maschinist_name="Anna", km_delta=5, zweck_id=zweck.id,
-            fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
-        ),
-        Fahrt(
-            org_id=org.id, zeitpunkt=zeitpunkt + timedelta(hours=1),
-            fahrzeug_id=fahrzeug.id, maschinist_name="Berta", km_delta=8,
-            zweck_id=zweck.id, fahrttyp=FahrtKategorie.uebung,
-            incident_id=incident.id,
-        ),
-    ])
+    db_session.add_all(
+        [
+            Fahrt(
+                org_id=org.id,
+                zeitpunkt=zeitpunkt,
+                fahrzeug_id=fahrzeug.id,
+                maschinist_name="Anna",
+                km_delta=5,
+                zweck_id=zweck.id,
+                fahrttyp=FahrtKategorie.uebung,
+                incident_id=incident.id,
+            ),
+            Fahrt(
+                org_id=org.id,
+                zeitpunkt=zeitpunkt + timedelta(hours=1),
+                fahrzeug_id=fahrzeug.id,
+                maschinist_name="Berta",
+                km_delta=8,
+                zweck_id=zweck.id,
+                fahrttyp=FahrtKategorie.uebung,
+                incident_id=incident.id,
+            ),
+        ]
+    )
 
     db_session.commit()
 
-    fahrten = db_session.query(Fahrt).filter(
-        Fahrt.fahrzeug_id == fahrzeug.id,
-        Fahrt.incident_id == incident.id,
-    ).all()
+    fahrten = (
+        db_session.query(Fahrt)
+        .filter(
+            Fahrt.fahrzeug_id == fahrzeug.id,
+            Fahrt.incident_id == incident.id,
+        )
+        .all()
+    )
     assert len(fahrten) == 2
 
 
 def test_fahrtenbuch_report_liefert_einzelfahrten_desselben_fahrzeugs(
-    db_session, org, fahrzeug, zweck,
+    db_session,
+    org,
+    fahrzeug,
+    zweck,
 ):
     incident = Incident(primary_org_id=org.id, alarm_type_code="B3", status="closed")
     db_session.add(incident)
     db_session.flush()
     erster_zeitpunkt = datetime.now(UTC)
-    db_session.add_all([
-        Fahrt(
-            org_id=org.id, zeitpunkt=erster_zeitpunkt, fahrzeug_id=fahrzeug.id,
-            maschinist_name="Anna", km_delta=5, zweck_id=zweck.id,
-            fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
-        ),
-        Fahrt(
-            org_id=org.id, zeitpunkt=erster_zeitpunkt + timedelta(hours=1),
-            fahrzeug_id=fahrzeug.id, maschinist_name="Berta",
-            maschinist2_name="Clemens", km_delta=8, zweck_id=zweck.id,
-            fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
-        ),
-    ])
+    db_session.add_all(
+        [
+            Fahrt(
+                org_id=org.id,
+                zeitpunkt=erster_zeitpunkt,
+                fahrzeug_id=fahrzeug.id,
+                maschinist_name="Anna",
+                km_delta=5,
+                zweck_id=zweck.id,
+                fahrttyp=FahrtKategorie.uebung,
+                incident_id=incident.id,
+            ),
+            Fahrt(
+                org_id=org.id,
+                zeitpunkt=erster_zeitpunkt + timedelta(hours=1),
+                fahrzeug_id=fahrzeug.id,
+                maschinist_name="Berta",
+                maschinist2_name="Clemens",
+                km_delta=8,
+                zweck_id=zweck.id,
+                fahrttyp=FahrtKategorie.uebung,
+                incident_id=incident.id,
+            ),
+        ]
+    )
     db_session.flush()
 
     details, extras = load_fahrtenbuch_report(incident.id, {fahrzeug.id}, db_session)
@@ -558,15 +661,22 @@ def test_excel_export_verwendet_leitstellennummer(db_session, org, fahrzeug, zwe
     from app.services.excel_export_service import exportiere_fahrten
 
     incident = Incident(
-        primary_org_id=org.id, alarm_type_code="B2", status="closed",
-        lis_operation_number="f26009999", nummer=42,
+        primary_org_id=org.id,
+        alarm_type_code="B2",
+        status="closed",
+        lis_operation_number="f26009999",
+        nummer=42,
     )
     db_session.add(incident)
     db_session.flush()
     fahrt = Fahrt(
-        org_id=org.id, zeitpunkt=datetime.now(UTC), fahrzeug_id=fahrzeug.id,
-        maschinist_name="Dora", zweck_id=zweck.id,
-        fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
+        org_id=org.id,
+        zeitpunkt=datetime.now(UTC),
+        fahrzeug_id=fahrzeug.id,
+        maschinist_name="Dora",
+        zweck_id=zweck.id,
+        fahrttyp=FahrtKategorie.uebung,
+        incident_id=incident.id,
     )
     fahrt.incident = incident
 
@@ -576,19 +686,30 @@ def test_excel_export_verwendet_leitstellennummer(db_session, org, fahrzeug, zwe
 
 
 def test_fahrt_detail_zeigt_leitstellennummer(
-    client: TestClient, db_session, org, fahrzeug, zweck,
+    client: TestClient,
+    db_session,
+    org,
+    fahrzeug,
+    zweck,
 ):
     _login(client, db_session, org, "leitstellen_detail", role_code="fahrtenbuch_admin")
     incident = Incident(
-        primary_org_id=org.id, alarm_type_code="B3", status="closed",
-        lis_operation_number="f26007777", nummer=77,
+        primary_org_id=org.id,
+        alarm_type_code="B3",
+        status="closed",
+        lis_operation_number="f26007777",
+        nummer=77,
     )
     db_session.add(incident)
     db_session.flush()
     fahrt = Fahrt(
-        org_id=org.id, zeitpunkt=datetime.now(UTC), fahrzeug_id=fahrzeug.id,
-        maschinist_name="Emil", zweck_id=zweck.id,
-        fahrttyp=FahrtKategorie.uebung, incident_id=incident.id,
+        org_id=org.id,
+        zeitpunkt=datetime.now(UTC),
+        fahrzeug_id=fahrzeug.id,
+        maschinist_name="Emil",
+        zweck_id=zweck.id,
+        fahrttyp=FahrtKategorie.uebung,
+        incident_id=incident.id,
     )
     db_session.add(fahrt)
     db_session.commit()
@@ -601,9 +722,7 @@ def test_fahrt_detail_zeigt_leitstellennummer(
     assert "Einsatz-Nr." not in response.text
 
 
-def test_zweck_felder_zeigt_letzten_einsatz_als_fallback(
-    client: TestClient, db_session, org
-):
+def test_zweck_felder_zeigt_letzten_einsatz_als_fallback(client: TestClient, db_session, org):
     _login(client, db_session, org, "einsatz_fallback_tester")
     vorhandene = (
         db_session.query(Incident)
@@ -615,11 +734,15 @@ def test_zweck_felder_zeigt_letzten_einsatz_als_fallback(
         incident.started_at = datetime.now(UTC) - timedelta(days=30)
     z = Fahrtzweck(org_id=org.id, name="Fallback-Einsatz", kategorie=FahrtKategorie.einsatz)
     aelter = Incident(
-        primary_org_id=org.id, alarm_type_code="ALT20", status="closed",
+        primary_org_id=org.id,
+        alarm_type_code="ALT20",
+        status="closed",
         started_at=datetime.now(UTC) - timedelta(days=20),
     )
     letzter = Incident(
-        primary_org_id=org.id, alarm_type_code="ALT10", status="closed",
+        primary_org_id=org.id,
+        alarm_type_code="ALT10",
+        status="closed",
         started_at=datetime.now(UTC) - timedelta(days=10),
     )
     db_session.add_all([z, aelter, letzter])
@@ -633,14 +756,17 @@ def test_zweck_felder_zeigt_letzten_einsatz_als_fallback(
     assert f'value="{letzter.id}" selected' in r.text
 
 
-def test_zweck_felder_kein_einsatzleiter_bei_fahrzeug_flag_ohne_gk(
-    client: TestClient, db_session, org, fahrzeug
-):
+def test_zweck_felder_kein_einsatzleiter_bei_fahrzeug_flag_ohne_gk(client: TestClient, db_session, org, fahrzeug):
     """Fahrzeug-Flag allein (ohne GK-Pflicht des Zwecks) zeigt KEIN Einsatzleiter-Feld mehr."""
     _login(client, db_session, org, "el_fahrzeug_tester")
     fahrzeug.einsatzleiter_abfrage = True
-    z = Fahrtzweck(org_id=org.id, name="Kein-EL-Zweck", kategorie=FahrtKategorie.uebung,
-                   optional_einsatzleiter=False, verlangt_gruppenkommandant=False)
+    z = Fahrtzweck(
+        org_id=org.id,
+        name="Kein-EL-Zweck",
+        kategorie=FahrtKategorie.uebung,
+        optional_einsatzleiter=False,
+        verlangt_gruppenkommandant=False,
+    )
     db_session.add(z)
     db_session.commit()
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}&fahrzeug_id={fahrzeug.id}")
@@ -654,8 +780,13 @@ def test_zweck_felder_zeigt_fuehrungsrollen_auswahl_bei_gk_und_fahrzeug_flag(
     """GK erforderlich + Fahrzeug-Flag zeigt die kombinierte Fuehrungsrollen-Auswahl."""
     _login(client, db_session, org, "el_fahrzeug_gk_tester")
     fahrzeug.einsatzleiter_abfrage = True
-    z = Fahrtzweck(org_id=org.id, name="GK-Zweck", kategorie=FahrtKategorie.uebung,
-                   optional_einsatzleiter=False, verlangt_gruppenkommandant=True)
+    z = Fahrtzweck(
+        org_id=org.id,
+        name="GK-Zweck",
+        kategorie=FahrtKategorie.uebung,
+        optional_einsatzleiter=False,
+        verlangt_gruppenkommandant=True,
+    )
     db_session.add(z)
     db_session.commit()
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}&fahrzeug_id={fahrzeug.id}")
@@ -700,8 +831,7 @@ def test_zweck_felder_ohne_flags_kein_einsatzleiter(client: TestClient, db_sessi
     """Ohne beide Flags erscheint kein Einsatzleiter-Feld (keine Duplikate/kein Zwang)."""
     _login(client, db_session, org, "el_kein_tester")
     fahrzeug.einsatzleiter_abfrage = False
-    z = Fahrtzweck(org_id=org.id, name="Plain-Zweck", kategorie=FahrtKategorie.uebung,
-                   optional_einsatzleiter=False)
+    z = Fahrtzweck(org_id=org.id, name="Plain-Zweck", kategorie=FahrtKategorie.uebung, optional_einsatzleiter=False)
     db_session.add(z)
     db_session.commit()
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}&fahrzeug_id={fahrzeug.id}")
@@ -711,13 +841,17 @@ def test_zweck_felder_ohne_flags_kein_einsatzleiter(client: TestClient, db_sessi
 
 # ── Sysadmin-Löschen ──────────────────────────────────────────────────────────
 
+
 def test_loesche_fahrten_entfernt_und_rechnet_zaehler_neu(db_session, org, fahrzeug, zweck):
     from app.services.fahrtenbuch_service import loesche_fahrten
+
     fahrzeug.km_aktuell = 1000
     db_session.flush()
-    d1 = _basis_daten(org.id, fahrzeug.id, zweck.id); d1["km_stand_neu"] = 1010
+    d1 = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    d1["km_stand_neu"] = 1010
     f1 = erstelle_fahrt(d1, db_session)
-    d2 = _basis_daten(org.id, fahrzeug.id, zweck.id); d2["km_stand_neu"] = 1030
+    d2 = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    d2["km_stand_neu"] = 1030
     f2 = erstelle_fahrt(d2, db_session)
     assert fahrzeug.km_aktuell == 1030
 
@@ -730,10 +864,13 @@ def test_loesche_fahrten_entfernt_und_rechnet_zaehler_neu(db_session, org, fahrz
 
 def test_loesche_fahrten_nur_eigene_org(db_session, org, fahrzeug, zweck):
     from app.services.fahrtenbuch_service import loesche_fahrten
+
     f = erstelle_fahrt(_basis_daten(org.id, fahrzeug.id, zweck.id), db_session)
     n = loesche_fahrten([f.id], org_id=org.id + 9999, user_id=1, db=db_session)
     assert n == 0
-    assert db_session.query(Fahrt).filter(Fahrt.id == f.id).execution_options(include_all_tenants=True).first() is not None
+    assert (
+        db_session.query(Fahrt).filter(Fahrt.id == f.id).execution_options(include_all_tenants=True).first() is not None
+    )
 
 
 def test_verwaltung_liste_ohne_loeschen_fuer_fahrtenbuch_admin(client: TestClient, db_session, org):
@@ -757,21 +894,27 @@ def _org_mit_fahrt(db_session, slug: str, name: str, maschinist: str):
     """Legt eine zweite Org mit Fahrzeug, Zweck und einer Fahrt an. Gibt die Org zurück."""
     from app.models.master import FireDept
     from app.services.fahrtenbuch_service import erstelle_fahrt
+
     o = FireDept(slug=slug, name=name)
     db_session.add(o)
     db_session.flush()
-    fz = VehicleMaster(dept_id=o.id, code=f"{slug}-FZ", name="Fahrzeug", type="Test",
-                       display_order=5, erfasst_km=False)
+    fz = VehicleMaster(dept_id=o.id, code=f"{slug}-FZ", name="Fahrzeug", type="Test", display_order=5, erfasst_km=False)
     db_session.add(fz)
     db_session.flush()
     z = Fahrtzweck(org_id=o.id, name=f"{slug}-Zweck", kategorie=FahrtKategorie.uebung)
     db_session.add(z)
     db_session.flush()
-    erstelle_fahrt({
-        "org_id": o.id, "fahrzeug_id": fz.id, "zweck_id": z.id,
-        "maschinist_name": maschinist, "km_stand_neu": None,
-        "erfasst_via": FahrtErfassungsweg.web,
-    }, db_session)
+    erstelle_fahrt(
+        {
+            "org_id": o.id,
+            "fahrzeug_id": fz.id,
+            "zweck_id": z.id,
+            "maschinist_name": maschinist,
+            "km_stand_neu": None,
+            "erfasst_via": FahrtErfassungsweg.web,
+        },
+        db_session,
+    )
     db_session.commit()
     return o
 
@@ -798,7 +941,11 @@ def test_regular_admin_ignoriert_org_param(client: TestClient, db_session, org):
 
 
 def test_recorder_darf_fahrtenbuch_lesen(
-    client: TestClient, db_session, org, fahrzeug, zweck,
+    client: TestClient,
+    db_session,
+    org,
+    fahrzeug,
+    zweck,
 ):
     """Bearbeiter duerfen Liste, Detail und Excel-Export lesen."""
     fahrt = erstelle_fahrt(_basis_daten(org.id, fahrzeug.id, zweck.id), db_session)
@@ -813,7 +960,11 @@ def test_recorder_darf_fahrtenbuch_lesen(
 
 
 def test_recorder_darf_fahrtenbuch_nicht_veraendern(
-    client: TestClient, db_session, org, fahrzeug, zweck,
+    client: TestClient,
+    db_session,
+    org,
+    fahrzeug,
+    zweck,
 ):
     """Bearbeiter bleiben auf allen Verwaltungs- und Mutationsrouten gesperrt."""
     fahrt = erstelle_fahrt(_basis_daten(org.id, fahrzeug.id, zweck.id), db_session)
@@ -846,8 +997,7 @@ def test_loeschen_route_verweigert_nicht_sysadmin(client: TestClient, db_session
     """Fahrtenbuch-Admin (kein Sysadmin) darf nicht löschen → 403."""
     _login(client, db_session, org, "el_nichtsys", role_code="fahrtenbuch_admin")
     csrf = client.cookies.get("ec_csrf")
-    r = client.post("/verwaltung/fahrten/loeschen",
-                    data={"_csrf": csrf, "ids": "1"}, follow_redirects=False)
+    r = client.post("/verwaltung/fahrten/loeschen", data={"_csrf": csrf, "ids": "1"}, follow_redirects=False)
     assert r.status_code == 403
 
 
@@ -858,20 +1008,23 @@ def test_loeschen_route_sysadmin_loescht(client: TestClient, db_session, org, fa
     fahrt_id = f.id
     _login(client, db_session, org, "el_sysadmin", role_code="system_admin")
     csrf = client.cookies.get("ec_csrf")
-    r = client.post("/verwaltung/fahrten/loeschen",
-                    data={"_csrf": csrf, "ids": str(fahrt_id)}, follow_redirects=False)
+    r = client.post("/verwaltung/fahrten/loeschen", data={"_csrf": csrf, "ids": str(fahrt_id)}, follow_redirects=False)
     assert r.status_code == 303
     assert "geloescht=1" in r.headers.get("location", "")
-    assert db_session.query(Fahrt).filter(Fahrt.id == fahrt_id).execution_options(include_all_tenants=True).first() is None
+    assert (
+        db_session.query(Fahrt).filter(Fahrt.id == fahrt_id).execution_options(include_all_tenants=True).first() is None
+    )
 
 
 # ── Fahrzeug-Links / Export ───────────────────────────────────────────────────
+
 
 def test_exportiere_fahrzeug_links_enthaelt_link():
     import io
     import openpyxl
     from types import SimpleNamespace
     from app.services.excel_export_service import exportiere_fahrzeug_links
+
     fzs = [
         SimpleNamespace(code="LFA", name="LF-A", kennzeichen="W-1", type="LF", qr_token="tok1"),
         SimpleNamespace(code="KDO", name="Kdo", kennzeichen=None, type="", qr_token=None),
@@ -887,6 +1040,7 @@ def test_exportiere_fahrzeug_links_enthaelt_link():
 def test_fahrzeuge_export_links_route(client: TestClient, db_session, org):
     """POST erzeugt fehlende QR-Tokens und liefert eine Excel-Datei zurück."""
     from app.models.master import OrgSettings, VehicleMaster
+
     org_s = (
         db_session.query(OrgSettings)
         .filter(OrgSettings.org_id == org.id)
@@ -904,18 +1058,23 @@ def test_fahrzeuge_export_links_route(client: TestClient, db_session, org):
 
     _login(client, db_session, org, "fz_export_admin", role_code="fahrtenbuch_admin")
     csrf = client.cookies.get("ec_csrf")
-    r = client.post("/admin/fahrtenbuch/fahrzeuge/export-links", data={"_csrf": csrf},
-                    follow_redirects=False)
+    r = client.post("/admin/fahrtenbuch/fahrzeuge/export-links", data={"_csrf": csrf}, follow_redirects=False)
     assert r.status_code == 200
     assert "spreadsheet" in r.headers.get("content-type", "")
     # fehlender QR-Token wurde erzeugt
     db_session.expire_all()
-    fz2 = db_session.query(VehicleMaster).filter(VehicleMaster.id == fz_id).execution_options(include_all_tenants=True).first()
+    fz2 = (
+        db_session.query(VehicleMaster)
+        .filter(VehicleMaster.id == fz_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
     assert fz2.qr_token
 
 
 def test_fahrzeuge_export_links_ohne_org_token_redirect(client: TestClient, db_session, org):
     from app.models.master import OrgSettings
+
     org_s = (
         db_session.query(OrgSettings)
         .filter(OrgSettings.org_id == org.id)
@@ -929,8 +1088,7 @@ def test_fahrzeuge_export_links_ohne_org_token_redirect(client: TestClient, db_s
     db_session.commit()
     _login(client, db_session, org, "fz_export_notoken", role_code="fahrtenbuch_admin")
     csrf = client.cookies.get("ec_csrf")
-    r = client.post("/admin/fahrtenbuch/fahrzeuge/export-links", data={"_csrf": csrf},
-                    follow_redirects=False)
+    r = client.post("/admin/fahrtenbuch/fahrzeuge/export-links", data={"_csrf": csrf}, follow_redirects=False)
     assert r.status_code == 303
     assert "qr_kein_org_token" in r.headers.get("location", "")
 
@@ -939,6 +1097,7 @@ def test_fahrtenbuch_neu_rendert_offline_draft_markup(client: TestClient, db_ses
     """PR6 (STAB-2): Formular muss ohne Jinja-/Template-Fehler rendern und den
     Offline-Draft-Hinweis + localStorage-Key enthalten."""
     from app.core.security import hash_password
+
     user = User(
         username="fahrtenbuchtester",
         password_hash=hash_password("Test1234!"),
@@ -972,15 +1131,21 @@ def test_fahrtenbuch_neu_rendert_offline_draft_markup(client: TestClient, db_ses
 
 # ── Fremde/Ad-hoc Ressourcen: nicht im Fahrtenbuch ───────────────────────────
 
+
 def test_fahrtenbuch_admin_liste_zeigt_keine_fremden_ressourcen(client: TestClient, db_session, org, fahrzeug):
     """Nutzer-Feedback 2026-07-11: Fremdorganisationen/Ad-hoc-Ressourcen (Stammdaten
     'Ressourcen') sind keine echten eigenen Fahrzeuge und sollen im Fahrtenbuch
     (weder Admin-Liste noch Erfassung) nicht auswählbar sein."""
     _login(client, db_session, org, "fb_fremd_admin", role_code="org_admin")
-    fremd = VehicleMaster(dept_id=org.id, code="FREMD-1", name="Fremdes Fahrzeug",
-                          is_external=True, adhoc_org_name="FF Nachbarort", display_order=100)
-    adhoc = VehicleMaster(dept_id=org.id, code="ADHOC-1", name="Ad-hoc-Fahrzeug",
-                          is_adhoc=True, display_order=101)
+    fremd = VehicleMaster(
+        dept_id=org.id,
+        code="FREMD-1",
+        name="Fremdes Fahrzeug",
+        is_external=True,
+        adhoc_org_name="FF Nachbarort",
+        display_order=100,
+    )
+    adhoc = VehicleMaster(dept_id=org.id, code="ADHOC-1", name="Ad-hoc-Fahrzeug", is_adhoc=True, display_order=101)
     db_session.add_all([fremd, adhoc])
     db_session.commit()
 
