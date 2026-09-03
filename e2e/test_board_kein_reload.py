@@ -75,7 +75,7 @@ def test_board_bleibt_bei_updates_und_reconnect_montiert(
     card.locator(".card__title").first.click()
     expect(page.locator("#cardDetailModal")).to_have_js_property("open", True)
     draft = "e2e-draft-" + uuid4().hex
-    draft_field = page.locator("#cardDetailModal").locator('input[type="text"], textarea').last
+    draft_field = page.locator("#cardDetailModal").locator('input[type="text"]:visible, textarea:visible').last
     expect(draft_field).to_be_visible()
     draft_field.fill(draft)
     draft_field.evaluate("el => { el.dataset.e2eDraft = '1'; el.focus(); }")
