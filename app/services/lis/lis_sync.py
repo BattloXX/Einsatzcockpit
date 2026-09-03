@@ -869,7 +869,7 @@ async def sync_operation(
         messages_changed or tasks_changed or responses_changed or vehicles_changed or documents_changed
     ):
         from app.services.broadcast import manager
-        await manager.broadcast(incident.id, {"type": "lis_sync", "reload_board": True})
+        await manager.broadcast(incident.id, {"type": "lis_sync"})
 
     if created:
         if parsed.get("is_closed"):

@@ -440,9 +440,15 @@ _SESSION_SKIP_PATHS = ("/sw.js", "/favicon.ico")
 # Session middleware – inject request.state.user + sliding-window token refresh
 @app.middleware("http")
 async def session_middleware(request: Request, call_next):
+    from app.services.broadcast import reset_request_client_id, set_request_client_id
+
+    client_token = set_request_client_id(request.headers.get("X-EC-Client"))
     _path = request.url.path
     if _path.startswith(_SESSION_SKIP_PREFIXES) or _path in _SESSION_SKIP_PATHS:
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        finally:
+            reset_request_client_id(client_token)
 
     token = request.cookies.get("session")
     request.state.user = None
@@ -627,7 +633,10 @@ async def session_middleware(request: Request, call_next):
                 })
             request.state.accounts.sort(key=lambda account: not account["is_active_account"])
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    finally:
+        reset_request_client_id(client_token)
 
     # Sliding-Window-Refresh, ABER nicht auf /logout: dort löscht der Handler das
     # Session-Cookie – ein Refresh würde es sofort wieder setzen und das Abmelden

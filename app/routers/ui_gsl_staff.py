@@ -55,7 +55,7 @@ def _parse_datetime(val: str | None) -> datetime:
 
 
 async def _broadcast_staff(lage_id: int):
-    await broadcast_lage(lage_id, {"type": "staff:changed", "reload_board": False})
+    await broadcast_lage(lage_id, {"type": "staff:changed"})
 
 
 # ── Besetzungstafel (HTMX-Partial) ────────────────────────────────────────────

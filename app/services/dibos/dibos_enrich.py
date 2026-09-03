@@ -797,7 +797,7 @@ async def enrich_and_broadcast(
         return
     for incident_id in changed_ids:
         try:
-            await manager.broadcast(incident_id, {"type": "dibos_sync", "reload_board": True})
+            await manager.broadcast(incident_id, {"type": "dibos_sync"})
         except Exception:
             logger.exception("DIBOS-Broadcast für Einsatz %s fehlgeschlagen", incident_id)
     for incident_id in rsvp_changed_ids:

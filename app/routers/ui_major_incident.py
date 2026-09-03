@@ -509,7 +509,7 @@ async def site_create(
         logger.exception("Fehler beim Anlegen der Einsatzstelle lage_id=%s", lage_id)
         db.rollback()
         raise
-    await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
+    await broadcast_lage(lage_id, {"type": "site_created"})
     from app.services.gsl_live_notify import notify_gsl_live
     await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     # Board (board.html) ruft per HTMX auf (hx-swap="none") -- die neue Karte
@@ -576,7 +576,7 @@ async def site_create_via_karte(
         logger.exception("Fehler beim Anlegen via Karte lage_id=%s", lage_id)
         db.rollback()
         raise
-    await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
+    await broadcast_lage(lage_id, {"type": "site_created"})
     from app.services.gsl_live_notify import notify_gsl_live
     await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     return JSONResponse({"id": site.id, "bezeichnung": site.bezeichnung,
@@ -636,7 +636,6 @@ async def site_phase_change(
         "type": "site_phase_changed",
         "site_id": site_id,
         "phase": new_phase.value,
-        "reload_board": True,
     })
     from app.services.gsl_live_notify import notify_gsl_live
     await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
@@ -676,7 +675,7 @@ async def site_prio_change(
             ))
         lagemeldung_service.recompute_if_active(site, db)
         db.commit()
-        await broadcast_lage(lage_id, {"type": "site_prio_changed", "site_id": site_id, "reload_board": True})
+        await broadcast_lage(lage_id, {"type": "site_prio_changed", "site_id": site_id})
         return Response(status_code=204)
 
     try:
@@ -698,7 +697,7 @@ async def site_prio_change(
         ))
     lagemeldung_service.recompute_if_active(site, db)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site_prio_changed", "site_id": site_id, "reload_board": True})
+    await broadcast_lage(lage_id, {"type": "site_prio_changed", "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -795,7 +794,7 @@ def site_card_partial(
 # ── Phasen-Spalten-Partial (Board) ──────────────────────────────────────────
 # Refresh-Ziel fuer WS-Events, die eine Karte neu erscheinen lassen oder in
 # eine andere Phasen-Spalte verschieben (site_created/site_phase_changed) --
-# vormals loeste das einen kompletten location.reload() aus. Alle Spalten
+# vormals loeste das einen kompletten Voll-Reload aus. Alle Spalten
 # hoeren per hx-trigger="sitePhaseChanged from:body" auf dasselbe Event
 # (board.html), analog zum bestehenden cross-marker-col-body-Muster; wer genau
 # betroffen ist, muss der Client dafuer nicht wissen.
@@ -830,6 +829,22 @@ def phase_column_partial(
         "sectors_by_id": sectors_by_id,
         "can_edit": _can_edit(user),
     })
+
+
+@router.get("/lage/{lage_id}/board-sektorfilter", response_class=HTMLResponse)
+def board_sector_filter_partial(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    sectors = sorted(lage.sectors, key=lambda sector: sector.id)
+    return templates.TemplateResponse(
+        request, "incident_major/_board_sector_filter.html", {"lage": lage, "sectors": sectors}
+    )
 
 
 # ── Kopfzeilen-Partial (OOB) ─────────────────────────────────────────────────
@@ -1399,7 +1414,7 @@ async def site_edit(
         ))
     await _geocode_site(site)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site_updated", "site_id": site_id, "reload_board": True})
+    await broadcast_lage(lage_id, {"type": "site_updated", "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -1459,7 +1474,7 @@ async def site_pin_save(
     from app.services.geo_service import auto_assign_section
     auto_assign_section(db, site)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site_updated", "site_id": site_id, "reload_board": True})
+    await broadcast_lage(lage_id, {"type": "site_updated", "site_id": site_id})
 
     vehicles = (
         db.query(VehicleMaster)
@@ -1651,7 +1666,7 @@ async def lage_beenden(
                 payload={"lage_id": lage_id, "name": lage.name,
                          "closed_incidents": len(closed_incident_ids)})
     db.commit()
-    await broadcast_lage(lage_id, {"type": "lage_closed", "reload_board": True})
+    await broadcast_lage(lage_id, {"type": "lage_closed"})
     from app.services.gsl_live_notify import notify_gsl_live
     await notify_gsl_live(db, lage, org_id=lage.org_id, reason="closed")
     for iid in closed_incident_ids:
@@ -1753,7 +1768,7 @@ async def lage_bearbeiten_save(
         background_tasks.add_task(autoprint_gsl_updated_background, lage.id, lage.org_id)
     write_audit(db, "major_incident.edited", user_id=user.id,
                 payload={"lage_id": lage_id, "name": lage.name})
-    await broadcast_lage(lage_id, {"type": "lage_updated", "reload_board": True})
+    await broadcast_lage(lage_id, {"type": "lage_updated"})
     return RedirectResponse(f"/lage/{lage_id}", status_code=303)
 
 
@@ -1794,7 +1809,7 @@ async def lage_wiederoeffnen(
     write_audit(db, "major_incident.reopened", user_id=user.id,
                 payload={"lage_id": lage_id, "name": lage.name})
     db.commit()
-    await broadcast_lage(lage_id, {"type": "lage_updated", "reload_board": True})
+    await broadcast_lage(lage_id, {"type": "lage_updated"})
     return RedirectResponse(f"/lage/{lage_id}", status_code=303)
 
 
@@ -2152,6 +2167,7 @@ def lage_stab(
         )
         .options(selectinload(LageJournalEntry.media))
         .order_by(LageJournalEntry.ts.desc())
+        .limit(200)
         .all()
     )
 
@@ -2446,7 +2462,7 @@ async def cross_marker_create(
     )
     db.add(m)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": m.id, "reload_board": False})
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": m.id})
     return Response(status_code=204)
 
 
@@ -2488,7 +2504,7 @@ async def cross_marker_set_status(
     if status in CROSS_MARKER_STATUS_LABEL:
         m.status = status
         db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "reload_board": False})
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid})
     return Response(status_code=204)
 
 
@@ -2523,7 +2539,7 @@ async def cross_marker_update(
     m.hausnr = hausnr.strip()[:20] or None
     m.ort = ort.strip()[:120] or None
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "reload_board": False})
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid})
     return Response(status_code=204)
 
 
@@ -2569,7 +2585,7 @@ async def cross_marker_set_pin(
     m.lat = lat
     m.lng = lng
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "reload_board": False})
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid})
     return templates.TemplateResponse(request, "incident_major/_cross_marker_panel.html", {
         "lage": lage,
         "marker": m,
@@ -2599,7 +2615,7 @@ async def cross_marker_delete(
     db.commit()
     await broadcast_lage(lage_id, {
         "type": "cross_marker:changed", "marker_id": mid,
-        "deleted": True, "reload_board": False,
+        "deleted": True,
     })
     return Response(status_code=204)
 
@@ -2671,7 +2687,7 @@ async def cross_marker_log_add(
         author_name=get_author_name(request),
     ))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "reload_board": False})
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid})
     return Response(status_code=204)
 
 
@@ -2720,7 +2736,7 @@ async def cross_marker_media_upload(
     )
     db.add(media)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid, "reload_board": False})
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid})
     return Response(status_code=204)
 
 
@@ -3392,7 +3408,7 @@ async def meldung_annehmen(
                          lage_id, report_id)
         db.rollback()
         raise
-    await broadcast_lage(lage_id, {"type": "site_created", "reload_board": True})
+    await broadcast_lage(lage_id, {"type": "site_created"})
     if _is_htmx(request):
         return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
             "r": report, "lage": lage, "can_edit": _can_edit(user),
@@ -3461,7 +3477,7 @@ async def meldung_als_lageinfo(
     db.add(m)
     report.status = "accepted"
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": m.id, "reload_board": False})
+    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": m.id})
     if _is_htmx(request):
         return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
             "r": report, "lage": lage, "can_edit": _can_edit(user),
@@ -4076,7 +4092,6 @@ async def site_sektor_assign(
         "type": "site:sector_changed",
         "site_id": site_id,
         "sector_id": site.sector_id,
-        "reload_board": False,
     })
     return Response(status_code=204)
 
@@ -4125,7 +4140,6 @@ async def sektor_geometry_update(
         "type": "section:changed",
         "sector_id": sektor_id,
         "reassigned": reassigned,
-        "reload_board": False,
     })
     from fastapi.responses import JSONResponse
     return JSONResponse({"geometry": geometry, "reassigned": reassigned})
@@ -4154,7 +4168,7 @@ async def sektor_geometry_delete(
     bulk_reassign_section(db, lage_id)
     db.commit()
 
-    await broadcast_lage(lage_id, {"type": "section:changed", "sector_id": sektor_id, "reload_board": False})
+    await broadcast_lage(lage_id, {"type": "section:changed", "sector_id": sektor_id})
     return Response(status_code=204)
 
 

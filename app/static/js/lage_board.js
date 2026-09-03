@@ -62,15 +62,42 @@
     });
   }
 
-  // STAB-6: State-Resync nach Reconnect. Ein Blip trennt die WS-Verbindung;
-  // waehrenddessen gesendete Broadcasts (Karten-/Sektor-Aenderungen anderer
-  // Nutzer) gehen verloren, ohne dass das Board das je bemerkt (es reconnected
-  // einfach stillschweigend). Analog zum "server-wins"-Reload in app.js
-  // (incidentBoard._connectWS): Reconnect mit Backoff+Jitter, und ein
-  // Full-Reload NUR wenn die Verbindung tatsaechlich eine Weile weg war (kurze
-  // Blips sollen nicht neu laden) und nicht haeufiger als alle 10s (Schutz vor
-  // Reload-Stuermen bei flackernder Verbindung).
-  const RELOAD_COOLDOWN_MS = 10000;
+  function resyncBoard(lageId) {
+    const scroll = { x: window.scrollX, y: window.scrollY };
+    const focusedId = document.activeElement && document.activeElement.id;
+    htmx.trigger(document.body, 'sitePhaseChanged');
+    htmx.ajax('GET', `/lage/${lageId}/kopf`, { target: document.body, swap: 'none' });
+    htmx.trigger(document.body, 'crossMarkerChanged');
+    if (typeof window.applyBoardFilters === 'function') window.applyBoardFilters();
+    requestAnimationFrame(() => {
+      window.scrollTo(scroll.x, scroll.y);
+      if (focusedId) document.getElementById(focusedId)?.focus({ preventScroll: true });
+    });
+  }
+
+  function updateConnectionStatus(status) {
+    const el = document.getElementById('lage-connection-status');
+    if (!el) return;
+    const now = new Date().toLocaleTimeString('de-AT', { hour12: false });
+    el.textContent = `${status} · aktualisiert ${now}`;
+    document.dispatchEvent(new CustomEvent('board-last-update', { detail: Date.now() }));
+  }
+
+  function showSessionExpiredBanner() {
+    if (document.getElementById('sessionExpiredBanner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'sessionExpiredBanner';
+    banner.style.cssText = (
+      'position:fixed;top:0;left:0;right:0;z-index:9999;'
+      + 'background:#b91c1c;color:#fff;padding:12px 16px;'
+      + 'display:flex;align-items:center;justify-content:center;gap:16px;'
+      + 'box-shadow:0 2px 8px rgba(0,0,0,.3);font-weight:600;'
+    );
+    banner.innerHTML = '<span>Sitzung abgelaufen -- bitte neu anmelden</span>'
+      + '<a style="background:#fff;color:#b91c1c;padding:6px 14px;'
+      + 'border-radius:4px;font-weight:700;text-decoration:none;" href="/login">Anmelden</a>';
+    document.body.appendChild(banner);
+  }
 
   function initWs(lageId) {
     if (!lageId) return;
@@ -78,27 +105,29 @@
     let pingInterval;
     let disconnectedAt = null;
     let reconnectAttempt = 0;
+    let reconnectStopped = false;
+    const clientId = sessionStorage.getItem('ecBoardClientId') || crypto.randomUUID();
+    sessionStorage.setItem('ecBoardClientId', clientId);
+    document.body.addEventListener('htmx:configRequest', event => {
+      event.detail.headers['X-EC-Client'] = clientId;
+    });
+    setInterval(() => {
+      fetch('/api/v1/live/state', { credentials: 'same-origin', headers: { 'X-EC-Client': clientId } })
+        .then(response => { if (response.ok) updateConnectionStatus('verbunden'); });
+    }, 300000);
 
     function connect() {
       const ws = new WebSocket(`${proto}://${location.host}/ws/lage/${lageId}`);
 
       ws.addEventListener('open', () => {
+        updateConnectionStatus('verbunden');
         pingInterval = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send('ping');
         }, 25000);
 
         if (disconnectedAt !== null) {
-          const downMs = Date.now() - disconnectedAt;
-          const lastReload = Number(sessionStorage.getItem('ec_last_lage_ws_reload') || 0);
-          if (downMs > 2000 && Date.now() - lastReload > RELOAD_COOLDOWN_MS) {
-            sessionStorage.setItem('ec_last_lage_ws_reload', String(Date.now()));
-            const modal = document.getElementById('siteDetailModal');
-            if (modal && modal.open) {
-              modal.addEventListener('close', () => location.reload(), { once: true });
-            } else {
-              location.reload();
-            }
-          }
+          window.ecDiagLog('lage-ws:reconnected', Date.now() - disconnectedAt);
+          resyncBoard(lageId);
           disconnectedAt = null;
         }
         reconnectAttempt = 0;
@@ -134,6 +163,8 @@
       ws.addEventListener('message', evt => {
         try {
           const msg = JSON.parse(evt.data);
+          if (msg.origin && msg.origin === clientId) return;
+          updateConnectionStatus('verbunden');
           if (msg.type === 'cross_marker:changed') {
             htmx.trigger(document.body, 'crossMarkerChanged');
             return;
@@ -159,6 +190,23 @@
             htmx.trigger(document.body, 'sitePhaseChanged');
             return;
           }
+          if (msg.type === 'staff:changed' || msg.type === 'ressource:changed') {
+            htmx.trigger(document.body, 'sitePhaseChanged');
+            return;
+          }
+          if (msg.type === 'section:changed') {
+            htmx.trigger(document.body, 'sitePhaseChanged');
+            const filter = document.getElementById('sector-filter-wrap');
+            if (filter) {
+              htmx.ajax('GET', `/lage/${lageId}/board-sektorfilter`, { target: filter, swap: 'outerHTML' })
+                .then(() => {
+                  window._allSectorVals = Array.from(document.querySelectorAll('.sector-cb'), cb => cb.value);
+                  if (typeof window._updateSectorUI === 'function') window._updateSectorUI();
+                  if (typeof window.applyBoardFilters === 'function') window.applyBoardFilters();
+                });
+            }
+            return;
+          }
           // Lage-Stammdaten (Name/Status) geaendert: nur die Kopfzeile per OOB
           // nachladen, kein Reload -- analog zur Kopfleiste des Einsatz-Boards.
           if (msg.type === 'lage_updated') {
@@ -173,13 +221,23 @@
         } catch (e) { /* noop */ }
       });
 
-      ws.addEventListener('close', () => {
+      ws.addEventListener('close', event => {
         clearInterval(pingInterval);
+        pingInterval = null;
+        if (event.code === 4401 || event.code === 4403) {
+          updateConnectionStatus('Sitzung abgelaufen');
+          reconnectStopped = true;
+          showSessionExpiredBanner();
+          return;
+        }
         if (disconnectedAt === null) disconnectedAt = Date.now();
+        updateConnectionStatus('verbindet neu');
+        const backoff = reconnectAttempt === 0
+          ? 0
+          : Math.min(1000 * 2 ** (reconnectAttempt - 1), 15000);
         reconnectAttempt++;
-        const backoff = Math.min(1000 * 2 ** reconnectAttempt, 15000);
         const jitter = Math.random() * 500;
-        setTimeout(connect, backoff + jitter);
+        setTimeout(() => { if (!reconnectStopped) connect(); }, backoff + jitter);
       });
 
       ws.addEventListener('error', () => ws.close());
@@ -193,11 +251,13 @@
       const lageId = getLageId();
       initBoard();
       initWs(lageId);
+      window.addEventListener('ec:resync', () => resyncBoard(lageId));
     });
   } else {
     const lageId = getLageId();
     initBoard();
     initWs(lageId);
+    window.addEventListener('ec:resync', () => resyncBoard(lageId));
   }
 
   document.body.addEventListener('htmx:afterSwap',    scheduleInit);
@@ -209,8 +269,8 @@
   // WS-Verbindung; hierher verschoben, damit es weiterhin ausgeloest wird).
   document.body.addEventListener('htmx:afterSwap', evt => {
     const tgt = evt.detail.target;
+    if (typeof window.applyBoardFilters === 'function') window.applyBoardFilters();
     if (tgt && tgt.dataset && tgt.dataset.siteId) {
-      if (typeof window.applyBoardFilters === 'function') window.applyBoardFilters();
       const newCard = document.querySelector(`.site-card[data-site-id="${tgt.dataset.siteId}"]`);
       if (newCard) {
         newCard.classList.add('site-card--refreshed');

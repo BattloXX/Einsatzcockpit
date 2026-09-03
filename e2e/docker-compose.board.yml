@@ -1,0 +1,58 @@
+# Isolierte Board-E2E-Umgebung (Reload-/Remount-Regression, Repro mit echtem Dump).
+#
+#   docker compose -p ec-board-e2e --env-file .env.board-e2e \
+#     -f e2e/docker-compose.board.yml up -d --build
+#
+# Bewusst eigenstaendig statt Overlay auf docker-compose.yml: dort haengt
+# "env_file: .env" am Repo-Root-.env, das hier nicht existieren soll. Aufbau,
+# Images und Entrypoint sind identisch zur Produktion; abweichend sind nur
+# Projektname, Port (8094) und die eigenen Volumes -- damit beruehrt der Stack
+# weder eine produktive Instanz noch den Notification-E2E-Stack.
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ../.env.board-e2e
+    volumes:
+      - app_storage:/app/app_storage
+      - ../e2e:/app/e2e:ro
+    ports:
+      - "127.0.0.1:8094:8092"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?in .env.board-e2e setzen}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:?in .env.board-e2e setzen}
+      MARIADB_USER: ${MARIADB_USER:?in .env.board-e2e setzen}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?in .env.board-e2e setzen}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:33094:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MARIADB_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  app_storage:
+  mariadb_data:
+  redis_data:

@@ -421,11 +421,13 @@ function headerState(startedAt) {
     lastUpdateDisplay: '–',
     lastUpdateAgeSec: 0,
     lastUpdateState: 'fresh',
+    connectionStatus: 'verbunden',
 
     init() {
       this._startTimer(new Date(startedAt));
       this._startLastUpdate();
       document.addEventListener('board-last-update', (e) => { this._lastUpdate = e.detail; });
+      document.addEventListener('board-connection-status', (e) => { this.connectionStatus = e.detail; });
     },
 
     _startTimer(start) {
@@ -469,9 +471,22 @@ function incidentBoard(incidentId, alarm, startedAt) {
     sidebarOpen: localStorage.getItem('sidebarOpen') === 'true',
 
     init() {
+      this._clientId = sessionStorage.getItem('ecBoardClientId') || crypto.randomUUID();
+      sessionStorage.setItem('ecBoardClientId', this._clientId);
+      document.body.addEventListener('htmx:configRequest', (event) => {
+        event.detail.headers['X-EC-Client'] = this._clientId;
+      });
+      document.body.addEventListener('htmx:afterRequest', (event) => {
+        if (event.detail.successful) this._bumpLastUpdate();
+      });
       this._connectWS(incidentId);
       this._setupKeyboard(incidentId);
       this._trackOpenModalEntity();
+      window.addEventListener('ec:resync', () => this._resyncBoard(incidentId));
+      this._keepaliveTimer = setInterval(() => {
+        fetch('/api/v1/live/state', { credentials: 'same-origin', headers: { 'X-EC-Client': this._clientId } })
+          .then((response) => { if (response.ok) this._bumpLastUpdate(); });
+      }, 300000);
     },
 
     // Merkt sich, welche Karte gerade im #cardDetailModal offen ist (kind/uid aus der
@@ -496,7 +511,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
       document.dispatchEvent(new CustomEvent('board-last-update', { detail: Date.now() }));
     },
 
-    // ── Board-Events: gezielter HTMX-Swap statt location.reload() ──────────
+    // ── Board-Events: gezielter HTMX-Swap statt Voll-Reload ────────────────
     _cardElId(kind, uid) {
       return `${kind === 'message' ? 'msg' : kind}-card-${uid}`;
     },
@@ -531,14 +546,44 @@ function incidentBoard(incidentId, alarm, startedAt) {
     _swapKanban(incidentId) {
       const kanban = document.getElementById('kanban');
       if (!kanban) return;
-      htmx.ajax('GET', `/einsatz/${incidentId}/kanban`, { target: kanban, swap: 'innerHTML' })
+      return htmx.ajax('GET', `/einsatz/${incidentId}/kanban`, { target: kanban, swap: 'innerHTML' })
         .then(() => { if (window.reapplyMobileLane) window.reapplyMobileLane(); });
     },
 
     _swapKopfleiste(incidentId) {
       // Reine OOB-Antwort (Alarm-Badge/Adresse, EL-vor-Ort, Lage-Ticker) — kein Haupt-Target nötig.
-      htmx.ajax('GET', `/einsatz/${incidentId}/kopfleiste`, { target: document.body, swap: 'none' })
+      return htmx.ajax('GET', `/einsatz/${incidentId}/kopfleiste`, { target: document.body, swap: 'none' })
         .then(() => { if (window.buildLaneDropdown) window.buildLaneDropdown(); });
+    },
+
+    _resyncBoard(incidentId) {
+      const scroll = { x: window.scrollX, y: window.scrollY };
+      const kanban = document.getElementById('kanban');
+      const kanbanScroll = kanban ? { x: kanban.scrollLeft, y: kanban.scrollTop } : null;
+      const focusedId = document.activeElement && document.activeElement.id;
+      Promise.all([this._swapKanban(incidentId), this._swapKopfleiste(incidentId)]).finally(() => {
+        window.scrollTo(scroll.x, scroll.y);
+        if (kanban && kanbanScroll) {
+          kanban.scrollLeft = kanbanScroll.x;
+          kanban.scrollTop = kanbanScroll.y;
+        }
+        if (focusedId) document.getElementById(focusedId)?.focus({ preventScroll: true });
+      });
+    },
+
+    _queueResync(incidentId) {
+      const now = Date.now();
+      const wait = Math.max(0, 5000 - (now - (this._lastResyncAt || 0)));
+      if (wait === 0) {
+        this._lastResyncAt = now;
+        this._resyncBoard(incidentId);
+        return;
+      }
+      clearTimeout(this._resyncTimer);
+      this._resyncTimer = setTimeout(() => {
+        this._lastResyncAt = Date.now();
+        this._resyncBoard(incidentId);
+      }, wait);
     },
 
     _refreshOpenModal(incidentId, kind, uid) {
@@ -602,34 +647,66 @@ function incidentBoard(incidentId, alarm, startedAt) {
         case 'ai_hints_ready':
           this._swapKopfleiste(incidentId);
           break;
+        case 'lis_sync':
+        case 'dibos_sync':
+        case 'objektgefahren':
+        case 'incident_geocoded':
+        case 'incident_reopened':
+        case 'log_updated':
+          this._queueResync(incidentId);
+          break;
+        // Diese Typen werden im selben WS-Handler unterhalb des Board-Dispatchs
+        // oder von der Lagefuehrungs-Komponente verarbeitet. Hier bleiben sie
+        // explizit bekannt, damit sie keinen allgemeinen Fragment-Resync ausloesen.
+        case 'incident_closed':
+        case 'autoclose_warning':
+        case 'autoclose_dismissed':
+        case 'rsvp:changed':
+        case 'message_due':
+        case 'task_due':
+        case 'troop_created':
+        case 'troop_redeployed':
+        case 'troop_started':
+        case 'troop_back_pressure_reported':
+        case 'troop_status_changed':
+        case 'pressure_logged':
+        case 'troop_objective_reached':
+        case 'troop_meldung':
+        case 'troop_warning':
+        case 'troop_warning_acked':
+        case 'troop_standort':
+        case 'lagefuehrung.presence.changed':
+        case 'lagefuehrung.feature.locked':
+        case 'lagefuehrung.feature.unlocked':
+        case 'lagefuehrung.vehicle.pinned':
+        case 'lagefuehrung.feature.created':
+        case 'lagefuehrung.feature.updated':
+        case 'lagefuehrung.feature.deleted':
+        case 'lagefuehrung.fuehrer_changed':
+        case 'lagefuehrung.berechtigung.changed':
+        case 'lagefuehrung.chronologie_changed':
+          break;
         default:
-          // Sicherheitsnetz für (noch) unbekannte Event-Typen.
-          if (ev.reload_board) {
-            const modal = document.getElementById('cardDetailModal');
-            if (modal && modal.open) {
-              modal.addEventListener('close', () => location.reload(), { once: true });
-            } else {
-              location.reload();
-            }
-          }
+          // Ein unbekanntes Event darf den Arbeitszustand des Einsatzleiters nicht
+          // durch einen Voll-Reload zerstoeren. Fragmente still serverseitig abgleichen.
+          window.ecDiagLog('ws:unknown_event', ev.type);
+          this._queueResync(incidentId);
       }
     },
 
     _connectWS(id) {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const url = `${proto}://${location.host}/ws/incident/${id}`;
-      // Reconnect mit exponentiellem Backoff + Jitter (statt fix 3s) und ein
-      // Reload-Cooldown über sessionStorage: verhindert bei flackernder Verbindung
-      // einen "Reload-Sturm" (jede Sekunde neu laden), weil ein location.reload()
-      // die Seite (und damit alle JS-Variablen inkl. reconnectAttempt) zurücksetzt.
       let disconnectedAt = null;
       let reconnectAttempt = 0;
-      const RELOAD_COOLDOWN_MS = 10000;
+      let pingInterval = null;
+      let reconnectStopped = false;
       const connect = () => {
         const ws = new WebSocket(url);
         ws.onmessage = (e) => {
           if (e.data === 'pong') return;
           const ev = JSON.parse(e.data);
+          if (ev.origin && ev.origin === this._clientId) return;
           this._bumpLastUpdate();
           this._handleBoardEvent(ev, id);
           if (ev.reload_breathing || ev.type === 'troop_created' || ev.type === 'troop_started' || ev.type === 'troop_status_changed') {
@@ -679,36 +756,53 @@ function incidentBoard(incidentId, alarm, startedAt) {
             window.dispatchEvent(new CustomEvent('rsvp-refresh'));
           }
         };
-        ws.onclose = () => {
+        ws.onclose = (event) => {
+          clearInterval(pingInterval);
+          pingInterval = null;
+          if (event.code === 4401 || event.code === 4403) {
+            document.dispatchEvent(new CustomEvent('board-connection-status', { detail: 'Sitzung abgelaufen' }));
+            reconnectStopped = true;
+            this._showSessionExpiredBanner();
+            return;
+          }
           if (disconnectedAt === null) disconnectedAt = Date.now();
+          document.dispatchEvent(new CustomEvent('board-connection-status', { detail: 'verbindet neu' }));
+          const backoff = reconnectAttempt === 0
+            ? 0
+            : Math.min(1000 * 2 ** (reconnectAttempt - 1), 15000);
           reconnectAttempt++;
-          const backoff = Math.min(1000 * 2 ** reconnectAttempt, 15000);
           const jitter = Math.random() * 500;
-          setTimeout(connect, backoff + jitter);
+          setTimeout(() => { if (!reconnectStopped) connect(); }, backoff + jitter);
         };
         ws.onopen = () => {
-          // "Server-wins"-Reload nur, wenn die Verbindung tatsächlich eine Weile weg
-          // war (kurze Blips sollen nicht neu laden) und nicht gerade erst geladen wurde.
+          document.dispatchEvent(new CustomEvent('board-connection-status', { detail: 'verbunden' }));
           if (disconnectedAt !== null) {
-            const downMs = Date.now() - disconnectedAt;
-            const lastReload = Number(sessionStorage.getItem('ec_last_ws_reload') || 0);
-            if (downMs > 2000 && Date.now() - lastReload > RELOAD_COOLDOWN_MS) {
-              sessionStorage.setItem('ec_last_ws_reload', String(Date.now()));
-              const modal = document.getElementById('cardDetailModal');
-              if (modal && modal.open) {
-                modal.addEventListener('close', () => location.reload(), { once: true });
-              } else {
-                location.reload();
-              }
-            }
+            window.ecDiagLog('ws:reconnected', Date.now() - disconnectedAt);
+            this._resyncBoard(id);
             disconnectedAt = null;
           }
           reconnectAttempt = 0;
         };
         this._ws = ws;
-        setInterval(() => ws.readyState === 1 && ws.send('ping'), 30000);
+        pingInterval = setInterval(() => ws.readyState === 1 && ws.send('ping'), 30000);
       };
       connect();
+    },
+
+    _showSessionExpiredBanner() {
+      if (document.getElementById('sessionExpiredBanner')) return;
+      const banner = document.createElement('div');
+      banner.id = 'sessionExpiredBanner';
+      banner.style.cssText = (
+        'position:fixed;top:0;left:0;right:0;z-index:9999;'
+        + 'background:#b91c1c;color:#fff;padding:12px 16px;'
+        + 'display:flex;align-items:center;justify-content:center;gap:16px;'
+        + 'box-shadow:0 2px 8px rgba(0,0,0,.3);font-weight:600;'
+      );
+      banner.innerHTML = '<span>Sitzung abgelaufen -- bitte neu anmelden</span>'
+        + '<a style="background:#fff;color:#b91c1c;padding:6px 14px;'
+        + 'border-radius:4px;font-weight:700;text-decoration:none;" href="/login">Anmelden</a>';
+      document.body.appendChild(banner);
     },
 
     _showAutocloseBanner(incidentId, graceMinutes) {
@@ -848,7 +942,7 @@ document.addEventListener('htmx:afterSwap', (e) => {
 });
 
 
-/* ─── Offline: block writes with toast, reload on reconnect ─────── */
+/* ─── Offline: block writes with toast, resync on reconnect ────── */
 function _showConnToast(msg) {
   const appEl = document.querySelector('[x-data="appState()"]');
   if (appEl && window.Alpine) Alpine.$data(appEl).addToast(msg, 'warn');
@@ -881,11 +975,9 @@ document.addEventListener('htmx:timeout', (e) => {
 
 // After SW intercepts a 503 for a mutating fetch (non-HTMX), also show a toast
 document.addEventListener('DOMContentLoaded', () => {
-  // Check if this page load itself was served from SW offline cache
-  if (document.getElementById('offline-banner')) return; // banner already in HTML
   window.addEventListener('online', () => {
-    // Reconnected: reload to get fresh server state
-    location.reload();
+    // Board-Seiten gleichen ihre Fragmente ab; andere Seiten tun bewusst nichts.
+    window.dispatchEvent(new CustomEvent('ec:resync'));
   });
 });
 
