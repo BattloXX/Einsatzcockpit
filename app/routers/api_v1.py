@@ -70,6 +70,18 @@ def _create_neighbor_invitations_api(
     db.flush()
 
 
+def _create_neighbor_invitations_api_guarded(
+    db, incident, alarm_type_code: str, org_id: int | None
+) -> None:
+    """Ruft die API-Einladungslogik nur nach Exercise-Guard-Freigabe auf."""
+    from app.services.exercise_guard import darf_extern
+
+    if darf_extern(
+        "nachbar", is_exercise=incident.is_exercise, org_id=org_id, db=db
+    ):
+        _create_neighbor_invitations_api(db, incident, alarm_type_code, org_id)
+
+
 # Mapping of possible lowercase Stufe values to alarm type codes
 STUFE_MAP = {
     "f1": "F1", "f2": "F2", "f3": "F3", "f4": "F4", "f5": "F5",
@@ -233,10 +245,24 @@ async def _geocode_incident(incident_id: int, street: str | None, no: str | None
     from app.db import SessionLocal
     from app.models.incident import Incident
     from app.services.broadcast import manager
+    from app.services.exercise_guard import darf_extern
     from app.services.geocoding import geocode_address
 
     if not (street or city):
         return
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = db.get(Incident, incident_id)
+        if not incident or not darf_extern(
+            "geocoding",
+            is_exercise=incident.is_exercise,
+            org_id=incident.primary_org_id,
+            db=db,
+        ):
+            return
+    finally:
+        db.close()
     try:
         geo = await geocode_address(street, no, city)
     except Exception:
@@ -761,6 +787,7 @@ async def create_incident_api(
 
     # WebSocket broadcast – org-spezifisch
     if api_key.org_id:
+        from app.services.exercise_guard import darf_extern
         background_tasks.add_task(
             broadcast_org,
             api_key.org_id,
@@ -768,6 +795,10 @@ async def create_incident_api(
                 "type": "incident_created",
                 "incident_id": incident.id,
                 "alarm": alarm_type_code,
+                "alarm_erlaubt": darf_extern(
+                    "ws_alarm", is_exercise=payload.Uebung, org_id=api_key.org_id, db=db
+                ),
+                "alarm_type_code": alarm_type_code,
                 "address": address,
                 "is_exercise": payload.Uebung,
                 "url": f"/einsatz/{incident.id}/info",
@@ -778,7 +809,11 @@ async def create_incident_api(
     # notify_neighbors → Einladungsvorschläge für Partner-Orgs
     run_side_effect(
         "neighbor_invitations",
-        _create_neighbor_invitations_api, db, incident, alarm_type_code, api_key.org_id,
+        _create_neighbor_invitations_api_guarded,
+        db,
+        incident,
+        alarm_type_code,
+        api_key.org_id,
     )
 
     board_token, board_url = run_side_effect(

@@ -157,6 +157,14 @@ async def dispatch_objekt_einsatzinfo(
         if not org:
             return ergebnis
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        from app.services.exercise_guard import darf_extern
+        if not darf_extern(
+            "objekt_kontakt",
+            is_exercise=incident.is_exercise,
+            org_id=org_id,
+            db=db,
+        ):
+            return ergebnis
         sms_geprueft = False
         sms_verfuegbar = False
         sms_ctx = None

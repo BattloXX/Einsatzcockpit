@@ -500,6 +500,23 @@
         </small>
       </div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Übungseinsätze: externe Aktionen</h3>
+      <p class="form-hint"><strong>Achtung:</strong> Diese Freigaben lösen Aktionen bei produktiven Empfängern und angebundenen Systemen aus.</p>
+      {% for feld, label in [
+        ('uebung_push_erlaubt', 'Web-Push senden'),
+        ('uebung_ws_alarm_erlaubt', 'Alarmton und Alarm-Infoscreen auslösen'),
+        ('uebung_nachbar_einladung_erlaubt', 'Nachbarorganisationen einladen'),
+        ('uebung_lis_status_erlaubt', 'Fahrzeugstatus an LIS zurückschreiben'),
+        ('uebung_wordpress_bericht_erlaubt', 'WordPress-Bericht erstellen')
+      ] %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem">
+          <input type="checkbox" name="{{ feld }}_raw" value="1" {% if org_settings and org_settings|attr(feld) %}checked{% endif %}>
+          {{ label }}
+        </label>
+      </div>
+      {% endfor %}
+
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">🗓 Probenplanung</h3>
       {% set _probenplanung_org_on = (org_settings.probenplanung_modul_aktiv) if org_settings else false %}
       <div class="form-group">

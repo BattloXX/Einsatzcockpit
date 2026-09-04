@@ -900,7 +900,7 @@
       if (e.data === "pong") { return; }
       try {
         var ev = JSON.parse(e.data);
-        if (ev.type === "incident_created" || ev.type === "objekt_match" ||
+        if ((ev.type === "incident_created" && ev.alarm_erlaubt !== false) || ev.type === "objekt_match" ||
             ev.type === "incident_closed" || ev.type === "gsl_changed" ||
             ev.type === "vehicle_status" || ev.type === "vehicles_changed") {
           letzterModus = null; // Neuaufbau erzwingen

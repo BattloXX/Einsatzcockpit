@@ -555,6 +555,7 @@ async def _notify_new_dibos_incident(incident_id: int, org_id: int) -> None:
     from app.db import SessionLocal
     from app.models.incident import Incident
     from app.services.broadcast import broadcast_org
+    from app.services.exercise_guard import darf_extern
     from app.services.incident_notify import notify_incident_created
 
     db = SessionLocal()
@@ -567,6 +568,12 @@ async def _notify_new_dibos_incident(incident_id: int, org_id: int) -> None:
             await broadcast_org(org_id, {
                 "type": "incident_created",
                 "incident_id": incident.id,
+                "alarm": incident.alarm_type_code,
+                "alarm_erlaubt": darf_extern(
+                    "ws_alarm", is_exercise=incident.is_exercise, org_id=org_id, db=db
+                ),
+                "alarm_type_code": incident.alarm_type_code,
+                "is_exercise": incident.is_exercise,
                 "url": f"/einsatz/{incident.id}/info",
                 "title": f"Neuer Einsatz aus DIBOS: {incident.alarm_type_code}",
             })

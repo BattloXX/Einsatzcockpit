@@ -85,7 +85,13 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
     )
     if not cfg or not cfg.enabled:
         return
-    if incident.is_exercise and not cfg.send_exercise:
+    from app.services.exercise_guard import darf_extern
+    if not darf_extern(
+        "teams",
+        is_exercise=incident.is_exercise,
+        org_id=incident.primary_org_id,
+        db=db,
+    ):
         return
 
     from app.services.alarm_service import get_alarm_type_by_code
@@ -207,7 +213,8 @@ async def post_gsl_alarm_card(
         cfg = db.query(TeamsAlarmConfig).filter(TeamsAlarmConfig.org_id == org_id).first()
         if not cfg or not cfg.enabled:
             return
-        if is_exercise and not cfg.send_exercise:
+        from app.services.exercise_guard import darf_extern
+        if not darf_extern("teams", is_exercise=is_exercise, org_id=org_id, db=db):
             return
 
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
