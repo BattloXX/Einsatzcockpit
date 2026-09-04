@@ -2264,6 +2264,17 @@ async def close_incident_view(
     incident = _incident_or_404(incident_id, db)
     close_incident(db, incident, user_id=request.state.user.id)
     db.commit()
+    # Nur die explizit rueckverknuepfte Probe synchronisieren. Dieser Folgeeffekt
+    # ist bewusst best effort: ein Fehler darf den scharfen Einsatzabschluss nie
+    # zurueckrollen oder verhindern.
+    from app.services.probe_exercise_service import einsatzabschluss_synchronisieren
+    run_side_effect(
+        "probe_exercise_status_sync",
+        einsatzabschluss_synchronisieren,
+        db,
+        incident,
+        request.state.user.id,
+    )
     await manager.broadcast(incident_id, {"type": "incident_closed"})
     from app.services.incident_live_notify import notify_incident_live
     await notify_incident_live(

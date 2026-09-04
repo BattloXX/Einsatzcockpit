@@ -1,0 +1,47 @@
+<section class="card">
+  <h2>Übungseinsatz</h2>
+  {% if exercise_incident %}
+    <p><span class="badge badge--exercise">ÜBUNG</span> Einsatz {{ exercise_incident.alarm_type_code }} ist mit dieser Probe verknüpft.</p>
+    <p><a class="btn btn--secondary" href="/einsatz/{{ exercise_incident.id }}">Bestehenden Einsatz öffnen</a></p>
+    {% if can_edit %}
+      <form method="post" action="/probenplanung/{{ termin.id }}/uebungseinsatz/starten" style="display:inline-block">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--primary" type="submit">Übungseinsatz starten</button>
+      </form>
+      <form method="post" action="/probenplanung/{{ termin.id }}/uebungseinsatz/teilnehmer-uebernehmen" style="display:inline-block">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--secondary" type="submit">Einsatzkräfte übernehmen</button>
+      </form>
+      <details style="margin-top:1rem">
+        <summary>Bewusst einen weiteren Einsatz anlegen</summary>
+        <form method="post" action="/probenplanung/{{ termin.id }}/uebungseinsatz/weiterer">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="bestaetigt" value="true">
+          <label>Alarmstichwort<select name="alarm_type_code">{% for alarm in alarm_types %}<option value="{{ alarm.code }}">{{ alarm.code }} – {{ alarm.label }}</option>{% endfor %}</select></label>
+          <p><label><input type="checkbox" name="objekt_adresse" value="1"> Objekt und Adresse</label></p>
+          <p><label><input type="checkbox" name="alarmtext" value="1"> Alarmtext</label></p>
+          <p><label><input type="checkbox" name="gefahren_hinweise" value="1"> Gefahren und Hinweise</label></p>
+          <p><label><input type="checkbox" name="skizze" value="1"> Skizzen kopieren</label></p>
+          <p><label><input type="checkbox" name="dokumente" value="1"> Dokumente kopieren</label></p>
+          <button class="btn btn--danger" type="submit">Weiteren Übungseinsatz verbindlich anlegen</button>
+        </form>
+      </details>
+    {% endif %}
+  {% elif can_edit and termin.probeart and termin.probeart.uebungseinsatz_erlaubt %}
+    <p>Wählen Sie bewusst aus, welche vorbereiteten Inhalte in den Einsatz kopiert werden.</p>
+    <form method="post" action="/probenplanung/{{ termin.id }}/uebungseinsatz">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <label>Alarmstichwort<select name="alarm_type_code" required>{% for alarm in alarm_types %}<option value="{{ alarm.code }}">{{ alarm.code }} – {{ alarm.label }}</option>{% endfor %}</select></label>
+      <p><label><input type="checkbox" name="objekt_adresse" value="1"> Objekt und Adresse übernehmen</label></p>
+      <p><label><input type="checkbox" name="alarmtext" value="1"> Alarmtext übernehmen</label></p>
+      <p><label><input type="checkbox" name="gefahren_hinweise" value="1"> Besondere Gefahren und Hinweise übernehmen</label></p>
+      <p><label><input type="checkbox" name="skizze" value="1"> Skizzen kopieren</label></p>
+      <p><label><input type="checkbox" name="dokumente" value="1"> Dokumente kopieren</label></p>
+      <button class="btn btn--primary" type="submit">Übungseinsatz anlegen</button>
+    </form>
+  {% elif termin.probeart and not termin.probeart.uebungseinsatz_erlaubt %}
+    <p class="text-muted">Für diese Probeart sind keine Übungseinsätze freigegeben.</p>
+  {% else %}
+    <p class="text-muted">Noch kein Übungseinsatz angelegt.</p>
+  {% endif %}
+</section>

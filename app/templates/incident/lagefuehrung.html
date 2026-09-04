@@ -6,6 +6,9 @@
 <link rel="stylesheet" href="/static/css/MarkerCluster.Default.css">
 {% endblock %}
 {% block content %}
+{% if incident.is_exercise %}
+<div class="exercise-topbar">⚠ ÜBUNG / SIMULATION ⚠</div>
+{% endif %}
 <div class="page-content">
   <div class="page-header">
     <div>

@@ -7,7 +7,7 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from sqlalchemy import case, func, or_, update
 from sqlalchemy.orm import Session, joinedload
@@ -17,7 +17,8 @@ from app.core.permissions import can_edit_proben, is_proben_admin
 from app.core.templating import templates
 from app.core.timezones import local_date_to_utc, local_input_to_utc, now_local, to_org_tz
 from app.db import get_db
-from app.models.master import Member
+from app.models.incident import Incident
+from app.models.master import AlarmType, Member
 from app.models.probenplanung import (
     ChecklistItemTyp,
     Probeart,
@@ -743,6 +744,11 @@ def probe_detail(
         })
     if tab == "teilnehmer":
         context.update(_teilnehmer_context(db, user, termin))
+    if tab == "uebungseinsatz":
+        context["exercise_incident"] = (
+            db.get(Incident, termin.exercise_incident_id) if termin.exercise_incident_id else None
+        )
+        context["alarm_types"] = db.query(AlarmType).order_by(AlarmType.code).all()
     if checkliste:
         context.update(_checkliste_context(db, user, termin, checkliste))
     return templates.TemplateResponse(
@@ -750,6 +756,140 @@ def probe_detail(
         "probenplanung/probe_detail.html",
         context,
     )
+
+
+@router.get("/{termin_id}/uebungseinsatz", response_class=HTMLResponse)
+def probe_uebungseinsatz_dialog(
+    request: Request, termin_id: int, db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    incident = db.get(Incident, termin.exercise_incident_id) if termin.exercise_incident_id else None
+    return templates.TemplateResponse(request, "probenplanung/_uebungseinsatz.html", {
+        "user": user, "termin": termin, "exercise_incident": incident,
+        "alarm_types": db.query(AlarmType).order_by(AlarmType.code).all(),
+        "can_edit": can_edit_proben(user),
+    })
+
+
+def _uebernahme_aus_form(
+    objekt_adresse: str, alarmtext: str, gefahren_hinweise: str, skizze: str, dokumente: str,
+) -> set[str]:
+    return {name for name, value in (
+        ("objekt_adresse", objekt_adresse), ("alarmtext", alarmtext),
+        ("gefahren_hinweise", gefahren_hinweise), ("skizze", skizze), ("dokumente", dokumente),
+    ) if value}
+
+
+def _uebungseinsatz_anlegen(
+    request: Request, termin_id: int, alarm_type_code: str, objekt_adresse: str,
+    alarmtext: str, gefahren_hinweise: str, skizze: str, dokumente: str,
+    db: Session, *, weiterer: bool,
+) -> RedirectResponse:
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    if not termin.probeart or not termin.probeart.uebungseinsatz_erlaubt:
+        raise HTTPException(409, "Für diese Probeart sind keine Übungseinsätze erlaubt")
+    from app.services.probe_exercise_service import doppelanlage_pruefen, uebungseinsatz_erstellen
+
+    existing = doppelanlage_pruefen(termin, db)
+    if existing is not None and not weiterer:
+        return RedirectResponse(
+            f"/probenplanung/{termin.id}?tab=uebungseinsatz&bereits_vorhanden={existing.id}", status_code=303
+        )
+    incident = uebungseinsatz_erstellen(
+        db, termin, user, request=request, alarm_type_code=alarm_type_code, weiterer=weiterer,
+        uebernehmen=_uebernahme_aus_form(objekt_adresse, alarmtext, gefahren_hinweise, skizze, dokumente),
+    )
+    db.commit()
+    return RedirectResponse(f"/probenplanung/{termin.id}?tab=uebungseinsatz&angelegt={incident.id}", status_code=303)
+
+
+@router.post("/{termin_id}/uebungseinsatz")
+def probe_uebungseinsatz_anlegen(
+    request: Request, termin_id: int, alarm_type_code: str = Form("T1"),
+    objekt_adresse: str = Form(""), alarmtext: str = Form(""),
+    gefahren_hinweise: str = Form(""), skizze: str = Form(""), dokumente: str = Form(""),
+    db: Session = Depends(get_db), _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    return _uebungseinsatz_anlegen(
+        request, termin_id, alarm_type_code, objekt_adresse, alarmtext,
+        gefahren_hinweise, skizze, dokumente, db, weiterer=False,
+    )
+
+
+@router.post("/{termin_id}/uebungseinsatz/weiterer")
+def probe_weiteren_uebungseinsatz_anlegen(
+    request: Request, termin_id: int, bestaetigt: bool = Form(False),
+    alarm_type_code: str = Form("T1"), objekt_adresse: str = Form(""),
+    alarmtext: str = Form(""), gefahren_hinweise: str = Form(""),
+    skizze: str = Form(""), dokumente: str = Form(""),
+    db: Session = Depends(get_db), _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    if not bestaetigt:
+        raise HTTPException(400, "Weiteren Übungseinsatz ausdrücklich bestätigen")
+    return _uebungseinsatz_anlegen(
+        request, termin_id, alarm_type_code, objekt_adresse, alarmtext,
+        gefahren_hinweise, skizze, dokumente, db, weiterer=True,
+    )
+
+
+@router.post("/{termin_id}/uebungseinsatz/starten")
+async def probe_uebungseinsatz_starten(
+    request: Request, termin_id: int, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db), _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    from app.services.probe_exercise_service import doppelanlage_pruefen, einsatzstart_synchronisieren
+
+    incident = doppelanlage_pruefen(termin, db)
+    if incident is None:
+        raise HTTPException(409, "Noch kein Übungseinsatz angelegt")
+    einsatzstart_synchronisieren(db, incident, user)
+    db.commit()
+    from app.services.incident_notify import notify_incident_created
+    await notify_incident_created(
+        db, incident, org_id=user.org_id, triggered_by_user_id=user.id,
+        base_url=str(request.base_url), background_tasks=background_tasks,
+    )
+    from app.services.broadcast import broadcast_org
+    from app.services.exercise_guard import darf_extern
+    assert user.org_id is not None
+    background_tasks.add_task(broadcast_org, user.org_id, {
+        "type": "incident_created", "incident_id": incident.id, "alarm": incident.alarm_type_code,
+        "alarm_erlaubt": darf_extern("ws_alarm", is_exercise=True, org_id=user.org_id, db=db),
+        "alarm_type_code": incident.alarm_type_code, "is_exercise": True,
+        "url": f"/einsatz/{incident.id}/info", "title": f"[ÜBUNG] Neuer Einsatz: {incident.alarm_type_code}",
+    })
+    from app.core.resilience import run_side_effect
+    from app.routers.ui_incident import _create_neighbor_invitations_guarded
+    run_side_effect("neighbor_invitations", _create_neighbor_invitations_guarded,
+                    db, incident, incident.alarm_type_code, user.org_id, user.id)
+    return RedirectResponse(f"/einsatz/{incident.id}", status_code=303)
+
+
+@router.post("/{termin_id}/uebungseinsatz/teilnehmer-uebernehmen")
+def probe_uebungseinsatz_teilnehmer_uebernehmen(
+    request: Request, termin_id: int, db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    from app.services.probe_exercise_service import teilnehmer_uebernehmen
+    try:
+        anzahl = teilnehmer_uebernehmen(db, termin, user)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    db.commit()
+    return RedirectResponse(f"/probenplanung/{termin.id}?tab=teilnehmer&uebernommen={anzahl}", status_code=303)
 
 
 @router.get("/{termin_id}/teilnehmer", response_class=HTMLResponse)

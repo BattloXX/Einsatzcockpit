@@ -24,6 +24,9 @@
   </style>
 </head>
 <body>
+  {% if incident.is_exercise %}
+  <div class="exercise-topbar" style="position:fixed;top:0;left:0;right:0;">⚠ ÜBUNG / SIMULATION ⚠</div>
+  {% endif %}
   <div class="pin-card">
     <h1>Einsatz {{ incident.alarm_type_code }}</h1>
     <p class="sub">PIN eingeben um den Einsatz zu verfolgen</p>
