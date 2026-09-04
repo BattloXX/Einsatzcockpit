@@ -8,6 +8,7 @@
   {% if termin.ort %}<p><strong>Ort:</strong> {{ termin.ort }}</p>{% endif %}
   {% if fortschritt %}<p><strong>Vorbereitung:</strong> {{ fortschritt.erledigt }}/{{ fortschritt.gesamt }} ({{ fortschritt.prozent }} %), Pflicht {{ fortschritt.pflicht_erledigt }}/{{ fortschritt.pflicht_gesamt }}</p>{% endif %}
 </div>
+{% if checkliste %}<div style="margin-top:1rem">{% include "probenplanung/_checkliste.html" %}</div>{% endif %}
 {% if can_edit %}
 <div class="card" style="margin-top:1rem">
   <h2>Status ändern</h2>

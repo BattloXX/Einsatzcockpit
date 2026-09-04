@@ -1,0 +1,50 @@
+<article class="probe-checklist-item" id="probe-checklist-item-{{ item.id }}" data-item-id="{{ item.id }}" data-version="{{ item.version }}">
+  <div class="probe-checklist-item-head">
+    <div><strong>{{ item.titel }}</strong>{% if item.pflicht %} <small>Pflicht</small>{% endif %}</div>
+    <span class="probe-save-status" data-save-status aria-live="polite">{% if konflikt %}Wurde zwischenzeitlich geändert — aktualisiert{% elif gespeichert|default(false) %}Gespeichert{% else %}Bereit{% endif %}</span>
+  </div>
+  {% if item.hilfetext %}<p class="text-muted">{{ item.hilfetext }}</p>{% endif %}
+  {% if item.zustand == 'nicht_relevant' %}
+    <p><strong>Nicht relevant:</strong> {{ item.begruendung }}</p>
+    {% if can_edit %}
+    <form class="probe-autosave-form">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="feld" value="zustand"><input type="hidden" name="wert" value="offen"><input type="hidden" name="version" value="{{ item.version }}">
+      <button class="btn btn--secondary" hx-patch="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-include="closest form" type="button">Wieder öffnen</button>
+    </form>
+    {% endif %}
+  {% else %}
+    {% if item.typ == 'checkbox' %}
+    <form class="probe-autosave-form">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="feld" value="zustand"><input type="hidden" name="wert" value="{{ 'erledigt' if item.zustand != 'erledigt' else 'offen' }}"><input type="hidden" name="version" value="{{ item.version }}">
+      <label class="probe-checklist-checkbox"><input type="checkbox" {% if item.zustand == 'erledigt' %}checked{% endif %} {% if can_edit %}hx-patch="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-trigger="change" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-include="closest form"{% else %}disabled{% endif %}> Erledigt</label>
+    </form>
+    {% elif item.typ == 'person' %}
+    <form class="probe-autosave-form"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="feld" value="wert_member_id"><input type="hidden" name="version" value="{{ item.version }}">
+      <select class="form-input" name="wert" {% if can_edit %}hx-patch="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-trigger="change" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-include="closest form"{% else %}disabled{% endif %}><option value="">Nicht ausgewählt</option>{% for member in members %}<option value="{{ member.id }}" {% if item.wert_member_id == member.id %}selected{% endif %}>{{ member.firstname }} {{ member.lastname }}</option>{% endfor %}</select>
+    </form>
+    {% elif item.typ == 'auswahl' or item.typ == 'ja_nein' %}
+    <form class="probe-autosave-form"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="feld" value="wert_text"><input type="hidden" name="version" value="{{ item.version }}">
+      <select class="form-input" name="wert" {% if can_edit %}hx-patch="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-trigger="change" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-include="closest form"{% else %}disabled{% endif %}><option value="">Nicht ausgewählt</option>{% if item.typ == 'ja_nein' %}<option value="ja" {% if item.wert_text == 'ja' %}selected{% endif %}>Ja</option><option value="nein" {% if item.wert_text == 'nein' %}selected{% endif %}>Nein</option>{% else %}{% for choice in optionen(item) %}<option value="{{ choice }}" {% if item.wert_text == choice %}selected{% endif %}>{{ choice }}</option>{% endfor %}{% endif %}</select>
+    </form>
+    {% elif item.typ == 'mehrfachauswahl' %}
+    <form class="probe-autosave-form"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="feld" value="wert_text"><input type="hidden" name="version" value="{{ item.version }}"><input type="hidden" name="wert" value="{{ item.wert_text or '[]' }}" hx-patch="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-trigger="change" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-include="closest form">
+      <select class="form-input" multiple {% if not can_edit %}disabled{% endif %} onchange="const h=this.form.elements.wert;h.value=JSON.stringify(Array.from(this.selectedOptions,o=>o.value));htmx.trigger(h,'change')">{% set selected = item.wert_text|default('[]', true) %}{% for choice in optionen(item) %}<option value="{{ choice }}" {% if ('&quot;' ~ choice ~ '&quot;') in selected %}selected{% endif %}>{{ choice }}</option>{% endfor %}</select>
+    </form>
+    {% else %}
+    <form class="probe-autosave-form"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="feld" value="wert_text"><input type="hidden" name="version" value="{{ item.version }}">
+      {% if item.typ == 'langtext' %}<textarea class="form-input" name="wert" {% if can_edit %}hx-patch="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-trigger="input changed delay:800ms" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-include="closest form"{% else %}disabled{% endif %}>{{ item.wert_text or '' }}</textarea>{% else %}<input class="form-input" type="{{ 'date' if item.typ == 'datum' else 'time' if item.typ == 'uhrzeit' else 'url' if item.typ == 'link' else 'text' }}" name="wert" value="{{ item.wert_text or '' }}" {% if can_edit %}hx-patch="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-trigger="input changed delay:800ms" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-include="closest form"{% else %}disabled{% endif %}>{% endif %}
+    </form>
+    {% endif %}
+    {% if item.typ != 'checkbox' %}
+    <form class="probe-autosave-form"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="feld" value="zustand"><input type="hidden" name="version" value="{{ item.version }}">
+      <select class="form-input" name="wert" aria-label="Bearbeitungsstand" {% if can_edit %}hx-patch="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-trigger="change" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-include="closest form"{% else %}disabled{% endif %}><option value="offen" {% if item.zustand == 'offen' %}selected{% endif %}>Offen</option><option value="erledigt" {% if item.zustand == 'erledigt' %}selected{% endif %}>Erledigt</option></select>
+    </form>
+    {% endif %}
+    {% if can_edit %}
+    <details class="probe-checklist-item-actions"><summary>Weitere Aktionen</summary>
+      <form hx-post="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}/nicht-relevant" hx-target="closest .probe-checklist-item" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="version" value="{{ item.version }}"><label>Begründung<input class="form-input" name="begruendung" required></label><button class="btn btn--secondary" type="submit">Nicht relevant</button></form>
+      {% if item.quelle == 'individuell' %}<button class="btn btn--danger" type="button" hx-delete="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-confirm="Diesen individuellen Punkt löschen?">Löschen</button>{% endif %}
+    </details>
+    {% endif %}
+  {% endif %}
+</article>

@@ -1,0 +1,24 @@
+<details class="probe-checklist-add">
+  <summary>Individuellen Punkt hinzufügen</summary>
+  <form method="post"
+        hx-post="/probenplanung/{{ termin.id }}/checkliste/punkt"
+        hx-target="#probe-checklist-individual-items"
+        hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful){this.reset();this.closest('details').open=false}">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label>Titel<input class="form-input" name="titel" maxlength="200" required></label>
+    <label>Typ
+      <select class="form-input" name="typ">
+        <option value="checkbox">Checkbox</option>
+        <option value="text">Text</option>
+        <option value="langtext">Langtext</option>
+        <option value="datum">Datum</option>
+        <option value="uhrzeit">Uhrzeit</option>
+        <option value="person">Person</option>
+        <option value="link">Link</option>
+      </select>
+    </label>
+    <label><input type="checkbox" name="pflicht" value="1"> Pflichtpunkt</label>
+    <button class="btn btn--secondary" type="submit">Punkt hinzufügen</button>
+  </form>
+</details>

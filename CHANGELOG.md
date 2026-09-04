@@ -2,6 +2,12 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-04): Probenplanung Phase 5 ergänzt die tablet-taugliche
+Checklisten-UI mit Autosave, sichtbarem Speicherstatus, gezielten HTMX-Swaps,
+live aktualisiertem Fortschritt und punktweisem Optimistic Locking samt aktuellem
+Item-Partial bei Konflikten. Individuelle Punkte und begründetes „nicht relevant“
+sind ebenfalls enthalten.
+
 > **Achtung beim Update auf die kommende Version:** Übungseinsätze lösen ab sofort
 > serverseitig **keine** produktiven externen Aktionen mehr aus. Betroffen sind Web-Push/FCM,
 > der Alarmton der PWA, die Alarmansicht des Infoscreens, Nachbar-Einladungen, das

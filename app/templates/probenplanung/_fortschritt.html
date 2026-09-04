@@ -1,0 +1,13 @@
+<div id="probe-fortschritt"
+     hx-get="/probenplanung/{{ termin.id }}/checkliste/fortschritt"
+     hx-trigger="probe-fortschritt from:body"
+     hx-swap="outerHTML">
+  <div class="probe-checklist-progress-row">
+    <strong>{{ fortschritt.erledigt }}/{{ fortschritt.gesamt }} erledigt</strong>
+    <span>{{ fortschritt.prozent }} %</span>
+  </div>
+  <div class="progress-bar" role="progressbar" aria-valuenow="{{ fortschritt.prozent }}" aria-valuemin="0" aria-valuemax="100" aria-label="Vorbereitungsfortschritt">
+    <div class="progress-fill" style="width:{{ fortschritt.prozent }}%"></div>
+  </div>
+  <small>Pflichtpunkte {{ fortschritt.pflicht_erledigt }}/{{ fortschritt.pflicht_gesamt }}{% if fortschritt.ueberfaellig %} · {{ fortschritt.ueberfaellig }} überfällig{% endif %}</small>
+</div>
