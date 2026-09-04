@@ -337,7 +337,8 @@ async def dispatch_einsatzinfo(
             )
             return
 
-        if is_exercise and not org_settings.einsatzinfo_sms_send_exercise:
+        from app.services.exercise_guard import darf_extern
+        if not darf_extern("sms", is_exercise=is_exercise, org_id=org_id, db=db):
             logger.debug(
                 "Einsatzinfo-SMS bei Uebung unterdrueckt (org_id=%d) — uebersprungen", org_id
             )
@@ -498,7 +499,8 @@ async def dispatch_gsl_alarm(
             logger.debug("GSL-Alarm-SMS deaktiviert (org_id=%d) — uebersprungen", org_id)
             return
 
-        if is_exercise and not org_settings.einsatzinfo_sms_send_exercise:
+        from app.services.exercise_guard import darf_extern
+        if not darf_extern("sms", is_exercise=is_exercise, org_id=org_id, db=db):
             logger.debug("GSL-Alarm-SMS bei Uebung unterdrueckt (org_id=%d) — uebersprungen", org_id)
             return
 

@@ -241,6 +241,11 @@ async def save_org_settings(
     nachschlagewerke_module_enabled_raw: str = Form(""),
     foerderstrecke_module_enabled_raw: str = Form(""),
     probenplanung_modul_aktiv_raw: str = Form(""),
+    uebung_push_erlaubt_raw: str = Form(""),
+    uebung_ws_alarm_erlaubt_raw: str = Form(""),
+    uebung_nachbar_einladung_erlaubt_raw: str = Form(""),
+    uebung_lis_status_erlaubt_raw: str = Form(""),
+    uebung_wordpress_bericht_erlaubt_raw: str = Form(""),
     objekt_geo_match_radius_raw: str = Form(""),
     objekt_ki_klassifikation_raw: str = Form(""),
     objekt_kontakt_info_betreff_raw: str = Form(""),
@@ -477,6 +482,16 @@ async def save_org_settings(
                 payload={"alt": old_proben, "neu": new_proben},
                 ip=request.client.host if request.client else None,
             )
+
+    org_s.uebung_push_erlaubt = uebung_push_erlaubt_raw in ("1", "true", "on")
+    org_s.uebung_ws_alarm_erlaubt = uebung_ws_alarm_erlaubt_raw in ("1", "true", "on")
+    org_s.uebung_nachbar_einladung_erlaubt = (
+        uebung_nachbar_einladung_erlaubt_raw in ("1", "true", "on")
+    )
+    org_s.uebung_lis_status_erlaubt = uebung_lis_status_erlaubt_raw in ("1", "true", "on")
+    org_s.uebung_wordpress_bericht_erlaubt = (
+        uebung_wordpress_bericht_erlaubt_raw in ("1", "true", "on")
+    )
 
     # Objektverwaltung: Org-Toggle — nur änderbar wenn System-Flag aktiv
     # (gleiches Muster wie UAS: disabled-Checkbox darf den Wert nicht kippen).

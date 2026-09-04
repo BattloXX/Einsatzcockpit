@@ -134,6 +134,7 @@ async def notify_incident_created(
     - `base_url` wird nur für die Teams-Alarmierung gebraucht (absolute Links/Kartenbild-URL
       in der Karte). Ohne `base_url` wird der Teams-Versand übersprungen.
     """
+    from app.services.exercise_guard import darf_extern
     from app.services.sms_dispatch_service import dispatch_einsatzinfo
     from app.services.teams_alarm_service import post_incident_card
 
@@ -185,6 +186,10 @@ async def notify_incident_created(
             logger.exception("Einsatzinfo-SMS fehlgeschlagen (Einsatz %s)", incident.id)
 
     async def _push_senden() -> None:
+        if not darf_extern(
+            "push", is_exercise=incident.is_exercise, org_id=org_id, db=db
+        ):
+            return
         try:
             await _send_incident_push(
                 incident.id,

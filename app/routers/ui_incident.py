@@ -272,6 +272,18 @@ def _create_neighbor_invitations(
     db.flush()
 
 
+def _create_neighbor_invitations_guarded(
+    db, incident, alarm_type_code: str, org_id: int | None, user_id: int | None
+) -> None:
+    """Ruft die bestehende Einladungslogik nur nach Exercise-Guard-Freigabe auf."""
+    from app.services.exercise_guard import darf_extern
+
+    if darf_extern(
+        "nachbar", is_exercise=incident.is_exercise, org_id=org_id, db=db
+    ):
+        _create_neighbor_invitations(db, incident, alarm_type_code, org_id, user_id)
+
+
 def _entity_logs(db: Session, incident_id: int, entity_type: str, entity_id: int) -> list:
     return (
         db.query(IncidentLog)
@@ -485,12 +497,17 @@ async def new_incident(
 
     # Broadcast – Fehler darf den Redirect nicht verhindern
     if user.org_id:
+        from app.services.exercise_guard import darf_extern
         background_tasks.add_task(
             broadcast_org,
             user.org_id,
             {
                 "type": "incident_created", "incident_id": incident.id,
-                "alarm": alarm_type_code, "is_exercise": is_exercise,
+                "alarm": alarm_type_code,
+                "alarm_erlaubt": darf_extern(
+                    "ws_alarm", is_exercise=is_exercise, org_id=user.org_id, db=db
+                ),
+                "alarm_type_code": alarm_type_code, "is_exercise": is_exercise,
                 "url": f"/einsatz/{incident.id}/info",
                 "title": f"{'[ÜBUNG] ' if is_exercise else ''}Neuer Einsatz: {alarm_type_code}",
             },
@@ -498,7 +515,12 @@ async def new_incident(
 
     run_side_effect(
         "neighbor_invitations",
-        _create_neighbor_invitations, db, incident, alarm_type_code, user.org_id, user.id,
+        _create_neighbor_invitations_guarded,
+        db,
+        incident,
+        alarm_type_code,
+        user.org_id,
+        user.id,
     )
 
     if ai_is_enabled() and not is_exercise:

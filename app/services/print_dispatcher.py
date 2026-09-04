@@ -332,7 +332,16 @@ def on_event(db: Session, org_id: int, trigger: str, context: dict) -> list[Prin
     Verbindet sich kein Gateway, bleiben die Jobs 'queued'.
     """
     from app.models.gateway import PrintRule
+    from app.services.exercise_guard import darf_extern
     from app.services.gateway_service import gateway_effective_enabled
+
+    if not darf_extern(
+        "autoprint",
+        is_exercise=bool(context.get("is_exercise")),
+        org_id=org_id,
+        db=db,
+    ):
+        return []
 
     if not gateway_effective_enabled(org_id, db):
         return []

@@ -119,8 +119,12 @@ document.addEventListener('alpine:init', () => {
     },
 
     onIncidentCreated(detail) {
+      const alarmCode = detail.alarm_type_code || detail.alarm || '';
+      if (detail.alarm_erlaubt === false) {
+        return;
+      }
       if (detail.is_exercise) {
-        this.addToast('[ÜBUNG] Neuer Einsatz: ' + detail.alarm, 'warn');
+        this.addToast('[ÜBUNG] Neuer Einsatz: ' + alarmCode, 'warn');
       } else {
         this.newIncidentAlert = detail;
         try { new Audio('/static/audio/alarm.mp3').play().catch(() => {}); } catch (_) {}

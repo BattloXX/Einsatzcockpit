@@ -25,6 +25,20 @@ class WordPressReportResult:
 
 
 async def post_incident_report(db: Session, incident: Incident) -> WordPressReportResult:
+    from app.services.exercise_guard import darf_extern
+    if not darf_extern(
+        "wordpress",
+        is_exercise=incident.is_exercise,
+        org_id=incident.primary_org_id,
+        db=db,
+    ):
+        return WordPressReportResult(
+            success=False,
+            post_id=None,
+            edit_url=None,
+            error="Website-Bericht ist für Übungseinsätze nicht freigegeben.",
+            already_existed=False,
+        )
     if incident.wp_report_post_id is not None:
         return WordPressReportResult(
             success=True,

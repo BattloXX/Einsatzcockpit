@@ -120,9 +120,22 @@ async def ingest_alarm(
             )
             try:
                 from app.services.broadcast import broadcast_org
+                from app.services.exercise_guard import darf_extern
                 await broadcast_org(
                     gateway.org_id,
-                    {"type": "incident_created", "incident_id": ingest.einsatz_id},
+                    {
+                        "type": "incident_created",
+                        "incident_id": ingest.einsatz_id,
+                        "alarm": inc.alarm_type_code,
+                        "alarm_erlaubt": darf_extern(
+                            "ws_alarm",
+                            is_exercise=inc.is_exercise,
+                            org_id=gateway.org_id,
+                            db=db,
+                        ),
+                        "alarm_type_code": inc.alarm_type_code,
+                        "is_exercise": inc.is_exercise,
+                    },
                 )
             except Exception:
                 pass

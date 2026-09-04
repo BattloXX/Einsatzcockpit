@@ -921,9 +921,16 @@ async def sync_operation(
             logger.exception("Objekt-Matching nach LIS-Anlage fehlgeschlagen (Einsatz %s)", incident.id)
 
         from app.services.broadcast import broadcast_org
+        from app.services.exercise_guard import darf_extern
         await broadcast_org(org.id, {
             "type": "incident_created",
             "incident_id": incident.id,
+            "alarm": incident.alarm_type_code,
+            "alarm_erlaubt": darf_extern(
+                "ws_alarm", is_exercise=incident.is_exercise, org_id=org.id, db=db
+            ),
+            "alarm_type_code": incident.alarm_type_code,
+            "is_exercise": incident.is_exercise,
             "url": f"/einsatz/{incident.id}/info",
             "title": f"Neuer Einsatz aus LIS: {parsed['alarm_type_code']}",
         })
@@ -1123,6 +1130,14 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
             return
         incident = db.get(Incident, vehicle.incident_id)
         if not incident or not incident.primary_org_id:
+            return
+        from app.services.exercise_guard import darf_extern
+        if not darf_extern(
+            "lis_status",
+            is_exercise=incident.is_exercise,
+            org_id=incident.primary_org_id,
+            db=db,
+        ):
             return
         config = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == incident.primary_org_id).first()
         if not config or not config.enabled or not config.push_vehicle_status or not config.is_fully_configured:
