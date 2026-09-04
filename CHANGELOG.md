@@ -2,6 +2,10 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-04): Der systemweite Probenplanung-Schalter behält beim
+Umschalten den ausgewählten Organisationskontext bei und verwendet nun dieselbe
+responsive Darstellung wie die übrigen Modulschalter.
+
 Unveröffentlicht (2026-09-04): Probenplanung Phase 10 ergänzt die strukturierte
 Nachbereitung mit Erkenntnissen und Maßnahmen, einen abgesicherten Abschlussworkflow
 sowie die Startseiten-Kachel für die nächste Vollprobe mit aggregiertem Fortschritt und

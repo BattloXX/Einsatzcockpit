@@ -1834,7 +1834,11 @@ def toggle_foerderstrecke_system(
 
 @router.post("/settings/system/probenplanung-toggle")
 def toggle_probenplanung_system(
-    request: Request, db=Depends(get_db), user: User = Depends(require_system_admin), enabled_raw: str = Form("")
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    enabled_raw: str = Form(""),
+    org_id: int | None = Form(None),
 ):
     from datetime import UTC, datetime
 
@@ -1859,7 +1863,7 @@ def toggle_probenplanung_system(
         ip=request.client.host if request.client else None,
     )
     db.commit()
-    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
+    org_suffix = f"&org_id={org_id}" if org_id else ""
     return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
 
 

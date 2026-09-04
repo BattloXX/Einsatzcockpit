@@ -173,9 +173,29 @@
     {% set _probenplanung_sys_on = sys_settings.get('probenplanung_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/probenplanung-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div class="form-group" style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
-        <div><label style="font-weight:600">🗓 Probenplanung</label><p class="form-hint">Jahresplanung und Verwaltung von Feuerwehrproben; zusätzlich je Organisation aktivierbar.</p></div>
-        <label class="toggle-label"><input type="checkbox" name="enabled_raw" value="1" {% if _probenplanung_sys_on %}checked{% endif %} onchange="this.form.submit()"> Systemweit aktivieren</label>
+      {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+          <label style="font-weight:600">&#x1F5D3; Probenplanung</label>
+          <p class="form-hint" style="margin-top:.25rem">
+            Jahresplanung und Verwaltung von Feuerwehrproben.<br>
+            Zweistufig schaltbar: erst systemweit an, dann je Organisation.
+            Ausschalten versteckt alle Ansichten &ndash; <strong>keine Daten werden gelöscht</strong>.
+          </p>
+        </div>
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" name="enabled_raw" value="1"
+                   {% if _probenplanung_sys_on %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <span>Systemweit aktivieren</span>
+          </label>
+          {% if _probenplanung_sys_on %}
+          <span class="badge badge--success">AN</span>
+          {% else %}
+          <span class="badge badge--muted">AUS</span>
+          {% endif %}
+        </div>
       </div>
     </form>
 
