@@ -1,0 +1,16 @@
+<div id="probenplan-tabelle" class="card" style="margin-top:1rem;overflow-x:auto">
+  <table class="table">
+    <thead><tr><th>Datum</th><th>Probeart</th><th>Termin</th><th>Status</th><th>Verantwortlich</th><th>Vorbereitung</th></tr></thead>
+    <tbody>{% for termin in termine %}
+      {% set fp = fortschritte.get(termin.id) %}
+      <tr>
+        <td>{{ termin.beginn|local_datetime }}</td>
+        <td>{% if termin.probeart %}<span style="display:inline-block;width:.75rem;height:.75rem;border-radius:50%;background:{{ termin.probeart.farbe }}" aria-hidden="true"></span> {{ termin.probeart.kurz }} – {{ termin.probeart.name }}{% else %}–{% endif %}</td>
+        <td><a href="/probenplanung/{{ termin.id }}">{{ termin.titel }}</a>{% if termin.thema %}<br><small>{{ termin.thema }}</small>{% endif %}</td>
+        <td><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span></td>
+        <td>{{ member_namen.get(termin.verantwortlich_member_id, '–') }}</td>
+        <td>{% if fp %}{{ fp.erledigt }}/{{ fp.gesamt }}{% else %}–{% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="6">Keine Termine für diese Auswahl.</td></tr>{% endfor %}</tbody>
+  </table>
+</div>

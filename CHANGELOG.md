@@ -2,7 +2,11 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
-Unveröffentlicht (2026-09-04): Probenplanung Phase 5 ergänzt die tablet-taugliche
+Unveröffentlicht (2026-09-04): Probenplanung Phase 6 macht das Modul mit Jahresplan,
+Monatskalender, kombinierbaren HTMX-Filtern und der gegliederten Probe-Detailansicht
+sichtbar. Termine lassen sich duplizieren und wochentagsgleich als Entwürfe in ein
+anderes Jahr übernehmen; die bisherigen `/termine`-GET-Seiten leiten bei aktivem Modul
+auf die entsprechenden Probenplanungsseiten um. Phase 5 ergänzt die tablet-taugliche
 Checklisten-UI mit Autosave, sichtbarem Speicherstatus, gezielten HTMX-Swaps,
 live aktualisiertem Fortschritt und punktweisem Optimistic Locking samt aktuellem
 Item-Partial bei Konflikten. Individuelle Punkte und begründetes „nicht relevant“
@@ -18,7 +22,7 @@ sind ebenfalls enthalten.
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
-| **Unveröffentlicht** | 2026-09-04 | **Probenplanung Phase 4**: Probe-CRUD mit Statusworkflow, Archivierung und Duplizierung, unveränderliche Checklisten-Snapshots beim Anlegen, Fortschritts- und Pflichtpunktberechnung sowie organisationslokale Datumsableitung für relative Fälligkeiten und Überfälligkeit; **Phase 3**: tenant-sichere Verwaltung versionierter Checklisten-Vorlagen, unveränderliche Veröffentlichungen, sortierbare Bereiche/Punkte und bewusster idempotenter Import der Standard-Vollprobencheckliste; **Phase 2**: zentraler Exercise-Guard unterdrückt externe Aktionen bei Übungseinsätzen standardmäßig kanalweise (Push, WebSocket-Alarmwirkung, Nachbar-Einladungen, LIS-Status und WordPress; Geocoding bleibt freigegeben) und ermöglicht bewusste Org-Opt-ins; **Phase 1**: vollständiges Datenfundament und Migration 0232, zweistufiges Modul-Flag, Rolle „Probenverwalter“ sowie tenant-sichere Verwaltung von Probearten mit Standard-Stammdaten und Übernahme bestehender Termine |
+| **Unveröffentlicht** | 2026-09-04 | **Probenplanung Phase 6**: Jahresplan und serverseitiger Monatskalender, kombinierbare HTMX-Filter, Detailtabs mit Vorbereitung und Historie, Duplizieren, wochentagsgleiche Jahresübernahme und modulabhängige `/termine`-Weiterleitung; **Phase 4**: Probe-CRUD mit Statusworkflow, Archivierung und Duplizierung, unveränderliche Checklisten-Snapshots beim Anlegen, Fortschritts- und Pflichtpunktberechnung sowie organisationslokale Datumsableitung für relative Fälligkeiten und Überfälligkeit; **Phase 3**: tenant-sichere Verwaltung versionierter Checklisten-Vorlagen, unveränderliche Veröffentlichungen, sortierbare Bereiche/Punkte und bewusster idempotenter Import der Standard-Vollprobencheckliste; **Phase 2**: zentraler Exercise-Guard unterdrückt externe Aktionen bei Übungseinsätzen standardmäßig kanalweise (Push, WebSocket-Alarmwirkung, Nachbar-Einladungen, LIS-Status und WordPress; Geocoding bleibt freigegeben) und ermöglicht bewusste Org-Opt-ins; **Phase 1**: vollständiges Datenfundament und Migration 0232, zweistufiges Modul-Flag, Rolle „Probenverwalter“ sowie tenant-sichere Verwaltung von Probearten mit Standard-Stammdaten und Übernahme bestehender Termine |
 | **2026.09.02** | 2026-09-02 | **Maschinisten-Matrix**: Jahresauswertung Mitglied × Fahrzeug (Übung/Einsatz) in der Fahrtenbuch-Statistik, als XLSX und als einseitiger farbiger A3-Querformat-Druck (lokal und über den Stationsdrucker); Maschinisten-Stufen M1–M4 im Qualifikationskatalog, pflegbar auch durch Fahrtenbuch-Administratoren; Fahrzeuge zusammenführen jetzt jederzeit über die Ressourcen-Verwaltung statt nur bei erkannten Dubletten; **Uptime-Kuma-SMS-Gateway**: synchroner `POST /api/v1/sms/send` mit Scope-Authentifizierung, Limits, Versandstatus, SMS-Protokoll und Audit |
 | **2026.09.01** | 2026-09-01 | **Nachrichten-API**: persistenter externer SMS- und E-Mail-Versand mit API-Key-Scopes, Idempotenz, Empfängerstatus, Limits, Mail-Retry, SMS-Protokoll und Audit |
 | **2026.08.27.1** | 2026-08-27 | **Druckregeln und Verleihschein-Autodruck**: Druckregeln als eigenes Gateway-Tab; Verleihschein-Autodruck vollständig über Druckregeln, bestehender Schalter migriert und entfernt; Übungsfilter greift nun auch bei Verleihscheinen |

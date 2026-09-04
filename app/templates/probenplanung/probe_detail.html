@@ -1,20 +1,38 @@
 {% extends "base.html" %}
+{% from "_tabnav.html" import tabnav %}
 {% block title %}{{ termin.titel }} – Probe{% endblock %}
 {% block content %}
-<div class="page-header"><div><h1>{{ termin.titel }}</h1><p>{{ termin.beginn|local_datetime }}{% if termin.ende %} – {{ termin.ende|local_datetime }}{% endif %}</p></div>{% if can_edit %}<a class="btn btn--primary" href="/probenplanung/{{ termin.id }}/bearbeiten">Bearbeiten</a>{% endif %}</div>
+<div class="page-header"><div><h1>{{ termin.titel }}</h1><p>{{ wochentag }}, {{ termin.beginn|local_datetime }}{% if termin.ende %} – {{ termin.ende|local_datetime }}{% endif %}</p><p>Verantwortlich: {{ verantwortliche.get(termin.verantwortlich_member_id, '–') }}{% if termin.unterstuetzung_member_id %} · Unterstützung: {{ verantwortliche.get(termin.unterstuetzung_member_id, '–') }}{% endif %}</p></div>{% if can_edit %}<a class="btn btn--primary" href="/probenplanung/{{ termin.id }}/bearbeiten">Bearbeiten</a>{% endif %}</div>
 <div class="card">
-  <p><strong>Status:</strong> {{ termin.status_label }}</p>
-  {% if termin.thema %}<p><strong>Thema:</strong> {{ termin.thema }}</p>{% endif %}
-  {% if termin.ort %}<p><strong>Ort:</strong> {{ termin.ort }}</p>{% endif %}
-  {% if fortschritt %}<p><strong>Vorbereitung:</strong> {{ fortschritt.erledigt }}/{{ fortschritt.gesamt }} ({{ fortschritt.prozent }} %), Pflicht {{ fortschritt.pflicht_erledigt }}/{{ fortschritt.pflicht_gesamt }}</p>{% endif %}
+  <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap"><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span>{% if termin.probeart %}<span><span style="display:inline-block;width:.75rem;height:.75rem;border-radius:50%;background:{{ termin.probeart.farbe }}" aria-hidden="true"></span> {{ termin.probeart.kurz }} – {{ termin.probeart.name }}</span>{% endif %}</div>
+  {% if fortschritt %}<div style="margin-top:1rem"><strong>Vorbereitung: {{ fortschritt.erledigt }}/{{ fortschritt.gesamt }}</strong><div class="progress-bar" role="progressbar" aria-valuenow="{{ fortschritt.prozent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width:{{ fortschritt.prozent }}%"></div></div></div>{% endif %}
 </div>
-{% if checkliste %}<div style="margin-top:1rem">{% include "probenplanung/_checkliste.html" %}</div>{% endif %}
+{{ tabnav([
+  {"label":"Übersicht","href":"/probenplanung/" ~ termin.id ~ "?tab=uebersicht","active":active_tab == "uebersicht"},
+  {"label":"Vorbereitung","href":"/probenplanung/" ~ termin.id ~ "?tab=vorbereitung","active":active_tab == "vorbereitung"},
+  {"label":"Skizze","href":"/probenplanung/" ~ termin.id ~ "?tab=skizze","active":active_tab == "skizze"},
+  {"label":"Dokumente","href":"/probenplanung/" ~ termin.id ~ "?tab=dokumente","active":active_tab == "dokumente"},
+  {"label":"Übungseinsatz","href":"/probenplanung/" ~ termin.id ~ "?tab=uebungseinsatz","active":active_tab == "uebungseinsatz"},
+  {"label":"Teilnehmer","href":"/probenplanung/" ~ termin.id ~ "?tab=teilnehmer","active":active_tab == "teilnehmer"},
+  {"label":"Nachbereitung","href":"/probenplanung/" ~ termin.id ~ "?tab=nachbereitung","active":active_tab == "nachbereitung"},
+  {"label":"Historie","href":"/probenplanung/" ~ termin.id ~ "?tab=historie","active":active_tab == "historie"}
+]) }}
+{% if active_tab == 'uebersicht' %}
+<div class="card"><h2>Übersicht</h2>{% if termin.thema %}<p><strong>Thema:</strong> {{ termin.thema }}</p>{% endif %}{% if termin.objekt %}<p><strong>Objekt:</strong> {{ termin.objekt }}</p>{% endif %}{% if termin.ort %}<p><strong>Ort:</strong> {{ termin.ort }}</p>{% endif %}{% if termin.beschreibung %}<p>{{ termin.beschreibung }}</p>{% endif %}</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem;margin-top:1rem">
+  <section class="card"><h2>Noch offen</h2>{% for item in noch_offen %}<p>{{ item.titel }}</p>{% else %}<p class="text-muted">Keine offenen Punkte.</p>{% endfor %}</section>
+  <section class="card"><h2>Demnächst fällig</h2>{% for item in demnaechst %}<p>{{ item.titel }}{% if item.faellig_am %} · {{ item.faellig_am.strftime('%d.%m.%Y') }}{% endif %}</p>{% else %}<p class="text-muted">Keine demnächst fälligen Punkte.</p>{% endfor %}</section>
+  <section class="card"><h2>Bereits erledigt</h2>{% for item in erledigt %}<p>{{ item.titel }}</p>{% else %}<p class="text-muted">Noch keine erledigten Punkte.</p>{% endfor %}</section>
+</div>
+{% elif active_tab == 'vorbereitung' %}
+  {% if checkliste %}{% include "probenplanung/_checkliste.html" %}{% else %}<div class="card"><p>Für diese Probe ist keine Checkliste hinterlegt.</p></div>{% endif %}
+{% elif active_tab == 'historie' %}
+<div class="card"><h2>Historie</h2>{% for change in historie %}<p><strong>{{ change.ts|local_datetime }}</strong> · {{ change.action }}</p>{% else %}<p class="text-muted">Noch keine Änderungen protokolliert.</p>{% endfor %}</div>
+{% else %}<div class="card"><h2>{{ active_tab|replace('_', ' ')|title }}</h2><p>Dieser Bereich folgt in einer späteren Phase.</p></div>{% endif %}
 {% if can_edit %}
-<div class="card" style="margin-top:1rem">
-  <h2>Status ändern</h2>
-  {% for ziel in statuswechsel %}<form method="post" action="/probenplanung/{{ termin.id }}/status" style="display:inline-block;margin:.25rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="neuer_status" value="{{ ziel }}">{% if ziel == 'vorbereitung_abgeschlossen' and is_admin %}<input name="grund" placeholder="Übersteuerungsgrund (nur falls nötig)">{% endif %}<button class="btn btn--secondary" type="submit">{{ ziel }}</button></form>{% endfor %}
-  <form method="post" action="/probenplanung/{{ termin.id }}/duplizieren" style="margin-top:1rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--secondary" type="submit">Duplizieren</button></form>
-  <form method="post" action="/probenplanung/{{ termin.id }}/archivieren" style="margin-top:.5rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger" type="submit">Archivieren</button></form>
-</div>
-{% endif %}
+<div class="card" style="margin-top:1rem"><h2>Aktionen</h2>
+  {% for ziel in statuswechsel %}<form method="post" action="/probenplanung/{{ termin.id }}/status" style="display:inline-block;margin:.25rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="neuer_status" value="{{ ziel }}">{% if ziel == 'vorbereitung_abgeschlossen' and is_admin %}<input name="grund" placeholder="Übersteuerungsgrund (nur falls nötig)">{% endif %}<button class="btn btn--secondary" type="submit">{{ ziel|replace('_', ' ')|title }}</button></form>{% endfor %}
+  <form method="post" action="/probenplanung/{{ termin.id }}/duplizieren" style="display:inline-block;margin:.25rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--secondary" type="submit">Duplizieren</button></form>
+  <form method="post" action="/probenplanung/{{ termin.id }}/archivieren" style="display:inline-block;margin:.25rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger" type="submit">Archivieren</button></form>
+</div>{% endif %}
 {% endblock %}

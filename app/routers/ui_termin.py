@@ -19,6 +19,7 @@ from app.models.master import Member, VehicleMaster
 from app.models.sms import SmsGroup, SmsGroupMember
 from app.models.teilnahme import Funktion, Teilnahme, Termin
 from app.models.user import DeviceToken
+from app.services.probenplanung_service import probenplanung_effective_enabled
 
 router = APIRouter()
 logger = logging.getLogger("einsatzleiter.termin")
@@ -48,6 +49,12 @@ def _require_login(request: Request):
 
 def _can_edit(user) -> bool:
     return has_role(user, "incident_leader", "recorder")
+
+
+def _probenplanung_redirect(db: Session, user, ziel: str) -> RedirectResponse | None:
+    if probenplanung_effective_enabled(getattr(user, "org_id", None), db):
+        return RedirectResponse(ziel, status_code=307)
+    return None
 
 
 def _termin_or_404(termin_id: int, db: Session) -> Termin:
@@ -96,6 +103,8 @@ async def termin_liste(
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
+    if redirect := _probenplanung_redirect(db, user, "/probenplanung"):
+        return redirect
     termine = []
     incidents = []
     alle_eintraege = []
@@ -139,6 +148,8 @@ async def termin_neu_formular(
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
+    if redirect := _probenplanung_redirect(db, user, "/probenplanung/neu"):
+        return redirect
     if not _can_edit(user):
         raise HTTPException(status_code=403, detail="Keine Berechtigung")
     return templates.TemplateResponse(request, "termin/formular.html", {
@@ -200,6 +211,8 @@ async def termin_detail(
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
+    if redirect := _probenplanung_redirect(db, user, f"/probenplanung/{termin_id}"):
+        return redirect
     termin = _termin_or_404(termin_id, db)
     bezug_typ = "uebung" if termin.typ == "uebung" else "veranstaltung"
     teilnahmen = _lade_teilnahmen(db, bezug_typ, termin_id)
@@ -227,6 +240,8 @@ async def termin_bearbeiten_formular(
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
+    if redirect := _probenplanung_redirect(db, user, f"/probenplanung/{termin_id}/bearbeiten"):
+        return redirect
     if not _can_edit(user):
         raise HTTPException(status_code=403, detail="Keine Berechtigung")
     termin = _termin_or_404(termin_id, db)
