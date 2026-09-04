@@ -81,6 +81,7 @@ def _org_of_direct(db: Session, media) -> int | None:  # type: ignore[no-untyped
 def _build_registry() -> dict[str, MediaSpec]:
     from app.models.incident import MessageMedia, PersonMedia, TaskMedia
     from app.models.major_incident import CrossMarkerMedia, LageJournalMedia, SiteMedia
+    from app.models.probenplanung import ProbeMedia
     from app.services.lage_media_service import (
         cross_media_path,
         cross_media_thumb_path,
@@ -90,9 +91,11 @@ def _build_registry() -> dict[str, MediaSpec]:
         site_thumb_path,
     )
     from app.services.media_service import absolute_path, absolute_thumb_path
+    from app.services.probe_media_service import probe_media_path, probe_thumb_path
 
     def kind_ec(m): return getattr(m, "kind", None)          # task/message/person
     def kind_gsl(m): return getattr(m, "media_type", None)   # site/cross/journal
+    def kind_probe(m): return getattr(m, "kind", None)
 
     return {
         "task":         MediaSpec("task", TaskMedia, kind_ec, absolute_path,
@@ -107,6 +110,8 @@ def _build_registry() -> dict[str, MediaSpec]:
                                    _access_org, cross_media_thumb_path, _org_of_direct),
         "lage_journal": MediaSpec("lage_journal", LageJournalMedia, kind_gsl, journal_media_path,
                                    _access_org, journal_thumb_path, _org_of_direct),
+        "probe":        MediaSpec("probe", ProbeMedia, kind_probe, probe_media_path,
+                                   _access_org, probe_thumb_path, _org_of_direct),
     }
 
 
@@ -140,7 +145,12 @@ def can_read(db: Session, user: User, media_typ: str, media) -> bool:  # type: i
 
 
 def can_write(db: Session, user: User, media_typ: str, media) -> bool:  # type: ignore[no-untyped-def]
-    return can_read(db, user, media_typ, media) and has_role(user, *_EDIT_ROLLEN)
+    if not can_read(db, user, media_typ, media):
+        return False
+    if media_typ == "probe":
+        from app.core.permissions import can_edit_proben
+        return can_edit_proben(user)
+    return has_role(user, *_EDIT_ROLLEN)
 
 
 # ── Annotation-Zeile ─────────────────────────────────────────────────────────

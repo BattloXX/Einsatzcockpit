@@ -17,7 +17,7 @@ from app.db import Base
 
 # Erlaubte media_typ-Werte (Diskriminator). Muss mit dem Resolver in
 # app/services/annotation_service.py uebereinstimmen.
-MEDIA_TYPEN = ("task", "message", "person", "site", "cross_marker", "lage_journal")
+MEDIA_TYPEN = ("task", "message", "person", "site", "cross_marker", "lage_journal", "probe")
 
 
 class MediaAnnotation(Base):

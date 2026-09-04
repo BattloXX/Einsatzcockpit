@@ -5,9 +5,10 @@ from __future__ import annotations
 import calendar
 import json
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from sqlalchemy import case, func, or_, update
 from sqlalchemy.orm import Session, joinedload
 
@@ -24,6 +25,7 @@ from app.models.probenplanung import (
     ProbeCheckliste,
     ProbeChecklistItem,
     ProbeChecklistSection,
+    ProbeMedia,
     TerminStatus,
 )
 from app.models.teilnahme import Termin
@@ -160,7 +162,7 @@ def probenplan_liste(
         q=q,
         zeitraum=zeitraum,
     ).order_by(Termin.beginn).all()
-    context = {
+    context: dict[str, Any] = {
         **_listen_context(db, user, termine),
         "jahr": selected_year,
         "probearten": db.query(Probeart).filter(Probeart.aktiv.is_(True)).order_by(Probeart.sortierung).all(),
@@ -621,7 +623,7 @@ def probe_detail(
         if item.zustand == "offen" and item.faellig_am is not None and item.faellig_am <= heute + timedelta(days=7)
     ]
     noch_offen = [item for item in items if item.zustand == "offen" and item not in demnaechst]
-    context = {
+    context: dict[str, Any] = {
         "user": user,
         "termin": termin,
         "checkliste": checkliste,
@@ -643,6 +645,20 @@ def probe_detail(
         ],
         "verantwortliche": {member.id: member.full_name for member in verantwortliche},
     }
+    if tab in {"skizze", "dokumente"}:
+        medien = (
+            db.query(ProbeMedia)
+            .filter(ProbeMedia.termin_id == termin.id, ProbeMedia.org_id == user.org_id)
+            .order_by(ProbeMedia.hochgeladen_am.desc(), ProbeMedia.id.desc())
+            .all()
+        )
+        uploader_ids = {medium.hochgeladen_von for medium in medien if medium.hochgeladen_von is not None}
+        uploaders = db.query(User).filter(User.id.in_(uploader_ids)).all() if uploader_ids else []
+        context.update({
+            "skizzen": [medium for medium in medien if medium.kind == "image"],
+            "dokumente": [medium for medium in medien if medium.art == "dokument"],
+            "uploader_namen": {uploader.id: uploader.display_name for uploader in uploaders},
+        })
     if checkliste:
         context.update(_checkliste_context(db, user, termin, checkliste))
     return templates.TemplateResponse(
@@ -650,6 +666,152 @@ def probe_detail(
         "probenplanung/probe_detail.html",
         context,
     )
+
+
+@router.post("/{termin_id}/medien")
+async def probe_medium_hochladen(
+    request: Request,
+    termin_id: int,
+    datei: UploadFile = File(...),
+    art: str = Form("dokument"),
+    name: str = Form(""),
+    typ: str | None = Form(None),
+    beschreibung: str | None = Form(None),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    if user.org_id is None:
+        raise HTTPException(403, "Keine Organisation zugeordnet")
+    from app.services.probe_media_service import upload_probe_media
+
+    await upload_probe_media(
+        datei,
+        termin_id=termin.id,
+        org_id=user.org_id,
+        user_id=user.id,
+        art=art,
+        name=name,
+        typ=typ,
+        beschreibung=beschreibung,
+        db=db,
+    )
+    db.commit()
+    tab = "skizze" if art in {"skizze", "bild"} else "dokumente"
+    return RedirectResponse(f"/probenplanung/{termin.id}?tab={tab}", status_code=303)
+
+
+@router.delete("/{termin_id}/medien/{media_id}")
+def probe_medium_loeschen(
+    request: Request,
+    termin_id: int,
+    media_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    _termin_or_404(db, user.org_id, termin_id)
+    media = (
+        db.query(ProbeMedia)
+        .filter(
+            ProbeMedia.id == media_id,
+            ProbeMedia.termin_id == termin_id,
+            ProbeMedia.org_id == user.org_id,
+        )
+        .first()
+    )
+    if media is None:
+        raise HTTPException(404, "Medium nicht gefunden")
+    from app.services.probe_media_service import delete_probe_media
+
+    tab = "skizze" if media.art in {"skizze", "bild"} else "dokumente"
+    delete_probe_media(db, media)
+    db.commit()
+    return RedirectResponse(f"/probenplanung/{termin_id}?tab={tab}", status_code=303)
+
+
+def _probe_medium_fuer_org(db: Session, media_id: int, org_id: int | None) -> ProbeMedia | None:
+    return db.query(ProbeMedia).filter(ProbeMedia.id == media_id, ProbeMedia.org_id == org_id).first()
+
+
+@router.get("/medien/{media_id}")
+def probe_medium_ausliefern(
+    request: Request,
+    media_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    media = _probe_medium_fuer_org(db, media_id, user.org_id)
+    if media is None:
+        return Response(status_code=404)
+    from app.services.probe_media_service import probe_media_path
+
+    path = probe_media_path(media)
+    if not path.exists():
+        return Response(status_code=404)
+    return FileResponse(
+        path,
+        media_type=media.mime_type,
+        filename=media.name,
+        content_disposition_type="inline",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/medien/{media_id}/thumb")
+def probe_medium_thumbnail(
+    request: Request,
+    media_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    media = _probe_medium_fuer_org(db, media_id, user.org_id)
+    if media is None:
+        return Response(status_code=404)
+    from app.services.probe_media_service import probe_media_path, probe_thumb_path
+
+    path = probe_thumb_path(media)
+    if path is None or not path.exists():
+        path = probe_media_path(media) if media.kind == "image" else None
+    if path is None or not path.exists():
+        return Response(status_code=404)
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/{termin_id}/skizze")
+def probe_skizze_bearbeiten(
+    request: Request,
+    termin_id: int,
+    media_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    _termin_or_404(db, user.org_id, termin_id)
+    query = db.query(ProbeMedia).filter(
+        ProbeMedia.termin_id == termin_id,
+        ProbeMedia.org_id == user.org_id,
+        ProbeMedia.kind == "image",
+    )
+    media = (
+        query.filter(ProbeMedia.id == media_id).first()
+        if media_id
+        else query.order_by(ProbeMedia.id.desc()).first()
+    )
+    if media is None:
+        raise HTTPException(404, "Kein Skizzenbild vorhanden")
+    return RedirectResponse(f"/annotieren/probe/{media.id}", status_code=303)
 
 
 from app.services.probe_checklist_service import ERLAUBTE_STATUSWECHSEL  # noqa: E402
