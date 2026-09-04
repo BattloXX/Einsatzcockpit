@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ template.name }} - Checklisten-Vorlage{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h1>{{ template.name }}</h1><p class="text-muted">{{ template.beschreibung or "Keine Beschreibung" }}</p></div>
+  <a class="btn btn--secondary" href="/probenplanung/verwaltung/vorlagen">Zurück</a>
+</div>
+{% with active_tab="vorlagen" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
+<div class="card" style="margin-top:1rem">
+  <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+    <label>Version
+      <select onchange="location.href='/probenplanung/verwaltung/vorlagen/{{ template.id }}?version='+this.value">
+      {% for entry in versions %}<option value="{{ entry.id }}" {% if version and entry.id == version.id %}selected{% endif %}>V{{ entry.version }} · {{ "veröffentlicht" if entry.veroeffentlicht_am else "Entwurf" }}</option>{% endfor %}
+      </select>
+    </label>
+    {% if version and version.veroeffentlicht_am %}
+      <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/neu">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="btn btn--primary" type="submit">Bearbeiten (neue Version)</button>
+      </form>
+    {% elif version %}
+      <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/veroeffentlichen">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="btn btn--primary" type="submit">Veröffentlichen</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% if version %}
+  {% if not version.veroeffentlicht_am %}
+  <div class="card" style="margin-top:1rem">
+    <h2>Bereich hinzufügen</h2>
+    <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche" class="form-grid">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <label>Titel<input name="titel" maxlength="200" required></label>
+      <label>Beschreibung<textarea name="beschreibung"></textarea></label>
+      <button class="btn btn--secondary" type="submit">Bereich hinzufügen</button>
+    </form>
+  </div>
+  {% endif %}
+  {% for section, items in sections %}{% include "probenplanung/_vorlage_bereich.html" %}{% endfor %}
+{% endif %}
+{% endblock %}
