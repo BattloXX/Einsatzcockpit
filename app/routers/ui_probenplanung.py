@@ -28,7 +28,8 @@ from app.models.probenplanung import (
     ProbeMedia,
     TerminStatus,
 )
-from app.models.teilnahme import Termin
+from app.models.sms import SmsGroup
+from app.models.teilnahme import Funktion, Teilnahme, TeilnahmeStatus, Termin
 from app.models.user import User
 from app.routers.ui_probenplanung_admin import require_probenplanung_enabled
 from app.services.probe_checklist_service import fortschritt, snapshot_erzeugen, statuswechsel, uebersteuern
@@ -245,6 +246,87 @@ def _termin_or_404(db: Session, org_id: int | None, termin_id: int) -> Termin:
     if not termin:
         raise HTTPException(404, "Probe nicht gefunden")
     return termin
+
+
+def _teilnehmer_context(db: Session, user: User, termin: Termin) -> dict[str, Any]:
+    members = (
+        db.query(Member)
+        .filter(Member.active.is_(True))
+        .order_by(Member.lastname, Member.firstname, Member.id)
+        .all()
+    )
+    rows = (
+        db.query(Teilnahme)
+        .filter(
+            Teilnahme.org_id == user.org_id,
+            Teilnahme.bezug_typ == termin.typ,
+            Teilnahme.bezug_id == termin.id,
+            Teilnahme.mitglied_id.is_not(None),
+        )
+        .all()
+    )
+    by_member = {row.mitglied_id: row for row in rows}
+    statuswerte = [status.value for status in TeilnahmeStatus]
+    summary = {status: 0 for status in statuswerte}
+    teilnehmer = []
+    for member in members:
+        row = by_member.get(member.id)
+        status = row.status if row else TeilnahmeStatus.NICHT_ERFASST.value
+        if status not in summary:
+            status = TeilnahmeStatus.NICHT_ERFASST.value
+        summary[status] += 1
+        teilnehmer.append({"member": member, "teilnahme": row, "status": status})
+
+    gruppen = db.query(SmsGroup).order_by(SmsGroup.display_order, SmsGroup.name).all()
+    member_gruppen: dict[int, list[int]] = {}
+    for gruppe in gruppen:
+        for relation in gruppe.members:
+            member_gruppen.setdefault(relation.member_id, []).append(gruppe.id)
+    return {
+        "teilnehmer": teilnehmer,
+        "teilnahme_summary": summary,
+        "teilnahme_statuswerte": statuswerte,
+        "gruppen": gruppen,
+        "member_gruppen": member_gruppen,
+        "funktionen": db.query(Funktion).filter(Funktion.aktiv.is_(True)).order_by(Funktion.sortierung).all(),
+    }
+
+
+def _teilnehmer_response(request: Request, db: Session, user: User, termin: Termin) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "probenplanung/_teilnehmer.html",
+        {
+            "user": user,
+            "termin": termin,
+            "can_edit": can_edit_proben(user),
+            **_teilnehmer_context(db, user, termin),
+        },
+    )
+
+
+def _teilnahme_or_neu(db: Session, user: User, termin: Termin, member: Member) -> Teilnahme:
+    row = (
+        db.query(Teilnahme)
+        .filter(
+            Teilnahme.org_id == user.org_id,
+            Teilnahme.bezug_typ == termin.typ,
+            Teilnahme.bezug_id == termin.id,
+            Teilnahme.mitglied_id == member.id,
+        )
+        .first()
+    )
+    if row is None:
+        row = Teilnahme(
+            org_id=user.org_id,
+            bezug_typ=termin.typ,
+            bezug_id=termin.id,
+            mitglied_id=member.id,
+            hinzugefuegt_von=user.id,
+        )
+        row.set_status(TeilnahmeStatus.NICHT_ERFASST)
+        db.add(row)
+    return row
 
 
 def _probeart_or_422(db: Session, org_id: int | None, probeart_id: int) -> Probeart:
@@ -659,6 +741,8 @@ def probe_detail(
             "dokumente": [medium for medium in medien if medium.art == "dokument"],
             "uploader_namen": {uploader.id: uploader.display_name for uploader in uploaders},
         })
+    if tab == "teilnehmer":
+        context.update(_teilnehmer_context(db, user, termin))
     if checkliste:
         context.update(_checkliste_context(db, user, termin, checkliste))
     return templates.TemplateResponse(
@@ -666,6 +750,117 @@ def probe_detail(
         "probenplanung/probe_detail.html",
         context,
     )
+
+
+@router.get("/{termin_id}/teilnehmer", response_class=HTMLResponse)
+def probe_teilnehmer(
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    return probe_detail(request, termin_id, tab="teilnehmer", db=db, _guard=_guard, _=_)
+
+
+@router.patch("/{termin_id}/teilnehmer/{member_id}", response_class=HTMLResponse)
+async def probe_teilnehmer_bearbeiten(
+    request: Request,
+    termin_id: int,
+    member_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    member = db.query(Member).filter(Member.id == member_id, Member.active.is_(True)).first()
+    if member is None:
+        raise HTTPException(404, "Mitglied nicht gefunden")
+    form = await request.form()
+    status = str(form.get("status") or TeilnahmeStatus.NICHT_ERFASST.value)
+    try:
+        normalized_status = TeilnahmeStatus(status)
+    except ValueError as exc:
+        raise HTTPException(422, "Ungültiger Teilnahmestatus") from exc
+    row = _teilnahme_or_neu(db, user, termin, member)
+    row.set_status(normalized_status)
+    row.notiz = str(form.get("notiz") or "").strip()[:255] or None
+    funktion_id = str(form.get("funktion_id") or "").strip()
+    if funktion_id:
+        try:
+            parsed_funktion_id = int(funktion_id)
+        except ValueError as exc:
+            raise HTTPException(422, "Ungültige Funktion") from exc
+        funktion = db.query(Funktion).filter(Funktion.id == parsed_funktion_id).first()
+        if funktion is None:
+            raise HTTPException(422, "Ungültige Funktion")
+        row.funktion_id = funktion.id
+    else:
+        row.funktion_id = None
+    for feld in ("gekommen_um", "gegangen_um"):
+        value = str(form.get(feld) or "").strip()
+        parsed = local_input_to_utc(value, user.org) if value else None
+        if value and parsed is None:
+            raise HTTPException(422, "Ungültige Uhrzeit")
+        setattr(row, feld, parsed)
+    db.commit()
+    return _teilnehmer_response(request, db, user, termin)
+
+
+@router.post("/{termin_id}/teilnehmer/alle-anwesend", response_class=HTMLResponse)
+def probe_teilnehmer_alle_anwesend(
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    members = db.query(Member).filter(Member.active.is_(True)).all()
+    existing = {
+        row.mitglied_id: row
+        for row in db.query(Teilnahme).filter(
+            Teilnahme.org_id == user.org_id,
+            Teilnahme.bezug_typ == termin.typ,
+            Teilnahme.bezug_id == termin.id,
+            Teilnahme.mitglied_id.is_not(None),
+        )
+    }
+    for member in members:
+        row = existing.get(member.id) or _teilnahme_or_neu(db, user, termin, member)
+        if row.status == TeilnahmeStatus.NICHT_ERFASST.value:
+            row.set_status(TeilnahmeStatus.ANWESEND)
+    db.commit()
+    return _teilnehmer_response(request, db, user, termin)
+
+
+@router.post("/{termin_id}/teilnehmer/zuruecksetzen", response_class=HTMLResponse)
+def probe_teilnehmer_zuruecksetzen(
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    rows = db.query(Teilnahme).filter(
+        Teilnahme.org_id == user.org_id,
+        Teilnahme.bezug_typ == termin.typ,
+        Teilnahme.bezug_id == termin.id,
+    ).all()
+    for row in rows:
+        row.set_status(TeilnahmeStatus.NICHT_ERFASST)
+        row.gekommen_um = None
+        row.gegangen_um = None
+        row.notiz = None
+    db.commit()
+    return _teilnehmer_response(request, db, user, termin)
 
 
 @router.post("/{termin_id}/medien")

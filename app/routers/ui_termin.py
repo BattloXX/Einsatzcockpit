@@ -17,7 +17,7 @@ from app.core.timezones import format_local_datetime, local_input_to_utc
 from app.db import get_db
 from app.models.master import Member, VehicleMaster
 from app.models.sms import SmsGroup, SmsGroupMember
-from app.models.teilnahme import Funktion, Teilnahme, Termin
+from app.models.teilnahme import Funktion, Teilnahme, TeilnahmeStatus, Termin
 from app.models.user import DeviceToken
 from app.services.probenplanung_service import probenplanung_effective_enabled
 
@@ -469,17 +469,23 @@ async def teilnahme_hinzufuegen(
             Teilnahme.mitglied_id == mid_int,
         ).first()
         if not exists:
-            db.add(Teilnahme(
+            teilnahme = Teilnahme(
                 org_id=org_id,
                 bezug_typ=bezug_typ,
                 bezug_id=bezug_id,
                 mitglied_id=mid_int,
-                ausgerueckt=(status == "teilgenommen"),
-                entschuldigt=(status == "entschuldigt"),
                 fahrzeug_id=device_fahrzeug_id,
                 hinzugefuegt_von=user.id,
                 hinzugefuegt_am=datetime.now(UTC),
-            ))
+            )
+            teilnahme.set_status(
+                TeilnahmeStatus.ANWESEND
+                if status == "teilgenommen"
+                else TeilnahmeStatus.ENTSCHULDIGT
+                if status == "entschuldigt"
+                else TeilnahmeStatus.NICHT_ERFASST
+            )
+            db.add(teilnahme)
 
     # Freitext-Eintrag
     if freitext:
@@ -533,9 +539,21 @@ async def teilnahme_bearbeiten(
     if "notiz" in form:
         teilnahme.notiz = (form.get("notiz") or "").strip() or None  # type: ignore[union-attr]
     if "ausgerueckt" in form:
-        teilnahme.ausgerueckt = form.get("ausgerueckt") == "1"
+        teilnahme.set_status(
+            TeilnahmeStatus.ANWESEND
+            if form.get("ausgerueckt") == "1"
+            else TeilnahmeStatus.ENTSCHULDIGT
+            if teilnahme.entschuldigt
+            else TeilnahmeStatus.NICHT_ERFASST
+        )
     if "entschuldigt" in form:
-        teilnahme.entschuldigt = form.get("entschuldigt") == "1"
+        teilnahme.set_status(
+            TeilnahmeStatus.ENTSCHULDIGT
+            if form.get("entschuldigt") == "1"
+            else TeilnahmeStatus.ANWESEND
+            if teilnahme.ausgerueckt
+            else TeilnahmeStatus.NICHT_ERFASST
+        )
     db.commit()
 
     # Partial-Response: aktualisierte Zeile
@@ -639,7 +657,7 @@ async def teilnahme_export_pdf(
         user=user,
         base_url=str(request.base_url),
     )
-    safe_titel = titel.replace(" ", "_")[:40] if titel else bezug_typ
+    safe_titel = titel.replace("–", "-").replace(" ", "_")[:40] if titel else bezug_typ
     filename = f"Teilnahme_{safe_titel}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
@@ -664,7 +682,7 @@ async def teilnahme_export_xlsx(
     titel, beginn_dt, ort_str = _bezug_meta(db, bezug_typ, bezug_id)
 
     xlsx_bytes = _build_xlsx(teilnahmen, bezug_typ, titel, beginn_dt, ort_str, org=user.org)
-    safe_titel = titel.replace(" ", "_")[:40] if titel else bezug_typ
+    safe_titel = titel.replace("–", "-").replace(" ", "_")[:40] if titel else bezug_typ
     filename = f"Teilnahme_{safe_titel}.xlsx"
     return StreamingResponse(
         io.BytesIO(xlsx_bytes),

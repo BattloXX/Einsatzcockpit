@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -111,6 +112,13 @@ class Funktion(TenantScoped, Base):
     aktiv: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
+class TeilnahmeStatus(StrEnum):
+    NICHT_ERFASST = "nicht_erfasst"
+    ANWESEND = "anwesend"
+    ENTSCHULDIGT = "entschuldigt"
+    UNENTSCHULDIGT = "unentschuldigt"
+
+
 class Teilnahme(TenantScoped, Base):
     __tablename__ = "teilnahme"
     __table_args__ = (
@@ -179,3 +187,31 @@ class Teilnahme(TenantScoped, Base):
         if self.mitglied:
             return self.mitglied.full_name
         return self.freitext_name or "–"
+
+    @property
+    def status_label(self) -> str:
+        return {
+            TeilnahmeStatus.NICHT_ERFASST.value: "Noch nicht erfasst",
+            TeilnahmeStatus.ANWESEND.value: "Anwesend",
+            TeilnahmeStatus.ENTSCHULDIGT.value: "Entschuldigt",
+            TeilnahmeStatus.UNENTSCHULDIGT.value: "Unentschuldigt",
+        }.get(self.status, self.status)
+
+    @property
+    def status_css(self) -> str:
+        return {
+            TeilnahmeStatus.NICHT_ERFASST.value: "status-pill--muted",
+            TeilnahmeStatus.ANWESEND.value: "status-pill--green",
+            TeilnahmeStatus.ENTSCHULDIGT.value: "status-pill--blue",
+            TeilnahmeStatus.UNENTSCHULDIGT.value: "status-pill--red",
+        }.get(self.status, "")
+
+    def set_status(self, status: str | TeilnahmeStatus) -> None:
+        """Setzt den Erfassungsstatus und hält die von Altansichten gelesenen Felder synchron."""
+        try:
+            normalized = TeilnahmeStatus(status)
+        except ValueError as exc:
+            raise ValueError("Ungültiger Teilnahmestatus") from exc
+        self.status = normalized.value
+        self.ausgerueckt = normalized is TeilnahmeStatus.ANWESEND
+        self.entschuldigt = normalized is TeilnahmeStatus.ENTSCHULDIGT
