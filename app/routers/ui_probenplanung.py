@@ -2,23 +2,25 @@
 
 from __future__ import annotations
 
+import calendar
 import json
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import update
-from sqlalchemy.orm import Session
+from sqlalchemy import case, func, or_, update
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import CurrentOrgId
 from app.core.permissions import can_edit_proben, is_proben_admin
 from app.core.templating import templates
-from app.core.timezones import local_input_to_utc
+from app.core.timezones import local_date_to_utc, local_input_to_utc, now_local, to_org_tz
 from app.db import get_db
 from app.models.master import Member
 from app.models.probenplanung import (
     ChecklistItemTyp,
     Probeart,
+    ProbeChange,
     ProbeCheckliste,
     ProbeChecklistItem,
     ProbeChecklistSection,
@@ -31,6 +33,197 @@ from app.services.probe_checklist_service import fortschritt, snapshot_erzeugen,
 from app.services.probe_history import write_probe_change
 
 router = APIRouter(prefix="/probenplanung", tags=["probenplanung"])
+
+_ZEITRAEUME = {"zukuenftig", "vergangen", "alle"}
+
+
+def _jahr_grenzen(jahr: int, org: object) -> tuple[datetime, datetime]:
+    start = local_date_to_utc(f"{jahr:04d}-01-01", org=org)
+    ende = local_date_to_utc(f"{jahr + 1:04d}-01-01", org=org)
+    if start is None or ende is None:
+        raise HTTPException(422, "Ungültiges Jahr")
+    return start, ende
+
+
+def _filter_query(
+    query,
+    *,
+    org: object,
+    jahr: int,
+    probeart_id: int | None,
+    status: str | None,
+    verantwortlich_id: int | None,
+    von: date | None,
+    bis: date | None,
+    q: str | None,
+    zeitraum: str,
+):
+    start, ende = _jahr_grenzen(jahr, org)
+    query = query.filter(Termin.beginn >= start, Termin.beginn < ende, Termin.archiviert_am.is_(None))
+    if probeart_id is not None:
+        query = query.filter(Termin.probeart_id == probeart_id)
+    if status:
+        query = query.filter(Termin.status == status)
+    if verantwortlich_id is not None:
+        query = query.filter(Termin.verantwortlich_member_id == verantwortlich_id)
+    if von:
+        von_utc = local_date_to_utc(von.isoformat(), org=org)
+        if von_utc:
+            query = query.filter(Termin.beginn >= von_utc)
+    if bis:
+        bis_utc = local_date_to_utc(bis.isoformat(), end=True, org=org)
+        if bis_utc:
+            query = query.filter(Termin.beginn <= bis_utc)
+    if q and q.strip():
+        pattern = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                Termin.titel.ilike(pattern),
+                Termin.thema.ilike(pattern),
+                Termin.objekt.ilike(pattern),
+                Termin.ort.ilike(pattern),
+            )
+        )
+    jetzt = now_local(org).astimezone(UTC).replace(tzinfo=None)
+    if zeitraum == "zukuenftig":
+        query = query.filter(Termin.beginn >= jetzt)
+    elif zeitraum == "vergangen":
+        query = query.filter(Termin.beginn < jetzt)
+    return query
+
+
+def _listen_context(db: Session, user: User, termine: list[Termin]) -> dict:
+    termin_ids = [termin.id for termin in termine]
+    fortschritte: dict[int, dict[str, int]] = {}
+    if termin_ids:
+        rows = (
+            db.query(
+                ProbeCheckliste.termin_id,
+                func.sum(case((ProbeChecklistItem.zustand != "nicht_relevant", 1), else_=0)),
+                func.sum(case((ProbeChecklistItem.zustand == "erledigt", 1), else_=0)),
+            )
+            .outerjoin(ProbeChecklistItem, ProbeChecklistItem.checkliste_id == ProbeCheckliste.id)
+            .filter(ProbeCheckliste.termin_id.in_(termin_ids))
+            .group_by(ProbeCheckliste.termin_id)
+            .all()
+        )
+        fortschritte = {
+            termin_id: {"gesamt": int(gesamt or 0), "erledigt": int(erledigt or 0)}
+            for termin_id, gesamt, erledigt in rows
+        }
+    member_ids = {
+        member_id
+        for termin in termine
+        for member_id in (termin.verantwortlich_member_id, termin.unterstuetzung_member_id)
+        if member_id is not None
+    }
+    members = db.query(Member).filter(Member.id.in_(member_ids)).all() if member_ids else []
+    return {
+        "user": user,
+        "termine": termine,
+        "fortschritte": fortschritte,
+        "member_namen": {member.id: member.full_name for member in members},
+        "can_edit": can_edit_proben(user),
+    }
+
+
+@router.get("", response_class=HTMLResponse)
+def probenplan_liste(
+    request: Request,
+    jahr: int | None = Query(None, ge=1900, le=9998),
+    probeart_id: int | None = None,
+    status: str | None = None,
+    verantwortlich_id: int | None = None,
+    von: date | None = None,
+    bis: date | None = None,
+    q: str | None = None,
+    zeitraum: str = "alle",
+    uebernommen: int | None = Query(None, ge=0),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    if zeitraum not in _ZEITRAEUME:
+        raise HTTPException(422, "Ungültiger Zeitraum")
+    selected_year = jahr or now_local(user.org).year
+    query = db.query(Termin).options(joinedload(Termin.probeart))
+    termine = _filter_query(
+        query,
+        org=user.org,
+        jahr=selected_year,
+        probeart_id=probeart_id,
+        status=status,
+        verantwortlich_id=verantwortlich_id,
+        von=von,
+        bis=bis,
+        q=q,
+        zeitraum=zeitraum,
+    ).order_by(Termin.beginn).all()
+    context = {
+        **_listen_context(db, user, termine),
+        "jahr": selected_year,
+        "probearten": db.query(Probeart).filter(Probeart.aktiv.is_(True)).order_by(Probeart.sortierung).all(),
+        "members": db.query(Member).filter(Member.active.is_(True)).order_by(Member.lastname, Member.firstname).all(),
+        "statuswerte": list(TerminStatus),
+        "filter": {
+            "probeart_id": probeart_id,
+            "status": status or "",
+            "verantwortlich_id": verantwortlich_id,
+            "von": von,
+            "bis": bis,
+            "q": q or "",
+            "zeitraum": zeitraum,
+        },
+        "uebernommen": uebernommen,
+    }
+    template = (
+        "probenplanung/_plan_tabelle.html"
+        if request.headers.get("HX-Request") == "true"
+        else "probenplanung/plan.html"
+    )
+    return templates.TemplateResponse(request, template, context)
+
+
+@router.get("/kalender", response_class=HTMLResponse)
+def probenplan_kalender(
+    request: Request,
+    jahr: int | None = Query(None, ge=1900, le=9998),
+    monat: int | None = Query(None, ge=1, le=12),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    heute = now_local(user.org)
+    selected_year = jahr or heute.year
+    selected_month = monat or heute.month
+    first = date(selected_year, selected_month, 1)
+    next_month = date(selected_year + (selected_month == 12), 1 if selected_month == 12 else selected_month + 1, 1)
+    start = local_date_to_utc(first.isoformat(), org=user.org)
+    ende = local_date_to_utc(next_month.isoformat(), org=user.org)
+    assert start is not None and ende is not None
+    termine = (
+        db.query(Termin)
+        .options(joinedload(Termin.probeart))
+        .filter(Termin.beginn >= start, Termin.beginn < ende, Termin.archiviert_am.is_(None))
+        .order_by(Termin.beginn)
+        .all()
+    )
+    tage: dict[date, list[Termin]] = {}
+    for termin in termine:
+        local = to_org_tz(termin.beginn, user.org)
+        assert local is not None
+        tage.setdefault(local.date(), []).append(termin)
+    return templates.TemplateResponse(request, "probenplanung/kalender.html", {
+        "user": user,
+        "jahr": selected_year,
+        "monat": selected_month,
+        "monatsname": calendar.month_name[selected_month],
+        "wochen": calendar.Calendar(firstweekday=0).monthdatescalendar(selected_year, selected_month),
+        "tage": tage,
+        "can_edit": can_edit_proben(user),
+    })
 
 
 def _require_login(request: Request) -> User:
@@ -210,6 +403,94 @@ def _form_anwenden(
     termin.public_info_sichtbar = bool(public_info_sichtbar)
 
 
+def _ziel_datum_wochentagsgleich(source: date, zieljahr: int) -> date:
+    ordinal = (source.day - 1) // 7 + 1
+    erster = date(zieljahr, source.month, 1)
+    erster_treffer = 1 + (source.weekday() - erster.weekday()) % 7
+    tag = erster_treffer + (ordinal - 1) * 7
+    letzter_tag = calendar.monthrange(zieljahr, source.month)[1]
+    if tag > letzter_tag:
+        tag -= 7
+    return date(zieljahr, source.month, tag)
+
+
+def _termin_kopieren(
+    db: Session,
+    source: Termin,
+    user: User,
+    *,
+    beginn: datetime,
+    ende: datetime | None,
+) -> Termin:
+    clone = Termin(
+        org_id=source.org_id,
+        typ=source.typ,
+        titel=source.titel,
+        thema=source.thema,
+        beschreibung=source.beschreibung,
+        ort=source.ort,
+        objekt=source.objekt,
+        objekt_id=source.objekt_id,
+        beginn=beginn,
+        ende=ende,
+        ganztaegig=source.ganztaegig,
+        status=TerminStatus.entwurf,
+        erstellt_von=user.id,
+        probeart_id=source.probeart_id,
+        verantwortlich_member_id=source.verantwortlich_member_id,
+        unterstuetzung_member_id=source.unterstuetzung_member_id,
+    )
+    db.add(clone)
+    db.flush()
+    snapshot_erzeugen(db, clone, user.org)
+    return clone
+
+
+@router.post("/jahr-uebernehmen")
+def probenplan_jahr_uebernehmen(
+    request: Request,
+    quelljahr: int = Form(..., ge=1900, le=9998),
+    zieljahr: int = Form(..., ge=1900, le=9998),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    if quelljahr == zieljahr:
+        raise HTTPException(422, "Quell- und Zieljahr müssen verschieden sein")
+    start, ende = _jahr_grenzen(quelljahr, user.org)
+    sources = (
+        db.query(Termin)
+        .filter(Termin.beginn >= start, Termin.beginn < ende, Termin.archiviert_am.is_(None))
+        .order_by(Termin.beginn)
+        .all()
+    )
+    for source in sources:
+        source_local = to_org_tz(source.beginn, user.org)
+        assert source_local is not None
+        ziel_datum = _ziel_datum_wochentagsgleich(source_local.date(), zieljahr)
+        ziel_local = source_local.replace(
+            year=ziel_datum.year, month=ziel_datum.month, day=ziel_datum.day
+        )
+        ziel_beginn = ziel_local.astimezone(UTC).replace(tzinfo=None)
+        ziel_ende = ziel_beginn + (source.ende - source.beginn) if source.ende else None
+        clone = _termin_kopieren(db, source, user, beginn=ziel_beginn, ende=ziel_ende)
+        write_probe_change(
+            db,
+            clone.id,
+            "probe.jahresuebernahme",
+            "probe",
+            None,
+            None,
+            {"quelle_termin_id": source.id, "quelljahr": quelljahr, "zieljahr": zieljahr},
+            user_id=user.id,
+            ip=request.client.host if request.client else None,
+        )
+    db.commit()
+    return RedirectResponse(f"/probenplanung?jahr={zieljahr}&uebernommen={len(sources)}", status_code=303)
+
+
 @router.get("/neu", response_class=HTMLResponse)
 def probe_neu(
     request: Request,
@@ -307,13 +588,39 @@ def probe_anlegen(
 def probe_detail(
     request: Request,
     termin_id: int,
+    tab: str = "uebersicht",
     db: Session = Depends(get_db),
     _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
+    erlaubte_tabs = {
+        "uebersicht", "vorbereitung", "historie", "skizze", "dokumente",
+        "uebungseinsatz", "teilnehmer", "nachbereitung",
+    }
+    if tab not in erlaubte_tabs:
+        raise HTTPException(404, "Unbekannter Tab")
     termin = _termin_or_404(db, user.org_id, termin_id)
     checkliste = db.query(ProbeCheckliste).filter(ProbeCheckliste.termin_id == termin.id).first()
+    termin_lokal = to_org_tz(termin.beginn, user.org)
+    assert termin_lokal is not None
+    verantwortliche_ids = {
+        member_id
+        for member_id in (termin.verantwortlich_member_id, termin.unterstuetzung_member_id)
+        if member_id is not None
+    }
+    verantwortliche = (
+        db.query(Member).filter(Member.id.in_(verantwortliche_ids)).all() if verantwortliche_ids else []
+    )
+    heute = now_local(user.org).date()
+    items = list(checkliste.items) if checkliste else []
+    erledigt = [item for item in items if item.zustand in {"erledigt", "nicht_relevant"}]
+    demnaechst = [
+        item
+        for item in items
+        if item.zustand == "offen" and item.faellig_am is not None and item.faellig_am <= heute + timedelta(days=7)
+    ]
+    noch_offen = [item for item in items if item.zustand == "offen" and item not in demnaechst]
     context = {
         "user": user,
         "termin": termin,
@@ -322,6 +629,19 @@ def probe_detail(
         "can_edit": can_edit_proben(user),
         "is_admin": is_proben_admin(user),
         "statuswechsel": sorted(ERLAUBTE_STATUSWECHSEL.get(termin.status, frozenset())),
+        "active_tab": tab,
+        "noch_offen": noch_offen,
+        "demnaechst": demnaechst,
+        "erledigt": erledigt,
+        "historie": (
+            db.query(ProbeChange).filter(ProbeChange.termin_id == termin.id).order_by(ProbeChange.ts.desc()).all()
+            if tab == "historie"
+            else []
+        ),
+        "wochentag": ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"][
+            termin_lokal.weekday()
+        ],
+        "verantwortliche": {member.id: member.full_name for member in verantwortliche},
     }
     if checkliste:
         context.update(_checkliste_context(db, user, termin, checkliste))
@@ -463,27 +783,13 @@ def probe_duplizieren(
     user = _require_login(request)
     _require_edit(user)
     source = _termin_or_404(db, user.org_id, termin_id)
-    clone = Termin(
-        org_id=source.org_id,
-        typ=source.typ,
-        titel=source.titel,
-        thema=source.thema,
-        beschreibung=source.beschreibung,
-        ort=source.ort,
-        objekt=source.objekt,
-        objekt_id=source.objekt_id,
+    clone = _termin_kopieren(
+        db,
+        source,
+        user,
         beginn=source.beginn + timedelta(days=7),
         ende=source.ende + timedelta(days=7) if source.ende else None,
-        ganztaegig=source.ganztaegig,
-        status=TerminStatus.entwurf,
-        erstellt_von=user.id,
-        probeart_id=source.probeart_id,
-        verantwortlich_member_id=source.verantwortlich_member_id,
-        unterstuetzung_member_id=source.unterstuetzung_member_id,
     )
-    db.add(clone)
-    db.flush()
-    snapshot_erzeugen(db, clone, user.org)
     write_probe_change(
         db,
         clone.id,
