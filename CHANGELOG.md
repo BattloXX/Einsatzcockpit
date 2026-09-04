@@ -2,6 +2,11 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-04): Probenplanung Phase 10 ergänzt die strukturierte
+Nachbereitung mit Erkenntnissen und Maßnahmen, einen abgesicherten Abschlussworkflow
+sowie die Startseiten-Kachel für die nächste Vollprobe mit aggregiertem Fortschritt und
+überfälligen Vorbereitungspunkten.
+
 Unveröffentlicht (2026-09-04): Probenplanung Phase 8 ergänzt die schnelle,
 tablet-taugliche Teilnehmererfassung für alle aktiven Mitglieder mit Statusübersicht,
 clientseitigen Filtern, optionalen Ankunfts-/Abgangszeiten und Bemerkungen. Der neue

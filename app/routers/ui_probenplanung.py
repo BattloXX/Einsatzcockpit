@@ -26,7 +26,9 @@ from app.models.probenplanung import (
     ProbeCheckliste,
     ProbeChecklistItem,
     ProbeChecklistSection,
+    ProbeErkenntnis,
     ProbeMedia,
+    ProbeNachbereitung,
     TerminStatus,
 )
 from app.models.sms import SmsGroup
@@ -349,6 +351,21 @@ def _checkliste_or_404(db: Session, org_id: int | None, termin_id: int) -> tuple
     return termin, checkliste
 
 
+def _nachbereitung_context(db: Session, termin: Termin) -> dict[str, Any]:
+    nachbereitung = (
+        db.query(ProbeNachbereitung)
+        .filter(ProbeNachbereitung.termin_id == termin.id)
+        .first()
+    )
+    erkenntnisse = (
+        db.query(ProbeErkenntnis)
+        .filter(ProbeErkenntnis.termin_id == termin.id)
+        .order_by(ProbeErkenntnis.sortierung, ProbeErkenntnis.id)
+        .all()
+    )
+    return {"nachbereitung": nachbereitung, "erkenntnisse": erkenntnisse}
+
+
 def _checklist_item_or_404(
     db: Session, org_id: int | None, checkliste_id: int, item_id: int
 ) -> ProbeChecklistItem:
@@ -669,6 +686,82 @@ def probe_anlegen(
     return RedirectResponse(f"/probenplanung/{termin.id}", status_code=303)
 
 
+@router.get("/uebersicht", response_class=HTMLResponse)
+def probenplanung_uebersicht(
+    request: Request,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    jetzt_lokal = now_local(user.org)
+    tagesbeginn_utc = local_date_to_utc(jetzt_lokal.date().isoformat(), org=user.org)
+    assert tagesbeginn_utc is not None
+    termine = (
+        db.query(Termin)
+        .options(joinedload(Termin.probeart))
+        .join(Probeart, Probeart.id == Termin.probeart_id)
+        .filter(
+            func.lower(Probeart.name) == "vollprobe",
+            Termin.beginn >= tagesbeginn_utc,
+            Termin.archiviert_am.is_(None),
+            Termin.status != TerminStatus.abgesagt,
+        )
+        .order_by(Termin.beginn, Termin.id)
+        .all()
+    )
+    termin = termine[0] if termine else None
+    aggregate: dict[int, tuple[int, int, int, int]] = {}
+    if termine:
+        rows = (
+            db.query(
+                ProbeCheckliste.termin_id,
+                func.sum(case((ProbeChecklistItem.zustand != "nicht_relevant", 1), else_=0)),
+                func.sum(case((ProbeChecklistItem.zustand == "erledigt", 1), else_=0)),
+                func.sum(case((ProbeChecklistItem.zustand == "offen", 1), else_=0)),
+                func.sum(
+                    case(
+                        (
+                            (ProbeChecklistItem.zustand == "offen")
+                            & (ProbeChecklistItem.faellig_am < jetzt_lokal.date()),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+            )
+            .join(ProbeCheckliste, ProbeCheckliste.id == ProbeChecklistItem.checkliste_id)
+            .filter(ProbeCheckliste.termin_id.in_([probe.id for probe in termine]))
+            .group_by(ProbeCheckliste.termin_id)
+            .all()
+        )
+        aggregate = {
+            termin_id: (int(gesamt or 0), int(erledigt or 0), int(offen or 0), int(ueberfaellig or 0))
+            for termin_id, gesamt, erledigt, offen, ueberfaellig in rows
+        }
+    aggregat = aggregate.get(termin.id, (0, 0, 0, 0)) if termin else (0, 0, 0, 0)
+    ueberfaellig_gesamt = sum(values[3] for values in aggregate.values())
+    gesamt, erledigt, offen, _ = aggregat
+    verantwortlich = (
+        db.get(Member, termin.verantwortlich_member_id)
+        if termin and termin.verantwortlich_member_id
+        else None
+    )
+    termin_lokal = to_org_tz(termin.beginn, user.org) if termin else None
+    return templates.TemplateResponse(request, "probenplanung/_dashboard_kachel.html", {
+        "user": user,
+        "termin": termin,
+        "termin_lokal": termin_lokal,
+        "am_probentag": bool(termin_lokal and termin_lokal.date() == jetzt_lokal.date()),
+        "gesamt": gesamt,
+        "erledigt": erledigt,
+        "offen": offen,
+        "prozent": round(erledigt * 100 / gesamt) if gesamt else 100,
+        "ueberfaellig": ueberfaellig_gesamt,
+        "verantwortlich": verantwortlich,
+    })
+
+
 @router.get("/{termin_id}", response_class=HTMLResponse)
 def probe_detail(
     request: Request,
@@ -744,6 +837,8 @@ def probe_detail(
         })
     if tab == "teilnehmer":
         context.update(_teilnehmer_context(db, user, termin))
+    if tab == "nachbereitung":
+        context.update(_nachbereitung_context(db, termin))
     if tab == "uebungseinsatz":
         context["exercise_incident"] = (
             db.get(Incident, termin.exercise_incident_id) if termin.exercise_incident_id else None
@@ -1001,6 +1096,146 @@ def probe_teilnehmer_zuruecksetzen(
         row.notiz = None
     db.commit()
     return _teilnehmer_response(request, db, user, termin)
+
+
+def _nachbereitung_response(request: Request, db: Session, user: User, termin: Termin) -> HTMLResponse:
+    return templates.TemplateResponse(request, "probenplanung/_nachbereitung.html", {
+        "user": user,
+        "termin": termin,
+        "can_edit": can_edit_proben(user),
+        **_nachbereitung_context(db, termin),
+    })
+
+
+@router.get("/{termin_id}/nachbereitung", response_class=HTMLResponse)
+def probe_nachbereitung(
+    request: Request, termin_id: int, db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    return _nachbereitung_response(request, db, user, _termin_or_404(db, user.org_id, termin_id))
+
+
+@router.post("/{termin_id}/nachbereitung", response_class=HTMLResponse)
+def probe_nachbereitung_speichern(
+    request: Request,
+    termin_id: int,
+    bemerkungen: str = Form(""),
+    was_lief_gut: str = Form(""),
+    verbesserungen: str = Form(""),
+    teilnehmer_vollstaendig: str = Form(""),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    row = db.query(ProbeNachbereitung).filter(ProbeNachbereitung.termin_id == termin.id).first()
+    if row is None:
+        row = ProbeNachbereitung(org_id=user.org_id, termin_id=termin.id)
+        db.add(row)
+    row.bemerkungen = bemerkungen.strip() or None
+    row.was_lief_gut = was_lief_gut.strip() or None
+    row.verbesserungen = verbesserungen.strip() or None
+    row.teilnehmer_vollstaendig = teilnehmer_vollstaendig in {"1", "true", "on"}
+    row.abgeschlossen_von = user.id
+    row.abgeschlossen_am = datetime.now(UTC).replace(tzinfo=None)
+    db.commit()
+    return _nachbereitung_response(request, db, user, termin)
+
+
+def _erkenntnis_or_404(db: Session, org_id: int | None, termin_id: int, erkenntnis_id: int) -> ProbeErkenntnis:
+    row = db.query(ProbeErkenntnis).filter(
+        ProbeErkenntnis.id == erkenntnis_id,
+        ProbeErkenntnis.termin_id == termin_id,
+        ProbeErkenntnis.org_id == org_id,
+    ).first()
+    if row is None:
+        raise HTTPException(404, "Erkenntnis nicht gefunden")
+    return row
+
+
+@router.post("/{termin_id}/nachbereitung/erkenntnis", response_class=HTMLResponse)
+def probe_erkenntnis_anlegen(
+    request: Request, termin_id: int, text: str = Form(...), kategorie: str = Form("allgemein"),
+    massnahme_text: str = Form(""), db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    if not text.strip() or not kategorie.strip():
+        raise HTTPException(422, "Text und Kategorie sind erforderlich")
+    sortierung = db.query(func.max(ProbeErkenntnis.sortierung)).filter(ProbeErkenntnis.termin_id == termin.id).scalar()
+    db.add(ProbeErkenntnis(
+        org_id=user.org_id, termin_id=termin.id, text=text.strip(), kategorie=kategorie.strip()[:30],
+        massnahme_text=massnahme_text.strip() or None, sortierung=int(sortierung or 0) + 1,
+    ))
+    db.commit()
+    return _nachbereitung_response(request, db, user, termin)
+
+
+@router.patch("/{termin_id}/nachbereitung/erkenntnis/{erkenntnis_id}", response_class=HTMLResponse)
+async def probe_erkenntnis_bearbeiten(
+    request: Request, termin_id: int, erkenntnis_id: int, db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    row = _erkenntnis_or_404(db, user.org_id, termin.id, erkenntnis_id)
+    form = await request.form()
+    text = str(form.get("text") or "").strip()
+    kategorie = str(form.get("kategorie") or "").strip()
+    if not text or not kategorie:
+        raise HTTPException(422, "Text und Kategorie sind erforderlich")
+    row.text = text
+    row.kategorie = kategorie[:30]
+    row.massnahme_text = str(form.get("massnahme_text") or "").strip() or None
+    row.massnahme_erledigt = str(form.get("massnahme_erledigt") or "") in {"1", "true", "on"}
+    db.commit()
+    return _nachbereitung_response(request, db, user, termin)
+
+
+@router.delete("/{termin_id}/nachbereitung/erkenntnis/{erkenntnis_id}", response_class=HTMLResponse)
+def probe_erkenntnis_loeschen(
+    request: Request, termin_id: int, erkenntnis_id: int, db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    db.delete(_erkenntnis_or_404(db, user.org_id, termin.id, erkenntnis_id))
+    db.commit()
+    return _nachbereitung_response(request, db, user, termin)
+
+
+@router.post("/{termin_id}/abschliessen")
+def probe_abschliessen(
+    request: Request, termin_id: int, db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    nachbereitung = db.query(ProbeNachbereitung).filter(ProbeNachbereitung.termin_id == termin.id).first()
+    if nachbereitung is None or not nachbereitung.teilnehmer_vollstaendig:
+        raise HTTPException(409, "Die Teilnehmererfassung ist noch nicht vollständig")
+    if termin.exercise_incident_id is not None:
+        incident = db.get(Incident, termin.exercise_incident_id)
+        if incident is None or incident.status != "closed":
+            raise HTTPException(409, "Der verknüpfte Übungseinsatz ist noch nicht abgeschlossen")
+    if termin.probeart and termin.probeart.nachbereitung_erforderlich:
+        ausgefuellt = any((nachbereitung.bemerkungen, nachbereitung.was_lief_gut, nachbereitung.verbesserungen))
+        if not ausgefuellt:
+            raise HTTPException(409, "Die erforderliche Nachbereitung ist noch nicht ausgefüllt")
+    try:
+        statuswechsel(db, termin, TerminStatus.abgeschlossen, user, ip=request.client.host if request.client else None)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    db.commit()
+    return RedirectResponse(f"/probenplanung/{termin.id}?tab=nachbereitung", status_code=303)
 
 
 @router.post("/{termin_id}/medien")

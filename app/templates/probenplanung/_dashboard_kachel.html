@@ -1,0 +1,13 @@
+<section class="panel" id="probenplanung-dashboard">
+  <div class="panel-hd"><div class="panel-hd__title"><span class="panel-hd__icon">📅</span> Nächste Vollprobe</div></div>
+  <div class="panel-body">
+    {% if termin %}
+      <p><strong>{{ termin.thema or termin.titel }}</strong></p>
+      <p>{{ termin_lokal.strftime('%d.%m.%Y %H:%M') }} · Verantwortlich: {{ verantwortlich.full_name if verantwortlich else '–' }}</p>
+      <p>Fortschritt: {{ erledigt }}/{{ gesamt }} · {{ offen }} Punkte offen</p>
+      <div class="progress-bar" role="progressbar" aria-valuenow="{{ prozent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width:{{ prozent }}%"></div></div>
+      <a class="btn btn--primary" href="/probenplanung/{{ termin.id }}{% if am_probentag %}?tab=uebungseinsatz{% endif %}">{{ 'Übungseinsatz starten' if am_probentag else 'Probe öffnen' }}</a>
+    {% else %}<p>Keine kommende Vollprobe geplant.</p>{% endif %}
+    <p>Überfällige Vorbereitung: {{ ueberfaellig }} Punkte</p>
+  </div>
+</section>

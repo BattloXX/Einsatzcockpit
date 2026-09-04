@@ -1,0 +1,51 @@
+<div id="probe-nachbereitung">
+  <section class="card">
+    <h2>Nachbereitung</h2>
+    {% if can_edit %}
+    <form hx-post="/probenplanung/{{ termin.id }}/nachbereitung" hx-target="#probe-nachbereitung" hx-swap="outerHTML">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group"><label>Was lief gut?</label><textarea class="form-input" name="was_lief_gut">{{ nachbereitung.was_lief_gut or '' if nachbereitung else '' }}</textarea></div>
+      <div class="form-group"><label>Verbesserungen</label><textarea class="form-input" name="verbesserungen">{{ nachbereitung.verbesserungen or '' if nachbereitung else '' }}</textarea></div>
+      <div class="form-group"><label>Bemerkungen</label><textarea class="form-input" name="bemerkungen">{{ nachbereitung.bemerkungen or '' if nachbereitung else '' }}</textarea></div>
+      <div class="form-group form-group--checkbox"><label><input type="checkbox" name="teilnehmer_vollstaendig" value="1" {% if nachbereitung and nachbereitung.teilnehmer_vollstaendig %}checked{% endif %}> Teilnehmer vollständig erfasst</label></div>
+      <button class="btn btn--primary" type="submit">Nachbereitung speichern</button>
+    </form>
+    {% else %}
+      <p><strong>Was lief gut:</strong> {{ nachbereitung.was_lief_gut or '–' if nachbereitung else '–' }}</p>
+      <p><strong>Verbesserungen:</strong> {{ nachbereitung.verbesserungen or '–' if nachbereitung else '–' }}</p>
+      <p><strong>Bemerkungen:</strong> {{ nachbereitung.bemerkungen or '–' if nachbereitung else '–' }}</p>
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Erkenntnisse</h2>
+    {% for erkenntnis in erkenntnisse %}
+    <div class="card">
+      {% if can_edit %}
+      <form hx-patch="/probenplanung/{{ termin.id }}/nachbereitung/erkenntnis/{{ erkenntnis.id }}" hx-target="#probe-nachbereitung" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input class="form-input" name="kategorie" value="{{ erkenntnis.kategorie }}" required>
+        <textarea class="form-input" name="text" required>{{ erkenntnis.text }}</textarea>
+        <textarea class="form-input" name="massnahme_text" placeholder="Maßnahme">{{ erkenntnis.massnahme_text or '' }}</textarea>
+        <label><input type="checkbox" name="massnahme_erledigt" value="1" {% if erkenntnis.massnahme_erledigt %}checked{% endif %}> Maßnahme erledigt</label>
+        <button class="btn btn--secondary" type="submit">Ändern</button>
+      </form>
+      <form hx-delete="/probenplanung/{{ termin.id }}/nachbereitung/erkenntnis/{{ erkenntnis.id }}" hx-target="#probe-nachbereitung" hx-swap="outerHTML" hx-confirm="Erkenntnis wirklich löschen?">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger" type="submit">Löschen</button>
+      </form>
+      {% else %}<p><strong>{{ erkenntnis.kategorie }}:</strong> {{ erkenntnis.text }}</p>{% endif %}
+    </div>
+    {% else %}<p class="text-muted">Noch keine Erkenntnisse.</p>{% endfor %}
+    {% if can_edit %}
+    <form hx-post="/probenplanung/{{ termin.id }}/nachbereitung/erkenntnis" hx-target="#probe-nachbereitung" hx-swap="outerHTML">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group"><label>Kategorie</label><input class="form-input" name="kategorie" value="allgemein" required></div>
+      <div class="form-group"><label>Erkenntnis</label><textarea class="form-input" name="text" required></textarea></div>
+      <div class="form-group"><label>Maßnahme</label><textarea class="form-input" name="massnahme_text"></textarea></div>
+      <button class="btn btn--primary" type="submit">Erkenntnis hinzufügen</button>
+    </form>
+    <form method="post" action="/probenplanung/{{ termin.id }}/abschliessen">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--primary" type="submit">Probe abschließen</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
