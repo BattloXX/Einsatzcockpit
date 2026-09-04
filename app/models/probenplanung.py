@@ -10,7 +10,7 @@ import enum
 from datetime import UTC, date, datetime
 
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
 from app.db import Base
@@ -148,6 +148,9 @@ class ProbeCheckliste(TenantScoped, Base):
     template_name: Mapped[str] = mapped_column(String(150), nullable=False)
     template_version: Mapped[int] = mapped_column(Integer, nullable=False)
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    items: Mapped[list[ProbeChecklistItem]] = relationship(
+        "ProbeChecklistItem", cascade="all, delete-orphan", order_by="ProbeChecklistItem.sortierung"
+    )
 
 
 class ProbeChecklistSection(TenantScoped, Base):

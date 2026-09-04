@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ termin.titel }} – Probe{% endblock %}
+{% block content %}
+<div class="page-header"><div><h1>{{ termin.titel }}</h1><p>{{ termin.beginn|local_datetime }}{% if termin.ende %} – {{ termin.ende|local_datetime }}{% endif %}</p></div>{% if can_edit %}<a class="btn btn--primary" href="/probenplanung/{{ termin.id }}/bearbeiten">Bearbeiten</a>{% endif %}</div>
+<div class="card">
+  <p><strong>Status:</strong> {{ termin.status_label }}</p>
+  {% if termin.thema %}<p><strong>Thema:</strong> {{ termin.thema }}</p>{% endif %}
+  {% if termin.ort %}<p><strong>Ort:</strong> {{ termin.ort }}</p>{% endif %}
+  {% if fortschritt %}<p><strong>Vorbereitung:</strong> {{ fortschritt.erledigt }}/{{ fortschritt.gesamt }} ({{ fortschritt.prozent }} %), Pflicht {{ fortschritt.pflicht_erledigt }}/{{ fortschritt.pflicht_gesamt }}</p>{% endif %}
+</div>
+{% if can_edit %}
+<div class="card" style="margin-top:1rem">
+  <h2>Status ändern</h2>
+  {% for ziel in statuswechsel %}<form method="post" action="/probenplanung/{{ termin.id }}/status" style="display:inline-block;margin:.25rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="neuer_status" value="{{ ziel }}">{% if ziel == 'vorbereitung_abgeschlossen' and is_admin %}<input name="grund" placeholder="Übersteuerungsgrund (nur falls nötig)">{% endif %}<button class="btn btn--secondary" type="submit">{{ ziel }}</button></form>{% endfor %}
+  <form method="post" action="/probenplanung/{{ termin.id }}/duplizieren" style="margin-top:1rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--secondary" type="submit">Duplizieren</button></form>
+  <form method="post" action="/probenplanung/{{ termin.id }}/archivieren" style="margin-top:.5rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger" type="submit">Archivieren</button></form>
+</div>
+{% endif %}
+{% endblock %}

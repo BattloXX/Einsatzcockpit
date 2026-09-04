@@ -93,6 +93,13 @@ class Termin(TenantScoped, Base):
             "abgesagt": "status-pill--red",
         }.get(self.status, "")
 
+    @property
+    def ist_vollprobe(self) -> bool:
+        probeart = getattr(self, "probeart", None)
+        return bool(probeart and probeart.name.casefold() == "vollprobe")
+
+    probeart = relationship("Probeart", foreign_keys=[probeart_id])
+
 
 class Funktion(TenantScoped, Base):
     __tablename__ = "funktion"
