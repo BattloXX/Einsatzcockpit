@@ -180,6 +180,10 @@ async def notify_incident_created(
     async def _sms_senden() -> None:
         if sms_args is None:
             return
+        if not darf_extern(
+            "sms", is_exercise=incident.is_exercise, org_id=org_id, db=db
+        ):
+            return
         try:
             await dispatch_einsatzinfo(*sms_args)
         except Exception:
@@ -205,6 +209,10 @@ async def notify_incident_created(
 
     async def _teams_senden() -> None:
         if teams_args is None:
+            return
+        if not darf_extern(
+            "teams", is_exercise=incident.is_exercise, org_id=org_id, db=db
+        ):
             return
         assert base_url is not None  # teams_args ist nur mit base_url gesetzt
         try:
