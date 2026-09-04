@@ -208,6 +208,8 @@ def reconcile_storage(db: Session, org_id: int) -> int:
             # daher genau diese Spalte summieren -- objekt_dokument_seite NICHT separat
             # addieren (waere Doppelzaehlung).
             "  SELECT COALESCE(belegt_bytes, 0) FROM objekt_dokument WHERE org_id = :oid"
+            "  UNION ALL"
+            "  SELECT COALESCE(size_bytes, 0) FROM probe_media WHERE org_id = :oid"
             ") AS t"
         ),
         {"oid": org_id},

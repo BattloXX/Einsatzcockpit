@@ -121,6 +121,7 @@ class Settings(BaseSettings):
     # Storage liegt bewusst AUSSERHALB von app/static, damit Dateien nur ueber
     # die geschuetzte Route /medien/datei/{id} ausgeliefert werden (Org-Check).
     MEDIA_STORAGE_DIR: str = "app_storage/incident_media"
+    PROBE_MEDIA_DIR: str = "app_storage/probe_media"
     MAILING_ATTACHMENT_MAX_BYTES: int = 10 * 1024 * 1024
     MAILING_ATTACHMENT_MAX_TOTAL_BYTES: int = 20 * 1024 * 1024
     MAILING_ATTACHMENT_MAX_COUNT: int = 5

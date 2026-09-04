@@ -1,0 +1,11 @@
+<form method="post" action="/probenplanung/{{ termin.id }}/medien" enctype="multipart/form-data">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <input type="hidden" name="art" value="{{ upload_art }}">
+  <div class="form-grid">
+    <label>Datei<input type="file" name="datei" accept="{{ upload_accept }}" required></label>
+    <label>Name<input type="text" name="name" maxlength="255" placeholder="Anzeigename (optional)"></label>
+    <label>Typ<input type="text" name="typ" maxlength="50" placeholder="z. B. Brandschutzplan, Objektplan, Foto"></label>
+    <label>Beschreibung<textarea name="beschreibung" rows="2"></textarea></label>
+  </div>
+  <button class="btn btn--primary" type="submit">Hochladen</button>
+</form>

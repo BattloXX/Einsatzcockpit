@@ -2,6 +2,11 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-04): Probenplanung Phase 7 ergänzt Skizzen auf
+JPG-/PNG-Hintergründen im bestehenden Konva-Editor sowie Dokumentablage mit Metadaten.
+Uploads verwenden Magic-Byte-Prüfung, geschützte organisationsgebundene Auslieferung,
+Thumbnails und die bestehende Speicherquota.
+
 Unveröffentlicht (2026-09-04): Probenplanung Phase 6 macht das Modul mit Jahresplan,
 Monatskalender, kombinierbaren HTMX-Filtern und der gegliederten Probe-Detailansicht
 sichtbar. Termine lassen sich duplizieren und wochentagsgleich als Entwürfe in ein

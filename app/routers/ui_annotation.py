@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import CurrentOrgId
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
@@ -17,6 +18,11 @@ from app.models.user import User
 from app.services import annotation_service as ann_svc
 
 router = APIRouter(tags=["annotation"])
+
+
+def _guard_probe(request: Request, media_typ: str) -> None:
+    if media_typ == "probe" and not getattr(request.state, "probenplanung_enabled", False):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
 
 
 def _lade_media(db: Session, media_typ: str, media_id: int):  # type: ignore[no-untyped-def]
@@ -34,8 +40,10 @@ def annotate_editor(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly")),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly", "probenverwalter")),
+    _: CurrentOrgId = None,
 ):
+    _guard_probe(request, media_typ)
     media = _lade_media(db, media_typ, media_id)
     if not ann_svc.can_read(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Zugriff")
@@ -68,9 +76,12 @@ async def annotate_save(
     media_typ: str,
     media_id: int,
     payload: AnnotationPayload,
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder")),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "probenverwalter")),
+    _: CurrentOrgId = None,
 ):
+    _guard_probe(request, media_typ)
     media = _lade_media(db, media_typ, media_id)
     if not ann_svc.can_write(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Schreibrecht")
@@ -85,9 +96,11 @@ def annotate_display(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly")),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly", "probenverwalter")),
+    _: CurrentOrgId = None,
 ):
     """Liefert die annotierte Version (flaches PNG) falls vorhanden, sonst das Original."""
+    _guard_probe(request, media_typ)
     media = _lade_media(db, media_typ, media_id)
     if not ann_svc.can_read(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Zugriff")
@@ -107,9 +120,11 @@ def annotate_original(
     media_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly")),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "readonly", "probenverwalter")),
+    _: CurrentOrgId = None,
 ):
     """Original-Bild (Editor-Hintergrund) — immer das Original, nie die annotierte Version."""
+    _guard_probe(request, media_typ)
     media = _lade_media(db, media_typ, media_id)
     if not ann_svc.can_read(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Zugriff")
@@ -123,9 +138,12 @@ def annotate_original(
 def annotate_lock(
     media_typ: str,
     media_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder")),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "probenverwalter")),
+    _: CurrentOrgId = None,
 ):
+    _guard_probe(request, media_typ)
     media = _lade_media(db, media_typ, media_id)
     if not ann_svc.can_write(db, user, media_typ, media):
         raise HTTPException(status_code=403, detail="Kein Schreibrecht")
@@ -138,9 +156,15 @@ def annotate_lock(
 def annotate_unlock(
     media_typ: str,
     media_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("incident_leader", "admin", "recorder")),
+    user: User = Depends(require_role("incident_leader", "admin", "recorder", "probenverwalter")),
+    _: CurrentOrgId = None,
 ):
+    _guard_probe(request, media_typ)
+    media = _lade_media(db, media_typ, media_id)
+    if not ann_svc.can_write(db, user, media_typ, media):
+        raise HTTPException(status_code=403, detail="Kein Schreibrecht")
     ann_svc.release_lock(db, media_typ, media_id, user)
     db.commit()
     return JSONResponse({"ok": True})
