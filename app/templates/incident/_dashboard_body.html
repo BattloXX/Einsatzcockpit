@@ -160,6 +160,9 @@
 {% endif %}
 
 <!-- ══ MAIN ══ -->
+{% if request.state.probenplanung_enabled %}
+<div hx-get="/probenplanung/uebersicht" hx-trigger="load" hx-swap="outerHTML"></div>
+{% endif %}
 <div class="main"{% if uas_einsatz %} style="grid-template-columns: 1.9fr 1.35fr 1.35fr 1.3fr;"{% endif %}>
 
   <!-- ── FAHRZEUGE nach Abschnitt gruppiert (Einheiten + Abschnitte in einer Ansicht) ── -->
