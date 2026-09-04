@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Probearten - Probenplanung{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h1>Probenplanung verwalten</h1><p class="text-muted">Probearten und deren Grundeinstellungen</p></div>
+  <a class="btn btn--primary" href="/probenplanung/verwaltung/probearten/neu">Probeart anlegen</a>
+</div>
+{% with active_tab="probearten" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
+<div class="card" style="margin-top:1rem;overflow-x:auto">
+  <table class="table">
+    <thead><tr><th>Farbe</th><th>Name</th><th>Kurz</th><th>Typ</th><th>Dauer</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for p in probearten %}
+      <tr>
+        <td><span style="display:inline-block;width:1.25rem;height:1.25rem;border-radius:.25rem;background:{{ p.farbe }}" aria-label="Farbe {{ p.farbe }}"></span></td>
+        <td>{{ p.name }}</td><td>{{ p.kurz }}</td><td>{{ "Übung" if p.termin_typ == "uebung" else "Veranstaltung" }}</td>
+        <td>{{ p.standarddauer_minuten or "-" }}{% if p.standarddauer_minuten %} min{% endif %}</td>
+        <td>{{ "Aktiv" if p.aktiv else "Inaktiv" }}</td>
+        <td><a class="btn btn--secondary btn--sm" href="/probenplanung/verwaltung/probearten/{{ p.id }}/bearbeiten">Bearbeiten</a></td>
+      </tr>
+    {% else %}<tr><td colspan="7">Noch keine Probearten vorhanden.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

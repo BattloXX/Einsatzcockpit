@@ -1,8 +1,10 @@
 """Teilnehmerlisten: Termin (Übung/Veranstaltung), Funktion, Teilnahme."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -27,15 +29,39 @@ class Termin(TenantScoped, Base):
     beginn: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     ende: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ganztaegig: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    status: Mapped[str] = mapped_column(
-        Enum("geplant", "laufend", "abgeschlossen", "abgesagt"),
-        default="geplant",
-        nullable=False,
-    )
+    status: Mapped[str] = mapped_column(String(30), default="geplant", nullable=False)
     erstellt_von: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    probeart_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("probeart.id", ondelete="SET NULL"))
+    thema: Mapped[str | None] = mapped_column(String(200))
+    objekt: Mapped[str | None] = mapped_column(String(200))
+    objekt_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("objekt.id", ondelete="SET NULL"))
+    info: Mapped[str | None] = mapped_column(Text)
+    interne_bemerkung: Mapped[str | None] = mapped_column(Text)
+    verantwortlich_member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL")
+    )
+    unterstuetzung_member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL")
+    )
+    alarmtext: Mapped[str | None] = mapped_column(Text)
+    besondere_gefahren: Mapped[str | None] = mapped_column(Text)
+    besondere_hinweise: Mapped[str | None] = mapped_column(Text)
+    public_sichtbar: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    public_ort_sichtbar: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    public_info_sichtbar: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    ics_uid: Mapped[str | None] = mapped_column(String(80), unique=True, default=lambda: uuid4().hex)
+    ics_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    geaendert_am: Mapped[datetime | None] = mapped_column(DateTime, onupdate=lambda: datetime.now(UTC))
+    exercise_incident_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("incident.id", ondelete="SET NULL"))
+    archiviert_am: Mapped[datetime | None] = mapped_column(DateTime)
+    vorbereitung_uebersteuert_von: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL")
+    )
+    vorbereitung_uebersteuert_am: Mapped[datetime | None] = mapped_column(DateTime)
+    vorbereitung_uebersteuert_grund: Mapped[str | None] = mapped_column(Text)
 
     @property
     def typ_label(self) -> str:
@@ -44,8 +70,12 @@ class Termin(TenantScoped, Base):
     @property
     def status_label(self) -> str:
         return {
+            "entwurf": "Entwurf",
             "geplant": "Geplant",
-            "laufend": "Laufend",
+            "in_vorbereitung": "In Vorbereitung",
+            "vorbereitung_abgeschlossen": "Vorbereitung abgeschlossen",
+            "durchfuehrung_laeuft": "Durchführung läuft",
+            "durchgefuehrt": "Durchgeführt",
             "abgeschlossen": "Abgeschlossen",
             "abgesagt": "Abgesagt",
         }.get(self.status, self.status)
@@ -53,8 +83,12 @@ class Termin(TenantScoped, Base):
     @property
     def status_css(self) -> str:
         return {
+            "entwurf": "status-pill--muted",
             "geplant": "status-pill--blue",
-            "laufend": "status-pill--green",
+            "in_vorbereitung": "status-pill--blue",
+            "vorbereitung_abgeschlossen": "status-pill--green",
+            "durchfuehrung_laeuft": "status-pill--green",
+            "durchgefuehrt": "status-pill--green",
             "abgeschlossen": "status-pill--muted",
             "abgesagt": "status-pill--red",
         }.get(self.status, "")
@@ -74,7 +108,10 @@ class Teilnahme(TenantScoped, Base):
     __tablename__ = "teilnahme"
     __table_args__ = (
         UniqueConstraint(
-            "org_id", "bezug_typ", "bezug_id", "mitglied_id",
+            "org_id",
+            "bezug_typ",
+            "bezug_id",
+            "mitglied_id",
             name="uq_teilnahme_mitglied",
         ),
         # DIBOS-Personenrückmeldung (personResponseList[].id) als zusätzlicher,
@@ -103,6 +140,9 @@ class Teilnahme(TenantScoped, Base):
     notiz: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ausgerueckt: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     entschuldigt: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[str] = mapped_column(String(15), nullable=False, default="nicht_erfasst")
+    gekommen_um: Mapped[datetime | None] = mapped_column(DateTime)
+    gegangen_um: Mapped[datetime | None] = mapped_column(DateTime)
     # RSVP (Zu-/Absage) über die Teams-Alarmierung — unabhängig von ausgerueckt/entschuldigt,
     # die erst nachträglich (tatsächliche Teilnahme) gepflegt werden. NULL = keine Antwort.
     rsvp_status: Mapped[str | None] = mapped_column(Enum("zugesagt", "abgesagt"), nullable=True)
@@ -119,9 +159,7 @@ class Teilnahme(TenantScoped, Base):
     mitglied: Mapped[Member | None] = relationship(  # type: ignore[name-defined]
         "Member", lazy="joined", foreign_keys="[Teilnahme.mitglied_id]"
     )
-    funktion: Mapped[Funktion | None] = relationship(
-        "Funktion", lazy="joined", foreign_keys="[Teilnahme.funktion_id]"
-    )
+    funktion: Mapped[Funktion | None] = relationship("Funktion", lazy="joined", foreign_keys="[Teilnahme.funktion_id]")
     fahrzeug: Mapped[VehicleMaster | None] = relationship(  # type: ignore[name-defined]
         "VehicleMaster", lazy="joined", foreign_keys="[Teilnahme.fahrzeug_id]"
     )

@@ -10,6 +10,7 @@ ROLES = {
     "fahrtenbuch_admin": 80,    # Fahrtenbuch-Verwaltung der eigenen Org (ohne Benutzerverwaltung)
     "incident_leader": 70,
     "objekt_verwalter": 60,     # Objektverwaltung: Objekte pflegen/freigeben, Dokumente, Lagekarte
+    "probenverwalter": 60,      # Probenplanung bearbeiten
     "breathing_supervisor": 50,
     "recorder": 30,
     "readonly": 10,
@@ -26,6 +27,7 @@ FAHRTENBUCH_ADMIN_ROLES = {"system_admin", "admin", "org_admin", "fahrtenbuch_ad
 
 # Roles that can manage Objekte (anlegen, bearbeiten, freigeben, Dokumente, Lagekarte)
 OBJEKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalter"}
+PROBEN_EDIT_ROLES = {"system_admin", "admin", "org_admin", "probenverwalter", "incident_leader", "recorder"}
 
 
 def require_role(*roles: str) -> Callable:
@@ -142,3 +144,13 @@ def can_view_fahrtenbuch(user) -> bool:
 def is_objekt_verwalter(user) -> bool:
     """True if user can manage Objekte (org_admin, objekt_verwalter, or system_admin)."""
     return has_role(user, "objekt_verwalter")
+
+
+def can_edit_proben(user) -> bool:
+    """True fuer alle Rollen, die Proben fachlich bearbeiten duerfen."""
+    return bool(user and ({r.code for r in user.roles} & PROBEN_EDIT_ROLES))
+
+
+def is_proben_admin(user) -> bool:
+    """True fuer organisationsweite Probenplanung-Verwaltung."""
+    return has_role(user, "org_admin")
