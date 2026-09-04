@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Probe {{ "bearbeiten" if termin else "anlegen" }}{% endblock %}
+{% block content %}
+{% set v = termin %}
+<div class="page-header"><h1>Probe {{ "bearbeiten" if termin else "anlegen" }}</h1></div>
+<form method="post" action="{% if termin %}/probenplanung/{{ termin.id }}/bearbeiten{% else %}/probenplanung/neu{% endif %}" class="card">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <div class="form-grid">
+    <label>Probeart<select name="probeart_id" required>{% for p in probearten %}<option value="{{ p.id }}" {% if v and v.probeart_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></label>
+    <label>Titel<input name="titel" maxlength="200" required value="{{ v.titel if v else '' }}"></label>
+    <label>Thema<input name="thema" maxlength="200" value="{{ v.thema or '' if v else '' }}"></label>
+    <label>Ort<input name="ort" maxlength="200" value="{{ v.ort or '' if v else '' }}"></label>
+    <label>Objekt<input name="objekt" maxlength="200" value="{{ v.objekt or '' if v else '' }}"></label>
+    <label>Beginn<input type="datetime-local" name="beginn" required value="{{ (v.beginn|local).strftime('%Y-%m-%dT%H:%M') if v else '' }}"></label>
+    <label>Ende<input type="datetime-local" name="ende" value="{{ (v.ende|local).strftime('%Y-%m-%dT%H:%M') if v and v.ende else '' }}"></label>
+    <label>Verantwortlich<select name="verantwortlich_member_id"><option value="">Nicht zugeordnet</option>{% for m in members %}<option value="{{ m.id }}" {% if v and v.verantwortlich_member_id == m.id %}selected{% endif %}>{{ m.firstname }} {{ m.lastname }}</option>{% endfor %}</select></label>
+    <label>Unterstützung<select name="unterstuetzung_member_id"><option value="">Nicht zugeordnet</option>{% for m in members %}<option value="{{ m.id }}" {% if v and v.unterstuetzung_member_id == m.id %}selected{% endif %}>{{ m.firstname }} {{ m.lastname }}</option>{% endfor %}</select></label>
+  </div>
+  <label><input type="checkbox" name="ganztaegig" value="1" {% if v and v.ganztaegig %}checked{% endif %}> Ganztägig</label>
+  <label>Beschreibung<textarea name="beschreibung">{{ v.beschreibung or '' if v else '' }}</textarea></label>
+  <label>Öffentliche Information<textarea name="info">{{ v.info or '' if v else '' }}</textarea></label>
+  <label>Interne Bemerkung<textarea name="interne_bemerkung">{{ v.interne_bemerkung or '' if v else '' }}</textarea></label>
+  <label>Alarmtext<textarea name="alarmtext">{{ v.alarmtext or '' if v else '' }}</textarea></label>
+  <label>Besondere Gefahren<textarea name="besondere_gefahren">{{ v.besondere_gefahren or '' if v else '' }}</textarea></label>
+  <label>Besondere Hinweise<textarea name="besondere_hinweise">{{ v.besondere_hinweise or '' if v else '' }}</textarea></label>
+  <div><label><input type="checkbox" name="public_sichtbar" value="1" {% if not v or v.public_sichtbar %}checked{% endif %}> Öffentlich sichtbar</label></div>
+  <div><label><input type="checkbox" name="public_ort_sichtbar" value="1" {% if v and v.public_ort_sichtbar %}checked{% endif %}> Ort öffentlich</label></div>
+  <div><label><input type="checkbox" name="public_info_sichtbar" value="1" {% if v and v.public_info_sichtbar %}checked{% endif %}> Information öffentlich</label></div>
+  <div style="display:flex;gap:.75rem;margin-top:1rem"><button class="btn btn--primary" type="submit">Speichern</button>{% if v %}<a class="btn btn--secondary" href="/probenplanung/{{ v.id }}">Abbrechen</a>{% endif %}</div>
+</form>
+{% endblock %}

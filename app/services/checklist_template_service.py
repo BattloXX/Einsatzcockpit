@@ -20,75 +20,83 @@ STANDARD_TEMPLATE_NAME = "Vollprobe Standard"
 
 # Titel gemaess Konzept Abschnitt 11. Die Typisierung bildet die fachlich naheliegende
 # Eingabeart ab und kann nach dem Import wie jede andere Entwurfsversion angepasst werden.
-STANDARD_SECTIONS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
+STANDARD_SECTIONS: tuple[tuple[str, tuple[tuple[str, str, bool], ...]], ...] = (
     (
         "Stammdaten",
-        (("Ausführende / Organisatoren", "person"), ("Termin", "datum"), ("Ort", "text"), ("Objekt", "text")),
+        (
+            ("Ausführende / Organisatoren", "person", False),
+            ("Termin", "datum", False),
+            ("Ort", "text", False),
+            ("Objekt", "text", False),
+        ),
     ),
     (
         "Abstimmungen",
         (
-            ("mit Eigentümer vereinbart", "checkbox"),
-            ("Datum der Vereinbarung", "datum"),
-            ("Bewohner verständigt", "checkbox"),
-            ("Datum", "datum"),
-            ("Sondervereinbarungen", "langtext"),
+            ("mit Eigentümer vereinbart", "checkbox", True),
+            ("Datum der Vereinbarung", "datum", False),
+            ("Bewohner verständigt", "checkbox", True),
+            ("Datum", "datum", False),
+            ("Sondervereinbarungen", "langtext", False),
         ),
     ),
     (
         "Darsteller / Verletzte",
         (
-            ("Feuerwehrjugend eingeplant", "checkbox"),
-            ("Jugendleiter verständigt", "checkbox"),
-            ("externe Personen eingeplant", "checkbox"),
-            ("Kantine verständigt", "checkbox"),
-            ("Verletzte gekennzeichnet", "checkbox"),
-            ("Anzahl Verletzte / Darsteller", "text"),
-            ("Bemerkungen", "langtext"),
+            ("Feuerwehrjugend eingeplant", "checkbox", False),
+            ("Jugendleiter verständigt", "checkbox", False),
+            ("externe Personen eingeplant", "checkbox", False),
+            ("Kantine verständigt", "checkbox", False),
+            ("Verletzte gekennzeichnet", "checkbox", False),
+            ("Anzahl Verletzte / Darsteller", "text", False),
+            ("Bemerkungen", "langtext", False),
         ),
     ),
     (
         "Hilfsmittel",
         (
-            ("Fahnen", "checkbox"),
-            ("Blitzleuchte", "checkbox"),
-            ("Nebelmaschine", "checkbox"),
-            ("Farbnebel", "checkbox"),
-            ("weitere Hilfsmittel", "langtext"),
+            ("Fahnen", "checkbox", False),
+            ("Blitzleuchte", "checkbox", False),
+            ("Nebelmaschine", "checkbox", False),
+            ("Farbnebel", "checkbox", False),
+            ("weitere Hilfsmittel", "langtext", False),
         ),
     ),
     (
         "Unterlagen",
         (
-            ("Brandschutzplan vorhanden", "checkbox"),
-            ("Objektplan vorhanden", "checkbox"),
-            ("Übungsskizze vorhanden", "checkbox"),
-            ("sonstige Unterlagen", "langtext"),
+            ("Brandschutzplan vorhanden", "checkbox", False),
+            ("Objektplan vorhanden", "checkbox", False),
+            ("Übungsskizze vorhanden", "checkbox", False),
+            ("sonstige Unterlagen", "langtext", False),
         ),
     ),
     (
         "Aufgabenplanung",
         (
-            ("Einsatzleiter", "person"),
-            ("Fahrzeug-/Gruppenaufgaben", "langtext"),
-            ("besondere Aufgaben", "langtext"),
-            ("Aufgabenvorstellung durchgeführt", "checkbox"),
+            ("Einsatzleiter", "person", False),
+            ("Fahrzeug-/Gruppenaufgaben", "langtext", False),
+            ("besondere Aufgaben", "langtext", False),
+            ("Aufgabenvorstellung durchgeführt", "checkbox", True),
         ),
     ),
     (
         "Information",
         (
-            ("Dienstgrade informiert", "checkbox"),
-            ("Alarmtext vorbereitet", "checkbox"),
-            ("besondere Gefahren dokumentiert", "checkbox"),
-            ("gefährliche Stoffe", "langtext"),
-            ("verschlossene Türen", "text"),
-            ("Schlüssel", "text"),
-            ("geplante Lageänderungen", "langtext"),
-            ("sonstige Besonderheiten", "langtext"),
+            ("Dienstgrade informiert", "checkbox", True),
+            ("Alarmtext vorbereitet", "checkbox", True),
+            ("besondere Gefahren dokumentiert", "checkbox", True),
+            ("gefährliche Stoffe", "langtext", False),
+            ("verschlossene Türen", "text", False),
+            ("Schlüssel", "text", False),
+            ("geplante Lageänderungen", "langtext", False),
+            ("sonstige Besonderheiten", "langtext", False),
         ),
     ),
-    ("Lage / Skizze", (("Übungsskizze", "bild"), ("Lageplan", "datei"), ("Bild oder Plan", "datei"))),
+    (
+        "Lage / Skizze",
+        (("Übungsskizze", "bild", False), ("Lageplan", "datei", False), ("Bild oder Plan", "datei", False)),
+    ),
 )
 
 
@@ -219,13 +227,14 @@ def standardvorlage_importieren(db: Session, org_id: int, user_id: int | None) -
             )
             db.add(section)
             db.flush()
-            for item_index, (item_title, item_type) in enumerate(items):
+            for item_index, (item_title, item_type, item_required) in enumerate(items):
                 db.add(
                     ChecklistTemplateItem(
                         org_id=org_id,
                         section_id=section.id,
                         titel=item_title,
                         typ=item_type,
+                        pflicht=item_required,
                         sortierung=item_index,
                     )
                 )
