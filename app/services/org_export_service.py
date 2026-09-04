@@ -97,6 +97,12 @@ AREA_ROOTS: dict[str, set[str]] = {
     },
     "wetter": {"weather_alert_log", "weather_alert_rule", "weather_alert_state", "weather_station"},
     "teilnahme": {"termin", "funktion", "teilnahme"},
+    "probenplanung": {
+        "probeart", "checklist_template", "checklist_template_version",
+        "checklist_template_section", "checklist_template_item", "probe_checkliste",
+        "probe_checklist_section", "probe_checklist_item", "probe_media",
+        "probe_public_token", "probe_nachbereitung", "probe_erkenntnis", "probe_change",
+    },
     "mannschaft": {"member"},
     "sms": {"sms_einsatzinfo_recipient", "sms_forward_rule", "sms_group", "sms_inbox", "sms_log"},
 }
@@ -110,6 +116,7 @@ AREA_LABELS: dict[str, str] = {
     "verleih": "Geräteverleih",
     "wetter": "Wetterstation / -warnungen",
     "teilnahme": "Teilnehmerlisten",
+    "probenplanung": "Probenplanung",
     "mannschaft": "Mannschaft",
     "sms": "SMS-Gruppen / -Log",
 }

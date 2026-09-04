@@ -77,6 +77,7 @@ from app.routers import (
     ui_org_mail,
     ui_password_reset,
     ui_pin_login,
+    ui_probenplanung_admin,
     ui_profile,
     ui_push,
     ui_settings,
@@ -791,6 +792,7 @@ app.include_router(ui_ai_prompts.router)
 app.include_router(ui_profile.router)
 app.include_router(ui_weather.router)
 app.include_router(ui_termin.router)
+app.include_router(ui_probenplanung_admin.router)
 app.include_router(ui_uas.router)
 app.include_router(ui_bma_import.router)
 app.include_router(ui_einsatz_import.router)

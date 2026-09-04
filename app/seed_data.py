@@ -29,6 +29,7 @@ ROLES = [
     {"code": "mailing_sender",       "label": "Mailing-Versand"},
     {"code": "incident_leader",      "label": "Einsatzleiter"},
     {"code": "objekt_verwalter",     "label": "Objektverwalter"},
+    {"code": "probenverwalter",      "label": "Probenverwalter"},
     {"code": "breathing_supervisor", "label": "AS-Überwacher"},
     {"code": "recorder",             "label": "Bearbeiter"},
     {"code": "readonly",             "label": "Nur Lesen"},

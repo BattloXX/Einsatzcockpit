@@ -170,6 +170,15 @@
       </div>
     </form>
 
+    {% set _probenplanung_sys_on = sys_settings.get('probenplanung_module_enabled') == 'true' %}
+    <form method="post" action="/admin/settings/system/probenplanung-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group" style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
+        <div><label style="font-weight:600">🗓 Probenplanung</label><p class="form-hint">Jahresplanung und Verwaltung von Feuerwehrproben; zusätzlich je Organisation aktivierbar.</p></div>
+        <label class="toggle-label"><input type="checkbox" name="enabled_raw" value="1" {% if _probenplanung_sys_on %}checked{% endif %} onchange="this.form.submit()"> Systemweit aktivieren</label>
+      </div>
+    </form>
+
     {% set _foerderstrecke_sys_on = sys_settings.get('foerderstrecke_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/foerderstrecke-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -489,6 +498,16 @@
           <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
           {% endif %}
         </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">🗓 Probenplanung</h3>
+      {% set _probenplanung_org_on = (org_settings.probenplanung_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;{% if not probenplanung_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="probenplanung_modul_aktiv_raw" value="1" {% if _probenplanung_org_on %}checked{% endif %} {% if not probenplanung_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
+          Probenplanung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">Schaltet Probearten und die Probenplanung für diese Organisation frei.</small>
       </div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F6B0; Förderstrecken-Planer</h3>

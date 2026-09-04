@@ -142,6 +142,21 @@ from app.models.org_backup import OrgBackupConfig
 from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 from app.models.org_sms import OrgSmsConfig
 from app.models.password_reset import PasswordResetToken
+from app.models.probenplanung import (  # noqa: F401 -- registriert ORM-Modelle
+    ChecklistTemplate,
+    ChecklistTemplateItem,
+    ChecklistTemplateSection,
+    ChecklistTemplateVersion,
+    Probeart,
+    ProbeChange,
+    ProbeCheckliste,
+    ProbeChecklistItem,
+    ProbeChecklistSection,
+    ProbeErkenntnis,
+    ProbeMedia,
+    ProbeNachbereitung,
+    ProbePublicToken,
+)
 from app.models.sms import (
     SmsEinsatzinfoRecipient,
     SmsForwardRule,
@@ -228,6 +243,10 @@ __all__ = [
     "SmsGroup", "SmsGroupMember", "SmsEinsatzinfoRecipient", "SmsLog",
     "SmsInbox", "SmsForwardRule", "SmsForwardRuleGroup", "SmsForwardRuleMember",
     "Fahrtzweck", "Zielort", "Fahrt", "FahrtBenachrichtigung",
+    "Probeart", "ChecklistTemplate", "ChecklistTemplateVersion",
+    "ChecklistTemplateSection", "ChecklistTemplateItem", "ProbeCheckliste",
+    "ProbeChecklistSection", "ProbeChecklistItem", "ProbeMedia", "ProbePublicToken",
+    "ProbeNachbereitung", "ProbeErkenntnis", "ProbeChange",
     "FahrtKategorie", "FahrtStatus", "FahrtErfassungsweg",
     "Termin", "Funktion", "Teilnahme",
     "RettungsdatenblattCache",

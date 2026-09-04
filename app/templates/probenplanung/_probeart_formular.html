@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Probeart {{ "bearbeiten" if probeart else "anlegen" }}{% endblock %}
+{% block content %}
+{% set v = form if form else probeart %}
+<div class="page-header"><h1>Probeart {{ "bearbeiten" if probeart else "anlegen" }}</h1></div>
+{% if fehler %}<div class="alert alert--error"><ul>{% for f in fehler %}<li>{{ f }}</li>{% endfor %}</ul></div>{% endif %}
+<form method="post" action="{% if probeart %}/probenplanung/verwaltung/probearten/{{ probeart.id }}{% else %}/probenplanung/verwaltung/probearten{% endif %}" class="card">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <div class="form-grid">
+    <div class="form-group"><label for="name">Name</label><input id="name" name="name" maxlength="150" required value="{{ v.name or '' }}"></div>
+    <div class="form-group"><label for="kurz">Kurzbezeichnung</label><input id="kurz" name="kurz" maxlength="20" required value="{{ v.kurz or '' }}"></div>
+    <div class="form-group"><label for="farbe">Farbe</label><input id="farbe" name="farbe" type="color" value="{{ v.farbe or '#2563eb' }}"></div>
+    <div class="form-group"><label for="sortierung">Sortierung</label><input id="sortierung" name="sortierung" type="number" value="{{ v.sortierung or 0 }}"></div>
+    <div class="form-group"><label for="standarddauer_minuten">Standarddauer (Minuten)</label><input id="standarddauer_minuten" name="standarddauer_minuten" type="number" min="1" value="{{ v.standarddauer_minuten or '' }}"></div>
+    <div class="form-group"><label for="druckgruppe">Druckgruppe</label><input id="druckgruppe" name="druckgruppe" maxlength="50" value="{{ v.druckgruppe or '' }}"></div>
+    <div class="form-group"><label for="termin_typ">Termin-Typ</label><select id="termin_typ" name="termin_typ"><option value="uebung" {% if v.termin_typ != 'veranstaltung' %}selected{% endif %}>Übung</option><option value="veranstaltung" {% if v.termin_typ == 'veranstaltung' %}selected{% endif %}>Veranstaltung</option></select></div>
+  </div>
+  {% for feld, label in [("checkliste_erforderlich", "Checkliste erforderlich"), ("teilnahme_erforderlich", "Teilnahme erforderlich"), ("nachbereitung_erforderlich", "Nachbereitung erforderlich"), ("uebungseinsatz_erlaubt", "Übungseinsatz erlaubt")] %}
+  <label style="display:flex;gap:.5rem;margin-top:.75rem"><input type="checkbox" name="{{ feld }}" value="1" {% if v and v|attr(feld) %}checked{% endif %}> {{ label }}</label>
+  {% endfor %}
+  {% if probeart %}<label style="display:flex;gap:.5rem;margin-top:.75rem"><input type="checkbox" name="aktiv" value="1" {% if v.aktiv %}checked{% endif %}> Aktiv</label>{% endif %}
+  <div style="display:flex;gap:.75rem;margin-top:1.25rem"><button class="btn btn--primary" type="submit">Speichern</button><a class="btn btn--secondary" href="/probenplanung/verwaltung/probearten">Abbrechen</a></div>
+</form>
+{% if probeart %}<form method="post" action="/probenplanung/verwaltung/probearten/{{ probeart.id }}/loeschen" style="margin-top:1rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger" type="submit">Probeart löschen</button></form>{% endif %}
+{% endblock %}

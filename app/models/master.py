@@ -441,6 +441,14 @@ class OrgSettings(Base):
     # "foerderstrecke_module_enabled" == "true" AND dieser Wert (Muster UAS).
     foerderstrecke_module_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False)
+    probenplanung_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    probenplanung_public_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    uebung_push_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    uebung_ws_alarm_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    uebung_nachbar_einladung_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    uebung_lis_status_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    uebung_wordpress_bericht_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    uebung_geocoding_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Nachschlagewerke (Gefahrgut-Suche, Rettungsdatenblaetter, Karten-Overlays):
     # effektiv = SystemSettings-Key "nachschlagewerke_module_enabled" == "true"
     # AND dieser Wert (Muster UAS/Objekt/Gateway).

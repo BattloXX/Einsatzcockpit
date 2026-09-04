@@ -162,6 +162,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     from app.services.mailing_service import mailing_system_enabled
     from app.services.nachschlagewerk_service import nachschlagewerke_system_enabled
     from app.services.objekt_service import objekt_system_enabled
+    from app.services.probenplanung_service import probenplanung_system_enabled
     from app.services.uas_service import uas_system_enabled
 
     weather_stations = (
@@ -185,6 +186,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "gateway_sys_enabled": _gateway_system_enabled(db),
         "mailing_sys_enabled": mailing_system_enabled(db),
         "lagefuehrung_sys_enabled": lagefuehrung_system_enabled(db),
+        "probenplanung_sys_enabled": probenplanung_system_enabled(db),
         "timezones": common_timezones(),
         "default_timezone": app_settings.DEFAULT_TIMEZONE,
         "weather_stations": weather_stations,
@@ -238,6 +240,7 @@ async def save_org_settings(
     objekt_module_enabled_raw: str = Form(""),
     nachschlagewerke_module_enabled_raw: str = Form(""),
     foerderstrecke_module_enabled_raw: str = Form(""),
+    probenplanung_modul_aktiv_raw: str = Form(""),
     objekt_geo_match_radius_raw: str = Form(""),
     objekt_ki_klassifikation_raw: str = Form(""),
     objekt_kontakt_info_betreff_raw: str = Form(""),
@@ -454,6 +457,24 @@ async def save_org_settings(
                 org_id=effective_org_id,
                 user_id=user.id,
                 payload={"alt": old_foerder, "neu": new_foerder},
+                ip=request.client.host if request.client else None,
+            )
+
+    from app.services.probenplanung_service import probenplanung_system_enabled
+
+    if probenplanung_system_enabled(db):
+        old_proben = org_s.probenplanung_modul_aktiv
+        new_proben = probenplanung_modul_aktiv_raw in ("1", "true", "on")
+        org_s.probenplanung_modul_aktiv = new_proben
+        if old_proben != new_proben:
+            from app.core.audit import write_audit
+
+            write_audit(
+                db,
+                "probenplanung.org_toggle",
+                org_id=effective_org_id,
+                user_id=user.id,
+                payload={"alt": old_proben, "neu": new_proben},
                 ip=request.client.host if request.client else None,
             )
 
@@ -1792,6 +1813,37 @@ def toggle_foerderstrecke_system(
     )
     db.commit()
 
+    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
+    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
+@router.post("/settings/system/probenplanung-toggle")
+def toggle_probenplanung_system(
+    request: Request, db=Depends(get_db), user: User = Depends(require_system_admin), enabled_raw: str = Form("")
+):
+    from datetime import UTC, datetime
+
+    from app.core.audit import write_audit
+
+    key = "probenplanung_module_enabled"
+    value = "true" if enabled_raw in ("1", "true", "on") else "false"
+    row = db.query(SystemSettings).filter(SystemSettings.key == key).first()
+    old = row.value if row else "false"
+    if row is None:
+        row = SystemSettings(key=key, value=value, updated_at=datetime.now(UTC), updated_by_user_id=user.id)
+        db.add(row)
+    else:
+        row.value = value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user.id
+    write_audit(
+        db,
+        "probenplanung.system_toggle",
+        user_id=user.id,
+        payload={"alt": old, "neu": value},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
     org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
     return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
 
