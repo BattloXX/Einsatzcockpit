@@ -1,0 +1,13 @@
+<details style="margin-top:1rem"><summary>Punkt hinzufügen</summary>
+  <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte" class="form-grid">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label>Titel<input name="titel" maxlength="200" required></label>
+    <label>Typ<select name="typ">{% for item_type in item_types %}<option value="{{ item_type }}">{{ item_type }}</option>{% endfor %}</select></label>
+    <label>Hilfetext<textarea name="hilfetext"></textarea></label>
+    <label>Optionen (eine pro Zeile)<textarea name="optionen"></textarea></label>
+    <label><input type="checkbox" name="pflicht" value="1"> Pflichtpunkt</label>
+    <label>Verantwortlich<select name="default_verantwortlich_member_id"><option value="">Nicht zugeordnet</option>{% for member in members %}<option value="{{ member.id }}">{{ member.firstname }} {{ member.lastname }}</option>{% endfor %}</select></label>
+    <label>Tage vor der Probe<input type="number" name="faellig_tage_vorher" min="0"></label>
+    <button class="btn btn--secondary" type="submit">Punkt hinzufügen</button>
+  </form>
+</details>

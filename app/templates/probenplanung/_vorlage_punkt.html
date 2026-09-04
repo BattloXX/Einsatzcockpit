@@ -1,0 +1,22 @@
+<div style="padding:.5rem 0;border-bottom:1px solid var(--border-color)">
+  <strong>{{ item.titel }}</strong> <span class="text-muted">{{ item.typ }}{% if item.pflicht %} · Pflicht{% endif %}</span>
+  {% if item.hilfetext %}<div class="text-muted">{{ item.hilfetext }}</div>{% endif %}
+  {% if not version.veroeffentlicht_am %}
+  <details><summary>Bearbeiten</summary>
+    <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte/{{ item.id }}" class="form-grid">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <label>Titel<input name="titel" maxlength="200" value="{{ item.titel }}" required></label>
+      <label>Typ<select name="typ">{% for item_type in item_types %}<option value="{{ item_type }}" {% if item.typ == item_type %}selected{% endif %}>{{ item_type }}</option>{% endfor %}</select></label>
+      <label>Hilfetext<textarea name="hilfetext">{{ item.hilfetext or '' }}</textarea></label>
+      <label>Optionen<textarea name="optionen">{{ item.optionen or '' }}</textarea></label>
+      <label><input type="checkbox" name="pflicht" value="1" {% if item.pflicht %}checked{% endif %}> Pflichtpunkt</label>
+      <label>Verantwortlich<select name="default_verantwortlich_member_id"><option value="">Nicht zugeordnet</option>{% for member in members %}<option value="{{ member.id }}" {% if item.default_verantwortlich_member_id == member.id %}selected{% endif %}>{{ member.firstname }} {{ member.lastname }}</option>{% endfor %}</select></label>
+      <label>Tage vor der Probe<input type="number" name="faellig_tage_vorher" min="0" value="{{ item.faellig_tage_vorher if item.faellig_tage_vorher is not none else '' }}"></label>
+      <button class="btn btn--secondary btn--sm" type="submit">Punkt speichern</button>
+    </form>
+    <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte/{{ item.id }}/loeschen">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Punkt löschen</button>
+    </form>
+  </details>
+  {% endif %}
+</div>

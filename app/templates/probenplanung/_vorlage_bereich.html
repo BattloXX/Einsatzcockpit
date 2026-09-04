@@ -1,0 +1,18 @@
+<section class="card" style="margin-top:1rem">
+  <h2>{{ section.titel }}</h2>{% if section.beschreibung %}<p>{{ section.beschreibung }}</p>{% endif %}
+  {% for item in items %}{% include "probenplanung/_vorlage_punkt.html" %}{% else %}<p class="text-muted">Noch keine Punkte.</p>{% endfor %}
+  {% if not version.veroeffentlicht_am %}
+    <details style="margin-top:1rem"><summary>Bereich bearbeiten</summary>
+      <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}" class="form-grid">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <label>Titel<input name="titel" maxlength="200" value="{{ section.titel }}" required></label>
+        <label>Beschreibung<textarea name="beschreibung">{{ section.beschreibung or '' }}</textarea></label>
+        <button class="btn btn--secondary btn--sm" type="submit">Bereich speichern</button>
+      </form>
+    </details>
+    {% include "probenplanung/_vorlage_punkt_formular.html" %}
+    <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/loeschen" style="margin-top:.5rem">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Bereich löschen</button>
+    </form>
+  {% endif %}
+</section>
