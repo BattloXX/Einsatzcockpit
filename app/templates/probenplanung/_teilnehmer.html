@@ -1,0 +1,88 @@
+<section id="probe-teilnehmer">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div>
+        <h2>Teilnehmer</h2>
+        <p id="teilnehmer-zusammenfassung">
+          <strong>{{ teilnahme_summary.anwesend }} anwesend</strong> /
+          {{ teilnahme_summary.entschuldigt }} entschuldigt /
+          {{ teilnahme_summary.unentschuldigt }} unentschuldigt /
+          {{ teilnahme_summary.nicht_erfasst }} noch nicht erfasst
+        </p>
+      </div>
+      {% if can_edit %}
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <form hx-post="/probenplanung/{{ termin.id }}/teilnehmer/alle-anwesend" hx-target="#probe-teilnehmer" hx-swap="outerHTML">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button class="btn btn--success" type="submit" style="min-height:44px">Alle nicht erfassten anwesend</button>
+        </form>
+        <form hx-post="/probenplanung/{{ termin.id }}/teilnehmer/zuruecksetzen" hx-target="#probe-teilnehmer" hx-swap="outerHTML" hx-confirm="Teilnehmererfassung wirklich zurücksetzen?">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button class="btn btn--secondary" type="submit" style="min-height:44px">Zurücksetzen</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% if teilnahme_summary.nicht_erfasst %}
+      <p role="alert" style="margin-top:.75rem;padding:.75rem;border-left:4px solid var(--yellow);background:rgba(242,176,46,.12)">
+        Die Erfassung ist noch unvollständig: {{ teilnahme_summary.nicht_erfasst }} Status fehlen.
+      </p>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem">
+    <label>Suche<input class="form-input" id="teilnehmer-suche" type="search" placeholder="Name suchen" oninput="filterProbeTeilnehmer()"></label>
+    <label>Gruppe<select class="form-input" id="teilnehmer-gruppe" onchange="filterProbeTeilnehmer()"><option value="">Alle Gruppen</option>{% for gruppe in gruppen %}<option value="{{ gruppe.id }}">{{ gruppe.name }}</option>{% endfor %}</select></label>
+    <label>Funktion<select class="form-input" id="teilnehmer-funktion" onchange="filterProbeTeilnehmer()"><option value="">Alle Funktionen</option>{% for funktion in funktionen %}<option value="{{ funktion.id }}">{{ funktion.name }}</option>{% endfor %}</select></label>
+    <label style="display:flex;align-items:center;gap:.5rem;min-height:44px"><input id="teilnehmer-offen" type="checkbox" onchange="filterProbeTeilnehmer()"> Nur nicht erfasste anzeigen</label>
+  </div>
+
+  <div id="teilnehmer-liste" style="display:grid;gap:.75rem;margin-top:1rem">
+  {% for item in teilnehmer %}
+    {% set row = item.teilnahme %}
+    <form class="card probe-teilnehmer-row" data-name="{{ item.member.full_name|lower }}" data-status="{{ item.status }}" data-gruppen=",{{ member_gruppen.get(item.member.id, [])|join(',') }}," data-funktion="{{ row.funktion_id if row and row.funktion_id else '' }}" style="margin:0">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap">
+        <strong>{{ item.member.full_name }}</strong>
+        <span class="status-pill {% if row %}{{ row.status_css }}{% else %}status-pill--muted{% endif %}">{% if row %}{{ row.status_label }}{% else %}Noch nicht erfasst{% endif %}</span>
+      </div>
+      {% if can_edit %}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.5rem;margin-top:.75rem">
+        <button class="btn btn--success" type="button" style="min-height:48px" hx-patch="/probenplanung/{{ termin.id }}/teilnehmer/{{ item.member.id }}" hx-target="#probe-teilnehmer" hx-swap="outerHTML" hx-include="closest form" hx-vals='{"status":"anwesend"}'>Anwesend</button>
+        <button class="btn btn--secondary" type="button" style="min-height:48px" hx-patch="/probenplanung/{{ termin.id }}/teilnehmer/{{ item.member.id }}" hx-target="#probe-teilnehmer" hx-swap="outerHTML" hx-include="closest form" hx-vals='{"status":"entschuldigt"}'>Entschuldigt</button>
+        <button class="btn btn--danger" type="button" style="min-height:48px" hx-patch="/probenplanung/{{ termin.id }}/teilnehmer/{{ item.member.id }}" hx-target="#probe-teilnehmer" hx-swap="outerHTML" hx-include="closest form" hx-vals='{"status":"unentschuldigt"}'>Unentschuldigt</button>
+      </div>
+      <details style="margin-top:.75rem"><summary>Details (optional)</summary>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem;margin-top:.75rem">
+          <label>Funktion<select class="form-input" name="funktion_id"><option value="">Keine</option>{% for funktion in funktionen %}<option value="{{ funktion.id }}" {% if row and row.funktion_id == funktion.id %}selected{% endif %}>{{ funktion.name }}</option>{% endfor %}</select></label>
+          <label>Später gekommen<input class="form-input" type="datetime-local" name="gekommen_um" value="{{ (row.gekommen_um|local).strftime('%Y-%m-%dT%H:%M') if row and row.gekommen_um else '' }}"></label>
+          <label>Früher gegangen<input class="form-input" type="datetime-local" name="gegangen_um" value="{{ (row.gegangen_um|local).strftime('%Y-%m-%dT%H:%M') if row and row.gegangen_um else '' }}"></label>
+          <label>Bemerkung<input class="form-input" name="notiz" maxlength="255" value="{{ row.notiz if row and row.notiz else '' }}"></label>
+        </div>
+      </details>
+      {% endif %}
+    </form>
+  {% else %}<div class="card"><p>Keine aktiven Mitglieder vorhanden.</p></div>{% endfor %}
+  </div>
+  <p id="teilnehmer-keine-treffer" class="card" hidden style="margin-top:1rem">Keine Mitglieder entsprechen dem Filter.</p>
+</section>
+<script>
+function filterProbeTeilnehmer() {
+  const root = document.getElementById('probe-teilnehmer');
+  if (!root) return;
+  const suche = (root.querySelector('#teilnehmer-suche').value || '').trim().toLocaleLowerCase('de');
+  const gruppe = root.querySelector('#teilnehmer-gruppe').value;
+  const funktion = root.querySelector('#teilnehmer-funktion').value;
+  const nurOffen = root.querySelector('#teilnehmer-offen').checked;
+  let sichtbar = 0;
+  root.querySelectorAll('.probe-teilnehmer-row').forEach(function (row) {
+    const passt = (!suche || row.dataset.name.includes(suche)) &&
+      (!gruppe || row.dataset.gruppen.includes(',' + gruppe + ',')) &&
+      (!funktion || row.dataset.funktion === funktion) &&
+      (!nurOffen || row.dataset.status === 'nicht_erfasst');
+    row.hidden = !passt;
+    if (passt) sichtbar += 1;
+  });
+  root.querySelector('#teilnehmer-keine-treffer').hidden = sichtbar !== 0;
+}
+</script>

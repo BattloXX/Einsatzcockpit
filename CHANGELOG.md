@@ -2,6 +2,13 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-04): Probenplanung Phase 8 ergänzt die schnelle,
+tablet-taugliche Teilnehmererfassung für alle aktiven Mitglieder mit Statusübersicht,
+clientseitigen Filtern, optionalen Ankunfts-/Abgangszeiten und Bemerkungen. Der neue
+Teilnahmestatus hält die von Einsatzansicht, PDF- und XLSX-Export verwendeten Altfelder
+`ausgerueckt` und `entschuldigt` weiterhin konsistent; nicht erfasste Mitglieder bleiben
+streng von unentschuldigten getrennt.
+
 Unveröffentlicht (2026-09-04): Probenplanung Phase 7 ergänzt Skizzen auf
 JPG-/PNG-Hintergründen im bestehenden Konva-Editor sowie Dokumentablage mit Metadaten.
 Uploads verwenden Magic-Byte-Prüfung, geschützte organisationsgebundene Auslieferung,
