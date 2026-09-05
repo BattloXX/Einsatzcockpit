@@ -2,6 +2,15 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-05): Probenplanung – Formulare zeigten weiße Browser-
+Standardfelder statt des dunklen App-Designs, weil 17 Templates die vorhandenen
+`.form-input`/`.form-select`/`.form-group`-Klassen nicht oder nur teilweise nutzten;
+Beschriftungen standen neben statt über dem Feld. Zusätzlich ragte der Sticky-Header
+der Checkliste im Vorbereitung-Tab auf schmalen Bildschirmen 8px über den Rand hinaus
+(negative Margin ohne passende Gegenstelle, da `.main-content` kein Padding hat).
+Beides behoben und per Playwright bei 320/390/820px nachgewiesen (33 vormals weiße
+Felder auf 0, kein horizontaler Überlauf mehr). Drei Regressionstests ergänzt.
+
 Unveröffentlicht (2026-09-05): Fehlende oder defekte Kalender-Abhängigkeiten blockieren
 nicht mehr den App-Start. Nur der ICS-Feed liefert HTTP 503 mit Installationshinweis;
 der Fehler wird geloggt. Weitere Start-Blocker durch Excel-, QR-, KI-, SSO- und CRDT-Pakete

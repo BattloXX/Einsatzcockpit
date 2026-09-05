@@ -142,3 +142,20 @@ def test_probenplanung_beschriftungen_stehen_in_formulargruppen():
         for treffer in nackt.finditer(pfad.read_text(encoding="utf-8"))
     ]
     assert not fehlend, "Beschriftung nicht als .form-group ausgezeichnet:\n" + "\n".join(fehlend)
+
+
+def test_checkliste_sticky_header_hat_keine_ausgleichslose_bleed_margin():
+    """`.main-content` hat `padding: 0` (app/static/css/tailwind.input.css) -- eine
+    negative Margin auf `.probe-checklist-sticky` faengt daher NICHTS ab, sondern
+    laesst den Sticky-Header bei <=760px um den Margin-Betrag ueber den Viewport
+    hinausragen (Bugfix 2026-09-05: gemessener horizontaler Ueberlauf 8px bei 390px
+    Breite). Falls der Header spaeter erneut mit den Card-Kanten buendig gemacht
+    werden soll, braucht es zuerst eine tatsaechliche Padding-Gegenstelle -- kein
+    Copy-Paste einer negativen Margin ohne sie."""
+    css = (PROBENPLANUNG_ROOT / "_checkliste.html").read_text(encoding="utf-8")
+    treffer = re.findall(r"\.probe-checklist-sticky\{([^}]*)\}", css)
+    assert treffer, "Regel .probe-checklist-sticky nicht gefunden"
+    for regel in treffer:
+        assert "margin" not in regel or "-.5rem" not in regel and "-0.5rem" not in regel, (
+            f".probe-checklist-sticky traegt wieder eine negative Margin ohne Padding-Gegenstelle: {regel}"
+        )
