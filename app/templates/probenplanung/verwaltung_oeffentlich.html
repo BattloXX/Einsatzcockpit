@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Öffentlicher Probenplan{% endblock %}
+{% block content %}
+<h1>Öffentlicher Probenplan</h1>
+{% with active_tab="oeffentlich" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
+<p>Jeder mit diesem Link kann freigegebene Proben ohne Anmeldung lesen und abonnieren.
+Ort und Information erscheinen nur bei ausdrücklicher Freigabe in der Probe.</p>
+<form method="post" action="/probenplanung/verwaltung/oeffentlich/freigabe">
+<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+<label><input type="checkbox" name="public_aktiv" value="1" {% if public_aktiv %}checked{% endif %}> Öffentliche Auslieferung aktivieren</label>
+<button class="btn btn--primary">Freigabe speichern</button>
+</form>
+{% if public_url %}
+<div class="card" style="padding:1rem;overflow-wrap:anywhere">
+<h2>Neue Links – nur jetzt sichtbar</h2>
+<p>Diese Links jetzt kopieren. Sie werden nicht im Klartext gespeichert.</p>
+<p>Leseansicht: <a href="{{ public_url }}">{{ public_url }}</a></p>
+<p>Kalender-Abo: <a href="{{ ics_url }}">{{ ics_url }}</a></p>
+<p>Webcal: <a href="{{ webcal_url }}">{{ webcal_url }}</a></p>
+</div>
+{% endif %}
+<form method="post" action="/probenplanung/verwaltung/oeffentlich">
+<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+<label>Bezeichnung <input class="form-input" name="bezeichnung" maxlength="150"></label>
+<button class="btn btn--primary">Link erzeugen</button>
+</form>
+{% for token in tokens %}
+<div class="card" style="padding:1rem;margin-top:1rem">
+<strong>{{ token.bezeichnung or "Probenplan" }}</strong> – {{ "Aktiv" if token.is_active else "Widerrufen" }}
+{% if token.is_active %}
+<form method="post" action="/probenplanung/verwaltung/oeffentlich/{{ token.id }}/widerrufen">
+<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+<button class="btn btn--danger">Widerrufen</button>
+</form>
+{% endif %}
+<form method="post" action="/probenplanung/verwaltung/oeffentlich/{{ token.id }}/regenerieren">
+<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+<button class="btn btn--secondary">Neu generieren (alten Link widerrufen)</button>
+</form>
+</div>
+{% endfor %}
+{% endblock %}

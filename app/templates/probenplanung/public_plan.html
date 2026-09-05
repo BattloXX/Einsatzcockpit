@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Öffentlicher Probenplan</title>
+<style>
+body {font-family:system-ui,sans-serif;max-width:65rem;margin:auto;padding:1rem;color:#172033}
+article {border:1px solid #ccc;border-radius:.5rem;padding:1rem;margin:1rem 0}
+.info {white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>Probenplan</h1>
+{% for p in proben %}
+<article>
+<h2>{{ p.probeart_name }} - {{ p.thema or "" }}</h2>
+<p>{{ p.datum.strftime('%d.%m.%Y') }} · {% if p.ganztaegig %}Ganztägig{% else %}{{ p.beginn.time().isoformat(timespec='minutes') }}{% if p.ende %} – {{ p.ende.date().isoformat() }} {{ p.ende.time().isoformat(timespec='minutes') }}{% endif %}{% endif %}</p>
+{% if p.status_abgesagt %}<strong>Abgesagt</strong>{% endif %}
+{% if p.objekt %}<p>{{ p.objekt }}</p>{% endif %}
+{% if p.ort %}<p>Ort: {{ p.ort }}</p>{% endif %}
+{% if p.info %}<p class="info">{{ p.info }}</p>{% endif %}
+</article>
+{% else %}<p>Keine öffentlichen Proben vorhanden.</p>{% endfor %}
+</body>
+</html>

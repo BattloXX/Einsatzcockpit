@@ -748,3 +748,66 @@ def test_foerderstrecke_token_zeigt_nur_eigene_org(client):
 
 def test_foerderstrecke_unbekannter_token_404(client):
     assert client.get("/m/foerderstrecke/voellig-unbekannter-token").status_code == 404
+
+
+# ── Öffentlicher Probenplan und ICS: identische SEC-11-Beweiskette ──
+
+def test_probenplan_und_ics_token_isolieren_org_und_fremde_verknuepfungen(client):
+    import hashlib
+    import secrets
+    from app.models.probenplanung import Probeart, ProbePublicToken
+    from app.models.teilnahme import Termin
+    from tests.test_probenplanung_checkliste import _flags
+
+    org_b = _setup_zwei_orgs()
+    _flags()
+    tokens = {}
+    ids = {}
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        for org_id, name in [(ORG_A, "Public-Org-A"), (org_b, "GEHEIM-Org-B")]:
+            settings = db.query(OrgSettings).filter_by(org_id=org_id).first()
+            if settings is None:
+                settings = OrgSettings(org_id=org_id)
+                db.add(settings)
+            settings.probenplanung_modul_aktiv = True
+            settings.probenplanung_public_aktiv = True
+            art = Probeart(org_id=org_id, name=name, kurz=name[:10], farbe="#123456")
+            db.add(art)
+            db.flush()
+            termin = Termin(org_id=org_id, typ="uebung", titel=name, probeart_id=art.id,
+                            beginn=datetime(2026, 7, 10, 18), public_sichtbar=True)
+            db.add(termin)
+            db.flush()
+            ids[org_id] = (termin.id, art.id)
+            plain = secrets.token_urlsafe(32)
+            tokens[org_id] = plain
+            db.add(ProbePublicToken(org_id=org_id, art="plan",
+                                    token_hash=hashlib.sha256(plain.encode()).hexdigest()))
+        db.commit()
+    client.cookies.clear()
+    for suffix in ("", ".ics"):
+        a = client.get(f"/p/probenplan/{tokens[ORG_A]}{suffix}")
+        b = client.get(f"/p/probenplan/{tokens[org_b]}{suffix}")
+        assert a.status_code == b.status_code == 200
+        assert "Public-Org-A" in a.text and "GEHEIM-Org-B" not in a.text
+        assert "GEHEIM-Org-B" in b.text and "Public-Org-A" not in b.text
+    # Manipulierte FKs dürfen auch bei gültigem Token keine fremden Details öffnen.
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        token_a = db.query(ProbePublicToken).filter_by(
+            token_hash=hashlib.sha256(tokens[ORG_A].encode()).hexdigest()).one()
+        token_a.termin_id = ids[org_b][0]
+        db.get(Termin, ids[ORG_A][0]).probeart_id = ids[org_b][1]
+        db.commit()
+    for suffix in ("", ".ics"):
+        r = client.get(f"/p/probenplan/{tokens[ORG_A]}{suffix}")
+        assert r.status_code == 200 and "GEHEIM-Org-B" not in r.text
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        db.query(ProbePublicToken).filter_by(
+            token_hash=hashlib.sha256(tokens[ORG_A].encode()).hexdigest()).one().termin_id = None
+        db.commit()
+    for suffix in ("", ".ics"):
+        r = client.get(f"/p/probenplan/{tokens[ORG_A]}{suffix}")
+        assert "Public-Org-A" in r.text and "GEHEIM-Org-B" not in r.text
