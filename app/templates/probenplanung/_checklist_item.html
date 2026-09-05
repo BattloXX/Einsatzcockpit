@@ -1,6 +1,7 @@
-<article class="probe-checklist-item" id="probe-checklist-item-{{ item.id }}" data-item-id="{{ item.id }}" data-version="{{ item.version }}">
+{% set ueberfaellig = item.pflicht and item.zustand == 'offen' and item.faellig_am and item.faellig_am < heute %}
+<article data-zustand="{{ item.zustand }}" class="probe-checklist-item{% if ueberfaellig %} probe-checklist-item--overdue{% endif %}" id="probe-checklist-item-{{ item.id }}" data-item-id="{{ item.id }}" data-version="{{ item.version }}">
   <div class="probe-checklist-item-head">
-    <div><strong>{{ item.titel }}</strong>{% if item.pflicht %} <small>Pflicht</small>{% endif %}</div>
+    <div><strong>{{ item.titel }}</strong><span class="status-pill">{{ 'Pflicht' if item.pflicht else 'Optional' }}</span>{% if ueberfaellig %} <span class="status-pill">Überfällig seit {{ item.faellig_am.strftime('%d.%m.%Y') }}</span>{% endif %}</div>
     <span class="probe-save-status" data-save-status aria-live="polite">{% if konflikt %}Wurde zwischenzeitlich geändert — aktualisiert{% elif gespeichert|default(false) %}Gespeichert{% else %}Bereit{% endif %}</span>
   </div>
   {% if item.hilfetext %}<p class="text-muted">{{ item.hilfetext }}</p>{% endif %}

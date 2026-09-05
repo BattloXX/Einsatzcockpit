@@ -4,10 +4,7 @@
     <p><span class="badge badge--exercise">ÜBUNG</span> Einsatz {{ exercise_incident.alarm_type_code }} ist mit dieser Probe verknüpft.</p>
     <p><a class="btn btn--secondary" href="/einsatz/{{ exercise_incident.id }}">Bestehenden Einsatz öffnen</a></p>
     {% if can_edit %}
-      <form method="post" action="/probenplanung/{{ termin.id }}/uebungseinsatz/starten" style="display:inline-block">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="btn btn--primary" type="submit">Übungseinsatz starten</button>
-      </form>
+      {% include "probenplanung/_uebungseinsatz_cta.html" %}
       <form method="post" action="/probenplanung/{{ termin.id }}/uebungseinsatz/teilnehmer-uebernehmen" style="display:inline-block">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <button class="btn btn--secondary" type="submit">Einsatzkräfte übernehmen</button>
@@ -37,7 +34,7 @@
       <div class="form-group form-group--checkbox"><label for="neu-gefahren_hinweise"><input type="checkbox" id="neu-gefahren_hinweise" name="gefahren_hinweise" value="1"> Besondere Gefahren und Hinweise übernehmen</label></div>
       <div class="form-group form-group--checkbox"><label for="neu-skizze"><input type="checkbox" id="neu-skizze" name="skizze" value="1"> Skizzen kopieren</label></div>
       <div class="form-group form-group--checkbox"><label for="neu-dokumente"><input type="checkbox" id="neu-dokumente" name="dokumente" value="1"> Dokumente kopieren</label></div>
-      <div class="form-actions"><button class="btn btn--primary" type="submit">Übungseinsatz anlegen</button></div>
+      <div class="form-actions">{% with exercise_form=true %}{% include "probenplanung/_uebungseinsatz_cta.html" %}{% endwith %}</div>
     </form>
   {% elif termin.probeart and not termin.probeart.uebungseinsatz_erlaubt %}
     <p class="text-muted">Für diese Probeart sind keine Übungseinsätze freigegeben.</p>

@@ -2,6 +2,10 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-05): Probeplan-Detailseite mit durchgängigem Kopfbereich,
+Meta-Grid, Accordion-Checkliste, Widget-Spalte, mobiler Segmented-Navigation und
+Sticky-Bottom-Bar. Bestehendes Dark Theme und Autosave bleiben erhalten.
+
 Unveröffentlicht (2026-09-05): Jahresplan mit Hero-Karte für die nächste Vollprobe,
 KPI-Zeile, Fortschrittsbalken pro Termin und mobiler Karten-Ansicht statt Tabelle.
 

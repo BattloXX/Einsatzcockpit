@@ -43,7 +43,7 @@
     <form class="card probe-teilnehmer-row" data-name="{{ item.member.full_name|lower }}" data-status="{{ item.status }}" data-gruppen=",{{ member_gruppen.get(item.member.id, [])|join(',') }}," data-funktion="{{ row.funktion_id if row and row.funktion_id else '' }}" style="margin:0">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap">
-        <strong>{{ item.member.full_name }}</strong>
+        <span class="initialen-chip" aria-hidden="true">{{ item.member.firstname[0] if item.member.firstname else '' }}{{ item.member.lastname[0] if item.member.lastname else '' }}</span> <strong>{{ item.member.full_name }}</strong>
         <span class="status-pill {% if row %}{{ row.status_css }}{% else %}status-pill--muted{% endif %}">{% if row %}{{ row.status_label }}{% else %}Noch nicht erfasst{% endif %}</span>
       </div>
       {% if can_edit %}

@@ -1,0 +1,10 @@
+{% for aktion, label in [('duplizieren', 'Duplizieren'), ('archivieren', 'Archivieren')] %}
+<form method="post" action="/probenplanung/{{ termin.id }}/{{ aktion }}">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <button class="btn btn--secondary" type="submit" title="{{ label }}" aria-label="{{ label }}">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+      {% if aktion == 'duplizieren' %}<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/>{% else %}<path d="M4 9v11h16V9M3 4h18v5H3zM9 13h6"/>{% endif %}
+    </svg>
+  </button>
+</form>
+{% endfor %}
