@@ -14,7 +14,7 @@
      or ('/admin/medien' in _p and not is_sysadmin)
      or '/admin/verleih' in _p or '/admin/wasserstellen' in _p
      or '/admin/foerderpumpen' in _p or '/admin/foerderschlaeuche' in _p
-     or '/admin/foerderkalibrierung' in _p
+     or '/admin/foerderkalibrierung' in _p or '/admin/probenplanung' in _p
      or '/admin/einsatz-import' in _p
      or _p.startswith('/gateway') %}
   {% set active_group = 'verwaltung' %}
@@ -307,6 +307,21 @@
                class="admin-nav__item {% if '/admin/foerderpumpen' in request.url.path or '/admin/foerderschlaeuche' in request.url.path or '/admin/foerderkalibrierung' in request.url.path %}is-active{% endif %}"
                {{ tip('Förderstrecke: eigene Pumpen mit Kennlinie und Schläuche verwalten, Vorlagen wie TS 1600/TS 1200 übernehmen, Übungsmessungen kalibrieren') }}>
               <span class="admin-nav__icon">🧵</span>Förderstrecke
+            </a>
+            {% endif %}
+            {% if request.state.probenplanung_enabled %}
+            <div class="admin-nav__subheading">Probenplanung</div>
+            <a href="/admin/probenplanung/probearten"
+               class="admin-nav__item {% if '/admin/probenplanung/probearten' in request.url.path %}is-active{% endif %}">
+              <span class="admin-nav__icon">🗓</span>Probearten
+            </a>
+            <a href="/admin/probenplanung/vorlagen"
+               class="admin-nav__item {% if '/admin/probenplanung/vorlagen' in request.url.path %}is-active{% endif %}">
+              <span class="admin-nav__icon">📋</span>Checklisten-Vorlagen
+            </a>
+            <a href="/admin/probenplanung/oeffentlich"
+               class="admin-nav__item {% if '/admin/probenplanung/oeffentlich' in request.url.path %}is-active{% endif %}">
+              <span class="admin-nav__icon">🌐</span>Öffentlicher Plan
             </a>
             {% endif %}
             <div class="admin-nav__subheading">Zugänge und Tokens</div>

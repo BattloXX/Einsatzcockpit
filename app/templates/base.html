@@ -53,9 +53,6 @@
   {% set darf_einsatz_anlegen = ('incident_leader' in user_roles or is_admin) and not request.state.is_device %}
   {% set is_fahrtenbuch = request.state.fahrtenbuch_modul_aktiv and ('fahrtenbuch_admin' in user_roles or 'incident_leader' in user_roles or 'recorder' in user_roles or is_admin) %}
   {% set is_as_pruefung = request.state.atemschutz_pruefung_modul_aktiv %}
-  {# Phase 1 der Probenplanung hat nur die Verwaltung (org_admin). Sobald der Probenplan
-     existiert, zeigt der Eintrag dorthin und die Rollenbedingung entfaellt. #}
-  {% set is_probenplanung = request.state.probenplanung_enabled and is_admin %}
   <nav class="topnav" id="topnav">
     <button type="button" class="topnav__burger" aria-label="Menu oeffnen"
             @click="mobileMenuOpen = !mobileMenuOpen"
@@ -97,8 +94,11 @@
           {% if is_fahrtenbuch %}
           <a href="/verwaltung/fahrten" class="{% if '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path %}active{% endif %}">🚒 Fahrtenbuch</a>
           {% endif %}
+          {% if request.state.probenplanung_enabled %}
+          <a href="/probenplanung" class="{% if request.url.path.startswith('/probenplanung') %}active{% endif %}">🗓 Probeplan</a>
+          {% else %}
           <a href="/termine" class="{% if request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') %}active{% endif %}">📋 Teilnahme</a>
-          {% if is_probenplanung %}<a href="/probenplanung/verwaltung/probearten" class="{% if request.url.path.startswith('/probenplanung') %}active{% endif %}">🗓 Probenplanung</a>{% endif %}
+          {% endif %}
           {% if is_as_pruefung %}
           <a href="/atemschutz-pruefung" class="{% if request.url.path.startswith('/atemschutz-pruefung') %}active{% endif %}">🫁 Atemschutz-Geräteprüfung</a>
           {% endif %}
@@ -255,8 +255,11 @@
       {% if is_fahrtenbuch %}
       <a href="/verwaltung/fahrten" class="mobile-menu__link {% if '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path %}active{% endif %}">🚒 Fahrtenbuch</a>
       {% endif %}
+      {% if request.state.probenplanung_enabled %}
+      <a href="/probenplanung" class="mobile-menu__link {% if request.url.path.startswith('/probenplanung') %}active{% endif %}">🗓 Probeplan</a>
+      {% else %}
       <a href="/termine" class="mobile-menu__link {% if request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') %}active{% endif %}">📋 Teilnahme</a>
-      {% if is_probenplanung %}<a href="/probenplanung/verwaltung/probearten" class="mobile-menu__link {% if request.url.path.startswith('/probenplanung') %}active{% endif %}">🗓 Probenplanung</a>{% endif %}
+      {% endif %}
       {% if is_as_pruefung %}
       <a href="/atemschutz-pruefung" class="mobile-menu__link {% if request.url.path.startswith('/atemschutz-pruefung') %}active{% endif %}">🫁 Atemschutz-Geräteprüfung</a>
       {% endif %}
