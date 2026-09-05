@@ -1439,6 +1439,9 @@ def probe_speichern(
     ende_dt = local_input_to_utc(ende, user.org) if ende else None
     if beginn_dt is None or (ende and ende_dt is None):
         raise HTTPException(422, "Ungültiges Datum")
+    ics_felder = ("beginn", "ende", "ort", "titel", "status", "thema", "objekt", "info",
+                  "ganztaegig", "probeart_id", "public_sichtbar", "public_ort_sichtbar", "public_info_sichtbar")
+    ics_vorher = tuple(getattr(termin, feld) for feld in ics_felder)
     before = {"titel": termin.titel, "beginn": termin.beginn}
     _form_anwenden(
         termin,
@@ -1462,7 +1465,8 @@ def probe_speichern(
         public_ort_sichtbar=public_ort_sichtbar,
         public_info_sichtbar=public_info_sichtbar,
     )
-    termin.ics_sequence = (termin.ics_sequence or 0) + 1
+    if ics_vorher != tuple(getattr(termin, feld) for feld in ics_felder):
+        termin.ics_sequence = (termin.ics_sequence or 0) + 1
     write_probe_change(
         db,
         termin.id,

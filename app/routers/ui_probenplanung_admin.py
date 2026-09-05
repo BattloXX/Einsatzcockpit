@@ -797,3 +797,100 @@ def punkt_loeschen(
     db.delete(_item_or_404(db, user.org_id, template_id, version_id, section_id, item_id))
     db.commit()
     return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template_id}?version={version_id}", 303)
+
+
+def _public_token_liste(db: Session, org_id: int | None):
+    from app.models.probenplanung import ProbePublicToken
+    return (db.query(ProbePublicToken).filter(ProbePublicToken.org_id == org_id)
+            .order_by(ProbePublicToken.erstellt_am.desc()).all())
+
+
+def _public_verwaltung_response(request: Request, db: Session, user: User, plain: str | None = None):
+    from app.config import settings
+    from app.models.master import OrgSettings
+
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
+    basis = (settings.PUBLIC_BASE_URL or settings.APP_BASE_URL).rstrip("/")
+    url = f"{basis}/p/probenplan/{plain}" if plain else None
+    return templates.TemplateResponse(request, "probenplanung/verwaltung_oeffentlich.html", {
+        "user": user, "tokens": _public_token_liste(db, user.org_id),
+        "public_aktiv": bool(org_settings and org_settings.probenplanung_public_aktiv),
+        "public_url": url, "ics_url": f"{url}.ics" if url else None,
+        "webcal_url": "webcal://" + url.split("://", 1)[1] + ".ics" if url else None,
+    }, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+
+@router.get("/oeffentlich", response_class=HTMLResponse)
+def public_verwaltung(
+    request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    return _public_verwaltung_response(request, db, user)
+
+
+@router.post("/oeffentlich/freigabe")
+def public_freigabe(
+    request: Request, public_aktiv: str = Form(""), db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    from app.models.master import OrgSettings
+    row = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
+    if row is None:
+        raise HTTPException(404, "Nicht gefunden")
+    row.probenplanung_public_aktiv = bool(public_aktiv)
+    write_audit(db, "probenplanung.public.freigabe", org_id=user.org_id, user_id=user.id,
+                payload={"aktiv": bool(public_aktiv)})
+    db.commit()
+    return RedirectResponse("/probenplanung/verwaltung/oeffentlich", 303)
+
+
+@router.post("/oeffentlich")
+def public_token_erzeugen(
+    request: Request, bezeichnung: str = Form(""), db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    import hashlib
+    import secrets
+
+    from app.models.probenplanung import ProbePublicToken
+    plain = secrets.token_urlsafe(32)
+    db.add(ProbePublicToken(org_id=user.org_id, art="plan", bezeichnung=bezeichnung.strip()[:150] or None,
+                            token_hash=hashlib.sha256(plain.encode()).hexdigest()))
+    write_audit(db, "probenplanung.public.token_erzeugt", org_id=user.org_id, user_id=user.id)
+    db.commit()
+    return _public_verwaltung_response(request, db, user, plain)
+
+
+@router.post("/oeffentlich/{token_id}/{aktion}")
+def public_token_aendern(
+    token_id: int, aktion: str, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+):
+    import hashlib
+    import secrets
+    from datetime import UTC, datetime
+
+    from app.models.probenplanung import ProbePublicToken
+    row = (db.query(ProbePublicToken)
+           .filter(ProbePublicToken.id == token_id, ProbePublicToken.org_id == user.org_id).first())
+    if row is None or aktion not in {"widerrufen", "regenerieren"}:
+        raise HTTPException(404, "Nicht gefunden")
+    row.widerrufen_am = datetime.now(UTC).replace(tzinfo=None)
+    plain = None
+    if aktion == "regenerieren":
+        plain = secrets.token_urlsafe(32)
+        db.add(ProbePublicToken(
+            org_id=user.org_id, art=row.art, termin_id=row.termin_id, jahr=row.jahr,
+            filter_probeart_ids=row.filter_probeart_ids, bezeichnung=row.bezeichnung,
+            token_hash=hashlib.sha256(plain.encode()).hexdigest(),
+        ))
+    write_audit(db, "probenplanung.public.token_" + aktion, org_id=user.org_id, user_id=user.id,
+                entity_type="probe_public_token", entity_id=row.id)
+    db.commit()
+    if plain:
+        return _public_verwaltung_response(request, db, user, plain)
+    return RedirectResponse("/probenplanung/verwaltung/oeffentlich", 303)

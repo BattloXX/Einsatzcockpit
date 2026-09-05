@@ -2,6 +2,13 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-05): Probenplanung Phase 11 ergänzt öffentliche Leseansicht
+und ICS-Abos mit gemeinsamer Feld-Positivliste, expliziter Organisationsbindung und
+widerrufbaren, nur gehasht gespeicherten Links. Ort und Info benötigen eine eigene
+Freigabe; Entwürfe und archivierte Proben bleiben unsichtbar. Kalender behalten
+stabile UIDs und erhalten Änderungen sowie Absagen. Öffentliche Auslieferung muss
+separat aktiviert werden; Antworten werden nicht gecacht.
+
 Unveröffentlicht (2026-09-04): Der systemweite Probenplanung-Schalter behält beim
 Umschalten den ausgewählten Organisationskontext bei und verwendet nun dieselbe
 responsive Darstellung wie die übrigen Modulschalter.

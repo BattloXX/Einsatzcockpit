@@ -212,7 +212,7 @@ async def robots(request: Request):
     base = str(request.base_url).rstrip("/")
     return PlainTextResponse(
         "User-agent: *\nAllow: /\n"
-        "Disallow: /admin/\nDisallow: /lage/\nDisallow: /api/\n"
+        "Disallow: /p/\nDisallow: /admin/\nDisallow: /lage/\nDisallow: /api/\n"
         f"Sitemap: {base}/sitemap.xml\n"
     )
 
