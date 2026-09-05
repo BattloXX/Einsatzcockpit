@@ -3,10 +3,10 @@
 import csv
 import io
 import json
+import logging
 import re
 from datetime import UTC, datetime, timedelta
 
-from openpyxl import load_workbook
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -200,6 +200,14 @@ def import_csv(db: Session, recipient_list: MailingRecipientList, content: bytes
 
 def import_xlsx(db: Session, recipient_list: MailingRecipientList, content: bytes):
     """Excel-Empfaenger org-sicher importieren und bestehende Eintraege aktualisieren."""
+    try:
+        from openpyxl import load_workbook
+    except (ImportError, OSError) as exc:
+        logging.getLogger(__name__).exception("openpyxl kann nicht geladen werden")
+        raise ValueError(
+            "Excel-Funktion nicht verfügbar: Abhängigkeit openpyxl fehlt oder ist defekt. "
+            "Bitte pip install -e . ausführen."
+        ) from exc
     workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     sheet = workbook.active
     rows = sheet.iter_rows(values_only=True)

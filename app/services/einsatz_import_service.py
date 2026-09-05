@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import io
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-import openpyxl
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -92,6 +92,14 @@ def _float(value: Any) -> float | None:
 
 def parse_einsatz_excel(raw: bytes) -> ParsedImport:
     """Erkennt Format A/B und gruppiert alle Daten nach Leitstellen-Nummer."""
+    try:
+        import openpyxl
+    except (ImportError, OSError) as exc:
+        logging.getLogger(__name__).exception("openpyxl kann nicht geladen werden")
+        raise EinsatzImportError(
+            "Excel-Funktion nicht verfügbar: Abhängigkeit openpyxl fehlt oder ist defekt. "
+            "Bitte pip install -e . ausführen."
+        ) from exc
     if not raw:
         raise EinsatzImportError("Die Datei ist leer.")
     try:

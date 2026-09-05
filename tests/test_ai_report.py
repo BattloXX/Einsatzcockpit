@@ -24,7 +24,7 @@ async def test_generate_report_draft_returns_string(monkeypatch):
     mock_client = MagicMock()
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await generate_report_draft({"alarm_type": "B2", "dauer_min": 45})
 
     assert isinstance(result, str)
@@ -63,7 +63,7 @@ async def test_generate_report_draft_no_person_data_in_prompt(monkeypatch):
 
     mock_client.messages.create = _capture
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         await generate_report_draft(incident_data)
 
     assert captured_user_msg, "messages.create was not called"
