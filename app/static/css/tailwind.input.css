@@ -2546,3 +2546,41 @@ button.htmx-request,
   .stats-vehicle-chart { display:none; }
   .stats-vehicle-cards { display:flex; }
 }
+
+/* Probenplanung: Jahresplan */
+/* Bestehende Checklisten-Balken auch außerhalb des Checklisten-Fragments. */
+.progress-bar { height: 8px; background: rgba(255,255,255,.12); border-radius: 4px; margin: .5rem 0; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg,#18a957,rgba(24,169,87,.6)); transition: width .3s ease; }
+.probeplan-hero { padding: 1rem; display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr); gap: 1.5rem; margin-bottom: 1rem; border-left: 4px solid var(--red-light); overflow-wrap: anywhere; }
+.probeplan-hero h2 { margin: .25rem 0; }
+.probeplan-hero p, .probeplan-termin p { margin: .5rem 0; }
+.probeplan-hero__vorbereitung { align-self: center; min-width: 0; }
+.probeplan-hero .form-actions { flex-wrap: wrap; }
+.probeplan-hinweis { margin-bottom: 1rem; }
+.probeplan-kpis { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: .75rem; margin: 1rem 0; }
+.probeplan-kpis .card { padding: .85rem; }
+.probeplan-kpis dt { font-size: .8rem; color: var(--text-muted); }
+.probeplan-kpis dd { margin: .35rem 0 0; font-size: 1.25rem; font-weight: 700; }
+.probeplan-ergebnisse { min-width: 0; overflow-wrap: anywhere; }
+.probeplan-desktop { padding: .5rem; }
+.probeplan-desktop .table { width: 100%; table-layout: fixed; }
+.probeplan-desktop .table th, .probeplan-desktop .table td { padding: .6rem .4rem; white-space: normal; }
+.probeplan-desktop .status-pill { white-space: normal; }
+.probeplan-farbpunkt { display: inline-block; width: .65rem; height: .65rem; border-radius: 50%; }
+.probeplan-personen { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
+.initialen-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; height: 2rem; padding: .2rem; border-radius: 50%; background: var(--surface-high); border: 1px solid var(--border); font-size: .75rem; font-weight: 600; }
+.probeplan-fortschritt { font-size: .8rem; }
+.probeplan-mobil { display: none; }
+.probeplan-termin { padding: 1rem; border-left: 4px solid var(--border); }
+.probeplan-termin__kopf { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: .8rem; }
+.probeplan-termin h3 { margin: .75rem 0 .5rem; }
+@media (max-width: 760px) {
+  .probeplan-hero { grid-template-columns: minmax(0,1fr); gap: .5rem; }
+  .probeplan-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .probeplan-desktop { display: none; }
+  .probeplan-mobil { display: grid; gap: .75rem; }
+  .probeplan-filter { grid-template-columns: minmax(0,1fr); }
+}
+.probeplan-legende { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: 1rem 0; font-size: .85rem; }
+
+.probeplan-filter, .probeplan-uebernahme { padding: 1rem; }

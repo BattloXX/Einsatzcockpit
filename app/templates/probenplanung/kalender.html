@@ -7,13 +7,16 @@
   <div class="form-group"><label for="kal-jahr">Jahr</label><input class="form-input" id="kal-jahr" type="number" name="jahr" value="{{ jahr }}" min="1900" max="9998"></div>
   <button class="btn btn--secondary" type="submit">Anzeigen</button>
 </form>
-<div class="card" style="margin-top:1rem;overflow-x:auto">
+<div class="probeplan-legende" aria-label="Probearten im Monat">
+  {% for art in kalender_probearten %}<span><span class="probeplan-farbpunkt" style="background:{{ art.farbe }}" aria-hidden="true"></span> {{ art.kurz }} · {{ art.name }}</span>{% endfor %}
+</div>
+<div class="card" style="overflow-x:auto">
   <div style="display:grid;grid-template-columns:repeat(7,minmax(9rem,1fr));min-width:63rem;gap:1px;background:var(--border)">
     {% for name in ['Mo','Di','Mi','Do','Fr','Sa','So'] %}<strong style="padding:.5rem;background:var(--surface)">{{ name }}</strong>{% endfor %}
     {% for woche in wochen %}{% for tag in woche %}
       <section style="min-height:8rem;padding:.45rem;background:var(--surface);opacity:{{ '1' if tag.month == monat else '.45' }}">
         <strong>{{ tag.day }}.</strong>
-        {% for termin in tage.get(tag, []) %}<a href="/probenplanung/{{ termin.id }}" style="display:block;margin-top:.35rem;padding:.3rem;border-left:.35rem solid {{ termin.probeart.farbe if termin.probeart else '#64748b' }};background:var(--surface-muted);color:inherit;text-decoration:none"><strong>{{ termin.probeart.kurz if termin.probeart else 'Termin' }}</strong> {{ termin.titel }}<br><small>{{ termin.beginn|local_time }} · {{ termin.status_label }}</small></a>{% endfor %}
+        {% for termin in tage.get(tag, []) %}<a href="/probenplanung/{{ termin.id }}" style="display:block;margin-top:.35rem;padding:.3rem;border-left:.35rem solid {{ termin.probeart.farbe if termin.probeart else 'var(--border)' }};background:var(--surface-muted);color:inherit;text-decoration:none"><strong>{{ termin.probeart.kurz if termin.probeart else 'Termin' }}</strong> {{ termin.titel }}<br><small>{{ termin.beginn|local_time }} · {{ termin.status_label }}</small></a>{% endfor %}
       </section>
     {% endfor %}{% endfor %}
   </div>

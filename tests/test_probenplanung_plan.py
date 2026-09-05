@@ -197,3 +197,99 @@ def test_einsatz_mannschaftsseite_bleibt_funktionsfaehig(client):
     response = client.get(f"/einsatz/{incident_id}/mannschaft")
     assert response.status_code == 200
     assert "Mannschaft" in response.text
+
+
+def test_jahres_kpis_hero_und_aggregierter_fortschritt(client, request):
+    from app.services.probe_checklist_service import fortschritt
+
+    _leser(client, "ux2")
+    art = _probeart(0, "Vollprobe")
+
+    def probeart_aufraeumen():
+        # Die Suite teilt eine DB; spätere Importtests legen selbst Vollprobe an.
+        from app.models.probenplanung import Probeart
+
+        with SessionLocal() as cleanup_db:
+            set_tenant_context(cleanup_db, None)
+            row = cleanup_db.query(Probeart).filter_by(id=art, org_id=ORG_ID).one()
+            row.name = "UX2 Vollprobe abgeschlossen"
+            cleanup_db.commit()
+
+    request.addfinalizer(probeart_aufraeumen)
+    andere_art = _probeart(0, "UX2 Sonderprobe")
+    termin_id = _termin(art, "UX2 Vollprobe", "2088-06-10T19:00", status="in_vorbereitung")
+    _termin(andere_art, "UX2 Sondertermin", "2088-07-10T19:00")
+    _termin(art, "UX2 Abgesagt", "2088-06-02T19:00", status="abgesagt")
+    _termin(art, "UX2 Archiv", "2088-06-03T19:00", archiviert_am=datetime(2088, 6, 1))
+    _termin(art, "UX2 Vorjahr", "2087-06-10T19:00")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        liste = ProbeCheckliste(org_id=ORG_ID, termin_id=termin_id, template_name="UX2", template_version=1)
+        db.add(liste)
+        db.flush()
+        for zustand in ["erledigt", "offen", "offen", "nicht_relevant"]:
+            db.add(ProbeChecklistItem(org_id=ORG_ID, checkliste_id=liste.id, titel=zustand,
+                                      typ="checkbox", zustand=zustand))
+        db.commit()
+        erwartet = fortschritt(liste, None)
+    finally:
+        db.close()
+    with patch(
+        "app.routers.ui_probenplanung.now_local",
+        return_value=datetime(2088, 6, 1, tzinfo=ZoneInfo("Europe/Vienna")),
+    ):
+        response = client.get("/probenplanung?jahr=2088")
+        assert response.status_code == 200
+        assert response.context["hero"]["termin"].id == termin_id
+        assert response.context["hero"]["tage_bis"] == 9
+        assert response.context["kpi"] == {"gesamt": 3, "vollproben": 2, "vorbereitung": 1}
+        assert 'id="probeplan-hero-title"' in response.text
+        assert response.context["fortschritte"][termin_id] == {
+            "gesamt": erwartet.gesamt, "erledigt": erwartet.erledigt, "prozent": erwartet.prozent,
+        }
+        assert response.text.count('aria-valuenow="33"') == 3
+        fragment = client.get("/probenplanung?jahr=2088&q=Sondertermin", headers={"HX-Request": "true"})
+        assert fragment.context["kpi"] == response.context["kpi"]
+        assert "UX2 Vollprobe" not in fragment.text
+        assert 'data-kpi="gesamt">3<' in fragment.text
+        dashboard = client.get("/probenplanung/uebersicht")
+        assert dashboard.context["termin"].id == termin_id
+        assert dashboard.context["prozent"] == erwartet.prozent
+    with patch(
+        "app.routers.ui_probenplanung.now_local",
+        return_value=datetime(2099, 1, 1, tzinfo=ZoneInfo("Europe/Vienna")),
+    ):
+        leer = client.get("/probenplanung?jahr=2099")
+        assert 'id="probeplan-hero-title"' not in leer.text
+        assert "Keine kommende Vollprobe geplant." in leer.text
+
+
+def test_leere_und_nicht_relevante_checklisten_zaehlen_wie_service(client):
+    from app.models.user import User
+    from app.routers.ui_probenplanung import _listen_context
+    from app.services.probe_checklist_service import fortschritt
+
+    _leser(client, "ux2_leer")
+    art = _probeart(0, "UX2 Leere Checklisten")
+    ids = [_termin(art, f"UX2 Liste {i}", "2086-06-10T19:00") for i in range(3)]
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        for index, zustaende in enumerate([[], ["nicht_relevant"], ["erledigt", "erledigt"]]):
+            liste = ProbeCheckliste(org_id=ORG_ID, termin_id=ids[index], template_name="UX2", template_version=1)
+            db.add(liste)
+            db.flush()
+            for zustand in zustaende:
+                db.add(ProbeChecklistItem(org_id=ORG_ID, checkliste_id=liste.id, titel=zustand,
+                                          typ="checkbox", zustand=zustand))
+        db.commit()
+        user = db.query(User).filter_by(username="phase6_ux2_leer").one()
+        context = _listen_context(db, user, db.query(Termin).filter(Termin.id.in_(ids)).all())
+        for liste in db.query(ProbeCheckliste).filter(ProbeCheckliste.termin_id.in_(ids)).all():
+            erwartet = fortschritt(liste, user.org)
+            assert context["fortschritte"][liste.termin_id] == {
+                "gesamt": erwartet.gesamt, "erledigt": erwartet.erledigt, "prozent": erwartet.prozent,
+            }
+    finally:
+        db.close()
