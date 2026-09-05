@@ -1,13 +1,13 @@
 <details style="margin-top:1rem"><summary>Punkt hinzufügen</summary>
   <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte" class="form-grid">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <label>Titel<input name="titel" maxlength="200" required></label>
-    <label>Typ<select name="typ">{% for item_type in item_types %}<option value="{{ item_type }}">{{ item_type }}</option>{% endfor %}</select></label>
-    <label>Hilfetext<textarea name="hilfetext"></textarea></label>
-    <label>Optionen (eine pro Zeile)<textarea name="optionen"></textarea></label>
-    <label><input type="checkbox" name="pflicht" value="1"> Pflichtpunkt</label>
-    <label>Verantwortlich<select name="default_verantwortlich_member_id"><option value="">Nicht zugeordnet</option>{% for member in members %}<option value="{{ member.id }}">{{ member.firstname }} {{ member.lastname }}</option>{% endfor %}</select></label>
-    <label>Tage vor der Probe<input type="number" name="faellig_tage_vorher" min="0"></label>
-    <button class="btn btn--secondary" type="submit">Punkt hinzufügen</button>
+    <div class="form-group"><label for="neu-titel-{{ section.id }}">Titel</label><input class="form-input" id="neu-titel-{{ section.id }}" name="titel" maxlength="200" required></div>
+    <div class="form-group"><label for="neu-typ-{{ section.id }}">Typ</label><select class="form-select" id="neu-typ-{{ section.id }}" name="typ">{% for item_type in item_types %}<option value="{{ item_type }}">{{ item_type }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label for="neu-hilfetext-{{ section.id }}">Hilfetext</label><textarea class="form-input form-input--textarea" id="neu-hilfetext-{{ section.id }}" name="hilfetext"></textarea></div>
+    <div class="form-group"><label for="neu-optionen-{{ section.id }}">Optionen (eine pro Zeile)</label><textarea class="form-input form-input--textarea" id="neu-optionen-{{ section.id }}" name="optionen"></textarea></div>
+    <div class="form-group form-group--checkbox"><label for="neu-pflicht-{{ section.id }}"><input type="checkbox" id="neu-pflicht-{{ section.id }}" name="pflicht" value="1"> Pflichtpunkt</label></div>
+    <div class="form-group"><label for="neu-verantwortlich-{{ section.id }}">Verantwortlich</label><select class="form-select" id="neu-verantwortlich-{{ section.id }}" name="default_verantwortlich_member_id"><option value="">Nicht zugeordnet</option>{% for member in members %}<option value="{{ member.id }}">{{ member.firstname }} {{ member.lastname }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label for="neu-faellig-{{ section.id }}">Tage vor der Probe</label><input class="form-input" id="neu-faellig-{{ section.id }}" type="number" name="faellig_tage_vorher" min="0"></div>
+    <div class="form-actions"><button class="btn btn--secondary" type="submit">Punkt hinzufügen</button></div>
   </form>
 </details>

@@ -7,7 +7,7 @@
 Ort und Information erscheinen nur bei ausdrücklicher Freigabe in der Probe.</p>
 <form method="post" action="/probenplanung/verwaltung/oeffentlich/freigabe">
 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-<label><input type="checkbox" name="public_aktiv" value="1" {% if public_aktiv %}checked{% endif %}> Öffentliche Auslieferung aktivieren</label>
+<div class="form-group form-group--checkbox"><label for="public-aktiv"><input type="checkbox" id="public-aktiv" name="public_aktiv" value="1" {% if public_aktiv %}checked{% endif %}> Öffentliche Auslieferung aktivieren</label></div>
 <button class="btn btn--primary">Freigabe speichern</button>
 </form>
 {% if public_url %}
@@ -21,7 +21,7 @@ Ort und Information erscheinen nur bei ausdrücklicher Freigabe in der Probe.</p
 {% endif %}
 <form method="post" action="/probenplanung/verwaltung/oeffentlich">
 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-<label>Bezeichnung <input class="form-input" name="bezeichnung" maxlength="150"></label>
+<div class="form-group"><label for="token-bezeichnung">Bezeichnung</label><input class="form-input" id="token-bezeichnung" name="bezeichnung" maxlength="150"></div>
 <button class="btn btn--primary">Link erzeugen</button>
 </form>
 {% for token in tokens %}

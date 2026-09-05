@@ -6,9 +6,9 @@
         hx-swap="beforeend"
         hx-on::after-request="if(event.detail.successful){this.reset();this.closest('details').open=false}">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <label>Titel<input class="form-input" name="titel" maxlength="200" required></label>
-    <label>Typ
-      <select class="form-input" name="typ">
+    <div class="form-group"><label for="ind-titel">Titel</label><input class="form-input" id="ind-titel" name="titel" maxlength="200" required></div>
+    <div class="form-group"><label for="ind-typ">Typ</label>
+      <select class="form-select" id="ind-typ" name="typ">
         <option value="checkbox">Checkbox</option>
         <option value="text">Text</option>
         <option value="langtext">Langtext</option>
@@ -17,8 +17,8 @@
         <option value="person">Person</option>
         <option value="link">Link</option>
       </select>
-    </label>
-    <label><input type="checkbox" name="pflicht" value="1"> Pflichtpunkt</label>
-    <button class="btn btn--secondary" type="submit">Punkt hinzufügen</button>
+    </div>
+    <div class="form-group form-group--checkbox"><label for="ind-pflicht"><input type="checkbox" id="ind-pflicht" name="pflicht" value="1"> Pflichtpunkt</label></div>
+    <div class="form-actions"><button class="btn btn--secondary" type="submit">Punkt hinzufügen</button></div>
   </form>
 </details>

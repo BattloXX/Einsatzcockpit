@@ -17,13 +17,13 @@
         <form method="post" action="/probenplanung/{{ termin.id }}/uebungseinsatz/weiterer">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="bestaetigt" value="true">
-          <label>Alarmstichwort<select name="alarm_type_code">{% for alarm in alarm_types %}<option value="{{ alarm.code }}">{{ alarm.code }} – {{ alarm.label }}</option>{% endfor %}</select></label>
-          <p><label><input type="checkbox" name="objekt_adresse" value="1"> Objekt und Adresse</label></p>
-          <p><label><input type="checkbox" name="alarmtext" value="1"> Alarmtext</label></p>
-          <p><label><input type="checkbox" name="gefahren_hinweise" value="1"> Gefahren und Hinweise</label></p>
-          <p><label><input type="checkbox" name="skizze" value="1"> Skizzen kopieren</label></p>
-          <p><label><input type="checkbox" name="dokumente" value="1"> Dokumente kopieren</label></p>
-          <button class="btn btn--danger" type="submit">Weiteren Übungseinsatz verbindlich anlegen</button>
+          <div class="form-group"><label for="weiterer-alarm">Alarmstichwort</label><select class="form-select" id="weiterer-alarm" name="alarm_type_code">{% for alarm in alarm_types %}<option value="{{ alarm.code }}">{{ alarm.code }} – {{ alarm.label }}</option>{% endfor %}</select></div>
+          <div class="form-group form-group--checkbox"><label for="weiterer-objekt_adresse"><input type="checkbox" id="weiterer-objekt_adresse" name="objekt_adresse" value="1"> Objekt und Adresse</label></div>
+          <div class="form-group form-group--checkbox"><label for="weiterer-alarmtext"><input type="checkbox" id="weiterer-alarmtext" name="alarmtext" value="1"> Alarmtext</label></div>
+          <div class="form-group form-group--checkbox"><label for="weiterer-gefahren_hinweise"><input type="checkbox" id="weiterer-gefahren_hinweise" name="gefahren_hinweise" value="1"> Gefahren und Hinweise</label></div>
+          <div class="form-group form-group--checkbox"><label for="weiterer-skizze"><input type="checkbox" id="weiterer-skizze" name="skizze" value="1"> Skizzen kopieren</label></div>
+          <div class="form-group form-group--checkbox"><label for="weiterer-dokumente"><input type="checkbox" id="weiterer-dokumente" name="dokumente" value="1"> Dokumente kopieren</label></div>
+          <div class="form-actions"><button class="btn btn--danger" type="submit">Weiteren Übungseinsatz verbindlich anlegen</button></div>
         </form>
       </details>
     {% endif %}
@@ -31,13 +31,13 @@
     <p>Wählen Sie bewusst aus, welche vorbereiteten Inhalte in den Einsatz kopiert werden.</p>
     <form method="post" action="/probenplanung/{{ termin.id }}/uebungseinsatz">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <label>Alarmstichwort<select name="alarm_type_code" required>{% for alarm in alarm_types %}<option value="{{ alarm.code }}">{{ alarm.code }} – {{ alarm.label }}</option>{% endfor %}</select></label>
-      <p><label><input type="checkbox" name="objekt_adresse" value="1"> Objekt und Adresse übernehmen</label></p>
-      <p><label><input type="checkbox" name="alarmtext" value="1"> Alarmtext übernehmen</label></p>
-      <p><label><input type="checkbox" name="gefahren_hinweise" value="1"> Besondere Gefahren und Hinweise übernehmen</label></p>
-      <p><label><input type="checkbox" name="skizze" value="1"> Skizzen kopieren</label></p>
-      <p><label><input type="checkbox" name="dokumente" value="1"> Dokumente kopieren</label></p>
-      <button class="btn btn--primary" type="submit">Übungseinsatz anlegen</button>
+      <div class="form-group"><label for="neuer-alarm">Alarmstichwort</label><select class="form-select" id="neuer-alarm" name="alarm_type_code" required>{% for alarm in alarm_types %}<option value="{{ alarm.code }}">{{ alarm.code }} – {{ alarm.label }}</option>{% endfor %}</select></div>
+      <div class="form-group form-group--checkbox"><label for="neu-objekt_adresse"><input type="checkbox" id="neu-objekt_adresse" name="objekt_adresse" value="1"> Objekt und Adresse übernehmen</label></div>
+      <div class="form-group form-group--checkbox"><label for="neu-alarmtext"><input type="checkbox" id="neu-alarmtext" name="alarmtext" value="1"> Alarmtext übernehmen</label></div>
+      <div class="form-group form-group--checkbox"><label for="neu-gefahren_hinweise"><input type="checkbox" id="neu-gefahren_hinweise" name="gefahren_hinweise" value="1"> Besondere Gefahren und Hinweise übernehmen</label></div>
+      <div class="form-group form-group--checkbox"><label for="neu-skizze"><input type="checkbox" id="neu-skizze" name="skizze" value="1"> Skizzen kopieren</label></div>
+      <div class="form-group form-group--checkbox"><label for="neu-dokumente"><input type="checkbox" id="neu-dokumente" name="dokumente" value="1"> Dokumente kopieren</label></div>
+      <div class="form-actions"><button class="btn btn--primary" type="submit">Übungseinsatz anlegen</button></div>
     </form>
   {% elif termin.probeart and not termin.probeart.uebungseinsatz_erlaubt %}
     <p class="text-muted">Für diese Probeart sind keine Übungseinsätze freigegeben.</p>

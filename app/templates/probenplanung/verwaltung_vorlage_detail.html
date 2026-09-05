@@ -8,11 +8,11 @@
 {% with active_tab="vorlagen" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
 <div class="card" style="margin-top:1rem">
   <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
-    <label>Version
-      <select onchange="location.href='/probenplanung/verwaltung/vorlagen/{{ template.id }}?version='+this.value">
+    <div class="form-group"><label for="vorlage-version">Version</label>
+      <select class="form-select" id="vorlage-version" onchange="location.href='/probenplanung/verwaltung/vorlagen/{{ template.id }}?version='+this.value">
       {% for entry in versions %}<option value="{{ entry.id }}" {% if version and entry.id == version.id %}selected{% endif %}>V{{ entry.version }} · {{ "veröffentlicht" if entry.veroeffentlicht_am else "Entwurf" }}</option>{% endfor %}
       </select>
-    </label>
+    </div>
     {% if version and version.veroeffentlicht_am %}
       <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/neu">
         <input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="btn btn--primary" type="submit">Bearbeiten (neue Version)</button>
@@ -30,9 +30,9 @@
     <h2>Bereich hinzufügen</h2>
     <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche" class="form-grid">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <label>Titel<input name="titel" maxlength="200" required></label>
-      <label>Beschreibung<textarea name="beschreibung"></textarea></label>
-      <button class="btn btn--secondary" type="submit">Bereich hinzufügen</button>
+      <div class="form-group"><label for="neuer-bereich-titel">Titel</label><input class="form-input" id="neuer-bereich-titel" name="titel" maxlength="200" required></div>
+      <div class="form-group"><label for="neuer-bereich-beschreibung">Beschreibung</label><textarea class="form-input form-input--textarea" id="neuer-bereich-beschreibung" name="beschreibung"></textarea></div>
+      <div class="form-actions"><button class="btn btn--secondary" type="submit">Bereich hinzufügen</button></div>
     </form>
   </div>
   {% endif %}

@@ -3,8 +3,8 @@
 {% block content %}
 <div class="page-header"><div><h1>Probenkalender {{ monat }}/{{ jahr }}</h1><p>Monatsansicht</p></div><a class="btn btn--secondary" href="/probenplanung?jahr={{ jahr }}">Jahresplan</a></div>
 <form method="get" action="/probenplanung/kalender" class="card" style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap">
-  <label>Monat<input class="form-input" type="number" name="monat" value="{{ monat }}" min="1" max="12"></label>
-  <label>Jahr<input class="form-input" type="number" name="jahr" value="{{ jahr }}" min="1900" max="9998"></label>
+  <div class="form-group"><label for="kal-monat">Monat</label><input class="form-input" id="kal-monat" type="number" name="monat" value="{{ monat }}" min="1" max="12"></div>
+  <div class="form-group"><label for="kal-jahr">Jahr</label><input class="form-input" id="kal-jahr" type="number" name="jahr" value="{{ jahr }}" min="1900" max="9998"></div>
   <button class="btn btn--secondary" type="submit">Anzeigen</button>
 </form>
 <div class="card" style="margin-top:1rem;overflow-x:auto">

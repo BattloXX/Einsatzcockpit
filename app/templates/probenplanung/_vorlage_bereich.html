@@ -5,9 +5,9 @@
     <details style="margin-top:1rem"><summary>Bereich bearbeiten</summary>
       <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}" class="form-grid">
         <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-        <label>Titel<input name="titel" maxlength="200" value="{{ section.titel }}" required></label>
-        <label>Beschreibung<textarea name="beschreibung">{{ section.beschreibung or '' }}</textarea></label>
-        <button class="btn btn--secondary btn--sm" type="submit">Bereich speichern</button>
+        <div class="form-group"><label for="bereich-titel-{{ section.id }}">Titel</label><input class="form-input" id="bereich-titel-{{ section.id }}" name="titel" maxlength="200" value="{{ section.titel }}" required></div>
+        <div class="form-group"><label for="bereich-beschreibung-{{ section.id }}">Beschreibung</label><textarea class="form-input form-input--textarea" id="bereich-beschreibung-{{ section.id }}" name="beschreibung">{{ section.beschreibung or '' }}</textarea></div>
+        <div class="form-actions"><button class="btn btn--secondary btn--sm" type="submit">Bereich speichern</button></div>
       </form>
     </details>
     {% include "probenplanung/_vorlage_punkt_formular.html" %}

@@ -31,10 +31,10 @@
   </div>
 
   <div class="card" style="margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem">
-    <label>Suche<input class="form-input" id="teilnehmer-suche" type="search" placeholder="Name suchen" oninput="filterProbeTeilnehmer()"></label>
-    <label>Gruppe<select class="form-input" id="teilnehmer-gruppe" onchange="filterProbeTeilnehmer()"><option value="">Alle Gruppen</option>{% for gruppe in gruppen %}<option value="{{ gruppe.id }}">{{ gruppe.name }}</option>{% endfor %}</select></label>
-    <label>Funktion<select class="form-input" id="teilnehmer-funktion" onchange="filterProbeTeilnehmer()"><option value="">Alle Funktionen</option>{% for funktion in funktionen %}<option value="{{ funktion.id }}">{{ funktion.name }}</option>{% endfor %}</select></label>
-    <label style="display:flex;align-items:center;gap:.5rem;min-height:44px"><input id="teilnehmer-offen" type="checkbox" onchange="filterProbeTeilnehmer()"> Nur nicht erfasste anzeigen</label>
+    <div class="form-group"><label for="teilnehmer-suche">Suche</label><input class="form-input" id="teilnehmer-suche" type="search" placeholder="Name suchen" oninput="filterProbeTeilnehmer()"></div>
+    <div class="form-group"><label for="teilnehmer-gruppe">Gruppe</label><select class="form-select" id="teilnehmer-gruppe" onchange="filterProbeTeilnehmer()"><option value="">Alle Gruppen</option>{% for gruppe in gruppen %}<option value="{{ gruppe.id }}">{{ gruppe.name }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label for="teilnehmer-funktion">Funktion</label><select class="form-select" id="teilnehmer-funktion" onchange="filterProbeTeilnehmer()"><option value="">Alle Funktionen</option>{% for funktion in funktionen %}<option value="{{ funktion.id }}">{{ funktion.name }}</option>{% endfor %}</select></div>
+    <div class="form-group form-group--checkbox"><label for="teilnehmer-offen" style="min-height:44px"><input id="teilnehmer-offen" type="checkbox" onchange="filterProbeTeilnehmer()"> Nur nicht erfasste anzeigen</label></div>
   </div>
 
   <div id="teilnehmer-liste" style="display:grid;gap:.75rem;margin-top:1rem">
@@ -54,10 +54,10 @@
       </div>
       <details style="margin-top:.75rem"><summary>Details (optional)</summary>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem;margin-top:.75rem">
-          <label>Funktion<select class="form-input" name="funktion_id"><option value="">Keine</option>{% for funktion in funktionen %}<option value="{{ funktion.id }}" {% if row and row.funktion_id == funktion.id %}selected{% endif %}>{{ funktion.name }}</option>{% endfor %}</select></label>
-          <label>Später gekommen<input class="form-input" type="datetime-local" name="gekommen_um" value="{{ (row.gekommen_um|local).strftime('%Y-%m-%dT%H:%M') if row and row.gekommen_um else '' }}"></label>
-          <label>Früher gegangen<input class="form-input" type="datetime-local" name="gegangen_um" value="{{ (row.gegangen_um|local).strftime('%Y-%m-%dT%H:%M') if row and row.gegangen_um else '' }}"></label>
-          <label>Bemerkung<input class="form-input" name="notiz" maxlength="255" value="{{ row.notiz if row and row.notiz else '' }}"></label>
+          <div class="form-group"><label for="tn-funktion-{{ item.member.id }}">Funktion</label><select class="form-select" id="tn-funktion-{{ item.member.id }}" name="funktion_id"><option value="">Keine</option>{% for funktion in funktionen %}<option value="{{ funktion.id }}" {% if row and row.funktion_id == funktion.id %}selected{% endif %}>{{ funktion.name }}</option>{% endfor %}</select></div>
+          <div class="form-group"><label for="tn-gekommen-{{ item.member.id }}">Später gekommen</label><input class="form-input" id="tn-gekommen-{{ item.member.id }}" type="datetime-local" name="gekommen_um" value="{{ (row.gekommen_um|local).strftime('%Y-%m-%dT%H:%M') if row and row.gekommen_um else '' }}"></div>
+          <div class="form-group"><label for="tn-gegangen-{{ item.member.id }}">Früher gegangen</label><input class="form-input" id="tn-gegangen-{{ item.member.id }}" type="datetime-local" name="gegangen_um" value="{{ (row.gegangen_um|local).strftime('%Y-%m-%dT%H:%M') if row and row.gegangen_um else '' }}"></div>
+          <div class="form-group"><label for="tn-notiz-{{ item.member.id }}">Bemerkung</label><input class="form-input" id="tn-notiz-{{ item.member.id }}" name="notiz" maxlength="255" value="{{ row.notiz if row and row.notiz else '' }}"></div>
         </div>
       </details>
       {% endif %}
