@@ -110,11 +110,15 @@ def _listen_context(db: Session, user: User, termine: list[Termin]) -> dict:
             )
             .outerjoin(ProbeChecklistItem, ProbeChecklistItem.checkliste_id == ProbeCheckliste.id)
             .filter(ProbeCheckliste.termin_id.in_(termin_ids))
-            .group_by(ProbeCheckliste.termin_id)
+            .group_by(ProbeCheckliste.id, ProbeCheckliste.termin_id)
             .all()
         )
         fortschritte = {
-            termin_id: {"gesamt": int(gesamt or 0), "erledigt": int(erledigt or 0)}
+            termin_id: {
+                "gesamt": int(gesamt or 0),
+                "erledigt": int(erledigt or 0),
+                "prozent": round(int(erledigt or 0) * 100 / int(gesamt)) if gesamt else 100,
+            }
             for termin_id, gesamt, erledigt in rows
         }
     member_ids = {
@@ -166,8 +170,21 @@ def probenplan_liste(
         q=q,
         zeitraum=zeitraum,
     ).order_by(Termin.beginn).all()
+    # Jahreszahlen bleiben beim Filtern stabil; Probearten werden gemeinsam geladen.
+    jahrestermine = termine
+    if probeart_id is not None or status or verantwortlich_id is not None or von or bis or q or zeitraum != "alle":
+        start, ende = _jahr_grenzen(selected_year, user.org)
+        jahrestermine = query.filter(
+            Termin.beginn >= start, Termin.beginn < ende, Termin.archiviert_am.is_(None)
+        ).all()
     context: dict[str, Any] = {
         **_listen_context(db, user, termine),
+        "hero": _vollprobe_context(db, user),
+        "kpi": {
+            "gesamt": len(jahrestermine),
+            "vollproben": sum(bool(t.probeart and t.probeart.name.lower() == "vollprobe") for t in jahrestermine),
+            "vorbereitung": sum(t.status == TerminStatus.in_vorbereitung for t in jahrestermine),
+        },
         "jahr": selected_year,
         "probearten": db.query(Probeart).filter(Probeart.aktiv.is_(True)).order_by(Probeart.sortierung).all(),
         "members": db.query(Member).filter(Member.active.is_(True)).order_by(Member.lastname, Member.firstname).all(),
@@ -225,6 +242,7 @@ def probenplan_kalender(
         "user": user,
         "jahr": selected_year,
         "monat": selected_month,
+        "kalender_probearten": list({t.probeart.id: t.probeart for t in termine if t.probeart}.values()),
         "monatsname": calendar.month_name[selected_month],
         "wochen": calendar.Calendar(firstweekday=0).monthdatescalendar(selected_year, selected_month),
         "tage": tage,
@@ -694,6 +712,11 @@ def probenplanung_uebersicht(
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
+    return templates.TemplateResponse(request, "probenplanung/_dashboard_kachel.html",
+                                      _vollprobe_context(db, user))
+
+
+def _vollprobe_context(db: Session, user: User) -> dict[str, Any]:
     jetzt_lokal = now_local(user.org)
     tagesbeginn_utc = local_date_to_utc(jetzt_lokal.date().isoformat(), org=user.org)
     assert tagesbeginn_utc is not None
@@ -732,7 +755,7 @@ def probenplanung_uebersicht(
             )
             .join(ProbeCheckliste, ProbeCheckliste.id == ProbeChecklistItem.checkliste_id)
             .filter(ProbeCheckliste.termin_id.in_([probe.id for probe in termine]))
-            .group_by(ProbeCheckliste.termin_id)
+            .group_by(ProbeCheckliste.id, ProbeCheckliste.termin_id)
             .all()
         )
         aggregate = {
@@ -748,10 +771,11 @@ def probenplanung_uebersicht(
         else None
     )
     termin_lokal = to_org_tz(termin.beginn, user.org) if termin else None
-    return templates.TemplateResponse(request, "probenplanung/_dashboard_kachel.html", {
+    return {
         "user": user,
         "termin": termin,
         "termin_lokal": termin_lokal,
+        "tage_bis": (termin_lokal.date() - jetzt_lokal.date()).days if termin_lokal else None,
         "am_probentag": bool(termin_lokal and termin_lokal.date() == jetzt_lokal.date()),
         "gesamt": gesamt,
         "erledigt": erledigt,
@@ -759,7 +783,7 @@ def probenplanung_uebersicht(
         "prozent": round(erledigt * 100 / gesamt) if gesamt else 100,
         "ueberfaellig": ueberfaellig_gesamt,
         "verantwortlich": verantwortlich,
-    })
+    }
 
 
 @router.get("/{termin_id}", response_class=HTMLResponse)

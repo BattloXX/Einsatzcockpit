@@ -2,6 +2,9 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-05): Jahresplan mit Hero-Karte für die nächste Vollprobe,
+KPI-Zeile, Fortschrittsbalken pro Termin und mobiler Karten-Ansicht statt Tabelle.
+
 Unveröffentlicht (2026-09-05): Probeplan UX Phase 1 konsolidiert die Navigation:
 bei aktivem Modul ersetzt Probeplan den Teilnahme-Eintrag für alle Angemeldeten.
 Die Konfiguration liegt jetzt in der Verwaltung mit Sidebar und bestehenden Tabs.

@@ -1,16 +1,54 @@
-<div id="probenplan-tabelle" class="card" style="margin-top:1rem;overflow-x:auto">
-  <table class="table">
-    <thead><tr><th>Datum</th><th>Probeart</th><th>Termin</th><th>Status</th><th>Verantwortlich</th><th>Vorbereitung</th></tr></thead>
-    <tbody>{% for termin in termine %}
-      {% set fp = fortschritte.get(termin.id) %}
-      <tr>
-        <td>{{ termin.beginn|local_datetime }}</td>
-        <td>{% if termin.probeart %}<span style="display:inline-block;width:.75rem;height:.75rem;border-radius:50%;background:{{ termin.probeart.farbe }}" aria-hidden="true"></span> {{ termin.probeart.kurz }} – {{ termin.probeart.name }}{% else %}–{% endif %}</td>
-        <td><a href="/probenplanung/{{ termin.id }}">{{ termin.titel }}</a>{% if termin.thema %}<br><small>{{ termin.thema }}</small>{% endif %}</td>
-        <td><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span></td>
-        <td>{{ member_namen.get(termin.verantwortlich_member_id, '–') }}</td>
-        <td>{% if fp %}{{ fp.erledigt }}/{{ fp.gesamt }}{% else %}–{% endif %}</td>
-      </tr>
-    {% else %}<tr><td colspan="6">Keine Termine für diese Auswahl.</td></tr>{% endfor %}</tbody>
-  </table>
+{% macro fortschritt_balken(termin, fp) %}
+  {% if fp %}
+    <div class="probeplan-fortschritt">
+      <span>{{ fp.erledigt }}/{{ fp.gesamt }} · {{ fp.prozent }}%</span>
+      <div class="progress-bar" role="progressbar" aria-label="Vorbereitung {{ termin.titel }}" aria-valuenow="{{ fp.prozent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width:{{ fp.prozent }}%"></div></div>
+    </div>
+  {% else %}<span class="text-muted">Keine Checkliste</span>{% endif %}
+{% endmacro %}
+{% macro personen(termin) %}
+  <div class="probeplan-personen">
+    {% for id, rolle in [(termin.verantwortlich_member_id, 'Verantwortlich'), (termin.unterstuetzung_member_id, 'Unterstützung')] %}
+      {% if id and id in member_namen %}
+        {% set name = member_namen[id] %}
+        <span class="initialen-chip" tabindex="0" title="{{ rolle }}: {{ name }}" aria-label="{{ rolle }}: {{ name }}">{% for teil in name.split() %}{% if loop.first or loop.last %}{{ teil[0]|upper }}{% endif %}{% endfor %}</span>
+      {% elif loop.first %}<span class="text-muted">Nicht zugeteilt</span>{% endif %}
+    {% endfor %}
+  </div>
+{% endmacro %}
+<div id="probenplan-tabelle" class="probeplan-ergebnisse">
+  <dl class="probeplan-kpis" aria-label="Kennzahlen im Jahr {{ jahr }}">
+    <div class="card"><dt>Termine · Jahr {{ jahr }}</dt><dd data-kpi="gesamt">{{ kpi.gesamt }}</dd></div>
+    <div class="card"><dt>Vollproben · Jahr {{ jahr }}</dt><dd data-kpi="vollproben">{{ kpi.vollproben }}</dd></div>
+    <div class="card"><dt>In Vorbereitung · Jahr {{ jahr }}</dt><dd data-kpi="vorbereitung">{{ kpi.vorbereitung }}</dd></div>
+    <div class="card"><dt>Nächste Vollprobe · unabhängig vom Filter</dt><dd>{% if hero.tage_bis is not none %}{{ hero.tage_bis }} Tage{% else %}Nicht geplant{% endif %}</dd></div>
+  </dl>
+  <div class="card probeplan-desktop">
+    <table class="table">
+      <thead><tr><th>Datum</th><th>Probeart</th><th>Termin</th><th>Status</th><th>Team</th><th>Vorbereitung</th></tr></thead>
+      <tbody>{% for termin in termine %}
+        <tr>
+          <td>{{ termin.beginn|local_datetime }}</td>
+          <td>{% if termin.probeart %}<span class="probeplan-farbpunkt" style="background:{{ termin.probeart.farbe }}" aria-hidden="true"></span> {{ termin.probeart.kurz }} · {{ termin.probeart.name }}{% else %}Termin{% endif %}</td>
+          <td><a href="/probenplanung/{{ termin.id }}">{{ termin.titel }}</a>{% if termin.thema %}<br><small>{{ termin.thema }}</small>{% endif %}{% if termin.ort %}<br><small class="text-muted">{{ termin.ort }}</small>{% endif %}</td>
+          <td><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span></td>
+          <td>{{ personen(termin) }}</td>
+          <td>{{ fortschritt_balken(termin, fortschritte.get(termin.id)) }}</td>
+        </tr>
+      {% else %}<tr><td colspan="6">Keine Termine für diese Auswahl.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  <div class="probeplan-mobil">
+    {% for termin in termine %}
+      <article class="card probeplan-termin" style="border-left-color:{{ termin.probeart.farbe if termin.probeart else 'var(--border)' }}">
+        <div class="probeplan-termin__kopf"><span>{{ termin.probeart.name if termin.probeart else 'Termin' }}</span><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span></div>
+        <h3><a href="/probenplanung/{{ termin.id }}">{{ termin.titel }}</a></h3>
+        {% if termin.thema %}<p>{{ termin.thema }}</p>{% endif %}
+        <p>{{ termin.beginn|local_datetime }}</p>
+        {% if termin.ort %}<p class="text-muted">{{ termin.ort }}</p>{% endif %}
+        {{ personen(termin) }}
+        {{ fortschritt_balken(termin, fortschritte.get(termin.id)) }}
+      </article>
+    {% else %}<p>Keine Termine für diese Auswahl.</p>{% endfor %}
+  </div>
 </div>
