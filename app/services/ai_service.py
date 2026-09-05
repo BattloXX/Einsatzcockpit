@@ -16,8 +16,6 @@ import re as _re
 import time
 from typing import Any
 
-from anthropic import APIError, AsyncAnthropic, AuthenticationError, RateLimitError
-
 from app.config import settings
 
 logger = logging.getLogger("einsatzleiter.ai")
@@ -242,6 +240,14 @@ async def _complete(
         raise AIServiceError("KI-Dienst: kein API-Key konfiguriert.")
 
     tokens = max_tokens or platform_cfg["max_tokens"]
+    try:
+        from anthropic import APIError, AsyncAnthropic, AuthenticationError, RateLimitError
+    except (ImportError, OSError) as exc:
+        logger.exception("Anthropic-SDK kann nicht geladen werden")
+        raise AIServiceError(
+            "KI-Dienst nicht verfügbar: Abhängigkeit anthropic fehlt oder ist defekt. "
+            "Bitte pip install -e . ausführen."
+        ) from exc
     client = AsyncAnthropic(api_key=api_key)
 
     try:
@@ -351,6 +357,14 @@ async def _complete_vision(
     content.append({"type": "text", "text": user})
 
     tokens = max_tokens or platform_cfg["max_tokens"]
+    try:
+        from anthropic import APIError, AsyncAnthropic, AuthenticationError, RateLimitError
+    except (ImportError, OSError) as exc:
+        logger.exception("Anthropic-SDK kann nicht geladen werden")
+        raise AIServiceError(
+            "KI-Dienst nicht verfügbar: Abhängigkeit anthropic fehlt oder ist defekt. "
+            "Bitte pip install -e . ausführen."
+        ) from exc
     client = AsyncAnthropic(api_key=api_key)
 
     try:

@@ -24,12 +24,12 @@ abonniert werden.
 """
 from __future__ import annotations
 
+import functools
 import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from pycrdt import Channel
 from sqlalchemy.orm import Session
 
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
@@ -143,40 +143,53 @@ async def lagedokument_druck(
 
 # ── Realtime-Kollaboration (Yjs-CRDT-Sync) ────────────────────────────────────
 
-class _FastAPIChannel(Channel):
-    """Adapter: erfuellt pycrdt's `Channel`-Protokoll ueber eine FastAPI-WebSocket-Verbindung,
-    damit YRoom.serve() sie direkt bedienen kann.
+@functools.cache
+def _channel_klasse() -> type:
+    """Baut die Adapterklasse beim ersten Verbindungsaufbau und merkt sie sich.
 
-    Muss von `Channel` ERBEN (nicht nur strukturell path/send/recv nachbilden) --
-    YRoom.serve() iteriert per `async for message in channel:`, was `__aiter__`/`__anext__`
-    voraussetzt. `Channel` liefert dafuer eine Default-Implementierung, die aber nur bei
-    tatsaechlicher Vererbung wirksam wird (Bugfix 2026-07-15: die vorherige eigenstaendige
-    Klasse ohne Vererbung crashte bei jeder Verbindung mit
-    "TypeError: 'async for' requires an object with __aiter__ method" direkt nach der
-    ersten SYNC_STEP1-Nachricht -- die Live-Kollaboration hat dadurch nie echte Client-
-    Aenderungen empfangen). Muster: pycrdt.websocket.websocket.HttpxWebsocket (eigene
-    __anext__-Override wandelt Verbindungsabbrueche in ein sauberes StopAsyncIteration
-    statt sie als Fehler im Sync-Room zu loggen)."""
+    `pycrdt` ist eine kompilierte Erweiterung; ein fehlendes oder defektes Wheel darf
+    nicht schon beim Import dieses Routers den gesamten App-Start verhindern (siehe
+    CHANGELOG 2026-09-05). Da die Klasse von `Channel` erben MUSS, laesst sich der
+    Import nicht anders verzoegern als ueber eine spaet gebaute Klasse -- deshalb hier
+    einmalig gecacht statt pro Verbindung neu erzeugt."""
+    from pycrdt import Channel
 
-    def __init__(self, websocket: WebSocket, path: str):
-        self._ws = websocket
-        self._path = path
+    class FastAPIChannel(Channel):
+        """Adapter: erfuellt pycrdt's `Channel`-Protokoll ueber eine FastAPI-WebSocket-Verbindung,
+        damit YRoom.serve() sie direkt bedienen kann.
 
-    @property
-    def path(self) -> str:
-        return self._path
+        Muss von `Channel` ERBEN (nicht nur strukturell path/send/recv nachbilden) --
+        YRoom.serve() iteriert per `async for message in channel:`, was `__aiter__`/`__anext__`
+        voraussetzt. `Channel` liefert dafuer eine Default-Implementierung, die aber nur bei
+        tatsaechlicher Vererbung wirksam wird (Bugfix 2026-07-15: die vorherige eigenstaendige
+        Klasse ohne Vererbung crashte bei jeder Verbindung mit
+        "TypeError: 'async for' requires an object with __aiter__ method" direkt nach der
+        ersten SYNC_STEP1-Nachricht -- die Live-Kollaboration hat dadurch nie echte Client-
+        Aenderungen empfangen). Muster: pycrdt.websocket.websocket.HttpxWebsocket (eigene
+        __anext__-Override wandelt Verbindungsabbrueche in ein sauberes StopAsyncIteration
+        statt sie als Fehler im Sync-Room zu loggen)."""
 
-    async def send(self, message: bytes) -> None:
-        await self._ws.send_bytes(message)
+        def __init__(self, websocket: WebSocket, path: str):
+            self._ws = websocket
+            self._path = path
 
-    async def recv(self) -> bytes:
-        return await self._ws.receive_bytes()
+        @property
+        def path(self) -> str:
+            return self._path
 
-    async def __anext__(self) -> bytes:
-        try:
-            return await self.recv()
-        except Exception:
-            raise StopAsyncIteration() from None
+        async def send(self, message: bytes) -> None:
+            await self._ws.send_bytes(message)
+
+        async def recv(self) -> bytes:
+            return await self._ws.receive_bytes()
+
+        async def __anext__(self) -> bytes:
+            try:
+                return await self.recv()
+            except Exception:
+                raise StopAsyncIteration() from None
+
+    return FastAPIChannel
 
 
 @router.websocket("/ws/lagedokument/{lage_id}")
@@ -215,10 +228,14 @@ async def lagedokument_ws(websocket: WebSocket, lage_id: int):
         db.close()
 
     await websocket.accept()
-    channel = _FastAPIChannel(websocket, path=f"lagedokument-{lage_id}")
     try:
+        channel = _channel_klasse()(websocket, path=f"lagedokument-{lage_id}")
         room = await get_or_create_room(lage_id, org_id)
         await room.serve(channel)
+    except (ImportError, OSError):
+        logger.exception("Lagedokument-Sync nicht verfügbar: Abhängigkeit pycrdt fehlt oder ist defekt; "
+                         "bitte pip install -e . ausführen")
+        await websocket.close(code=1011, reason="Sync-Abhängigkeit fehlt/defekt. Bitte pip install -e . ausführen.")
     except WebSocketDisconnect:
         pass
     except Exception:

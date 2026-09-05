@@ -10,7 +10,6 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from jose import ExpiredSignatureError, JWTError, jwt
 
 from app.config import settings
 
@@ -184,6 +183,14 @@ async def validate_id_token(
     authority_base: str | None = None,
 ) -> dict[str, Any]:
     """Validiert id_token: Signatur, aud, iss, exp, nbf, nonce, tid."""
+    try:
+        from jose import ExpiredSignatureError, JWTError, jwt
+    except (ImportError, OSError) as exc:
+        logger.exception("SSO nicht verfügbar: python-jose kann nicht geladen werden; pip install -e . ausführen")
+        raise SsoError(
+            "sso_failed", "SSO nicht verfügbar: Abhängigkeit python-jose fehlt oder ist defekt. "
+            "Bitte pip install -e . ausführen.",
+        ) from exc
     jwks = await _get_jwks(tenant_id, authority_base)
 
     try:

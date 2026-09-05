@@ -6,7 +6,6 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-import qrcode
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, or_
@@ -1340,10 +1339,16 @@ async def _build_dashboard_context(
             db.add(IT(incident_id=incident_id, token_hash=token_hash, issued_by_user_id=user.id))
             db.commit()
         qr_url_str = f"{request.base_url}qr-login?incident_id={incident_id}&token={token}"
-        qr_img = qrcode.make(qr_url_str, box_size=4, border=1)
-        buf = io.BytesIO()
-        qr_img.save(buf, format="PNG")
-        qr_img_b64 = base64.b64encode(buf.getvalue()).decode()
+        try:
+            import qrcode
+
+            qr_img = qrcode.make(qr_url_str, box_size=4, border=1)
+            buf = io.BytesIO()
+            qr_img.save(buf, format="PNG")
+            qr_img_b64 = base64.b64encode(buf.getvalue()).decode()
+        except (ImportError, OSError):
+            _log.exception("QR-Code nicht verfügbar: Abhängigkeit qrcode/Pillow fehlt oder ist defekt; "
+                             "bitte pip install -e . ausführen")
 
     # Drohnen-Panel: immer anzeigen, sobald ein Drohneneinsatz mit diesem Einsatz
     # verknüpft ist – unabhängig vom Modul-Flag oder Betrachter. Das Dashboard ist ein reines

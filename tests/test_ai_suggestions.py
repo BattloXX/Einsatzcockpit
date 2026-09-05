@@ -37,7 +37,7 @@ async def test_suggest_tasks_returns_list(ai_enabled):
     )
     mock_client = _mock_client_with_text(json_response)
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await suggest_tasks("Brand in Lagerhalle", "B3")
 
     assert isinstance(result, list)
@@ -54,7 +54,7 @@ async def test_suggest_tasks_returns_empty_on_invalid_json(ai_enabled):
 
     mock_client = _mock_client_with_text("Leider kein JSON hier, nur Text.")
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await suggest_tasks("Brandmeldung", "T1")
 
     assert result == []
@@ -78,7 +78,7 @@ async def test_suggest_tasks_truncates_long_titles(ai_enabled):
     json_response = f'[{{"titel":"{long_titel}","detail":null}}]'
     mock_client = _mock_client_with_text(json_response)
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await suggest_tasks("Übung", "T1")
 
     assert len(result[0]["titel"]) <= 60
@@ -91,7 +91,7 @@ async def test_suggest_tasks_skips_empty_titles(ai_enabled):
     json_response = '[{"titel":"","detail":"nur Detail"},{"titel":"Gültig"}]'
     mock_client = _mock_client_with_text(json_response)
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await suggest_tasks("Test", "T1")
 
     assert len(result) == 1
@@ -107,7 +107,7 @@ async def test_rank_task_suggestions_returns_ranked_indices(ai_enabled):
     mock_client = _mock_client_with_text("[2,0,1]")
     vorlagen = ["Erstangriff", "Wasserversorgung", "Menschenrettung", "Belüften", "Absperren"]
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await rank_task_suggestions(vorlagen, "B3", limit=5)
 
     assert result == [2, 0, 1]
@@ -120,7 +120,7 @@ async def test_rank_task_suggestions_respects_limit(ai_enabled):
     mock_client = _mock_client_with_text("[4,3,2,1,0]")
     vorlagen = ["A", "B", "C", "D", "E"]
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await rank_task_suggestions(vorlagen, "B3", limit=3)
 
     assert result == [4, 3, 2]
@@ -133,7 +133,7 @@ async def test_rank_task_suggestions_ignores_out_of_range_indices(ai_enabled):
     mock_client = _mock_client_with_text("[9,1,-1,0]")
     vorlagen = ["A", "B"]
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await rank_task_suggestions(vorlagen, "B3", limit=5)
 
     assert result == [1, 0]
@@ -145,7 +145,7 @@ async def test_rank_task_suggestions_returns_none_on_invalid_json(ai_enabled):
 
     mock_client = _mock_client_with_text("Kein JSON hier.")
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await rank_task_suggestions(["A", "B"], "B3")
 
     assert result is None

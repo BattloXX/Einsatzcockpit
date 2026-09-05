@@ -116,7 +116,7 @@ def _make_mock_client(text: str) -> MagicMock:
 async def test_complete_returns_text(ai_enabled):
     mock_client = _make_mock_client("Einsatzverlauf: Brand in Halle 3.")
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await ai_service.complete("System-Prompt", "User-Prompt", feature="test")
 
     assert result == "Einsatzverlauf: Brand in Halle 3."
@@ -126,7 +126,7 @@ async def test_complete_returns_text(ai_enabled):
 async def test_complete_uses_default_model(ai_enabled):
     mock_client = _make_mock_client("ok")
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         await ai_service.complete("sys", "user", feature="test", fast=False)
 
     call_kwargs = mock_client.messages.create.call_args.kwargs
@@ -137,7 +137,7 @@ async def test_complete_uses_default_model(ai_enabled):
 async def test_complete_uses_fast_model(ai_enabled):
     mock_client = _make_mock_client("schnell")
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         await ai_service.complete("sys", "user", feature="test", fast=True)
 
     call_kwargs = mock_client.messages.create.call_args.kwargs
@@ -148,7 +148,7 @@ async def test_complete_uses_fast_model(ai_enabled):
 async def test_complete_respects_custom_max_tokens(ai_enabled):
     mock_client = _make_mock_client("ok")
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         await ai_service.complete("sys", "user", feature="test", max_tokens=500)
 
     call_kwargs = mock_client.messages.create.call_args.kwargs
@@ -191,7 +191,7 @@ async def test_complete_api_error_raises_ai_service_error(ai_enabled):
         side_effect=APIConnectionError(request=mock_request)
     )
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         with pytest.raises(AIServiceError):
             await ai_service.complete("sys", "user", feature="test")
 
@@ -203,7 +203,7 @@ async def test_complete_empty_response_raises_ai_service_error(ai_enabled):
     mock_client = MagicMock()
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         with pytest.raises(AIServiceError, match="leer"):
             await ai_service.complete("sys", "user", feature="test")
 
@@ -216,7 +216,7 @@ async def test_complete_writes_success_log(ai_enabled):
     db.close()
     mock_client = _make_mock_client("ok")
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         await ai_service.complete("sys", "user", feature="report")
 
     db = TestingSession()

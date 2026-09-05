@@ -2,6 +2,12 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-05): Fehlende oder defekte Kalender-Abhängigkeiten blockieren
+nicht mehr den App-Start. Nur der ICS-Feed liefert HTTP 503 mit Installationshinweis;
+der Fehler wird geloggt. Weitere Start-Blocker durch Excel-, QR-, KI-, SSO- und CRDT-Pakete
+werden ebenfalls erst beim Feature-Aufruf geladen und dort abgefangen. Die
+Update-Anleitung betont das Nachinstallieren von Abhängigkeiten nach manuellem `git pull`.
+
 Unveröffentlicht (2026-09-05): Probenplanung Phase 11 ergänzt öffentliche Leseansicht
 und ICS-Abos mit gemeinsamer Feld-Positivliste, expliziter Organisationsbindung und
 widerrufbaren, nur gehasht gespeicherten Links. Ort und Info benötigen eine eigene

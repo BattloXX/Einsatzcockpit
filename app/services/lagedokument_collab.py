@@ -22,9 +22,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+from typing import TYPE_CHECKING
 
-from pycrdt import Doc, YMessageType, read_message
-from pycrdt.websocket.yroom import YRoom
+if TYPE_CHECKING:
+    from pycrdt.websocket.yroom import YRoom
 
 from app.services import ws_bus
 
@@ -145,6 +146,8 @@ def _on_room_message(lage_id: int, message: bytes) -> bool:
     normale Verarbeitung durch YRoom.serve() (lokale Zustellung, Anwenden auf
     room.awareness) laeuft immer unveraendert weiter, dies ist nur ein
     zusaetzlicher Abzweig."""
+    from pycrdt import YMessageType
+
     if message and message[0] == YMessageType.AWARENESS and lage_id not in _applying_remote_awareness \
             and ws_bus.enabled():
         asyncio.create_task(_publish_awareness(lage_id, message))
@@ -178,6 +181,8 @@ async def _bus_deliver_awareness(payload: dict) -> None:
     try:
         for client in list(room.clients):
             asyncio.create_task(client.send(message))
+        from pycrdt import read_message
+
         room.awareness.apply_awareness_update(read_message(message[1:]), room)
     finally:
         _applying_remote_awareness.discard(lage_id)
@@ -209,6 +214,9 @@ async def get_or_create_room(lage_id: int, org_id: int) -> YRoom:
         room = _rooms.get(lage_id)
         if room is not None:
             return room
+        from pycrdt import Doc
+        from pycrdt.websocket.yroom import YRoom
+
         doc: Doc = Doc()
         existing_state, existing_html = await asyncio.to_thread(_load_ydoc_state, lage_id)
         if existing_state:

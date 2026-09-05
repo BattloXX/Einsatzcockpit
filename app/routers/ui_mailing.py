@@ -2,13 +2,13 @@
 
 import io
 import json
+import logging
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from openpyxl import Workbook
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -332,6 +332,15 @@ def list_import_template(
     user=Depends(require_role("mailing_admin")),
     _g=Depends(require_mailing_enabled),
 ):
+    try:
+        from openpyxl import Workbook
+    except (ImportError, OSError) as exc:
+        logging.getLogger(__name__).exception("openpyxl kann nicht geladen werden")
+        raise HTTPException(
+            503,
+            detail="Excel-Funktion nicht verfügbar: Abhängigkeit openpyxl fehlt oder ist defekt. "
+                   "Bitte pip install -e . ausführen.",
+        ) from exc
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Empfaenger"

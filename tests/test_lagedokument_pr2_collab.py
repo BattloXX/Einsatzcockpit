@@ -106,7 +106,9 @@ class _FakeWebSocket:
 async def test_fastapi_channel_ist_async_iterierbar():
     """Ohne den Fix wirft schon `channel.__aiter__()` einen AttributeError bzw.
     _FastAPIChannel() selbst ist kein gueltiges 'async for'-Ziel."""
-    from app.routers.ui_lagedokument import _FastAPIChannel
+    from app.routers.ui_lagedokument import _channel_klasse
+
+    _FastAPIChannel = _channel_klasse()
     channel = _FastAPIChannel(_FakeWebSocket(incoming=[]), path="test")
     assert channel.__aiter__() is channel
     with pytest.raises(StopAsyncIteration):
@@ -118,7 +120,9 @@ async def test_room_serve_mit_fastapi_channel_crasht_nicht_beim_ersten_iteration
     """Direkter Repro-Test gegen die echte YRoom.serve()-Implementierung (nicht nur den
     Adapter isoliert): vor dem Fix brach dieser Aufruf mit der oben beschriebenen
     TypeError ab, nachdem genau eine SYNC_STEP1-Nachricht gesendet wurde."""
-    from app.routers.ui_lagedokument import _FastAPIChannel
+    from app.routers.ui_lagedokument import _channel_klasse
+
+    _FastAPIChannel = _channel_klasse()
     from pycrdt.websocket.yroom import YRoom
 
     ws = _FakeWebSocket(incoming=[])  # "Client" trennt sofort nach dem Connect

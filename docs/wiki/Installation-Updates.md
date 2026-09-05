@@ -69,6 +69,12 @@ Token-Änderungen landen im Audit-Log.
 
 ## Standard-Update-Prozess (SSH, Alternative)
 
+> **Wichtig bei manuellem `git pull`:** Wenn sich Abhängigkeiten geändert haben,
+> muss anschließend **`pip install -e .` in der aktivierten App-Umgebung** ausgeführt
+> werden, bevor Migrationen und Neustart folgen. `git pull` allein installiert keine
+> Python-Pakete. Der Web-Updater übernimmt diesen Schritt automatisch, wenn
+> **Abhängigkeiten installieren** aktiviert ist (bei GitHub-Updates standardmäßig aktiv).
+
 ```bash
 cd /home/clp-einsatz/htdocs/einsatzleiter
 source .venv/bin/activate

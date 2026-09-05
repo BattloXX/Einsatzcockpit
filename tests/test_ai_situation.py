@@ -34,7 +34,7 @@ async def test_generate_situation_brief_returns_string(ai_enabled):
     brief = "Einsatz läuft seit 15 Minuten. Drei Fahrzeuge sind vor Ort."
     mock_client = _mock_client_with_text(brief)
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         result = await generate_situation_brief({"alarm_type": "B2", "laufzeit_min": 15})
 
     assert isinstance(result, str)
@@ -64,7 +64,7 @@ async def test_generate_situation_brief_strips_person_data(ai_enabled):
 
     mock_client.messages.create = _capture
 
-    with patch("app.services.ai_service.AsyncAnthropic", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         await generate_situation_brief(context)
 
     assert captured, "messages.create was not called"

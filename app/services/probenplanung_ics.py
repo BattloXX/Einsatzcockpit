@@ -1,12 +1,21 @@
 """RFC-5545-Ausgabe ausschließlich aus freigegebenen Wertobjekten."""
 from datetime import UTC, datetime, timedelta
 
-from icalendar import Calendar, Event
-
 from app.services.probenplanung_public import OeffentlicherKalendereintrag
 
 
+class KalenderNichtVerfuegbar(RuntimeError):
+    """Die Kalender-Bibliothek kann nicht geladen werden."""
+
+
 def probenplan_ics(eintraege: tuple[OeffentlicherKalendereintrag, ...], host: str) -> bytes:
+    try:
+        from icalendar import Calendar, Event
+    except (ImportError, OSError) as exc:
+        raise KalenderNichtVerfuegbar(
+            "Kalender-Feed nicht verfügbar: Die Abhängigkeit icalendar fehlt oder ist defekt. "
+            "Bitte in der App-Umgebung pip install -e . ausführen."
+        ) from exc
     kalender = Calendar()
     kalender.add("prodid", "-//Einsatzcockpit//Probenplan//DE")
     kalender.add("version", "2.0")
