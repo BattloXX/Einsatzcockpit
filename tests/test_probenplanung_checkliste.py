@@ -22,7 +22,7 @@ from app.models.user import Role, User, UserRole
 from app.services.probe_checklist_service import darf_vorbereitung_abschliessen, fortschritt
 
 ORG_ID = 1
-VORLAGEN = "/probenplanung/verwaltung/vorlagen"
+VORLAGEN = "/admin/probenplanung/vorlagen"
 
 
 def _user(username: str, role_code: str) -> None:

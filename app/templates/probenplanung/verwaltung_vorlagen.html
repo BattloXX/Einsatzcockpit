@@ -1,9 +1,9 @@
-{% extends "base.html" %}
+{% extends "admin/_layout.html" %}
 {% block title %}Checklisten-Vorlagen - Probenplanung{% endblock %}
-{% block content %}
+{% block admin_content %}
 <div class="page-header">
   <div><h1>Checklisten-Vorlagen</h1><p class="text-muted">Versionierte Vorlagen für die Probenvorbereitung</p></div>
-  <form method="post" action="/probenplanung/verwaltung/vorlagen/standard-import">
+  <form method="post" action="/admin/probenplanung/vorlagen/standard-import">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <button class="btn btn--secondary" type="submit">Standardvorlage importieren</button>
   </form>
@@ -11,7 +11,7 @@
 {% with active_tab="vorlagen" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
 <div class="card" style="margin-top:1rem">
   <h2>Neue Vorlage</h2>
-  <form method="post" action="/probenplanung/verwaltung/vorlagen" class="form-grid">
+  <form method="post" action="/admin/probenplanung/vorlagen" class="form-grid">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <div class="form-group"><label for="vorlage-name">Name</label><input class="form-input" id="vorlage-name" name="name" maxlength="150" required></div>
     <div class="form-group"><label for="vorlage-beschreibung">Beschreibung</label><textarea class="form-input form-input--textarea" id="vorlage-beschreibung" name="beschreibung"></textarea></div>
@@ -22,7 +22,7 @@
   <table class="table"><thead><tr><th>Name</th><th>Status</th><th></th></tr></thead><tbody>
   {% for template in vorlagen %}
     <tr><td>{{ template.name }}</td><td>{{ "Aktiv" if template.aktiv else "Inaktiv" }}</td>
-      <td><a class="btn btn--secondary btn--sm" href="/probenplanung/verwaltung/vorlagen/{{ template.id }}">Öffnen</a></td></tr>
+      <td><a class="btn btn--secondary btn--sm" href="/admin/probenplanung/vorlagen/{{ template.id }}">Öffnen</a></td></tr>
   {% else %}<tr><td colspan="3">Noch keine Checklisten-Vorlagen vorhanden.</td></tr>{% endfor %}
   </tbody></table>
 </div>

@@ -15,7 +15,7 @@ from app.models.probenplanung import (
 from app.models.user import Role, User, UserRole
 
 ORG_ID = 1
-BASE = "/probenplanung/verwaltung/vorlagen"
+BASE = "/admin/probenplanung/vorlagen"
 
 
 def _user(username: str, role_code: str, org_id: int = ORG_ID) -> None:

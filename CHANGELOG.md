@@ -2,6 +2,12 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+Unveröffentlicht (2026-09-05): Probeplan UX Phase 1 konsolidiert die Navigation:
+bei aktivem Modul ersetzt Probeplan den Teilnahme-Eintrag für alle Angemeldeten.
+Die Konfiguration liegt jetzt in der Verwaltung mit Sidebar und bestehenden Tabs.
+Pfadwechsel (Breaking Change für Bookmarks): `/probenplanung/verwaltung/*` wird
+zu `/admin/probenplanung/*`; die drei bisherigen Übersichtsseiten leiten per 307 weiter.
+
 Unveröffentlicht (2026-09-05): Probenplanung – Formulare zeigten weiße Browser-
 Standardfelder statt des dunklen App-Designs, weil 17 Templates die vorhandenen
 `.form-input`/`.form-select`/`.form-group`-Klassen nicht oder nur teilweise nutzten;

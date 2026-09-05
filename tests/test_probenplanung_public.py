@@ -127,7 +127,7 @@ def test_token_verwaltung_einmalig_rotation_widerruf_und_csrf(client):
     _flags()
     _user("public_admin", "org_admin")
     csrf = _login(client, "public_admin")
-    url = "/probenplanung/verwaltung/oeffentlich"
+    url = "/admin/probenplanung/oeffentlich"
     assert client.post(url, data={"bezeichnung": "Test"}).status_code == 403
     r = client.post(url, data={"_csrf": csrf, "bezeichnung": "Einmaliger Link"})
     assert r.status_code == 200
@@ -158,7 +158,7 @@ def test_token_verwaltung_nur_org_admin(client):
     _flags()
     _user("public_leser", "readonly")
     csrf = _login(client, "public_leser")
-    url = "/probenplanung/verwaltung/oeffentlich"
+    url = "/admin/probenplanung/oeffentlich"
     assert client.get(url).status_code == 403
     for path in (url, url + "/1/widerrufen", url + "/1/regenerieren", url + "/freigabe"):
         assert client.post(path, data={"_csrf": csrf}).status_code == 403
@@ -216,7 +216,7 @@ def test_org_admin_kann_fremden_token_nicht_verwalten(client):
         db.add(token)
         db.commit()
         token_id = token.id
-    url = "/probenplanung/verwaltung/oeffentlich"
+    url = "/admin/probenplanung/oeffentlich"
     assert "FremderGeheimerToken" not in client.get(url).text
     for action in ("widerrufen", "regenerieren"):
         assert client.post(f"{url}/{token_id}/{action}", data={"_csrf": csrf}).status_code == 404
@@ -229,7 +229,7 @@ def test_public_freigabe_wird_nur_explizit_aktiviert(client):
     plain, _, _, _ = public_setup()
     _user("public_freigabe_admin", "org_admin")
     csrf = _login(client, "public_freigabe_admin")
-    url = "/probenplanung/verwaltung/oeffentlich/freigabe"
+    url = "/admin/probenplanung/oeffentlich/freigabe"
     assert client.post(url, data={"_csrf": csrf}, follow_redirects=False).status_code == 303
     assert client.get(f"/p/probenplan/{plain}").status_code == 404
     assert client.post(url, data={"_csrf": csrf, "public_aktiv": "1"}, follow_redirects=False).status_code == 303

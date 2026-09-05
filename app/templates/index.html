@@ -90,7 +90,9 @@
     {% if WEATHER_ENABLED %}
     <a href="/wetter" class="module-btn"><span class="module-btn__icon">🌦</span><span class="module-btn__label">Wetter</span></a>
     {% endif %}
+    {% if not request.state.probenplanung_enabled %}
     <a href="/termine" class="module-btn"><span class="module-btn__icon">📋</span><span class="module-btn__label">Teilnahme</span></a>
+    {% endif %}
     {% if request.state.uas_module_enabled %}
     <a href="/uas/einsaetze" class="module-btn"><span class="module-btn__icon">🚁</span><span class="module-btn__label">Drohne / UAS</span></a>
     {% endif %}

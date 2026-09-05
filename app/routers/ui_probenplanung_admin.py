@@ -34,12 +34,27 @@ from app.services.checklist_template_service import (
     veroeffentlichen,
 )
 
-router = APIRouter(prefix="/probenplanung/verwaltung", tags=["probenplanung"])
+legacy_router = APIRouter(prefix="/probenplanung/verwaltung", tags=["probenplanung"])
+router = APIRouter(prefix="/admin/probenplanung", tags=["probenplanung"])
 
 
 def require_probenplanung_enabled(request: Request) -> None:
     if not getattr(request.state, "probenplanung_enabled", False):
         raise HTTPException(404, "Nicht gefunden")
+
+
+@legacy_router.get("/probearten")
+@legacy_router.get("/vorlagen")
+@legacy_router.get("/oeffentlich")
+def verwaltung_redirect(
+    request: Request,
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_probenplanung_enabled),
+):
+    ziel = request.url.path.replace("/probenplanung/verwaltung", "/admin/probenplanung", 1)
+    if request.url.query:
+        ziel += "?" + request.url.query
+    return RedirectResponse(ziel, status_code=307)
 
 
 def _probeart_or_404(db: Session, org_id: int | None, probeart_id: int) -> Probeart:
@@ -174,7 +189,7 @@ def probeart_anlegen(
         payload={"name": row.name},
     )
     db.commit()
-    return RedirectResponse("/probenplanung/verwaltung/probearten", 303)
+    return RedirectResponse("/admin/probenplanung/probearten", 303)
 
 
 @router.get("/probearten/{probeart_id}/bearbeiten", response_class=HTMLResponse)
@@ -247,7 +262,7 @@ def probeart_speichern(
         payload={"vorher": before, "name": row.name, "aktiv": row.aktiv},
     )
     db.commit()
-    return RedirectResponse("/probenplanung/verwaltung/probearten", 303)
+    return RedirectResponse("/admin/probenplanung/probearten", 303)
 
 
 @router.post("/probearten/{probeart_id}/loeschen")
@@ -274,7 +289,7 @@ def probeart_loeschen(
         payload={"name": row_name},
     )
     db.commit()
-    return RedirectResponse("/probenplanung/verwaltung/probearten", 303)
+    return RedirectResponse("/admin/probenplanung/probearten", 303)
 
 
 def _template_or_404(db: Session, org_id: int | None, template_id: int) -> ChecklistTemplate:
@@ -465,7 +480,7 @@ def vorlage_anlegen(
         payload={"name": template.name},
     )
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template.id}?version={version.id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template.id}?version={version.id}", 303)
 
 
 @router.post("/vorlagen/standard-import")
@@ -489,7 +504,7 @@ def standardvorlage_import(
         payload={"erstellt": created},
     )
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template.id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template.id}", 303)
 
 
 @router.get("/vorlagen/{template_id}", response_class=HTMLResponse)
@@ -522,7 +537,7 @@ def vorlage_neue_version(
     template = _template_or_404(db, user.org_id, template_id)
     version = neue_version(db, template, user.id)
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template.id}?version={version.id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template.id}?version={version.id}", 303)
 
 
 @router.post("/vorlagen/{template_id}/version/{version_id}/veroeffentlichen")
@@ -539,7 +554,7 @@ def vorlage_veroeffentlichen(
     version = _version_or_404(db, user.org_id, template_id, version_id)
     veroeffentlichen(db, template, version)
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template.id}?version={version.id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template.id}?version={version.id}", 303)
 
 
 @router.post("/vorlagen/{template_id}/version/{version_id}/bereiche")
@@ -575,7 +590,7 @@ def bereich_anlegen(
         )
     )
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template_id}?version={version_id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template_id}?version={version_id}", 303)
 
 
 @router.post("/vorlagen/{template_id}/version/{version_id}/bereiche/sortieren")
@@ -604,7 +619,7 @@ def bereiche_sortieren(
     for index, row_id in enumerate(order):
         by_id[row_id].sortierung = index
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template_id}?version={version_id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template_id}?version={version_id}", 303)
 
 
 @router.post("/vorlagen/{template_id}/version/{version_id}/bereiche/{section_id}")
@@ -627,7 +642,7 @@ def bereich_speichern(
         raise HTTPException(422, "Titel ist erforderlich")
     row.titel, row.beschreibung = titel.strip()[:200], beschreibung.strip() or None
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template_id}?version={version_id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template_id}?version={version_id}", 303)
 
 
 @router.post("/vorlagen/{template_id}/version/{version_id}/bereiche/{section_id}/loeschen")
@@ -645,7 +660,7 @@ def bereich_loeschen(
     require_entwurf(version)
     db.delete(_section_or_404(db, user.org_id, template_id, version_id, section_id))
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template_id}?version={version_id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template_id}?version={version_id}", 303)
 
 
 def _item_values(
@@ -717,7 +732,7 @@ def punkt_anlegen(
     )
     db.add(ChecklistTemplateItem(org_id=user.org_id, section_id=section.id, sortierung=(next_sort or 0) + 1, **values))
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template_id}?version={version_id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template_id}?version={version_id}", 303)
 
 
 @router.post("/vorlagen/{template_id}/version/{version_id}/bereiche/{section_id}/punkte/sortieren")
@@ -747,7 +762,7 @@ def punkte_sortieren(
     for index, row_id in enumerate(order):
         by_id[row_id].sortierung = index
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template_id}?version={version_id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template_id}?version={version_id}", 303)
 
 
 @router.post("/vorlagen/{template_id}/version/{version_id}/bereiche/{section_id}/punkte/{item_id}")
@@ -777,7 +792,7 @@ def punkt_speichern(
     ).items():
         setattr(row, key, value)
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template_id}?version={version_id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template_id}?version={version_id}", 303)
 
 
 @router.post("/vorlagen/{template_id}/version/{version_id}/bereiche/{section_id}/punkte/{item_id}/loeschen")
@@ -796,7 +811,7 @@ def punkt_loeschen(
     require_entwurf(version)
     db.delete(_item_or_404(db, user.org_id, template_id, version_id, section_id, item_id))
     db.commit()
-    return RedirectResponse(f"/probenplanung/verwaltung/vorlagen/{template_id}?version={version_id}", 303)
+    return RedirectResponse(f"/admin/probenplanung/vorlagen/{template_id}?version={version_id}", 303)
 
 
 def _public_token_liste(db: Session, org_id: int | None):
@@ -843,7 +858,7 @@ def public_freigabe(
     write_audit(db, "probenplanung.public.freigabe", org_id=user.org_id, user_id=user.id,
                 payload={"aktiv": bool(public_aktiv)})
     db.commit()
-    return RedirectResponse("/probenplanung/verwaltung/oeffentlich", 303)
+    return RedirectResponse("/admin/probenplanung/oeffentlich", 303)
 
 
 @router.post("/oeffentlich")
@@ -893,4 +908,4 @@ def public_token_aendern(
     db.commit()
     if plain:
         return _public_verwaltung_response(request, db, user, plain)
-    return RedirectResponse("/probenplanung/verwaltung/oeffentlich", 303)
+    return RedirectResponse("/admin/probenplanung/oeffentlich", 303)

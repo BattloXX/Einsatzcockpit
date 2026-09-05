@@ -1,5 +1,5 @@
 <details style="margin-top:1rem"><summary>Punkt hinzufügen</summary>
-  <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte" class="form-grid">
+  <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte" class="form-grid">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <div class="form-group"><label for="neu-titel-{{ section.id }}">Titel</label><input class="form-input" id="neu-titel-{{ section.id }}" name="titel" maxlength="200" required></div>
     <div class="form-group"><label for="neu-typ-{{ section.id }}">Typ</label><select class="form-select" id="neu-typ-{{ section.id }}" name="typ">{% for item_type in item_types %}<option value="{{ item_type }}">{{ item_type }}</option>{% endfor %}</select></div>
