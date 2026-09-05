@@ -2,10 +2,10 @@
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   <input type="hidden" name="art" value="{{ upload_art }}">
   <div class="form-grid">
-    <label>Datei<input type="file" name="datei" accept="{{ upload_accept }}" required></label>
-    <label>Name<input type="text" name="name" maxlength="255" placeholder="Anzeigename (optional)"></label>
-    <label>Typ<input type="text" name="typ" maxlength="50" placeholder="z. B. Brandschutzplan, Objektplan, Foto"></label>
-    <label>Beschreibung<textarea name="beschreibung" rows="2"></textarea></label>
+    <div class="form-group"><label for="up-datei-{{ upload_art }}">Datei</label><input class="form-input" id="up-datei-{{ upload_art }}" type="file" name="datei" accept="{{ upload_accept }}" required></div>
+    <div class="form-group"><label for="up-name-{{ upload_art }}">Name</label><input class="form-input" id="up-name-{{ upload_art }}" type="text" name="name" maxlength="255" placeholder="Anzeigename (optional)"></div>
+    <div class="form-group"><label for="up-typ-{{ upload_art }}">Typ</label><input class="form-input" id="up-typ-{{ upload_art }}" type="text" name="typ" maxlength="50" placeholder="z. B. Brandschutzplan, Objektplan, Foto"></div>
+    <div class="form-group"><label for="up-beschreibung-{{ upload_art }}">Beschreibung</label><textarea class="form-input form-input--textarea" id="up-beschreibung-{{ upload_art }}" name="beschreibung" rows="2"></textarea></div>
   </div>
-  <button class="btn btn--primary" type="submit">Hochladen</button>
+  <div class="form-actions"><button class="btn btn--primary" type="submit">Hochladen</button></div>
 </form>

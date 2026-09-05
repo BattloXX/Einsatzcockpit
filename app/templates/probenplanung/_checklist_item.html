@@ -42,7 +42,7 @@
     {% endif %}
     {% if can_edit %}
     <details class="probe-checklist-item-actions"><summary>Weitere Aktionen</summary>
-      <form hx-post="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}/nicht-relevant" hx-target="closest .probe-checklist-item" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="version" value="{{ item.version }}"><label>Begründung<input class="form-input" name="begruendung" required></label><button class="btn btn--secondary" type="submit">Nicht relevant</button></form>
+      <form hx-post="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}/nicht-relevant" hx-target="closest .probe-checklist-item" hx-swap="outerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="version" value="{{ item.version }}"><div class="form-group"><label for="begruendung-{{ item.id }}">Begründung</label><input class="form-input" id="begruendung-{{ item.id }}" name="begruendung" required></div><button class="btn btn--secondary" type="submit">Nicht relevant</button></form>
       {% if item.quelle == 'individuell' %}<button class="btn btn--danger" type="button" hx-delete="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-confirm="Diesen individuellen Punkt löschen?">Löschen</button>{% endif %}
     </details>
     {% endif %}

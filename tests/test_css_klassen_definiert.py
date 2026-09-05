@@ -98,3 +98,64 @@ def test_bem_modifier_sind_in_erreichbarem_css_definiert() -> None:
     assert not fehler, "Undefinierte CSS-Modifier:\n" + "\n".join(
         f"{template}: {modifier}" for template, modifier in sorted(fehler)
     )
+
+
+# ── Probenplanung: sichtbare Formularfelder muessen das Formular-Design benutzen ──
+#
+# Der Modifier-Test oben greift nur bei falsch geschriebenen BEM-Modifiern. Ein
+# komplett fehlendes class-Attribut ist fuer ihn unsichtbar -- genau dadurch sind die
+# Formulare der Probenplanung ueber elf Phasen hinweg mit weissen Browser-Standard-
+# feldern ausgeliefert worden (Bugfix 2026-09-05). Diese Pruefung deckt den Fall ab.
+
+PROBENPLANUNG_ROOT = TEMPLATE_ROOT / "probenplanung"
+FELD_RE = re.compile(r"<(input|select|textarea)\b[^>]*>", re.IGNORECASE)
+# Diese Eingabearten tragen bewusst kein Feld-Design: unsichtbar, eigene Auszeichnung
+# ueber .form-group--checkbox, oder es sind Schaltflaechen.
+OHNE_FELDDESIGN_RE = re.compile(
+    r"""type\s*=\s*["'](hidden|checkbox|radio|submit|button|image)["']""", re.IGNORECASE
+)
+FELDKLASSEN = ("form-input", "form-select", "form-control")
+
+
+def test_probenplanung_felder_tragen_formularklassen():
+    fehlend = []
+    for pfad in sorted(PROBENPLANUNG_ROOT.glob("*.html")):
+        for treffer in FELD_RE.finditer(pfad.read_text(encoding="utf-8")):
+            tag = treffer.group(0)
+            if OHNE_FELDDESIGN_RE.search(tag) or any(k in tag for k in FELDKLASSEN):
+                continue
+            fehlend.append(f"{pfad.name}: {tag[:120]}")
+    assert not fehlend, (
+        "Sichtbare Eingabefelder ohne Formularklasse -- sie werden mit weissem "
+        "Browser-Standard statt im dunklen App-Design gerendert:\n" + "\n".join(fehlend)
+    )
+
+
+def test_probenplanung_beschriftungen_stehen_in_formulargruppen():
+    """`<label>Text<feld></label>` legt die Beschriftung neben statt ueber das Feld
+    und laesst die Felder unterschiedlich weit einruecken. Zielform ist
+    `<div class="form-group"><label for="x">Text</label><feld id="x" ...></div>`."""
+    nackt = re.compile(r"<label>[^<]*<(input|select|textarea)\b", re.IGNORECASE)
+    fehlend = [
+        f"{pfad.name}: {treffer.group(0)}"
+        for pfad in sorted(PROBENPLANUNG_ROOT.glob("*.html"))
+        for treffer in nackt.finditer(pfad.read_text(encoding="utf-8"))
+    ]
+    assert not fehlend, "Beschriftung nicht als .form-group ausgezeichnet:\n" + "\n".join(fehlend)
+
+
+def test_checkliste_sticky_header_hat_keine_ausgleichslose_bleed_margin():
+    """`.main-content` hat `padding: 0` (app/static/css/tailwind.input.css) -- eine
+    negative Margin auf `.probe-checklist-sticky` faengt daher NICHTS ab, sondern
+    laesst den Sticky-Header bei <=760px um den Margin-Betrag ueber den Viewport
+    hinausragen (Bugfix 2026-09-05: gemessener horizontaler Ueberlauf 8px bei 390px
+    Breite). Falls der Header spaeter erneut mit den Card-Kanten buendig gemacht
+    werden soll, braucht es zuerst eine tatsaechliche Padding-Gegenstelle -- kein
+    Copy-Paste einer negativen Margin ohne sie."""
+    css = (PROBENPLANUNG_ROOT / "_checkliste.html").read_text(encoding="utf-8")
+    treffer = re.findall(r"\.probe-checklist-sticky\{([^}]*)\}", css)
+    assert treffer, "Regel .probe-checklist-sticky nicht gefunden"
+    for regel in treffer:
+        assert "margin" not in regel or "-.5rem" not in regel and "-0.5rem" not in regel, (
+            f".probe-checklist-sticky traegt wieder eine negative Margin ohne Padding-Gegenstelle: {regel}"
+        )

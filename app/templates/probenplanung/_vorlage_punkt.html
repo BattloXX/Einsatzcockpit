@@ -5,14 +5,14 @@
   <details><summary>Bearbeiten</summary>
     <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte/{{ item.id }}" class="form-grid">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <label>Titel<input name="titel" maxlength="200" value="{{ item.titel }}" required></label>
-      <label>Typ<select name="typ">{% for item_type in item_types %}<option value="{{ item_type }}" {% if item.typ == item_type %}selected{% endif %}>{{ item_type }}</option>{% endfor %}</select></label>
-      <label>Hilfetext<textarea name="hilfetext">{{ item.hilfetext or '' }}</textarea></label>
-      <label>Optionen<textarea name="optionen">{{ item.optionen or '' }}</textarea></label>
-      <label><input type="checkbox" name="pflicht" value="1" {% if item.pflicht %}checked{% endif %}> Pflichtpunkt</label>
-      <label>Verantwortlich<select name="default_verantwortlich_member_id"><option value="">Nicht zugeordnet</option>{% for member in members %}<option value="{{ member.id }}" {% if item.default_verantwortlich_member_id == member.id %}selected{% endif %}>{{ member.firstname }} {{ member.lastname }}</option>{% endfor %}</select></label>
-      <label>Tage vor der Probe<input type="number" name="faellig_tage_vorher" min="0" value="{{ item.faellig_tage_vorher if item.faellig_tage_vorher is not none else '' }}"></label>
-      <button class="btn btn--secondary btn--sm" type="submit">Punkt speichern</button>
+      <div class="form-group"><label for="punkt-titel-{{ item.id }}">Titel</label><input class="form-input" id="punkt-titel-{{ item.id }}" name="titel" maxlength="200" value="{{ item.titel }}" required></div>
+      <div class="form-group"><label for="punkt-typ-{{ item.id }}">Typ</label><select class="form-select" id="punkt-typ-{{ item.id }}" name="typ">{% for item_type in item_types %}<option value="{{ item_type }}" {% if item.typ == item_type %}selected{% endif %}>{{ item_type }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label for="punkt-hilfetext-{{ item.id }}">Hilfetext</label><textarea class="form-input form-input--textarea" id="punkt-hilfetext-{{ item.id }}" name="hilfetext">{{ item.hilfetext or '' }}</textarea></div>
+      <div class="form-group"><label for="punkt-optionen-{{ item.id }}">Optionen</label><textarea class="form-input form-input--textarea" id="punkt-optionen-{{ item.id }}" name="optionen">{{ item.optionen or '' }}</textarea></div>
+      <div class="form-group form-group--checkbox"><label for="punkt-pflicht-{{ item.id }}"><input type="checkbox" id="punkt-pflicht-{{ item.id }}" name="pflicht" value="1" {% if item.pflicht %}checked{% endif %}> Pflichtpunkt</label></div>
+      <div class="form-group"><label for="punkt-verantwortlich-{{ item.id }}">Verantwortlich</label><select class="form-select" id="punkt-verantwortlich-{{ item.id }}" name="default_verantwortlich_member_id"><option value="">Nicht zugeordnet</option>{% for member in members %}<option value="{{ member.id }}" {% if item.default_verantwortlich_member_id == member.id %}selected{% endif %}>{{ member.firstname }} {{ member.lastname }}</option>{% endfor %}</select></div>
+      <div class="form-group"><label for="punkt-faellig-{{ item.id }}">Tage vor der Probe</label><input class="form-input" id="punkt-faellig-{{ item.id }}" type="number" name="faellig_tage_vorher" min="0" value="{{ item.faellig_tage_vorher if item.faellig_tage_vorher is not none else '' }}"></div>
+      <div class="form-actions"><button class="btn btn--secondary btn--sm" type="submit">Punkt speichern</button></div>
     </form>
     <form method="post" action="/probenplanung/verwaltung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte/{{ item.id }}/loeschen">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Punkt löschen</button>

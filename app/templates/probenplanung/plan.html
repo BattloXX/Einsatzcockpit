@@ -10,15 +10,15 @@
 </div>
 {% if uebernommen is not none %}<div class="alert alert--success">{{ uebernommen }} Termin{{ 'e' if uebernommen != 1 else '' }} wurden als Entwürfe in den Jahresplan übernommen.</div>{% endif %}
 <form class="card form-grid" method="get" action="/probenplanung" hx-get="/probenplanung" hx-target="#probenplan-tabelle" hx-swap="outerHTML" hx-push-url="true">
-  <label>Jahr<input class="form-input" type="number" name="jahr" value="{{ jahr }}" min="1900" max="9998"></label>
-  <label>Probeart<select class="form-input" name="probeart_id"><option value="">Alle</option>{% for p in probearten %}<option value="{{ p.id }}" {% if filter.probeart_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></label>
-  <label>Status<select class="form-input" name="status"><option value="">Alle</option>{% for s in statuswerte %}<option value="{{ s.value }}" {% if filter.status == s.value %}selected{% endif %}>{{ s.value|replace('_', ' ')|title }}</option>{% endfor %}</select></label>
-  <label>Verantwortlich<select class="form-input" name="verantwortlich_id"><option value="">Alle</option>{% for m in members %}<option value="{{ m.id }}" {% if filter.verantwortlich_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>{% endfor %}</select></label>
-  <label>Von<input class="form-input" type="date" name="von" value="{{ filter.von.isoformat() if filter.von else '' }}"></label>
-  <label>Bis<input class="form-input" type="date" name="bis" value="{{ filter.bis.isoformat() if filter.bis else '' }}"></label>
-  <label>Zeitraum<select class="form-input" name="zeitraum"><option value="alle" {% if filter.zeitraum == 'alle' %}selected{% endif %}>Alle</option><option value="zukuenftig" {% if filter.zeitraum == 'zukuenftig' %}selected{% endif %}>Zukünftig</option><option value="vergangen" {% if filter.zeitraum == 'vergangen' %}selected{% endif %}>Vergangen</option></select></label>
-  <label>Suche<input class="form-input" type="search" name="q" value="{{ filter.q }}" placeholder="Titel, Thema, Objekt, Ort"></label>
-  <div style="align-self:end"><button class="btn btn--secondary" type="submit">Filtern</button></div>
+  <div class="form-group"><label for="f-jahr">Jahr</label><input class="form-input" id="f-jahr" type="number" name="jahr" value="{{ jahr }}" min="1900" max="9998"></div>
+  <div class="form-group"><label for="f-probeart">Probeart</label><select class="form-select" id="f-probeart" name="probeart_id"><option value="">Alle</option>{% for p in probearten %}<option value="{{ p.id }}" {% if filter.probeart_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label for="f-status">Status</label><select class="form-select" id="f-status" name="status"><option value="">Alle</option>{% for s in statuswerte %}<option value="{{ s.value }}" {% if filter.status == s.value %}selected{% endif %}>{{ s.value|replace('_', ' ')|title }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label for="f-verantwortlich">Verantwortlich</label><select class="form-select" id="f-verantwortlich" name="verantwortlich_id"><option value="">Alle</option>{% for m in members %}<option value="{{ m.id }}" {% if filter.verantwortlich_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label for="f-von">Von</label><input class="form-input" id="f-von" type="date" name="von" value="{{ filter.von.isoformat() if filter.von else '' }}"></div>
+  <div class="form-group"><label for="f-bis">Bis</label><input class="form-input" id="f-bis" type="date" name="bis" value="{{ filter.bis.isoformat() if filter.bis else '' }}"></div>
+  <div class="form-group"><label for="f-zeitraum">Zeitraum</label><select class="form-select" id="f-zeitraum" name="zeitraum"><option value="alle" {% if filter.zeitraum == 'alle' %}selected{% endif %}>Alle</option><option value="zukuenftig" {% if filter.zeitraum == 'zukuenftig' %}selected{% endif %}>Zukünftig</option><option value="vergangen" {% if filter.zeitraum == 'vergangen' %}selected{% endif %}>Vergangen</option></select></div>
+  <div class="form-group"><label for="f-q">Suche</label><input class="form-input" id="f-q" type="search" name="q" value="{{ filter.q }}" placeholder="Titel, Thema, Objekt, Ort"></div>
+  <div class="form-group" style="justify-content:end"><button class="btn btn--secondary" type="submit">Filtern</button></div>
 </form>
 {% include "probenplanung/_plan_tabelle.html" %}
 {% if can_edit %}
@@ -26,8 +26,8 @@
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   <h2>Jahresplan übernehmen</h2>
   <div style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap">
-    <label>Aus Jahr<input class="form-input" type="number" name="quelljahr" value="{{ jahr - 1 }}" min="1900" max="9998" required></label>
-    <label>In Jahr<input class="form-input" type="number" name="zieljahr" value="{{ jahr }}" min="1900" max="9998" required></label>
+    <div class="form-group"><label for="quelljahr">Aus Jahr</label><input class="form-input" id="quelljahr" type="number" name="quelljahr" value="{{ jahr - 1 }}" min="1900" max="9998" required></div>
+    <div class="form-group"><label for="zieljahr">In Jahr</label><input class="form-input" id="zieljahr" type="number" name="zieljahr" value="{{ jahr }}" min="1900" max="9998" required></div>
     <button class="btn btn--secondary" type="submit">Als Entwürfe übernehmen</button>
   </div>
 </form>
