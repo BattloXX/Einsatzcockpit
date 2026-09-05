@@ -1,12 +1,32 @@
 {% extends "base.html" %}
 {% from "_tabnav.html" import tabnav %}
-{% block title %}{{ termin.titel }} – Probe{% endblock %}
+{% block title %}{{ termin.titel }} – Probe</div>
+{% if can_edit and termin.probeart and termin.probeart.uebungseinsatz_erlaubt and not termin.exercise_incident_id %}
+<dialog id="probe-exercise-dialog" class="probe-detail-dialog"><form method="dialog"><button class="btn btn--secondary" aria-label="Dialog schließen">Schließen</button></form><div id="probe-exercise-content"></div></dialog>
+{% endif %}
+{% endblock %}
 {% block content %}
-<div class="page-header"><div><h1>{{ termin.titel }}</h1><p>{{ wochentag }}, {{ termin.beginn|local_datetime }}{% if termin.ende %} – {{ termin.ende|local_datetime }}{% endif %}</p><p>Verantwortlich: {{ verantwortliche.get(termin.verantwortlich_member_id, '–') }}{% if termin.unterstuetzung_member_id %} · Unterstützung: {{ verantwortliche.get(termin.unterstuetzung_member_id, '–') }}{% endif %}</p></div>{% if can_edit %}<a class="btn btn--primary" href="/probenplanung/{{ termin.id }}/bearbeiten">Bearbeiten</a>{% endif %}</div>
-<div class="card">
-  <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap"><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span>{% if termin.probeart %}<span><span style="display:inline-block;width:.75rem;height:.75rem;border-radius:50%;background:{{ termin.probeart.farbe }}" aria-hidden="true"></span> {{ termin.probeart.kurz }} – {{ termin.probeart.name }}</span>{% endif %}</div>
-  {% if fortschritt %}<div style="margin-top:1rem"><strong>Vorbereitung: {{ fortschritt.erledigt }}/{{ fortschritt.gesamt }}</strong><div class="progress-bar" role="progressbar" aria-valuenow="{{ fortschritt.prozent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width:{{ fortschritt.prozent }}%"></div></div></div>{% endif %}
-</div>
+<div class="probe-detail">
+<header class="card probe-detail-command" id="probe-detail-command">
+  <nav aria-label="Breadcrumb"><a href="/probenplanung?jahr={{ (termin.beginn|local).year }}">Probeplan {{ (termin.beginn|local).year }}</a> › {{ termin.titel }}</nav>
+  <div class="probe-detail-command__row">
+    <div><h1>{{ termin.titel }}</h1><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span>{% if termin.probeart %} <span>{{ termin.probeart.kurz }} – {{ termin.probeart.name }}</span>{% endif %}</div>
+    <div class="form-actions">
+      {% include "probenplanung/_uebungseinsatz_cta.html" %}
+      {% if can_edit %}
+      <a class="btn btn--secondary" href="/probenplanung/{{ termin.id }}/bearbeiten">Bearbeiten</a>
+      {% include "probenplanung/_detail_sekundaeraktionen.html" %}
+      {% endif %}
+    </div>
+  </div>
+</header>
+<dl class="card probe-detail-meta">
+  <div><dt>Termin &amp; Zeitrahmen</dt><dd>{{ wochentag }}<br>{{ termin.beginn|local_datetime }}{% if termin.ende %}<br>bis {{ termin.ende|local_datetime }}{% endif %}</dd></div>
+  <div><dt>Einsatzort/Objekt</dt><dd>{{ termin.ort or 'Noch kein Ort festgelegt' }}{% if termin.objekt %}<br>{{ termin.objekt }}{% endif %}</dd></div>
+  {% if termin.alarmtext or termin.besondere_gefahren %}<div><dt>Alarmszenario</dt><dd>{% if termin.alarmtext %}{{ termin.alarmtext }}{% endif %}{% if termin.besondere_gefahren %}<p>{{ termin.besondere_gefahren }}</p>{% endif %}</dd></div>{% endif %}
+  <div><dt>Leitung</dt><dd>{% for member_id in [termin.verantwortlich_member_id, termin.unterstuetzung_member_id] if member_id %}{% set name = verantwortliche.get(member_id, '–') %}<div class="probeplan-personen"><span class="initialen-chip" aria-hidden="true">{% for teil in name.split() %}{{ teil[0] }}{% endfor %}</span><span>{{ name }}{% if loop.index > 1 %} (Unterstützung){% endif %}</span></div>{% else %}Noch nicht zugewiesen{% endfor %}</dd></div>
+</dl>
+{% if fortschritt %}<div class="probe-detail-progress"><strong>Vorbereitung: {{ fortschritt.erledigt }}/{{ fortschritt.gesamt }}</strong><div class="progress-bar" role="progressbar" aria-label="Vorbereitung" aria-valuenow="{{ fortschritt.prozent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width:{{ fortschritt.prozent }}%"></div></div></div>{% endif %}
 {{ tabnav([
   {"label":"Übersicht","href":"/probenplanung/" ~ termin.id ~ "?tab=uebersicht","active":active_tab == "uebersicht"},
   {"label":"Vorbereitung","href":"/probenplanung/" ~ termin.id ~ "?tab=vorbereitung","active":active_tab == "vorbereitung"},
@@ -18,12 +38,14 @@
   {"label":"Historie","href":"/probenplanung/" ~ termin.id ~ "?tab=historie","active":active_tab == "historie"}
 ]) }}
 {% if active_tab == 'uebersicht' %}
+<div class="probe-detail-overview"><div class="probe-detail-main">
 <div class="card"><h2>Übersicht</h2>{% if termin.thema %}<p><strong>Thema:</strong> {{ termin.thema }}</p>{% endif %}{% if termin.objekt %}<p><strong>Objekt:</strong> {{ termin.objekt }}</p>{% endif %}{% if termin.ort %}<p><strong>Ort:</strong> {{ termin.ort }}</p>{% endif %}{% if termin.beschreibung %}<p>{{ termin.beschreibung }}</p>{% endif %}</div>
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem;margin-top:1rem">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:1rem;margin-top:1rem">
   <section class="card"><h2>Noch offen</h2>{% for item in noch_offen %}<p>{{ item.titel }}</p>{% else %}<p class="text-muted">Keine offenen Punkte.</p>{% endfor %}</section>
   <section class="card"><h2>Demnächst fällig</h2>{% for item in demnaechst %}<p>{{ item.titel }}{% if item.faellig_am %} · {{ item.faellig_am.strftime('%d.%m.%Y') }}{% endif %}</p>{% else %}<p class="text-muted">Keine demnächst fälligen Punkte.</p>{% endfor %}</section>
   <section class="card"><h2>Bereits erledigt</h2>{% for item in erledigt %}<p>{{ item.titel }}</p>{% else %}<p class="text-muted">Noch keine erledigten Punkte.</p>{% endfor %}</section>
 </div>
+</div>{% include "probenplanung/_detail_widgets.html" %}</div>
 {% elif active_tab == 'vorbereitung' %}
   {% if checkliste %}{% include "probenplanung/_checkliste.html" %}{% else %}<div class="card"><p>Für diese Probe ist keine Checkliste hinterlegt.</p></div>{% endif %}
 {% elif active_tab == 'skizze' %}
@@ -42,7 +64,9 @@
 {% if can_edit %}
 <div class="card" style="margin-top:1rem"><h2>Aktionen</h2>
   {% for ziel in statuswechsel %}<form method="post" action="/probenplanung/{{ termin.id }}/status" style="display:inline-block;margin:.25rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="neuer_status" value="{{ ziel }}">{% if ziel == 'vorbereitung_abgeschlossen' and is_admin %}<input class="form-input" name="grund" aria-label="Übersteuerungsgrund" placeholder="Übersteuerungsgrund (nur falls nötig)">{% endif %}<button class="btn btn--secondary" type="submit">{{ ziel|replace('_', ' ')|title }}</button></form>{% endfor %}
-  <form method="post" action="/probenplanung/{{ termin.id }}/duplizieren" style="display:inline-block;margin:.25rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--secondary" type="submit">Duplizieren</button></form>
-  <form method="post" action="/probenplanung/{{ termin.id }}/archivieren" style="display:inline-block;margin:.25rem"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger" type="submit">Archivieren</button></form>
 </div>{% endif %}
+</div>
+{% if can_edit and termin.probeart and termin.probeart.uebungseinsatz_erlaubt and not termin.exercise_incident_id %}
+<dialog id="probe-exercise-dialog" class="probe-detail-dialog"><form method="dialog"><button class="btn btn--secondary" aria-label="Dialog schließen">Schließen</button></form><div id="probe-exercise-content"></div></dialog>
+{% endif %}
 {% endblock %}

@@ -426,6 +426,7 @@ def _checkliste_context(db: Session, user: User, termin: Termin, checkliste: Pro
         "members": db.query(Member).filter(Member.active.is_(True)).order_by(Member.lastname, Member.firstname).all(),
         "can_edit": can_edit_proben(user),
         "optionen": _optionen,
+        "heute": now_local(user.org).date(),
         "fortschritt": fortschritt(checkliste, user.org),
     }
 
@@ -859,8 +860,22 @@ def probe_detail(
             "dokumente": [medium for medium in medien if medium.art == "dokument"],
             "uploader_namen": {uploader.id: uploader.display_name for uploader in uploaders},
         })
-    if tab == "teilnehmer":
+    if tab in {"teilnehmer", "uebersicht"}:
         context.update(_teilnehmer_context(db, user, termin))
+    if tab == "uebersicht":
+        from app.models.probenplanung import ProbePublicToken
+
+        context["neueste_skizze"] = (
+            db.query(ProbeMedia)
+            .filter(ProbeMedia.termin_id == termin.id, ProbeMedia.org_id == user.org_id,
+                    ProbeMedia.art == "skizze", ProbeMedia.kind == "image")
+            .order_by(ProbeMedia.hochgeladen_am.desc(), ProbeMedia.id.desc()).first()
+        )
+        context["public_token_aktiv"] = termin.public_sichtbar and (
+            db.query(ProbePublicToken.id)
+            .filter(ProbePublicToken.org_id == user.org_id, ProbePublicToken.art == "plan",
+                    ProbePublicToken.widerrufen_am.is_(None)).first() is not None
+        )
     if tab == "nachbereitung":
         context.update(_nachbereitung_context(db, termin))
     if tab == "uebungseinsatz":
