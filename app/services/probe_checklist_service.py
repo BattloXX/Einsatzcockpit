@@ -57,15 +57,24 @@ ERLAUBTE_STATUSWECHSEL: dict[str, frozenset[str]] = {
 
 def snapshot_erzeugen(db: Session, termin: Termin, org: object | None) -> ProbeCheckliste | None:
     """Kopiert die aktive Vorlagenversion einmalig und unabhaengig zur Probe."""
+    probeart = db.get(Probeart, termin.probeart_id) if termin.probeart_id else None
+    if not probeart or not probeart.checklist_template_id:
+        return None
+    template = db.get(ChecklistTemplate, probeart.checklist_template_id)
+    return snapshot_aus_vorlage(db, termin, template, org)
+
+
+def snapshot_aus_vorlage(
+    db: Session, termin: Termin, template: ChecklistTemplate | None, org: object | None
+) -> ProbeCheckliste | None:
+    """Übernimmt eine veröffentlichte Vorlage als unveränderlichen Probe-Snapshot."""
     if termin.id is None:
         db.flush()
     existing = db.query(ProbeCheckliste).filter(ProbeCheckliste.termin_id == termin.id).first()
     if existing:
         return existing
-    probeart = db.get(Probeart, termin.probeart_id) if termin.probeart_id else None
-    if not probeart or not probeart.checklist_template_id:
+    if template is not None and template.org_id != termin.org_id:
         return None
-    template = db.get(ChecklistTemplate, probeart.checklist_template_id)
     if not template or not template.aktiv or template.aktive_version_id is None:
         return None
     version = (

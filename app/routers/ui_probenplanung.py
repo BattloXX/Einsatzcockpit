@@ -21,6 +21,7 @@ from app.models.incident import Incident
 from app.models.master import AlarmType, Member
 from app.models.probenplanung import (
     ChecklistItemTyp,
+    ChecklistTemplate,
     Probeart,
     ProbeChange,
     ProbeCheckliste,
@@ -35,7 +36,13 @@ from app.models.sms import SmsGroup
 from app.models.teilnahme import Funktion, Teilnahme, TeilnahmeStatus, Termin
 from app.models.user import User
 from app.routers.ui_probenplanung_admin import require_probenplanung_enabled
-from app.services.probe_checklist_service import fortschritt, snapshot_erzeugen, statuswechsel, uebersteuern
+from app.services.probe_checklist_service import (
+    fortschritt,
+    snapshot_aus_vorlage,
+    snapshot_erzeugen,
+    statuswechsel,
+    uebersteuern,
+)
 from app.services.probe_history import write_probe_change
 
 router = APIRouter(prefix="/probenplanung", tags=["probenplanung"])
@@ -845,6 +852,18 @@ def probe_detail(
             termin_lokal.weekday()
         ],
         "verantwortliche": {member.id: member.full_name for member in verantwortliche},
+        "verfuegbare_vorlagen": (
+            db.query(ChecklistTemplate)
+            .filter(
+                ChecklistTemplate.org_id == user.org_id,
+                ChecklistTemplate.aktiv.is_(True),
+                ChecklistTemplate.aktive_version_id.is_not(None),
+            )
+            .order_by(ChecklistTemplate.name)
+            .all()
+            if checkliste is None and can_edit_proben(user)
+            else []
+        ),
     }
     if tab in {"skizze", "dokumente"}:
         medien = (
@@ -890,6 +909,47 @@ def probe_detail(
         "probenplanung/probe_detail.html",
         context,
     )
+
+
+@router.post("/{termin_id}/checkliste/anlegen")
+def probe_checkliste_anlegen(
+    request: Request,
+    termin_id: int,
+    template_id: int = Form(...),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    if db.query(ProbeCheckliste).filter(ProbeCheckliste.termin_id == termin.id).first():
+        raise HTTPException(409, "Für diese Probe ist bereits eine Checkliste vorhanden")
+    template = (
+        db.query(ChecklistTemplate)
+        .filter(
+            ChecklistTemplate.id == template_id,
+            ChecklistTemplate.org_id == user.org_id,
+            ChecklistTemplate.aktiv.is_(True),
+            ChecklistTemplate.aktive_version_id.is_not(None),
+        )
+        .first()
+    )
+    if not template or snapshot_aus_vorlage(db, termin, template, user.org) is None:
+        raise HTTPException(422, "Die ausgewählte Vorlage ist nicht veröffentlicht")
+    write_probe_change(
+        db,
+        termin.id,
+        "checkliste.angelegt",
+        "checkliste",
+        None,
+        None,
+        {"template_id": template.id, "template_name": template.name},
+        user_id=user.id,
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    return RedirectResponse(f"/probenplanung/{termin.id}?tab=vorbereitung", status_code=303)
 
 
 @router.get("/{termin_id}/uebungseinsatz", response_class=HTMLResponse)

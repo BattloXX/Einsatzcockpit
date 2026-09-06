@@ -6,11 +6,11 @@
 {% endif %}
 {% endblock %}
 {% block content %}
-<div class="probe-detail">
-<header class="card probe-detail-command" id="probe-detail-command">
-  <nav aria-label="Breadcrumb"><a href="/probenplanung?jahr={{ (termin.beginn|local).year }}">Probeplan {{ (termin.beginn|local).year }}</a> › {{ termin.titel }}</nav>
-  <div class="probe-detail-command__row">
-    <div><h1>{{ termin.titel }}</h1><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span>{% if termin.probeart %} <span>{{ termin.probeart.kurz }} – {{ termin.probeart.name }}</span>{% endif %}</div>
+<div class="probe-detail pd-page">
+<header class="pd-command" id="probe-detail-command">
+  <nav class="pd-command__crumb" aria-label="Breadcrumb"><a href="/probenplanung?jahr={{ (termin.beginn|local).year }}">Probeplan {{ (termin.beginn|local).year }}</a> › {{ termin.titel }}</nav>
+  <div class="pd-command__row">
+    <div><p class="pd-command__eyebrow">{{ termin.probeart.kurz if termin.probeart else 'Probe' }} · {{ termin.probeart.name if termin.probeart else 'Probenplanung' }}</p><h1>{{ termin.titel }}</h1><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span></div>
     <div class="form-actions">
       {% include "probenplanung/_uebungseinsatz_cta.html" %}
       {% if can_edit %}
@@ -20,13 +20,13 @@
     </div>
   </div>
 </header>
-<dl class="card probe-detail-meta">
+<dl class="pd-meta">
   <div><dt>Termin &amp; Zeitrahmen</dt><dd>{{ wochentag }}<br>{{ termin.beginn|local_datetime }}{% if termin.ende %}<br>bis {{ termin.ende|local_datetime }}{% endif %}</dd></div>
   <div><dt>Einsatzort/Objekt</dt><dd>{{ termin.ort or 'Noch kein Ort festgelegt' }}{% if termin.objekt %}<br>{{ termin.objekt }}{% endif %}</dd></div>
   {% if termin.alarmtext or termin.besondere_gefahren %}<div><dt>Alarmszenario</dt><dd>{% if termin.alarmtext %}{{ termin.alarmtext }}{% endif %}{% if termin.besondere_gefahren %}<p>{{ termin.besondere_gefahren }}</p>{% endif %}</dd></div>{% endif %}
   <div><dt>Leitung</dt><dd>{% for member_id in [termin.verantwortlich_member_id, termin.unterstuetzung_member_id] if member_id %}{% set name = verantwortliche.get(member_id, '–') %}<div class="probeplan-personen"><span class="initialen-chip" aria-hidden="true">{% for teil in name.split() %}{{ teil[0] }}{% endfor %}</span><span>{{ name }}{% if loop.index > 1 %} (Unterstützung){% endif %}</span></div>{% else %}Noch nicht zugewiesen{% endfor %}</dd></div>
 </dl>
-{% if fortschritt %}<div class="probe-detail-progress"><strong>Vorbereitung: {{ fortschritt.erledigt }}/{{ fortschritt.gesamt }}</strong><div class="progress-bar" role="progressbar" aria-label="Vorbereitung" aria-valuenow="{{ fortschritt.prozent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width:{{ fortschritt.prozent }}%"></div></div></div>{% endif %}
+{% if fortschritt %}<div class="pd-progress"><strong>Vorbereitung: {{ fortschritt.erledigt }}/{{ fortschritt.gesamt }}</strong><div class="progress-bar" role="progressbar" aria-label="Vorbereitung" aria-valuenow="{{ fortschritt.prozent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width:{{ fortschritt.prozent }}%"></div></div></div>{% endif %}
 {{ tabnav([
   {"label":"Übersicht","href":"/probenplanung/" ~ termin.id ~ "?tab=uebersicht","active":active_tab == "uebersicht"},
   {"label":"Vorbereitung","href":"/probenplanung/" ~ termin.id ~ "?tab=vorbereitung","active":active_tab == "vorbereitung"},
@@ -47,7 +47,10 @@
 </div>
 </div>{% include "probenplanung/_detail_widgets.html" %}</div>
 {% elif active_tab == 'vorbereitung' %}
-  {% if checkliste %}{% include "probenplanung/_checkliste.html" %}{% else %}<div class="card"><p>Für diese Probe ist keine Checkliste hinterlegt.</p></div>{% endif %}
+  {% if checkliste %}{% include "probenplanung/_checkliste.html" %}{% else %}
+  <section class="pd-checklist-empty"><div><p class="pd-command__eyebrow">Vorbereitung</p><h2>Noch keine Checkliste</h2><p class="text-muted">Wähle eine veröffentlichte Vorlage. Sie wird anschließend als unabhängige Kopie dieser Probe angelegt.</p></div>
+    {% if can_edit and verfuegbare_vorlagen %}<form method="post" action="/probenplanung/{{ termin.id }}/checkliste/anlegen" class="pd-checklist-empty__form"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><div class="form-group"><label for="checklisten-vorlage">Vorlage</label><select class="form-select" id="checklisten-vorlage" name="template_id" required>{% for template in verfuegbare_vorlagen %}<option value="{{ template.id }}">{{ template.name }}</option>{% endfor %}</select></div><button class="btn btn--primary" type="submit">Checkliste anlegen</button></form>{% elif can_edit %}<p class="text-muted">Es ist noch keine veröffentlichte Vorlage verfügbar.</p>{% endif %}
+  </section>{% endif %}
 {% elif active_tab == 'skizze' %}
   {% include "probenplanung/_skizze.html" %}
 {% elif active_tab == 'dokumente' %}

@@ -1,32 +1,38 @@
 {% extends "admin/_layout.html" %}
 {% block title %}Öffentlicher Probenplan{% endblock %}
 {% block admin_content %}
-<h1>Öffentlicher Probenplan</h1>
+<div class="pt-page">
+<header class="pt-header">
+  <div><p class="pt-header__eyebrow">Probenplanung · Veröffentlichung</p><h1>Öffentlicher Plan</h1><p class="pt-header__sub">Freigegebene Proben sicher lesbar und abonnierbar machen.</p></div>
+</header>
 {% with active_tab="oeffentlich" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
-<p>Jeder mit diesem Link kann freigegebene Proben ohne Anmeldung lesen und abonnieren.
-Ort und Information erscheinen nur bei ausdrücklicher Freigabe in der Probe.</p>
-<form method="post" action="/admin/probenplanung/oeffentlich/freigabe">
+<section class="pt-card pt-card--info"><div class="pt-card__head"><span aria-hidden="true">🌐</span><h2>Freigabe</h2></div>
+<p>Jeder mit diesem Link kann freigegebene Proben ohne Anmeldung lesen und abonnieren. Ort und Information erscheinen nur bei ausdrücklicher Freigabe in der Probe.</p>
+<form method="post" action="/admin/probenplanung/oeffentlich/freigabe" class="pt-inline-form">
 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 <div class="form-group form-group--checkbox"><label for="public-aktiv"><input type="checkbox" id="public-aktiv" name="public_aktiv" value="1" {% if public_aktiv %}checked{% endif %}> Öffentliche Auslieferung aktivieren</label></div>
 <button class="btn btn--primary">Freigabe speichern</button>
 </form>
+</section>
 {% if public_url %}
-<div class="card" style="padding:1rem;overflow-wrap:anywhere">
+<section class="pt-card pt-card--success">
 <h2>Neue Links – nur jetzt sichtbar</h2>
 <p>Diese Links jetzt kopieren. Sie werden nicht im Klartext gespeichert.</p>
 <p>Leseansicht: <a href="{{ public_url }}">{{ public_url }}</a></p>
 <p>Kalender-Abo: <a href="{{ ics_url }}">{{ ics_url }}</a></p>
 <p>Webcal: <a href="{{ webcal_url }}">{{ webcal_url }}</a></p>
-</div>
+</section>
 {% endif %}
-<form method="post" action="/admin/probenplanung/oeffentlich">
+<section class="pt-card"><div class="pt-card__head"><span aria-hidden="true">🔗</span><h2>Neuen Link erzeugen</h2></div><form method="post" action="/admin/probenplanung/oeffentlich" class="pt-inline-form">
 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 <div class="form-group"><label for="token-bezeichnung">Bezeichnung</label><input class="form-input" id="token-bezeichnung" name="bezeichnung" maxlength="150"></div>
 <button class="btn btn--primary">Link erzeugen</button>
-</form>
+</form></section>
+<section class="pt-token-list" aria-label="Öffentliche Links">
 {% for token in tokens %}
-<div class="card" style="padding:1rem;margin-top:1rem">
-<strong>{{ token.bezeichnung or "Probenplan" }}</strong> – {{ "Aktiv" if token.is_active else "Widerrufen" }}
+<article class="pt-token">
+<div><strong>{{ token.bezeichnung or "Probenplan" }}</strong><span class="pt-badge {% if token.is_active %}pt-badge--active{% else %}pt-badge--inactive{% endif %}">{{ "Aktiv" if token.is_active else "Widerrufen" }}</span></div>
+<div class="pt-token__actions">
 {% if token.is_active %}
 <form method="post" action="/admin/probenplanung/oeffentlich/{{ token.id }}/widerrufen">
 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -38,5 +44,8 @@ Ort und Information erscheinen nur bei ausdrücklicher Freigabe in der Probe.</p
 <button class="btn btn--secondary">Neu generieren (alten Link widerrufen)</button>
 </form>
 </div>
+</article>
 {% endfor %}
+</section>
+</div>
 {% endblock %}

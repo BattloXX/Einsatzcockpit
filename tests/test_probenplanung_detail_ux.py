@@ -7,13 +7,50 @@ import pytest
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.probenplanung import Probeart, ProbeChecklistItem, ProbePublicToken
+from app.models.probenplanung import Probeart, ProbeCheckliste, ProbeChecklistItem, ProbePublicToken
 from app.models.teilnahme import Termin
 from tests.test_probenplanung_autosave import _setup
-from tests.test_probenplanung_checkliste import ORG_ID
+from tests.test_probenplanung_checkliste import (
+    ORG_ID,
+    _flags,
+    _login,
+    _probe_anlegen,
+    _probeart,
+    _user,
+    _vorlage_mit_punkt,
+)
 
 TABS = ('uebersicht', 'vorbereitung', 'skizze', 'dokumente', 'uebungseinsatz',
         'teilnehmer', 'nachbereitung', 'historie')
+
+
+def test_checkliste_kann_bei_bestehender_probe_aus_vorlage_angelegt_werden(client):
+    _user("detail_template_admin", "org_admin")
+    _flags()
+    csrf = _login(client, "detail_template_admin")
+    template_id, _, _ = _vorlage_mit_punkt(client, csrf, "Detail Vorlage")
+    termin_id = _probe_anlegen(client, csrf, _probeart(0, "Detail ohne Vorlage"), "Detail ohne Checkliste")
+
+    html = client.get(f"/probenplanung/{termin_id}?tab=vorbereitung").text
+    assert "Noch keine Checkliste" in html
+    assert f'value="{template_id}"' in html
+    created = client.post(
+        f"/probenplanung/{termin_id}/checkliste/anlegen",
+        data={"_csrf": csrf, "template_id": template_id},
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+    assert created.headers["location"] == f"/probenplanung/{termin_id}?tab=vorbereitung"
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        checkliste = db.query(ProbeCheckliste).filter_by(termin_id=termin_id).one()
+        assert checkliste.template_id == template_id
+        assert db.query(ProbeChecklistItem).filter_by(
+            checkliste_id=checkliste.id, titel="Pflicht V1"
+        ).one()
+    assert client.post(
+        f"/probenplanung/{termin_id}/checkliste/anlegen", data={"_csrf": csrf, "template_id": template_id}
+    ).status_code == 409
 
 
 def test_detail_alle_tabs_aktionen_widgets_und_fragmente(client):

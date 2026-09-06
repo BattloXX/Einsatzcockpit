@@ -2642,7 +2642,60 @@ button.htmx-request,
 .pa-badge--inactive { background: var(--surface-high); border-color: var(--border); color: var(--text-muted); }
 @media (max-width:760px) { .pa-page { padding: .75rem; } .pa-header .btn { width: 100%; } }
 
+/* Probenplanung: Vorlagen und öffentliche Freigaben – Fahrtenbuch-Kartensprache. */
+.pt-page { max-width: 1280px; margin: 0 auto; padding: 1rem; }
+.pt-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.pt-header h1 { margin: .15rem 0 0; font-size: 1.6rem; line-height: 1.15; }
+.pt-header__eyebrow { margin: 0; color: var(--red-light); font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.pt-header__sub { margin: .4rem 0 0; color: var(--text-muted); font-size: .85rem; }
+.pt-page .tabnav { margin-bottom: 1rem; }
+.pt-card { margin-bottom: 1rem; padding: 1rem; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow-wrap: anywhere; }
+.pt-card--info { border-left: 4px solid #3a7bd5; }
+.pt-card--success { border-left: 4px solid var(--green); }
+.pt-card__head { display: flex; align-items: center; gap: .55rem; margin-bottom: .85rem; }
+.pt-card__head > span { font-size: 1.15rem; }
+.pt-card__head h2, .pt-card > h2 { margin: 0; font-size: 1.05rem; }
+.pt-form { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(16rem, 2fr) auto; gap: .75rem; align-items: end; }
+.pt-form .form-group, .pt-inline-form .form-group { margin: 0; }
+.pt-inline-form { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+.pt-inline-form .form-group:not(.form-group--checkbox) { min-width: min(100%, 18rem); flex: 1; }
+.pt-table-card { overflow-x: auto; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pt-table { width: 100%; border-collapse: collapse; min-width: 32rem; }
+.pt-table th { padding: 10px 14px; background: var(--surface-mid); color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-align: left; text-transform: uppercase; }
+.pt-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: .85rem; vertical-align: middle; }
+.pt-table tbody tr:last-child td { border-bottom: none; }
+.pt-table tbody tr:hover td { background: rgba(255,255,255,.03); }
+.pt-table__name { font-weight: 700; }
+.pt-badge { display: inline-flex; align-items: center; margin-left: .5rem; padding: 2px 9px; border: 1px solid transparent; border-radius: 999px; font-family: 'JetBrains Mono', monospace; font-size: .66rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+.pt-table .pt-badge { margin-left: 0; }
+.pt-badge--active { background: rgba(24,169,87,.15); border-color: rgba(24,169,87,.3); color: var(--green); }
+.pt-badge--inactive { background: var(--surface-high); border-color: var(--border); color: var(--text-muted); }
+.pt-token-list { display: flex; flex-direction: column; gap: .75rem; }
+.pt-token { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: .9rem 1rem; background: var(--surface-low); border: 1px solid var(--border); border-left: 4px solid var(--red); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.pt-token__actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.pt-token__actions form { margin: 0; }
+@media (max-width:760px) { .pt-page { padding: .75rem; } .pt-header { align-items: stretch; } .pt-form { grid-template-columns: 1fr; } .pt-form .btn, .pt-inline-form .btn { width: 100%; } .pt-inline-form { align-items: stretch; } .pt-token__actions { width: 100%; } .pt-token__actions form, .pt-token__actions .btn { flex: 1; } }
+
 /* Probenplanung: Detailseite – bestehende Theme-Tokens und Formulare. */
+.pd-page { max-width: 1280px; margin: 0 auto; padding: 1rem; min-width: 0; overflow-wrap: anywhere; }
+.pd-command { margin-bottom: 1rem; padding: 1rem; background: var(--surface-low); border: 1px solid var(--border); border-left: 4px solid var(--red); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pd-command__crumb { display: block; margin-bottom: .7rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .72rem; }
+.pd-command__crumb a { color: inherit; }
+.pd-command__row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.pd-command__eyebrow { margin: 0 0 .25rem; color: var(--red-light); font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.pd-command h1 { margin: 0 0 .45rem; font-size: 1.45rem; line-height: 1.15; }
+.pd-command .form-actions { margin: 0; gap: .5rem; flex-wrap: wrap; }
+.pd-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 1px; margin: 0 0 1rem; overflow: hidden; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pd-meta > div { padding: .9rem 1rem; background: var(--surface-low); }
+.pd-meta dt { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.pd-meta dd { margin: .45rem 0 0; font-size: .88rem; }
+.pd-progress { margin: 0 0 1rem; padding: .85rem 1rem; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.pd-checklist-empty { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, .8fr); gap: 1rem; align-items: center; padding: 1rem; background: var(--surface-low); border: 1px dashed var(--border); border-left: 4px solid var(--red); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pd-checklist-empty h2 { margin: .15rem 0 .5rem; font-size: 1.1rem; }
+.pd-checklist-empty p { margin: .35rem 0; }
+.pd-checklist-empty__form { display: flex; align-items: end; gap: .75rem; flex-wrap: wrap; padding: .85rem; background: var(--surface-mid); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.pd-checklist-empty__form .form-group { flex: 1; min-width: 12rem; margin: 0; }
+.pd-checklist-empty__form .form-select { width: 100%; }
 .probe-detail { min-width: 0; overflow-wrap: anywhere; }
 .probe-detail-command { position: sticky; top: var(--topnav-h); z-index: 21; padding: .75rem 1rem; background: var(--surface-low); }
 .probe-detail-command nav { font-size: .8rem; color: var(--text-muted); }
@@ -2669,6 +2722,13 @@ button.htmx-request,
   .probe-detail-overview { grid-template-columns: minmax(0,1fr) 19rem; }
 }
 @media (max-width:760px) {
+  .pd-page { padding: .75rem; }
+  .pd-command__row { align-items: stretch; }
+  .pd-checklist-empty { grid-template-columns: 1fr; }
+  .pd-command .form-actions { width: 100%; }
+  .pd-command .form-actions .btn, .pd-command .form-actions form { flex: 1; }
+  .pd-checklist-empty__form { align-items: stretch; }
+  .pd-checklist-empty__form .btn { width: 100%; }
   .tabnav { gap: .35rem; align-items: center; padding: .3rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-low); max-width: 100%; }
   .tabnav__item { padding: .4rem .75rem; font-size: .8rem; border: 0; border-radius: 999px; }
   .tabnav__item--active { background: var(--surface-high); box-shadow: inset 0 0 0 1px var(--border); }
