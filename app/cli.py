@@ -11,7 +11,6 @@ import argparse
 import gzip
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tarfile
@@ -142,7 +141,13 @@ def _sanitisierter_dump_fehler(label: str, dump_bin: str, exc: Exception) -> str
 
 
 def _dump_db(cfg, ziel: Path, dump_bin: str) -> int:
-    """Streamt einen mariadb-dump gzip-komprimiert nach ziel. Rueckgabe: Bytes."""
+    """Streamt einen portablen mariadb-dump gzip-komprimiert nach ziel.
+
+    MariaDB kann in Bestandsdatenbanken identische, rein numerische FK-Namen
+    exportieren. Diese waeren in einer frisch angelegten DB nicht eindeutig;
+    daher werden sie beim Schreiben entfernt, damit MariaDB beim Restore selbst
+    eindeutige Namen vergibt.
+    """
     from app.services import backup_service as bs
     argv, env_zusatz = bs.build_dump_argv(cfg, dump_bin)
     full_env = {**os.environ, **env_zusatz}
@@ -150,8 +155,10 @@ def _dump_db(cfg, ziel: Path, dump_bin: str) -> int:
     assert proc.stdout is not None
     try:
         with gzip.open(ziel, "wb") as gz:
-            for chunk in iter(lambda: proc.stdout.read(1 << 20), b""):  # type: ignore[union-attr]
-                gz.write(chunk)
+            # Fremdschluessel stehen in CREATE TABLE-Zeilen. Zeilenweises
+            # Streamen vermeidet, dass ein Name an einer Chunk-Grenze entgeht.
+            for zeile in iter(proc.stdout.readline, b""):  # type: ignore[union-attr]
+                gz.write(bs.normalisiere_dump_fk_namen(zeile))
     finally:
         proc.stdout.close()
     err = proc.stderr.read() if proc.stderr else b""
@@ -341,9 +348,17 @@ def restore_test(scratch_db: str = "") -> int:
         restore_argv, _ = bs.build_restore_argv(cfg, scratch, client)
         proc = subprocess.Popen(restore_argv, stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=full_env)
         assert proc.stdin is not None
-        with gzip.open(neuester, "rb") as gz:
-            shutil.copyfileobj(gz, proc.stdin)
-        proc.stdin.close()
+        try:
+            # Die Dumps enthalten ueblicherweise selbst FOREIGN_KEY_CHECKS=0.
+            # Das explizite Setzen macht auch historische/anders erzeugte Dumps
+            # robust, deren CREATE TABLE-Reihenfolge nicht topologisch ist.
+            proc.stdin.write(b"SET FOREIGN_KEY_CHECKS=0;\nSET UNIQUE_CHECKS=0;\n")
+            with gzip.open(neuester, "rb") as gz:
+                for zeile in iter(gz.readline, b""):
+                    proc.stdin.write(bs.normalisiere_dump_fk_namen(zeile))
+            proc.stdin.write(b"SET FOREIGN_KEY_CHECKS=1;\nSET UNIQUE_CHECKS=1;\n")
+        finally:
+            proc.stdin.close()
         err = proc.stderr.read() if proc.stderr else b""
         if proc.wait() != 0:
             print(f"✗ Restore fehlgeschlagen: {err.decode('utf-8', 'ignore')[:600]}", file=sys.stderr)

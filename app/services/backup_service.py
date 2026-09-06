@@ -32,6 +32,14 @@ DEFAULT_MAX_COUNT = 7
 _DUMP_RE = re.compile(
     r"^(?P<label>einsatzleiter(?:_weather)?)-(?P<stamp>\d{8}-\d{6}Z)\.sql\.gz$"
 )
+# Manche Bestands-Tabellen haben von MariaDB vergebene, rein numerische
+# Fremdschluessel-Namen (z. B. ``CONSTRAINT `1` FOREIGN KEY``). Solche Namen
+# sind zwar in der Quelldatenbank vorhanden, kollidieren beim Neuaufsetzen,
+# weil FK-Namen innerhalb eines Schemas eindeutig sein muessen. Ohne expliziten
+# Namen vergibt MariaDB beim Import einen eindeutigen Namen pro Tabelle.
+_NUMERIC_FK_CONSTRAINT_RE = re.compile(
+    br"CONSTRAINT\s+`[0-9]+`\s+FOREIGN\s+KEY\b"
+)
 
 
 @dataclass(frozen=True)
@@ -42,6 +50,17 @@ class DbConfig:
     user: str
     password: str
     database: str
+
+
+def normalisiere_dump_fk_namen(zeile: bytes) -> bytes:
+    """Entfernt ausschliesslich kollidierende, numerische FK-Namen aus SQL-DDL.
+
+    Die Funktion arbeitet bytebasiert, damit Zeichensatz und Binaerdaten eines
+    Dumps unveraendert bleiben. Sie wird sowohl beim Erzeugen neuer Dumps als
+    auch beim Einspielen alter Dumps verwendet; damit sind neue Archive direkt
+    portabel und bereits vorhandene Archive weiter wiederherstellbar.
+    """
+    return _NUMERIC_FK_CONSTRAINT_RE.sub(b"FOREIGN KEY", zeile)
 
 
 def parse_database_url(url: str) -> DbConfig:

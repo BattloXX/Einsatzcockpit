@@ -4,6 +4,8 @@ Die reine Logik (URL-Parsing, Kommandozeilen, Retention, Verifikations-SQL) wird
 direkt geprueft; die Orchestrierung (app.cli.run_backup/restore_test) mit
 gemockten Subprozessen, damit kein echtes MariaDB noetig ist.
 """
+import gzip
+import io
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -163,6 +165,35 @@ def test_verify_sql_enthaelt_kernchecks():
     assert any("alembic_version" in c for c in checks)
     assert any("fire_dept" in c for c in checks)
     assert all(c.upper().startswith("SELECT") for c in checks)
+
+
+def test_normalisiere_dump_fk_namen_entfernt_nur_numerische_namen():
+    numerisch = b"  CONSTRAINT `1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),\n"
+    benannt = b"  CONSTRAINT `fk_incident_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),\n"
+    assert bs.normalisiere_dump_fk_namen(numerisch) == (
+        b"  FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),\n"
+    )
+    assert bs.normalisiere_dump_fk_namen(benannt) == benannt
+
+
+def test_dump_db_schreibt_portable_fk_namen(tmp_path, monkeypatch):
+    """Der erzeugte Dump darf keine kollidierenden numerischen FK-Namen tragen."""
+    class FakeProc:
+        def __init__(self):
+            self.stdout = io.BytesIO(
+                b"CREATE TABLE `a` (\n"
+                b"  CONSTRAINT `1` FOREIGN KEY (`x`) REFERENCES `b` (`id`)\n);\n"
+            )
+            self.stderr = io.BytesIO()
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(cli.subprocess, "Popen", lambda *args, **kwargs: FakeProc())
+    ziel = tmp_path / "portable.sql.gz"
+    cli._dump_db(_cfg(), ziel, "mariadb-dump")
+    with gzip.open(ziel, "rb") as dump:
+        assert b"CONSTRAINT `1`" not in dump.read()
 
 
 # ── Orchestrierung (gemockte Subprozesse) ─────────────────────────────────────
