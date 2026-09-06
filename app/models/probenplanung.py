@@ -73,9 +73,14 @@ class Probeart(TenantScoped, Base):
 
 class ChecklistTemplate(TenantScoped, Base):
     __tablename__ = "checklist_template"
-    __table_args__ = (UniqueConstraint("org_id", "name", name="uq_checklist_template_org_name"),)
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", name="uq_checklist_template_org_name"),
+        UniqueConstraint("org_id", "code", name="uq_checklist_template_org_code"),
+    )
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
+    # Stabile, optionale Kennung für systemseitige und wiederholbar importierbare Vorlagen.
+    code: Mapped[str | None] = mapped_column(String(80))
     beschreibung: Mapped[str | None] = mapped_column(Text)
     aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     aktive_version_id: Mapped[int | None] = mapped_column(
