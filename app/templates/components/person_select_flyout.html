@@ -1,0 +1,67 @@
+{# Wiederverwendbare, ID-basierte Personenauswahl.
+   Erwartet: person_field, person_label, person_title, person_required,
+   person_name, person_id, person_placeholder und personen. #}
+<div class="person-select" data-required="{{ 'true' if person_required else 'false' }}" x-data='personSelectFlyout({
+       title: {{ person_title|tojson }},
+       people: {{ personen|tojson }},
+       initialName: {{ person_name|tojson }},
+       initialId: {{ person_id|tojson }}
+     })' @keydown.escape.window="close()">
+  <label class="form-label" for="{{ person_field }}-trigger">{{ person_label }}{% if person_required %} *{% endif %}</label>
+  <input type="hidden" name="{{ person_field }}_member_id" :value="memberId">
+  <input type="hidden" name="{{ person_field }}_name" :value="selectedName">
+  <button type="button" id="{{ person_field }}-trigger" class="person-select__trigger"
+          @click="openFlyout()" :aria-expanded="open.toString()" aria-haspopup="dialog">
+    <span aria-hidden="true">&#128100;</span>
+    <strong x-text='selectedName || {{ person_placeholder|tojson }}'></strong>
+    <span class="person-select__chevron" aria-hidden="true">&#8250;</span>
+  </button>
+  <p class="fb-name-warn" x-show="invalid" x-cloak>Bitte eine Person aus der Liste auswählen.</p>
+
+  <template x-teleport="body">
+    <div class="person-flyout-backdrop" x-show="open" x-transition.opacity @click.self="close()" role="presentation">
+      <section class="person-flyout" role="dialog" aria-modal="true" :aria-label="title" @click.stop>
+        <header class="person-flyout__header">
+          <h2 x-text="title"></h2>
+          <button type="button" class="btn btn--ghost person-flyout__close" @click="close()" aria-label="Schließen">&#215;</button>
+        </header>
+        <div class="person-flyout__search">
+          <label class="sr-only" :for="uid + '-search'">Name suchen</label>
+          <input type="search" class="form-control" :id="uid + '-search'" x-ref="search"
+                 x-model="query" placeholder="&#128269; Name suchen …" autocomplete="off">
+        </div>
+        <nav class="person-flyout__abc" x-show="!query" aria-label="Alphabetische Sprungnavigation">
+          <template x-for="letter in letters" :key="letter">
+            <button type="button" @click="jump(letter)" :disabled="!groups[letter]" x-text="letter"></button>
+          </template>
+        </nav>
+        <div class="person-flyout__list" x-ref="list" role="listbox" :aria-label="title">
+          <template x-if="query">
+            <div>
+              <template x-for="person in filtered" :key="person.id">
+                <button type="button" class="person-flyout__person" :class="{'is-selected': String(person.id) === String(memberId)}"
+                        @click="select(person)" @keydown.enter.prevent="select(person)" role="option"
+                        :aria-selected="String(person.id) === String(memberId)" x-text="person.name"></button>
+              </template>
+            </div>
+          </template>
+          <template x-if="!query">
+            <div>
+              <template x-for="letter in availableLetters" :key="letter">
+                <section class="person-flyout__group" :id="uid + '-' + letter">
+                  <h3 x-text="letter"></h3>
+                  <template x-for="person in groups[letter]" :key="person.id">
+                    <button type="button" class="person-flyout__person" :class="{'is-selected': String(person.id) === String(memberId)}"
+                            @click="select(person)" @keydown.enter.prevent="select(person)" role="option"
+                            :aria-selected="String(person.id) === String(memberId)" x-text="person.name"></button>
+                  </template>
+                </section>
+              </template>
+            </div>
+          </template>
+          <p class="person-flyout__empty" x-show="query && !filtered.length">Keine Person gefunden.</p>
+        </div>
+      </section>
+    </div>
+  </template>
+</div>

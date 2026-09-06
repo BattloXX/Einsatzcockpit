@@ -62,6 +62,26 @@ def _current_user(request: Request):
     return getattr(request.state, "user", None)
 
 
+def _aktive_personen(org_id: int, db: Session) -> list[Member]:
+    """Die bisherige Maschinisten-Menge: alle aktiven Mitglieder der Organisation."""
+    return (
+        db.query(Member)
+        .filter(Member.org_id == org_id, Member.active == True)  # noqa: E712
+        .execution_options(include_all_tenants=True)
+        .order_by(Member.lastname, Member.firstname)
+        .all()
+    )
+
+
+def _personen_fuer_client(members: list[Member]) -> list[dict[str, str | int]]:
+    """Kleines, bewusst ID-basiertes View-Model fuer die clientseitige Auswahl."""
+    return [
+        {"id": member.id, "name": fahrtenbuch_person_name(member),
+         "lastname": member.lastname or "", "firstname": member.firstname or ""}
+        for member in members
+    ]
+
+
 # ── Web-Login ──────────────────────────────────────────────────────────────────
 
 @router.get("/fahrtenbuch/neu", response_class=HTMLResponse)
@@ -229,10 +249,18 @@ async def hx_fahrzeug_felder(
         .execution_options(include_all_tenants=True)
         .first()
     )
-    if not fahrzeug:
+    user = _current_user(request)
+    token_org: OrgSettings | None = getattr(request.state, "fahrtenbuch_org", None)
+    if not user and not token_org:
+        token = request.query_params.get("t", "")
+        if token:
+            token_org = _resolve_org_by_token(token, db)
+    org_id = user.org_id if user else (token_org.org_id if token_org else None)
+    if not fahrzeug or not org_id or fahrzeug.dept_id != org_id:
         return HTMLResponse("")
     return templates.TemplateResponse(request, "fahrtenbuch/_fahrzeug_felder.html", {
         "fahrzeug": fahrzeug,
+        "personen": _personen_fuer_client(_aktive_personen(org_id, db)),
         "form_daten": {},
         "fehler": None,
     })
@@ -306,6 +334,8 @@ async def hx_zweck_felder(
         "fahrzeug": fahrzeug,
         "incidents": incidents,
         "gk_members": gk_members,
+        "personen": _personen_fuer_client(_aktive_personen(org_id, db)) if org_id else [],
+        "gk_personen": _personen_fuer_client(gk_members),
         "form_daten": {},
     })
 
@@ -385,6 +415,7 @@ async def _render_erfassung(
         .order_by(Zielort.sort)
         .all()
     )
+    personen = _personen_fuer_client(_aktive_personen(org_id, db))
 
     org = db.query(FireDept).filter(FireDept.id == org_id).execution_options(include_all_tenants=True).first()
 
@@ -407,6 +438,7 @@ async def _render_erfassung(
         "doppelfahrt_warnung": doppelfahrt_warnung,
         "fehler": fehler,
         "form_daten": form_daten or {},
+        "personen": personen,
     })
 
 

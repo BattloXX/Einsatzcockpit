@@ -23,6 +23,7 @@ from app.services.fahrtenbuch_service import (
     stammdaten_korrektur_zaehler,
 )
 from app.services.pdf_service import load_fahrtenbuch_report
+from app.routers.ui_fahrtenbuch import _personen_fuer_client
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -88,6 +89,18 @@ def _basis_daten(org_id, fahrzeug_id, zweck_id):
         "erfasst_via": FahrtErfassungsweg.web,
         "doppelfahrt_bestaetigt": True,
     }
+
+
+def test_personenauswahl_uebergibt_id_und_anzeigedaten_getrennt():
+    """Die Touch-Auswahl darf Namen nur anzeigen, die technische Referenz ist die ID."""
+    member = Member(id=123, firstname="Jodok", lastname="Bösch")
+
+    assert _personen_fuer_client([member]) == [{
+        "id": 123,
+        "name": "Bösch Jodok",
+        "lastname": "Bösch",
+        "firstname": "Jodok",
+    }]
 
 
 # ── Zähler-Tests ──────────────────────────────────────────────────────────────
