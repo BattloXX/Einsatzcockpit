@@ -13,6 +13,7 @@
     <div><p class="pd-command__eyebrow">{{ termin.probeart.kurz if termin.probeart else 'Probe' }} · {{ termin.probeart.name if termin.probeart else 'Probenplanung' }}</p><h1>{{ termin.titel }}</h1><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span></div>
     <div class="form-actions">
       {% include "probenplanung/_uebungseinsatz_cta.html" %}
+      <a class="btn btn--secondary" href="/probenplanung/{{ termin.id }}/druck" target="_blank" rel="noopener">Drucken</a>
       {% if can_edit %}
       <a class="btn btn--secondary" href="/probenplanung/{{ termin.id }}/bearbeiten">Bearbeiten</a>
       {% include "probenplanung/_detail_sekundaeraktionen.html" %}

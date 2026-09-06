@@ -19,6 +19,7 @@ def write_probe_change(
     before: dict | None,
     after: dict | None,
     *,
+    org_id: int | None = None,
     user_id: int | None = None,
     ip: str | None = None,
     ts: datetime | None = None,
@@ -26,6 +27,7 @@ def write_probe_change(
     """Schreibt einen ProbeChange; der Aufrufer commitet die Transaktion."""
     db.add(
         ProbeChange(
+            org_id=org_id,
             termin_id=termin_id,
             action=action,
             bereich=bereich,

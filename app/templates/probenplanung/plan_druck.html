@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Probenplan {{ jahr }} drucken{% endblock %}
+{% block head_extra %}
+<style>
+  .pp-print { max-width: 1120px; margin: 0 auto; padding: 24px; color: #111; background: #fff; }
+  .pp-print__head { border-bottom: 3px solid #d42225; margin-bottom: 20px; padding-bottom: 10px; }
+  .pp-print h1 { margin: 0; font-size: 1.55rem; }.pp-print h2 { margin: 22px 0 8px; font-size: 1rem; }
+  .pp-print table { width: 100%; border-collapse: collapse; font-size: .8rem; }.pp-print th { background: #d42225; color: #fff; text-align: left; }
+  .pp-print th, .pp-print td { border: 1px solid #bbb; padding: 6px 8px; vertical-align: top; }.pp-print tr { break-inside: avoid; }
+  .pp-print__meta { font-size: .8rem; color: #555; }.pp-print__actions { margin-bottom: 16px; }
+  @media print { @page { size: A4 landscape; margin: 12mm; } .topnav, .sidebar, .bottom-nav, .mobile-menu, .pp-print__actions { display: none !important; } .main-content { padding: 0 !important; } body { background: #fff !important; } .pp-print { max-width: none; padding: 0; } }
+</style>
+{% endblock %}
+{% block content %}
+<main class="pp-print"><div class="pp-print__actions"><button class="btn btn--primary" data-ec-action="print">Drucken</button> <button class="btn btn--secondary" onclick="window.close()">Schließen</button></div>
+<header class="pp-print__head"><h1>Probenplan {{ jahr }}</h1><p class="pp-print__meta">Erstellt am {{ now|local_datetime }}</p></header>
+{% for gruppe, termine in gruppen.items() %}<section><h2>{{ gruppe }}</h2><table><thead><tr><th>Datum</th><th>Veranstaltung</th><th>Thema / Objekt</th><th>Verantwortlich</th><th>Unterstützung</th><th>Info</th></tr></thead><tbody>{% for termin in termine %}<tr><td>{{ termin.beginn|local_datetime }}</td><td>{{ termin.titel }}</td><td>{{ termin.thema or termin.objekt or '–' }}</td><td>{{ member_namen.get(termin.verantwortlich_member_id, '–') }}</td><td>{{ member_namen.get(termin.unterstuetzung_member_id, '–') }}</td><td>{{ termin.info or '–' }}</td></tr>{% endfor %}</tbody></table></section>{% else %}<p>Für dieses Jahr sind keine Proben geplant.</p>{% endfor %}
+</main>
+{% endblock %}

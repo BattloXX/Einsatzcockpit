@@ -233,6 +233,10 @@ async def lifespan(app: FastAPI):
     from app.services.verleih_erinnerung import verleih_erinnerung_loop
     verleih_task = asyncio.create_task(verleih_erinnerung_loop())
 
+    # Tägliche Vorbereitungs-Erinnerungen für bevorstehende Proben.
+    from app.services.probe_erinnerung import probe_erinnerung_loop
+    probe_erinnerung_task = asyncio.create_task(probe_erinnerung_loop())
+
     # Background-Loop für Wetterstations-Zeitreihen-Retention (täglich 03:30)
     from app.services.weather_retention import weather_retention_loop
     weather_retention_task = asyncio.create_task(weather_retention_loop())
@@ -307,6 +311,7 @@ async def lifespan(app: FastAPI):
         print_watchdog_task.cancel()
         lagemeldung_task.cancel()
         verleih_task.cancel()
+        probe_erinnerung_task.cancel()
         weather_retention_task.cancel()
         ai_log_retention_task.cancel()
         sms_log_retention_task.cancel()
@@ -325,6 +330,7 @@ async def lifespan(app: FastAPI):
         mailing_schedule_task.cancel()
         for t in (autoclose_task, watchdog_task, reminder_task, print_watchdog_task,
                   lagemeldung_task, verleih_task,
+                  probe_erinnerung_task,
                   weather_retention_task, ai_log_retention_task, vehicle_position_retention_task, weather_alert_task,
                   dienst_monitor_task,
                   abfluss_poll_task, lis_task, lis_capture_retention_task,

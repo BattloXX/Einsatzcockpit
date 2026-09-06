@@ -6,6 +6,7 @@
   <div><p class="pp-header__eyebrow">Jahresplanung · {{ jahr }}</p><h1>Probenplan {{ jahr }}</h1><p class="pp-header__sub">Jahresübersicht aller geplanten Proben und Veranstaltungen</p></div>
   <div class="pp-header__actions">
     <a class="btn btn--secondary" href="/probenplanung/kalender?jahr={{ jahr }}">Kalender</a>
+    <a class="btn btn--secondary" href="/probenplanung/druck?jahr={{ jahr }}" target="_blank" rel="noopener">Drucken</a>
     {% if can_edit %}<a class="btn btn--primary" href="/probenplanung/neu">Probe anlegen</a>{% endif %}
   </div>
 </header>

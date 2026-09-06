@@ -1,14 +1,14 @@
 """Routentests fuer Phase 6: Jahresplan, Kalender und Uebernahmen."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
-from app.models.master import OrgSettings
-from app.models.probenplanung import ProbeCheckliste, ProbeChecklistItem, ProbeNachbereitung
+from app.models.master import FireDept, OrgSettings
+from app.models.probenplanung import ProbeChange, ProbeCheckliste, ProbeChecklistItem, ProbeNachbereitung
 from app.models.teilnahme import Teilnahme, Termin
 from tests.test_probenplanung_checkliste import ORG_ID, _flags, _login, _probe_anlegen, _probeart, _user
 
@@ -95,6 +95,57 @@ def test_kalender_monatsgrenzen_und_lokaler_tag_2330(client):
     assert "P6 Spaet am Abend" in response.text
     assert "23:30" in response.text
     assert "P6 Folgemonat" not in response.text
+
+
+def test_druckansichten_enthalten_jahresplan_und_einzelprobe(client):
+    _leser(client, "druck")
+    art_id = _probeart(0, "Phase6 Druckart")
+    termin_id = _termin(art_id, "P6 Druckprobe", "2026-04-08T20:00", thema="Druckthema", ort="Druckort")
+
+    jahr = client.get("/probenplanung/druck?jahr=2026")
+    assert jahr.status_code == 200
+    assert "Probenplan 2026" in jahr.text
+    assert "P6 Druckprobe" in jahr.text
+    assert "A4 landscape" in jahr.text
+
+    einzel = client.get(f"/probenplanung/{termin_id}/druck")
+    assert einzel.status_code == 200
+    assert "P6 Druckprobe" in einzel.text
+    assert "Druckthema" in einzel.text
+    assert "A4 portrait" in einzel.text
+
+
+def test_probe_erinnerung_ist_entdoppelt_und_auditiert():
+    from app.core.timezones import now_local
+    from app.services.probe_erinnerung import pruefe_probe_erinnerungen
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org = db.get(FireDept, ORG_ID)
+        assert org is not None
+        art_id = _probeart(0, "Phase6 Erinnerungsart")
+        lokal = now_local(org) + timedelta(days=14)
+        termin = Termin(
+            org_id=ORG_ID,
+            typ="uebung",
+            titel="P6 Erinnerungsprobe",
+            beginn=lokal.astimezone(UTC).replace(tzinfo=None),
+            probeart_id=art_id,
+            status="geplant",
+        )
+        db.add(termin)
+        db.commit()
+        termin_id = termin.id
+
+        with patch("app.services.push_service.notify_org") as notify:
+            assert pruefe_probe_erinnerungen(db) == 1
+            assert pruefe_probe_erinnerungen(db) == 0
+        notify.assert_called_once()
+        action = db.query(ProbeChange).filter_by(termin_id=termin_id).one().action
+        assert action == "erinnerung.14_tage"
+    finally:
+        db.close()
 
 
 def test_duplizieren_nimmt_stammdaten_aber_keine_folgedaten(client):

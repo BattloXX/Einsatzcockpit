@@ -794,6 +794,105 @@ def _vollprobe_context(db: Session, user: User) -> dict[str, Any]:
     }
 
 
+def _druck_context(db: Session, user: User, termin: Termin) -> dict[str, Any]:
+    """Vollständiger, request-freier Kontext für die Druckansicht einer Probe."""
+    checkliste = (
+        db.query(ProbeCheckliste)
+        .filter(ProbeCheckliste.termin_id == termin.id, ProbeCheckliste.org_id == user.org_id)
+        .first()
+    )
+    sections = (
+        db.query(ProbeChecklistSection)
+        .filter(ProbeChecklistSection.checkliste_id == checkliste.id)
+        .order_by(ProbeChecklistSection.sortierung, ProbeChecklistSection.id)
+        .all()
+        if checkliste
+        else []
+    )
+    items = list(checkliste.items) if checkliste else []
+    by_section: dict[int | None, list[ProbeChecklistItem]] = {section.id: [] for section in sections}
+    by_section[None] = []
+    for item in items:
+        by_section.setdefault(item.section_id, []).append(item)
+    member_ids = {
+        member_id for member_id in [termin.verantwortlich_member_id, termin.unterstuetzung_member_id]
+        if member_id is not None
+    } | {item.verantwortlich_member_id for item in items if item.verantwortlich_member_id is not None}
+    members = db.query(Member).filter(Member.id.in_(member_ids)).all() if member_ids else []
+    medien = (
+        db.query(ProbeMedia)
+        .filter(ProbeMedia.termin_id == termin.id, ProbeMedia.org_id == user.org_id)
+        .order_by(ProbeMedia.hochgeladen_am, ProbeMedia.id)
+        .all()
+    )
+    return {
+        "user": user,
+        "termin": termin,
+        "checkliste": checkliste,
+        "fortschritt": fortschritt(checkliste, user.org) if checkliste else None,
+        "sections": sections,
+        "items_by_section": by_section,
+        "member_namen": {member.id: member.full_name for member in members},
+        "skizzen": [medium for medium in medien if medium.kind == "image"],
+        "dokumente": [medium for medium in medien if medium.art == "dokument"],
+        "now": datetime.now(UTC),
+    }
+
+
+@router.get("/druck", response_class=HTMLResponse)
+def probenplan_druck(
+    request: Request,
+    jahr: int | None = Query(None, ge=1900, le=9998),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    """A4-Druckansicht des gesamten Jahresplans, gruppiert nach Druckgruppe."""
+    user = _require_login(request)
+    selected_year = jahr or now_local(user.org).year
+    start, ende = _jahr_grenzen(selected_year, user.org)
+    termine = (
+        db.query(Termin)
+        .options(joinedload(Termin.probeart))
+        .filter(Termin.beginn >= start, Termin.beginn < ende, Termin.archiviert_am.is_(None))
+        .order_by(Termin.beginn, Termin.id)
+        .all()
+    )
+    member_ids = {
+        member_id
+        for termin in termine
+        for member_id in (termin.verantwortlich_member_id, termin.unterstuetzung_member_id)
+        if member_id is not None
+    }
+    members = db.query(Member).filter(Member.id.in_(member_ids)).all() if member_ids else []
+    gruppen: dict[str, list[Termin]] = {}
+    for termin in termine:
+        gruppe = (termin.probeart.druckgruppe if termin.probeart else None) or (
+            termin.probeart.name if termin.probeart else "Termine"
+        )
+        gruppen.setdefault(gruppe, []).append(termin)
+    return templates.TemplateResponse(request, "probenplanung/plan_druck.html", {
+        "user": user,
+        "jahr": selected_year,
+        "gruppen": gruppen,
+        "member_namen": {member.id: member.full_name for member in members},
+        "now": datetime.now(UTC),
+    })
+
+
+@router.get("/{termin_id}/druck", response_class=HTMLResponse)
+def probe_druck(
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    return templates.TemplateResponse(request, "probenplanung/probe_druck.html", _druck_context(db, user, termin))
+
+
 @router.get("/{termin_id}", response_class=HTMLResponse)
 def probe_detail(
     request: Request,
