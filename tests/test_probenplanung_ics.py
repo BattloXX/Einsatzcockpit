@@ -9,6 +9,11 @@ from tests.test_probenplanung_checkliste import _login, _user
 from tests.test_probenplanung_public import public_setup
 
 
+def _next_calendar_year() -> int:
+    """Die öffentlichen Feeds enthalten bewusst nur kommende Termine."""
+    return datetime.now(UTC).year + 1
+
+
 def _event(client, plain):
     r = client.get(f"/p/probenplan/{plain}.ics")
     assert r.status_code == 200
@@ -18,6 +23,7 @@ def _event(client, plain):
 
 
 def test_uid_sequence_last_modified_und_absage(client):
+    year = _next_calendar_year()
     plain, tid, _, art = public_setup()
     with SessionLocal() as db:
         set_tenant_context(db, None)
@@ -27,14 +33,14 @@ def test_uid_sequence_last_modified_und_absage(client):
     _user("ics_editor", "probenverwalter")
     csrf = _login(client, "ics_editor")
     values = {"_csrf": csrf, "titel": "Freigegebene Probe", "probeart_id": art,
-              "beginn": "2026-07-10T21:00", "public_sichtbar": "1"}
+              "beginn": f"{year}-07-10T21:00", "public_sichtbar": "1"}
     r = client.post(f"/probenplanung/{tid}/bearbeiten", data=values, follow_redirects=False)
     assert r.status_code == 303
     second, raw = _event(client, plain)
     assert first["UID"] == second["UID"]
     assert int(second["SEQUENCE"]) == int(first["SEQUENCE"]) + 1
     assert second.decoded("LAST-MODIFIED") > first.decoded("LAST-MODIFIED")
-    assert b"DTSTART:20260710T190000Z" in raw
+    assert f"DTSTART:{year}0710T190000Z".encode() in raw
     assert abs((second.decoded("DTSTAMP") - datetime.now(UTC)).total_seconds()) < 10
     # Identisches Speichern erzeugt keine unnötige Revision.
     assert client.post(f"/probenplanung/{tid}/bearbeiten", data=values, follow_redirects=False).status_code == 303
@@ -49,32 +55,34 @@ def test_uid_sequence_last_modified_und_absage(client):
 
 
 def test_sommer_winter_utc_und_ende(client):
+    year = _next_calendar_year()
     for month, utc_hour in [(7, 18), (1, 19)]:
         plain, tid, _, _ = public_setup()
         with SessionLocal() as db:
             set_tenant_context(db, None)
             t = db.get(Termin, tid)
-            t.beginn = datetime(2026, month, 10, utc_hour)
-            t.ende = datetime(2026, month, 10, utc_hour + 1)
+            t.beginn = datetime(year, month, 10, utc_hour)
+            t.ende = datetime(year, month, 10, utc_hour + 1)
             db.commit()
         event, raw = _event(client, plain)
-        assert event.decoded("DTSTART") == datetime(2026, month, 10, utc_hour, tzinfo=UTC)
-        assert event.decoded("DTEND") == datetime(2026, month, 10, utc_hour + 1, tzinfo=UTC)
-        assert f"DTSTART:2026{month:02}10T{utc_hour:02}0000Z".encode() in raw
+        assert event.decoded("DTSTART") == datetime(year, month, 10, utc_hour, tzinfo=UTC)
+        assert event.decoded("DTEND") == datetime(year, month, 10, utc_hour + 1, tzinfo=UTC)
+        assert f"DTSTART:{year}{month:02}10T{utc_hour:02}0000Z".encode() in raw
         assert "20:00" in client.get(f"/p/probenplan/{plain}").text
         assert event["STATUS"] == "CONFIRMED"
 
 
 def test_ganztag_date_und_exklusives_ende(client):
+    year = _next_calendar_year()
     plain, tid, _, _ = public_setup(ganztaegig=True)
     with SessionLocal() as db:
         set_tenant_context(db, None)
-        db.get(Termin, tid).beginn = datetime(2026, 7, 9, 22)
+        db.get(Termin, tid).beginn = datetime(year, 7, 9, 22)
         db.commit()
     event, raw = _event(client, plain)
-    assert b"DTSTART;VALUE=DATE:20260710" in raw
-    assert b"DTEND;VALUE=DATE:20260711" in raw
-    assert event.decoded("DTSTART") == date(2026, 7, 10)
+    assert f"DTSTART;VALUE=DATE:{year}0710".encode() in raw
+    assert f"DTEND;VALUE=DATE:{year}0711".encode() in raw
+    assert event.decoded("DTSTART") == date(year, 7, 10)
 
 
 def test_summary_escaping_und_utf8_zeilenfaltung(client):
